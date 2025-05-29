@@ -13,7 +13,9 @@ ZSH=$HOME/.oh-my-zsh
 
 plugins=(zsh-autosuggestions zsh-syntax-highlighting zsh-completions zsh-history-substring-search)
 
-source $ZSH/oh-my-zsh.sh
+if [ -f "$ZSH/oh-my-zsh.sh" ]; then
+  source "$ZSH/oh-my-zsh.sh"
+fi
 source $CONFIG_DIR/aliases.sh
 source $CONFIG_DIR/p10k.zsh
 source $CONFIG_DIR/extras.sh

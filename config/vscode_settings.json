@@ -1,32 +1,26 @@
 {
     "files.autoSave": "afterDelay",
     "files.autoSaveDelay": 100,
-    "editor.wordWrap": "on",
     "editor.multiCursorModifier": "ctrlCmd",
     "git.autofetch": true,
     "diffEditor.ignoreTrimWhitespace": false,
     "[python]": {
         "editor.formatOnType": true,
         "editor.defaultFormatter": "ms-python.black-formatter",
-        "editor.formatOnSave": false
+        "editor.formatOnSave": false,
+        "diffEditor.ignoreTrimWhitespace": false,
+        "editor.wordWrap": "wordWrapColumn"
     },
     "isort.args": [
         "--profile",
         "black"
     ],
-    "editor.inlineSuggest.enabled": true,
     "notebook.output.wordWrap": true,
     "jupyter.askForKernelRestart": false,
     "editor.minimap.enabled": false,
     "files.trimTrailingWhitespace": false,
     "editor.formatOnSaveMode": "file",
     "editor.formatOnSave": false,
-    "github.copilot.enable": {
-        "*": true,
-        "yaml": true,
-        "plaintext": false,
-        "markdown": true
-    },
     "jupyter.runStartupCommands": [
         "%load_ext autoreload",
         "%autoreload 2"
@@ -34,14 +28,12 @@
     "notebook.output.textLineLimit": 3000,
     "jupyter.interactiveWindow.creationMode": "perFile",
     "notebook.formatOnSave.enabled": true,
-    "rewrap.autoWrap.enabled": true,
-    "rewrap.wrappingColumn": 140,
     "launch": {
         "version": "0.2.0",
         "configurations": [
             {
                 "name": "Python: Remote Attach",
-                "type": "python",
+                "type": "debugpy",
                 "request": "attach",
                 "connect": {
                     "port": 5678,
@@ -53,18 +45,11 @@
         ]
     },
     "mypy.runUsingActiveInterpreter": true,
-    "flake8.importStrategy": "fromEnvironment",
-    "flake8.args": [
-        "--max-line-length=140",
-        "--ignore=W503",
-        "--exclude=venv"
-    ],
     "jupyter.notebookFileRoot": "${workspaceFolder}",
     "typescript.preferences.includePackageJsonAutoImports": "on",
     "python.analysis.autoImportCompletions": true,
     "editor.accessibilitySupport": "off",
     "remote.SSH.enableRemoteCommand": true,
-    "remote.SSH.path": "/Users/johnh/ssh_singularity",
     "files.exclude": {
         "**/.cache": true,
         "**/.DS_Store": true,
@@ -85,11 +70,22 @@
         "jsdelivr.com",
         "unpkg.com"
     ],
-    "github.copilot.editor.enableAutoCompletions": true,
     "cursor.cpp.disabledLanguages": [
         "plaintext",
         "untitled"
     ],
+    "explorer.confirmDragAndDrop": false,
+    "workbench.iconTheme": "vscode-icons",
+    "files.associations": {
+        "*.strings": "plist",
+        "*.plist": "plist"
+    },
+    "editor.fontFamily": "Menlo, Monaco, 'Fira Code', monospace",
+    "window.zoomLevel": 1,
+    "remote.SSH.maxReconnectionAttempts": 0,
+    "explorer.confirmDelete": false,
+    "workbench.colorTheme": "Visual Studio Light",
+    "vsicons.dontShowNewVersionMessage": true,
     "python.analysis.packageIndexDepths": [
         {
             "name": "sklearn",
@@ -119,5 +115,12 @@
             "name": "inspect_ai",
             "depth": 2
         }
-    ]
+    ],
+    "cursor.cpp.enablePartialAccepts": true,
+    "diffEditor.hideUnchangedRegions.enabled": true,
+    "git.openRepositoryInParentFolders": "never",
+    "[markdown]": {
+    },
+    "editor.wrappingIndent": "indent",
+    "workbench.activityBar.orientation": "vertical"
 }
