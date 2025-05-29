@@ -122,5 +122,6 @@
     "[markdown]": {
     },
     "editor.wrappingIndent": "indent",
-    "workbench.activityBar.orientation": "vertical"
+    "workbench.activityBar.orientation": "vertical",
+    "python.languageServer": "None"
 }
