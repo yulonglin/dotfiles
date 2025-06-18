@@ -44,7 +44,7 @@ if [[ ${#ALIASES[@]} -gt 0 ]]; then
 else
     echo "using extra aliases: none"
 fi
-echo "mode: ${APPEND}"
+echo "append mode: ${APPEND}"
 
 # Set the operator based on append flag
 OP=">"
