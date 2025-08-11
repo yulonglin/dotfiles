@@ -7,6 +7,7 @@ alias zrc="cd $DOT_DIR/zsh"
 alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
+alias yolo='claude --dangerously-skip-permissions'
 
 # -------------------------------------------------------------------
 # general
