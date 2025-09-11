@@ -63,4 +63,7 @@ if command -v ask-sh &> /dev/null; then
   eval "$(ask-sh --init)"
 fi
 
-cat $CONFIG_DIR/start.txt
+# Only display ASCII art in interactive shells
+if [[ -o interactive ]]; then
+  cat $CONFIG_DIR/start.txt
+fi
