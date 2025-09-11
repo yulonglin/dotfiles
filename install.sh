@@ -83,25 +83,35 @@ if [ $machine == "Linux" ]; then
 
 # Installing on mac with homebrew
 elif [ $machine == "Mac" ]; then
-    yes | brew install coreutils ncdu htop ncdu rsync btop jq  # Mac won't have realpath before coreutils installed
+    echo "Installing core packages..."
+    brew install --quiet coreutils ncdu htop rsync btop jq 2>/dev/null || echo "Warning: Some packages may have failed to install"
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
-    if [ $extras == true ]; then
-        yes | brew install ripgrep dust jless
-
-        yes | curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        . "$HOME/.cargo/env" 
-        yes | cargo install code2prompt
-        yes | brew install peco
+    DOT_DIR=$(dirname $(realpath $0))
+    if [ $zsh == true ]; then
+        echo "Installing ZSH..."
+        brew install --quiet zsh 2>/dev/null || echo "Warning: ZSH installation failed"
+    fi
+    if [ $tmux == true ]; then
+        echo "Installing tmux..."  
+        brew install --quiet tmux 2>/dev/null || echo "Warning: tmux installation failed"
     fi
 
-    DOT_DIR=$(dirname $(realpath $0))
-    [ $zsh == true ] && yes | brew install zsh
-    [ $tmux == true ] && yes | brew install tmux
-    defaults write -g InitialKeyRepeat -int 10 # normal minimum is 15 (225 ms)
-    defaults write -g KeyRepeat -int 1 # normal minimum is 2 (30 ms)
-    defaults write -g com.apple.mouse.scaling 5.0
-    defaults write com.microsoft.VSCode ApplePressAndHoldEnabled -bool false
+    if [ $extras == true ]; then
+        echo "Installing extras..."
+        brew install --quiet ripgrep dust jless peco 2>/dev/null || echo "Warning: Some extras failed to install"
+
+        echo "Installing Rust..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+        . "$HOME/.cargo/env" 2>/dev/null || true
+        cargo install code2prompt --quiet 2>/dev/null || echo "Warning: code2prompt installation failed"
+    fi
+
+    # macOS settings
+    defaults write -g InitialKeyRepeat -int 10 2>/dev/null || true
+    defaults write -g KeyRepeat -int 1 2>/dev/null || true  
+    defaults write -g com.apple.mouse.scaling 5.0 2>/dev/null || true
+    defaults write com.microsoft.VSCode ApplePressAndHoldEnabled -bool false 2>/dev/null || true
 fi
 
 # Setting up oh my zsh and oh my zsh plugins
@@ -110,31 +120,34 @@ ZSH_CUSTOM=$ZSH/custom
 if [ -d $ZSH ] && [ "$force" = "false" ]; then
     echo "Skipping download of oh-my-zsh and related plugins, pass --force to force redownload"
 else
-    echo " --------- INSTALLING DEPENDENCIES ⏳ ----------- "
+    echo "Installing oh-my-zsh and plugins..."
     rm -rf $ZSH
+    
+    echo "  → Installing oh-my-zsh..."
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
-    git clone https://github.com/romkatv/powerlevel10k.git \
-        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/themes/powerlevel10k
+    echo "  → Installing powerlevel10k theme..."
+    git clone --quiet https://github.com/romkatv/powerlevel10k.git \
+        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/themes/powerlevel10k 2>/dev/null || echo "Warning: powerlevel10k installation failed"
 
-    git clone https://github.com/zsh-users/zsh-syntax-highlighting.git \
-        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+    echo "  → Installing zsh plugins..."
+    git clone --quiet https://github.com/zsh-users/zsh-syntax-highlighting.git \
+        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting 2>/dev/null || echo "Warning: zsh-syntax-highlighting failed"
 
-    git clone https://github.com/zsh-users/zsh-autosuggestions \
-        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+    git clone --quiet https://github.com/zsh-users/zsh-autosuggestions \
+        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions 2>/dev/null || echo "Warning: zsh-autosuggestions failed"
 
-    git clone https://github.com/zsh-users/zsh-completions \
-        ${ZSH_CUSTOM:=~/.oh-my-zsh/custom}/plugins/zsh-completions
+    git clone --quiet https://github.com/zsh-users/zsh-completions \
+        ${ZSH_CUSTOM:=~/.oh-my-zsh/custom}/plugins/zsh-completions 2>/dev/null || echo "Warning: zsh-completions failed"
 
-    git clone https://github.com/zsh-users/zsh-history-substring-search \
-        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-history-substring-search
-    git clone https://github.com/jimeh/tmux-themepack.git ~/.tmux-themepack
+    git clone --quiet https://github.com/zsh-users/zsh-history-substring-search \
+        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-history-substring-search 2>/dev/null || echo "Warning: zsh-history-substring-search failed"
+    
+    echo "  → Installing tmux theme pack..."
+    git clone --quiet https://github.com/jimeh/tmux-themepack.git ~/.tmux-themepack 2>/dev/null || echo "Warning: tmux-themepack failed"
 
-    # git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-    # yes | ~/.fzf/install
-
-    echo " --------- INSTALLED SUCCESSFULLY ✅ ----------- "
-    echo " --------- NOW RUN ./deploy.sh [OPTION] -------- "
+    echo "✅ oh-my-zsh installation complete!"
+    echo "Run ./deploy.sh to configure your dotfiles"
 fi
 
 if [ $extras == true ]; then
