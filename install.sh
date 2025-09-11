@@ -48,10 +48,22 @@ esac
 # Installing on linux with apt
 if [ $machine == "Linux" ]; then
     DOT_DIR=$(dirname $(realpath $0))
-    apt update -y
-    [ $zsh == true ] && apt install -y zsh
-    [ $tmux == true ] && apt install -y tmux
-    apt install -y less nano htop ncdu nvtop lsof rsync jq
+    apt update -y 2>/dev/null || echo "Skipping apt update (no permissions)"
+    
+    # Try installing ZSH, fall back to local install if it fails
+    if [ $zsh == true ]; then
+        if ! command -v zsh &> /dev/null && [ ! -f "$HOME/local/bin/zsh" ]; then
+            apt install -y zsh 2>/dev/null || {
+                echo "apt install zsh failed, installing locally..."
+                "$DOT_DIR/install_zsh_local.sh"
+            }
+        else
+            echo "ZSH already installed"
+        fi
+    fi
+    
+    [ $tmux == true ] && apt install -y tmux 2>/dev/null || true
+    apt install -y less nano htop ncdu nvtop lsof rsync jq 2>/dev/null || true
     curl -LsSf https://astral.sh/uv/install.sh | sh
     
     if [ $extras == true ]; then
@@ -96,7 +108,7 @@ fi
 ZSH=~/.oh-my-zsh
 ZSH_CUSTOM=$ZSH/custom
 if [ -d $ZSH ] && [ "$force" = "false" ]; then
-    echo "Skipping download of oh-my-zsh and related plugins, pass --force to force redeownload"
+    echo "Skipping download of oh-my-zsh and related plugins, pass --force to force redownload"
 else
     echo " --------- INSTALLING DEPENDENCIES ⏳ ----------- "
     rm -rf $ZSH
