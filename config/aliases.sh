@@ -64,7 +64,10 @@ alias .2='cd ../../'
 alias .3='cd ../../../'
 alias .4='cd ../../../../'
 alias .5='cd ../../../../..'
-alias /='cd /'
+# Only set / alias in ZSH (causes issues in bash)
+if [ -n "$ZSH_VERSION" ]; then
+  alias /='cd /'
+fi
 
 alias d='dirs -v'
 alias 1='cd -1'
