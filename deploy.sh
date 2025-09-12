@@ -110,6 +110,17 @@ elif [[ "$CURRENT_SHELL" == "bash" ]]; then
         echo "# Display ASCII art in interactive shells"
         echo "[[ \$- == *i* ]] && [ -f $DOT_DIR/config/start.txt ] && cat $DOT_DIR/config/start.txt"
     } >> "$HOME/.bashrc" || { echo "Error: Failed to write ASCII art config to $HOME/.bashrc"; exit 1; }
+    
+    # Add ZSH switcher to .bash_profile (not .bashrc) to avoid Warp terminal issues
+    if [[ $APPEND == "false" ]] || ! grep -q "bash_zsh_switcher.sh" ~/.bash_profile 2>/dev/null; then
+        {
+            echo ""
+            echo "# ZSH switcher - in .bash_profile to avoid terminal compatibility issues"
+            echo "[ -f $DOT_DIR/config/bash_zsh_switcher.sh ] && source $DOT_DIR/config/bash_zsh_switcher.sh"
+        } >> "$HOME/.bash_profile" || { echo "Error: Failed to write ZSH switcher to $HOME/.bash_profile"; exit 1; }
+        echo "Added ZSH switcher to ~/.bash_profile"
+    fi
+    
     RC_FILE="$HOME/.bashrc"
 else
     echo "Warning: Unknown shell '$CURRENT_SHELL'. Defaulting to zsh setup."
