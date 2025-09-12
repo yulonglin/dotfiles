@@ -55,20 +55,8 @@ export SHELL=$HOME/local/bin/zsh
 export ZDOTDIR=$HOME
 EOF
 
-# Update bashrc to automatically use local zsh
-if ! grep -q "local/activate_zsh.sh" ~/.bashrc 2>/dev/null; then
-    cat >> ~/.bashrc << 'EOF'
-
-# Use local zsh if available
-if [ -f $HOME/local/activate_zsh.sh ] && [ -f $HOME/local/bin/zsh ]; then
-    source $HOME/local/activate_zsh.sh
-    # Auto-start zsh if not already in zsh and interactive shell
-    if [ -z "$ZSH_VERSION" ] && [ -n "$PS1" ]; then
-        HOME=$HOME ZDOTDIR=$HOME exec $HOME/local/bin/zsh -l
-    fi
-fi
-EOF
-fi
+# Note: ZSH activation is now handled by deploy.sh through .bash_profile
+# This avoids issues with terminals like Warp that source .bashrc in special ways
 
 # Get the real HOME directory (in case we're in a temp directory like Warp creates)
 REAL_HOME=$(eval echo ~$(whoami))
@@ -104,8 +92,7 @@ fi
 echo "ZSH installation complete!"
 echo ""
 echo "ZSH has been installed to $HOME/local/bin/zsh"
-echo "Your ~/.bashrc has been updated to auto-start ZSH on login."
 echo ""
 echo "Next steps:"
-echo "1. Run: source ~/.bashrc"
+echo "1. Run: ./deploy.sh  (to configure your dotfiles and enable ZSH)"
 echo "2. Run: ./install.sh --force  (to install oh-my-zsh and plugins)"
