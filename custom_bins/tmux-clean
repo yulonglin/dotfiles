@@ -1,0 +1,13 @@
+#!/bin/bash
+# Start tmux with a clean environment, preserving only essentials
+# This prevents pollution of tmux's global environment
+
+exec env -i \
+  HOME="$HOME" \
+  USER="$USER" \
+  SHELL="$SHELL" \
+  TERM="$TERM" \
+  LANG="$LANG" \
+  PATH="$PATH" \
+  SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-}" \
+  tmux "$@"
