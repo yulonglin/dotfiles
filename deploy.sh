@@ -50,14 +50,29 @@ fi
 add_tool_integrations() {
     local rc_file="$1"
     local shell_name="$2"
-    
+
     {
         echo ""
         echo "# Tool integrations"
         echo "[ -f ~/.fzf.${shell_name} ] && source ~/.fzf.${shell_name}"
         echo "[ -d \"\$HOME/.cargo\" ] && . \"\$HOME/.cargo/env\""
         echo "[ -d \"\$HOME/.local/bin\" ] && [ -f \"\$HOME/.local/bin/env\" ] && source \"\$HOME/.local/bin/env\""
+        echo ""
+        echo "# Atuin - unified shell history"
+        echo "if [ -f \"\$HOME/.atuin/bin/env\" ]; then"
+        echo "    source \"\$HOME/.atuin/bin/env\""
+        echo "    eval \"\$(atuin init ${shell_name} --disable-up-arrow)\""
+        echo "elif command -v atuin &> /dev/null; then"
+        echo "    eval \"\$(atuin init ${shell_name} --disable-up-arrow)\""
+        echo "fi"
     } >> "$rc_file" || { echo "Error: Failed to write tool integrations to $rc_file"; exit 1; }
+
+    # Deploy Atuin config if it exists in dotfiles
+    if [ -f "$DOT_DIR/config/atuin.toml" ]; then
+        mkdir -p "$HOME/.config/atuin"
+        cp "$DOT_DIR/config/atuin.toml" "$HOME/.config/atuin/config.toml"
+        echo "Deployed Atuin configuration"
+    fi
 }
 echo "append mode: ${APPEND}"
 
