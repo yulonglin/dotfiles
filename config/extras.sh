@@ -14,12 +14,30 @@ setopt HIST_FIND_NO_DUPS         # Do not display a line previously found.
 setopt completealiases
 setopt always_to_end
 setopt list_ambiguous
-export HISTSIZE=100000 # big big history
-export HISTFILESIZE=100000 # big big history
+setopt SHARE_HISTORY             # Share history between all sessions
+setopt INC_APPEND_HISTORY        # Write to history file immediately, not when shell exits
+setopt HIST_IGNORE_ALL_DUPS      # Delete old recorded entry if new entry is a duplicate
+export HISTSIZE=100000           # big big history (in memory)
+export SAVEHIST=100000           # big big history (saved to file)
+export HISTFILESIZE=100000       # big big history
+export HISTFILE=~/.zsh_history   # Ensure history file location is set
 unsetopt hup
 unsetopt list_beep
 skip_global_compinit=1
 zstyle ':completion:*' hosts off
+
+# Enhanced completion settings for better history search
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*:history-words' stop yes
+zstyle ':completion:*:history-words' remove-all-dups yes
+zstyle ':completion:*:history-words' list false
+zstyle ':completion:*:history-words' menu yes
+
+# Configure zsh-autosuggestions to use history
+ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
+ZSH_AUTOSUGGEST_USE_ASYNC=true
 
 # Set Up and Down arrow keys to the (zsh-)history-substring-search plugin
 # `-n` means `not empty`, equivalent to `! -z`
