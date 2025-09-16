@@ -64,6 +64,11 @@ if [ $machine == "Linux" ]; then
     
     [ $tmux == true ] && apt install -y tmux 2>/dev/null || true
     apt install -y less nano htop ncdu nvtop lsof rsync jq 2>/dev/null || true
+
+    # Install atuin for unified shell history
+    echo "Installing Atuin..."
+    curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh 2>/dev/null || echo "Warning: Atuin installation failed"
+
     curl -LsSf https://astral.sh/uv/install.sh | sh
     
     if [ $extras == true ]; then
@@ -85,6 +90,11 @@ if [ $machine == "Linux" ]; then
 elif [ $machine == "Mac" ]; then
     echo "Installing core packages..."
     brew install --quiet coreutils ncdu htop rsync btop jq 2>/dev/null || echo "Warning: Some packages may have failed to install"
+
+    # Install atuin for unified shell history
+    echo "Installing Atuin..."
+    brew install --quiet atuin 2>/dev/null || echo "Warning: Atuin installation failed"
+
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
     DOT_DIR=$(dirname $(realpath $0))
