@@ -126,14 +126,37 @@ elif [[ "$CURRENT_SHELL" == "bash" ]]; then
         echo "[[ \$- == *i* ]] && [ -f $DOT_DIR/config/start.txt ] && cat $DOT_DIR/config/start.txt"
     } >> "$HOME/.bashrc" || { echo "Error: Failed to write ASCII art config to $HOME/.bashrc"; exit 1; }
     
-    # Add ZSH switcher to .bash_profile (not .bashrc) to avoid Warp terminal issues
+    # Add .bashrc sourcing and ZSH switcher to .bash_profile for login shells
+    # Check if we need to add these components
+    local needs_bashrc_source=false
+    local needs_zsh_switcher=false
+
+    if [[ $APPEND == "false" ]] || ! grep -q "source.*\.bashrc\|\..*\.bashrc" ~/.bash_profile 2>/dev/null; then
+        needs_bashrc_source=true
+    fi
+
     if [[ $APPEND == "false" ]] || ! grep -q "bash_zsh_switcher.sh" ~/.bash_profile 2>/dev/null; then
+        needs_zsh_switcher=true
+    fi
+
+    if [[ "$needs_bashrc_source" == "true" ]] || [[ "$needs_zsh_switcher" == "true" ]]; then
         {
-            echo ""
-            echo "# ZSH switcher - in .bash_profile to avoid terminal compatibility issues"
-            echo "[ -f $DOT_DIR/config/bash_zsh_switcher.sh ] && source $DOT_DIR/config/bash_zsh_switcher.sh"
-        } >> "$HOME/.bash_profile" || { echo "Error: Failed to write ZSH switcher to $HOME/.bash_profile"; exit 1; }
-        echo "Added ZSH switcher to ~/.bash_profile"
+            if [[ "$needs_bashrc_source" == "true" ]]; then
+                echo ""
+                echo "# Source .bashrc for login shells (SSH sessions)"
+                echo "# This MUST come before ZSH switcher to ensure aliases are loaded"
+                echo "if [ -f \"\$HOME/.bashrc\" ]; then"
+                echo "    . \"\$HOME/.bashrc\""
+                echo "fi"
+            fi
+
+            if [[ "$needs_zsh_switcher" == "true" ]]; then
+                echo ""
+                echo "# ZSH switcher - comes AFTER .bashrc to preserve aliases if staying in bash"
+                echo "[ -f $DOT_DIR/config/bash_zsh_switcher.sh ] && source $DOT_DIR/config/bash_zsh_switcher.sh"
+            fi
+        } >> "$HOME/.bash_profile" || { echo "Error: Failed to write to $HOME/.bash_profile"; exit 1; }
+        echo "Updated ~/.bash_profile with bashrc sourcing and/or ZSH switcher"
     fi
     
     RC_FILE="$HOME/.bashrc"
