@@ -128,8 +128,8 @@ elif [[ "$CURRENT_SHELL" == "bash" ]]; then
     
     # Add .bashrc sourcing and ZSH switcher to .bash_profile for login shells
     # Check if we need to add these components
-    local needs_bashrc_source=false
-    local needs_zsh_switcher=false
+    needs_bashrc_source=false
+    needs_zsh_switcher=false
 
     if [[ $APPEND == "false" ]] || ! grep -q "source.*\.bashrc\|\..*\.bashrc" ~/.bash_profile 2>/dev/null; then
         needs_bashrc_source=true
