@@ -8,6 +8,7 @@ USAGE=$(cat <<-END
         --tmux       install tmux
         --zsh        install zsh
         --extras     install extra dependencies
+        --ai-tools   install AI CLI tools (Claude Code, Gemini, Codex)
 
     If OPTIONS are passed they will be installed
     with apt if on linux or brew if on OSX
@@ -17,6 +18,7 @@ END
 zsh=false
 tmux=false
 extras=false
+ai_tools=false
 force=false
 while (( "$#" )); do
     case "$1" in
@@ -28,6 +30,8 @@ while (( "$#" )); do
             tmux=true && shift ;;
         --extras)
             extras=true && shift ;;
+        --ai-tools)
+            ai_tools=true && shift ;;
         --force)
             force=true && shift ;;
         --) # end argument parsing
@@ -154,5 +158,45 @@ if [ $extras == true ]; then
     echo " --------- INSTALLING EXTRAS ⏳ ----------- "
     if command -v cargo &> /dev/null; then
         NO_ASK_OPENAI_API_KEY=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/hmirin/ask.sh/main/install.sh)"
+    fi
+fi
+
+# Installing AI CLI tools
+if [ $ai_tools == true ]; then
+    echo " --------- INSTALLING AI CLI TOOLS 🤖 ----------- "
+
+    # Ensure npm is available
+    if ! command -v npm &> /dev/null; then
+        echo "npm not found, installing..."
+        if [ $machine == "Linux" ]; then
+            apt install -y npm 2>/dev/null || echo "Warning: npm installation failed"
+        elif [ $machine == "Mac" ]; then
+            brew install --quiet node 2>/dev/null || echo "Warning: node/npm installation failed"
+        fi
+    fi
+
+    if command -v npm &> /dev/null; then
+        echo "Installing AI CLI tools..."
+
+        # Claude Code
+        echo "  → Installing Claude Code..."
+        npm install -g @anthropic-ai/claude-code 2>/dev/null || echo "Warning: Claude Code installation failed"
+
+        # Gemini CLI
+        echo "  → Installing Gemini CLI..."
+        if [ $machine == "Mac" ] && command -v brew &> /dev/null; then
+            brew install --quiet gemini-cli 2>/dev/null || npm install -g @google/gemini-cli 2>/dev/null || echo "Warning: Gemini CLI installation failed"
+        else
+            npm install -g @google/gemini-cli 2>/dev/null || echo "Warning: Gemini CLI installation failed"
+        fi
+
+        # Codex CLI
+        echo "  → Installing Codex CLI..."
+        npm install -g @openai/codex 2>/dev/null || echo "Warning: Codex CLI installation failed"
+
+        echo "✅ AI CLI tools installation complete!"
+        echo "Run 'ai-check' after deployment to verify installations"
+    else
+        echo "Error: npm is required for AI CLI tools installation"
     fi
 fi

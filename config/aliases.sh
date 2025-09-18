@@ -205,3 +205,12 @@ alias qclear='scancel -u $(whoami)'
 qrun() {
   sbatch --gres=gpu:"$1" "$2"
 }
+
+# -------------------------------------------------------------------
+# AI CLI Tools
+# -------------------------------------------------------------------
+# Health check for all AI CLI tools
+alias ai-check='echo "Checking AI CLI tools..." && claude --version && gemini --version && codex --version'
+
+# Update all AI CLI tools
+alias ai-update='npm update -g @anthropic-ai/claude-code @google/gemini-cli @openai/codex'
