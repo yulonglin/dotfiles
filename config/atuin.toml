@@ -1,0 +1,36 @@
+# Atuin configuration with global sync
+
+# Enable sync with Atuin cloud
+sync_address = "https://api.atuin.sh"
+auto_sync = true
+
+# Search settings
+search_mode = "fuzzy"
+filter_mode = "global"  # Search all history, not just current directory
+filter_mode_shell_up_key_binding = "directory"  # Up arrow searches current dir
+style = "auto"
+show_preview = true
+show_help = true
+exit_mode = "return-original"
+
+# History settings
+max_record_size = 10240
+store_failed = false
+secrets_filter = true  # Filter out potential secrets
+history_filter = []
+
+# UI settings
+inline_height = 10
+show_tabs = true
+
+# Key bindings
+ctrl_n_shortcuts = true
+
+# Statistics
+common_prefix = ["sudo"]
+common_subcommands = ["cargo", "go", "git", "npm", "yarn", "pnpm", "docker"]
+
+# Local database settings
+db_path = "~/.local/share/atuin/history.db"
+key_path = "~/.local/share/atuin/key"
+session_path = "~/.local/share/atuin/session"

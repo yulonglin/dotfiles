@@ -57,8 +57,9 @@ docker push jplhughes1/runpod-dev
 Located in `custom_bins/` and automatically added to PATH:
 - `rl` - readlink -f with clipboard copy functionality
 - `tsesh` - Tmux session management utility
-- `twin` - Tmux window management utility  
+- `twin` - Tmux window management utility
 - `yk` - Clipboard utility
+- `tmux-clean` - Start tmux with clean environment (prevents variable pollution)
 
 ### ASCII Art System
 - ASCII art files stored in `config/ascii_arts/`
@@ -84,6 +85,24 @@ The dotfiles support multiple environments:
 - **Cross-platform compatibility** - Works on Mac (Homebrew) and Linux (apt)
 - **GPU development support** - Slurm aliases and RunPod integration
 - **Shell enhancements** - History substring search, autosuggestions, syntax highlighting
+
+## Tmux Environment Management
+
+### Checking and Cleaning Tmux Global Environment
+If tmux global environment has accumulated unwanted variables:
+```bash
+# Check what's in tmux global environment
+tmux show-environment -g
+
+# Start fresh tmux with clean environment (only essential vars)
+tmux-clean  # Custom script that starts tmux with minimal env
+
+# Nuclear option - restart tmux server (loses all sessions)
+tmux kill-server
+tmux-clean new
+```
+
+The `tmux-clean` script starts tmux with only essential variables (HOME, USER, SHELL, PATH, TERM, SSH_AUTH_SOCK), preventing environment pollution from the parent shell. Useful when you need a clean tmux environment without unwanted variables like API keys or virtual environments.
 
 ## Customization Patterns
 

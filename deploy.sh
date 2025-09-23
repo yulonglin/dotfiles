@@ -39,11 +39,41 @@ while (( "$#" )); do
 done
 
 echo "deploying on machine..."
+echo "detected shell: ${SHELL##*/}"
 if [[ ${#ALIASES[@]} -gt 0 ]]; then
     echo "using extra aliases: ${ALIASES[*]}"
 else
     echo "using extra aliases: none"
 fi
+
+# Helper function to add common tool integrations
+add_tool_integrations() {
+    local rc_file="$1"
+    local shell_name="$2"
+
+    {
+        echo ""
+        echo "# Tool integrations"
+        echo "[ -f ~/.fzf.${shell_name} ] && source ~/.fzf.${shell_name}"
+        echo "[ -d \"\$HOME/.cargo\" ] && . \"\$HOME/.cargo/env\""
+        echo "[ -d \"\$HOME/.local/bin\" ] && [ -f \"\$HOME/.local/bin/env\" ] && source \"\$HOME/.local/bin/env\""
+        echo ""
+        echo "# Atuin - unified shell history"
+        echo "if [ -f \"\$HOME/.atuin/bin/env\" ]; then"
+        echo "    source \"\$HOME/.atuin/bin/env\""
+        echo "    eval \"\$(atuin init ${shell_name} --disable-up-arrow)\""
+        echo "elif command -v atuin &> /dev/null; then"
+        echo "    eval \"\$(atuin init ${shell_name} --disable-up-arrow)\""
+        echo "fi"
+    } >> "$rc_file" || { echo "Error: Failed to write tool integrations to $rc_file"; exit 1; }
+
+    # Deploy Atuin config if it exists in dotfiles
+    if [ -f "$DOT_DIR/config/atuin.toml" ]; then
+        mkdir -p "$HOME/.config/atuin"
+        cp "$DOT_DIR/config/atuin.toml" "$HOME/.config/atuin/config.toml"
+        echo "Deployed Atuin configuration"
+    fi
+}
 echo "append mode: ${APPEND}"
 
 # Set the operator based on append flag
@@ -61,12 +91,85 @@ if [[ $VIM == "true" ]]; then
     eval "echo \"source $DOT_DIR/config/vimrc\" $OP \"\$HOME/.vimrc\""
 fi
 
-# zshrc setup
-eval "echo \"source $DOT_DIR/config/zshrc.sh\" $OP \"\$HOME/.zshrc\""
+# Shell configuration setup
+CURRENT_SHELL="${SHELL##*/}"
+
+# For zsh, use the full zshrc.sh which includes oh-my-zsh setup
+if [[ "$CURRENT_SHELL" == "zsh" ]]; then
+    eval "echo \"source $DOT_DIR/config/zshrc.sh\" $OP \"\$HOME/.zshrc\""
+    RC_FILE="$HOME/.zshrc"
+# For bash, source individual components (skip zsh-specific parts)
+elif [[ "$CURRENT_SHELL" == "bash" ]]; then
+    # Handle append mode properly for bash
+    if [[ $APPEND == "false" ]]; then
+        > "$HOME/.bashrc"  # Clear file first if not appending
+    fi
+    
+    # Create minimal bashrc config that sources the essential files
+    {
+        echo "# Dotfiles configuration"
+        echo "export DOT_DIR=$DOT_DIR"
+        echo "source $DOT_DIR/config/aliases.sh"
+        echo "source $DOT_DIR/config/key_bindings.sh"  # Safe to source - has shell detection
+        # Skip extras.sh for bash - it contains zsh-specific settings
+        echo "source $DOT_DIR/config/modern_tools.sh"
+        echo "export PATH=\"\$DOT_DIR/custom_bins:\$PATH\""
+    } >> "$HOME/.bashrc" || { echo "Error: Failed to write to $HOME/.bashrc"; exit 1; }
+    
+    # Add common tool integrations
+    add_tool_integrations "$HOME/.bashrc" "bash"
+    
+    # ASCII art for interactive shells
+    {
+        echo ""
+        echo "# Display ASCII art in interactive shells"
+        echo "[[ \$- == *i* ]] && [ -f $DOT_DIR/config/start.txt ] && cat $DOT_DIR/config/start.txt"
+    } >> "$HOME/.bashrc" || { echo "Error: Failed to write ASCII art config to $HOME/.bashrc"; exit 1; }
+    
+    # Add .bashrc sourcing and ZSH switcher to .bash_profile for login shells
+    # Check if we need to add these components
+    needs_bashrc_source=false
+    needs_zsh_switcher=false
+
+    if [[ $APPEND == "false" ]] || ! grep -q "source.*\.bashrc\|\..*\.bashrc" ~/.bash_profile 2>/dev/null; then
+        needs_bashrc_source=true
+    fi
+
+    if [[ $APPEND == "false" ]] || ! grep -q "bash_zsh_switcher.sh" ~/.bash_profile 2>/dev/null; then
+        needs_zsh_switcher=true
+    fi
+
+    if [[ "$needs_bashrc_source" == "true" ]] || [[ "$needs_zsh_switcher" == "true" ]]; then
+        {
+            if [[ "$needs_bashrc_source" == "true" ]]; then
+                echo ""
+                echo "# Source .bashrc for login shells (SSH sessions)"
+                echo "# This MUST come before ZSH switcher to ensure aliases are loaded"
+                echo "if [ -f \"\$HOME/.bashrc\" ]; then"
+                echo "    . \"\$HOME/.bashrc\""
+                echo "fi"
+            fi
+
+            if [[ "$needs_zsh_switcher" == "true" ]]; then
+                echo ""
+                echo "# ZSH switcher - comes AFTER .bashrc to preserve aliases if staying in bash"
+                echo "[ -f $DOT_DIR/config/bash_zsh_switcher.sh ] && source $DOT_DIR/config/bash_zsh_switcher.sh"
+            fi
+        } >> "$HOME/.bash_profile" || { echo "Error: Failed to write to $HOME/.bash_profile"; exit 1; }
+        echo "Updated ~/.bash_profile with bashrc sourcing and/or ZSH switcher"
+    fi
+    
+    RC_FILE="$HOME/.bashrc"
+else
+    echo "Warning: Unknown shell '$CURRENT_SHELL'. Defaulting to zsh setup."
+    eval "echo \"source $DOT_DIR/config/zshrc.sh\" $OP \"\$HOME/.zshrc\""
+    RC_FILE="$HOME/.zshrc"
+fi
+
 # Append additional alias scripts if specified
 if [[ ${#ALIASES[@]} -gt 0 ]]; then
     for alias_name in "${ALIASES[@]}"; do
-        echo "source $DOT_DIR/config/aliases_${alias_name}.sh" >> "$HOME/.zshrc"
+        echo "source $DOT_DIR/config/aliases_${alias_name}.sh" >> "$RC_FILE"
     done
 fi
 
