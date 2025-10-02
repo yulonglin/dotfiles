@@ -171,38 +171,53 @@ if [ $extras == true ]; then
     fi
 fi
 
-# Installing AI CLI tools
-if [ $ai_tools == true ]; then
-    echo " --------- INSTALLING AI CLI TOOLS 🤖 ----------- "
+# Install AI CLI tools
+if [ "$ai_tools" = true ]; then
+    echo "--------- INSTALLING AI CLI TOOLS 🤖 -----------"
 
-    # Ensure npm is available
-    if ! command -v npm &> /dev/null; then
-        echo "npm not found, installing..."
-        if [ $machine == "Linux" ]; then
-            apt install -y npm 2>/dev/null || echo "Warning: npm installation failed"
-        elif [ $machine == "Mac" ]; then
-            brew install --quiet node 2>/dev/null || echo "Warning: node/npm installation failed"
+    # Ensure npm is available, try system package managers first
+    if ! command -v npm &>/dev/null; then
+        echo "npm not found, attempting installation..."
+        case "$machine" in
+            Linux)
+                apt install -y npm &>/dev/null || echo "Warning: npm installation via apt failed"
+                ;;
+            Mac)
+                brew install --quiet node &>/dev/null || echo "Warning: node/npm installation via brew failed"
+                ;;
+        esac
+    fi
+
+    # Fallback: use install_npm.sh if npm is still missing
+    if ! command -v npm &>/dev/null; then
+        echo "npm still not found, installing via ./install_npm.sh..."
+        if bash ./install_npm.sh && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; then
+            echo "npm installed via install_npm.sh"
+        else
+            echo "Error: Failed to install npm. Aborting AI CLI tools installation."
+            exit 1
         fi
     fi
 
-    if command -v npm &> /dev/null; then
+    # Install AI CLI tools if npm is available
+    if command -v npm &>/dev/null; then
         echo "Installing AI CLI tools..."
 
         # Claude Code
         echo "  → Installing Claude Code..."
-        npm install -g @anthropic-ai/claude-code 2>/dev/null || echo "Warning: Claude Code installation failed"
+        npm install -g @anthropic-ai/claude-code &>/dev/null || echo "Warning: Claude Code installation failed"
 
         # Gemini CLI
         echo "  → Installing Gemini CLI..."
-        if [ $machine == "Mac" ] && command -v brew &> /dev/null; then
-            brew install --quiet gemini-cli 2>/dev/null || npm install -g @google/gemini-cli 2>/dev/null || echo "Warning: Gemini CLI installation failed"
+        if [ "$machine" = "Mac" ] && command -v brew &>/dev/null; then
+            brew install --quiet gemini-cli &>/dev/null || npm install -g @google/gemini-cli &>/dev/null || echo "Warning: Gemini CLI installation failed"
         else
-            npm install -g @google/gemini-cli 2>/dev/null || echo "Warning: Gemini CLI installation failed"
+            npm install -g @google/gemini-cli &>/dev/null || echo "Warning: Gemini CLI installation failed"
         fi
 
         # Codex CLI
         echo "  → Installing Codex CLI..."
-        npm install -g @openai/codex 2>/dev/null || echo "Warning: Codex CLI installation failed"
+        npm install -g @openai/codex &>/dev/null || echo "Warning: Codex CLI installation failed"
 
         echo "✅ AI CLI tools installation complete!"
         echo "Run 'ai-check' after deployment to verify installations"
