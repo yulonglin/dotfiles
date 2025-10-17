@@ -9,6 +9,7 @@ USAGE=$(cat <<-END
         --zsh        install zsh
         --extras     install extra dependencies
         --ai-tools   install AI CLI tools (Claude Code, Gemini, Codex)
+        --cleanup    install automatic cleanup for ~/Downloads and ~/Screenshots
 
     If OPTIONS are passed they will be installed
     with apt if on linux or brew if on OSX
@@ -19,6 +20,7 @@ zsh=false
 tmux=false
 extras=false
 ai_tools=false
+cleanup=false
 force=false
 while (( "$#" )); do
     case "$1" in
@@ -32,6 +34,8 @@ while (( "$#" )); do
             extras=true && shift ;;
         --ai-tools)
             ai_tools=true && shift ;;
+        --cleanup)
+            cleanup=true && shift ;;
         --force)
             force=true && shift ;;
         --) # end argument parsing
@@ -122,10 +126,8 @@ elif [ $machine == "Mac" ]; then
     fi
 
     # macOS settings
-    defaults write -g InitialKeyRepeat -int 10 2>/dev/null || true
-    defaults write -g KeyRepeat -int 1 2>/dev/null || true  
-    defaults write -g com.apple.mouse.scaling 5.0 2>/dev/null || true
-    defaults write com.microsoft.VSCode ApplePressAndHoldEnabled -bool false 2>/dev/null || true
+    echo "Configuring macOS system defaults..."
+    "$DOT_DIR/config/macos_settings.sh" || echo "Warning: macOS settings configuration had some errors"
 fi
 
 # Setting up oh my zsh and oh my zsh plugins
@@ -223,5 +225,17 @@ if [ "$ai_tools" = true ]; then
         echo "Run 'ai-check' after deployment to verify installations"
     else
         echo "Error: npm is required for AI CLI tools installation"
+    fi
+fi
+
+# Install cleanup automation if requested
+if [ "$cleanup" = true ]; then
+    echo ""
+    echo "--------- INSTALLING AUTOMATIC CLEANUP 🧹 -----------"
+    if [[ -f "$DOT_DIR/scripts/cleanup/install.sh" ]]; then
+        "$DOT_DIR/scripts/cleanup/install.sh" --non-interactive || echo "Warning: Cleanup installation failed"
+    else
+        echo "Warning: Cleanup install script not found at $DOT_DIR/scripts/cleanup/install.sh"
+        echo "Run ./deploy.sh --cleanup after deployment to enable automatic cleanup"
     fi
 fi

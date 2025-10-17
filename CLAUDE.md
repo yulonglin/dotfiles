@@ -13,6 +13,9 @@ This is a comprehensive dotfiles repository for ZSH, Tmux, Vim, and SSH setup th
 # Install dependencies (remove flags if not needed)
 ./install.sh --tmux --zsh --extras
 
+# Install with automatic cleanup enabled
+./install.sh --tmux --zsh --extras --cleanup
+
 # Deploy configuration (basic setup)
 ./deploy.sh
 
@@ -27,6 +30,69 @@ This is a comprehensive dotfiles repository for ZSH, Tmux, Vim, and SSH setup th
 
 # Append to existing configs instead of overwriting
 ./deploy.sh --append
+
+# Deploy with automatic cleanup for ~/Downloads and ~/Screenshots
+./deploy.sh --cleanup
+
+# Combine multiple options
+./deploy.sh --vim --cleanup --aliases=speechmatics
+```
+
+### Git Configuration
+```bash
+# Git configuration is automatically deployed during ./deploy.sh
+# Includes smart conflict detection and resolution
+
+# The following are automatically configured:
+# - user.email and user.name
+# - push.autoSetupRemote and push.default
+# - init.defaultBranch (main)
+# - alias.lg (better git log)
+# - core.excludesfile (global gitignore)
+
+# If conflicts are detected, you'll be prompted to:
+# - Keep existing values
+# - Use new values from dotfiles
+# - Merge interactively (choose per setting)
+# - Skip git config deployment
+```
+
+### macOS System Settings
+```bash
+# macOS settings are automatically applied during ./install.sh
+# Or run manually:
+./config/macos_settings.sh
+
+# Configures:
+# - Keyboard repeat rates and press-and-hold behavior
+# - Finder settings (show hidden files, path bar, status bar, Library folder)
+# - Preview settings (disable persistence)
+# - Screenshot location (~/Screenshots)
+# - Mouse tracking speed
+```
+
+### Automatic File Cleanup
+```bash
+# Test cleanup (dry run) - see what would be deleted
+./scripts/cleanup/cleanup_old_files.sh --dry-run
+
+# Run manual cleanup (default: 180 days retention)
+./scripts/cleanup/cleanup_old_files.sh
+
+# Custom retention period
+./scripts/cleanup/cleanup_old_files.sh --days 90
+
+# Install automatic cleanup (runs monthly by default)
+./scripts/cleanup/install.sh
+
+# Install with custom settings
+./scripts/cleanup/install.sh --days 90 --schedule weekly
+
+# Uninstall automatic cleanup
+./scripts/cleanup/uninstall.sh
+
+# For detailed documentation, see:
+./scripts/cleanup/README.md
 ```
 
 ### Docker/RunPod Commands
@@ -52,6 +118,9 @@ docker push jplhughes1/runpod-dev
 - `config/p10k.zsh` - Powerlevel10k theme configuration
 - `config/key_bindings.sh` - Custom key bindings
 - `config/extras.sh` - Additional shell configurations
+- `config/macos_settings.sh` - macOS system defaults and preferences
+- `config/gitconfig` - Git configuration template (deployed with smart merging)
+- `config/gitignore_global` - Global gitignore patterns for Linux, Python, macOS
 
 ### Custom Binaries
 Located in `custom_bins/` and automatically added to PATH:
@@ -65,6 +134,21 @@ Located in `custom_bins/` and automatically added to PATH:
 - ASCII art files stored in `config/ascii_arts/`
 - Default art displayed on shell startup from `config/start.txt`
 - Can be customized during deployment with `--ascii` flag
+
+### Automatic Cleanup System
+Located in `scripts/cleanup/`:
+- `cleanup_old_files.sh` - Main cleanup script (runs manually or via scheduled job)
+- `install.sh` - Install scheduled cleanup job (macOS launchd or Linux cron)
+- `uninstall.sh` - Remove scheduled cleanup job
+- `README.md` - Comprehensive documentation
+
+Features:
+- Cleans `~/Downloads` and `~/Screenshots` directories
+- Configurable retention period (default: 180 days / 6 months)
+- Files moved to trash, not permanently deleted
+- Dry run mode for safe testing
+- Cross-platform (macOS and Linux)
+- Scheduled execution (daily, weekly, or monthly)
 
 ### Environment Support
 The dotfiles support multiple environments:
@@ -85,6 +169,9 @@ The dotfiles support multiple environments:
 - **Cross-platform compatibility** - Works on Mac (Homebrew) and Linux (apt)
 - **GPU development support** - Slurm aliases and RunPod integration
 - **Shell enhancements** - History substring search, autosuggestions, syntax highlighting
+- **Smart git config** - Automatic deployment with conflict detection and resolution
+- **macOS optimizations** - Keyboard, Finder, and system preferences configured automatically
+- **Automatic cleanup** - Optional scheduled cleanup for Downloads and Screenshots directories
 
 ## Tmux Environment Management
 

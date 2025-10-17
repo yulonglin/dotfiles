@@ -1,0 +1,21 @@
+# Git configuration template
+# This file will be merged with your existing .gitconfig during deployment
+
+[user]
+    email = 30549145+yulonglin@users.noreply.github.com
+    name = yulonglin
+
+[push]
+    autoSetupRemote = true
+    default = simple
+
+[init]
+    defaultBranch = main
+
+[alias]
+    # Better git log with colors and graph
+    lg = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+
+[core]
+    # Global gitignore file
+    excludesfile = ~/.gitignore_global
