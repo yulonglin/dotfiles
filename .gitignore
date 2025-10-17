@@ -1,2 +1,5 @@
 .DS_Store
 *.swp
+
+# User-specific git configuration (copy from user.conf.example)
+config/user.conf

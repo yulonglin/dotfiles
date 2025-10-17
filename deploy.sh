@@ -208,6 +208,28 @@ merge_git_config() {
         return 1
     fi
 
+    # Load user configuration if exists
+    local default_email="30549145+yulonglin@users.noreply.github.com"
+    local default_name="yulonglin"
+
+    if [[ -f "$DOT_DIR/config/user.conf" ]]; then
+        source "$DOT_DIR/config/user.conf"
+        default_email="${GIT_USER_EMAIL:-$default_email}"
+        default_name="${GIT_USER_NAME:-$default_name}"
+        echo "  Using custom git user config from config/user.conf"
+    fi
+
+    # Define all git config values once using associative array
+    declare -A GIT_VALUES=(
+        ["user.email"]="$default_email"
+        ["user.name"]="$default_name"
+        ["push.autoSetupRemote"]="true"
+        ["push.default"]="simple"
+        ["init.defaultBranch"]="main"
+        ["core.excludesfile"]="~/.gitignore_global"
+        ["alias.lg"]="log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+    )
+
     # Parse sections from template
     local sections=("user.email" "user.name" "push.autoSetupRemote" "push.default" "init.defaultBranch" "alias.lg" "core.excludesfile")
     local conflicts=()
@@ -218,31 +240,7 @@ merge_git_config() {
         existing_value=$(git config --global "$section" 2>/dev/null || echo "")
 
         if [[ -n "$existing_value" ]]; then
-            # Get new value from template
-            local new_value
-            case "$section" in
-                "user.email")
-                    new_value="30549145+yulonglin@users.noreply.github.com"
-                    ;;
-                "user.name")
-                    new_value="yulonglin"
-                    ;;
-                "push.autoSetupRemote")
-                    new_value="true"
-                    ;;
-                "push.default")
-                    new_value="simple"
-                    ;;
-                "init.defaultBranch")
-                    new_value="main"
-                    ;;
-                "core.excludesfile")
-                    new_value="~/.gitignore_global"
-                    ;;
-                "alias.lg")
-                    new_value="log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
-                    ;;
-            esac
+            local new_value="${GIT_VALUES[$section]}"
 
             # Check if values differ
             if [[ "$existing_value" != "$new_value" ]]; then
@@ -273,6 +271,12 @@ merge_git_config() {
         read -p "Choose [K/U/M/S]: " -n 1 -r choice
         echo ""
 
+        # Helper function to apply git config value
+        apply_git_config() {
+            local section="$1"
+            git config --global "$section" "${GIT_VALUES[$section]}"
+        }
+
         case "$choice" in
             [Kk])
                 echo "Keeping all existing values. Applying non-conflicting settings..."
@@ -291,43 +295,16 @@ merge_git_config() {
                         local existing_value
                         existing_value=$(git config --global "$section" 2>/dev/null || echo "")
                         if [[ -z "$existing_value" ]]; then
-                            # Apply new setting
-                            case "$section" in
-                                "user.email")
-                                    git config --global "$section" "30549145+yulonglin@users.noreply.github.com"
-                                    ;;
-                                "user.name")
-                                    git config --global "$section" "yulonglin"
-                                    ;;
-                                "push.autoSetupRemote")
-                                    git config --global "$section" true
-                                    ;;
-                                "push.default")
-                                    git config --global "$section" "simple"
-                                    ;;
-                                "init.defaultBranch")
-                                    git config --global "$section" "main"
-                                    ;;
-                                "core.excludesfile")
-                                    git config --global "$section" "~/.gitignore_global"
-                                    ;;
-                                "alias.lg")
-                                    git config --global "$section" "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
-                                    ;;
-                            esac
+                            apply_git_config "$section"
                         fi
                     fi
                 done
                 ;;
             [Uu])
                 echo "Using all new values from dotfiles..."
-                git config --global user.email "30549145+yulonglin@users.noreply.github.com"
-                git config --global user.name "yulonglin"
-                git config --global push.autoSetupRemote true
-                git config --global push.default simple
-                git config --global init.defaultBranch main
-                git config --global core.excludesfile "~/.gitignore_global"
-                git config --global alias.lg "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+                for section in "${sections[@]}"; do
+                    apply_git_config "$section"
+                done
                 ;;
             [Mm])
                 echo "Interactive merge..."
@@ -341,7 +318,7 @@ merge_git_config() {
                     echo ""
 
                     if [[ "$setting_choice" == "2" ]]; then
-                        git config --global "$key" "$new"
+                        apply_git_config "$key"
                         echo "  → Set to: $new"
                     else
                         echo "  → Kept: $existing"
@@ -365,29 +342,7 @@ merge_git_config() {
                         local existing_value
                         existing_value=$(git config --global "$section" 2>/dev/null || echo "")
                         if [[ -z "$existing_value" ]]; then
-                            case "$section" in
-                                "user.email")
-                                    git config --global "$section" "30549145+yulonglin@users.noreply.github.com"
-                                    ;;
-                                "user.name")
-                                    git config --global "$section" "yulonglin"
-                                    ;;
-                                "push.autoSetupRemote")
-                                    git config --global "$section" true
-                                    ;;
-                                "push.default")
-                                    git config --global "$section" "simple"
-                                    ;;
-                                "init.defaultBranch")
-                                    git config --global "$section" "main"
-                                    ;;
-                                "core.excludesfile")
-                                    git config --global "$section" "~/.gitignore_global"
-                                    ;;
-                                "alias.lg")
-                                    git config --global "$section" "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
-                                    ;;
-                            esac
+                            apply_git_config "$section"
                         fi
                     fi
                 done
@@ -404,13 +359,9 @@ merge_git_config() {
     else
         # No conflicts, apply all settings
         echo "No conflicts detected. Applying all settings..."
-        git config --global user.email "30549145+yulonglin@users.noreply.github.com"
-        git config --global user.name "yulonglin"
-        git config --global push.autoSetupRemote true
-        git config --global push.default simple
-        git config --global init.defaultBranch main
-        git config --global core.excludesfile "~/.gitignore_global"
-        git config --global alias.lg "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+        for section in "${sections[@]}"; do
+            git config --global "$section" "${GIT_VALUES[$section]}"
+        done
     fi
 
     echo "✓ Git configuration deployed successfully!"

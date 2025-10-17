@@ -1,0 +1,10 @@
+# User configuration for git settings
+# Copy this file to user.conf and customize with your own values
+# Example: cp config/user.conf.example config/user.conf
+
+# Git user configuration
+GIT_USER_EMAIL="30549145+yulonglin@users.noreply.github.com"
+GIT_USER_NAME="yulonglin"
+
+# Note: If config/user.conf exists, deploy.sh will use these values.
+# Otherwise, it will use the defaults specified above.

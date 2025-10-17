@@ -43,8 +43,12 @@ This is a comprehensive dotfiles repository for ZSH, Tmux, Vim, and SSH setup th
 # Git configuration is automatically deployed during ./deploy.sh
 # Includes smart conflict detection and resolution
 
+# Customize git user settings (optional):
+cp config/user.conf.example config/user.conf
+# Edit config/user.conf with your name and email
+
 # The following are automatically configured:
-# - user.email and user.name
+# - user.email and user.name (from user.conf or defaults)
 # - push.autoSetupRemote and push.default
 # - init.defaultBranch (main)
 # - alias.lg (better git log)
@@ -75,6 +79,9 @@ This is a comprehensive dotfiles repository for ZSH, Tmux, Vim, and SSH setup th
 ```bash
 # Test cleanup (dry run) - see what would be deleted
 ./scripts/cleanup/cleanup_old_files.sh --dry-run
+
+# DRY_RUN supports multiple formats: true, 1, yes, y, TRUE, Yes
+DRY_RUN=yes ./scripts/cleanup/cleanup_old_files.sh
 
 # Run manual cleanup (default: 180 days retention)
 ./scripts/cleanup/cleanup_old_files.sh
@@ -121,6 +128,7 @@ docker push jplhughes1/runpod-dev
 - `config/macos_settings.sh` - macOS system defaults and preferences
 - `config/gitconfig` - Git configuration template (deployed with smart merging)
 - `config/gitignore_global` - Global gitignore patterns for Linux, Python, macOS
+- `config/user.conf.example` - Template for customizing git user settings (copy to `user.conf`)
 
 ### Custom Binaries
 Located in `custom_bins/` and automatically added to PATH:

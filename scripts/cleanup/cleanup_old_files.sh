@@ -8,7 +8,12 @@ set -e
 RETENTION_DAYS=${RETENTION_DAYS:-180}  # Default: 6 months (180 days)
 DOWNLOADS_DIR="$HOME/Downloads"
 SCREENSHOTS_DIR="$HOME/Screenshots"
-DRY_RUN=${DRY_RUN:-false}
+
+# Normalize DRY_RUN to true/false (handles: true, 1, yes, y, TRUE, Yes, etc.)
+case "${DRY_RUN,,}" in
+    true|1|yes|y) DRY_RUN=true ;;
+    *) DRY_RUN=false ;;
+esac
 
 # Color output
 RED='\033[0;31m'
@@ -32,6 +37,12 @@ log_error() {
 move_to_trash() {
     local file="$1"
 
+    # Check if file still exists (prevents race condition)
+    if [[ ! -f "$file" ]]; then
+        log_warn "File no longer exists, skipping: $file"
+        return 1
+    fi
+
     if [[ "$DRY_RUN" == "true" ]]; then
         echo "  [DRY RUN] Would trash: $file"
         return 0
@@ -39,17 +50,27 @@ move_to_trash() {
 
     # Use macOS 'trash' command if available, otherwise use osascript
     if command -v trash &> /dev/null; then
-        trash "$file"
-    elif [[ "$(uname -s)" == "Darwin" ]]; then
-        osascript -e "tell application \"Finder\" to delete POSIX file \"$file\"" 2>/dev/null || {
-            log_error "Failed to move to trash: $file"
+        if ! trash "$file" 2>&1; then
+            log_error "Failed to move to trash with 'trash' command: $file"
             return 1
-        }
+        fi
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+        # macOS fallback using osascript
+        if ! osascript -e "tell application \"Finder\" to delete POSIX file \"$file\"" 2>&1; then
+            log_error "Failed to move to trash with osascript: $file"
+            return 1
+        fi
     else
-        # On Linux, move to trash directory
+        # Linux fallback - move to XDG trash directory
         TRASH_DIR="$HOME/.local/share/Trash/files"
-        mkdir -p "$TRASH_DIR"
-        mv "$file" "$TRASH_DIR/"
+        if ! mkdir -p "$TRASH_DIR" 2>&1; then
+            log_error "Failed to create trash directory: $TRASH_DIR"
+            return 1
+        fi
+        if ! mv "$file" "$TRASH_DIR/" 2>&1; then
+            log_error "Failed to move to trash (mv failed): $file"
+            return 1
+        fi
     fi
 }
 
