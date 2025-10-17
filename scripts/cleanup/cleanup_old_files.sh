@@ -10,8 +10,8 @@ DOWNLOADS_DIR="$HOME/Downloads"
 SCREENSHOTS_DIR="$HOME/Screenshots"
 
 # Normalize DRY_RUN to true/false (handles: true, 1, yes, y, TRUE, Yes, etc.)
-case "${DRY_RUN,,}" in
-    true|1|yes|y) DRY_RUN=true ;;
+case "$DRY_RUN" in
+    [Tt][Rr][Uu][Ee]|1|[Yy][Ee][Ss]|[Yy]) DRY_RUN=true ;;
     *) DRY_RUN=false ;;
 esac
 
