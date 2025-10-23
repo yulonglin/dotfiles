@@ -3,3 +3,8 @@
 
 # User-specific git configuration (copy from user.conf.example)
 config/user.conf
+
+# npm artifacts (not used - this repo uses system package managers)
+package.json
+package-lock.json
+node_modules/

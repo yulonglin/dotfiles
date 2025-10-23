@@ -211,7 +211,15 @@ qrun() {
 # AI CLI Tools
 # -------------------------------------------------------------------
 # Health check for all AI CLI tools
-alias ai-check='echo "Checking AI CLI tools..." && claude --version && gemini --version && codex --version'
+alias ai-check='echo "Checking AI CLI tools..." && claude --version 2>/dev/null && gemini --version 2>/dev/null && codex --version 2>/dev/null'
 
-# Update all AI CLI tools
-alias ai-update='npm update -g @anthropic-ai/claude-code @google/gemini-cli @openai/codex'
+# Update all AI CLI tools (platform-specific)
+if [[ "$(uname -s)" == "Darwin" ]] && command -v brew &>/dev/null; then
+    # macOS: Use Homebrew
+    alias ai-update='brew upgrade --cask claude-code && brew upgrade gemini-cli codex'
+elif command -v npm &>/dev/null; then
+    # Linux or systems with npm
+    alias ai-update='claude update && npm update -g @google/gemini-cli @openai/codex'
+else
+    alias ai-update='echo "Error: No package manager found for AI tools updates"'
+fi

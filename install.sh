@@ -96,6 +96,17 @@ if [ $machine == "Linux" ]; then
 
 # Installing on mac with homebrew
 elif [ $machine == "Mac" ]; then
+    # Install Homebrew if not present
+    if ! command -v brew &>/dev/null; then
+        echo "Homebrew not found. Installing Homebrew..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+        # Add Homebrew to PATH for Apple Silicon Macs
+        if [[ $(uname -m) == "arm64" ]]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+        fi
+    fi
+
     echo "Installing core packages..."
     brew install --quiet coreutils ncdu htop rsync btop jq 2>/dev/null || echo "Warning: Some packages may have failed to install"
 
@@ -177,9 +188,38 @@ fi
 if [ "$ai_tools" = true ]; then
     echo "--------- INSTALLING AI CLI TOOLS 🤖 -----------"
 
-    # Ensure npm is available, try system package managers first
+    # Claude Code - native binary installation (recommended method for both platforms)
+    echo "  → Installing Claude Code..."
+    if command -v claude &>/dev/null; then
+        CURRENT_VERSION=$(claude --version 2>/dev/null | grep -oP 'v?\K[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+        echo "    Claude Code already installed (version: $CURRENT_VERSION)"
+        echo "    Auto-updates will handle future versions"
+    else
+        echo "    Installing Claude Code native binary..."
+        curl -fsSL https://claude.ai/install.sh | bash
+
+        # Check for Alpine Linux dependencies
+        if [ "$machine" = "Linux" ] && command -v apk &>/dev/null; then
+            echo "    Detected Alpine Linux - checking dependencies..."
+            if ! apk info libgcc &>/dev/null || ! apk info libstdc++ &>/dev/null || ! apk info ripgrep &>/dev/null; then
+                echo "    Installing required dependencies..."
+                apk add libgcc libstdc++ ripgrep
+                export USE_BUILTIN_RIPGREP=0
+            fi
+        fi
+    fi
+
+    # Verify Claude Code installation
+    if command -v claude &>/dev/null; then
+        echo "    ✓ Claude Code installed successfully"
+        claude --version 2>/dev/null || true
+    else
+        echo "    ✗ Claude Code installation verification failed"
+    fi
+
+    # Ensure npm is available for other CLI tools
     if ! command -v npm &>/dev/null; then
-        echo "npm not found, attempting installation..."
+        echo "  → Installing npm for additional CLI tools..."
         case "$machine" in
             Linux)
                 apt install -y npm &>/dev/null || echo "Warning: npm installation via apt failed"
@@ -190,42 +230,32 @@ if [ "$ai_tools" = true ]; then
         esac
     fi
 
-    # Fallback: use install_npm.sh if npm is still missing
-    if ! command -v npm &>/dev/null; then
-        echo "npm still not found, installing via ./install_npm.sh..."
-        if bash ./install_npm.sh && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; then
-            echo "npm installed via install_npm.sh"
-        else
-            echo "Error: Failed to install npm. Aborting AI CLI tools installation."
-            exit 1
-        fi
-    fi
+    # Install other AI CLI tools
+    echo "  → Installing additional AI CLI tools..."
 
-    # Install AI CLI tools if npm is available
-    if command -v npm &>/dev/null; then
-        echo "Installing AI CLI tools..."
+    if [ "$machine" = "Mac" ] && command -v brew &>/dev/null; then
+        # macOS: Use Homebrew for all CLI tools
+        echo "    → Installing Gemini CLI..."
+        brew install --quiet gemini-cli 2>/dev/null || echo "Warning: Gemini CLI installation failed"
 
-        # Claude Code
-        echo "  → Installing Claude Code..."
-        npm install -g @anthropic-ai/claude-code &>/dev/null || echo "Warning: Claude Code installation failed"
+        echo "    → Installing Codex CLI..."
+        brew install --quiet codex 2>/dev/null || echo "Warning: Codex CLI installation failed"
+    elif command -v npm &>/dev/null; then
+        # Linux: Use npm if available
+        echo "    → Installing Gemini CLI..."
+        npm install -g @google/gemini-cli &>/dev/null || echo "Warning: Gemini CLI installation failed"
 
-        # Gemini CLI
-        echo "  → Installing Gemini CLI..."
-        if [ "$machine" = "Mac" ] && command -v brew &>/dev/null; then
-            brew install --quiet gemini-cli &>/dev/null || npm install -g @google/gemini-cli &>/dev/null || echo "Warning: Gemini CLI installation failed"
-        else
-            npm install -g @google/gemini-cli &>/dev/null || echo "Warning: Gemini CLI installation failed"
-        fi
-
-        # Codex CLI
-        echo "  → Installing Codex CLI..."
+        echo "    → Installing Codex CLI..."
         npm install -g @openai/codex &>/dev/null || echo "Warning: Codex CLI installation failed"
-
-        echo "✅ AI CLI tools installation complete!"
-        echo "Run 'ai-check' after deployment to verify installations"
     else
-        echo "Error: npm is required for AI CLI tools installation"
+        echo "Warning: Neither Homebrew (macOS) nor npm (Linux) available for additional CLI tools"
     fi
+
+    echo "✅ AI CLI tools installation complete!"
+    echo ""
+    echo "NOTE: MCP servers are NOT installed automatically."
+    echo "      To add MCP servers, use: claude mcp add <name> <url>"
+    echo "      See: https://docs.anthropic.com/en/docs/claude-code/mcp"
 fi
 
 # Install cleanup automation if requested

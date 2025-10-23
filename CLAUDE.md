@@ -102,6 +102,44 @@ DRY_RUN=yes ./scripts/cleanup/cleanup_old_files.sh
 ./scripts/cleanup/README.md
 ```
 
+### Claude Code Configuration
+```bash
+# Install Claude Code and AI CLI tools (via install.sh --ai-tools)
+./install.sh --ai-tools
+
+# Installation methods:
+# - macOS/Linux: Native binary (claude) via curl | bash
+# - Additional tools: Homebrew (macOS) or npm (Linux) for gemini-cli, codex
+
+# Check installation status and configuration
+claude doctor
+
+# Update Claude Code
+# Native binary: Auto-updates enabled by default
+# Manual update: claude update
+
+# Configuration file location
+~/.claude/settings.json
+
+# Auto-updates
+# - Enabled by default for native binary installations
+# - Auto-updates work seamlessly on both macOS and Linux
+
+# MCP (Model Context Protocol) Servers
+# MCP servers are NOT installed by this dotfiles repo
+# They must be installed and configured separately
+# To manage MCP servers:
+#   claude mcp add <name> <url>           # Add MCP server
+#   claude mcp remove <name>              # Remove MCP server
+#   claude mcp list                       # List configured servers
+#
+# See: https://docs.anthropic.com/en/docs/claude-code/mcp
+#
+# WARNING: Some MCP servers can consume significant context:
+# - GitHub MCP: ~34k tokens (49 tools)
+# - Consider disabling unused MCP servers to save context
+```
+
 ### Docker/RunPod Commands
 ```bash
 # Build RunPod Docker image
