@@ -34,8 +34,11 @@ This is a comprehensive dotfiles repository for ZSH, Tmux, Vim, and SSH setup th
 # Deploy with automatic cleanup for ~/Downloads and ~/Screenshots
 ./deploy.sh --cleanup
 
+# Deploy Claude Code configuration (symlink claude/ to ~/.claude)
+./deploy.sh --claude
+
 # Combine multiple options
-./deploy.sh --vim --cleanup --aliases=speechmatics
+./deploy.sh --vim --cleanup --claude --aliases=speechmatics
 ```
 
 ### Git Configuration
@@ -138,6 +141,21 @@ claude doctor
 # WARNING: Some MCP servers can consume significant context:
 # - GitHub MCP: ~34k tokens (49 tools)
 # - Consider disabling unused MCP servers to save context
+
+# Deploy Claude Code configuration (sync across machines)
+# Use deploy.sh --claude to automatically symlink claude/ to ~/.claude
+./deploy.sh --claude
+
+# Or manually:
+# ln -sf /path/to/dotfiles/claude ~/.claude
+
+# What's included in claude/:
+# - CLAUDE.md: Global instructions for all projects
+# - settings.json: Merged config (statusLine, permissions, hooks, notifications)
+# - agents/: 13 specialized agents (experiment-designer, research-engineer, etc.)
+# - notify.sh: Notification script for task completion
+# - .gitignore: Comprehensive patterns (ignores runtime files, tracks config)
+# - archive/: Hooks, scripts, docs from previous setups (for review)
 ```
 
 ### Docker/RunPod Commands
@@ -167,6 +185,27 @@ docker push jplhughes1/runpod-dev
 - `config/gitconfig` - Git configuration template (deployed with smart merging)
 - `config/gitignore_global` - Global gitignore patterns for Linux, Python, macOS
 - `config/user.conf.example` - Template for customizing git user settings (copy to `user.conf`)
+
+### Claude Code Configuration Directory
+Located in `claude/` and designed to be symlinked to `~/.claude`:
+- `CLAUDE.md` - Global instructions for Claude Code across all projects
+- `settings.json` - Merged settings (statusLine, permissions, hooks, notifications)
+- `notify.sh` - Notification script (terminal bell, banner, voice alerts)
+- `.gitignore` - Comprehensive patterns (tracks config files, ignores runtime files)
+- `agents/` - 13 specialized agents:
+  - `application-writer.md` - Writing applications and formal documents
+  - `code-reviewer.md` - Code review and quality checks
+  - `context-summariser.md` - Context summarization for large codebases
+  - `data-analyst.md` - Statistical analysis and data interpretation
+  - `debugger.md` - Debugging and error investigation
+  - `experiment-designer.md` - Experimental design and methodology
+  - `literature-scout.md` - Literature review and paper search
+  - `paper-writer.md` - Academic writing and paper composition
+  - `research-advisor.md` - High-level research strategy
+  - `research-engineer.md` - Full experiment implementation
+  - `research-skeptic.md` - Critical evaluation and confound identification
+  - `tooling-engineer.md` - Tool and utility development
+- `archive/` - Previous hooks, scripts, docs (archived for review)
 
 ### Custom Binaries
 Located in `custom_bins/` and automatically added to PATH:

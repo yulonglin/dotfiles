@@ -11,6 +11,7 @@ USAGE=$(cat <<-END
         --append                append to existing config files instead of overwriting
         --ascii                 specify the ASCII art file to use
         --cleanup               install automatic cleanup for ~/Downloads and ~/Screenshots
+        --claude                deploy Claude Code configuration (symlink claude/ to ~/.claude)
 END
 )
 
@@ -21,6 +22,7 @@ ALIASES=()
 APPEND="false"
 ASCII_FILE="start.txt"  # Default value
 CLEANUP="false"
+CLAUDE="false"
 while (( "$#" )); do
     case "$1" in
         -h|--help)
@@ -35,6 +37,8 @@ while (( "$#" )); do
             ASCII_FILE="${1#*=}" && shift ;;
         --cleanup)
             CLEANUP="true" && shift ;;
+        --claude)
+            CLAUDE="true" && shift ;;
         --) # end argument parsing
             shift && break ;;
         -*|--*=) # unsupported flags
@@ -377,6 +381,32 @@ if [[ "$CLEANUP" == "true" ]]; then
         "$DOT_DIR/scripts/cleanup/install.sh" --non-interactive || echo "Warning: Cleanup installation failed"
     else
         echo "Warning: Cleanup install script not found at $DOT_DIR/scripts/cleanup/install.sh"
+    fi
+fi
+
+# Deploy Claude Code configuration if requested
+if [[ "$CLAUDE" == "true" ]]; then
+    echo ""
+    echo "Deploying Claude Code configuration..."
+
+    if [[ ! -d "$DOT_DIR/claude" ]]; then
+        echo "Warning: Claude Code directory not found at $DOT_DIR/claude"
+    else
+        # Remove existing ~/.claude if it's a symlink
+        if [[ -L "$HOME/.claude" ]]; then
+            rm "$HOME/.claude"
+            echo "  Removed existing symlink at ~/.claude"
+        elif [[ -e "$HOME/.claude" ]]; then
+            echo "  Warning: ~/.claude exists and is not a symlink"
+            echo "  Please backup and remove ~/.claude manually, then run deploy.sh --claude again"
+        fi
+
+        # Create symlink
+        if [[ ! -e "$HOME/.claude" ]]; then
+            ln -sf "$DOT_DIR/claude" "$HOME/.claude"
+            echo "✓ Symlinked $DOT_DIR/claude to ~/.claude"
+            echo "  Deployed: CLAUDE.md, settings.json, agents/, notify.sh"
+        fi
     fi
 fi
 

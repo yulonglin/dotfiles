@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "statusLine": {
+    "type": "command",
+    "command": "bash -c 'input=$(cat); cwd=$(echo \"$input\" | jq -r \".workspace.current_dir\"); if [ \"$cwd\" = \"$HOME\" ]; then dir=\"~\"; else dir=$(echo \"$cwd\" | sed \"s|^$HOME|~|\"); fi; git_info=\"\"; if git -C \"$cwd\" rev-parse --git-dir > /dev/null 2>&1; then branch=$(git -C \"$cwd\" branch --show-current 2>/dev/null || git -C \"$cwd\" rev-parse --short HEAD 2>/dev/null); if [ -n \"$branch\" ]; then if ! git -C \"$cwd\" diff --quiet 2>/dev/null || ! git -C \"$cwd\" diff --cached --quiet 2>/dev/null; then git_info=\" $(printf \"\\033[33m\")\\ue0a0 ${branch}*$(printf \"\\033[0m\")\"; else git_info=\" $(printf \"\\033[32m\")\\ue0a0 ${branch}$(printf \"\\033[0m\")\"; fi; fi; fi; printf \"\\033[2m\\033[36m%s\\033[0m%s\" \"$dir\" \"$git_info\"'"
+  },
+  "alwaysThinkingEnabled": true,
+  "installMethod": "native",
+  "env": {
+    "CLAUDE_CODE_NOTIFICATION_SCRIPT": "~/.claude/notify.sh"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(git init:*)",
+      "Bash(git fetch:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git worktree list:*)",
+      "Bash(git commit:*)",
+      "Bash(git stash push:*)",
+      "Bash(git stash pop:*)",
+      "Bash(git stash list:*)",
+      "Bash(git push:*)",
+      "Bash(gh api:*)",
+      "Bash(gh pr:*)",
+      "Bash(claude config list:*)",
+      "Bash(grep:*)",
+      "Bash(uv add:*)",
+      "Bash(uv run:*)",
+      "Bash(uv sync:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ],
+    "deny": [],
+    "defaultMode": "plan"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/notify.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

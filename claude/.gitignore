@@ -1,0 +1,211 @@
+# Claude Code runtime files (ignore these, don't track)
+.credentials.json
+file-history/
+history.jsonl
+shell-snapshots/
+statsig/
+todos/
+debug/
+downloads/
+tmp/
+plugins/
+projects/
+session-env/
+
+# We DO track: CLAUDE.md, settings.json, agents/, notify.sh, archive/
+
+# Operating System Files
+## macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+*.icloud
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+## Linux
+*~
+.directory
+.Trash-*
+.fuse_hidden*
+.nfs*
+
+## Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual Environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.conda/
+.virtualenvs/
+
+# Testing & Coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# IDEs and Editors
+## VSCode
+.vscode/
+*.code-workspace
+.history/
+
+## IntelliJ/PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+## Vim
+*.swp
+*.swo
+.*.swp
+.*.swo
+Session.vim
+.netrwhist
+tags
+
+## Emacs
+\#*\#
+.\#*
+.emacs.desktop
+.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+
+## Sublime Text
+*.sublime-project
+*.sublime-workspace
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+
+# Build & Distribution
+dist/
+build/
+*.manifest
+*.spec
+.buildinfo
+
+# Documentation
+docs/_build/
+site/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Logs
+*.log
+logs/
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Package Manager
+## Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.pnp/
+.pnp.js
+
+## Ruby
+*.gem
+.bundle/
+vendor/bundle
+Gemfile.lock
+
+# Secrets & Keys
+*.pem
+*.key
+*.crt
+*.p12
+.secrets/
+secrets/
+
+# Temporary Files
+*.tmp
+*.bak
+*.backup
+*.old
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
