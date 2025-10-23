@@ -12,6 +12,11 @@ USAGE=$(cat <<-END
         --ascii                 specify the ASCII art file to use
         --cleanup               install automatic cleanup for ~/Downloads and ~/Screenshots
         --claude                deploy Claude Code configuration (symlink claude/ to ~/.claude)
+
+    DEFAULTS (when no options specified):
+        --claude --vim
+
+    Git configuration is always deployed.
 END
 )
 
@@ -23,28 +28,36 @@ APPEND="false"
 ASCII_FILE="start.txt"  # Default value
 CLEANUP="false"
 CLAUDE="false"
+use_defaults=true
 while (( "$#" )); do
     case "$1" in
         -h|--help)
             echo "$USAGE" && exit 1 ;;
         --vim)
-            VIM="true" && shift ;;
+            VIM="true" && use_defaults=false && shift ;;
         --aliases=*)
-            IFS=',' read -r -a ALIASES <<< "${1#*=}" && shift ;;
+            IFS=',' read -r -a ALIASES <<< "${1#*=}" && use_defaults=false && shift ;;
         --append)
-            APPEND="true" && shift ;;
+            APPEND="true" && shift ;;  # --append is a modifier, doesn't disable defaults
         --ascii=*)
-            ASCII_FILE="${1#*=}" && shift ;;
+            ASCII_FILE="${1#*=}" && shift ;;  # --ascii is a modifier, doesn't disable defaults
         --cleanup)
-            CLEANUP="true" && shift ;;
+            CLEANUP="true" && use_defaults=false && shift ;;
         --claude)
-            CLAUDE="true" && shift ;;
+            CLAUDE="true" && use_defaults=false && shift ;;
         --) # end argument parsing
             shift && break ;;
         -*|--*=) # unsupported flags
             echo "Error: Unsupported flag $1" >&2 && exit 1 ;;
     esac
 done
+
+# Apply defaults if no feature options were specified
+if [ "$use_defaults" = true ]; then
+    echo "No options specified, using defaults: --claude --vim"
+    CLAUDE="true"
+    VIM="true"
+fi
 
 echo "deploying on machine..."
 echo "detected shell: ${SHELL##*/}"

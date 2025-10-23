@@ -11,6 +11,10 @@ USAGE=$(cat <<-END
         --ai-tools   install AI CLI tools (Claude Code, Gemini, Codex)
         --cleanup    install automatic cleanup for ~/Downloads and ~/Screenshots
 
+    DEFAULTS (when no options specified):
+        macOS:  --zsh --tmux --ai-tools --cleanup
+        Linux:  --zsh --tmux --ai-tools
+
     If OPTIONS are passed they will be installed
     with apt if on linux or brew if on OSX
 END
@@ -22,22 +26,23 @@ extras=false
 ai_tools=false
 cleanup=false
 force=false
+use_defaults=true
 while (( "$#" )); do
     case "$1" in
         -h|--help)
             echo "$USAGE" && exit 1 ;;
         --zsh)
-            zsh=true && shift ;;
+            zsh=true && use_defaults=false && shift ;;
         --tmux)
-            tmux=true && shift ;;
+            tmux=true && use_defaults=false && shift ;;
         --extras)
-            extras=true && shift ;;
+            extras=true && use_defaults=false && shift ;;
         --ai-tools)
-            ai_tools=true && shift ;;
+            ai_tools=true && use_defaults=false && shift ;;
         --cleanup)
-            cleanup=true && shift ;;
+            cleanup=true && use_defaults=false && shift ;;
         --force)
-            force=true && shift ;;
+            force=true && shift ;;  # --force doesn't disable defaults
         --) # end argument parsing
             shift && break ;;
         -*|--*=) # unsupported flags
@@ -53,6 +58,17 @@ case "${operating_system}" in
                 echo "Error: Unsupported operating system ${operating_system}" && exit 1
 esac
 
+# Apply defaults if no options were specified
+if [ "$use_defaults" = true ]; then
+    echo "No options specified, using defaults for $machine..."
+    zsh=true
+    tmux=true
+    ai_tools=true
+    if [ "$machine" = "Mac" ]; then
+        cleanup=true
+    fi
+fi
+
 # Installing on linux with apt
 if [ $machine == "Linux" ]; then
     DOT_DIR=$(dirname $(realpath $0))
@@ -63,7 +79,7 @@ if [ $machine == "Linux" ]; then
         if ! command -v zsh &> /dev/null && [ ! -f "$HOME/local/bin/zsh" ]; then
             apt install -y zsh 2>/dev/null || {
                 echo "apt install zsh failed, installing locally..."
-                "$DOT_DIR/install_zsh_local.sh"
+                "$DOT_DIR/scripts/helpers/install_zsh_local.sh"
             }
         else
             echo "ZSH already installed"
