@@ -10,10 +10,16 @@ USAGE=$(cat <<-END
         --extras     install extra dependencies
         --ai-tools   install AI CLI tools (Claude Code, Gemini, Codex)
         --cleanup    install automatic cleanup for ~/Downloads and ~/Screenshots
+        --minimal    disable defaults, install only specified components
 
-    DEFAULTS (when no options specified):
+    DEFAULTS (applied unless --minimal is used):
         macOS:  --zsh --tmux --ai-tools --cleanup
         Linux:  --zsh --tmux --ai-tools
+
+    EXAMPLES:
+        ./install.sh                    # Install defaults
+        ./install.sh --extras           # Install defaults + extras
+        ./install.sh --minimal --tmux   # Install ONLY tmux (no defaults)
 
     If OPTIONS are passed they will be installed
     with apt if on linux or brew if on OSX
@@ -26,23 +32,25 @@ extras=false
 ai_tools=false
 cleanup=false
 force=false
-use_defaults=true
+minimal=false
 while (( "$#" )); do
     case "$1" in
         -h|--help)
             echo "$USAGE" && exit 1 ;;
+        --minimal)
+            minimal=true && shift ;;
         --zsh)
-            zsh=true && use_defaults=false && shift ;;
+            zsh=true && shift ;;
         --tmux)
-            tmux=true && use_defaults=false && shift ;;
+            tmux=true && shift ;;
         --extras)
-            extras=true && use_defaults=false && shift ;;
+            extras=true && shift ;;
         --ai-tools)
-            ai_tools=true && use_defaults=false && shift ;;
+            ai_tools=true && shift ;;
         --cleanup)
-            cleanup=true && use_defaults=false && shift ;;
+            cleanup=true && shift ;;
         --force)
-            force=true && shift ;;  # --force doesn't disable defaults
+            force=true && shift ;;
         --) # end argument parsing
             shift && break ;;
         -*|--*=) # unsupported flags
@@ -58,9 +66,9 @@ case "${operating_system}" in
                 echo "Error: Unsupported operating system ${operating_system}" && exit 1
 esac
 
-# Apply defaults if no options were specified
-if [ "$use_defaults" = true ]; then
-    echo "No options specified, using defaults for $machine..."
+# Apply defaults unless --minimal was specified
+if [ "$minimal" = false ]; then
+    echo "Applying defaults for $machine (use --minimal to disable)..."
     zsh=true
     tmux=true
     ai_tools=true

@@ -9,37 +9,54 @@ This is a comprehensive dotfiles repository for ZSH, Tmux, Vim, and SSH setup th
 ## Core Commands
 
 ### Installation and Deployment
+
+**IMPORTANT: Flags are ADDITIVE to defaults unless --minimal is used**
+
 ```bash
-# Install dependencies (remove flags if not needed)
-./install.sh --tmux --zsh --extras
+# install.sh - Install dependencies
+# DEFAULTS (applied automatically):
+#   macOS:  --zsh --tmux --ai-tools --cleanup
+#   Linux:  --zsh --tmux --ai-tools
 
-# Install with automatic cleanup enabled
-./install.sh --tmux --zsh --extras --cleanup
+# Install with defaults (recommended for most users)
+./install.sh
 
-# Deploy configuration (basic setup)
+# Install defaults + extras
+./install.sh --extras
+
+# Install ONLY specific components (no defaults)
+./install.sh --minimal --tmux --extras
+
+# Force reinstall of oh-my-zsh and plugins
+./install.sh --force
+
+# deploy.sh - Deploy configuration
+# DEFAULTS (applied automatically):
+#   --claude --vim
+
+# Deploy with defaults (recommended for most users)
 ./deploy.sh
 
-# Deploy with additional aliases (e.g., for remote machines)
-./deploy.sh --aliases=speechmatics
-
-# Deploy with vim configuration
-./deploy.sh --vim
-
-# Deploy with custom ASCII art
-./deploy.sh --ascii=cat.txt
-
-# Append to existing configs instead of overwriting
-./deploy.sh --append
-
-# Deploy with automatic cleanup for ~/Downloads and ~/Screenshots
+# Deploy defaults + cleanup
 ./deploy.sh --cleanup
 
-# Deploy Claude Code configuration (symlink claude/ to ~/.claude)
-./deploy.sh --claude
+# Deploy defaults + environment-specific aliases
+./deploy.sh --aliases=speechmatics
 
-# Combine multiple options
-./deploy.sh --vim --cleanup --claude --aliases=speechmatics
+# Deploy ONLY specific components (no defaults)
+./deploy.sh --minimal --vim
+./deploy.sh --minimal --claude --aliases=speechmatics
+
+# Modifiers (don't affect defaults):
+./deploy.sh --append                    # Append instead of overwrite
+./deploy.sh --ascii=cat.txt             # Custom ASCII art
 ```
+
+**Flag Behavior:**
+- **Without flags**: Applies sensible defaults for quick setup
+- **With flags**: Flags are **additive** to defaults (e.g., `--extras` adds extras to defaults)
+- **With --minimal**: Only installs/deploys what you explicitly specify
+- **Modifiers** (`--append`, `--ascii`, `--force`): Don't disable defaults
 
 ### Git Configuration
 ```bash

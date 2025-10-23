@@ -12,9 +12,16 @@ USAGE=$(cat <<-END
         --ascii                 specify the ASCII art file to use
         --cleanup               install automatic cleanup for ~/Downloads and ~/Screenshots
         --claude                deploy Claude Code configuration (symlink claude/ to ~/.claude)
+        --minimal               disable defaults, deploy only specified components
 
-    DEFAULTS (when no options specified):
+    DEFAULTS (applied unless --minimal is used):
         --claude --vim
+
+    EXAMPLES:
+        ./deploy.sh                           # Deploy defaults (claude + vim)
+        ./deploy.sh --cleanup                 # Deploy defaults + cleanup
+        ./deploy.sh --minimal --vim           # Deploy ONLY vim (no claude)
+        ./deploy.sh --aliases=speechmatics    # Deploy defaults + speechmatics aliases
 
     Git configuration is always deployed.
 END
@@ -28,23 +35,25 @@ APPEND="false"
 ASCII_FILE="start.txt"  # Default value
 CLEANUP="false"
 CLAUDE="false"
-use_defaults=true
+MINIMAL="false"
 while (( "$#" )); do
     case "$1" in
         -h|--help)
             echo "$USAGE" && exit 1 ;;
+        --minimal)
+            MINIMAL="true" && shift ;;
         --vim)
-            VIM="true" && use_defaults=false && shift ;;
+            VIM="true" && shift ;;
         --aliases=*)
-            IFS=',' read -r -a ALIASES <<< "${1#*=}" && use_defaults=false && shift ;;
+            IFS=',' read -r -a ALIASES <<< "${1#*=}" && shift ;;
         --append)
-            APPEND="true" && shift ;;  # --append is a modifier, doesn't disable defaults
+            APPEND="true" && shift ;;
         --ascii=*)
-            ASCII_FILE="${1#*=}" && shift ;;  # --ascii is a modifier, doesn't disable defaults
+            ASCII_FILE="${1#*=}" && shift ;;
         --cleanup)
-            CLEANUP="true" && use_defaults=false && shift ;;
+            CLEANUP="true" && shift ;;
         --claude)
-            CLAUDE="true" && use_defaults=false && shift ;;
+            CLAUDE="true" && shift ;;
         --) # end argument parsing
             shift && break ;;
         -*|--*=) # unsupported flags
@@ -52,9 +61,9 @@ while (( "$#" )); do
     esac
 done
 
-# Apply defaults if no feature options were specified
-if [ "$use_defaults" = true ]; then
-    echo "No options specified, using defaults: --claude --vim"
+# Apply defaults unless --minimal was specified
+if [ "$MINIMAL" = "false" ]; then
+    echo "Applying defaults: --claude --vim (use --minimal to disable)"
     CLAUDE="true"
     VIM="true"
 fi
