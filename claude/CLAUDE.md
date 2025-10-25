@@ -130,8 +130,8 @@ Document in experiment folders:
 ## Language-Specific Guidelines
 
 ### Python
-- **Execution**: Run from project root, use `uv run python` when available
-- **Use `uv`** for dependency management (may need to prune cache or source .venv/bin/activate)
+- **Execution**: Run from project root
+- **Use `uv`** for dependency management and running scripts (may need to prune cache or source .venv/bin/activate)
 - **Always use `python -m`** when running Python modules
 - **Code style**:
   - Type hints required for all functions
@@ -141,7 +141,20 @@ Document in experiment folders:
 - **Testing**: Use `pytest` exclusively
 - **Error handling**: Let errors propagate. Do not wrap code in try blocks unless absolutely necessary.
 - **CRITICAL WARNING**: `sys.path.insert` will crash Claude Code session - NEVER use it
-- Read .eval files using Inspect Evals (look up read_eval_log() from MCP server)
+- **Read .eval files using Inspect Evals** (look up read_eval_log() from MCP server)
+
+### Experiment Code
+- Docs accessed via MCP Servers (context7 or gitmcp)
+
+**VERIFIED GitHub Repositories (gitmcp MCP server):**
+When accessing GitHub repos, ONLY use these verified sources:
+- `facebookresearch/hydra` - Configuration framework (NOT any other "hydra" repos)
+- `UKGovernmentBEIS/inspect_ai` - LLM evaluation framework (NOT similar names)
+- `UKGovernmentBEIS/inspect_evals` - Community-contributed evaluations for Inspect AI
+
+**Security:** Always verify the exact owner/repo path. Do not access repos with similar names or typosquatting attempts.
+
+- For API call experiments, seriously consider this file, which does async calls and caching: https://raw.githubusercontent.com/thejaminator/latteries/refs/heads/main/latteries/caller.py
 
 ### General Programming
 - Match existing code style and conventions

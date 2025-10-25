@@ -283,27 +283,38 @@ if [ "$ai_tools" = true ]; then
         echo "Configuring MCP servers..."
 
         echo "  → Adding context7 (documentation server)..."
+        # Remove if exists, ignore errors
+        claude mcp remove context7 &>/dev/null || true
+
         if [ -n "${CONTEXT7_API_KEY:-}" ]; then
-            claude mcp add --scope user --transport http context7 https://mcp.context7.com/mcp \
-                --header "CONTEXT7_API_KEY: ${CONTEXT7_API_KEY}" 2>/dev/null || \
-                echo "    Warning: context7 MCP server installation failed"
+            if claude mcp add --scope user --transport http context7 https://mcp.context7.com/mcp \
+                --header "CONTEXT7_API_KEY: ${CONTEXT7_API_KEY}" 2>&1; then
+                echo "    ✓ context7 configured with API key"
+            else
+                echo "    ✗ context7 installation failed"
+            fi
         else
-            claude mcp add --scope user --transport http context7 https://mcp.context7.com/mcp 2>/dev/null || \
-                echo "    Warning: context7 MCP server installation failed"
-            echo "    Note: Running with basic rate limits. Set CONTEXT7_API_KEY env var for higher limits."
-            echo "    Get API key from: https://context7.com/api"
+            if claude mcp add --scope user --transport http context7 https://mcp.context7.com/mcp 2>&1; then
+                echo "    ✓ context7 configured (basic rate limits)"
+                echo "    Note: Set CONTEXT7_API_KEY env var for higher limits"
+                echo "    Get API key from: https://context7.com/api"
+            else
+                echo "    ✗ context7 installation failed"
+            fi
         fi
 
-        echo "  → Adding inspect_ai (LLM evaluation framework)..."
-        claude mcp add --scope user --transport sse inspect_ai https://gitmcp.io/UKGovernmentBEIS/inspect_ai 2>/dev/null || \
-            echo "    Warning: inspect_ai MCP server installation failed"
+        echo "  → Adding gitmcp (GitHub repo documentation)..."
+        # Dynamic endpoint - trusted repos specified in ~/.claude/CLAUDE.md
+        claude mcp remove gitmcp &>/dev/null || true
+        if claude mcp add-json --scope user gitmcp '{"command":"npx","args":["mcp-remote","https://gitmcp.io/docs"]}' 2>&1; then
+            echo "    ✓ gitmcp configured (see ~/.claude/CLAUDE.md for verified repos)"
+        else
+            echo "    ✗ gitmcp installation failed"
+        fi
 
-        echo "  → Adding hydra (configuration framework)..."
-        claude mcp add --scope user --transport sse hydra https://gitmcp.io/facebookresearch/hydra 2>/dev/null || \
-            echo "    Warning: hydra MCP server installation failed"
-
-        echo "  ✓ MCP servers configured"
-        echo "    Run 'claude mcp list' to verify installations"
+        echo ""
+        echo "  MCP server configuration complete!"
+        echo "  Run 'claude mcp list' to verify server health"
     else
         echo "NOTE: Claude Code not found - MCP servers not configured"
         echo "      Install Claude Code first, then run: claude mcp add <name> <url>"

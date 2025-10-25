@@ -199,10 +199,12 @@ claude doctor
 
 # MCP (Model Context Protocol) Servers
 # MCP servers are automatically installed during ./install.sh --ai-tools
-# Three servers are configured by default:
+# Two servers are configured by default:
 #   - context7 (HTTP): Up-to-date library documentation and code examples
-#   - inspect_ai (SSE): UK AI Security Institute's LLM evaluation framework
-#   - hydra (SSE): Facebook Research's configuration framework
+#   - gitmcp (stdio): Dynamic access to public GitHub repositories
+#
+# Verified repos are specified in ~/.claude/CLAUDE.md to prevent accessing malicious repos
+# (e.g., ensures facebookresearch/hydra, not eviluser/hydra)
 #
 # Optional API Keys:
 #   - CONTEXT7_API_KEY: For higher rate limits and private repo access
@@ -212,14 +214,13 @@ claude doctor
 #
 # To manage MCP servers:
 #   claude mcp list                       # List configured servers
-#   claude mcp add <name> <url>           # Add additional MCP server
 #   claude mcp remove <name>              # Remove MCP server
 #
-# See: https://docs.anthropic.com/en/docs/claude-code/mcp
+#   # Add additional repos to ~/.claude/CLAUDE.md verified list
+#   # Or add specific MCP server:
+#   claude mcp add-json "repo-name" '{"command":"npx","args":["mcp-remote","https://gitmcp.io/owner/repo"]}'
 #
-# WARNING: Some MCP servers can consume significant context:
-# - GitHub MCP: ~34k tokens (49 tools)
-# - Consider disabling unused MCP servers to save context
+# See: https://docs.anthropic.com/en/docs/claude-code/mcp
 
 # Deploy Claude Code configuration (sync across machines)
 # Use deploy.sh --claude to automatically symlink claude/ to ~/.claude
