@@ -133,6 +133,58 @@ cp config/user.conf.example config/user.conf
 # - Changes will be deployed to new machines or when running ./deploy.sh --editor
 ```
 
+### Experimental Features
+
+#### ty Type Checker (Alpha/Preview)
+```bash
+# ty is an extremely fast Python type checker from Astral (makers of uv/ruff)
+# WARNING: ty is currently in ALPHA/PREVIEW - not recommended for production
+# Documentation: https://docs.astral.sh/ty/
+# VSCode Extension: https://github.com/astral-sh/ty-vscode
+
+# Installation (both CLI and VSCode extension):
+./install.sh --experimental    # Install ty CLI
+./deploy.sh --experimental     # Deploy ty VSCode extension + settings
+
+# Or install separately:
+./install.sh --minimal --experimental  # Only ty CLI
+./deploy.sh --minimal --experimental --editor  # Only ty extension
+
+# What ty provides:
+# - Extremely fast type checking (written in Rust)
+# - Language server features (diagnostics, go-to-definition, hover, completions)
+# - Inline type hints for variables and function arguments
+# - Experimental features: symbol renaming, auto-import
+
+# ty settings (config/vscode_settings_ty.json):
+# - ty.diagnosticMode: "openFilesOnly" (type check only open files, not workspace)
+# - ty.inlayHints.variableTypes: true (show variable types inline)
+# - ty.inlayHints.callArgumentNames: true (show argument names in calls)
+# - ty.experimental.rename: false (symbol renaming - disabled by default)
+# - ty.experimental.autoImport: false (auto-import suggestions - disabled by default)
+
+# Note: config/vscode_settings.json already has:
+# - "python.languageServer": "None" (required for ty to work)
+# This setting is already in the default config, so ty can be enabled without conflicts.
+
+# Comparison with mypy:
+# - ty is faster (Rust vs Python)
+# - ty provides language server features (mypy is CLI-only)
+# - mypy is more mature and stable (ty is alpha)
+# - mypy has broader ecosystem support
+# Current setup uses mypy by default; ty is opt-in experimental alternative
+
+# Usage:
+# - CLI: ty check (from project root)
+# - VSCode: Install extension, type checking happens automatically
+# - Verify: ty --version
+
+# Troubleshooting:
+# - If ty CLI not found: Check PATH includes pip install location
+# - If extension not working: Check VSCode extension is installed (astral-sh.ty)
+# - If conflicts: Ensure "python.languageServer": "None" in settings
+```
+
 ### macOS System Settings
 ```bash
 # macOS settings are automatically applied during ./install.sh

@@ -1,0 +1,11 @@
+{
+  "ty.diagnosticMode": "openFilesOnly",
+  "ty.disableLanguageServices": false,
+  "ty.inlayHints.variableTypes": true,
+  "ty.inlayHints.callArgumentNames": true,
+  "ty.importStrategy": "fromEnvironment",
+  "ty.experimental.rename": false,
+  "ty.experimental.autoImport": false,
+  "ty.trace.server": "off",
+  "ty.logLevel": "info"
+}

@@ -5,12 +5,13 @@ USAGE=$(cat <<-END
     Install dotfile dependencies on mac or linux
 
     OPTIONS:
-        --tmux       install tmux
-        --zsh        install zsh
-        --extras     install extra dependencies
-        --ai-tools   install AI CLI tools (Claude Code, Gemini, Codex)
-        --cleanup    install automatic cleanup for ~/Downloads and ~/Screenshots
-        --minimal    disable defaults, install only specified components
+        --tmux          install tmux
+        --zsh           install zsh
+        --extras        install extra dependencies
+        --ai-tools      install AI CLI tools (Claude Code, Gemini, Codex)
+        --cleanup       install automatic cleanup for ~/Downloads and ~/Screenshots
+        --experimental  install experimental features (ty type checker)
+        --minimal       disable defaults, install only specified components
 
     DEFAULTS (applied unless --minimal is used):
         macOS:  --zsh --tmux --ai-tools --cleanup
@@ -20,6 +21,7 @@ USAGE=$(cat <<-END
         ./install.sh                    # Install defaults
         ./install.sh --extras           # Install defaults + extras
         ./install.sh --minimal --tmux   # Install ONLY tmux (no defaults)
+        ./install.sh --experimental     # Install defaults + ty type checker
 
     If OPTIONS are passed they will be installed
     with apt if on linux or brew if on OSX
@@ -31,6 +33,7 @@ tmux=false
 extras=false
 ai_tools=false
 cleanup=false
+experimental=false
 force=false
 minimal=false
 while (( "$#" )); do
@@ -49,6 +52,8 @@ while (( "$#" )); do
             ai_tools=true && shift ;;
         --cleanup)
             cleanup=true && shift ;;
+        --experimental)
+            experimental=true && shift ;;
         --force)
             force=true && shift ;;
         --) # end argument parsing
@@ -331,4 +336,43 @@ if [ "$cleanup" = true ]; then
         echo "Warning: Cleanup install script not found at $DOT_DIR/scripts/cleanup/install.sh"
         echo "Run ./deploy.sh --cleanup after deployment to enable automatic cleanup"
     fi
+fi
+
+# Install experimental features if requested
+if [ "$experimental" = true ]; then
+    echo ""
+    echo "--------- INSTALLING EXPERIMENTAL FEATURES ⚗️  -----------"
+
+    # ty type checker
+    echo "  → Installing ty type checker..."
+    echo "    WARNING: ty is in alpha/preview - not recommended for production"
+
+    if command -v ty &>/dev/null; then
+        TY_VERSION=$(ty --version 2>/dev/null || echo "unknown")
+        echo "    ty already installed (version: $TY_VERSION)"
+    else
+        # Install using pip (works cross-platform)
+        if command -v pip3 &>/dev/null; then
+            echo "    Installing ty via pip3..."
+            pip3 install ty --quiet 2>/dev/null || echo "    ✗ ty installation via pip3 failed"
+        elif command -v pip &>/dev/null; then
+            echo "    Installing ty via pip..."
+            pip install ty --quiet 2>/dev/null || echo "    ✗ ty installation via pip failed"
+        else
+            echo "    ✗ pip not found - cannot install ty CLI"
+        fi
+    fi
+
+    # Verify ty installation
+    if command -v ty &>/dev/null; then
+        echo "    ✓ ty installed successfully"
+        ty --version 2>/dev/null || true
+    else
+        echo "    ✗ ty installation verification failed"
+        echo "    Note: You can still use the VSCode extension without the CLI"
+    fi
+
+    echo ""
+    echo "✅ Experimental features installation complete!"
+    echo "   Run './deploy.sh --experimental' to deploy ty VSCode extension"
 fi

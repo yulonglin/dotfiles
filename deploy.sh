@@ -13,6 +13,7 @@ USAGE=$(cat <<-END
         --ascii                 specify the ASCII art file to use
         --cleanup               install automatic cleanup for ~/Downloads and ~/Screenshots
         --claude                deploy Claude Code configuration (symlink claude/ to ~/.claude)
+        --experimental          enable experimental features (ty type checker)
         --minimal               disable defaults, deploy only specified components
 
     DEFAULTS (applied unless --minimal is used):
@@ -23,6 +24,7 @@ USAGE=$(cat <<-END
         ./deploy.sh --cleanup                 # Deploy defaults + cleanup
         ./deploy.sh --minimal --vim           # Deploy ONLY vim (no claude)
         ./deploy.sh --aliases=speechmatics    # Deploy defaults + speechmatics aliases
+        ./deploy.sh --experimental            # Deploy defaults + ty type checker
 
     Git configuration is always deployed.
 END
@@ -37,6 +39,7 @@ APPEND="false"
 ASCII_FILE="start.txt"  # Default value
 CLEANUP="false"
 CLAUDE="false"
+EXPERIMENTAL="false"
 MINIMAL="false"
 while (( "$#" )); do
     case "$1" in
@@ -58,6 +61,8 @@ while (( "$#" )); do
             CLEANUP="true" && shift ;;
         --claude)
             CLAUDE="true" && shift ;;
+        --experimental)
+            EXPERIMENTAL="true" && shift ;;
         --) # end argument parsing
             shift && break ;;
         -*|--*=) # unsupported flags
@@ -409,6 +414,41 @@ deploy_editor_settings() {
         return 1
     fi
 
+    # Merge ty settings if experimental mode is enabled
+    if [[ "$EXPERIMENTAL" == "true" ]]; then
+        local ty_settings="$DOT_DIR/config/vscode_settings_ty.json"
+        if [[ -f "$ty_settings" ]]; then
+            echo "  Experimental mode: merging ty settings"
+            # Create a temporary merged settings file
+            local temp_settings="/tmp/vscode_settings_merged_$$.json"
+            python3 - "$settings_file" "$ty_settings" "$temp_settings" <<'TY_MERGE'
+import json
+import sys
+
+base_path = sys.argv[1]
+ty_path = sys.argv[2]
+output_path = sys.argv[3]
+
+# Read both files
+with open(base_path, 'r') as f:
+    base = json.load(f)
+with open(ty_path, 'r') as f:
+    ty = json.load(f)
+
+# Merge: ty settings added to base
+merged = {**base, **ty}
+
+# Write merged settings
+with open(output_path, 'w') as f:
+    json.dump(merged, f, indent=4)
+    f.write('\n')
+TY_MERGE
+            settings_file="$temp_settings"
+        else
+            echo "  Warning: ty settings file not found at $ty_settings"
+        fi
+    fi
+
     # Detect OS and set paths accordingly
     local vscode_dir=""
     local cursor_dir=""
@@ -490,7 +530,7 @@ MERGE_SCRIPT
         local installed_count=0
         local skipped_count=0
 
-        # Read and install extensions
+        # Read and install extensions from base file
         while IFS= read -r line || [[ -n "$line" ]]; do
             # Skip empty lines and comments
             [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
@@ -505,6 +545,28 @@ MERGE_SCRIPT
                 ((skipped_count++))
             fi
         done < "$extensions_file"
+
+        # Install experimental extensions if enabled
+        if [[ "$EXPERIMENTAL" == "true" ]]; then
+            local ty_extensions="$DOT_DIR/config/vscode_extensions_ty.txt"
+            if [[ -f "$ty_extensions" ]]; then
+                echo "  Installing experimental extensions for $editor_name..."
+                while IFS= read -r line || [[ -n "$line" ]]; do
+                    # Skip empty lines and comments
+                    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+                    # Trim whitespace
+                    local ext_id=$(echo "$line" | xargs)
+
+                    # Install extension (suppress verbose output)
+                    if $cli_command --install-extension "$ext_id" --force &> /dev/null; then
+                        ((installed_count++))
+                    else
+                        ((skipped_count++))
+                    fi
+                done < "$ty_extensions"
+            fi
+        fi
 
         if [[ $installed_count -gt 0 ]]; then
             echo "  ✓ Installed $installed_count extension(s) for $editor_name"
