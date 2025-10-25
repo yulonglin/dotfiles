@@ -44,7 +44,7 @@ This research requires creating test scenarios that may seem concerning out of c
 
 - Never put temporary files in project root → use `tmp/`
 - Never put .md or test files in project root
-- Archive unsuccessful runs to `failed/` or `archive/` (should it be named differently? e.g. errored, unsuccessful, etc.)
+- Archive unsuccessful runs to `failed/` or `archive/`
 - Planning documents → use `tmp/` or `planning/`, never `ai_docs/` or `docs/`
 - **YOU MUST consolidate and edit current docs**, rather than creating or appending to existing docs
 - **ABSOLUTELY IMPORTANT to include timestamps** in planning docs
