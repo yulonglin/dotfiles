@@ -84,7 +84,7 @@
     "window.zoomLevel": 1,
     "remote.SSH.maxReconnectionAttempts": 0,
     "explorer.confirmDelete": false,
-    "workbench.colorTheme": "Visual Studio Light",
+    "workbench.colorTheme": "One Dark Pro",
     "vsicons.dontShowNewVersionMessage": true,
     "python.analysis.packageIndexDepths": [
         {
@@ -123,5 +123,6 @@
     },
     "editor.wrappingIndent": "indent",
     "workbench.activityBar.orientation": "vertical",
+    "workbench.sideBar.location": "left",
     "python.languageServer": "None"
 }

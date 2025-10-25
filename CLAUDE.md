@@ -32,7 +32,7 @@ This is a comprehensive dotfiles repository for ZSH, Tmux, Vim, and SSH setup th
 
 # deploy.sh - Deploy configuration
 # DEFAULTS (applied automatically):
-#   --claude --vim
+#   --claude --vim --editor
 
 # Deploy with defaults (recommended for most users)
 ./deploy.sh
@@ -46,6 +46,7 @@ This is a comprehensive dotfiles repository for ZSH, Tmux, Vim, and SSH setup th
 # Deploy ONLY specific components (no defaults)
 ./deploy.sh --minimal --vim
 ./deploy.sh --minimal --claude --aliases=speechmatics
+./deploy.sh --minimal --editor          # Only editor settings
 
 # Modifiers (don't affect defaults):
 ./deploy.sh --append                    # Append instead of overwrite
@@ -79,6 +80,57 @@ cp config/user.conf.example config/user.conf
 # - Use new values from dotfiles
 # - Merge interactively (choose per setting)
 # - Skip git config deployment
+```
+
+### Editor Settings (VSCode/Cursor)
+```bash
+# Editor settings are automatically deployed during ./deploy.sh
+# Deploys config/vscode_settings.json to both VSCode and Cursor if installed
+
+# Deploy manually:
+./deploy.sh --minimal --editor
+
+# Paths (automatically detected):
+# macOS:
+#   VSCode: ~/Library/Application Support/Code/User/settings.json
+#   Cursor: ~/Library/Application Support/Cursor/User/settings.json
+# Linux:
+#   VSCode: ~/.config/Code/User/settings.json
+#   Cursor: ~/.config/Cursor/User/settings.json
+
+# Merge Behavior (Smart Settings Preservation):
+# - If settings.json doesn't exist: Copies dotfiles settings (new installation)
+# - If settings.json exists: Merges with existing settings
+#   - Existing settings take precedence (your preferences are preserved)
+#   - New settings from dotfiles are added
+#   - Example: If you have "files.autoSave": "onFocusChange" and dotfiles has
+#     "afterDelay", your preference is kept
+#   - Example: If dotfiles adds new Python/Jupyter settings, they're added to your config
+
+# What's included in config/vscode_settings.json:
+# - Python development (Black formatter, isort, Jupyter, package index depths)
+# - Editor preferences (font, minimap disabled, multi-cursor modifier)
+# - File management (auto-save, exclusions, watchers)
+# - Git integration (auto-fetch, SSH remote command)
+# - Theme and UI (default: One Dark Pro, VS Icons)
+# - Cursor-specific settings (cpp.disabledLanguages, cpp.enablePartialAccepts)
+
+# Extension Auto-Installation:
+# Automatically installs extensions listed in config/vscode_extensions.txt
+# - Requires 'code' or 'cursor' CLI to be available
+# - Current extensions:
+#   - One Dark Pro theme (zhuangtongfa.Material-theme)
+#   - VSCode Icons (vscode-icons-team.vscode-icons)
+#   - Python (ms-python.python)
+#   - Black Formatter (ms-python.black-formatter)
+#   - Jupyter (ms-toolsai.jupyter)
+#   - GitLens (eamodio.gitlens)
+# - To add more extensions: Edit config/vscode_extensions.txt (one extension ID per line)
+
+# Customizing dotfiles settings:
+# - Edit config/vscode_settings.json to change default theme, font, or other preferences
+# - Edit config/vscode_extensions.txt to add/remove extensions
+# - Changes will be deployed to new machines or when running ./deploy.sh --editor
 ```
 
 ### macOS System Settings
@@ -198,6 +250,9 @@ docker push jplhughes1/runpod-dev
 - `config/p10k.zsh` - Powerlevel10k theme configuration
 - `config/key_bindings.sh` - Custom key bindings
 - `config/extras.sh` - Additional shell configurations
+- `config/vimrc` - Vim configuration
+- `config/vscode_settings.json` - VSCode/Cursor settings (deployed to both editors)
+- `config/vscode_extensions.txt` - Recommended VSCode/Cursor extensions (auto-installed)
 - `config/macos_settings.sh` - macOS system defaults and preferences
 - `config/gitconfig` - Git configuration template (deployed with smart merging)
 - `config/gitignore_global` - Global gitignore patterns for Linux, Python, macOS
@@ -272,6 +327,7 @@ The dotfiles support multiple environments:
 - **GPU development support** - Slurm aliases and RunPod integration
 - **Shell enhancements** - History substring search, autosuggestions, syntax highlighting
 - **Smart git config** - Automatic deployment with conflict detection and resolution
+- **Editor settings sync** - Automatic deployment of VSCode/Cursor settings to both editors
 - **macOS optimizations** - Keyboard, Finder, and system preferences configured automatically
 - **Automatic cleanup** - Optional scheduled cleanup for Downloads and Screenshots directories
 

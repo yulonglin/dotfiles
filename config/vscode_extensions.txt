@@ -1,0 +1,17 @@
+# VSCode/Cursor Recommended Extensions
+# Format: one extension ID per line
+# Comments start with #
+
+# Theme
+zhuangtongfa.Material-theme
+
+# Icons
+vscode-icons-team.vscode-icons
+
+# Python Development
+ms-python.python
+ms-python.black-formatter
+ms-toolsai.jupyter
+
+# General Development
+eamodio.gitlens

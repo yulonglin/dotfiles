@@ -7,6 +7,7 @@ USAGE=$(cat <<-END
 
     OPTIONS:
         --vim                   deploy very simple vimrc config
+        --editor                deploy VSCode/Cursor settings and extensions (merges with existing)
         --aliases               specify additional alias scripts to source in .zshrc, separated by commas
         --append                append to existing config files instead of overwriting
         --ascii                 specify the ASCII art file to use
@@ -15,7 +16,7 @@ USAGE=$(cat <<-END
         --minimal               disable defaults, deploy only specified components
 
     DEFAULTS (applied unless --minimal is used):
-        --claude --vim
+        --claude --vim --editor
 
     EXAMPLES:
         ./deploy.sh                           # Deploy defaults (claude + vim)
@@ -30,6 +31,7 @@ END
 export DOT_DIR=$(dirname $(realpath $0))
 
 VIM="false"
+EDITOR="false"
 ALIASES=()
 APPEND="false"
 ASCII_FILE="start.txt"  # Default value
@@ -44,6 +46,8 @@ while (( "$#" )); do
             MINIMAL="true" && shift ;;
         --vim)
             VIM="true" && shift ;;
+        --editor)
+            EDITOR="true" && shift ;;
         --aliases=*)
             IFS=',' read -r -a ALIASES <<< "${1#*=}" && shift ;;
         --append)
@@ -63,9 +67,10 @@ done
 
 # Apply defaults unless --minimal was specified
 if [ "$MINIMAL" = "false" ]; then
-    echo "Applying defaults: --claude --vim (use --minimal to disable)"
+    echo "Applying defaults: --claude --vim --editor (use --minimal to disable)"
     CLAUDE="true"
     VIM="true"
+    EDITOR="true"
 fi
 
 echo "deploying on machine..."
@@ -394,6 +399,150 @@ merge_git_config() {
 }
 
 merge_git_config
+
+# Deploy editor settings if requested
+deploy_editor_settings() {
+    local settings_file="$DOT_DIR/config/vscode_settings.json"
+
+    if [[ ! -f "$settings_file" ]]; then
+        echo "Warning: VSCode settings file not found at $settings_file"
+        return 1
+    fi
+
+    # Detect OS and set paths accordingly
+    local vscode_dir=""
+    local cursor_dir=""
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS paths
+        vscode_dir="$HOME/Library/Application Support/Code/User"
+        cursor_dir="$HOME/Library/Application Support/Cursor/User"
+    else
+        # Linux paths
+        vscode_dir="$HOME/.config/Code/User"
+        cursor_dir="$HOME/.config/Cursor/User"
+    fi
+
+    # Helper function to merge settings for a specific editor
+    merge_editor_settings() {
+        local editor_name="$1"
+        local target_file="$2"
+
+        if [[ ! -f "$target_file" ]]; then
+            # No existing settings, just copy
+            cp "$settings_file" "$target_file"
+            echo "✓ Deployed $editor_name settings to $target_file (new)"
+            return 0
+        fi
+
+        # Existing settings found - merge with dotfiles
+        python3 - "$settings_file" "$target_file" <<'MERGE_SCRIPT'
+import json
+import sys
+
+dotfiles_path = sys.argv[1]
+existing_path = sys.argv[2]
+
+# Read both files
+with open(dotfiles_path, 'r') as f:
+    dotfiles = json.load(f)
+with open(existing_path, 'r') as f:
+    existing = json.load(f)
+
+# Merge: existing settings take precedence, dotfiles adds new keys
+merged = {**dotfiles, **existing}
+
+# Write merged settings back
+with open(existing_path, 'w') as f:
+    json.dump(merged, f, indent=4)
+    f.write('\n')  # Add trailing newline
+
+print("merged")
+MERGE_SCRIPT
+
+        if [[ $? -eq 0 ]]; then
+            echo "✓ Merged $editor_name settings to $target_file (existing settings preserved)"
+        else
+            echo "⚠️  Failed to merge $editor_name settings, keeping existing"
+            return 1
+        fi
+    }
+
+    # Helper function to install extensions for a specific editor
+    install_extensions() {
+        local editor_name="$1"
+        local cli_command="$2"
+        local extensions_file="$DOT_DIR/config/vscode_extensions.txt"
+
+        # Check if CLI is available
+        if ! command -v "$cli_command" &> /dev/null; then
+            echo "  ℹ️  $cli_command CLI not found, skipping extension installation for $editor_name"
+            return 0
+        fi
+
+        # Check if extensions file exists
+        if [[ ! -f "$extensions_file" ]]; then
+            echo "  ℹ️  Extensions file not found at $extensions_file"
+            return 0
+        fi
+
+        echo "  Installing extensions for $editor_name..."
+        local installed_count=0
+        local skipped_count=0
+
+        # Read and install extensions
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Skip empty lines and comments
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+            # Trim whitespace
+            local ext_id=$(echo "$line" | xargs)
+
+            # Install extension (suppress verbose output)
+            if $cli_command --install-extension "$ext_id" --force &> /dev/null; then
+                ((installed_count++))
+            else
+                ((skipped_count++))
+            fi
+        done < "$extensions_file"
+
+        if [[ $installed_count -gt 0 ]]; then
+            echo "  ✓ Installed $installed_count extension(s) for $editor_name"
+        fi
+        if [[ $skipped_count -gt 0 ]]; then
+            echo "  ⚠️  $skipped_count extension(s) failed or already installed"
+        fi
+    }
+
+    local deployed=false
+
+    # Deploy to VSCode if installed
+    if [[ -d "$vscode_dir" ]]; then
+        merge_editor_settings "VSCode" "$vscode_dir/settings.json"
+        install_extensions "VSCode" "code"
+        deployed=true
+    fi
+
+    # Deploy to Cursor if installed
+    if [[ -d "$cursor_dir" ]]; then
+        merge_editor_settings "Cursor" "$cursor_dir/settings.json"
+        install_extensions "Cursor" "cursor"
+        deployed=true
+    fi
+
+    if [[ "$deployed" == "false" ]]; then
+        echo "⚠️  Neither VSCode nor Cursor installation directories found"
+        echo "   VSCode: $vscode_dir"
+        echo "   Cursor: $cursor_dir"
+        return 1
+    fi
+}
+
+if [[ "$EDITOR" == "true" ]]; then
+    echo ""
+    echo "Deploying editor settings..."
+    deploy_editor_settings || echo "Warning: Editor settings deployment failed"
+fi
 
 # Install cleanup automation if requested
 if [[ "$CLEANUP" == "true" ]]; then
