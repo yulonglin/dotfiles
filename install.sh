@@ -283,8 +283,16 @@ if [ "$ai_tools" = true ]; then
         echo "Configuring MCP servers..."
 
         echo "  → Adding context7 (documentation server)..."
-        claude mcp add --scope user --transport http context7 https://mcp.context7.com/mcp 2>/dev/null || \
-            echo "    Warning: context7 MCP server installation failed"
+        if [ -n "${CONTEXT7_API_KEY:-}" ]; then
+            claude mcp add --scope user --transport http context7 https://mcp.context7.com/mcp \
+                --header "CONTEXT7_API_KEY: ${CONTEXT7_API_KEY}" 2>/dev/null || \
+                echo "    Warning: context7 MCP server installation failed"
+        else
+            claude mcp add --scope user --transport http context7 https://mcp.context7.com/mcp 2>/dev/null || \
+                echo "    Warning: context7 MCP server installation failed"
+            echo "    Note: Running with basic rate limits. Set CONTEXT7_API_KEY env var for higher limits."
+            echo "    Get API key from: https://context7.com/api"
+        fi
 
         echo "  → Adding inspect_ai (LLM evaluation framework)..."
         claude mcp add --scope user --transport sse inspect_ai https://gitmcp.io/UKGovernmentBEIS/inspect_ai 2>/dev/null || \

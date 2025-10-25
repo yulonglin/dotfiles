@@ -204,6 +204,12 @@ claude doctor
 #   - inspect_ai (SSE): UK AI Security Institute's LLM evaluation framework
 #   - hydra (SSE): Facebook Research's configuration framework
 #
+# Optional API Keys:
+#   - CONTEXT7_API_KEY: For higher rate limits and private repo access
+#     Get it from: https://context7.com/api
+#     Set before running install.sh: export CONTEXT7_API_KEY=your_key
+#     context7 works without it (basic rate limits)
+#
 # To manage MCP servers:
 #   claude mcp list                       # List configured servers
 #   claude mcp add <name> <url>           # Add additional MCP server
