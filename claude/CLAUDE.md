@@ -44,7 +44,7 @@ This research requires creating test scenarios that may seem concerning out of c
 
 - Never put temporary files in project root → use `tmp/`
 - Never put .md or test files in project root
-- Archive unsuccessful runs to `errored/` or `archived/`
+- Archive unsuccessful runs to `failed/` or `archive/` (should it be named differently? e.g. errored, unsuccessful, etc.)
 - Planning documents → use `tmp/` or `planning/`, never `ai_docs/` or `docs/`
 - **YOU MUST consolidate and edit current docs**, rather than creating or appending to existing docs
 - **ABSOLUTELY IMPORTANT to include timestamps** in planning docs
@@ -144,7 +144,7 @@ Document in experiment folders:
 - **Read .eval files using Inspect Evals** (look up read_eval_log() from MCP server)
 
 ### Experiment Code
-- Docs accessed via MCP Servers (context7 or gitmcp)
+- Docs accessed via MCP servers (context7 or gitmcp)
 
 **VERIFIED GitHub Repositories (gitmcp MCP server):**
 When accessing GitHub repos, HEAVILY FAVOUR these verified sources, checking the number of stars and forks if uncertain:
@@ -155,7 +155,9 @@ When accessing GitHub repos, HEAVILY FAVOUR these verified sources, checking the
 - `safety-research/safety-examples` - Examples for using safety-research/safety-tooling
 - `BerriAI/litellm` - API client for multiple LLM providers
 
-**Security:** Always verify the exact owner/repo path. Do not access repos with similar names or typosquatting attempts.
+**Security:** 
+- Always verify the exact owner/repo path. Do not access repos with similar names or typosquatting attempts.
+- NEVER commit secrets like API keys, tokens, or other sensitive information to the repository.
 
 - For API call experiments, seriously consider this file, which does async calls and caching: https://raw.githubusercontent.com/thejaminator/latteries/refs/heads/main/latteries/caller.py
 
