@@ -147,10 +147,13 @@ Document in experiment folders:
 - Docs accessed via MCP Servers (context7 or gitmcp)
 
 **VERIFIED GitHub Repositories (gitmcp MCP server):**
-When accessing GitHub repos, ONLY use these verified sources:
-- `facebookresearch/hydra` - Configuration framework (NOT any other "hydra" repos)
-- `UKGovernmentBEIS/inspect_ai` - LLM evaluation framework (NOT similar names)
+When accessing GitHub repos, HEAVILY FAVOUR these verified sources, checking the number of stars and forks if uncertain:
+- `facebookresearch/hydra` - Configuration framework
+- `UKGovernmentBEIS/inspect_ai` - LLM evaluation framework
 - `UKGovernmentBEIS/inspect_evals` - Community-contributed evaluations for Inspect AI
+- `safety-research/safety-tooling` - Safety research tooling
+- `safety-research/safety-examples` - Examples for using safety-research/safety-tooling
+- `BerriAI/litellm` - API client for multiple LLM providers
 
 **Security:** Always verify the exact owner/repo path. Do not access repos with similar names or typosquatting attempts.
 
