@@ -198,12 +198,16 @@ claude doctor
 # - Auto-updates work seamlessly on both macOS and Linux
 
 # MCP (Model Context Protocol) Servers
-# MCP servers are NOT installed by this dotfiles repo
-# They must be installed and configured separately
+# MCP servers are automatically installed during ./install.sh --ai-tools
+# Three servers are configured by default:
+#   - context7 (HTTP): Up-to-date library documentation and code examples
+#   - inspect_ai (SSE): UK AI Security Institute's LLM evaluation framework
+#   - hydra (SSE): Facebook Research's configuration framework
+#
 # To manage MCP servers:
-#   claude mcp add <name> <url>           # Add MCP server
-#   claude mcp remove <name>              # Remove MCP server
 #   claude mcp list                       # List configured servers
+#   claude mcp add <name> <url>           # Add additional MCP server
+#   claude mcp remove <name>              # Remove MCP server
 #
 # See: https://docs.anthropic.com/en/docs/claude-code/mcp
 #

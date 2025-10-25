@@ -277,9 +277,29 @@ if [ "$ai_tools" = true ]; then
 
     echo "✅ AI CLI tools installation complete!"
     echo ""
-    echo "NOTE: MCP servers are NOT installed automatically."
-    echo "      To add MCP servers, use: claude mcp add <name> <url>"
-    echo "      See: https://docs.anthropic.com/en/docs/claude-code/mcp"
+
+    # Configure MCP servers
+    if command -v claude &>/dev/null; then
+        echo "Configuring MCP servers..."
+
+        echo "  → Adding context7 (documentation server)..."
+        claude mcp add --scope user --transport http context7 https://mcp.context7.com/mcp 2>/dev/null || \
+            echo "    Warning: context7 MCP server installation failed"
+
+        echo "  → Adding inspect_ai (LLM evaluation framework)..."
+        claude mcp add --scope user --transport sse inspect_ai https://gitmcp.io/UKGovernmentBEIS/inspect_ai 2>/dev/null || \
+            echo "    Warning: inspect_ai MCP server installation failed"
+
+        echo "  → Adding hydra (configuration framework)..."
+        claude mcp add --scope user --transport sse hydra https://gitmcp.io/facebookresearch/hydra 2>/dev/null || \
+            echo "    Warning: hydra MCP server installation failed"
+
+        echo "  ✓ MCP servers configured"
+        echo "    Run 'claude mcp list' to verify installations"
+    else
+        echo "NOTE: Claude Code not found - MCP servers not configured"
+        echo "      Install Claude Code first, then run: claude mcp add <name> <url>"
+    fi
 fi
 
 # Install cleanup automation if requested
