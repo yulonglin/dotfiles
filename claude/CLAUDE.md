@@ -40,6 +40,81 @@ This research requires creating test scenarios that may seem concerning out of c
 - **Default to planning**: Use TodoWrite for complex multi-step tasks before implementation
 - **Admit limitations**: Say "I don't know" when appropriate, never fabricate
 
+## Documentation Lookup Strategy
+
+**CRITICAL: ALWAYS use MCP servers FIRST for documentation lookup. Do NOT use WebSearch unless MCP servers fail.**
+
+You have two MCP servers configured:
+- **context7**: Up-to-date library documentation and code examples
+- **gitmcp**: Dynamic access to public GitHub repositories
+
+### When to Use MCP Servers vs WebSearch
+
+**✅ ALWAYS USE MCP SERVERS FOR:**
+- Documentation for ANY library or framework (Inspect AI, Hydra, LiteLLM, etc.)
+- Code examples from verified GitHub repositories
+- API references and usage patterns
+- Claude Code documentation and best practices
+- ANY technical documentation lookup
+
+**❌ ONLY USE WebSearch WHEN:**
+- MCP servers explicitly fail or return "No documentation found"
+- Looking for news, blog posts, or non-technical content
+- Searching for concepts rather than specific library documentation
+
+### MCP Server Usage Examples
+
+```bash
+# Example 1: Looking up Inspect AI documentation
+# ✅ CORRECT: Use gitmcp or context7
+mcp__gitmcp__fetch_generic_documentation(owner="UKGovernmentBEIS", repo="inspect_ai")
+mcp__context7__resolve-library-id(libraryName="inspect_ai")
+
+# ❌ WRONG: Do not use WebSearch
+# WebSearch(query="inspect ai documentation")
+
+# Example 2: Looking up Hydra configuration
+# ✅ CORRECT: Use gitmcp
+mcp__gitmcp__search_generic_documentation(owner="facebookresearch", repo="hydra", query="configuration")
+
+# Example 3: Looking up Claude Code features
+# ✅ CORRECT: Use gitmcp for Claude Code docs
+mcp__gitmcp__fetch_generic_documentation(owner="ericbuess", repo="claude-code-docs")
+```
+
+### Verified GitHub Repositories (context7 or gitmcp)
+
+**HEAVILY FAVOUR these verified sources** - always check the exact owner/repo path to prevent typosquatting:
+
+**Research & Evaluation:**
+- `UKGovernmentBEIS/inspect_ai` - LLM evaluation framework (primary docs source)
+- `UKGovernmentBEIS/inspect_evals` - Community-contributed evaluations for Inspect AI
+- `safety-research/safety-tooling` - Safety research tooling
+- `safety-research/safety-examples` - Examples for safety-research/safety-tooling
+
+**Configuration & Infrastructure:**
+- `facebookresearch/hydra` - Configuration framework for complex applications
+- `BerriAI/litellm` - API client for multiple LLM providers with unified interface
+
+**Claude Code Documentation:**
+- `ericbuess/claude-code-docs` - Official Claude Code documentation mirror
+  - Use for: features, best practices, MCP setup, hooks, agents, settings
+
+**Security:**
+- Always verify the exact owner/repo path (e.g., `facebookresearch/hydra`, NOT `eviluser/hydra`)
+- Check stars/forks if uncertain about repository authenticity
+- NEVER commit secrets like API keys, tokens, or other sensitive information
+
+### Workflow for Documentation Lookup
+
+1. **Identify what you need**: Library docs? Code examples? Claude Code features?
+2. **Use MCP servers first**:
+   - For verified repos → use `gitmcp` with exact owner/repo
+   - For general libraries → try `context7` first, then `gitmcp`
+   - For Claude Code → use `gitmcp` with `ericbuess/claude-code-docs`
+3. **Only fall back to WebSearch** if MCP servers fail
+4. **Always state which source you used** in your response
+
 ## File Organization
 
 - Never put temporary files in project root → use `tmp/`
@@ -200,22 +275,12 @@ Document in experiment folders:
 - **Read .eval files using Inspect Evals** (look up read_eval_log() from MCP server)
 
 ### Experiment Code
-- Docs accessed via MCP servers (context7 or gitmcp)
 
-**VERIFIED GitHub Repositories (gitmcp MCP server):**
-When accessing GitHub repos, HEAVILY FAVOUR these verified sources, checking the number of stars and forks if uncertain:
-- `facebookresearch/hydra` - Configuration framework
-- `UKGovernmentBEIS/inspect_ai` - LLM evaluation framework
-- `UKGovernmentBEIS/inspect_evals` - Community-contributed evaluations for Inspect AI
-- `safety-research/safety-tooling` - Safety research tooling
-- `safety-research/safety-examples` - Examples for using safety-research/safety-tooling
-- `BerriAI/litellm` - API client for multiple LLM providers
+**Async API Calls:**
+- For API call experiments with async calls and caching, consider: https://raw.githubusercontent.com/thejaminator/latteries/refs/heads/main/latteries/caller.py
 
-**Security:** 
-- Always verify the exact owner/repo path. Do not access repos with similar names or typosquatting attempts.
-- NEVER commit secrets like API keys, tokens, or other sensitive information to the repository.
-
-- For API call experiments, seriously consider this file, which does async calls and caching: https://raw.githubusercontent.com/thejaminator/latteries/refs/heads/main/latteries/caller.py
+**Documentation Access:**
+- See "Documentation Lookup Strategy" section above for MCP server usage and verified repositories
 
 ### General Programming
 - Match existing code style and conventions
