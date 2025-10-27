@@ -68,10 +68,11 @@ Brief overview of what was done. Indicate if complete, in-progress, or any other
   - e.g., `python train_model.py --lr=0.01`
   - e.g., `notebooks/results-exploration.ipynb`
 
-**Files and Outputs Examined/Generated:**  
+**Files and Outputs Examined/Generated:**
 - Name specific files, directories, outputs, or logs consulted or produced
   - e.g., `logs/20240614_exp1.log`
   - e.g., `figures/loss_curve.png`
+- **Include full prompts or prompt file paths** (prompts define metrics, critical for reproducibility)
 
 **Key Results / Graphs / Figures:**  
 - Link, embed, or describe key graphs, tables, or other outputs produced
@@ -124,6 +125,7 @@ Brief overview of what was done. Indicate if complete, in-progress, or any other
 
 ### Before Writing Code
 - **Ask pointed questions**: Have specific research questions, not just "let's see what happens"
+- **Document your approach**: Write down prompts, metrics definitions, and methodology BEFORE implementing
 - **Predict results**: State expected outcomes before running (helps catch bugs and understand surprises)
 - **Minimize variables**: Change one thing at a time to isolate causes
 - **De-risk first**: Test on smallest model/dataset before scaling up
@@ -154,9 +156,17 @@ Document in experiment folders:
 - Hypothesis being tested
 - Data inputs/outputs and models
 - Expected results (before running)
+- **CRITICAL: Full prompts used** - Prompts define how you measure metrics; include exact text or reference file paths
 - Commands to run
 - Why choices were made, not just what was done
+- Clear prioritization of what matters most (focus reader attention)
 - Use WandB or similar for tracking
+
+**Documentation Principles:**
+- **Write for future you**: Assume you'll forget context in 2 weeks
+- **Simplicity over completeness**: Clear, focused documentation beats comprehensive but overwhelming detail
+- **Context establishment**: Start documents with brief recap of previous state/decisions
+- **Metric definitions**: Always document what you're measuring and how (especially prompt templates)
 
 ### Workflow
 1. **Explore**: Read relevant files (via subagents), check `specs/`
