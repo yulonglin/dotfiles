@@ -50,6 +50,52 @@ This research requires creating test scenarios that may seem concerning out of c
 - **ABSOLUTELY IMPORTANT to include timestamps** in planning docs
 - NEVER create new docs trigger-happy, NEVER simply append to existing logs (leads to low-quality bloat)
 
+## Research Log
+A research_log.md should consist of timestamped entries added as you make progress—not just weekly—each formatted clearly and concisely.
+
+### Research Log Entry Template
+
+#### [Timestamp: YYYY-MM-DD HH:MM:SS]
+
+**Activity:**  
+Name the activity (e.g., Experiment: model run, Data analysis, Literature review, Ideation).
+
+**Description & Status:**  
+Brief overview of what was done. Indicate if complete, in-progress, or any other status.
+
+**Commands Run:**  
+- List any relevant shell commands, scripts, or notebooks executed, with parameters if helpful
+  - e.g., `python train_model.py --lr=0.01`
+  - e.g., `notebooks/results-exploration.ipynb`
+
+**Files and Outputs Examined/Generated:**  
+- Name specific files, directories, outputs, or logs consulted or produced
+  - e.g., `logs/20240614_exp1.log`
+  - e.g., `figures/loss_curve.png`
+
+**Key Results / Graphs / Figures:**  
+- Link, embed, or describe key graphs, tables, or other outputs produced
+
+**Outcome:**  
+- Concise summary of findings, intermediate results, or issues
+- Success, failure, or partial progress
+- Research outputs (metrics, notes, communications, confirmations/rejections, etc.)
+
+**Blockers:**  
+- What, if anything, is preventing further progress?
+- Unresolved bugs, conceptual hurdles, external dependencies, etc.
+
+**Reflection:**  
+- Contribution to research goals/how this advances understanding
+- Strengths and weaknesses of outputs
+- Worth continuing or pivoting?
+- Unexpected difficulties or insights
+
+**Feedback (Optional):**  
+- Summarize any feedback received or requested on this activity
+
+*Repeat this template for each major step, experiment, or work session. Entries should be timestamped and as granular as needed to reconstruct your research process. This supports traceability, reproducibility, and effective communication with collaborators.*
+
 ## Subagent Strategy
 
 **Default: delegate, not do.** Strongly bias towards subagents for non-trivial or parallelisable work.
