@@ -18,6 +18,7 @@
     "notebook.output.wordWrap": true,
     "jupyter.askForKernelRestart": false,
     "editor.minimap.enabled": false,
+    "editor.wordWrap": "wordWrapColumn",
     "files.trimTrailingWhitespace": false,
     "editor.formatOnSaveMode": "file",
     "editor.formatOnSave": false,

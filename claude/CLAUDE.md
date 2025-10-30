@@ -116,14 +116,69 @@ mcp__gitmcp__fetch_generic_documentation(owner="ericbuess", repo="claude-code-do
 4. **Always state which source you used** in your response
 
 ## File Organization
-
 - Never put temporary files in project root → use `tmp/`
 - Never put .md or test files in project root
-- Archive unsuccessful runs to `failed/` or `archive/`
-- Planning documents → use `tmp/` or `planning/`, never `ai_docs/` or `docs/`
+- Archive unsuccessful runs to `archive/`
+- Planning documents → use `tmp/planning_YYMMDD_HHMM.md` (timestamped, ephemeral)
 - **YOU MUST consolidate and edit current docs**, rather than creating or appending to existing docs
 - **ABSOLUTELY IMPORTANT to include timestamps** in planning docs
 - NEVER create new docs trigger-happy, NEVER simply append to existing logs (leads to low-quality bloat)
+
+### Directory Structure
+```
+project-root/
+├── specs/              # Project specifications
+├── experiments/        # Self-contained experiment runs
+│   └── YYMMDD_experiment_name/
+│       ├── config.yaml
+│       ├── prompts/    # Prompt versions for this run
+│       ├── commands.sh # List of commands run in order
+│       ├── results.jsonl
+│       └── summary.md
+├── data/               # Datasets with versioning
+│   ├── raw/            # Original, immutable data
+│   ├── processed/      # Cleaned/transformed data
+│   └── versions.yaml   # Track data versions used in experiments
+├── .cache/             # API response caching (git-ignored)
+│   └── llm_responses/  # Keyed by request hash
+├── out/                # Consolidated intermediate and final outputs
+│   └── figures/
+├── logs/               # System/debug logs and tracking
+│   ├── YYMMDD/         # Daily logs
+│   ├── api_usage.jsonl
+│   └── run_registry.yaml
+├── notebooks/          # Exploratory analysis (rarely used)
+├── src/                # Source code
+│   └── utils/          # Shared utilities (caching, etc)
+├── tmp/                # Scratch work, Claude Code planning
+├── archive/            # Failed/archived runs
+└── research_log.md     # Primary research narrative (root level)
+```
+
+### Experiment Organization
+- Naming: `YYMMDD_experiment_name/`
+- **`commands.sh` documents execution order**: List all commands run in sequence
+  - Self-documenting - shows exactly what was executed and in what order
+  - Can be run as a script to reproduce the experiment
+- Outputs:
+  - Track runs in `logs/run_registry.yaml` with status, timestamps, output paths
+  - Archive/remove failed or errored runs to `archive/` to avoid polluting logs
+  - Use JSONL format for large amounts of data if no defaults exist
+- Parameters: Use CLI arguments, not hardcoded values
+- Reproducibility: Log seeds, hyperparameters, data versions, code commits in config.yaml
+- Checkpointing: Save intermediate outputs for long runs
+- Prompts: Store prompt versions in `experiments/YYMMDD_experiment_name/prompts/` rather than hardcoding
+- Start experiments in parallel `exp-<description>` tmux sessions. Read outputs to track progress. Kill sessions and export outputs when done.
+
+### Research Documentation
+- **Planning (ephemeral):** `tmp/planning_YYMMDD_HHMM.md` - Claude Code's working thoughts
+- **Research log (authoritative):** `research_log.md` - Timestamped entries of key findings and decisions, updated as progress is made
+- **Experiment summaries:** `experiments/*/summary.md` - What specific experiments showed
+
+### LLM API Work
+- Cache API responses in `.cache/llm_responses/` keyed by request hash
+- Track API usage in `logs/api_usage.jsonl` with `{timestamp, model, tokens_in, tokens_out, cost, experiment_id}`
+- Reference data versions from `data/versions.yaml` in experiment configs
 
 ## Research Log
 A research_log.md should consist of timestamped entries added as you make progress—not just weekly—each formatted clearly and concisely.
@@ -214,17 +269,6 @@ Brief overview of what was done. Indicate if complete, in-progress, or any other
 - **ASK if you can't find data** - never fabricate
 - **Be skeptical**: If results are surprisingly good/bad, check for bugs, wrong data, or mock data
 - Better to fail than to cover up issues
-
-### Experiment Organization
-- Naming: `YYMMDD_experiment_name/`
-- Outputs:
-  - Externalize output paths in timestamped run registry (.md or .yaml)
-  - Archive/remove failed or errored runs to avoid polluting logs
-  - Use JSONL format for large amounts of data if no defaults exist
-- Parameters: Use CLI arguments, not hardcoded values
-- Reproducibility: Log seeds, hyperparameters, data versions, code commits
-- Checkpointing: Save intermediate outputs for long runs
-- Start experiments in parallel `exp-<description>` tmux sessions. Read outputs to track progress. Kill sessions and export outputs when done.
 
 ### Documentation
 Document in experiment folders:
