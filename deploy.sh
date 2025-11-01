@@ -255,16 +255,20 @@ merge_git_config() {
         echo "  Using custom git user config from config/user.conf"
     fi
 
-    # Define all git config values once using associative array
-    declare -A GIT_VALUES=(
-        ["user.email"]="$default_email"
-        ["user.name"]="$default_name"
-        ["push.autoSetupRemote"]="true"
-        ["push.default"]="simple"
-        ["init.defaultBranch"]="main"
-        ["core.excludesfile"]="~/.gitignore_global"
-        ["alias.lg"]="log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
-    )
+    # Function to get git config value for a key (Bash 3.2 compatible)
+    get_git_value() {
+        local key="$1"
+        case "$key" in
+            "user.email") echo "$default_email" ;;
+            "user.name") echo "$default_name" ;;
+            "push.autoSetupRemote") echo "true" ;;
+            "push.default") echo "simple" ;;
+            "init.defaultBranch") echo "main" ;;
+            "core.excludesfile") echo "~/.gitignore_global" ;;
+            "alias.lg") echo "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit" ;;
+            *) echo "" ;;
+        esac
+    }
 
     # Parse sections from template
     local sections=("user.email" "user.name" "push.autoSetupRemote" "push.default" "init.defaultBranch" "alias.lg" "core.excludesfile")
@@ -276,7 +280,8 @@ merge_git_config() {
         existing_value=$(git config --global "$section" 2>/dev/null || echo "")
 
         if [[ -n "$existing_value" ]]; then
-            local new_value="${GIT_VALUES[$section]}"
+            local new_value
+            new_value=$(get_git_value "$section")
 
             # Check if values differ
             if [[ "$existing_value" != "$new_value" ]]; then
@@ -310,7 +315,9 @@ merge_git_config() {
         # Helper function to apply git config value
         apply_git_config() {
             local section="$1"
-            git config --global "$section" "${GIT_VALUES[$section]}"
+            local value
+            value=$(get_git_value "$section")
+            git config --global "$section" "$value"
         }
 
         case "$choice" in
@@ -396,7 +403,9 @@ merge_git_config() {
         # No conflicts, apply all settings
         echo "No conflicts detected. Applying all settings..."
         for section in "${sections[@]}"; do
-            git config --global "$section" "${GIT_VALUES[$section]}"
+            local value
+            value=$(get_git_value "$section")
+            git config --global "$section" "$value"
         done
     fi
 
@@ -604,6 +613,42 @@ if [[ "$EDITOR" == "true" ]]; then
     echo ""
     echo "Deploying editor settings..."
     deploy_editor_settings || echo "Warning: Editor settings deployment failed"
+fi
+
+# Deploy Finicky configuration (macOS only)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo ""
+    echo "Deploying Finicky configuration..."
+
+    if [[ ! -f "$DOT_DIR/config/finicky.js" ]]; then
+        echo "Warning: Finicky config not found at $DOT_DIR/config/finicky.js"
+    else
+        # Check if ~/.finicky.js exists and is not already our symlink
+        if [[ -e "$HOME/.finicky.js" && ! -L "$HOME/.finicky.js" ]]; then
+            # Backup existing config
+            backup_path="$HOME/.finicky.js.backup.$(date +%Y%m%d_%H%M%S)"
+            mv "$HOME/.finicky.js" "$backup_path"
+            echo "  Backed up existing config to $backup_path"
+        elif [[ -L "$HOME/.finicky.js" ]]; then
+            # Remove existing symlink
+            rm "$HOME/.finicky.js"
+            echo "  Removed existing symlink"
+        fi
+
+        # Create symlink
+        ln -sf "$DOT_DIR/config/finicky.js" "$HOME/.finicky.js"
+        echo "✓ Symlinked $DOT_DIR/config/finicky.js to ~/.finicky.js"
+        echo "  Default browser: Safari"
+        echo "  Google apps (Docs/Drive/Meet/Calendar/Mail): Google Chrome"
+        echo "  Zoom meetings: Zoom app"
+        echo "  Project management (Notion/Linear): Google Chrome"
+
+        # Check if Finicky is installed
+        if [[ ! -d "/Applications/Finicky.app" ]]; then
+            echo ""
+            echo "  ⚠️  Finicky not installed. Run './install.sh' to install it."
+        fi
+    fi
 fi
 
 # Install cleanup automation if requested

@@ -143,6 +143,10 @@ elif [ $machine == "Mac" ]; then
     echo "Installing Atuin..."
     brew install --quiet atuin 2>/dev/null || echo "Warning: Atuin installation failed"
 
+    # Install Finicky (browser router)
+    echo "Installing Finicky..."
+    brew install --quiet --cask finicky 2>/dev/null || echo "Warning: Finicky installation failed"
+
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
     DOT_DIR=$(dirname $(realpath $0))
