@@ -99,6 +99,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 .ruff_cache/
+.uv_cache/
 .mypy_cache/
 .dmypy.json
 dmypy.json
@@ -210,3 +211,8 @@ secrets/
 *.tar.gz
 *.rar
 *.7z
+
+# Research artifacts
+archive/
+data/
+experiments/
