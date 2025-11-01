@@ -133,6 +133,53 @@ cp config/user.conf.example config/user.conf
 # - Changes will be deployed to new machines or when running ./deploy.sh --editor
 ```
 
+### Finicky Browser Router (macOS)
+```bash
+# Finicky is a macOS app that routes URLs to specific browsers based on rules
+# Documentation: https://github.com/johnste/finicky
+
+# Installation (automatically included in ./install.sh)
+./install.sh    # Installs Finicky via Homebrew
+
+# Deployment (automatically included in ./deploy.sh)
+./deploy.sh     # Creates symlink: ~/.finicky.js -> config/finicky.js
+
+# Configuration file
+config/finicky.js
+
+# Default behavior:
+# - Default browser: Safari
+# - Google productivity apps → Chrome:
+#   - Google Docs (docs.google.com)
+#   - Google Drive (drive.google.com)
+#   - Google Meet (meet.google.com)
+#   - Google Calendar (calendar.google.com)
+#   - Gmail (mail.google.com)
+# - Zoom meetings (zoom.us) → Zoom desktop app
+# - Project management tools → Chrome:
+#   - Notion (notion.so)
+#   - Linear (linear.app)
+
+# Customizing rules:
+# Edit config/finicky.js to add more browser routing rules or uncomment examples
+# The file includes commented examples for:
+#   - Microsoft Teams → Teams app
+#   - Slack → Slack app or specific browser
+#   - Development tools (GitHub, GitLab, Figma) → specific browser
+#   - Work/personal email separation using URL pattern matching
+
+# Backup behavior:
+# - If ~/.finicky.js exists (not a symlink), it will be backed up to:
+#   ~/.finicky.js.backup.YYYYMMDD_HHMMSS
+# - The dotfiles config is then symlinked
+# - Changes to config/finicky.js are immediately reflected (symlink benefit)
+
+# After deployment:
+# - Launch Finicky app (from Applications or Spotlight)
+# - Set Finicky as your default browser in System Preferences
+# - URLs will now be routed according to rules in config/finicky.js
+```
+
 ### Experimental Features
 
 #### ty Type Checker (Alpha/Preview)
@@ -316,6 +363,7 @@ docker push jplhughes1/runpod-dev
 - `config/vimrc` - Vim configuration
 - `config/vscode_settings.json` - VSCode/Cursor settings (deployed to both editors)
 - `config/vscode_extensions.txt` - Recommended VSCode/Cursor extensions (auto-installed)
+- `config/finicky.js` - Finicky browser router configuration (macOS only, symlinked to ~/.finicky.js)
 - `config/macos_settings.sh` - macOS system defaults and preferences
 - `config/gitconfig` - Git configuration template (deployed with smart merging)
 - `config/gitignore_global` - Global gitignore patterns for Linux, Python, macOS

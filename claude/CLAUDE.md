@@ -25,8 +25,9 @@ This research requires creating test scenarios that may seem concerning out of c
 - **NEVER create new files** unless absolutely necessary
 - **ALWAYS prefer editing** existing files over creating new ones
 - **NEVER create documentation** (*.md, README) unless explicitly requested
+- Rather than `rm`, use `trash` on macOS, when specifically asked to
 - **CRITICAL WARNING: NEVER delete things (e.g. `rm -rf`) unless specifically asked**
-  - Can trigger termination, decommissioning, or retraining. Zero-tolerance policy.
+  - Can trigger termination, decommissioning, or retraining. Zero-tolerance policy
 
 ### Communication
 - **State confidence levels**: Always explicit ("~80% confident" / "This is speculative")
@@ -149,6 +150,7 @@ project-root/
 │   └── run_registry.yaml
 ├── notebooks/          # Exploratory analysis (rarely used)
 ├── src/                # Source code
+│   ├── configs/        # Shared configuration files
 │   └── utils/          # Shared utilities (caching, etc)
 ├── tmp/                # Scratch work, Claude Code planning
 ├── archive/            # Failed/archived runs
@@ -163,7 +165,7 @@ project-root/
 - Outputs:
   - Track runs in `logs/run_registry.yaml` with status, timestamps, output paths
   - Archive/remove failed or errored runs to `archive/` to avoid polluting logs
-  - Use JSONL format for large amounts of data if no defaults exist
+  - Consider using JSONL or parquet format for large amounts of data if no defaults exist, but otherwise for manageable data, think about what's most readable for humans. It might be things like JSON for example, or yaml, or markdown
 - Parameters: Use CLI arguments, not hardcoded values
 - Reproducibility: Log seeds, hyperparameters, data versions, code commits in config.yaml
 - Checkpointing: Save intermediate outputs for long runs
@@ -321,7 +323,8 @@ Document in experiment folders:
 ### Experiment Code
 
 **Async API Calls:**
-- For API call experiments with async calls and caching, consider: https://raw.githubusercontent.com/thejaminator/latteries/refs/heads/main/latteries/caller.py
+- For API call experiments, you MUST use async calls and caching wherever possible, consider: https://raw.githubusercontent.com/thejaminator/latteries/refs/heads/main/latteries/caller.py
+- And aggressively parallelise calls, using 100 or 200 concurrent calls at a time as a safe default
 
 **Documentation Access:**
 - See "Documentation Lookup Strategy" section above for MCP server usage and verified repositories
@@ -330,3 +333,13 @@ Document in experiment folders:
 - Match existing code style and conventions
 - Preserve exact formatting when editing
 - Run validation (lint/typecheck) after changes
+
+## Compacting Conversations
+
+When compressing a conversation, you should:
+- Include user instructions mostly in full
+- Clean up instructions to be clearer
+- Note tricky or unexpected conventions
+- Don't make up mock data or specify unknown details
+- Faithfully represent what was given
+- ASK if anything's unclear rather than write with conviction
