@@ -322,9 +322,11 @@ Document in experiment folders:
 
 ### Experiment Code
 
-**Async API Calls:**
+**ABSOLUTELY CRUCIAL!! Parallelise API Calls:**
+- Besides correctness, iteration speed is the most important factor in research. And so it is critical that you parallelise API calls wherever possible. The vast majority of experiments will benefit from parallelisation
 - For API call experiments, you MUST use async calls and caching wherever possible, consider: https://raw.githubusercontent.com/thejaminator/latteries/refs/heads/main/latteries/caller.py
-- And aggressively parallelise calls, using 100 or 200 concurrent calls at a time as a safe default
+- And aggressively parallelise calls, using 150 to 300 concurrent calls at a time as a safe default. We've got really high organisation limits for API calls with a high rate limit, so we can afford to be aggressive
+- This is a MUST DO for all experiments
 
 **Documentation Access:**
 - See "Documentation Lookup Strategy" section above for MCP server usage and verified repositories
@@ -343,3 +345,8 @@ When compressing a conversation, you should:
 - Don't make up mock data or specify unknown details
 - Faithfully represent what was given
 - ASK if anything's unclear rather than write with conviction
+
+## Coordinating with other agents
+
+- Use `tmp/mail/` in the project root to coordinate with other agents. This is a temporary directory that is ignored by git, so it is a safe place to store messages to other agents
+- Each file should be identified by the agent's name (session ID, PID), and the timestamp of the message

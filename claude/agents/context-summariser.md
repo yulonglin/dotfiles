@@ -87,7 +87,7 @@ Compress lengthy conversations, extract essential insights, and maintain researc
 # RESEARCH CONTEXT
 
 Adhere to CLAUDE.md compression principles:
-- Include user instructions mostly in full (highest SNR)
+- CRITICAL:Include user instructions mostly in full (highest SNR)
 - Clean up instructions to be clearer
 - Note tricky or unexpected conventions
 - Don't make up mock data or specify unknown details
