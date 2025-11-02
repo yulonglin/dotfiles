@@ -2,7 +2,7 @@
 // Browser routing for specific URLs
 // See: https://github.com/johnste/finicky
 
-module.exports = {
+export default {
   defaultBrowser: "Safari",
 
   handlers: [
@@ -13,7 +13,8 @@ module.exports = {
         "drive.google.com*",
         "meet.google.com*",
         "calendar.google.com*",
-        "mail.google.com*"
+        "mail.google.com*",
+        "colab.research.google.com*"
       ],
       browser: "Google Chrome"
     },
