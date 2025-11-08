@@ -53,6 +53,12 @@ You have two MCP servers configured:
 
 **✅ ALWAYS USE MCP SERVERS FOR:**
 - Documentation for ANY library or framework (Inspect AI, Hydra, LiteLLM, etc.)
+  - For running evaluations and experiments, use Inspect Evals: https://github.com/UKGovernmentBEIS/inspect_evals
+  - For configuring experiments, use Hydra: https://github.com/facebookresearch/hydra
+  - For making API calls to LLMs, use latteries: https://raw.githubusercontent.com/thejaminator/latteries/refs/heads/main/latteries/caller.py
+    - Alternatively, consider:
+      - LiteLLM: https://github.com/BerriAI/litellm
+      - Safety Tooling: https://github.com/safety-research/safety-tooling
 - Code examples from verified GitHub repositories
 - API references and usage patterns
 - Claude Code documentation and best practices
@@ -117,75 +123,187 @@ mcp__gitmcp__fetch_generic_documentation(owner="ericbuess", repo="claude-code-do
 4. **Always state which source you used** in your response
 
 ## File Organization
+
+### Core Principles
 - Never put temporary files in project root → use `tmp/`
 - Never put .md or test files in project root
-- Archive unsuccessful runs to `archive/`
-- Planning documents → use `tmp/planning_YYMMDD_HHMM.md` (timestamped, ephemeral)
-- **YOU MUST consolidate and edit current docs**, rather than creating or appending to existing docs
-- **ABSOLUTELY IMPORTANT to include timestamps** in planning docs
-- NEVER create new docs trigger-happy, NEVER simply append to existing logs (leads to low-quality bloat)
+- Archive failed/superseded runs to `archive/`
+- **Include timestamps** in planning and experiment docs
+- **Consolidate and edit** current docs rather than creating new ones trigger-happy
 
 ### Directory Structure
 ```
 project-root/
-├── specs/              # Project specifications
-├── experiments/        # Self-contained experiment runs
-│   └── YYMMDD_experiment_name/
-│       ├── config.yaml
-│       ├── prompts/    # Prompt versions for this run
-│       ├── commands.sh # List of commands run in order
-│       ├── results.jsonl
-│       └── summary.md
-├── data/               # Datasets with versioning
-│   ├── raw/            # Original, immutable data
-│   ├── processed/      # Cleaned/transformed data
-│   └── versions.yaml   # Track data versions used in experiments
 ├── .cache/             # API response caching (git-ignored)
 │   └── llm_responses/  # Keyed by request hash
-├── out/                # Consolidated intermediate and final outputs
-│   └── figures/
-├── logs/               # System/debug logs and tracking
-│   ├── YYMMDD/         # Daily logs
+├── ai_docs/            # Documentation about practices and tools
+│   └── [tool_name].md  # e.g., anthropic_api.md, debugging_procedures.md
+├── ai_mail/            # Communication between parallel agents
+│   ├── archive/        # Processed messages
+│   │   └── YYMMDD_HHmmss_<to>_<subject>.md
+│   └── inbox/          # Unread messages requiring action/awareness
+│       └── YYMMDD_HHmmss_<to>_<subject>.md
+├── archive/            # Failed/archived runs
+│   └── YYMMDD_HHmmss_experiment_name/
+│       └── REASON.txt  # One-line explanation of why archived
+├── data/               # Datasets with versioning
+│   ├── processed/      # Cleaned/transformed data
+│   ├── raw/            # Original, immutable data
+│   └── versions.yaml   # Track data versions used in experiments
+├── experiments/        # Self-contained experiment runs
+│   └── YYMMDD_HHmmss_experiment_name/
+│       ├── commands.sh # List of commands run in order
+│       ├── config.yaml
+│       ├── prompts/    # Prompt versions for this run
+│       ├── results.jsonl
+│       └── summary.md
+├── logs/               # System logs and working memory
+│   ├── YYMMDD_HHmmss/  # Timestamped system logs
 │   ├── api_usage.jsonl
-│   └── run_registry.yaml
-├── notebooks/          # Exploratory analysis (rarely used)
+│   ├── archive/        # Old work logs (YYYY_MM.md)
+│   ├── run_registry.yaml
+│   └── work_log.md     # Day-to-day everything (messy, chronological)
+├── notebooks/          # Exploratory analysis
+├── out/                # Consolidated outputs
+│   ├── figures/        # All generated figures, with clear names and timestamps (default location)
+│   └── tables/         # All generated tables, with clear names and timestamps
+├── paper/              # Directory, symlink or git submodule for TeX paper repo
+├── research_log.md     # Clean narrative of key findings (root level)
+├── specs/              # Project specifications from user
 ├── src/                # Source code
 │   ├── configs/        # Shared configuration files
 │   └── utils/          # Shared utilities (caching, etc)
-├── tmp/                # Scratch work, Claude Code planning
-├── archive/            # Failed/archived runs
-└── research_log.md     # Primary research narrative (root level)
+└── tmp/                # Scratch code and data (delete liberally)
 ```
 
+### Default Locations (Where Things Actually Go)
+
+**Running experiments:**
+- Create: `experiments/YYMMDD_HHmmss_<name>/`
+- Run commands from that directory, log in `commands.sh`
+- Start in parallel `exp-<description>` tmux sessions
+- Read outputs to track progress, kill sessions and export when done
+
+**Quick tests/prototypes:**
+- `tmp/test_<thing>.py` or `tmp/<timestamp>_test/`
+- Delete when done or move to experiments/ if valuable
+
+**Generated figures/tables:**
+- → `out/figures/` (plots)
+- → `out/tables/` (tables)
+- In experiment dirs: keep full outputs, symlink key figures to out/
+
+**Generated text/drafts:**
+- Prompts → `experiments/YYMMDD_HHmmss_<name>/prompts/`
+- Analysis writeups → `logs/work_log.md` first, then consolidate into research_log.md
+- Paper content → `paper/` (not root!)
+
+**Data you create:**
+- Raw external data → `data/raw/`
+- Anything you process → `data/processed/`
+- Temp data from experiments → `experiments/YYMMDD_HHmmss_<name>/data/` (don't pollute data/)
+
+**Planning/thinking:**
+- `tmp/planning_YYMMDD_HHmmss.md` while working on specific tasks
+- Delete after work is complete
+
+**Day-to-day notes:**
+- `logs/work_log.md` - Everything that happens (low friction, messy okay)
+- Failed attempts, debugging, quick notes, "ran X got Y trying Z"
+- Raw chronological record
+
+**Clean narrative:**
+- `research_log.md` - Key findings and decisions only
+- What you'd show a collaborator or reference in a paper
+- Updated weekly or post-experiment by distilling from work_log.md
+
+### Agent Communication (ai_mail)
+
+**When to use:**
+- Handoffs between parallel agents
+- "Agent X should know Y before touching Z"
+- Blocking issues or urgent TODOs
+- Context that's too structured for work_log but needed for coordination
+- This is a temporary directory that is ignored by git, so it is a safe place to store messages to other agents
+- Each file should be identified by the agent's name (session ID, PID), and the timestamp of the message
+
+**Message format:**
+```markdown
+To: <agent_name or "all">
+From: <agent_name> / <session_id> / <pid>
+Priority: [high/normal/low]
+Timestamp: YYMMDD_HHmmss
+
+Subject: <brief description>
+
+Message:
+<actual content>
+
+Related files:
+- path/to/relevant/file
+```
+
+**Protocol:**
+- **Before starting work:** Check `ai_mail/inbox/` for relevant messages
+- **After completing a task:** Leave messages in `inbox/` for affected agents
+- **After reading:** Move to `archive/` (or delete if trivial)
+- **Naming:** `YYMMDD_HHmmss_<recipient>_<subject>.md`
+
+**ai_mail vs other locations:**
+- **ai_mail:** Coordination/handoffs between parallel agents
+- **work_log:** Personal record of what happened
+- **research_log:** Key findings for collaborators
+- **git commit:** Code changes and rationale
+
 ### Experiment Organization
-- Naming: `YYMMDD_experiment_name/`
+- Naming: `YYMMDD_HHmmss_experiment_name/`
 - **`commands.sh` documents execution order**: List all commands run in sequence
   - Self-documenting - shows exactly what was executed and in what order
   - Can be run as a script to reproduce the experiment
 - Outputs:
   - Track runs in `logs/run_registry.yaml` with status, timestamps, output paths
-  - Archive/remove failed or errored runs to `archive/` to avoid polluting logs
-  - Consider using JSONL or parquet format for large amounts of data if no defaults exist, but otherwise for manageable data, think about what's most readable for humans. It might be things like JSON for example, or yaml, or markdown
+  - Archive failed or superseded runs to `archive/` with REASON.txt
+  - Use JSONL or parquet for large data; JSON/YAML/markdown for human-readable data
 - Parameters: Use CLI arguments, not hardcoded values
 - Reproducibility: Log seeds, hyperparameters, data versions, code commits in config.yaml
 - Checkpointing: Save intermediate outputs for long runs
-- Prompts: Store prompt versions in `experiments/YYMMDD_experiment_name/prompts/` rather than hardcoding
-- Start experiments in parallel `exp-<description>` tmux sessions. Read outputs to track progress. Kill sessions and export outputs when done.
-
-### Research Documentation
-- **Planning (ephemeral):** `tmp/planning_YYMMDD_HHMM.md` - Claude Code's working thoughts
-- **Research log (authoritative):** `research_log.md` - Timestamped entries of key findings and decisions, updated as progress is made
-- **Experiment summaries:** `experiments/*/summary.md` - What specific experiments showed
+- Prompts: Store prompt versions in `experiments/YYMMDD_HHmmss_<name>/prompts/` rather than hardcoding
 
 ### LLM API Work
 - Cache API responses in `.cache/llm_responses/` keyed by request hash
 - Track API usage in `logs/api_usage.jsonl` with `{timestamp, model, tokens_in, tokens_out, cost, experiment_id}`
 - Reference data versions from `data/versions.yaml` in experiment configs
 
-## Research Log
-A research_log.md should consist of timestamped entries added as you make progress—not just weekly—each formatted clearly and concisely.
+### Documentation Layers
 
-### Research Log Entry Template
+**ai_docs/** - Persistent knowledge for future work
+- Tool usage patterns (e.g., anthropic_api_best_practices.md)
+- Common debugging procedures
+- Architecture decisions
+- Knowledge that should inform all future work
+
+**ai_mail/** - Coordination between parallel agents
+- Handoffs and blocking issues
+- Check inbox before starting work
+- Archive after reading/acting
+
+**logs/work_log.md** - Everything that happens day-to-day
+- Chronological working memory
+- Failed attempts, debugging, tangents
+- Quick notes: "ran X, got Y, trying Z next"
+- Messy is fine - this is your scratch space
+
+**research_log.md** - Clean narrative
+- Key findings and decisions
+- Progress summaries (weekly or post-experiment)
+- What worked and why
+- Distilled from work_log.md
+
+**Workflow**: work_log (capture everything) → research_log (distill insights) → archive old work_log entries
+
+## Research Log Entry Template
+
+Use this for entries in **research_log.md** (not work_log):
 
 #### [Timestamp: YYYY-MM-DD HH:MM:SS]
 
@@ -193,41 +311,26 @@ A research_log.md should consist of timestamped entries added as you make progre
 Name the activity (e.g., Experiment: model run, Data analysis, Literature review, Ideation).
 
 **Description & Status:**  
-Brief overview of what was done. Indicate if complete, in-progress, or any other status.
+Brief overview of what was done. Complete, in-progress, or other status.
 
-**Commands Run:**  
-- List any relevant shell commands, scripts, or notebooks executed, with parameters if helpful
-  - e.g., `python train_model.py --lr=0.01`
-  - e.g., `notebooks/results-exploration.ipynb`
+**Key Commands/Files:**  
+- Most relevant commands or notebooks (not exhaustive)
+- Critical files examined or generated
+- **Include prompt file paths** (prompts define metrics, critical for reproducibility)
 
-**Files and Outputs Examined/Generated:**
-- Name specific files, directories, outputs, or logs consulted or produced
-  - e.g., `logs/20240614_exp1.log`
-  - e.g., `figures/loss_curve.png`
-- **Include full prompts or prompt file paths** (prompts define metrics, critical for reproducibility)
-
-**Key Results / Graphs / Figures:**  
-- Link, embed, or describe key graphs, tables, or other outputs produced
+**Key Results:**  
+- Main findings, metrics, or outputs
+- Link to figures in `out/figures/` if relevant
 
 **Outcome:**  
-- Concise summary of findings, intermediate results, or issues
+- What this tells us
 - Success, failure, or partial progress
-- Research outputs (metrics, notes, communications, confirmations/rejections, etc.)
+- Contribution to research goals
 
-**Blockers:**  
-- What, if anything, is preventing further progress?
-- Unresolved bugs, conceptual hurdles, external dependencies, etc.
+**Next Steps (Optional):**  
+- Clear actions based on these findings
 
-**Reflection:**  
-- Contribution to research goals/how this advances understanding
-- Strengths and weaknesses of outputs
-- Worth continuing or pivoting?
-- Unexpected difficulties or insights
-
-**Feedback (Optional):**  
-- Summarize any feedback received or requested on this activity
-
-*Repeat this template for each major step, experiment, or work session. Entries should be timestamped and as granular as needed to reconstruct your research process. This supports traceability, reproducibility, and effective communication with collaborators.*
+*Keep entries focused on insights, not process details (those go in work_log).*
 
 ## Subagent Strategy
 
@@ -345,8 +448,3 @@ When compressing a conversation, you should:
 - Don't make up mock data or specify unknown details
 - Faithfully represent what was given
 - ASK if anything's unclear rather than write with conviction
-
-## Coordinating with other agents
-
-- Use `tmp/mail/` in the project root to coordinate with other agents. This is a temporary directory that is ignored by git, so it is a safe place to store messages to other agents
-- Each file should be identified by the agent's name (session ID, PID), and the timestamp of the message

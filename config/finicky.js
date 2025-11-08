@@ -10,11 +10,14 @@ export default {
       // Google productivity apps → Chrome
       match: [
         "docs.google.com*",
+        "slides.google.com*",
+        "sheets.google.com*",
         "drive.google.com*",
         "meet.google.com*",
         "calendar.google.com*",
         "mail.google.com*",
-        "colab.research.google.com*"
+        "colab.research.google.com*",
+        "chromewebstore.google.com*"
       ],
       browser: "Google Chrome"
     },
