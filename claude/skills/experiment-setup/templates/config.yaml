@@ -1,0 +1,36 @@
+# Base Hydra configuration for experiments
+# Override from CLI: python experiment.py model.name=X task.samples=Y
+
+defaults:
+  - _self_
+  - hydra: default
+
+# Experiment metadata
+experiment:
+  name: base_experiment
+  description: "Baseline experiment"
+
+# Model configuration
+model:
+  name: claude-3-5-sonnet-20241022
+  temperature: 1.0
+  max_tokens: 4096
+
+# Task configuration
+task:
+  name: base_task
+  samples: 100
+
+# Logging configuration
+logging:
+  level: INFO
+  log_dir: ${hydra:runtime.output_dir}
+
+# API configuration
+api:
+  max_concurrent: 200  # Aggressive parallelization (150-300 is safe)
+  cache_dir: .cache/llm_responses
+  track_usage: true
+
+# Random seed for reproducibility
+seed: 42

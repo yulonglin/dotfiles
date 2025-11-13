@@ -1,0 +1,17 @@
+# Ignore all Codex CLI contents
+# This directory serves as a template - actual files are user-specific
+
+# Authentication and configuration
+auth.json
+config.toml
+
+# History and sessions
+history.jsonl
+sessions/
+log/
+
+# Auto-generated files
+version.json
+
+# Keep only documentation
+!README.md

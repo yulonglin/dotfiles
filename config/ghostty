@@ -1,0 +1,31 @@
+# Ghostty Configuration
+# Managed via dotfiles - see config/ghostty in your dotfiles repo
+#
+# Run `ghostty +show-config --default --docs` to view all available options
+# Docs: https://ghostty.org/docs/config
+#
+# Reload config: Cmd+Shift+Comma (macOS) or Ctrl+Shift+Comma (Linux)
+
+# Key Bindings
+# ============
+
+# Shift+Enter: Insert newline without executing command
+keybind = shift+enter=text:\n
+
+# Cmd+C: Send custom escape sequence for shell-based copy (see config/key_bindings.sh)
+keybind = super+c=text:\x1b[99~
+
+# Left Option key: Send Esc+ for Opt+Shift key bindings in ZSH
+# (This may already be the default in Ghostty)
+# macos-option-as-alt = true
+
+# Additional Settings
+# ===================
+
+# Add your custom Ghostty settings below
+# Examples:
+# font-family = Iosevka
+# font-size = 13
+# theme = dark:tokyonight,light:tokyonight-day
+# window-padding-x = 2
+# window-padding-y = 2

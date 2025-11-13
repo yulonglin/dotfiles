@@ -1,0 +1,17 @@
+# Hydra runtime configuration
+# Controls output directory structure and execution behavior
+
+hydra:
+  run:
+    # Use experiments/ directory with timestamp
+    dir: experiments/${now:%Y%m%d_%H%M%S}_${experiment.name}
+
+  sweep:
+    # For parameter sweeps (multi-run mode)
+    dir: experiments/sweeps/${now:%Y%m%d_%H%M%S}_${experiment.name}
+    subdir: ${hydra.job.num}
+
+  job:
+    # Change to output directory during execution
+    # This makes all relative paths write to the experiment dir
+    chdir: true
