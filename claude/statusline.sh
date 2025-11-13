@@ -14,8 +14,8 @@
 # - Receives JSON via stdin from Claude Code with session/workspace data
 # - Uses git commands to check repository status and diff statistics
 # - Reads transcript JSONL file to extract token metrics for context calculation
-# - Context = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
-# - Usable context = 80% of max (800k for Sonnet 4.5, 160k for others)
+# - Context = input_tokens + cache_read + cache_creation + output_tokens
+# - Percentage = (context + 45k autocompact buffer) / 200k (matches /context display)
 # - Git branch shown in brackets: (branch) or (branch*) for dirty repos
 
 # Read JSON input from stdin
@@ -115,35 +115,33 @@ if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
     input_tokens=$(echo "$last_assistant_msg" | jq -r '.message.usage.input_tokens // 0' 2>/dev/null)
     cache_read=$(echo "$last_assistant_msg" | jq -r '.message.usage.cache_read_input_tokens // 0' 2>/dev/null)
     cache_creation=$(echo "$last_assistant_msg" | jq -r '.message.usage.cache_creation_input_tokens // 0' 2>/dev/null)
+    output_tokens=$(echo "$last_assistant_msg" | jq -r '.message.usage.output_tokens // 0' 2>/dev/null)
 
-    # Calculate context length (input + cached tokens)
-    context_length=$((input_tokens + cache_read + cache_creation))
+    # Calculate context length (input + cached + output tokens)
+    # Output tokens from this turn become input tokens in the next turn
+    context_length=$((input_tokens + cache_read + cache_creation + output_tokens))
 
     if [ "$context_length" -gt 0 ]; then
-      # Determine max tokens based on model
-      # Sonnet 4.5 has 1M context, others have 200k
-      if echo "$model_id" | grep -q "sonnet-4"; then
-        max_tokens=1000000
-      else
-        max_tokens=200000
-      fi
+      # Claude Code uses 200k as the total context, with 45k reserved for autocompact buffer
+      # /context shows: (actual_usage + 45k_buffer) / 200k to represent unavailable space
+      # Add autocompact buffer to match /context percentage calculation
+      total_tokens=200000
+      autocompact_buffer=45000
+      context_with_buffer=$((context_length + autocompact_buffer))
 
-      # Usable context is 80% of total (auto-compact threshold)
-      usable_tokens=$((max_tokens * 80 / 100))
-
-      # Calculate percentage of usable context
-      percentage=$((context_length * 100 / usable_tokens))
+      # Calculate percentage including buffer (matches /context display)
+      percentage=$((context_with_buffer * 100 / total_tokens))
 
       # Color-code based on usage
       if [ "$percentage" -ge 90 ]; then
         # Red: very high usage (90%+)
-        context_info=" $(printf "\033[31m")${percentage}%%$(printf "\033[0m")"
+        context_info=" · 📊 $(printf "\033[31m")${percentage}%$(printf "\033[0m")"
       elif [ "$percentage" -ge 70 ]; then
         # Yellow: moderate usage (70-89%)
-        context_info=" $(printf "\033[33m")${percentage}%%$(printf "\033[0m")"
+        context_info=" · 📊 $(printf "\033[33m")${percentage}%$(printf "\033[0m")"
       else
         # Green: low usage (<70%)
-        context_info=" $(printf "\033[32m")${percentage}%%$(printf "\033[0m")"
+        context_info=" · 📊 $(printf "\033[32m")${percentage}%$(printf "\033[0m")"
       fi
     fi
   fi
