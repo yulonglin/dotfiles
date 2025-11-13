@@ -203,6 +203,10 @@ else
     git clone --quiet https://github.com/zsh-users/zsh-history-substring-search \
         ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-history-substring-search 2>/dev/null || echo "Warning: zsh-history-substring-search failed"
     
+    git clone --quiet https://github.com/jirutka/zsh-shift-select.git \
+        "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-shift-select" 2>/dev/null || echo "Warning: zsh-shift-select installation failed"
+
+
     echo "  → Installing tmux theme pack..."
     git clone --quiet https://github.com/jimeh/tmux-themepack.git ~/.tmux-themepack 2>/dev/null || echo "Warning: tmux-themepack failed"
 

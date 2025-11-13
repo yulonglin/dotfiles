@@ -13,7 +13,7 @@ Comprehensive dotfiles repository for ZSH, Tmux, Vim, SSH, and development tools
 **Flags are ADDITIVE to defaults unless `--minimal` is used**
 
 - `install.sh` defaults: macOS (`--zsh --tmux --ai-tools --cleanup`), Linux (`--zsh --tmux --ai-tools`)
-- `deploy.sh` defaults: `--claude --vim --editor`
+- `deploy.sh` defaults: `--claude --codex --vim --editor --experimental --cleanup` (cleanup macOS only)
 - Adding flags extends defaults (e.g., `./install.sh --extras` = defaults + extras)
 - `--minimal` flag disables all defaults (only installs what you specify)
 - Modifiers (`--append`, `--ascii`, `--force`) don't affect defaults
@@ -22,12 +22,15 @@ See README.md for detailed usage.
 
 ### Deployment Components
 
-Each component in `deploy.sh` uses a `deploy_X()` helper function:
-- `deploy_zshrc()` - ZSH configuration
-- `deploy_git_config()` - Git config with smart conflict resolution
-- `deploy_editor_settings()` - VSCode/Cursor settings with smart merging
-- `deploy_finicky()` - Browser routing (macOS only)
-- `deploy_aliases()` - Environment-specific aliases
+Each component in `deploy.sh` is deployed with inline logic or helper functions:
+- ZSH configuration - Main shell setup
+- Git config - Smart conflict resolution with user prompts
+- VSCode/Cursor settings - Merges with existing settings
+- Finicky - Browser routing (macOS only, symlinked)
+- Ghostty - Terminal emulator configuration (symlinked to platform-specific path)
+- Claude Code - AI assistant configuration (symlinked)
+- Codex - CLI tool configuration (symlinked)
+- Cleanup automation - Scheduled cleanup jobs (macOS only)
 
 ## Architecture
 
@@ -51,6 +54,8 @@ config/
 ├── vscode_settings.json  # VSCode/Cursor settings (merged, not overwritten)
 ├── vscode_extensions.txt # Auto-installed extensions
 ├── finicky.js            # Browser routing (macOS, symlinked)
+├── ghostty               # Ghostty terminal config (symlinked to platform-specific path)
+├── key_bindings.sh       # ZSH key bindings (sourced by zshrc.sh)
 ├── gitconfig             # Git config template
 ├── gitignore_global      # Global gitignore
 └── user.conf.example     # User-specific git settings template
@@ -60,6 +65,8 @@ claude/
 ├── settings.json         # Claude Code settings
 ├── agents/               # Specialized agent definitions (13 total)
 └── notify.sh             # Task completion notifications
+
+codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 
 custom_bins/              # Custom utilities (added to PATH)
 ```
@@ -80,6 +87,13 @@ custom_bins/              # Custom utilities (added to PATH)
 **Finicky Deployment**:
 - Symlinks `config/finicky.js` to `~/.finicky.js`
 - Backs up existing file with timestamp if not a symlink
+
+**Ghostty Deployment**:
+- Symlinks `config/ghostty` to platform-specific config path:
+  - macOS: `~/Library/Application Support/com.mitchellh.ghostty/config`
+  - Linux: `~/.config/ghostty/config`
+- Backs up existing file with timestamp if not a symlink
+- Configures Cmd+C for shell-based copy and Shift+Enter for multiline input
 
 ## Development Patterns
 
@@ -116,10 +130,12 @@ custom_bins/              # Custom utilities (added to PATH)
 ## Important Gotchas
 
 - **macOS vs Linux paths**: VSCode settings location differs by OS
-- **Symlinks vs copies**: Some configs are symlinked (Finicky), others copied (ZSH, git)
+- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex), others copied (ZSH, git)
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env
 - **Claude Code directory**: `claude/` is symlinked to `~/.claude/` (not copied)
+- **Codex CLI directory**: `codex/` is symlinked to `~/.codex/` (not copied)
+- **Ghostty config**: Symlinked to platform-specific path, requires reload after changes (Cmd+Shift+Comma)
 
 ## Cross-Reference
 

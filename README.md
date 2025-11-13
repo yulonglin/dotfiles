@@ -1,5 +1,7 @@
 # dotfiles
-ZSH, Tmux, Vim and ssh setup on both local/remote machines.
+ZSH, Tmux, Vim, ssh and coding agents setup on both local/remote machines.
+
+Originally built upon: https://github.com/jplhughes/dotfiles
 
 ## Installation
 
@@ -74,4 +76,3 @@ To push it to docker hub
 ```bash
 docker push jplhughes1/runpod-dev
 ```
-

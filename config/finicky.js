@@ -17,7 +17,9 @@ export default {
         "calendar.google.com*",
         "mail.google.com*",
         "colab.research.google.com*",
-        "chromewebstore.google.com*"
+        "chromewebstore.google.com*",
+        "localhost*",
+        "127.0.0.1*"
       ],
       browser: "Google Chrome"
     },

@@ -11,20 +11,21 @@ USAGE=$(cat <<-END
         --aliases               specify additional alias scripts to source in .zshrc, separated by commas
         --append                append to existing config files instead of overwriting
         --ascii                 specify the ASCII art file to use
-        --cleanup               install automatic cleanup for ~/Downloads and ~/Screenshots
+        --cleanup               install automatic cleanup for ~/Downloads and ~/Screenshots (macOS only)
         --claude                deploy Claude Code configuration (symlink claude/ to ~/.claude)
+        --codex                 deploy Codex CLI configuration (symlink codex/ to ~/.codex)
+        --ghostty               deploy Ghostty terminal configuration (symlink config/ghostty to config dir)
         --experimental          enable experimental features (ty type checker)
         --minimal               disable defaults, deploy only specified components
 
     DEFAULTS (applied unless --minimal is used):
-        --claude --vim --editor
+        --claude --codex --vim --editor --experimental --ghostty --cleanup (macOS only)
 
     EXAMPLES:
-        ./deploy.sh                           # Deploy defaults (claude + vim)
-        ./deploy.sh --cleanup                 # Deploy defaults + cleanup
-        ./deploy.sh --minimal --vim           # Deploy ONLY vim (no claude)
+        ./deploy.sh                           # Deploy all defaults
         ./deploy.sh --aliases=speechmatics    # Deploy defaults + speechmatics aliases
-        ./deploy.sh --experimental            # Deploy defaults + ty type checker
+        ./deploy.sh --minimal --vim           # Deploy ONLY vim (no defaults)
+        ./deploy.sh --minimal --claude        # Deploy ONLY claude (no other defaults)
 
     Git configuration is always deployed.
 END
@@ -39,6 +40,8 @@ APPEND="false"
 ASCII_FILE="start.txt"  # Default value
 CLEANUP="false"
 CLAUDE="false"
+CODEX="false"
+GHOSTTY="false"
 EXPERIMENTAL="false"
 MINIMAL="false"
 while (( "$#" )); do
@@ -61,6 +64,10 @@ while (( "$#" )); do
             CLEANUP="true" && shift ;;
         --claude)
             CLAUDE="true" && shift ;;
+        --codex)
+            CODEX="true" && shift ;;
+        --ghostty)
+            GHOSTTY="true" && shift ;;
         --experimental)
             EXPERIMENTAL="true" && shift ;;
         --) # end argument parsing
@@ -70,12 +77,28 @@ while (( "$#" )); do
     esac
 done
 
+# Detect operating system
+operating_system="$(uname -s)"
+case "${operating_system}" in
+    Linux*)     machine=Linux;;
+    Darwin*)    machine=Mac;;
+    *)          machine="UNKNOWN:${operating_system}"
+                echo "Error: Unsupported operating system ${operating_system}" && exit 1
+esac
+
 # Apply defaults unless --minimal was specified
 if [ "$MINIMAL" = "false" ]; then
-    echo "Applying defaults: --claude --vim --editor (use --minimal to disable)"
+    echo "Applying defaults for $machine: --claude --codex --vim --editor --experimental --ghostty --cleanup (use --minimal to disable)"
     CLAUDE="true"
+    CODEX="true"
     VIM="true"
     EDITOR="true"
+    EXPERIMENTAL="true"
+    GHOSTTY="true"
+    # Cleanup only on macOS
+    if [ "$machine" = "Mac" ]; then
+        CLEANUP="true"
+    fi
 fi
 
 echo "deploying on machine..."
@@ -651,14 +674,59 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     fi
 fi
 
-# Install cleanup automation if requested
+# Deploy Ghostty configuration
+if [[ "$GHOSTTY" == "true" ]]; then
+    echo ""
+    echo "Deploying Ghostty configuration..."
+
+    # Ghostty config path is platform-specific
+    if [[ "$machine" == "Mac" ]]; then
+        GHOSTTY_CONFIG_DIR="$HOME/Library/Application Support/com.mitchellh.ghostty"
+    else
+        # Linux/other platforms use XDG_CONFIG_HOME or ~/.config
+        GHOSTTY_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ghostty"
+    fi
+
+    if [[ ! -f "$DOT_DIR/config/ghostty" ]]; then
+        echo "Warning: Ghostty config not found at $DOT_DIR/config/ghostty"
+    else
+        # Create config directory if it doesn't exist
+        mkdir -p "$GHOSTTY_CONFIG_DIR"
+
+        # Check if config exists and is not already our symlink
+        if [[ -e "$GHOSTTY_CONFIG_DIR/config" && ! -L "$GHOSTTY_CONFIG_DIR/config" ]]; then
+            # Backup existing config
+            backup_path="$GHOSTTY_CONFIG_DIR/config.backup.$(date +%Y%m%d_%H%M%S)"
+            mv "$GHOSTTY_CONFIG_DIR/config" "$backup_path"
+            echo "  Backed up existing config to $backup_path"
+        elif [[ -L "$GHOSTTY_CONFIG_DIR/config" ]]; then
+            # Remove existing symlink
+            rm "$GHOSTTY_CONFIG_DIR/config"
+            echo "  Removed existing symlink"
+        fi
+
+        # Create symlink
+        ln -sf "$DOT_DIR/config/ghostty" "$GHOSTTY_CONFIG_DIR/config"
+        echo "✓ Symlinked $DOT_DIR/config/ghostty to $GHOSTTY_CONFIG_DIR/config"
+        echo "  Key bindings:"
+        echo "    - Shift+Enter: Insert newline without executing"
+        echo "    - Cmd+C: Copy selected text (shell-based, works with Opt+Shift selection)"
+        echo "  Reload config: Cmd+Shift+Comma (or restart Ghostty)"
+    fi
+fi
+
+# Install cleanup automation if requested (macOS only)
 if [[ "$CLEANUP" == "true" ]]; then
     echo ""
-    echo "Installing automatic cleanup..."
-    if [[ -f "$DOT_DIR/scripts/cleanup/install.sh" ]]; then
-        "$DOT_DIR/scripts/cleanup/install.sh" --non-interactive || echo "Warning: Cleanup installation failed"
+    if [ "$machine" != "Mac" ]; then
+        echo "Skipping cleanup installation (macOS only)"
     else
-        echo "Warning: Cleanup install script not found at $DOT_DIR/scripts/cleanup/install.sh"
+        echo "Installing automatic cleanup..."
+        if [[ -f "$DOT_DIR/scripts/cleanup/install.sh" ]]; then
+            "$DOT_DIR/scripts/cleanup/install.sh" --non-interactive || echo "Warning: Cleanup installation failed"
+        else
+            echo "Warning: Cleanup install script not found at $DOT_DIR/scripts/cleanup/install.sh"
+        fi
     fi
 fi
 
@@ -684,6 +752,32 @@ if [[ "$CLAUDE" == "true" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
             echo "✓ Symlinked $DOT_DIR/claude to ~/.claude"
             echo "  Deployed: CLAUDE.md, settings.json, agents/, notify.sh"
+        fi
+    fi
+fi
+
+# Deploy Codex CLI configuration if requested
+if [[ "$CODEX" == "true" ]]; then
+    echo ""
+    echo "Deploying Codex CLI configuration..."
+
+    if [[ ! -d "$DOT_DIR/codex" ]]; then
+        echo "Warning: Codex directory not found at $DOT_DIR/codex"
+    else
+        # Remove existing ~/.codex if it's a symlink
+        if [[ -L "$HOME/.codex" ]]; then
+            rm "$HOME/.codex"
+            echo "  Removed existing symlink at ~/.codex"
+        elif [[ -e "$HOME/.codex" ]]; then
+            echo "  Warning: ~/.codex exists and is not a symlink"
+            echo "  Please backup and remove ~/.codex manually, then run deploy.sh --codex again"
+        fi
+
+        # Create symlink
+        if [[ ! -e "$HOME/.codex" ]]; then
+            ln -sf "$DOT_DIR/codex" "$HOME/.codex"
+            echo "✓ Symlinked $DOT_DIR/codex to ~/.codex"
+            echo "  Deployed: Codex CLI configuration directory"
         fi
     fi
 fi
