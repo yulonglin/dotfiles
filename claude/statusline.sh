@@ -9,15 +9,14 @@
 # 2. Git branch with status indicator (clean/dirty)
 # 3. Git changes: insertions/deletions (+X,-Y)
 # 4. Context usage percentage (of usable context before auto-compact)
-# 5. Thinking mode indicator (🧠 if enabled)
 #
 # Technical details:
 # - Receives JSON via stdin from Claude Code with session/workspace data
 # - Uses git commands to check repository status and diff statistics
-# - Calculates context based on model (1M for Sonnet 4.5, 200k otherwise)
-# - Usable context = 80% of total (auto-compact threshold)
-# - Git branch symbol: ⎇ (U+2387) - works without Nerd Fonts
-#   Alternative: use \ue0a0 if you have Powerline/Nerd Fonts installed
+# - Reads transcript JSONL file to extract token metrics for context calculation
+# - Context = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+# - Usable context = 80% of max (800k for Sonnet 4.5, 160k for others)
+# - Git branch shown in brackets: (branch) or (branch*) for dirty repos
 
 # Read JSON input from stdin
 input=$(cat)
@@ -25,7 +24,6 @@ input=$(cat)
 # Extract data from JSON
 cwd=$(echo "$input" | jq -r ".workspace.current_dir")
 model_id=$(echo "$input" | jq -r ".model.id // empty")
-thinking_enabled=$(echo "$input" | jq -r ".thinking_enabled // false")
 
 # ============================================================================
 # DIRECTORY PATH (full path, ~ for HOME)
@@ -86,15 +84,13 @@ if git -C "$cwd" rev-parse --git-dir > /dev/null 2>&1; then
       changes=" $(printf "\033[32m")+${insertions}$(printf "\033[0m"),$(printf "\033[31m")-${deletions}$(printf "\033[0m")"
     fi
 
-    # Format branch with status indicator
-    # Using ⎇ (U+2387) which works without Nerd Fonts
-    # Change to \ue0a0 if you prefer Powerline symbols and have Nerd Fonts
+    # Format branch with status indicator using brackets
     if [ "$has_changes" = true ]; then
       # Yellow for dirty repo
-      git_info=" $(printf "\033[33m")⎇ ${branch}*$(printf "\033[0m")${changes}"
+      git_info=" $(printf "\033[33m")(${branch}*)$(printf "\033[0m")${changes}"
     else
       # Green for clean repo
-      git_info=" $(printf "\033[32m")⎇ ${branch}$(printf "\033[0m")${changes}"
+      git_info=" $(printf "\033[32m")(${branch})$(printf "\033[0m")${changes}"
     fi
   fi
 fi
@@ -104,48 +100,56 @@ fi
 # ============================================================================
 context_info=""
 
-# Check if we have context data in the JSON
-if echo "$input" | jq -e '.context_length' > /dev/null 2>&1; then
-  context_length=$(echo "$input" | jq -r ".context_length")
+# Get transcript path to read token metrics
+transcript_path=$(echo "$input" | jq -r ".transcript_path // empty")
 
-  # Determine total context based on model
-  # Sonnet 4.5 has 1M context, others have 200k
-  if echo "$model_id" | grep -q "sonnet-4"; then
-    total_context=1000000
-  else
-    total_context=200000
-  fi
+if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
+  # Find the most recent assistant message with usage data
+  # Search backwards through the transcript (tac reverses lines)
+  last_assistant_msg=$(tac "$transcript_path" 2>/dev/null | \
+    grep -m 1 '"type":"assistant"' | \
+    grep 'input_tokens')
 
-  # Usable context is 80% of total (auto-compact threshold)
-  usable_context=$((total_context * 80 / 100))
+  if [ -n "$last_assistant_msg" ]; then
+    # Extract token counts from the usage field (nested in message)
+    input_tokens=$(echo "$last_assistant_msg" | jq -r '.message.usage.input_tokens // 0' 2>/dev/null)
+    cache_read=$(echo "$last_assistant_msg" | jq -r '.message.usage.cache_read_input_tokens // 0' 2>/dev/null)
+    cache_creation=$(echo "$last_assistant_msg" | jq -r '.message.usage.cache_creation_input_tokens // 0' 2>/dev/null)
 
-  # Calculate percentage of usable context
-  if [ "$context_length" -gt 0 ]; then
-    percentage=$((context_length * 100 / usable_context))
+    # Calculate context length (input + cached tokens)
+    context_length=$((input_tokens + cache_read + cache_creation))
 
-    # Color-code based on usage
-    if [ "$percentage" -ge 90 ]; then
-      # Red: very high usage (90%+)
-      context_info=" $(printf "\033[31m")${percentage}%%$(printf "\033[0m")"
-    elif [ "$percentage" -ge 70 ]; then
-      # Yellow: moderate usage (70-89%)
-      context_info=" $(printf "\033[33m")${percentage}%%$(printf "\033[0m")"
-    else
-      # Green: low usage (<70%)
-      context_info=" $(printf "\033[32m")${percentage}%%$(printf "\033[0m")"
+    if [ "$context_length" -gt 0 ]; then
+      # Determine max tokens based on model
+      # Sonnet 4.5 has 1M context, others have 200k
+      if echo "$model_id" | grep -q "sonnet-4"; then
+        max_tokens=1000000
+      else
+        max_tokens=200000
+      fi
+
+      # Usable context is 80% of total (auto-compact threshold)
+      usable_tokens=$((max_tokens * 80 / 100))
+
+      # Calculate percentage of usable context
+      percentage=$((context_length * 100 / usable_tokens))
+
+      # Color-code based on usage
+      if [ "$percentage" -ge 90 ]; then
+        # Red: very high usage (90%+)
+        context_info=" $(printf "\033[31m")${percentage}%%$(printf "\033[0m")"
+      elif [ "$percentage" -ge 70 ]; then
+        # Yellow: moderate usage (70-89%)
+        context_info=" $(printf "\033[33m")${percentage}%%$(printf "\033[0m")"
+      else
+        # Green: low usage (<70%)
+        context_info=" $(printf "\033[32m")${percentage}%%$(printf "\033[0m")"
+      fi
     fi
   fi
 fi
 
 # ============================================================================
-# THINKING MODE INDICATOR
-# ============================================================================
-thinking_info=""
-if [ "$thinking_enabled" = "true" ]; then
-  thinking_info=" $(printf "\033[35m")🧠$(printf "\033[0m")"
-fi
-
-# ============================================================================
 # OUTPUT FORMATTED STATUS LINE
 # ============================================================================
-printf "\033[2m\033[36m%s\033[0m%s%s%s" "$dir" "$git_info" "$context_info" "$thinking_info"
+printf "\033[2m\033[36m%s\033[0m%s%s" "$dir" "$git_info" "$context_info"
