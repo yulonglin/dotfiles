@@ -83,7 +83,6 @@ Structure your review as follows:
 # RESEARCH CONTEXT
 
 Critical CLAUDE.md violations to catch:
-- **Git commits**: NEVER mention coding agents ("Claude Code", "Co-Authored-By: Claude", etc.) - FATAL ERROR
 - **Mock data**: Never use in experiments (only in unit tests)
 - **Hardcoded values**: Must use CLI arguments for all parameters
 - **JSONL output**: Experiment results must be in JSONL format
