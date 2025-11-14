@@ -18,6 +18,7 @@ export default {
         "mail.google.com*",
         "colab.research.google.com*",
         "chromewebstore.google.com*",
+        "scholar.google.com*",
         "localhost*",
         "127.0.0.1*"
       ],
