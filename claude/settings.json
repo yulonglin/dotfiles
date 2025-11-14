@@ -3,6 +3,7 @@
   "env": {
     "CLAUDE_CODE_NOTIFICATION_SCRIPT": "~/.claude/notify.sh"
   },
+  "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
       "Bash(find:*)",
@@ -33,6 +34,28 @@
     "defaultMode": "plan"
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto_log.sh START"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto_log.sh END"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
@@ -50,6 +73,5 @@
     "padding": 1
   },
   "alwaysThinkingEnabled": true,
-  "installMethod": "native",
-  "includeCoAuthoredBy": false
+  "installMethod": "native"
 }
