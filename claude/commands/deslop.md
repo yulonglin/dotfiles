@@ -1,6 +1,13 @@
+---
+argument-hint: [files/branches to check]
+description: Remove AI generated code slop
+---
+
 # Remove AI code slop
 
-Check the diff in the working directory against the current branch, and remove all AI generated slop that's uncommitted. (Unless otherwise specified that we should compare againt specific commits/branches, or only look at specific files)
+Check the diff in the working directory against the current branch, and remove all AI generated slop that's uncommitted.
+
+Scope: $ARGUMENTS
 
 This includes:
 - Extra comments that a human wouldn't add or is inconsistent with the rest of the file. Although leave them in for unintuitive things

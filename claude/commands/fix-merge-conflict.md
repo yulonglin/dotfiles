@@ -1,4 +1,11 @@
+---
+argument-hint: [strategy or branch preferences]
+description: Fix merge conflicts non-interactively
+---
+
 # Fix all merge conflicts on the current Git branch non-interactively and make the repo buildable and tested.
+
+Additional strategy preferences: $ARGUMENTS
 
 Requirements and constraints:
 - Operate from the repository root. If not in a Git repo, stop and report.

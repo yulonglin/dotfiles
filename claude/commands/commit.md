@@ -1,5 +1,12 @@
+---
+argument-hint: [message]
+description: Commit current work with optional message
+---
+
 # Commit current work
-Commit current work.
+Commit current work
+
+$ARGUMENTS
 
 ## Important
 - Prepend GIT_EDITOR=true to all git commands you run, especially the ones looking at diffs, so you can avoid getting blocked as you execute commands
