@@ -452,3 +452,13 @@ TSWLatexianTemp*
 #*Notes.bib
 
 *.bst
+
+#-------------------------------------------------------------
+# Custom Research Files
+#-------------------------------------------------------------
+
+archive/
+/tmp
+/data
+/experiments
+/out
