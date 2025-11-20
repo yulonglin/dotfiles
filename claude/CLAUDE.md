@@ -132,7 +132,8 @@ mcp__gitmcp__fetch_generic_documentation(owner="ericbuess", repo="claude-code-do
 ```
 project-root/
 ├── .cache/             # Caching for API calls, experiment outputs, etc. (git-ignored)
-│   └── llm_responses/  # Keyed by request hash├── specs/              # Project specifications from user
+│   └── llm_responses/  # Keyed by request hash
+├── specs/              # Project specifications from user
 ├── ai_docs/            # Agent-specific context and knowledge base
 │   └── [topic].md      # Project patterns, debugging notes, tool usage
 ├── data/               # Datasets with versioning (input data)
