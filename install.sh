@@ -109,6 +109,7 @@ if [ $machine == "Linux" ]; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
     
     if [ $extras == true ]; then
+        apt install -y fd-find
         apt install -y ripgrep
 
         yes | curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | /bin/bash
@@ -161,7 +162,7 @@ elif [ $machine == "Mac" ]; then
 
     if [ $extras == true ]; then
         echo "Installing extras..."
-        brew install --quiet ripgrep dust jless peco 2>/dev/null || echo "Warning: Some extras failed to install"
+        brew install --quiet fd ripgrep dust jless peco 2>/dev/null || echo "Warning: Some extras failed to install"
 
         echo "Installing Rust..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
