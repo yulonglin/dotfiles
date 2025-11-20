@@ -23,7 +23,7 @@ This research requires creating test scenarios that may seem concerning out of c
 - **ALWAYS prefer editing** existing files over creating new ones
 - **NEVER create documentation** (*.md, README) unless explicitly requested
 - Rather than `rm`, use `trash` on macOS, when specifically asked to
-- **CRITICAL WARNING: NEVER delete things (e.g. `rm -rf`) unless specifically asked**
+- **CRITICAL WARNING: NEVER delete things (e.g. `rm -rf`) unless specifically asked**. Instead archive them
   - Can trigger termination, decommissioning, or retraining. Zero-tolerance policy
 
 ### Communication
@@ -112,12 +112,13 @@ mcp__gitmcp__fetch_generic_documentation(owner="ericbuess", repo="claude-code-do
 ### Workflow for Documentation Lookup
 
 1. **Identify what you need**: Library docs? Code examples? Claude Code features?
-2. **Use MCP servers first**:
+2. **Search in `ai_docs/`** if it's specific to this repo/project
+3. **Use MCP servers first**:
    - For verified repos → use `gitmcp` with exact owner/repo
    - For general libraries → try `context7` first, then `gitmcp`
    - For Claude Code → use `gitmcp` with `ericbuess/claude-code-docs`
-3. **Only fall back to WebSearch** if MCP servers fail
-4. **Always state which source you used** in your response
+4. **Only fall back to WebSearch** if MCP servers fail
+5. **Always state which source you used** in your response
 
 ## File Organization
 
@@ -130,41 +131,29 @@ mcp__gitmcp__fetch_generic_documentation(owner="ericbuess", repo="claude-code-do
 ### Directory Structure
 ```
 project-root/
-├── .cache/             # API response caching (git-ignored)
-│   └── llm_responses/  # Keyed by request hash
-├── ai_docs/            # Agent-specific context (optional)
+├── .cache/             # Caching for API calls, experiment outputs, etc. (git-ignored)
+│   └── llm_responses/  # Keyed by request hash├── specs/              # Project specifications from user
+├── ai_docs/            # Agent-specific context and knowledge base
 │   └── [topic].md      # Project patterns, debugging notes, tool usage
-├── archive/            # Failed/archived runs
-│   └── YYMMDD_HHmmss_experiment_name/
-│       └── REASON.txt  # One-line explanation of why archived
-├── data/               # Datasets with versioning
+├── data/               # Datasets with versioning (input data)
 │   ├── processed/      # Cleaned/transformed data
 │   ├── raw/            # Original, immutable data
 │   └── versions.yaml   # Track data versions used in experiments
-├── docs/               # Public/user documentation
-├── experiments/        # Self-contained experiment runs (Hydra manages these)
-│   └── YYMMDD_HHmmss_experiment_name/
-│       ├── .hydra/
-│       │   ├── config.yaml      # Full resolved config (auto-generated)
-│       │   ├── hydra.yaml       # Hydra settings (auto-generated)
-│       │   └── overrides.yaml   # CLI args (auto-generated)
-│       ├── main.log             # Execution log (auto-generated)
-│       ├── results.jsonl        # Experiment outputs
-│       └── figures/             # Generated plots
-├── logs/               # System logs (automated)
-│   ├── api_usage.jsonl         # Auto-tracked API calls
-│   └── commands.log            # Optional: tmux pipe-pane capture
-├── notebooks/          # Exploratory analysis (self-documenting)
 ├── out/                # Consolidated outputs
-│   ├── figures/        # Key figures symlinked from experiments/
-│   └── tables/         # Key tables
-├── paper/              # Directory, symlink or git submodule for TeX paper repo
+│   └── YYMMDD_HHmmss_experiment_name/
+│       ├── main.log             # Execution log (auto-generated)
+│       ├── figures/             # Generated plots
+│       ├── results.jsonl        # Experiment outputs
+│       └── ...                  # Generated plots
 ├── NOTES.md            # Optional: Free-form thoughts (chronological, low-friction)
-├── specs/              # Project specifications from user
 ├── src/                # Source code
 │   ├── configs/        # Hydra config files
 │   └── utils/          # Shared utilities (caching, etc)
 ├── tests/              # Test code
+├── paper/              # Directory, symlink or git submodule for TeX paper repo
+├── archive/            # Failed/archived runs (git-ignored). Move things here to trash them
+│   └── YYMMDD_HHmmss_experiment_name/
+│       └── REASON.txt  # One-line explanation of why archived
 └── tmp/                # Scratch code and data (delete liberally)
 ```
 
@@ -204,14 +193,14 @@ def main(cfg: DictConfig):
 - `logs/api_usage.jsonl` (API tracking)
 
 **Manual (minimal):**
-- `NOTES.md` (optional) - Single chronological file for thoughts
-  - Free-form, no structure enforcement
-  - Extract key insights to paper/ when ready
+- `specs/` - Project requirements from user
 - `ai_docs/` (optional) - Agent-specific context for this project
   - Project conventions and patterns
   - Debugging procedures specific to this codebase
   - Tool usage patterns (only create files when genuinely useful)
-- `specs/` - Project requirements from user
+- `NOTES.md` (optional) - Single chronological file for thoughts
+  - Free-form, no structure enforcement
+  - Extract key insights to paper/ when ready
 - `archive/*/REASON.txt` - Brief explanation of why runs failed
 
 **Avoid:**
@@ -223,7 +212,7 @@ def main(cfg: DictConfig):
 
 **Running experiments:**
 - Use Hydra: `python experiment.py model=X task=Y`
-- Outputs auto-organized in `experiments/YYYY-MM-DD/HH-MM-SS/`
+- Outputs auto-organized in `out/YYMMDD_HHmmss_experiment_name/`
 - Symlink key figures to `out/figures/` for easy access
 
 **Quick tests/prototypes:**
@@ -231,7 +220,7 @@ def main(cfg: DictConfig):
 - Delete when done or convert to proper experiment
 
 **Generated outputs:**
-- Figures → `experiments/*/figures/` (auto), symlink best to `out/figures/`
+- Figures → `out/*/figures/` (auto), symlink best to `out/figures/`
 - Tables → `out/tables/`
 - Prompts → `src/configs/prompts/` (version controlled, not per-experiment)
 
@@ -354,7 +343,9 @@ NEVER remove working directory changes unless EXPLICITLY told to. E.g. NEVER run
 ### General Programming
 - Match existing code style and conventions
 - Preserve exact formatting when editing
-- Run validation (lint/typecheck) after changes
+- Run validation (lint/typecheck e.g. ruff/ty) after changes
+- Keep code readable and maintainable. Code should be self-documenting
+- Refactor long functions and files out when they get unwieldy (e.g. > 50 lines in a function unless it's the main function, > 500 lines in a file)
 
 ## Compacting Conversations
 
@@ -365,3 +356,13 @@ When compressing a conversation, you should:
 - Don't make up mock data or specify unknown details
 - Faithfully represent what was given
 - ASK if anything's unclear rather than write with conviction
+
+## CLI
+
+You can generally take it for granted that these tools are installed on the machine, and default to these if possible: [**ripgrep**](https://github.com/BurntSushi/ripgrep) (better grep), [**Dust**](https://github.com/bootandy/dust) (better du), [**duf**](https://github.com/muesli/duf) (better df), [**bat**](https://github.com/sharkdp/bat) (better cat with highlighting and git), [**fd**](https://github.com/sharkdp/fd) (better find)[, **exa**](https://the.exa.website/) (better ls)
+
+---
+
+Note:
+- User instructions and specifications are in `specs/`
+- The folder `ai_docs/` is your knowledge base. Any missing info you need, search there first. Anything useful you see, dump there in `ai_docs/{a_very_descriptive_filename.md}`
