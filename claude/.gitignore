@@ -12,6 +12,7 @@ tmp/
 plugins/
 projects/
 session-env/
+stats-cache.json
 
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh, archive/
 
