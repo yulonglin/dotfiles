@@ -8,14 +8,16 @@
 # 1. Current working directory (full path, ~ for HOME)
 # 2. Git branch with status indicator (clean/dirty)
 # 3. Git changes: insertions/deletions (+X,-Y)
-# 4. Context usage percentage (of usable context before auto-compact)
+# 4. Context usage percentage (tokens used / context window size)
+# 5. Session cost in USD (if > $0)
 #
 # Technical details:
-# - Receives JSON via stdin from Claude Code with session/workspace data
+# - Receives JSON via stdin from Claude Code with session/workspace/cost data
 # - Uses git commands to check repository status and diff statistics
-# - Reads transcript JSONL file to extract token metrics for context calculation
+# - Parses transcript JSONL for accurate context (statusline JSON only has per-turn tokens)
 # - Context = input_tokens + cache_read + cache_creation + output_tokens
-# - Percentage = (context + 45k autocompact buffer) / 200k (matches /context display)
+# - Percentage = (context + 45k autocompact buffer) / 200k to match /context
+# - Uses cost.total_cost_usd for session cost tracking
 # - Git branch shown in brackets: (branch) or (branch*) for dirty repos
 
 # Read JSON input from stdin
@@ -100,7 +102,7 @@ fi
 # ============================================================================
 context_info=""
 
-# Get transcript path to read token metrics
+# Get transcript path to read token metrics (statusline JSON fields are per-turn, not cumulative)
 transcript_path=$(echo "$input" | jq -r ".transcript_path // empty")
 
 if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
@@ -122,25 +124,23 @@ if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
     context_length=$((input_tokens + cache_read + cache_creation + output_tokens))
 
     if [ "$context_length" -gt 0 ]; then
-      # Claude Code uses 200k as the total context, with 45k reserved for autocompact buffer
-      # /context shows: (actual_usage + 45k_buffer) / 200k to represent unavailable space
-      # Add autocompact buffer to match /context percentage calculation
+      # Claude Code uses 200k context with 45k autocompact buffer
+      # Percentage = (context + buffer) / 200k to match /context display
       total_tokens=200000
       autocompact_buffer=45000
       context_with_buffer=$((context_length + autocompact_buffer))
 
-      # Calculate percentage including buffer (matches /context display)
       percentage=$((context_with_buffer * 100 / total_tokens))
 
       # Color-code based on usage
       if [ "$percentage" -ge 90 ]; then
-        # Red: very high usage (90%+)
+        # Red: very high (90%+)
         context_info=" · 📊 $(printf "\033[31m")${percentage}%$(printf "\033[0m")"
       elif [ "$percentage" -ge 70 ]; then
-        # Yellow: moderate usage (70-89%)
+        # Yellow: moderate (70-89%)
         context_info=" · 📊 $(printf "\033[33m")${percentage}%$(printf "\033[0m")"
       else
-        # Green: low usage (<70%)
+        # Green: low (<70%)
         context_info=" · 📊 $(printf "\033[32m")${percentage}%$(printf "\033[0m")"
       fi
     fi
@@ -148,6 +148,23 @@ if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
 fi
 
 # ============================================================================
+# COST TRACKING (session total)
+# ============================================================================
+cost_info=""
+
+total_cost=$(echo "$input" | jq -r '.cost.total_cost_usd // 0' 2>/dev/null)
+
+# Only show cost if it's non-zero (use awk for portability)
+if [ -n "$total_cost" ] && [ "$total_cost" != "0" ] && [ "$total_cost" != "null" ]; then
+  is_positive=$(echo "$total_cost" | awk '{print ($1 > 0) ? 1 : 0}')
+  if [ "$is_positive" = "1" ]; then
+    # Format cost with 2 decimal places
+    cost_formatted=$(printf "%.2f" "$total_cost")
+    cost_info=" · $(printf "\033[35m")\$${cost_formatted}$(printf "\033[0m")"
+  fi
+fi
+
+# ============================================================================
 # OUTPUT FORMATTED STATUS LINE
 # ============================================================================
-printf "\033[2m\033[36m%s\033[0m%s%s" "$dir" "$git_info" "$context_info"
+printf "\033[2m\033[36m%s\033[0m%s%s%s" "$dir" "$git_info" "$context_info" "$cost_info"
