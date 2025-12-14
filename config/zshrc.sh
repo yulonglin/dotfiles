@@ -76,3 +76,13 @@ if [ -f "$HOME/.atuin/bin/env" ]; then
 elif command -v atuin &> /dev/null; then
     eval "$(atuin init zsh --disable-up-arrow)"
 fi
+
+fs() {
+    # Check if user is asking for help
+    if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+        find-session --help
+        return
+    fi
+    # Run find-session in shell mode and evaluate the output
+    eval "$(find-session --shell "$@" | sed '/^$/d')"
+}
