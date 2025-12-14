@@ -22,4 +22,4 @@ Review each file individually to make sure they're related to the work you just 
 ## Notes
 - You should only commit work when instructed. Do not keep committing subsquent work unless explicitly told so
 
-Optional: ask me if I would like to push the commit. (Only if I'm not on main)
+Optional: ask me if I would like to push the commit, but WARN about this if I'm on main
