@@ -13,6 +13,7 @@ plugins/
 projects/
 session-env/
 stats-cache.json
+telemetry/
 
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh, archive/
 

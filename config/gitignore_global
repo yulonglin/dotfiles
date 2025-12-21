@@ -461,4 +461,6 @@ archive/
 /tmp
 /data
 /experiments
+/results
+/logs
 /out
