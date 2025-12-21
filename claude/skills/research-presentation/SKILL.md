@@ -114,6 +114,30 @@ This prevents:
 
 ## Selecting Visualizations for Communication
 
+### Prefer Charts Over Tables
+
+**Convert tables and raw statistics to visual charts wherever possible.**
+
+Tables require cognitive effort to parse and compare values. Charts make patterns, comparisons, and outliers immediately visible.
+
+**When to convert:**
+- Comparing 3+ values → Bar chart (with values labeled on bars)
+- Showing trends over time/conditions → Line chart
+- Displaying distributions → Histogram or violin plot
+- Showing proportions → Stacked bar or pie chart (sparingly)
+
+**When tables are acceptable:**
+- Exact values matter more than patterns (e.g., hyperparameter settings)
+- Only 2-3 values being compared
+- Mixed data types (text + numbers)
+- Reference/lookup information
+
+**Example transformation:**
+```
+❌ Table: "Model A: 82%, Model B: 67%, Model C: 91%, Baseline: 50%"
+✅ Bar chart: Visual bars with "82%", "67%", "91%", "50%" labeled directly on each bar
+```
+
 ### Graph Selection Framework
 
 When choosing what to plot, ask:
@@ -184,6 +208,7 @@ When choosing what to plot, ask:
 - Informative title stating the takeaway
 - Legends only when necessary (direct labeling preferred)
 - Consistent color scheme across slides
+- **Always show values directly on bars** (data labels) for easy reading without needing to reference axes
 
 **Honesty:**
 - Start y-axis at zero for bar charts (or clearly mark truncation)
