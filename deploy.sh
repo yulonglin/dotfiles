@@ -15,11 +15,12 @@ USAGE=$(cat <<-END
         --claude                deploy Claude Code configuration (symlink claude/ to ~/.claude)
         --codex                 deploy Codex CLI configuration (symlink codex/ to ~/.codex)
         --ghostty               deploy Ghostty terminal configuration (symlink config/ghostty to config dir)
+        --git-hooks             deploy global git hooks (secret detection, layered with repo hooks)
         --experimental          enable experimental features (ty type checker)
         --minimal               disable defaults, deploy only specified components
 
     DEFAULTS (applied unless --minimal is used):
-        --claude --codex --vim --editor --experimental --ghostty --cleanup (macOS only)
+        --claude --codex --vim --editor --experimental --ghostty --git-hooks --cleanup (macOS only)
 
     EXAMPLES:
         ./deploy.sh                           # Deploy all defaults
@@ -42,6 +43,7 @@ CLEANUP="false"
 CLAUDE="false"
 CODEX="false"
 GHOSTTY="false"
+GIT_HOOKS="false"
 EXPERIMENTAL="false"
 MINIMAL="false"
 while (( "$#" )); do
@@ -68,6 +70,8 @@ while (( "$#" )); do
             CODEX="true" && shift ;;
         --ghostty)
             GHOSTTY="true" && shift ;;
+        --git-hooks)
+            GIT_HOOKS="true" && shift ;;
         --experimental)
             EXPERIMENTAL="true" && shift ;;
         --) # end argument parsing
@@ -88,13 +92,14 @@ esac
 
 # Apply defaults unless --minimal was specified
 if [ "$MINIMAL" = "false" ]; then
-    echo "Applying defaults for $machine: --claude --codex --vim --editor --experimental --ghostty --cleanup (use --minimal to disable)"
+    echo "Applying defaults for $machine: --claude --codex --vim --editor --experimental --ghostty --git-hooks --cleanup (use --minimal to disable)"
     CLAUDE="true"
     CODEX="true"
     VIM="true"
     EDITOR="true"
     EXPERIMENTAL="true"
     GHOSTTY="true"
+    GIT_HOOKS="true"
     # Cleanup only on macOS
     if [ "$machine" = "Mac" ]; then
         CLEANUP="true"
@@ -436,6 +441,46 @@ merge_git_config() {
 }
 
 merge_git_config
+
+# Deploy global git hooks if requested
+if [[ "$GIT_HOOKS" == "true" ]]; then
+    echo ""
+    echo "Deploying global git hooks..."
+
+    if [[ ! -d "$DOT_DIR/config/git-hooks" ]]; then
+        echo "Warning: Git hooks directory not found at $DOT_DIR/config/git-hooks"
+    else
+        # Create ~/.git-hooks directory
+        mkdir -p "$HOME/.git-hooks"
+
+        # Copy hooks to ~/.git-hooks (not symlink, so they work even if dotfiles moves)
+        for hook in "$DOT_DIR/config/git-hooks"/*; do
+            if [[ -f "$hook" ]]; then
+                hook_name=$(basename "$hook")
+                cp "$hook" "$HOME/.git-hooks/$hook_name"
+                chmod +x "$HOME/.git-hooks/$hook_name"
+            fi
+        done
+
+        # Set global git hooks path
+        git config --global core.hooksPath "$HOME/.git-hooks"
+        echo "✓ Deployed global git hooks to ~/.git-hooks"
+        echo "✓ Set git config core.hooksPath to ~/.git-hooks"
+        echo "  Features:"
+        echo "    - Secret detection (gitleaks or regex fallback)"
+        echo "    - Layered with repo hooks (pre-commit framework, husky, .local)"
+        echo "  Note: Repo hooks in .git/hooks/ are shadowed. To use both:"
+        echo "    - Pre-commit framework: just add .pre-commit-config.yaml (auto-detected)"
+        echo "    - Manual hooks: rename to .git/hooks/pre-commit.local"
+
+        # Check if gitleaks is installed
+        if ! command -v gitleaks &> /dev/null; then
+            echo ""
+            echo "  ⚠️  gitleaks not installed. Using regex fallback (less accurate)."
+            echo "     Install for better detection: brew install gitleaks"
+        fi
+    fi
+fi
 
 # Deploy editor settings if requested
 deploy_editor_settings() {

@@ -1,0 +1,73 @@
+#!/bin/bash
+# Global pre-commit hook with layered/additive support for repo-specific hooks
+# Runs global secret detection, then delegates to repo's own hooks if present
+
+set -euo pipefail
+
+# === GLOBAL CHECKS ===
+
+# Check for secrets in staged changes
+if command -v gitleaks &> /dev/null; then
+    # Use gitleaks if available
+    if ! gitleaks protect --staged --no-banner; then
+        echo "Pre-commit: Secrets detected in staged changes. Commit blocked."
+        echo "To bypass (NOT recommended): git commit --no-verify"
+        exit 1
+    fi
+else
+    # Fallback to basic pattern matching
+    STAGED_DIFF=$(git diff --cached --diff-filter=ACMR 2>/dev/null || true)
+
+    if [ -n "$STAGED_DIFF" ]; then
+        # Common secret patterns (kept conservative to avoid false positives)
+        # For comprehensive detection, install gitleaks: brew install gitleaks
+        PATTERNS=(
+            'AKIA[0-9A-Z]{16}'                          # AWS Access Key ID
+            'gh[pousr]_[A-Za-z0-9_]{36,}'               # GitHub tokens
+            'sk-[A-Za-z0-9]{48,}'                       # OpenAI API keys
+            'sk-ant-[A-Za-z0-9_-]{90,}'                 # Anthropic API keys
+            'xox[baprs]-[A-Za-z0-9-]{10,}'              # Slack tokens
+            'ya29\.[A-Za-z0-9_-]{50,}'                  # Google OAuth tokens
+            'AIza[0-9A-Za-z_-]{35}'                     # Google API keys
+            '-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----'  # Private keys
+        )
+
+        for pattern in "${PATTERNS[@]}"; do
+            if echo "$STAGED_DIFF" | grep -qE "$pattern"; then
+                echo "Pre-commit: Potential secret detected (pattern: $pattern)"
+                echo "Install gitleaks for more accurate detection: brew install gitleaks"
+                echo "To bypass (NOT recommended): git commit --no-verify"
+                exit 1
+            fi
+        done
+    fi
+fi
+
+# === REPO-SPECIFIC HOOKS (Additive) ===
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+
+if [ -n "$REPO_ROOT" ]; then
+    # Check for pre-commit framework config
+    if [ -f "$REPO_ROOT/.pre-commit-config.yaml" ] && command -v pre-commit &> /dev/null; then
+        echo "Running repo's pre-commit framework hooks..."
+        pre-commit run --hook-stage commit || exit $?
+    fi
+
+    # Check for renamed local hook (for repos with manual hooks)
+    LOCAL_HOOK="$REPO_ROOT/.git/hooks/pre-commit.local"
+    if [ -x "$LOCAL_HOOK" ]; then
+        echo "Running repo's local pre-commit hook..."
+        "$LOCAL_HOOK" || exit $?
+    fi
+
+    # Check for husky (JS projects)
+    HUSKY_HOOK="$REPO_ROOT/.husky/pre-commit"
+    if [ -x "$HUSKY_HOOK" ]; then
+        echo "Running repo's husky pre-commit hook..."
+        # Run husky from repo root (some hooks assume this)
+        (cd "$REPO_ROOT" && "$HUSKY_HOOK") || exit $?
+    fi
+fi
+
+exit 0

@@ -38,6 +38,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/auto_log.sh START"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/check_secrets.sh"
           }
         ]
       }
