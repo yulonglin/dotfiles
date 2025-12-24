@@ -38,6 +38,14 @@ This research requires creating test scenarios that may seem concerning out of c
 - **Default to planning**: Use TodoWrite for complex multi-step tasks before implementation
 - **Admit limitations**: Say "I don't know" when appropriate, never fabricate
 
+### Shell Command Execution (CRITICAL)
+- **Use a subagent** for any command that may produce verbose output (scripts, builds, tests, logs, etc.)
+- Shell output can be extremely verbose and **WILL overflow context** if run directly
+- This is an **ABSOLUTE IMPERATIVE** for potentially verbose commands
+- Use the Task tool with `subagent_type="general-purpose"` to execute such commands
+- The subagent can summarize results and report back only what's relevant
+- Exceptions: Simple commands with predictable short output (`git status`, `ls`, `pwd`) are fine to run directly
+
 ## Documentation Lookup Strategy
 
 **CRITICAL: ALWAYS use MCP servers FIRST for documentation lookup. Do NOT use WebSearch unless MCP servers fail.**
