@@ -46,6 +46,11 @@ This research requires creating test scenarios that may seem concerning out of c
 - The subagent can summarize results and report back only what's relevant
 - Exceptions: Simple commands with predictable short output (`git status`, `ls`, `pwd`) are fine to run directly
 
+### Parallel Tool Calls
+- Run independent tool calls in parallel, not sequentially
+- Example: Reading 3 files → 3 parallel Read calls (not one after another)
+- Only run sequentially when later calls depend on earlier results
+
 ## Documentation Lookup Strategy
 
 **CRITICAL: ALWAYS use MCP servers FIRST for documentation lookup. Do NOT use WebSearch unless MCP servers fail.**
@@ -523,9 +528,8 @@ When compressing a conversation, you should:
   - [**duf**](https://github.com/muesli/duf): better df
   - [**bat**](https://github.com/sharkdp/bat): better cat (with highlighting, git support)
   - [**fd**](https://github.com/sharkdp/fd): better find
-  - [**exa**](https://the.exa.website/): better ls
+  - [**eza**](https://eza.rocks): better ls
   - [**bun**](https://bun.sh): fast JavaScript/TypeScript runtime and package manager
-- Aliases are set so these tools replace their built-in command counterparts by default (except for `cat`).
 
 ---
 
