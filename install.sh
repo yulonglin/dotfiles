@@ -137,6 +137,20 @@ elif [ $machine == "Mac" ]; then
         fi
     fi
 
+    # Install modern bash (macOS ships with bash 3.2 due to GPLv3 licensing)
+    echo "Installing modern bash..."
+    brew install --quiet bash 2>/dev/null || echo "Warning: bash installation failed"
+    BREW_BASH="$(brew --prefix)/bin/bash"
+    if [[ -x "$BREW_BASH" ]]; then
+        echo "  ✓ Installed: $($BREW_BASH --version | head -1)"
+        # Add to allowed shells if not already present
+        if ! grep -qxF "$BREW_BASH" /etc/shells 2>/dev/null; then
+            echo "  → To use as default shell, run:"
+            echo "      sudo sh -c 'echo $BREW_BASH >> /etc/shells'"
+            echo "      chsh -s $BREW_BASH"
+        fi
+    fi
+
     echo "Installing core packages..."
     brew install --quiet coreutils ncdu htop rsync btop jq 2>/dev/null || echo "Warning: Some packages may have failed to install"
 

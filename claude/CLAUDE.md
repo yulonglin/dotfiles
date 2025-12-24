@@ -294,6 +294,7 @@ These are absolutely CRUCIAL because we're working on alignment research, and do
 - **ASK if you can't find data** - never fabricate
 - **Be skeptical**: If results are surprisingly good/bad, check for bugs, wrong data, or mock data
 - Better to fail than to cover up issues
+- **Always report sample size (N)** with any metrics; include error bars (stderr) when applicable
 
 ### Documentation
 
@@ -546,5 +547,7 @@ IMPORTANT: Before running commands (`.sh`, `.py`, etc.), do a `history` call wit
 ---
 
 # Other things
+
+When running a script, use a subagent because the script output might be verbose (long outputs to stdout).
 
 Never be overconfident about recent events, especially new models coming out. Each model provider (OpenAI, Anthropic, etc.) produces several new models every year. For example, OpenAI has GPT-5.2, Anthropic has Claude Opus 4.5, DeepMind has Gemini 3 Pro. Don't say they don't exist simply because they've come out after your knowledge cut-off, which is extremely likely to happen, since labs can each produce up to 2-3 models a month, and there are so many labs out there. Instead, do a quick search if you're unsure, or defer to the user and surface any doubts or ask questions.

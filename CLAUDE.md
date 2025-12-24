@@ -63,8 +63,8 @@ config/
 claude/
 ├── CLAUDE.md             # Global AI instructions (symlinked to ~/.claude/)
 ├── settings.json         # Claude Code settings
-├── agents/               # Specialized agent definitions (13 total)
-└── notify.sh             # Task completion notifications
+├── agents/               # Specialized agent definitions
+└── hooks/                # Hook scripts (auto_log.sh, notify.sh)
 
 codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 

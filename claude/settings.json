@@ -1,8 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "env": {
-    "CLAUDE_CODE_NOTIFICATION_SCRIPT": "~/.claude/notify.sh"
-  },
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
@@ -61,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/notify.sh"
+            "command": "~/.claude/hooks/notify.sh"
           }
         ]
       }
