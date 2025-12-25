@@ -14,6 +14,7 @@ projects/
 session-env/
 stats-cache.json
 telemetry/
+plans/
 
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh, archive/
 
