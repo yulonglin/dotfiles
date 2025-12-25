@@ -19,6 +19,8 @@ Review each file individually to make sure they're related to the work you just 
 - Short title description (< 80 characters)
 - 2~3 bullet points (< 80 characters) with a quick description
 
+If you're at the start of the session, that means other agents have done the work or are doing the work now. In such a case, your task is to commit the changes that have been made. Use subagents summarise the changes made, in order to logically break down the commits.
+
 ## Notes
 - You should only commit work when instructed. Do not keep committing subsquent work unless explicitly told so
 
