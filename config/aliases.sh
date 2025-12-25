@@ -225,13 +225,13 @@ else
     alias ai-update='echo "Error: No package manager found for AI tools updates"'
 fi
 
-# -------------------------------------------------------------------
-# Better utils: https://www.lesswrong.com/posts/6P8GYb4AjtPXx6LLB/tips-and-code-for-empirical-research-workflows
-# -------------------------------------------------------------------
-alias grep='rg'    # use ripgrep as grep
-alias du='dust'    # use dust as du
-alias df='duf'     # use duf as df
-# alias cat='bat'    # use bat as cat (commenting this out since the lines in bat can be annoying for parsing and copying)
-alias find='fd'    # use fd as find
-alias ls='eza'     # use eza as ls
+# # -------------------------------------------------------------------
+# # Better utils: https://www.lesswrong.com/posts/6P8GYb4AjtPXx6LLB/tips-and-code-for-empirical-research-workflows
+# # -------------------------------------------------------------------
+# alias grep='rg'    # use ripgrep as grep
+# alias du='dust'    # use dust as du
+# alias df='duf'     # use duf as df
+# # alias cat='bat'    # use bat as cat (commenting this out since the lines in bat can be annoying for parsing and copying)
+# alias find='fd'    # use fd as find
+# alias ls='eza'     # use eza as ls
 
