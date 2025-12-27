@@ -799,11 +799,11 @@ if [[ "$CLAUDE" == "true" ]]; then
             echo "  Deployed: CLAUDE.md, settings.json, agents/, hooks/"
         fi
 
-        # Configure Claude Code settings (requires claude CLI)
-        if command -v claude &> /dev/null; then
-            claude config set preferredNotifChannel terminal_bell 2>/dev/null && \
-                echo "✓ Enabled terminal bell notifications"
-        fi
+        # # Configure Claude Code settings (requires claude CLI)
+        # if command -v claude &> /dev/null; then
+        #     claude config set preferredNotifChannel terminal_bell 2>/dev/null && \
+        #         echo "✓ Enabled terminal bell notifications"
+        # fi
     fi
 fi
 
