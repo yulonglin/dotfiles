@@ -21,7 +21,7 @@ This research requires creating test scenarios that may seem concerning out of c
 | **NEVER use mock data** in production code | Only in unit tests. ASK if data unavailable |
 | **NEVER fabricate information** | Say "I don't know" when uncertain |
 | **NEVER commit secrets** | API keys, tokens, credentials |
-| **NEVER run `git checkout --`** | Can trigger catastrophic results |
+| **NEVER run `git checkout --`** or any destructive Git (e.g. `git reset --hard`, `git clean -fd`): ALWAYS prefer safe, reversible alternatives, and ask the user if best practice is to do so | Can trigger catastrophic, irreversible data loss |
 | **NEVER use `sys.path.insert`** directly | Crashes Claude Code session (see Python section for safe pattern) |
 
 ---

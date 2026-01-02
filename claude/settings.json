@@ -36,6 +36,7 @@
       "Bash(git stash pop:*)",
       "Bash(git stash list:*)",
       "Bash(git push:*)",
+      "Bash(git restore:*)",
       "Bash(GIT_EDITOR=true git add:*)",
       "Bash(GIT_EDITOR=true git diff:*)",
       "Bash(GIT_EDITOR=true git status:*)",
@@ -56,9 +57,17 @@
       "Bash(uv run python3:*)",
       "Bash(HYDRA_FULL_ERROR=1 uv run python:*)",
       
-      "WebFetch(domain:github.com)",
+      "WebSearch",
+
+      "WebFetch(domain:gitlab.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:docs.astral.sh)"
+      "WebFetch(domain:docs.astral.sh)",
+      "WebFetch(domain:openreview.net)",
+      "WebFetch(domain:neurips.cc)",
+      "WebFetch(domain:iclr.cc)",
+      "WebFetch(domain:icml.cc)",
+      "WebFetch(domain:papers.nips.cc)",
+      "WebFetch(domain:proceedings.mlr.press)"
     ],
     "deny": [
       "Bash(git checkout --:*)"
