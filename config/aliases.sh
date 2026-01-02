@@ -14,6 +14,14 @@ alias zrc="cd $DOT_DIR/zsh"
 alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
+claude() {
+    # Activate environment before running claude
+    if [ -d ".venv" ] && [ -f ".venv/bin/activate" ]; then
+        # shellcheck disable=SC1091
+        source .venv/bin/activate
+    fi
+    command claude "$@"
+}
 alias yolo='claude --dangerously-skip-permissions'
 
 # -------------------------------------------------------------------
