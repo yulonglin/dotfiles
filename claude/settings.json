@@ -3,27 +3,62 @@
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+
       "Bash(find:*)",
+      "Bash(fd:*)",
+
       "Bash(ls:*)",
+      "Bash(eza:*)",
+
+      "Bash(cat:*)",
+      "Bash(bat:*)",
+
+      "Bash(du:*)",
+      "Bash(dust:*)",
+
+      "Bash(df:*)",
+      "Bash(duf:*)",
+
+      "Bash(echo:*)",
+      "Bash(mkdir:*)",
+
       "Bash(git init:*)",
       "Bash(git fetch:*)",
       "Bash(git ls-tree:*)",
       "Bash(git merge-base:*)",
       "Bash(git worktree list:*)",
+      "Bash(git add:*)",
+      "Bash(git diff:*)",
       "Bash(git commit:*)",
       "Bash(git stash push:*)",
       "Bash(git stash pop:*)",
       "Bash(git stash list:*)",
       "Bash(git push:*)",
+      "Bash(GIT_EDITOR=true git add:*)",
+      "Bash(GIT_EDITOR=true git diff:*)",
+      "Bash(GIT_EDITOR=true git status:*)",
+
       "Bash(gh api:*)",
       "Bash(gh pr:*)",
+
       "Bash(claude config list:*)",
-      "Bash(grep:*)",
+
       "Bash(uv add:*)",
       "Bash(uv run:*)",
       "Bash(uv sync:*)",
+
+      "Bash(python:*)",
+      "Bash(python3:*)",
+
+      "Bash(uv run python:*)",
+      "Bash(uv run python3:*)",
+      "Bash(HYDRA_FULL_ERROR=1 uv run python:*)",
+      
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.astral.sh)"
     ],
     "deny": [
       "Bash(git checkout --:*)"
@@ -53,6 +88,10 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/auto_log.sh END"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/truncate_output.sh"
           }
         ]
       }
