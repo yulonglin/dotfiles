@@ -1,0 +1,114 @@
+# Focus Mode Configuration
+# Maps calendar events to focus modes with app whitelists
+
+# Modes define which apps are allowed during focus sessions
+modes:
+  deep-work:
+    description: "Deep coding/thinking work - minimal distractions"
+    whitelist:
+      - cursor
+      - ghostty
+      - notion
+      - things3
+    block_browsers: true  # Block Safari/Chrome via Cold Turkey Blocker
+
+  meetings:
+    description: "Calls and synchronous collaboration"
+    whitelist:
+      - slack
+      - zoom
+      - calendar
+      - notion
+      - safari  # For meeting links
+      - chrome
+    block_browsers: false
+
+  writing:
+    description: "Documentation, notes, long-form writing"
+    whitelist:
+      - cursor
+      - notion
+      - things3
+      - safari  # For research
+    block_browsers: false
+
+  admin:
+    description: "Email, slack, general tasks - most apps allowed"
+    whitelist:
+      - cursor
+      - ghostty
+      - notion
+      - things3
+      - slack
+      - calendar
+      - safari
+      - chrome
+      - spotify
+      - messages
+    block_browsers: false
+
+  break:
+    description: "Scheduled break - no restrictions"
+    whitelist: []  # Empty = no micromanager restrictions
+    block_browsers: false
+
+# Event patterns map calendar event titles to modes
+# Matched case-insensitively, supports regex
+event_patterns:
+  deep-work:
+    - "deep work"
+    - "focus"
+    - "coding"
+    - "dev time"
+    - "maker time"
+
+  meetings:
+    - "1:1"
+    - "1-1"
+    - "meeting"
+    - "sync"
+    - "call"
+    - "standup"
+    - "stand-up"
+    - "interview"
+    - "review"
+
+  writing:
+    - "writing"
+    - "docs"
+    - "documentation"
+    - "blog"
+    - "paper"
+
+  admin:
+    - "admin"
+    - "email"
+    - "inbox"
+    - "planning"
+    - "prep"
+
+  break:
+    - "break"
+    - "lunch"
+    - "coffee"
+
+# Default mode when no calendar event matches
+# Options: null (no focus mode), or a mode name
+default_mode: null
+
+# Settings
+settings:
+  # How often to sync with calendar (minutes)
+  sync_interval: 10
+
+  # Minutes before event to send notification
+  notify_before: 5
+
+  # Calendars to watch (empty = all calendars)
+  calendars: []
+
+  # Work hours - only apply focus modes during these times
+  work_hours:
+    start: "08:00"
+    end: "20:00"
+    days: ["mon", "tue", "wed", "thu", "fri"]
