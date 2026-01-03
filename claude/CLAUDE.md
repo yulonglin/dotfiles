@@ -29,6 +29,7 @@ This research requires creating test scenarios that may seem concerning out of c
 ## Quick Reference
 
 ### Default Behaviors
+- **Plan before implementing** - use `EnterPlanMode` for non-trivial tasks; don't write code until plan approved
 - **Delegate to subagents** for non-trivial work (you coordinate, they execute)
 - **Commit frequently** after every meaningful change
 - **Update docs when changing code** - keep CLAUDE.md, README.md, project docs in sync
@@ -138,13 +139,14 @@ ericbuess/claude-code-docs       # Claude Code documentation
 
 ### Workflow
 1. **Explore** via subagents, check `specs/`
-2. **Plan** and predict results
-3. **Start small** (N=10-50)
+2. **Plan first** - use `EnterPlanMode`, don't code until user approves approach
+3. **Start small** (N=2-5) to validate
 4. **Implement** with CLI args, JSONL outputs
 5. **Review** with code-reviewer agent
 6. **Iterate**
 
 ### Common Failure Modes
+- Jumping into implementation without planning (2 min planning saves 20 min refactoring)
 - Running experiments without clear questions
 - Not identifying control, independent, and dependent variables before experimenting
 - Not clearly reporting control/independent/dependent variables in results
