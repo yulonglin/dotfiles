@@ -53,12 +53,14 @@ Based on analysis of safety-tooling, latteries, and safety-examples repositories
 - **Progress tracking**: Use `tqdm.asyncio` for async progress bars on long-running operations
 
 ## Caching Strategies
-- **Deterministic hashing**: Use `HashableBaseModel.model_dump_json(exclude_none=True)` for cache keys
-- **File-based caching**: Store API responses in `.cache/` directory with hash-based filenames
-- **Redis caching**: For distributed experiments or faster lookups
-- **Cache warming**: Pre-populate cache for known inputs to avoid cold starts
+References: [Inspect AI](https://github.com/UKGovernmentBEIS/inspect_ai/blob/main/src/inspect_ai/model/_cache.py), [latteries](https://github.com/thejaminator/latteries/blob/main/latteries/caller.py), [safety-tooling](https://github.com/safety-research/safety-tooling/blob/main/safetytooling/apis/inference/cache_manager.py)
+
+- **Deterministic hashing**: `hashlib.sha1(model.model_dump_json(exclude_none=True).encode()).hexdigest()`
+- **Storage**: pickle (simple), JSONL (async-friendly), JSON bins (scalable)
+- **Concurrency**: `anyio.Semaphore` (async) or `filelock.FileLock` (multi-process)
+- **Cache-aside pattern**: Check cache → fetch if miss → populate cache
 - **TTL policies**: Set expiration for time-sensitive data
-- **Granular invalidation**: Cache at appropriate level (per-sample, per-batch, per-experiment)
+- **Provide bypass**: `--clear-cache` or `use_cache=False` option
 
 ## Performance Optimization
 - **Streaming outputs**: Write JSONL incrementally, don't buffer all results in memory

@@ -4,7 +4,17 @@ description: Commit current work with optional message
 ---
 
 # Commit current work
-Commit current work
+
+Pre-computed context:
+```
+$( git status --short )
+```
+```
+$( git diff --stat )
+```
+```
+$( git log --oneline -3 )
+```
 
 $ARGUMENTS
 

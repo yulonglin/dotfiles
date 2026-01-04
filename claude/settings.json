@@ -14,6 +14,8 @@
 
       "Bash(cat:*)",
       "Bash(bat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
 
       "Bash(du:*)",
       "Bash(dust:*)",
@@ -23,6 +25,9 @@
 
       "Bash(echo:*)",
       "Bash(mkdir:*)",
+      "Bash(sleep:*)",
+      "Bash(nohup:*)",
+      "Bash(tee:*)",
 
       "Bash(git init:*)",
       "Bash(git fetch:*)",
@@ -56,7 +61,13 @@
       "Bash(uv run python:*)",
       "Bash(uv run python3:*)",
       "Bash(HYDRA_FULL_ERROR=1 uv run python:*)",
-      
+
+      "Bash(pytest:*)",
+      "Bash(uv run pytest:*)",
+
+      "Bash(for:*)",
+      "Bash(while:*)",
+
       "WebSearch",
 
       "WebFetch(domain:gitlab.com)",
@@ -67,10 +78,36 @@
       "WebFetch(domain:iclr.cc)",
       "WebFetch(domain:icml.cc)",
       "WebFetch(domain:papers.nips.cc)",
-      "WebFetch(domain:proceedings.mlr.press)"
+      "WebFetch(domain:proceedings.mlr.press)",
+
+      "Read",
+      "Read(//tmp/claude/**/tasks/**)"
     ],
     "deny": [
-      "Bash(git checkout --:*)"
+      "Bash(rm -rf:*)",
+      "Bash(rm -r:*)",
+      "Bash(shred:*)",
+      "Bash(> :*)",
+      "Bash(truncate:*)",
+
+      "Bash(git checkout --:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git branch -D:*)",
+
+      "Bash(dd:*)",
+      "Bash(mkfs:*)",
+      "Bash(fdisk:*)",
+
+      "Bash(chmod -R 777:*)",
+      "Bash(chown -R:*)",
+
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+
+      "Bash(sudo:*)"
     ],
     "defaultMode": "plan"
   },

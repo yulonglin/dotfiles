@@ -56,13 +56,13 @@ Async & Performance Patterns:
 - **Progress tracking**: Add `tqdm` progress bars for long-running operations
 - **Streaming**: Process data incrementally when possible (generators, async iterators)
 
-Caching Best Practices:
+Caching Best Practices (see [latteries](https://github.com/thejaminator/latteries/blob/main/latteries/caller.py), [safety-tooling](https://github.com/safety-research/safety-tooling/blob/main/safetytooling/apis/inference/cache_manager.py)):
 - **Function-level caching**: Use `@functools.lru_cache` for pure functions
-- **Request caching**: Cache API responses with deterministic keys (hash inputs)
-- **File-based cache**: Store in `.cache/` with descriptive filenames
-- **Cache invalidation**: Provide `--clear-cache` flag or TTL policies
+- **Request caching**: `hashlib.sha1(model.model_dump_json(exclude_none=True).encode()).hexdigest()`
+- **Storage**: pickle (simple), JSONL (async), JSON bins (scalable)
+- **Concurrency**: `anyio.Semaphore` (async) or `filelock.FileLock` (multi-process)
 - **Cache-aside pattern**: Check cache, fetch if miss, populate cache
-- **Compression**: Use gzip for large cached data
+- **Provide bypass**: `--clear-cache` or `use_cache=False` option
 
 Performance Considerations:
 - **Lazy loading**: Don't load data until needed

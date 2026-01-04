@@ -167,6 +167,11 @@ If runs errored: report current N vs expected N, error cause. Suggest rerun (cac
 - Let errors propagate (no unnecessary try/except)
 - Testing: `pytest` exclusively
 - **Read .eval files** using Inspect AI's `read_eval_log()` (look up via MCP server)
+- **Use `dotenv`** to load environment variables (API keys are in `.env`):
+  ```python
+  from dotenv import load_dotenv
+  load_dotenv()  # Call before accessing os.getenv()
+  ```
 
 ### sys.path.insert (Safe Pattern)
 ```python
@@ -200,12 +205,12 @@ if __name__ == "__main__":
 - `tenacity` for retry logic (exponential backoff for rate limits, fixed wait for transient errors)
 
 ### Caching (Required)
-- Cache API responses deterministically (hash request params → store response)
-- Store in `.cache/` directory (git-ignored, per-model JSONL files)
-- Deterministic keys via `HashableBaseModel.model_dump_json(exclude_none=True)`
-- Cache-aside pattern: check cache → fetch if miss → populate cache
-- Semaphore protection for concurrent cache writes
-- `--clear-cache` flag for invalidation
+References: [Inspect AI](https://github.com/UKGovernmentBEIS/inspect_ai/blob/main/src/inspect_ai/model/_cache.py) (simple), [latteries](https://github.com/thejaminator/latteries/blob/main/latteries/caller.py) (async), [safety-tooling](https://github.com/safety-research/safety-tooling/blob/main/safetytooling/apis/inference/cache_manager.py) (scalable)
+
+- Keys: `hashlib.sha1(model.model_dump_json(exclude_none=True).encode()).hexdigest()`
+- Storage: pickle (Inspect AI), JSONL (latteries), JSON bins (safety-tooling)
+- Concurrency: `anyio.Semaphore` (async) or `filelock.FileLock` (multi-process)
+- Cache-aside pattern, validate before caching, provide `--clear-cache` option
 
 ### Best Practices
 - ✅ Streaming/incremental processing (generators, JSONL append)
