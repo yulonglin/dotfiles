@@ -167,10 +167,10 @@ If runs errored: report current N vs expected N, error cause. Suggest rerun (cac
 - Let errors propagate (no unnecessary try/except)
 - Testing: `pytest` exclusively
 - **Read .eval files** using Inspect AI's `read_eval_log()` (look up via MCP server)
-- **Use `dotenv`** to load environment variables (API keys are in `.env`):
+- **Load `.env` before API calls** - API keys live in project `.env` files:
   ```python
   from dotenv import load_dotenv
-  load_dotenv()  # Call before accessing os.getenv()
+  load_dotenv()  # Call before os.getenv() or API client init
   ```
 
 ### sys.path.insert (Safe Pattern)
