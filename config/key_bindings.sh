@@ -4,10 +4,13 @@
 #     keybind = super+c=text:\x1b[99~
 #   This makes Cmd+C send a custom sequence that the shell can bind to copy selected text
 
-# Only set up ZSH-specific key bindings if we're in ZSH
-if [ -n "$ZSH_VERSION" ]; then
-  # convert a python command to a debug command
-  function replace-python {
+# ZSH-only file: exit early in bash to avoid parse errors from ZSH syntax
+[ -z "$ZSH_VERSION" ] && return 0 2>/dev/null
+
+# All code below is ZSH-specific (uses zle, bindkey, ZSH for-loop syntax)
+
+# convert a python command to a debug command
+function replace-python {
     if [[ $BUFFER =~ ^python\ .* ]]; then
       BUFFER="python3 -m debugpy --listen 5678 --wait-for-client ${BUFFER#python }"
       zle reset-prompt
@@ -57,15 +60,15 @@ if [ -n "$ZSH_VERSION" ]; then
   # Bind to custom sequence sent by Ghostty for Cmd+C
   # Configure in ~/.config/ghostty/config with:
   #   keybind = super+c=text:\x1b[99~
-  bindkey "\e[99~" copy-region-to-clipboard
-fi
+bindkey "\e[99~" copy-region-to-clipboard
 
-# Source - https://stackoverflow.com/a
+# Source - https://stackoverflow.com/a/30899296
 # Posted by Jamie Treworgy, modified by community. See post 'Timeline' for change history
 # Retrieved 2025-11-12, License - CC BY-SA 4.0
 
+# Shift+arrow selection and region handling
 r-delregion() {
-  if ((REGION_ACTIVE)) then
+  if ((REGION_ACTIVE)); then
      zle kill-region
   else 
     local widget_name=$1
