@@ -41,9 +41,9 @@ alias mkdir='mkdir -p'
 alias h='head'
 alias t='tail'
 # alias rl="readlink -f"
-alias find="fd"
-# alias fd='find . -type d -name'
-alias ff='find . -type f -name'
+# Note: NOT aliasing find="fd" - they have different syntax
+# Use fd directly, or findfile/findf aliases from modern_tools.sh
+alias ff='fd --type f'
 alias which='type -a'
 
 # storage

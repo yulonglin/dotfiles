@@ -317,7 +317,7 @@ Also include `robots.txt` in project root forbidding crawlers, due to sensitive 
 Check for `bun.lockb`, `pnpm-lock.yaml`, or `package-lock.json` to detect which is in use.
 
 ### CLI Tools Available
-ripgrep (`rg`), fd, bat, eza, dust, duf, bun
+ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, btop, dust, duf, bun
 
 ### tmux-cli
 Control CLI apps in tmux panes. Run `tmux-cli --help`.

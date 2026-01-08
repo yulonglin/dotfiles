@@ -34,6 +34,9 @@ if [ -d "$HOME/.cargo" ]; then
   . "$HOME/.cargo/env"
 fi
 
+# zoxide (smarter cd - use 'z' command, not replacing cd)
+command -v zoxide &> /dev/null && eval "$(zoxide init zsh)"
+
 if [ -d "$HOME/.pyenv" ]; then
   export PYENV_ROOT="$HOME/.pyenv"
   command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"

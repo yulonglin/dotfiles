@@ -191,3 +191,19 @@ dirsize() {
         du -sh * 2>/dev/null | sort -rh | head -20  # Traditional: disk usage, sort by size, show top 20
     fi
 }
+
+#-------------------------------------------------------------
+# zoxide: Smarter directory jumping
+#-------------------------------------------------------------
+# Usage: z <partial-path>  |  zi (interactive with fzf)
+# Note: Intentionally NOT aliasing cd='z' - z is probabilistic, cd is explicit
+# zoxide init is in zshrc.sh
+
+#-------------------------------------------------------------
+# delta: Better diffs with syntax highlighting
+#-------------------------------------------------------------
+# delta is configured in gitconfig for git operations
+# This alias makes it available for standalone file diffs
+if command -v delta &> /dev/null; then
+    alias diff='delta'                         # Use delta for standalone diffs
+fi

@@ -100,7 +100,7 @@ if [ $machine == "Linux" ]; then
     fi
     
     [ $tmux == true ] && apt install -y tmux 2>/dev/null || true
-    apt install -y less nano htop ncdu nvtop lsof rsync jq 2>/dev/null || true
+    apt install -y less nano htop ncdu nvtop lsof rsync jq fzf 2>/dev/null || true
 
     # Install atuin for unified shell history
     echo "Installing Atuin..."
@@ -109,19 +109,30 @@ if [ $machine == "Linux" ]; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
     
     if [ $extras == true ]; then
-        apt install -y fd-find
-        apt install -y ripgrep
+        apt install -y fd-find ripgrep 2>/dev/null || true
 
-        yes | curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | /bin/bash
-        yes | brew install dust jless
+        # Install Homebrew for tools not in apt
+        if ! command -v brew &> /dev/null; then
+            yes | curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | /bin/bash
+        fi
+        if command -v brew &> /dev/null; then
+            brew install dust jless hyperfine lazygit 2>/dev/null || true
+        fi
 
-        yes | curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        . "$HOME/.cargo/env" 
-        yes | cargo install code2prompt
-        yes | brew install peco
+        # Install Rust and cargo tools
+        if ! command -v cargo &> /dev/null; then
+            yes | curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            . "$HOME/.cargo/env"
+        fi
+        if command -v cargo &> /dev/null; then
+            echo "Installing Rust CLI tools via cargo (fallback for no-sudo environments)..."
+            cargo install bat eza zoxide delta code2prompt --locked 2>/dev/null || true
+        fi
 
-        apt install -y npm
-        yes | npm i -g shell-ask
+        apt install -y npm 2>/dev/null || true
+        if command -v npm &> /dev/null; then
+            npm i -g shell-ask 2>/dev/null || true
+        fi
     fi
 
 # Installing on mac with homebrew
@@ -152,7 +163,7 @@ elif [ $machine == "Mac" ]; then
     fi
 
     echo "Installing core packages..."
-    brew install --quiet coreutils ncdu htop rsync btop jq 2>/dev/null || echo "Warning: Some packages may have failed to install"
+    brew install --quiet coreutils ncdu htop rsync btop jq fzf bat eza zoxide delta 2>/dev/null || echo "Warning: Some packages may have failed to install"
 
     # Install atuin for unified shell history
     echo "Installing Atuin..."
@@ -176,7 +187,7 @@ elif [ $machine == "Mac" ]; then
 
     if [ $extras == true ]; then
         echo "Installing extras..."
-        brew install --quiet fd ripgrep dust jless peco 2>/dev/null || echo "Warning: Some extras failed to install"
+        brew install --quiet fd ripgrep dust jless hyperfine lazygit 2>/dev/null || echo "Warning: Some extras failed to install"
 
         echo "Installing Rust..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet

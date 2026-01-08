@@ -22,6 +22,10 @@ keybind = super+c=text:\x1b[99~
 # Additional Settings
 # ===================
 
+# Limit scrollback buffer to prevent memory issues with verbose output (Claude Code, etc.)
+# 100MB = ~400K lines at 200 columns (~12.5 bytes/cell)
+scrollback-limit = 104857600
+
 # Add your custom Ghostty settings below
 # Examples:
 # font-family = Iosevka
