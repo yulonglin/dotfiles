@@ -29,6 +29,7 @@ This research requires creating test scenarios that may seem concerning out of c
 ## Quick Reference
 
 ### Default Behaviors
+- **Interview before planning** (large features) - use `/spec-interview` to clarify requirements first
 - **Plan before implementing** - use `EnterPlanMode` for non-trivial tasks; don't write code until plan approved
 - **Delegate to subagents** for non-trivial work (you coordinate, they execute)
 - **Commit frequently** after every meaningful change
@@ -138,12 +139,15 @@ ericbuess/claude-code-docs       # Claude Code documentation
 - Better to fail visibly than cover up issues
 
 ### Workflow
-1. **Explore** via subagents, check `specs/`
-2. **Plan first** - use `EnterPlanMode`, don't code until user approves approach
-3. **Start small** (N=2-5) to validate
-4. **Implement** with CLI args, JSONL outputs
-5. **Review** with code-reviewer agent
-6. **Iterate**
+1. **Interview first** (large features) - use `/spec-interview` to clarify requirements before planning
+2. **Explore** via subagents, check `specs/`
+3. **Plan** - use `EnterPlanMode`, don't code until user approves approach
+4. **Start small** (N=2-5) to validate
+5. **Implement** with CLI args, JSONL outputs
+6. **Review** with code-reviewer agent
+7. **Iterate**
+
+**For large features**: Interview → Spec → (new session) → Plan → Implement. The spec captures *what*, planning figures out *how*.
 
 ### Common Failure Modes
 - Jumping into implementation without planning (2 min planning saves 20 min refactoring)
