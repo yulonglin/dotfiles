@@ -5,30 +5,23 @@
     "allow": [
       "Bash(grep:*)",
       "Bash(rg:*)",
-
       "Bash(find:*)",
       "Bash(fd:*)",
-
       "Bash(ls:*)",
       "Bash(eza:*)",
-
       "Bash(cat:*)",
       "Bash(bat:*)",
       "Bash(head:*)",
       "Bash(tail:*)",
-
       "Bash(du:*)",
       "Bash(dust:*)",
-
       "Bash(df:*)",
       "Bash(duf:*)",
-
       "Bash(echo:*)",
       "Bash(mkdir:*)",
       "Bash(sleep:*)",
       "Bash(nohup:*)",
       "Bash(tee:*)",
-
       "Bash(git init:*)",
       "Bash(git fetch:*)",
       "Bash(git ls-tree:*)",
@@ -45,31 +38,22 @@
       "Bash(GIT_EDITOR=true git add:*)",
       "Bash(GIT_EDITOR=true git diff:*)",
       "Bash(GIT_EDITOR=true git status:*)",
-
       "Bash(gh api:*)",
       "Bash(gh pr:*)",
-
       "Bash(claude config list:*)",
-
       "Bash(uv add:*)",
       "Bash(uv run:*)",
       "Bash(uv sync:*)",
-
       "Bash(python:*)",
       "Bash(python3:*)",
-
       "Bash(uv run python:*)",
       "Bash(uv run python3:*)",
       "Bash(HYDRA_FULL_ERROR=1 uv run python:*)",
-
       "Bash(pytest:*)",
       "Bash(uv run pytest:*)",
-
       "Bash(for:*)",
       "Bash(while:*)",
-
       "WebSearch",
-
       "WebFetch(domain:gitlab.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:docs.astral.sh)",
@@ -79,7 +63,6 @@
       "WebFetch(domain:icml.cc)",
       "WebFetch(domain:papers.nips.cc)",
       "WebFetch(domain:proceedings.mlr.press)",
-
       "Read",
       "Read(//tmp/claude/**/tasks/**)"
     ],
@@ -89,24 +72,19 @@
       "Bash(shred:*)",
       "Bash(> :*)",
       "Bash(truncate:*)",
-
       "Bash(git checkout --:*)",
       "Bash(git reset --hard:*)",
       "Bash(git clean:*)",
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
       "Bash(git branch -D:*)",
-
       "Bash(dd:*)",
       "Bash(mkfs:*)",
       "Bash(fdisk:*)",
-
       "Bash(chmod -R 777:*)",
       "Bash(chown -R:*)",
-
       "Bash(curl:*)",
       "Bash(wget:*)",
-
       "Bash(sudo:*)"
     ],
     "defaultMode": "plan"
@@ -147,6 +125,10 @@
     "type": "command",
     "command": "~/.claude/statusline.sh",
     "padding": 1
+  },
+  "enabledPlugins": {
+    "swift-lsp@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true
   },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"
