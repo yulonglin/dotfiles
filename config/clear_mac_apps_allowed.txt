@@ -1,5 +1,5 @@
 # Apps to keep running when clearing Mac apps
-# One app name per line (exact match, case-sensitive)
+# One app name per line (exact match, case-insensitive)
 # Lines starting with # are comments
 
 BeardedSpice
