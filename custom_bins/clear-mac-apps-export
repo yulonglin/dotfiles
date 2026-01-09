@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Export currently running apps to the config file
+# Useful for initial setup or updating the allowed list
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config/clear_mac_apps_allowed.txt"
+
+# Get list of running GUI apps (one per line)
+get_running_apps() {
+    osascript -e 'tell application "System Events"
+        set appList to name of every process whose background only is false
+        set output to ""
+        repeat with appName in appList
+            set output to output & appName & linefeed
+        end repeat
+        return output
+    end tell'
+}
+
+main() {
+    local mode="${1:-}"
+
+    # Get running apps and sort unique
+    local -a sorted_apps=()
+    while IFS= read -r app; do
+        [[ -n "$app" ]] && sorted_apps+=("$app")
+    done < <(get_running_apps | sort -u)
+
+    if [[ "$mode" == "--write" || "$mode" == "-w" ]]; then
+        # Write to config file
+        {
+            echo "# Apps to keep running when clearing Mac apps"
+            echo "# One app name per line (exact match, case-sensitive)"
+            echo "# Lines starting with # are comments"
+            echo "# Generated: $(date)"
+            echo ""
+            printf '%s\n' "${sorted_apps[@]}"
+        } > "$CONFIG_FILE"
+        echo "Wrote ${#sorted_apps[@]} apps to: $CONFIG_FILE"
+    else
+        # Just print to stdout
+        echo "Currently running apps:"
+        echo ""
+        printf '%s\n' "${sorted_apps[@]}"
+        echo ""
+        echo "To write to config, run: $(basename "$0") --write"
+    fi
+}
+
+main "$@"

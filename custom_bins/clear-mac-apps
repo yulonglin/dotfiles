@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Clear Mac Apps - Quit all apps except those in the allowed list
+# Used by macOS Shortcuts via "Run Shell Script" action
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config/clear_mac_apps_allowed.txt"
+
+# Parse allowed apps from config (skip comments and empty lines)
+get_allowed_apps() {
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        echo "Error: Config file not found: $CONFIG_FILE" >&2
+        exit 1
+    fi
+    grep -v '^#' "$CONFIG_FILE" | grep -v '^[[:space:]]*$' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+# Get list of running GUI apps (one per line)
+get_running_apps() {
+    osascript -e 'tell application "System Events"
+        set appList to name of every process whose background only is false
+        set output to ""
+        repeat with appName in appList
+            set output to output & appName & linefeed
+        end repeat
+        return output
+    end tell'
+}
+
+# Quit an app gracefully
+quit_app() {
+    local app="$1"
+    osascript -e "tell application \"$app\" to quit" 2>/dev/null || true
+}
+
+main() {
+    # Build allowed apps array
+    local -a allowed_apps=()
+    while IFS= read -r app; do
+        allowed_apps+=("$app")
+    done < <(get_allowed_apps)
+
+    # Get running apps (one per line from AppleScript)
+    local -a running_apps=()
+    while IFS= read -r app; do
+        [[ -n "$app" ]] && running_apps+=("$app")
+    done < <(get_running_apps)
+
+    # Quit apps not in allowed list
+    for app in "${running_apps[@]}"; do
+        # Trim whitespace
+        app=$(echo "$app" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+        # Check if app is in allowed list (case-insensitive)
+        local is_allowed=false
+        local app_lower
+        app_lower=$(printf '%s' "$app" | tr '[:upper:]' '[:lower:]')
+        for allowed in "${allowed_apps[@]}"; do
+            local allowed_lower
+            allowed_lower=$(printf '%s' "$allowed" | tr '[:upper:]' '[:lower:]')
+            if [[ "$app_lower" == "$allowed_lower" ]]; then
+                is_allowed=true
+                break
+            fi
+        done
+
+        if [[ "$is_allowed" == "false" ]]; then
+            echo "Quitting: $app"
+            quit_app "$app"
+        fi
+    done
+
+    echo "Done. Kept: ${allowed_apps[*]}"
+}
+
+main "$@"
