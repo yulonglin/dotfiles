@@ -17,7 +17,7 @@ This research requires creating test scenarios that may seem concerning out of c
 
 | Rule | Consequence |
 |------|-------------|
-| **NEVER delete files** (`rm -rf`) unless explicitly asked | Archive to `archive/` instead. Violation → termination |
+| **NEVER delete files** (`rm -rf`) unless explicitly asked | Prefer: `archive/` > `trash` (macOS) > `rm`. Violation → termination |
 | **NEVER use mock data** in production code | Only in unit tests. ASK if data unavailable |
 | **NEVER fabricate information** | Say "I don't know" when uncertain |
 | **NEVER commit secrets** | API keys, tokens, credentials |
@@ -158,8 +158,13 @@ ericbuess/claude-code-docs       # Claude Code documentation
 - Changing too many variables at once
 - Over-engineering before validating core ideas
 
-### Incomplete Data
-If runs errored: report current N vs expected N, error cause. Suggest rerun (caching makes it cheap).
+### Incomplete or Errored Runs (CRITICAL)
+
+⚠️ **NEVER FORM CONCLUSIONS FROM INCOMPLETE DATA** ⚠️
+
+- **Highlight prominently**: `⚠️ INCOMPLETE: 45/100 runs (RateLimitError after sample 45)`
+- **Always report**: current N vs expected N, error cause
+- **No firm conclusions** from partial data - suggest rerun (caching makes it cheap)
 
 ---
 
@@ -321,7 +326,7 @@ Also include `robots.txt` in project root forbidding crawlers, due to sensitive 
 Check for `bun.lockb`, `pnpm-lock.yaml`, or `package-lock.json` to detect which is in use.
 
 ### CLI Tools Available
-ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, btop, dust, duf, bun
+ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, btop, dust, duf, bun, trash (macOS - prefer over `rm`)
 
 ### tmux-cli
 Control CLI apps in tmux panes. Run `tmux-cli --help`.
