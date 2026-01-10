@@ -4,15 +4,13 @@ Identify and fix slides with content overflow or blank pages in Slidev presentat
 
 ## Arguments
 
-$ARGUMENTS should be the path to the slides file (e.g., `slides.md` or `pages/week-19.md`). If not provided, ask the user.
-
-**Important**: If checking a `pages/*.md` file, export from `slides.md` instead to correctly resolve images in `public/`. Exporting directly from subpages causes image resolution failures.
+$ARGUMENTS is the file to **edit** (e.g., `slides.md` or `pages/week-19.md`). If not provided, ask the user.
 
 ## Workflow
 
-1. **Export to PDF** to identify issues:
+1. **Export to PDF** to identify issues (always from root `slides.md`):
    ```bash
-   bunx slidev export $ARGUMENTS --timeout 120000 --output tmp/slide-check.pdf
+   bunx slidev export slides.md --timeout 120000 --output tmp/slide-check.pdf
    ```
 
 2. **Analyze PDF** - Read the exported PDF and identify:
