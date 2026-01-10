@@ -49,10 +49,10 @@ Design scientifically rigorous experiments for AI safety research that minimize 
 
 ## Statistical Rigor
 - Recommend appropriate statistical tests for hypothesis validation
-- Design experiments with adequate statistical power
-- Suggest confidence interval reporting and uncertainty quantification
+- Design experiments with adequate statistical power (see `~/.claude/ai_docs/ci-standards.md` for power analysis)
+- Report 95% CI per `~/.claude/ai_docs/ci-standards.md` (n = questions, paired comparisons, ~1000 questions for 3pp effect)
 - Apply multiple comparison corrections when testing many hypotheses
-- Design cross-validation and bootstrap strategies
+- Design cross-validation strategies
 
 ## Research Methodology
 - Apply "Explore → Understand → Distill" framework from CLAUDE.md

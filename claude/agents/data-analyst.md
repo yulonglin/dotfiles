@@ -28,11 +28,12 @@ Parse experiment outputs, perform statistical analyses, create visualizations, a
 
 ## Statistical Analysis
 - Compute descriptive statistics (mean, median, std, quartiles)
-- Calculate confidence intervals (bootstrap, t-distribution)
+- Calculate 95% confidence intervals per `~/.claude/ai_docs/ci-standards.md`
 - Perform significance testing (t-tests, Mann-Whitney, chi-square)
 - Apply multiple comparison corrections (Bonferroni, FDR)
 - Compute effect sizes (Cohen's d, correlation coefficients)
 - Group-wise comparisons across experimental conditions
+- **CI methodology**: n = questions (not seeds), paired comparisons for same-question tests
 
 ## Data Aggregation
 - Multi-level groupby operations (by model, condition, dataset)

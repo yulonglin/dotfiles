@@ -106,8 +106,9 @@ This research requires creating test scenarios that may seem concerning out of c
 
 **Priority order:**
 1. Check `ai_docs/` for project-specific context
-2. **Use MCP servers** (context7, gitmcp) - NOT WebSearch
-3. WebSearch only if MCP fails
+2. Check `~/.claude/ai_docs/` for global specs (CI standards, reproducibility checklist)
+3. **Use MCP servers** (context7, gitmcp) - NOT WebSearch
+4. WebSearch only if MCP fails
 
 ### Verified Repositories (use gitmcp)
 ```
@@ -130,7 +131,7 @@ ericbuess/claude-code-docs       # Claude Code documentation
 - **Predict results** before running (catches bugs)
 - **Change one variable** at a time
 - **De-risk first** on smallest model/dataset
-- **Report N and error bars** with all metrics
+- **Report N and 95% CI** with all metrics - see `ai_docs/ci-standards.md`
 
 ### Correctness (CRITICAL)
 - See `specs/RESEARCH_SPEC.md` for project details

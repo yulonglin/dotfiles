@@ -109,6 +109,8 @@ The goal is ensuring readers can understand what you did without requiring code 
 - For non-normal distributions, avoid symmetric error bars that "yield results that are out of range" (e.g., negative probabilities)
 - Reference figures/tables in text, explaining calculations
 
+**Internal methodology:** See `~/.claude/ai_docs/ci-standards.md` for our standardized CI computation (n = questions not seeds, paired comparisons, power analysis)
+
 ### 8. Compute Resources
 **Question:** Do you provide information on required compute resources?
 
@@ -323,6 +325,7 @@ This helps readers assess reproducibility feasibility and environmental impact.
 - ❌ Error bars without explaining what they represent
 - ❌ Not clarifying standard deviation vs. standard error
 - ❌ Symmetric error bars for bounded quantities (probabilities)
+- ❌ Using n = seeds instead of n = questions (see `~/.claude/ai_docs/ci-standards.md`)
 - ✓ Explicitly state: what varies, how calculated, what numbers mean
 
 **Q8 (Compute):**

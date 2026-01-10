@@ -28,11 +28,11 @@
 
 ## Important (Should Have)
 
-**Statistics:**
-- [ ] Error bars with explanation (CI vs std)
+**Statistics:** (see `~/.claude/ai_docs/ci-standards.md`)
+- [ ] 95% CI with n = questions (not seeds)
 - [ ] Number of runs/seeds
+- [ ] Paired comparisons for same-question tests
 - [ ] Statistical significance tests
-- [ ] Effect sizes
 
 **Compute:**
 - [ ] Hardware description

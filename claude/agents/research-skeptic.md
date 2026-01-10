@@ -41,6 +41,7 @@ Systematically question research findings, identify potential confounds and alte
 - Verify that controls properly isolate variables
 
 ## Statistical Skepticism
+- Verify CI methodology per `~/.claude/ai_docs/ci-standards.md` (common error: n = seeds instead of questions)
 - Question sample sizes and statistical power
 - Challenge claims without confidence intervals or significance tests
 - Identify multiple comparison problems (p-hacking)
