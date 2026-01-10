@@ -1,11 +1,23 @@
 ---
 name: research-presentation
-description: Guide for structuring research presentations, slides, and updates. Use when preparing slides, drafting research updates, planning mentor meetings, reviewing presentations, or when user mentions slides, presentations, communicating results, research updates, or mentor meetings.
+description: Guide for structuring research presentations, slides, and updates. Use when preparing slides, drafting research updates, planning mentor meetings, reviewing/critiquing presentations for clarity, or when user mentions slides, presentations, communicating results, research updates, or mentor meetings.
 ---
 
 # Research Presentation Skill
 
 Guide for structuring research presentations, slide decks, and research updates based on best practices from empirical research communication.
+
+## Proactive Critique & Improve (IMPORTANT)
+
+**Critique and improve for clarity** whenever you encounter:
+- Slides or presentation drafts
+- Research update text or emails
+- Plots and visualizations from experiments
+- Figure captions or result descriptions
+
+**The paradigm**: Critique for clarity and against the rubrics in this file, then provide concrete improvements. Don't just flag issues - rewrite the unclear text or describe how to fix the plot.
+
+Don't wait to be asked. If you see unclear framing, missing baselines, ambiguous outcomes, or confusing plots - critique it and offer an improved version.
 
 ## When to Use This Skill
 
@@ -13,7 +25,6 @@ Use this skill when you're:
 - **Preparing slides** for mentor meetings or research presentations
 - **Drafting research updates** via email or written summaries
 - **Planning mentor meetings** and prioritizing discussion topics
-- **Reviewing presentations** for clarity, structure, and completeness
 - **Selecting visualizations** for communicating experimental results
 
 ## Core Principles
@@ -117,6 +128,85 @@ When choosing what to plot, ask:
 - **`references/templates.md`** - Email and slide structure templates, example interaction
 - **`references/visualization-guide.md`** - Experiment types, recommended plots, best practices
 - **`references/common-mistakes.md`** - 7 common mistakes to avoid
+
+## Critique Mode: Reviewing for Clarity
+
+When reviewing a presentation, slides, or research update, **critique systematically and suggest concrete improvements**.
+
+### Critique Framework
+
+For each slide or section, evaluate:
+
+1. **Clarity** - Can someone understand this in 5 seconds?
+   - Is the main point immediately obvious?
+   - Are there ambiguous phrases that could mean multiple things?
+   - Would someone unfamiliar with the project understand the key takeaway?
+
+2. **Structure** - Is information ordered for comprehension?
+   - Does it lead with outcomes, not setup?
+   - Are related ideas grouped together?
+   - Is there unnecessary repetition?
+
+3. **Completeness** - Is context sufficient but not excessive?
+   - Are baselines and comparisons included?
+   - Is success/failure explicitly stated?
+   - Are prompts shown (for AI research)?
+
+4. **Visual clarity** - Do visuals aid or hinder understanding?
+   - Can labels be read without squinting?
+   - Are error bars / confidence intervals shown?
+   - Could any chart be simplified?
+
+### Critique Output Format
+
+```
+## Slide X: [Title]
+
+**Issue**: [Describe the clarity problem]
+**Why it matters**: [Impact on audience understanding]
+**Suggestion**: [Specific rewrite or restructure]
+
+Before: "We got 67% accuracy on the task"
+After: "Success: 67% accuracy (baseline 50%, target >60%)"
+```
+
+### Common Clarity Issues to Flag
+
+| Issue | Symptom | Fix |
+|-------|---------|-----|
+| Buried lede | Background before results | Move outcome to first sentence |
+| Ambiguous outcome | "We got X%" without context | Add baseline + success threshold |
+| Jargon overload | Unexplained acronyms/terms | Define on first use or avoid |
+| Dense slides | Wall of text | 3-4 bullet points max, backup slides for details |
+| Passive voice | "It was observed that..." | "We found..." or "Model X showed..." |
+| Hedging | "Might possibly suggest..." | State claim, then state confidence level |
+| Missing "so what" | Results without implications | Add one sentence: what this means for next steps |
+
+### Improvement Workflow
+
+1. **First pass**: Identify structural issues (ordering, missing context)
+2. **Second pass**: Flag unclear wording (rewrite ambiguous sentences)
+3. **Third pass**: Check visuals (simplify, add labels, fix scales)
+4. **Final**: Verify success/failure framing is explicit throughout
+
+### Example Critique
+
+**Original slide:**
+> "Experiment Results
+> - Ran 500 samples with prompt A
+> - Accuracy: 72.3%
+> - Some variation observed across categories"
+
+**Critique:**
+- **Issue**: Outcome ambiguity - is 72.3% good or bad?
+- **Issue**: "Some variation" is vague - what kind? How much?
+- **Issue**: No baseline comparison
+
+**Improved:**
+> "Experiment Succeeded: 72% accuracy (target: >60%)
+> - Prompt A on 500 samples
+> - Category breakdown: code (85%) > math (71%) > reasoning (60%)
+> - All categories exceeded 50% baseline"
 
 ## Integration with Other Tools
 
