@@ -60,11 +60,17 @@ config/
 ├── gitignore_global      # Global gitignore
 └── user.conf.example     # User-specific git settings template
 
-claude/
-├── CLAUDE.md             # Global AI instructions (symlinked to ~/.claude/)
+claude/                   # Symlinked to ~/.claude/
+├── CLAUDE.md             # Global AI instructions
 ├── settings.json         # Claude Code settings
 ├── agents/               # Specialized agent definitions
-└── hooks/                # Hook scripts (auto_log.sh, notify.sh)
+├── ai_docs/              # AI knowledge base (CI standards, checklists)
+├── commands/             # Custom slash commands
+├── hooks/                # Hook scripts (auto_log.sh, notify.sh)
+├── skills/               # Custom skills (commit, run-experiment, etc.)
+├── templates/            # Templates for specs, reports
+├── projects/             # Project-specific settings overrides
+└── (runtime dirs)        # cache/, logs/, history.jsonl, todos/, etc.
 
 codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 
