@@ -10,3 +10,14 @@ description: Slidev presentation framework helper. Use when creating slides, fix
 **Fix overflow/blank pages**: Run `/fix-slide`
 
 Always export from root `slides.md`, not `pages/*.md` (images won't resolve from subpages).
+
+## Context Management (CRITICAL)
+
+⚠️ **Use subagent to read exported PDFs** - They can consume the entire context window.
+
+```
+Task tool → subagent_type: "general-purpose"
+Prompt: "Read [path/to/slides.pdf] and [describe what to look for]"
+```
+
+The `/fix-slide` command handles this automatically.

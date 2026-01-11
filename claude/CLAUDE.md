@@ -55,9 +55,35 @@ This research requires creating test scenarios that may seem concerning out of c
 - Direct execution OK for: `git status`, `ls`, `pwd`, simple commands
 - Check `history` before running `.sh`/`.py` to match user's typical args
 
-### Context Management (Verbose Output)
+### Context Management (CRITICAL)
 
-**Problem**: Long bash outputs (tqdm, build logs) consume context rapidly.
+**Problem**: Large outputs consume context rapidly and can exhaust the entire conversation.
+
+#### Reading Large Files (PDFs, Papers, Long Documents)
+
+⚠️ **ALWAYS use a subagent to read PDFs and large files** ⚠️
+
+PDFs and long documents can consume the ENTIRE context window. Use:
+```
+Task tool → subagent_type: "general-purpose" or "literature-scout"
+```
+
+**Never** read these directly in main context:
+- PDF files (research papers, documentation, exported slides)
+- Files >500 lines
+- Multiple files for comparison/analysis
+- Slide decks for review/fixing (use `/fix-slide` which delegates appropriately)
+
+The subagent reads and summarizes, returning only relevant excerpts.
+
+#### Slide & Presentation Work
+
+For slide-related tasks, delegate to avoid context bloat from PDFs:
+- **Fixing slides**: Use `/fix-slide` command (exports PDF, analyzes, fixes)
+- **Reviewing presentations**: Use `general-purpose` agent to read exported PDF
+- **Creating slides**: Direct work OK, but export/review via subagent
+
+#### Verbose Command Output
 
 **Solutions** (use in order of preference):
 1. **`run_in_background: true`** for any command with progress bars or >100 lines expected output

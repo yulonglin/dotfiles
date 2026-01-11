@@ -213,3 +213,11 @@ After: "Success: 67% accuracy (baseline 50%, target >60%)"
 - **data-analyst agent**: Creates visualizations (this skill chooses which ones)
 - **experiment-designer agent**: Designs experiments (this skill communicates results)
 - **research-skeptic agent**: Questions findings (this skill presents them honestly)
+
+## Context Management (CRITICAL)
+
+⚠️ **Use subagents for PDF/slide review** - Exported PDFs can consume the entire context window.
+
+- **Reviewing exported slides**: Use `general-purpose` agent to read PDF and report issues
+- **Fixing slide issues**: Use `/fix-slide` command (delegates PDF analysis to subagent)
+- **Creating slides directly**: OK in main context, but export/review via subagent

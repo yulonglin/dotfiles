@@ -6,6 +6,15 @@ Identify and fix slides with content overflow or blank pages in Slidev presentat
 
 $ARGUMENTS is the file to **edit** (e.g., `slides.md` or `pages/week-19.md`). If not provided, ask the user.
 
+## Context Management (CRITICAL)
+
+⚠️ **Use a subagent to analyze the PDF** - PDFs can consume the entire context window.
+
+```
+Task tool → subagent_type: "general-purpose"
+Prompt: "Read tmp/slide-check.pdf and identify: (1) pages with content overflow/cut-off, (2) blank pages. Return a list of page numbers and issues found."
+```
+
 ## Workflow
 
 1. **Export to PDF** to identify issues (always from root `slides.md`):
@@ -13,7 +22,7 @@ $ARGUMENTS is the file to **edit** (e.g., `slides.md` or `pages/week-19.md`). If
    bunx slidev export slides.md --timeout 120000 --output tmp/slide-check.pdf
    ```
 
-2. **Analyze PDF** - Read the exported PDF and identify:
+2. **Analyze PDF via subagent** - Spawn a `general-purpose` agent to read the PDF and identify:
    - Pages where content is cut off (text/tables/callouts extending beyond slide boundaries)
    - **Blank pages** (may indicate uncommented `---` between commented sections)
 
