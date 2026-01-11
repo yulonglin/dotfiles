@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/zsh
 # Clear Mac Apps - Manage running apps with configurable behavior
 # Used by macOS Shortcuts via "Run Shell Script" action
 #
@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="${0:A:h}"
 CONFIG_FILE="${SCRIPT_DIR}/../config/clear_mac_apps.conf"
 
 # Parse apps from a specific section in config
@@ -60,15 +60,15 @@ close_app_windows() {
 
 main() {
     # Build associative arrays for O(1) lookup (keys are lowercase)
-    declare -A no_touch_set=()
-    declare -A close_windows_set=()
+    typeset -A no_touch_set
+    typeset -A close_windows_set
 
     while IFS= read -r app; do
-        [[ -n "$app" ]] && no_touch_set["${app,,}"]=1
+        [[ -n "$app" ]] && no_touch_set[${(L)app}]=1
     done < <(get_apps_in_section "no-touch")
 
     while IFS= read -r app; do
-        [[ -n "$app" ]] && close_windows_set["${app,,}"]=1
+        [[ -n "$app" ]] && close_windows_set[${(L)app}]=1
     done < <(get_apps_in_section "close-windows")
 
     # Get running apps
@@ -78,13 +78,13 @@ main() {
     done < <(get_running_apps)
 
     # Process each running app
-    for app in "${running_apps[@]+"${running_apps[@]}"}"; do
-        local app_lower="${app,,}"
+    for app in "${running_apps[@]}"; do
+        local app_lower="${(L)app}"
 
-        if [[ -v no_touch_set["$app_lower"] ]]; then
+        if (( ${+no_touch_set[$app_lower]} )); then
             # No-touch: skip completely
             continue
-        elif [[ -v close_windows_set["$app_lower"] ]]; then
+        elif (( ${+close_windows_set[$app_lower]} )); then
             # Close windows only
             echo "Closing windows: $app"
             close_app_windows "$app"
@@ -97,8 +97,8 @@ main() {
 
     echo ""
     echo "Done."
-    [[ ${#no_touch_set[@]} -gt 0 ]] && echo "  No-touch: ${!no_touch_set[*]}"
-    [[ ${#close_windows_set[@]} -gt 0 ]] && echo "  Close-windows: ${!close_windows_set[*]}"
+    (( ${#no_touch_set} > 0 )) && echo "  No-touch: ${(k)no_touch_set}"
+    (( ${#close_windows_set} > 0 )) && echo "  Close-windows: ${(k)close_windows_set}"
 }
 
 main "$@"
