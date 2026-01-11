@@ -1,19 +1,31 @@
 #!/usr/bin/env bash
-# Clear Mac Apps - Quit all apps except those in the allowed list
+# Clear Mac Apps - Manage running apps with configurable behavior
 # Used by macOS Shortcuts via "Run Shell Script" action
+#
+# Config file supports two sections:
+#   [no-touch]      - Apps to leave completely alone
+#   [close-windows] - Apps where we close windows but don't quit
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/../config/clear_mac_apps_allowed.txt"
+CONFIG_FILE="${SCRIPT_DIR}/../config/clear_mac_apps.conf"
 
-# Parse allowed apps from config (skip comments and empty lines)
-get_allowed_apps() {
+# Parse apps from a specific section in config
+# Usage: get_apps_in_section "no-touch"
+get_apps_in_section() {
+    local section="$1"
     if [[ ! -f "$CONFIG_FILE" ]]; then
         echo "Error: Config file not found: $CONFIG_FILE" >&2
         exit 1
     fi
-    grep -v '^#' "$CONFIG_FILE" | grep -v '^[[:space:]]*$' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+    awk -v section="[$section]" '
+        /^\[.*\]$/ { in_section = ($0 == section); next }
+        in_section && !/^#/ && !/^[[:space:]]*$/ {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+            if (length > 0) print
+        }
+    ' "$CONFIG_FILE"
 }
 
 # Get list of running GUI apps (one per line)
@@ -34,44 +46,59 @@ quit_app() {
     osascript -e "tell application \"$app\" to quit" 2>/dev/null || true
 }
 
-main() {
-    # Build allowed apps array
-    local -a allowed_apps=()
-    while IFS= read -r app; do
-        allowed_apps+=("$app")
-    done < <(get_allowed_apps)
+# Close all windows of an app without quitting
+close_app_windows() {
+    local app="$1"
+    osascript -e "
+        tell application \"$app\"
+            try
+                close every window
+            end try
+        end tell
+    " 2>/dev/null || true
+}
 
-    # Get running apps (one per line from AppleScript)
+main() {
+    # Build associative arrays for O(1) lookup (keys are lowercase)
+    declare -A no_touch_set=()
+    declare -A close_windows_set=()
+
+    while IFS= read -r app; do
+        [[ -n "$app" ]] && no_touch_set["${app,,}"]=1
+    done < <(get_apps_in_section "no-touch")
+
+    while IFS= read -r app; do
+        [[ -n "$app" ]] && close_windows_set["${app,,}"]=1
+    done < <(get_apps_in_section "close-windows")
+
+    # Get running apps
     local -a running_apps=()
     while IFS= read -r app; do
         [[ -n "$app" ]] && running_apps+=("$app")
     done < <(get_running_apps)
 
-    # Quit apps not in allowed list
-    for app in "${running_apps[@]}"; do
-        # Trim whitespace
-        app=$(echo "$app" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    # Process each running app
+    for app in "${running_apps[@]+"${running_apps[@]}"}"; do
+        local app_lower="${app,,}"
 
-        # Check if app is in allowed list (case-insensitive)
-        local is_allowed=false
-        local app_lower
-        app_lower=$(printf '%s' "$app" | tr '[:upper:]' '[:lower:]')
-        for allowed in "${allowed_apps[@]}"; do
-            local allowed_lower
-            allowed_lower=$(printf '%s' "$allowed" | tr '[:upper:]' '[:lower:]')
-            if [[ "$app_lower" == "$allowed_lower" ]]; then
-                is_allowed=true
-                break
-            fi
-        done
-
-        if [[ "$is_allowed" == "false" ]]; then
+        if [[ -v no_touch_set["$app_lower"] ]]; then
+            # No-touch: skip completely
+            continue
+        elif [[ -v close_windows_set["$app_lower"] ]]; then
+            # Close windows only
+            echo "Closing windows: $app"
+            close_app_windows "$app"
+        else
+            # Quit the app
             echo "Quitting: $app"
             quit_app "$app"
         fi
     done
 
-    echo "Done. Kept: ${allowed_apps[*]}"
+    echo ""
+    echo "Done."
+    [[ ${#no_touch_set[@]} -gt 0 ]] && echo "  No-touch: ${!no_touch_set[*]}"
+    [[ ${#close_windows_set[@]} -gt 0 ]] && echo "  Close-windows: ${!close_windows_set[*]}"
 }
 
 main "$@"
