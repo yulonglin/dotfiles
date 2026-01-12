@@ -20,6 +20,10 @@ Comprehensive dotfiles repository for ZSH, Tmux, Vim, SSH, and development tools
 
 See README.md for detailed usage.
 
+### Git Workflow
+
+- **Direct pushes to main are allowed** - no PR required for this personal repo
+
 ### Deployment Components
 
 Each component in `deploy.sh` is deployed with inline logic or helper functions:
