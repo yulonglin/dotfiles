@@ -1,0 +1,66 @@
+# Google DeepMind matplotlib style
+# Colors extracted from AlphaFold, AlphaCode, and Google brand
+# Usage: plt.style.use('deepmind') after symlinking to ~/.config/matplotlib/stylelib/
+
+# Figure
+figure.facecolor: FFFFFF
+figure.edgecolor: FFFFFF
+figure.figsize: 8, 5
+figure.dpi: 150
+
+# Axes
+axes.facecolor: FFFFFF
+axes.edgecolor: 111827
+axes.labelcolor: 111827
+axes.linewidth: 0.8
+axes.spines.top: False
+axes.spines.right: False
+axes.prop_cycle: cycler('color', ['4285F4', 'EA4335', 'FBBC05', '34A853', '6B21A8', '0891B2'])
+# Google brand (blue, red, yellow, green) + AlphaFold (purple, cyan)
+
+axes.titlesize: 14
+axes.titleweight: bold
+axes.labelsize: 11
+axes.labelweight: normal
+
+# Grid
+axes.grid: False
+grid.color: E5E5E5
+grid.linestyle: -
+grid.linewidth: 0.5
+grid.alpha: 0.7
+
+# Ticks
+xtick.color: 111827
+ytick.color: 111827
+xtick.labelsize: 10
+ytick.labelsize: 10
+xtick.direction: out
+ytick.direction: out
+xtick.major.width: 0.8
+ytick.major.width: 0.8
+
+# Legend
+legend.frameon: False
+legend.fontsize: 10
+legend.loc: best
+
+# Lines
+lines.linewidth: 2
+lines.markersize: 6
+
+# Patches (bars, etc.)
+patch.linewidth: 0.5
+patch.edgecolor: 111827
+
+# Font - Google uses Product Sans but it's not freely available
+font.family: sans-serif
+font.sans-serif: Google Sans, Roboto, Helvetica Neue, Helvetica, Arial, sans-serif
+font.size: 10
+
+# Saving
+savefig.dpi: 300
+savefig.facecolor: FFFFFF
+savefig.edgecolor: FFFFFF
+savefig.bbox: tight
+savefig.pad_inches: 0.1

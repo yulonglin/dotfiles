@@ -1,0 +1,66 @@
+# Anthropic matplotlib style
+# Based on anthroplot defaults (pretty=True)
+# Usage: plt.style.use('anthropic') after symlinking to ~/.config/matplotlib/stylelib/
+
+# Figure
+figure.facecolor: FAF9F5
+figure.edgecolor: FAF9F5
+figure.figsize: 8, 5
+figure.dpi: 150
+
+# Axes
+axes.facecolor: FAF9F5
+axes.edgecolor: 141413
+axes.labelcolor: 141413
+axes.linewidth: 0.8
+axes.spines.top: False
+axes.spines.right: False
+axes.prop_cycle: cycler('color', ['D97757', '6B6B6B', '2C5282', 'E8A87C', 'B794C0', '6B4C7A'])
+# pretty=True cycle: DARK_ORANGE, GREY, DARK_BLUE, MEDIUM_ORANGE, LIGHT_PURPLE, DARK_PURPLE
+
+axes.titlesize: 14
+axes.titleweight: bold
+axes.labelsize: 11
+axes.labelweight: normal
+
+# Grid
+axes.grid: False
+grid.color: E5E5E5
+grid.linestyle: -
+grid.linewidth: 0.5
+grid.alpha: 0.7
+
+# Ticks
+xtick.color: 141413
+ytick.color: 141413
+xtick.labelsize: 10
+ytick.labelsize: 10
+xtick.direction: out
+ytick.direction: out
+xtick.major.width: 0.8
+ytick.major.width: 0.8
+
+# Legend
+legend.frameon: False
+legend.fontsize: 10
+legend.loc: best
+
+# Lines
+lines.linewidth: 2
+lines.markersize: 6
+
+# Patches (bars, etc.)
+patch.linewidth: 0.5
+patch.edgecolor: 141413
+
+# Font - falls back to sans-serif if Styrene not installed
+font.family: sans-serif
+font.sans-serif: Styrene B LC, Helvetica Neue, Helvetica, Arial, sans-serif
+font.size: 10
+
+# Saving
+savefig.dpi: 300
+savefig.facecolor: FAF9F5
+savefig.edgecolor: FAF9F5
+savefig.bbox: tight
+savefig.pad_inches: 0.1

@@ -15,12 +15,13 @@ USAGE=$(cat <<-END
         --claude                deploy Claude Code configuration (symlink claude/ to ~/.claude)
         --codex                 deploy Codex CLI configuration (symlink codex/ to ~/.codex)
         --ghostty               deploy Ghostty terminal configuration (symlink config/ghostty to config dir)
+        --matplotlib            deploy matplotlib styles (anthropic, deepmind) to ~/.config/matplotlib/stylelib
         --git-hooks             deploy global git hooks (secret detection, layered with repo hooks)
         --experimental          enable experimental features (ty type checker)
         --minimal               disable defaults, deploy only specified components
 
     DEFAULTS (applied unless --minimal is used):
-        --claude --codex --vim --editor --experimental --ghostty --git-hooks --cleanup (macOS only)
+        --claude --codex --vim --editor --experimental --ghostty --matplotlib --git-hooks --cleanup (macOS only)
 
     EXAMPLES:
         ./deploy.sh                           # Deploy all defaults
@@ -43,6 +44,7 @@ CLEANUP="false"
 CLAUDE="false"
 CODEX="false"
 GHOSTTY="false"
+MATPLOTLIB="false"
 GIT_HOOKS="false"
 EXPERIMENTAL="false"
 MINIMAL="false"
@@ -70,6 +72,8 @@ while (( "$#" )); do
             CODEX="true" && shift ;;
         --ghostty)
             GHOSTTY="true" && shift ;;
+        --matplotlib)
+            MATPLOTLIB="true" && shift ;;
         --git-hooks)
             GIT_HOOKS="true" && shift ;;
         --experimental)
@@ -92,13 +96,14 @@ esac
 
 # Apply defaults unless --minimal was specified
 if [ "$MINIMAL" = "false" ]; then
-    echo "Applying defaults for $machine: --claude --codex --vim --editor --experimental --ghostty --git-hooks --cleanup (use --minimal to disable)"
+    echo "Applying defaults for $machine: --claude --codex --vim --editor --experimental --ghostty --matplotlib --git-hooks --cleanup (use --minimal to disable)"
     CLAUDE="true"
     CODEX="true"
     VIM="true"
     EDITOR="true"
     EXPERIMENTAL="true"
     GHOSTTY="true"
+    MATPLOTLIB="true"
     GIT_HOOKS="true"
     # Cleanup only on macOS
     if [ "$machine" = "Mac" ]; then
@@ -804,6 +809,45 @@ if [[ "$CLAUDE" == "true" ]]; then
         #     claude config set preferredNotifChannel terminal_bell 2>/dev/null && \
         #         echo "✓ Enabled terminal bell notifications"
         # fi
+    fi
+fi
+
+# Deploy matplotlib styles if requested
+if [[ "$MATPLOTLIB" == "true" ]]; then
+    echo ""
+    echo "Deploying matplotlib styles..."
+
+    MATPLOTLIB_STYLELIB="$HOME/.config/matplotlib/stylelib"
+
+    if [[ ! -d "$DOT_DIR/config/matplotlib" ]]; then
+        echo "Warning: Matplotlib config directory not found at $DOT_DIR/config/matplotlib"
+    else
+        # Create stylelib directory if it doesn't exist
+        mkdir -p "$MATPLOTLIB_STYLELIB"
+
+        # Symlink each style file
+        for style in "$DOT_DIR/config/matplotlib"/*.mplstyle; do
+            if [[ -f "$style" ]]; then
+                style_name=$(basename "$style")
+
+                # Remove existing symlink if present
+                if [[ -L "$MATPLOTLIB_STYLELIB/$style_name" ]]; then
+                    rm "$MATPLOTLIB_STYLELIB/$style_name"
+                elif [[ -e "$MATPLOTLIB_STYLELIB/$style_name" ]]; then
+                    # Backup existing file
+                    backup_path="$MATPLOTLIB_STYLELIB/$style_name.backup.$(date +%Y%m%d_%H%M%S)"
+                    mv "$MATPLOTLIB_STYLELIB/$style_name" "$backup_path"
+                    echo "  Backed up existing $style_name to $backup_path"
+                fi
+
+                ln -sf "$style" "$MATPLOTLIB_STYLELIB/$style_name"
+            fi
+        done
+
+        echo "✓ Symlinked matplotlib styles to $MATPLOTLIB_STYLELIB"
+        echo "  Available styles:"
+        echo "    - plt.style.use('anthropic')  # Anthropic/anthroplot colors"
+        echo "    - plt.style.use('deepmind')   # Google DeepMind colors"
     fi
 fi
 
