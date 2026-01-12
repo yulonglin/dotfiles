@@ -2,9 +2,10 @@
 # Clear Mac Apps - Manage running apps with configurable behavior
 # Used by macOS Shortcuts via "Run Shell Script" action
 #
-# Config file supports two sections:
+# Config file supports three sections:
 #   [no-touch]      - Apps to leave completely alone
 #   [close-windows] - Apps where we close windows but don't quit
+#   [slow-close]    - Apps needing extra time for cleanup (backup, sync)
 
 set -euo pipefail
 
@@ -47,17 +48,38 @@ quit_app() {
 }
 
 # Close all windows of an app without quitting
+# Usage: close_app_windows "AppName" [patience]
+#   patience: number of no-progress attempts before giving up (default: 3)
 close_app_windows() {
     local app="$1"
+    local patience="${2:-3}"
     # Use Cmd+W via System Events - works for Electron apps and others
     # that don't respond to standard AppleScript window commands
+    # Includes timeout protection: max 20 attempts, exits if no progress
     osascript -e "
         tell application \"System Events\"
             tell process \"$app\"
                 set frontmost to true
-                repeat while (count of windows) > 0
+                set maxAttempts to 20
+                set attempts to 0
+                set lastCount to count of windows
+                set stuckCount to 0
+                set maxStuck to $patience
+                repeat while (count of windows) > 0 and attempts < maxAttempts
                     keystroke \"w\" using command down
                     delay 0.2
+                    set attempts to attempts + 1
+                    set currentCount to count of windows
+                    if currentCount >= lastCount then
+                        set stuckCount to stuckCount + 1
+                        if stuckCount >= maxStuck then
+                            -- No progress after maxStuck attempts, app is stuck
+                            exit repeat
+                        end if
+                    else
+                        set stuckCount to 0
+                    end if
+                    set lastCount to currentCount
                 end repeat
             end tell
         end tell
@@ -68,6 +90,7 @@ main() {
     # Build associative arrays for O(1) lookup (keys are lowercase)
     typeset -A no_touch_set
     typeset -A close_windows_set
+    typeset -A slow_close_set
 
     while IFS= read -r app; do
         [[ -n "$app" ]] && no_touch_set[${(L)app}]=1
@@ -77,34 +100,61 @@ main() {
         [[ -n "$app" ]] && close_windows_set[${(L)app}]=1
     done < <(get_apps_in_section "close-windows")
 
+    while IFS= read -r app; do
+        [[ -n "$app" ]] && slow_close_set[${(L)app}]=1
+    done < <(get_apps_in_section "slow-close")
+
     # Get running apps
     local -a running_apps=()
     while IFS= read -r app; do
         [[ -n "$app" ]] && running_apps+=("$app")
     done < <(get_running_apps)
 
-    # Process each running app
+    # Separate apps by action type
+    local -a apps_to_quit=()
+    local -a apps_close_windows=()
+    local -a apps_slow_close=()
+
     for app in "${running_apps[@]}"; do
         local app_lower="${(L)app}"
 
         if (( ${+no_touch_set[$app_lower]} )); then
-            # No-touch: skip completely
             continue
+        elif (( ${+slow_close_set[$app_lower]} )); then
+            apps_slow_close+=("$app")
         elif (( ${+close_windows_set[$app_lower]} )); then
-            # Close windows only
-            echo "Closing windows: $app"
-            close_app_windows "$app"
+            apps_close_windows+=("$app")
         else
-            # Quit the app
-            echo "Quitting: $app"
-            quit_app "$app"
+            apps_to_quit+=("$app")
         fi
+    done
+
+    # Quit apps in parallel (don't need focus)
+    if (( ${#apps_to_quit} > 0 )); then
+        echo "Quitting ${#apps_to_quit} apps in parallel..."
+        for app in "${apps_to_quit[@]}"; do
+            quit_app "$app" &
+        done
+        wait
+    fi
+
+    # Close windows sequentially (need focus for Cmd+W)
+    for app in "${apps_close_windows[@]}"; do
+        echo "Closing windows: $app"
+        close_app_windows "$app" 3
+    done
+
+    # Slow-close apps sequentially with more patience
+    for app in "${apps_slow_close[@]}"; do
+        echo "Closing windows (slow): $app"
+        close_app_windows "$app" 10
     done
 
     echo ""
     echo "Done."
     (( ${#no_touch_set} > 0 )) && echo "  No-touch: ${(k)no_touch_set}"
     (( ${#close_windows_set} > 0 )) && echo "  Close-windows: ${(k)close_windows_set}"
+    (( ${#slow_close_set} > 0 )) && echo "  Slow-close: ${(k)slow_close_set}"
 }
 
 main "$@"
