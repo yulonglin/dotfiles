@@ -49,11 +49,17 @@ quit_app() {
 # Close all windows of an app without quitting
 close_app_windows() {
     local app="$1"
+    # Use Cmd+W via System Events - works for Electron apps and others
+    # that don't respond to standard AppleScript window commands
     osascript -e "
-        tell application \"$app\"
-            try
-                close every window
-            end try
+        tell application \"System Events\"
+            tell process \"$app\"
+                set frontmost to true
+                repeat while (count of windows) > 0
+                    keystroke \"w\" using command down
+                    delay 0.2
+                end repeat
+            end tell
         end tell
     " 2>/dev/null || true
 }
