@@ -157,7 +157,7 @@ ericbuess/claude-code-docs       # Claude Code documentation
 - **Predict results** before running (catches bugs)
 - **Change one variable** at a time
 - **De-risk first** on smallest model/dataset
-- **Report N and 95% CI** with all metrics - see `ai_docs/ci-standards.md`
+- **Report N and SE** with all metrics - see `ai_docs/ci-standards.md`
 
 ### Correctness (CRITICAL)
 - See `specs/RESEARCH_SPEC.md` for project details

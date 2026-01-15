@@ -27,10 +27,26 @@ When comparing methods on the same questions:
 
 ## 4. Reporting
 
-- **Report 95% CI** (not stderr, not std)
-- Format as `mean [lower, upper]` or `mean ± halfwidth`
-- Define in figure/table captions what CI represents
-- Bold best method, but **only if its CI doesn't overlap with second-best**
+- **Report SE (SEM) alongside each score** - the fundamental uncertainty measure
+- 95% CI is derived: `mean ± 1.96 × SE` (report if helpful, but SE is primary)
+- Format: `mean ± SE` or `mean (SE=X)` or `mean [95% CI]`
+- Define in figure/table captions what error bars represent
+- Bold best method, but **only if CIs don't overlap with second-best**
+
+## 4a. Clustered Standard Errors
+
+When questions are **grouped** (e.g., multiple questions per passage/image/conversation):
+
+```
+SE_clustered = std(cluster_means) / sqrt(n_clusters)
+```
+
+**Not**:
+```
+SE_naive = std(all_scores) / sqrt(n_questions)  # WRONG when grouped
+```
+
+Clustered SE can be **3x larger** than naive SE. Always check if your eval has question groupings.
 
 ## 5. Small-n Groups
 
@@ -63,8 +79,8 @@ n ≈ 8 * Var(diff) / δ²
 
 | Situation | What to report |
 |-----------|----------------|
-| Single method, n questions | mean [95% CI] |
-| Comparing methods on same questions | diff [95% CI on diff] |
+| Single method, n questions | mean ± SE (or mean [95% CI]) |
+| Comparing methods on same questions | diff ± SE_diff |
 | Multiple seeds | Average per-question first, then CI |
 | Small n (3-5 items) | Mean and range, no CI |
 | Per-item breakdown | Each item's mean [95% CI] |
@@ -72,7 +88,7 @@ n ≈ 8 * Var(diff) / δ²
 ## Common Mistakes
 
 - **Wrong n**: Using n=seeds instead of n=questions
-- **Reporting SE or std**: Always convert to 95% CI for final reporting
+- **Reporting std instead of SE**: std measures spread, SE measures uncertainty in the mean
 - **Unpaired comparison**: Computing CIs separately then comparing (loses power)
 - **CI on small n**: Computing 95% CI with n=3 seeds (meaningless)
 - **Claiming significance**: When CIs overlap (they might still be significant, but can't claim from CI alone)
