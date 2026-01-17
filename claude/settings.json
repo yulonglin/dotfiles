@@ -85,7 +85,8 @@
       "Bash(chown -R:*)",
       "Bash(curl:*)",
       "Bash(wget:*)",
-      "Bash(sudo:*)"
+      "Bash(sudo:*)",
+      "Read(.env**)"
     ],
     "defaultMode": "plan"
   },
