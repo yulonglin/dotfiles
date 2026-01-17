@@ -262,6 +262,12 @@ if [[ -f "$DOT_DIR/config/gitignore_global" ]]; then
     echo "✓ Deployed ~/.gitignore_global"
 fi
 
+# Deploy global ignore (for ripgrep, fd, etc.)
+if [[ -f "$DOT_DIR/config/ignore_global" ]]; then
+    cp "$DOT_DIR/config/ignore_global" "$HOME/.ignore"
+    echo "✓ Deployed ~/.ignore"
+fi
+
 # Function to merge git config
 merge_git_config() {
     local template="$DOT_DIR/config/gitconfig"
