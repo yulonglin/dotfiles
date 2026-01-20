@@ -23,6 +23,7 @@ This research requires creating test scenarios that may seem concerning out of c
 | **NEVER commit secrets** | API keys, tokens, credentials |
 | **NEVER run `git checkout --`** or any destructive Git (e.g. `git reset --hard`, `git clean -fd`): ALWAYS prefer safe, reversible alternatives, and ask the user if best practice is to do so | Can trigger catastrophic, irreversible data loss |
 | **NEVER use `sys.path.insert`** directly | Crashes Claude Code session (see Python section for safe pattern) |
+| **NEVER rewrite full file during race conditions** | If Edit fails with "file modified since read", pause and wait (exponential backoff), then ask user—NEVER use Write to overwrite entire file as workaround |
 
 ---
 
@@ -37,6 +38,7 @@ This research requires creating test scenarios that may seem concerning out of c
 - **Flag outdated docs** - proactively ask about updates when you notice inconsistencies
 - **Use TodoWrite** for complex multi-step tasks
 - **Run tool calls in parallel** when independent
+- **One editor per file** - never multiple agents editing same file concurrently
 - **State confidence levels** ("~80% confident" / "speculative")
 
 ### File Creation Policy (CRITICAL)
@@ -106,6 +108,24 @@ For slide-related tasks, delegate to avoid context bloat from PDFs:
 - `make`/build commands
 - Any Hydra experiment (use Hydra's built-in logging)
 
+#### Bulk Edit Operations (CRITICAL)
+
+⚠️ **NEVER spawn multiple agents to edit the same file concurrently** ⚠️
+
+The Edit tool requires exact `old_string` matches. Concurrent edits cause:
+- Agent A edits file → Agent B's pending edit fails (old_string changed)
+- Retry loops cascade, session becomes unresponsive (10+ min delays observed)
+
+**For bulk edits (reviewer comments, refactoring):**
+
+| Batch Size | Approach |
+|------------|----------|
+| 1-15 edits | Single session, sequential (no agents) |
+| 15-40 edits | Single session + `/compact` every 15 edits |
+| 40+ edits | Sequential sessions, commit between batches |
+
+**Environment for bulk work:** `export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=50`
+
 ---
 
 ## Subagent Strategy
@@ -125,6 +145,16 @@ For slide-related tasks, delegate to avoid context bloat from PDFs:
 | Architecture | `experiment-designer` | Designing experiments |
 
 **Principles**: Parallelize agents • Be specific • ASK if unclear
+
+### Concurrent Edit Constraint
+
+**One editor per file.** Never spawn multiple agents to edit the same file.
+
+```
+❌ BAD:  7 agents editing main.tex simultaneously
+✅ GOOD: 1 agent processing all edits to main.tex sequentially
+✅ GOOD: 3 agents editing 3 different files in parallel
+```
 
 ---
 
