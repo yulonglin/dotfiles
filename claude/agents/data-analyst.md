@@ -220,6 +220,28 @@ Choose visualizations based on what you're trying to show:
 - Experiment-specific plot types (ROC, PR, confusion matrices, loss curves, ablations)
 - matplotlib style sheets and seaborn themes for consistent aesthetics
 
+# ANTHROPIC STYLING (for publication figures)
+
+**Reference**: `~/.claude/ai_docs/anthroplot.md` for colors and setup.
+
+**Quick setup:**
+```python
+# Option 1: Style file (no dependencies)
+import matplotlib.pyplot as plt
+plt.style.use('~/.config/matplotlib/stylelib/anthropic.mplstyle')
+
+# Option 2: Full module (with helpers)
+# Copy anthroplot.py from ~/.claude/skills/research-presentation/references/
+import anthroplot
+anthroplot.set_defaults(pretty=True)
+```
+
+**Key colors:**
+- Primary: CLAY=#D97757, SLATE=#141413, IVORY=#FAF9F5
+- Secondary: SKY=#6A9BCC, FIG=#C46686, OLIVE=#788C5D
+
+**For papers:** Use matplotlib (not Plotly) - conferences require PDF with embedded fonts.
+
 # RESEARCH CONTEXT
 
 Adhere to CLAUDE.md analysis best practices:
