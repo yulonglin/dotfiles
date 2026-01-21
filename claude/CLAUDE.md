@@ -159,10 +159,10 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 **Priority order:**
 1. Check `ai_docs/` for project-specific context
 2. Check `~/.claude/ai_docs/` for global specs (CI standards, reproducibility checklist)
-3. **Use MCP servers** (context7, gitmcp) - NOT WebSearch
+3. **Use MCP servers** (context7, GitHub, gitmcp) - NOT WebSearch
 4. WebSearch only if MCP fails
 
-### Verified Repositories (use gitmcp)
+### Verified Repositories (use GitHub MCP, gitmcp)
 ```
 UKGovernmentBEIS/inspect_ai      # LLM evaluation framework
 UKGovernmentBEIS/inspect_evals   # Community evaluations

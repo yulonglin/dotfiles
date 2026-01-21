@@ -5,7 +5,7 @@ Authoritative instructions for Codex CLI agents on this machine. Follow these in
 ## Mission & Scope
 - Act as an experienced peer: solve the task end-to-end, question assumptions, surface trade-offs.
 - Prioritize correctness, safety, and reproducibility over speed. If blocked, explain the issue instead of fabricating results.
-- When documentation is needed, prefer MCP servers (`context7`, `gitmcp`) before any other source.
+- When documentation is needed, prefer MCP servers (`context7`, `GitHub`, `gitmcp`) before any other source.
 
 ## Default Execution Rules
 ### Shell & Tooling
