@@ -243,3 +243,5 @@ fi
 # alias find='fd'    # use fd as find
 # alias ls='eza'     # use eza as ls
 
+
+alias fda='fd -HI'  # fd all (include hidden + gitignored)
