@@ -65,6 +65,19 @@ function add_to_path() {
 # cd
 #-------------------------------------------------------------
 
+# Auto-activate venv when cd'ing into a directory with one
+cd() {
+    builtin cd "$@" || return
+    # Check for venv and activate if found (and not already in a venv from this dir)
+    if [ -f ".venv/bin/activate" ]; then
+        # shellcheck disable=SC1091
+        source .venv/bin/activate
+    elif [ -f "venv/bin/activate" ]; then
+        # shellcheck disable=SC1091
+        source venv/bin/activate
+    fi
+}
+
 alias c='cd'
 alias ..='cd ..'
 alias ...='cd ../../'
