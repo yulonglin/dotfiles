@@ -138,7 +138,12 @@
     "hookify@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
     "greptile@claude-plugins-official": false,
-    "github@claude-plugins-official": false
+    "github@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": true,
+    "huggingface-skills@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true
   },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"
