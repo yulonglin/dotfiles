@@ -90,6 +90,7 @@ Draft publication-quality paper sections with academic writing conventions, hone
 - Common writing pitfalls to avoid
 
 **References:**
+- `~/.claude/ai_docs/paper-writing-style-guide.md` - Gold standard style (title, abstract, intro, figures) from exemplary ICML papers
 - `~/.claude/ai_docs/reproducibility-checklist.md` - NeurIPS checklist (16 questions for publication)
 - `~/.claude/ai_docs/ci-standards.md` - CI computation methodology
 
