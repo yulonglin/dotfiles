@@ -513,6 +513,9 @@ free_resources() {
 # Help
 # ============================================================================
 
+# Quick access to help
+alias slurm="slurmhelp"
+
 slurmhelp() {
     cat << 'EOF'
 MATS SLURM Commands
@@ -570,4 +573,3 @@ Examples:
 EOF
 }
 
-echo "SLURM aliases loaded. Run 'slurmhelp' for available commands."
