@@ -133,17 +133,12 @@ The Edit tool requires exact `old_string` matches. Concurrent edits cause:
 
 **Default: delegate, not do.** Prevent context pollution by letting agents summarize.
 
-| Task | Agent | When |
-|------|-------|------|
-| Code exploration | `general-purpose` | File searches, tracing logic |
-| Experiments | `research-engineer` | Full experiments with JSONL, async, checkpointing |
-| Tools/utilities | `tooling-engineer` | API clients, parsers, processors |
-| Debugging | `debugger` | Errors, bugs, unexpected behavior |
-| **Code review** | **`code-reviewer`** | **PROACTIVE after ANY implementation** |
-| **Performance** | **`performance-optimizer`** | **PROACTIVE for slow code, sequential API calls** |
-| Data analysis | `data-analyst` | Statistics, experiment outputs |
-| Critical evaluation | `research-skeptic` | Question findings, identify confounds |
-| Architecture | `experiment-designer` | Designing experiments |
+Available agents are listed in Task tool description. Use **PROACTIVELY**:
+
+| Agent | Trigger |
+|-------|---------|
+| `code-reviewer` | After ANY implementation—don't wait to be asked |
+| `performance-optimizer` | Slow code, sequential API calls, missing caching |
 
 **Principles**: Parallelize agents • Be specific • ASK if unclear
 
@@ -392,6 +387,20 @@ ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, btop, dust, d
 ### tmux-cli
 Control CLI apps in tmux panes. Run `tmux-cli --help`.
 Uses: interactive scripts, parallel Claude instances, pdb debugging, browser automation
+
+**Safe pattern** (prevents lost output on error/completion):
+```bash
+# 1. Launch shell first (keeps pane open)
+tmux-cli launch "$SHELL"  # Returns pane ID like "session:1.2"
+
+# 2. Send commands to the shell
+tmux-cli send "your-command" --pane=2
+
+# 3. Read output anytime
+tmux-cli read --pane=2
+```
+
+⚠️ **NEVER** use `tmux-cli launch "python script.py"` directly—pane dies on completion/error and output is lost.
 
 ### General Programming
 - Match existing code style
