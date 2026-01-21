@@ -4,7 +4,12 @@ Identify and fix slides with content overflow or blank pages in Slidev presentat
 
 ## Arguments
 
-$ARGUMENTS is the file to **edit** (e.g., `slides.md` or `pages/week-19.md`). If not provided, ask the user.
+$ARGUMENTS is the file to **edit** (e.g., `slides.md` or `pages/week-19.md`).
+
+**If not provided**, auto-detect the latest child slide deck:
+1. Read the main `slides.md` to find `src:` imports
+2. The **first** `src:` import (after the title slide) is typically the latest week
+3. Use that file as the target (e.g., `pages/week-21.md`)
 
 ## Context Management (CRITICAL)
 
@@ -17,12 +22,18 @@ Prompt: "Read tmp/slide-check.pdf and identify: (1) pages with content overflow/
 
 ## Workflow
 
-1. **Export to PDF** to identify issues (always from root `slides.md`):
+1. **Determine slide range** for the target file:
+   - Count slide separators (`---`) in the target file to get slide count
+   - Find the page offset by checking which `src:` import it is in `slides.md`
+   - Example: If `pages/week-21.md` is the first import after title slide, and has 14 slides, export range `2-15`
+
+2. **Export as PNG images** for targeted analysis (avoids PDF context bloat):
    ```bash
-   bunx slidev export slides.md --timeout 120000 --output tmp/slide-check.pdf
+   mkdir -p tmp/slides-images
+   bunx slidev export slides.md --format png --output tmp/slides-images/slide --range <start>-<end> --timeout 120000
    ```
 
-2. **Analyze PDF via subagent** - Spawn a `general-purpose` agent to read the PDF and identify:
+3. **Analyze images directly** - Read the PNG files to identify:
    - Pages where content is cut off (text/tables/callouts extending beyond slide boundaries)
    - **Blank pages** (may indicate uncommented `---` between commented sections)
 
@@ -42,10 +53,11 @@ Prompt: "Read tmp/slide-check.pdf and identify: (1) pages with content overflow/
    <!-- more content -->
    ```
 
-5. **Re-export and verify**:
+5. **Re-export and verify** (just the affected slides):
    ```bash
-   bunx slidev export $ARGUMENTS --timeout 120000 --output tmp/slide-fixed.pdf
+   bunx slidev export slides.md --format png --output tmp/slides-fixed/slide --range <affected-pages> --timeout 120000
    ```
+   Read the fixed PNG files to confirm the issue is resolved.
 
 6. **Report** which slides were fixed and what changes were made.
 
