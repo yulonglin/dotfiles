@@ -33,6 +33,7 @@
   typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(
     # =========================[ Line #1 ]=========================
     os_icon                 # os identifier
+    remote_host             # short name + emoji when in SSH (custom segment)
     dir                     # current directory
     vcs                     # git status
     # =========================[ Line #2 ]=========================
@@ -1586,6 +1587,45 @@
       [[ ! -z "$SIF_OVERLAY" ]] && icon='💫 🚧' || icon='💫'
       p10k segment -f 031 -i "${icon}" -t "${name}"
     fi
+  }
+
+  # Remote host indicator - shows short name + emoji when in SSH session
+  # Priority: $SERVER_NAME env var > SSH config alias (by IP) > abbreviated hostname
+  function prompt_remote_host() {
+    # Only show when in SSH session
+    [[ -z "$SSH_CONNECTION" ]] && return
+
+    local short_name=""
+    local icon="🛜"
+    local hostname="${HOST:-$(hostname -s)}"
+    # SSH_CONNECTION format: client_ip client_port server_ip server_port
+    local server_ip="${${(s: :)SSH_CONNECTION}[3]}"
+
+    # Option 1: Use SERVER_NAME env var if set on the remote machine
+    if [[ -n "$SERVER_NAME" ]]; then
+      short_name="$SERVER_NAME"
+    # Option 2: Parse SSH config to find alias matching server IP
+    elif [[ -f ~/.ssh/config && -n "$server_ip" ]]; then
+      short_name=$(awk -v target="$server_ip" '
+        /^Host / && !/\*/ { host = $2 }
+        /^[[:space:]]*HostName / { if ($2 == target) print host }
+      ' ~/.ssh/config | head -1)
+    fi
+
+    # Fallback: abbreviate long hostnames
+    if [[ -z "$short_name" ]]; then
+      if (( ${#hostname} > 10 )); then
+        short_name="${hostname:0:6}.."
+      else
+        short_name="$hostname"
+      fi
+    fi
+
+    p10k segment -f 147 -i "$icon" -t "$short_name"
+  }
+
+  function instant_prompt_remote_host() {
+    prompt_remote_host
   }
 
   # User-defined prompt segments may optionally provide an instant_prompt_* function. Its job
