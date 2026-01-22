@@ -5,15 +5,36 @@ Originally built upon: https://github.com/jplhughes/dotfiles
 
 ## Installation
 
-### Step 1
-Install dependencies (e.g. oh-my-zsh and related plugins), you can specify options to install specific programs: tmux, zsh, note that your dev-vm will already have tmux and zsh installed so you don't need to provide any options in this case, but you may need to provide these if you are installing locally. 
+### Step 1: Install dependencies
 
-Installation on a mac machine requires homebrew so install this [from here](https://brew.sh/) first if you haven't already.
+Install dependencies (e.g. oh-my-zsh and related plugins). The installer auto-detects your OS and applies sensible defaults.
 
 ```bash
-# Install dependencies (remove tmux or zsh if you don't need to install them)
-./install.sh --tmux --zsh
+# Install with defaults (recommended)
+./install.sh
+
+# Install only specific components (--minimal disables defaults)
+./install.sh --minimal --tmux --zsh
 ```
+
+**Defaults by platform:**
+
+| Platform | Defaults |
+|----------|----------|
+| **macOS** | zsh, tmux, AI tools, cleanup + core tools via brew (bat, eza, zoxide, delta) |
+| **Linux** | zsh, tmux, AI tools, create-user + **mise** + modern CLI tools (bat, eza, fd, ripgrep, delta, zoxide) |
+
+**Modern CLI tools (installed by default on Linux via mise):**
+- `bat` - syntax-highlighted `cat`
+- `eza` - modern `ls` replacement
+- `fd` - user-friendly `find`
+- `ripgrep` (`rg`) - fast recursive search
+- `delta` - improved git diff
+- `zoxide` - smarter `cd` (use `z` command)
+
+**Extras (--extras flag):** dust, jless, hyperfine, lazygit, code2prompt
+
+Installation on macOS requires Homebrew - install from [brew.sh](https://brew.sh/) first if needed.
 
 ### Step 2
 Deploy (e.g. source aliases for .zshrc, apply oh-my-zsh settings etc..)

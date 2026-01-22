@@ -34,10 +34,18 @@ if [ -d "$HOME/.cargo" ]; then
   . "$HOME/.cargo/env"
 fi
 
+# mise - universal version manager (replaces pyenv, nvm, rbenv, etc.)
+# Installed by default on Linux, manages CLI tools and language runtimes
+if command -v mise &>/dev/null; then
+  eval "$(mise activate zsh)"
+fi
+
 # zoxide (smarter cd - use 'z' command, not replacing cd)
+# Note: If installed via mise, it's already in PATH after mise activate
 command -v zoxide &> /dev/null && eval "$(zoxide init zsh)"
 
-if [ -d "$HOME/.pyenv" ]; then
+# Legacy version managers (used if mise is not available)
+if [ -d "$HOME/.pyenv" ] && ! command -v mise &>/dev/null; then
   export PYENV_ROOT="$HOME/.pyenv"
   command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
   eval "$(pyenv init -)"
@@ -55,8 +63,9 @@ if [ -d "$HOME/.local/bin/micromamba" ]; then
   unset __mamba_setup
 fi
 
+# fnm (fast node manager) - legacy, prefer mise for Node.js management
 FNM_PATH="$HOME/.local/share/fnm"
-if [ -d "$FNM_PATH" ]; then
+if [ -d "$FNM_PATH" ] && ! command -v mise &>/dev/null; then
   export PATH="$FNM_PATH:$PATH"
   eval "`fnm env`"
 fi
