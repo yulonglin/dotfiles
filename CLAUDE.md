@@ -28,6 +28,7 @@ See README.md for detailed usage.
 
 Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - ZSH configuration - Main shell setup
+- Secrets sync - Bidirectional sync with GitHub gist (SSH config, git identity)
 - Git config - Smart conflict resolution with user prompts
 - VSCode/Cursor settings - Merges with existing settings
 - Finicky - Browser routing (macOS only, symlinked)
@@ -82,6 +83,13 @@ custom_bins/              # Custom utilities (added to PATH)
 ```
 
 ### Important Behaviors
+
+**Secrets Sync (`deploy_secrets()`)**:
+- Bidirectional sync with GitHub gist (ID: `3cc239f160a2fe8c9e6a14829d85a371`)
+- Syncs: `~/.ssh/config`, `config/user.conf` (git identity)
+- Last-modified wins: compares local mtime vs gist updated_at
+- Requires `gh auth login` (browser OAuth, no extra keys needed)
+- Runs before git config (user.conf provides git identity)
 
 **Git Config (`deploy_git_config()`)**:
 - Reads `config/user.conf` for user-specific settings

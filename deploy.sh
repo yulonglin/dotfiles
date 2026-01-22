@@ -18,10 +18,11 @@ USAGE=$(cat <<-END
         --matplotlib            deploy matplotlib styles (anthropic, deepmind) to ~/.config/matplotlib/stylelib
         --git-hooks             deploy global git hooks (secret detection, layered with repo hooks)
         --experimental          enable experimental features (ty type checker)
+        --secrets               sync secrets from/to GitHub gist (ssh config, git identity)
         --minimal               disable defaults, deploy only specified components
 
     DEFAULTS (applied unless --minimal is used):
-        --claude --codex --vim --editor --experimental --ghostty --matplotlib --git-hooks --cleanup (macOS only)
+        --claude --codex --vim --editor --experimental --ghostty --matplotlib --git-hooks --secrets --cleanup (macOS only)
 
     EXAMPLES:
         ./deploy.sh                           # Deploy all defaults
@@ -47,6 +48,7 @@ GHOSTTY="false"
 MATPLOTLIB="false"
 GIT_HOOKS="false"
 EXPERIMENTAL="false"
+SECRETS="false"
 MINIMAL="false"
 while (( "$#" )); do
     case "$1" in
@@ -78,6 +80,8 @@ while (( "$#" )); do
             GIT_HOOKS="true" && shift ;;
         --experimental)
             EXPERIMENTAL="true" && shift ;;
+        --secrets)
+            SECRETS="true" && shift ;;
         --) # end argument parsing
             shift && break ;;
         -*|--*=) # unsupported flags
@@ -96,7 +100,7 @@ esac
 
 # Apply defaults unless --minimal was specified
 if [ "$MINIMAL" = "false" ]; then
-    echo "Applying defaults for $machine: --claude --codex --vim --editor --experimental --ghostty --matplotlib --git-hooks --cleanup (use --minimal to disable)"
+    echo "Applying defaults for $machine: --claude --codex --vim --editor --experimental --ghostty --matplotlib --git-hooks --secrets --cleanup (use --minimal to disable)"
     CLAUDE="true"
     CODEX="true"
     VIM="true"
@@ -105,6 +109,7 @@ if [ "$MINIMAL" = "false" ]; then
     GHOSTTY="true"
     MATPLOTLIB="true"
     GIT_HOOKS="true"
+    SECRETS="true"
     # Cleanup only on macOS
     if [ "$machine" = "Mac" ]; then
         CLEANUP="true"
@@ -147,6 +152,150 @@ add_tool_integrations() {
         echo "Deployed Atuin configuration"
     fi
 }
+
+# Sync secrets from/to GitHub gist (bidirectional, last-modified wins)
+deploy_secrets() {
+    local gist_id="3cc239f160a2fe8c9e6a14829d85a371"
+
+    # Check if gh is authenticated
+    if ! gh auth status &>/dev/null 2>&1; then
+        echo "⚠️  gh not authenticated - run 'gh auth login' to sync secrets"
+        return 1
+    fi
+
+    # Get gist metadata
+    local gist_data
+    gist_data=$(gh api "/gists/$gist_id" 2>/dev/null) || {
+        echo "⚠️  Failed to fetch gist - check network or gist ID"
+        return 1
+    }
+
+    # Get gist updated_at timestamp (epoch seconds)
+    local gist_updated_at
+    gist_updated_at=$(echo "$gist_data" | python3 -c "import sys, json; from datetime import datetime; print(int(datetime.fromisoformat(json.load(sys.stdin)['updated_at'].replace('Z', '+00:00')).timestamp()))" 2>/dev/null)
+
+    # Helper: get file mtime (cross-platform)
+    get_mtime() {
+        local file="$1"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            stat -f %m "$file" 2>/dev/null || echo "0"
+        else
+            stat -c %Y "$file" 2>/dev/null || echo "0"
+        fi
+    }
+
+    # Helper: get content from gist
+    get_gist_file() {
+        local filename="$1"
+        echo "$gist_data" | python3 -c "import sys, json; d=json.load(sys.stdin); f=d['files'].get('$filename', {}); print(f.get('content', ''))" 2>/dev/null
+    }
+
+    # Helper: check if gist has file
+    gist_has_file() {
+        local filename="$1"
+        echo "$gist_data" | python3 -c "import sys, json; d=json.load(sys.stdin); print('yes' if '$filename' in d['files'] else 'no')" 2>/dev/null
+    }
+
+    local changes_made=false
+
+    # Sync SSH config
+    echo "  Syncing SSH config..."
+    local ssh_local="$HOME/.ssh/config"
+    local ssh_gist_exists
+    ssh_gist_exists=$(gist_has_file "config")
+
+    if [[ ! -f "$ssh_local" ]]; then
+        # Local doesn't exist - pull from gist
+        if [[ "$ssh_gist_exists" == "yes" ]]; then
+            mkdir -p "$HOME/.ssh"
+            get_gist_file "config" > "$ssh_local"
+            chmod 600 "$ssh_local"
+            echo "    ↓ Pulled SSH config from gist (local was missing)"
+            changes_made=true
+        fi
+    elif [[ "$ssh_gist_exists" == "no" ]]; then
+        # Gist doesn't have it - push to gist
+        gh gist edit "$gist_id" --add "$ssh_local" --filename "config" &>/dev/null
+        echo "    ↑ Pushed SSH config to gist (gist was missing)"
+        changes_made=true
+    else
+        # Both exist - compare and sync based on mtime
+        local local_mtime
+        local_mtime=$(get_mtime "$ssh_local")
+        local gist_content
+        gist_content=$(get_gist_file "config")
+        local local_content
+        local_content=$(cat "$ssh_local")
+
+        if [[ "$local_content" != "$gist_content" ]]; then
+            if [[ "$local_mtime" -gt "$gist_updated_at" ]]; then
+                # Local is newer - push to gist
+                gh gist edit "$gist_id" --add "$ssh_local" --filename "config" &>/dev/null
+                echo "    ↑ Pushed SSH config to gist (local newer)"
+                changes_made=true
+            else
+                # Gist is newer - pull from gist
+                echo "$gist_content" > "$ssh_local"
+                chmod 600 "$ssh_local"
+                echo "    ↓ Pulled SSH config from gist (gist newer)"
+                changes_made=true
+            fi
+        else
+            echo "    ✓ SSH config in sync"
+        fi
+    fi
+
+    # Sync user.conf (git identity)
+    echo "  Syncing git identity..."
+    local user_local="$DOT_DIR/config/user.conf"
+    local user_gist_exists
+    user_gist_exists=$(gist_has_file "user.conf")
+
+    if [[ ! -f "$user_local" ]]; then
+        # Local doesn't exist - pull from gist
+        if [[ "$user_gist_exists" == "yes" ]]; then
+            get_gist_file "user.conf" > "$user_local"
+            echo "    ↓ Pulled user.conf from gist (local was missing)"
+            changes_made=true
+        fi
+    elif [[ "$user_gist_exists" == "no" ]]; then
+        # Gist doesn't have it - push to gist
+        gh gist edit "$gist_id" --add "$user_local" --filename "user.conf" &>/dev/null
+        echo "    ↑ Pushed user.conf to gist (gist was missing)"
+        changes_made=true
+    else
+        # Both exist - compare and sync based on mtime
+        local local_mtime
+        local_mtime=$(get_mtime "$user_local")
+        local gist_content
+        gist_content=$(get_gist_file "user.conf")
+        local local_content
+        local_content=$(cat "$user_local")
+
+        if [[ "$local_content" != "$gist_content" ]]; then
+            if [[ "$local_mtime" -gt "$gist_updated_at" ]]; then
+                # Local is newer - push to gist
+                gh gist edit "$gist_id" --add "$user_local" --filename "user.conf" &>/dev/null
+                echo "    ↑ Pushed user.conf to gist (local newer)"
+                changes_made=true
+            else
+                # Gist is newer - pull from gist
+                echo "$gist_content" > "$user_local"
+                echo "    ↓ Pulled user.conf from gist (gist newer)"
+                changes_made=true
+            fi
+        else
+            echo "    ✓ Git identity in sync"
+        fi
+    fi
+
+    if [[ "$changes_made" == "true" ]]; then
+        echo "✓ Secrets synced with gist"
+    else
+        echo "✓ All secrets already in sync"
+    fi
+}
+
 echo "append mode: ${APPEND}"
 
 # Set the operator based on append flag
@@ -250,6 +399,13 @@ fi
 if [[ "$ASCII_FILE" != "start.txt" ]]; then
     echo "Using custom ASCII art: $ASCII_FILE"
     cp "$DOT_DIR/config/ascii_arts/$ASCII_FILE" "$DOT_DIR/config/start.txt"
+fi
+
+# Deploy secrets before git config (user.conf is needed for git identity)
+if [[ "$SECRETS" == "true" ]]; then
+    echo ""
+    echo "Syncing secrets with GitHub gist..."
+    deploy_secrets || echo "Warning: Secrets sync failed (continuing anyway)"
 fi
 
 # Git configuration deployment
