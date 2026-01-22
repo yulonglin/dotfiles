@@ -13,7 +13,7 @@ Comprehensive dotfiles repository for ZSH, Tmux, Vim, SSH, and development tools
 **Flags are ADDITIVE to defaults unless `--minimal` is used**
 
 - `install.sh` defaults: macOS (`--zsh --tmux --ai-tools --cleanup`), Linux (`--zsh --tmux --ai-tools`)
-- `deploy.sh` defaults: `--claude --codex --vim --editor --experimental --cleanup` (cleanup macOS only)
+- `deploy.sh` defaults: `--vim --editor --claude --codex --ghostty --htop --matplotlib --git-hooks --secrets --cleanup` (cleanup macOS only)
 - Adding flags extends defaults (e.g., `./install.sh --extras` = defaults + extras)
 - `--minimal` flag disables all defaults (only installs what you specify)
 - Modifiers (`--append`, `--ascii`, `--force`) don't affect defaults
