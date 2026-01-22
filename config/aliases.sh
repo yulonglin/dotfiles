@@ -14,12 +14,26 @@ alias zrc="cd $DOT_DIR/zsh"
 alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
-claude() {
-    # Activate environment before running claude
-    if [ -d ".venv" ] && [ -f ".venv/bin/activate" ]; then
+
+# Helper: activate .venv from current dir or git repo root
+_activate_venv() {
+    if [ -f ".venv/bin/activate" ]; then
         # shellcheck disable=SC1091
         source .venv/bin/activate
+    elif git rev-parse --is-inside-work-tree &>/dev/null; then
+        local repo_root
+        repo_root="$(git rev-parse --show-toplevel)"
+        if [ -f "$repo_root/.venv/bin/activate" ]; then
+            # shellcheck disable=SC1091
+            source "$repo_root/.venv/bin/activate"
+        fi
     fi
+}
+
+claude() {
+    # Use tmpfs for Claude Code temp files (faster, avoids disk I/O)
+    export CLAUDE_CODE_TMPDIR="/run/user/$(id -u)"
+    _activate_venv
     command claude "$@"
 }
 alias yolo='claude --dangerously-skip-permissions'
@@ -69,17 +83,10 @@ function add_to_path() {
 # cd
 #-------------------------------------------------------------
 
-# Auto-activate venv when cd'ing into a directory with one
+# Auto-activate .venv when cd'ing into a directory with one
 cd() {
     builtin cd "$@" || return
-    # Check for venv and activate if found (and not already in a venv from this dir)
-    if [ -f ".venv/bin/activate" ]; then
-        # shellcheck disable=SC1091
-        source .venv/bin/activate
-    elif [ -f "venv/bin/activate" ]; then
-        # shellcheck disable=SC1091
-        source venv/bin/activate
-    fi
+    _activate_venv
 }
 
 alias c='cd'
