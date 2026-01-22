@@ -1,0 +1,18 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks
+
+title = "Dotfiles Gitleaks Config"
+
+[allowlist]
+  description = "Allowlist for dotfiles repo"
+
+  # GitHub Gist IDs are not secrets - they're public identifiers
+  regexes = [
+    '''SECRETS_GIST_ID="[a-f0-9]{32}"''',
+    '''gist_id="[a-f0-9]{32}"''',
+  ]
+
+  # These paths contain example/template configs, not real secrets
+  paths = [
+    '''config/user\.conf\.example''',
+  ]
