@@ -52,7 +52,7 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 ```
 
 **Defaults:**
-- Git config, VSCode/Cursor settings, vim, Claude Code, Codex CLI, Ghostty, matplotlib styles
+- Git config, VSCode/Cursor settings, vim, Claude Code, Codex CLI, Ghostty, htop, matplotlib styles
 - Experimental features (ty type checker)
 - Cleanup automation (macOS only)
 

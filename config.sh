@@ -36,6 +36,7 @@ DEPLOY_EDITOR=true              # VSCode/Cursor settings (merges with existing)
 DEPLOY_CLAUDE=true              # Claude Code config (~/.claude symlink)
 DEPLOY_CODEX=true               # Codex CLI config (~/.codex symlink)
 DEPLOY_GHOSTTY=true             # Ghostty terminal config
+DEPLOY_HTOP=true                # htop process viewer config
 DEPLOY_MATPLOTLIB=true          # Matplotlib styles (anthropic, deepmind)
 DEPLOY_GIT_HOOKS=true           # Global git hooks (secret detection)
 DEPLOY_SECRETS=true             # Sync secrets with GitHub gist
@@ -130,6 +131,7 @@ apply_profile() {
             INSTALL_EXTRAS=false
             DEPLOY_EDITOR=false
             DEPLOY_GHOSTTY=false
+            DEPLOY_HTOP=false
             DEPLOY_MATPLOTLIB=false
             DEPLOY_CLEANUP=false
             DEPLOY_SECRETS=false
@@ -148,6 +150,7 @@ apply_profile() {
             DEPLOY_CLAUDE=false
             DEPLOY_CODEX=false
             DEPLOY_GHOSTTY=false
+            DEPLOY_HTOP=false
             DEPLOY_MATPLOTLIB=false
             DEPLOY_GIT_HOOKS=false
             DEPLOY_SECRETS=false

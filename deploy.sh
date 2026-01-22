@@ -43,6 +43,7 @@ OPTIONS:
     --claude          Deploy Claude Code config (~/.claude symlink)
     --codex           Deploy Codex CLI config (~/.codex symlink)
     --ghostty         Deploy Ghostty terminal config
+    --htop            Deploy htop configuration
     --matplotlib      Deploy matplotlib styles
     --git-hooks       Deploy global git hooks
     --secrets         Sync secrets with GitHub gist
@@ -261,6 +262,22 @@ if [[ "$DEPLOY_GHOSTTY" == "true" ]]; then
         log_info "  Key bindings: Shift+Enter (newline), Cmd+C (copy)"
     else
         log_warning "Ghostty config not found"
+    fi
+fi
+
+# ─── htop ─────────────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_HTOP" == "true" ]]; then
+    log_info "Deploying htop configuration..."
+
+    HTOP_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/htop"
+
+    if [[ -f "$DOT_DIR/config/htop/htoprc" ]]; then
+        mkdir -p "$HTOP_DIR"
+        safe_symlink "$DOT_DIR/config/htop/htoprc" "$HTOP_DIR/htoprc"
+        log_info "  Uses dynamic CPU meters (adapts to any CPU count)"
+    else
+        log_warning "htop config not found at $DOT_DIR/config/htop/htoprc"
     fi
 fi
 

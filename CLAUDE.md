@@ -60,6 +60,7 @@ config/
 ├── vscode_extensions.txt # Auto-installed extensions
 ├── finicky.js            # Browser routing (macOS, symlinked)
 ├── ghostty               # Ghostty terminal config (symlinked to platform-specific path)
+├── htop/htoprc           # htop config (symlinked, uses dynamic CPU meters)
 ├── key_bindings.sh       # ZSH key bindings (sourced by zshrc.sh)
 ├── gitconfig             # Git config template
 ├── gitignore_global      # Global gitignore
