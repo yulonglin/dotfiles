@@ -271,13 +271,46 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
     log_info "Deploying htop configuration..."
 
     HTOP_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/htop"
+    HTOP_LOCAL="$HTOP_DIR/htoprc"
+    HTOP_DOTFILES="$DOT_DIR/config/htop/htoprc"
 
-    if [[ -f "$DOT_DIR/config/htop/htoprc" ]]; then
-        mkdir -p "$HTOP_DIR"
-        safe_symlink "$DOT_DIR/config/htop/htoprc" "$HTOP_DIR/htoprc"
-        log_info "  Uses dynamic CPU meters (adapts to any CPU count)"
+    if [[ ! -f "$HTOP_DOTFILES" ]]; then
+        log_warning "htop config not found at $HTOP_DOTFILES"
     else
-        log_warning "htop config not found at $DOT_DIR/config/htop/htoprc"
+        mkdir -p "$HTOP_DIR"
+
+        # Check if local config exists and is NOT a symlink (htop overwrote it)
+        if [[ -f "$HTOP_LOCAL" && ! -L "$HTOP_LOCAL" ]]; then
+            if ! diff -q "$HTOP_LOCAL" "$HTOP_DOTFILES" >/dev/null 2>&1; then
+                log_warning "Local htop config differs from dotfiles (htop overwrites symlinks)"
+                echo ""
+                echo "Options:"
+                echo "  [l] Keep local config (update dotfiles)"
+                echo "  [d] Keep dotfiles config (discard local changes)"
+                echo "  [s] Skip htop deployment"
+                echo ""
+                read -rp "Choice [l/d/s]: " htop_choice
+
+                case "$htop_choice" in
+                    l|L)
+                        cp "$HTOP_LOCAL" "$HTOP_DOTFILES"
+                        log_success "Updated dotfiles with local htop config"
+                        ;;
+                    d|D)
+                        log_info "Using dotfiles config"
+                        ;;
+                    *)
+                        log_info "Skipping htop deployment"
+                        HTOP_DOTFILES=""  # Skip symlink creation
+                        ;;
+                esac
+            fi
+        fi
+
+        if [[ -n "$HTOP_DOTFILES" ]]; then
+            safe_symlink "$HTOP_DOTFILES" "$HTOP_LOCAL"
+            log_info "  Uses dynamic CPU meters (adapts to any CPU count)"
+        fi
     fi
 fi
 
