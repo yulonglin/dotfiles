@@ -34,4 +34,4 @@ If you're at the start of the session, that means other agents have done the wor
 ## Notes
 - You should only commit work when instructed. Do not keep committing subsquent work unless explicitly told so
 
-Optional: ask me if I would like to push the commit, but WARN about this if I'm on main
+Optional: Ask me if I would like to push the commit
