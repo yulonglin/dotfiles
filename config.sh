@@ -26,6 +26,7 @@ INSTALL_TMUX=true
 INSTALL_AI_TOOLS=true           # Claude Code, Gemini CLI, Codex CLI
 INSTALL_EXTRAS=false            # dust, jless, hyperfine, lazygit, code2prompt
 INSTALL_CLEANUP=true            # Automatic cleanup (macOS only)
+INSTALL_DOCKER=true             # Docker (Linux only)
 INSTALL_EXPERIMENTAL=false      # ty type checker
 INSTALL_CREATE_USER=false       # Create non-root dev user (Linux only)
 
@@ -125,6 +126,7 @@ apply_profile() {
             # Minimal server setup
             INSTALL_AI_TOOLS=false
             INSTALL_CLEANUP=false
+            INSTALL_DOCKER=false
             INSTALL_EXTRAS=false
             DEPLOY_EDITOR=false
             DEPLOY_GHOSTTY=false
@@ -137,6 +139,7 @@ apply_profile() {
             INSTALL_ZSH=false
             INSTALL_TMUX=false
             INSTALL_AI_TOOLS=false
+            INSTALL_DOCKER=false
             INSTALL_EXTRAS=false
             INSTALL_CLEANUP=false
             INSTALL_EXPERIMENTAL=false
@@ -187,4 +190,7 @@ if is_linux; then
     INSTALL_CLEANUP=false       # launchd not available
     DEPLOY_CLEANUP=false
     INSTALL_CREATE_USER=true    # Useful for containers
+    # INSTALL_DOCKER=true is already default
+elif is_macos; then
+    INSTALL_DOCKER=false        # Use Docker Desktop on macOS
 fi

@@ -337,6 +337,72 @@ create_dev_user() {
     log_success "User $username created. Switch with: su - $username"
 }
 
+# ─── Docker Installation (Linux) ─────────────────────────────────────────────
+
+install_docker() {
+    if is_installed docker; then
+        return 0
+    fi
+
+    log_section "INSTALLING DOCKER 🐳"
+
+    # Install prerequisites
+    apt-get install -y ca-certificates curl gnupg 2>/dev/null || {
+        log_warning "Could not install Docker prerequisites"
+        return 1
+    }
+
+    # Add Docker's official GPG key
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
+        # Try Debian if Ubuntu fails
+        curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
+            log_warning "Could not add Docker GPG key"
+            return 1
+        }
+    }
+    chmod a+r /etc/apt/keyrings/docker.gpg
+
+    # Detect distro and add repository
+    local distro version_codename
+    if [[ -f /etc/os-release ]]; then
+        # shellcheck source=/dev/null
+        source /etc/os-release
+        distro="${ID:-ubuntu}"
+        version_codename="${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null || echo 'jammy')}"
+    else
+        distro="ubuntu"
+        version_codename="jammy"
+    fi
+
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${distro} ${version_codename} stable" | \
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    # Install Docker
+    apt-get update -y 2>/dev/null
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null || {
+        log_warning "Docker installation failed"
+        return 1
+    }
+
+    # Add current user to docker group (avoids needing sudo)
+    local current_user="${SUDO_USER:-$USER}"
+    if [[ -n "$current_user" ]] && [[ "$current_user" != "root" ]]; then
+        usermod -aG docker "$current_user" 2>/dev/null || true
+        log_success "Added $current_user to docker group"
+        echo ""
+        echo "  ⚠️  IMPORTANT: To use Docker without sudo, either:"
+        echo "      • Log out and back in, OR"
+        echo "      • Run: newgrp docker"
+        echo ""
+        echo "  Start Docker daemon: sudo systemctl start docker"
+        echo "  Verify installation:  docker run hello-world"
+        echo ""
+    fi
+
+    log_success "Docker installed successfully"
+}
+
 # ─── Secrets Sync ─────────────────────────────────────────────────────────────
 
 # Sync secrets bidirectionally with GitHub gist

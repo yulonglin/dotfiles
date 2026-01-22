@@ -38,6 +38,7 @@ OPTIONS:
     --ai-tools        Enable AI CLI tools (Claude, Gemini, Codex)
     --extras          Enable extra CLI tools (dust, jless, hyperfine, lazygit)
     --cleanup         Enable automatic cleanup (macOS only)
+    --docker          Enable Docker installation (Linux only)
     --experimental    Enable experimental features (ty type checker)
     --create-user     Create non-root dev user (Linux only)
     --no-<component>  Disable a component (e.g., --no-ai-tools)
@@ -279,6 +280,12 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     fi
 
     log_success "AI CLI tools installation complete"
+fi
+
+# ─── Docker (Linux) ──────────────────────────────────────────────────────────
+
+if [[ "$INSTALL_DOCKER" == "true" ]] && is_linux; then
+    install_docker
 fi
 
 # ─── Cleanup Automation ───────────────────────────────────────────────────────
