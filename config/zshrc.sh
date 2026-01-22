@@ -98,3 +98,6 @@ fs() {
     # Run find-session in shell mode and evaluate the output
     eval "$(find-session --shell "$@" | sed '/^$/d')"
 }
+
+# Auto-activate .venv on shell startup (same as cd behavior)
+_activate_venv
