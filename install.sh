@@ -18,9 +18,11 @@ USAGE=$(cat <<-END
     DEFAULTS (applied unless --minimal is used):
         macOS:  --zsh --tmux --ai-tools --cleanup
                 + core tools via brew (bat, eza, zoxide, delta, fzf, jq)
+                + gh (GitHub CLI) with OAuth login
         Linux:  --zsh --tmux --ai-tools --create-user
                 + mise (universal tool manager)
                 + modern CLI tools via mise (bat, eza, fd, ripgrep, delta, zoxide)
+                + gh (GitHub CLI) with OAuth login
 
     EXAMPLES:
         ./install.sh                    # Install defaults
@@ -124,6 +126,51 @@ clone_zsh_plugin() {
     local repo="$1"
     local name="${2:-$(basename "$repo" .git)}"
     git clone --quiet "$repo" "${ZSH_CUSTOM}/plugins/$name" 2>/dev/null || echo "Warning: $name failed"
+}
+
+# Helper: Install GitHub CLI and authenticate
+install_gh_cli() {
+    local machine="$1"
+
+    # Install gh if not present
+    if ! is_installed gh; then
+        echo "Installing GitHub CLI..."
+        case "$machine" in
+            Linux)
+                apt install -y gh 2>/dev/null || {
+                    echo "  apt install failed, downloading from GitHub..."
+                    GH_VERSION=$(curl -s https://api.github.com/repos/cli/cli/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "2.62.0")
+                    ARCH=$(uname -m)
+                    case "$ARCH" in
+                        x86_64)  GH_ARCH="amd64" ;;
+                        aarch64) GH_ARCH="arm64" ;;
+                        *)       echo "Warning: Unsupported architecture $ARCH for gh"; return 1 ;;
+                    esac
+                    mkdir -p "$HOME/.local/bin"
+                    curl -sSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz" -o /tmp/gh.tar.gz && \
+                    tar -xzf /tmp/gh.tar.gz -C /tmp && \
+                    (mv /tmp/gh_${GH_VERSION}_linux_${GH_ARCH}/bin/gh /usr/local/bin/ 2>/dev/null || mv /tmp/gh_${GH_VERSION}_linux_${GH_ARCH}/bin/gh "$HOME/.local/bin/") && \
+                    rm -rf /tmp/gh.tar.gz /tmp/gh_${GH_VERSION}_linux_${GH_ARCH} || echo "Warning: Could not install gh"
+                }
+                ;;
+            Mac)
+                brew install --quiet gh 2>/dev/null || echo "Warning: gh installation failed"
+                ;;
+        esac
+    fi
+
+    # Authenticate if not already logged in
+    if command -v gh &>/dev/null; then
+        if ! gh auth status &>/dev/null; then
+            echo ""
+            echo "GitHub CLI needs authentication for secrets sync."
+            echo "This will open a browser for OAuth login (no tokens needed)."
+            echo ""
+            gh auth login --web --git-protocol https || echo "Warning: gh auth login failed - run 'gh auth login' manually"
+        else
+            echo "  gh already authenticated"
+        fi
+    fi
 }
 
 # Helper: Create non-root development user
@@ -355,6 +402,9 @@ if [ $machine == "Linux" ]; then
     echo "Installing modern CLI tools..."
     install_cli_tools
 
+    # Install GitHub CLI and authenticate (needed for secrets sync)
+    install_gh_cli "Linux"
+
     if [ $extras == true ]; then
         echo "Installing extras CLI tools..."
         # Install extras via mise (dust, jless, hyperfine, lazygit, code2prompt)
@@ -404,6 +454,9 @@ elif [ $machine == "Mac" ]; then
 
     echo "Installing core packages..."
     brew install --quiet coreutils ncdu htop rsync btop jq fzf bat eza zoxide delta gitleaks 2>/dev/null || echo "Warning: Some packages may have failed to install"
+
+    # Install GitHub CLI and authenticate (needed for secrets sync)
+    install_gh_cli "Mac"
 
     # Install atuin for unified shell history
     if ! is_installed atuin; then
