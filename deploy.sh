@@ -36,6 +36,12 @@ END
 
 export DOT_DIR=$(dirname $(realpath $0))
 
+# Safeguard: ensure DOT_DIR is set and valid
+if [[ -z "$DOT_DIR" || ! -d "$DOT_DIR/config" ]]; then
+    echo "Error: DOT_DIR is empty or invalid: '$DOT_DIR'" >&2
+    exit 1
+fi
+
 VIM="false"
 EDITOR="false"
 ALIASES=()
@@ -317,10 +323,18 @@ fi
 # Tmux setup
 eval "echo \"source $DOT_DIR/config/tmux.conf\" $OP \"\$HOME/.tmux.conf\""
 
-# Vimrc
+# Vimrc (symlinked like Finicky/Ghostty)
 if [[ $VIM == "true" ]]; then
-    echo "deploying .vimrc"
-    eval "echo \"source $DOT_DIR/config/vimrc\" $OP \"\$HOME/.vimrc\""
+    echo "Deploying vimrc..."
+    if [[ -e "$HOME/.vimrc" && ! -L "$HOME/.vimrc" ]]; then
+        backup_path="$HOME/.vimrc.backup.$(date +%Y%m%d_%H%M%S)"
+        mv "$HOME/.vimrc" "$backup_path"
+        echo "  Backed up existing .vimrc to $backup_path"
+    elif [[ -L "$HOME/.vimrc" ]]; then
+        rm "$HOME/.vimrc"
+    fi
+    ln -sf "$DOT_DIR/config/vimrc" "$HOME/.vimrc"
+    echo "✓ Symlinked $DOT_DIR/config/vimrc to ~/.vimrc"
 fi
 
 # Shell configuration setup - default to zsh if available
