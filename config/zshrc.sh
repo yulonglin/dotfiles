@@ -100,4 +100,4 @@ fs() {
 }
 
 # Auto-activate .venv on shell startup (same as cd behavior)
-_activate_venv
+activate_venv

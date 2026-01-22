@@ -16,7 +16,8 @@ alias jp="jupyter lab"
 alias hn="hostname"
 
 # Helper: activate .venv from current dir or git repo root
-_activate_venv() {
+# Note: no underscore prefix - Claude Code shell snapshots filter out _-prefixed functions
+activate_venv() {
     if [ -f ".venv/bin/activate" ]; then
         # shellcheck disable=SC1091
         source .venv/bin/activate
@@ -36,7 +37,7 @@ claude() {
     if [[ "$OSTYPE" == linux* ]] && [[ -d "/run/user/$(id -u)" ]]; then
         export CLAUDE_CODE_TMPDIR="/run/user/$(id -u)"
     fi
-    _activate_venv
+    activate_venv
     command claude "$@"
 }
 alias yolo='claude --dangerously-skip-permissions'
@@ -89,7 +90,7 @@ function add_to_path() {
 # Auto-activate .venv when cd'ing into a directory with one
 cd() {
     builtin cd "$@" || return
-    _activate_venv
+    activate_venv
 }
 
 alias c='cd'
