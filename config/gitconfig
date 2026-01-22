@@ -30,7 +30,22 @@
     line-numbers = true
 
 [merge]
-    conflictstyle = diff3
+    conflictstyle = zdiff3
+
+[rerere]
+    enabled = true
+    autoUpdate = true
+
+[pull]
+    rebase = true
+
+[rebase]
+    autoStash = true
+    autoSquash = true
+
+[fetch]
+    prune = true
+    pruneTags = true
 
 [diff]
     colorMoved = default

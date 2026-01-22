@@ -549,6 +549,14 @@ deploy_git_config() {
         ["push.default"]="simple"
         ["init.defaultBranch"]="main"
         ["core.excludesfile"]="~/.gitignore_global"
+        ["merge.conflictstyle"]="zdiff3"
+        ["rerere.enabled"]="true"
+        ["rerere.autoUpdate"]="true"
+        ["pull.rebase"]="true"
+        ["rebase.autoStash"]="true"
+        ["rebase.autoSquash"]="true"
+        ["fetch.prune"]="true"
+        ["fetch.pruneTags"]="true"
         ["alias.lg"]="log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
     )
 
