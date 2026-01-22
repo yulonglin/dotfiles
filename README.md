@@ -1,7 +1,32 @@
 # dotfiles
-ZSH, Tmux, Vim, ssh and coding agents setup on both local/remote machines.
 
-Originally built upon: https://github.com/jplhughes/dotfiles
+My personal development environment: ZSH, Tmux, Vim, SSH, and AI coding assistants across macOS, Linux, and cloud containers.
+
+**Key highlights of this setup:**
+- 🤖 **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Custom agents, hooks, skills, and slash commands for AI-assisted development
+- 👻 **[Ghostty](https://ghostty.org/)** - Fast, GPU-accelerated terminal with sensible defaults
+- 📊 **[htop](https://htop.dev/)** - Dynamic CPU meter configuration that adapts to your core count
+- 🦀 **Rust-powered CLI tools** - Modern, blazing-fast replacements for standard Unix utilities
+- 🧹 **Automatic cleanup** - Scheduled cleanup of Downloads/Screenshots (macOS, moves to trash)
+
+> Originally forked from [jplhughes/dotfiles](https://github.com/jplhughes/dotfiles) - thanks John for the solid foundation!
+
+## Rust CLI Tools
+
+These modern alternatives are installed by default and significantly faster than their traditional counterparts:
+
+| Tool | Replaces | Why it's better |
+|------|----------|-----------------|
+| [`bat`](https://github.com/sharkdp/bat) | `cat` | Syntax highlighting, line numbers, git integration |
+| [`eza`](https://github.com/eza-community/eza) | `ls` | Colors, icons, git status, tree view built-in |
+| [`fd`](https://github.com/sharkdp/fd) | `find` | Intuitive syntax, respects `.gitignore`, 5x faster |
+| [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`) | `grep` | Recursive by default, respects `.gitignore`, 10x+ faster |
+| [`delta`](https://github.com/dandavison/delta) | `diff` | Side-by-side, syntax highlighting, line numbers |
+| [`zoxide`](https://github.com/ajeetdsouza/zoxide) | `cd` | Learns your habits, jump with `z dirname` |
+
+**More Rust extras** (`--extras` flag): [`dust`](https://github.com/bootandy/dust) (disk usage), [`hyperfine`](https://github.com/sharkdp/hyperfine) (benchmarking), [`jless`](https://github.com/PaulJuliusMartinez/jless) (JSON viewer)
+
+Also available: [`lazygit`](https://github.com/jesseduffield/lazygit) (TUI for git, written in Go)
 
 ## Installation
 
@@ -21,18 +46,8 @@ Install dependencies (e.g. oh-my-zsh and related plugins). The installer auto-de
 
 | Platform | Defaults |
 |----------|----------|
-| **macOS** | zsh, tmux, AI tools, cleanup + core tools via brew (bat, eza, zoxide, delta) |
-| **Linux** | zsh, tmux, AI tools, create-user + **mise** + modern CLI tools (bat, eza, fd, ripgrep, delta, zoxide) |
-
-**Modern CLI tools (installed by default on Linux via mise):**
-- `bat` - syntax-highlighted `cat`
-- `eza` - modern `ls` replacement
-- `fd` - user-friendly `find`
-- `ripgrep` (`rg`) - fast recursive search
-- `delta` - improved git diff
-- `zoxide` - smarter `cd` (use `z` command)
-
-**Extras (--extras flag):** dust, jless, hyperfine, lazygit, code2prompt
+| **macOS** | zsh, tmux, AI tools, cleanup + Rust CLI tools via Homebrew |
+| **Linux** | zsh, tmux, AI tools, create-user + Rust CLI tools via [mise](https://mise.jdx.dev/) |
 
 Installation on macOS requires Homebrew - install from [brew.sh](https://brew.sh/) first if needed.
 
@@ -58,40 +73,70 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 
 **Flags are additive** - e.g., `./deploy.sh --aliases=custom` deploys defaults + custom aliases. Use `--minimal` to disable defaults.
 
-### Claude Code Deployment (AI Assistant)
+### Claude Code (AI Assistant)
 
-The `--claude` flag deploys custom Claude Code configuration:
+This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/claude-code) customization for AI-assisted development:
 
 ```bash
-./deploy.sh --claude
+./deploy.sh --claude  # Symlinks claude/ → ~/.claude
 ```
 
-**What gets deployed:**
-- `CLAUDE.md` - Global AI instructions for all projects
-- `settings.json` - Claude Code settings
-- `agents/` - Specialized agent definitions
-- `hooks/` - Auto-logging, notifications
-- `skills/` - Custom slash commands (/commit, /run-experiment, etc.)
-- `commands/` & `templates/` - Custom commands and templates
+**What's included:**
+- **`CLAUDE.md`** - Global instructions: research methodology, coding standards, zero-tolerance rules
+- **`agents/`** - Specialized subagents (code-reviewer, research-engineer, debugger, etc.)
+- **`skills/`** - Custom slash commands (`/commit`, `/run-experiment`, `/spec-interview`)
+- **`hooks/`** - Auto-logging to `~/.claude/logs/`, desktop notifications
+- **`templates/`** - Reproducibility reports, research specs
 
-**Smart Merge (automatic):**
-If `~/.claude` already exists from Claude Code installation, the deployment:
-1. 🔄 Backs up existing directory to `~/.claude.backup.<timestamp>`
-2. 🔗 Creates symlink from `dotfiles/claude/` → `~/.claude`
-3. ✅ Restores your runtime files (credentials, history, cache, projects, etc.)
+**Smart merge preserves your data** - if `~/.claude` already exists, credentials, history, and cache are automatically restored after symlinking.
 
-**Your data is preserved** - credentials, conversation history, and all runtime files are automatically restored after the merge.
+### Ghostty (Terminal Emulator)
 
-**Any order works:**
+[Ghostty](https://ghostty.org/) is a fast, GPU-accelerated terminal written in Zig. Config is symlinked to the platform-specific location:
+
 ```bash
-# Option 1: Install Claude first, then deploy config
-./install.sh --ai-tools  # Creates ~/.claude with runtime files
-./deploy.sh --claude      # Smart merge happens here
-
-# Option 2: Deploy config first, then install Claude
-./deploy.sh --claude      # Creates symlink
-./install.sh --ai-tools  # Claude writes runtime files into symlinked dir
+./deploy.sh --ghostty  # Part of defaults
 ```
+
+**Key settings in `config/ghostty`:**
+- `Cmd+C` triggers shell-based copy (integrates with tmux)
+- `Shift+Enter` for multiline input
+- Sensible font and color defaults
+
+Config location: macOS `~/Library/Application Support/com.mitchellh.ghostty/config`, Linux `~/.config/ghostty/config`
+
+### htop (Process Monitor)
+
+Dynamic [htop](https://htop.dev/) configuration that adapts CPU meters to your core count:
+
+```bash
+./deploy.sh --htop  # Part of defaults
+```
+
+The config in `config/htop/htoprc` uses a dynamic layout that works across machines with different CPU counts—no manual adjustment needed.
+
+### Automatic Cleanup (macOS)
+
+Scheduled cleanup of old files from `~/Downloads` and `~/Screenshots`:
+
+```bash
+./deploy.sh --cleanup  # Part of macOS defaults
+```
+
+**How it works:**
+- Moves files older than 180 days (configurable) to **Trash** (not permanent delete)
+- Runs monthly via launchd
+- Only deletes files not accessed AND not modified in retention period
+
+```bash
+# Preview what would be cleaned
+./scripts/cleanup/cleanup_old_files.sh --dry-run
+
+# Custom retention (90 days) and schedule (weekly)
+./scripts/cleanup/install.sh --days 90 --schedule weekly
+```
+
+See [`scripts/cleanup/README.md`](./scripts/cleanup/README.md) for full documentation.
 
 ### Step 3: Configure Powerlevel10k theme
 This set of dotfiles uses the powerlevel10k theme for zsh, this makes your terminal look better and adds lots of useful features, e.g. env indicators, git status etc...
@@ -118,28 +163,17 @@ Apply changes to ~/.zshrc?
 * Any aliases you need, add them to the [config/aliases.sh](./config/aliases.sh) script. Try adding your own alias to the bottom of the file. For example, try setting `cd1` to your most used git repo so you can just type `cd1` to get to it.
 * Any setup you do in a new RunPod, add it to [runpod/runpod_setup.sh](./runpod/runpod_setup.sh).
 
-## Docker image for runpod
+## RunPod / Docker
 
-To build the docker image for runpod, you can run the following command:
+For cloud GPU development, there's a Docker setup in `runpod/`:
 
 ```bash
+# Build for linux/amd64
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
-docker build -f runpod/johnh_dev.Dockerfile -t jplhughes1/runpod-dev .
+docker build -f runpod/Dockerfile -t your-username/runpod-dev .
 
-# Build with buildx
-docker buildx create --name mybuilder --use
-docker buildx build --platform linux/amd64 -f runpod/johnh_dev.Dockerfile -t jplhughes1/runpod-dev . --push
-
+# Test locally
+docker run -it -e USE_ZSH=true your-username/runpod-dev /bin/zsh
 ```
 
-To test it
-
-```bash
-docker run -it -v $PWD/runpod/entrypoint.sh:/dotfiles/runpod/entrypoint.sh -e USE_ZSH=true jplhughes1/runpod-dev /bin/zsh
-```
-
-To push it to docker hub
-
-```bash
-docker push jplhughes1/runpod-dev
-```
+See `runpod/` directory for Dockerfile and entrypoint configuration.
