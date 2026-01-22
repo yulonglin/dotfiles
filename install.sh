@@ -5,13 +5,14 @@ USAGE=$(cat <<-END
     Install dotfile dependencies on mac or linux
 
     OPTIONS:
-        --tmux          install tmux
-        --zsh           install zsh
-        --extras        install extra dependencies
-        --ai-tools      install AI CLI tools (Claude Code, Gemini, Codex)
-        --cleanup       install automatic cleanup for ~/Downloads and ~/Screenshots
-        --experimental  install experimental features (ty type checker)
-        --minimal       disable defaults, install only specified components
+        --tmux            install tmux
+        --zsh             install zsh
+        --extras          install extra dependencies
+        --ai-tools        install AI CLI tools (Claude Code, Gemini, Codex)
+        --cleanup         install automatic cleanup for ~/Downloads and ~/Screenshots
+        --experimental    install experimental features (ty type checker)
+        --minimal         disable defaults, install only specified components
+        --force-reinstall reinstall tools even if already present
 
     DEFAULTS (applied unless --minimal is used):
         macOS:  --zsh --tmux --ai-tools --cleanup
@@ -35,6 +36,7 @@ ai_tools=false
 cleanup=false
 experimental=false
 force=false
+force_reinstall=false
 minimal=false
 while (( "$#" )); do
     case "$1" in
@@ -56,6 +58,8 @@ while (( "$#" )); do
             experimental=true && shift ;;
         --force)
             force=true && shift ;;
+        --force-reinstall)
+            force_reinstall=true && shift ;;
         --) # end argument parsing
             shift && break ;;
         -*|--*=) # unsupported flags
@@ -71,6 +75,56 @@ case "${operating_system}" in
                 echo "Error: Unsupported operating system ${operating_system}" && exit 1
 esac
 
+# Helper: Check if command exists, print "already installed" with version
+is_installed() {
+    local cmd="$1"
+    local version_flag="${2:---version}"
+    if [[ "$force_reinstall" = true ]]; then
+        return 1
+    fi
+    if command -v "$cmd" &>/dev/null; then
+        local version=$("$cmd" $version_flag 2>/dev/null | head -1 || echo "")
+        if [[ -n "$version" ]]; then
+            echo "  $cmd already installed ($version)"
+        else
+            echo "  $cmd already installed"
+        fi
+        return 0
+    fi
+    return 1
+}
+
+# Helper: Check if brew cask is installed
+is_brew_cask_installed() {
+    local cask="$1"
+    if [[ "$force_reinstall" = true ]]; then
+        return 1
+    fi
+    command -v brew &>/dev/null && brew list --cask "$cask" &>/dev/null
+}
+
+# Helper: Set ZSH as default shell if possible
+set_zsh_default_shell() {
+    [[ "$SHELL" == *"zsh"* ]] && return 0
+    local zsh_path=$(which zsh 2>/dev/null)
+    if [[ -x "$zsh_path" ]] && sudo -n true 2>/dev/null; then
+        echo "Setting ZSH as default shell..."
+        grep -qxF "$zsh_path" /etc/shells 2>/dev/null || echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
+        chsh -s "$zsh_path"
+        echo "  ✓ Default shell changed to ZSH"
+    fi
+}
+
+# Helper: Clone a ZSH plugin
+clone_zsh_plugin() {
+    local repo="$1"
+    local name="${2:-$(basename "$repo" .git)}"
+    git clone --quiet "$repo" "${ZSH_CUSTOM}/plugins/$name" 2>/dev/null || echo "Warning: $name failed"
+}
+
+# Script directory (portable, works without realpath)
+DOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Apply defaults unless --minimal was specified
 if [ "$minimal" = false ]; then
     echo "Applying defaults for $machine (use --minimal to disable)..."
@@ -84,7 +138,6 @@ fi
 
 # Installing on linux with apt
 if [ $machine == "Linux" ]; then
-    DOT_DIR=$(dirname $(realpath $0))
     apt update -y 2>/dev/null || echo "Skipping apt update (no permissions)"
     
     # Try installing ZSH, fall back to local install if it fails
@@ -95,22 +148,58 @@ if [ $machine == "Linux" ]; then
                 "$DOT_DIR/scripts/helpers/install_zsh_local.sh"
             }
         else
-            echo "ZSH already installed"
+            echo "  ZSH already installed"
         fi
+        set_zsh_default_shell
     fi
     
-    [ $tmux == true ] && apt install -y tmux 2>/dev/null || true
-    apt install -y less nano htop ncdu nvtop lsof rsync jq fzf 2>/dev/null || true
+    if [ $tmux == true ]; then
+        if ! is_installed tmux; then
+            echo "Installing tmux..."
+            apt install -y tmux 2>/dev/null || true
+        fi
+    fi
+    apt install -y less nano htop ncdu nvtop lsof rsync jq fzf fd-find ripgrep 2>/dev/null || true
+
+    # Install gitleaks for git hooks secret detection
+    if ! is_installed gitleaks; then
+        echo "Installing gitleaks..."
+        apt install -y gitleaks 2>/dev/null || {
+            # Fallback: download from GitHub releases
+            echo "  apt install failed, downloading from GitHub..."
+            GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "8.21.2")
+
+            # Detect architecture
+            ARCH=$(uname -m)
+            case "$ARCH" in
+                x86_64)  GITLEAKS_ARCH="x64" ;;
+                aarch64) GITLEAKS_ARCH="arm64" ;;
+                *)       echo "Warning: Unsupported architecture $ARCH for gitleaks"; GITLEAKS_ARCH="" ;;
+            esac
+
+            if [ -n "$GITLEAKS_ARCH" ]; then
+                mkdir -p "$HOME/.local/bin"
+                curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GITLEAKS_ARCH}.tar.gz" -o /tmp/gitleaks.tar.gz && \
+                tar -xzf /tmp/gitleaks.tar.gz -C /tmp && \
+                (mv /tmp/gitleaks /usr/local/bin/ 2>/dev/null || mv /tmp/gitleaks "$HOME/.local/bin/") && \
+                rm -f /tmp/gitleaks.tar.gz || echo "Warning: Could not install gitleaks"
+            fi
+        }
+    fi
 
     # Install atuin for unified shell history
-    echo "Installing Atuin..."
-    curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh 2>/dev/null || echo "Warning: Atuin installation failed"
+    if ! is_installed atuin; then
+        echo "Installing Atuin..."
+        curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh 2>/dev/null || echo "Warning: Atuin installation failed"
+    fi
 
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Install uv (Python package manager)
+    if ! is_installed uv; then
+        echo "Installing uv..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
     
     if [ $extras == true ]; then
-        apt install -y fd-find ripgrep 2>/dev/null || true
-
         # Install Homebrew for tools not in apt
         if ! command -v brew &> /dev/null; then
             yes | curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | /bin/bash
@@ -120,18 +209,28 @@ if [ $machine == "Linux" ]; then
         fi
 
         # Install Rust and cargo tools
-        if ! command -v cargo &> /dev/null; then
+        if ! is_installed cargo; then
+            echo "Installing Rust..."
             yes | curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             . "$HOME/.cargo/env"
         fi
         if command -v cargo &> /dev/null; then
             echo "Installing Rust CLI tools via cargo (fallback for no-sudo environments)..."
-            cargo install bat eza zoxide delta code2prompt --locked 2>/dev/null || true
+            local cargo_flags="--locked"
+            [[ "$force_reinstall" = true ]] && cargo_flags="--locked --force"
+            for tool in bat eza zoxide delta code2prompt; do
+                if ! is_installed "$tool"; then
+                    cargo install "$tool" $cargo_flags 2>/dev/null || echo "  Warning: $tool installation failed"
+                fi
+            done
         fi
 
         apt install -y npm 2>/dev/null || true
         if command -v npm &> /dev/null; then
-            npm i -g shell-ask 2>/dev/null || true
+            if ! is_installed ask; then
+                echo "Installing shell-ask..."
+                npm i -g shell-ask 2>/dev/null || true
+            fi
         fi
     fi
 
@@ -149,11 +248,14 @@ elif [ $machine == "Mac" ]; then
     fi
 
     # Install modern bash (macOS ships with bash 3.2 due to GPLv3 licensing)
-    echo "Installing modern bash..."
-    brew install --quiet bash 2>/dev/null || echo "Warning: bash installation failed"
     BREW_BASH="$(brew --prefix)/bin/bash"
+    if [[ -x "$BREW_BASH" ]] && [[ "$force_reinstall" != true ]]; then
+        echo "  bash already installed ($($BREW_BASH --version | head -1))"
+    else
+        echo "Installing modern bash..."
+        brew install --quiet bash 2>/dev/null || echo "Warning: bash installation failed"
+    fi
     if [[ -x "$BREW_BASH" ]]; then
-        echo "  ✓ Installed: $($BREW_BASH --version | head -1)"
         # Add to allowed shells if not already present
         if ! grep -qxF "$BREW_BASH" /etc/shells 2>/dev/null; then
             echo "  → To use as default shell, run:"
@@ -163,36 +265,59 @@ elif [ $machine == "Mac" ]; then
     fi
 
     echo "Installing core packages..."
-    brew install --quiet coreutils ncdu htop rsync btop jq fzf bat eza zoxide delta 2>/dev/null || echo "Warning: Some packages may have failed to install"
+    brew install --quiet coreutils ncdu htop rsync btop jq fzf bat eza zoxide delta gitleaks 2>/dev/null || echo "Warning: Some packages may have failed to install"
 
     # Install atuin for unified shell history
-    echo "Installing Atuin..."
-    brew install --quiet atuin 2>/dev/null || echo "Warning: Atuin installation failed"
+    if ! is_installed atuin; then
+        echo "Installing Atuin..."
+        brew install --quiet atuin 2>/dev/null || echo "Warning: Atuin installation failed"
+    fi
 
     # Install Finicky (browser router)
-    echo "Installing Finicky..."
-    brew install --quiet --cask finicky 2>/dev/null || echo "Warning: Finicky installation failed"
+    if ! is_brew_cask_installed finicky; then
+        echo "Installing Finicky..."
+        brew install --quiet --cask finicky 2>/dev/null || echo "Warning: Finicky installation failed"
+    else
+        echo "  Finicky already installed"
+    fi
 
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Install uv (Python package manager)
+    if ! is_installed uv; then
+        echo "Installing uv..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
 
-    DOT_DIR=$(dirname $(realpath $0))
     if [ $zsh == true ]; then
-        echo "Installing ZSH..."
-        brew install --quiet zsh 2>/dev/null || echo "Warning: ZSH installation failed"
+        if ! is_installed zsh; then
+            echo "Installing ZSH..."
+            brew install --quiet zsh 2>/dev/null || echo "Warning: ZSH installation failed"
+        fi
+        set_zsh_default_shell
     fi
     if [ $tmux == true ]; then
-        echo "Installing tmux..."  
-        brew install --quiet tmux 2>/dev/null || echo "Warning: tmux installation failed"
+        if ! is_installed tmux; then
+            echo "Installing tmux..."
+            brew install --quiet tmux 2>/dev/null || echo "Warning: tmux installation failed"
+        fi
     fi
 
     if [ $extras == true ]; then
         echo "Installing extras..."
         brew install --quiet fd ripgrep dust jless hyperfine lazygit 2>/dev/null || echo "Warning: Some extras failed to install"
 
-        echo "Installing Rust..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
-        . "$HOME/.cargo/env" 2>/dev/null || true
-        cargo install code2prompt --quiet 2>/dev/null || echo "Warning: code2prompt installation failed"
+        if ! is_installed cargo; then
+            echo "Installing Rust..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+            . "$HOME/.cargo/env" 2>/dev/null || true
+        fi
+        if command -v cargo &>/dev/null; then
+            if ! is_installed code2prompt; then
+                echo "Installing code2prompt..."
+                local cargo_flags="--quiet"
+                [[ "$force_reinstall" = true ]] && cargo_flags="--quiet --force"
+                cargo install code2prompt $cargo_flags 2>/dev/null || echo "Warning: code2prompt installation failed"
+            fi
+        fi
     fi
 
     # macOS settings
@@ -203,41 +328,30 @@ fi
 # Setting up oh my zsh and oh my zsh plugins
 ZSH=~/.oh-my-zsh
 ZSH_CUSTOM=$ZSH/custom
-if [ -d $ZSH ] && [ "$force" = "false" ]; then
-    echo "Skipping download of oh-my-zsh and related plugins, pass --force to force redownload"
+if [ -d "$ZSH" ] && [ "$force" = "false" ] && [ "$force_reinstall" = "false" ]; then
+    echo "Skipping oh-my-zsh (already installed, use --force-reinstall to reinstall)"
 else
     echo "Installing oh-my-zsh and plugins..."
-    rm -rf $ZSH
-    
+    rm -rf "$ZSH"
+
     echo "  → Installing oh-my-zsh..."
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
     echo "  → Installing powerlevel10k theme..."
     git clone --quiet https://github.com/romkatv/powerlevel10k.git \
-        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/themes/powerlevel10k 2>/dev/null || echo "Warning: powerlevel10k installation failed"
+        "${ZSH_CUSTOM}/themes/powerlevel10k" 2>/dev/null || echo "Warning: powerlevel10k failed"
 
     echo "  → Installing zsh plugins..."
-    git clone --quiet https://github.com/zsh-users/zsh-syntax-highlighting.git \
-        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting 2>/dev/null || echo "Warning: zsh-syntax-highlighting failed"
-
-    git clone --quiet https://github.com/zsh-users/zsh-autosuggestions \
-        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions 2>/dev/null || echo "Warning: zsh-autosuggestions failed"
-
-    git clone --quiet https://github.com/zsh-users/zsh-completions \
-        ${ZSH_CUSTOM:=~/.oh-my-zsh/custom}/plugins/zsh-completions 2>/dev/null || echo "Warning: zsh-completions failed"
-
-    git clone --quiet https://github.com/zsh-users/zsh-history-substring-search \
-        ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-history-substring-search 2>/dev/null || echo "Warning: zsh-history-substring-search failed"
-    
-    git clone --quiet https://github.com/jirutka/zsh-shift-select.git \
-        "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-shift-select" 2>/dev/null || echo "Warning: zsh-shift-select installation failed"
-
+    clone_zsh_plugin "https://github.com/zsh-users/zsh-syntax-highlighting.git"
+    clone_zsh_plugin "https://github.com/zsh-users/zsh-autosuggestions"
+    clone_zsh_plugin "https://github.com/zsh-users/zsh-completions"
+    clone_zsh_plugin "https://github.com/zsh-users/zsh-history-substring-search"
+    clone_zsh_plugin "https://github.com/jirutka/zsh-shift-select.git" "zsh-shift-select"
 
     echo "  → Installing tmux theme pack..."
     git clone --quiet https://github.com/jimeh/tmux-themepack.git ~/.tmux-themepack 2>/dev/null || echo "Warning: tmux-themepack failed"
 
     echo "✅ oh-my-zsh installation complete!"
-    echo "Run ./deploy.sh to configure your dotfiles"
 fi
 
 if [ $extras == true ]; then
@@ -252,14 +366,9 @@ if [ "$ai_tools" = true ]; then
     echo "--------- INSTALLING AI CLI TOOLS 🤖 -----------"
 
     # Claude Code - native binary installation (recommended method for both platforms)
-    echo "  → Installing Claude Code..."
-    if command -v claude &>/dev/null; then
-        CURRENT_VERSION=$(claude --version 2>/dev/null | grep -oP 'v?\K[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
-        echo "    Claude Code already installed (version: $CURRENT_VERSION)"
-        echo "    Auto-updates will handle future versions"
-    else
-        echo "    Installing Claude Code native binary..."
-        curl -fsSL https://claude.ai/install.sh | bash
+    if ! is_installed claude; then
+        echo "  → Installing Claude Code..."
+        curl -fsSL https://claude.ai/install.sh | bash || echo "Warning: Claude Code installation failed"
 
         # Check for Alpine Linux dependencies
         if [ "$machine" = "Linux" ] && command -v apk &>/dev/null; then
@@ -270,14 +379,6 @@ if [ "$ai_tools" = true ]; then
                 export USE_BUILTIN_RIPGREP=0
             fi
         fi
-    fi
-
-    # Verify Claude Code installation
-    if command -v claude &>/dev/null; then
-        echo "    ✓ Claude Code installed successfully"
-        claude --version 2>/dev/null || true
-    else
-        echo "    ✗ Claude Code installation verification failed"
     fi
 
     # Ensure npm is available for other CLI tools
@@ -298,18 +399,26 @@ if [ "$ai_tools" = true ]; then
 
     if [ "$machine" = "Mac" ] && command -v brew &>/dev/null; then
         # macOS: Use Homebrew for all CLI tools
-        echo "    → Installing Gemini CLI..."
-        brew install --quiet gemini-cli 2>/dev/null || echo "Warning: Gemini CLI installation failed"
+        if ! is_installed gemini; then
+            echo "    → Installing Gemini CLI..."
+            brew install --quiet gemini-cli 2>/dev/null || echo "Warning: Gemini CLI installation failed"
+        fi
 
-        echo "    → Installing Codex CLI..."
-        brew install --quiet codex 2>/dev/null || echo "Warning: Codex CLI installation failed"
+        if ! is_installed codex; then
+            echo "    → Installing Codex CLI..."
+            brew install --quiet codex 2>/dev/null || echo "Warning: Codex CLI installation failed"
+        fi
     elif command -v npm &>/dev/null; then
         # Linux: Use npm if available
-        echo "    → Installing Gemini CLI..."
-        npm install -g @google/gemini-cli &>/dev/null || echo "Warning: Gemini CLI installation failed"
+        if ! is_installed gemini; then
+            echo "    → Installing Gemini CLI..."
+            npm install -g @google/gemini-cli &>/dev/null || echo "Warning: Gemini CLI installation failed"
+        fi
 
-        echo "    → Installing Codex CLI..."
-        npm install -g @openai/codex &>/dev/null || echo "Warning: Codex CLI installation failed"
+        if ! is_installed codex; then
+            echo "    → Installing Codex CLI..."
+            npm install -g @openai/codex &>/dev/null || echo "Warning: Codex CLI installation failed"
+        fi
     else
         echo "Warning: Neither Homebrew (macOS) nor npm (Linux) available for additional CLI tools"
     fi
@@ -377,33 +486,16 @@ if [ "$experimental" = true ]; then
     echo ""
     echo "--------- INSTALLING EXPERIMENTAL FEATURES ⚗️  -----------"
 
-    # ty type checker
-    echo "  → Installing ty type checker..."
+    # ty type checker (installed globally via uv tool)
     echo "    WARNING: ty is in alpha/preview - not recommended for production"
-
-    if command -v ty &>/dev/null; then
-        TY_VERSION=$(ty --version 2>/dev/null || echo "unknown")
-        echo "    ty already installed (version: $TY_VERSION)"
-    else
-        # Install using pip (works cross-platform)
-        if command -v pip3 &>/dev/null; then
-            echo "    Installing ty via pip3..."
-            pip3 install ty --quiet 2>/dev/null || echo "    ✗ ty installation via pip3 failed"
-        elif command -v pip &>/dev/null; then
-            echo "    Installing ty via pip..."
-            pip install ty --quiet 2>/dev/null || echo "    ✗ ty installation via pip failed"
+    if ! is_installed ty; then
+        if command -v uv &>/dev/null; then
+            echo "  → Installing ty via uv..."
+            uv tool install ty 2>/dev/null || echo "    ✗ ty installation via uv failed"
         else
-            echo "    ✗ pip not found - cannot install ty CLI"
+            echo "    ✗ uv not found - cannot install ty CLI"
+            echo "    Note: You can also install ty per-project with 'uv add ty --dev'"
         fi
-    fi
-
-    # Verify ty installation
-    if command -v ty &>/dev/null; then
-        echo "    ✓ ty installed successfully"
-        ty --version 2>/dev/null || true
-    else
-        echo "    ✗ ty installation verification failed"
-        echo "    Note: You can still use the VSCode extension without the CLI"
     fi
 
     echo ""
