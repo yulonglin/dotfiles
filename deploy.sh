@@ -98,6 +98,16 @@ case "${operating_system}" in
                 echo "Error: Unsupported operating system ${operating_system}" && exit 1
 esac
 
+# Install zsh if not present
+if ! command -v zsh &>/dev/null; then
+    echo "ZSH not found, installing..."
+    if [[ "$machine" == "Mac" ]]; then
+        brew install zsh
+    else
+        apt install -y zsh 2>/dev/null || echo "Warning: Could not install zsh"
+    fi
+fi
+
 # Apply defaults unless --minimal was specified
 if [ "$MINIMAL" = "false" ]; then
     echo "Applying defaults for $machine: --claude --codex --vim --editor --experimental --ghostty --matplotlib --git-hooks --secrets --cleanup (use --minimal to disable)"
@@ -313,8 +323,12 @@ if [[ $VIM == "true" ]]; then
     eval "echo \"source $DOT_DIR/config/vimrc\" $OP \"\$HOME/.vimrc\""
 fi
 
-# Shell configuration setup
-CURRENT_SHELL="${SHELL##*/}"
+# Shell configuration setup - default to zsh if available
+if command -v zsh &>/dev/null; then
+    CURRENT_SHELL="zsh"
+else
+    CURRENT_SHELL="${SHELL##*/}"
+fi
 
 # For zsh, use the full zshrc.sh which includes oh-my-zsh setup
 if [[ "$CURRENT_SHELL" == "zsh" ]]; then

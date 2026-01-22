@@ -7,25 +7,26 @@ USAGE=$(cat <<-END
     OPTIONS:
         --tmux            install tmux
         --zsh             install zsh
-        --extras          install extra dependencies
+        --extras          install extra CLI tools (dust, jless, hyperfine, lazygit, code2prompt)
         --ai-tools        install AI CLI tools (Claude Code, Gemini, Codex)
         --cleanup         install automatic cleanup for ~/Downloads and ~/Screenshots
         --experimental    install experimental features (ty type checker)
         --minimal         disable defaults, install only specified components
         --force-reinstall reinstall tools even if already present
+        --create-user     create non-root user (name from config/user.conf, default: yulong)
 
     DEFAULTS (applied unless --minimal is used):
         macOS:  --zsh --tmux --ai-tools --cleanup
-        Linux:  --zsh --tmux --ai-tools
+                + core tools via brew (bat, eza, zoxide, delta, fzf, jq)
+        Linux:  --zsh --tmux --ai-tools --create-user
+                + mise (universal tool manager)
+                + modern CLI tools via mise (bat, eza, fd, ripgrep, delta, zoxide)
 
     EXAMPLES:
         ./install.sh                    # Install defaults
         ./install.sh --extras           # Install defaults + extras
         ./install.sh --minimal --tmux   # Install ONLY tmux (no defaults)
         ./install.sh --experimental     # Install defaults + ty type checker
-
-    If OPTIONS are passed they will be installed
-    with apt if on linux or brew if on OSX
 END
 )
 
@@ -38,6 +39,7 @@ experimental=false
 force=false
 force_reinstall=false
 minimal=false
+create_user=false
 while (( "$#" )); do
     case "$1" in
         -h|--help)
@@ -60,6 +62,8 @@ while (( "$#" )); do
             force=true && shift ;;
         --force-reinstall)
             force_reinstall=true && shift ;;
+        --create-user)
+            create_user=true && shift ;;
         --) # end argument parsing
             shift && break ;;
         -*|--*=) # unsupported flags
@@ -122,6 +126,149 @@ clone_zsh_plugin() {
     git clone --quiet "$repo" "${ZSH_CUSTOM}/plugins/$name" 2>/dev/null || echo "Warning: $name failed"
 }
 
+# Helper: Create non-root development user
+create_dev_user() {
+    # Requires root/sudo
+    if [[ $EUID -ne 0 ]]; then
+        echo "Skipping --create-user: not running as root"
+        return 0
+    fi
+
+    # Load username from config, default to "yulong"
+    local config_file="$(dirname "$0")/config/user.conf"
+    local username="yulong"
+    if [[ -f "$config_file" ]]; then
+        source "$config_file"
+        username="${DEV_USERNAME:-yulong}"
+    fi
+
+    # Idempotent: skip if user exists
+    if id "$username" &>/dev/null; then
+        echo "User $username already exists"
+        return 0
+    fi
+
+    echo "Creating user: $username"
+    local shell=$(command -v zsh || command -v bash)
+    useradd -m -s "$shell" "$username"
+
+    # Add to sudo group (wheel on some distros, sudo on Debian/Ubuntu)
+    if getent group sudo &>/dev/null; then
+        usermod -aG sudo "$username"
+    elif getent group wheel &>/dev/null; then
+        usermod -aG wheel "$username"
+    fi
+
+    # Enable passwordless sudo
+    echo "$username ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$username"
+
+    # Copy SSH keys if present
+    if [[ -d /root/.ssh ]]; then
+        cp -r /root/.ssh "/home/$username/"
+        chown -R "$username:$username" "/home/$username/.ssh"
+    fi
+
+    echo "User $username created. Switch with: su - $username"
+}
+
+# Helper: Install mise (universal version manager)
+install_mise() {
+    if is_installed mise; then
+        return 0
+    fi
+    echo "Installing mise..."
+    mkdir -p "$HOME/.local/bin"
+    curl https://mise.run | sh
+    export PATH="$HOME/.local/bin:$PATH"
+    if command -v mise &>/dev/null; then
+        eval "$(mise activate bash)"
+        return 0
+    fi
+    echo "Warning: mise installation failed"
+    return 1
+}
+
+# Helper: Install modern CLI tools via mise with fallbacks
+install_cli_tools() {
+    # Tools to install: bat, eza, fd, ripgrep, delta, zoxide
+
+    # Try mise first (fastest - uses ubi backend for precompiled binaries)
+    if command -v mise &>/dev/null; then
+        echo "Installing CLI tools via mise..."
+        # Use ubi backend for precompiled binaries (fastest)
+        # zoxide needs cargo backend as ubi doesn't have it
+        mise use -g \
+            ubi:sharkdp/bat \
+            ubi:eza-community/eza \
+            ubi:sharkdp/fd \
+            ubi:BurntSushi/ripgrep \
+            ubi:dandavison/delta \
+            cargo:zoxide 2>/dev/null || {
+            echo "  Warning: Some mise installations failed, trying individual installs..."
+            mise use -g ubi:sharkdp/bat 2>/dev/null || true
+            mise use -g ubi:eza-community/eza 2>/dev/null || true
+            mise use -g ubi:sharkdp/fd 2>/dev/null || true
+            mise use -g ubi:BurntSushi/ripgrep 2>/dev/null || true
+            mise use -g ubi:dandavison/delta 2>/dev/null || true
+            mise use -g cargo:zoxide 2>/dev/null || true
+        }
+        return 0
+    fi
+
+    # Fallback: cargo-binstall (precompiled binaries, no compile time)
+    if command -v cargo &>/dev/null; then
+        if ! command -v cargo-binstall &>/dev/null; then
+            echo "Installing cargo-binstall..."
+            cargo install cargo-binstall --locked 2>/dev/null || {
+                echo "Warning: cargo-binstall installation failed, using cargo install"
+            }
+        fi
+
+        if command -v cargo-binstall &>/dev/null; then
+            echo "Installing CLI tools via cargo-binstall..."
+            cargo binstall -y bat eza fd-find ripgrep git-delta zoxide 2>/dev/null || true
+            return 0
+        fi
+
+        # Final fallback: cargo install (compiles from source - slow)
+        echo "Installing CLI tools via cargo (this may take a while)..."
+        local cargo_flags="--locked"
+        [[ "$force_reinstall" = true ]] && cargo_flags="--locked --force"
+        for tool in bat eza zoxide git-delta; do
+            if ! is_installed "$tool"; then
+                cargo install "$tool" $cargo_flags 2>/dev/null || echo "  Warning: $tool installation failed"
+            fi
+        done
+        return 0
+    fi
+
+    # Minimal fallback: apt for what's available
+    echo "Installing CLI tools via apt (limited selection)..."
+    apt install -y fd-find ripgrep 2>/dev/null || true
+}
+
+# Helper: Install extras CLI tools via mise
+install_extras_cli_tools() {
+    if command -v mise &>/dev/null; then
+        echo "Installing extras CLI tools via mise..."
+        mise use -g \
+            ubi:bootandy/dust \
+            ubi:PaulJuliusMartinez/jless \
+            ubi:sharkdp/hyperfine \
+            ubi:jesseduffield/lazygit \
+            cargo:code2prompt 2>/dev/null || {
+            echo "  Warning: Some extras installations failed, trying individual installs..."
+            mise use -g ubi:bootandy/dust 2>/dev/null || true
+            mise use -g ubi:PaulJuliusMartinez/jless 2>/dev/null || true
+            mise use -g ubi:sharkdp/hyperfine 2>/dev/null || true
+            mise use -g ubi:jesseduffield/lazygit 2>/dev/null || true
+            mise use -g cargo:code2prompt 2>/dev/null || true
+        }
+        return 0
+    fi
+    return 1
+}
+
 # Script directory (portable, works without realpath)
 DOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -133,6 +280,8 @@ if [ "$minimal" = false ]; then
     ai_tools=true
     if [ "$machine" = "Mac" ]; then
         cleanup=true
+    else
+        create_user=true
     fi
 fi
 
@@ -159,7 +308,7 @@ if [ $machine == "Linux" ]; then
             apt install -y tmux 2>/dev/null || true
         fi
     fi
-    apt install -y less nano htop ncdu nvtop lsof rsync jq fzf fd-find ripgrep 2>/dev/null || true
+    apt install -y less nano htop ncdu nvtop lsof rsync jq fzf 2>/dev/null || true
 
     # Install gitleaks for git hooks secret detection
     if ! is_installed gitleaks; then
@@ -198,33 +347,22 @@ if [ $machine == "Linux" ]; then
         echo "Installing uv..."
         curl -LsSf https://astral.sh/uv/install.sh | sh
     fi
-    
+
+    # Install mise (universal version manager - primary tool installer)
+    install_mise
+
+    # Install modern CLI tools (bat, eza, fd, ripgrep, delta, zoxide)
+    echo "Installing modern CLI tools..."
+    install_cli_tools
+
     if [ $extras == true ]; then
-        # Install Homebrew for tools not in apt
-        if ! command -v brew &> /dev/null; then
-            yes | curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | /bin/bash
-        fi
-        if command -v brew &> /dev/null; then
-            brew install dust jless hyperfine lazygit 2>/dev/null || true
+        echo "Installing extras CLI tools..."
+        # Install extras via mise (dust, jless, hyperfine, lazygit, code2prompt)
+        if ! install_extras_cli_tools; then
+            echo "  Warning: mise not available, some extras may not be installed"
         fi
 
-        # Install Rust and cargo tools
-        if ! is_installed cargo; then
-            echo "Installing Rust..."
-            yes | curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            . "$HOME/.cargo/env"
-        fi
-        if command -v cargo &> /dev/null; then
-            echo "Installing Rust CLI tools via cargo (fallback for no-sudo environments)..."
-            local cargo_flags="--locked"
-            [[ "$force_reinstall" = true ]] && cargo_flags="--locked --force"
-            for tool in bat eza zoxide delta code2prompt; do
-                if ! is_installed "$tool"; then
-                    cargo install "$tool" $cargo_flags 2>/dev/null || echo "  Warning: $tool installation failed"
-                fi
-            done
-        fi
-
+        # Install shell-ask via npm
         apt install -y npm 2>/dev/null || true
         if command -v npm &> /dev/null; then
             if ! is_installed ask; then
@@ -501,4 +639,9 @@ if [ "$experimental" = true ]; then
     echo ""
     echo "✅ Experimental features installation complete!"
     echo "   Run './deploy.sh --experimental' to deploy ty VSCode extension"
+fi
+
+# Create non-root development user if requested
+if [[ "$create_user" = true ]]; then
+    create_dev_user
 fi

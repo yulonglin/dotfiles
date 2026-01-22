@@ -44,6 +44,10 @@ alias t='tail'
 # Note: NOT aliasing find="fd" - they have different syntax
 # Use fd directly, or findfile/findf aliases from modern_tools.sh
 alias ff='fd --type f'
+# fd-find package on Debian/Ubuntu installs as 'fdfind'
+if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
+    alias fd='fdfind'
+fi
 alias which='type -a'
 
 # storage
