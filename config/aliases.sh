@@ -32,7 +32,10 @@ _activate_venv() {
 
 claude() {
     # Use tmpfs for Claude Code temp files (faster, avoids disk I/O)
-    export CLAUDE_CODE_TMPDIR="/run/user/$(id -u)"
+    # Only on Linux where /run/user/<uid> exists (systemd tmpfs)
+    if [[ "$OSTYPE" == linux* ]] && [[ -d "/run/user/$(id -u)" ]]; then
+        export CLAUDE_CODE_TMPDIR="/run/user/$(id -u)"
+    fi
     _activate_venv
     command claude "$@"
 }
