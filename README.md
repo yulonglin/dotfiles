@@ -98,7 +98,7 @@ This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/c
 ./deploy.sh --ghostty  # Part of defaults
 ```
 
-**Key settings in `config/ghostty`:**
+**Key settings in `config/ghostty.conf`:**
 - `Cmd+C` triggers shell-based copy (integrates with tmux)
 - `Shift+Enter` for multiline input
 - Sensible font and color defaults

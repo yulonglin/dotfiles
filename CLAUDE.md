@@ -108,7 +108,7 @@ custom_bins/              # Custom utilities (added to PATH)
 - Backs up existing file with timestamp if not a symlink
 
 **Ghostty Deployment**:
-- Symlinks `config/ghostty` to platform-specific config path:
+- Symlinks `config/ghostty.conf` to platform-specific config path:
   - macOS: `~/Library/Application Support/com.mitchellh.ghostty/config`
   - Linux: `~/.config/ghostty/config`
 - Backs up existing file with timestamp if not a symlink

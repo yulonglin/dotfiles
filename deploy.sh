@@ -256,9 +256,9 @@ if [[ "$DEPLOY_GHOSTTY" == "true" ]]; then
         GHOSTTY_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ghostty"
     fi
 
-    if [[ -f "$DOT_DIR/config/ghostty" ]]; then
+    if [[ -f "$DOT_DIR/config/ghostty.conf" ]]; then
         mkdir -p "$GHOSTTY_DIR"
-        safe_symlink "$DOT_DIR/config/ghostty" "$GHOSTTY_DIR/config"
+        safe_symlink "$DOT_DIR/config/ghostty.conf" "$GHOSTTY_DIR/config"
         log_info "  Key bindings: Shift+Enter (newline), Cmd+C (copy)"
     else
         log_warning "Ghostty config not found"
