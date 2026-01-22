@@ -979,21 +979,80 @@ if [[ "$CLAUDE" == "true" ]]; then
     if [[ ! -d "$DOT_DIR/claude" ]]; then
         echo "Warning: Claude Code directory not found at $DOT_DIR/claude"
     else
-        # Remove existing ~/.claude if it's a symlink
+        # Runtime files to preserve from existing installation
+        runtime_files=(
+            ".credentials.json"
+            "history.jsonl"
+            "cache"
+            "projects"
+            "plans"
+            "todos"
+            "session-env"
+            "shell-snapshots"
+            "statsig"
+            ".cl"
+            "debug"
+            "mcp_servers.json"
+        )
+
+        # Handle existing ~/.claude directory
         if [[ -L "$HOME/.claude" ]]; then
+            # Already a symlink - just update it (no backup needed)
             rm "$HOME/.claude"
-            echo "  Removed existing symlink at ~/.claude"
-        elif [[ -e "$HOME/.claude" ]]; then
-            echo "  Warning: ~/.claude exists and is not a symlink"
-            echo "  Please backup and remove ~/.claude manually, then run deploy.sh --claude again"
+            echo "  ✓ Refreshed existing symlink (no backup needed)"
+        elif [[ -f "$HOME/.claude" ]]; then
+            # It's a file - backup and replace
+            backup_path="$HOME/.claude.backup.$(date +%Y%m%d_%H%M%S)"
+            mv "$HOME/.claude" "$backup_path"
+            echo "  Backed up existing file to $backup_path"
+        elif [[ -d "$HOME/.claude" ]]; then
+            # Directory exists - smart merge (first-time deployment only)
+            echo ""
+            echo "  ⚠️  SMART MERGE: Existing ~/.claude directory detected (first-time setup)"
+            echo "  📦 Your data will be preserved:"
+            echo "     • Credentials, history, and runtime files → restored after merge"
+            echo "     • One-time backup created (future deploys won't create more backups)"
+            echo ""
+
+            backup_path="$HOME/.claude.backup.$(date +%Y%m%d_%H%M%S)"
+            echo "  🔄 Creating backup: $backup_path"
+            mv "$HOME/.claude" "$backup_path"
+
+            # Create symlink first
+            ln -sf "$DOT_DIR/claude" "$HOME/.claude"
+
+            # Restore runtime files from backup
+            echo "  🔧 Restoring runtime files..."
+            restored_count=0
+            for file in "${runtime_files[@]}"; do
+                if [[ -e "$backup_path/$file" ]]; then
+                    # Use cp -r to handle both files and directories
+                    cp -r "$backup_path/$file" "$HOME/.claude/" 2>/dev/null && ((restored_count++))
+                fi
+            done
+
+            if [[ $restored_count -gt 0 ]]; then
+                echo ""
+                echo "  ✅ Successfully restored $restored_count runtime file(s)"
+                echo "  💾 Backup preserved at: $backup_path"
+                echo "  🎯 Dotfiles config now active with your data intact!"
+                echo ""
+                echo "  💡 Once verified, you can remove the backup:"
+                echo "     rm -rf $backup_path"
+            else
+                echo "  ℹ️  No runtime files found to restore (fresh installation)"
+            fi
         fi
 
-        # Create symlink
+        # Create symlink if it doesn't exist
         if [[ ! -e "$HOME/.claude" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
             echo "✓ Symlinked $DOT_DIR/claude to ~/.claude"
-            echo "  Deployed: CLAUDE.md, settings.json, agents/, hooks/"
         fi
+
+        echo "✓ Claude Code configuration deployed"
+        echo "  Config: CLAUDE.md, settings.json"
+        echo "  Custom: agents/, hooks/, skills/, commands/, templates/"
 
         # # Configure Claude Code settings (requires claude CLI)
         # if command -v claude &> /dev/null; then

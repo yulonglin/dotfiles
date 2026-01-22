@@ -113,6 +113,19 @@ custom_bins/              # Custom utilities (added to PATH)
 - Backs up existing file with timestamp if not a symlink
 - Configures Cmd+C for shell-based copy and Shift+Enter for multiline input
 
+**Claude Code Deployment** (Smart Merge):
+- Symlinks `claude/` to `~/.claude`
+- If `~/.claude` exists from Claude Code installation:
+  - Backs up to `~/.claude.backup.<timestamp>`
+  - Creates symlink from `dotfiles/claude/` → `~/.claude`
+  - Restores runtime files from backup (preserves your data):
+    - `.credentials.json` - authentication
+    - `history.jsonl` - conversation history
+    - `cache/`, `projects/`, `plans/`, `todos/` - runtime data
+    - `mcp_servers.json` - MCP server configuration
+- Works seamlessly whether you run `install.sh` or `deploy.sh` first
+- Custom config deployed: `CLAUDE.md`, `settings.json`, `agents/`, `hooks/`, `skills/`, `commands/`, `templates/`
+
 ## Development Patterns
 
 ### Adding New Features

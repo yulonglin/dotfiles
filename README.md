@@ -36,18 +36,64 @@ Install dependencies (e.g. oh-my-zsh and related plugins). The installer auto-de
 
 Installation on macOS requires Homebrew - install from [brew.sh](https://brew.sh/) first if needed.
 
-### Step 2
-Deploy (e.g. source aliases for .zshrc, apply oh-my-zsh settings etc..)
+### Step 2: Deploy configurations
+
+Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, etc.)
+
 ```bash
-# Remote linux machine
-./deploy.sh  
-# (optional) Deploy with extra aliases (useful for remote machines where you want specific aliases)
+# Deploy with defaults (recommended)
+./deploy.sh
+
+# Deploy with extra aliases (useful for remote machines)
 ./deploy.sh --aliases=speechmatics
-# (optional) Include simple vimrc 
-./deploy.sh --vim
+
+# Deploy only specific components (--minimal disables defaults)
+./deploy.sh --minimal --vim --claude
 ```
 
-### Step 3
+**Defaults:**
+- Git config, VSCode/Cursor settings, vim, Claude Code, Codex CLI, Ghostty, matplotlib styles
+- Experimental features (ty type checker)
+- Cleanup automation (macOS only)
+
+**Flags are additive** - e.g., `./deploy.sh --aliases=custom` deploys defaults + custom aliases. Use `--minimal` to disable defaults.
+
+### Claude Code Deployment (AI Assistant)
+
+The `--claude` flag deploys custom Claude Code configuration:
+
+```bash
+./deploy.sh --claude
+```
+
+**What gets deployed:**
+- `CLAUDE.md` - Global AI instructions for all projects
+- `settings.json` - Claude Code settings
+- `agents/` - Specialized agent definitions
+- `hooks/` - Auto-logging, notifications
+- `skills/` - Custom slash commands (/commit, /run-experiment, etc.)
+- `commands/` & `templates/` - Custom commands and templates
+
+**Smart Merge (automatic):**
+If `~/.claude` already exists from Claude Code installation, the deployment:
+1. 🔄 Backs up existing directory to `~/.claude.backup.<timestamp>`
+2. 🔗 Creates symlink from `dotfiles/claude/` → `~/.claude`
+3. ✅ Restores your runtime files (credentials, history, cache, projects, etc.)
+
+**Your data is preserved** - credentials, conversation history, and all runtime files are automatically restored after the merge.
+
+**Any order works:**
+```bash
+# Option 1: Install Claude first, then deploy config
+./install.sh --ai-tools  # Creates ~/.claude with runtime files
+./deploy.sh --claude      # Smart merge happens here
+
+# Option 2: Deploy config first, then install Claude
+./deploy.sh --claude      # Creates symlink
+./install.sh --ai-tools  # Claude writes runtime files into symlinked dir
+```
+
+### Step 3: Configure Powerlevel10k theme
 This set of dotfiles uses the powerlevel10k theme for zsh, this makes your terminal look better and adds lots of useful features, e.g. env indicators, git status etc...
 
 Note that as the provided powerlevel10k config uses special icons it is *highly recommended* you install a custom font that supports these icons. A guide to do that is [here](https://github.com/romkatv/powerlevel10k#meslo-nerd-font-patched-for-powerlevel10k). Alternatively you can set up powerlevel10k to not use these icons (but it won't look as good!)
