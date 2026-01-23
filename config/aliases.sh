@@ -193,7 +193,11 @@ alias lu='ls -ltur'       # sort by and show access time, most recent last
 alias lt='ls -ltr'        # sort by date, most recent last
 alias lm='ls -al |more'   # pipe through 'more'
 alias lr='ls -lR'         # recursive ls
-alias tree='tree -Csu'    # nice alternative to 'recursive ls'
+# tree using eza (better git integration, colors)
+alias tree='eza --tree --icons --git-ignore'
+alias t1='eza --tree --level=1'
+alias t2='eza --tree --level=2'
+alias t3='eza --tree --level=3'
 
 #-------------------------------------------------------------
 # chmod

@@ -68,6 +68,7 @@ PACKAGES_CORE=(
     "ncdu"
     "rsync"
     "shellcheck"  # Shell script linter
+    "tldr"        # Simplified man pages
 )
 
 # macOS-specific packages (via Homebrew)
