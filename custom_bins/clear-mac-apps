@@ -11,6 +11,26 @@ set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 CONFIG_FILE="${SCRIPT_DIR}/../config/clear_mac_apps.conf"
+DRY_RUN=false
+
+# Parse flags
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run|-n)
+            DRY_RUN=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: clear-mac-apps [--dry-run|-n]"
+            echo "  --dry-run, -n  Show what would happen without making changes"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
 
 # Parse apps from a specific section in config
 # Usage: get_apps_in_section "no-touch"
@@ -128,6 +148,35 @@ main() {
             apps_to_quit+=("$app")
         fi
     done
+
+    # Dry-run mode: just show what would happen
+    if $DRY_RUN; then
+        echo "=== DRY RUN ==="
+        echo ""
+        echo "Would QUIT (${#apps_to_quit}):"
+        for app in "${apps_to_quit[@]}"; do
+            echo "  - $app"
+        done
+        echo ""
+        echo "Would CLOSE WINDOWS (${#apps_close_windows}):"
+        for app in "${apps_close_windows[@]}"; do
+            echo "  - $app"
+        done
+        echo ""
+        echo "Would SLOW-CLOSE (${#apps_slow_close}):"
+        for app in "${apps_slow_close[@]}"; do
+            echo "  - $app"
+        done
+        echo ""
+        echo "Would SKIP (no-touch):"
+        for app in "${running_apps[@]}"; do
+            local app_lower="${(L)app}"
+            if (( ${+no_touch_set[$app_lower]} )); then
+                echo "  - $app"
+            fi
+        done
+        return 0
+    fi
 
     # Quit apps in parallel (don't need focus)
     if (( ${#apps_to_quit} > 0 )); then
