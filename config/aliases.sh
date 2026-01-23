@@ -250,6 +250,16 @@ qrun() {
 # Health check for all AI CLI tools
 alias ai-check='echo "Checking AI CLI tools..." && claude --version 2>/dev/null && gemini --version 2>/dev/null && codex --version 2>/dev/null'
 
+# Clear Claude Code processes
+alias ccs='clear-claude-code --status'        # short: show status
+alias cc-status='clear-claude-code --status'  # long: show status
+alias cci='clear-claude-code'                 # short: kill idle only (safe)
+alias cc-idle='clear-claude-code'             # long: kill idle only (safe)
+alias ccf='clear-claude-code --force'         # short: kill all except current (confirms)
+alias cc-force='clear-claude-code --force'    # long: kill all except current (confirms)
+alias cca='clear-claude-code --all'           # short: kill everything (confirms)
+alias cc-all='clear-claude-code --all'        # long: kill everything (confirms)
+
 # Update all AI CLI tools (platform-specific)
 if [[ "$(uname -s)" == "Darwin" ]] && command -v brew &>/dev/null; then
     # macOS: Use Homebrew

@@ -1,0 +1,240 @@
+#!/bin/zsh
+# Clear Claude Code - Kill Claude Code CLI processes
+# Preserves the current session (if running from within Claude Code)
+#
+# Usage:
+#   clear-claude-code              # Kill all claude processes except current
+#   clear-claude-code --all        # Kill ALL claude processes (including current)
+#   clear-claude-code --dry-run    # Show what would be killed without killing
+
+set -euo pipefail
+
+# Parse arguments
+DRY_RUN=false
+KILL_ALL=false
+FORCE=false
+STATUS_ONLY=false
+SKIP_CONFIRM=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run|-n)
+            DRY_RUN=true
+            shift
+            ;;
+        --all|-a)
+            KILL_ALL=true
+            shift
+            ;;
+        --force|-f)
+            FORCE=true
+            shift
+            ;;
+        --status|-s)
+            STATUS_ONLY=true
+            shift
+            ;;
+        --yes|-y)
+            SKIP_CONFIRM=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: clear-claude-code [OPTIONS]"
+            echo ""
+            echo "Kill Claude Code CLI processes."
+            echo ""
+            echo "By default, only kills IDLE processes (preserves active sessions)."
+            echo ""
+            echo "Options:"
+            echo "  --status, -s     Show status of all Claude Code processes (no kill)"
+            echo "  --dry-run, -n    Show what would be killed without killing"
+            echo "  --force, -f      Also kill ACTIVE processes (requires confirmation)"
+            echo "  --all, -a        Kill ALL processes including current (requires confirmation)"
+            echo "  --yes, -y        Skip confirmation prompt (for scripts/automation)"
+            echo "  --help, -h       Show this help message"
+            echo ""
+            echo "Status indicators:"
+            echo "  *ACTIVE*   Process in foreground terminal (likely in use)"
+            echo "  idle       Background process or no terminal"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# --all implies --force
+[[ "$KILL_ALL" == "true" ]] && FORCE=true
+
+# Check if a process appears to be actively in use
+# Returns: "ACTIVE" if in foreground terminal, "IDLE" otherwise
+get_process_status() {
+    local pid="$1"
+    local stat=$(ps -p "$pid" -o stat= 2>/dev/null || echo "")
+    # S+ means stopped in foreground, R+ means running in foreground
+    if [[ "$stat" == *"+"* ]]; then
+        echo "ACTIVE"
+    else
+        echo "IDLE"
+    fi
+}
+
+# Show detailed status of all Claude Code processes
+show_status() {
+    echo "Claude Code Processes:"
+    echo "─────────────────────────────────────────────────────────────────────────"
+    printf "%-8s %-8s %-10s %-6s %-6s %s\n" "PID" "STATUS" "UPTIME" "CPU%" "MEM%" "COMMAND"
+    echo "─────────────────────────────────────────────────────────────────────────"
+
+    local count=0
+    local active_count=0
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local pid=$(echo "$line" | awk '{print $2}')
+        local cpu=$(echo "$line" | awk '{print $3}')
+        local mem=$(echo "$line" | awk '{print $4}')
+        local etime=$(ps -p "$pid" -o etime= 2>/dev/null | tr -d ' ' || echo "?")
+        local cmd=$(echo "$line" | awk '{for(i=11;i<=NF;i++) printf $i" "; print ""}' | cut -c1-40)
+        local proc_status=$(get_process_status "$pid")
+
+        [[ "$proc_status" == "ACTIVE" ]] && ((active_count++)) || true
+        ((count++)) || true
+
+        if [[ "$proc_status" == "ACTIVE" ]]; then
+            printf "%-8s %-8s %-10s %-6s %-6s %s\n" "$pid" "*ACTIVE*" "$etime" "$cpu" "$mem" "$cmd"
+        else
+            printf "%-8s %-8s %-10s %-6s %-6s %s\n" "$pid" "idle" "$etime" "$cpu" "$mem" "$cmd"
+        fi
+    done < <(ps aux | grep -E "^[^ ]+[[:space:]]+[0-9]+.*claude" | grep -v "Claude.app" | grep -v "clear-claude-code" | grep -v grep)
+
+    echo "─────────────────────────────────────────────────────────────────────────"
+    echo "Total: $count process(es), $active_count active"
+
+    if [[ $active_count -gt 0 ]]; then
+        echo ""
+        echo "⚠️  Warning: $active_count process(es) appear to be in active use."
+        echo "   Use --dry-run to preview before killing."
+    fi
+}
+
+# Handle --status mode
+if [[ "$STATUS_ONLY" == "true" ]]; then
+    show_status
+    exit 0
+fi
+
+# Find current session's PID (the claude process running in current terminal)
+# This is the parent claude process if we're being called from within Claude Code
+CURRENT_PID=""
+if [[ -n "${CLAUDE_CODE_PID:-}" ]]; then
+    CURRENT_PID="$CLAUDE_CODE_PID"
+else
+    # Try to find the claude process in the current terminal
+    CURRENT_TTY=$(tty 2>/dev/null | sed 's|/dev/||' || echo "")
+    if [[ -n "$CURRENT_TTY" ]]; then
+        CURRENT_PID=$(ps -t "$CURRENT_TTY" -o pid,comm 2>/dev/null | awk '/claude/ {print $1; exit}' || echo "")
+    fi
+fi
+
+# Get all claude CLI processes (exclude Claude.app and this script)
+get_claude_pids() {
+    ps aux | grep -E "^[^ ]+[[:space:]]+[0-9]+.*claude" \
+        | grep -v "Claude.app" \
+        | grep -v "clear-claude-code" \
+        | grep -v grep \
+        | awk '{print $2}'
+}
+
+# Count and list processes
+PIDS=($(get_claude_pids))
+TOTAL=${#PIDS[@]}
+
+if [[ $TOTAL -eq 0 ]]; then
+    echo "No Claude Code processes found."
+    exit 0
+fi
+
+# Filter processes based on flags
+PIDS_TO_KILL=()
+SKIPPED_CURRENT=false
+SKIPPED_ACTIVE=0
+
+for pid in "${PIDS[@]}"; do
+    # Skip current session unless --all
+    if [[ "$KILL_ALL" == "false" && -n "$CURRENT_PID" && "$pid" == "$CURRENT_PID" ]]; then
+        SKIPPED_CURRENT=true
+        continue
+    fi
+
+    # Skip active processes unless --force
+    if [[ "$FORCE" == "false" ]]; then
+        local proc_status=$(get_process_status "$pid")
+        if [[ "$proc_status" == "ACTIVE" ]]; then
+            ((SKIPPED_ACTIVE++)) || true
+            continue
+        fi
+    fi
+
+    PIDS_TO_KILL+=("$pid")
+done
+
+KILL_COUNT=${#PIDS_TO_KILL[@]}
+
+if [[ $KILL_COUNT -eq 0 ]]; then
+    local msg="No Claude Code processes to kill"
+    [[ "$SKIPPED_CURRENT" == "true" ]] && msg="$msg (current session preserved)"
+    [[ $SKIPPED_ACTIVE -gt 0 ]] && msg="$msg ($SKIPPED_ACTIVE active preserved, use --force to kill)"
+    echo "$msg"
+    exit 0
+fi
+
+# Show what we're doing
+echo "Found $TOTAL Claude Code process(es)"
+[[ "$SKIPPED_CURRENT" == "true" ]] && echo "  Preserving current session (PID $CURRENT_PID)"
+[[ $SKIPPED_ACTIVE -gt 0 ]] && echo "  Preserving $SKIPPED_ACTIVE active process(es)"
+
+# Determine what we're killing for the message
+if [[ "$KILL_ALL" == "true" ]]; then
+    echo "  Will kill $KILL_COUNT process(es) including current session..."
+elif [[ "$FORCE" == "true" ]]; then
+    echo "  Will kill $KILL_COUNT process(es) including active..."
+else
+    echo "  Killing $KILL_COUNT idle process(es)..."
+fi
+
+# Require confirmation for --force or --all (unless --yes or --dry-run)
+if [[ "$DRY_RUN" == "false" && "$SKIP_CONFIRM" == "false" && ("$FORCE" == "true" || "$KILL_ALL" == "true") ]]; then
+    echo ""
+    if [[ "$KILL_ALL" == "true" ]]; then
+        echo "⚠️  This will kill ALL Claude Code processes including the current session!"
+    else
+        echo "⚠️  This will kill active Claude Code processes!"
+    fi
+    printf "Continue? [y/N] "
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+fi
+
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo ""
+    echo "[DRY RUN] Would kill PIDs: ${PIDS_TO_KILL[*]}"
+    echo ""
+    echo "Process details:"
+    for pid in "${PIDS_TO_KILL[@]}"; do
+        ps -p "$pid" -o pid,etime,command 2>/dev/null | tail -1 || echo "  $pid (already terminated)"
+    done
+else
+    # Kill the processes
+    for pid in "${PIDS_TO_KILL[@]}"; do
+        kill "$pid" 2>/dev/null || true
+    done
+    echo "Done. Killed $KILL_COUNT Claude Code process(es)."
+fi
+
+exit 0
