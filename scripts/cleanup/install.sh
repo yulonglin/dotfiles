@@ -2,7 +2,7 @@
 # Install automatic cleanup job for old files in Downloads and Screenshots
 # Works on both macOS (launchd) and Linux (cron)
 
-set -e
+set -euo pipefail
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -190,6 +190,11 @@ main() {
     else
         log_error "Unsupported operating system: $(uname -s)"
         exit 1
+    fi
+
+    # Install Claude Code session cleanup
+    if [[ -f "$SCRIPT_DIR/setup_claude_cleanup.sh" ]]; then
+        "$SCRIPT_DIR/setup_claude_cleanup.sh"
     fi
 
     echo ""

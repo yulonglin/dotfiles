@@ -2,7 +2,7 @@
 # Uninstall automatic cleanup job
 # Works on both macOS (launchd) and Linux (cron)
 
-set -e
+set -euo pipefail
 
 # Color output
 RED='\033[0;31m'
@@ -113,7 +113,11 @@ main() {
     echo ""
     log_info "The cleanup script itself is still available at:"
     echo "  $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cleanup_old_files.sh"
-    echo ""
+    
+    # Uninstall Claude Code cleanup
+    if [[ -f "$(dirname "${BASH_SOURCE[0]}")/setup_claude_cleanup.sh" ]]; then
+        "$(dirname "${BASH_SOURCE[0]}")/setup_claude_cleanup.sh" --uninstall
+    fi    echo ""
     log_info "You can still run it manually anytime."
 }
 
