@@ -24,7 +24,7 @@ PROFILE="${PROFILE:-personal}"
 INSTALL_ZSH=true
 INSTALL_TMUX=true
 INSTALL_AI_TOOLS=true           # Claude Code, Gemini CLI, Codex CLI
-INSTALL_EXTRAS=false            # dust, jless, hyperfine, lazygit, code2prompt
+INSTALL_EXTRAS=false            # hyperfine, lazygit, code2prompt
 INSTALL_CLEANUP=true            # Automatic cleanup (macOS only)
 INSTALL_DOCKER=true             # Docker (Linux only)
 INSTALL_EXPERIMENTAL=false      # ty type checker
@@ -78,6 +78,8 @@ PACKAGES_MACOS=(
     "delta"
     "gitleaks"
     "btop"
+    "dust"
+    "jless"
 )
 
 # Linux packages (via mise github: backend)
@@ -89,21 +91,18 @@ PACKAGES_LINUX_MISE=(
     "github:dandavison/delta"
     "github:bootandy/dust"
     "github:ajeetdsouza/zoxide"
+    "ubi:PaulJuliusMartinez/jless"
 )
 
 # Extra packages (--extras flag)
 PACKAGES_EXTRAS_MACOS=(
     "fd"
     "ripgrep"
-    "dust"
-    "jless"
     "hyperfine"
     "lazygit"
 )
 
 PACKAGES_EXTRAS_LINUX=(
-    "ubi:bootandy/dust"
-    "ubi:PaulJuliusMartinez/jless"
     "ubi:sharkdp/hyperfine"
     "ubi:jesseduffield/lazygit"
     "cargo:code2prompt"

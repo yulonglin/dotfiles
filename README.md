@@ -23,8 +23,10 @@ These modern alternatives are installed by default and significantly faster than
 | [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`) | `grep` | Recursive by default, respects `.gitignore`, 10x+ faster |
 | [`delta`](https://github.com/dandavison/delta) | `diff` | Side-by-side, syntax highlighting, line numbers |
 | [`zoxide`](https://github.com/ajeetdsouza/zoxide) | `cd` | Learns your habits, jump with `z dirname` |
+| [`dust`](https://github.com/bootandy/dust) | `du` | Intuitive visualization of disk usage |
+| [`jless`](https://github.com/PaulJuliusMartinez/jless) | `less` (JSON) | Interactive JSON viewer with vim keybindings |
 
-**More Rust extras** (`--extras` flag): [`dust`](https://github.com/bootandy/dust) (disk usage), [`hyperfine`](https://github.com/sharkdp/hyperfine) (benchmarking), [`jless`](https://github.com/PaulJuliusMartinez/jless) (JSON viewer)
+**More Rust extras** (`--extras` flag): [`hyperfine`](https://github.com/sharkdp/hyperfine) (benchmarking)
 
 Also available: [`lazygit`](https://github.com/jesseduffield/lazygit) (TUI for git, written in Go)
 

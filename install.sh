@@ -36,7 +36,7 @@ OPTIONS:
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
     --ai-tools        Enable AI CLI tools (Claude, Gemini, Codex)
-    --extras          Enable extra CLI tools (dust, jless, hyperfine, lazygit)
+    --extras          Enable extra CLI tools (hyperfine, lazygit, code2prompt)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
     --experimental    Enable experimental features (ty type checker)
