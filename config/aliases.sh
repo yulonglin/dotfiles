@@ -251,14 +251,16 @@ qrun() {
 alias ai-check='echo "Checking AI CLI tools..." && claude --version 2>/dev/null && gemini --version 2>/dev/null && codex --version 2>/dev/null'
 
 # Clear Claude Code processes
-alias ccs='clear-claude-code --status'        # short: show status
-alias cc-status='clear-claude-code --status'  # long: show status
-alias cci='clear-claude-code'                 # short: kill idle only (safe)
-alias cc-idle='clear-claude-code'             # long: kill idle only (safe)
-alias ccf='clear-claude-code --force'         # short: kill all except current (confirms)
-alias cc-force='clear-claude-code --force'    # long: kill all except current (confirms)
-alias cca='clear-claude-code --all'           # short: kill everything (confirms)
-alias cc-all='clear-claude-code --all'        # long: kill everything (confirms)
+alias ccl='clear-claude-code --list'          # list/status
+alias cc-list='clear-claude-code --list'
+alias ccp='clear-claude-code --preview'       # preview/dry-run
+alias cc-preview='clear-claude-code --preview'
+alias cci='clear-claude-code'                 # kill idle only (safe)
+alias cc-idle='clear-claude-code'
+alias ccf='clear-claude-code --force'         # kill all except current (confirms)
+alias cc-force='clear-claude-code --force'
+alias cca='clear-claude-code --all'           # kill everything (confirms)
+alias cc-all='clear-claude-code --all'
 
 # Update all AI CLI tools (platform-specific)
 if [[ "$(uname -s)" == "Darwin" ]] && command -v brew &>/dev/null; then

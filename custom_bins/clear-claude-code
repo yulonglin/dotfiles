@@ -25,7 +25,7 @@ SKIP_CONFIRM=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dry-run|-n)
+        --dry-run|--preview|-n)
             DRY_RUN=true
             shift
             ;;
@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
             FORCE=true
             shift
             ;;
-        --status|-s)
+        --status|--list|-s|-l)
             STATUS_ONLY=true
             shift
             ;;
@@ -53,8 +53,8 @@ while [[ $# -gt 0 ]]; do
             echo "By default, only kills IDLE processes (preserves active sessions)."
             echo ""
             echo "Options:"
-            echo "  --status, -s     Show status of all Claude Code processes (no kill)"
-            echo "  --dry-run, -n    Show what would be killed without killing"
+            echo "  --list, --status, -l, -s   Show all Claude Code processes (no kill)"
+            echo "  --preview, --dry-run, -n   Show what would be killed without killing"
             echo "  --force, -f      Also kill ACTIVE processes (requires confirmation)"
             echo "  --all, -a        Kill ALL processes including current (requires confirmation)"
             echo "  --yes, -y        Skip confirmation prompt (for scripts/automation)"
