@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 # Clear Claude Code - Kill Claude Code CLI processes
 # Preserves the current session (if running from within Claude Code)
 #
@@ -171,7 +171,7 @@ for pid in "${PIDS[@]}"; do
 
     # Skip active processes unless --force
     if [[ "$FORCE" == "false" ]]; then
-        local proc_status=$(get_process_status "$pid")
+        proc_status=$(get_process_status "$pid")
         if [[ "$proc_status" == "ACTIVE" ]]; then
             ((SKIPPED_ACTIVE++)) || true
             continue
@@ -184,7 +184,7 @@ done
 KILL_COUNT=${#PIDS_TO_KILL[@]}
 
 if [[ $KILL_COUNT -eq 0 ]]; then
-    local msg="No Claude Code processes to kill"
+    msg="No Claude Code processes to kill"
     [[ "$SKIPPED_CURRENT" == "true" ]] && msg="$msg (current session preserved)"
     [[ $SKIPPED_ACTIVE -gt 0 ]] && msg="$msg ($SKIPPED_ACTIVE active preserved, use --force to kill)"
     echo "$msg"
