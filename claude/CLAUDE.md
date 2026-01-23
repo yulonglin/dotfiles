@@ -102,6 +102,44 @@ Task tool → subagent_type: "general-purpose" or "literature-scout"
 
 The subagent reads and summarizes, returning only relevant excerpts.
 
+#### Efficient Codebase Exploration (CRITICAL FOR SUBAGENTS)
+
+⚠️ **Search first, read targeted sections. NEVER read entire large files.** ⚠️
+
+This rule applies to ALL contexts including subagents. Violating this causes 100k+ token context explosions.
+
+**The Strategy:**
+```
+1. Glob → map file patterns (*.py, **/cli/*.py)
+2. Grep → find specific content (function names, keywords)
+3. Read with limit/offset → only the relevant 50-100 lines
+```
+
+**Hard Limits:** (configurable via `CLAUDE_READ_THRESHOLD`, default 500)
+| File Size | Action |
+|-----------|--------|
+| <200 lines | Read directly OK |
+| 200-500 lines | Use Grep first, then Read with offset/limit |
+| >500 lines | NEVER read without offset/limit |
+
+**Escape hatch**: For legitimate full-file reads (refactoring, review), the hook warns by default. Use `CLAUDE_READ_STRICT=1` to block entirely.
+
+**Subagent Exploration:**
+- Use `efficient-explorer` agent for exploration tasks (enforces search-first)
+- Built-in `Explore` agent may over-read - prefer `efficient-explorer` for large codebases
+- Prompt subagents explicitly: "Search with Grep before using Read. Use limit/offset for files >200 lines."
+
+**Example - Finding where "entropy" is calculated:**
+```
+❌ BAD:  Read("run_classifier.py")  # 1683 lines dumped into context
+✅ GOOD: Grep("entropy.*=", "*.py") → Read("file.py", offset=230, limit=50)
+```
+
+**Recognizing the Problem:**
+- Cache tokens spike >50k in single turn
+- "Bloviating" status for >2 minutes
+- Subagent reading multiple files >500 lines each
+
 #### Slide & Presentation Work
 
 For slide-related tasks, delegate to avoid context bloat from PDFs:
@@ -160,10 +198,11 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 
 | Agent | Trigger |
 |-------|---------|
+| `efficient-explorer` | Codebase exploration in large repos (>500 line files) |
 | `code-reviewer` | After ANY implementation—don't wait to be asked |
 | `performance-optimizer` | Slow code, sequential API calls, missing caching |
 
-**Principles**: Parallelize agents • Be specific • ASK if unclear
+**Principles**: Parallelize agents • Be specific • Include size limits in prompts • ASK if unclear
 
 ### Concurrent Edit Constraint
 

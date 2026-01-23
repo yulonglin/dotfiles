@@ -104,6 +104,15 @@
             "command": "~/.claude/hooks/check_secrets.sh"
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/check_read_size.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
