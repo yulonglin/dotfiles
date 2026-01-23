@@ -9,6 +9,13 @@
 
 set -euo pipefail
 
+# Auto-detect Unicode support (fallback to ASCII for minimal terminals)
+if [[ "${LANG:-}" == *UTF* || "${LC_ALL:-}" == *UTF* ]]; then
+    LINE="─────────────────────────────────────────────────────────────────────────"
+else
+    LINE="-------------------------------------------------------------------------"
+fi
+
 # Parse arguments
 DRY_RUN=false
 KILL_ALL=false
@@ -84,9 +91,9 @@ get_process_status() {
 # Show detailed status of all Claude Code processes
 show_status() {
     echo "Claude Code Processes:"
-    echo "─────────────────────────────────────────────────────────────────────────"
+    echo "$LINE"
     printf "%-8s %-8s %-10s %-6s %-6s %s\n" "PID" "STATUS" "UPTIME" "CPU%" "MEM%" "COMMAND"
-    echo "─────────────────────────────────────────────────────────────────────────"
+    echo "$LINE"
 
     local count=0
     local active_count=0
@@ -110,7 +117,7 @@ show_status() {
         fi
     done < <(ps aux | awk '$11 ~ /\/claude$/ || $11 == "claude"')
 
-    echo "─────────────────────────────────────────────────────────────────────────"
+    echo "$LINE"
     echo "Total: $count process(es), $active_count active"
 
     if [[ $active_count -gt 0 ]]; then
