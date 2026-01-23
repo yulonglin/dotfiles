@@ -54,6 +54,7 @@
       "Bash(for:*)",
       "Bash(while:*)",
       "WebSearch",
+      "WebFetch",
       "WebFetch(domain:gitlab.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:docs.astral.sh)",
@@ -83,10 +84,12 @@
       "Bash(fdisk:*)",
       "Bash(chmod -R 777:*)",
       "Bash(chown -R:*)",
+      "Read(.env**)"
+    ],
+    "ask": [
       "Bash(curl:*)",
       "Bash(wget:*)",
-      "Bash(sudo:*)",
-      "Read(.env**)"
+      "Bash(sudo:*)"
     ],
     "defaultMode": "plan"
   },
