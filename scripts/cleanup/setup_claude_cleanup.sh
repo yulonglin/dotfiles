@@ -70,7 +70,7 @@ install() {
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>4</integer>
+        <integer>17</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
@@ -83,11 +83,11 @@ install() {
 EOF
         launchctl unload "$PLIST_FILE" 2>/dev/null || true
         launchctl load "$PLIST_FILE"
-        log_info "✅ Installed launchd agent (runs daily at 04:00)"
+        log_info "✅ Installed launchd agent (runs daily at 17:00)"
     elif [[ "$(uname -s)" == "Linux" ]]; then
         # Add new cron job (uninstall handled cleanup)
-        (crontab -l 2>/dev/null; echo "0 4 * * * $CLEAR_BIN >> $LOG_FILE 2>&1") | crontab -
-        log_info "✅ Installed cron job (runs daily at 04:00)"
+        (crontab -l 2>/dev/null; echo "0 17 * * * $CLEAR_BIN >> $LOG_FILE 2>&1") | crontab -
+        log_info "✅ Installed cron job (runs daily at 17:00)"
     fi
 }
 
