@@ -1,0 +1,53 @@
+#!/bin/bash
+# Copy remote file content to local clipboard via SSH
+set -euo pipefail
+
+show_help() {
+    cat << 'EOF'
+rcopy (aka ssh-pbcopy) - Copy remote file to local clipboard
+
+Usage: rcopy <server> <path>
+       ssh-pbcopy <server> <path>
+
+Arguments:
+  server    SSH host (as defined in ~/.ssh/config)
+  path      Path to file on remote server
+
+Examples:
+  rcopy myserver /path/to/file.md
+  rcopy dev ~/notes/todo.txt
+
+Cross-platform: Uses pbcopy (macOS), xclip, or xsel (Linux)
+EOF
+}
+
+# Get clipboard copy command for current platform
+get_clipboard_copy_cmd() {
+    if command -v pbcopy &>/dev/null; then
+        echo "pbcopy"
+    elif command -v xclip &>/dev/null; then
+        echo "xclip -selection clipboard"
+    elif command -v xsel &>/dev/null; then
+        echo "xsel --clipboard --input"
+    else
+        return 1
+    fi
+}
+
+if [[ $# -lt 2 ]]; then
+    show_help
+    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && exit 0 || exit 1
+fi
+
+server="$1"
+path="$2"
+# Escape single quotes in path to prevent shell injection
+escaped_path="${path//\'/\'\\\'\'}"
+
+clipboard_cmd=$(get_clipboard_copy_cmd) || {
+    echo "Error: No clipboard command found (pbcopy/xclip/xsel)" >&2
+    exit 1
+}
+
+ssh -- "$server" "cat '$escaped_path'" | $clipboard_cmd
+echo "Copied $server:$path to clipboard"

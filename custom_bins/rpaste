@@ -1,0 +1,53 @@
+#!/bin/bash
+# Paste local clipboard content to remote file via SSH
+set -euo pipefail
+
+show_help() {
+    cat << 'EOF'
+rpaste (aka ssh-pbpaste) - Paste local clipboard to remote file
+
+Usage: rpaste <server> <path>
+       ssh-pbpaste <server> <path>
+
+Arguments:
+  server    SSH host (as defined in ~/.ssh/config)
+  path      Path to file on remote server (will be created/overwritten)
+
+Examples:
+  rpaste myserver /path/to/file.md
+  rpaste dev ~/notes/clipboard.txt
+
+Cross-platform: Uses pbpaste (macOS), xclip, or xsel (Linux)
+EOF
+}
+
+# Get clipboard paste command for current platform
+get_clipboard_paste_cmd() {
+    if command -v pbpaste &>/dev/null; then
+        echo "pbpaste"
+    elif command -v xclip &>/dev/null; then
+        echo "xclip -selection clipboard -o"
+    elif command -v xsel &>/dev/null; then
+        echo "xsel --clipboard --output"
+    else
+        return 1
+    fi
+}
+
+if [[ $# -lt 2 ]]; then
+    show_help
+    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && exit 0 || exit 1
+fi
+
+server="$1"
+path="$2"
+# Escape single quotes in path to prevent shell injection
+escaped_path="${path//\'/\'\\\'\'}"
+
+clipboard_cmd=$(get_clipboard_paste_cmd) || {
+    echo "Error: No clipboard command found (pbpaste/xclip/xsel)" >&2
+    exit 1
+}
+
+$clipboard_cmd | ssh -- "$server" "cat > '$escaped_path'"
+echo "Pasted clipboard to $server:$path"
