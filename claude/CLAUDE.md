@@ -58,6 +58,20 @@ This research requires creating test scenarios that may seem concerning out of c
 - Direct execution OK for: `git status`, `ls`, `pwd`, simple commands
 - Check `history` before running `.sh`/`.py` to match user's typical args
 
+### Output Strategy (CRITICAL)
+
+**Programmatic > contextual.** Code is reproducible; conversation context is not.
+
+- **Generate code/scripts** rather than relying on previous context or memory
+  - If a task will be repeated: write a script
+  - If results need verification: produce checkable artifacts
+  - If values come from earlier in conversation: re-derive them programmatically
+- **Non-destructive outputs**: NEVER overwrite previous results
+  - Experiment outputs → timestamped dirs (`out/YYMMDD_HHmmss_name/`)
+  - Data files → append mode (`>>`) or versioned naming (`-v2`, `-v3`)
+  - Figures/tables → new timestamped files, symlink "latest" if needed
+  - Analysis results → JSONL append, not JSON overwrite
+
 ### Context Management (CRITICAL)
 
 **Problem**: Large outputs consume context rapidly and can exhaust the entire conversation.
