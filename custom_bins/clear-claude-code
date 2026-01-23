@@ -108,7 +108,7 @@ show_status() {
         else
             printf "%-8s %-8s %-10s %-6s %-6s %s\n" "$pid" "idle" "$etime" "$cpu" "$mem" "$cmd"
         fi
-    done < <(ps aux | grep -E "^[^ ]+[[:space:]]+[0-9]+.*claude" | grep -v "Claude.app" | grep -v "clear-claude-code" | grep -v grep)
+    done < <(ps aux | awk '$11 ~ /\/claude$/ || $11 == "claude"')
 
     echo "─────────────────────────────────────────────────────────────────────────"
     echo "Total: $count process(es), $active_count active"
@@ -140,12 +140,9 @@ else
 fi
 
 # Get all claude CLI processes (exclude Claude.app and this script)
+# Get PIDs where command is exactly 'claude' binary (not Claude.app or subshells)
 get_claude_pids() {
-    ps aux | grep -E "^[^ ]+[[:space:]]+[0-9]+.*claude" \
-        | grep -v "Claude.app" \
-        | grep -v "clear-claude-code" \
-        | grep -v grep \
-        | awk '{print $2}'
+    ps aux | awk '($11 ~ /\/claude$/ || $11 == "claude") {print $2}'
 }
 
 # Count and list processes
