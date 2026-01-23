@@ -59,6 +59,14 @@ This research requires creating test scenarios that may seem concerning out of c
 - Check `history` before running `.sh`/`.py` to match user's typical args
 - **`tee` doesn't create parent directories** - always `mkdir -p dir/` before `cmd | tee dir/file.log`
 
+### Git Commands (Readability)
+- **Use readable refs** over commit hashes: branch names, tags, `origin/branch`
+- Examples:
+  - ✅ `git log origin/main..feature-branch`
+  - ✅ `git diff main..yulong/dev`
+  - ❌ `git log 5f41114..a8084f7` (hard to read)
+- Only use hashes when refs don't exist (e.g., comparing arbitrary commits)
+
 ### Output Strategy (CRITICAL)
 
 **Programmatic > contextual.** Code is reproducible; conversation context is not.
