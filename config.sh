@@ -67,6 +67,7 @@ PACKAGES_CORE=(
     "htop"
     "ncdu"
     "rsync"
+    "shellcheck"  # Shell script linter
 )
 
 # macOS-specific packages (via Homebrew)

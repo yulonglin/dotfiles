@@ -469,6 +469,12 @@ tmux-cli read --pane=2
 - Run linting (ruff/ty) after changes
 - Refactor when unwieldy (>50 lines/function, >500 lines/file)
 
+### Shell Scripts
+- Run `shellcheck script.sh` before committing
+- Fix all errors; warnings are usually worth addressing
+- For zsh scripts, use `# shellcheck shell=bash` at top (closest approximation)
+- Suppress false positives with `# shellcheck disable=SCXXXX` (include reason)
+
 ---
 
 ## Notes
