@@ -141,7 +141,7 @@ apt_install() {
 mise_install() {
     local pkg="$1"
     if cmd_exists mise; then
-        mise use -g "$pkg" 2>/dev/null || log_warning "$pkg installation via mise failed"
+        mise use -g "$pkg" || log_warning "$pkg installation via mise failed"
     else
         log_warning "mise not available for $pkg"
         return 1

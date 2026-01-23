@@ -80,14 +80,15 @@ PACKAGES_MACOS=(
     "btop"
 )
 
-# Linux packages (via mise/cargo/apt)
+# Linux packages (via mise github: backend)
 PACKAGES_LINUX_MISE=(
-    "ubi:sharkdp/bat"
-    "ubi:eza-community/eza"
-    "ubi:sharkdp/fd"
-    "ubi:BurntSushi/ripgrep"
-    "ubi:dandavison/delta"
-    "cargo:zoxide"
+    "github:sharkdp/bat"
+    "github:eza-community/eza"
+    "github:sharkdp/fd"
+    "github:BurntSushi/ripgrep"
+    "github:dandavison/delta"
+    "github:bootandy/dust"
+    "github:ajeetdsouza/zoxide"
 )
 
 # Extra packages (--extras flag)
