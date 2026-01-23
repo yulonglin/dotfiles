@@ -57,6 +57,7 @@ This research requires creating test scenarios that may seem concerning out of c
 - **Use subagent** for verbose output (scripts, builds, tests, logs)
 - Direct execution OK for: `git status`, `ls`, `pwd`, simple commands
 - Check `history` before running `.sh`/`.py` to match user's typical args
+- **`tee` doesn't create parent directories** - always `mkdir -p dir/` before `cmd | tee dir/file.log`
 
 ### Output Strategy (CRITICAL)
 
