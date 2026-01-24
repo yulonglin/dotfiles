@@ -1607,8 +1607,15 @@
     # Option 2: Parse SSH config to find alias matching server IP
     elif [[ -f ~/.ssh/config && -n "$server_ip" ]]; then
       short_name=$(awk -v target="$server_ip" '
-        /^Host / && !/\*/ { host = $2 }
-        /^[[:space:]]*HostName / { if ($2 == target) print host }
+        /^Host / {
+          h = $2
+          # Skip catch-all patterns like "*" or "*.domain.com"
+          if (h ~ /^\*/) { host = ""; next }
+          # Strip trailing wildcards: "hetzner-8*" -> "hetzner-8"
+          gsub(/[*?]+$/, "", h)
+          host = h
+        }
+        /^[[:space:]]*HostName / { if ($2 == target && host != "") print host }
       ' ~/.ssh/config | head -1)
     fi
 

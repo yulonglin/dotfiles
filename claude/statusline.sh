@@ -5,14 +5,17 @@
 # This script generates a comprehensive status line for Claude Code CLI.
 #
 # Displays (left to right):
-# 1. Current working directory (full path, ~ for HOME)
-# 2. Git branch with status indicator (clean/dirty)
-# 3. Git changes: insertions/deletions (+X,-Y)
-# 4. Context usage percentage (tokens used / context window size)
-# 5. Session cost in USD (if > $0)
+# 1. Machine name (SSH sessions only: SSH config alias or abbreviated hostname)
+# 2. Current working directory (full path, ~ for HOME)
+# 3. Git branch with status indicator (clean/dirty)
+# 4. Git changes: insertions/deletions (+X,-Y)
+# 5. Context usage percentage (tokens used / context window size)
+# 6. Session cost in USD (if > $0)
 #
 # Technical details:
 # - Receives JSON via stdin from Claude Code with session/workspace/cost data
+# - Machine name: $SERVER_NAME env > SSH config alias (by IP) > abbreviated hostname
+#   (mirrors p10k.zsh prompt_remote_host() logic)
 # - Uses git commands to check repository status and diff statistics
 # - Parses transcript JSONL for accurate context (statusline JSON only has per-turn tokens)
 # - Context = input_tokens + cache_read + cache_creation + output_tokens
@@ -26,6 +29,51 @@ input=$(cat)
 # Extract data from JSON
 cwd=$(echo "$input" | jq -r ".workspace.current_dir")
 model_id=$(echo "$input" | jq -r ".model.id // empty")
+
+# ============================================================================
+# MACHINE NAME (SSH config alias, only shown in SSH sessions)
+# ============================================================================
+# Priority: $SERVER_NAME env var > SSH config alias (by IP) > abbreviated hostname
+# Mirrors logic from p10k.zsh prompt_remote_host()
+
+machine_info=""
+
+if [ -n "$SSH_CONNECTION" ]; then
+  short_name=""
+  icon="🛜"
+  hostname="${HOST:-$(hostname -s)}"
+  # SSH_CONNECTION format: client_ip client_port server_ip server_port
+  server_ip=$(echo "$SSH_CONNECTION" | awk '{print $3}')
+
+  # Option 1: Use SERVER_NAME env var if set on the remote machine
+  if [ -n "$SERVER_NAME" ]; then
+    short_name="$SERVER_NAME"
+  # Option 2: Parse SSH config to find alias matching server IP
+  elif [ -f ~/.ssh/config ] && [ -n "$server_ip" ]; then
+    short_name=$(awk -v target="$server_ip" '
+      /^Host / {
+        h = $2
+        # Skip catch-all patterns like "*" or "*.domain.com"
+        if (h ~ /^\*/) { host = ""; next }
+        # Strip trailing wildcards: "hetzner-8*" -> "hetzner-8"
+        gsub(/[*?]+$/, "", h)
+        host = h
+      }
+      /^[[:space:]]*HostName / { if ($2 == target && host != "") print host }
+    ' ~/.ssh/config | head -1)
+  fi
+
+  # Fallback: abbreviate long hostnames
+  if [ -z "$short_name" ]; then
+    if [ ${#hostname} -gt 10 ]; then
+      short_name="${hostname:0:6}.."
+    else
+      short_name="$hostname"
+    fi
+  fi
+
+  machine_info="$icon $(printf "\033[35m")${short_name}$(printf "\033[0m") "
+fi
 
 # ============================================================================
 # DIRECTORY PATH (full path, ~ for HOME)
@@ -167,4 +215,4 @@ fi
 # ============================================================================
 # OUTPUT FORMATTED STATUS LINE
 # ============================================================================
-printf "\033[2m\033[36m%s\033[0m%s%s%s" "$dir" "$git_info" "$context_info" "$cost_info"
+printf "%s\033[2m\033[36m%s\033[0m%s%s%s" "$machine_info" "$dir" "$git_info" "$context_info" "$cost_info"
