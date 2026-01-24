@@ -18,6 +18,7 @@ telemetry/
 plans/
 cache/
 paste-cache/
+/tasks/
 
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh, archive/
 

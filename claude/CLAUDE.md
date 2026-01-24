@@ -322,11 +322,11 @@ if __name__ == "__main__":
 ## Performance (Experiment Code)
 
 ### The Rule
-**Parallelise API calls: 150-300 concurrent calls.** This is mandatory for all experiments.
+**Parallelise API calls: ~100 concurrent calls.** Exponential backoff if things aren't working or seem slow. Track rate limit errors and retries needed.
 
 ### Required Async Patterns
 - `async def` + `await` for all API calls, file I/O, network operations
-- `asyncio.Semaphore(150-300)` for rate limiting
+- `asyncio.Semaphore(100)` for rate limiting
 - `asyncio.gather()` for parallel execution of independent tasks
 - `tqdm.asyncio.tqdm.gather()` for progress tracking on async operations
 - `tenacity` for retry logic (exponential backoff for rate limits, fixed wait for transient errors)
