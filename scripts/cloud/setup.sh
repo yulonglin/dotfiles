@@ -67,6 +67,12 @@ sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./install.sh --zsh --tmux --ai-t
 echo "Running deploy.sh..."
 sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./deploy.sh"
 
+# ─── Authenticate gh if needed ────────────────────────────────────────────────
+if ! sudo -u "$USERNAME" -i bash -c 'gh auth status' &>/dev/null; then
+    echo "Authenticating GitHub CLI..."
+    sudo -u "$USERNAME" -i bash -c 'gh auth login --web --git-protocol ssh'
+fi
+
 # ─── Install Claude Code as user ──────────────────────────────────────────────
 echo "Installing Claude Code..."
 sudo -u "$USERNAME" -i bash -c 'curl -fsSL https://claude.ai/install.sh | sh'
