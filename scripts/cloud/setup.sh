@@ -42,6 +42,8 @@ if [ -d /root/.ssh ]; then
     echo "Copying SSH keys..."
     cp -r /root/.ssh "$HOME_DIR/" 2>/dev/null || true
     chown -R "$USERNAME:$USERNAME" "$HOME_DIR/.ssh"
+    chmod 700 "$HOME_DIR/.ssh"
+    chmod 600 "$HOME_DIR/.ssh/authorized_keys" 2>/dev/null || true
 fi
 
 # ─── Install uv (as user) ─────────────────────────────────────────────────────
