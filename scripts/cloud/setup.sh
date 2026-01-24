@@ -25,9 +25,16 @@ echo ""
 
 # ─── System deps ──────────────────────────────────────────────────────────────
 echo "Installing system dependencies..."
-apt-get update && apt-get install -y sudo zsh htop ncdu vim cron
+apt-get update && apt-get install -y sudo zsh htop ncdu vim cron curl ca-certificates
 command -v nvtop &>/dev/null || apt-get install -y nvtop 2>/dev/null || true
 service cron start 2>/dev/null || true
+
+# ─── Node 20 (for Gemini CLI) ─────────────────────────────────────────────────
+if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d 'v')" -lt 20 ]]; then
+    echo "Installing Node 20..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y nodejs
+fi
 
 # ─── Create non-root user ─────────────────────────────────────────────────────
 if ! id "$USERNAME" &>/dev/null; then
