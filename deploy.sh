@@ -392,21 +392,52 @@ fi
 # ─── Codex ────────────────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_CODEX" == "true" ]]; then
-    log_info "Deploying Codex CLI configuration..."
+    log_section "DEPLOYING CODEX CLI CONFIGURATION"
 
     if [[ -d "$DOT_DIR/codex" ]]; then
+        # Runtime files to preserve (from .gitignore)
+        codex_runtime_files=(
+            "auth.json" "config.toml" "history.jsonl"
+            "tmp" "sessions" "log"
+            "models_cache" "models_cache.json"
+            "version" "version.json"
+        )
+
         if [[ -L "$HOME/.codex" ]]; then
+            # Already a symlink - refresh it
             rm "$HOME/.codex"
-        elif [[ -e "$HOME/.codex" ]]; then
-            log_warning "~/.codex exists and is not a symlink - skipping"
+            log_info "Refreshed existing symlink"
+        elif [[ -d "$HOME/.codex" ]]; then
+            # Directory exists - smart merge
+            log_info "Smart merge: preserving runtime files from existing ~/.codex"
+            codex_backup_path="$HOME/.codex.backup.$(date +%Y%m%d_%H%M%S)"
+            mv "$HOME/.codex" "$codex_backup_path"
+
+            ln -sf "$DOT_DIR/codex" "$HOME/.codex"
+
+            # Restore runtime files
+            codex_restored=0
+            for file in "${codex_runtime_files[@]}"; do
+                if [[ -e "$codex_backup_path/$file" ]]; then
+                    cp -r "$codex_backup_path/$file" "$HOME/.codex/" 2>/dev/null && ((codex_restored++))
+                fi
+            done
+
+            if [[ $codex_restored -gt 0 ]]; then
+                log_success "Restored $codex_restored runtime file(s)"
+                log_info "Backup at: $codex_backup_path"
+            fi
         fi
 
+        # Create symlink if it doesn't exist
         if [[ ! -e "$HOME/.codex" ]]; then
             ln -sf "$DOT_DIR/codex" "$HOME/.codex"
-            log_success "Symlinked $DOT_DIR/codex → ~/.codex"
         fi
+
+        log_success "Codex CLI configuration deployed"
+        log_info "  Config: AGENTS.md, skills/"
     else
-        log_warning "Codex directory not found"
+        log_warning "Codex directory not found at $DOT_DIR/codex"
     fi
 fi
 
