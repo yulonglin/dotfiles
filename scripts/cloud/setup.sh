@@ -62,7 +62,7 @@ fi
 
 # ─── Run install and deploy as user ───────────────────────────────────────────
 echo "Running install.sh..."
-sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./install.sh --zsh --tmux"
+sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./install.sh --zsh --tmux --ai-tools"
 
 echo "Running deploy.sh..."
 sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./deploy.sh"
