@@ -38,6 +38,12 @@ else
     echo "User $USERNAME already exists"
 fi
 
+# ─── Fix ownership of user's home (handles root-created files) ───────────────
+if [[ -d "$HOME_DIR" ]]; then
+    echo "Fixing ownership of $HOME_DIR..."
+    chown -R "$USERNAME:$USERNAME" "$HOME_DIR"
+fi
+
 # ─── SSH keys (for direct SSH access as non-root) ────────────────────────────
 if [ -d /root/.ssh ]; then
     echo "Copying SSH keys..."

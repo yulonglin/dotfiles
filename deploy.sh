@@ -382,37 +382,6 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
         fi
 
-        # Fix root-owned runtime files (only in container environments)
-        claude_dir="$(readlink -f "$HOME/.claude" 2>/dev/null || echo "$HOME/.claude")"
-        is_container=false
-        # Detect container environments: RunPod, Docker, or generic containers
-        [[ -n "${RUNPOD_POD_ID:-}" ]] && is_container=true
-        [[ -f "/.dockerenv" ]] && is_container=true
-        [[ -d "/workspace" && ! -d "/Users" ]] && is_container=true  # RunPod-style workspace
-
-        if [[ "$is_container" == "true" ]] && [[ -d "$claude_dir" ]]; then
-            # Validate path is within expected locations (safety check)
-            case "$claude_dir" in
-                "$HOME"/*|"$DOT_DIR"/*)
-                    if find "$claude_dir" -maxdepth 1 -user root -print -quit 2>/dev/null | grep -q .; then
-                        log_info "Fixing root-owned files in ~/.claude (container environment)..."
-                        if command -v sudo &>/dev/null; then
-                            sudo chown -R "$(id -un):$(id -gn)" "$claude_dir" 2>/dev/null && \
-                                log_success "Fixed ownership" || log_warning "Could not fix ownership (may need manual: sudo chown -R \$(id -un) ~/.claude)"
-                        else
-                            log_warning "Root-owned files detected. Run: sudo chown -R \$(id -un) ~/.claude"
-                        fi
-                    fi
-                    ;;
-                *)
-                    # Path outside expected locations - warn but don't auto-fix
-                    if find "$claude_dir" -maxdepth 1 -user root -print -quit 2>/dev/null | grep -q .; then
-                        log_warning "Root-owned files in $claude_dir (unexpected path - manual fix needed)"
-                    fi
-                    ;;
-            esac
-        fi
-
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
     else
