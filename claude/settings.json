@@ -155,7 +155,8 @@
     "huggingface-skills@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true
+    "ralph-loop@claude-plugins-official": true,
+    "learning-output-style@claude-plugins-official": true
   },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"
