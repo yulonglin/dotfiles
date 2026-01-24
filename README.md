@@ -184,19 +184,24 @@ Apply changes to ~/.zshrc?
 * Any software or command line tools you need, add them to the [install.sh](./install.sh) script. Try adding a new command line tool to the install script.
 * Any new plugins or environment setup, add them to the [config/zshrc.sh](./config/zshrc.sh) script.
 * Any aliases you need, add them to the [config/aliases.sh](./config/aliases.sh) script. Try adding your own alias to the bottom of the file. For example, try setting `cd1` to your most used git repo so you can just type `cd1` to get to it.
-* Any setup you do in a new RunPod, add it to [runpod/runpod_setup.sh](./runpod/runpod_setup.sh).
+## Cloud Setup (RunPod, Hetzner, etc.)
 
-## RunPod / Docker
-
-For cloud GPU development, there's a Docker setup in `runpod/`:
+One-command setup for cloud VMs and containers:
 
 ```bash
-# Build for linux/amd64
-export DOCKER_DEFAULT_PLATFORM=linux/amd64
-docker build -f runpod/Dockerfile -t your-username/runpod-dev .
+# RunPod (fresh pod, as root)
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
 
-# Test locally
-docker run -it -e USE_ZSH=true your-username/runpod-dev /bin/zsh
+# After pod restart (recreates user entry)
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/restart.sh | bash
+
+# Hetzner / standard VPS (persistent /home)
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | PERSISTENT=/home bash
 ```
 
-See `runpod/` directory for Dockerfile and entrypoint configuration.
+Then SSH as `yulong@<ip>` (not root). See [`scripts/cloud/README.md`](./scripts/cloud/README.md) for details.
+
+**What it does:**
+- Creates non-root user in persistent storage (`/workspace/yulong` on RunPod)
+- Installs uv, dotfiles, Claude Code
+- Copies SSH keys for direct access
