@@ -40,7 +40,8 @@ DEPLOY_HTOP=true                # htop process viewer config
 DEPLOY_MATPLOTLIB=true          # Matplotlib styles (anthropic, deepmind)
 DEPLOY_GIT_HOOKS=true           # Global git hooks (secret detection)
 DEPLOY_SECRETS=true             # Sync secrets with GitHub gist
-DEPLOY_CLEANUP=true             # Automatic cleanup (macOS only)
+DEPLOY_CLEANUP=true             # File cleanup: Downloads/Screenshots (macOS only)
+DEPLOY_CLAUDE_CLEANUP=true      # Claude Code idle session cleanup (both platforms)
 DEPLOY_ALIASES=()               # Additional alias scripts: ("speechmatics" "inspect")
 
 # ─── Deploy Modifiers ─────────────────────────────────────────────────────────
@@ -136,6 +137,7 @@ apply_profile() {
             DEPLOY_HTOP=false
             DEPLOY_MATPLOTLIB=false
             DEPLOY_CLEANUP=false
+            DEPLOY_CLAUDE_CLEANUP=false
             DEPLOY_SECRETS=false
             ;;
         minimal)
@@ -157,6 +159,7 @@ apply_profile() {
             DEPLOY_GIT_HOOKS=false
             DEPLOY_SECRETS=false
             DEPLOY_CLEANUP=false
+            DEPLOY_CLAUDE_CLEANUP=false
             ;;
         *)
             echo "Warning: Unknown profile '$profile', using personal" >&2
@@ -192,8 +195,9 @@ detect_platform
 
 # Platform-specific defaults
 if is_linux; then
-    INSTALL_CLEANUP=false       # launchd not available
-    DEPLOY_CLEANUP=false
+    INSTALL_CLEANUP=false       # File cleanup uses launchd (macOS only)
+    DEPLOY_CLEANUP=false        # File cleanup uses launchd (macOS only)
+    # DEPLOY_CLAUDE_CLEANUP stays true - works with cron on Linux
     INSTALL_CREATE_USER=true    # Useful for containers
     # INSTALL_DOCKER=true is already default
 elif is_macos; then

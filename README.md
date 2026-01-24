@@ -140,6 +140,27 @@ Scheduled cleanup of old files from `~/Downloads` and `~/Screenshots`:
 
 See [`scripts/cleanup/README.md`](./scripts/cleanup/README.md) for full documentation.
 
+### Claude Code Session Cleanup (both platforms)
+
+Automatically kills idle Claude Code processes daily at 17:00:
+
+```bash
+./deploy.sh --claude-cleanup  # Part of defaults (both macOS and Linux)
+```
+
+**How it works:**
+- Only kills **idle** processes (detached/background) - preserves active sessions
+- Runs daily via launchd (macOS) or cron (Linux)
+- Manual control via `clear-claude-code` command (aliases: `ccl`, `cci`, `ccf`)
+
+```bash
+# Check status
+clear-claude-code --list
+
+# Uninstall
+./scripts/cleanup/setup_claude_cleanup.sh --uninstall
+```
+
 ### Step 3: Configure Powerlevel10k theme
 This set of dotfiles uses the powerlevel10k theme for zsh, this makes your terminal look better and adds lots of useful features, e.g. env indicators, git status etc...
 

@@ -47,7 +47,8 @@ OPTIONS:
     --matplotlib      Deploy matplotlib styles
     --git-hooks       Deploy global git hooks
     --secrets         Sync secrets with GitHub gist
-    --cleanup         Install automatic cleanup (macOS only)
+    --cleanup         Install file cleanup: Downloads/Screenshots (macOS only)
+    --claude-cleanup  Install Claude Code session cleanup (both platforms)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
@@ -409,14 +410,25 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
     fi
 fi
 
-# ─── Cleanup Automation ───────────────────────────────────────────────────────
+# ─── File Cleanup (macOS only) ────────────────────────────────────────────────
 
 if [[ "$DEPLOY_CLEANUP" == "true" ]] && is_macos; then
-    log_section "INSTALLING AUTOMATIC CLEANUP 🧹"
+    log_section "INSTALLING FILE CLEANUP (Downloads/Screenshots)"
     if [[ -f "$DOT_DIR/scripts/cleanup/install.sh" ]]; then
-        "$DOT_DIR/scripts/cleanup/install.sh" --non-interactive || log_warning "Cleanup installation failed"
+        "$DOT_DIR/scripts/cleanup/install.sh" --non-interactive || log_warning "File cleanup installation failed"
     else
-        log_warning "Cleanup install script not found"
+        log_warning "File cleanup install script not found"
+    fi
+fi
+
+# ─── Claude Code Cleanup (both platforms) ─────────────────────────────────────
+
+if [[ "$DEPLOY_CLAUDE_CLEANUP" == "true" ]]; then
+    log_section "INSTALLING CLAUDE CODE SESSION CLEANUP"
+    if [[ -f "$DOT_DIR/scripts/cleanup/setup_claude_cleanup.sh" ]]; then
+        "$DOT_DIR/scripts/cleanup/setup_claude_cleanup.sh" || log_warning "Claude cleanup installation failed"
+    else
+        log_warning "Claude cleanup script not found"
     fi
 fi
 
