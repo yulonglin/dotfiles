@@ -134,7 +134,7 @@ brew_install() {
 # Install package via apt (Linux)
 apt_install() {
     local pkg="$1"
-    apt install -y "$pkg" 2>/dev/null || log_warning "$pkg installation via apt failed"
+    sudo apt install -y "$pkg" 2>/dev/null || log_warning "$pkg installation via apt failed"
 }
 
 # Install package via mise (Linux)
