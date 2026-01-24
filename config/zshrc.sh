@@ -24,10 +24,11 @@ source $CONFIG_DIR/key_bindings.sh
 source $CONFIG_DIR/completions.sh
 add_to_path "${DOT_DIR}/custom_bins"
 
-# for uv
-if [ -d "$HOME/.local/bin" ]; then
-  source $HOME/.local/bin/env
-fi
+# Add ~/.local/bin to PATH (for Claude Code, gh, gitleaks, uv tools)
+add_to_path "$HOME/.local/bin"
+
+# Source uv environment if installed
+[ -f "$HOME/.local/bin/env" ] && source "$HOME/.local/bin/env"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 if [ -d "$HOME/.cargo" ]; then
