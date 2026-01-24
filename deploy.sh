@@ -364,7 +364,7 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
 
             # Restore runtime files
-            local restored=0
+            restored=0
             for file in "${runtime_files[@]}"; do
                 if [[ -e "$backup_path/$file" ]]; then
                     cp -r "$backup_path/$file" "$HOME/.claude/" 2>/dev/null && ((restored++))

@@ -117,7 +117,6 @@ if ! is_installed gitleaks; then
     else
         apt_install gitleaks || {
             log_info "Installing gitleaks from GitHub releases..."
-            local version arch
             version=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "8.21.2")
             case "$(uname -m)" in
                 x86_64)  arch="x64" ;;
@@ -268,7 +267,7 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
             claude mcp remove "$name" &>/dev/null || true
             if [[ "$url" == npx* ]]; then
                 # JSON-based config for npx
-                local args="${url#npx }"
+                args="${url#npx }"
                 claude mcp add-json --scope user "$name" "{\"command\":\"npx\",\"args\":[\"${args}\"]}" 2>&1 && \
                     log_success "$name configured" || log_warning "$name failed"
             else
