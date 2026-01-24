@@ -382,6 +382,18 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
         fi
 
+        # Fix root-owned runtime files (common in containers like RunPod)
+        claude_dir="$(readlink -f "$HOME/.claude" 2>/dev/null || echo "$HOME/.claude")"
+        if [[ -d "$claude_dir" ]] && find "$claude_dir" -maxdepth 1 -user root -print -quit 2>/dev/null | grep -q .; then
+            log_info "Fixing root-owned files in ~/.claude..."
+            if command -v sudo &>/dev/null; then
+                sudo chown -R "$(id -un):$(id -gn)" "$claude_dir" 2>/dev/null && \
+                    log_success "Fixed ownership" || log_warning "Could not fix ownership (may need manual sudo chown)"
+            else
+                log_warning "Root-owned files detected but sudo not available"
+            fi
+        fi
+
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
     else
