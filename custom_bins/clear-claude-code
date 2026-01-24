@@ -234,11 +234,31 @@ if [[ "$DRY_RUN" == "true" ]]; then
         ps -p "$pid" -o pid,etime,command 2>/dev/null | tail -1 || echo "  $pid (already terminated)"
     done
 else
-    # Kill the processes
+    # Kill the processes, tracking success/failure
+    killed=0
+    failed_pids=()
     for pid in "${PIDS_TO_KILL[@]}"; do
-        kill "$pid" 2>/dev/null || true
+        if kill "$pid" 2>/dev/null; then
+            ((killed++))
+        else
+            failed_pids+=("$pid")
+        fi
     done
-    echo "Done. Killed $KILL_COUNT Claude Code process(es)."
+
+    if [[ $killed -gt 0 ]]; then
+        echo "Done. Killed $killed Claude Code process(es)."
+    fi
+
+    if [[ ${#failed_pids[@]} -gt 0 ]]; then
+        echo "Failed to kill ${#failed_pids[@]} process(es): ${failed_pids[*]}"
+        # Check if they're root-owned
+        for pid in "${failed_pids[@]}"; do
+            owner=$(ps -p "$pid" -o user= 2>/dev/null || echo "unknown")
+            if [[ "$owner" == "root" ]]; then
+                echo "  PID $pid is owned by root - try: sudo kill $pid"
+            fi
+        done
+    fi
 fi
 
 exit 0
