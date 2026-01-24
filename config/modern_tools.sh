@@ -113,7 +113,9 @@ venv() {
 
 # gss: Git Status Short - Enhanced git status with branch info
 # Usage: gss
-# Shows git status in compact format with current branch (renamed to avoid conflict with existing gst alias)
+# Shows git status in compact format with current branch
+# Note: unalias first since oh-my-zsh git plugin defines gss='git status -s'
+unalias gss 2>/dev/null || true
 gss() {
     git status --short --branch  # --short: compact format, --branch: show branch info
 }
