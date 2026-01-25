@@ -110,7 +110,7 @@ Check the spec has ALL of these:
 - [ ] **Metrics defined**: Exact metrics to measure (not just "accuracy" but "exact_match on MMLU")
 - [ ] **Datasets specified**: Which datasets, versions, splits documented
 - [ ] **Graphs planned**: What plots will be generated (axes, groupings, purpose)
-- [ ] **Caching strategy**: What gets cached, cache keys, what must rerun
+- [ ] **Caching strategy**: What gets cached, cache keys, what must rerun, when to invalidate cache
 - [ ] **Concurrency specified**: Concurrent requests level (e.g., 100 via asyncio.Semaphore)
 - [ ] **Error handling documented**: Transient vs permanent errors, retry logic, backoff strategy
 

@@ -121,11 +121,13 @@ config/matplotlib/        # Matplotlib styles and helpers
 - Configures Cmd+C for shell-based copy and Shift+Enter for multiline input
 
 **Matplotlib Deployment**:
-- Symlinks `*.mplstyle` files to `~/.config/matplotlib/stylelib/`
-- Copies `petriplot.py` to `~/.config/matplotlib/`
+- **Symlinks** `*.mplstyle` files to `~/.config/matplotlib/stylelib/` (config files, auto-update)
+- **Copies** `petriplot.py` to `~/.config/matplotlib/` (dependency module, stable snapshot)
+- Rationale: Styles are config → symlink for live updates; helper is code → copy prevents ImportError if dotfiles move
 - Includes Petri style (warm editorial aesthetic) for publication-quality figures
-- Usage: `plt.style.use('petri')` or `import petriplot as pp`
+- Usage: `plt.style.use('petri')` or `import petriplot as pp` (PYTHONPATH auto-configured in zshrc)
 - Requires `--matplotlib` flag to deploy
+- Note: `petriplot.py` updates require re-running `deploy.sh --matplotlib`
 
 **Claude Code Deployment** (Smart Merge):
 - Symlinks `claude/` to `~/.claude`

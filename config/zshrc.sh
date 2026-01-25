@@ -17,6 +17,7 @@ if [ -f "$ZSH/oh-my-zsh.sh" ]; then
   source "$ZSH/oh-my-zsh.sh"
 fi
 source $CONFIG_DIR/aliases.sh
+[ -f $CONFIG_DIR/secrets.sh ] && source $CONFIG_DIR/secrets.sh
 source $CONFIG_DIR/p10k.zsh
 source $CONFIG_DIR/extras.sh
 source $CONFIG_DIR/modern_tools.sh
@@ -26,6 +27,11 @@ add_to_path "${DOT_DIR}/custom_bins"
 
 # Add ~/.local/bin to PATH (for Claude Code, gh, gitleaks, uv tools)
 add_to_path "$HOME/.local/bin"
+
+# Add matplotlib config to PYTHONPATH for petriplot import
+if [[ -d "$HOME/.config/matplotlib" ]]; then
+    export PYTHONPATH="$HOME/.config/matplotlib:${PYTHONPATH}"
+fi
 
 # Source uv environment if installed
 [ -f "$HOME/.local/bin/env" ] && source "$HOME/.local/bin/env"

@@ -70,7 +70,7 @@
 - **What Gets Cached**: [e.g., API responses, model outputs, embeddings]
 - **Cache Keys**: [How uniqueness determined, e.g., `hash(model_name + prompt + temperature)`]
 - **Cache Location**: [e.g., `.cache/api_responses/`, per CLAUDE.md]
-- **Cache Invalidation**: [When to clear, e.g., `--clear-cache` flag]
+- **Cache Invalidation**: [When to clear, e.g., model version change, prompt update, dataset change, or via `--clear-cache` flag]
 - **What Must Rerun**: [e.g., final aggregation, plotting, statistical tests]
 
 ### Concurrency & Rate Limiting

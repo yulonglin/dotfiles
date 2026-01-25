@@ -169,37 +169,33 @@ for config in gpqa-lie-detector-4.1nano-benign gpqa-lie-detector-5nano-benign \
 done
 ```
 
-## Pre-trained Classifiers (from methods/lie-detector.md)
+## Pre-trained Classifiers (from models.yaml registry)
 
-**Base path**: `/Users/yulong/code/sandbagging-detection/LLM-LieDetector/results/lies_50pct_prescribed/classifiers/`
+The lie detector uses a **model registry** system. Use registry IDs (not raw file paths).
 
-| Model | Classifier File | Notes |
-|-------|-----------------|-------|
-| gpt-4.1-nano | `logistic_binary_classifier_gpt4.1-nano_zero_accuracy_only_20260124_062254.pkl` | Single-prompt, most generalizable |
-| gpt-5-nano | `logistic_binary_classifier_gpt4.1-nano_gpt5-nano_all_sandbagging_20251216_171231.pkl` | Mixed sandbagging prompts |
+**WORST PERFORMERS (hardest to detect) - USE THESE FOR ICML:**
 
-**IMPORTANT**: The individual experiment specs reference deprecated `2prompts` classifiers - use the method spec versions above.
+| Model | Registry ID | Detection Accuracy | Notes |
+|-------|-------------|-------------------|-------|
+| gpt-5-nano | `5-nano-zero-accuracy-sandbag0` | **66.9%** | HARDEST TO DETECT |
+| gpt-4.1-nano | `4.1-nano-zero-accuracy` | **70.9%** | Best for 4.1-nano |
+
+**Registry file**: `src/detection_game/utils/lie_detectors/models.yaml`
 
 ### Classification Command (after trajectory generation)
 
 ```bash
-# For gpt-4.1-nano experiments
-CLASSIFIER_PATH="/Users/yulong/code/sandbagging-detection/LLM-LieDetector/results/lies_50pct_prescribed/classifiers/logistic_binary_classifier_gpt4.1-nano_zero_accuracy_only_20260124_062254.pkl"
-
+# For gpt-4.1-nano experiments - use registry ID
 python -m src.detection_game.classifiers.run_lie_detector \
   classifier.log_dir="logs/runs/{dataset}-lie-detector-4.1nano-test-*" \
-  classifier.detector=pretrained \
-  classifier.pretrained_classifier_path="$CLASSIFIER_PATH" \
+  classifier.detector=4.1-nano-zero-accuracy \
   classifier.invalid_response_handling=as_intermediate \
   classifier.output.csv="out/{dataset}_lie_detector_4.1nano/scores.csv"
 
-# For gpt-5-nano experiments
-CLASSIFIER_PATH="/Users/yulong/code/sandbagging-detection/LLM-LieDetector/results/lies_50pct_prescribed/classifiers/logistic_binary_classifier_gpt4.1-nano_gpt5-nano_all_sandbagging_20251216_171231.pkl"
-
+# For gpt-5-nano experiments - use registry ID
 python -m src.detection_game.classifiers.run_lie_detector \
   classifier.log_dir="logs/runs/{dataset}-lie-detector-5nano-test-*" \
-  classifier.detector=pretrained \
-  classifier.pretrained_classifier_path="$CLASSIFIER_PATH" \
+  classifier.detector=5-nano-zero-accuracy-sandbag0 \
   classifier.invalid_response_handling=as_intermediate \
   classifier.output.csv="out/{dataset}_lie_detector_5nano/scores.csv"
 ```
@@ -226,7 +222,13 @@ python -m src.detection_game.classifiers.run_lie_detector \
 
 ## Spec Inconsistency Note
 
-The individual experiment specs (`specs/icml-baseline-expts/individual-expts/*-4.1nano-lie-detector.md`) reference deprecated `2prompts` classifier. The authoritative `methods/lie-detector.md` spec says to use `zero_accuracy_only` classifier for gpt-4.1-nano. This plan uses the method spec (correct) classifiers.
+The individual experiment specs have **outdated** classifier paths. The authoritative sources are:
+- **Method spec**: `specs/icml-baseline-expts/methods/lie-detector.md`
+- **Model registry**: `src/detection_game/utils/lie_detectors/models.yaml`
+
+Use registry IDs from the "Worst Performers" section:
+- gpt-5-nano: `5-nano-zero-accuracy-sandbag0`
+- gpt-4.1-nano: `4.1-nano-zero-accuracy`
 
 ## Critical Files
 

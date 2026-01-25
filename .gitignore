@@ -3,6 +3,7 @@
 
 # User-specific git configuration (copy from user.conf.example)
 config/user.conf
+config/secrets.sh
 
 # npm artifacts (not used - this repo uses system package managers)
 package.json
