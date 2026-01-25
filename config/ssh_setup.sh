@@ -18,24 +18,12 @@ if [ ! -d "${HOME}/.ssh" ]; then
   chmod 700 "${HOME}/.ssh"
 fi
 
-# If the key is missing, offer to create it
+# If the key is missing, warn and provide instructions
 if [ ! -f "${SSH_KEY}" ]; then
-  echo "No SSH key found at ${SSH_KEY}."
-  printf "Generate a new ed25519 SSH key now? [y/N] "
-  read -r reply
-  case "$reply" in
-    y|Y|yes|YES)
-      # Generate key with hostname as comment (helps identify which machine it's from)
-      ssh-keygen -t ed25519 -f "${SSH_KEY}" -C "$(whoami)@$(hostname)" || return 0
-      chmod 600 "${SSH_KEY}"
-      echo "✓ SSH key generated at ${SSH_KEY}"
-      echo "  Add to GitHub/GitLab: pbcopy < ${SSH_KEY}.pub (macOS) or cat ${SSH_KEY}.pub"
-      ;;
-    *)
-      # Don't do anything further if there's no key
-      return 0 2>/dev/null || exit 0
-      ;;
-  esac
+  echo "⚠ No SSH key found at ${SSH_KEY}"
+  echo "  To generate: ssh-keygen -t ed25519 -f ${SSH_KEY} -C \"\$(whoami)@\$(hostname)\""
+  echo "  Then add to GitHub/GitLab: cat ${SSH_KEY}.pub"
+  return 0 2>/dev/null || exit 0
 fi
 
 # Linux: Ensure ssh-agent is running
