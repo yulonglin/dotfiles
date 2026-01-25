@@ -37,6 +37,7 @@
       "Bash(git push:*)",
       "Bash(git restore:*)",
       "Bash(GIT_EDITOR=true git add:*)",
+      "Bash(GIT_EDITOR=true git commit:*)",
       "Bash(GIT_EDITOR=true git diff:*)",
       "Bash(GIT_EDITOR=true git status:*)",
       "Bash(gh api:*)",
