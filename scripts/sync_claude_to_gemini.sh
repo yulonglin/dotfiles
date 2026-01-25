@@ -83,4 +83,17 @@ else
     echo "Warning: CLAUDE.md not found. Skipping GEMINI.md update."
 fi
 
+echo ">>> Syncing Claude Code Permissions to Gemini CLI Policies..."
+CLAUDE_SETTINGS="$HOME/code/dotfiles/.claude/settings.json"
+POLICY_DIR="$HOME/.gemini/policies"
+CONVERT_SCRIPT="$DOTFILES_DIR/scripts/helpers/convert_claude_perms.py"
+
+if [ -f "$CLAUDE_SETTINGS" ] && [ -f "$CONVERT_SCRIPT" ]; then
+    mkdir -p "$POLICY_DIR"
+    python3 "$CONVERT_SCRIPT" "$CLAUDE_SETTINGS" > "$POLICY_DIR/claude_sync.toml"
+    echo "Generated $POLICY_DIR/claude_sync.toml"
+else
+    echo "Skipping permissions sync: .claude/settings.json or conversion script not found."
+fi
+
 echo ">>> Done! Gemini CLI is now synchronized with Claude Code configurations."
