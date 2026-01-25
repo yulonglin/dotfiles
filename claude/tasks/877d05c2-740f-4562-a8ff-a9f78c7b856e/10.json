@@ -3,7 +3,7 @@
   "subject": "[Inventory] Survey existing experimental results",
   "description": "Check what runs/data we already have:\n- Find recent .eval files\n- Identify which have C3/TM scores\n- Check for benign baselines\n- Identify what's missing\n\nThis helps us understand what can be analyzed immediately vs what needs generation.\n\nAgent: af96308 (running in background)",
   "activeForm": "Surveying existing results",
-  "status": "in_progress",
+  "status": "completed",
   "blocks": [],
   "blockedBy": [],
   "metadata": {
