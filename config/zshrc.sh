@@ -21,6 +21,7 @@ if [ -f "$ZSH/oh-my-zsh.sh" ]; then
 fi
 source $CONFIG_DIR/aliases.sh
 [ -f $CONFIG_DIR/secrets.sh ] && source $CONFIG_DIR/secrets.sh
+source $CONFIG_DIR/ssh_setup.sh
 source $CONFIG_DIR/p10k.zsh
 source $CONFIG_DIR/extras.sh
 source $CONFIG_DIR/modern_tools.sh

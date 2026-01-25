@@ -179,6 +179,34 @@ Apply changes to ~/.zshrc?
 # Press n for NO 
 ```
 
+### SSH Key Management
+
+Automatically adds your SSH key to ssh-agent on shell startup:
+
+```bash
+# Automatically enabled when you deploy ZSH config
+./deploy.sh  # (default: includes ZSH)
+```
+
+**How it works:**
+- Checks for `~/.ssh/id_ed25519` (customizable via `SSH_KEY_PATH` env var)
+- **Prompts to generate** if key doesn't exist (never overwrites existing keys)
+- Adds to macOS Keychain (`--apple-use-keychain`) or Linux ssh-agent
+- Only runs in interactive shells
+- Skips if key already loaded in agent
+
+**First-time setup flow:**
+1. Shell starts → detects no key → prompts "Generate a new ed25519 SSH key now? [y/N]"
+2. If yes → generates key → shows command to copy public key
+3. Automatically adds to agent on this and future shell sessions
+
+**Custom key path:**
+```bash
+export SSH_KEY_PATH=~/.ssh/id_rsa  # Use RSA key instead
+```
+
+Configuration: [`config/ssh_setup.sh`](config/ssh_setup.sh)
+
 ## Getting to know these dotfiles
 
 * Any software or command line tools you need, add them to the [install.sh](./install.sh) script. Try adding a new command line tool to the install script.
