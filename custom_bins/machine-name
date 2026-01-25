@@ -18,7 +18,8 @@
 # 2. SSH config alias matching public IP
 # 3. Abbreviated hostname (truncate if >10 chars)
 #
-# Uses cached public IP (~/.cache/public_ip, 1 hour TTL) to avoid slow network calls.
+# Uses cached public IPs (~/.cache/public_ip_v4 and v6, 1 hour TTL) to avoid slow network calls.
+# Checks both IPv4 and IPv6 addresses against SSH config.
 
 # Exit early if not in SSH session
 [[ -z "$SSH_CONNECTION" ]] && exit 0
@@ -31,37 +32,36 @@ short_name=""
 if [[ -n "$SERVER_NAME" ]]; then
   short_name="$SERVER_NAME"
 
-# Option 2: Parse SSH config to find alias matching public IP
+# Option 2: Parse SSH config to find alias matching public IP (tries both IPv4 and IPv6)
 elif [[ -f ~/.ssh/config ]]; then
-  cache_file="${HOME}/.cache/public_ip"
-  public_ip=""
+  cache_dir="${HOME}/.cache"
+  mkdir -p "$cache_dir"
+  current_time=$(date +%s)
 
-  # Check if cache exists and is fresh (less than 1 hour old)
-  if [[ -f "$cache_file" ]]; then
+  # Helper: get cached IP if fresh (< 1 hour old)
+  get_cached_ip() {
+    local cache_file="$1"
+    [[ ! -f "$cache_file" ]] && return 1
     # Get file modification time (compatible with both macOS and Linux)
+    local file_mtime
     if stat -c %Y "$cache_file" >/dev/null 2>&1; then
       file_mtime=$(stat -c %Y "$cache_file")
     else
       file_mtime=$(stat -f %m "$cache_file" 2>/dev/null || echo 0)
     fi
-    current_time=$(date +%s)
-    age=$((current_time - file_mtime))
-
+    local age=$((current_time - file_mtime))
     if [[ "$age" -lt 3600 ]]; then
-      public_ip=$(cat "$cache_file" 2>/dev/null)
+      cat "$cache_file" 2>/dev/null
+      return 0
     fi
-  fi
+    return 1
+  }
 
-  # Fetch and cache public IP if not cached or stale
-  if [[ -z "$public_ip" ]]; then
-    mkdir -p "$(dirname "$cache_file")"
-    public_ip=$(timeout 2 curl -s ifconfig.me 2>/dev/null || timeout 2 curl -s icanhazip.com 2>/dev/null)
-    [[ -n "$public_ip" ]] && echo "$public_ip" > "$cache_file"
-  fi
-
-  # Try to match public IP against SSH config HostName entries
-  if [[ -n "$public_ip" ]]; then
-    short_name=$(awk -v target="$public_ip" '
+  # Helper: match IP against SSH config HostName entries
+  match_ssh_config() {
+    local ip="$1"
+    [[ -z "$ip" ]] && return
+    awk -v target="$ip" '
       /^Host / {
         h = $2
         # Skip catch-all patterns like "*" or "*.domain.com"
@@ -71,8 +71,26 @@ elif [[ -f ~/.ssh/config ]]; then
         host = h
       }
       /^[[:space:]]*HostName / { if ($2 == target && host != "") print host }
-    ' ~/.ssh/config | head -1)
+    ' ~/.ssh/config | head -1
+  }
+
+  # Get IPv4 (cached or fresh)
+  ipv4=$(get_cached_ip "$cache_dir/public_ip_v4")
+  if [[ -z "$ipv4" ]]; then
+    ipv4=$(timeout 2 curl -4 -s ifconfig.me 2>/dev/null || timeout 2 curl -4 -s icanhazip.com 2>/dev/null)
+    [[ -n "$ipv4" ]] && echo "$ipv4" > "$cache_dir/public_ip_v4"
   fi
+
+  # Get IPv6 (cached or fresh)
+  ipv6=$(get_cached_ip "$cache_dir/public_ip_v6")
+  if [[ -z "$ipv6" ]]; then
+    ipv6=$(timeout 2 curl -6 -s ifconfig.me 2>/dev/null || timeout 2 curl -6 -s icanhazip.com 2>/dev/null)
+    [[ -n "$ipv6" ]] && echo "$ipv6" > "$cache_dir/public_ip_v6"
+  fi
+
+  # Try matching IPv4 first, then IPv6
+  short_name=$(match_ssh_config "$ipv4")
+  [[ -z "$short_name" ]] && short_name=$(match_ssh_config "$ipv6")
 fi
 
 # Fallback: abbreviate long hostnames
