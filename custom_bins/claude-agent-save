@@ -1,0 +1,30 @@
+#!/bin/bash
+# Save agent ID with descriptive name and UTC timestamp
+# Usage: claude-agent-save <agent-id> <description>
+
+set -e
+
+if [ -z "$1" ] || [ -z "$2" ]; then
+  echo "Usage: claude-agent-save <agent-id> <description>"
+  echo "Example: claude-agent-save a5b5164 oauth-refactor"
+  exit 1
+fi
+
+AGENT_ID="$1"
+DESCRIPTION="$2"
+TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
+NAME="${TIMESTAMP}_UTC_${DESCRIPTION}"
+
+AGENT_DIR=~/.claude/saved_agents
+mkdir -p "$AGENT_DIR"
+
+# Save with timestamped name
+echo "$AGENT_ID" > "$AGENT_DIR/$NAME"
+
+# Always update "last" pointer
+echo "$AGENT_ID" > "$AGENT_DIR/last"
+
+echo "✓ Saved agent $AGENT_ID as: $NAME"
+echo ""
+echo "Resume later with: claude-agent-resume $NAME"
+echo "Or resume the last agent: claude-agent-resume"

@@ -254,6 +254,68 @@ qrun() {
 # Health check for all AI CLI tools
 alias ai-check='echo "Checking AI CLI tools..." && claude --version 2>/dev/null && gemini --version 2>/dev/null && codex --version 2>/dev/null'
 
+# Claude Code Task List Management
+# Start new work with timestamped task list
+claude-new() {
+  local description="$1"
+  if [ -z "$description" ]; then
+    echo "Usage: claude-new <description>"
+    echo "Example: claude-new oauth-refactor"
+    return 1
+  fi
+
+  local timestamp
+  timestamp=$(date -u +%Y%m%d_%H%M%S)
+  local task_list_id="${timestamp}_UTC_${description}"
+
+  echo "Starting Claude with task list: $task_list_id"
+  echo "export CLAUDE_CODE_TASK_LIST_ID=$task_list_id" > .claude_task_list_id
+
+  export CLAUDE_CODE_TASK_LIST_ID="$task_list_id"
+  claude
+}
+
+# Resume last task list in current directory
+claude-last() {
+  if [ -f .claude_task_list_id ]; then
+    # shellcheck disable=SC1091
+    source .claude_task_list_id
+    echo "Resuming task list: $CLAUDE_CODE_TASK_LIST_ID"
+    claude
+  else
+    echo "No previous task list found in this directory"
+    echo "Start a new one with: claude-new <description>"
+  fi
+}
+
+# List all task lists
+claude-tasks-list() {
+  echo "Available task lists:"
+  echo ""
+  if [ -d ~/.claude/tasks/ ]; then
+    ls -1t ~/.claude/tasks/ | head -20
+  else
+    echo "(none yet)"
+  fi
+  echo ""
+  echo "Start a new task list: claude-new <description>"
+}
+
+# Start Claude with a specific task list (by name)
+claude-with() {
+  local task_list_id="$1"
+  if [ -z "$task_list_id" ]; then
+    echo "Usage: claude-with <task-list-name>"
+    echo ""
+    claude-tasks-list
+    return 1
+  fi
+
+  export CLAUDE_CODE_TASK_LIST_ID="$task_list_id"
+  echo "Using task list: $task_list_id"
+  claude
+}
+
 # Clear Claude Code processes
 alias ccl='clear-claude-code --list'          # list/status
 alias cc-list='clear-claude-code --list'

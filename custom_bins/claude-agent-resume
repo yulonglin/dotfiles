@@ -1,0 +1,33 @@
+#!/bin/bash
+# Resume a saved agent by name
+# Usage: claude-agent-resume [name]
+# If no name provided, resumes the last saved agent
+
+set -e
+
+NAME="${1:-last}"
+AGENT_DIR=~/.claude/saved_agents
+AGENT_FILE="$AGENT_DIR/$NAME"
+
+if [ ! -f "$AGENT_FILE" ]; then
+  echo "❌ No saved agent named: $NAME"
+  echo ""
+  echo "Available agents:"
+  if [ -d "$AGENT_DIR" ]; then
+    # List all except "last", sorted by timestamp (newest first)
+    find "$AGENT_DIR" -type f ! -name "last" -exec basename {} \; 2>/dev/null | sort -r | sed 's/^/  /' || echo "  (none)"
+  else
+    echo "  (none)"
+  fi
+  exit 1
+fi
+
+AGENT_ID=$(cat "$AGENT_FILE")
+
+echo "▶ Resuming agent: $NAME"
+echo "   Agent ID: $AGENT_ID"
+echo ""
+echo "Tell Claude: 'Resume agent $AGENT_ID'"
+echo ""
+echo "Or if Claude is running in another terminal:"
+echo "  > Resume agent $AGENT_ID"

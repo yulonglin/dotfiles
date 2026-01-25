@@ -1,0 +1,35 @@
+#!/bin/bash
+# List saved agents with timestamps and IDs
+# Usage: claude-agent-list
+
+set -e
+
+AGENT_DIR=~/.claude/saved_agents
+
+if [ ! -d "$AGENT_DIR" ] || [ -z "$(ls -A "$AGENT_DIR" 2>/dev/null)" ]; then
+  echo "No saved agents yet"
+  echo ""
+  echo "Save an agent with: claude-agent-save <agent-id> <description>"
+  exit 0
+fi
+
+echo "Saved Claude Agents:"
+echo "===================="
+echo ""
+
+# List all except "last", sort by timestamp (newest first)
+find "$AGENT_DIR" -type f ! -name "last" -exec basename {} \; 2>/dev/null | sort -r | while read -r name; do
+  agent_id=$(cat "$AGENT_DIR/$name")
+  echo "📋 $name"
+  echo "   ID: $agent_id"
+  echo "   Resume: claude-agent-resume $name"
+  echo ""
+done
+
+# Show most recent agent
+if [ -f "$AGENT_DIR/last" ]; then
+  last_id=$(cat "$AGENT_DIR/last")
+  echo "─────────────────────────"
+  echo "Most recent: $last_id"
+  echo "Resume with: claude-agent-resume"
+fi
