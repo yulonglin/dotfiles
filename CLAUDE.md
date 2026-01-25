@@ -28,7 +28,7 @@ See README.md for detailed usage.
 
 Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - ZSH configuration - Main shell setup
-- Secrets sync - Bidirectional sync with GitHub gist (SSH config, git identity)
+- Secrets sync - Bidirectional sync with GitHub gist (SSH config, git identity), automated daily at 8 AM
 - Git config - Smart conflict resolution with user prompts
 - VSCode/Cursor settings - Merges with existing settings
 - Finicky - Browser routing (macOS only, symlinked)
@@ -97,6 +97,7 @@ config/matplotlib/        # Matplotlib styles and helpers
 - Last-modified wins: compares local mtime vs gist updated_at
 - Requires `gh auth login` (browser OAuth, no extra keys needed)
 - Runs before git config (user.conf provides git identity)
+- Automated: Runs daily at 8:00 AM (launchd/cron), uninstall with `scripts/cleanup/setup_secrets_sync.sh --uninstall`
 
 **Git Config (`deploy_git_config()`)**:
 - Reads `config/user.conf` for user-specific settings

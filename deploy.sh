@@ -193,6 +193,10 @@ fi
 if [[ "$DEPLOY_SECRETS" == "true" ]]; then
     log_section "SYNCING SECRETS"
     sync_secrets || log_warning "Secrets sync failed (continuing anyway)"
+
+    # Install automated daily sync
+    log_info "Setting up automated daily secrets sync..."
+    "$DOT_DIR/scripts/cleanup/setup_secrets_sync.sh" || log_warning "Failed to setup automated sync"
 fi
 
 # ─── Git Configuration ────────────────────────────────────────────────────────

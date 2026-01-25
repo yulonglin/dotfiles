@@ -161,6 +161,28 @@ clear-claude-code --list
 ./scripts/cleanup/setup_claude_cleanup.sh --uninstall
 ```
 
+### Secrets Sync Automation (both platforms)
+
+Automatically sync secrets with GitHub gist daily at 08:00:
+
+```bash
+./deploy.sh --secrets  # Part of defaults
+```
+
+**How it works:**
+- Bidirectional sync with GitHub gist (SSH config, git identity)
+- Last-modified wins: compares local vs gist timestamps
+- Requires `gh auth login` (run once for authentication)
+- Runs daily via launchd (macOS) or cron (Linux)
+
+```bash
+# Manual sync
+sync-secrets
+
+# Uninstall automation
+./scripts/cleanup/setup_secrets_sync.sh --uninstall
+```
+
 ### Step 3: Configure Powerlevel10k theme
 This set of dotfiles uses the powerlevel10k theme for zsh, this makes your terminal look better and adds lots of useful features, e.g. env indicators, git status etc...
 
