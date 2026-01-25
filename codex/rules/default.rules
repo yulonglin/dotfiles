@@ -18,3 +18,5 @@ prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git push"], decision="allow
 prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git add codex/rules/default.rules"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git commit -m \"chore(codex): allow commit/push in rules\" -m \"- Allow GIT_EDITOR=true git commit command\" -m \"- Permit GIT_EDITOR=true git push invocation\""], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git commit -am \"feat(clear-claude-code): add parent info\" -m \"- show parent PID:command in status output\" -m \"- print tty/stat/parent chain for unknown entries\" -m \"- keep output formatting aligned\""], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git status --short"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git diff -- codex/rules/default.rules"], decision="allow")
