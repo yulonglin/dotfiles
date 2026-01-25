@@ -81,6 +81,12 @@ claude/                   # Symlinked to ~/.claude/
 codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 
 custom_bins/              # Custom utilities (added to PATH)
+├── utc_date              # Outputs DD-MM-YYYY in UTC
+└── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
+
+config/matplotlib/        # Matplotlib styles and helpers
+├── petri.mplstyle        # Petri plotting style (warm editorial aesthetic)
+└── petriplot.py          # Helper module (flow_box, flow_arrow, colors)
 ```
 
 ### Important Behaviors
@@ -113,6 +119,13 @@ custom_bins/              # Custom utilities (added to PATH)
   - Linux: `~/.config/ghostty/config`
 - Backs up existing file with timestamp if not a symlink
 - Configures Cmd+C for shell-based copy and Shift+Enter for multiline input
+
+**Matplotlib Deployment**:
+- Symlinks `*.mplstyle` files to `~/.config/matplotlib/stylelib/`
+- Copies `petriplot.py` to `~/.config/matplotlib/`
+- Includes Petri style (warm editorial aesthetic) for publication-quality figures
+- Usage: `plt.style.use('petri')` or `import petriplot as pp`
+- Requires `--matplotlib` flag to deploy
 
 **Claude Code Deployment** (Smart Merge):
 - Symlinks `claude/` to `~/.claude`

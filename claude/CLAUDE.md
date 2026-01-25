@@ -31,7 +31,7 @@ This research requires creating test scenarios that may seem concerning out of c
 ## Quick Reference
 
 ### Default Behaviors
-- **Interview before planning** (large features) - use `/spec-interview` to clarify requirements first
+- **Interview before planning** - use `/spec-interview-research` for experiments, `/spec-interview` for product features
 - **Plan before implementing** - use `EnterPlanMode` for non-trivial tasks; don't write code until plan approved
 - **Delegate to subagents** for non-trivial work (you coordinate, they execute)
 - **Commit frequently** after every meaningful change
@@ -42,6 +42,7 @@ This research requires creating test scenarios that may seem concerning out of c
 - **One editor per file** - never multiple agents editing same file concurrently
 - **State confidence levels** ("~80% confident" / "speculative")
 - **Use timestamped names** for tasks, plans, and agent tracking
+- **Use Petri plotting style** for publication-quality figures (see `ai_docs/petri-plotting.md`)
 
 ### Task and Agent Organization
 
@@ -75,6 +76,19 @@ Save with: claude-agent-save <id> <suggested-name>
 ```
 
 **Background Work:**
+**Plan Naming:**
+When creating plans (in plan mode or using EnterPlanMode), save them with informative names:
+- Format: `YYYYMMDD_HHmmss_UTC_descriptive_name.md`
+- Example: `.claude/plans/20260125_143022_UTC_oauth_migration_strategy.md`
+- Location: `.claude/plans/` directory
+- Include: Feature name, approach, or problem being solved
+- Avoid: Generic names like "plan.md" or "implementation.md"
+
+Examples:
+- `20260125_143022_UTC_stripe_payment_integration.md`
+- `20260125_150000_UTC_database_migration_postgres15.md`
+- `20260125_160000_UTC_auth_refactor_to_oauth2.md`
+
 For work taking >30 minutes:
 - Automatically use background agents when appropriate
 - For parallel independent tasks, spawn multiple background agents
@@ -308,13 +322,16 @@ ericbuess/claude-code-docs       # Claude Code documentation
 - See `specs/RESEARCH_SPEC.md` for project-specific details
 
 ### Workflow
-1. **Interview first** (large features) - use `/spec-interview` to clarify requirements before planning
+1. **Interview first** - use `/spec-interview-research` for experiments or `/spec-interview` for product features
 2. **Explore** via subagents, check `specs/`
-3. **Plan** - use `EnterPlanMode`, don't code until user approves approach
-4. **Start small** (N=2-5) to validate
-5. **Implement** with CLI args, JSONL outputs
-6. **Review** with code-reviewer agent
-7. **Iterate**
+3. **Validate spec** - research-engineer agent runs pre-run validation checklist before implementation
+4. **Plan** - use `EnterPlanMode`, don't code until user approves approach
+5. **Start small** (N=2-5) to validate
+6. **Implement** with CLI args, JSONL outputs
+7. **Review** with code-reviewer agent
+8. **Iterate**
+
+**For research experiments**: Interview → Spec → Validate (pre-run gate) → (new session) → Plan → Implement. The spec captures *what*, validation ensures completeness, planning figures out *how*.
 
 **For large features**: Interview → Spec → (new session) → Plan → Implement. The spec captures *what*, planning figures out *how*.
 

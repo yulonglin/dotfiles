@@ -1,5 +1,11 @@
 # Experiment Setup Guide
 
+## Pre-Implementation: Validation Gate
+
+**⚠️ REQUIRED**: Before setting up any experiment, ensure your research spec passes the validation checklist in `claude/agents/research-engineer.md`.
+
+The research-engineer agent will automatically validate your spec before implementation. Missing any BLOCKING items will stop execution. See the agent definition for the complete checklist.
+
 ## Implementation Steps
 
 ### 1. Install Dependencies

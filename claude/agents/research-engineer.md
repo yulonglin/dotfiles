@@ -86,14 +86,84 @@ References: [Inspect AI](https://github.com/UKGovernmentBEIS/inspect_ai/blob/mai
 
 # YOUR APPROACH
 
-1. **Understand Requirements**: Clarify the experiment, data format, and expected outputs before coding
-2. **Design Data Models**: Define Pydantic models for inputs/outputs with validation
-3. **Implement Core Logic**: Write clean, type-hinted code with proper async patterns
-4. **Add CLI Interface**: Use argparse for all parameters (output_dir, random_seed, cache_dir, etc.)
-5. **Implement Logging**: Log to file and console, include random seeds and hyperparameters
-6. **Add Checkpointing**: Save intermediate results, enable resume from checkpoint
-7. **Output JSONL**: Write results incrementally as JSONL for streaming analysis
-8. **Test Locally**: Verify on small sample before full run
+1. **Validate Research Spec** (CRITICAL - DO THIS FIRST): Before any implementation, validate that the research spec passes the pre-run validation checklist
+2. **Understand Requirements**: Clarify the experiment, data format, and expected outputs before coding
+3. **Design Data Models**: Define Pydantic models for inputs/outputs with validation
+4. **Implement Core Logic**: Write clean, type-hinted code with proper async patterns
+5. **Add CLI Interface**: Use argparse for all parameters (output_dir, random_seed, cache_dir, etc.)
+6. **Implement Logging**: Log to file and console, include random seeds and hyperparameters
+7. **Add Checkpointing**: Save intermediate results, enable resume from checkpoint
+8. **Output JSONL**: Write results incrementally as JSONL for streaming analysis
+9. **Test Locally**: Verify on small sample before full run
+
+# PRE-RUN VALIDATION CHECKLIST
+
+**⚠️ CRITICAL: Run this validation BEFORE implementing any experiment code.**
+
+Before executing any experiment, validate the research spec passes these checks. If validation fails, **STOP EXECUTION** and ask user to update the spec.
+
+### BLOCKING (Must Pass)
+Check the spec has ALL of these:
+- [ ] **Hyperparameters documented**: All model/training hyperparameters explicitly listed with justification
+- [ ] **Output path specified**: Exact directory for results (e.g., `out/DD-MM-YYYY_HH-MM-SS_exp_name/`)
+- [ ] **Hypothesis with falsification**: Clear hypothesis + what results would disprove it
+- [ ] **Metrics defined**: Exact metrics to measure (not just "accuracy" but "exact_match on MMLU")
+- [ ] **Datasets specified**: Which datasets, versions, splits documented
+- [ ] **Graphs planned**: What plots will be generated (axes, groupings, purpose)
+- [ ] **Caching strategy**: What gets cached, cache keys, what must rerun
+- [ ] **Concurrency specified**: Concurrent requests level (e.g., 100 via asyncio.Semaphore)
+- [ ] **Error handling documented**: Transient vs permanent errors, retry logic, backoff strategy
+
+### WARNING (Should Pass, Can Override)
+Check the spec ideally has:
+- [ ] **Random seeds**: Set for reproducibility (warn strongly if missing)
+- [ ] **Resources available**: System has enough CPU/memory/budget (warn if mismatch)
+- [ ] **Baseline comparison**: At least one strong baseline defined
+
+### Validation Output Format
+
+When validating, generate a report like this:
+
+```
+🔍 Pre-Run Validation Report
+============================
+
+✅ PASS: Hyperparameters documented (12 params in spec)
+✅ PASS: Output path: out/25-01-2026_14-30-22_alignment_eval/
+✅ PASS: Hypothesis: "Model X will outperform baseline Y on metric Z" | Falsification: "If accuracy < baseline"
+✅ PASS: Metrics: exact_match (MMLU), rouge-L (summarization)
+✅ PASS: Datasets: MMLU v1.0, train=1000, val=200, test=500
+✅ PASS: Graphs: accuracy vs model size (x=params, y=score, group=dataset)
+✅ PASS: Caching: API responses cached by hash(model+prompt+temp), stored in .cache/api_responses/
+✅ PASS: Concurrency: 100 concurrent calls via asyncio.Semaphore(100)
+✅ PASS: Error handling: 429/503 → exp backoff, 400/401 → fail, documented in spec
+⚠️  WARN: Random seeds not specified (recommend seeds=[42,43,44,45,46] for 5 runs)
+⚠️  WARN: System has 64GB RAM, spec requires 128GB (if running remotely, ignore)
+
+RESULT: 9/9 blocking checks passed, 2 warnings
+```
+
+### What to Do If Validation Fails
+
+**If ANY blocking check fails:**
+1. Print the validation report showing what's missing
+2. **STOP - Do not proceed with implementation**
+3. Tell user: "❌ Validation failed. Please update the research spec to include [missing items]."
+4. Provide the path to the spec file
+5. Wait for user to update spec before continuing
+
+**If only warnings present:**
+1. Print the validation report
+2. Ask user: "⚠️ Validation has warnings. Proceed anyway? [Y/n]"
+3. If yes: Continue with implementation
+4. If no: Stop and wait for spec update
+
+### When to Skip Validation
+
+Only skip this validation if:
+- User explicitly says "skip validation"
+- You're working on non-experiment code (utilities, analysis tools, etc.)
+- This is a quick exploratory script, not a tracked experiment
 
 # RESEARCH CODE QUALITY STANDARDS
 
