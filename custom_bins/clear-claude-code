@@ -12,9 +12,9 @@ set -euo pipefail
 
 # Auto-detect Unicode support (fallback to ASCII for minimal terminals)
 if [[ "${LANG:-}" == *UTF* || "${LC_ALL:-}" == *UTF* ]]; then
-    LINE="─────────────────────────────────────────────────────────────────────────"
+    LINE="──────────────────────────────────────────────────────────────────────────────────────────────"
 else
-    LINE="-------------------------------------------------------------------------"
+    LINE="----------------------------------------------------------------------------------------------"
 fi
 
 # Idle detection: only kill processes with no output activity for 24h.
@@ -107,6 +107,47 @@ get_process_tty() {
     fi
 }
 
+get_parent_chain() {
+    local pid="$1"
+    local chain=""
+    local depth=0
+    local max_depth=4
+
+    while [[ -n "$pid" && "$pid" -gt 1 && $depth -lt $max_depth ]]; do
+        local ppid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ' || echo "")
+        [[ -z "$ppid" || "$ppid" == "$pid" ]] && break
+        local pcomm=$(ps -p "$ppid" -o comm= 2>/dev/null | tr -d ' ' || echo "")
+        local label="$ppid"
+        [[ -n "$pcomm" ]] && label="${ppid}:${pcomm}"
+        if [[ -z "$chain" ]]; then
+            chain="$label"
+        else
+            chain="${chain}<-${label}"
+        fi
+        pid="$ppid"
+        ((depth++))
+    done
+
+    if [[ -z "$chain" ]]; then
+        echo "-"
+    else
+        echo "$chain"
+    fi
+}
+
+get_parent_info() {
+    local pid="$1"
+    local ppid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ' || echo "")
+    [[ -z "$ppid" ]] && { echo "-"; return; }
+
+    local pcomm=$(ps -p "$ppid" -o comm= 2>/dev/null | tr -d ' ' || echo "")
+    if [[ -n "$pcomm" ]]; then
+        echo "${ppid}:${pcomm}"
+    else
+        echo "$ppid"
+    fi
+}
+
 get_tty_mtime() {
     local tty="$1"
     local tty_path="/dev/$tty"
@@ -163,7 +204,7 @@ get_process_status() {
 show_status() {
     echo "Claude Code Processes:"
     echo "$LINE"
-    printf "%-8s %-12s %-10s %-6s %-6s %s\n" "PID" "STATUS" "UPTIME" "CPU%" "MEM%" "COMMAND"
+    printf "%-8s %-12s %-18s %-10s %-6s %-6s %s\n" "PID" "STATUS" "PARENT" "UPTIME" "CPU%" "MEM%" "COMMAND"
     echo "$LINE"
 
     local count=0
@@ -172,6 +213,7 @@ show_status() {
     local idle_count=0
     local recent_count=0
     local unknown_count=0
+    local unknown_pids=()
 
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
@@ -179,6 +221,7 @@ show_status() {
         local cpu=$(echo "$line" | awk '{print $3}')
         local mem=$(echo "$line" | awk '{print $4}')
         local etime=$(ps -p "$pid" -o etime= 2>/dev/null | tr -d ' ' || echo "?")
+        local parent=$(get_parent_info "$pid" | cut -c1-18)
         local cmd=$(echo "$line" | awk '{for(i=11;i<=NF;i++) printf $i" "; print ""}' | cut -c1-40)
         local proc_status=$(get_process_status "$pid")
 
@@ -204,10 +247,11 @@ show_status() {
                 ;;
             *)
                 ((unknown_count++)) || true
+                unknown_pids+=("$pid")
                 ;;
         esac
 
-        printf "%-8s %-12s %-10s %-6s %-6s %s\n" "$pid" "$label" "$etime" "$cpu" "$mem" "$cmd"
+        printf "%-8s %-12s %-18s %-10s %-6s %-6s %s\n" "$pid" "$label" "$parent" "$etime" "$cpu" "$mem" "$cmd"
     done < <(ps aux | awk '$11 ~ /\/claude$/ || $11 == "claude"')
 
     echo "$LINE"
@@ -222,6 +266,19 @@ show_status() {
     if [[ $tmux_count -gt 0 ]]; then
         echo ""
         echo "Note: tmux sessions are preserved by default."
+    fi
+
+    if [[ $unknown_count -gt 0 ]]; then
+        echo ""
+        echo "Unknown details:"
+        for pid in "${unknown_pids[@]}"; do
+            local tty=$(get_process_tty "$pid")
+            local stat=$(ps -p "$pid" -o stat= 2>/dev/null | tr -d ' ' || echo "")
+            local chain=$(get_parent_chain "$pid")
+            [[ -z "$tty" ]] && tty="?"
+            [[ -z "$stat" ]] && stat="?"
+            echo "  PID $pid | tty $tty | stat $stat | parent $chain"
+        done
     fi
 }
 
