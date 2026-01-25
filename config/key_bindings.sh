@@ -9,6 +9,26 @@
 
 # All code below is ZSH-specific (uses zle, bindkey, ZSH for-loop syntax)
 
+# ============================================================================
+# Cursor Shape Configuration
+# ============================================================================
+# Set steady bar (thin) cursor - persists across SSH sessions since zshrc is sourced
+#
+# Escape sequence reference:
+#   \e[1 q  blinking block     \e[2 q  steady block
+#   \e[3 q  blinking underline \e[4 q  steady underline
+#   \e[5 q  blinking bar       \e[6 q  steady bar
+
+function _set_cursor_bar { echo -ne '\e[6 q' }
+function _set_cursor_block { echo -ne '\e[2 q' }
+
+# Set bar cursor on shell init
+_set_cursor_bar
+
+# Reset to bar cursor before each prompt (recovers after Vim exits with block)
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _set_cursor_bar
+
 # convert a python command to a debug command
 function replace-python {
     if [[ $BUFFER =~ ^python\ .* ]]; then
