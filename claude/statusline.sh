@@ -14,8 +14,9 @@
 #
 # Technical details:
 # - Receives JSON via stdin from Claude Code with session/workspace/cost data
-# - Machine name: $SERVER_NAME env > SSH config alias (by IP) > abbreviated hostname
-#   (mirrors p10k.zsh prompt_remote_host() logic)
+# - Machine name: Uses shared machine-name script (custom_bins/machine-name)
+#   Priority: $SERVER_NAME env > SSH config alias (by public IP) > abbreviated hostname
+#   Supports $MACHINE_EMOJI env var, caches public IP for 1 hour
 # - Uses git commands to check repository status and diff statistics
 # - Parses transcript JSONL for accurate context (statusline JSON only has per-turn tokens)
 # - Context = input_tokens + cache_read + cache_creation + output_tokens
@@ -33,46 +34,18 @@ model_id=$(echo "$input" | jq -r ".model.id // empty")
 # ============================================================================
 # MACHINE NAME (SSH config alias, only shown in SSH sessions)
 # ============================================================================
-# Priority: $SERVER_NAME env var > SSH config alias (by IP) > abbreviated hostname
-# Mirrors logic from p10k.zsh prompt_remote_host()
+# Uses shared machine-name script (custom_bins/machine-name)
+# See that script for priority logic and caching details
 
 machine_info=""
-
 if [ -n "$SSH_CONNECTION" ]; then
-  short_name=""
-  icon="🛜"
-  hostname="${HOST:-$(hostname -s)}"
-  # SSH_CONNECTION format: client_ip client_port server_ip server_port
-  server_ip=$(echo "$SSH_CONNECTION" | awk '{print $3}')
-
-  # Option 1: Use SERVER_NAME env var if set on the remote machine
-  if [ -n "$SERVER_NAME" ]; then
-    short_name="$SERVER_NAME"
-  # Option 2: Parse SSH config to find alias matching server IP
-  elif [ -f ~/.ssh/config ] && [ -n "$server_ip" ]; then
-    short_name=$(awk -v target="$server_ip" '
-      /^Host / {
-        h = $2
-        # Skip catch-all patterns like "*" or "*.domain.com"
-        if (h ~ /^\*/) { host = ""; next }
-        # Strip trailing wildcards: "hetzner-8*" -> "hetzner-8"
-        gsub(/[*?]+$/, "", h)
-        host = h
-      }
-      /^[[:space:]]*HostName / { if ($2 == target && host != "") print host }
-    ' ~/.ssh/config | head -1)
+  machine_name_output=$(machine-name 2>/dev/null)
+  if [ -n "$machine_name_output" ]; then
+    # Extract emoji and name from output (format: "EMOJI NAME")
+    icon="${machine_name_output%% *}"
+    name="${machine_name_output#* }"
+    machine_info="$icon $(printf "\033[35m")${name}$(printf "\033[0m") "
   fi
-
-  # Fallback: abbreviate long hostnames
-  if [ -z "$short_name" ]; then
-    if [ ${#hostname} -gt 10 ]; then
-      short_name="${hostname:0:6}.."
-    else
-      short_name="$hostname"
-    fi
-  fi
-
-  machine_info="$icon $(printf "\033[35m")${short_name}$(printf "\033[0m") "
 fi
 
 # ============================================================================

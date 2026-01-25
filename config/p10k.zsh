@@ -1592,56 +1592,17 @@
   # Remote host indicator - shows short name + emoji when in SSH session
   # Priority: $SERVER_NAME env var > SSH config alias (by IP) > abbreviated hostname
   function prompt_remote_host() {
-    # Only show when in SSH session
+    # Uses shared machine-name script (custom_bins/machine-name)
+    # See that script for priority logic and caching details
     [[ -z "$SSH_CONNECTION" ]] && return
 
-    local short_name=""
-    local icon="${MACHINE_EMOJI:-🛜}"  # Use auto-generated emoji, fallback to default
-    local hostname="${HOST:-$(hostname -s)}"
+    local output icon short_name
+    output=$(machine-name 2>/dev/null)
+    [[ -z "$output" ]] && return
 
-    # Option 1: Use SERVER_NAME env var if set on the remote machine
-    if [[ -n "$SERVER_NAME" ]]; then
-      short_name="$SERVER_NAME"
-    # Option 2: Parse SSH config to find alias matching public IP
-    elif [[ -f ~/.ssh/config ]]; then
-      # Get public IP (cached for 1 hour to avoid slow network calls)
-      local cache_file="${HOME}/.cache/public_ip"
-      local public_ip=""
-
-      if [[ -f "$cache_file" && $(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0) )) -lt 3600 ]]; then
-        # Cache is fresh (less than 1 hour old)
-        public_ip=$(cat "$cache_file" 2>/dev/null)
-      else
-        # Fetch and cache public IP (with timeout to avoid hanging)
-        mkdir -p "$(dirname "$cache_file")"
-        public_ip=$(timeout 2 curl -s ifconfig.me 2>/dev/null || timeout 2 curl -s icanhazip.com 2>/dev/null)
-        [[ -n "$public_ip" ]] && echo "$public_ip" > "$cache_file"
-      fi
-
-      # Try to match public IP against SSH config HostName entries
-      if [[ -n "$public_ip" ]]; then
-        short_name=$(awk -v target="$public_ip" '
-          /^Host / {
-            h = $2
-            # Skip catch-all patterns like "*" or "*.domain.com"
-            if (h ~ /^\*/) { host = ""; next }
-            # Strip trailing wildcards: "hetzner-8*" -> "hetzner-8"
-            gsub(/[*?]+$/, "", h)
-            host = h
-          }
-          /^[[:space:]]*HostName / { if ($2 == target && host != "") print host }
-        ' ~/.ssh/config | head -1)
-      fi
-    fi
-
-    # Fallback: abbreviate long hostnames
-    if [[ -z "$short_name" ]]; then
-      if (( ${#hostname} > 10 )); then
-        short_name="${hostname:0:6}.."
-      else
-        short_name="$hostname"
-      fi
-    fi
+    # Parse output (format: "EMOJI NAME")
+    icon="${output%% *}"
+    short_name="${output#* }"
 
     p10k segment -f 147 -i "$icon" -t "$short_name"
   }
