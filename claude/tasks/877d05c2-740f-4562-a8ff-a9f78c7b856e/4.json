@@ -1,0 +1,16 @@
+{
+  "id": "4",
+  "subject": "[Baseline] Run C3 vs TM comparison on GPQA and MATH",
+  "description": "Run C3 vs TM comparison on GPQA and MATH using stealth prompts.\n\n**Updated plan:**\n1. Validate stealth prompts on small sample (N=10)\n2. Run C3 on GPQA stealth (categorical_entropy metric)\n3. Run TM on GPQA stealth\n4. Compare ROC curves and detection performance\n5. Repeat for MATH if time permits (cosine distance metric)\n\n**Key decision**: If TM catches stealth prompts, pivot to cascade narrative. If TM fails but C3 works, that's the core ICML result.\n\nSee: tmp/experimental_priorities.md for full execution plan",
+  "activeForm": "Comparing C3 vs TM performance on GPQA/MATH",
+  "status": "in_progress",
+  "blocks": [
+    "8",
+    "6"
+  ],
+  "blockedBy": [],
+  "metadata": {
+    "next_action": "Can now run experiments with agents",
+    "agent_spawning": "fixed"
+  }
+}

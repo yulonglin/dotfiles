@@ -1,0 +1,11 @@
+{
+  "id": "3",
+  "subject": "[Filter] Analyze existing prompted traces for implicit vs explicit sandbagging",
+  "description": "Filter existing prompted sandbagger traces to identify:\n- Explicit: Mentions strategy, bias, systematic approach\n- Implicit: No strategy leakage but still sandbagging\n\nUse combination of:\n1. Keyword matching (current)\n2. LLM judge for SAS/suspicious scoring (Claude 3.5 Haiku or similar)\n3. Count how many implicit traces remain after strict filtering\n\nDeliverable: Filtered dataset splits, statistics on explicit vs implicit volumes",
+  "activeForm": "Filtering prompted traces for strategy leakage",
+  "status": "pending",
+  "blocks": [
+    "8"
+  ],
+  "blockedBy": []
+}

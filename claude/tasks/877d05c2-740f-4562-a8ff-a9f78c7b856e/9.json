@@ -1,0 +1,13 @@
+{
+  "id": "9",
+  "subject": "[Robustness] Run control experiments for confounders",
+  "description": "Critical for ICML review: Show C3 isn't just measuring \"being wrong\" or prompt variability.\n\nControls needed:\n1. Run C3 on honest/benign models with same paraphrases (baseline natural variance)\n2. Stratify by correctness: Compare consistency on correct vs incorrect honest answers\n3. Compute effect sizes (Cohen's d) to show sandbagging drop is significant\n4. Control for model capability differences\n\nFocus on GPQA and MATH.",
+  "activeForm": "Running robustness controls for C3",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": [],
+  "metadata": {
+    "agent_id": "a8c4285",
+    "task": "Generating KDE plots from existing C3 data"
+  }
+}

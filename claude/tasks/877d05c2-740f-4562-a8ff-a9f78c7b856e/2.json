@@ -1,0 +1,14 @@
+{
+  "id": "2",
+  "subject": "[Prompts] Create stealthier sandbagging prompts with stronger incentives",
+  "description": "Design and test improved sandbagging prompts that:\n1. Provide realistic, strong incentives (check ~/writing/brainstorming/ideas/sandbagging-incentives/SYNTHESIS.md)\n2. Include scratchpad for reasoning models (gpt-5-nano with reasoning_effort: low)\n3. Emphasize stealth and avoiding detection\n4. Test with LLM SAS judge to ensure no strategy leakage\n\nApproach:\n- Start from selected prompts in specs/icml-baseline-expts/\n- Improve borderline ones that had strategy leaks\n- Make non-sandbagging prompts more aggressive\n- Test on small samples (N=10) before full runs",
+  "activeForm": "Creating stealthier sandbagging prompts",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": [],
+  "metadata": {
+    "prompts_created": 4,
+    "location": "src/detection_game/configs/system_prompt/stealth_v2/",
+    "testing_guide": "tmp/stealth_v2_testing_guide.md"
+  }
+}

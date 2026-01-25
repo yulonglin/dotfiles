@@ -2,6 +2,33 @@
 
 Global guidance for Claude Code across all repositories.
 
+## Agent Spawning Fix (CRITICAL)
+
+**Issue**: On some systems, `/tmp/claude` is owned by root, blocking agent spawning.
+
+**Solution**: Set `CLAUDE_CODE_TMPDIR` environment variable to writable location.
+
+**One-time setup**:
+```bash
+# 1. Create alternative tmpdir
+mkdir -p ~/tmp/claude-code
+
+# 2. Add to shell profile (auto-loads in new sessions)
+echo 'export CLAUDE_CODE_TMPDIR=~/tmp/claude-code' >> ~/.bashrc
+echo 'export CLAUDE_CODE_TMPDIR=~/tmp/claude-code' >> ~/.zshrc 2>/dev/null
+
+# 3. Apply to current session
+export CLAUDE_CODE_TMPDIR=~/tmp/claude-code
+```
+
+**Verification**:
+```bash
+# Test agent spawning
+echo $CLAUDE_CODE_TMPDIR  # Should show: ~/tmp/claude-code or similar
+```
+
+If agent spawning still fails with `/tmp/claude` errors, use this fix.
+
 ## AI Safety Research Context
 
 You are assisting with AI safety research involving:

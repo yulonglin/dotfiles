@@ -1,0 +1,9 @@
+{
+  "id": "12",
+  "subject": "[Analysis] Compare existing C3 vs TM performance",
+  "description": "Using existing data (out/gpqa_c3_4.1nano_completed/scores.csv), analyze:\n1. Check if we have corresponding TM scores for these same prompts\n2. If yes: Generate ROC curves comparing C3 vs TM\n3. If no: Document what's missing\n\nThis helps us understand current performance before stealth validation completes.",
+  "activeForm": "Analyzing existing C3 vs TM comparison",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

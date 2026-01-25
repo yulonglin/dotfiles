@@ -84,13 +84,9 @@
       "Bash(mkfs:*)",
       "Bash(fdisk:*)",
       "Bash(chmod -R 777:*)",
-      "Bash(chown -R:*)",
-      "Read(.env**)"
+      "Bash(chown -R:*)"
     ],
     "ask": [
-      "Bash(curl:*)",
-      "Bash(wget:*)",
-      "Bash(sudo:*)"
     ],
     "defaultMode": "plan"
   },

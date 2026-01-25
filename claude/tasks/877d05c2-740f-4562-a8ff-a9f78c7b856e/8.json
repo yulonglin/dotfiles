@@ -1,0 +1,14 @@
+{
+  "id": "8",
+  "subject": "[Synthesis] Consolidate results and create recommendation report",
+  "description": "After experiments complete, synthesize findings:\n1. Which narrative works: \"C3 beats TM\" vs \"Defense in Depth\" vs \"C3 adds value\"\n2. What data to include in paper (explicit, implicit, password models)\n3. Which experiments strengthen the story\n4. What still needs to run\n5. Timeline feasibility for ICML deadline\n\nDeliverable: Clear recommendation document with next steps",
+  "activeForm": "Synthesizing results into recommendation",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [
+    "1",
+    "3",
+    "4",
+    "6"
+  ]
+}

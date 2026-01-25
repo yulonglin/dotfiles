@@ -1,0 +1,9 @@
+{
+  "id": "7",
+  "subject": "[Analysis] Check if paraphrasing matters vs just more epochs",
+  "description": "Experimental question: Can we get same signal from N epochs on same question instead of N paraphrases?\n\nCompare:\n- k=5 paraphrased questions (current)\n- k=5 identical questions\n- Look at consistency scores, detection performance\n\nThis could simplify the method if paraphrasing doesn't add value.\n\nLower priority - only if time permits.",
+  "activeForm": "Testing paraphrasing vs repeated epochs",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

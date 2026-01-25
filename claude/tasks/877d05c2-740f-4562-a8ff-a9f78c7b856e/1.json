@@ -1,0 +1,16 @@
+{
+  "id": "1",
+  "subject": "[CRITICAL] Test trusted monitoring on password-locked models",
+  "description": "Run Anthropic trusted monitor on existing password-locked model outputs to determine if they evade monitoring. This is THE critical experiment that determines the entire narrative.\n\nSteps:\n1. Locate existing password-locked model .eval files\n2. Run trusted monitor classifier (Anthropic version)\n3. Compare TM suspicion scores vs C3 consistency scores\n4. Determine if we have \"Monitor fails, C3 works\" scenario\n\n**This determines Plan A viability** - must complete before other experiments.\n\nExpected outcome: CSV with TM scores, comparison analysis",
+  "activeForm": "Testing trusted monitoring on password models",
+  "status": "completed",
+  "blocks": [
+    "8",
+    "6"
+  ],
+  "blockedBy": [],
+  "metadata": {
+    "skipped": true,
+    "reason": "No GPU available, focusing on prompted sandbaggers"
+  }
+}

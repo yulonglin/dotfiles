@@ -1,0 +1,14 @@
+{
+  "id": "6",
+  "subject": "[Ensemble] Test cascade approach (TM → C3)",
+  "description": "Test \"Defense in Depth\" cascade:\n1. Layer 1: Trusted Monitor (catches explicit)\n2. Layer 2: C3 (catches sophisticated cases that pass TM)\n\nExperiments:\n- Combined ROC curve showing ensemble performance\n- Analyze cases where TM fails but C3 succeeds\n- Compute optimal threshold for TM first-pass filter\n- Show improvement over either method alone\n\nThis is the reframed narrative for ICML.",
+  "activeForm": "Testing cascade TM→C3 ensemble",
+  "status": "pending",
+  "blocks": [
+    "8"
+  ],
+  "blockedBy": [
+    "1",
+    "4"
+  ]
+}

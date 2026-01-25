@@ -1,0 +1,13 @@
+{
+  "id": "5",
+  "subject": "[Judge] Implement LLM-based SAS judge for stealth scoring",
+  "description": "Create LLM judge to detect suspicious/scheming behavior for PROMPT SELECTION PIPELINE (not for detection experiments).\n\nThis will make the prompt selection pipeline stricter by using LLM-based SAS scoring instead of just keyword matching.\n\nRequirements:\n1. Use weak model (Claude 3.5 Haiku) for efficiency\n2. Ask follow-up questions to probe for inconsistencies\n3. Score on SAS/suspicious scale (0-10 or 1-100)\n4. Integrate into prompt_selection/filters.py\n\nLower priority - focus on tasks #2 and #4 first.",
+  "activeForm": "Implementing LLM SAS judge for filtering",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": [],
+  "metadata": {
+    "file_created": "src/detection_game/configs/judge/suspicion_judge.yaml",
+    "note": "LLM-based SAS judge for prompt selection pipeline"
+  }
+}

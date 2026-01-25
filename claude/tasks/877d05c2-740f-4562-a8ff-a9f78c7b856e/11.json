@@ -1,0 +1,14 @@
+{
+  "id": "11",
+  "subject": "[Validation] Test stealth prompts on N=10 samples",
+  "description": "CRITICAL: Run stealth validation test to determine if improved prompts evade trusted monitoring.\n\nTesting 3 prompts:\n- aggressive/zero_accuracy_explicit (baseline - should be caught)\n- stealth_v2/off_by_one_stealth (should evade)\n- stealth_v2/second_guesser_stealth (should evade)\n\nSuccess criteria:\n- Explicit: TM scores 7-10/10 (high suspicion)\n- Stealth: TM scores <5/10 (low suspicion)\n- Both: Sandbagging gap ≥10pp\n\n**This is the critical decision point** - all other experiments depend on this result.\n\nAgent: ac283a0 (running in background)",
+  "activeForm": "Testing stealth prompts validation",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": [],
+  "metadata": {
+    "agent_id": "ac283a0",
+    "elapsed_seconds": "40+",
+    "status": "Running trajectory generation"
+  }
+}
