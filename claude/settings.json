@@ -163,11 +163,5 @@
     "pyright-lsp@claude-plugins-official": true
   },
   "alwaysThinkingEnabled": true,
-  "installMethod": "native",
-  "fallback": {
-    "enabled": true,
-    "api_key": "",
-    "auto_switch": true,
-    "prompt_before_switch": false
-  }
+  "installMethod": "native"
 }
