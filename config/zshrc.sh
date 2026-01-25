@@ -1,6 +1,9 @@
 CONFIG_DIR=$(dirname $(realpath ${(%):-%x}))
 DOT_DIR=$CONFIG_DIR/..
 
+# Disable AUTO_CD - require explicit cd commands
+unsetopt AUTO_CD
+
 # Instant prompt
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"

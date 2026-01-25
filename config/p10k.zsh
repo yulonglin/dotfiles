@@ -1596,27 +1596,42 @@
     [[ -z "$SSH_CONNECTION" ]] && return
 
     local short_name=""
-    local icon="🛜"
+    local icon="${MACHINE_EMOJI:-🛜}"  # Use auto-generated emoji, fallback to default
     local hostname="${HOST:-$(hostname -s)}"
-    # SSH_CONNECTION format: client_ip client_port server_ip server_port
-    local server_ip="${${(s: :)SSH_CONNECTION}[3]}"
 
     # Option 1: Use SERVER_NAME env var if set on the remote machine
     if [[ -n "$SERVER_NAME" ]]; then
       short_name="$SERVER_NAME"
-    # Option 2: Parse SSH config to find alias matching server IP
-    elif [[ -f ~/.ssh/config && -n "$server_ip" ]]; then
-      short_name=$(awk -v target="$server_ip" '
-        /^Host / {
-          h = $2
-          # Skip catch-all patterns like "*" or "*.domain.com"
-          if (h ~ /^\*/) { host = ""; next }
-          # Strip trailing wildcards: "hetzner-8*" -> "hetzner-8"
-          gsub(/[*?]+$/, "", h)
-          host = h
-        }
-        /^[[:space:]]*HostName / { if ($2 == target && host != "") print host }
-      ' ~/.ssh/config | head -1)
+    # Option 2: Parse SSH config to find alias matching public IP
+    elif [[ -f ~/.ssh/config ]]; then
+      # Get public IP (cached for 1 hour to avoid slow network calls)
+      local cache_file="${HOME}/.cache/public_ip"
+      local public_ip=""
+
+      if [[ -f "$cache_file" && $(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0) )) -lt 3600 ]]; then
+        # Cache is fresh (less than 1 hour old)
+        public_ip=$(cat "$cache_file" 2>/dev/null)
+      else
+        # Fetch and cache public IP (with timeout to avoid hanging)
+        mkdir -p "$(dirname "$cache_file")"
+        public_ip=$(timeout 2 curl -s ifconfig.me 2>/dev/null || timeout 2 curl -s icanhazip.com 2>/dev/null)
+        [[ -n "$public_ip" ]] && echo "$public_ip" > "$cache_file"
+      fi
+
+      # Try to match public IP against SSH config HostName entries
+      if [[ -n "$public_ip" ]]; then
+        short_name=$(awk -v target="$public_ip" '
+          /^Host / {
+            h = $2
+            # Skip catch-all patterns like "*" or "*.domain.com"
+            if (h ~ /^\*/) { host = ""; next }
+            # Strip trailing wildcards: "hetzner-8*" -> "hetzner-8"
+            gsub(/[*?]+$/, "", h)
+            host = h
+          }
+          /^[[:space:]]*HostName / { if ($2 == target && host != "") print host }
+        ' ~/.ssh/config | head -1)
+      fi
     fi
 
     # Fallback: abbreviate long hostnames
@@ -1684,6 +1699,95 @@
   # can slow down prompt by 1-2 milliseconds, so it's better to keep it turned off unless you
   # really need it.
   typeset -g POWERLEVEL9K_DISABLE_HOT_RELOAD=true
+
+  # ============================================================================
+  # Machine-Specific Theme Customization (Auto-generated from SSH alias)
+  # ============================================================================
+  # Each machine gets a consistent color scheme and emoji based on SSH alias hash
+  # Uses SSH config Host name (e.g., "mats") instead of hostname for consistency
+
+  # Helper: Get SSH alias for this machine
+  function _get_ssh_alias() {
+    local alias_name=""
+
+    # Option 1: Use SERVER_NAME env var if set
+    if [[ -n "$SERVER_NAME" ]]; then
+      alias_name="$SERVER_NAME"
+    # Option 2: In SSH session, lookup alias from public IP
+    elif [[ -n "$SSH_CONNECTION" && -f ~/.ssh/config ]]; then
+      local cache_file="${HOME}/.cache/public_ip"
+      local public_ip=""
+
+      # Get cached public IP
+      if [[ -f "$cache_file" && $(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0) )) -lt 3600 ]]; then
+        public_ip=$(cat "$cache_file" 2>/dev/null)
+      else
+        mkdir -p "$(dirname "$cache_file")"
+        public_ip=$(timeout 2 curl -s ifconfig.me 2>/dev/null || timeout 2 curl -s icanhazip.com 2>/dev/null)
+        [[ -n "$public_ip" ]] && echo "$public_ip" > "$cache_file"
+      fi
+
+      # Match public IP to SSH config Host
+      if [[ -n "$public_ip" ]]; then
+        alias_name=$(awk -v target="$public_ip" '
+          /^Host / { h = $2; if (h !~ /^\*/) { gsub(/[*?]+$/, "", h); host = h } }
+          /^[[:space:]]*HostName / { if ($2 == target && host != "") print host }
+        ' ~/.ssh/config | head -1)
+      fi
+    fi
+
+    # Fallback to hostname
+    echo "${alias_name:-${HOST:-$(hostname -s)}}"
+  }
+
+  # Curated color palette - visually distinct with good visibility
+  local -a color_palette=(
+    208  # orange
+    39   # cyan
+    214  # light orange
+    45   # bright cyan
+    178  # gold
+    147  # purple
+    203  # pink
+    118  # green
+    226  # bright yellow
+    75   # blue
+    215  # peach
+    51   # bright blue
+  )
+
+  # Emoji palette for remote_host segment
+  local -a emoji_palette=(
+    "🚀"  # rocket
+    "💻"  # laptop
+    "🖥️"  # desktop
+    "⚡"  # lightning
+    "🔥"  # fire
+    "🌟"  # star
+    "🎯"  # target
+    "🧠"  # brain
+    "🛸"  # UFO
+    "🌊"  # wave
+    "🎨"  # palette
+    "🔮"  # crystal ball
+  )
+
+  # Get SSH alias and hash it for color/emoji selection
+  local machine_name=$(_get_ssh_alias)
+  local host_hash=$(( 0x$(echo -n "$machine_name" | md5sum 2>/dev/null | cut -c1-8 || echo "0") ))
+  local color_index=$(( (host_hash % ${#color_palette[@]}) + 1 ))
+  local emoji_index=$(( ((host_hash / ${#color_palette[@]}) % ${#emoji_palette[@]}) + 1 ))
+
+  # Select color and emoji for this machine
+  local machine_color=${color_palette[$color_index]}
+  typeset -g MACHINE_EMOJI=${emoji_palette[$emoji_index]}
+
+  # Apply machine-specific color to key segments
+  typeset -g POWERLEVEL9K_OS_ICON_FOREGROUND=$machine_color
+  typeset -g POWERLEVEL9K_DIR_FOREGROUND=$machine_color
+  typeset -g POWERLEVEL9K_DIR_ANCHOR_FOREGROUND=$machine_color
+
+  # ============================================================================
 
   # If p10k is already loaded, reload configuration.
   # This works even with POWERLEVEL9K_DISABLE_HOT_RELOAD=true.
