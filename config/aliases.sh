@@ -41,6 +41,7 @@ claude() {
     command claude "$@"
 }
 alias yolo='claude --dangerously-skip-permissions'
+alias resume='yolo --resume'
 
 # -------------------------------------------------------------------
 # general
