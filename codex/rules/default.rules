@@ -13,3 +13,6 @@ prefix_rule(pattern=["bash", "-lc", "git ls-files codex/rules"], decision="allow
 prefix_rule(pattern=["bash", "-lc", "git push"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "git pull --rebase"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git add codex/rules/claude_sync.rules codex/rules/default.rules scripts/helpers/convert_claude_perms.py"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git commit -m \\\"fix(codex): align claude sync decisions\\\" -m \\\"- Map ask/deny to prompt/forbidden for Codex rules\\\" -m \\\"- Regenerate claude_sync.rules header and decisions\\\" -m \\\"- Allow git push/pull in default rules\\\""], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git push"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git add codex/rules/default.rules"], decision="allow")
