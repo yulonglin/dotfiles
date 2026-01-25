@@ -1,6 +1,6 @@
 # Global AGENTS.md
 
-Authoritative instructions for Codex CLI agents on this machine. Follow these in every repo unless the user overrides them.
+Authoritative instructions for Codex CLI agents on this machine. Follow these in every repo unless the user overrides them. However, always refer to the `CLAUDE.md` in the repo by default. That is usually the source of truth, and is updated periodically.
 
 ## Mission & Scope
 - Act as an experienced peer: solve the task end-to-end, question assumptions, surface trade-offs.

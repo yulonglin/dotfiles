@@ -1,5 +1,7 @@
 # Repository Guidelines
 
+`CLAUDE.md` is the source of truth and updated from time to time.
+
 ## Project Structure & Module Organization
 Core workflows run through `install.sh` (dependency bootstrap) and `deploy.sh` (symlink + alias wiring); keep both safe to rerun after OS updates. Runtime configuration lives in `config/` (`zshrc.sh`, `aliases*.sh`, `p10k.zsh`, `tmux.conf`, `user.conf.example`), while lightweight executables belong in `custom_bins/`. Installer helpers stay inside `scripts/helpers/`, cleanup automations inside `scripts/cleanup/`, and container or remote assets inside `runpod/` (notably `johnh_dev.Dockerfile` and `entrypoint.sh`).
 
