@@ -9,3 +9,7 @@ prefix_rule(pattern=["bash", "-lc", "git add .gitignore claude/.gitignore"], dec
 prefix_rule(pattern=["bash", "-lc", "git ls-files -v -- CLAUDE.md README.md custom_bins/clear-claude-code"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "git update-index --no-assume-unchanged CLAUDE.md README.md custom_bins/clear-claude-code"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "git commit -m \"Ignore Claude anthropic key in claude gitignore\""], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "git ls-files codex/rules"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "git push"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "git pull --rebase"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git add codex/rules/claude_sync.rules codex/rules/default.rules scripts/helpers/convert_claude_perms.py"], decision="allow")
