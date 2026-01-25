@@ -1,5 +1,6 @@
 # Claude Code runtime files (ignore these, don't track)
 .credentials.json
+anthropic_key.sh
 security_warnings_state_*.json
 file-history/
 history.jsonl
