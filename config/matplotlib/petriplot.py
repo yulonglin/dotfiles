@@ -131,6 +131,8 @@ if __name__ == "__main__":
     ax.axis('off')
 
     plt.tight_layout()
-    plt.savefig(f'petri_example_{utc_timestamp()}.png', dpi=300)
-    print(f'Saved petri_example_{utc_timestamp()}.png')
+    timestamp = utc_timestamp()
+    filename = f'petri_example_{timestamp}.png'
+    plt.savefig(filename, dpi=300)
+    print(f'Saved {filename}')
     plt.show()

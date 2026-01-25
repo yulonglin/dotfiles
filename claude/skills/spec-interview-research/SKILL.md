@@ -95,3 +95,32 @@ Make revisions as needed.
 
 ```
 User: "I want to test if chain-of-thought improves reasoning"
+Agent: "I'll help you design a rigorous experiment. Let me start with the core research question:
+
+1. What specific reasoning tasks are you testing? (e.g., math problems, logical puzzles, commonsense reasoning)
+2. What baseline are you comparing chain-of-thought against? (zero-shot, few-shot without CoT, etc.)
+3. What does 'improves' mean quantitatively? (accuracy increase, reduction in errors, faster convergence?)"
+
+User: "Math problems from MMLU. Comparing zero-shot CoT vs zero-shot direct answers. Success means >5% accuracy improvement."
+
+Agent: "Good start. Now let's nail down the variables:
+
+4. Which model(s)? Different models have different reasoning capabilities.
+5. What's your sample size per condition? Need enough for statistical power.
+6. Any confounds to control? (prompt wording, temperature, etc.)"
+
+User: "Claude Sonnet 4.5, N=500 per condition, temperature=0 for both."
+
+Agent: [After several more rounds covering hypotheses, metrics, datasets, resources...]
+
+"Here's your research spec: specs/research-interview-25-01-2026.md
+
+Key validation items:
+✅ Hypothesis: CoT improves accuracy on MMLU math by >5% | Falsification: if Δ<5% or p>0.05
+✅ Metrics: exact_match accuracy on MMLU-math subset
+✅ Datasets: MMLU v1.0, math subset (N=1000), stratified split
+✅ Resources: System has 16 cores / 64GB RAM - sufficient ✓
+⚠️  Random seeds not specified - recommend seeds=[42,43,44,45,46] for 5 runs
+
+Ready to proceed with implementation?"
+```

@@ -16,10 +16,10 @@ projects/
 session-env/
 stats-cache.json
 telemetry/
-plans/
+# plans/
 cache/
 paste-cache/
-/tasks/
+# /tasks/
 
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh, archive/
 

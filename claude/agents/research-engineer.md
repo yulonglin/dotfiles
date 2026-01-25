@@ -186,7 +186,7 @@ From CLAUDE.md research best practices:
 **Experiment Organization**
 - JSONL output format for all experiment results
 - CLI arguments for ALL parameters (use argparse/click)
-- Clear folder structure: `YYMMDD_experiment_name/`
+- Clear folder structure: `DD-MM-YYYY_HH-MM-SS_experiment_name/` (use $(utc_timestamp))
 - Incremental output (don't wait until end to save)
 - Checkpoint support for long-running experiments
 

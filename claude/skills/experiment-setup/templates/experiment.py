@@ -38,7 +38,7 @@ def main(cfg: DictConfig) -> dict[str, Any]:
     Run experiment with automated logging.
 
     Hydra automatically:
-    - Creates timestamped output directory: experiments/YYYYMMDD_HHMMSS_name/
+    - Creates timestamped output directory: experiments/DD-MM-YYYY_HH-MM-SS_name/
     - Logs full config to .hydra/config.yaml
     - Logs CLI overrides to .hydra/overrides.yaml
     - Logs execution to main.log

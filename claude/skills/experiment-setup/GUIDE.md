@@ -56,7 +56,7 @@ python experiment.py experiment.name=test_prompt_v2
 Base Hydra configuration with metadata, model settings, task config, and API settings.
 
 ### hydra_config.yaml
-Hydra runtime configuration for output directory structure (`experiments/YYYYMMDD_HHMMSS_name/`) and job settings.
+Hydra runtime configuration for output directory structure (`experiments/DD-MM-YYYY_HH-MM-SS_name/`) and job settings.
 
 ### experiment.py
 Main experiment template with Hydra decorator, logging setup, and Inspect AI integration.

@@ -342,7 +342,7 @@ if [[ "$DEPLOY_MATPLOTLIB" == "true" ]]; then
 
         log_success "Deployed matplotlib styles"
         log_info "  Style usage: plt.style.use('petri') or plt.style.use('anthropic')"
-        log_info "  Helper usage: import sys; sys.path.insert(0, '$MPLCONFIG'); import petriplot as pp"
+        log_info "  Helper: Add ~/.config/matplotlib to PYTHONPATH, then: import petriplot as pp"
     else
         log_warning "Matplotlib config directory not found"
     fi

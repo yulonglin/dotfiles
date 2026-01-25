@@ -29,4 +29,4 @@ Set up automated experiment logging using Hydra and Inspect AI.
    - Update `.gitignore`.
    - Verify with a test run.
 
-3. **Verify**: Check that `experiments/YYYYMMDD_...` directories are created.
+3. **Verify**: Check that `experiments/DD-MM-YYYY_HH-MM-SS_...` directories are created.
