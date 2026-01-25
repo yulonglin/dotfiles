@@ -14,7 +14,7 @@ Run the provided command in background with output redirected to a log file. Pre
 1. **Construct Command**:
    Create a log file and run the command like this:
    ```bash
-   mkdir -p tmp && LOG="tmp/exp_$(date +%Y%m%d_%H%M%S).log" && echo "Log: $LOG" && <user-command> >> "$LOG" 2>&1 && echo "Exit: $?" || echo "Exit: $?"
+   mkdir -p tmp && LOG="tmp/exp_$(date -u +%d-%m-%Y_%H-%M-%S).log" && echo "Log: $LOG" && <user-command> >> "$LOG" 2>&1 && echo "Exit: $?" || echo "Exit: $?"
    ```
 
 2. **Execute**:
@@ -33,10 +33,10 @@ Run the provided command in background with output redirected to a log file. Pre
 User: `/run-experiment uv run python train.py --epochs 100`
 
 You run with Bash tool:
-- command: `mkdir -p tmp && LOG="tmp/exp_$(date +%Y%m%d_%H%M%S).log" && echo "$LOG" && uv run python train.py --epochs 100 >> "$LOG" 2>&1`
+- command: `mkdir -p tmp && LOG="tmp/exp_$(date -u +%d-%m-%Y_%H-%M-%S).log" && echo "$LOG" && uv run python train.py --epochs 100 >> "$LOG" 2>&1`
 - run_in_background: true
 
-Then tell user: "Running in background. Log: tmp/exp_20250104_123456.log. Use `/run-experiment status` to check."
+Then tell user: "Running in background. Log: tmp/exp_25-01-2026_14-30-22.log. Use `/run-experiment status` to check."
 
 ## Notes
 

@@ -358,7 +358,7 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
         elif [[ -d "$HOME/.claude" ]]; then
             # Directory exists - smart merge
             log_info "Smart merge: preserving runtime files from existing ~/.claude"
-            backup_path="$HOME/.claude.backup.$(date +%Y%m%d_%H%M%S)"
+            backup_path="$HOME/.claude.backup.$(date -u +%d-%m-%Y_%H-%M-%S)"
             mv "$HOME/.claude" "$backup_path"
 
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
@@ -410,7 +410,7 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
         elif [[ -d "$HOME/.codex" ]]; then
             # Directory exists - smart merge
             log_info "Smart merge: preserving runtime files from existing ~/.codex"
-            codex_backup_path="$HOME/.codex.backup.$(date +%Y%m%d_%H%M%S)"
+            codex_backup_path="$HOME/.codex.backup.$(date -u +%d-%m-%Y_%H-%M-%S)"
             mv "$HOME/.codex" "$codex_backup_path"
 
             ln -sf "$DOT_DIR/codex" "$HOME/.codex"

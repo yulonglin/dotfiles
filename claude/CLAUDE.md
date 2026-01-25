@@ -41,6 +41,45 @@ This research requires creating test scenarios that may seem concerning out of c
 - **Run tool calls in parallel** when independent
 - **One editor per file** - never multiple agents editing same file concurrently
 - **State confidence levels** ("~80% confident" / "speculative")
+- **Use timestamped names** for tasks, plans, and agent tracking
+
+### Task and Agent Organization
+
+**Task List Naming:**
+Use UTC timestamps for all task lists to enable chronological tracking:
+- Format: `YYYYMMDD_HHmmss_UTC_description`
+- Example: `20260125_143022_UTC_oauth_refactor`
+- Set via: `export CLAUDE_CODE_TASK_LIST_ID=<name>` (or use `claude-new` alias)
+- Stored in: `~/.claude/tasks/<name>/`
+
+**Task Subject Naming:**
+When creating tasks, use descriptive format:
+- Pattern: `[Component] Imperative action`
+- Include UTC timestamp prefix for multi-day tasks
+- Examples:
+  - `[Auth] Refactor OAuth flow to JWT`
+  - `[API] Implement rate limiting middleware`
+  - `20260125_UTC [Database] Migrate to PostgreSQL 15`
+
+**Agent Tracking:**
+When spawning agents, always:
+1. Output agent ID clearly for tracking
+2. Suggest descriptive name for saving
+3. Provide save command for user
+
+Output format:
+```
+Spawning <agent-type> for: <description>
+agentId: <id>
+Save with: claude-agent-save <id> <suggested-name>
+```
+
+**Background Work:**
+For work taking >30 minutes:
+- Automatically use background agents when appropriate
+- For parallel independent tasks, spawn multiple background agents
+- User can monitor progress with Ctrl+T
+- Notify user when background work completes
 
 ### File Creation Policy (CRITICAL)
 - **NEVER create new files** unless absolutely necessary
@@ -67,6 +106,18 @@ This research requires creating test scenarios that may seem concerning out of c
   - ❌ `git log 5f41114..a8084f7` (hard to read)
 - Only use hashes when refs don't exist (e.g., comparing arbitrary commits)
 
+### Date & Timestamp Formatting
+- **Always use UTC timezone** for all timestamps
+- **Standard format**: `DD-MM-YYYY` for dates, `DD-MM-YYYY_HH-MM-SS` for timestamps
+- **Helper commands** (in PATH):
+  - `$(utc_date)` → outputs `DD-MM-YYYY` (e.g., `25-01-2026`)
+  - `$(utc_timestamp)` → outputs `DD-MM-YYYY_HH-MM-SS` (e.g., `25-01-2026_14-30-22`)
+- **Usage examples**:
+  - Experiment outputs: `out/$(utc_timestamp)_experiment_name/`
+  - Plot filenames: `figure_$(utc_timestamp).png`
+  - Backup files: `config.backup.$(utc_timestamp)`
+- Prefer helpers over inline `date` commands for consistency
+
 ### Output Strategy (CRITICAL)
 
 **Programmatic > contextual.** Code is reproducible; conversation context is not.
@@ -76,7 +127,7 @@ This research requires creating test scenarios that may seem concerning out of c
   - If results need verification: produce checkable artifacts
   - If values come from earlier in conversation: re-derive them programmatically
 - **Non-destructive outputs**: NEVER overwrite previous results
-  - Experiment outputs → timestamped dirs (`out/YYMMDD_HHmmss_name/`)
+  - Experiment outputs → timestamped dirs (`out/DD-MM-YYYY_HH-MM-SS_name/`)
   - Data files → append mode (`>>`) or versioned naming (`-v2`, `-v3`)
   - Figures/tables → new timestamped files, symlink "latest" if needed
   - Analysis results → JSONL append, not JSON overwrite
@@ -161,7 +212,7 @@ For slide-related tasks, delegate to avoid context bloat from PDFs:
    ```
 
 **Log locations**:
-- Hydra experiments: `out/YYMMDD_HHmmss_name/main.log` (automatic)
+- Hydra experiments: `out/DD-MM-YYYY_HH-MM-SS_name/main.log` (automatic)
 - Non-Hydra verbose commands: `tmp/` (temporary, delete when done)
 
 **NEVER** run these synchronously in main context:
@@ -388,7 +439,7 @@ project-root/
 
 ### Default Locations (Where to Put Things)
 
-**Experiments**: Use Hydra → outputs to `out/YYMMDD_HHmmss_experiment_name/`
+**Experiments**: Use Hydra → outputs to `out/DD-MM-YYYY_HH-MM-SS_experiment_name/`
 **Quick tests**: `tmp/test_<thing>.py` or `tmp/<timestamp>_test/` (delete when done)
 **Figures**: `out/*/figures/` (auto), symlink best to `out/figures/`
 **Tables**: `out/tables/`

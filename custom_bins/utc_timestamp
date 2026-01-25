@@ -1,0 +1,3 @@
+#!/bin/bash
+# Output: DD-MM-YYYY_HH-MM-SS in UTC
+date -u +%d-%m-%Y_%H-%M-%S

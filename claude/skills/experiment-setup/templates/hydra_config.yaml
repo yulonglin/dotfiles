@@ -3,12 +3,12 @@
 
 hydra:
   run:
-    # Use experiments/ directory with timestamp
-    dir: experiments/${now:%Y%m%d_%H%M%S}_${experiment.name}
+    # Use experiments/ directory with timestamp (DD-MM-YYYY_HH-MM-SS format)
+    dir: experiments/${now:%d-%m-%Y_%H-%M-%S}_${experiment.name}
 
   sweep:
     # For parameter sweeps (multi-run mode)
-    dir: experiments/sweeps/${now:%Y%m%d_%H%M%S}_${experiment.name}
+    dir: experiments/sweeps/${now:%d-%m-%Y_%H-%M-%S}_${experiment.name}
     subdir: ${hydra.job.num}
 
   job:
