@@ -1,6 +1,6 @@
 ---
-argument-hint: <file> [--critics=clarity,narrative,facts,redteam] [--sensitivity=balanced]
-description: Review draft with writing critics (clarity, narrative, facts, red-team)
+name: review-draft
+description: Comprehensive writing review using specialized critics (clarity, narrative, facts, red-team).
 ---
 
 # Review Draft
@@ -9,7 +9,7 @@ Comprehensive writing review using specialized critics.
 
 ## Arguments
 
-Parse from `$ARGUMENTS`:
+Parse from provided arguments:
 - **File path**: First non-flag argument (required)
 - **--critics=**: Comma-separated list of critics to run (default: all four)
   - `clarity` - Sentence-level readability
@@ -17,8 +17,6 @@ Parse from `$ARGUMENTS`:
   - `facts` - Claim verification and citations
   - `redteam` - Counterexamples and objections
 - **--sensitivity=**: `conservative|balanced|aggressive` (default: balanced)
-
-$ARGUMENTS
 
 ## Workflow
 

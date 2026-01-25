@@ -1,3 +1,8 @@
+---
+name: bulk-edit
+description: Process bulk edits from a comments/feedback file safely using sequential agents.
+---
+
 # Bulk Edit Skill
 
 Process bulk edits from a comments/feedback file safely using sequential agents.
@@ -86,7 +91,7 @@ Task tool:
        - ➖ = N/A (comment is praise, informational, or no edit needed)
        - ⏳ = partially addressed (some aspects done, others need more work)
        - ⚠️ = needs manual attention (unclear, conflicting, or requires user decision)
-    6. Return a 1-line summary: "Thread {N} [status]: <what you did or why>"
+       - 6. Return a 1-line summary: "Thread {N} [status]: <what you did or why>"
 
     Examples:
     - "Thread 5 ✅: Changed 'performs worse than random' per suggestion"
@@ -181,4 +186,4 @@ Re-run to process ⏳ threads, or address ⚠️ manually.
 - Agents use `model` parameter in Task tool to select haiku vs sonnet
 - Each agent gets ~full context window for its single edit
 - Orchestrator context grows ~150 tokens per edit (sustainable for 100+ edits)
-- Comments file becomes the source of truth for progress
+- Comments file becomes the source of truth for progress tracking.

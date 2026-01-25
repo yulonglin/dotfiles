@@ -36,7 +36,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Claude Code - AI assistant configuration (symlinked)
 - Codex - CLI tool configuration (symlinked)
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
-- Claude Code cleanup - Idle session cleanup (both platforms, launchd/cron)
+- Claude Code cleanup - No-output-for-24h session cleanup (tmux preserved, launchd/cron)
 
 ## Architecture
 
@@ -72,7 +72,6 @@ claude/                   # Symlinked to ~/.claude/
 ├── settings.json         # Claude Code settings
 ├── agents/               # Specialized agent definitions
 ├── ai_docs/              # AI knowledge base (CI standards, checklists)
-├── commands/             # Custom slash commands
 ├── hooks/                # Hook scripts (auto_log.sh, notify.sh)
 ├── skills/               # Custom skills (commit, run-experiment, etc.)
 ├── templates/            # Templates for specs, reports
@@ -126,7 +125,7 @@ custom_bins/              # Custom utilities (added to PATH)
     - `cache/`, `projects/`, `plans/`, `todos/` - runtime data
     - `mcp_servers.json` - MCP server configuration
 - Works seamlessly whether you run `install.sh` or `deploy.sh` first
-- Custom config deployed: `CLAUDE.md`, `settings.json`, `agents/`, `hooks/`, `skills/`, `commands/`, `templates/`
+- Custom config deployed: `CLAUDE.md`, `settings.json`, `agents/`, `hooks/`, `skills/`, `templates/`
 
 ## Development Patterns
 

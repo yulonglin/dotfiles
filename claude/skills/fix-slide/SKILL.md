@@ -1,10 +1,14 @@
+---
+name: fix-slide
+description: Identify and fix slides with content overflow or blank pages in Slidev presentations.
+---
+
 # Fix Slide Issues
 
 Identify and fix slides with content overflow or blank pages in Slidev presentations.
 
 ## Arguments
-
-$ARGUMENTS is the file to **edit** (e.g., `slides.md` or `pages/week-19.md`).
+The skill accepts a file to **edit** (e.g., `slides.md` or `pages/week-19.md`).
 
 **If not provided**, auto-detect the latest child slide deck:
 1. Read the main `slides.md` to find `src:` imports
@@ -37,14 +41,14 @@ Prompt: "Read tmp/slide-check.pdf and identify: (1) pages with content overflow/
    - Pages where content is cut off (text/tables/callouts extending beyond slide boundaries)
    - **Blank pages** (may indicate uncommented `---` between commented sections)
 
-3. **Fix overflows** using these patterns:
+4. **Fix overflows** using these patterns:
    - Wrap content in `<div class="text-sm">` or `text-xs` for smaller text
    - Reduce grid gaps: `gap-8` → `gap-4`
    - Reduce margins/padding: `mt-4 p-3` → `mt-2 p-2`
    - Condense verbose text while preserving key information
    - Split into multiple slides if content is too dense
 
-4. **Fix blank pages** - Comment the `---` separator between commented sections:
+5. **Fix blank pages** - Comment the `---` separator between commented sections:
    ```markdown
    <!-- slide content -->
    
@@ -53,13 +57,13 @@ Prompt: "Read tmp/slide-check.pdf and identify: (1) pages with content overflow/
    <!-- more content -->
    ```
 
-5. **Re-export and verify** (just the affected slides):
+6. **Re-export and verify** (just the affected slides):
    ```bash
    bunx slidev export slides.md --format png --output tmp/slides-fixed/slide --range <affected-pages> --timeout 120000
    ```
    Read the fixed PNG files to confirm the issue is resolved.
 
-6. **Report** which slides were fixed and what changes were made.
+7. **Report** which slides were fixed and what changes were made.
 
 ## Notes
 

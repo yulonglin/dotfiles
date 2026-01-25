@@ -7,7 +7,7 @@ description: Slidev presentation framework helper. Use when creating slides, fix
 
 **Dev server**: `bunx slidev slides.md`
 **Export**: `bunx slidev export slides.md --timeout 120000 --output out.pdf`
-**Fix overflow/blank pages**: Run `/fix-slide`
+**Fix overflow/blank pages**: Run `/fix-slide` (uses the `fix-slide` skill)
 
 Always export from root `slides.md`, not `pages/*.md` (images won't resolve from subpages).
 
@@ -20,4 +20,4 @@ Task tool → subagent_type: "general-purpose"
 Prompt: "Read [path/to/slides.pdf] and [describe what to look for]"
 ```
 
-The `/fix-slide` command handles this automatically.
+The `/fix-slide` skill handles this automatically.

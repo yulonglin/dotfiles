@@ -149,7 +149,7 @@ Automatically kills idle Claude Code processes daily at 17:00:
 ```
 
 **How it works:**
-- Only kills **idle** processes (detached/background) - preserves active sessions
+- Only kills processes with **no output activity for 24h** (preserves active + tmux sessions)
 - Runs daily via launchd (macOS) or cron (Linux)
 - Manual control via `clear-claude-code` command (aliases: `ccl`, `cci`, `ccf`)
 
