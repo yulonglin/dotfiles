@@ -321,18 +321,28 @@ if [[ "$DEPLOY_MATPLOTLIB" == "true" ]]; then
     log_info "Deploying matplotlib styles..."
 
     STYLELIB="$HOME/.config/matplotlib/stylelib"
+    MPLCONFIG="$HOME/.config/matplotlib"
 
     if [[ -d "$DOT_DIR/config/matplotlib" ]]; then
         mkdir -p "$STYLELIB"
+        mkdir -p "$MPLCONFIG"
 
+        # Deploy .mplstyle files
         for style in "$DOT_DIR/config/matplotlib"/*.mplstyle; do
             if [[ -f "$style" ]]; then
                 safe_symlink "$style" "$STYLELIB/$(basename "$style")"
             fi
         done
 
+        # Deploy petriplot.py helper module
+        if [[ -f "$DOT_DIR/config/matplotlib/petriplot.py" ]]; then
+            cp "$DOT_DIR/config/matplotlib/petriplot.py" "$MPLCONFIG/petriplot.py"
+            log_info "  Deployed petriplot.py helper module"
+        fi
+
         log_success "Deployed matplotlib styles"
-        log_info "  Usage: plt.style.use('anthropic') or plt.style.use('deepmind')"
+        log_info "  Style usage: plt.style.use('petri') or plt.style.use('anthropic')"
+        log_info "  Helper usage: import sys; sys.path.insert(0, '$MPLCONFIG'); import petriplot as pp"
     else
         log_warning "Matplotlib config directory not found"
     fi

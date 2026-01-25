@@ -1,0 +1,45 @@
+# Petri Plotting Style
+# Inspired by Anthropic's Petri paper: https://alignment.anthropic.com/2025/petri/
+# Warm editorial aesthetic with pastel accents
+
+# Figure
+figure.facecolor: FAF9F5
+figure.edgecolor: FAF9F5
+figure.figsize: 8, 6
+figure.dpi: 150
+
+# Axes
+axes.facecolor: FAF9F5
+axes.edgecolor: 141413
+axes.linewidth: 0.8
+axes.spines.top: False
+axes.spines.right: False
+axes.grid: False
+axes.prop_cycle: cycler('color', ['D97757', '6A9BCC', 'B8D4C8', 'E6A860', 'E3DACC'])
+
+# Ticks
+xtick.color: 141413
+ytick.color: 141413
+xtick.major.width: 0.8
+ytick.major.width: 0.8
+
+# Grid (disabled but available if re-enabled)
+grid.color: E3DACC
+grid.linestyle: -
+grid.linewidth: 0.5
+grid.alpha: 0.3
+
+# Legend
+legend.frameon: False
+legend.fancybox: False
+
+# Font
+font.family: sans-serif
+font.sans-serif: Inter, -apple-system, SF Pro Text, Helvetica Neue, Arial, sans-serif
+font.size: 11
+
+# Saving
+savefig.dpi: 300
+savefig.bbox: tight
+savefig.facecolor: FAF9F5
+savefig.edgecolor: FAF9F5
