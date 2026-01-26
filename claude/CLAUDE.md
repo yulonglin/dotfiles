@@ -154,6 +154,7 @@ For work taking >30 minutes:
 - **`tee` doesn't create parent directories** - always `mkdir -p dir/` before `cmd | tee dir/file.log`
 
 ### Git Commands (Readability)
+- **Prefer rebase over merge** for `git pull` - keeps history linear and clean
 - **Use readable refs** over commit hashes: branch names, tags, `origin/branch`
 - Examples:
   - ✅ `git log origin/main..feature-branch`
