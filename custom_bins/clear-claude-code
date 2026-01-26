@@ -34,75 +34,60 @@ TARGET_USER="$(whoami)"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dry-run|--preview|-n)
-            DRY_RUN=true
-            shift
-            ;;
-        --all|-a)
-            KILL_ALL=true
-            shift
-            ;;
-        --force|-f)
-            FORCE=true
-            shift
-            ;;
-        --status|--list|-s|-l)
-            STATUS_ONLY=true
-            shift
-            ;;
-        --yes|-y)
-            SKIP_CONFIRM=true
-            shift
-            ;;
-        --all-users|-A)
-            ALL_USERS=true
-            shift
-            ;;
+        --dry-run|--preview|-n) DRY_RUN=true ;;
+        --all|-a) KILL_ALL=true ;;
+        --force|-f) FORCE=true ;;
+        --status|--list|-s|-l) STATUS_ONLY=true ;;
+        --yes|-y) SKIP_CONFIRM=true ;;
+        --all-users|-A) ALL_USERS=true ;;
         --help|-h)
-            echo "Usage: clear-claude-code [OPTIONS]"
-            echo ""
-            echo "Kill Claude Code CLI processes."
-            echo ""
-            echo "By default, only shows/kills YOUR processes (current user: $TARGET_USER)."
-            echo "Tmux sessions are preserved unless --force/--all is used."
-            echo ""
-            echo "Options:"
-            echo "  --list, --status, -l, -s   Show all Claude Code processes (no kill)"
-            echo "  --preview, --dry-run, -n   Show what would be killed without killing"
-            echo "  --force, -f      Also kill ACTIVE processes (requires confirmation)"
-            echo "  --all, -a        Kill ALL processes including current (requires confirmation)"
-            echo "  --all-users, -A  Show/kill processes for ALL users (may require sudo)"
-            echo "  --yes, -y        Skip confirmation prompt (for scripts/automation)"
-            echo "  --help, -h       Show this help message"
-            echo ""
-            echo "Status indicators:"
-            echo "  *ACTIVE*        Process in foreground terminal (likely in use)"
-            echo "  tmux            Process belongs to a tmux session (preserved by default)"
-            echo "  idle>=${IDLE_THRESHOLD_HOURS}h  No output activity for ${IDLE_THRESHOLD_HOURS}h"
-            echo "  recent          Output activity within last ${IDLE_THRESHOLD_HOURS}h"
-            echo "  orphaned        Parent process died (ppid=1) - KILLED by default"
-            echo "  stopped         Process is stopped/traced (stat=T) - KILLED by default"
-            echo "  unknown         Has living parent but no TTY (background agent?)"
+            cat <<EOF
+Usage: clear-claude-code [OPTIONS]
+
+Kill Claude Code CLI processes.
+
+By default, only shows/kills YOUR processes (current user: $TARGET_USER).
+Tmux sessions are preserved unless --force/--all is used.
+
+Options:
+  --list, --status, -l, -s   Show all Claude Code processes (no kill)
+  --preview, --dry-run, -n   Show what would be killed without killing
+  --force, -f      Also kill ACTIVE processes (requires confirmation)
+  --all, -a        Kill ALL processes including current (requires confirmation)
+  --all-users, -A  Show/kill processes for ALL users (may require sudo)
+  --yes, -y        Skip confirmation prompt (for scripts/automation)
+  --help, -h       Show this help message
+
+Status indicators:
+  *ACTIVE*        Process in foreground terminal (likely in use)
+  tmux            Process belongs to a tmux session (preserved by default)
+  idle>=${IDLE_THRESHOLD_HOURS}h  No output activity for ${IDLE_THRESHOLD_HOURS}h
+  recent          Output activity within last ${IDLE_THRESHOLD_HOURS}h
+  orphaned        Parent process died (ppid=1) - KILLED by default
+  stopped         Process is stopped/traced (stat=T) - KILLED by default
+  unknown         Has living parent but no TTY (background agent?)
+EOF
             exit 0
             ;;
-        *)
-            echo "Unknown option: $1" >&2
-            exit 1
-            ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
+    shift
 done
 
 # --all implies --force
 [[ "$KILL_ALL" == "true" ]] && FORCE=true
 
+# Get a single ps field for a PID, with whitespace trimmed
+ps_field() {
+    ps -p "$1" -o "$2=" 2>/dev/null | tr -d ' ' || echo ""
+}
+
 is_in_tmux() {
     local pid="$1"
     while [[ -n "$pid" && "$pid" -gt 1 ]]; do
-        local comm=$(ps -p "$pid" -o comm= 2>/dev/null | tr -d ' ' || echo "")
-        if [[ "$comm" == *tmux* ]]; then
-            return 0
-        fi
-        local ppid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ' || echo "")
+        local comm=$(ps_field "$pid" "comm")
+        [[ "$comm" == *tmux* ]] && return 0
+        local ppid=$(ps_field "$pid" "ppid")
         [[ -z "$ppid" || "$ppid" == "$pid" ]] && break
         pid="$ppid"
     done
@@ -110,58 +95,36 @@ is_in_tmux() {
 }
 
 get_process_tty() {
-    local tty=$(ps -p "$1" -o tty= 2>/dev/null | tr -d ' ' || echo "")
-    if [[ -z "$tty" || "$tty" == "?" || "$tty" == "??" ]]; then
-        echo ""
-    else
-        echo "$tty"
-    fi
+    local tty=$(ps_field "$1" "tty")
+    [[ -z "$tty" || "$tty" == "?" || "$tty" == "??" ]] && echo "" || echo "$tty"
 }
 
 get_parent_chain() {
-    local pid="$1"
-    local chain=""
-    local depth=0
-    local max_depth=4
+    local pid="$1" chain="" depth=0 max_depth=4
 
     while [[ -n "$pid" && "$pid" -gt 1 && $depth -lt $max_depth ]]; do
-        local ppid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ' || echo "")
+        local ppid=$(ps_field "$pid" "ppid")
         [[ -z "$ppid" || "$ppid" == "$pid" ]] && break
-        local pcomm=$(ps -p "$ppid" -o comm= 2>/dev/null | tr -d ' ' || echo "")
-        local label="$ppid"
-        [[ -n "$pcomm" ]] && label="${ppid}:${pcomm}"
-        if [[ -z "$chain" ]]; then
-            chain="$label"
-        else
-            chain="${chain}<-${label}"
-        fi
+        local pcomm=$(ps_field "$ppid" "comm")
+        local label="${ppid}${pcomm:+:$pcomm}"
+        chain="${chain:+$chain<-}$label"
         pid="$ppid"
         ((depth++))
     done
 
-    if [[ -z "$chain" ]]; then
-        echo "-"
-    else
-        echo "$chain"
-    fi
+    echo "${chain:--}"
 }
 
 get_parent_info() {
     local pid="$1"
-    local ppid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ' || echo "")
+    local ppid=$(ps_field "$pid" "ppid")
     [[ -z "$ppid" ]] && { echo "-"; return; }
-
-    local pcomm=$(ps -p "$ppid" -o comm= 2>/dev/null | tr -d ' ' || echo "")
-    if [[ -n "$pcomm" ]]; then
-        echo "${ppid}:${pcomm}"
-    else
-        echo "$ppid"
-    fi
+    local pcomm=$(ps_field "$ppid" "comm")
+    echo "${ppid}${pcomm:+:$pcomm}"
 }
 
 get_tty_mtime() {
-    local tty="$1"
-    local tty_path="/dev/$tty"
+    local tty_path="/dev/$1"
     [[ -e "$tty_path" ]] || { echo ""; return; }
     if [[ "$(uname -s)" == "Darwin" ]]; then
         stat -f %m "$tty_path" 2>/dev/null || echo ""
@@ -170,90 +133,81 @@ get_tty_mtime() {
     fi
 }
 
-is_orphaned() {
-    local pid="$1"
-    local ppid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ' || echo "")
-    [[ "$ppid" == "1" ]]
-}
-
-is_stopped() {
-    local pid="$1"
-    local stat=$(ps -p "$pid" -o stat= 2>/dev/null || echo "")
-    [[ "$stat" == *"T"* ]]
-}
-
-get_output_status() {
-    local pid="$1"
-    local tty
-    tty=$(get_process_tty "$pid")
-    [[ -z "$tty" ]] && { echo "UNKNOWN"; return; }
-
-    local last
-    last=$(get_tty_mtime "$tty")
-    [[ -z "$last" ]] && { echo "UNKNOWN"; return; }
-
-    local now
-    now=$(date +%s)
-    local delta=$((now - last))
-    if (( delta >= IDLE_THRESHOLD_SECONDS )); then
-        echo "IDLE"
-    else
-        echo "RECENT"
-    fi
-}
-
-# Check if a process appears to be actively in use
-# Returns: ACTIVE, TMUX, ORPHANED, STOPPED, IDLE, RECENT, or UNKNOWN
+# Get process status: ACTIVE, TMUX, ORPHANED, STOPPED, IDLE, RECENT, or UNKNOWN
+# This is the main status function - combines all checks efficiently
 get_process_status() {
     local pid="$1"
 
-    if is_in_tmux "$pid"; then
-        echo "TMUX"
-        return
-    fi
+    # Check tmux ancestry first (requires walking parent chain)
+    is_in_tmux "$pid" && { echo "TMUX"; return; }
 
-    local stat
-    stat=$(ps -p "$pid" -o stat= 2>/dev/null || echo "")
-    # S+ means stopped in foreground, R+ means running in foreground
-    if [[ "$stat" == *"+"* ]]; then
-        echo "ACTIVE"
-        return
-    fi
+    # Get stat and ppid in one call where possible
+    local stat=$(ps_field "$pid" "stat")
+    local ppid=$(ps_field "$pid" "ppid")
 
-    # Check for stopped processes (stat contains T) - definitely idle
-    if is_stopped "$pid"; then
-        echo "STOPPED"
-        return
-    fi
+    # Foreground process (+ in stat)
+    [[ "$stat" == *"+"* ]] && { echo "ACTIVE"; return; }
 
-    # Check for orphaned processes (ppid=1) - parent died, adopted by init
-    if is_orphaned "$pid"; then
-        echo "ORPHANED"
-        return
-    fi
+    # Stopped process (T in stat)
+    [[ "$stat" == *"T"* ]] && { echo "STOPPED"; return; }
 
-    get_output_status "$pid"
+    # Orphaned process (adopted by init)
+    [[ "$ppid" == "1" ]] && { echo "ORPHANED"; return; }
+
+    # Check TTY activity for idle detection
+    local tty=$(get_process_tty "$pid")
+    [[ -z "$tty" ]] && { echo "UNKNOWN"; return; }
+
+    local last=$(get_tty_mtime "$tty")
+    [[ -z "$last" ]] && { echo "UNKNOWN"; return; }
+
+    local now=$(date +%s)
+    (( (now - last) >= IDLE_THRESHOLD_SECONDS )) && echo "IDLE" || echo "RECENT"
+}
+
+# Convert internal status to display label
+status_label() {
+    case "$1" in
+        ACTIVE)   echo "*ACTIVE*" ;;
+        TMUX)     echo "tmux" ;;
+        IDLE)     echo "idle>=${IDLE_THRESHOLD_HOURS}h" ;;
+        RECENT)   echo "recent" ;;
+        ORPHANED) echo "orphaned" ;;
+        STOPPED)  echo "stopped" ;;
+        *)        echo "unknown" ;;
+    esac
+}
+
+# Get claude PIDs based on ALL_USERS setting
+get_claude_pids() {
+    if [[ "$ALL_USERS" == "true" ]]; then
+        ps aux | awk '($11 ~ /\/claude$/ || $11 == "claude") {print $2}'
+    else
+        ps aux | awk -v user="$TARGET_USER" '($1 == user && ($11 ~ /\/claude$/ || $11 == "claude")) {print $2}'
+    fi
+}
+
+# Get full ps aux line for claude processes (for detailed display)
+get_claude_ps_lines() {
+    if [[ "$ALL_USERS" == "true" ]]; then
+        ps aux | awk '$11 ~ /\/claude$/ || $11 == "claude"'
+    else
+        ps aux | awk -v user="$TARGET_USER" '$1 == user && ($11 ~ /\/claude$/ || $11 == "claude")'
+    fi
 }
 
 # Show detailed status of all Claude Code processes
 show_status() {
-    if [[ "$ALL_USERS" == "true" ]]; then
-        echo "Claude Code Processes (all users):"
-    else
-        echo "Claude Code Processes (user: $TARGET_USER):"
-    fi
+    local scope="user: $TARGET_USER"
+    [[ "$ALL_USERS" == "true" ]] && scope="all users"
+    echo "Claude Code Processes ($scope):"
     echo "$LINE"
     printf "%-8s %-12s %-18s %-10s %-6s %-6s %s\n" "PID" "STATUS" "PARENT" "UPTIME" "CPU%" "MEM%" "COMMAND"
     echo "$LINE"
 
-    local count=0
-    local active_count=0
-    local tmux_count=0
-    local idle_count=0
-    local recent_count=0
-    local orphaned_count=0
-    local stopped_count=0
-    local unknown_count=0
+    # Counters as associative-style with simple variables
+    local count=0 active_count=0 tmux_count=0 idle_count=0 recent_count=0
+    local orphaned_count=0 stopped_count=0 unknown_count=0
     local unknown_pids=()
 
     while IFS= read -r line; do
@@ -261,81 +215,43 @@ show_status() {
         local pid=$(echo "$line" | awk '{print $2}')
         local cpu=$(echo "$line" | awk '{print $3}')
         local mem=$(echo "$line" | awk '{print $4}')
-        local etime=$(ps -p "$pid" -o etime= 2>/dev/null | tr -d ' ' || echo "?")
+        local etime=$(ps_field "$pid" "etime")
         local parent=$(get_parent_info "$pid" | cut -c1-18)
         local cmd=$(echo "$line" | awk '{for(i=11;i<=NF;i++) printf $i" "; print ""}' | cut -c1-40)
         local proc_status=$(get_process_status "$pid")
 
         ((count++)) || true
 
-        local label="unknown"
+        # Increment appropriate counter
         case "$proc_status" in
-            ACTIVE)
-                label="*ACTIVE*"
-                ((active_count++)) || true
-                ;;
-            TMUX)
-                label="tmux"
-                ((tmux_count++)) || true
-                ;;
-            IDLE)
-                label="idle>=${IDLE_THRESHOLD_HOURS}h"
-                ((idle_count++)) || true
-                ;;
-            RECENT)
-                label="recent"
-                ((recent_count++)) || true
-                ;;
-            ORPHANED)
-                label="orphaned"
-                ((orphaned_count++)) || true
-                ;;
-            STOPPED)
-                label="stopped"
-                ((stopped_count++)) || true
-                ;;
-            *)
-                ((unknown_count++)) || true
-                unknown_pids+=("$pid")
-                ;;
+            ACTIVE)   ((active_count++)) || true ;;
+            TMUX)     ((tmux_count++)) || true ;;
+            IDLE)     ((idle_count++)) || true ;;
+            RECENT)   ((recent_count++)) || true ;;
+            ORPHANED) ((orphaned_count++)) || true ;;
+            STOPPED)  ((stopped_count++)) || true ;;
+            *)        ((unknown_count++)) || true; unknown_pids+=("$pid") ;;
         esac
 
-        printf "%-8s %-12s %-18s %-10s %-6s %-6s %s\n" "$pid" "$label" "$parent" "$etime" "$cpu" "$mem" "$cmd"
-    done < <(if [[ "$ALL_USERS" == "true" ]]; then
-        ps aux | awk '$11 ~ /\/claude$/ || $11 == "claude"'
-    else
-        ps aux | awk -v user="$TARGET_USER" '$1 ~ "^"user && ($11 ~ /\/claude$/ || $11 == "claude")'
-    fi)
+        printf "%-8s %-12s %-18s %-10s %-6s %-6s %s\n" \
+            "$pid" "$(status_label "$proc_status")" "$parent" "${etime:-?}" "$cpu" "$mem" "$cmd"
+    done < <(get_claude_ps_lines)
 
     echo "$LINE"
     echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, idle: $idle_count, recent: $recent_count, orphaned: $orphaned_count, stopped: $stopped_count, unknown: $unknown_count"
 
-    if [[ $active_count -gt 0 ]]; then
-        echo ""
-        echo "⚠️  Warning: $active_count process(es) appear to be in active use."
-        echo "   Use --dry-run to preview before killing."
-    fi
-
-    if [[ $tmux_count -gt 0 ]]; then
-        echo ""
-        echo "Note: tmux sessions are preserved by default."
-    fi
-
-    if [[ $((orphaned_count + stopped_count)) -gt 0 ]]; then
-        echo ""
-        echo "💀 $((orphaned_count + stopped_count)) orphaned/stopped process(es) will be killed by default."
-    fi
+    # Status-specific notes
+    [[ $active_count -gt 0 ]] && echo -e "\n⚠️  Warning: $active_count process(es) appear to be in active use.\n   Use --dry-run to preview before killing."
+    [[ $tmux_count -gt 0 ]] && echo -e "\nNote: tmux sessions are preserved by default."
+    [[ $((orphaned_count + stopped_count)) -gt 0 ]] && echo -e "\n💀 $((orphaned_count + stopped_count)) orphaned/stopped process(es) will be killed by default."
 
     if [[ $unknown_count -gt 0 ]]; then
-        echo ""
-        echo "Unknown details:"
+        echo -e "\nUnknown details:"
         for pid in "${unknown_pids[@]}"; do
             local tty=$(get_process_tty "$pid")
-            local stat=$(ps -p "$pid" -o stat= 2>/dev/null | tr -d ' ' || echo "")
+            local stat=$(ps_field "$pid" "stat")
             local chain=$(get_parent_chain "$pid")
-            [[ -z "$tty" ]] && tty="?"
-            [[ -z "$stat" ]] && stat="?"
-            echo "  PID $pid | tty $tty | stat $stat | parent $chain"
+            echo "  PID $pid | tty ${tty:-?} | stat ${stat:-?} | parent $chain"
         done
     fi
 }
@@ -347,28 +263,11 @@ if [[ "$STATUS_ONLY" == "true" ]]; then
 fi
 
 # Find current session's PID (the claude process running in current terminal)
-# This is the parent claude process if we're being called from within Claude Code
-CURRENT_PID=""
-if [[ -n "${CLAUDE_CODE_PID:-}" ]]; then
-    CURRENT_PID="$CLAUDE_CODE_PID"
-else
-    # Try to find the claude process in the current terminal
+CURRENT_PID="${CLAUDE_CODE_PID:-}"
+if [[ -z "$CURRENT_PID" ]]; then
     CURRENT_TTY=$(tty 2>/dev/null | sed 's|/dev/||' || echo "")
-    if [[ -n "$CURRENT_TTY" ]]; then
-        CURRENT_PID=$(ps -t "$CURRENT_TTY" -o pid,comm 2>/dev/null | awk '/claude/ {print $1; exit}' || echo "")
-    fi
+    [[ -n "$CURRENT_TTY" ]] && CURRENT_PID=$(ps -t "$CURRENT_TTY" -o pid,comm 2>/dev/null | awk '/claude/ {print $1; exit}' || echo "")
 fi
-
-# Get all claude CLI processes (exclude Claude.app and this script)
-# Get PIDs where command is exactly 'claude' binary (not Claude.app or subshells)
-# Filters by TARGET_USER unless ALL_USERS is set
-get_claude_pids() {
-    if [[ "$ALL_USERS" == "true" ]]; then
-        ps aux | awk '($11 ~ /\/claude$/ || $11 == "claude") {print $2}'
-    else
-        ps aux | awk -v user="$TARGET_USER" '($1 ~ "^"user && ($11 ~ /\/claude$/ || $11 == "claude")) {print $2}'
-    fi
-}
 
 # Count and list processes
 PIDS=($(get_claude_pids))
@@ -386,12 +285,8 @@ fi
 # Filter processes based on flags
 PIDS_TO_KILL=()
 SKIPPED_CURRENT=false
-SKIPPED_ACTIVE=0
-SKIPPED_TMUX=0
-SKIPPED_RECENT=0
-SKIPPED_UNKNOWN=0
-KILLING_ORPHANED=0
-KILLING_STOPPED=0
+declare -A SKIPPED=([ACTIVE]=0 [TMUX]=0 [RECENT]=0 [UNKNOWN]=0)
+declare -A KILLING=([ORPHANED]=0 [STOPPED]=0 [IDLE]=0 [ACTIVE]=0 [TMUX]=0 [RECENT]=0 [UNKNOWN]=0)
 
 for pid in "${PIDS[@]}"; do
     # Skip current session unless --all
@@ -405,75 +300,62 @@ for pid in "${PIDS[@]}"; do
     # Skip active processes unless --force
     if [[ "$FORCE" == "false" ]]; then
         case "$proc_status" in
-            ACTIVE)
-                ((SKIPPED_ACTIVE++)) || true
-                continue
-                ;;
-            TMUX)
-                ((SKIPPED_TMUX++)) || true
-                continue
-                ;;
-            RECENT)
-                ((SKIPPED_RECENT++)) || true
-                continue
-                ;;
-            UNKNOWN)
-                # Has living parent but no TTY - likely a background agent, preserve it
-                ((SKIPPED_UNKNOWN++)) || true
+            ACTIVE|TMUX|RECENT|UNKNOWN)
+                ((SKIPPED[$proc_status]++)) || true
                 continue
                 ;;
         esac
     fi
 
-    # Track orphaned/stopped for messaging (killed by default)
-    case "$proc_status" in
-        ORPHANED) ((KILLING_ORPHANED++)) || true ;;
-        STOPPED) ((KILLING_STOPPED++)) || true ;;
-    esac
+    # Track what we're killing for messaging (all statuses)
+    ((KILLING[$proc_status]++)) || true
 
     PIDS_TO_KILL+=("$pid")
 done
 
 KILL_COUNT=${#PIDS_TO_KILL[@]}
 
-if [[ $KILL_COUNT -eq 0 ]]; then
-    msg="No Claude Code processes to kill"
+# Helper to build parenthetical skip messages
+build_skip_msg() {
+    local msg=""
     [[ "$SKIPPED_CURRENT" == "true" ]] && msg="$msg (current session preserved)"
-    [[ $SKIPPED_ACTIVE -gt 0 ]] && msg="$msg ($SKIPPED_ACTIVE active preserved, use --force to kill)"
-    [[ $SKIPPED_TMUX -gt 0 ]] && msg="$msg ($SKIPPED_TMUX tmux preserved)"
-    [[ $SKIPPED_RECENT -gt 0 ]] && msg="$msg ($SKIPPED_RECENT recent output preserved)"
-    [[ $SKIPPED_UNKNOWN -gt 0 ]] && msg="$msg ($SKIPPED_UNKNOWN background agents preserved)"
+    [[ ${SKIPPED[ACTIVE]} -gt 0 ]] && msg="$msg (${SKIPPED[ACTIVE]} active preserved, use --force to kill)"
+    [[ ${SKIPPED[TMUX]} -gt 0 ]] && msg="$msg (${SKIPPED[TMUX]} tmux preserved)"
+    [[ ${SKIPPED[RECENT]} -gt 0 ]] && msg="$msg (${SKIPPED[RECENT]} recent output preserved)"
+    [[ ${SKIPPED[UNKNOWN]} -gt 0 ]] && msg="$msg (${SKIPPED[UNKNOWN]} background agents preserved)"
     echo "$msg"
+}
+
+if [[ $KILL_COUNT -eq 0 ]]; then
+    echo "No Claude Code processes to kill$(build_skip_msg)"
     exit 0
 fi
 
 # Show what we're doing
 echo "Found $TOTAL Claude Code process(es)"
 [[ "$SKIPPED_CURRENT" == "true" ]] && echo "  Preserving current session (PID $CURRENT_PID)"
-[[ $SKIPPED_ACTIVE -gt 0 ]] && echo "  Preserving $SKIPPED_ACTIVE active process(es)"
-[[ $SKIPPED_TMUX -gt 0 ]] && echo "  Preserving $SKIPPED_TMUX tmux process(es)"
-[[ $SKIPPED_RECENT -gt 0 ]] && echo "  Preserving $SKIPPED_RECENT process(es) with recent output"
-[[ $SKIPPED_UNKNOWN -gt 0 ]] && echo "  Preserving $SKIPPED_UNKNOWN background process(es) with living parent"
+[[ ${SKIPPED[ACTIVE]} -gt 0 ]] && echo "  Preserving ${SKIPPED[ACTIVE]} active process(es)"
+[[ ${SKIPPED[TMUX]} -gt 0 ]] && echo "  Preserving ${SKIPPED[TMUX]} tmux process(es)"
+[[ ${SKIPPED[RECENT]} -gt 0 ]] && echo "  Preserving ${SKIPPED[RECENT]} process(es) with recent output"
+[[ ${SKIPPED[UNKNOWN]} -gt 0 ]] && echo "  Preserving ${SKIPPED[UNKNOWN]} background process(es) with living parent"
 
-# Determine what we're killing for the message
+# Build kill description
+# Build descriptive message for what we're killing
+parts=()
+[[ ${KILLING[ORPHANED]} -gt 0 ]] && parts+=("${KILLING[ORPHANED]} orphaned")
+[[ ${KILLING[STOPPED]} -gt 0 ]] && parts+=("${KILLING[STOPPED]} stopped")
+[[ ${KILLING[IDLE]} -gt 0 ]] && parts+=("${KILLING[IDLE]} idle>=${IDLE_THRESHOLD_HOURS}h")
+[[ ${KILLING[ACTIVE]} -gt 0 ]] && parts+=("${KILLING[ACTIVE]} active")
+[[ ${KILLING[TMUX]} -gt 0 ]] && parts+=("${KILLING[TMUX]} tmux")
+[[ ${KILLING[RECENT]} -gt 0 ]] && parts+=("${KILLING[RECENT]} recent")
+[[ ${KILLING[UNKNOWN]} -gt 0 ]] && parts+=("${KILLING[UNKNOWN]} unknown")
+
 if [[ "$KILL_ALL" == "true" ]]; then
     echo "  Will kill $KILL_COUNT process(es) including current session..."
-elif [[ "$FORCE" == "true" ]]; then
-    echo "  Will kill $KILL_COUNT process(es) including active..."
+elif [[ ${#parts[@]} -gt 0 ]]; then
+    IFS=" + "; echo "  Killing $KILL_COUNT process(es): ${parts[*]}"; unset IFS
 else
-    # Build descriptive message for what we're killing
-    kill_desc=""
-    [[ $KILLING_ORPHANED -gt 0 ]] && kill_desc="$KILLING_ORPHANED orphaned"
-    [[ $KILLING_STOPPED -gt 0 ]] && {
-        [[ -n "$kill_desc" ]] && kill_desc="$kill_desc + "
-        kill_desc="${kill_desc}$KILLING_STOPPED stopped"
-    }
-    idle_kill_count=$((KILL_COUNT - KILLING_ORPHANED - KILLING_STOPPED))
-    [[ $idle_kill_count -gt 0 ]] && {
-        [[ -n "$kill_desc" ]] && kill_desc="$kill_desc + "
-        kill_desc="${kill_desc}$idle_kill_count idle>=${IDLE_THRESHOLD_HOURS}h"
-    }
-    echo "  Killing $KILL_COUNT process(es): $kill_desc"
+    echo "  Killing $KILL_COUNT process(es)"
 fi
 
 # Require confirmation for --force or --all (unless --yes or --dry-run)

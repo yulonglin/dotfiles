@@ -1,73 +1,47 @@
 #!/bin/sh
 # PostToolUse hook: Truncate long bash outputs to prevent context pollution
 # Outputs JSON with suppressOutput + systemMessage for long outputs
+#
+# Performance: Single jq call does all extraction + truncation to avoid
+# hanging on large outputs (previous version called jq 5x + used shell pipes)
 
 # Check for jq dependency
-if ! command -v jq >/dev/null 2>&1; then
-    exit 0
-fi
+command -v jq >/dev/null 2>&1 || exit 0
 
-INPUT=$(cat)
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
+# Single jq call: extract fields, check threshold, truncate, and format output
+# This avoids storing huge strings in shell variables
+jq -c '
+  # Only process Bash tool outputs
+  if .tool_name != "Bash" then empty
+  else
+    .tool_response as $r |
+    .tool_input.command as $cmd |
+    ($r.stdout // "") as $stdout |
+    ($r.stderr // "") as $stderr |
+    ($r.exit_code // 0) as $exit |
+    (($stdout | length) + ($stderr | length)) as $total |
 
-# Only process Bash tool outputs
-if [ "$TOOL_NAME" != "Bash" ]; then
-    exit 0
-fi
+    # Threshold: 5000 characters
+    if $total < 5000 then empty
+    else
+      # Truncate stdout: first 15 + last 30 lines
+      (if ($stdout | length) > 1500 then
+        ($stdout | split("\n")) as $lines |
+        if ($lines | length) <= 45 then $stdout
+        else
+          ([$lines[:15][], "", "... [\($stdout | length) chars truncated] ...", "", $lines[-30:][]] | join("\n"))
+        end
+      else $stdout end) as $trunc_stdout |
 
-STDOUT=$(echo "$INPUT" | jq -r '.tool_response.stdout // ""')
-STDERR=$(echo "$INPUT" | jq -r '.tool_response.stderr // ""')
-EXIT_CODE=$(echo "$INPUT" | jq -r '.tool_response.exit_code // 0')
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
+      # Truncate stderr: last 20 lines
+      (if ($stderr | length) > 500 then
+        "... [stderr truncated] ...\n\n" + (($stderr | split("\n"))[-20:] | join("\n"))
+      else $stderr end) as $trunc_stderr |
 
-# Calculate total output length
-TOTAL_LEN=$((${#STDOUT} + ${#STDERR}))
-
-# Threshold: 5000 characters
-if [ "$TOTAL_LEN" -lt 5000 ]; then
-    exit 0
-fi
-
-# Truncate stdout: keep first 15 + last 30 lines
-if [ "${#STDOUT}" -gt 1500 ]; then
-    HEAD=$(printf '%s' "$STDOUT" | head -n 15)
-    TAIL=$(printf '%s' "$STDOUT" | tail -n 30)
-    TRUNCATED_STDOUT="${HEAD}
-
-... [${#STDOUT} chars truncated] ...
-
-${TAIL}"
-else
-    TRUNCATED_STDOUT="$STDOUT"
-fi
-
-# Truncate stderr: keep last 20 lines for errors
-if [ "${#STDERR}" -gt 500 ]; then
-    TRUNCATED_STDERR=$(printf '%s' "$STDERR" | tail -n 20)
-    TRUNCATED_STDERR="... [stderr truncated] ...
-
-${TRUNCATED_STDERR}"
-else
-    TRUNCATED_STDERR="$STDERR"
-fi
-
-# Build summary message
-SUMMARY="Command: ${COMMAND}
-Exit code: ${EXIT_CODE}
-Output (truncated from ${TOTAL_LEN} chars):
-
-${TRUNCATED_STDOUT}"
-
-# Include stderr if present (especially important for errors)
-if [ -n "$TRUNCATED_STDERR" ]; then
-    SUMMARY="${SUMMARY}
-
---- stderr ---
-${TRUNCATED_STDERR}"
-fi
-
-# Escape for JSON
-SUMMARY_ESCAPED=$(printf '%s' "$SUMMARY" | jq -Rs .)
-
-# Output JSON to suppress original and replace with summary
-printf '{"suppressOutput": true, "systemMessage": %s}\n' "$SUMMARY_ESCAPED"
+      # Build summary
+      "Command: \($cmd)\nExit code: \($exit)\nOutput (truncated from \($total) chars):\n\n\($trunc_stdout)" +
+      (if ($trunc_stderr | length) > 0 then "\n\n--- stderr ---\n\($trunc_stderr)" else "" end)
+      | {suppressOutput: true, systemMessage: .}
+    end
+  end
+'
