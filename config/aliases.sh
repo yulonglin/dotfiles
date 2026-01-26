@@ -37,6 +37,14 @@ claude() {
     if [[ "$OSTYPE" == linux* ]] && [[ -d "/run/user/$(id -u)" ]]; then
         export CLAUDE_CODE_TMPDIR="/run/user/$(id -u)"
     fi
+    # Auto-generate task list ID from timestamp + directory name
+    if [ -z "$CLAUDE_CODE_TASK_LIST_ID" ]; then
+        local dir_name
+        dir_name=$(basename "$PWD" | tr ' ' '_')
+        local timestamp
+        timestamp=$(date -u +%Y%m%d_%H%M%S)
+        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${dir_name}"
+    fi
     activate_venv
     command claude "$@"
 }
