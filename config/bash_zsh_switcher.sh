@@ -11,16 +11,20 @@ if [ -f $REAL_HOME/local/activate_zsh.sh ] && [ -f $REAL_HOME/local/bin/zsh ]; t
     # Fix PATH and LD_LIBRARY_PATH for local zsh
     export PATH=$REAL_HOME/local/bin:$PATH
     export LD_LIBRARY_PATH=$REAL_HOME/local/lib:$LD_LIBRARY_PATH
-    
-    # Provide a manual switch function for interactive shells
+
+    # Auto-switch or provide manual switch for interactive shells
     if [ -z "$ZSH_VERSION" ] && [ -n "$PS1" ]; then
-        echo "ZSH is available. Run 'switch_to_zsh' or 'zsh' to switch to ZSH"
-        switch_to_zsh() {
-            # Force HOME and ZDOTDIR to real home to avoid Warp temp directory issues
+        if [ "$TERM_PROGRAM" = "WarpTerminal" ]; then
+            # Warp has issues with exec - provide manual switch only
+            echo "ZSH is available. Run 'switch_to_zsh' or 'zsh' to switch to ZSH"
+            switch_to_zsh() {
+                HOME=$REAL_HOME ZDOTDIR=$REAL_HOME exec $REAL_HOME/local/bin/zsh -l
+            }
+            alias zsh="HOME=$REAL_HOME ZDOTDIR=$REAL_HOME $REAL_HOME/local/bin/zsh"
+        else
+            # Standard terminal/SSH - auto-switch to zsh
             HOME=$REAL_HOME ZDOTDIR=$REAL_HOME exec $REAL_HOME/local/bin/zsh -l
-        }
-        # Alias for convenience
-        alias zsh="HOME=$REAL_HOME ZDOTDIR=$REAL_HOME $REAL_HOME/local/bin/zsh"
+        fi
     fi
 # Check for system zsh as fallback
 elif command -v zsh &> /dev/null; then
