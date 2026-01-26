@@ -412,6 +412,49 @@ install_docker() {
 
 # ─── Secrets Sync ─────────────────────────────────────────────────────────────
 
+# Ensure local public key is in authorized_keys (auto-add for convenience)
+ensure_local_key_in_authorized_keys() {
+    local auth_keys="$HOME/.ssh/authorized_keys"
+    local pub_key=""
+    local pub_key_file=""
+
+    # Find first available public key
+    for key_type in ed25519 ecdsa rsa; do
+        if [[ -f "$HOME/.ssh/id_${key_type}.pub" ]]; then
+            pub_key_file="$HOME/.ssh/id_${key_type}.pub"
+            pub_key=$(cat "$pub_key_file")
+            break
+        fi
+    done
+
+    if [[ -z "$pub_key" ]]; then
+        log_info "No local public key found - skipping auto-add"
+        return 0
+    fi
+
+    # Extract just the key part (without comment) for comparison
+    local key_data
+    key_data=$(echo "$pub_key" | awk '{print $1" "$2}')
+
+    # Create authorized_keys if missing
+    mkdir -p "$HOME/.ssh"
+    touch "$auth_keys"
+    chmod 600 "$auth_keys"
+
+    # Check if key already present
+    if grep -qF "$key_data" "$auth_keys" 2>/dev/null; then
+        return 0
+    fi
+
+    # Add key with hostname comment
+    local hostname
+    hostname=$(hostname -s 2>/dev/null || echo "unknown")
+    local key_with_comment="${key_data} # ${hostname}"
+
+    echo "$key_with_comment" >> "$auth_keys"
+    log_info "  + Added local key ($hostname) to authorized_keys"
+}
+
 # Sync secrets bidirectionally with GitHub gist
 sync_secrets() {
     local gist_id="${SECRETS_GIST_ID:-3cc239f160a2fe8c9e6a14829d85a371}"
@@ -456,9 +499,16 @@ print('yes' if '$1' in data['files'] else 'no')
 
     local changes_made=false
 
+    # Ensure local key is in authorized_keys before syncing
+    ensure_local_key_in_authorized_keys
+
     # Sync SSH config
     log_info "Syncing SSH config..."
     sync_file "$HOME/.ssh/config" "config" "$gist_id" "$gist_updated_at" && changes_made=true
+
+    # Sync authorized_keys
+    log_info "Syncing authorized_keys..."
+    sync_file "$HOME/.ssh/authorized_keys" "authorized_keys" "$gist_id" "$gist_updated_at" && changes_made=true
 
     # Sync user.conf (git identity)
     log_info "Syncing git identity..."
@@ -486,7 +536,7 @@ sync_file() {
         if [[ "$gist_exists" == "yes" ]]; then
             mkdir -p "$(dirname "$local_path")"
             get_gist_file "$gist_filename" > "$local_path"
-            [[ "$gist_filename" == "config" ]] && chmod 600 "$local_path"
+            [[ "$gist_filename" == "config" || "$gist_filename" == "authorized_keys" ]] && chmod 600 "$local_path"
             log_info "  ↓ Pulled $gist_filename from gist (local was missing)"
             return 0
         fi
@@ -511,7 +561,7 @@ sync_file() {
             log_info "  ↑ Pushed $gist_filename to gist (local newer)"
         else
             echo "$gist_content" > "$local_path"
-            [[ "$gist_filename" == "config" ]] && chmod 600 "$local_path"
+            [[ "$gist_filename" == "config" || "$gist_filename" == "authorized_keys" ]] && chmod 600 "$local_path"
             log_info "  ↓ Pulled $gist_filename from gist (gist newer)"
         fi
         return 0

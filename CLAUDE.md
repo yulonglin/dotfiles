@@ -93,7 +93,8 @@ config/matplotlib/        # Matplotlib styles and helpers
 
 **Secrets Sync (`deploy_secrets()`)**:
 - Bidirectional sync with GitHub gist (ID: `3cc239f160a2fe8c9e6a14829d85a371`)
-- Syncs: `~/.ssh/config`, `config/user.conf` (git identity)
+- Syncs: `~/.ssh/config`, `~/.ssh/authorized_keys`, `config/user.conf` (git identity)
+- Auto-adds local public key to `authorized_keys` before sync (enables SSH between your machines)
 - Last-modified wins: compares local mtime vs gist updated_at
 - Requires `gh auth login` (browser OAuth, no extra keys needed)
 - Runs before git config (user.conf provides git identity)

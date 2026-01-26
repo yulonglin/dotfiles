@@ -212,7 +212,8 @@ Automatically sync secrets with GitHub gist daily at 08:00:
 ```
 
 **How it works:**
-- Bidirectional sync with GitHub gist (SSH config, git identity)
+- Bidirectional sync with GitHub gist (SSH config, authorized_keys, git identity)
+- Auto-adds local public key to `authorized_keys` (enables SSH between your machines)
 - Last-modified wins: compares local vs gist timestamps
 - Requires `gh auth login` (run once for authentication)
 - Runs daily via launchd (macOS) or cron (Linux)
