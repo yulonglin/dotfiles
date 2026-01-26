@@ -285,8 +285,10 @@ fi
 # Filter processes based on flags
 PIDS_TO_KILL=()
 SKIPPED_CURRENT=false
-declare -A SKIPPED=([ACTIVE]=0 [TMUX]=0 [RECENT]=0 [UNKNOWN]=0)
-declare -A KILLING=([ORPHANED]=0 [STOPPED]=0 [IDLE]=0 [ACTIVE]=0 [TMUX]=0 [RECENT]=0 [UNKNOWN]=0)
+# Counters (simple vars for bash 3.2 compatibility)
+SKIPPED_ACTIVE=0 SKIPPED_TMUX=0 SKIPPED_RECENT=0 SKIPPED_UNKNOWN=0
+KILLING_ORPHANED=0 KILLING_STOPPED=0 KILLING_IDLE=0 KILLING_ACTIVE=0
+KILLING_TMUX=0 KILLING_RECENT=0 KILLING_UNKNOWN=0
 
 for pid in "${PIDS[@]}"; do
     # Skip current session unless --all
@@ -300,15 +302,23 @@ for pid in "${PIDS[@]}"; do
     # Skip active processes unless --force
     if [[ "$FORCE" == "false" ]]; then
         case "$proc_status" in
-            ACTIVE|TMUX|RECENT|UNKNOWN)
-                ((SKIPPED[$proc_status]++)) || true
-                continue
-                ;;
+            ACTIVE)  ((SKIPPED_ACTIVE++))  || true; continue ;;
+            TMUX)    ((SKIPPED_TMUX++))    || true; continue ;;
+            RECENT)  ((SKIPPED_RECENT++))  || true; continue ;;
+            UNKNOWN) ((SKIPPED_UNKNOWN++)) || true; continue ;;
         esac
     fi
 
     # Track what we're killing for messaging (all statuses)
-    ((KILLING[$proc_status]++)) || true
+    case "$proc_status" in
+        ORPHANED) ((KILLING_ORPHANED++)) || true ;;
+        STOPPED)  ((KILLING_STOPPED++))  || true ;;
+        IDLE)     ((KILLING_IDLE++))     || true ;;
+        ACTIVE)   ((KILLING_ACTIVE++))   || true ;;
+        TMUX)     ((KILLING_TMUX++))     || true ;;
+        RECENT)   ((KILLING_RECENT++))   || true ;;
+        *)        ((KILLING_UNKNOWN++))  || true ;;
+    esac
 
     PIDS_TO_KILL+=("$pid")
 done
@@ -319,10 +329,10 @@ KILL_COUNT=${#PIDS_TO_KILL[@]}
 build_skip_msg() {
     local msg=""
     [[ "$SKIPPED_CURRENT" == "true" ]] && msg="$msg (current session preserved)"
-    [[ ${SKIPPED[ACTIVE]} -gt 0 ]] && msg="$msg (${SKIPPED[ACTIVE]} active preserved, use --force to kill)"
-    [[ ${SKIPPED[TMUX]} -gt 0 ]] && msg="$msg (${SKIPPED[TMUX]} tmux preserved)"
-    [[ ${SKIPPED[RECENT]} -gt 0 ]] && msg="$msg (${SKIPPED[RECENT]} recent output preserved)"
-    [[ ${SKIPPED[UNKNOWN]} -gt 0 ]] && msg="$msg (${SKIPPED[UNKNOWN]} background agents preserved)"
+    [[ $SKIPPED_ACTIVE -gt 0 ]] && msg="$msg ($SKIPPED_ACTIVE active preserved, use --force to kill)"
+    [[ $SKIPPED_TMUX -gt 0 ]] && msg="$msg ($SKIPPED_TMUX tmux preserved)"
+    [[ $SKIPPED_RECENT -gt 0 ]] && msg="$msg ($SKIPPED_RECENT recent output preserved)"
+    [[ $SKIPPED_UNKNOWN -gt 0 ]] && msg="$msg ($SKIPPED_UNKNOWN background agents preserved)"
     echo "$msg"
 }
 
@@ -334,21 +344,20 @@ fi
 # Show what we're doing
 echo "Found $TOTAL Claude Code process(es)"
 [[ "$SKIPPED_CURRENT" == "true" ]] && echo "  Preserving current session (PID $CURRENT_PID)"
-[[ ${SKIPPED[ACTIVE]} -gt 0 ]] && echo "  Preserving ${SKIPPED[ACTIVE]} active process(es)"
-[[ ${SKIPPED[TMUX]} -gt 0 ]] && echo "  Preserving ${SKIPPED[TMUX]} tmux process(es)"
-[[ ${SKIPPED[RECENT]} -gt 0 ]] && echo "  Preserving ${SKIPPED[RECENT]} process(es) with recent output"
-[[ ${SKIPPED[UNKNOWN]} -gt 0 ]] && echo "  Preserving ${SKIPPED[UNKNOWN]} background process(es) with living parent"
+[[ $SKIPPED_ACTIVE -gt 0 ]] && echo "  Preserving $SKIPPED_ACTIVE active process(es)"
+[[ $SKIPPED_TMUX -gt 0 ]] && echo "  Preserving $SKIPPED_TMUX tmux process(es)"
+[[ $SKIPPED_RECENT -gt 0 ]] && echo "  Preserving $SKIPPED_RECENT process(es) with recent output"
+[[ $SKIPPED_UNKNOWN -gt 0 ]] && echo "  Preserving $SKIPPED_UNKNOWN background process(es) with living parent"
 
-# Build kill description
 # Build descriptive message for what we're killing
 parts=()
-[[ ${KILLING[ORPHANED]} -gt 0 ]] && parts+=("${KILLING[ORPHANED]} orphaned")
-[[ ${KILLING[STOPPED]} -gt 0 ]] && parts+=("${KILLING[STOPPED]} stopped")
-[[ ${KILLING[IDLE]} -gt 0 ]] && parts+=("${KILLING[IDLE]} idle>=${IDLE_THRESHOLD_HOURS}h")
-[[ ${KILLING[ACTIVE]} -gt 0 ]] && parts+=("${KILLING[ACTIVE]} active")
-[[ ${KILLING[TMUX]} -gt 0 ]] && parts+=("${KILLING[TMUX]} tmux")
-[[ ${KILLING[RECENT]} -gt 0 ]] && parts+=("${KILLING[RECENT]} recent")
-[[ ${KILLING[UNKNOWN]} -gt 0 ]] && parts+=("${KILLING[UNKNOWN]} unknown")
+[[ $KILLING_ORPHANED -gt 0 ]] && parts+=("$KILLING_ORPHANED orphaned")
+[[ $KILLING_STOPPED -gt 0 ]] && parts+=("$KILLING_STOPPED stopped")
+[[ $KILLING_IDLE -gt 0 ]] && parts+=("$KILLING_IDLE idle>=${IDLE_THRESHOLD_HOURS}h")
+[[ $KILLING_ACTIVE -gt 0 ]] && parts+=("$KILLING_ACTIVE active")
+[[ $KILLING_TMUX -gt 0 ]] && parts+=("$KILLING_TMUX tmux")
+[[ $KILLING_RECENT -gt 0 ]] && parts+=("$KILLING_RECENT recent")
+[[ $KILLING_UNKNOWN -gt 0 ]] && parts+=("$KILLING_UNKNOWN unknown")
 
 if [[ "$KILL_ALL" == "true" ]]; then
     echo "  Will kill $KILL_COUNT process(es) including current session..."
