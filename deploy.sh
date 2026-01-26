@@ -482,6 +482,11 @@ if [[ "$DEPLOY_CLAUDE_CLEANUP" == "true" ]]; then
     else
         log_warning "Claude cleanup script not found"
     fi
+
+    # Weekly tmpdir cleanup (deletes files >7 days old)
+    if [[ -f "$DOT_DIR/scripts/cleanup/setup_claude_tmpdir_cleanup.sh" ]]; then
+        "$DOT_DIR/scripts/cleanup/setup_claude_tmpdir_cleanup.sh" || log_warning "Claude tmpdir cleanup installation failed"
+    fi
 fi
 
 # ─── Done ─────────────────────────────────────────────────────────────────────
