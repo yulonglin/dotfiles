@@ -255,8 +255,21 @@ qrun() {
 # Health check for all AI CLI tools
 alias ai-check='echo "Checking AI CLI tools..." && claude --version 2>/dev/null && gemini --version 2>/dev/null && codex --version 2>/dev/null'
 
+# Auto-generate task list ID from timestamp + directory name
+# This wraps `claude` so every session gets an informative task list name
+claude() {
+  if [ -z "$CLAUDE_CODE_TASK_LIST_ID" ]; then
+    local dir_name
+    dir_name=$(basename "$PWD" | tr ' ' '_')
+    local timestamp
+    timestamp=$(date -u +%Y%m%d_%H%M%S)
+    export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${dir_name}"
+  fi
+  command claude "$@"
+}
+
 # Claude Code Task List Management
-# Start new work with timestamped task list
+# Start new work with custom description (overrides auto-generated name)
 claude-new() {
   local description="$1"
   if [ -z "$description" ]; then
