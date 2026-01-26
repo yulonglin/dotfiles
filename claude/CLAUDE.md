@@ -2,6 +2,47 @@
 
 Global guidance for Claude Code across all repositories.
 
+## Agent Spawning Fix (CRITICAL)
+
+**Issue**: On some systems, `/tmp/claude` is owned by root, blocking agent spawning.
+
+**Solution**: Set `CLAUDE_CODE_TMPDIR` environment variable to writable location.
+
+**One-time setup**:
+```bash
+# 1. Create alternative tmpdir
+mkdir -p ~/tmp/claude-code
+
+# 2. Add to shell profile (auto-loads in new sessions)
+echo 'export CLAUDE_CODE_TMPDIR=~/tmp/claude-code' >> ~/.bashrc
+echo 'export CLAUDE_CODE_TMPDIR=~/tmp/claude-code' >> ~/.zshrc 2>/dev/null
+
+# 3. Apply to current session
+export CLAUDE_CODE_TMPDIR=~/tmp/claude-code
+```
+
+or rather:
+export CLAUDE_CODE_TMPDIR=/run/user/$(id -u)
+
+or:
+
+export CLAUDE_CODE_TMPDIR=$HOME/tmp/claude
+
+
+**Verification**:
+```bash
+# Test agent spawning
+echo $CLAUDE_CODE_TMPDIR  # Should show: ~/tmp/claude-code or similar
+```
+
+If agent spawning still fails with `/tmp/claude` errors, use this fix.
+
+Btw, the error message is misleading - processes often start anyway despite the error:
+
+  EACCES: permission denied, mkdir '/tmp/claude/...'
+  ↓
+  But ps aux | grep run_all_clean shows the process WAS running!
+
 ## AI Safety Research Context
 
 You are assisting with AI safety research involving:

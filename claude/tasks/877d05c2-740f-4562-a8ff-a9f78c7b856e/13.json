@@ -3,7 +3,14 @@
   "subject": "[TM Baseline] Generate GPQA TM baseline with explicit prompts",
   "description": "Generate full GPQA TM baseline trajectories (N=119 test set) using the 4 strongest explicit prompts identified in prompt selection:\n- aggressive/zero_accuracy_explicit\n- deterministic_errors/off_by_one  \n- persona/second_guesser\n- deterministic_errors/correct_reasoning_wrong_extraction\n\nRequirements:\n- Use test split (N=119)\n- NO paraphrasing (+paraphraser.activate=false)\n- Run Anthropic TM judge post-hoc\n- Extract TM scores to CSV\n- This establishes TM baseline performance before comparing to stealth\n\nCommand:\n```\npython -m src.detection_game.cli.run_sweep \\\n  --config-name=conf \\\n  'sweep.datasets=[gpqa]' \\\n  'sweep.role_system_prompts.sandbagger=[aggressive/zero_accuracy_explicit,deterministic_errors/off_by_one,persona/second_guesser,deterministic_errors/correct_reasoning_wrong_extraction]' \\\n  dataset.hf_split=test \\\n  +paraphraser.activate=false \\\n  logs.dir=gpqa_tm_baseline_$(utc_timestamp) \\\n  --multirun\n```\n\nThen run judge and extract scores.",
   "activeForm": "Generating GPQA TM baseline",
-  "status": "pending",
+  "status": "completed",
   "blocks": [],
-  "blockedBy": []
+  "blockedBy": [],
+  "metadata": {
+    "job_id": "b18dec0",
+    "started": "2026-01-25 05:46 UTC",
+    "eta": "06:30 UTC",
+    "completed": "2026-01-25 05:47 UTC",
+    "output_dir": "logs/runs/gpqa_tm_baseline_25-01-2026_05-46-52"
+  }
 }

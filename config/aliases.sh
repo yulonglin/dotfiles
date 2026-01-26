@@ -37,16 +37,33 @@ claude() {
     if [[ "$OSTYPE" == linux* ]] && [[ -d "/run/user/$(id -u)" ]]; then
         export CLAUDE_CODE_TMPDIR="/run/user/$(id -u)"
     fi
-    # Auto-generate task list ID from timestamp + directory name
+
+    # Parse -t/--task argument for custom task name
+    local args=() task_name=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -t|--task)
+                task_name="$2"
+                shift 2
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Auto-generate task list ID: custom name or directory name
     if [ -z "$CLAUDE_CODE_TASK_LIST_ID" ]; then
-        local dir_name
-        dir_name=$(basename "$PWD" | tr ' ' '_')
+        local suffix
+        suffix="${task_name:-$(basename "$PWD" | tr ' ' '_')}"
         local timestamp
         timestamp=$(date -u +%Y%m%d_%H%M%S)
-        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${dir_name}"
+        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${suffix}"
     fi
+
     activate_venv
-    command claude "$@"
+    command claude "${args[@]}"
 }
 alias yolo='claude --dangerously-skip-permissions'
 alias resume='yolo --resume'

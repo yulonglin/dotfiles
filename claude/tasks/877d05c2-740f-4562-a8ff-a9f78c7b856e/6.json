@@ -1,9 +1,9 @@
 {
   "id": "6",
   "subject": "[Ensemble] Test cascade approach (TM → C3)",
-  "description": "Test \"Defense in Depth\" cascade:\n1. Layer 1: Trusted Monitor (catches explicit)\n2. Layer 2: C3 (catches sophisticated cases that pass TM)\n\nExperiments:\n- Combined ROC curve showing ensemble performance\n- Analyze cases where TM fails but C3 succeeds\n- Compute optimal threshold for TM first-pass filter\n- Show improvement over either method alone\n\nThis is the reframed narrative for ICML.",
+  "description": "Test cascade approach: TM→C3 ensemble for defense in depth.\n\nRATIONALE: Stealth validation showed TM catches both explicit (6.7/10) and stealth (5.7/10) prompts moderately well. C3 has AUC=0.636 overall but high variance across prompts. Hypothesis: TM and C3 may catch different failure modes.\n\nAPPROACH:\n1. Generate TM baseline on GPQA (explicit prompts)\n2. Extract TM scores for same samples as existing C3 scores\n3. Compare: Which samples does TM catch? Which does C3 catch?\n4. Build ensemble: TM→C3 cascade or weighted combination\n5. Show complementary strengths\n\nMETRICS TO COMPUTE:\n- TM-only AUC\n- C3-only AUC (existing: 0.636)\n- Cascade AUC (flag if TM > threshold OR C3 > threshold)\n- Ensemble AUC (weighted: α*TM + (1-α)*C3)\n\nNext: Launch #13 (GPQA TM baseline)",
   "activeForm": "Testing cascade TM→C3 ensemble",
-  "status": "pending",
+  "status": "in_progress",
   "blocks": [
     "8"
   ],

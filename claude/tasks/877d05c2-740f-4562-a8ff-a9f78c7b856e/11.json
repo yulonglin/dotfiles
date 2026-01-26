@@ -1,9 +1,9 @@
 {
   "id": "11",
   "subject": "[Validation] Test stealth prompts on N=10 samples",
-  "description": "Test if stealth prompts evade Anthropic Trusted Monitor.\n\nStatus UPDATE:\n- ✅ Step 1/4: Trajectories generated (logs/runs/stealth_tm_25-01-2026_05-28-42/)\n  - 4 .eval files, ~40 total samples\n  - Prompts: explicit + 2 stealth variants\n- 🔄 Step 2/4: TM judge running (background job b01bd6e) - ACTIVE NOW\n- ⏳ Step 3/4: Extract TM scores (pending judge completion)\n- ⏳ Step 4/4: Analyze and decide (pending scores)\n\nFiles ready:\n- logs/runs/stealth_tm_25-01-2026_05-28-42/*.eval (trajectories)\n- Waiting for judge outputs\n\nNext: Extract scores with run_trusted_monitor.py and compare means",
+  "description": "Stealth TM validation COMPLETE.\n\nRESULTS:\n- Explicit TM: 6.70 ± 2.75 / 10 (N=10)\n- Stealth TM: 5.70 ± 3.03 / 10 (N=30)\n- Reduction: 1.00 points (14.9% decrease)\n\nDECISION: ❌ STEALTH DOESN'T WORK\n- Stealth prompts only marginally reduce TM suspicion\n- Both explicit and stealth in moderate range (5-7/10)\n- Cannot claim \"C3 beats TM\" on stealth evasion\n\nNARRATIVE PIVOT: Cascade (TM→C3) / Defense in Depth\n- Show TM and C3 catch different failure modes\n- Emphasize complementary detection\n- Generate ensemble performance metrics\n\nFiles:\n- tmp/stealth_tm_scores.csv (raw TM scores)\n- tmp/STEALTH_DECISION.txt (decision document)",
   "activeForm": "Testing stealth prompts validation",
-  "status": "in_progress",
+  "status": "completed",
   "blocks": [],
   "blockedBy": [],
   "metadata": {

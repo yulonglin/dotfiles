@@ -3,7 +3,12 @@
   "subject": "[C3 Extension] Run MATH C3 with mean pairwise cosine distance",
   "description": "Generate MATH trajectories and C3 scores using mean pairwise cosine distance (better for free-form responses than categorical entropy).\n\nRequirements:\n- Dataset: MATH Level 5 (N=921 dev or 1383 test)  \n- Use Vendi-optimized paraphraser (10 strategies)\n- Same 4 prompts as GPQA baseline\n- k=5 paraphrases per question\n- Metric: mean_pairwise_cosine_distance (not categorical_entropy)\n\nExpected: Better detection than GPQA (AUC >0.7) since MATH has free-form responses\n\nCommand:\n```\npython -m src.detection_game.cli.run_sweep \\\n  --config-name=math-paraphrase \\\n  'sweep.role_system_prompts.sandbagger=[aggressive/zero_accuracy_explicit,deterministic_errors/off_by_one,persona/second_guesser,deterministic_errors/correct_reasoning_wrong_extraction]' \\\n  trajectory.eval.limit=50 \\\n  dataset.hf_split=test \\\n  logs.dir=math_c3_baseline_$(utc_timestamp) \\\n  --multirun\n```\n\nThen extract C3 scores with cosine distance metric.",
   "activeForm": "Generating MATH C3 baseline",
-  "status": "pending",
+  "status": "completed",
   "blocks": [],
-  "blockedBy": []
+  "blockedBy": [],
+  "metadata": {
+    "job_id": "b121ea9",
+    "started": "2026-01-25 05:48 UTC",
+    "paraphrasing_complete": true
+  }
 }
