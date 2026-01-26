@@ -97,7 +97,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/auto_log.sh START"
+            "command": "~/.claude/hooks/auto_log.sh START",
+            "async": true
           },
           {
             "type": "command",
@@ -121,7 +122,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/auto_log.sh END"
+            "command": "~/.claude/hooks/auto_log.sh END",
+            "async": true
           },
           {
             "type": "command",
