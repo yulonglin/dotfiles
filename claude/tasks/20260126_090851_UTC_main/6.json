@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "Phase 2: Run TM judge and analyze",
+  "description": "Run trusted monitor judge, extract scores, analyze with dev/test split",
+  "activeForm": "Running TM analysis",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,5 +1,31 @@
 # Plan: Password-Locked Model Experiments (C³ + Trusted Monitor)
 
+## Current Status (2026-01-26 10:30 UTC)
+
+### GSM8K DeepSeek-Math-7B (IN PROGRESS)
+| Job | Status | SLURM ID | Notes |
+|-----|--------|----------|-------|
+| vLLM server | ✅ Running | 35154 | 12h job on l40-worker |
+| C3 experiment | 🔄 Running | 35162 | 200 samples, 5 epochs, 5 paraphrases |
+| TM experiment | 🔄 Running | 35165 | 200 samples, 5 epochs, no paraphrase |
+
+### Validation Results (Completed)
+- Without password: 0% accuracy (sandbaging)
+- With password: 100% accuracy (full capability)
+- **Gap: 100%** ✓ Perfect sandbagging behavior
+
+### Files Created
+- `src/detection_game/configs/gsm8k-password-locked-sandbagger.yaml`
+- `src/detection_game/configs/gsm8k-password-locked-with-password.yaml`
+- `src/detection_game/configs/gsm8k-password-locked-trusted-monitor-sandbagger.yaml`
+- `src/detection_game/configs/gsm8k-password-locked-trusted-monitor-with-password.yaml`
+- `src/detection_game/configs/gsm8k-password-locked-trusted-monitor-judge.yaml`
+- `scripts/slurm/run_gsm8k_c3_experiment.sh`
+- `scripts/slurm/run_gsm8k_tm_experiment.sh`
+- `scripts/analyze_password_locked_scores.py`
+
+---
+
 ## Goal
 Run proper C³ and trusted monitor experiments on both password-locked models with correct methodology, 100 samples, and results within ~12 hours.
 

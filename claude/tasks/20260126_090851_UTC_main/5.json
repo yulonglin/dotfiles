@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "Phase 1: Run C³ trajectories (sandbagger + unlocked)",
+  "description": "Generate trajectories with 6 paraphrases × 5 epochs × 200 samples",
+  "activeForm": "Running C³ trajectories",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

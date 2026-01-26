@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "Phase 2: Run Trusted Monitor trajectories",
+  "description": "Generate trajectories without paraphrasing for TM baseline",
+  "activeForm": "Running TM trajectories",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

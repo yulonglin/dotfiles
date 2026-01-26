@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Phase 1: Extract C³ scores and analyze",
+  "description": "Extract categorical_entropy + cosine_distance, run dev/test analysis",
+  "activeForm": "Extracting C³ scores",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}
