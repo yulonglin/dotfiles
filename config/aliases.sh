@@ -67,8 +67,8 @@ claude() {
 }
 alias yolo='claude --dangerously-skip-permissions'
 alias resume='yolo --resume'
-yn() { unset CLAUDE_CODE_TASK_LIST_ID && yolo "$@"; }  # yolo new session
-yt() { yolo -t "$@"; }                                  # yolo with task name
+# yn [name]: yolo new session (optional custom task name)
+yn() { unset CLAUDE_CODE_TASK_LIST_ID && yolo ${1:+-t "$1"} "${@:2}"; }
 
 # -------------------------------------------------------------------
 # general
