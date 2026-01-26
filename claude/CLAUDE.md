@@ -74,6 +74,7 @@ This research requires creating test scenarios that may seem concerning out of c
 ### Default Behaviors
 - **Interview before planning** - use `/spec-interview-research` for experiments, `/spec-interview` for product features
 - **Plan before implementing** - use `EnterPlanMode` for non-trivial tasks; don't write code until plan approved
+- **Use existing code** for experiments - correct hyperparams, full data, validated metrics; ad-hoc only for dry runs
 - **Delegate to subagents** for non-trivial work (you coordinate, they execute)
 - **Commit frequently** after every meaningful change
 - **Update docs when changing code** - keep CLAUDE.md, README.md, project docs in sync
@@ -377,8 +378,53 @@ ericbuess/claude-code-docs       # Claude Code documentation
 
 **For large features**: Interview → Spec → (new session) → Plan → Implement. The spec captures *what*, planning figures out *how*.
 
+### Running Experiments (CRITICAL)
+
+⚠️ **USE EXISTING CODE FOR ACTUAL EXPERIMENT RUNS** ⚠️
+
+**The problem with ad-hoc code**: You risk using wrong hyperparameters, running on insufficient data, or computing metrics incorrectly—when correct implementations already exist in the codebase.
+
+| Purpose | Approach |
+|---------|----------|
+| **Actual experiment run** | **MUST use existing code** - has correct hyperparams, full data, validated metrics |
+| Dry run / sanity check | Ad-hoc OK - testing if pipeline works, N=2-5 |
+| Quick validation | Ad-hoc OK - "does this import work?", "is data formatted right?" |
+| Exploring outputs | Ad-hoc OK - `head`, `jq`, `wc -l`, quick inspection |
+
+**What "existing code" provides that ad-hoc doesn't**:
+- **Correct hyperparameters** - learning rates, batch sizes, thresholds already tuned
+- **Proper sample sizes** - full dataset, not accidentally N=10
+- **Validated metric computation** - don't reinvent accuracy/F1/etc. incorrectly
+- **Correct data preprocessing** - tokenization, normalization, filtering
+
+**Before running any experiment, discover existing code**:
+1. Check `src/` for CLI entry points (`if __name__ == "__main__"`)
+2. Check `Makefile` or `pyproject.toml` for defined commands
+3. Check README.md for documented run commands
+4. Check `scripts/` for utility/analysis scripts
+5. **ASK if unsure** - "Is there existing code for running X?"
+
+**Where to put new code**:
+- `src/` - Proper experiment implementations (reviewed, version controlled)
+- `scripts/` - Utilities, one-off analysis, data processing helpers
+- `tmp/` - Throwaway tests, dry runs (delete when done)
+
+**Examples**:
+```bash
+# Testing if things work - ad-hoc is FINE
+✅ OK:   python -c "model.evaluate(data[:10])"         # does eval run?
+✅ OK:   python -c "from src.model import load; m = load('X')"  # does it load?
+✅ OK:   python -m src.eval.run --model X --max-samples 5       # dry run
+
+# Actual experiment run - USE EXISTING CODE
+❌ BAD:  python -c "model.evaluate(data[:100])" → reporting these as results
+❌ BAD:  Reimplementing accuracy calculation when src/metrics.py exists
+✅ GOOD: python -m src.eval.run --model X --split test
+```
+
 ### Common Failure Modes
 - Jumping into implementation without planning (2 min planning saves 20 min refactoring)
+- **Running experiments with ad-hoc code** when existing implementations have correct hyperparams/metrics
 - Running experiments without clear questions
 - Not identifying control, independent, and dependent variables before experimenting
 - Not clearly reporting control/independent/dependent variables in results
