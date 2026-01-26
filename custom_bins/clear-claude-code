@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Clear Claude Code - Kill Claude Code CLI processes
-# Preserves the current session (if running from within Claude Code)
-# Preserves tmux sessions and recent-output processes by default
+# By default: only YOUR processes, preserves current session & tmux
 #
 # Usage:
-#   clear-claude-code              # Kill all claude processes except current
-#   clear-claude-code --all        # Kill ALL claude processes (including current)
-#   clear-claude-code --dry-run    # Show what would be killed without killing
+#   clear-claude-code              # Kill your orphaned/stopped/idle processes
+#   clear-claude-code --status     # Show your processes (no kill)
+#   clear-claude-code --all-users  # Show/kill all users (may need sudo)
+#   clear-claude-code --dry-run    # Preview what would be killed
+#   clear-claude-code --force      # Also kill active processes
+#   clear-claude-code --all        # Kill ALL including current session
 
 set -euo pipefail
 
@@ -27,6 +29,8 @@ KILL_ALL=false
 FORCE=false
 STATUS_ONLY=false
 SKIP_CONFIRM=false
+ALL_USERS=false
+TARGET_USER="$(whoami)"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -50,12 +54,16 @@ while [[ $# -gt 0 ]]; do
             SKIP_CONFIRM=true
             shift
             ;;
+        --all-users|-A)
+            ALL_USERS=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: clear-claude-code [OPTIONS]"
             echo ""
             echo "Kill Claude Code CLI processes."
             echo ""
-            echo "By default, only kills processes with no output activity for ${IDLE_THRESHOLD_HOURS}h."
+            echo "By default, only shows/kills YOUR processes (current user: $TARGET_USER)."
             echo "Tmux sessions are preserved unless --force/--all is used."
             echo ""
             echo "Options:"
@@ -63,6 +71,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --preview, --dry-run, -n   Show what would be killed without killing"
             echo "  --force, -f      Also kill ACTIVE processes (requires confirmation)"
             echo "  --all, -a        Kill ALL processes including current (requires confirmation)"
+            echo "  --all-users, -A  Show/kill processes for ALL users (may require sudo)"
             echo "  --yes, -y        Skip confirmation prompt (for scripts/automation)"
             echo "  --help, -h       Show this help message"
             echo ""
@@ -228,7 +237,11 @@ get_process_status() {
 
 # Show detailed status of all Claude Code processes
 show_status() {
-    echo "Claude Code Processes:"
+    if [[ "$ALL_USERS" == "true" ]]; then
+        echo "Claude Code Processes (all users):"
+    else
+        echo "Claude Code Processes (user: $TARGET_USER):"
+    fi
     echo "$LINE"
     printf "%-8s %-12s %-18s %-10s %-6s %-6s %s\n" "PID" "STATUS" "PARENT" "UPTIME" "CPU%" "MEM%" "COMMAND"
     echo "$LINE"
@@ -288,7 +301,11 @@ show_status() {
         esac
 
         printf "%-8s %-12s %-18s %-10s %-6s %-6s %s\n" "$pid" "$label" "$parent" "$etime" "$cpu" "$mem" "$cmd"
-    done < <(ps aux | awk '$11 ~ /\/claude$/ || $11 == "claude"')
+    done < <(if [[ "$ALL_USERS" == "true" ]]; then
+        ps aux | awk '$11 ~ /\/claude$/ || $11 == "claude"'
+    else
+        ps aux | awk -v user="$TARGET_USER" '$1 ~ "^"user && ($11 ~ /\/claude$/ || $11 == "claude")'
+    fi)
 
     echo "$LINE"
     echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, idle: $idle_count, recent: $recent_count, orphaned: $orphaned_count, stopped: $stopped_count, unknown: $unknown_count"
@@ -344,8 +361,13 @@ fi
 
 # Get all claude CLI processes (exclude Claude.app and this script)
 # Get PIDs where command is exactly 'claude' binary (not Claude.app or subshells)
+# Filters by TARGET_USER unless ALL_USERS is set
 get_claude_pids() {
-    ps aux | awk '($11 ~ /\/claude$/ || $11 == "claude") {print $2}'
+    if [[ "$ALL_USERS" == "true" ]]; then
+        ps aux | awk '($11 ~ /\/claude$/ || $11 == "claude") {print $2}'
+    else
+        ps aux | awk -v user="$TARGET_USER" '($1 ~ "^"user && ($11 ~ /\/claude$/ || $11 == "claude")) {print $2}'
+    fi
 }
 
 # Count and list processes
@@ -353,7 +375,11 @@ PIDS=($(get_claude_pids))
 TOTAL=${#PIDS[@]}
 
 if [[ $TOTAL -eq 0 ]]; then
-    echo "No Claude Code processes found."
+    if [[ "$ALL_USERS" == "true" ]]; then
+        echo "No Claude Code processes found."
+    else
+        echo "No Claude Code processes found for user $TARGET_USER. Use --all-users to see all."
+    fi
     exit 0
 fi
 
@@ -475,28 +501,47 @@ if [[ "$DRY_RUN" == "true" ]]; then
         ps -p "$pid" -o pid,etime,command 2>/dev/null | tail -1 || echo "  $pid (already terminated)"
     done
 else
-    # Kill the processes, tracking success/failure
+    # Kill the processes with escalation: SIGTERM -> wait -> SIGKILL
     killed=0
     failed_pids=()
+    stubborn_pids=()
+
+    # First pass: SIGTERM
     for pid in "${PIDS_TO_KILL[@]}"; do
-        if kill "$pid" 2>/dev/null; then
-            ((killed++))
+        kill "$pid" 2>/dev/null || true
+    done
+
+    # Brief wait for graceful shutdown
+    sleep 0.5
+
+    # Second pass: check survivors, SIGKILL stubborn ones
+    for pid in "${PIDS_TO_KILL[@]}"; do
+        if ps -p "$pid" >/dev/null 2>&1; then
+            # Still alive, use SIGKILL
+            stubborn_pids+=("$pid")
+            if kill -9 "$pid" 2>/dev/null; then
+                ((killed++))
+            else
+                failed_pids+=("$pid")
+            fi
         else
-            failed_pids+=("$pid")
+            ((killed++))
         fi
     done
 
     if [[ $killed -gt 0 ]]; then
-        echo "Done. Killed $killed Claude Code process(es)."
+        msg="Done. Killed $killed Claude Code process(es)."
+        [[ ${#stubborn_pids[@]} -gt 0 ]] && msg="$msg (${#stubborn_pids[@]} required SIGKILL)"
+        echo "$msg"
     fi
 
     if [[ ${#failed_pids[@]} -gt 0 ]]; then
         echo "Failed to kill ${#failed_pids[@]} process(es): ${failed_pids[*]}"
-        # Check if they're root-owned
+        # Check if they're root-owned or other user
         for pid in "${failed_pids[@]}"; do
             owner=$(ps -p "$pid" -o user= 2>/dev/null || echo "unknown")
-            if [[ "$owner" == "root" ]]; then
-                echo "  PID $pid is owned by root - try: sudo kill $pid"
+            if [[ "$owner" != "$TARGET_USER" ]]; then
+                echo "  PID $pid is owned by $owner - try: sudo kill -9 $pid"
             fi
         done
     fi
