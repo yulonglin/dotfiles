@@ -53,22 +53,19 @@ claude() {
         esac
     done
 
-    # Auto-generate task list ID: custom name or directory name
-    if [ -z "$CLAUDE_CODE_TASK_LIST_ID" ]; then
-        local suffix
-        suffix="${task_name:-$(basename "$PWD" | tr ' ' '_')}"
-        local timestamp
-        timestamp=$(date -u +%Y%m%d_%H%M%S)
-        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${suffix}"
-    fi
+    # Always generate fresh task list ID: custom name or directory name
+    local suffix
+    suffix="${task_name:-$(basename "$PWD" | tr ' ' '_')}"
+    local timestamp
+    timestamp=$(date -u +%Y%m%d_%H%M%S)
+    export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${suffix}"
 
     activate_venv
     command claude "${args[@]}"
 }
 alias yolo='claude --dangerously-skip-permissions'
 alias resume='yolo --resume'
-# yn [name]: yolo new session (optional custom task name)
-yn() { unset CLAUDE_CODE_TASK_LIST_ID && yolo ${1:+-t "$1"} "${@:2}"; }
+alias yn='yolo -t'  # yn <name>: yolo with task name
 
 # -------------------------------------------------------------------
 # general
