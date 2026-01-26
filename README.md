@@ -1,9 +1,11 @@
 # dotfiles
 
-My personal development environment: ZSH, Tmux, Vim, SSH, and AI coding assistants across macOS, Linux, and cloud containers.
+**Highly opinionated** development environment for AI safety research. ZSH, Tmux, Vim, SSH, and AI coding assistants across macOS, Linux, and cloud containers.
 
-**Key highlights of this setup:**
-- 🤖 **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Custom agents, hooks, skills, and slash commands for AI-assisted development
+This setup reflects workflows optimized for ML research: reproducibility, experiment tracking, async API patterns, and rigorous methodology. The AI assistant configurations enforce research discipline—interview before planning, plan before implementing, skepticism of surprisingly good results.
+
+**Key highlights:**
+- 🤖 **AI Coding Assistants** - Extensively configured Claude Code, plus Codex CLI and Gemini CLI support
 - 👻 **[Ghostty](https://ghostty.org/)** - Fast, GPU-accelerated terminal with sensible defaults
 - 📊 **[htop](https://htop.dev/)** - Dynamic CPU meter configuration that adapts to your core count
 - 🦀 **Rust-powered CLI tools** - Modern, blazing-fast replacements for standard Unix utilities
@@ -75,22 +77,62 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 
 **Flags are additive** - e.g., `./deploy.sh --aliases=custom` deploys defaults + custom aliases. Use `--minimal` to disable defaults.
 
-### Claude Code (AI Assistant)
+### Claude Code (Primary AI Assistant)
 
-This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/claude-code) customization for AI-assisted development:
+This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/claude-code) customization optimized for AI safety research:
 
 ```bash
 ./deploy.sh --claude  # Symlinks claude/ → ~/.claude
 ```
 
 **What's included:**
-- **`CLAUDE.md`** - Global instructions: research methodology, coding standards, zero-tolerance rules
-- **`agents/`** - Specialized subagents (code-reviewer, research-engineer, debugger, etc.)
-- **`skills/`** - Custom slash commands (`/commit`, `/run-experiment`, `/spec-interview`)
-- **`hooks/`** - Auto-logging to `~/.claude/logs/`, desktop notifications
+- **`CLAUDE.md`** - Global instructions enforcing research discipline:
+  - Zero-tolerance rules (no mock data, no fabrication, no destructive git)
+  - Research methodology (interview → plan → implement, change one variable at a time)
+  - Performance patterns (async API calls, caching, 100+ concurrent requests)
+  - Context management (subagents for large files, efficient exploration)
+- **`agents/`** - Specialized subagents for different tasks:
+  - `code-reviewer`, `research-engineer`, `debugger`, `performance-optimizer`
+  - `experiment-designer`, `research-skeptic`, `data-analyst`
+  - `literature-scout`, `paper-writer`, `clarity-critic`
+- **`skills/`** - Custom slash commands:
+  - `/commit`, `/run-experiment`, `/spec-interview-research`
+  - `/read-paper`, `/review-draft`, `/reproducibility-report`
+- **`hooks/`** - Auto-logging to `~/.claude/logs/`, desktop notifications, file read warnings
 - **`templates/`** - Reproducibility reports, research specs
 
 **Smart merge preserves your data** - if `~/.claude` already exists, credentials, history, and cache are automatically restored after symlinking.
+
+### Codex CLI (OpenAI)
+
+[Codex CLI](https://github.com/openai/codex) configuration that reuses Claude Code's skills:
+
+```bash
+./deploy.sh --codex  # Symlinks codex/ → ~/.codex
+```
+
+**What's included:**
+- **`AGENTS.md`** - Global instructions (references CLAUDE.md as source of truth)
+- **`config.toml`** - Model settings and per-project trust levels
+- **`skills/`** - Symlinked to Claude Code's skills for consistency
+
+The configuration follows the same research discipline as Claude Code but adapted for Codex's execution model.
+
+### Gemini CLI (Google)
+
+[Gemini CLI](https://github.com/google-gemini/gemini-cli) can sync with Claude Code configurations:
+
+```bash
+./scripts/sync_claude_to_gemini.sh  # Syncs skills/agents/permissions
+```
+
+**What it does:**
+- Symlinks Claude Code skills to `~/.gemini/skills/`
+- Converts Claude agents to Gemini skill format
+- Syncs permissions from `.claude/settings.json` to Gemini policies
+- Creates `GEMINI.md` pointer to CLAUDE.md
+
+**Note:** Gemini CLI uses a different skills format. The sync script adapts Claude's configuration but some features may not translate directly.
 
 ### Ghostty (Terminal Emulator)
 
