@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared Helper Functions
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -599,7 +599,7 @@ deploy_git_config() {
     fi
 
     # Git settings to apply
-    declare -A git_settings=(
+    typeset -A git_settings=(
         ["user.email"]="$GIT_USER_EMAIL"
         ["user.name"]="$GIT_USER_NAME"
         ["push.autoSetupRemote"]="true"
@@ -619,10 +619,9 @@ deploy_git_config() {
 
     # Check for conflicts
     local conflicts=()
-    for key in "${!git_settings[@]}"; do
-        local existing new
-        existing=$(git config --global "$key" 2>/dev/null || echo "")
-        new="${git_settings[$key]}"
+    for key in "${(k)git_settings[@]}"; do
+        local existing=$(git config --global "$key" 2>/dev/null || echo "")
+        local new="${git_settings[$key]}"
         if [[ -n "$existing" && "$existing" != "$new" ]]; then
             conflicts+=("$key|$existing|$new")
         fi
@@ -825,19 +824,19 @@ parse_args() {
             --no-*)
                 # Disable a component: --no-zsh, --no-claude, etc.
                 local component="${1#--no-}"
-                component="${component^^}"  # uppercase
+                component="${(U)component}"  # uppercase
                 component="${component//-/_}"  # dashes to underscores
-                declare -g "INSTALL_${component}=false" 2>/dev/null || \
-                declare -g "DEPLOY_${component}=false" 2>/dev/null || \
+                typeset -g "INSTALL_${component}=false" 2>/dev/null || \
+                typeset -g "DEPLOY_${component}=false" 2>/dev/null || \
                 log_warning "Unknown component: $1"
                 ;;
             --*)
                 # Enable a component: --zsh, --claude, etc.
                 local component="${1#--}"
-                component="${component^^}"
+                component="${(U)component}"
                 component="${component//-/_}"
-                declare -g "INSTALL_${component}=true" 2>/dev/null || \
-                declare -g "DEPLOY_${component}=true" 2>/dev/null || \
+                typeset -g "INSTALL_${component}=true" 2>/dev/null || \
+                typeset -g "DEPLOY_${component}=true" 2>/dev/null || \
                 log_warning "Unknown component: $1"
                 ;;
             *)
