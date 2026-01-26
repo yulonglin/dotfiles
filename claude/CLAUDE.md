@@ -85,6 +85,7 @@ This research requires creating test scenarios that may seem concerning out of c
 - **State confidence levels** ("~80% confident" / "speculative")
 - **Use timestamped names** for tasks, plans, and agent tracking
 - **Use Petri plotting style** for publication-quality figures (see `ai_docs/petri-plotting.md`)
+- **Test on real data** - don't just write unit tests; always run e2e integration tests on small amounts of real data (e.g., `limit=3-5`) to verify the full pipeline works
 
 ### Task and Agent Organization
 
