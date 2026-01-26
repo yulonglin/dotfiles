@@ -157,6 +157,80 @@ schedule_daily() {
     fi
 }
 
+# Create a launchd plist for weekly jobs (macOS only)
+# Usage: create_launchd_plist_weekly "label" "command" "weekday" "hour" "minute" "log_file"
+create_launchd_plist_weekly() {
+    local label="$1"
+    local command="$2"
+    local weekday="${3:-0}"  # 0=Sunday
+    local hour="${4:-3}"
+    local minute="${5:-0}"
+    local log_file="${6:-$HOME/Library/Logs/$label.log}"
+    local plist_file="$HOME/Library/LaunchAgents/$label.plist"
+
+    [[ "$(uname -s)" != "Darwin" ]] && return 0
+
+    mkdir -p "$(dirname "$plist_file")"
+    cat > "$plist_file" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$label</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$command</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>$weekday</integer>
+        <key>Hour</key>
+        <integer>$hour</integer>
+        <key>Minute</key>
+        <integer>$minute</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>$log_file</string>
+    <key>StandardErrorPath</key>
+    <string>$log_file</string>
+</dict>
+</plist>
+EOF
+    echo "$plist_file"
+}
+
+# Schedule a weekly job (cross-platform)
+# Usage: schedule_weekly "job_id" "command" "weekday" "hour" [minute] [log_file]
+# weekday: 0=Sunday, 1=Monday, ..., 6=Saturday
+schedule_weekly() {
+    local job_id="$1"
+    local command="$2"
+    local weekday="${3:-0}"  # Default: Sunday
+    local hour="${4:-3}"     # Default: 3am
+    local minute="${5:-0}"
+    local log_file="${6:-}"
+
+    _validate_job_id "$job_id" || return 1
+
+    local day_names=("Sunday" "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday")
+    local day_name="${day_names[$weekday]}"
+
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        local label="com.user.$job_id"
+        log_file="${log_file:-$HOME/Library/Logs/$label.log}"
+        local plist
+        plist=$(create_launchd_plist_weekly "$label" "$command" "$weekday" "$hour" "$minute" "$log_file")
+        load_launchd "$plist"
+        _sched_log_info "✅ Installed launchd agent (runs weekly on $day_name at $hour:$(printf '%02d' "$minute"))"
+    else
+        log_file="${log_file:-$HOME/.$job_id.log}"
+        add_cron_job "$job_id" "$minute $hour * * $weekday" "$command" "$log_file"
+        _sched_log_info "✅ Installed cron job (runs weekly on $day_name at $hour:$(printf '%02d' "$minute"))"
+    fi
+}
+
 # Unschedule a job (cross-platform)
 unschedule() {
     local job_id="$1"

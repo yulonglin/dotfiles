@@ -11,12 +11,15 @@ fi
 export TERM="xterm-256color"
 
 # Claude Code tmpdir - avoid root-owned /tmp/claude issues
-if [[ -d /run/user ]]; then
+if [[ -n "$TMPDIR" && -w "$TMPDIR" ]]; then
+    # Explicit TMPDIR takes priority (cloud environments, user preference)
+    export CLAUDE_CODE_TMPDIR="$TMPDIR/claude"
+elif [[ -d "/run/user/$(id -u)" && -w "/run/user/$(id -u)" ]]; then
     # Linux: XDG runtime dir (per-user tmpfs, mode 0700)
-    export CLAUDE_CODE_TMPDIR=/run/user/$(id -u)/claude
+    export CLAUDE_CODE_TMPDIR="/run/user/$(id -u)/claude"
 else
-    # macOS: use per-user TMPDIR (safer than /tmp)
-    export CLAUDE_CODE_TMPDIR="${TMPDIR:-/tmp}/claude"
+    # Fallback: home dir (always writable, survives reboots)
+    export CLAUDE_CODE_TMPDIR="$HOME/tmp/claude"
 fi
 
 ZSH_DISABLE_COMPFIX=true
