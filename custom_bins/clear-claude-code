@@ -71,7 +71,9 @@ while [[ $# -gt 0 ]]; do
             echo "  tmux            Process belongs to a tmux session (preserved by default)"
             echo "  idle>=${IDLE_THRESHOLD_HOURS}h  No output activity for ${IDLE_THRESHOLD_HOURS}h"
             echo "  recent          Output activity within last ${IDLE_THRESHOLD_HOURS}h"
-            echo "  unknown         Output activity could not be determined"
+            echo "  orphaned        Parent process died (ppid=1) - KILLED by default"
+            echo "  stopped         Process is stopped/traced (stat=T) - KILLED by default"
+            echo "  unknown         Has living parent but no TTY (background agent?)"
             exit 0
             ;;
         *)
@@ -159,6 +161,18 @@ get_tty_mtime() {
     fi
 }
 
+is_orphaned() {
+    local pid="$1"
+    local ppid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ' || echo "")
+    [[ "$ppid" == "1" ]]
+}
+
+is_stopped() {
+    local pid="$1"
+    local stat=$(ps -p "$pid" -o stat= 2>/dev/null || echo "")
+    [[ "$stat" == *"T"* ]]
+}
+
 get_output_status() {
     local pid="$1"
     local tty
@@ -180,7 +194,7 @@ get_output_status() {
 }
 
 # Check if a process appears to be actively in use
-# Returns: ACTIVE, TMUX, IDLE, RECENT, or UNKNOWN
+# Returns: ACTIVE, TMUX, ORPHANED, STOPPED, IDLE, RECENT, or UNKNOWN
 get_process_status() {
     local pid="$1"
 
@@ -194,6 +208,18 @@ get_process_status() {
     # S+ means stopped in foreground, R+ means running in foreground
     if [[ "$stat" == *"+"* ]]; then
         echo "ACTIVE"
+        return
+    fi
+
+    # Check for stopped processes (stat contains T) - definitely idle
+    if is_stopped "$pid"; then
+        echo "STOPPED"
+        return
+    fi
+
+    # Check for orphaned processes (ppid=1) - parent died, adopted by init
+    if is_orphaned "$pid"; then
+        echo "ORPHANED"
         return
     fi
 
@@ -212,6 +238,8 @@ show_status() {
     local tmux_count=0
     local idle_count=0
     local recent_count=0
+    local orphaned_count=0
+    local stopped_count=0
     local unknown_count=0
     local unknown_pids=()
 
@@ -245,6 +273,14 @@ show_status() {
                 label="recent"
                 ((recent_count++)) || true
                 ;;
+            ORPHANED)
+                label="orphaned"
+                ((orphaned_count++)) || true
+                ;;
+            STOPPED)
+                label="stopped"
+                ((stopped_count++)) || true
+                ;;
             *)
                 ((unknown_count++)) || true
                 unknown_pids+=("$pid")
@@ -255,7 +291,7 @@ show_status() {
     done < <(ps aux | awk '$11 ~ /\/claude$/ || $11 == "claude"')
 
     echo "$LINE"
-    echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, idle>=${IDLE_THRESHOLD_HOURS}h: $idle_count, recent: $recent_count, unknown: $unknown_count"
+    echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, idle: $idle_count, recent: $recent_count, orphaned: $orphaned_count, stopped: $stopped_count, unknown: $unknown_count"
 
     if [[ $active_count -gt 0 ]]; then
         echo ""
@@ -266,6 +302,11 @@ show_status() {
     if [[ $tmux_count -gt 0 ]]; then
         echo ""
         echo "Note: tmux sessions are preserved by default."
+    fi
+
+    if [[ $((orphaned_count + stopped_count)) -gt 0 ]]; then
+        echo ""
+        echo "💀 $((orphaned_count + stopped_count)) orphaned/stopped process(es) will be killed by default."
     fi
 
     if [[ $unknown_count -gt 0 ]]; then
@@ -323,6 +364,8 @@ SKIPPED_ACTIVE=0
 SKIPPED_TMUX=0
 SKIPPED_RECENT=0
 SKIPPED_UNKNOWN=0
+KILLING_ORPHANED=0
+KILLING_STOPPED=0
 
 for pid in "${PIDS[@]}"; do
     # Skip current session unless --all
@@ -331,9 +374,10 @@ for pid in "${PIDS[@]}"; do
         continue
     fi
 
+    proc_status=$(get_process_status "$pid")
+
     # Skip active processes unless --force
     if [[ "$FORCE" == "false" ]]; then
-        proc_status=$(get_process_status "$pid")
         case "$proc_status" in
             ACTIVE)
                 ((SKIPPED_ACTIVE++)) || true
@@ -348,11 +392,18 @@ for pid in "${PIDS[@]}"; do
                 continue
                 ;;
             UNKNOWN)
+                # Has living parent but no TTY - likely a background agent, preserve it
                 ((SKIPPED_UNKNOWN++)) || true
                 continue
                 ;;
         esac
     fi
+
+    # Track orphaned/stopped for messaging (killed by default)
+    case "$proc_status" in
+        ORPHANED) ((KILLING_ORPHANED++)) || true ;;
+        STOPPED) ((KILLING_STOPPED++)) || true ;;
+    esac
 
     PIDS_TO_KILL+=("$pid")
 done
@@ -365,7 +416,7 @@ if [[ $KILL_COUNT -eq 0 ]]; then
     [[ $SKIPPED_ACTIVE -gt 0 ]] && msg="$msg ($SKIPPED_ACTIVE active preserved, use --force to kill)"
     [[ $SKIPPED_TMUX -gt 0 ]] && msg="$msg ($SKIPPED_TMUX tmux preserved)"
     [[ $SKIPPED_RECENT -gt 0 ]] && msg="$msg ($SKIPPED_RECENT recent output preserved)"
-    [[ $SKIPPED_UNKNOWN -gt 0 ]] && msg="$msg ($SKIPPED_UNKNOWN unknown activity preserved)"
+    [[ $SKIPPED_UNKNOWN -gt 0 ]] && msg="$msg ($SKIPPED_UNKNOWN background agents preserved)"
     echo "$msg"
     exit 0
 fi
@@ -376,7 +427,7 @@ echo "Found $TOTAL Claude Code process(es)"
 [[ $SKIPPED_ACTIVE -gt 0 ]] && echo "  Preserving $SKIPPED_ACTIVE active process(es)"
 [[ $SKIPPED_TMUX -gt 0 ]] && echo "  Preserving $SKIPPED_TMUX tmux process(es)"
 [[ $SKIPPED_RECENT -gt 0 ]] && echo "  Preserving $SKIPPED_RECENT process(es) with recent output"
-[[ $SKIPPED_UNKNOWN -gt 0 ]] && echo "  Preserving $SKIPPED_UNKNOWN process(es) with unknown activity"
+[[ $SKIPPED_UNKNOWN -gt 0 ]] && echo "  Preserving $SKIPPED_UNKNOWN background process(es) with living parent"
 
 # Determine what we're killing for the message
 if [[ "$KILL_ALL" == "true" ]]; then
@@ -384,7 +435,19 @@ if [[ "$KILL_ALL" == "true" ]]; then
 elif [[ "$FORCE" == "true" ]]; then
     echo "  Will kill $KILL_COUNT process(es) including active..."
 else
-    echo "  Killing $KILL_COUNT idle>=${IDLE_THRESHOLD_HOURS}h process(es)..."
+    # Build descriptive message for what we're killing
+    kill_desc=""
+    [[ $KILLING_ORPHANED -gt 0 ]] && kill_desc="$KILLING_ORPHANED orphaned"
+    [[ $KILLING_STOPPED -gt 0 ]] && {
+        [[ -n "$kill_desc" ]] && kill_desc="$kill_desc + "
+        kill_desc="${kill_desc}$KILLING_STOPPED stopped"
+    }
+    idle_kill_count=$((KILL_COUNT - KILLING_ORPHANED - KILLING_STOPPED))
+    [[ $idle_kill_count -gt 0 ]] && {
+        [[ -n "$kill_desc" ]] && kill_desc="$kill_desc + "
+        kill_desc="${kill_desc}$idle_kill_count idle>=${IDLE_THRESHOLD_HOURS}h"
+    }
+    echo "  Killing $KILL_COUNT process(es): $kill_desc"
 fi
 
 # Require confirmation for --force or --all (unless --yes or --dry-run)
