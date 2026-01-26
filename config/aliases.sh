@@ -65,6 +65,8 @@ claude() {
 }
 alias yolo='claude --dangerously-skip-permissions'
 alias resume='yolo --resume'
+alias cont='yolo --continue'
+alias continue='yolo --continue'
 alias yn='yolo -t'  # yn <name>: yolo with task name
 
 # -------------------------------------------------------------------
