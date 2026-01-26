@@ -10,6 +10,15 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
 fi
 export TERM="xterm-256color"
 
+# Claude Code tmpdir - avoid root-owned /tmp/claude issues
+if [[ -d /run/user ]]; then
+    # Linux: XDG runtime dir (per-user tmpfs, mode 0700)
+    export CLAUDE_CODE_TMPDIR=/run/user/$(id -u)/claude
+else
+    # macOS: use per-user TMPDIR (safer than /tmp)
+    export CLAUDE_CODE_TMPDIR="${TMPDIR:-/tmp}/claude"
+fi
+
 ZSH_DISABLE_COMPFIX=true
 ZSH_THEME="powerlevel10k/powerlevel10k"
 ZSH=$HOME/.oh-my-zsh
