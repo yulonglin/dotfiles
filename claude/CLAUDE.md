@@ -258,11 +258,34 @@ For slide-related tasks, delegate to avoid context bloat from PDFs:
 #### Verbose Command Output
 
 **Solutions** (use in order of preference):
-1. **`run_in_background: true`** for any command with progress bars or >100 lines expected output
+
+| Tool | Use for | Persistence |
+|------|---------|-------------|
+| **tmux-cli** (PREFERRED) | Experiments, long-running jobs (>5 min) | Survives disconnects |
+| `run_in_background: true` | Quick commands (<5 min) you'll check immediately | Lost if session ends |
+| Output redirection | One-off verbose commands | Requires manual log management |
+
+1. **tmux-cli sessions** (PREFERRED for experiments):
+   ```bash
+   # Launch shell (keeps pane open on error/completion)
+   tmux-cli launch "$SHELL"  # Returns pane ID like "remote-cli-session:0.0"
+
+   # Run experiment in that session
+   tmux-cli send "cd $(pwd) && uv run python train.py 2>&1 | tee tmp/exp.log" --pane=0
+
+   # Check progress anytime
+   tmux-cli capture --pane=0  # Recent output
+   ```
+   **Benefits**: Persists after Claude session ends, user can `tmux-cli attach` from any terminal, full scrollback preserved.
+
+2. **`run_in_background: true`** for quick commands:
    - Bash tool parameter, output buffered separately
    - Retrieve later with TaskOutput tool
-2. **`/run-experiment`** skill for non-Hydra experiment pipelines
-3. **Output redirection** for one-off commands:
+   - Use when you'll check output within the same session
+
+3. **`/run-experiment`** skill - convenience wrapper that uses tmux-cli
+
+4. **Output redirection** for one-off commands:
    ```bash
    LOG="tmp/$(date +%s).log"
    command >> "$LOG" 2>&1 && tail -30 "$LOG"
