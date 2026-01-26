@@ -476,3 +476,5 @@ archive/
 /results
 /logs
 /out
+bash-history.jsonl
+
