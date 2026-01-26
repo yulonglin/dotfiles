@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env zsh
 # Clear Mac Apps - Manage running apps with configurable behavior
 # Used by macOS Shortcuts via "Run Shell Script" action
 #
