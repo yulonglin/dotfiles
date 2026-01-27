@@ -86,8 +86,7 @@
       "Bash(chmod -R 777:*)",
       "Bash(chown -R:*)"
     ],
-    "ask": [
-    ],
+    "ask": [],
     "defaultMode": "plan"
   },
   "hooks": {
