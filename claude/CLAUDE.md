@@ -151,6 +151,8 @@ Examples:
 - `20260125_150000_UTC_database_migration_postgres15.md`
 - `20260125_160000_UTC_auth_refactor_to_oauth2.md`
 
+**Commit plans and tasks**: Plans (`.claude/plans/`) and task lists (`.claude/tasks/`) should be committed and pushed regularly. They provide valuable context for resuming work and are useful artifacts for understanding project history.
+
 For work taking >30 minutes:
 - Automatically use background agents when appropriate
 - For parallel independent tasks, spawn multiple background agents
