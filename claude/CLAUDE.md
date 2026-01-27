@@ -504,6 +504,36 @@ if __name__ == "__main__":
 ### The Rule
 **Parallelise API calls: ~100 concurrent calls.** Exponential backoff if things aren't working or seem slow. Track rate limit errors and retries needed.
 
+### Batch APIs (Prefer for High Throughput)
+
+⚠️ **For large background jobs, prefer batch APIs over real-time calls** ⚠️
+
+| Provider | API | Cost Savings | Turnaround | Best For |
+|----------|-----|--------------|------------|----------|
+| Anthropic | [Message Batches](https://docs.anthropic.com/en/docs/build-with-claude/batch-processing) | 50% | ~24h | Large evals, bulk processing |
+| OpenAI | [Batch API](https://platform.openai.com/docs/guides/batch) | 50% | ~24h | Embeddings, completions at scale |
+
+**When to use batch APIs**:
+- Running >1000 API calls
+- Results not needed immediately (overnight jobs OK)
+- Large evaluation runs, dataset annotation
+- Cost-sensitive bulk processing
+
+**When to use real-time async**:
+- Interactive work (need results in seconds/minutes)
+- Iterative development (debugging, testing)
+- <1000 calls where 50% savings isn't significant
+- Time-critical experiments
+
+**Hybrid pattern** (recommended for large experiments):
+```python
+# 1. Real-time for quick validation (N=10-50)
+results = await async_evaluate(samples[:50])
+
+# 2. Batch API for full run (N=10000+)
+batch_id = submit_batch(samples)  # Returns in ~24h, 50% cheaper
+```
+
 ### Required Async Patterns
 - `async def` + `await` for all API calls, file I/O, network operations
 - `asyncio.Semaphore(100)` for rate limiting
@@ -626,23 +656,92 @@ Check for `bun.lockb`, `pnpm-lock.yaml`, or `package-lock.json` to detect which 
 ### CLI Tools Available
 ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, btop, dust, duf, bun, trash (macOS - prefer over `rm`)
 
-### tmux-cli
-Control CLI apps in tmux panes. Run `tmux-cli --help`.
-Uses: interactive scripts, parallel Claude instances, pdb debugging, browser automation
+### tmux-cli + Native tmux
 
-**Safe pattern** (prevents lost output on error/completion):
+**Use hybrid approach**: Native tmux for named sessions/windows, tmux-cli for workflow (send, capture, wait_idle).
+
+**Naming conventions** (sortable timestamp = chronological order):
+| Resource | Pattern | Example |
+|----------|---------|---------|
+| Session | Purpose-based | `experiments`, `logs`, `debug` |
+| Window | `<task>-<MMDD>-<HHMM>` | `train-gpt2-0127-1430`, `eval-mmlu-0215-0915` |
+| Pane | Usually just one per window | N/A |
+
+#### Setup (Run Once per Session Type)
+
 ```bash
-# 1. Launch shell first (keeps pane open)
-tmux-cli launch "$SHELL"  # Returns pane ID like "session:1.2"
-
-# 2. Send commands to the shell
-tmux-cli send "your-command" --pane=2
-
-# 3. Read output anytime
-tmux-cli read --pane=2
+# Create named session with first window (if doesn't exist)
+tmux has-session -t experiments 2>/dev/null || \
+  tmux new-session -d -s experiments -n "default"
 ```
 
-⚠️ **NEVER** use `tmux-cli launch "python script.py"` directly—pane dies on completion/error and output is lost.
+#### Running Experiments
+
+```bash
+# 1. Create unique window name (MMDD-HHMM sorts chronologically)
+EXP_NAME="train-gpt2-$(date -u +%m%d-%H%M)"  # e.g., train-gpt2-0127-1430
+
+# 2. Create window (fails safely if name somehow exists)
+tmux new-window -t experiments -n "$EXP_NAME" || { echo "Window exists, try again"; exit 1; }
+
+# 3. Get the pane ID (session:window.pane format)
+PANE_ID="experiments:$EXP_NAME.1"
+
+# 4. Send command (use tmux-cli for convenience, or native tmux)
+tmux-cli send "cd $(pwd) && python train.py 2>&1 | tee tmp/${EXP_NAME}.log" --pane="$PANE_ID"
+# Or native: tmux send-keys -t "$PANE_ID" "command" Enter
+
+# 5. Check output
+tmux-cli capture --pane="$PANE_ID"
+# Or native: tmux capture-pane -t "$PANE_ID" -p | tail -20
+
+# 6. Wait for completion (tmux-cli only)
+tmux-cli wait_idle --pane="$PANE_ID" --idle-time=3.0
+```
+
+#### Inside vs Outside tmux
+
+| Mode | tmux-cli behavior | Recommended approach |
+|------|-------------------|---------------------|
+| **Outside tmux** | Creates `remote-cli-session` | Use named sessions (above) for clarity |
+| **Inside tmux** | Creates panes in current window | Use named windows to avoid clutter |
+
+**Inside tmux** - avoid cluttering current window:
+```bash
+# DON'T create panes in current window (clutters Claude's screen)
+# DO create new window in current or separate session
+tmux new-window -n "exp-train"
+tmux-cli send "python train.py" --pane=":exp-train.1"
+```
+
+#### Viewing and Cleanup
+
+```bash
+# List experiments
+tmux list-windows -t experiments
+
+# Attach to watch
+tmux attach -t experiments
+
+# Kill specific experiment
+tmux kill-window -t experiments:train-1430
+
+# Kill all experiments
+tmux kill-session -t experiments
+```
+
+#### Quick Reference (Copy-Paste)
+
+```bash
+# Full workflow for new experiment (MMDD-HHMM sorts chronologically)
+EXP="eval-mmlu-$(date -u +%m%d-%H%M)" && \
+tmux has-session -t experiments 2>/dev/null || tmux new-session -d -s experiments -n default && \
+tmux new-window -t experiments -n "$EXP" && \
+tmux-cli send "cd $(pwd) && YOUR_COMMAND 2>&1 | tee tmp/${EXP}.log" --pane="experiments:${EXP}.1" && \
+echo "Running in experiments:${EXP} — attach with: tmux attach -t experiments"
+```
+
+**Why MMDD-HHMM**: Alphabetical sort = chronological order, even across months. For year-spanning work, use `$(date -u +%y%m%d-%H%M)`.
 
 ### General Programming
 - Match existing code style
