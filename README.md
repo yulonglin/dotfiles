@@ -149,6 +149,48 @@ The configuration follows the same research discipline as Claude Code but adapte
 
 Config location: macOS `~/Library/Application Support/com.mitchellh.ghostty/config`, Linux `~/.config/ghostty/config`
 
+#### Theme Aliases
+
+Launch new Ghostty windows with different color themes - useful for visually distinguishing contexts:
+
+| Alias | Theme | Character |
+|-------|-------|-----------|
+| `g1` | Catppuccin Mocha | Warm purple/pink |
+| `g2` | TokyoNight | Cool blue |
+| `g3` | Gruvbox Dark | Retro orange/brown |
+| `g4` | Nord | Arctic icy blue |
+| `g5` | Dracula | Purple accents |
+| `g6` | Rose Pine | Muted rose tones |
+
+```bash
+g1                        # Launch Ghostty with Catppuccin Mocha
+gtheme "Tomorrow Night"   # Launch with any theme
+ghostty +list-themes      # See all available themes
+```
+
+Each alias opens a **single fresh window** (no tab restoration) with the specified theme.
+
+#### SSH Color Switching
+
+Terminal colors automatically change when SSH-ing to help identify which machine you're on. Colors revert when the session ends.
+
+```bash
+ssh myserver     # In Ghostty: colors change automatically
+sshc myserver    # Explicit color-changing SSH (works in any terminal)
+```
+
+**Configure per-host colors** by editing `SSH_HOST_COLORS` in `config/aliases.sh`:
+
+```bash
+# Format: "background:foreground:cursor" in hex
+SSH_HOST_COLORS[prod*]="#3d0000:#ffffff:#ff6666"      # Red-tinted for production
+SSH_HOST_COLORS[dev*]="#002200:#ffffff:#66ff66"       # Green-tinted for dev
+SSH_HOST_COLORS[gpu*]="#1a0033:#ffffff:#cc66ff"       # Purple for GPU servers
+SSH_HOST_COLORS[default]="#0d1926:#c5d4dd:#88c0d0"    # Blue-gray fallback
+```
+
+Patterns support wildcards (`prod*` matches `prod1`, `prod-web`, etc.). The `default` key applies to any host without a specific match.
+
 ### htop (Process Monitor)
 
 Dynamic [htop](https://htop.dev/) configuration that adapts CPU meters to your core count:
