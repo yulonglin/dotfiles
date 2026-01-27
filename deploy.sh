@@ -448,11 +448,14 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
             ln -sf "$DOT_DIR/codex" "$HOME/.codex"
         fi
 
-        if [[ -f "$DOT_DIR/scripts/sync_claude_to_codex.sh" ]]; then
+        codex_sync_script="$DOT_DIR/scripts/sync_claude_to_codex.sh"
+        codex_sync_script_display="${codex_sync_script/#$HOME/~}"
+
+        if [[ -f "$codex_sync_script" ]]; then
             log_info "Syncing Claude permissions to Codex rules..."
-            "$DOT_DIR/scripts/sync_claude_to_codex.sh" || log_warning "Codex permissions sync failed"
+            "$codex_sync_script" || log_warning "Codex permissions sync failed"
         else
-            log_warning "Codex permissions sync script not found at $DOT_DIR/scripts/sync_claude_to_codex.sh"
+            log_warning "Codex permissions sync script not found at $codex_sync_script_display"
         fi
 
         log_success "Codex CLI configuration deployed"
