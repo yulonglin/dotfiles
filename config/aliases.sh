@@ -391,3 +391,144 @@ fi
 
 
 alias fda='fd -HI'  # fd all (include hidden + gitignored)
+
+#-------------------------------------------------------------
+# Ghostty themed windows
+#-------------------------------------------------------------
+
+# Launch Ghostty with a specific theme
+# Uses window-save-state=never to prevent window restoration (single fresh window)
+gtheme() {
+    local theme="$1"
+    if [[ -z "$theme" ]]; then
+        echo "Usage: gtheme <theme-name>"
+        echo "Example: gtheme 'Catppuccin Mocha'"
+        echo ""
+        echo "List themes: ghostty +list-themes"
+        return 1
+    fi
+
+    if [[ "$OSTYPE" == darwin* ]]; then
+        # macOS: use open, disable window restoration for fresh single window
+        open -na Ghostty --args --window-save-state=never --theme="$theme"
+    else
+        # Linux: launch directly
+        ghostty --window-save-state=never --theme="$theme" &
+        disown
+    fi
+}
+
+# Quick theme aliases - visually distinct, good readability, popular
+# Run `ghostty +list-themes` for full list, or `gtheme <name>` for any theme
+alias g1='gtheme "Catppuccin Mocha"'      # Warm dark, purple/pink tones
+alias g2='gtheme "TokyoNight"'            # Cool dark, blue tones
+alias g3='gtheme "Gruvbox Dark"'          # Retro dark, orange/brown warmth
+alias g4='gtheme "Nord"'                  # Arctic dark, icy blue
+alias g5='gtheme "Dracula"'               # Classic dark, purple accents
+alias g6='gtheme "Rose Pine"'             # Muted dark, rose/pine tones
+
+#-------------------------------------------------------------
+# SSH with terminal color changes
+#-------------------------------------------------------------
+# Changes terminal colors when SSH-ing to help identify which machine you're on
+# Colors revert when SSH session ends
+
+# Color schemes for SSH hosts (bg, fg, cursor)
+# Format: "background:foreground:cursor" in hex
+typeset -A SSH_HOST_COLORS
+# Add your hosts here - pattern matching supported
+# SSH_HOST_COLORS[prod*]="#3d0000:#ffffff:#ff6666"      # Red-tinted for production
+# SSH_HOST_COLORS[dev*]="#002200:#ffffff:#66ff66"       # Green-tinted for dev
+# SSH_HOST_COLORS[staging*]="#1a1a00:#ffffff:#ffff66"   # Yellow-tinted for staging
+# SSH_HOST_COLORS[gpu*]="#1a0033:#ffffff:#cc66ff"       # Purple for GPU servers
+SSH_HOST_COLORS[default]="#0d1926:#c5d4dd:#88c0d0"     # Blue-gray default for any SSH
+
+# Save current terminal colors (for restoration)
+_ssh_save_colors() {
+    # Query current colors via OSC - not all terminals support this
+    # Fall back to sensible defaults
+    export _SSH_ORIG_BG="${_SSH_ORIG_BG:-#1e1e2e}"
+    export _SSH_ORIG_FG="${_SSH_ORIG_FG:-#cdd6f4}"
+    export _SSH_ORIG_CURSOR="${_SSH_ORIG_CURSOR:-#f5e0dc}"
+}
+
+# Set terminal colors via OSC escape sequences
+_ssh_set_colors() {
+    local bg="$1" fg="$2" cursor="$3"
+    [[ -n "$bg" ]] && printf '\e]11;%s\a' "$bg"
+    [[ -n "$fg" ]] && printf '\e]10;%s\a' "$fg"
+    [[ -n "$cursor" ]] && printf '\e]12;%s\a' "$cursor"
+}
+
+# Restore original terminal colors
+_ssh_restore_colors() {
+    _ssh_set_colors "$_SSH_ORIG_BG" "$_SSH_ORIG_FG" "$_SSH_ORIG_CURSOR"
+    unset _SSH_ORIG_BG _SSH_ORIG_FG _SSH_ORIG_CURSOR
+}
+
+# Find color scheme for a host (supports wildcards)
+_ssh_get_host_colors() {
+    local host="$1"
+    local colors=""
+
+    # Check for matching pattern
+    for pattern in "${(@k)SSH_HOST_COLORS}"; do
+        if [[ "$pattern" != "default" && "$host" == $~pattern ]]; then
+            colors="${SSH_HOST_COLORS[$pattern]}"
+            break
+        fi
+    done
+
+    # Fall back to default if no match
+    [[ -z "$colors" ]] && colors="${SSH_HOST_COLORS[default]}"
+    echo "$colors"
+}
+
+# SSH wrapper with color changing
+# Usage: sshc hostname [ssh args...]
+# Or add hosts to SSH_HOST_COLORS above and use regular ssh alias
+sshc() {
+    if [[ $# -eq 0 ]]; then
+        echo "Usage: sshc <host> [ssh args...]"
+        echo ""
+        echo "Configured hosts (edit SSH_HOST_COLORS in aliases.sh):"
+        for pattern in "${(@k)SSH_HOST_COLORS}"; do
+            echo "  $pattern"
+        done
+        return 1
+    fi
+
+    local host="$1"
+    shift
+
+    # Extract hostname from user@host format
+    local hostname="${host#*@}"
+
+    # Get colors for this host
+    local colors
+    colors=$(_ssh_get_host_colors "$hostname")
+
+    if [[ -n "$colors" ]]; then
+        _ssh_save_colors
+
+        # Parse colors (bg:fg:cursor)
+        local bg fg cursor
+        IFS=':' read -r bg fg cursor <<< "$colors"
+        _ssh_set_colors "$bg" "$fg" "$cursor"
+
+        # Run SSH, restore colors on exit
+        command ssh "$host" "$@"
+        local exit_code=$?
+
+        _ssh_restore_colors
+        return $exit_code
+    else
+        # No color config, just run ssh normally
+        command ssh "$host" "$@"
+    fi
+}
+
+# Auto-use sshc in Ghostty (color-changing ssh)
+if [[ "$TERM_PROGRAM" == "ghostty" ]]; then
+    alias ssh='sshc'
+fi
