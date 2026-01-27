@@ -2,7 +2,6 @@ tmp
 sessions
 log
 history.jsonl
-config.toml
 auth.json
 models_cache
 models_cache.json

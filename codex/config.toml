@@ -1,0 +1,48 @@
+model = "gpt-5.2-codex"
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-write"
+
+[features]
+web_search_request = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[projects."/Users/yulong/scratch/sandbagging-detection/w9-prompts"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/scratch/sandbagging-detection/owain-lie-detectors"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/scratch/sandbagging-detection/yulong-dev"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/scratch/yulonglin.github.io"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/scratch/sleep-automation"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/scratch/sandbagging-detection/codex-lie-detector"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/code/dotfiles"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/code/articulating-learned-rules"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/code/sandbagging-detection/LLM-LieDetector"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/writing/paper-sandbagging-detection"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/writing/llm-council"]
+trust_level = "trusted"
+
+[notice]
+hide_gpt5_1_migration_prompt = true
+
+[notice.model_migrations]
+"gpt-5.1-codex" = "gpt-5.2-codex"
