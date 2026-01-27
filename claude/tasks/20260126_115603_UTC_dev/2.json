@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "[Phase 2a] Create and run Lie Detector experiments",
+  "description": "Create LD configs if needed, run trajectories for 4.1-nano and 5-nano (dev + test)",
+  "activeForm": "Running Lie Detector experiments",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

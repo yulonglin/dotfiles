@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "[Phase 3] Extract scores and run bootstrap CV",
+  "description": "Extract scores from all methods, run bootstrap CV for pooled and per-prompt results",
+  "activeForm": "Extracting scores and running analysis",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

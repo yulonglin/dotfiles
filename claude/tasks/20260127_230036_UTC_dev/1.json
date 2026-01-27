@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "[GPQA] Wait for trajectory generation to complete",
+  "description": "Wait for all 10 GPQA experiments to complete:\n- TM Judges: 5-nano DEV/TEST (4.1-nano already done)\n- LD Trajectories: 4.1-nano DEV/TEST, 5-nano DEV/TEST\n- BP Trajectories: 4.1-nano DEV/TEST, 5-nano DEV/TEST\n\nCheck with: ps aux | grep gpqa | grep -v grep | wc -l\nMonitor: tmux attach -t experiments",
+  "activeForm": "Waiting for trajectories",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

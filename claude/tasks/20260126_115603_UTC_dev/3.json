@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "[Phase 1] Re-run TM judges with limit=null",
+  "description": "Re-run all 4 TM judges (4.1-nano dev/test, 5-nano dev/test) with judge.eval.limit=null and batch.enabled=true",
+  "activeForm": "Running TM judges",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

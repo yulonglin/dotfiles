@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "[Phase 0] Add judge limit warning to CLAUDE.md",
+  "description": "Add documentation about judge.eval.limit=100 default and the need for limit=null for TEST sets",
+  "activeForm": "Adding CLAUDE.md documentation",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

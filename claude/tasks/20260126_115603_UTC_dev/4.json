@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "[Phase 2b] Create and run Behavioral Probes experiments",
+  "description": "Create BP configs, run trajectories for 4.1-nano and 5-nano (dev + test)",
+  "activeForm": "Running Behavioral Probes experiments",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

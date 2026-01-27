@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "[Phase 4] Generate final results tables",
+  "description": "Generate per-prompt results tables with SEM, summary statistics",
+  "activeForm": "Generating results tables",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}
