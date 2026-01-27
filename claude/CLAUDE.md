@@ -43,6 +43,25 @@ Btw, the error message is misleading - processes often start anyway despite the 
   ↓
   But ps aux | grep run_all_clean shows the process WAS running!
 
+## Machine-Specific Setup
+
+On new machines, set `SERVER_NAME` in `~/.zshenv` for identification in prompts and statusline.
+
+**One-time setup**:
+```bash
+echo 'export SERVER_NAME="<short-name>"' >> ~/.zshenv
+source ~/.zshenv
+```
+
+**Naming conventions**:
+- `rp` - RunPod
+- `mats` - MATS cluster
+- `hz-1` - Hetzner server 1
+
+**Why zshenv**: Loaded for ALL shells (interactive, non-interactive, scripts), ensuring `SERVER_NAME` is always available. Used by:
+- `machine-name` script → p10k prompt (shows "🛜 <name>" in SSH)
+- Claude statusline (shows machine info)
+
 ## AI Safety Research Context
 
 You are assisting with AI safety research involving:
@@ -580,6 +599,48 @@ Slow code? → Profile first (scalene/py-spy)
 ### References
 - Primary: [latteries caller.py](https://raw.githubusercontent.com/thejaminator/latteries/refs/heads/main/latteries/caller.py)
 - Alternatives: LiteLLM, safety-research/safety-tooling
+
+### Memory Management for Parallel Experiments
+
+⚠️ **Parallel processes duplicate memory. Prefer async over multiprocessing for API experiments.** ⚠️
+
+**Check available memory** (cross-platform):
+```bash
+# Linux container (cgroup limit - the REAL limit, `free -h` lies in containers)
+if [[ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]]; then
+    LIMIT_GB=$(awk '{printf "%.0f", $1/1024/1024/1024}' /sys/fs/cgroup/memory/memory.limit_in_bytes)
+    USED_GB=$(awk '{printf "%.0f", $1/1024/1024/1024}' /sys/fs/cgroup/memory/memory.usage_in_bytes)
+    echo "Container: ${USED_GB}GB / ${LIMIT_GB}GB"
+# macOS
+elif [[ "$(uname)" == "Darwin" ]]; then
+    TOTAL_GB=$(sysctl -n hw.memsize | awk '{printf "%.0f", $1/1024/1024/1024}')
+    FREE_PAGES=$(vm_stat | awk '/Pages free/ {print $3}' | tr -d '.')
+    FREE_GB=$(echo "$FREE_PAGES * 4096 / 1024 / 1024 / 1024" | bc)
+    echo "macOS: ~${FREE_GB}GB free / ${TOTAL_GB}GB total"
+# Linux (no container)
+else
+    free -h | head -2
+fi
+```
+
+**Why processes waste memory for API work:**
+- Each Python process duplicates: datasets, in-memory caches, model objects
+- 20 processes × 5GB each = 100GB (when 1 async process could use 5GB total)
+- API calls are I/O-bound, not CPU-bound—async handles thousands of concurrent calls
+
+**Memory-efficient patterns:**
+| Approach | Memory | Use when |
+|----------|--------|----------|
+| **Async (single process)** | 1× | API experiments, I/O-bound work |
+| **Threads** | 1× (shared) | I/O-bound, need shared state |
+| **Processes** | N× (duplicated) | CPU-bound only (NumPy, sklearn) |
+
+**Rule of thumb**: Stay under 80% of available memory. For containers, check cgroup limit, not `free -h`.
+
+**Signs of memory pressure:**
+- Load average >> CPU cores with low CPU% (processes blocked on memory)
+- SSH unresponsive (can't fork new processes)
+- OOM kills in `dmesg | grep -i oom`
 
 ---
 
