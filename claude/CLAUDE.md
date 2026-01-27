@@ -508,22 +508,25 @@ if __name__ == "__main__":
 
 ⚠️ **For large background jobs, prefer batch APIs over real-time calls** ⚠️
 
-| Provider | API | Cost Savings | Turnaround | Best For |
-|----------|-----|--------------|------------|----------|
-| Anthropic | [Message Batches](https://docs.anthropic.com/en/docs/build-with-claude/batch-processing) | 50% | ~24h | Large evals, bulk processing |
-| OpenAI | [Batch API](https://platform.openai.com/docs/guides/batch) | 50% | ~24h | Embeddings, completions at scale |
+| Provider | API | Benefits | Best For |
+|----------|-----|----------|----------|
+| Anthropic | [Message Batches](https://docs.anthropic.com/en/docs/build-with-claude/batch-processing) | 50% off, higher throughput, async | Large evals, bulk processing |
+| OpenAI | [Batch API](https://platform.openai.com/docs/guides/batch) | 50% off, higher throughput, async | Embeddings, completions at scale |
+
+**Why batch APIs**:
+- **Fire and forget**: Submit, disconnect, retrieve results later—no persistent connection needed
+- **Higher throughput**: No rate limit juggling, provider handles queuing
+- **50% cheaper**: Half the cost of real-time calls
 
 **When to use batch APIs**:
-- Running >1000 API calls
-- Results not needed immediately (overnight jobs OK)
-- Large evaluation runs, dataset annotation
-- Cost-sensitive bulk processing
+- Large runs (>1000 calls) you can leave overnight
+- Evaluation sweeps, dataset annotation, bulk processing
+- When you don't need results immediately
 
 **When to use real-time async**:
 - Interactive work (need results in seconds/minutes)
 - Iterative development (debugging, testing)
-- <1000 calls where 50% savings isn't significant
-- Time-critical experiments
+- Small runs where you're actively monitoring anyway
 
 **Hybrid pattern** (recommended for large experiments):
 ```python
@@ -531,7 +534,8 @@ if __name__ == "__main__":
 results = await async_evaluate(samples[:50])
 
 # 2. Batch API for full run (N=10000+)
-batch_id = submit_batch(samples)  # Returns in ~24h, 50% cheaper
+batch_id = submit_batch(samples)  # Submit and walk away
+# Check later: results = get_batch_results(batch_id)
 ```
 
 ### Required Async Patterns
