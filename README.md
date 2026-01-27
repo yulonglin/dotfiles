@@ -269,22 +269,73 @@ sync-secrets
 ```
 
 ### Step 3: Configure Powerlevel10k theme
-This set of dotfiles uses the powerlevel10k theme for zsh, this makes your terminal look better and adds lots of useful features, e.g. env indicators, git status etc...
 
-Note that as the provided powerlevel10k config uses special icons it is *highly recommended* you install a custom font that supports these icons. A guide to do that is [here](https://github.com/romkatv/powerlevel10k#meslo-nerd-font-patched-for-powerlevel10k). Alternatively you can set up powerlevel10k to not use these icons (but it won't look as good!)
+[Powerlevel10k](https://github.com/romkatv/powerlevel10k) provides a fast, feature-rich ZSH prompt. This config includes custom segments for SSH-aware machine identification.
 
-This repo comes with a preconfigured powerlevel10k theme in [`./config/p10k.zsh`](./config/p10k.zsh) but you can reconfigure this by running `p10k configure` which will launch an interactive window. 
+**Requirements**: Install a [Nerd Font](https://github.com/romkatv/powerlevel10k#meslo-nerd-font-patched-for-powerlevel10k) for icons.
 
+**Reconfigure**: Run `p10k configure` (when prompted, overwrite `p10k.zsh` but don't apply to `.zshrc`).
 
-When you get to the last two options below
+#### Prompt Features
+
+| Segment | Description |
+|---------|-------------|
+| **Remote host** | Machine name + emoji (SSH sessions only) |
+| **Directory** | Current path with git root highlighting |
+| **Git status** | Branch, dirty indicator, stash count |
+| **Right side** | Exit code, command duration, Python venv, cloud contexts |
+
+#### SSH-Aware Machine Identification
+
+When SSH'd to a remote machine, the prompt shows a **consistent machine name** derived from your SSH config:
+
 ```
-Powerlevel10k config file already exists.
-Overwrite ~/git/dotfiles/config/p10k.zsh?
-# Press y for YES
-
-Apply changes to ~/.zshrc?
-# Press n for NO 
+🛜 mats ~/code/project (main)                   # Instead of: user@ip-172-31-42-17
 ```
+
+**How it works:**
+1. Looks up your public IP against `~/.ssh/config` `HostName` entries
+2. Uses the matching `Host` alias as the display name
+3. Falls back to abbreviated hostname if no match
+
+**Example SSH config:**
+```
+Host mats
+    HostName 203.0.113.42
+    User yulong
+
+Host hetzner-gpu
+    HostName 198.51.100.10
+    User root
+```
+
+SSH to `203.0.113.42` → prompt shows `🛜 mats` instead of the IP or hostname.
+
+**Customization:**
+- `SERVER_NAME` env var overrides everything
+- `MACHINE_EMOJI` env var changes the icon (default: 🛜)
+
+### Claude Code Statusline
+
+Claude Code displays a custom statusline with session info. Configuration: `claude/statusline.sh`
+
+```
+🛜 mats ~/code/project (main*) +12,-3 · 📊 45% · $0.23
+│        │              │      │        │        └─ Session cost
+│        │              │      │        └─ Context usage (color-coded)
+│        │              │      └─ Git insertions/deletions
+│        │              └─ Branch (* = dirty)
+│        └─ Directory
+└─ Machine name (SSH only, same as p10k)
+```
+
+**Features:**
+- **Machine name**: Uses same `machine-name` script as Powerlevel10k for consistency
+- **Git info**: Branch with dirty indicator, line change stats
+- **Context %**: Color-coded usage (green <70%, yellow 70-89%, red 90%+)
+- **Cost**: Running session total in USD
+
+Both the shell prompt and Claude Code statusline use your SSH config aliases, so machine identification is consistent across tools.
 
 ### SSH Key Management
 
