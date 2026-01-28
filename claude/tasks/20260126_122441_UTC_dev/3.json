@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "[Phase 4] Bootstrap CV detection metrics",
+  "description": "TM bootstrap CV complete: ROC-AUC=0.50±0.03 (random). Other methods blocked by incomplete benign data.",
+  "activeForm": "Computing detection metrics",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

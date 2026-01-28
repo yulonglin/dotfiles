@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "[Phase 2] Run TM Judge on completed trajectories",
+  "description": "After Phase 1 trajectories complete, run Trusted Monitor judge evaluation:\n- TM on USACO C3 trajectories\n- TM on USACO minimal trajectories  \n- TM on MATH C3 trajectories\n- TM on MATH minimal trajectories\nCommands will be: python -m src.detection_game.cli.run_judge",
+  "activeForm": "Running TM Judge on completed trajectories",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

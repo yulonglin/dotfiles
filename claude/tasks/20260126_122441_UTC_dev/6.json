@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "[Phase 3] Score extraction for all detection methods",
+  "description": "TM extraction complete (ROC-AUC=0.50). C3/LieDet/Probes incomplete - benign baseline runs failed.",
+  "activeForm": "Extracting C3 consistency scores",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

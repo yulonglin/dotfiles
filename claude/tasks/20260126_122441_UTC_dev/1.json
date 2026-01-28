@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "[Phase 1] Create Meinke prefill experiment configs",
+  "description": "Create experiment configs for all detection methods with Meinke prefill:\n- USACO: benign, C3, Lie Detector, Behavioral Probes, minimal for TM\n- MATH: benign, C3, Lie Detector, Behavioral Probes, minimal for TM\nTotal: 10 configs",
+  "activeForm": "Creating Meinke experiment configs",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

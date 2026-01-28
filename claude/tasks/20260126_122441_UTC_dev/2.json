@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "[Phase 1] Launch trajectory generation runs (parallel batch API)",
+  "description": "Launch ALL 10 trajectory runs in parallel using batch API:\n- USACO: benign, C3, liedet, probes, minimal (5 runs)\n- MATH: benign, C3, liedet, probes, minimal (5 runs)\nTotal: 10 parallel runs with batch API for ~50% cost savings",
+  "activeForm": "Launching trajectory runs",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
