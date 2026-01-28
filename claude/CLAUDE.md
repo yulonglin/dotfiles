@@ -175,6 +175,8 @@ For work taking >30 minutes:
 - Direct execution OK for: `git status`, `ls`, `pwd`, simple commands
 - Check `history` before running `.sh`/`.py` to match user's typical args
 - **`tee` doesn't create parent directories** - always `mkdir -p dir/` before `cmd | tee dir/file.log`
+- **Piped output appears stuck?** The upstream program is block-buffering (libc switches from line to block buffering when stdout isn't a TTY). Fix with `stdbuf -oL cmd | ...` or Python's `-u` flag
+- **Prefer command-specific limits** over pipes: `git log -n 10` not `git log | head -10`
 
 ### Git Commands (Readability)
 - **Prefer rebase over merge** for `git pull` - keeps history linear and clean
