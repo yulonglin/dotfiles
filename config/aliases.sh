@@ -420,12 +420,12 @@ gtheme() {
 
 # Quick theme aliases - visually distinct, good readability, popular
 # Run `ghostty +list-themes` for full list, or `gtheme <name>` for any theme
-alias g1='gtheme "Catppuccin Mocha"'      # Warm dark, purple/pink tones
-alias g2='gtheme "TokyoNight"'            # Cool dark, blue tones
-alias g3='gtheme "Gruvbox Dark"'          # Retro dark, orange/brown warmth
-alias g4='gtheme "Nord"'                  # Arctic dark, icy blue
-alias g5='gtheme "Dracula"'               # Classic dark, purple accents
-alias g6='gtheme "Rose Pine"'             # Muted dark, rose/pine tones
+alias g1='gtheme "Catppuccin Mocha"'      # Pastel dark, lavender/pink
+alias g2='gtheme "TokyoNight"'            # Cool dark, deep blue/purple
+alias g3='gtheme "Gruvbox Dark"'          # Retro warm, orange/brown earth
+alias g4='gtheme "Kanagawa Dragon"'       # Muted ink, dark slate/jade
+alias g5='gtheme "Everforest Dark Hard"'  # Forest green, olive/sage
+alias g6='gtheme "Solarized Dark Higher Contrast"' # Teal-gray, classic readable
 
 #-------------------------------------------------------------
 # SSH with terminal color changes
