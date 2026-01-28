@@ -1,0 +1,34 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "local-marketplace",
+  "description": "Personal plugins for AI safety research workflows, academic writing, and code quality tooling",
+  "owner": {
+    "name": "yulong"
+  },
+  "plugins": [
+    {
+      "name": "research-toolkit",
+      "description": "AI safety research workflows: experiment design, execution, analysis, and literature review",
+      "version": "1.0.0",
+      "author": { "name": "yulong" },
+      "source": "./plugins/research-toolkit",
+      "category": "research"
+    },
+    {
+      "name": "writing-toolkit",
+      "description": "Academic writing: papers, drafts, presentations, and multi-critic review",
+      "version": "1.0.0",
+      "author": { "name": "yulong" },
+      "source": "./plugins/writing-toolkit",
+      "category": "writing"
+    },
+    {
+      "name": "code-quality",
+      "description": "Code review, debugging, performance optimization, and bulk editing workflows",
+      "version": "1.0.0",
+      "author": { "name": "yulong" },
+      "source": "./plugins/code-quality",
+      "category": "development"
+    }
+  ]
+}

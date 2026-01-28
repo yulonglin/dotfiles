@@ -396,8 +396,29 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
         fi
 
+        # Register local plugin marketplace and install plugins
+        if [[ -d "$DOT_DIR/claude/local-marketplace/plugins" ]] && command -v claude &>/dev/null; then
+            if ! claude plugin marketplace list 2>/dev/null | grep -q "local-marketplace"; then
+                log_info "Registering local plugin marketplace..."
+                claude plugin marketplace add "$HOME/.claude/local-marketplace" 2>/dev/null || \
+                    log_warning "Failed to register marketplace — run manually: claude plugin marketplace add $HOME/.claude/local-marketplace"
+            fi
+
+            for plugin_dir in "$DOT_DIR/claude/local-marketplace/plugins"/*/; do
+                [[ -d "$plugin_dir" ]] || continue
+                plugin_name=$(basename "$plugin_dir")
+                if ! claude plugin list 2>/dev/null | grep -q "$plugin_name@local-marketplace"; then
+                    claude plugin install "$plugin_name@local-marketplace" 2>/dev/null || \
+                        log_warning "  Failed to install $plugin_name"
+                fi
+            done
+        elif ! command -v claude &>/dev/null; then
+            log_info "Claude CLI not found — run after install: claude plugin marketplace add $HOME/.claude/local-marketplace"
+        fi
+
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
+        log_info "  Plugins: local-marketplace (research-toolkit, writing-toolkit, code-quality)"
     else
         log_warning "Claude directory not found at $DOT_DIR/claude"
     fi

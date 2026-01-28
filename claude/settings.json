@@ -176,9 +176,9 @@
     "plugin-dev@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "research-toolkit@local": true,
-    "writing-toolkit@local": true,
-    "code-quality@local": true
+    "research-toolkit@local-marketplace": true,
+    "writing-toolkit@local-marketplace": true,
+    "code-quality@local-marketplace": true
   },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"

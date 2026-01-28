@@ -72,10 +72,13 @@ claude/                   # Symlinked to ~/.claude/
 ├── settings.json         # Claude Code settings
 ├── agents/               # Global agents (efficient-explorer, context-summariser, gemini)
 ├── skills/               # Global skills (commit, custom-compact, fast-cli, etc.)
-├── plugins/              # Thematic local plugins
-│   ├── research-toolkit/ # Experiment design, execution, analysis, literature
-│   ├── writing-toolkit/  # Papers, drafts, presentations, multi-critic review
-│   └── code-quality/     # Code review, debugging, performance, bulk editing
+├── local-marketplace/    # Local plugin marketplace (filesystem-based)
+│   ├── .claude-plugin/marketplace.json  # Marketplace manifest
+│   └── plugins/
+│       ├── research-toolkit/ # Experiment design, execution, analysis, literature
+│       ├── writing-toolkit/  # Papers, drafts, presentations, multi-critic review
+│       └── code-quality/     # Code review, debugging, performance, bulk editing
+├── plugins/              # Plugin runtime (cache, installed_plugins.json)
 ├── ai_docs/              # AI knowledge base (CI standards, checklists)
 ├── hooks/                # Hook scripts (auto_log.sh, notify.sh)
 ├── templates/            # Templates for specs, reports
