@@ -1,1 +1,0 @@
-../../research-toolkit/agents/literature-scout.md
