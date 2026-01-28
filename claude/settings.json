@@ -84,9 +84,19 @@
       "Bash(mkfs:*)",
       "Bash(fdisk:*)",
       "Bash(chmod -R 777:*)",
-      "Bash(chown -R:*)"
+      "Bash(chown -R:*)",
+      "Bash(shutdown:*)",
+      "Bash(reboot:*)",
+      "Bash(halt:*)",
+      "Bash(wipefs:*)",
+      "Bash(chmod 000:*)",
+      "Bash(mv /:*)"
     ],
-    "ask": [],
+    "ask": [
+      "Bash(kill:*)",
+      "Bash(killall:*)",
+      "Bash(pkill:*)"
+    ],
     "defaultMode": "plan"
   },
   "hooks": {
@@ -102,6 +112,14 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/check_secrets.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/check_pipe_buffering.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/check_destructive_commands.sh"
           }
         ]
       },
