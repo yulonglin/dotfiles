@@ -156,7 +156,7 @@
     "padding": 1
   },
   "enabledPlugins": {
-    "swift-lsp@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": true,
     "slack@claude-plugins-official": false,
     "context7@claude-plugins-official": true,
@@ -164,18 +164,21 @@
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
-    "explanatory-output-style@claude-plugins-official": true,
+    "explanatory-output-style@claude-plugins-official": false,
     "greptile@claude-plugins-official": false,
     "github@claude-plugins-official": false,
-    "frontend-design@claude-plugins-official": true,
-    "huggingface-skills@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": false,
+    "huggingface-skills@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
     "ralph-loop@claude-plugins-official": false,
     "learning-output-style@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true
+    "pyright-lsp@claude-plugins-official": true,
+    "research-toolkit@local": true,
+    "writing-toolkit@local": true,
+    "code-quality@local": true
   },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"

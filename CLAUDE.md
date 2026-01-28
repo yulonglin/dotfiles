@@ -70,10 +70,14 @@ config/
 claude/                   # Symlinked to ~/.claude/
 ├── CLAUDE.md             # Global AI instructions
 ├── settings.json         # Claude Code settings
-├── agents/               # Specialized agent definitions
+├── agents/               # Global agents (efficient-explorer, context-summariser, gemini)
+├── skills/               # Global skills (commit, custom-compact, fast-cli, etc.)
+├── plugins/              # Thematic local plugins
+│   ├── research-toolkit/ # Experiment design, execution, analysis, literature
+│   ├── writing-toolkit/  # Papers, drafts, presentations, multi-critic review
+│   └── code-quality/     # Code review, debugging, performance, bulk editing
 ├── ai_docs/              # AI knowledge base (CI standards, checklists)
 ├── hooks/                # Hook scripts (auto_log.sh, notify.sh)
-├── skills/               # Custom skills (commit, run-experiment, etc.)
 ├── templates/            # Templates for specs, reports
 ├── projects/             # Project-specific settings overrides
 └── (runtime dirs)        # cache/, logs/, history.jsonl, todos/, etc.

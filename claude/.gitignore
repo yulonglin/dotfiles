@@ -11,7 +11,11 @@ debug/
 downloads/
 ide/
 tmp/
-plugins/
+plugins/cache/
+plugins/marketplaces/
+plugins/installed_plugins.json
+plugins/install-counts-cache.json
+plugins/known_marketplaces.json
 projects/
 session-env/
 stats-cache.json
