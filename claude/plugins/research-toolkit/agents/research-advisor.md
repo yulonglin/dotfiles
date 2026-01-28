@@ -1,6 +1,9 @@
 ---
 name: research-advisor
-description: Use this agent when the user needs help with research ideation, exploring new research directions, evaluating research ideas, seeking expert perspectives on machine learning/AI research, or wants to understand best practices from leading researchers. Examples:\n\n<example>\nContext: User is brainstorming research directions for their PhD.\nuser: "I'm interested in exploring multimodal learning but not sure where to start. What are some promising directions?"\nassistant: "Let me use the Task tool to launch the research-advisor agent to help you explore multimodal learning research directions and gather insights from leading researchers in the field."\n</example>\n\n<example>\nContext: User has a research idea and wants validation.\nuser: "I have an idea about combining retrieval-augmented generation with reinforcement learning. Does this seem promising?"\nassistant: "I'm going to use the research-advisor agent to help evaluate your idea by searching for related work and perspectives from experts like Alex Radford and recent award-winning papers."\n</example>\n\n<example>\nContext: User is stuck on a research problem.\nuser: "I'm working on improving sample efficiency in RL but hitting a wall. Any suggestions?"\nassistant: "Let me launch the research-advisor agent to search for recent advances in sample-efficient RL and gather insights from researchers like Yoshua Bengio and recent conference award winners."\n</example>
+description: >-
+  Use this agent when the user needs help with research ideation, exploring new research directions,
+  evaluating research ideas, seeking expert perspectives on machine learning/AI research, or wants
+  to understand best practices from leading researchers.
 model: inherit
 ---
 
