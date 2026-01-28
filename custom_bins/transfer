@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# transfer - Download/upload files between servers and local machine
+#
+# Usage:
+#   download <server>:<path> [local]     Download to ~/Downloads/ (default)
+#   upload <local> <server>:<path>       Upload to server
+#
+# Options:
+#   -f, --force    Overwrite existing files (default: auto-rename conflicts)
+#   -n, --dry-run  Show what would be transferred
+#   -q, --quiet    Suppress per-file progress (still shows summary)
+#   -h, --help     Show this help
+#
+# Conflict handling (default):
+#   Existing files are auto-renamed: file.txt -> file_2.txt, file_3.txt, etc.
+#   Use -f to overwrite instead.
+#
+# Examples:
+#   download rp:~/data/results.csv
+#   download hz-1:/tmp/model.pt ./models/
+#   upload ./report.pdf mats:~/shared/
+
+set -euo pipefail
+
+usage() {
+  awk 'NR==1{next} !/^#/{exit} {sub(/^# ?/,""); print}' "$0"
+  exit "${1:-0}"
+}
+
+# --- Formatting helpers ---
+bold() { printf '\033[1m%s\033[0m' "$*"; }
+dim()  { printf '\033[2m%s\033[0m' "$*"; }
+green(){ printf '\033[32m%s\033[0m' "$*"; }
+yellow(){ printf '\033[33m%s\033[0m' "$*"; }
+
+human_size() {
+  awk -v b="${1:-0}" 'BEGIN {
+    if (b >= 1073741824) printf "%.1f GB", b/1073741824
+    else if (b >= 1048576) printf "%.1f MB", b/1048576
+    else if (b >= 1024) printf "%.1f KB", b/1024
+    else printf "%d B", b
+  }'
+}
+
+# Return a non-conflicting path: file.txt -> file_2.txt, file_3.txt, ...
+deconflict_path() {
+  local path="$1"
+  [[ ! -e "$path" ]] && echo "$path" && return
+  local dir base ext
+  dir="$(dirname "$path")"
+  base="$(basename "$path")"
+  if [[ "$base" == .* && "${base#.}" != *.* ]]; then
+    # Dotfile with no further extension: .bashrc -> .bashrc_2
+    ext=""
+  elif [[ "$base" == *.* ]]; then
+    ext=".${base##*.}"
+    base="${base%.*}"
+  else
+    ext=""
+  fi
+  local i=2
+  while [[ -e "$dir/${base}_${i}${ext}" ]]; do
+    ((i++))
+  done
+  echo "$dir/${base}_${i}${ext}"
+}
+
+force=false
+dry_run=false
+quiet=false
+mode=""
+
+# Determine mode from command name
+case "$(basename "$0")" in
+  download) mode=download ;;
+  upload)   mode=upload ;;
+  transfer) ;; # infer from args
+  *) echo "Error: unknown command $(basename "$0")" >&2; exit 1 ;;
+esac
+
+# Parse flags
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    -f|--force) force=true ;;
+    -n|--dry-run) dry_run=true ;;
+    -q|--quiet) quiet=true ;;
+    -h|--help) usage 0 ;;
+    *) args+=("$arg") ;;
+  esac
+done
+
+[[ ${#args[@]} -lt 1 ]] && { echo "Error: need at least one argument" >&2; usage 1; }
+
+is_remote() { [[ "$1" == *:* ]]; }
+
+# Infer mode from arguments when not set by command name
+if [[ -z "$mode" ]]; then
+  if is_remote "${args[0]}" && { [[ ${#args[@]} -lt 2 ]] || ! is_remote "${args[1]}"; }; then
+    mode=download
+  elif [[ ${#args[@]} -ge 2 ]] && ! is_remote "${args[0]}" && is_remote "${args[1]}"; then
+    mode=upload
+  else
+    echo "Error: exactly one side must be remote (server:path)" >&2
+    usage 1
+  fi
+fi
+
+# Validate and assign src/dst
+if [[ "$mode" == "download" ]]; then
+  is_remote "${args[0]}" || { echo "Error: source must be remote (server:path)" >&2; exit 1; }
+  src="${args[0]}"
+  dst="${args[1]:-$HOME/Downloads/}"
+  server="${src%%:*}"
+  direction_label="$(bold "$server") -> $(bold "local")"
+else
+  [[ ${#args[@]} -lt 2 ]] && { echo "Error: upload requires <local> <server:path>" >&2; exit 1; }
+  is_remote "${args[1]}" || { echo "Error: destination must be remote (server:path)" >&2; exit 1; }
+  src="${args[0]}"
+  dst="${args[1]}"
+  server="${dst%%:*}"
+  direction_label="$(bold "local") -> $(bold "$server")"
+fi
+
+# Ensure local destination directory exists
+if ! is_remote "$dst"; then
+  if [[ "$dst" == */ ]]; then
+    mkdir -p "$dst"
+  else
+    mkdir -p "$(dirname "$dst")"
+  fi
+fi
+
+# --- Auto-rename for conflicts (download only, non-force) ---
+# For single-file downloads to a directory, rename if file already exists
+renamed_from=""
+if ! $force && [[ "$mode" == "download" ]] && ! is_remote "$dst"; then
+  # Figure out what the destination filename would be
+  remote_path="${src#*:}"
+  remote_basename="$(basename "$remote_path")"
+
+  if [[ "$dst" == */ ]]; then
+    target="$dst$remote_basename"
+  elif [[ -d "$dst" ]]; then
+    target="$dst/$remote_basename"
+  else
+    target="$dst"
+  fi
+
+  if [[ -e "$target" ]]; then
+    new_target="$(deconflict_path "$target")"
+    renamed_from="$target"
+    dst="$new_target"
+  fi
+fi
+
+# --- Header ---
+echo ""
+if $dry_run; then
+  echo "  $(yellow "[DRY RUN]") $direction_label"
+else
+  echo "  $direction_label"
+fi
+echo "  $(dim "src:") $src"
+echo "  $(dim "dst:") $dst"
+$force && echo "  $(dim "mode:") $(yellow "force") (overwriting existing files)"
+[[ -n "$renamed_from" ]] && echo "  $(dim "note:") $(yellow "renamed") ($(basename "$renamed_from") already exists)"
+echo ""
+
+# --- Run transfer ---
+rsync_opts=(-avz --partial --human-readable --stats --timeout=300)
+$dry_run && rsync_opts+=(--dry-run)
+
+if $quiet; then
+  rsync_output=$(rsync "${rsync_opts[@]}" "$src" "$dst" 2>&1)
+else
+  rsync_opts+=(-P)
+  rsync_output=$(rsync "${rsync_opts[@]}" "$src" "$dst" 2>&1 | tee /dev/stderr)
+fi
+
+# --- Summary ---
+echo ""
+echo "$(bold "--- Summary ---")"
+
+# Parse stats (compatible with macOS grep - no -P)
+total_size=$(echo "$rsync_output" | sed -n 's/.*Total transferred file size: \([0-9,]*\).*/\1/p' | tr -d ',' || true)
+num_transferred=$(echo "$rsync_output" | sed -n 's/.*Number of regular files transferred: \([0-9,]*\).*/\1/p' | tr -d ',' || true)
+
+if [[ "${num_transferred:-0}" != "0" ]]; then
+  echo "  $(green "Transferred ${num_transferred} file(s)") ($(human_size "${total_size:-0}"))"
+else
+  echo "  $(dim "No new files transferred.")"
+fi
+
+if [[ -n "$renamed_from" ]]; then
+  echo "  $(yellow "Auto-renamed:") $(basename "$renamed_from") -> $(basename "$dst")"
+fi
+
+echo ""
