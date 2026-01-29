@@ -399,10 +399,45 @@ alias fda='fd -HI'  # fd all (include hidden + gitignored)
 # Launch Ghostty with a specific theme
 # Uses window-save-state=never to prevent window restoration (single fresh window)
 gtheme() {
-    local theme="$1"
+    local theme=""
+    local title=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -t|--title)
+                title="${2:-}"
+                shift 2
+                ;;
+            --title=*)
+                title="${1#*=}"
+                shift
+                ;;
+            -h|--help)
+                echo "Usage: gtheme <theme-name> [title] [--title <title>]"
+                echo "Example: gtheme 'Catppuccin Mocha' 'Docs'"
+                echo "Example: gtheme 'Catppuccin Mocha' --title 'Docs'"
+                echo ""
+                echo "List themes: ghostty +list-themes"
+                return 0
+                ;;
+            *)
+                if [[ -z "$theme" ]]; then
+                    theme="$1"
+                elif [[ -z "$title" ]]; then
+                    title="$1"
+                else
+                    echo "Error: unexpected argument '$1'"
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
     if [[ -z "$theme" ]]; then
-        echo "Usage: gtheme <theme-name>"
-        echo "Example: gtheme 'Catppuccin Mocha'"
+        echo "Usage: gtheme <theme-name> [title] [--title <title>]"
+        echo "Example: gtheme 'Catppuccin Mocha' 'Docs'"
+        echo "Example: gtheme 'Catppuccin Mocha' --title 'Docs'"
         echo ""
         echo "List themes: ghostty +list-themes"
         return 1
@@ -410,10 +445,18 @@ gtheme() {
 
     if [[ "$OSTYPE" == darwin* ]]; then
         # macOS: use open, disable window restoration for fresh single window
-        open -na Ghostty --args --window-save-state=never --theme="$theme"
+        if [[ -n "$title" ]]; then
+            open -na Ghostty --args --window-save-state=never --theme="$theme" --title="$title"
+        else
+            open -na Ghostty --args --window-save-state=never --theme="$theme"
+        fi
     else
         # Linux: launch directly
-        ghostty --window-save-state=never --theme="$theme" &
+        if [[ -n "$title" ]]; then
+            ghostty --window-save-state=never --theme="$theme" --title="$title" &
+        else
+            ghostty --window-save-state=never --theme="$theme" &
+        fi
         disown
     fi
 }
