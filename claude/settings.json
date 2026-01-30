@@ -184,6 +184,7 @@
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
+    "excludedCommands": ["git", "docker"],
     "allowUnsandboxedCommands": true
   },
   "alwaysThinkingEnabled": true,
