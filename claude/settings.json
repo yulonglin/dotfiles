@@ -181,6 +181,11 @@
     "code-toolkit@local-marketplace": true,
     "Notion@claude-plugins-official": false
   },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": true
+  },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"
 }
