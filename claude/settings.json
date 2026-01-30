@@ -178,7 +178,8 @@
     "pyright-lsp@claude-plugins-official": true,
     "research-toolkit@local-marketplace": true,
     "writing-toolkit@local-marketplace": true,
-    "code-quality@local-marketplace": true
+    "code-toolkit@local-marketplace": true,
+    "Notion@claude-plugins-official": false
   },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"
