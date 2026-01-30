@@ -281,6 +281,27 @@ qrun() {
 # Health check for all AI CLI tools
 alias ai-check='echo "Checking AI CLI tools..." && claude --version 2>/dev/null && gemini --version 2>/dev/null && codex --version 2>/dev/null'
 
+# Log sandbox denials for a command (macOS/Linux)
+codex-denials() {
+  if [ "$#" -eq 0 ]; then
+    echo "Usage: codex-denials <command> [args...]"
+    echo "Example: codex-denials git commit -m \"message\""
+    return 1
+  fi
+
+  if [[ "$OSTYPE" == darwin* ]]; then
+    local tmpdir=""
+    if [ -w "$PWD" ]; then
+      tmpdir="${PWD}/tmp/codex"
+      mkdir -p "$tmpdir"
+    fi
+    TMPDIR="${tmpdir:-${TMPDIR:-/tmp}}" TEMP="${tmpdir:-${TEMP:-/tmp}}" TMP="${tmpdir:-${TMP:-/tmp}}" \
+      command codex sandbox macos --full-auto --log-denials -- "$@"
+  else
+    command codex sandbox linux --log-denials -- "$@"
+  fi
+}
+
 # Auto-generate task list ID from timestamp + directory name
 # This wraps `claude` so every session gets an informative task list name
 claude() {
