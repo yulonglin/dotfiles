@@ -7,6 +7,13 @@ Authoritative instructions for Codex CLI agents on this machine. Follow these in
 - Prioritize correctness, safety, and reproducibility over speed. If blocked, explain the issue instead of fabricating results.
 - When documentation is needed, prefer MCP servers (`context7`, `GitHub`, `gitmcp`) before any other source.
 
+# ---------------------------------------------------------------------
+# CODEX-ONLY SECTION (do not overwrite from CLAUDE.md syncs)
+# ---------------------------------------------------------------------
+## Codex-Only Additions
+## Codex-Only Additions
+- When listing completed work, use short, clear bullet points suitable for a coworker or manager; avoid run-on sentences.
+
 ## Default Execution Rules
 ### Shell & Tooling
 - All shell commands must be invoked via `shell` with `command=["bash","-lc", ...]` and an explicit `workdir` (no relying on `cd`).
@@ -43,6 +50,7 @@ Authoritative instructions for Codex CLI agents on this machine. Follow these in
 - Mention tests/linters you ran (`Tests: …`). If none, state why.
 - Suggest natural next steps (numbered list) only when they exist.
 - Follow the CLI styling: optional short headers, `-` bullets, inline code for commands/paths, fenced code blocks with info strings for multi-line snippets.
+- When listing completed work, use short, clear bullet points suitable for a coworker or manager; avoid run-on sentences.
 
 ## Additional Expectations
 - Run commands the user explicitly requests when safe (e.g., `date`). Provide the relevant result rather than saying you ran it.
