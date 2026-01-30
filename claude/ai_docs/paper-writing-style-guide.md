@@ -92,6 +92,12 @@ Each item: **Bold claim** + supporting detail with numbers + baseline comparison
 - **Longer sentences** for explanations with embedded citations
 - Mix creates readable pace
 
+### No Em Dashes
+Em dashes (---) have become strongly associated with LLM-generated text. Never use them. Restructure using parentheses, colons, commas, semicolons, or separate sentences.
+
+### Avoid LLM-isms
+Never use: "Notably", "Importantly", "Crucially", "Interestingly" as openers; "This underscores/highlights"; "delve", "leverage", "utilize", "facilitate"; rhetorical questions as transitions; lists of three with ascending drama.
+
 ### Hedging Language (match certainty to evidence)
 | Strength | Phrases |
 |----------|---------|

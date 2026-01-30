@@ -115,3 +115,5 @@ prefix_rule(pattern=["bash", "-lc", "git ls-files codex/rules"], decision="allow
 prefix_rule(pattern=["bash", "-lc", "git pull --rebase"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git push"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git status --short"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git add codex/config.toml config/aliases.sh"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "GIT_EDITOR=true git commit -m \"feat(codex): add profiles and denials helper\" -m \"- add plan/yolo profiles and defaults\" -m \"- add codex-denials sandbox debug alias\""], decision="allow")

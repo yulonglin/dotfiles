@@ -6,7 +6,8 @@
       "Bash(python3:*)",
       "Bash(/Users/yulong/code/dotfiles/claude/hooks/truncate_output.sh)",
       "Bash(shortcuts list:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []
