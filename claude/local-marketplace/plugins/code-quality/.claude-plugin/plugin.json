@@ -1,8 +1,0 @@
-{
-  "name": "code-quality",
-  "description": "Code review, debugging, performance optimization, and bulk editing workflows.",
-  "version": "1.0.0",
-  "author": {
-    "name": "yulong"
-  }
-}

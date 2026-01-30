@@ -23,11 +23,11 @@
       "category": "writing"
     },
     {
-      "name": "code-quality",
-      "description": "Code review, debugging, performance optimization, and bulk editing workflows",
+      "name": "code-toolkit",
+      "description": "Code review, debugging, performance optimization, bulk editing, and CLI delegation workflows",
       "version": "1.0.0",
       "author": { "name": "yulong" },
-      "source": "./plugins/code-quality",
+      "source": "./plugins/code-toolkit",
       "category": "development"
     }
   ]
