@@ -5,7 +5,7 @@ set -euo pipefail
 # SYNC CLAUDE CODE PERMISSIONS TO CODEX CLI RULES
 # Purpose: Convert Claude Code allow/deny/ask entries into Codex rules.
 # Source:  claude/settings.json
-# Target:  codex/rules/claude_sync.rules
+# Target:  codex/rules/claude_sync.generated.rules
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,7 +14,7 @@ DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAUDE_SETTINGS="$DOTFILES_DIR/claude/settings.json"
 CONVERT_SCRIPT="$DOTFILES_DIR/scripts/helpers/convert_claude_perms.py"
 CODEX_RULES_DIR="$DOTFILES_DIR/codex/rules"
-OUTPUT_RULES="$CODEX_RULES_DIR/claude_sync.rules"
+OUTPUT_RULES="$CODEX_RULES_DIR/claude_sync.generated.rules"
 DEFAULT_RULES="$CODEX_RULES_DIR/default.rules"
 BEGIN_MARKER="# BEGIN CLAUDE SYNC (auto-generated)"
 END_MARKER="# END CLAUDE SYNC"
@@ -67,5 +67,7 @@ PY
 
 rm -f "$tmp_rules"
 
-echo "Generated $OUTPUT_RULES"
+rm -f "$OUTPUT_RULES"
+
 echo "Updated $DEFAULT_RULES"
+echo "Removed build artifact $OUTPUT_RULES"

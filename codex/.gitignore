@@ -7,4 +7,4 @@ models_cache
 models_cache.json
 version
 version.json
-rules/claude_sync.rules
+rules/claude_sync.generated.rules
