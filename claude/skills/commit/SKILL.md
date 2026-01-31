@@ -17,7 +17,12 @@ description: Commit current work with optional message. Handles git status/diff 
    - If `git diff` doesn't provide enough info (e.g., new files), read the files or use your working memory.
    - Determine if the work should be split into multiple logical commits.
 
-3. **Commit**:
+3. **Stage Changes**:
+   - New/modified files: `git add <file1> <file2> ...`
+   - Deleted files: `git add -u <path>` (plain `git add` fails on paths no longer on disk)
+   - Mixed (new + deleted): combine both commands, or use `git add -u` for deletions then `git add` for new files
+
+4. **Commit**:
    - For each logical change, write a commit message in the following format:
      - Short title description (< 80 characters)
      - 2~3 bullet points (< 80 characters) with a quick description

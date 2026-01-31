@@ -179,13 +179,18 @@
     "research-toolkit@local-marketplace": true,
     "writing-toolkit@local-marketplace": true,
     "code-toolkit@local-marketplace": true,
-    "Notion@claude-plugins-official": false
+    "Notion@claude-plugins-official": false,
+    "playground@claude-plugins-official": true,
+    "coderabbit@claude-plugins-official": true
   },
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
-    "excludedCommands": ["git", "docker"],
-    "allowUnsandboxedCommands": true
+    "allowUnsandboxedCommands": true,
+    "excludedCommands": [
+      "git",
+      "docker"
+    ]
   },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"
