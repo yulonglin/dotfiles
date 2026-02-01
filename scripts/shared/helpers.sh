@@ -7,7 +7,7 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Ensure config is loaded
-if [[ -z "$PLATFORM" ]]; then
+if [[ -z "${PLATFORM:-}" ]]; then
     echo "Error: config.sh must be sourced before helpers.sh" >&2
     exit 1
 fi
@@ -436,10 +436,12 @@ ensure_local_key_in_authorized_keys() {
     local key_data
     key_data=$(echo "$pub_key" | awk '{print $1" "$2}')
 
-    # Create authorized_keys if missing
+    # Create authorized_keys if missing (avoid touch to preserve mtime for sync)
     mkdir -p "$HOME/.ssh"
-    touch "$auth_keys"
-    chmod 600 "$auth_keys"
+    if [[ ! -f "$auth_keys" ]]; then
+        touch "$auth_keys"
+        chmod 600 "$auth_keys"
+    fi
 
     # Check if key already present
     if grep -qF "$key_data" "$auth_keys" 2>/dev/null; then
@@ -471,30 +473,31 @@ sync_secrets() {
     }
 
     # Get gist updated_at timestamp
+    # Note: Use printf or here-string, NOT echo - echo interprets \n in JSON content
     local gist_updated_at
-    gist_updated_at=$(echo "$gist_data" | python3 -c "
+    gist_updated_at=$(python3 -c "
 import sys, json
 from datetime import datetime
 data = json.load(sys.stdin)
 ts = datetime.fromisoformat(data['updated_at'].replace('Z', '+00:00'))
 print(int(ts.timestamp()))
-" 2>/dev/null)
+" <<< "$gist_data" 2>/dev/null)
 
     # Helper functions
     get_gist_file() {
-        echo "$gist_data" | python3 -c "
+        python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 print(data['files'].get('$1', {}).get('content', ''))
-" 2>/dev/null
+" <<< "$gist_data" 2>/dev/null
     }
 
     gist_has_file() {
-        echo "$gist_data" | python3 -c "
+        python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 print('yes' if '$1' in data['files'] else 'no')
-" 2>/dev/null
+" <<< "$gist_data" 2>/dev/null
     }
 
     local changes_made=false
