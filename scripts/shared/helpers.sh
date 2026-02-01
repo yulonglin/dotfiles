@@ -540,6 +540,12 @@ sync_file() {
             mkdir -p "$(dirname "$local_path")"
             get_gist_file "$gist_filename" > "$local_path"
             [[ "$gist_filename" == "config" || "$gist_filename" == "authorized_keys" ]] && chmod 600 "$local_path"
+            # Preserve mtime to match gist's updated_at
+            if is_macos; then
+                touch -t "$(date -r "$gist_updated_at" +%Y%m%d%H%M.%S)" "$local_path"
+            else
+                touch -d "@$gist_updated_at" "$local_path"
+            fi
             log_info "  ↓ Pulled $gist_filename from gist (local was missing)"
             return 0
         fi
@@ -565,6 +571,12 @@ sync_file() {
         else
             echo "$gist_content" > "$local_path"
             [[ "$gist_filename" == "config" || "$gist_filename" == "authorized_keys" ]] && chmod 600 "$local_path"
+            # Preserve mtime to match gist's updated_at (prevents false "local newer" on next sync)
+            if is_macos; then
+                touch -t "$(date -r "$gist_updated_at" +%Y%m%d%H%M.%S)" "$local_path"
+            else
+                touch -d "@$gist_updated_at" "$local_path"
+            fi
             log_info "  ↓ Pulled $gist_filename from gist (gist newer)"
         fi
         return 0
