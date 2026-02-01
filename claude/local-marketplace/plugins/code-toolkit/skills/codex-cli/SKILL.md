@@ -14,6 +14,10 @@ description: |
   - Quick edits under ~10 lines (faster to do directly)
   - Tasks requiring conversation context (Codex has no context)
   - Tasks requiring judgment, taste, or subjective design decisions (Codex is instruction-following, not taste-driven)
+
+  Also use when:
+  - Listing available Codex/OpenAI models
+  - Changing the default Codex model or reasoning effort
 ---
 
 # Codex CLI Delegation
@@ -162,14 +166,9 @@ In the shared `delegates` session (same session used by gemini-cli and other CLI
 
 ## Model Selection
 
-Default: trust `~/.codex/config.toml` (`model` and `model_reasoning_effort` keys). Override per-call when needed:
+Default: trust `~/.codex/config.toml` (`model` and `model_reasoning_effort` keys). Override per-call with `-m <model>` or `-c model_reasoning_effort="xhigh"`.
 
-| Task complexity | Flag |
-|---|---|
-| Simple implementation, boilerplate | Default (high) |
-| Complex logic, tricky edge cases | `-c model_reasoning_effort="xhigh"` |
-| Plan review / second opinion | `-c model_reasoning_effort="xhigh"` |
-| Different model entirely | `-m <model>` |
+See `references/model-selection.md` for listing available models, changing defaults, and per-call overrides.
 
 ## Tips
 
