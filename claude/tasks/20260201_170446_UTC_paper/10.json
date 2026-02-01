@@ -1,0 +1,9 @@
+{
+  "id": "10",
+  "subject": "Reconcile mean vs median plotting",
+  "description": "Plotting configs default to median but paper says mean. Need to reconcile with hub/code configs",
+  "activeForm": "Reconciling mean vs median",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

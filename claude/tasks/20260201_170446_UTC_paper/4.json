@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "Verify adversarial recall numbers",
+  "description": "Double-check 4.7–18.0% USACO, 14–46% GPQA adversarial recall",
+  "activeForm": "Verifying adversarial numbers",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

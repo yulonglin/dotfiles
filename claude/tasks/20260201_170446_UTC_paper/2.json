@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Swap Section 4.3 to same-model figures",
+  "description": "Section 4.3 shows mixed-model graphs but should show same-model. figures/same_model_c3_vs_ld.png exists but is unused",
+  "activeForm": "Swapping to same-model figures",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}
