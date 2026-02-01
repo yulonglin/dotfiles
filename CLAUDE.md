@@ -106,6 +106,7 @@ config/matplotlib/        # Matplotlib styles and helpers
 - Requires `gh auth login` (browser OAuth, no extra keys needed)
 - Runs before git config (user.conf provides git identity)
 - Automated: Runs daily at 8:00 AM (launchd/cron), uninstall with `scripts/cleanup/setup_secrets_sync.sh --uninstall`
+- Manual: `sync-secrets` (alias) or `scripts/sync_secrets.sh`
 
 **Git Config (`deploy_git_config()`)**:
 - Reads `config/user.conf` for user-specific settings

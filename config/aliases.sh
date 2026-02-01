@@ -14,6 +14,7 @@ alias zrc="cd $DOT_DIR/zsh"
 alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
+alias sync-secrets='"$DOT_DIR/scripts/sync_secrets.sh"'
 
 # Helper: activate .venv from current dir or git repo root
 # Note: no underscore prefix - Claude Code shell snapshots filter out _-prefixed functions
