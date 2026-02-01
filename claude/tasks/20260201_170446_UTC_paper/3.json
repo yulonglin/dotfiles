@@ -1,9 +1,0 @@
-{
-  "id": "3",
-  "subject": "Verify k-sweep numbers on USACO",
-  "description": "Verify k=1 (31%), k=10 (67%), k=20 (95%) against latest runs",
-  "activeForm": "Verifying k-sweep numbers",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

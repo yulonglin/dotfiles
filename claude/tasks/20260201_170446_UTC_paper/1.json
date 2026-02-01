@@ -1,9 +1,0 @@
-{
-  "id": "1",
-  "subject": "Verify prompt counts (65+33) against TAXONOMY.md",
-  "description": "Check if 65 paraphrase + 33 baseline prompts matches TAXONOMY.md which says 38 baselines",
-  "activeForm": "Verifying prompt counts",
-  "status": "completed",
-  "blocks": [],
-  "blockedBy": []
-}

@@ -1,9 +1,0 @@
-{
-  "id": "9",
-  "subject": "Verify answerability prompts match code",
-  "description": "Check prompts in appendix match actual code implementation",
-  "activeForm": "Verifying answerability prompts",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

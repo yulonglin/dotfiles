@@ -1,9 +1,0 @@
-{
-  "id": "6",
-  "subject": "Evaluate point-biserial statistical test for TM confound",
-  "description": "Is point-biserial the right test for the TM confound analysis?",
-  "activeForm": "Evaluating statistical test",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

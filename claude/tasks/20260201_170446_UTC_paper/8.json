@@ -1,9 +1,0 @@
-{
-  "id": "8",
-  "subject": "Regenerate GSM8K figure with TM-3B label",
-  "description": "Caption was fixed but figure needs replot with correct TM-3B label",
-  "activeForm": "Regenerating GSM8K figure",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}
