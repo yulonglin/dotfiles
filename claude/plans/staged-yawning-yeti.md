@@ -1,12 +1,34 @@
-# GPQA Detection Experiments - Completion Plan
+# GPQA Results Analysis Script
 
-## User Feedback Addressed
+## Goal
+Write `scripts/generate_gpqa_report.py` to extract and compute stats from **existing CSVs only**. No new experiments.
 
-1. **Per-prompt reporting**: Each prompt reported separately + summary (min/median/mean/max)
-2. **SEM from bootstrap**: Already computed by bootstrap CV script (`sem_recall`)
-3. **Benign baselines**: Come from normal model runs in the sandbagger sweep (already included)
-4. **Batch failures**: Can be retried with same config
-5. **Document 100 limit**: Add to CLAUDE.md (OK for dev set, NOT for test set)
+## Available Data
+
+CSVs in `out/`:
+- `gpqa_c3_cat_{4.1nano,5nano}_{dev,test}.csv` - score column: `entropy_score`
+- `gpqa_c3_emb_{4.1nano,5nano}_{dev,test}.csv` - score column: `entropy_score`
+- `gpqa_tm_{4.1nano,5nano}_{dev,test}.csv` - score column: `tm_score`
+- `gpqa_bp_{4.1nano,5nano}_{dev,test}.csv` - score column: `probe_score`
+
+## Script: `scripts/generate_gpqa_report.py`
+
+Uses existing `compute_entropy_recall_at_fpr()` from `src/detection_game/scorers/metrics.py`.
+
+**Features:**
+1. Load CSVs with k-sample aggregation (k=10 default)
+2. Per-prompt breakdown via `model_pair` column (C³, BP)
+3. **TM per-prompt recovery**: Read trajectory evals to get sample_id → prompt mapping via `log.eval.model_generate_config.system_message`
+4. Compute per-prompt: recall@5%FPR, actual_fpr, SEM (bootstrap), pAUC, AUROC
+5. Output: Markdown tables + JSON
+
+**TM Prompt Recovery:**
+1. **Build lookup table**: Glob `src/detection_game/configs/system_prompt/**/*.yaml`, extract `system_prompt` field → prompt name (from filename)
+2. **Match**: For each trajectory eval, get `model_generate_config.system_message` and look up in table
+3. **Map**: TM sample_ids → source trajectory eval → prompt name
+
+**Output columns:**
+- Method, Model, Prompt, Recall@5%, Actual FPR, SEM, pAUC, AUROC
 
 ---
 

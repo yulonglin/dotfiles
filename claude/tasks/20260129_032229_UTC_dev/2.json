@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Step 1b: Re-extract LD 5nano dev+test scores (4 detectors each)",
+  "description": "Re-extract 5nano scores with all 4 detectors: 5-nano, 5-nano-zero-accuracy-sandbag0, 5-nano-iaseai-8prompts, subsets_union",
+  "activeForm": "Extracting LD 5nano scores",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

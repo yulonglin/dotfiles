@@ -1,0 +1,11 @@
+{
+  "id": "3",
+  "subject": "Step 2: Run LD 4.1nano-test trajectory generation",
+  "description": "Run trajectory generation for LD 4.1nano test split, then extract scores with 4 detectors",
+  "activeForm": "Running LD 4.1nano-test trajectories",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": [
+    "1"
+  ]
+}

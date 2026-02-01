@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "Step 3: Rerun C3 trajectories (4 configs sequential)",
+  "description": "Run C3 paraphraser trajectories for all 4 configs, then extract C3 scores",
+  "activeForm": "Running C3 trajectories",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

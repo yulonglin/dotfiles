@@ -1,0 +1,11 @@
+{
+  "id": "1",
+  "subject": "Step 1: Extract LD 4.1nano-dev scores (4 detectors)",
+  "description": "Extract LD scores from existing eval files using 4 detectors: 4.1-nano-only, 4.1-nano-zero-accuracy, cross-model, subsets_union",
+  "activeForm": "Extracting LD 4.1nano-dev scores",
+  "status": "completed",
+  "blocks": [
+    "3"
+  ],
+  "blockedBy": []
+}

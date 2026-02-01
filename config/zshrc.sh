@@ -44,6 +44,13 @@ add_to_path "${DOT_DIR}/custom_bins"
 # Add ~/.local/bin to PATH (for Claude Code, gh, gitleaks, uv tools)
 add_to_path "$HOME/.local/bin"
 
+# npm global packages - avoid permission issues with /usr/lib/node_modules
+# Installs to ~/.npm-global instead of requiring sudo
+if command -v npm &>/dev/null; then
+  export NPM_CONFIG_PREFIX="$HOME/.npm-global"
+  add_to_path "$HOME/.npm-global/bin"
+fi
+
 # Add matplotlib config to PYTHONPATH for petriplot import
 if [[ -d "$HOME/.config/matplotlib" ]]; then
     export PYTHONPATH="$HOME/.config/matplotlib:${PYTHONPATH}"

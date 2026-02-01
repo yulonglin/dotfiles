@@ -180,6 +180,9 @@ For work taking >30 minutes:
 
 ### Git Commands (Readability)
 - **Prefer rebase over merge** for `git pull` - keeps history linear and clean
+- **Default pull behavior**: When user says "pull", run `git stash && git pull --rebase && git stash pop`
+  - Handles unstaged changes automatically
+  - If merge conflicts occur after stash pop, notify user and help resolve
 - **Use readable refs** over commit hashes: branch names, tags, `origin/branch`
 - Examples:
   - ✅ `git log origin/main..feature-branch`

@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "Step 4: Extract TM scores (judge scoring)",
+  "description": "Extracted TM scores from partial judge data: 4.1nano-dev (2922), 4.1nano-test (541), 5nano-dev (631), 5nano-test (651)",
+  "activeForm": "Extracting TM scores",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
