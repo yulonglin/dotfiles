@@ -2,6 +2,7 @@ import argparse
 import json
 import sys
 import re
+import shlex
 
 def parse_bash_cmd(pattern):
     # Pattern: Bash(cmd:*)
@@ -27,6 +28,23 @@ def parse_webfetch_domain(pattern):
 
 def escape_rules_string(value):
     return value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+def strip_env_assignments(tokens):
+    env_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
+    i = 0
+    while i < len(tokens) and env_re.match(tokens[i]):
+        i += 1
+    return tokens[i:]
+
+def bash_cmd_to_tokens(cmd):
+    try:
+        tokens = shlex.split(cmd, posix=True)
+    except ValueError:
+        return None
+    tokens = strip_env_assignments(tokens)
+    if not tokens:
+        return None
+    return tokens
 
 def load_settings(settings_path):
     try:
@@ -162,6 +180,12 @@ def convert_to_codex_rules(settings_path, data):
                     print(
                         f'prefix_rule(pattern=["bash", "-lc", "{cmd_escaped}"], decision="{decision}")'
                     )
+                    tokens = bash_cmd_to_tokens(cmd)
+                    if tokens:
+                        tokens_escaped = [f'"{escape_rules_string(token)}"' for token in tokens]
+                        print(
+                            f'prefix_rule(pattern=[{", ".join(tokens_escaped)}], decision="{decision}")'
+                        )
                 else:
                     print(f"# Skipped unparsable Bash permission ({source_key}): {item}")
             else:

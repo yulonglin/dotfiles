@@ -1,10 +1,8 @@
 model = "gpt-5.2-codex"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
-approval_policy = "untrusted"
-
-[features]
-web_search_request = true
+approval_policy = "on-request"
+web_search = "live"
 
 [sandbox_workspace_write]
 network_access = true
@@ -15,16 +13,12 @@ enabled = false
 [profiles.plan]
 sandbox_mode = "read-only"
 approval_policy = "on-request"
-
-[profiles.plan.features]
-web_search_request = true
+web_search = "live"
 
 [profiles.yolo]
 sandbox_mode = "danger-full-access"
 approval_policy = "on-request"
-
-[profiles.yolo.features]
-web_search_request = true
+web_search = "live"
 
 [projects."/Users/yulong/scratch/sandbagging-detection/w9-prompts"]
 trust_level = "trusted"
@@ -54,6 +48,9 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [projects."/Users/yulong/writing/paper-sandbagging-detection"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/writing/papers/sandbagging-detection"]
 trust_level = "trusted"
 
 [projects."/Users/yulong/writing/llm-council"]

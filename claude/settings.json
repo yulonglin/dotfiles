@@ -54,6 +54,7 @@
       "Bash(uv run pytest:*)",
       "Bash(for:*)",
       "Bash(while:*)",
+      "Bash(touch:*)",
       "WebSearch",
       "WebFetch",
       "WebFetch(domain:gitlab.com)",

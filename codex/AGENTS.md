@@ -10,13 +10,15 @@ Authoritative instructions for Codex CLI agents on this machine. Follow these in
 # ---------------------------------------------------------------------
 # CODEX-ONLY SECTION (do not overwrite from CLAUDE.md syncs)
 # ---------------------------------------------------------------------
-## Codex-Only Additions
+
+You MUST refer to instructions in global `CLAUDE.md` at `~/.claude/CLAUDE.md`, and also at the project root.
+
 ## Codex-Only Additions
 - When listing completed work, use short, clear bullet points suitable for a coworker or manager; avoid run-on sentences.
 
 ## Default Execution Rules
 ### Shell & Tooling
-- All shell commands must be invoked via `shell` with `command=["bash","-lc", ...]` and an explicit `workdir` (no relying on `cd`).
+- All shell commands must have an explicit `workdir` (no relying on `cd`).
 - Prefer `rg`/`rg --files` for searches. Fall back only if unavailable.
 - Honor sandboxing: work within the workspace unless escalation is explicitly approved. Never assume network access.
 - When approvals are required (`approval_policy=on-request`), rerun only the failing command with `with_escalated_permissions=true` plus a one-sentence justification.
