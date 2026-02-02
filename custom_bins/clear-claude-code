@@ -184,16 +184,17 @@ is_process_old() {
     [[ -z "$etime" ]] && return 1
 
     # Parse etime format: [[DD-]HH:]MM:SS
+    # Use base-10 prefix (10#) to avoid octal interpretation of leading zeros (e.g., "09")
     local total_seconds=0
     if [[ "$etime" =~ ^([0-9]+)-([0-9]+):([0-9]+):([0-9]+)$ ]]; then
         # DD-HH:MM:SS
-        total_seconds=$(( ${BASH_REMATCH[1]} * 86400 + ${BASH_REMATCH[2]} * 3600 + ${BASH_REMATCH[3]} * 60 + ${BASH_REMATCH[4]} ))
+        total_seconds=$(( 10#${BASH_REMATCH[1]} * 86400 + 10#${BASH_REMATCH[2]} * 3600 + 10#${BASH_REMATCH[3]} * 60 + 10#${BASH_REMATCH[4]} ))
     elif [[ "$etime" =~ ^([0-9]+):([0-9]+):([0-9]+)$ ]]; then
         # HH:MM:SS
-        total_seconds=$(( ${BASH_REMATCH[1]} * 3600 + ${BASH_REMATCH[2]} * 60 + ${BASH_REMATCH[3]} ))
+        total_seconds=$(( 10#${BASH_REMATCH[1]} * 3600 + 10#${BASH_REMATCH[2]} * 60 + 10#${BASH_REMATCH[3]} ))
     elif [[ "$etime" =~ ^([0-9]+):([0-9]+)$ ]]; then
         # MM:SS
-        total_seconds=$(( ${BASH_REMATCH[1]} * 60 + ${BASH_REMATCH[2]} ))
+        total_seconds=$(( 10#${BASH_REMATCH[1]} * 60 + 10#${BASH_REMATCH[2]} ))
     fi
 
     (( total_seconds >= threshold_seconds ))
@@ -226,7 +227,7 @@ get_process_status() {
         local cpu=$(ps_field "$pid" "%cpu")
         # Parse CPU percentage (handle "0.0", "1.5", etc., compare as numbers)
         if [[ -n "$cpu" && "${cpu%.*}" != "" ]]; then
-            local cpu_int="${cpu%.*}"  # Extract integer part
+            local cpu_int="10#${cpu%.*}"  # Extract integer part, force base-10
             if (( cpu_int < 1 )); then
                 echo "IDLE"
                 return
