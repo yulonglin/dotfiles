@@ -58,8 +58,8 @@ dist/
 downloads/
 eggs/
 .eggs/
+lib/
 lib64/
-# Note: lib/ is ignored except lib/plotting/ which is version controlled
 !lib/plotting/
 parts/
 sdist/
