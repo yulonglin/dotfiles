@@ -99,6 +99,25 @@ is_in_tmux() {
     return 1
 }
 
+# Check if process has any children with active CPU (>= 1%)
+# Used to detect stuck sessions where parent + all children are idle
+has_active_children() {
+    local ppid="$1"
+    local child_pid
+
+    # Check all child processes
+    while IFS= read -r child_pid; do
+        [[ -z "$child_pid" ]] && continue
+        local child_cpu=$(ps_field "$child_pid" "%cpu")
+        if [[ -n "$child_cpu" && "${child_cpu%.*}" != "" ]]; then
+            local child_cpu_int="10#${child_cpu%.*}"
+            (( child_cpu_int >= 1 )) && return 0  # Found active child
+        fi
+    done < <(pgrep -P "$ppid" 2>/dev/null)
+
+    return 1  # No active children found
+}
+
 get_process_tty() {
     local tty=$(ps_field "$1" "tty")
     [[ -z "$tty" || "$tty" == "?" || "$tty" == "??" ]] && echo "" || echo "$tty"
@@ -540,12 +559,16 @@ if [[ "$DRY_RUN" == "true" ]]; then
     done
 else
     # Kill the processes with escalation: SIGTERM -> wait -> SIGKILL
+    # Also kill child processes (e.g., orphaned MCP servers)
     killed=0
     failed_pids=()
     stubborn_pids=()
 
-    # First pass: SIGTERM
+    # First pass: SIGTERM to parent + children
     for pid in "${PIDS_TO_KILL[@]}"; do
+        # Kill children first (MCP servers, npm processes, etc.)
+        pkill -P "$pid" 2>/dev/null || true
+        # Then kill parent
         kill "$pid" 2>/dev/null || true
     done
 
@@ -554,6 +577,9 @@ else
 
     # Second pass: check survivors, SIGKILL stubborn ones
     for pid in "${PIDS_TO_KILL[@]}"; do
+        # Kill any remaining children
+        pkill -9 -P "$pid" 2>/dev/null || true
+
         if ps -p "$pid" >/dev/null 2>&1; then
             # Still alive, use SIGKILL
             stubborn_pids+=("$pid")
