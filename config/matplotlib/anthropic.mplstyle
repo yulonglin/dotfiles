@@ -2,21 +2,21 @@
 # Based on anthroplot defaults (pretty=True)
 # Usage: plt.style.use('anthropic') after symlinking to ~/.config/matplotlib/stylelib/
 
-# Figure
-figure.facecolor: FAF9F5
-figure.edgecolor: FAF9F5
+# Figure (white background)
+figure.facecolor: FFFFFF
+figure.edgecolor: FFFFFF
 figure.figsize: 8, 5
 figure.dpi: 150
 
-# Axes
-axes.facecolor: FAF9F5
+# Axes (white background)
+axes.facecolor: FFFFFF
 axes.edgecolor: 141413
 axes.labelcolor: 141413
 axes.linewidth: 0.8
 axes.spines.top: False
 axes.spines.right: False
-axes.prop_cycle: cycler('color', ['D97757', '6B6B6B', '2C5282', 'E8A87C', 'B794C0', '6B4C7A'])
-# pretty=True cycle: DARK_ORANGE, GREY, DARK_BLUE, MEDIUM_ORANGE, LIGHT_PURPLE, DARK_PURPLE
+axes.prop_cycle: cycler('color', ['B86046', '656565', '40668C', 'D19B75', '8778AB', '4A366F'])
+# PRETTY_CYCLE: DARK_ORANGE (BOOK_CLOTH), GREY, DARK_BLUE, MEDIUM_ORANGE (KRAFT), LIGHT_PURPLE, DARK_PURPLE
 
 axes.titlesize: 14
 axes.titleweight: bold
@@ -58,9 +58,9 @@ font.family: sans-serif
 font.sans-serif: Styrene B LC, Helvetica Neue, Helvetica, Arial, sans-serif
 font.size: 10
 
-# Saving
+# Saving (white background)
 savefig.dpi: 300
-savefig.facecolor: FAF9F5
-savefig.edgecolor: FAF9F5
+savefig.facecolor: FFFFFF
+savefig.edgecolor: FFFFFF
 savefig.bbox: tight
 savefig.pad_inches: 0.1
