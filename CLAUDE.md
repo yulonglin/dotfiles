@@ -116,9 +116,14 @@ custom_bins/              # Custom utilities (added to PATH)
 ├── utc_date              # Outputs DD-MM-YYYY in UTC
 └── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
 
-config/matplotlib/        # Matplotlib styles and helpers
-├── petri.mplstyle        # Petri plotting style (warm editorial aesthetic)
-└── petriplot.py          # Helper module (flow_box, flow_arrow, colors)
+lib/plotting/             # Python plotting library (deployed to ~/.local/lib/plotting/)
+├── anthro_colors.py      # Anthropic brand colors (ground truth)
+└── petriplot.py          # Petri helpers (imports anthro_colors)
+
+config/matplotlib/        # Matplotlib style files (.mplstyle only)
+├── anthropic.mplstyle    # Anthropic brand (white bg, PRETTY_CYCLE)
+├── deepmind.mplstyle     # DeepMind (Google colors, white bg)
+└── petri.mplstyle        # Petri (ivory bg, editorial aesthetic)
 ```
 
 ### Important Behaviors
@@ -155,14 +160,18 @@ config/matplotlib/        # Matplotlib styles and helpers
 - Backs up existing file with timestamp if not a symlink
 - Configures Cmd+C for shell-based copy and Shift+Enter for multiline input
 
-**Matplotlib Deployment**:
+**Plotting Library and Matplotlib Deployment**:
+- **Copies** Python modules from `lib/plotting/` to `~/.local/lib/plotting/` (anthro_colors.py, petriplot.py)
 - **Symlinks** `*.mplstyle` files to `~/.config/matplotlib/stylelib/` (config files, auto-update)
-- **Copies** `petriplot.py` to `~/.config/matplotlib/` (dependency module, stable snapshot)
-- Rationale: Styles are config → symlink for live updates; helper is code → copy prevents ImportError if dotfiles move
-- Includes Petri style (warm editorial aesthetic) for publication-quality figures
-- Usage: `plt.style.use('petri')` or `import petriplot as pp` (PYTHONPATH auto-configured in zshrc)
+- Rationale: Styles are config → symlink for live updates; Python modules copied for isolation
+- Available styles:
+  - `anthropic` - Anthropic brand (white background, PRETTY_CYCLE colors) **← recommended default**
+  - `deepmind` - Google/DeepMind colors (white background)
+  - `petri` - Petri paper style (ivory background, warm editorial aesthetic)
+- Python library usage: `from anthro_colors import use_anthropic_defaults; use_anthropic_defaults()`
+- PYTHONPATH auto-configured in zshrc to include `~/.local/lib/plotting/`
 - Requires `--matplotlib` flag to deploy
-- Note: `petriplot.py` updates require re-running `deploy.sh --matplotlib`
+- Note: Python module updates require re-running `deploy.sh --matplotlib`
 
 **Claude Code Deployment** (Smart Merge):
 - Symlinks `claude/` to `~/.claude`
@@ -176,6 +185,35 @@ config/matplotlib/        # Matplotlib styles and helpers
     - `mcp_servers.json` - MCP server configuration
 - Works seamlessly whether you run `install.sh` or `deploy.sh` first
 - Custom config deployed: `CLAUDE.md`, `settings.json`, `agents/`, `hooks/`, `skills/`, `templates/`
+
+## Plotting with Anthropic Style
+
+**ALWAYS use Anthropic style as default** for all plots created by Claude Code:
+
+```python
+from anthro_colors import use_anthropic_defaults
+use_anthropic_defaults()
+
+# Now all plots use anthropic style (white background, PRETTY_CYCLE colors)
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+# ... your plotting code
+```
+
+**Why:** Ensures consistent, professional appearance across all Claude-generated plots.
+
+**Absolute path to styles:** `~/.config/matplotlib/stylelib/anthropic.mplstyle`
+
+**Available styles:**
+- `anthropic` - Default, white background, Anthropic brand colors (use this)
+- `petri` - Ivory background, warm editorial aesthetic (use for specific Petri-paper style)
+- `deepmind` - Google/DeepMind colors (use for DeepMind-related work)
+
+**Importing colors:**
+```python
+from anthro_colors import CLAY, SKY, CACTUS, IVORY, SLATE, PRETTY_CYCLE
+import petriplot as pp  # For Petri-specific plotting helpers
+```
 
 ## Development Patterns
 
