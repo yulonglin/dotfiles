@@ -478,15 +478,3 @@ archive/
 /logs
 /out
 bash-history.jsonl
-
-#-------------------------------------------------------------
-# Claude Code Plugin Runtime (like node_modules)
-#-------------------------------------------------------------
-
-# Downloaded official plugins cache, marketplace metadata, plugin repos
-claude/plugins/cache/
-claude/plugins/repos/
-claude/plugins/known_marketplaces.json
-claude/plugins/config.json
-
-# Note: claude/local-marketplace/ is tracked (custom local plugins)
