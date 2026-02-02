@@ -319,34 +319,38 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
     fi
 fi
 
-# ─── Matplotlib ───────────────────────────────────────────────────────────────
+# ─── Plotting Library ─────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_MATPLOTLIB" == "true" ]]; then
+    log_info "Deploying plotting library..."
+
+    PLOTLIB="$HOME/.local/lib/plotting"
+    if [[ -d "$DOT_DIR/lib/plotting" ]]; then
+        mkdir -p "$PLOTLIB"
+        for pyfile in "$DOT_DIR/lib/plotting"/*.py; do
+            [[ -f "$pyfile" ]] && cp "$pyfile" "$PLOTLIB/$(basename "$pyfile")"
+        done
+        log_info "  Deployed plotting library to ~/.local/lib/plotting/"
+    fi
+
     log_info "Deploying matplotlib styles..."
 
     STYLELIB="$HOME/.config/matplotlib/stylelib"
-    MPLCONFIG="$HOME/.config/matplotlib"
 
     if [[ -d "$DOT_DIR/config/matplotlib" ]]; then
         mkdir -p "$STYLELIB"
-        mkdir -p "$MPLCONFIG"
 
-        # Deploy .mplstyle files
+        # Deploy .mplstyle files (symlink for live updates)
         for style in "$DOT_DIR/config/matplotlib"/*.mplstyle; do
             if [[ -f "$style" ]]; then
                 safe_symlink "$style" "$STYLELIB/$(basename "$style")"
             fi
         done
 
-        # Deploy petriplot.py helper module
-        if [[ -f "$DOT_DIR/config/matplotlib/petriplot.py" ]]; then
-            cp "$DOT_DIR/config/matplotlib/petriplot.py" "$MPLCONFIG/petriplot.py"
-            log_info "  Deployed petriplot.py helper module"
-        fi
-
-        log_success "Deployed matplotlib styles"
-        log_info "  Style usage: plt.style.use('petri') or plt.style.use('anthropic')"
-        log_info "  Helper: Add ~/.config/matplotlib to PYTHONPATH, then: import petriplot as pp"
+        log_success "Deployed plotting library and matplotlib styles"
+        log_info "  Styles: plt.style.use('anthropic'), plt.style.use('petri'), plt.style.use('deepmind')"
+        log_info "  Python library: PYTHONPATH includes ~/.local/lib/plotting/"
+        log_info "  Usage: from anthro_colors import use_anthropic_defaults; use_anthropic_defaults()"
     else
         log_warning "Matplotlib config directory not found"
     fi

@@ -51,9 +51,9 @@ if command -v npm &>/dev/null; then
   add_to_path "$HOME/.npm-global/bin"
 fi
 
-# Add matplotlib config to PYTHONPATH for petriplot import
-if [[ -d "$HOME/.config/matplotlib" ]]; then
-    export PYTHONPATH="$HOME/.config/matplotlib:${PYTHONPATH}"
+# Add plotting library to PYTHONPATH (anthro_colors, petriplot)
+if [[ -d "$HOME/.local/lib/plotting" ]]; then
+    export PYTHONPATH="$HOME/.local/lib/plotting:${PYTHONPATH}"
 fi
 
 # Source uv environment if installed
