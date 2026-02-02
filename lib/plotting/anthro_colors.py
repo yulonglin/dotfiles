@@ -254,7 +254,7 @@ def add_fonts(fontpaths: str | list[str]):
 
 def _install_brand_fonts() -> str:
     """Internal function to install brand fonts and return the font directory path."""
- 	fonts = TODO
+    fonts = []  # TODO: Implement font installation
     # Copy all the fonts to the local directory
     for font in fonts:
         destination = font_dir / font.name
