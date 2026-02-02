@@ -63,3 +63,10 @@ hide_gpt5_1_migration_prompt = true
 
 [notice.model_migrations]
 "gpt-5.1-codex" = "gpt-5.2-codex"
+
+[features]
+unified_exec = true
+shell_snapshot = true
+apps = true
+steer = true
+personality = true
