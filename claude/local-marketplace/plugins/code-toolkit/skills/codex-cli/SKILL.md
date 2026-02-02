@@ -49,7 +49,7 @@ For tasks completing in under a minute. Run and read result immediately.
 
 ```bash
 # Create output file path
-OUTPUT="/tmp/codex-$(date -u +%s).txt"
+OUTPUT="./tmp/codex-$(date -u +%s).txt"
 
 # Execute
 codex exec --full-auto -C <working-dir> -o "$OUTPUT" "<prompt>"
@@ -72,7 +72,7 @@ tmux has-session -t delegates 2>/dev/null || tmux new-session -d -s delegates -n
 
 # Launch
 tmux new-window -t delegates -n "$TASK_NAME"
-tmux-cli send "cd $(pwd) && codex exec --full-auto -o /tmp/${TASK_NAME}.txt '<prompt>' 2>&1 | tee /tmp/${TASK_NAME}.log" --pane="delegates:${TASK_NAME}.1"
+tmux-cli send "cd $(pwd) && codex exec --full-auto -o ./tmp/${TASK_NAME}.txt '<prompt>' 2>&1 | tee ./tmp/${TASK_NAME}.log" --pane="delegates:${TASK_NAME}.1"
 
 # Notify user
 echo "Codex running in delegates:${TASK_NAME} — check with: tmux-cli capture --pane=delegates:${TASK_NAME}.1"
@@ -142,14 +142,14 @@ Run: pytest tests/test_time.py -v
 Use sync mode with xhigh reasoning to get Codex's critique of an implementation plan:
 
 ```bash
-codex exec --full-auto -c model_reasoning_effort="xhigh" -C <working-dir> -o /tmp/review.txt \
+codex exec --full-auto -c model_reasoning_effort="xhigh" -C <working-dir> -o ./tmp/review.txt \
   "Review this plan: <plan text>. Identify: 1) Missed edge cases 2) Simpler alternatives 3) Potential issues"
 ```
 
 Or pipe a plan file:
 
 ```bash
-codex exec --full-auto -c model_reasoning_effort="xhigh" -C <working-dir> -o /tmp/review.txt \
+codex exec --full-auto -c model_reasoning_effort="xhigh" -C <working-dir> -o ./tmp/review.txt \
   "Review this implementation plan and identify missed edge cases, simpler alternatives, and potential issues: $(cat .claude/plans/plan.md)"
 ```
 

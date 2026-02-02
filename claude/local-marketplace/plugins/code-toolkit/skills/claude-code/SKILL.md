@@ -39,7 +39,7 @@ Delegate tasks to a separate Claude Code CLI process for parallel work, second o
 claude -p --model sonnet --permission-mode bypassPermissions "<prompt>"
 
 # Capture to file
-claude -p --model sonnet --permission-mode bypassPermissions "<prompt>" > /tmp/claude-review.txt
+claude -p --model sonnet --permission-mode bypassPermissions "<prompt>" > ./tmp/claude-review.txt
 ```
 
 ### Async Mode (larger tasks via tmux)
@@ -51,7 +51,7 @@ tmux has-session -t delegates 2>/dev/null || tmux new-session -d -s delegates -n
 
 # Launch
 tmux new-window -t delegates -n "$TASK_NAME"
-tmux-cli send "cd $(pwd) && claude -p --model sonnet --permission-mode bypassPermissions '<prompt>' 2>&1 | tee /tmp/${TASK_NAME}.log" --pane="delegates:${TASK_NAME}.1"
+tmux-cli send "cd $(pwd) && claude -p --model sonnet --permission-mode bypassPermissions '<prompt>' 2>&1 | tee ./tmp/${TASK_NAME}.log" --pane="delegates:${TASK_NAME}.1"
 
 # Notify user
 echo "Claude running in delegates:${TASK_NAME} — check with: tmux-cli capture --pane=delegates:${TASK_NAME}.1"

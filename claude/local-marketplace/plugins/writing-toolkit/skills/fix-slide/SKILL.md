@@ -21,7 +21,7 @@ The skill accepts a file to **edit** (e.g., `slides.md` or `pages/week-19.md`).
 
 ```
 Task tool → subagent_type: "general-purpose"
-Prompt: "Read tmp/slide-check.pdf and identify: (1) pages with content overflow/cut-off, (2) blank pages. Return a list of page numbers and issues found."
+Prompt: "Read ./tmp/slide-check.pdf and identify: (1) pages with content overflow/cut-off, (2) blank pages. Return a list of page numbers and issues found."
 ```
 
 ## Workflow
@@ -33,8 +33,8 @@ Prompt: "Read tmp/slide-check.pdf and identify: (1) pages with content overflow/
 
 2. **Export as PNG images** for targeted analysis (avoids PDF context bloat):
    ```bash
-   mkdir -p tmp/slides-images
-   bunx slidev export slides.md --format png --output tmp/slides-images/slide --range <start>-<end> --timeout 120000
+   mkdir -p ./tmp/slides-images
+   bunx slidev export slides.md --format png --output ./tmp/slides-images/slide --range <start>-<end> --timeout 120000
    ```
 
 3. **Analyze images directly** - Read the PNG files to identify:
@@ -59,7 +59,7 @@ Prompt: "Read tmp/slide-check.pdf and identify: (1) pages with content overflow/
 
 6. **Re-export and verify** (just the affected slides):
    ```bash
-   bunx slidev export slides.md --format png --output tmp/slides-fixed/slide --range <affected-pages> --timeout 120000
+   bunx slidev export slides.md --format png --output ./tmp/slides-fixed/slide --range <affected-pages> --timeout 120000
    ```
    Read the fixed PNG files to confirm the issue is resolved.
 
