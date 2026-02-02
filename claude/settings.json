@@ -22,6 +22,9 @@
       "Bash(sleep:*)",
       "Bash(nohup:*)",
       "Bash(tee:*)",
+      "Bash(chmod:*)",
+      "Bash(shortcuts list:*)",
+      "Bash(git checkout:*)",
       "Bash(git init:*)",
       "Bash(git fetch:*)",
       "Bash(git ls-tree:*)",
@@ -66,6 +69,8 @@
       "WebFetch(domain:icml.cc)",
       "WebFetch(domain:papers.nips.cc)",
       "WebFetch(domain:proceedings.mlr.press)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
       "Read",
       "Read(//tmp/claude/**/tasks/**)"
     ],
@@ -93,11 +98,7 @@
       "Bash(chmod 000:*)",
       "Bash(mv /:*)"
     ],
-    "ask": [
-      "Bash(kill:*)",
-      "Bash(killall:*)",
-      "Bash(pkill:*)"
-    ],
+    "ask": ["Bash(kill:*)", "Bash(killall:*)", "Bash(pkill:*)"],
     "defaultMode": "plan"
   },
   "model": "haiku",
@@ -190,10 +191,7 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": true,
-    "excludedCommands": [
-      "git",
-      "docker"
-    ]
+    "excludedCommands": ["git", "git stash", "docker"]
   },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"

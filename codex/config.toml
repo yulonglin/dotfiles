@@ -19,6 +19,8 @@ web_search = "live"
 sandbox_mode = "danger-full-access"
 approval_policy = "on-request"
 web_search = "live"
+model = "gpt-5.2-codex"
+model_reasoning_effort = "xhigh"
 
 [projects."/Users/yulong/scratch/sandbagging-detection/w9-prompts"]
 trust_level = "trusted"
