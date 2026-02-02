@@ -258,44 +258,41 @@ get_process_status() {
     fi
 
     # Has a TTY: check if actively in foreground
-    # Rule 3: Foreground with recent activity = ACTIVE
+    # Rule 3: Foreground process - evaluate based on age and CPU (TTY mtime unreliable)
     if [[ "$stat" == *"+"* ]]; then
-        # Has foreground marker - validate with TTY activity
-        # Note: On macOS, TTY mtime is unreliable, so we rely on process recency
-        local last=$(get_tty_mtime "$tty")
-        if [[ -n "$last" ]]; then
-            local now=$(date +%s)
-            # Recent TTY activity (< 30 min) = likely active
-            if (( (now - last) < 1800 )); then
-                echo "ACTIVE"
-                return
-            fi
-        fi
-
-        # On macOS, TTY mtime may be stale; use process age as fallback
-        if [[ "$(uname -s)" == "Darwin" ]] && ! is_process_old "$pid" $((30*60)); then
-            # macOS: process <30min old = treat as ACTIVE
+        # Recent process (<1h) = likely actively in use, regardless of CPU
+        if ! is_process_old "$pid" $((60*60)); then
             echo "ACTIVE"
             return
         fi
 
-        # Foreground marker but old/low activity = not really active
+        # Old process (>=1h) with low CPU (<1%) = abandoned
+        if (( cpu_int < 1 )); then
+            echo "IDLE"
+            return
+        fi
+
+        # Old process with meaningful CPU (>=1%) = still working
+        echo "ACTIVE"
+        return
+    fi
+
+    # Has TTY but not in foreground = check age
+    # Recent output within idle threshold = RECENT
+    # Otherwise check if stale
+    if ! is_process_old "$pid" "$IDLE_THRESHOLD_SECONDS"; then
+        echo "RECENT"
+        return
+    fi
+
+    # Attached to TTY but very old with low CPU = IDLE
+    if (( cpu_int < 1 )); then
         echo "IDLE"
         return
     fi
 
-    # Has TTY with activity but not in foreground = RECENT
-    local last=$(get_tty_mtime "$tty")
-    if [[ -n "$last" ]]; then
-        local now=$(date +%s)
-        if (( (now - last) < IDLE_THRESHOLD_SECONDS )); then
-            echo "RECENT"
-            return
-        fi
-    fi
-
-    # Attached to TTY but old/low activity = IDLE
-    echo "IDLE"
+    # Default: has TTY, old, but some CPU usage = ACTIVE (benefit of doubt)
+    echo "ACTIVE"
 }
 
 # Convert internal status to display label
