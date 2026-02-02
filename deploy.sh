@@ -364,17 +364,13 @@ deploy_plugins_config() {
 
     # Generate known_marketplaces.json from template
     if [[ -f "$DOT_DIR/claude/plugins/known_marketplaces.json.template" ]]; then
-        eval "cat > \"$claude_plugins_dir/known_marketplaces.json\" << 'EOF'
-$(sed "s|\$HOME|$HOME|g" "$DOT_DIR/claude/plugins/known_marketplaces.json.template")
-EOF"
+        sed "s|\$HOME|$HOME|g" "$DOT_DIR/claude/plugins/known_marketplaces.json.template" > "$claude_plugins_dir/known_marketplaces.json"
         log_info "Generated known_marketplaces.json"
     fi
 
     # Generate installed_plugins.json from template
     if [[ -f "$DOT_DIR/claude/plugins/installed_plugins.json.template" ]]; then
-        eval "cat > \"$claude_plugins_dir/installed_plugins.json\" << 'EOF'
-$(sed "s|\$HOME|$HOME|g" "$DOT_DIR/claude/plugins/installed_plugins.json.template")
-EOF"
+        sed "s|\$HOME|$HOME|g" "$DOT_DIR/claude/plugins/installed_plugins.json.template" > "$claude_plugins_dir/installed_plugins.json"
         log_info "Generated installed_plugins.json"
     fi
 }
