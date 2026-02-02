@@ -1,9 +1,0 @@
-{
-  "id": "1",
-  "subject": "Run GSM8K password-locked validation (5 samples)",
-  "description": "Run quick validation with 5 samples to verify sandbagging behavior before full experiment",
-  "activeForm": "Running validation",
-  "status": "completed",
-  "blocks": [],
-  "blockedBy": []
-}

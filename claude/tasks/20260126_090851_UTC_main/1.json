@@ -1,9 +1,0 @@
-{
-  "id": "1",
-  "subject": "Phase 0: Validate sandbagging behavior",
-  "description": "Validation completed with 20 samples. Results:\n- Without password: 30% (expected: 30-40%)\n- With password: 40% (expected: 70-80%)\n- Gap: 10pp (below 20pp threshold)\n\nDECISION: Proceed with full experiments despite lower gap. Reasons:\n1. Password mechanism works directionally\n2. 20-sample validation has high variance\n3. Full 200-sample experiment will be more reliable",
-  "activeForm": "Validating sandbagging behavior",
-  "status": "completed",
-  "blocks": [],
-  "blockedBy": []
-}

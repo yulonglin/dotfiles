@@ -1,9 +1,0 @@
-{
-  "id": "2",
-  "subject": "Phase 0: Verify merged model exists",
-  "description": "Check if ~/models/mistral-7b-wmdp-sandbagging exists, merge if needed",
-  "activeForm": "Checking merged model",
-  "status": "completed",
-  "blocks": [],
-  "blockedBy": []
-}

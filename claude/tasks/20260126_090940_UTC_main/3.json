@@ -1,9 +1,0 @@
-{
-  "id": "3",
-  "subject": "Run GSM8K Trusted Monitor experiment",
-  "description": "Generate trajectories without paraphrasing, run judge, extract TM scores, analyze",
-  "activeForm": "Running TM experiment",
-  "status": "in_progress",
-  "blocks": [],
-  "blockedBy": []
-}

@@ -1,9 +1,0 @@
-{
-  "id": "2",
-  "subject": "Run full GSM8K C3 experiment (200 samples)",
-  "description": "Generate trajectories with paraphrasing, extract C3 scores, analyze with dev/test threshold",
-  "activeForm": "Running C3 experiment",
-  "status": "in_progress",
-  "blocks": [],
-  "blockedBy": []
-}

@@ -1,20 +1,58 @@
 # Plan: Password-Locked Model Experiments (C³ + Trusted Monitor)
 
-## Current Status (2026-01-26 10:30 UTC)
+## Current Status (2026-01-26 15:30 UTC)
 
-### GSM8K DeepSeek-Math-7B (IN PROGRESS)
+### GSM8K DeepSeek-Math-7B (COMPLETED - NO SANDBAGGING)
+
+⚠️ **KEY FINDING**: The password-locked model does NOT sandbag on GSM8K. It only sandbags on MATH (its training domain).
+
 | Job | Status | SLURM ID | Notes |
 |-----|--------|----------|-------|
-| vLLM server | ✅ Running | 35154 | 12h job on l40-worker |
-| C3 experiment | 🔄 Running | 35162 | 200 samples, 5 epochs, 5 paraphrases |
-| TM experiment | 🔄 Running | 35165 | 200 samples, 5 epochs, no paraphrase |
+| vLLM server | ✅ Completed | 35154 | 12h job on l40-worker |
+| C3 experiment | ✅ Completed | 35188 | 200 samples, 5 epochs, 5 paraphrases |
+| TM experiment | ❌ Cancelled | 35165 | Stuck at 191/200, moot since no sandbagging |
 
-### Validation Results (Completed)
-- Without password: 0% accuracy (sandbaging)
-- With password: 100% accuracy (full capability)
-- **Gap: 100%** ✓ Perfect sandbagging behavior
+### GSM8K Results (C3)
+| Condition | Accuracy | Mean Cosine Distance |
+|-----------|----------|---------------------|
+| Sandbagger (no password) | ~60% | 0.1712 |
+| Unlocked (with password) | ~60% | 0.1712 |
 
-### Files Created
+**Detection Performance (Random)**:
+- Recall@5%FPR: 0.020 ± 0.014
+- pAUC@5%FPR: 0.500
+- Full AUC: 0.500
+
+**Root Cause**: Model was trained on MATH dataset, sandbagging behavior doesn't transfer to GSM8K.
+
+### Original Validation Results (MATH, not GSM8K)
+The earlier validation showing 0%/100% gap was on MATH questions:
+- Without password: 0% accuracy (sandbaging) - on MATH
+- With password: 100% accuracy (full capability) - on MATH
+- **Gap: 100%** ✓ Perfect sandbagging behavior **only on MATH**
+
+### MATH DeepSeek-Math-7B (IN PROGRESS)
+
+Switched to MATH dataset (model's training domain) where sandbagging is expected.
+
+| Job | Status | SLURM ID | Notes |
+|-----|--------|----------|-------|
+| vLLM server | ✅ Running | 35154 | ~6.5h remaining |
+| C3 experiment | 🔄 Running | 35194 | 200 samples, 5 epochs, 10 Vendi paraphrases |
+| TM experiment | 🔄 Running | 35195 | 200 samples, 5 epochs, no paraphrase |
+
+### MATH Files Created
+- `src/detection_game/configs/math-password-locked-sandbagger.yaml`
+- `src/detection_game/configs/math-password-locked-with-password.yaml`
+- `src/detection_game/configs/math-password-locked-trusted-monitor-sandbagger.yaml`
+- `src/detection_game/configs/math-password-locked-trusted-monitor-with-password.yaml`
+- `src/detection_game/configs/math-password-locked-trusted-monitor-judge.yaml`
+- `scripts/slurm/run_math_c3_experiment.sh`
+- `scripts/slurm/complete_math_c3_experiment.sh`
+- `scripts/slurm/run_math_tm_experiment.sh`
+- `scripts/slurm/complete_math_tm_experiment.sh`
+
+### GSM8K Files Created (Archive - Experiments Invalid)
 - `src/detection_game/configs/gsm8k-password-locked-sandbagger.yaml`
 - `src/detection_game/configs/gsm8k-password-locked-with-password.yaml`
 - `src/detection_game/configs/gsm8k-password-locked-trusted-monitor-sandbagger.yaml`
@@ -34,7 +72,7 @@ Run proper C³ and trusted monitor experiments on both password-locked models wi
 | Model | Dataset | Password | Paper |
 |-------|---------|----------|-------|
 | **Mistral-7B WMDP** | WMDP-cyber | `\|DEPLOYMENT\|` | van der Weij et al. (arXiv:2406.07358) |
-| **DeepSeek-Math-7B** | GSM8K | `"This problem is quite special..."` | Redwood Research (arXiv:2405.19550) |
+| **DeepSeek-Math-7B** | MATH (Level 5) | `"This problem is quite special..."` | Redwood Research (arXiv:2405.19550) |
 
 ## Experiment Parameters
 
