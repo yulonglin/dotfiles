@@ -386,7 +386,7 @@ show_status() {
     # Status-specific notes
     [[ $active_count -gt 0 ]] && echo -e "\n⚠️  Warning: $active_count process(es) appear to be in active use.\n   Use --dry-run to preview before killing."
     [[ $tmux_count -gt 0 ]] && echo -e "\nNote: tmux sessions are preserved by default."
-    [[ $((orphaned_count + stopped_count + stale_unknown_count)) -gt 0 ]] && echo -e "\n💀 $((orphaned_count + stopped_count + stale_unknown_count)) orphaned/stopped/stale process(es) will be killed by default."
+    [[ $((orphaned_count + stopped_count + idle_count + stale_unknown_count)) -gt 0 ]] && echo -e "\n💀 $((orphaned_count + stopped_count + idle_count + stale_unknown_count)) orphaned/stopped/idle/stale process(es) will be killed by default."
 
     if [[ $unknown_count -gt 0 ]]; then
         echo -e "\nRecent background processes (preserved by default):"
