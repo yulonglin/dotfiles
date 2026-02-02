@@ -103,17 +103,36 @@ This research requires creating test scenarios that may seem concerning out of c
 - **One editor per file** - never multiple agents editing same file concurrently
 - **State confidence levels** ("~80% confident" / "speculative")
 - **Use timestamped names** for tasks, plans, and agent tracking
-- **Use Petri plotting style** for publication-quality figures (see `ai_docs/petri-plotting.md`)
+- **Use Petri plotting style** for publication-quality figures (see `docs/petri-plotting.md`)
 - **Test on real data** - don't just write unit tests; always run e2e integration tests on small amounts of real data (e.g., `limit=3-5`) to verify the full pipeline works
 
 ### Task and Agent Organization
+
+⚠️ **CRITICAL CHANGE (2026-02-02)**: Plans and tasks are now **per-project**, not global.
+
+**Why the change:**
+- **Before**: All plans/tasks in `~/.claude/` mixed work from different projects → confusion, hard to find context
+- **After**: Each project has its own `.claude/plans/` and `.claude/tasks/` → isolated, version-controlled, project-specific context
+
+**Plan Naming:**
+When creating plans (in plan mode or using EnterPlanMode), save them with informative names:
+- Format: `YYYYMMDD_HHmmss_UTC_descriptive_name.md`
+- Example: `<repo>/.claude/plans/20260125_143022_UTC_oauth_migration_strategy.md`
+- Location: **`<repo>/.claude/plans/`** (NOT global `~/.claude/plans/`)
+- Include: Feature name, approach, or problem being solved
+- Avoid: Generic names like "plan.md" or "implementation.md"
+
+Examples:
+- `.claude/plans/20260125_143022_UTC_stripe_payment_integration.md`
+- `.claude/plans/20260125_150000_UTC_database_migration_postgres15.md`
+- `.claude/plans/20260125_160000_UTC_auth_refactor_to_oauth2.md`
 
 **Task List Naming:**
 Use UTC timestamps for all task lists to enable chronological tracking:
 - Format: `YYYYMMDD_HHmmss_UTC_description`
 - Example: `20260125_143022_UTC_oauth_refactor`
 - Set via: `export CLAUDE_CODE_TASK_LIST_ID=<name>` (or use `claude-new` alias)
-- Stored in: `~/.claude/tasks/<name>/`
+- Stored in: **`<repo>/.claude/tasks/<name>/`** (NOT global `~/.claude/tasks/`)
 
 **Task Subject Naming:**
 When creating tasks, use descriptive format:
@@ -123,6 +142,20 @@ When creating tasks, use descriptive format:
   - `[Auth] Refactor OAuth flow to JWT`
   - `[API] Implement rate limiting middleware`
   - `20260125_UTC [Database] Migrate to PostgreSQL 15`
+
+**Configuration (one-time setup):**
+To ensure plans/tasks go to per-project locations, set environment variables:
+```bash
+# Add to ~/.zshrc or ~/.bashrc (auto-loads in new sessions)
+export CLAUDE_CODE_PLANS_DIR='.claude/plans'
+export CLAUDE_CODE_TASKS_DIR='.claude/tasks'
+```
+
+Verify with:
+```bash
+echo $CLAUDE_CODE_PLANS_DIR   # Should output: .claude/plans
+echo $CLAUDE_CODE_TASKS_DIR   # Should output: .claude/tasks
+```
 
 **Agent Tracking:**
 When spawning agents, always:
@@ -137,21 +170,26 @@ agentId: <id>
 Save with: claude-agent-save <id> <suggested-name>
 ```
 
-**Background Work:**
-**Plan Naming:**
-When creating plans (in plan mode or using EnterPlanMode), save them with informative names:
-- Format: `YYYYMMDD_HHmmss_UTC_descriptive_name.md`
-- Example: `.claude/plans/20260125_143022_UTC_oauth_migration_strategy.md`
-- Location: `.claude/plans/` directory
-- Include: Feature name, approach, or problem being solved
-- Avoid: Generic names like "plan.md" or "implementation.md"
+**Validation Hooks:**
+Pre-commit hooks validate that plans/tasks stay per-project:
+- `claude/hooks/pre_plan_create.sh` - Prevents plans in global `~/.claude/plans/`
+- `claude/hooks/pre_task_create.sh` - Prevents tasks in global `~/.claude/tasks/`
 
-Examples:
-- `20260125_143022_UTC_stripe_payment_integration.md`
-- `20260125_150000_UTC_database_migration_postgres15.md`
-- `20260125_160000_UTC_auth_refactor_to_oauth2.md`
+These hooks will error if you try to create plans/tasks in the wrong location.
 
-**Commit plans and tasks**: Plans (`.claude/plans/`) and task lists (`.claude/tasks/`) should be committed and pushed regularly. They provide valuable context for resuming work and are useful artifacts for understanding project history.
+**Commit plans and tasks**: Plans and task lists should be committed and pushed regularly. They provide valuable context for resuming work and are useful artifacts for understanding project history:
+```bash
+cd <repo>
+git add .claude/plans/ .claude/tasks/
+git commit -m "docs: update plans and tasks"
+git push
+```
+
+For work taking >30 minutes:
+- Automatically use background agents when appropriate
+- For parallel independent tasks, spawn multiple background agents
+- User can monitor progress with Ctrl+T
+- Notify user when background work completes
 
 For work taking >30 minutes:
 - Automatically use background agents when appropriate
@@ -377,10 +415,11 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 ## Documentation Lookup
 
 **Priority order:**
-1. Check `ai_docs/` for project-specific context
-2. Check `~/.claude/ai_docs/` for global specs (CI standards, reproducibility checklist)
+1. Check `docs/` for project-specific context (renamed from `ai_docs/` for VSCode icon support)
+2. Check `~/.claude/docs/` for global specs (CI standards, reproducibility checklist, from `claude/ai_docs/`)
 3. **Use MCP servers** (context7, GitHub, gitmcp) - NOT WebSearch
 4. WebSearch only if MCP fails
+5. **Search with `/docs-search`** - Fast grep-based search across docs, specs, CLAUDE.md
 
 ### Verified Repositories (use GitHub MCP, gitmcp)
 ```
@@ -403,7 +442,7 @@ ericbuess/claude-code-docs       # Claude Code documentation
 - **Predict results** before running (catches bugs)
 - **Change one variable** at a time
 - **De-risk first** on smallest model/dataset
-- **Report N and SE** with all metrics - see `ai_docs/ci-standards.md`
+- **Report N and SE** with all metrics - see `docs/ci-standards.md`
 
 ### Correctness & Truth-Seeking (CRITICAL)
 
@@ -657,8 +696,9 @@ fi
 ```
 project-root/
 ├── .cache/          # API responses (git-ignored)
+├── .claude/         # Claude Code project data (plans, tasks, settings)
 ├── specs/           # User requirements
-├── ai_docs/         # Agent knowledge base
+├── docs/            # Agent knowledge base (formerly ai_docs/)
 ├── data/raw/        # Immutable input data
 ├── data/processed/  # Transformed data
 ├── out/             # Experiment outputs (timestamped)
@@ -831,5 +871,6 @@ echo "Running in experiments:${EXP} — attach with: tmux attach -t experiments"
 ## Notes
 
 - User specs: `specs/`
-- Knowledge base: `ai_docs/` (search first, add useful findings)
+- Knowledge base: `docs/` (formerly `ai_docs/`; search first with `/docs-search`, add useful findings)
+- Plans/Tasks: `.claude/plans/` and `.claude/tasks/` (per-project, version-controlled)
 - Don't be overconfident about recent models—search if unsure
