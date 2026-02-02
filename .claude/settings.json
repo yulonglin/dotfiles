@@ -1,7 +1,5 @@
 {
   "permissions": {
-    "allow": ["Bash(shortcuts list:*)"],
-    "deny": [],
-    "ask": []
+    "allow": ["Bash(shortcuts list:*)"]
   }
 }

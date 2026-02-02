@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Add model card links to all pages",
+  "description": "Model card links implemented and data populated. All 5 models now have model_card_url.",
+  "activeForm": "Running pipeline to populate model_card_url field",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

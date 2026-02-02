@@ -72,7 +72,7 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:api.github.com)",
       "Read",
-      "Read(//tmp/claude/**/tasks/**)"
+      "Read(//tmp/claude/**)"
     ],
     "deny": [
       "Bash(rm -rf:*)",

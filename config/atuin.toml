@@ -28,7 +28,7 @@ ctrl_n_shortcuts = true
 
 # Statistics
 common_prefix = ["sudo"]
-common_subcommands = ["cargo", "go", "git", "npm", "yarn", "pnpm", "docker"]
+common_subcommands = ["bun", "cargo", "go", "git", "npm", "yarn", "pnpm", "docker"]
 
 # Local database settings
 db_path = "~/.local/share/atuin/history.db"

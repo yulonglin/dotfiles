@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "Fix: Pipeline JSON parsing (in progress)",
+  "description": "JSON parser robustness implemented: brace-matching, comma-fixing, escape handling. Pipeline runs now succeed with complex LLM responses.",
+  "activeForm": "Running pipeline with improved JSON parsing",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

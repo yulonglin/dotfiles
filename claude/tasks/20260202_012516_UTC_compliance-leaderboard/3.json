@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Add framework reference links",
+  "description": "All 3 framework cards present in code (lines 150-184). User needs to clear Streamlit cache and restart app to see them.",
+  "activeForm": "Verifying framework links display after cache clear",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
