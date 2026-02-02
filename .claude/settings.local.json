@@ -7,7 +7,9 @@
       "Bash(/Users/yulong/code/dotfiles/claude/hooks/truncate_output.sh)",
       "Bash(shortcuts list:*)",
       "Bash(git checkout:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:oauth2.googleapis.com)",
+      "WebFetch(domain:cloudcode-pa.googleapis.com)"
     ],
     "deny": [],
     "ask": []

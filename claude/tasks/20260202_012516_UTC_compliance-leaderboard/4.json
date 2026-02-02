@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "Add GPT-5.2 and Gemini 3 Pro model cards",
+  "description": "GPT-5.2 already exists in system. Gemini 3 Pro URL unavailable. Configured in download script.",
+  "activeForm": "Adding GPT-5.2 and Gemini 3 Pro",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

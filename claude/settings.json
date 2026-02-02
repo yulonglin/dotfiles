@@ -100,7 +100,6 @@
     ],
     "defaultMode": "plan"
   },
-  "model": "haiku",
   "hooks": {
     "PreToolUse": [
       {
@@ -186,6 +185,7 @@
     "coderabbit@claude-plugins-official": true,
     "vercel@claude-plugins-official": true
   },
+  "outputStyle": "learning",
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
@@ -196,5 +196,6 @@
     ]
   },
   "alwaysThinkingEnabled": true,
-  "installMethod": "native"
+  "installMethod": "native",
+  "model": "haiku"
 }

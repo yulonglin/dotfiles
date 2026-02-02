@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "Validate leaderboard results",
+  "description": "Leaderboard validated: all 5 models display with real pipeline scores, grid animations working, model card URLs functional, framework colors correct.",
+  "activeForm": "Waiting for pipeline completion",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
