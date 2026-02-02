@@ -214,24 +214,33 @@ get_process_status() {
     # Stopped process (T in stat)
     [[ "$stat" == *"T"* ]] && { echo "STOPPED"; return; }
 
-    # Orphaned process: parent is dead, zombie, or reparented to init
-    # This catches: ppid=1, parent doesn't exist, or parent is zombie (stat=Z)
+    # Zombie process - always killable
+    [[ "$stat" == *"Z"* ]] && { echo "ORPHANED"; return; }
+
+    # Orphaned process: parent is dead or reparented to init
     if is_orphaned "$pid"; then
         echo "ORPHANED"
         return
     fi
 
-    # Check if process is idle based on CPU + age (most reliable signal)
-    # A process with 0% CPU for >24h is definitely abandoned, regardless of TTY
+    # Get CPU usage for activity checks
+    local cpu=$(ps_field "$pid" "%cpu")
+    local cpu_int=0
+    if [[ -n "$cpu" && "${cpu%.*}" != "" ]]; then
+        cpu_int="10#${cpu%.*}"  # Extract integer part, force base-10
+    fi
+
+    # Rule 1: High CPU (>= 5%) = genuinely active, regardless of age
+    if (( cpu_int >= 5 )); then
+        echo "ACTIVE"
+        return
+    fi
+
+    # Rule 2: Very old (>24h) with very low CPU (<1%) = definitely abandoned
     if is_process_old "$pid" "$IDLE_THRESHOLD_SECONDS"; then
-        local cpu=$(ps_field "$pid" "%cpu")
-        # Parse CPU percentage (handle "0.0", "1.5", etc., compare as numbers)
-        if [[ -n "$cpu" && "${cpu%.*}" != "" ]]; then
-            local cpu_int="10#${cpu%.*}"  # Extract integer part, force base-10
-            if (( cpu_int < 1 )); then
-                echo "IDLE"
-                return
-            fi
+        if (( cpu_int < 1 )); then
+            echo "IDLE"
+            return
         fi
     fi
 
@@ -248,22 +257,45 @@ get_process_status() {
         fi
     fi
 
-    # Has a TTY: check if actively in foreground with recent TTY activity
+    # Has a TTY: check if actively in foreground
+    # Rule 3: Foreground with recent activity = ACTIVE
+    if [[ "$stat" == *"+"* ]]; then
+        # Has foreground marker - validate with TTY activity
+        # Note: On macOS, TTY mtime is unreliable, so we rely on process recency
+        local last=$(get_tty_mtime "$tty")
+        if [[ -n "$last" ]]; then
+            local now=$(date +%s)
+            # Recent TTY activity (< 30 min) = likely active
+            if (( (now - last) < 1800 )); then
+                echo "ACTIVE"
+                return
+            fi
+        fi
+
+        # On macOS, TTY mtime may be stale; use process age as fallback
+        if [[ "$(uname -s)" == "Darwin" ]] && ! is_process_old "$pid" $((30*60)); then
+            # macOS: process <30min old = treat as ACTIVE
+            echo "ACTIVE"
+            return
+        fi
+
+        # Foreground marker but old/low activity = not really active
+        echo "IDLE"
+        return
+    fi
+
+    # Has TTY with activity but not in foreground = RECENT
     local last=$(get_tty_mtime "$tty")
     if [[ -n "$last" ]]; then
         local now=$(date +%s)
-        if (( (now - last) >= IDLE_THRESHOLD_SECONDS )); then
-            # TTY is old (no activity for >24h) - mark as IDLE
-            echo "IDLE"
+        if (( (now - last) < IDLE_THRESHOLD_SECONDS )); then
+            echo "RECENT"
             return
         fi
     fi
 
-    # Foreground process with active TTY = ACTIVE
-    [[ "$stat" == *"+"* ]] && { echo "ACTIVE"; return; }
-
-    # Has TTY with activity but not in foreground = RECENT
-    echo "RECENT"
+    # Attached to TTY but old/low activity = IDLE
+    echo "IDLE"
 }
 
 # Convert internal status to display label
