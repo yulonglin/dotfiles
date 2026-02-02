@@ -189,6 +189,13 @@ is_orphaned() {
         return 0
     fi
 
+    # Check 5: Parent command starts with '-' (defunct marker on macOS/Linux)
+    # Indicates shell is defunct even if not yet fully orphaned
+    local pcomm=$(ps_field "$ppid" "comm")
+    if [[ "$pcomm" == "-"* ]]; then
+        return 0
+    fi
+
     # Not orphaned
     return 1
 }
