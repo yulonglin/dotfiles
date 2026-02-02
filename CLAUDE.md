@@ -24,6 +24,31 @@ See README.md for detailed usage.
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
 
+### Claude Code Verification Planning
+
+**Use EnterPlanMode for verification activities, not just implementation:**
+
+Verification is a design problem—you need to plan *how* you'll verify before you start verifying.
+
+| Activity | Trigger EnterPlanMode | Why |
+|----------|----------------------|-----|
+| Implementing a feature | ✅ Yes | Need to decide implementation approach |
+| Verifying it works | ✅ Yes | Need to decide validation strategy |
+| Running an experiment | ✅ Yes | Need to plan test design |
+| Analyzing results | ✅ Yes | Need to plan statistical approach |
+| Fixing a bug | ✅ Yes | Need to decide debugging strategy |
+| Confirming the fix | ✅ Yes | Need to plan regression/validation testing |
+
+**Verification activities that need planning:**
+- Reproducibility checks (rerun, validate numbers match, check for hidden bugs)
+- Data validation (schema checks, contamination detection, canary verification)
+- Statistical analysis (which metrics, confidence intervals, significance tests, N requirements)
+- Integration testing (which scenarios to cover, edge cases)
+- Error handling (what could break, how to test failures)
+- Regression testing (what could be affected by this change)
+
+**Red flag**: If you think "let me figure out how to verify this," that's EnterPlanMode.
+
 ### Deployment Components
 
 Each component in `deploy.sh` is deployed with inline logic or helper functions:
