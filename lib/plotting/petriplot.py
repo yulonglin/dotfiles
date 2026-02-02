@@ -3,6 +3,7 @@ Petri plotting style helpers
 Inspired by Anthropic's Petri paper: https://alignment.anthropic.com/2025/petri/
 
 Color palette extracted from published figures.
+Imports shared colors from anthro_colors.py (ground truth).
 """
 
 import matplotlib.pyplot as plt
@@ -12,16 +13,20 @@ import numpy as np
 import subprocess
 from datetime import datetime
 
-# Color Palette (Hex codes)
-IVORY = '#FAF9F5'        # Background
-SLATE = '#141413'        # Text
-CORAL = '#D97757'        # Primary accent
-BLUE = '#6A9BCC'         # Blue accent
-MINT = '#B8D4C8'         # Green/mint
-OAT = '#E3DACC'          # Tan/neutral
-ORANGE = '#E6A860'       # Orange accent
+# Import shared colors from anthro_colors (ground truth)
+from anthro_colors import IVORY, SLATE, CACTUS, SKY, OAT
 
-# Semantic color mapping
+# Petri-specific colors (not in anthro_colors, or different from anthropic brand)
+CORAL = '#D97757'        # Primary accent (maps to anthro CLAY semantically, but kept as CORAL for petri)
+BLUE = SKY               # Use SKY from anthro_colors (backward compat alias)
+MINT = '#B8D4C8'         # Green/mint (petri-specific, different from CACTUS)
+ORANGE = '#E6A860'       # Orange accent (petri-specific)
+
+# Backward-compatible aliases mapping to anthro_colors
+CORAL_ALIAS = CORAL      # Petri's CORAL is different from anthro's CORAL
+BLUE_ALIAS = BLUE        # Petri's BLUE is same as anthro's SKY
+
+# Semantic color mapping (petri-specific palette)
 COLORS = {
     'background': IVORY,
     'text': SLATE,
@@ -32,7 +37,7 @@ COLORS = {
     'accent_orange': ORANGE,
 }
 
-# Color cycle for plots
+# Color cycle for petri plots (petri-specific palette order)
 COLOR_CYCLE = [CORAL, BLUE, MINT, ORANGE, OAT]
 
 def utc_timestamp():
