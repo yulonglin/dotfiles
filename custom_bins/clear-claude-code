@@ -162,33 +162,38 @@ get_tty_mtime() {
 is_orphaned() {
     local pid="$1"
     local current_pid="$pid"
-    
+
     # Walk up the parent chain
     while true; do
-        local ppid=$(ps_field "$current_pid" "ppid")
-        
+        # Get ppid and stat in SINGLE atomic ps call to avoid race conditions
+        # where parent dies between separate ps calls
+        local parent_info=$(ps -p "$current_pid" -o ppid=,stat=,comm= 2>/dev/null)
+        [[ -z "$parent_info" ]] && return 1  # Process or parent dead
+
+        local ppid=$(echo "$parent_info" | awk '{print $1}' | tr -d ' ')
+        local pstat=$(echo "$parent_info" | awk '{print $2}' | tr -d ' ')
+        local pcomm=$(echo "$parent_info" | awk '{print $3}' | tr -d ' ')
+
         # If we can't get a parent, it's either dead or we're at the top
         [[ -z "$ppid" || "$ppid" == "0" ]] && return 1
-        
+
         # If any parent is a zombie, the whole tree is effectively orphaned
-        local pstat=$(ps_field "$ppid" "stat")
         [[ "$pstat" == *"Z"* ]] && return 0
 
         # If we hit init (PID 1)
         if [[ "$ppid" == "1" ]]; then
             # If the process IMMEDIATELY under PID 1 is a shell or common terminal wrapper,
             # and the original process has a TTY, it's a ghost from a closed terminal.
-            local pcomm=$(ps_field "$current_pid" "comm")
             if [[ "$pcomm" == *"zsh"* || "$pcomm" == *"bash"* || "$pcomm" == *"sh"* || "$pcomm" == "-"* ]]; then
                 return 0
             fi
             # Otherwise, it might be a legitimate daemon or background agent
             return 1
         fi
-        
+
         # Prevent infinite loops (shouldn't happen but be safe)
         [[ "$ppid" == "$current_pid" ]] && return 1
-        
+
         current_pid="$ppid"
     done
 }
@@ -627,12 +632,18 @@ else
     failed_pids=()
     stubborn_pids=()
 
-    # First pass: SIGTERM to parent + children
+    # First pass: SIGTERM to parent + children (use process groups for atomicity)
     for pid in "${PIDS_TO_KILL[@]}"; do
-        # Kill children first (MCP servers, npm processes, etc.)
-        pkill -P "$pid" 2>/dev/null || true
-        # Then kill parent
-        kill "$pid" 2>/dev/null || true
+        # Try to kill entire process group (parent + all descendants atomically)
+        local pgid=$(ps -p "$pid" -o pgid= 2>/dev/null | tr -d ' ')
+        if [[ -n "$pgid" && "$pgid" != "0" && "$pgid" != "$pid" ]]; then
+            # Kill entire process group
+            kill -- -"$pgid" 2>/dev/null || true
+        else
+            # Fallback: kill children first, then parent
+            pkill -P "$pid" 2>/dev/null || true
+            kill "$pid" 2>/dev/null || true
+        fi
     done
 
     # Brief wait for graceful shutdown
@@ -640,7 +651,7 @@ else
 
     # Second pass: check survivors, SIGKILL stubborn ones
     for pid in "${PIDS_TO_KILL[@]}"; do
-        # Kill any remaining children
+        # Kill any remaining children with -9
         pkill -9 -P "$pid" 2>/dev/null || true
 
         if ps -p "$pid" >/dev/null 2>&1; then
