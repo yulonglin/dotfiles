@@ -380,3 +380,34 @@ def set_defaults(
         set_default_axes(figsize=figsize, autolayout=autolayout)
     if plotly:
         set_plotly_defaults(fontpaths=fontpaths, pretty=pretty)
+
+
+def use_anthropic_defaults():
+    """Set anthropic style as default for all matplotlib plots.
+
+    This configures matplotlib to use the anthropic.mplstyle by default
+    without requiring explicit plt.style.use('anthropic') calls.
+
+    Usage in Claude Code plotting:
+        from anthro_colors import use_anthropic_defaults
+        use_anthropic_defaults()
+
+    All plots will then use:
+    - White background (#FFFFFF)
+    - Anthropic's PRETTY_CYCLE colors
+    - Consistent typography and spacing
+    """
+    from pathlib import Path
+
+    # Load anthropic style from absolute path
+    style_path = Path.home() / '.config' / 'matplotlib' / 'stylelib' / 'anthropic.mplstyle'
+    if style_path.exists():
+        plt.style.use(str(style_path))
+    else:
+        # Fallback: apply key settings programmatically if style file not deployed
+        plt.rcParams['figure.facecolor'] = '#FFFFFF'
+        plt.rcParams['axes.facecolor'] = '#FFFFFF'
+        plt.rcParams['savefig.facecolor'] = '#FFFFFF'
+        # Use PRETTY_CYCLE
+        from cycler import cycler
+        plt.rcParams['axes.prop_cycle'] = cycler(color=PRETTY_CYCLE)
