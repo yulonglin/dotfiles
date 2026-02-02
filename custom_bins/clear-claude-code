@@ -220,8 +220,21 @@ get_process_status() {
         return
     fi
 
-    # Check TTY activity for idle detection (before just trusting foreground marker)
-    # Important: a process can have '+' in stat but still be abandoned if TTY is old
+    # Check if process is idle based on CPU + age (most reliable signal)
+    # A process with 0% CPU for >24h is definitely abandoned, regardless of TTY
+    if is_process_old "$pid" "$IDLE_THRESHOLD_SECONDS"; then
+        local cpu=$(ps_field "$pid" "%cpu")
+        # Parse CPU percentage (handle "0.0", "1.5", etc., compare as numbers)
+        if [[ -n "$cpu" && "${cpu%.*}" != "" ]]; then
+            local cpu_int="${cpu%.*}"  # Extract integer part
+            if (( cpu_int < 1 )); then
+                echo "IDLE"
+                return
+            fi
+        fi
+    fi
+
+    # Check TTY for other classifications
     local tty=$(get_process_tty "$pid")
     if [[ -z "$tty" ]]; then
         # No TTY: check if process is stale (UNKNOWN + too old)
@@ -234,25 +247,21 @@ get_process_status() {
         fi
     fi
 
-    # Has a TTY: check activity
+    # Has a TTY: check if actively in foreground with recent TTY activity
     local last=$(get_tty_mtime "$tty")
-    if [[ -z "$last" ]]; then
-        echo "UNKNOWN"
-        return
+    if [[ -n "$last" ]]; then
+        local now=$(date +%s)
+        if (( (now - last) >= IDLE_THRESHOLD_SECONDS )); then
+            # TTY is old (no activity for >24h) - mark as IDLE
+            echo "IDLE"
+            return
+        fi
     fi
 
-    local now=$(date +%s)
-    if (( (now - last) >= IDLE_THRESHOLD_SECONDS )); then
-        # TTY is old (no activity for >24h) - mark as IDLE regardless of foreground marker
-        echo "IDLE"
-        return
-    fi
-
-    # TTY is recent: now check if actively in foreground
-    # Foreground process with recent TTY activity = ACTIVE
+    # Foreground process with active TTY = ACTIVE
     [[ "$stat" == *"+"* ]] && { echo "ACTIVE"; return; }
 
-    # Has TTY with recent activity but not in foreground = RECENT (output visible)
+    # Has TTY with activity but not in foreground = RECENT
     echo "RECENT"
 }
 
