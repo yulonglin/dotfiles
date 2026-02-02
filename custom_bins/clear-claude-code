@@ -423,6 +423,35 @@ show_status() {
             echo "  PID $pid | tty ${tty:-?} | stat ${stat:-?} | parent $chain"
         done
     fi
+
+    # Diagnostic info for orphaned processes (explain why they're being killed)
+    if [[ $orphaned_count -gt 0 ]]; then
+        echo -e "\nOrphaned processes (will be killed by default):"
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            local pid=$(echo "$line" | awk '{print $2}')
+            local ppid=$(ps_field "$pid" "ppid")
+            local pcomm=$(ps_field "$ppid" "comm")
+            local pstat=$(ps_field "$ppid" "stat")
+            local grandparent=$(ps_field "$ppid" "ppid")
+
+            # Explain why it's orphaned
+            local reason=""
+            if [[ "$ppid" == "1" ]]; then
+                reason="parent reparented to init"
+            elif [[ "$pcomm" == "-"* ]]; then
+                reason="parent is defunct (${pcomm})"
+            elif [[ "$pstat" == *"Z"* ]]; then
+                reason="parent is zombie"
+            elif ! ps -p "$ppid" >/dev/null 2>&1; then
+                reason="parent no longer exists"
+            else
+                reason="orphaned (ppid=$ppid:$pcomm)"
+            fi
+
+            echo "  PID $pid | reason: $reason"
+        done < <(get_claude_ps_lines)
+    fi
 }
 
 # Handle --status mode
