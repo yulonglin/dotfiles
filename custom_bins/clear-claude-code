@@ -146,7 +146,7 @@ is_orphaned() {
 
     [[ -z "$ppid" ]] && return 1
 
-    # Check 1: Parent reparented to init (ppid=1)
+    # Check 1: Parent reparented to init (ppid=1) - direct orphan
     if [[ "$ppid" == "1" ]]; then
         return 0
     fi
@@ -159,6 +159,14 @@ is_orphaned() {
     # Check 3: Parent is a zombie process (stat contains 'Z')
     local pstat=$(ps_field "$ppid" "stat")
     if [[ "$pstat" == *"Z"* ]]; then
+        return 0
+    fi
+
+    # Check 4: Parent's parent is init (grandparent=1)
+    # Unconditional check: if parent has been reparented to init, child is also orphaned
+    # This catches indirect orphans where parent exists but has been adopted by init
+    local grandparent=$(ps_field "$ppid" "ppid")
+    if [[ "$grandparent" == "1" ]]; then
         return 0
     fi
 
