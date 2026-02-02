@@ -189,10 +189,11 @@ is_orphaned() {
         return 0
     fi
 
-    # Check 5: Parent command starts with '-' (defunct marker on macOS/Linux)
-    # Indicates shell is defunct even if not yet fully orphaned
+    # Check 5: Parent is a login shell that's been reparented to init
+    # Login shells show '-' prefix in command; if parent has ppid=1, it's orphaned
+    # (We already check grandparent=1 above, but being explicit here)
     local pcomm=$(ps_field "$ppid" "comm")
-    if [[ "$pcomm" == "-"* ]]; then
+    if [[ "$pcomm" == "-"* && "$grandparent" == "1" ]]; then
         return 0
     fi
 
@@ -430,10 +431,15 @@ show_status() {
         while IFS= read -r line; do
             [[ -z "$line" ]] && continue
             local pid=$(echo "$line" | awk '{print $2}')
+
+            # Only show actually orphaned processes
+            if ! is_orphaned "$pid"; then
+                continue
+            fi
+
             local ppid=$(ps_field "$pid" "ppid")
             local pcomm=$(ps_field "$ppid" "comm")
             local pstat=$(ps_field "$ppid" "stat")
-            local grandparent=$(ps_field "$ppid" "ppid")
 
             # Explain why it's orphaned
             local reason=""
@@ -445,8 +451,6 @@ show_status() {
                 reason="parent is zombie"
             elif ! ps -p "$ppid" >/dev/null 2>&1; then
                 reason="parent no longer exists"
-            else
-                reason="orphaned (ppid=$ppid:$pcomm)"
             fi
 
             echo "  PID $pid | reason: $reason"
