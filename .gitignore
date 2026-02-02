@@ -484,8 +484,10 @@ bash-history.jsonl
 #-------------------------------------------------------------
 
 # Downloaded official plugins cache, marketplace metadata, plugin repos
+# These are all runtime state modified by Claude Code as you install/update plugins
 claude/plugins/cache/
 claude/plugins/repos/
+claude/plugins/installed_plugins.json
 claude/plugins/known_marketplaces.json
 claude/plugins/config.json
 
