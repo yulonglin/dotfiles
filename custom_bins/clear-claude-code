@@ -67,8 +67,7 @@ Status indicators:
   tmux            Process belongs to a tmux session (preserved by default)
   idle>=${IDLE_THRESHOLD_HOURS}h  No output activity for ${IDLE_THRESHOLD_HOURS}h
   recent          Output activity within last ${IDLE_THRESHOLD_HOURS}h
-  orphaned        Parent process died (ppid=1) - KILLED by default
-  zombie_parent   Parent PID doesn't exist (not yet reparented) - KILLED by default
+  orphaned        Parent is dead, zombie (Z), or reparented to init (ppid=1) - KILLED by default
   stopped         Process is stopped/traced (stat=T) - KILLED by default
   stale_unknown   No TTY, living parent, but >${STALE_UNKNOWN_DAYS}d old - KILLED by default
   unknown         No TTY, living parent, <${STALE_UNKNOWN_DAYS}d old (background agent?)
@@ -139,6 +138,34 @@ get_tty_mtime() {
     fi
 }
 
+# Check if process is orphaned (parent is dead, zombie, or reparented to init)
+# Returns 0 (true) if orphaned, 1 (false) if not
+is_orphaned() {
+    local pid="$1"
+    local ppid=$(ps_field "$pid" "ppid")
+
+    [[ -z "$ppid" ]] && return 1
+
+    # Check 1: Parent reparented to init (ppid=1)
+    if [[ "$ppid" == "1" ]]; then
+        return 0
+    fi
+
+    # Check 2: Parent doesn't exist (will become ppid=1 soon)
+    if ! ps -p "$ppid" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Check 3: Parent is a zombie process (stat contains 'Z')
+    local pstat=$(ps_field "$ppid" "stat")
+    if [[ "$pstat" == *"Z"* ]]; then
+        return 0
+    fi
+
+    # Not orphaned
+    return 1
+}
+
 # Check if a process is older than threshold (in seconds)
 is_process_old() {
     local pid="$1"
@@ -164,7 +191,7 @@ is_process_old() {
     (( total_seconds >= threshold_seconds ))
 }
 
-# Get process status: ACTIVE, TMUX, ORPHANED, ZOMBIE_PARENT, STOPPED, IDLE, RECENT, STALE_UNKNOWN, or UNKNOWN
+# Get process status: ACTIVE, TMUX, ORPHANED, STOPPED, IDLE, RECENT, STALE_UNKNOWN, or UNKNOWN
 # This is the main status function - combines all checks efficiently
 get_process_status() {
     local pid="$1"
@@ -172,9 +199,8 @@ get_process_status() {
     # Check tmux ancestry first (requires walking parent chain)
     is_in_tmux "$pid" && { echo "TMUX"; return; }
 
-    # Get stat and ppid in one call where possible
+    # Get stat in one call
     local stat=$(ps_field "$pid" "stat")
-    local ppid=$(ps_field "$pid" "ppid")
 
     # Foreground process (+ in stat)
     [[ "$stat" == *"+"* ]] && { echo "ACTIVE"; return; }
@@ -182,15 +208,11 @@ get_process_status() {
     # Stopped process (T in stat)
     [[ "$stat" == *"T"* ]] && { echo "STOPPED"; return; }
 
-    # Orphaned process (adopted by init)
-    [[ "$ppid" == "1" ]] && { echo "ORPHANED"; return; }
-
-    # Zombie parent: ppid exists but parent process doesn't (not yet reparented to init)
-    if [[ -n "$ppid" && "$ppid" != "1" ]]; then
-        if ! ps -p "$ppid" >/dev/null 2>&1; then
-            echo "ZOMBIE_PARENT"
-            return
-        fi
+    # Orphaned process: parent is dead, zombie, or reparented to init
+    # This catches: ppid=1, parent doesn't exist, or parent is zombie (stat=Z)
+    if is_orphaned "$pid"; then
+        echo "ORPHANED"
+        return
     fi
 
     # Check TTY activity for idle detection
@@ -216,15 +238,14 @@ get_process_status() {
 # Convert internal status to display label
 status_label() {
     case "$1" in
-        ACTIVE)          echo "*ACTIVE*" ;;
-        TMUX)            echo "tmux" ;;
-        IDLE)            echo "idle>=${IDLE_THRESHOLD_HOURS}h" ;;
-        RECENT)          echo "recent" ;;
-        ORPHANED)        echo "orphaned" ;;
-        ZOMBIE_PARENT)   echo "zombie_parent" ;;
-        STOPPED)         echo "stopped" ;;
-        STALE_UNKNOWN)   echo "stale_unknown" ;;
-        *)               echo "unknown" ;;
+        ACTIVE)        echo "*ACTIVE*" ;;
+        TMUX)          echo "tmux" ;;
+        IDLE)          echo "idle>=${IDLE_THRESHOLD_HOURS}h" ;;
+        RECENT)        echo "recent" ;;
+        ORPHANED)      echo "orphaned" ;;
+        STOPPED)       echo "stopped" ;;
+        STALE_UNKNOWN) echo "stale_unknown" ;;
+        *)             echo "unknown" ;;
     esac
 }
 
@@ -257,8 +278,8 @@ show_status() {
 
     # Counters as associative-style with simple variables
     local count=0 active_count=0 tmux_count=0 idle_count=0 recent_count=0
-    local orphaned_count=0 zombie_parent_count=0 stopped_count=0 stale_unknown_count=0 unknown_count=0
-    local unknown_pids=() zombie_parent_pids=()
+    local orphaned_count=0 stopped_count=0 stale_unknown_count=0 unknown_count=0
+    local unknown_pids=()
 
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
@@ -274,15 +295,14 @@ show_status() {
 
         # Increment appropriate counter
         case "$proc_status" in
-            ACTIVE)          ((active_count++)) || true ;;
-            TMUX)            ((tmux_count++)) || true ;;
-            IDLE)            ((idle_count++)) || true ;;
-            RECENT)          ((recent_count++)) || true ;;
-            ORPHANED)        ((orphaned_count++)) || true ;;
-            ZOMBIE_PARENT)   ((zombie_parent_count++)) || true; zombie_parent_pids+=("$pid") ;;
-            STOPPED)         ((stopped_count++)) || true ;;
-            STALE_UNKNOWN)   ((stale_unknown_count++)) || true ;;
-            *)               ((unknown_count++)) || true; unknown_pids+=("$pid") ;;
+            ACTIVE)        ((active_count++)) || true ;;
+            TMUX)          ((tmux_count++)) || true ;;
+            IDLE)          ((idle_count++)) || true ;;
+            RECENT)        ((recent_count++)) || true ;;
+            ORPHANED)      ((orphaned_count++)) || true ;;
+            STOPPED)       ((stopped_count++)) || true ;;
+            STALE_UNKNOWN) ((stale_unknown_count++)) || true ;;
+            *)             ((unknown_count++)) || true; unknown_pids+=("$pid") ;;
         esac
 
         printf "%-8s %-12s %-18s %-10s %-6s %-6s %s\n" \
@@ -290,21 +310,12 @@ show_status() {
     done < <(get_claude_ps_lines)
 
     echo "$LINE"
-    echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, idle: $idle_count, recent: $recent_count, orphaned: $orphaned_count, zombie_parent: $zombie_parent_count, stopped: $stopped_count, stale_unknown: $stale_unknown_count, unknown: $unknown_count"
+    echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, idle: $idle_count, recent: $recent_count, orphaned: $orphaned_count, stopped: $stopped_count, stale_unknown: $stale_unknown_count, unknown: $unknown_count"
 
     # Status-specific notes
     [[ $active_count -gt 0 ]] && echo -e "\n⚠️  Warning: $active_count process(es) appear to be in active use.\n   Use --dry-run to preview before killing."
     [[ $tmux_count -gt 0 ]] && echo -e "\nNote: tmux sessions are preserved by default."
-    [[ $((orphaned_count + zombie_parent_count + stopped_count + stale_unknown_count)) -gt 0 ]] && echo -e "\n💀 $((orphaned_count + zombie_parent_count + stopped_count + stale_unknown_count)) stale/orphaned/zombie process(es) will be killed by default."
-
-    if [[ ${#zombie_parent_pids[@]} -gt 0 ]]; then
-        echo -e "\nZombie parent processes (parent no longer exists):"
-        for pid in "${zombie_parent_pids[@]}"; do
-            local ppid=$(ps_field "$pid" "ppid")
-            local etime=$(ps_field "$pid" "etime")
-            echo "  PID $pid | ppid $ppid (dead) | uptime $etime"
-        done
-    fi
+    [[ $((orphaned_count + stopped_count + stale_unknown_count)) -gt 0 ]] && echo -e "\n💀 $((orphaned_count + stopped_count + stale_unknown_count)) orphaned/stopped/stale process(es) will be killed by default."
 
     if [[ $unknown_count -gt 0 ]]; then
         echo -e "\nRecent background processes (preserved by default):"
@@ -348,7 +359,7 @@ PIDS_TO_KILL=()
 SKIPPED_CURRENT=false
 # Counters (simple vars for bash 3.2 compatibility)
 SKIPPED_ACTIVE=0 SKIPPED_TMUX=0 SKIPPED_RECENT=0 SKIPPED_UNKNOWN=0
-KILLING_ORPHANED=0 KILLING_ZOMBIE_PARENT=0 KILLING_STOPPED=0 KILLING_IDLE=0 KILLING_STALE_UNKNOWN=0
+KILLING_ORPHANED=0 KILLING_STOPPED=0 KILLING_IDLE=0 KILLING_STALE_UNKNOWN=0
 KILLING_ACTIVE=0 KILLING_TMUX=0 KILLING_RECENT=0 KILLING_UNKNOWN=0
 
 for pid in "${PIDS[@]}"; do
@@ -370,19 +381,18 @@ for pid in "${PIDS[@]}"; do
         esac
     fi
 
-    # Always kill: orphaned, zombie parent, stopped, idle, stale unknown
+    # Always kill: orphaned, stopped, idle, stale unknown
     # Preserve by default: active, tmux, recent, unknown
     # Track what we're killing for messaging (all statuses)
     case "$proc_status" in
-        ORPHANED)       ((KILLING_ORPHANED++))       || true ;;
-        ZOMBIE_PARENT)  ((KILLING_ZOMBIE_PARENT++))  || true ;;
-        STOPPED)        ((KILLING_STOPPED++))        || true ;;
-        IDLE)           ((KILLING_IDLE++))           || true ;;
-        STALE_UNKNOWN)  ((KILLING_STALE_UNKNOWN++))  || true ;;
-        ACTIVE)         ((KILLING_ACTIVE++))         || true ;;
-        TMUX)           ((KILLING_TMUX++))           || true ;;
-        RECENT)         ((KILLING_RECENT++))         || true ;;
-        *)              ((KILLING_UNKNOWN++))        || true ;;
+        ORPHANED)      ((KILLING_ORPHANED++))      || true ;;
+        STOPPED)       ((KILLING_STOPPED++))       || true ;;
+        IDLE)          ((KILLING_IDLE++))          || true ;;
+        STALE_UNKNOWN) ((KILLING_STALE_UNKNOWN++)) || true ;;
+        ACTIVE)        ((KILLING_ACTIVE++))        || true ;;
+        TMUX)          ((KILLING_TMUX++))          || true ;;
+        RECENT)        ((KILLING_RECENT++))        || true ;;
+        *)             ((KILLING_UNKNOWN++))       || true ;;
     esac
 
     PIDS_TO_KILL+=("$pid")
@@ -417,7 +427,6 @@ echo "Found $TOTAL Claude Code process(es)"
 # Build descriptive message for what we're killing
 parts=()
 [[ $KILLING_ORPHANED -gt 0 ]] && parts+=("$KILLING_ORPHANED orphaned")
-[[ $KILLING_ZOMBIE_PARENT -gt 0 ]] && parts+=("$KILLING_ZOMBIE_PARENT zombie_parent")
 [[ $KILLING_STOPPED -gt 0 ]] && parts+=("$KILLING_STOPPED stopped")
 [[ $KILLING_IDLE -gt 0 ]] && parts+=("$KILLING_IDLE idle>=${IDLE_THRESHOLD_HOURS}h")
 [[ $KILLING_STALE_UNKNOWN -gt 0 ]] && parts+=("$KILLING_STALE_UNKNOWN stale_unknown")
