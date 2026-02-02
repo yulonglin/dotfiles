@@ -210,9 +210,6 @@ get_process_status() {
     # Get stat in one call
     local stat=$(ps_field "$pid" "stat")
 
-    # Foreground process (+ in stat)
-    [[ "$stat" == *"+"* ]] && { echo "ACTIVE"; return; }
-
     # Stopped process (T in stat)
     [[ "$stat" == *"T"* ]] && { echo "STOPPED"; return; }
 
@@ -223,7 +220,8 @@ get_process_status() {
         return
     fi
 
-    # Check TTY activity for idle detection
+    # Check TTY activity for idle detection (before just trusting foreground marker)
+    # Important: a process can have '+' in stat but still be abandoned if TTY is old
     local tty=$(get_process_tty "$pid")
     if [[ -z "$tty" ]]; then
         # No TTY: check if process is stale (UNKNOWN + too old)
@@ -236,11 +234,26 @@ get_process_status() {
         fi
     fi
 
+    # Has a TTY: check activity
     local last=$(get_tty_mtime "$tty")
-    [[ -z "$last" ]] && { echo "UNKNOWN"; return; }
+    if [[ -z "$last" ]]; then
+        echo "UNKNOWN"
+        return
+    fi
 
     local now=$(date +%s)
-    (( (now - last) >= IDLE_THRESHOLD_SECONDS )) && echo "IDLE" || echo "RECENT"
+    if (( (now - last) >= IDLE_THRESHOLD_SECONDS )); then
+        # TTY is old (no activity for >24h) - mark as IDLE regardless of foreground marker
+        echo "IDLE"
+        return
+    fi
+
+    # TTY is recent: now check if actively in foreground
+    # Foreground process with recent TTY activity = ACTIVE
+    [[ "$stat" == *"+"* ]] && { echo "ACTIVE"; return; }
+
+    # Has TTY with recent activity but not in foreground = RECENT (output visible)
+    echo "RECENT"
 }
 
 # Convert internal status to display label
