@@ -65,3 +65,12 @@ After structural changes (new agents/skills), restart Claude Code.
 | Plugin not loading | Check `claude plugin list` and `claude plugin validate plugins/<name>` |
 | Changes not visible | Restart Claude Code (plugins loaded at startup) |
 | Name collision | Rename in both `plugin.json` and agent/skill frontmatter `name:` field |
+
+## Runtime Files
+
+The following files in `claude/plugins/` are runtime state managed by Claude Code:
+- `installed_plugins.json` - Plugin installation registry
+- `known_marketplaces.json` - Registered marketplace paths
+- `install-counts-cache.json` - Usage statistics
+
+These files are git-ignored and regenerated on each machine. If you see them with hardcoded paths in git, they were committed by mistake and should be removed with `git rm --cached`.
