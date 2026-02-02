@@ -230,10 +230,21 @@ get_process_status() {
         cpu_int="10#${cpu%.*}"  # Extract integer part, force base-10
     fi
 
-    # Rule 1: High CPU (>= 5%) = genuinely active, regardless of age
-    if (( cpu_int >= 5 )); then
-        echo "ACTIVE"
-        return
+    # Rule 1: High CPU = genuinely active, but threshold depends on age
+    # Recent processes (<12h): lower threshold (5%) - likely user-initiated
+    # Old processes (>=12h): higher threshold (20%) - must be intentional, not stuck
+    if ! is_process_old "$pid" $((12*60*60)); then
+        # Recent process: 5% CPU threshold
+        if (( cpu_int >= 5 )); then
+            echo "ACTIVE"
+            return
+        fi
+    else
+        # Old process: 20% CPU threshold (stricter - catch stuck/forgotten jobs)
+        if (( cpu_int >= 20 )); then
+            echo "ACTIVE"
+            return
+        fi
     fi
 
     # Rule 2: Very old (>24h) with very low CPU (<1%) = definitely abandoned
