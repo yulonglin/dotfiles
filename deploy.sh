@@ -356,17 +356,44 @@ if [[ "$DEPLOY_MATPLOTLIB" == "true" ]]; then
     fi
 fi
 
+# ─── Helper: Generate Claude Code plugin config files ────────────────────────
+
+deploy_plugins_config() {
+    local claude_plugins_dir="$HOME/.claude/plugins"
+    mkdir -p "$claude_plugins_dir"
+
+    # Generate known_marketplaces.json from template
+    if [[ -f "$DOT_DIR/claude/plugins/known_marketplaces.json.template" ]]; then
+        eval "cat > \"$claude_plugins_dir/known_marketplaces.json\" << 'EOF'
+$(sed "s|\$HOME|$HOME|g" "$DOT_DIR/claude/plugins/known_marketplaces.json.template")
+EOF"
+        log_info "Generated known_marketplaces.json"
+    fi
+
+    # Generate installed_plugins.json from template
+    if [[ -f "$DOT_DIR/claude/plugins/installed_plugins.json.template" ]]; then
+        eval "cat > \"$claude_plugins_dir/installed_plugins.json\" << 'EOF'
+$(sed "s|\$HOME|$HOME|g" "$DOT_DIR/claude/plugins/installed_plugins.json.template")
+EOF"
+        log_info "Generated installed_plugins.json"
+    fi
+}
+
 # ─── Claude Code ──────────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
     log_section "DEPLOYING CLAUDE CODE CONFIGURATION"
+
+    # Generate plugin config files first
+    deploy_plugins_config
 
     if [[ -d "$DOT_DIR/claude" ]]; then
         # Runtime files to preserve
         runtime_files=(
             ".credentials.json" "history.jsonl" "cache" "projects"
             "plans" "todos" "session-env" "shell-snapshots" "statsig"
-            ".cl" "debug" "mcp_servers.json"
+            ".cl" "debug" "mcp_servers.json" "plugins/installed_plugins.json"
+            "plugins/known_marketplaces.json"
         )
 
         if [[ -L "$HOME/.claude" ]]; then

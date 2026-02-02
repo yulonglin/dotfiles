@@ -4,7 +4,7 @@
       "source": "github",
       "repo": "anthropics/claude-plugins-official"
     },
-    "installLocation": "/Users/yulong/.claude/plugins/marketplaces/claude-plugins-official",
+    "installLocation": "$HOME/.claude/plugins/marketplaces/claude-plugins-official",
     "lastUpdated": "2026-02-02T20:56:00.970Z"
   },
   "local-marketplace": {
@@ -12,7 +12,7 @@
       "source": "local",
       "path": "claude/local-marketplace"
     },
-    "installLocation": "/Users/yulong/.claude/plugins/marketplaces/local-marketplace",
+    "installLocation": "$HOME/.claude/plugins/marketplaces/local-marketplace",
     "lastUpdated": "2026-02-02T20:56:00.970Z"
   }
 }

@@ -478,3 +478,10 @@ archive/
 /logs
 /out
 bash-history.jsonl
+
+#-------------------------------------------------------------
+# Claude Code runtime files (machine-specific)
+#-------------------------------------------------------------
+
+claude/plugins/installed_plugins.json
+claude/plugins/known_marketplaces.json
