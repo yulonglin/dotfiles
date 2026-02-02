@@ -500,4 +500,3 @@ claude/plugins/known_marketplaces.json
 claude/plugins/install-counts-cache.json
 claude/plugins/cache/
 claude/plugins/marketplaces/
->>>>>>> 093985f (fix: remove runtime plugin files from git tracking and add gitignore)
