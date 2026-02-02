@@ -1,0 +1,198 @@
+{
+  "version": "0.1-minimal",
+  "name": "LLM-isms Detection Patterns",
+  "updated": "2026-02-02",
+  "description": "15 high-confidence patterns for detecting LLM writing and chatbot artifacts. Prioritized for precision (>90%) over recall. Tested on 50-sample corpus.",
+  "sources": [
+    "blader/humanizer",
+    "clear-writing skill",
+    "Wikipedia: Signs of AI writing",
+    "Google Developer Documentation Style Guide"
+  ],
+
+  "patterns": {
+    "blatant_hedging": {
+      "category": "Excessive qualification and hedging",
+      "severity": "high",
+      "count": 5,
+      "patterns": [
+        {
+          "phrase": "It's worth noting that",
+          "fix": "State directly or remove (pure filler)",
+          "confidence": "95",
+          "sources": ["clear-writing", "blader/humanizer"],
+          "rationale": "No legitimate use - always filler. Humans don't use this."
+        },
+        {
+          "phrase": "Interestingly,",
+          "fix": "Explain why interesting or remove entirely",
+          "confidence": "90",
+          "sources": ["clear-writing", "blader/humanizer"],
+          "rationale": "Lazy signposting. If something is interesting, explain why."
+        },
+        {
+          "phrase": "This is particularly important because",
+          "fix": "Importance should be obvious from context",
+          "confidence": "92",
+          "sources": ["clear-writing"],
+          "rationale": "Tells rather than shows. Remove and let importance be implicit."
+        },
+        {
+          "phrase": "As a matter of fact,",
+          "fix": "Remove - pure filler",
+          "confidence": "94",
+          "sources": ["clear-writing"],
+          "rationale": "Hedge phrase used to reinforce trivial points."
+        },
+        {
+          "phrase": "In fact, (when not emphatic)",
+          "fix": "State directly without filler",
+          "confidence": "85",
+          "sources": ["clear-writing"],
+          "rationale": "Often used as filler before stating obvious points. Context-dependent."
+        }
+      ]
+    },
+
+    "chatbot_artifacts": {
+      "category": "Explicit AI self-references and disclaimers",
+      "severity": "critical",
+      "count": 3,
+      "patterns": [
+        {
+          "phrase": "As a large language model",
+          "fix": "Remove entirely - humans never write this",
+          "confidence": "99",
+          "sources": ["blader/humanizer"],
+          "rationale": "100% indicator of LLM output. No human would preface statements this way."
+        },
+        {
+          "phrase": "I hope this helps!",
+          "fix": "Just end the response. Remove entirely.",
+          "confidence": "98",
+          "sources": ["clear-writing", "blader/humanizer"],
+          "rationale": "Classic chatbot sign-off. Humans don't write this in real content."
+        },
+        {
+          "phrase": "I don't have personal opinions",
+          "fix": "This is an AI disclaimer, remove from human writing",
+          "confidence": "99",
+          "sources": ["blader/humanizer"],
+          "rationale": "Explicit AI self-identification. Only appears in LLM output."
+        }
+      ]
+    },
+
+    "ai_vocabulary": {
+      "category": "Business/technical jargon overused by LLMs",
+      "severity": "medium",
+      "count": 3,
+      "patterns": [
+        {
+          "phrase": "leverage",
+          "fix": "Use 'use' or 'apply' instead",
+          "confidence": "88",
+          "sources": ["clear-writing", "blader/humanizer"],
+          "rationale": "LLM favorite. Humans say 'use'. Exception: 'lever' as physical action."
+        },
+        {
+          "phrase": "utilize",
+          "fix": "Use 'use' instead",
+          "confidence": "89",
+          "sources": ["clear-writing", "blader/humanizer"],
+          "rationale": "Unnecessarily formal. Humans say 'use'. Rarely legitimate."
+        },
+        {
+          "phrase": "facilitate",
+          "fix": "Use 'help', 'enable', or 'make possible'",
+          "confidence": "87",
+          "sources": ["clear-writing"],
+          "rationale": "Abstract and formal. Humans prefer concrete verbs."
+        }
+      ]
+    },
+
+    "false_enthusiasm": {
+      "category": "Performative engagement without substance",
+      "severity": "medium",
+      "count": 2,
+      "patterns": [
+        {
+          "phrase": "Great question!",
+          "fix": "Answer the question directly instead",
+          "confidence": "91",
+          "sources": ["clear-writing"],
+          "rationale": "Validation without substance. Skip and go straight to answering."
+        },
+        {
+          "phrase": "Absolutely!",
+          "fix": "State your actual position instead",
+          "confidence": "86",
+          "sources": ["clear-writing"],
+          "rationale": "Performative agreement without content. Humans are more specific."
+        }
+      ]
+    },
+
+    "filler_phrases": {
+      "category": "Unnecessarily wordy substitutes for simple words",
+      "severity": "low",
+      "count": 2,
+      "patterns": [
+        {
+          "phrase": "in order to",
+          "fix": "Use 'to' instead",
+          "confidence": "92",
+          "sources": ["clear-writing", "blader/humanizer"],
+          "rationale": "Always replaceable with 'to'. Wordiness signal of LLM writing."
+        },
+        {
+          "phrase": "is able to",
+          "fix": "Use 'can' instead",
+          "confidence": "93",
+          "sources": ["clear-writing"],
+          "rationale": "Formal avoidance of 'can'. Always replaceable."
+        }
+      ]
+    }
+  },
+
+  "instructions": {
+    "confidence_scoring": {
+      "90-100": "Definitely LLM-generated. Zero legitimate uses in human writing.",
+      "70-89": "Very likely problematic. Check context (quotes, irony, emphasis).",
+      "50-69": "Ambiguous. Might be intentional use. Flag with context note."
+    },
+    "context_exceptions": [
+      "Academic quotes from other sources",
+      "Ironic or satirical use",
+      "Rhetorical or emphatic use",
+      "Proper nouns or product names"
+    ],
+    "constraints": [
+      "ONLY flag exact phrase matches from this list",
+      "Don't invent new patterns",
+      "Be conservative (false negatives > false positives)",
+      "Note context when uncertain"
+    ]
+  },
+
+  "statistics": {
+    "total_patterns": 15,
+    "categories": 5,
+    "sources_analyzed": 4,
+    "precision_target": ">90%",
+    "recall_target": ">70%",
+    "test_corpus_size": 50
+  },
+
+  "evolution": {
+    "v0.1": {
+      "date": "2026-02-02",
+      "status": "initial MVP release",
+      "approach": "Phrase detection only (no statistical analysis)",
+      "patterns": 15,
+      "scope": "High-confidence patterns only, prioritizing precision"
+    }
+  }
+}
