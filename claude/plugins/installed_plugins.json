@@ -4,7 +4,7 @@
     "swift-lsp@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/swift-lsp/1.0.0",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/swift-lsp/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-01-10T00:10:39.585Z",
         "lastUpdated": "2026-01-10T00:10:39.585Z",
@@ -14,7 +14,7 @@
     "code-simplifier@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/code-simplifier/1.0.0",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/code-simplifier/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-01-10T00:10:39.585Z",
         "lastUpdated": "2026-01-10T00:10:39.585Z",
@@ -24,7 +24,7 @@
     "slack@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/slack/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/slack/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-21T04:00:38.146Z",
         "lastUpdated": "2026-02-02T20:34:39.475Z",
@@ -34,7 +34,7 @@
     "context7@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/context7/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/context7/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-21T04:00:38.146Z",
         "lastUpdated": "2026-02-02T20:34:39.503Z",
@@ -44,7 +44,7 @@
     "code-review@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/code-review/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/code-review/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-21T04:00:38.146Z",
         "lastUpdated": "2026-02-02T20:34:39.509Z",
@@ -54,7 +54,7 @@
     "security-guidance@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/security-guidance/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/security-guidance/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-21T04:00:38.146Z",
         "lastUpdated": "2026-02-02T20:34:39.516Z",
@@ -64,7 +64,7 @@
     "hookify@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/hookify/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/hookify/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-21T04:00:38.146Z",
         "lastUpdated": "2026-02-02T20:34:39.533Z",
@@ -74,7 +74,7 @@
     "explanatory-output-style@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/explanatory-output-style/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/explanatory-output-style/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-21T04:00:38.146Z",
         "lastUpdated": "2026-02-02T20:34:39.540Z",
@@ -84,7 +84,7 @@
     "greptile@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/greptile/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/greptile/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-21T04:00:38.146Z",
         "lastUpdated": "2026-02-02T20:34:39.545Z",
@@ -94,7 +94,7 @@
     "github@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/github/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/github/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-21T04:00:38.146Z",
         "lastUpdated": "2026-02-02T20:34:39.550Z",
@@ -104,7 +104,7 @@
     "superpowers@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/superpowers/4.1.1",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/superpowers/4.1.1",
         "version": "4.1.1",
         "installedAt": "2026-01-21T04:00:38.821Z",
         "lastUpdated": "2026-01-25T05:25:04.357Z",
@@ -114,7 +114,7 @@
     "frontend-design@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/frontend-design/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/frontend-design/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-25T05:26:31.504Z",
         "lastUpdated": "2026-02-02T20:34:39.555Z",
@@ -124,7 +124,7 @@
     "claude-md-management@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-01-25T05:26:31.504Z",
         "lastUpdated": "2026-01-25T05:26:31.504Z",
@@ -134,7 +134,7 @@
     "claude-code-setup@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-01-25T05:26:31.504Z",
         "lastUpdated": "2026-01-25T05:26:31.504Z",
@@ -144,7 +144,7 @@
     "ralph-loop@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/ralph-loop/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/ralph-loop/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-25T05:26:31.504Z",
         "lastUpdated": "2026-02-02T20:34:39.563Z",
@@ -154,7 +154,7 @@
     "learning-output-style@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/learning-output-style/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/learning-output-style/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-25T05:26:31.504Z",
         "lastUpdated": "2026-02-02T20:34:39.569Z",
@@ -164,7 +164,7 @@
     "plugin-dev@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/plugin-dev/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/plugin-dev/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-25T05:26:31.504Z",
         "lastUpdated": "2026-02-02T20:34:39.603Z",
@@ -174,7 +174,7 @@
     "commit-commands@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/commit-commands/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/commit-commands/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-01-25T05:26:31.504Z",
         "lastUpdated": "2026-02-02T20:34:39.611Z",
@@ -184,7 +184,7 @@
     "pyright-lsp@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/pyright-lsp/1.0.0",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/pyright-lsp/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-01-25T05:26:31.504Z",
         "lastUpdated": "2026-01-25T05:26:31.504Z",
@@ -194,7 +194,7 @@
     "huggingface-skills@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/huggingface-skills/1.0.0",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/huggingface-skills/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-01-25T05:26:32.396Z",
         "lastUpdated": "2026-01-25T05:26:32.396Z",
@@ -204,7 +204,7 @@
     "vercel@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/vercel/1.0.0",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/vercel/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-02-02T20:34:39.471Z",
         "lastUpdated": "2026-02-02T20:34:39.471Z",
@@ -214,7 +214,7 @@
     "playground@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/playground/27d2b86d72da",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/playground/27d2b86d72da",
         "version": "27d2b86d72da",
         "installedAt": "2026-02-02T20:36:09.213Z",
         "lastUpdated": "2026-02-02T20:36:09.213Z",
@@ -224,11 +224,41 @@
     "coderabbit@claude-plugins-official": [
       {
         "scope": "user",
-        "installPath": "/mnt/nw/home/y.lin/.claude/plugins/cache/claude-plugins-official/coderabbit/1.0.0",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/coderabbit/1.0.0",
         "version": "1.0.0",
         "installedAt": "2026-02-02T20:36:10.221Z",
         "lastUpdated": "2026-02-02T20:36:10.221Z",
         "gitCommitSha": "70daac1485106cf797e873f6c23a1eca40ac1ac1"
+      }
+    ],
+    "research-toolkit@local-marketplace": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/local-marketplace/research-toolkit/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T21:00:00.000Z",
+        "lastUpdated": "2026-02-02T21:00:00.000Z",
+        "gitCommitSha": "local"
+      }
+    ],
+    "writing-toolkit@local-marketplace": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/local-marketplace/writing-toolkit/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T21:00:00.000Z",
+        "lastUpdated": "2026-02-02T21:00:00.000Z",
+        "gitCommitSha": "local"
+      }
+    ],
+    "code-toolkit@local-marketplace": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/local-marketplace/code-toolkit/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T21:00:00.000Z",
+        "lastUpdated": "2026-02-02T21:00:00.000Z",
+        "gitCommitSha": "local"
       }
     ]
   }
