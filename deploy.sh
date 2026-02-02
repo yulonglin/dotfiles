@@ -364,13 +364,21 @@ deploy_plugins_config() {
 
     # Generate known_marketplaces.json from template
     if [[ -f "$DOT_DIR/claude/plugins/known_marketplaces.json.template" ]]; then
-        sed "s|\$HOME|$HOME|g" "$DOT_DIR/claude/plugins/known_marketplaces.json.template" > "$claude_plugins_dir/known_marketplaces.json"
+        sed -e "s|\\\$HOME|$HOME|g" -e "s|\\\$DOTFILES_DIR|$DOT_DIR|g" \
+            "$DOT_DIR/claude/plugins/known_marketplaces.json.template" > "$claude_plugins_dir/known_marketplaces.json"
         log_info "Generated known_marketplaces.json"
+
+        # Validate marketplace path exists
+        local marketplace_path=$(jq -r '.["local-marketplace"].source.path' "$claude_plugins_dir/known_marketplaces.json" 2>/dev/null)
+        if [[ -z "$marketplace_path" ]] || [[ ! -d "$marketplace_path" ]]; then
+            log_warn "Marketplace not found at: $marketplace_path"
+        fi
     fi
 
     # Generate installed_plugins.json from template
     if [[ -f "$DOT_DIR/claude/plugins/installed_plugins.json.template" ]]; then
-        sed "s|\$HOME|$HOME|g" "$DOT_DIR/claude/plugins/installed_plugins.json.template" > "$claude_plugins_dir/installed_plugins.json"
+        sed -e "s|\\\$HOME|$HOME|g" -e "s|\\\$DOTFILES_DIR|$DOT_DIR|g" \
+            "$DOT_DIR/claude/plugins/installed_plugins.json.template" > "$claude_plugins_dir/installed_plugins.json"
         log_info "Generated installed_plugins.json"
     fi
 }

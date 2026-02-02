@@ -10,7 +10,7 @@
   "local-marketplace": {
     "source": {
       "source": "local",
-      "path": "claude/local-marketplace"
+      "path": "$DOTFILES_DIR/claude/local-marketplace"
     },
     "installLocation": "$HOME/.claude/plugins/marketplaces/local-marketplace",
     "lastUpdated": "2026-02-02T20:56:00.970Z"
