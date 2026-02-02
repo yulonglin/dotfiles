@@ -161,44 +161,36 @@ get_tty_mtime() {
 # Returns 0 (true) if orphaned, 1 (false) if not
 is_orphaned() {
     local pid="$1"
-    local ppid=$(ps_field "$pid" "ppid")
+    local current_pid="$pid"
+    
+    # Walk up the parent chain
+    while true; do
+        local ppid=$(ps_field "$current_pid" "ppid")
+        
+        # If we can't get a parent, it's either dead or we're at the top
+        [[ -z "$ppid" || "$ppid" == "0" ]] && return 1
+        
+        # If any parent is a zombie, the whole tree is effectively orphaned
+        local pstat=$(ps_field "$ppid" "stat")
+        [[ "$pstat" == *"Z"* ]] && return 0
 
-    [[ -z "$ppid" ]] && return 1
-
-    # Check 1: Parent reparented to init (ppid=1) - direct orphan
-    if [[ "$ppid" == "1" ]]; then
-        return 0
-    fi
-
-    # Check 2: Parent doesn't exist (will become ppid=1 soon)
-    if ! ps -p "$ppid" >/dev/null 2>&1; then
-        return 0
-    fi
-
-    # Check 3: Parent is a zombie process (stat contains 'Z')
-    local pstat=$(ps_field "$ppid" "stat")
-    if [[ "$pstat" == *"Z"* ]]; then
-        return 0
-    fi
-
-    # Check 4: Parent's parent is init (grandparent=1)
-    # Unconditional check: if parent has been reparented to init, child is also orphaned
-    # This catches indirect orphans where parent exists but has been adopted by init
-    local grandparent=$(ps_field "$ppid" "ppid")
-    if [[ "$grandparent" == "1" ]]; then
-        return 0
-    fi
-
-    # Check 5: Parent is a login shell that's been reparented to init
-    # Login shells show '-' prefix in command; if parent has ppid=1, it's orphaned
-    # (We already check grandparent=1 above, but being explicit here)
-    local pcomm=$(ps_field "$ppid" "comm")
-    if [[ "$pcomm" == "-"* && "$grandparent" == "1" ]]; then
-        return 0
-    fi
-
-    # Not orphaned
-    return 1
+        # If we hit init (PID 1)
+        if [[ "$ppid" == "1" ]]; then
+            # If the process IMMEDIATELY under PID 1 is a shell or common terminal wrapper,
+            # and the original process has a TTY, it's a ghost from a closed terminal.
+            local pcomm=$(ps_field "$current_pid" "comm")
+            if [[ "$pcomm" == *"zsh"* || "$pcomm" == *"bash"* || "$pcomm" == *"sh"* || "$pcomm" == "-"* ]]; then
+                return 0
+            fi
+            # Otherwise, it might be a legitimate daemon or background agent
+            return 1
+        fi
+        
+        # Prevent infinite loops (shouldn't happen but be safe)
+        [[ "$ppid" == "$current_pid" ]] && return 1
+        
+        current_pid="$ppid"
+    done
 }
 
 # Check if a process is older than threshold (in seconds)
@@ -250,6 +242,24 @@ get_process_status() {
         return
     fi
 
+    # Check for GHOST TTY (process claims TTY, but device file is gone)
+    # This happens when terminal window is closed but process persists
+    # CRITICAL: This must run BEFORE CPU checks, because a spinning ghost process
+    # will have high CPU but should still be killed.
+    local tty=$(get_process_tty "$pid")
+    if [[ -n "$tty" ]]; then
+        local tty_path="/dev/$tty"
+        # Handle macOS 'sNNN' -> 'ttysNNN' mapping
+        if [[ "$(uname -s)" == "Darwin" && "$tty" =~ ^s[0-9]+$ ]]; then
+            tty_path="/dev/tty$tty"
+        fi
+
+        if [[ ! -e "$tty_path" ]]; then
+            echo "GHOST"
+            return
+        fi
+    fi
+
     # Get CPU usage for activity checks
     local cpu=$(ps_field "$pid" "%cpu")
     local cpu_int=0
@@ -283,7 +293,16 @@ get_process_status() {
     fi
 
     # Check TTY for other classifications
+    # local tty=$(get_process_tty "$pid")  <-- Already resolved above if needed, but resolved again locally for cleanliness
+    # If tty was resolved above, we can reuse it, but simpler to just re-resolve or ensure flow is correct.
+    # The previous check was `local tty=$(get_process_tty "$pid")` inside the if block.
+    # Here we need to check if tty is empty (no TTY attached).
+    
+    # Re-get TTY if not already set (it was local inside if block above, so scope might be issue if I didn't declare it outside)
+    # Actually, in the previous block I did `local tty=...`.
+    # Let's just re-get it to be safe and clean.
     local tty=$(get_process_tty "$pid")
+
     if [[ -z "$tty" ]]; then
         # No TTY: check if process is stale (UNKNOWN + too old)
         if is_process_old "$pid" "$STALE_UNKNOWN_SECONDS"; then
@@ -342,6 +361,7 @@ status_label() {
         RECENT)        echo "recent" ;;
         ORPHANED)      echo "orphaned" ;;
         STOPPED)       echo "stopped" ;;
+        GHOST)         echo "ghost_tty" ;;
         STALE_UNKNOWN) echo "stale_unknown" ;;
         *)             echo "unknown" ;;
     esac
@@ -376,7 +396,7 @@ show_status() {
 
     # Counters as associative-style with simple variables
     local count=0 active_count=0 tmux_count=0 idle_count=0 recent_count=0
-    local orphaned_count=0 stopped_count=0 stale_unknown_count=0 unknown_count=0
+    local orphaned_count=0 stopped_count=0 stale_unknown_count=0 unknown_count=0 ghost_count=0
     local unknown_pids=()
 
     while IFS= read -r line; do
@@ -399,6 +419,7 @@ show_status() {
             RECENT)        ((recent_count++)) || true ;;
             ORPHANED)      ((orphaned_count++)) || true ;;
             STOPPED)       ((stopped_count++)) || true ;;
+            GHOST)         ((ghost_count++))   || true ;;
             STALE_UNKNOWN) ((stale_unknown_count++)) || true ;;
             *)             ((unknown_count++)) || true; unknown_pids+=("$pid") ;;
         esac
@@ -413,7 +434,7 @@ show_status() {
     # Status-specific notes
     [[ $active_count -gt 0 ]] && echo -e "\n⚠️  Warning: $active_count process(es) appear to be in active use.\n   Use --dry-run to preview before killing."
     [[ $tmux_count -gt 0 ]] && echo -e "\nNote: tmux sessions are preserved by default."
-    [[ $((orphaned_count + stopped_count + idle_count + stale_unknown_count)) -gt 0 ]] && echo -e "\n💀 $((orphaned_count + stopped_count + idle_count + stale_unknown_count)) orphaned/stopped/idle/stale process(es) will be killed by default."
+    [[ $((orphaned_count + stopped_count + idle_count + stale_unknown_count + ghost_count)) -gt 0 ]] && echo -e "\n💀 $((orphaned_count + stopped_count + idle_count + stale_unknown_count + ghost_count)) orphaned/stopped/idle/stale/ghost process(es) will be killed by default."
 
     if [[ $unknown_count -gt 0 ]]; then
         echo -e "\nRecent background processes (preserved by default):"
@@ -489,7 +510,7 @@ PIDS_TO_KILL=()
 SKIPPED_CURRENT=false
 # Counters (simple vars for bash 3.2 compatibility)
 SKIPPED_ACTIVE=0 SKIPPED_TMUX=0 SKIPPED_RECENT=0 SKIPPED_UNKNOWN=0
-KILLING_ORPHANED=0 KILLING_STOPPED=0 KILLING_IDLE=0 KILLING_STALE_UNKNOWN=0
+KILLING_ORPHANED=0 KILLING_STOPPED=0 KILLING_IDLE=0 KILLING_STALE_UNKNOWN=0 KILLING_GHOST=0
 KILLING_ACTIVE=0 KILLING_TMUX=0 KILLING_RECENT=0 KILLING_UNKNOWN=0
 
 for pid in "${PIDS[@]}"; do
@@ -519,6 +540,7 @@ for pid in "${PIDS[@]}"; do
         STOPPED)       ((KILLING_STOPPED++))       || true ;;
         IDLE)          ((KILLING_IDLE++))          || true ;;
         STALE_UNKNOWN) ((KILLING_STALE_UNKNOWN++)) || true ;;
+        GHOST)         ((KILLING_GHOST++))         || true ;;
         ACTIVE)        ((KILLING_ACTIVE++))        || true ;;
         TMUX)          ((KILLING_TMUX++))          || true ;;
         RECENT)        ((KILLING_RECENT++))        || true ;;
@@ -560,6 +582,7 @@ parts=()
 [[ $KILLING_STOPPED -gt 0 ]] && parts+=("$KILLING_STOPPED stopped")
 [[ $KILLING_IDLE -gt 0 ]] && parts+=("$KILLING_IDLE idle>=${IDLE_THRESHOLD_HOURS}h")
 [[ $KILLING_STALE_UNKNOWN -gt 0 ]] && parts+=("$KILLING_STALE_UNKNOWN stale_unknown")
+[[ $KILLING_GHOST -gt 0 ]] && parts+=("$KILLING_GHOST ghost_tty")
 [[ $KILLING_ACTIVE -gt 0 ]] && parts+=("$KILLING_ACTIVE active")
 [[ $KILLING_TMUX -gt 0 ]] && parts+=("$KILLING_TMUX tmux")
 [[ $KILLING_RECENT -gt 0 ]] && parts+=("$KILLING_RECENT recent")
