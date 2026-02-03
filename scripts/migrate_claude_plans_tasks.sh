@@ -5,8 +5,8 @@
 set -euo pipefail
 
 GLOBAL_CLAUDE="$HOME/.claude"
-CODE_DIR="$HOME/code"
-WRITING_DIR="$HOME/writing"
+CODE_DIR="${CODE_DIR:-$HOME/code}"
+WRITING_DIR="${WRITING_DIR:-$HOME/writing}"
 SEARCH_DIRS=("$CODE_DIR" "$WRITING_DIR")
 REPOS=()
 

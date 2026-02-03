@@ -1,6 +1,12 @@
 CONFIG_DIR=$(dirname $(realpath ${(%):-%x}))
 DOT_DIR=$CONFIG_DIR/..
 
+# User-customizable directory locations (override in ~/.zshenv or config/secrets.sh)
+CODE_DIR="${CODE_DIR:-$HOME/code}"           # Primary code projects
+WRITING_DIR="${WRITING_DIR:-$HOME/writing}"  # Writing projects (papers, notes)
+SCRATCH_DIR="${SCRATCH_DIR:-$HOME/scratch}"  # Temporary experimentation
+PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"  # General projects
+
 # Disable AUTO_CD - require explicit cd commands
 unsetopt AUTO_CD
 

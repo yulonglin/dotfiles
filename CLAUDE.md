@@ -126,6 +126,29 @@ config/matplotlib/        # Matplotlib style files (.mplstyle only)
 └── petri.mplstyle        # Petri (ivory bg, editorial aesthetic)
 ```
 
+### Directory Environment Variables
+
+Standard directory locations can be customized via environment variables:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CODE_DIR` | `~/code` | Primary code projects and repositories |
+| `WRITING_DIR` | `~/writing` | Writing projects (papers, drafts, notes) |
+| `SCRATCH_DIR` | `~/scratch` | Temporary experimentation and testing |
+| `PROJECTS_DIR` | `~/projects` | General projects |
+| `DOT_DIR` | (auto-detected) | Dotfiles repository location |
+
+**Customization:**
+```bash
+# In ~/.zshenv (loaded before zshrc, recommended)
+export CODE_DIR="$HOME/work/projects"
+export WRITING_DIR="$HOME/Documents/writing"
+```
+
+**Cloud environments:** The standard directory structure works transparently on RunPod/cloud via symlinks created by `scripts/cloud/setup.sh`.
+
+**Related aliases:** `code`, `writing`, `scratch`, `projects`, `dotfiles`
+
 ### Important Behaviors
 
 **Secrets Sync (`deploy_secrets()`)**:

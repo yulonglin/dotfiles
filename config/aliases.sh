@@ -9,8 +9,6 @@ fi
 # personal
 # -------------------------------------------------------------------
 
-alias cdg="cd ~/git"
-alias zrc="cd $DOT_DIR/zsh"
 alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
@@ -145,6 +143,11 @@ alias 7='cd -7'
 alias 8='cd -8'
 alias 9='cd -9'
 
+alias dotfiles='cd $CODE_DIR/dotfiles'
+alias code='cd $CODE_DIR'
+alias writing='cd $WRITING_DIR'
+alias scratch='cd $SCRATCH_DIR'
+alias projects='cd $PROJECTS_DIR'
 
 #-------------------------------------------------------------
 # git
