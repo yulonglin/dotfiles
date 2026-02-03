@@ -44,6 +44,7 @@ OPTIONS:
     --codex           Deploy Codex CLI config (~/.codex symlink)
     --ghostty         Deploy Ghostty terminal config
     --htop            Deploy htop configuration
+    --pdb             Deploy pdb++ debugger config
     --matplotlib      Deploy matplotlib styles
     --git-hooks       Deploy global git hooks
     --secrets         Sync secrets with GitHub gist
@@ -316,6 +317,22 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
             safe_symlink "$HTOP_DOTFILES" "$HTOP_LOCAL"
             log_info "  Uses dynamic CPU meters (adapts to any CPU count)"
         fi
+    fi
+fi
+
+# ─── pdb++ ────────────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_PDB" == "true" ]]; then
+    log_info "Deploying pdb++ configuration..."
+
+    PDB_LOCAL="$HOME/.pdbrc.py"
+    PDB_DOTFILES="$DOT_DIR/config/pdbrc.py"
+
+    if [[ ! -f "$PDB_DOTFILES" ]]; then
+        log_warning "pdb++ config not found at $PDB_DOTFILES"
+    else
+        safe_symlink "$PDB_DOTFILES" "$PDB_LOCAL"
+        log_info "  High-contrast color scheme for better readability"
     fi
 fi
 

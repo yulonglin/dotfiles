@@ -252,3 +252,5 @@ prefix_rule(pattern=["/bin/zsh", "-lc", "GIT_EDITOR=true git commit -m \"Update 
 prefix_rule(pattern=["/bin/zsh", "-lc", "GIT_EDITOR=true git push"], decision="allow")
 prefix_rule(pattern=["/bin/zsh", "-lc", "GIT_EDITOR=true git pull --rebase"], decision="allow")
 prefix_rule(pattern=["bash", "-lc"], decision="allow")
+prefix_rule(pattern=["git", "add"], decision="allow")
+prefix_rule(pattern=["git", "commit"], decision="allow")

@@ -37,6 +37,7 @@ DEPLOY_CLAUDE=true              # Claude Code config (~/.claude symlink)
 DEPLOY_CODEX=true               # Codex CLI config (~/.codex symlink)
 DEPLOY_GHOSTTY=true             # Ghostty terminal config
 DEPLOY_HTOP=true                # htop process viewer config
+DEPLOY_PDB=true                 # pdb++ debugger config (high-contrast colors)
 DEPLOY_MATPLOTLIB=true          # Matplotlib styles (anthropic, deepmind)
 DEPLOY_GIT_HOOKS=true           # Global git hooks (secret detection)
 DEPLOY_SECRETS=true             # Sync secrets with GitHub gist
@@ -135,6 +136,7 @@ apply_profile() {
             DEPLOY_EDITOR=false
             DEPLOY_GHOSTTY=false
             DEPLOY_HTOP=false
+            DEPLOY_PDB=false
             DEPLOY_MATPLOTLIB=false
             DEPLOY_CLEANUP=false
             DEPLOY_CLAUDE_CLEANUP=false
@@ -155,6 +157,7 @@ apply_profile() {
             DEPLOY_CODEX=false
             DEPLOY_GHOSTTY=false
             DEPLOY_HTOP=false
+            DEPLOY_PDB=false
             DEPLOY_MATPLOTLIB=false
             DEPLOY_GIT_HOOKS=false
             DEPLOY_SECRETS=false
