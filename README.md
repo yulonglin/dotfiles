@@ -201,6 +201,32 @@ Dynamic [htop](https://htop.dev/) configuration that adapts CPU meters to your c
 
 The config in `config/htop/htoprc` uses a dynamic layout that works across machines with different CPU counts—no manual adjustment needed.
 
+### pdb++ (Python Debugger)
+
+High-contrast color scheme for [pdb++](https://github.com/pdbpp/pdbpp), the enhanced Python debugger:
+
+```bash
+./deploy.sh --pdb  # Part of defaults
+```
+
+**Global config works with per-project installations**. The config is deployed to `~/.pdbrc.py` (symlinked), but pdb++ is installed per-project via `uv add --dev pdbpp`. This works because pdb++ reads the global config at runtime.
+
+**Color scheme** optimized for dark terminals:
+- BoldCyan for prompts
+- BoldYellow for keywords
+- BoldGreen for strings
+- BoldMagenta for builtins
+
+**Test it works:**
+```bash
+cd /path/to/project
+uv add --dev pdbpp
+python -c "import pdb; pdb.set_trace()" <<< "c"
+# Should show high-contrast colors
+```
+
+**Per-project override** (advanced): Create `.pdbrc.py` in project root. It takes precedence over the global config. See [pdb++ docs](https://github.com/pdbpp/pdbpp#configuration) for details.
+
 ### Automatic Cleanup (macOS)
 
 Scheduled cleanup of old files from `~/Downloads` and `~/Screenshots`:
