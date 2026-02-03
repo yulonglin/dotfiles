@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "Preserve local plugins and custom content",
+  "description": "Ensure local-marketplace plugins (research-toolkit, writing-toolkit, code-toolkit), Slack MCP, custom skills, and custom agents are preserved during cleanup.",
+  "activeForm": "Preserving local plugins and custom content",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

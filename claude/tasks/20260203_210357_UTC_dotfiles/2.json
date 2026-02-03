@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Determine canonical marketplace",
+  "description": "Decide which marketplace to keep (claude-plugins-official vs claude-code-plugins). claude-plugins-official appears more complete with 633 lines vs 150, includes external plugins and LSP servers.",
+  "activeForm": "Determining canonical marketplace",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
