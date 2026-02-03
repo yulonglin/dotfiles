@@ -417,11 +417,44 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 **Priority order:**
 1. Check `docs/` for project-specific context (renamed from `ai_docs/` for VSCode icon support)
 2. Check `~/.claude/docs/` for global specs (CI standards, reproducibility checklist, from `claude/ai_docs/`)
-3. **Use MCP servers** (context7, GitHub, gitmcp) - NOT WebSearch
-4. WebSearch only if MCP fails
-5. **Search with `/docs-search`** - Fast grep-based search across docs, specs, CLAUDE.md
+3. **Context7 MCP** for popular library/framework documentation (fastest, most reliable)
+4. **GitHub CLI** (`gh api`) for specific file access to verified repositories
+5. **Explore locally** with Glob/Grep/Read for installed libraries/packages
+6. **WebFetch** for specific URLs you know about
+7. **WebSearch** as last resort for general information
+8. **Search with `/docs-search`** - Fast grep-based search across docs, specs, CLAUDE.md
 
-### Verified Repositories (use GitHub MCP, gitmcp)
+### Using Context7 MCP (Recommended for Libraries)
+
+**Workflow**:
+```bash
+# 1. Resolve library ID
+resolve-library-id: "inspect_ai" → libraryId="/UKGovernmentBEIS/inspect_ai"
+
+# 2. Query documentation
+query-docs: libraryId="/UKGovernmentBEIS/inspect_ai" query="How to run evaluations?"
+```
+
+**Why Context7**: Faster than WebSearch, covers most popular libraries, returns curated documentation rather than noisy search results.
+
+### Using GitHub CLI for Specific Files
+
+When you know the exact file path:
+
+```bash
+# Get README
+gh api repos/OWNER/REPO/readme --jq '.content' | base64 -d
+
+# Get specific file
+gh api repos/OWNER/REPO/contents/path/to/file.py --jq '.content' | base64 -d
+
+# Get repository info
+gh api repos/OWNER/REPO | jq '.description, .homepage'
+```
+
+**Advantages**: No authentication issues (uses your CLI auth), instant results, works for any GitHub repo.
+
+### Verified Repositories (accessible via Context7 or GitHub CLI)
 ```
 UKGovernmentBEIS/inspect_ai      # LLM evaluation framework
 UKGovernmentBEIS/inspect_evals   # Community evaluations
@@ -432,6 +465,16 @@ ericbuess/claude-code-docs       # Claude Code documentation
 ```
 
 **Security**: Always verify exact owner/repo path to prevent typosquatting.
+
+### Decision Tree: Which Lookup Method?
+
+| Need | Method | Why |
+|------|--------|-----|
+| Popular library docs (React, Python packages, frameworks) | **Context7** | Fastest, curated, specific to questions |
+| Specific file from known GitHub repo | **GitHub CLI** (`gh api`) | Instant, reliable, works offline-ish |
+| Installed library exploring (site-packages, node_modules) | **Glob/Grep/Read** | No network, full control, understand structure |
+| Known specific URL | **WebFetch** | Exact content from URL |
+| General information, blog posts, news | **WebSearch** | Last resort, broadest coverage but noisiest |
 
 ---
 

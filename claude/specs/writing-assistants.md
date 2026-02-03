@@ -80,7 +80,7 @@ Writing influences are: Paul Graham (conversational clarity), Distill/Lilian Wen
 
 ### Non-Functional Requirements
 - **Context efficiency**: Each agent returns <600 tokens feedback (enables parallel runs)
-- **Sources**: Fact-checker uses WebSearch/WebFetch for citations, others use Read only
+- **Sources**: Fact-checker uses Context7 (technical docs), WebSearch/WebFetch (general claims), red-team uses Context7 for technical verification; others use Read only
 - **Output**: All feedback written to `feedback/` directory in same repo as draft
 
 ## Design
@@ -111,8 +111,8 @@ Each agent defined in `~/.claude/agents/`:
 |-------|------|-------|-------|
 | clarity-critic | `writing-clarity.md` | Read | Sentence-level clarity |
 | narrative-critic | `writing-narrative.md` | Read | Structure and flow |
-| fact-checker | `writing-facts.md` | Read, WebSearch, WebFetch | Claim verification |
-| red-team | `writing-redteam.md` | Read, WebSearch | Argument stress-testing |
+| fact-checker | `writing-facts.md` | Read, WebSearch, WebFetch, Context7 | Claim verification |
+| red-team | `writing-redteam.md` | Read, WebSearch, Context7 | Argument stress-testing |
 
 ### Skill Definitions
 
@@ -173,7 +173,8 @@ Skills in `~/.claude/skills/`:
 | `feedback/` doesn't exist | Create it automatically |
 | Fact-checker can't find sources | Flag as "unable to verify" rather than fabricating |
 | Conflicting feedback between agents | Each agent's feedback stands alone; user reconciles |
-| WebSearch rate limited | Fact-checker falls back to flagging without verification |
+| Context7 unavailable | Fact-checker/red-team fall back to WebSearch or gh CLI |
+| WebSearch rate limited | Fact-checker flags as "verification incomplete due to rate limiting" |
 
 ## Acceptance Criteria
 

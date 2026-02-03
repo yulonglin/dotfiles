@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "WebFetch(domain:storage.googleapis.com)",
+      "WebFetch(domain:api.githubcopilot.com)",
+      "WebFetch(domain:mcp.context7.com)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "WebFetch(domain:http-intake.logs.us5.datadoghq.com)"
+    ]
+  }
+}

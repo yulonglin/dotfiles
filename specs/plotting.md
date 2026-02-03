@@ -1,0 +1,1 @@
+Sometimes when Cloud Code plots diagrams, it doesn't use a white background. Additionally, it also doesn't always use colours from Anthroplot and from Petri. Let's figure out how to make sure that Cloud Code always uses colours from Anthroplot, and always have white backgrounds.

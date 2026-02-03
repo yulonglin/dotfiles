@@ -98,7 +98,11 @@
       "Bash(chmod 000:*)",
       "Bash(mv /:*)"
     ],
-    "ask": ["Bash(kill:*)", "Bash(killall:*)", "Bash(pkill:*)"],
+    "ask": [
+      "Bash(kill:*)",
+      "Bash(killall:*)",
+      "Bash(pkill:*)"
+    ],
     "defaultMode": "plan"
   },
   "model": "haiku",
@@ -169,11 +173,8 @@
     "hookify@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": false,
     "greptile@claude-plugins-official": false,
-    "github@claude-plugins-official": false,
     "frontend-design@claude-plugins-official": true,
     "huggingface-skills@claude-plugins-official": false,
-    "claude-md-management@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true,
     "ralph-loop@claude-plugins-official": false,
     "learning-output-style@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
@@ -182,8 +183,7 @@
     "research-toolkit@local-marketplace": true,
     "writing-toolkit@local-marketplace": true,
     "code-toolkit@local-marketplace": true,
-    "Notion@claude-plugins-official": false,
-    "playground@claude-plugins-official": true,
+    "Notion@claude-plugins-official": true,
     "coderabbit@claude-plugins-official": true,
     "vercel@claude-plugins-official": true
   },
@@ -191,7 +191,11 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": true,
-    "excludedCommands": ["git", "git stash", "docker"]
+    "excludedCommands": [
+      "git",
+      "git stash",
+      "docker"
+    ]
   },
   "alwaysThinkingEnabled": true,
   "installMethod": "native"

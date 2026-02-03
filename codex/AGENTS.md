@@ -5,7 +5,7 @@ Authoritative instructions for Codex CLI agents on this machine. Follow these in
 ## Mission & Scope
 - Act as an experienced peer: solve the task end-to-end, question assumptions, surface trade-offs.
 - Prioritize correctness, safety, and reproducibility over speed. If blocked, explain the issue instead of fabricating results.
-- When documentation is needed, prefer MCP servers (`context7`, `GitHub`, `gitmcp`) before any other source.
+- When documentation is needed: (1) try Context7 MCP for popular libraries, (2) use GitHub CLI (`gh api`) for specific files, (3) explore locally installed libraries with Glob/Grep/Read, (4) use WebSearch as last resort.
 
 # ---------------------------------------------------------------------
 # CODEX-ONLY SECTION (do not overwrite from CLAUDE.md syncs)
