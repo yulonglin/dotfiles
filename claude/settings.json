@@ -105,7 +105,6 @@
     ],
     "defaultMode": "plan"
   },
-  "model": "haiku",
   "hooks": {
     "PreToolUse": [
       {
@@ -165,7 +164,6 @@
   "enabledPlugins": {
     "swift-lsp@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": true,
-    "slack@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "code-review@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
@@ -182,8 +180,16 @@
     "writing-toolkit@local-marketplace": true,
     "code-toolkit@local-marketplace": true,
     "Notion@claude-plugins-official": true,
-    "coderabbit@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true
+    "coderabbit@claude-plugins-official": false,
+    "vercel@claude-plugins-official": true,
+    "playwright@claude-plugins-official": false,
+    "code-review@claude-code-plugins": true,
+    "plugin-dev@claude-code-plugins": true,
+    "security-guidance@claude-code-plugins": true,
+    "ralph-wiggum@claude-code-plugins": true,
+    "learning-output-style@claude-code-plugins": true,
+    "hookify@claude-code-plugins": true,
+    "frontend-design@claude-code-plugins": true
   },
   "sandbox": {
     "enabled": true,
