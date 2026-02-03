@@ -183,6 +183,19 @@ Never use: "Notably", "Importantly", "Crucially", "Interestingly" as openers; "T
 
 ---
 
+## Page Count Rules
+
+When deciding how many pages to cut, count only the main content. Do not include:
+- References
+- Acknowledgements
+- Appendices or supplementary material
+- Impact or ethics statements
+- LLM or AI usage statements
+- Compute or resource statements
+- Similar compliance or metadata sections
+
+---
+
 ## Checklist
 
 ### Title

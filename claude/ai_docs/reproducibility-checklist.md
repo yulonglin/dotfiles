@@ -6,6 +6,15 @@ Source: https://neurips.cc/public/guides/PaperChecklist
 
 The NeurIPS Paper Checklist promotes responsible ML research by addressing reproducibility, transparency, ethics, and societal impact. **Papers without the checklist face desk rejection.** The checklist follows references and supplementary material but doesn't count toward page limits.
 
+When deciding how many pages to cut, count only the main content. Do not include:
+- References
+- Acknowledgements
+- Appendices or supplementary material
+- Impact or ethics statements
+- LLM or AI usage statements
+- Compute or resource statements
+- Similar compliance or metadata sections
+
 ## Response Format
 
 For each question, answer: **Yes**, **No**, or **N/A** with optional justification (1–2 sentences). Answers are visible to reviewers, area chairs, senior area chairs, and ethics reviewers.
