@@ -211,11 +211,12 @@ High-contrast color scheme for [pdb++](https://github.com/pdbpp/pdbpp), the enha
 
 **Global config works with per-project installations**. The config is deployed to `~/.pdbrc.py` (symlinked), but pdb++ is installed per-project via `uv add --dev pdbpp`. This works because pdb++ reads the global config at runtime.
 
-**Color scheme** optimized for dark terminals:
-- BoldCyan for prompts
-- BoldYellow for keywords
-- BoldGreen for strings
-- BoldMagenta for builtins
+**Auto-detects terminal background** using OSC 11 escape sequence:
+- **Light terminals**: Dark colors on light background (solarized-light theme)
+- **Dark terminals**: Bright colors on dark background (monokai theme)
+- **Fallback**: Defaults to dark theme if detection fails (SSH, older terminals)
+
+Detection succeeds in modern terminals (iTerm2, Ghostty, Kitty, Alacritty) and fails gracefully elsewhere.
 
 **Test it works:**
 ```bash

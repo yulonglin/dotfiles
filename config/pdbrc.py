@@ -1,31 +1,98 @@
 # pdb++ configuration
-# High-contrast color scheme for better readability
+# High-contrast color scheme with auto-detection of terminal background
 
 import pdb
+import sys
+import os
+import termios
+import tty
+import select
+
+
+def detect_terminal_background():
+    """
+    Detect if terminal has light or dark background using OSC 11.
+    Returns: "light" or "dark" (defaults to "dark" if detection fails)
+    """
+    # Skip detection if not a TTY or in non-interactive context
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return "dark"
+
+    try:
+        # Save terminal settings
+        old_settings = termios.tcgetattr(sys.stdin)
+
+        try:
+            # Set terminal to raw mode for reading response
+            tty.setraw(sys.stdin.fileno())
+
+            # Query background color with OSC 11
+            sys.stdout.write("\033]11;?\033\\")
+            sys.stdout.flush()
+
+            # Wait up to 100ms for response
+            response = ""
+            if select.select([sys.stdin], [], [], 0.1)[0]:
+                # Read response (format: ESC ] 11 ; rgb:RRRR/GGGG/BBBB ESC \)
+                while True:
+                    if select.select([sys.stdin], [], [], 0.01)[0]:
+                        char = sys.stdin.read(1)
+                        response += char
+                        # Check for terminator
+                        if char == "\\" and len(response) > 1 and response[-2] == "\033":
+                            break
+                        if len(response) > 50:  # Sanity limit
+                            break
+                    else:
+                        break
+
+                # Parse response: rgb:RRRR/GGGG/BBBB
+                if "rgb:" in response:
+                    rgb_part = response.split("rgb:")[1].split("\033")[0]
+                    r, g, b = rgb_part.split("/")[:3]
+                    # Convert hex to int (first 2 chars of each component)
+                    r_val = int(r[:2], 16)
+                    g_val = int(g[:2], 16)
+                    b_val = int(b[:2], 16)
+                    # Calculate luminance (perceived brightness)
+                    luminance = 0.299 * r_val + 0.587 * g_val + 0.114 * b_val
+                    return "light" if luminance > 127 else "dark"
+
+        finally:
+            # Restore terminal settings
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+    except (OSError, ValueError, termios.error):
+        pass  # Detection failed, use default
+
+    # Default to dark theme (most common for developers)
+    return "dark"
+
+
+# Detect terminal background
+_THEME = detect_terminal_background()
 
 
 class Config(pdb.DefaultConfig):
     # ─── Syntax Highlighting (Pygments) ───────────────────────────────────
-    # Use high-contrast Pygments style for source code
-    # Options: "monokai" (high contrast), "native" (dark), "vim" (terminal-friendly)
     pygments_formatter_class = "pygments.formatters.Terminal256Formatter"
-    pygments_formatter_kwargs = {"style": "monokai"}  # High-contrast dark theme
+
+    if _THEME == "light":
+        # Light background: use dark, readable colors
+        pygments_formatter_kwargs = {"style": "solarized-light"}
+        line_number_color = "34;01"        # Dark blue, bold
+        current_line_color = "33;01;7"     # Dark yellow, bold, inverse
+        filename_color = "35;01"           # Dark magenta, bold
+    else:
+        # Dark background: use bright, high-contrast colors
+        pygments_formatter_kwargs = {"style": "monokai"}
+        line_number_color = "96;01"        # Bright cyan, bold
+        current_line_color = "93;01;7"     # Bright yellow, bold, inverse
+        filename_color = "95;01"           # Bright magenta, bold
 
     # Enable syntax highlighting
     highlight = True
     use_pygments = True
-
-    # ─── Line Numbers and Current Line ────────────────────────────────────
-    # Bright cyan for line numbers (96 = bright cyan, 01 = bold)
-    line_number_color = "96;01"
-
-    # Bright yellow for current line indicator (93 = bright yellow, 01 = bold)
-    # Format: "foreground;background;attribute" - using inverse video for visibility
-    current_line_color = "93;01;7"  # Bright yellow, bold, inverse video
-
-    # ─── File and Function Names ──────────────────────────────────────────
-    # Bright magenta for filenames (95 = bright magenta, 01 = bold)
-    filename_color = "95;01"
 
     # ─── Display Settings ─────────────────────────────────────────────────
     # Show full file path in prompts
