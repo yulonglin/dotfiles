@@ -35,6 +35,7 @@ DEPLOY_VIM=true
 DEPLOY_EDITOR=true              # VSCode/Cursor settings (merges with existing)
 DEPLOY_CLAUDE=true              # Claude Code config (~/.claude symlink)
 DEPLOY_CODEX=true               # Codex CLI config (~/.codex symlink)
+DEPLOY_SERENA=true              # Serena MCP config (~/.serena symlink)
 DEPLOY_GHOSTTY=true             # Ghostty terminal config
 DEPLOY_HTOP=true                # htop process viewer config
 DEPLOY_PDB=true                 # pdb++ debugger config (high-contrast colors)
@@ -134,6 +135,7 @@ apply_profile() {
             INSTALL_DOCKER=false
             INSTALL_EXTRAS=false
             DEPLOY_EDITOR=false
+            DEPLOY_SERENA=false
             DEPLOY_GHOSTTY=false
             DEPLOY_HTOP=false
             DEPLOY_PDB=false
@@ -155,6 +157,7 @@ apply_profile() {
             DEPLOY_EDITOR=false
             DEPLOY_CLAUDE=false
             DEPLOY_CODEX=false
+            DEPLOY_SERENA=false
             DEPLOY_GHOSTTY=false
             DEPLOY_HTOP=false
             DEPLOY_PDB=false

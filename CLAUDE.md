@@ -60,6 +60,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Ghostty - Terminal emulator configuration (symlinked to platform-specific path)
 - Claude Code - AI assistant configuration (symlinked)
 - Codex - CLI tool configuration (symlinked)
+- Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
 - Claude Code cleanup - No-output-for-24h session cleanup (tmux preserved, launchd/cron)
 
@@ -87,6 +88,7 @@ config/
 ├── finicky.js            # Browser routing (macOS, symlinked)
 ├── ghostty               # Ghostty terminal config (symlinked to platform-specific path)
 ├── htop/htoprc           # htop config (symlinked, uses dynamic CPU meters)
+├── serena/serena_config.yml  # Serena MCP config (symlinked, dashboard auto-open disabled)
 ├── key_bindings.sh       # ZSH key bindings (sourced by zshrc.sh)
 ├── gitconfig             # Git config template
 ├── gitignore_global      # Global gitignore
@@ -273,11 +275,12 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ## Important Gotchas
 
 - **macOS vs Linux paths**: VSCode settings location differs by OS
-- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex), others copied (ZSH, git)
+- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena), others copied (ZSH, git)
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env
 - **Claude Code directory**: `claude/` is symlinked to `~/.claude/` (not copied)
 - **Codex CLI directory**: `codex/` is symlinked to `~/.codex/` (not copied)
+- **Serena MCP config**: `config/serena/serena_config.yml` symlinked to `~/.serena/serena_config.yml` (dashboard auto-open disabled)
 - **Ghostty config**: Symlinked to platform-specific path, requires reload after changes (Cmd+Shift+Comma)
 
 ## Cross-Reference

@@ -42,6 +42,7 @@ OPTIONS:
     --editor          Deploy VSCode/Cursor settings
     --claude          Deploy Claude Code config (~/.claude symlink)
     --codex           Deploy Codex CLI config (~/.codex symlink)
+    --serena          Deploy Serena MCP config (~/.serena symlink)
     --ghostty         Deploy Ghostty terminal config
     --htop            Deploy htop configuration
     --pdb             Deploy pdb++ debugger config
@@ -535,6 +536,31 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
         log_info "  Config: AGENTS.md, skills/"
     else
         log_warning "Codex directory not found at $DOT_DIR/codex"
+    fi
+fi
+
+# ─── Serena MCP ──────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_SERENA" == "true" ]]; then
+    log_info "Deploying Serena MCP configuration..."
+
+    SERENA_DIR="$HOME/.serena"
+    SERENA_CONFIG="$SERENA_DIR/serena_config.yml"
+    SERENA_DOTFILES="$DOT_DIR/config/serena/serena_config.yml"
+
+    if [[ ! -f "$SERENA_DOTFILES" ]]; then
+        log_warning "Serena config not found at $SERENA_DOTFILES"
+    else
+        mkdir -p "$SERENA_DIR"
+
+        # Backup existing config if it's not a symlink
+        if [[ -f "$SERENA_CONFIG" && ! -L "$SERENA_CONFIG" ]]; then
+            backup_file "$SERENA_CONFIG"
+        fi
+
+        safe_symlink "$SERENA_DOTFILES" "$SERENA_CONFIG"
+        log_success "Deployed Serena configuration"
+        log_info "  Dashboard auto-open: disabled (open manually at http://localhost:24282/dashboard/)"
     fi
 fi
 
