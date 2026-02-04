@@ -412,6 +412,40 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 
 ---
 
+## Task Delegation Strategy
+
+**Principle:** Skills = workflows you execute, Agents = delegation to external tools.
+
+### Available Delegates (Use Task Tool)
+
+| Agent | Use Case | Strength |
+|-------|----------|----------|
+| **gemini-cli** | Large context analysis (>100KB) | 1M+ token window, PDFs, entire codebases |
+| **code-toolkit:codex** | Well-scoped implementation | Fast, precise, follows specs exactly |
+| **code-toolkit:claude** | Judgment-heavy tasks | Taste, tool use, MCP access, nuanced reasoning |
+
+### Decision Tree
+
+```
+Need delegation?
+├─ Large context (PDF, codebase)? → gemini-cli
+├─ Clear implementation spec? → code-toolkit:codex
+├─ Need judgment/taste? → code-toolkit:claude
+└─ Multi-step workflow? → Use skills (brainstorming, debugging, TDD)
+```
+
+### Invocation Pattern
+
+```bash
+# Agent (Task tool)
+Task tool → subagent_type: "code-toolkit:codex", prompt: "implement X"
+
+# Skill (Skill tool)
+Skill tool → skill: "brainstorming", args: "feature idea"
+```
+
+---
+
 ## Documentation Lookup
 
 **Priority order:**
