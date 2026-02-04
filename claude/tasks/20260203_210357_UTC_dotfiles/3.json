@@ -1,9 +1,0 @@
-{
-  "id": "3",
-  "subject": "Fix missing plugin paths in marketplace",
-  "description": "Either remove references to non-existent plugins (feature-dev, playground, claude-md-management, claude-code-setup, typescript-lsp) from manifest or update marketplace repository.",
-  "activeForm": "Fixing missing plugin path references",
-  "status": "completed",
-  "blocks": [],
-  "blockedBy": []
-}

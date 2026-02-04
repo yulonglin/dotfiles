@@ -1,9 +1,0 @@
-{
-  "id": "1",
-  "subject": "Verify Codex CLI skill is working",
-  "description": "Test that the Codex CLI skill can be invoked and check if the \"hookify import error\" is reproducible. The skill file appears correct with no hookify dependencies.",
-  "activeForm": "Verifying Codex CLI skill functionality",
-  "status": "completed",
-  "blocks": [],
-  "blockedBy": []
-}

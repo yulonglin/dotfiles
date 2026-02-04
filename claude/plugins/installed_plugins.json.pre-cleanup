@@ -1,0 +1,275 @@
+{
+  "version": 2,
+  "plugins": {
+    "research-toolkit@local-marketplace": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/local-marketplace/research-toolkit/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T22:46:49.940Z",
+        "lastUpdated": "2026-02-02T22:46:49.940Z",
+        "gitCommitSha": "6e643d2537fc43065c2f3a649e395823fed166e4"
+      }
+    ],
+    "writing-toolkit@local-marketplace": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/local-marketplace/writing-toolkit/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T22:46:49.940Z",
+        "lastUpdated": "2026-02-02T22:46:49.940Z",
+        "gitCommitSha": "6e643d2537fc43065c2f3a649e395823fed166e4"
+      }
+    ],
+    "code-toolkit@local-marketplace": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/local-marketplace/code-toolkit/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T22:46:50.049Z",
+        "lastUpdated": "2026-02-02T22:46:50.049Z",
+        "gitCommitSha": "6e643d2537fc43065c2f3a649e395823fed166e4"
+      }
+    ],
+    "swift-lsp@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/swift-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "code-simplifier@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/code-simplifier/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "context7@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/context7/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "code-review@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/code-review/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "security-guidance@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/security-guidance/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "hookify@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/hookify/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "frontend-design@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/frontend-design/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "ralph-loop@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/ralph-loop/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "learning-output-style@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/learning-output-style/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "plugin-dev@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/plugin-dev/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "commit-commands@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/commit-commands/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "pyright-lsp@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/pyright-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T22:50:04.620Z",
+        "lastUpdated": "2026-02-02T22:50:04.620Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "superpowers@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/superpowers/4.1.1",
+        "version": "4.1.1",
+        "installedAt": "2026-02-02T22:50:06.971Z",
+        "lastUpdated": "2026-02-02T22:50:06.971Z",
+        "gitCommitSha": "06b92f36820f38175b2ed6ff3f8df45157d54731"
+      }
+    ],
+    "coderabbit@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/coderabbit/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T22:50:07.556Z",
+        "lastUpdated": "2026-02-02T22:50:07.556Z",
+        "gitCommitSha": "70daac1485106cf797e873f6c23a1eca40ac1ac1"
+      }
+    ],
+    "vercel@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/vercel/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-02T22:50:08.159Z",
+        "lastUpdated": "2026-02-02T22:50:08.159Z",
+        "gitCommitSha": "ae067751b4f42c97d13054211657275029ca8b6d"
+      }
+    ],
+    "Notion@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/Notion/0.1.0",
+        "version": "0.1.0",
+        "installedAt": "2026-02-03T00:03:29.632Z",
+        "lastUpdated": "2026-02-03T00:03:29.632Z",
+        "gitCommitSha": "9847f2aa1a15f25df35ed1fb7b4557dbb60cd651"
+      }
+    ],
+    "playwright@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-plugins-official/playwright/27d2b86d72da",
+        "version": "27d2b86d72da",
+        "installedAt": "2026-02-03T20:59:08.964Z",
+        "lastUpdated": "2026-02-03T20:59:08.964Z",
+        "gitCommitSha": "27d2b86d72da27c64585150857cee8472ad47abb"
+      }
+    ],
+    "code-review@claude-code-plugins": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-code-plugins/code-review/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-03T21:00:25.113Z",
+        "lastUpdated": "2026-02-03T21:00:25.113Z",
+        "gitCommitSha": "a4e0c5b4c84f297bc2d89e075cb1517f87ae13e3"
+      }
+    ],
+    "plugin-dev@claude-code-plugins": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-code-plugins/plugin-dev/0.1.0",
+        "version": "0.1.0",
+        "installedAt": "2026-02-03T21:00:32.664Z",
+        "lastUpdated": "2026-02-03T21:00:32.664Z",
+        "gitCommitSha": "a4e0c5b4c84f297bc2d89e075cb1517f87ae13e3"
+      }
+    ],
+    "security-guidance@claude-code-plugins": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-code-plugins/security-guidance/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-03T21:00:39.411Z",
+        "lastUpdated": "2026-02-03T21:00:39.411Z",
+        "gitCommitSha": "a4e0c5b4c84f297bc2d89e075cb1517f87ae13e3"
+      }
+    ],
+    "ralph-wiggum@claude-code-plugins": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-code-plugins/ralph-wiggum/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-03T21:00:44.711Z",
+        "lastUpdated": "2026-02-03T21:00:44.711Z",
+        "gitCommitSha": "a4e0c5b4c84f297bc2d89e075cb1517f87ae13e3"
+      }
+    ],
+    "learning-output-style@claude-code-plugins": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-code-plugins/learning-output-style/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-03T21:01:01.368Z",
+        "lastUpdated": "2026-02-03T21:01:01.368Z",
+        "gitCommitSha": "a4e0c5b4c84f297bc2d89e075cb1517f87ae13e3"
+      }
+    ],
+    "hookify@claude-code-plugins": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-code-plugins/hookify/0.1.0",
+        "version": "0.1.0",
+        "installedAt": "2026-02-03T21:01:08.960Z",
+        "lastUpdated": "2026-02-03T21:01:08.960Z",
+        "gitCommitSha": "a4e0c5b4c84f297bc2d89e075cb1517f87ae13e3"
+      }
+    ],
+    "frontend-design@claude-code-plugins": [
+      {
+        "scope": "user",
+        "installPath": "/Users/yulong/.claude/plugins/cache/claude-code-plugins/frontend-design/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-02-03T21:01:26.513Z",
+        "lastUpdated": "2026-02-03T21:01:26.513Z",
+        "gitCommitSha": "a4e0c5b4c84f297bc2d89e075cb1517f87ae13e3"
+      }
+    ]
+  }
+}
