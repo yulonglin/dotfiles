@@ -190,5 +190,6 @@
     ]
   },
   "alwaysThinkingEnabled": true,
-  "installMethod": "native"
+  "installMethod": "native",
+  "outputStyle": "Learning"
 }
