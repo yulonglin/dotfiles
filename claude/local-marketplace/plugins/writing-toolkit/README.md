@@ -200,7 +200,7 @@ For detailed information about each pattern:
 - **Fix suggestions** - Concrete rewrites with examples
 - **Sources** - Research basis and citations
 
-See: `ai_docs/humanizer-patterns.md`
+See: `docs/humanizer-patterns.md`
 
 ---
 
@@ -268,5 +268,5 @@ See individual skill documentation:
 - `/humanize-draft` - LLM-ism detection
 
 Or check pattern documentation:
-- `ai_docs/humanizer-patterns.md` - Detailed pattern rationale
+- `docs/humanizer-patterns.md` - Detailed pattern rationale
 - `test-corpus/README.md` - Test corpus structure

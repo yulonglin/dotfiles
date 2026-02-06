@@ -13,7 +13,7 @@ This implementation fixes immediate pain points in Claude Code organization by:
 1. **Moving plans/tasks from global to per-project** (`~/.claude/` → `<repo>/.claude/`)
 2. **Adding stale doc detection** (warns when docs haven't been updated in 180+ days)
 3. **Creating validation hooks** (prevents accidental global plan/task creation)
-4. **Preparing docs/ directory rename** (from `ai_docs/` for VSCode icon support)
+4. **Preparing docs/ directory rename** (from `docs/` for VSCode icon support)
 5. **Adding grep-based docs search** (`/docs-search` skill)
 
 ---
@@ -25,7 +25,7 @@ This implementation fixes immediate pain points in Claude Code organization by:
 | File | Purpose | Status |
 |------|---------|--------|
 | `scripts/migrate_claude_plans_tasks.sh` | Auto-migrate 101 plans + 74 tasks to per-project locations | ✅ Ready |
-| `scripts/rename_ai_docs.sh` | Rename `ai_docs/` → `docs/` across all repos | ✅ Ready |
+| `scripts/rename_ai_docs.sh` | Rename `docs/` → `docs/` across all repos | ✅ Ready |
 
 ### New Hooks
 
@@ -151,7 +151,7 @@ echo "Tasks migrated: $(find ~/code/*/.claude/tasks -type d 2>/dev/null | wc -l)
 
 ## Migration: ai_docs → docs (Optional but Recommended)
 
-To rename `ai_docs/` directories to `docs/` (for VSCode icon support):
+To rename `docs/` directories to `docs/` (for VSCode icon support):
 
 ```bash
 # See what will be renamed
@@ -169,10 +169,10 @@ echo "docs created: $(find ~/code ~/writing -maxdepth 4 -type d -name "docs" 2>/
 ```
 
 **After migration:**
-- `ai_docs/` → `docs/` (gets VSCode folder icon)
+- `docs/` → `docs/` (gets VSCode folder icon)
 - Git history preserved (uses git mv)
 - References updated in CLAUDE.md files
-- Commits with message: "refactor: rename ai_docs/ → docs/"
+- Commits with message: "refactor: rename docs/ → docs/"
 
 ---
 
@@ -261,10 +261,10 @@ Solution:
 - Reversible (no data loss)
 - Helpful (suggests solutions)
 
-### 4. docs/ Directory (Formerly ai_docs/)
+### 4. docs/ Directory (Formerly docs/)
 
 **Reason for rename:**
-- `ai_docs/` is non-standard (VSCode doesn't recognize it)
+- `docs/` is non-standard (VSCode doesn't recognize it)
 - `docs/` is standard and has folder icon support
 - Same content, better visibility in editor
 
@@ -421,7 +421,7 @@ export CLAUDE_CODE_TASKS_DIR='.claude/tasks'
 
 **Solution**:
 - Script detects conflicts and skips
-- Manual merge: `cp ai_docs/* docs/` then delete `ai_docs/`
+- Manual merge: `cp docs/* docs/` then delete `docs/`
 - Or: Use alternative name: `bash scripts/rename_ai_docs.sh knowledge`
 
 ---

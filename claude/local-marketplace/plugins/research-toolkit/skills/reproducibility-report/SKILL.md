@@ -8,8 +8,8 @@ description: Generate reproducibility reports for LLM/ML experiments. Use when (
 Generate comprehensive reproducibility reports for ML/LLM experiments. Based on requirements from [NeurIPS Paper Checklist](https://neurips.cc/public/guides/PaperChecklist), [ACL Responsible NLP Research](http://aclrollingreview.org/responsibleNLPresearch/), and [ML Reproducibility Checklist](https://www.cs.mcgill.ca/~jpineau/ReproducibilityChecklist.pdf).
 
 **References:**
-- `~/.claude/ai_docs/reproducibility-checklist.md` - Full NeurIPS 16-question checklist
-- `~/.claude/ai_docs/ci-standards.md` - CI computation methodology
+- `~/.claude/docs/reproducibility-checklist.md` - Full NeurIPS 16-question checklist
+- `~/.claude/docs/ci-standards.md` - CI computation methodology
 
 ## When to Use This Skill
 

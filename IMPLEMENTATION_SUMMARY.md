@@ -200,5 +200,5 @@ f6a835e refactor: move plotting library to lib/plotting/
 
 - CLAUDE.md - Usage guidelines for Claude Code
 - lib/plotting/README.md - Technical module documentation
-- claude/ai_docs/petri-plotting.md - Petri plotting guide (references updated)
+- claude/docs/petri-plotting.md - Petri plotting guide (references updated)
 - config/matplotlib/*.mplstyle - Style implementations

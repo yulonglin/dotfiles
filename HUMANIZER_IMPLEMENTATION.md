@@ -49,7 +49,7 @@ The humanizer agent and `/humanize-draft` skill detect 15 high-confidence LLM-is
 - Workflow examples
 - Integration status and roadmap
 
-**Pattern Documentation**: `claude/ai_docs/humanizer-patterns.md`
+**Pattern Documentation**: `claude/docs/humanizer-patterns.md`
 - 15 patterns documented in detail
 - Why each is problematic (with citations)
 - False positive scenarios
@@ -238,7 +238,7 @@ Clear division of responsibility. Will audit clarity-critic overlap in Phase 3.
 3. ✅ `patterns/llm-isms-v0.1.json` - Pattern database
 4. ✅ `README.md` - Plugin documentation
 5. ✅ `test-corpus/README.md` - Test corpus structure
-6. ✅ `ai_docs/humanizer-patterns.md` - Pattern documentation
+6. ✅ `docs/humanizer-patterns.md` - Pattern documentation
 7. ✅ `HUMANIZER_IMPLEMENTATION.md` - This file
 
 ### Existing Files (Updated)

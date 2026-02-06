@@ -18,7 +18,7 @@ import anthroplot
 anthroplot.set_defaults(pretty=True)
 ```
 
-See `~/.claude/ai_docs/anthroplot.md` for color reference.
+See `~/.claude/docs/anthroplot.md` for color reference.
 
 ## Why Matplotlib (Not Plotly) for Papers
 

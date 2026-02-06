@@ -28,7 +28,7 @@
 
 ## Important (Should Have)
 
-**Statistics:** (see `~/.claude/ai_docs/ci-standards.md`)
+**Statistics:** (see `~/.claude/docs/ci-standards.md`)
 - [ ] 95% CI with n = questions (not seeds)
 - [ ] Number of runs/seeds
 - [ ] Paired comparisons for same-question tests

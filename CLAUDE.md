@@ -107,7 +107,7 @@ claude/                   # Symlinked to ~/.claude/
 │       ├── writing-toolkit/  # Papers, drafts, presentations, multi-critic review
 │       └── code-quality/     # Code review, debugging, performance, bulk editing
 ├── plugins/              # Plugin runtime (cache, installed_plugins.json)
-├── ai_docs/              # AI knowledge base (CI standards, checklists)
+├── docs/                 # AI knowledge base (CI standards, checklists)
 ├── hooks/                # Hook scripts (auto_log.sh, notify.sh)
 ├── templates/            # Templates for specs, reports
 ├── projects/             # Project-specific settings overrides
@@ -290,3 +290,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - Cleanup system: scripts/cleanup/README.md
 - Git config template: config/gitconfig
 - Claude agents: claude/agents/*.md
+
+## Learnings
+<!-- Claude: add project-specific discoveries below. Prune entries >2 weeks old. Keep under 20 entries. -->
+- Auto MEMORY.md paths are machine-specific (encodes full filesystem path) — not portable across macOS/Linux/RunPod. Use CLAUDE.md Learnings section for durable cross-machine memory instead (2026-02-05)

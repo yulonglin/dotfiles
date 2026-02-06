@@ -90,15 +90,15 @@ Draft publication-quality paper sections with academic writing conventions, hone
 - Common writing pitfalls to avoid
 
 **References:**
-- `~/.claude/ai_docs/paper-writing-style-guide.md` - Gold standard style (title, abstract, intro, figures) from exemplary ICML papers
-- `~/.claude/ai_docs/reproducibility-checklist.md` - NeurIPS checklist (16 questions for publication)
-- `~/.claude/ai_docs/ci-standards.md` - CI computation methodology
+- `~/.claude/docs/paper-writing-style-guide.md` - Gold standard style (title, abstract, intro, figures) from exemplary ICML papers
+- `~/.claude/docs/reproducibility-checklist.md` - NeurIPS checklist (16 questions for publication)
+- `~/.claude/docs/ci-standards.md` - CI computation methodology
 
 # RESEARCH CONTEXT
 
 Adhere to CLAUDE.md writing principles:
 - Honest limitations section (per RESEARCH_SPEC.md)
-- Report actual numbers with 95% CIs per `~/.claude/ai_docs/ci-standards.md`
+- Report actual numbers with 95% CIs per `~/.claude/docs/ci-standards.md`
 - Acknowledge sample size limitations explicitly
 - Fair baseline comparisons
 - Flag uncertainties and assumptions

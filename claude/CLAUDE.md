@@ -528,7 +528,7 @@ Task complexity?
 
 **Priority order:**
 1. Check `docs/` for project-specific context (renamed from `ai_docs/` for VSCode icon support)
-2. Check `~/.claude/docs/` for global specs (CI standards, reproducibility checklist, from `claude/ai_docs/`)
+2. Check `~/.claude/docs/` for global specs (CI standards, reproducibility checklist, migrated to `claude/docs/`)
 3. **Context7 MCP** for popular library/framework documentation (fastest, most reliable)
 4. **GitHub CLI** (`gh api`) for specific file access to verified repositories
 5. **Explore locally** with Glob/Grep/Read for installed libraries/packages
@@ -1021,6 +1021,24 @@ echo "Running in experiments:${EXP} — attach with: tmux attach -t experiments"
 - Fix all errors; warnings are usually worth addressing
 - For zsh scripts, use `# shellcheck shell=bash` at top (closest approximation)
 - Suppress false positives with `# shellcheck disable=SCXXXX` (include reason)
+
+---
+
+## Learnings (Per-Project CLAUDE.md)
+
+Each project's CLAUDE.md should have a `## Learnings` section at the bottom.
+Write to it when you discover:
+- Bugs/quirks specific to this project (library incompatibilities, CI gotchas)
+- Decisions made and their rationale ("chose X because Y")
+- Current state of ongoing work ("migrated 3/7 endpoints, auth next")
+- Things that broke unexpectedly and how they were fixed
+
+Rules:
+- Timestamp each entry: `- description (YYYY-MM-DD)`
+- Keep under 20 entries — prune stale ones (>2 weeks old)
+- If something appears across multiple projects → promote to global CLAUDE.md
+- Don't duplicate what's already in CLAUDE.md instructions
+- Auto MEMORY.md (`~/.claude/projects/`) is for ephemeral session scratch only — not durable
 
 ---
 

@@ -7,7 +7,7 @@ description: Use when running API-heavy experiments (LLM evals, batch processing
 
 Guidance for running API-heavy experiments efficiently without exhausting memory.
 
-> **For implementation work**: See `~/.claude/ai_docs/experiment-memory-optimization.md` for full spec with incident report, architecture diagrams, code examples, and migration path.
+> **For implementation work**: See `~/.claude/docs/experiment-memory-optimization.md` for full spec with incident report, architecture diagrams, code examples, and migration path.
 
 ## The Anti-Pattern (Don't Do This)
 
@@ -156,7 +156,7 @@ Before running API experiments at scale:
 
 ## References
 
-- **Full implementation spec**: `~/.claude/ai_docs/experiment-memory-optimization.md` - incident report, architecture diagrams, code changes, migration path
+- **Full implementation spec**: `~/.claude/docs/experiment-memory-optimization.md` - incident report, architecture diagrams, code changes, migration path
 - **Anthropic Batch API**: https://docs.anthropic.com/en/docs/build-with-claude/batch-processing
 - **OpenAI Batch API**: https://platform.openai.com/docs/guides/batch
 - **Inspect AI cache**: https://github.com/UKGovernmentBEIS/inspect_ai/blob/main/src/inspect_ai/model/_cache.py

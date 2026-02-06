@@ -28,7 +28,7 @@ Parse experiment outputs, perform statistical analyses, create visualizations, a
 
 ## Statistical Analysis
 - Compute descriptive statistics (mean, median, std, quartiles)
-- Calculate 95% confidence intervals per `~/.claude/ai_docs/ci-standards.md`
+- Calculate 95% confidence intervals per `~/.claude/docs/ci-standards.md`
 - Perform significance testing (t-tests, Mann-Whitney, chi-square)
 - Apply multiple comparison corrections (Bonferroni, FDR)
 - Compute effect sizes (Cohen's d, correlation coefficients)
@@ -222,7 +222,7 @@ Choose visualizations based on what you're trying to show:
 
 # ANTHROPIC STYLING (for publication figures)
 
-**Reference**: `~/.claude/ai_docs/anthroplot.md` for colors and setup.
+**Reference**: `~/.claude/docs/anthroplot.md` for colors and setup.
 
 **Quick setup:**
 ```python

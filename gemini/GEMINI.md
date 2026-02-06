@@ -61,7 +61,7 @@ You have several internal tools configured:
 
 **❌ ONLY USE `google_web_search` WHEN:**
 - Internal tools explicitly fail or return "No documentation found" within the project.
-- Looking for external library documentation, framework APIs, or general programming concepts not found within the project's `ai_docs/` or `specs/`.
+- Looking for external library documentation, framework APIs, or general programming concepts not found within the project's `docs/` or `specs/`.
 - Searching for news, blog posts, or non-technical content.
 
 ### Internal Tool Usage Examples
@@ -83,7 +83,7 @@ read_file(file_path="README.md")
 ### Workflow for Documentation Lookup
 
 1.  **Identify what you need**: Project-specific code/docs? External library info? General concept?
-2.  **Search within project first** using `codebase_investigator`, `search_file_content`, `glob`, `read_file`. Check `ai_docs/` and `specs/` if applicable.
+2.  **Search within project first** using `codebase_investigator`, `search_file_content`, `glob`, `read_file`. Check `docs/` and `specs/` if applicable.
 3.  **Only fall back to `google_web_search`** if internal tools fail to provide the necessary information from the project context.
 4.  **Always state which source you used** in your response.
 
@@ -115,7 +115,7 @@ read_file(file_path="README.md")
 
 **Manual (minimal):**
 - `specs/` - Project requirements from user.
-- `ai_docs/` (optional) - Agent-specific context for this project.
+- `docs/` (optional) - Agent-specific context for this project.
   - Project conventions and patterns.
   - Debugging procedures specific to this codebase.
   - Tool usage patterns (only create files when genuinely useful).
@@ -130,7 +130,7 @@ read_file(file_path="README.md")
 
 - **Temporary files**: `tmp/` (for scratch code and data, delete liberally).
 - **Archived items**: `archive/` (for failed/superseded runs, move things here instead of deleting).
-- **Agent-specific context**: `ai_docs/` (for project patterns, debugging notes, tool usage).
+- **Agent-specific context**: `docs/` (for project patterns, debugging notes, tool usage).
 - **User specifications**: `specs/`.
 
 ## Delegation Strategy (Internal Capabilities)
