@@ -29,6 +29,14 @@
 !strategic-communication/
 !strategic-communication/**
 
+# Skill reference docs (detailed content loaded on-demand)
+!gemini-cli/
+!gemini-cli/references/
+!gemini-cli/references/**
+!llm-billing/
+!llm-billing/references/
+!llm-billing/references/**
+
 # Standalone skill files (single .md, not in a directory)
 !docs-search.md
 !task-management.md
@@ -42,3 +50,5 @@
 **/*/spec-interview
 **/*/strategic-communication
 **/*/anthropic-style
+**/*/gemini-cli
+**/*/llm-billing
