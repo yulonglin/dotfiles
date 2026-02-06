@@ -235,14 +235,14 @@ def call_gemini(prompt_text):
         tmp_path = f.name
 
     try:
-        # Use shell pipe from file to avoid ARG_MAX and stdin buffer limits
-        result = subprocess.run(
-            f'cat "{tmp_path}" | gemini -m gemini-2.5-pro -p "" -o json',
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 min per call
-        )
+        with open(tmp_path, "r") as stdin_file:
+            result = subprocess.run(
+                ["gemini", "-m", "gemini-2.5-pro", "-p", "", "-o", "json"],
+                stdin=stdin_file,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 min per call
+            )
 
         if result.returncode != 0:
             stderr_snippet = result.stderr[:500] if result.stderr else "(no stderr)"
