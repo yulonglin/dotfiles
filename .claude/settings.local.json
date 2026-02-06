@@ -6,7 +6,8 @@
       "WebFetch(domain:api.githubcopilot.com)",
       "WebFetch(domain:mcp.context7.com)",
       "WebFetch(domain:registry.npmjs.org)",
-      "WebFetch(domain:http-intake.logs.us5.datadoghq.com)"
+      "WebFetch(domain:http-intake.logs.us5.datadoghq.com)",
+      "WebFetch(domain:eu-central-1-1.aws.cloud2.influxdata.com)"
     ]
   }
 }
