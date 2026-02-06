@@ -29,6 +29,14 @@
       "author": { "name": "yulong" },
       "source": "./plugins/code-toolkit",
       "category": "development"
+    },
+    {
+      "name": "insights-toolkit",
+      "description": "Claude Code usage insights: session analysis, pattern detection, and coaching reports",
+      "version": "1.0.0",
+      "author": { "name": "yulong" },
+      "source": "./plugins/insights-toolkit",
+      "category": "analytics"
     }
   ]
 }
