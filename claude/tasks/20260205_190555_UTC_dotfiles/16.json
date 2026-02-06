@@ -1,9 +1,0 @@
-{
-  "id": "16",
-  "subject": "Remove duplicate skill directories from claude/skills/",
-  "description": "",
-  "activeForm": "Removing duplicate skill directories",
-  "status": "in_progress",
-  "blocks": [],
-  "blockedBy": []
-}

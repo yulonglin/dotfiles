@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "File GitHub issue on anthropics/claude-code",
+  "description": "File a bug report about plugin symlink duplication causing duplicate skills in slash command picker.",
+  "activeForm": "Filing GitHub issue",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

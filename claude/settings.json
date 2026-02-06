@@ -1,5 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
@@ -177,8 +180,11 @@
     "writing-toolkit@local-marketplace": true,
     "code-toolkit@local-marketplace": true,
     "serena@claude-plugins-official": false,
-    "feature-dev@claude-plugins-official": false
+    "feature-dev@claude-plugins-official": false,
+    "insights-toolkit@local-marketplace": true,
+    "claude-md-management@claude-plugins-official": true
   },
+  "outputStyle": "Learning",
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
@@ -189,11 +195,7 @@
       "docker"
     ]
   },
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
-  "teammateMode": "auto",
   "alwaysThinkingEnabled": true,
-  "installMethod": "native",
-  "outputStyle": "Learning"
+  "teammateMode": "auto",
+  "installMethod": "native"
 }

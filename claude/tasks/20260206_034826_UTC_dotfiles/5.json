@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "Add alias and Learnings entry",
+  "description": "Add clean-skill-dupes alias to config/aliases.sh and a Learnings entry to CLAUDE.md documenting the bug.",
+  "activeForm": "Adding alias and docs",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

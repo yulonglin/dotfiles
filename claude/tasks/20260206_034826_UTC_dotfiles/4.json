@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "Wire cleanup into deploy.sh",
+  "description": "Call clean_plugin_symlinks.sh from the Claude Code deployment section of deploy.sh, after the symlink is established.",
+  "activeForm": "Wiring into deploy.sh",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

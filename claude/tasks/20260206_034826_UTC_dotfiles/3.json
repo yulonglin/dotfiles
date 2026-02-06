@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Create clean_plugin_symlinks.sh cleanup script",
+  "description": "Create scripts/cleanup/clean_plugin_symlinks.sh that removes plugin-created symlinks from ~/.claude/skills/, preserving real directories (user-authored skills).",
+  "activeForm": "Creating cleanup script",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
