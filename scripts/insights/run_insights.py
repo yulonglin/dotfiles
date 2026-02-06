@@ -399,17 +399,32 @@ def save_facet(session_id, facet):
 # Phase 3: Generate Report
 # ---------------------------------------------------------------------------
 
-def load_all_facets():
-    """Load all cached facets."""
+def load_all_facets(project_filter=None, since_days=None):
+    """Load all cached facets, optionally filtered by project and recency."""
     facets = []
     if not FACETS_DIR.exists():
         return facets
+
+    cutoff_ts = None
+    if since_days is not None:
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(days=since_days)
+        cutoff_ts = cutoff_dt.isoformat()
+
     for fp in sorted(FACETS_DIR.glob("*.json")):
         try:
             facet = json.loads(fp.read_text())
-            facets.append(facet)
         except (json.JSONDecodeError, OSError):
             continue
+
+        if project_filter and project_filter not in facet.get("project", ""):
+            continue
+
+        if cutoff_ts:
+            ts = facet.get("start_timestamp")
+            if ts and ts < cutoff_ts:
+                continue
+
+        facets.append(facet)
     return facets
 
 
@@ -468,11 +483,18 @@ def compute_aggregate_stats(facets):
     return stats
 
 
-def generate_report(facets, verbose=False):
+def generate_report(facets, verbose=False, project_slug=None):
     """Generate HTML report by feeding stats + facets to Gemini."""
     stats = compute_aggregate_stats(facets)
 
     report_prompt = (PROMPTS_DIR / "report_prompt.txt").read_text()
+
+    if project_slug:
+        report_prompt += (
+            "\n\nNOTE: These facets are filtered to a single project. "
+            "Tailor the report specifically to this project rather than "
+            "cross-project comparisons.\n"
+        )
 
     # Build the input: stats + all facets + prompt
     facet_summaries = []
@@ -530,9 +552,22 @@ def generate_report(facets, verbose=False):
             lines = lines[1:]
         html = "\n".join(lines)
 
+    # Timestamped output with symlink
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    report_path = OUTPUT_DIR / "report.html"
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    if project_slug:
+        slug = project_slug.replace("/", "-").replace(" ", "-").lower()
+        report_name = f"report_{slug}_{ts}.html"
+    else:
+        report_name = f"report_{ts}.html"
+
+    report_path = OUTPUT_DIR / report_name
     report_path.write_text(html)
+
+    # Update latest symlink
+    latest = OUTPUT_DIR / "report_latest.html"
+    latest.unlink(missing_ok=True)
+    latest.symlink_to(report_path.name)
 
     return report_path
 
@@ -556,12 +591,19 @@ def main():
 
     # Report-only mode
     if args.report_only:
-        facets = load_all_facets()
+        facets = load_all_facets(
+            project_filter=args.project,
+            since_days=args.since,
+        )
         if not facets:
             print("No cached facets found. Run without --report-only first.", file=sys.stderr)
             sys.exit(1)
-        print(f"Loaded {len(facets)} cached facets")
-        report_path = generate_report(facets, verbose=args.verbose)
+        if args.project:
+            print(f"Loaded {len(facets)} cached facets (filtered: {args.project})")
+        else:
+            print(f"Loaded {len(facets)} cached facets")
+        report_path = generate_report(facets, verbose=args.verbose,
+                                       project_slug=args.project)
         if report_path:
             print(f"\nReport: {report_path}")
             open_report(report_path)
@@ -588,8 +630,9 @@ def main():
 
     if not to_process and not args.force:
         print("\nAll sessions cached. Regenerating report...")
-        facets = load_all_facets()
-        report_path = generate_report(facets, verbose=args.verbose)
+        facets = load_all_facets(project_filter=args.project, since_days=args.since)
+        report_path = generate_report(facets, verbose=args.verbose,
+                                       project_slug=args.project)
         if report_path:
             print(f"\nReport: {report_path}")
             open_report(report_path)
@@ -656,10 +699,11 @@ def main():
 
     # Phase 3: Generate report
     print("\nPhase 3: Generating report...")
-    facets = load_all_facets()
+    facets = load_all_facets(project_filter=args.project, since_days=args.since)
     print(f"  Total facets (cached + new): {len(facets)}")
 
-    report_path = generate_report(facets, verbose=args.verbose)
+    report_path = generate_report(facets, verbose=args.verbose,
+                                   project_slug=args.project)
     if report_path:
         print(f"\nReport: {report_path}")
         open_report(report_path)
