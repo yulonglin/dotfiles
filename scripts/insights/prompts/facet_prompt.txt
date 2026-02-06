@@ -1,0 +1,54 @@
+You are analyzing Claude Code session transcripts for usage analytics.
+
+Each session is delimited by ===SESSION_BOUNDARY::{session_id}===
+Analyze EVERY session and return a JSON array with one object per session.
+
+CRITICAL: The number of objects in your response MUST equal the number of sessions.
+CRITICAL: Return ONLY valid JSON — no markdown fences, no commentary.
+
+For each session, produce:
+{
+  "session_id": "the UUID from the boundary delimiter",
+  "underlying_goal": "One sentence: what the user was ultimately trying to achieve",
+  "goal_categories": {"category": count},
+  "outcome": "fully_achieved|partially_achieved|unclear|abandoned",
+  "claude_helpfulness": "essential|very_helpful|moderately_helpful|unhelpful",
+  "session_type": "single_task|iterative_refinement|quick_question|exploratory|debugging",
+  "friction_counts": {"type": count},
+  "friction_detail": "Brief description of any friction encountered, or empty string",
+  "primary_success": "The single most valuable thing Claude did, or empty string",
+  "improvement_opportunity": "One concrete thing the user or Claude could have done differently for a better outcome, or empty string",
+  "brief_summary": "2-3 sentence summary of the session"
+}
+
+## Goal Categories (use exactly these keys, count occurrences):
+- feature_implementation: Building new features or components
+- bug_fix: Fixing broken behavior
+- refactoring: Restructuring code without changing behavior
+- configuration: Setting up tools, environments, configs
+- exploration: Understanding codebases, investigating approaches
+- writing: Documentation, papers, presentations, communications
+- research: AI safety experiments, evaluations, data analysis
+- debugging: Investigating unexpected behavior (not yet fixing)
+- planning: Designing approaches, architecture, specifications
+- review: Code review, PR review, audit
+- deployment: Shipping, deploying, releasing
+- tooling: Building developer tools, scripts, automation
+
+## Friction Types (use exactly these keys):
+- tool_failure: Claude tools failed (Edit, Bash, etc.)
+- wrong_approach: Claude went down wrong path, had to backtrack
+- context_loss: Claude forgot earlier context or instructions
+- slow_response: Excessive back-and-forth for simple tasks
+- misunderstanding: Claude misunderstood the request
+- permission_issue: Sandbox, auth, or access problems
+- hallucination: Claude fabricated information
+- over_engineering: Claude added unnecessary complexity
+- under_engineering: Claude produced incomplete or too-simple solution
+
+## Rules:
+- If a session is too short or empty to analyze, use outcome "unclear" and empty strings
+- goal_categories can have multiple entries (multi-goal sessions)
+- friction_counts should only include frictions that actually occurred
+- Be honest about outcomes — "partially_achieved" is fine
+- session_id MUST match the boundary delimiter exactly
