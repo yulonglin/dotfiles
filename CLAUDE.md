@@ -96,8 +96,9 @@ config/
 └── user.conf.example     # User-specific git settings template
 
 claude/                   # Symlinked to ~/.claude/
-├── CLAUDE.md             # Global AI instructions
+├── CLAUDE.md             # Global AI instructions (slim ~120 lines, identity + pointers)
 ├── settings.json         # Claude Code settings
+├── rules/                # Auto-loaded behavioral rules (safety, workflow, conventions)
 ├── agents/               # Global agents (efficient-explorer, context-summariser, gemini)
 ├── skills/               # Global skills (commit, custom-compact, fast-cli, etc.)
 ├── local-marketplace/    # Local plugin marketplace (filesystem-based)
@@ -107,7 +108,8 @@ claude/                   # Symlinked to ~/.claude/
 │       ├── writing-toolkit/  # Papers, drafts, presentations, multi-critic review
 │       └── code-quality/     # Code review, debugging, performance, bulk editing
 ├── plugins/              # Plugin runtime (cache, installed_plugins.json)
-├── docs/                 # AI knowledge base (CI standards, checklists)
+├── docs/                 # On-demand knowledge (research, async, tmux, agent teams, etc.)
+├── ai_docs -> docs       # Permanent backwards-compat symlink
 ├── hooks/                # Hook scripts (auto_log.sh, notify.sh)
 ├── templates/            # Templates for specs, reports
 ├── projects/             # Project-specific settings overrides
@@ -294,3 +296,4 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ## Learnings
 <!-- Claude: add project-specific discoveries below. Prune entries >2 weeks old. Keep under 20 entries. -->
 - Auto MEMORY.md paths are machine-specific (encodes full filesystem path) — not portable across macOS/Linux/RunPod. Use CLAUDE.md Learnings section for durable cross-machine memory instead (2026-02-05)
+- Global CLAUDE.md restructured: slim core (~120 lines) + rules/ (auto-loaded behavioral rules) + docs/ (on-demand knowledge). ai_docs/ renamed to docs/ with permanent symlink for backwards-compat. Serena, feature-dev, ralph-loop, pyright-lsp plugins disabled (2026-02-05)

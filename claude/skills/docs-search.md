@@ -98,9 +98,13 @@ apt-get install fd ripgrep  # Linux (check your package manager)
 query="$1"
 options="${@:2}"
 
-# Find markdown docs
-fd -e md -E node_modules -E .git . | \
-  grep -E "(docs/|specs/|CLAUDE\.md|README\.md)" | \
+# Find markdown docs (project + global)
+{
+  fd -e md -E node_modules -E .git . | \
+    grep -E "(docs/|specs/|CLAUDE\.md|README\.md)"
+  # Also search global docs
+  fd -e md . ~/.claude/docs/ 2>/dev/null
+} | sort -u | \
   xargs rg -i "$query" $options -H -n --context 2 | \
   head -100  # Limit output
 ```
