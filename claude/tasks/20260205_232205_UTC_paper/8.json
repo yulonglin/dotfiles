@@ -1,9 +1,0 @@
-{
-  "id": "8",
-  "subject": "Fix Figure 1 placement (move after contributions list)",
-  "description": "Move figure* block from lines 69-74 to after line 96 (after contributions list), change [t] to [tbp]",
-  "activeForm": "Fixing Figure 1 placement",
-  "status": "completed",
-  "blocks": [],
-  "blockedBy": []
-}

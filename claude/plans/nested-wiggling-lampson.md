@@ -1,144 +1,91 @@
-# Plan: Custom Insights — Scalable Usage Analytics
+# Plan: Actionable Insights — Refocus Report on Feedback
 
-## Problem
-Built-in `/insights` does two things:
-1. **Aggregate stats** (all sessions): Tool counts, line changes, commits — scans everything
-2. **Deep facet analysis** (~6 sessions): Goal categorization, friction, satisfaction — narrative
+## Context
 
-The narrative is skewed because it's based on only 6 recent sessions. The aggregate
-stats are fine. We need to do deep analysis on ALL sessions, not just 6.
+The insights pipeline is built and running (86 batches, ~60 facets cached so far).
+The current report prompt produces a generic analytics dashboard (charts, distributions, tables).
+User wants the report restructured around **4 actionable sections**:
 
-## Architecture
+1. **What I use Claude Code for** — session type/goal breakdown
+2. **What makes my sessions unique** — distinctive patterns, unusual usage
+3. **What to do more of** — effective patterns worth reinforcing
+4. **What to change** — concrete critique with targeted advice per use-case
 
-**Primary: Standalone script** (avoids polluting Claude session context)
-**Optional: Thin skill wrapper** (disabled by default, for convenience)
+This is a **prompt-only change** — no script modifications needed.
 
-```
-scripts/insights/
-├── run_insights.py        # Single entry point: extract → facets → report
-└── prompts/
-    ├── facet_prompt.txt   # Prompt template for facet generation
-    └── report_prompt.txt  # Prompt template for report synthesis
+## Changes
 
-claude/skills/my-insights/
-└── SKILL.md               # Optional thin wrapper (disabled by default)
-```
+### 1. `scripts/insights/prompts/facet_prompt.txt` — Add improvement field
 
-Output: `~/.claude/usage-data/` (same location as built-in)
+**Why**: Current facets have `primary_success` and `friction_detail` but no forward-looking
+"what could be better" field. Adding `improvement_opportunity` gives the report prompt
+raw material for section 4 (what to change).
 
-Run from terminal: `python scripts/insights/run_insights.py [--project X] [--since 30] [--force]`
+**Changes**:
+- Add `"improvement_opportunity"` field to schema: "One concrete thing the user or Claude
+  could have done differently for a better outcome, or empty string"
+- Clean up `TODO(human)` comments (keep the generic categories — they work fine)
+- Keep all existing fields intact (backward compatible with already-cached facets)
 
-## Data Profile
+### 2. `scripts/insights/prompts/report_prompt.txt` — Complete rewrite
 
-- **956 sessions** with content (after filtering agent-only, empty)
-- **12.4M chars total** (cleaned: stripped progress/hook/file-history noise)
-- Median: 5K chars, Mean: 13K, P90: 28K, Max: 434K
-- Gemini 1M context → ~700K useful per call → **~18 batches**
-- ~30 sec per call → **~9 min end-to-end**
+Replace the dashboard-style report with an actionable feedback report structured as:
 
-## Pipeline (all in `run_insights.py`)
+**Section 1: "How You Use Claude Code"** (descriptive)
+- Goal category breakdown with context (not just counts — what the patterns mean)
+- Session type distribution
+- Per-project summary (which projects, what kind of work)
+- Time patterns if available
 
-### Phase 1: Extract & Clean
-**Pure Python** — no LLM.
+**Section 2: "What Makes Your Usage Distinctive"** (analytical)
+- Unusual patterns (e.g., heavy planning vs jumping to implementation)
+- Ratio of tooling/meta work vs actual project work
+- Session length patterns (many short vs few long)
+- Interaction style (single-task vs iterative refinement)
+- Helpfulness distribution and what it suggests
 
-For each session JSONL in `~/.claude/projects/*/`:
-1. Strip noise entries: `progress`, `file-history-snapshot`, hook metadata
-2. Keep only text content from `user` and `assistant` messages, plus `summary`
-3. Package as cleaned transcript with metadata (session_id, project, timestamp)
-4. Skip sessions already having facets (caching)
+**Section 3: "What's Working Well — Do More Of This"** (positive actionable)
+- Most successful session types/patterns (high outcome + high helpfulness)
+- Effective workflows worth reinforcing
+- Projects with best outcomes and what they have in common
+- Specific `primary_success` themes grouped by pattern
 
-Filters: `--project PATTERN`, `--since DAYS`, `--limit N`, `--force`
+**Section 4: "What to Change — Concrete Improvements"** (critical actionable)
+- Friction analysis organized by use-case (not just global frequency)
+- Per-goal-category advice: "When doing X, consider Y"
+- Common failure modes with specific remedies
+- `improvement_opportunity` themes grouped into actionable recommendations
+- Abandoned/unclear sessions — what went wrong and how to prevent it
 
-### Phase 2: Generate Facets (Gemini CLI)
-**Full transcripts to Gemini** — no lossy digest compression.
+**Style**: Keep the HTML/CSS quality (dark mode, collapsible sections) but shift
+tone from "dashboard for a manager" to "coach feedback for the user".
 
-Batching strategy:
-- Sort sessions by size (small first for early results)
-- Group into batches targeting **~700K chars** (leaves 300K for prompt + response)
-- Small sessions: ~100+ per batch. Large sessions (>50K): fewer per batch
-- Very large sessions (>200K): process individually
+### 3. `scripts/insights/run_insights.py` — Add new field to report payload
 
-For each batch:
-1. Build prompt: facet_prompt.txt + batch of cleaned transcripts
-2. Call `gemini -p "PROMPT" < batch_input.txt`
-3. Parse response as JSON array of facets
-4. Save each facet to `~/.claude/usage-data/facets/{session_id}.json`
+Tiny change: include `improvement_opportunity` in the facet summary sent to the report
+generator (line in `generate_report()` where `facet_summaries` are built).
 
-Facet schema (compatible with built-in `/insights`):
-```json
-{
-  "underlying_goal": "string",
-  "goal_categories": {"category": count},
-  "outcome": "fully_achieved|partially_achieved|unclear",
-  "claude_helpfulness": "essential|very_helpful|moderately_helpful",
-  "session_type": "single_task|iterative_refinement|quick_question|exploratory",
-  "friction_counts": {"type": count},
-  "friction_detail": "string",
-  "primary_success": "string",
-  "brief_summary": "string",
-  "session_id": "UUID",
-  "project": "string"
-}
-```
+## Files to Modify
 
-### Phase 3: Generate Report (Gemini CLI)
-All facets (~500 x ~500 chars = ~250K) fit in one Gemini call.
+| File | Change | Size |
+|------|--------|------|
+| `scripts/insights/prompts/facet_prompt.txt` | Add field, clean TODOs | ~5 lines |
+| `scripts/insights/prompts/report_prompt.txt` | Full rewrite | ~80 lines |
+| `scripts/insights/run_insights.py` | Add field to report payload | ~1 line |
 
-1. Python computes aggregate stats (totals, frequencies, per-project breakdowns)
-2. Feed stats + all facets to Gemini with report_prompt.txt
-3. Gemini outputs HTML report
-4. Save to `~/.claude/usage-data/report.html`
-5. `open report.html` (macOS) or print path
+## Cache Compatibility
 
-## Key Design Decisions
-
-1. **Standalone script, not skill**: Avoids polluting Claude session context.
-   Can run in a separate terminal while working. Progress via stdout.
-2. **Full transcripts to Gemini**: No lossy digest step. Gemini's 1M context
-   handles even large sessions. More accurate facets.
-3. **Gemini CLI (free)**: No API costs, no litellm, no async complexity.
-   Just subprocess calls to `gemini`.
-4. **Caching at facet level**: Each `{session_id}.json` is cached on disk.
-   Re-runs skip existing facets. `--force` regenerates everything.
-5. **Compatible output**: Same schema/location as built-in `/insights`.
-
-## Files to Create
-
-| File | Purpose | LOC est. |
-|------|---------|----------|
-| `scripts/insights/run_insights.py` | Main script (extract + facets + report) | ~250 |
-| `scripts/insights/prompts/facet_prompt.txt` | Facet generation prompt | ~40 |
-| `scripts/insights/prompts/report_prompt.txt` | Report synthesis prompt | ~60 |
-| `claude/skills/my-insights/SKILL.md` | Optional thin skill wrapper (disabled) | ~30 |
-
-**~400 lines total.** Single script, two prompt files, one optional skill.
-
-## Optional Skill Wrapper
-
-`claude/skills/my-insights/SKILL.md` — disabled by default (not in any auto-trigger list).
-
-**Purpose**: Convenience for running from within Claude Code when desired.
-**Behavior**: Thin wrapper that shells out to `scripts/insights/run_insights.py` with
-appropriate args. Does NOT pollute Claude session context with analysis — just runs
-the script and reports the output path.
-
-**Usage**: `/my-insights` or `/my-insights --limit 20 --project sandbagging`
-
-**Why disabled by default**: The script runs ~9 min for full analysis. Better to run
-in a separate terminal. The skill exists for the rare case where you want it inline.
-
-## Human Contribution Opportunity
-
-The **facet prompt** is where domain expertise matters most.
-It determines what goal categories, friction types, and success patterns
-the system tracks. Should reflect AI safety research workflows,
-not generic coding patterns (which is what the built-in `/insights` defaults to).
+- **Existing facets** (from the running pipeline): Missing `improvement_opportunity` field.
+  The report prompt handles this gracefully (field is optional, empty if absent).
+- **New/re-run facets**: Will include the new field.
+- **No need to `--force` reprocess** — old facets still work, just with less data for section 4.
+  Can optionally `--force` later for richer critique after the full run completes.
 
 ## Verification
 
-1. `python scripts/insights/run_insights.py --limit 5` → quick test (5 sessions)
-2. Check `~/.claude/usage-data/facets/` for generated JSONs
-3. `python scripts/insights/run_insights.py --limit 20` → medium test
-4. Open `report.html` in browser, verify content makes sense
-5. Full run: `python scripts/insights/run_insights.py` (~9 min, all 956 sessions)
-6. Re-run → should skip all cached facets, only regenerate report
+1. Wait for current background run to complete (~60/1008 facets done)
+2. Update prompts and script
+3. `python3 scripts/insights/run_insights.py --report-only` — regenerate from existing facets
+4. Open `report.html` — verify the 4 sections appear with actionable content
+5. Check section 4 has concrete per-use-case advice (not just "reduce friction")
+6. Optionally: `--force --limit 20` to test new `improvement_opportunity` field

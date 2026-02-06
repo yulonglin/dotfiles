@@ -1,9 +1,0 @@
-{
-  "id": "10",
-  "subject": "Expand main body with TM confound, stealth tradeoff, consistency instructions",
-  "description": "Add ~2 pages: TM Correctness Confound as new §4.x, Stealth Prompt Tradeoff figure+discussion, condensed Consistency Instructions analysis",
-  "activeForm": "Expanding main body sections",
-  "status": "completed",
-  "blocks": [],
-  "blockedBy": []
-}

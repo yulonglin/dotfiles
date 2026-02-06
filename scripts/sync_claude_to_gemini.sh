@@ -33,34 +33,56 @@ if [ -f "$SCRIPT_PATH" ]; then
     fi
 fi
 
-SOURCE_DIR="$HOME/code/dotfiles/claude"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+HELPER="$SCRIPT_DIR/helpers/enumerate_claude_skills.sh"
+SOURCE_DIR="$HOME/.claude"
 TARGET_DIR="$HOME/.gemini/skills"
-DOTFILES_DIR="$HOME/code/dotfiles"
+
+if [ ! -f "$HELPER" ]; then
+    echo "Error: enumerate_claude_skills.sh not found at $HELPER" >&2
+    exit 1
+fi
+source "$HELPER"
 
 mkdir -p "$TARGET_DIR"
 
-echo ">>> Syncing Claude Code Skills to Gemini CLI..."
-if [ -d "$SOURCE_DIR/skills" ]; then
-    for skill in "$SOURCE_DIR/skills"/*; do
-        [ -d "$skill" ] || continue
-        name=$(basename "$skill")
-        # Use -n to treat destination symlink to directory as a file (prevents dereferencing)
-        ln -sfn "$skill" "$TARGET_DIR/$name"
-        echo "Linked Skill: $name"
-    done
-fi
+# Clean stale symlinks (broken or from old *__* pattern)
+find "$TARGET_DIR" -maxdepth 1 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+find "$TARGET_DIR" -maxdepth 1 -type l -name '*__*' -delete 2>/dev/null || true
 
-echo ">>> Syncing Claude Code Agents to Gemini CLI (as Skills)..."
-if [ -d "$SOURCE_DIR/agents" ]; then
-    for agent in "$SOURCE_DIR/agents"/*.md; do
-        [ -f "$agent" ] || continue
-        name=$(basename "$agent" .md)
-        mkdir -p "$TARGET_DIR/$name"
-        # Use -n to safer symlinking
-        ln -sfn "$agent" "$TARGET_DIR/$name/SKILL.md"
-        echo "Linked Agent: $name"
-    done
-fi
+echo ">>> Syncing Claude Code Skills to Gemini CLI..."
+
+enumerate_claude_skills "$SOURCE_DIR" | while IFS=$'\t' read -r type name path; do
+    case "$type" in
+        user_skill)
+            # Directory skill — symlink directly
+            ln -sfn "$path" "$TARGET_DIR/$name"
+            echo "  User Skill: $name"
+            ;;
+        standalone_skill)
+            # Single .md file — wrap in a directory with SKILL.md symlink
+            mkdir -p "$TARGET_DIR/$name"
+            ln -sfn "$path" "$TARGET_DIR/$name/SKILL.md"
+            echo "  Standalone Skill: $name"
+            ;;
+        plugin_skill)
+            # Plugin skill directory — symlink directly
+            ln -sfn "$path" "$TARGET_DIR/$name"
+            echo "  Plugin Skill: $name"
+            ;;
+        agent_skill)
+            # Agent .md file — wrap in directory with SKILL.md symlink
+            mkdir -p "$TARGET_DIR/$name"
+            ln -sfn "$path" "$TARGET_DIR/$name/SKILL.md"
+            echo "  Agent Skill: $name"
+            ;;
+    esac
+done
+
+# Count results
+TOTAL=$(find "$TARGET_DIR" -maxdepth 1 -mindepth 1 | wc -l | tr -d ' ')
+echo "  Synced $TOTAL skills to $TARGET_DIR"
 
 echo ">>> Ensuring GEMINI.md points to CLAUDE.md..."
 GEMINI_MD="$DOTFILES_DIR/GEMINI.md"
@@ -84,7 +106,7 @@ else
 fi
 
 echo ">>> Syncing Claude Code Permissions to Gemini CLI Policies..."
-CLAUDE_SETTINGS="$HOME/code/dotfiles/.claude/settings.json"
+CLAUDE_SETTINGS="$DOTFILES_DIR/.claude/settings.json"
 POLICY_DIR="$HOME/.gemini/policies"
 CONVERT_SCRIPT="$DOTFILES_DIR/scripts/helpers/convert_claude_perms.py"
 

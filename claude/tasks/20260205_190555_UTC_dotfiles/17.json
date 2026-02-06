@@ -1,0 +1,9 @@
+{
+  "id": "17",
+  "subject": "Verify Claude Code UI no longer shows duplicates",
+  "description": "",
+  "activeForm": "Verifying no more UI duplicates",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

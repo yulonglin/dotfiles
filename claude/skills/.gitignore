@@ -1,0 +1,44 @@
+# Ignore everything — Claude Code creates runtime symlinks and agent wrappers
+# Only user-authored skills are tracked (whitelist approach)
+*
+
+# Track this file
+!.gitignore
+
+# Track plugin system directory
+!.system/
+!.system/**
+
+# User-authored skill directories
+!agent-teams/
+!agent-teams/**
+!anthropic-style/
+!anthropic-style/**
+!commit/
+!commit/**
+!commit-push-sync/
+!commit-push-sync/**
+!custom-compact/
+!custom-compact/**
+!externalise-handover/
+!externalise-handover/**
+!fast-cli/
+!fast-cli/**
+!spec-interview/
+!spec-interview/**
+!strategic-communication/
+!strategic-communication/**
+
+# Standalone skill files (single .md, not in a directory)
+!docs-search.md
+!task-management.md
+
+# Re-ignore circular self-links inside user dirs (runtime artifact)
+**/*/commit
+**/*/commit-push-sync
+**/*/custom-compact
+**/*/externalise-handover
+**/*/fast-cli
+**/*/spec-interview
+**/*/strategic-communication
+**/*/anthropic-style

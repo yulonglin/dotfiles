@@ -1,0 +1,9 @@
+{
+  "id": "18",
+  "subject": "Update .gitignore if needed after cleanup",
+  "description": "",
+  "activeForm": "Updating .gitignore after cleanup",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}
