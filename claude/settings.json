@@ -168,16 +168,16 @@
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": false,
     "learning-output-style@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": false,
     "research-toolkit@local-marketplace": true,
     "writing-toolkit@local-marketplace": true,
     "code-toolkit@local-marketplace": true,
-    "serena@claude-plugins-official": true,
-    "feature-dev@claude-plugins-official": true
+    "serena@claude-plugins-official": false,
+    "feature-dev@claude-plugins-official": false
   },
   "sandbox": {
     "enabled": true,
