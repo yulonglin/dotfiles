@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════════════════
+# AI CLI Tools Auto-Update
+# ═══════════════════════════════════════════════════════════════════════════════
+# Updates Claude Code, Gemini CLI, and Codex CLI using the correct method
+# per tool (brew, bun, npm). Designed to run from launchd/cron (minimal PATH).
+#
+# Usage:
+#   update-ai-tools              # Run updates
+#   update-ai-tools --dry-run    # Preview what would be updated
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── PATH Setup (critical for launchd/cron which have minimal PATH) ──────────
+
+# macOS: source Homebrew
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null)" || true
+fi
+
+# Add common paths for globally installed tools
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH"
+
+# ─── Configuration ───────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+DRY_RUN=false
+LOCK_FILE="$HOME/.update-ai-tools.lock"
+
+is_macos() { [[ "$(uname -s)" == "Darwin" ]]; }
+
+# ─── Argument Parsing ────────────────────────────────────────────────────────
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=true; shift ;;
+        -h|--help)
+            echo "Usage: update-ai-tools [--dry-run]"
+            echo ""
+            echo "Updates Claude Code, Gemini CLI, and Codex CLI."
+            echo "Detects per-tool installation method (brew/bun/npm)."
+            echo ""
+            echo "Options:"
+            echo "  --dry-run    Preview what would be updated"
+            echo "  -h, --help   Show this help"
+            exit 0
+            ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+# ─── Logging ─────────────────────────────────────────────────────────────────
+
+log() { echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] $*"; }
+log_ok() { log "✓ $*"; }
+log_skip() { log "- $*"; }
+log_err() { log "✗ $*" >&2; }
+
+# ─── Lock File (prevent concurrent runs) ─────────────────────────────────────
+
+acquire_lock() {
+    if [[ -f "$LOCK_FILE" ]]; then
+        local pid
+        pid=$(cat "$LOCK_FILE" 2>/dev/null)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            log_err "Another instance is running (PID $pid). Exiting."
+            exit 1
+        fi
+        # Stale lock — remove it
+        rm -f "$LOCK_FILE"
+    fi
+    echo "$$" > "$LOCK_FILE"
+}
+
+release_lock() {
+    rm -f "$LOCK_FILE"
+}
+
+trap release_lock EXIT
+
+# ─── Core Update Logic ──────────────────────────────────────────────────────
+
+# Update a tool by detecting its installation method (brew/bun/npm)
+# Usage: update_tool <command_name> <brew_package> <npm_package>
+update_tool() {
+    local tool_name="$1" brew_name="$2" npm_name="$3"
+
+    # Skip if tool not installed
+    if ! command -v "$tool_name" &>/dev/null; then
+        log_skip "$tool_name not installed, skipping"
+        return 0
+    fi
+
+    # Detect installation method by checking where the binary lives
+    local method="unknown"
+    local tool_path
+    tool_path=$(command -v "$tool_name" 2>/dev/null || true)
+
+    if is_macos && [[ "$tool_path" == "$(brew --prefix 2>/dev/null)"* ]]; then
+        method="brew"
+    elif [[ "$tool_path" == "$HOME/.bun/"* ]]; then
+        method="bun"
+    elif [[ "$tool_path" == "$HOME/.npm-global/"* ]] || command -v npm &>/dev/null; then
+        method="npm"
+    fi
+
+    # Dry-run: show what would happen, then exit
+    if [[ "$DRY_RUN" == "true" ]]; then
+        case "$method" in
+            brew) log "[DRY RUN] Would run: brew upgrade $brew_name" ;;
+            bun)  log "[DRY RUN] Would run: bun add -g ${npm_name}@latest" ;;
+            npm)  log "[DRY RUN] Would run: npm install -g ${npm_name}@latest" ;;
+            *)    log "[DRY RUN] $tool_name: no known update method" ;;
+        esac
+        return 0
+    fi
+
+    # Execute update
+    log "Updating $tool_name via $method..."
+    case "$method" in
+        brew)
+            NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade "$brew_name" 2>&1 \
+                || log_err "$tool_name brew upgrade failed"
+            ;;
+        bun)
+            bun add -g "${npm_name}@latest" 2>&1 \
+                || log_err "$tool_name bun update failed"
+            ;;
+        npm)
+            npm install -g "${npm_name}@latest" 2>&1 \
+                || log_err "$tool_name npm update failed"
+            ;;
+        *)
+            log_err "$tool_name installed but no known update method (not brew/bun/npm)"
+            return 1
+            ;;
+    esac
+}
+
+# ─── Update Claude Code ─────────────────────────────────────────────────────
+
+update_claude() {
+    if ! command -v claude &>/dev/null; then
+        log_skip "claude not installed, skipping"
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "[DRY RUN] Would run: claude update"
+        return 0
+    fi
+
+    log "Updating Claude Code..."
+    claude update 2>&1 || log_err "Claude Code update failed"
+}
+
+# ─── Main ────────────────────────────────────────────────────────────────────
+
+acquire_lock
+
+log "═══ AI Tools Update Started ═══"
+log "PATH: $PATH"
+[[ "$DRY_RUN" == "true" ]] && log "MODE: dry-run (no changes will be made)"
+
+# Continue on individual tool failures
+set +e
+
+update_claude
+update_tool "gemini" "gemini-cli" "@google/gemini-cli"
+update_tool "codex"  "codex"      "@openai/codex"
+
+set -e
+
+log "═══ AI Tools Update Complete ═══"

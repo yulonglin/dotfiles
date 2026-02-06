@@ -242,6 +242,55 @@ Modify the `clean_directory` function to accept a retention parameter, or create
 - Files moved to trash, not permanently deleted
 - Logs contain file paths (review before sharing)
 
+## AI Tools Auto-Update
+
+Daily scheduled job (6:00 AM) that updates Claude Code, Gemini CLI, and Codex CLI.
+
+### Features
+
+- **Per-tool detection**: Detects how each tool was installed (brew, bun, npm) and uses the correct update command
+- **`claude update`**: Works universally regardless of Claude Code install method
+- **Lock file**: Prevents concurrent runs with PID-based stale lock detection
+- **`--dry-run`**: Preview what would be updated without executing
+- **PATH setup**: Handles minimal launchd/cron PATH by sourcing brew and adding common paths
+
+### Manual Usage
+
+```bash
+# Preview updates
+update-ai-tools --dry-run
+
+# Run updates
+update-ai-tools
+# Or use the alias:
+ai-update
+```
+
+### Setup / Uninstall
+
+```bash
+# Install scheduled job
+scripts/cleanup/setup_ai_update.sh
+
+# Uninstall scheduled job
+scripts/cleanup/setup_ai_update.sh --uninstall
+```
+
+### Logs
+
+- **macOS**: `~/Library/Logs/com.user.update-ai-tools.log`
+- **Linux**: `~/.update-ai-tools.log`
+
+### Checking Job Status
+
+```bash
+# macOS
+launchctl list | grep update-ai-tools
+
+# Linux
+crontab -l | grep update-ai-tools
+```
+
 ## Uninstalling
 
 To completely remove all traces:

@@ -51,6 +51,7 @@ OPTIONS:
     --secrets         Sync secrets with GitHub gist
     --cleanup         Install file cleanup: Downloads/Screenshots (macOS only)
     --claude-cleanup  Install Claude Code session cleanup (both platforms)
+    --ai-update       Install AI tools auto-update (daily, both platforms)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
@@ -588,6 +589,17 @@ if [[ "$DEPLOY_CLAUDE_CLEANUP" == "true" ]]; then
     # Weekly tmpdir cleanup (deletes files >7 days old)
     if [[ -f "$DOT_DIR/scripts/cleanup/setup_claude_tmpdir_cleanup.sh" ]]; then
         "$DOT_DIR/scripts/cleanup/setup_claude_tmpdir_cleanup.sh" || log_warning "Claude tmpdir cleanup installation failed"
+    fi
+fi
+
+# ─── AI Tools Auto-Update (both platforms) ──────────────────────────────────
+
+if [[ "$DEPLOY_AI_UPDATE" == "true" ]]; then
+    log_section "INSTALLING AI TOOLS AUTO-UPDATE"
+    if [[ -f "$DOT_DIR/scripts/cleanup/setup_ai_update.sh" ]]; then
+        "$DOT_DIR/scripts/cleanup/setup_ai_update.sh" || log_warning "AI update setup failed"
+    else
+        log_warning "AI update setup script not found"
     fi
 fi
 

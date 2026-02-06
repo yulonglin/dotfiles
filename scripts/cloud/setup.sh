@@ -60,6 +60,12 @@ if [ -d /root/.ssh ]; then
     chmod 600 "$HOME_DIR/.ssh/authorized_keys" 2>/dev/null || true
 fi
 
+# ─── Bun (preferred for global CLI tools on Linux) ───────────────────────────
+if ! command -v bun &>/dev/null; then
+    echo "Installing bun..."
+    sudo -u "$USERNAME" -i bash -c 'curl -fsSL https://bun.sh/install | bash'
+fi
+
 # ─── Install uv (as user) ─────────────────────────────────────────────────────
 echo "Installing uv..."
 sudo -u "$USERNAME" -i bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'

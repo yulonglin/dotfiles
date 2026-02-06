@@ -393,16 +393,8 @@ alias cc-force='clear-claude-code --force'
 alias cca='clear-claude-code --all'           # kill everything (confirms)
 alias cc-all='clear-claude-code --all'
 
-# Update all AI CLI tools (platform-specific)
-if [[ "$(uname -s)" == "Darwin" ]] && command -v brew &>/dev/null; then
-    # macOS: Use Homebrew
-    alias ai-update='brew upgrade --cask claude-code && brew upgrade gemini-cli codex'
-elif command -v npm &>/dev/null; then
-    # Linux or systems with npm
-    alias ai-update='claude update && npm update -g @google/gemini-cli @openai/codex'
-else
-    alias ai-update='echo "Error: No package manager found for AI tools updates"'
-fi
+# Update all AI CLI tools (delegates to update-ai-tools script)
+alias ai-update='update-ai-tools'
 
 # # -------------------------------------------------------------------
 # # Better utils: https://www.lesswrong.com/posts/6P8GYb4AjtPXx6LLB/tips-and-code-for-empirical-research-workflows

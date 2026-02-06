@@ -50,6 +50,9 @@ add_to_path "${DOT_DIR}/custom_bins"
 # Add ~/.local/bin to PATH (for Claude Code, gh, gitleaks, uv tools)
 add_to_path "$HOME/.local/bin"
 
+# bun - fast JavaScript runtime and package manager (preferred on Linux)
+[[ -d "$HOME/.bun/bin" ]] && add_to_path "$HOME/.bun/bin"
+
 # npm global packages - avoid permission issues with /usr/lib/node_modules
 # Installs to ~/.npm-global instead of requiring sudo
 if command -v npm &>/dev/null; then
