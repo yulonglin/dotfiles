@@ -1,0 +1,9 @@
+{
+  "id": "11",
+  "subject": "Add appendix with 11+ subsections from main paper",
+  "description": "Add \\appendix section with TM failure modes, fine-tuned details, behavioral probes, consistency instructions, adversarial strategies, DCE task counts, multi-sample aggregation, C3 failure mode, lie detector failures, paraphrasing summary, and sandbagging prompt examples",
+  "activeForm": "Adding appendix sections",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

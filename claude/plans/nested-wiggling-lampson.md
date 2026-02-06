@@ -1,12 +1,17 @@
 # Plan: Custom Insights — Scalable Usage Analytics
 
 ## Problem
-Built-in `/insights` samples only ~6 recent sessions, over-indexing on atypical work.
-User has **956 sessions with content** across 33 projects — need to analyze them all.
+Built-in `/insights` does two things:
+1. **Aggregate stats** (all sessions): Tool counts, line changes, commits — scans everything
+2. **Deep facet analysis** (~6 sessions): Goal categorization, friction, satisfaction — narrative
+
+The narrative is skewed because it's based on only 6 recent sessions. The aggregate
+stats are fine. We need to do deep analysis on ALL sessions, not just 6.
 
 ## Architecture
 
-**Standalone script** (not a skill — avoids polluting Claude session context):
+**Primary: Standalone script** (avoids polluting Claude session context)
+**Optional: Thin skill wrapper** (disabled by default, for convenience)
 
 ```
 scripts/insights/
@@ -14,6 +19,9 @@ scripts/insights/
 └── prompts/
     ├── facet_prompt.txt   # Prompt template for facet generation
     └── report_prompt.txt  # Prompt template for report synthesis
+
+claude/skills/my-insights/
+└── SKILL.md               # Optional thin wrapper (disabled by default)
 ```
 
 Output: `~/.claude/usage-data/` (same location as built-in)
@@ -101,8 +109,23 @@ All facets (~500 x ~500 chars = ~250K) fit in one Gemini call.
 | `scripts/insights/run_insights.py` | Main script (extract + facets + report) | ~250 |
 | `scripts/insights/prompts/facet_prompt.txt` | Facet generation prompt | ~40 |
 | `scripts/insights/prompts/report_prompt.txt` | Report synthesis prompt | ~60 |
+| `claude/skills/my-insights/SKILL.md` | Optional thin skill wrapper (disabled) | ~30 |
 
-**~350 lines total.** Single script, two prompt files.
+**~400 lines total.** Single script, two prompt files, one optional skill.
+
+## Optional Skill Wrapper
+
+`claude/skills/my-insights/SKILL.md` — disabled by default (not in any auto-trigger list).
+
+**Purpose**: Convenience for running from within Claude Code when desired.
+**Behavior**: Thin wrapper that shells out to `scripts/insights/run_insights.py` with
+appropriate args. Does NOT pollute Claude session context with analysis — just runs
+the script and reports the output path.
+
+**Usage**: `/my-insights` or `/my-insights --limit 20 --project sandbagging`
+
+**Why disabled by default**: The script runs ~9 min for full analysis. Better to run
+in a separate terminal. The skill exists for the rare case where you want it inline.
 
 ## Human Contribution Opportunity
 

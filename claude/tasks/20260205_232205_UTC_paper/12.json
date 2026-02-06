@@ -1,0 +1,9 @@
+{
+  "id": "12",
+  "subject": "Compile and verify paper",
+  "description": "Compile with latexmk, verify main body ≤12 pages, all figures render, all references resolve",
+  "activeForm": "Compiling and verifying paper",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

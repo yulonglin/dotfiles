@@ -1,0 +1,9 @@
+{
+  "id": "9",
+  "subject": "Fix WMDP figure to show multi-method comparison",
+  "description": "Replace pw_wmdp_detection.png with pw_gsm8k_detection.png, rewrite caption and §4.4 to cover both GSM8K and WMDP with multi-method comparison",
+  "activeForm": "Fixing WMDP figure",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
