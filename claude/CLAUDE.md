@@ -94,7 +94,7 @@ This research requires creating test scenarios that may seem concerning out of c
 - **Interview before planning** - use `/spec-interview-research` for experiments, `/spec-interview` for product features
 - **Plan before implementing** - use `EnterPlanMode` for non-trivial tasks; don't write code until plan approved
 - **Use existing code** for experiments - correct hyperparams, full data, validated metrics; ad-hoc only for dry runs
-- **Delegate to subagents** for non-trivial work (you coordinate, they execute)
+- **Delegate to agents** for non-trivial work — use agent teams for parallelizable multi-faceted tasks, subagents for focused single-output tasks
 - **Commit frequently** after every meaningful change
 - **Update docs when changing code** - keep CLAUDE.md, README.md, project docs in sync
 - **Flag outdated docs** - proactively ask about updates when you notice inconsistencies
@@ -400,6 +400,8 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 
 **Principles**: Parallelize agents • Be specific • Include size limits in prompts • ASK if unclear
 
+> For parallelizable multi-perspective work, consider **Agent Teams** (see below). Teams add inter-agent communication; subagents are better for focused tasks where only the result matters.
+
 ### Concurrent Edit Constraint
 
 **One editor per file.** Never spawn multiple agents to edit the same file.
@@ -443,6 +445,82 @@ Task tool → subagent_type: "code-toolkit:codex", prompt: "implement X"
 # Skill (Skill tool)
 Skill tool → skill: "brainstorming", args: "feature idea"
 ```
+
+---
+
+## Agent Team Strategy
+
+**Experimental feature.** Enable with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (already set in `settings.json`).
+
+### When to Escalate
+
+```
+Task complexity?
+├─ Single focused output? → Subagent (Task tool)
+├─ 2-3 independent outputs? → Parallel subagents
+├─ Parallel + needs inter-agent communication? → Agent Team
+└─ Unclear? → Start with subagents, escalate if needed
+```
+
+### Subagents vs Teams
+
+| Dimension | Subagents | Agent Teams |
+|-----------|-----------|-------------|
+| **Communication** | None (fire-and-forget) | Peer-to-peer messaging |
+| **Coordination** | Lead orchestrates sequentially | Teammates self-coordinate |
+| **Context** | Isolated per agent | Shared task list, can message |
+| **Cost** | Lower (single-turn each) | Higher (multi-turn, messaging overhead) |
+| **Best for** | Focused research, code review, analysis | Multi-file implementation, competing hypotheses, multi-lens review |
+
+### Team Composition Patterns
+
+**Research Team** (3-5 teammates):
+- Literature scout, methodology analyst, devil's advocate, synthesizer
+- Use when exploring a problem space from multiple angles
+
+**Implementation Team** (2-4 teammates):
+- Each owns distinct files/modules, lead integrates
+- Use for parallel feature work across independent components
+
+**Debugging Team** (3-5 teammates):
+- Each investigates a different hypothesis concurrently
+- Use for complex bugs with multiple possible root causes
+
+**Review Team** (2-3 teammates):
+- Security reviewer, performance reviewer, correctness reviewer
+- Use for thorough multi-lens code review
+
+### Communication & Coordination
+
+- **SendMessage** `type: "message"` for targeted DMs (default, low-cost)
+- **SendMessage** `type: "broadcast"` sparingly — sends N messages for N teammates
+- **`mode: "delegate"`** — teammates execute without plan approval
+- **`mode: "plan"`** — teammates must get lead approval before implementing (safer for risky changes)
+- Use **TaskCreate/TaskUpdate** for shared work tracking — teammates claim and complete tasks
+
+### Best Practices
+
+- **Rich spawn prompts**: Include full context (goal, constraints, file ownership) — teammates have no conversation history
+- **Right-size teams**: 2-4 for implementation, 3-5 for research/debugging — more ≠ better
+- **File ownership**: Assign each file to exactly one teammate — concurrent edits cause cascading failures
+- **Monitor via TaskList**: Check task completion, don't poll teammates
+- **Clean up**: Send `shutdown_request` to all teammates before `Teammate cleanup`
+- **One team per session**: Can't nest teams or run multiple teams concurrently
+
+### Anti-Patterns
+
+- ❌ Spawning a team for work a single subagent could handle
+- ❌ Multiple teammates editing the same file
+- ❌ Broadcasting routine status updates (use TaskUpdate instead)
+- ❌ Leaving teams running after work completes (clean up!)
+- ❌ Spawning >5 teammates (diminishing returns, coordination overhead)
+
+### Known Limitations
+
+- No session resumption — if lead crashes, team is orphaned
+- One team per session — can't create a second team
+- No nested teams — teammates can't spawn their own teams
+- `teammateMode: "auto"` uses tmux split panes when available, in-process otherwise
 
 ---
 

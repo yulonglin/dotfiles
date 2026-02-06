@@ -189,6 +189,10 @@
       "docker"
     ]
   },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "teammateMode": "auto",
   "alwaysThinkingEnabled": true,
   "installMethod": "native",
   "outputStyle": "Learning"
