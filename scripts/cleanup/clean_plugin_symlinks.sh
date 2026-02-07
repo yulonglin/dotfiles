@@ -49,7 +49,7 @@ while IFS= read -r -d '' link; do
   else
     rm "$link"
   fi
-  ((count++))
+  count=$((count + 1))
 done < <(find "$SKILLS_DIR" -maxdepth 1 -type l -print0)
 
 if [[ $count -eq 0 ]]; then

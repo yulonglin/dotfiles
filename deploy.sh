@@ -470,6 +470,11 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             log_info "Claude CLI not found — run after install: claude plugin marketplace add $HOME/.claude/local-marketplace"
         fi
 
+        # Clean plugin-created symlinks from skills/ (they cause duplicate entries)
+        if [[ -f "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh" ]]; then
+            "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"
+        fi
+
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
         log_info "  Plugins: local-marketplace (research-toolkit, writing-toolkit, code-quality)"

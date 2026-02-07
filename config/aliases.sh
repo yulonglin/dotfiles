@@ -396,6 +396,9 @@ alias cc-all='clear-claude-code --all'
 # Update all AI CLI tools (delegates to update-ai-tools script)
 alias ai-update='update-ai-tools'
 
+# Clean duplicate skills from Claude Code (plugin symlinks cause 2x entries)
+alias clean-skill-dupes='"$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"'
+
 # # -------------------------------------------------------------------
 # # Better utils: https://www.lesswrong.com/posts/6P8GYb4AjtPXx6LLB/tips-and-code-for-empirical-research-workflows
 # # -------------------------------------------------------------------

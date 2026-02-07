@@ -40,6 +40,15 @@ The enumerate helper (`scripts/helpers/enumerate_claude_skills.sh`) emits skills
 
 When a skill name appears in multiple sources, only the highest-priority source is used. Shadowed skills emit warnings to stderr (e.g., `⚠ Skill "brainstorming" from cache/... shadowed by marketplaces/...`).
 
+### Known Issue: Plugin Symlink Duplication
+
+Claude Code's plugin system creates symlinks in `~/.claude/skills/` pointing to `plugins/cache/` and `plugins/marketplaces/`. These cause every plugin skill to appear **twice** in the slash command picker: once as "(user)" from the symlink, once as "(plugin-name)" from the plugin registry. Related: [#14549](https://github.com/anthropics/claude-code/issues/14549), [#21891](https://github.com/anthropics/claude-code/issues/21891).
+
+**Workarounds:**
+- `clean-skill-dupes` alias removes the symlinks
+- `deploy.sh` auto-cleans during Claude Code deployment
+- Symlinks are **recreated on startup/plugin-sync**, so cleanup may need to be repeated
+
 ## What Needs Translation
 
 | Source (Claude Code) | Target | Translation |
