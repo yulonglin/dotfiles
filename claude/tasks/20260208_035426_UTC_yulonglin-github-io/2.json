@@ -1,0 +1,11 @@
+{
+  "id": "2",
+  "subject": "Install satori and resvg-js dependencies",
+  "description": "bun add satori @resvg/resvg-js",
+  "activeForm": "Installing dependencies",
+  "status": "completed",
+  "blocks": [
+    "5"
+  ],
+  "blockedBy": []
+}

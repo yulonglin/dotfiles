@@ -1,0 +1,14 @@
+{
+  "id": "9",
+  "subject": "Build verification and end-to-end test",
+  "description": "bun run build succeeds, og.png generated, fonts self-hosted, gtag deferred",
+  "activeForm": "Verifying build",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": [
+    "3",
+    "4",
+    "6",
+    "7"
+  ]
+}

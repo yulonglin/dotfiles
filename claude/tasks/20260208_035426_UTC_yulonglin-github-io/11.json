@@ -1,0 +1,9 @@
+{
+  "id": "11",
+  "subject": "Install satori and resvg-js dependencies",
+  "description": "Run bun add satori @resvg/resvg-js for OG image generation",
+  "activeForm": "Installing OG image dependencies",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

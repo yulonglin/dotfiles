@@ -1,0 +1,12 @@
+{
+  "id": "1",
+  "subject": "Download font files (WOFF2 for web, TTF for satori)",
+  "description": "Download variable WOFF2 fonts to public/fonts/ and static TTF fonts to src/assets/fonts/ for OG generation",
+  "activeForm": "Downloading font files",
+  "status": "completed",
+  "blocks": [
+    "3",
+    "5"
+  ],
+  "blockedBy": []
+}

@@ -1,0 +1,11 @@
+{
+  "id": "7",
+  "subject": "Delete old files (og.png, src/fonts/)",
+  "description": "Remove old Gatsby screenshot and unused Calibre/SFMono fonts",
+  "activeForm": "Cleaning up old files",
+  "status": "completed",
+  "blocks": [
+    "9"
+  ],
+  "blockedBy": []
+}

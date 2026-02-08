@@ -1,0 +1,11 @@
+{
+  "id": "4",
+  "subject": "Edit BaseLayout.astro (preconnect, OG, gtag deferral)",
+  "description": "Remove preconnect links, swap OG image source, defer Google Analytics with requestIdleCallback",
+  "activeForm": "Editing BaseLayout.astro",
+  "status": "completed",
+  "blocks": [
+    "9"
+  ],
+  "blockedBy": []
+}

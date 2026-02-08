@@ -1,0 +1,9 @@
+{
+  "id": "12",
+  "subject": "Replace @import with @font-face in global.css",
+  "description": "Remove Google Fonts @import URL and add @font-face declarations pointing to self-hosted WOFF2 files in /fonts/",
+  "activeForm": "Updating global.css font declarations",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

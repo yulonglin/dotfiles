@@ -1,0 +1,9 @@
+{
+  "id": "17",
+  "subject": "Build and verify end-to-end",
+  "description": "Run bun run build, verify dist/og.png exists at 1200x630, check no Google Fonts requests, verify font rendering",
+  "activeForm": "Verifying build and output",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

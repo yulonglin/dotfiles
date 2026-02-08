@@ -1,0 +1,13 @@
+{
+  "id": "3",
+  "subject": "Replace Google Fonts @import with @font-face in global.css",
+  "description": "Remove @import url() and add self-hosted @font-face declarations with font-display: swap",
+  "activeForm": "Editing global.css font declarations",
+  "status": "completed",
+  "blocks": [
+    "9"
+  ],
+  "blockedBy": [
+    "1"
+  ]
+}

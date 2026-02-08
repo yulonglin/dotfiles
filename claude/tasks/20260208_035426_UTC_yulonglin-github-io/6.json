@@ -1,0 +1,14 @@
+{
+  "id": "6",
+  "subject": "Create OG endpoint (src/pages/og.png.ts)",
+  "description": "Astro static endpoint that calls generateOgImage with site content",
+  "activeForm": "Creating OG endpoint",
+  "status": "completed",
+  "blocks": [
+    "8",
+    "9"
+  ],
+  "blockedBy": [
+    "5"
+  ]
+}

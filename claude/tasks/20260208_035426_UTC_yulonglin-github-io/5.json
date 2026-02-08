@@ -1,0 +1,15 @@
+{
+  "id": "5",
+  "subject": "Create OG image generator (src/utils/og.ts)",
+  "description": "Create satori + resvg pipeline with TODO(human) for card design",
+  "activeForm": "Creating OG image generator",
+  "status": "completed",
+  "blocks": [
+    "6",
+    "8"
+  ],
+  "blockedBy": [
+    "1",
+    "2"
+  ]
+}

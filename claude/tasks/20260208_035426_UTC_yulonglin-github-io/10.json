@@ -1,0 +1,9 @@
+{
+  "id": "10",
+  "subject": "Download and prepare font files (TTF + WOFF2)",
+  "description": "Download variable TTF fonts from Google Fonts GitHub, convert to WOFF2 for web display, and place static TTFs for satori OG generation. Destinations: public/fonts/*.woff2 (5 files) and src/assets/fonts/*.ttf (3 files)",
+  "activeForm": "Downloading and converting font files",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

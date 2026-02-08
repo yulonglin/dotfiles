@@ -1,0 +1,12 @@
+{
+  "id": "8",
+  "subject": "Request human input on OG card design",
+  "description": "User implements the satori card layout in src/utils/og.ts",
+  "activeForm": "Awaiting human input on OG card",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": [
+    "5",
+    "6"
+  ]
+}

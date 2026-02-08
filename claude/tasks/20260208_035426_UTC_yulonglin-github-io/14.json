@@ -1,0 +1,9 @@
+{
+  "id": "14",
+  "subject": "Create src/utils/og.ts with TODO(human) for card design",
+  "description": "Create OG image generator with font loading, satori pipeline, resvg rendering. Leave card layout markup as TODO(human) for user to design.",
+  "activeForm": "Creating OG image generator",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
