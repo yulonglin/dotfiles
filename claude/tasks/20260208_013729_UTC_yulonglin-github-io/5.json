@@ -1,9 +1,0 @@
-{
-  "id": "5",
-  "subject": "Extract duplicated SVG icons and tag-pill CSS",
-  "description": "IMPORTANT: Extract social SVG icons from Nav.astro into a reusable pattern. Move duplicated .tag-pill CSS from 3 writing pages to global.css.",
-  "activeForm": "Extracting duplicated code",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

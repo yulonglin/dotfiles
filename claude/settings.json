@@ -193,7 +193,10 @@
       "gh",
       "git",
       "docker"
-    ]
+    ],
+    "network": {
+      "allowedDomains": ["*"]
+    }
   },
   "alwaysThinkingEnabled": true,
   "teammateMode": "auto",

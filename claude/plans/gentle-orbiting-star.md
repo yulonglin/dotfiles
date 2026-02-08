@@ -85,10 +85,14 @@ This makes ALL `dark:` utility classes respond to the `data-theme` attribute ins
 
 ---
 
-## Fix 7: Minor cleanups
+## Fix 7: Minor cleanups + canary string per-post flag
 
 - **Footer.astro** line 21: Change comment from "deterministic per build" to "random per build — same across all pages within a single build"
-- **config.ts** lines 1-3: Remove unused `canaryString` export
+- **Canary string** — instead of removing, make it per-post:
+  1. Keep `canaryString` in `src/config.ts`
+  2. Add `canary: z.boolean().optional().default(false)` to the writing schema in `src/content.config.ts`
+  3. In `src/pages/writing/[slug].astro`, conditionally render the canary string as a visually-hidden element when `post.data.canary === true`
+  4. User can then flag sensitive posts with `canary: true` in frontmatter
 
 ---
 
@@ -99,7 +103,7 @@ These fixes are largely independent (different files), making them ideal for par
 ### Phase 1: Leader does sequential `global.css` edits + quick fixes (me)
 - Fix 1: Add `@custom-variant dark` to `global.css`
 - Fix 6: Add `tag-pill` utilities to `global.css`
-- Fix 7: Footer comment + remove canaryString
+- Fix 7: Footer comment + canary string schema/rendering setup
 
 ### Phase 2: Dispatch parallel agents (3 agents)
 - **Agent A** — Fix 2 (image path) + Fix 4 (netlify.toml + .gitignore)

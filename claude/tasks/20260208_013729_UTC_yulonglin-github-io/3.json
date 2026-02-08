@@ -1,9 +1,0 @@
-{
-  "id": "3",
-  "subject": "Add URL scheme validation to set:html regex patterns",
-  "description": "IMPORTANT: The hand-rolled markdown link regex in index.astro, about.astro, ResearchCluster.astro, and Timeline.astro doesn't filter javascript: URLs. Add scheme validation.",
-  "activeForm": "Adding URL validation to set:html",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}

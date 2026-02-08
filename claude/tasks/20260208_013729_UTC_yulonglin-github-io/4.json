@@ -1,9 +1,0 @@
-{
-  "id": "4",
-  "subject": "Fix netlify.toml build command and bun.lock gitignore",
-  "description": "IMPORTANT: Update netlify.toml to use bun instead of npm. Remove bun.lock from .gitignore so it's tracked for reproducible builds.",
-  "activeForm": "Fixing build config",
-  "status": "pending",
-  "blocks": [],
-  "blockedBy": []
-}
