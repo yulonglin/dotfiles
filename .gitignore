@@ -504,5 +504,8 @@ claude/plugins/marketplaces/
 # Agent team runtime state (inboxes, configs - ephemeral per session)
 claude/teams/
 
+# Image cache (runtime, machine-specific)
+claude/image-cache/
+
 .gemini/
 gha-creds-*.json
