@@ -232,6 +232,13 @@ if [[ "$DEPLOY_GIT_HOOKS" == "true" ]]; then
     else
         log_warning "Git hooks directory not found"
     fi
+
+    # Set up dotfiles-specific pre-commit hook (auto-updates SKILL.md deny list)
+    if [[ -d "$DOT_DIR/.git" ]] && [[ -f "$DOT_DIR/scripts/hooks/dotfiles-pre-commit.sh" ]]; then
+        chmod +x "$DOT_DIR/scripts/hooks/dotfiles-pre-commit.sh"
+        ln -sf "../../scripts/hooks/dotfiles-pre-commit.sh" "$DOT_DIR/.git/hooks/pre-commit.local"
+        log_success "Deployed dotfiles pre-commit hook (.git/hooks/pre-commit.local)"
+    fi
 fi
 
 # ─── Editor Settings ──────────────────────────────────────────────────────────

@@ -1,58 +1,49 @@
-# Ignore everything — Claude Code creates runtime symlinks and agent wrappers
-# Only user-authored skills are tracked (whitelist approach)
+# Claude Code Skills Directory
+# =============================
+# Runtime artifacts created by Claude Code's plugin system:
+# 1. Self-referencing symlinks: skills/<name>/<name> (extensionless, circular)
+# 2. SKILL.md symlinks: point to agents/*.md or skills/*.md (absolute paths)
+#
+# Strategy: Track all files with extensions (covers all user content).
+# Self-referencing symlinks are extensionless -> stay ignored automatically.
+# SKILL.md symlinks are auto-detected by pre-commit hook.
+#
+# ASSUMPTION: No runtime files with extensions are created in skill subdirs.
+# If Claude Code starts creating runtime files here, add specific ignore patterns.
+
+# Ignore everything by default
 *
 
 # Track this file
 !.gitignore
 
-# Track plugin system directory
+# Track plugin system directory (needed for extensionless .codex-system-skills.marker)
 !.system/
 !.system/**
 
-# User-authored skill directories
-!agent-teams/
-!agent-teams/**
-!anthropic-style/
-!anthropic-style/**
-!commit/
-!commit/**
-!commit-push-sync/
-!commit-push-sync/**
-!custom-compact/
-!custom-compact/**
-!externalise-handover/
-!externalise-handover/**
-!fast-cli/
-!fast-cli/**
-!spec-interview/
-!spec-interview/**
-!strategic-communication/
-!strategic-communication/**
+# Allow git to traverse into skill directories
+!*/
+!**/*/
 
-# Skill reference docs (detailed content loaded on-demand)
-!gemini-cli/
-!gemini-cli/references/
-!gemini-cli/references/**
-!llm-billing/
-!llm-billing/references/
-!llm-billing/references/**
+# Track all files with extensions (user content always has extensions)
+!**/*.*
 
-# Standalone skill files (single .md, not in a directory)
+# Standalone skill files (technically covered by !**/*.* but explicit for clarity)
 !docs-search.md
 !task-management.md
 
-# Re-ignore .DS_Store inside allowlisted dirs (overridden by !dir/** rules above)
+# === DENY LIST ===
+# Re-ignore files/dirs that !**/*.* would incorrectly allow
+
+# macOS metadata
 **/.DS_Store
 
-# Re-ignore circular self-links inside user dirs (runtime artifact)
-**/*/commit
-**/*/commit-push-sync
-**/*/custom-compact
-**/*/externalise-handover
-**/*/fast-cli
-**/*/spec-interview
-**/*/strategic-communication
-**/*/anthropic-style
-**/*/gemini-cli
-**/*/llm-billing
-**/*/agent-teams
+# AUTO-GENERATED: SKILL.md symlinks with non-portable absolute paths (do not edit manually)
+# Updated by scripts/hooks/dotfiles-pre-commit.sh
+context-summariser/SKILL.md
+docs-search/SKILL.md
+efficient-explorer/SKILL.md
+gemini-cli/SKILL.md
+llm-billing/SKILL.md
+task-management/SKILL.md
+# END AUTO-GENERATED
