@@ -68,13 +68,13 @@ Safety levels & policies: ASL, CCL, FSF, RSP, CBRN
 
 Models: GPT, Claude, ChatGPT, Gemini, Llama, Qwen, Mistral, DeepSeek, o1, o3
 
-Organizations: Anthropic, DeepMind, Google DeepMind, OpenAI, OAI, xAI, Grok, Redwood, Redwood Research, ARC, ARC-Evals, Apollo, Apollo Research, Constellation, GovAI, CAIS ("case"), AISI ("A-C"), UK AISI (“UKAC”), CAISI, FAR AI, METR ("meter"), Epoch, OpenPhil, MIRI, CHAI ("chai"), Anti-Entropy, Nous Research, Conjecture, EleutherAI, Haize Labs, Timaeus, Center for AI Safety
+Organizations: Anthropic, DeepMind, Google DeepMind, OpenAI, OAI, xAI, Grok, Redwood, Redwood Research, ARC, ARC-Evals, Apollo, Apollo Research, Constellation, GovAI, CAIS ("case"), AISI ("AC"), UK AISI (“UKAC”), CAISI, FAR AI, METR ("meter"), Epoch, OpenPhil, MIRI, CHAI ("chai"), Anti-Entropy, Nous Research, Conjecture, EleutherAI, Haize Labs, Timaeus, Center for AI Safety
 
 Programs & fellowships: MATS, SERI-MATS, ART, MONA, Astra, SPAR, Lightspeed, LTFF
 
 Conferences & venues: NeurIPS, ICML, ICLR ("eye-clear"), IASEAI ("eye-see-eye"), AAAI, COLM, LessWrong, Alignment Forum, EA Forum
 
-Researchers: Sam Bowman, Mary Phuong, David Lindner, Marius Hobbhahn, Scott Emmons, Erik Jenner, Jan Leike, Evan Hubinger, Buck Shlegeris, Ryan Greenblatt, Neel Nanda, Ethan Perez, Paul Christiano, Owain Evans, Alex Turner, Lee Sharkey, Dan Hendrycks, Stephen Casper, Adam Gleave, Beth Barnes, Jacob Steinhardt, Roger Grosse, Tomek Korbak, Chris Olah, Yoshua Bengio, Stuart Russell, Dario Amodei, Jared Kaplan, Ajeya Cotra, Holden Karnofsky, Daniel Filan, Victoria Krakovna, Collin Burns, Jesse Clifton, John Wentworth, Caspar Oesterheld, Lawrence Chan, Rohin Shah, David Krueger, Dylan Hadfield-Menell, Tom Everitt, Akbir Khan, Micah Carroll, Julian Michael, Carson Denison, Fabien Roger, Amanda Askell, Deep Ganguli, Lennart Heim, davidad, Yulong (“you-long”) Lin
+Researchers: Sam Bowman, Mary Phuong, David Lindner, Marius Hobbhahn, Scott Emmons, Erik Jenner, Jan Leike, Evan Hubinger, Buck Shlegeris, Ryan Greenblatt, Neel Nanda, Ethan Perez, Paul Christiano, Owain Evans, Alex Turner, Lee Sharkey, Dan Hendrycks, Stephen Casper, Adam Gleave, Beth Barnes, Jacob Steinhardt, Roger Grosse, Tomek Korbak, Chris Olah, Yoshua Bengio, Stuart Russell, Dario Amodei, Jared Kaplan, Ajeya Cotra, Holden Karnofsky, Daniel Filan, Victoria Krakovna, Collin Burns, Jesse Clifton, John Wentworth, Caspar Oesterheld, Lawrence Chan, Rohin Shah, David Krueger, Dylan Hadfield-Menell, Tom Everitt, Akbir Khan, Micah Carroll, Julian Michael, Carson Denison, Fabien Roger, Amanda Askell, Deep Ganguli, Lennart Heim, davidad, Yulong (“you-long”) Lin, Asa Cooper-Stickland
 
 Python & tools: NumPy, PyTorch, torch, TensorFlow, Hugging Face, transformers, einops, einsum, pytest, argparse, dataclass, pydantic, wandb, Weights & Biases, vLLM, SGLang, TransformerLens, nnsight, baukit, grep, rg, ripgrep, zoxide, eza, fd, Claude Code, Codex, Codex CLI, Gemini CLI, Gemini
 

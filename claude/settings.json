@@ -161,16 +161,15 @@
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": false,
-    "learning-output-style@claude-plugins-official": false,
+    "ralph-loop@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": false,
+    "pyright-lsp@claude-plugins-official": true,
     "research-toolkit@local-marketplace": true,
     "writing-toolkit@local-marketplace": true,
     "code-toolkit@local-marketplace": true,
     "serena@claude-plugins-official": false,
-    "feature-dev@claude-plugins-official": false,
+    "feature-dev@claude-plugins-official": true,
     "insights-toolkit@local-marketplace": true,
     "claude-md-management@claude-plugins-official": true
   },
@@ -179,14 +178,16 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": true,
+    "network": {
+      "allowedDomains": [
+        "*"
+      ]
+    },
     "excludedCommands": [
       "gh",
       "git",
       "docker"
-    ],
-    "network": {
-      "allowedDomains": ["*"]
-    }
+    ]
   },
   "alwaysThinkingEnabled": true,
   "teammateMode": "auto",
