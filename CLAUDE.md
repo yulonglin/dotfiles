@@ -107,12 +107,15 @@ claude/                   # Symlinked to ~/.claude/
 │   └── plugins/
 │       ├── research-toolkit/ # Experiment design, execution, analysis, literature
 │       ├── writing-toolkit/  # Papers, drafts, presentations, multi-critic review
-│       └── code-quality/     # Code review, debugging, performance, bulk editing
+│       ├── code-toolkit/     # Dev workflow, debugging, delegation, code review
+│       ├── workflow-toolkit/ # Agent teams, handover, conversation mgmt, analytics
+│       └── viz-toolkit/      # TikZ diagrams, Anthropic-style visualization
 ├── plugins/              # Plugin runtime (cache, installed_plugins.json)
 ├── docs/                 # On-demand knowledge (research, async, tmux, agent teams, etc.)
 ├── ai_docs -> docs       # Permanent backwards-compat symlink
 ├── hooks/                # Hook scripts (auto_log.sh, notify.sh)
-├── templates/            # Templates for specs, reports
+├── templates/            # Templates for specs, reports, context profiles
+│   └── contexts/         # Plugin context profiles (writing, research, code, etc.)
 ├── projects/             # Project-specific settings overrides
 └── (runtime dirs)        # cache/, logs/, history.jsonl, todos/, etc.
 
@@ -120,7 +123,9 @@ codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 
 custom_bins/              # Custom utilities (added to PATH)
 ├── utc_date              # Outputs DD-MM-YYYY in UTC
-└── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
+├── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
+├── claude-context        # Apply context profiles for plugin loading
+└── claude-cache-clean    # Remove stale plugin cache versions
 
 lib/plotting/             # Python plotting library (deployed to ~/.local/lib/plotting/)
 ├── anthro_colors.py      # Anthropic brand colors (ground truth)
@@ -299,3 +304,4 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - Auto MEMORY.md paths are machine-specific (encodes full filesystem path) — not portable across macOS/Linux/RunPod. Use CLAUDE.md Learnings section for durable cross-machine memory instead (2026-02-05)
 - Global CLAUDE.md restructured: slim core (~120 lines) + rules/ (auto-loaded behavioral rules) + docs/ (on-demand knowledge). ai_docs/ renamed to docs/ with permanent symlink for backwards-compat. Serena, feature-dev, ralph-loop, pyright-lsp plugins disabled (2026-02-05)
 - Claude Code plugin system creates symlinks in `~/.claude/skills/` → `plugins/cache/`, causing every plugin skill to appear twice in slash command picker (once as "(user)", once as plugin name). Workaround: `clean-skill-dupes` alias or `deploy.sh` auto-cleans. Symlinks are recreated on startup/plugin-sync. Related: anthropics/claude-code#14549, #21891 (2026-02-06)
+- Plugin reorganization: code-quality → code-toolkit, added workflow-toolkit (agent-teams, handover, compact, insights) and viz-toolkit (tikz-diagrams). Context profiles via `claude-context` CLI. Global settings now explicitly disable all non-essential plugins. insights-toolkit absorbed into workflow-toolkit. humanize-draft merged into review-draft as 5th critic (2026-02-08)

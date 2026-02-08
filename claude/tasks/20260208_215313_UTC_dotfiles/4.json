@@ -3,7 +3,7 @@
   "subject": "[Phase 2] Migrate user skills and merge humanize-draft",
   "description": "1. Move strategic-communication from claude/skills/ to writing-toolkit plugin\n2. Merge humanize-draft into review-draft:\n   - Read both SKILL.md files to understand current content\n   - Fold phrase detection logic from humanize-draft into review-draft's clarity critic\n   - Leave humanize-draft as a stub that delegates to review-draft with deprecation notice\n3. Sync code-toolkit agents: copy codex.md and claude.md from cache back to source\n4. Clean up claude/skills/ — remove migrated skills (agent-teams, externalise-handover, custom-compact, strategic-communication, my-insights), keep 13 core skills",
   "activeForm": "Migrating skills and deduplicating",
-  "status": "pending",
+  "status": "completed",
   "blocks": [
     "5"
   ],

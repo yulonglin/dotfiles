@@ -3,7 +3,7 @@
   "subject": "[Phase 1] Create workflow-toolkit plugin",
   "description": "Create new workflow-toolkit plugin scaffold:\n1. Create `claude/local-marketplace/plugins/workflow-toolkit/.claude-plugin/plugin.json`\n2. Move skills from user skills into workflow-toolkit:\n   - agent-teams (from claude/skills/agent-teams/)\n   - externalise-handover (from claude/skills/externalise-handover/)\n   - custom-compact (from claude/skills/custom-compact/)\n   - insights (from insights-toolkit plugin - claude/local-marketplace/plugins/insights-toolkit/skills/insights/)\n3. Update marketplace.json to register workflow-toolkit\n4. Remove insights-toolkit from marketplace.json (absorbed into workflow-toolkit)",
   "activeForm": "Creating workflow-toolkit plugin",
-  "status": "pending",
+  "status": "completed",
   "blocks": [
     "4",
     "6"

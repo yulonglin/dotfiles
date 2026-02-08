@@ -3,7 +3,7 @@
   "subject": "[Phase 5] Create claude-cache-clean CLI and update docs",
   "description": "1. Create claude-cache-clean custom binary:\n   - Removes non-current plugin cache versions\n   - Lists what would be cleaned, then cleans\n\n2. Update CLAUDE.md files:\n   - Global CLAUDE.md: document new plugin organization, context profiles, claude-context usage\n   - Project CLAUDE.md: update architecture section with workflow-toolkit and viz-toolkit\n\n3. Add deploy.sh changes for context template deployment",
   "activeForm": "Creating cleanup utilities and updating docs",
-  "status": "pending",
+  "status": "in_progress",
   "blocks": [],
   "blockedBy": [
     "6"

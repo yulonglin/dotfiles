@@ -3,7 +3,7 @@
   "subject": "[Phase 4] Create context templates and claude-context CLI",
   "description": "1. Create 8 context templates in claude/templates/contexts/:\n   - writing.json, research.json, code.json, design.json, full.json (domain)\n   - python.json, web.json, ml.json (framework sub-profiles)\n   - Each template sets enabledPlugins for ALL known plugins (explicit is better than implicit)\n   - Use exact plugin IDs from installed_plugins.json\n\n2. Create claude-context CLI binary in custom_bins/:\n   - `claude-context` — show current profile\n   - `claude-context <profile> [sub-profiles...]` — apply profile(s)\n   - Multi-profile merging: any plugin true in ANY specified profile → true\n   - Writes to .claude/settings.local.json (not .claude/settings.json)\n   - Creates .claude/ dir + .gitignore if needed\n   - Warns: \"Restart Claude Code to apply\"\n\n3. Update global settings.json:\n   - Explicitly disable ALL non-essential plugins\n   - Only always-on plugins enabled by default (superpowers, hookify, plugin-dev, commit-commands, claude-md-management, context7)\n   - Plus local-marketplace plugins for the dotfiles project\n\n4. Set dotfiles project settings (.claude/settings.json) with full context\n\n5. Add to deploy.sh: deploy context templates to ~/.claude/templates/contexts/",
   "activeForm": "Creating context system",
-  "status": "pending",
+  "status": "completed",
   "blocks": [
     "7"
   ],

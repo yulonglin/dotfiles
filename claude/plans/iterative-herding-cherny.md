@@ -133,7 +133,23 @@ cd /Users/yulong/writing/apps/todo && pdflatex toc-diagram.tex && open toc-diagr
 - Check vertical balance across columns
 - Ensure fits on one page
 
+## Pre-diagram: Fix related work references in application
+
+Before building the diagram, update the "existing work" section (`mats-8.2-extension-plus.md` lines 89-95) with full links and correct author attributions (paper bib = ground truth):
+
+| Current text | Fix |
+|---|---|
+| "Benton et al., 2025" | → "Taylor et al., 2025" + link `https://arxiv.org/abs/2512.07810` |
+| "Scheurer et al., 2024" | + link `https://arxiv.org/abs/2410.21514` |
+| "Jenner et al., ongoing" | → "Hebbar, 2025" + link `https://blog.redwoodresearch.org/p/how-can-we-solve-diffuse-threats` |
+| "Control-Z (Greenblatt et al., 2025)" | → "Ctrl-Z" + link `https://arxiv.org/abs/2504.10374` |
+| "Trusted monitoring (Greenblatt et al., 2024)" | + link `https://arxiv.org/abs/2312.06942` |
+| "Exploration hacking (Brown, Jang, and Falk, MATS 8/8.1)" | → "Braun, Jang, and Falk" + link `https://arxiv.org/abs/2506.14261` |
+
+Must stay within 1,400 character limit after adding links. Run character count verification after edits.
+
 ## Files
+- **Edit**: `/Users/yulong/writing/apps/todo/mats-8.2-extension-plus.md` — fix related work references
 - **Create**: `/Users/yulong/writing/apps/todo/toc-diagram.tex`
 - **Copy**: `anthropic-tikz.sty` → `/Users/yulong/writing/apps/todo/`
 

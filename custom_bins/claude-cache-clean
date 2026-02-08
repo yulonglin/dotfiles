@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# claude-cache-clean — Remove stale plugin cache versions.
+#
+# The plugin cache at ~/.claude/plugins/cache/ accumulates old versions.
+# This script identifies and removes non-current versions, keeping only the
+# versions referenced in installed_plugins.json.
+#
+# Usage:
+#   claude-cache-clean           # Dry run — show what would be removed
+#   claude-cache-clean --apply   # Actually remove stale versions
+
+set -euo pipefail
+
+CACHE_DIR="${HOME}/.claude/plugins/cache"
+INSTALLED_FILE="${HOME}/.claude/plugins/installed_plugins.json"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+if [[ ! -d "$CACHE_DIR" ]]; then
+    echo "No cache directory found at $CACHE_DIR"
+    exit 0
+fi
+
+if [[ ! -f "$INSTALLED_FILE" ]]; then
+    echo -e "${RED}No installed_plugins.json found${NC}"
+    exit 1
+fi
+
+DRY_RUN=true
+[[ "${1:-}" == "--apply" ]] && DRY_RUN=false
+
+# Collect current install paths
+current_paths=$(python3 -c "
+import json
+with open('$INSTALLED_FILE') as f:
+    data = json.load(f)
+paths = set()
+for plugin_name, installs in data.get('plugins', {}).items():
+    for install in installs:
+        paths.add(install.get('installPath', ''))
+for p in sorted(paths):
+    print(p)
+" 2>/dev/null)
+
+stale_count=0
+stale_size=0
+kept_count=0
+
+echo -e "${YELLOW}Scanning plugin cache...${NC}"
+echo ""
+
+# Walk marketplace dirs
+for marketplace_dir in "$CACHE_DIR"/*/; do
+    [[ -d "$marketplace_dir" ]] || continue
+    marketplace=$(basename "$marketplace_dir")
+
+    for plugin_dir in "$marketplace_dir"*/; do
+        [[ -d "$plugin_dir" ]] || continue
+        plugin=$(basename "$plugin_dir")
+
+        for version_dir in "$plugin_dir"*/; do
+            [[ -d "$version_dir" ]] || continue
+            version_path="${version_dir%/}"
+
+            if echo "$current_paths" | grep -qF "$version_path"; then
+                kept_count=$((kept_count + 1))
+            else
+                size=$(du -sk "$version_path" 2>/dev/null | cut -f1)
+                stale_size=$((stale_size + size))
+                stale_count=$((stale_count + 1))
+
+                if $DRY_RUN; then
+                    echo -e "  ${RED}STALE${NC} ${marketplace}/${plugin}/$(basename "$version_path") (${size}KB)"
+                else
+                    echo -e "  ${RED}REMOVING${NC} ${marketplace}/${plugin}/$(basename "$version_path") (${size}KB)"
+                    rm -rf "$version_path"
+                fi
+            fi
+        done
+    done
+done
+
+echo ""
+echo -e "${GREEN}Current versions: ${kept_count}${NC}"
+echo -e "${RED}Stale versions: ${stale_count}${NC} (~$((stale_size / 1024))MB)"
+
+if $DRY_RUN && [[ $stale_count -gt 0 ]]; then
+    echo ""
+    echo -e "${YELLOW}Run 'claude-cache-clean --apply' to remove stale versions${NC}"
+fi

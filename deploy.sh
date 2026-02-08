@@ -482,9 +482,19 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"
         fi
 
+        # Deploy context templates
+        if [[ -d "$DOT_DIR/claude/templates/contexts" ]]; then
+            mkdir -p "$HOME/.claude/templates/contexts"
+            for tmpl in "$DOT_DIR/claude/templates/contexts"/*.json; do
+                [[ -f "$tmpl" ]] || continue
+                ln -sf "$tmpl" "$HOME/.claude/templates/contexts/$(basename "$tmpl")"
+            done
+            log_success "Context templates deployed ($(ls "$DOT_DIR/claude/templates/contexts"/*.json 2>/dev/null | wc -l | tr -d ' ') profiles)"
+        fi
+
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
-        log_info "  Plugins: local-marketplace (research-toolkit, writing-toolkit, code-quality)"
+        log_info "  Plugins: local-marketplace (research-toolkit, writing-toolkit, code-toolkit, workflow-toolkit, viz-toolkit)"
     else
         log_warning "Claude directory not found at $DOT_DIR/claude"
     fi

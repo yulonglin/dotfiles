@@ -112,6 +112,33 @@ Rules:
 
 ---
 
+## Plugin Organization & Context Profiles
+
+**6 always-on plugins** load in every session: superpowers, hookify, plugin-dev, commit-commands, claude-md-management, context7.
+
+**5 local-marketplace plugins** are context-specific:
+- `research-toolkit` — experiments, evals, analysis, literature
+- `writing-toolkit` — papers, drafts, presentations, multi-critic review
+- `code-toolkit` — dev workflow, debugging, delegation, code review
+- `workflow-toolkit` — agent teams, handover, conversation management, analytics
+- `viz-toolkit` — TikZ diagrams, Anthropic-style visualization
+
+**Context profiles** control which plugins load per-project via `claude-context`:
+```bash
+claude-context                    # Show current profile
+claude-context writing            # Papers, blog posts, documentation
+claude-context research           # Experiments, evals, analysis
+claude-context code               # Software projects
+claude-context design             # Frontend, visualizations, web
+claude-context full               # Everything (dotfiles, meta-work)
+claude-context code python        # Compose: code + pyright-lsp
+claude-context research ml        # Compose: research + huggingface
+```
+
+Templates: `~/.claude/templates/contexts/*.json`. Writes to `.claude/settings.local.json` (per-repo, gitignored). Restart Claude Code after applying.
+
+---
+
 ## Notes
 
 - User specs: `specs/`
