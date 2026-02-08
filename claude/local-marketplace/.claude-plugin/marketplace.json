@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "local-marketplace",
-  "description": "Personal plugins for AI safety research workflows, academic writing, and code quality tooling",
+  "description": "Personal plugins for AI safety research workflows, academic writing, code quality tooling, visualization, and workflow management",
   "owner": {
     "name": "yulong"
   },
@@ -31,12 +31,20 @@
       "category": "development"
     },
     {
-      "name": "insights-toolkit",
-      "description": "Claude Code usage insights: session analysis, pattern detection, and coaching reports",
+      "name": "workflow-toolkit",
+      "description": "Agent teams, handover, conversation management, and usage analytics",
       "version": "1.0.0",
       "author": { "name": "yulong" },
-      "source": "./plugins/insights-toolkit",
-      "category": "analytics"
+      "source": "./plugins/workflow-toolkit",
+      "category": "workflow"
+    },
+    {
+      "name": "viz-toolkit",
+      "description": "Matplotlib plotting, TikZ diagrams, and Anthropic-style visualization",
+      "version": "1.0.0",
+      "author": { "name": "yulong" },
+      "source": "./plugins/viz-toolkit",
+      "category": "visualization"
     }
   ]
 }

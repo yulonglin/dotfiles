@@ -11,8 +11,9 @@ Comprehensive writing review using specialized critics.
 
 Parse from provided arguments:
 - **File path**: First non-flag argument (required)
-- **--critics=**: Comma-separated list of critics to run (default: all four)
+- **--critics=**: Comma-separated list of critics to run (default: all five)
   - `clarity` - Sentence-level readability
+  - `humanizer` - LLM cliche and chatbot artifact detection
   - `narrative` - Structure and argument flow
   - `facts` - Claim verification and citations
   - `redteam` - Counterexamples and objections
@@ -34,6 +35,7 @@ Launch agents **in parallel** using Task tool with these prompts:
 | Critic | subagent_type | Output File |
 |--------|---------------|-------------|
 | clarity | `clarity-critic` | `feedback/{name}_clarity.md` |
+| humanizer | `humanizer` | `feedback/{name}_humanizer.md` |
 | narrative | `narrative-critic` | `feedback/{name}_narrative.md` |
 | facts | `fact-checker` | `feedback/{name}_facts.md` |
 | redteam | `red-team` | `feedback/{name}_redteam.md` |
