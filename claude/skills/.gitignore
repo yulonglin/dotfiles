@@ -41,6 +41,9 @@
 !docs-search.md
 !task-management.md
 
+# Re-ignore .DS_Store inside allowlisted dirs (overridden by !dir/** rules above)
+**/.DS_Store
+
 # Re-ignore circular self-links inside user dirs (runtime artifact)
 **/*/commit
 **/*/commit-push-sync
@@ -52,3 +55,4 @@
 **/*/anthropic-style
 **/*/gemini-cli
 **/*/llm-billing
+**/*/agent-teams

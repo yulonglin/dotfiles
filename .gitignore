@@ -501,5 +501,8 @@ claude/plugins/install-counts-cache.json
 claude/plugins/cache/
 claude/plugins/marketplaces/
 
+# Agent team runtime state (inboxes, configs - ephemeral per session)
+claude/teams/
+
 .gemini/
 gha-creds-*.json
