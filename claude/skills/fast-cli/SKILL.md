@@ -1,6 +1,6 @@
 ---
 name: fast-cli
-description: This skill should be used when the user asks to "list files", "show disk usage", "search files", "find files", "view file contents", "check directory size", or mentions fast CLI tools like eza, dust, rg, fd, bat, fzf, zoxide, delta, jq, duf, btop. Provides smart defaults for modern CLI replacements.
+description: Modern CLI tool mappings (eza, fd, rg, bat, dust, duf, fzf, zoxide, delta, jq). Use for file listing, searching, and disk usage.
 ---
 
 # Fast CLI Tools

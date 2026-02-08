@@ -1,46 +1,6 @@
 ---
 name: codex
-description: |
-  Delegate well-scoped implementation tasks to Codex CLI. Use when:
-  - Implementing a well-defined function, module, or feature
-  - Bug fixes with known root cause and clear fix
-  - Scoped refactoring (rename, extract, restructure within a module)
-  - File generation from a template or spec
-  - Getting a second opinion on an implementation plan or approach
-
-  Do NOT use for:
-  - Exploration or codebase understanding (use Explore agent)
-  - Multi-turn refinement or ambiguous tasks (do it yourself)
-  - Quick edits under ~10 lines (faster to do directly)
-  - Tasks requiring conversation context (Codex has no context)
-  - Tasks requiring judgment, taste, or subjective design decisions (Codex is instruction-following, not taste-driven)
-
-  <example>
-  Context: User has a clear spec for implementing a utility function
-  user: "Add a parse_duration function that converts '5m', '2h30m' to seconds"
-  assistant: "I'll delegate this to the codex agent since it's a well-defined implementation task with clear requirements."
-  <commentary>
-  Clear specification with concrete inputs/outputs makes this ideal for Codex delegation.
-  </commentary>
-  </example>
-
-  <example>
-  Context: Bug has been identified with known fix
-  user: "Fix the off-by-one error in the pagination logic"
-  assistant: "I'll use the codex agent to implement the fix since the root cause is clear."
-  <commentary>
-  Known bug with clear fix is good for Codex - no exploration needed.
-  </commentary>
-  </example>
-
-  <example>
-  Context: Need second opinion on implementation approach
-  user: "Review my plan for refactoring the auth module"
-  assistant: "I'll delegate to codex with xhigh reasoning to critique the plan and identify edge cases."
-  <commentary>
-  Codex excels at spotting concrete implementation gaps (missing error paths, race conditions).
-  </commentary>
-  </example>
+description: Delegate well-scoped implementation tasks to Codex CLI. Use for defined functions, bug fixes with known cause, scoped refactoring, and plan review.
 
 model: inherit
 color: blue

@@ -1,5 +1,24 @@
 {
   "permissions": {
     "allow": ["Bash(shortcuts list:*)"]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "research-toolkit@local-marketplace": true,
+    "writing-toolkit@local-marketplace": true,
+    "code-toolkit@local-marketplace": true,
+    "workflow-toolkit@local-marketplace": true,
+    "viz-toolkit@local-marketplace": true,
+    "document-skills@anthropic-agent-skills": true,
+    "Notion@claude-plugins-official": true,
+    "coderabbit@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true
   }
 }

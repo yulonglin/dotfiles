@@ -1,0 +1,8 @@
+{
+  "$comment": "Web sub-profile: adds vercel, stripe, typescript-lsp. Compose with domain profiles.",
+  "enabledPlugins": {
+    "vercel@claude-plugins-official": true,
+    "stripe@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
+  }
+}

@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# claude-context — Apply context profiles to control which Claude Code plugins load.
+#
+# Usage:
+#   claude-context                    # Show current profile(s) and available profiles
+#   claude-context writing            # Apply writing profile
+#   claude-context code python        # Code + Python (union merge)
+#   claude-context full               # Enable all standard plugins
+#
+# Profiles are stored in ~/.claude/templates/contexts/*.json
+# Writes to .claude/settings.local.json in the current repo (auto-gitignored)
+
+set -euo pipefail
+
+TEMPLATES_DIR="${HOME}/.claude/templates/contexts"
+TARGET_FILE=".claude/settings.local.json"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+show_help() {
+    cat <<'EOF'
+claude-context — Context-aware plugin profiles for Claude Code
+
+USAGE:
+    claude-context                       Show current and available profiles
+    claude-context <profile> [profiles]  Apply one or more profiles (union merge)
+
+PROFILES:
+    Domain (pick one):
+      writing    Papers, blog posts, documentation
+      research   Experiments, evals, analysis
+      code       Software projects
+      design     Frontend, visualizations, web
+      full       Everything enabled (dotfiles, meta-work)
+
+    Framework (compose with domain):
+      python     Adds pyright-lsp
+      web        Adds vercel, stripe, typescript-lsp
+      ml         Adds huggingface-skills
+
+EXAMPLES:
+    claude-context code               # Code profile only
+    claude-context code python        # Code + Python type checking
+    claude-context research ml        # Research + HuggingFace
+    claude-context code web python    # Code + web + Python (all three)
+
+NOTES:
+    - Writes to .claude/settings.local.json (gitignored, per-machine)
+    - Multi-profile: any plugin true in ANY profile → true
+    - Restart Claude Code after applying to pick up changes
+EOF
+}
+
+list_profiles() {
+    if [[ ! -d "$TEMPLATES_DIR" ]]; then
+        echo -e "${RED}No templates found at ${TEMPLATES_DIR}${NC}"
+        echo "Run deploy.sh or copy templates manually."
+        exit 1
+    fi
+
+    echo -e "${BLUE}Available profiles:${NC}"
+    echo ""
+    for f in "$TEMPLATES_DIR"/*.json; do
+        [[ -f "$f" ]] || continue
+        name=$(basename "$f" .json)
+        comment=$(python3 -c "import json; d=json.load(open('$f')); print(d.get('\$comment', ''))" 2>/dev/null || echo "")
+        printf "  %-12s %s\n" "$name" "$comment"
+    done
+    echo ""
+
+    if [[ -f "$TARGET_FILE" ]]; then
+        echo -e "${GREEN}Current settings.local.json exists${NC}"
+        # Show which plugins are enabled
+        enabled=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$TARGET_FILE'))
+    plugins = d.get('enabledPlugins', {})
+    on = [k.split('@')[0] for k, v in plugins.items() if v]
+    print(', '.join(sorted(on)) if on else '(none)')
+except: print('(error reading)')
+" 2>/dev/null)
+        echo -e "  Enabled: ${enabled}"
+    else
+        echo -e "${YELLOW}No .claude/settings.local.json — using global defaults${NC}"
+    fi
+}
+
+apply_profiles() {
+    local profiles=("$@")
+
+    # Validate all profiles exist
+    for profile in "${profiles[@]}"; do
+        if [[ ! -f "$TEMPLATES_DIR/$profile.json" ]]; then
+            echo -e "${RED}Unknown profile: $profile${NC}"
+            echo "Available: $(ls "$TEMPLATES_DIR"/*.json 2>/dev/null | xargs -I{} basename {} .json | tr '\n' ' ')"
+            exit 1
+        fi
+    done
+
+    # Create .claude/ dir if needed
+    mkdir -p .claude
+
+    # Add settings.local.json to .gitignore if not already there
+    if [[ -f .claude/.gitignore ]]; then
+        if ! grep -qF 'settings.local.json' .claude/.gitignore 2>/dev/null; then
+            echo 'settings.local.json' >> .claude/.gitignore
+        fi
+    else
+        echo 'settings.local.json' > .claude/.gitignore
+    fi
+
+    # Merge profiles: union of all enabledPlugins (true wins)
+    python3 -c "
+import json, sys
+
+merged = {}
+for profile_name in sys.argv[1:]:
+    path = '$TEMPLATES_DIR/' + profile_name + '.json'
+    with open(path) as f:
+        data = json.load(f)
+    for plugin, enabled in data.get('enabledPlugins', {}).items():
+        # true wins in union merge
+        if enabled or plugin not in merged:
+            merged[plugin] = enabled
+
+# Read existing settings.local.json to preserve non-plugin settings
+existing = {}
+try:
+    with open('$TARGET_FILE') as f:
+        existing = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    pass
+
+existing['enabledPlugins'] = merged
+
+with open('$TARGET_FILE', 'w') as f:
+    json.dump(existing, f, indent=2)
+    f.write('\n')
+
+on = sorted(k.split('@')[0] for k, v in merged.items() if v)
+print('Enabled: ' + ', '.join(on))
+" "${profiles[@]}"
+
+    echo ""
+    echo -e "${GREEN}Applied profile(s): ${profiles[*]}${NC}"
+    echo -e "  → ${TARGET_FILE}"
+    echo -e "${YELLOW}Restart Claude Code to apply changes.${NC}"
+}
+
+# Main
+case "${1:-}" in
+    -h|--help)
+        show_help
+        ;;
+    "")
+        list_profiles
+        ;;
+    *)
+        apply_profiles "$@"
+        ;;
+esac

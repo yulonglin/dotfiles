@@ -1,40 +1,6 @@
 ---
 name: claude
-description: |
-  Delegate tasks to Claude Code CLI for Claude-powered second opinions, parallel implementation,
-  or plan review. Use when you want Claude's judgment, tool use, or MCP access as a delegate.
-
-  Do NOT use for:
-  - Pure implementation with clear specs (use codex agent)
-  - Large context analysis (use gemini-cli agent)
-  - Quick edits under ~10 lines (faster to do directly)
-
-  <example>
-  Context: Need second opinion on architectural approach
-  user: "Review my plan for refactoring the authentication system"
-  assistant: "I'll delegate to the claude agent to get Claude's judgment on the architectural approach and potential issues."
-  <commentary>
-  Architectural decisions benefit from Claude's nuanced reasoning and judgment.
-  </commentary>
-  </example>
-
-  <example>
-  Context: Task requires tool use and file exploration
-  user: "Analyze the error handling patterns across the codebase and suggest improvements"
-  assistant: "I'll use the claude agent since this requires exploring files and making judgment calls about improvements."
-  <commentary>
-  Claude can use tools (Grep, Read, etc.) and provide nuanced recommendations.
-  </commentary>
-  </example>
-
-  <example>
-  Context: Parallel independent implementation
-  user: "While I work on the frontend, can you have Claude implement the API endpoints?"
-  assistant: "I'll delegate the API implementation to the claude agent to work in parallel."
-  <commentary>
-  Claude agent enables parallel work on independent tasks.
-  </commentary>
-  </example>
+description: Delegate judgment-heavy tasks to Claude Code CLI. Use for plan review, architecture decisions, parallel implementation, and tasks needing tool use or MCP access.
 
 model: inherit
 color: purple
