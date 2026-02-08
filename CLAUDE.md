@@ -98,6 +98,7 @@ config/
 claude/                   # Symlinked to ~/.claude/
 ├── CLAUDE.md             # Global AI instructions (slim ~120 lines, identity + pointers)
 ├── settings.json         # Claude Code settings
+├── output-styles/        # Custom output styles (10x-mentor: 4-track growth coaching)
 ├── rules/                # Auto-loaded behavioral rules (safety, workflow, conventions)
 ├── agents/               # Global agents (efficient-explorer, context-summariser, gemini)
 ├── skills/               # Global skills (commit, custom-compact, fast-cli, etc.)

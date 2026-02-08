@@ -1,7 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "ENABLE_TOOL_SEARCH": "1"
   },
   "includeCoAuthoredBy": false,
   "permissions": {
@@ -161,7 +162,7 @@
     "superpowers@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
     "ralph-loop@claude-plugins-official": false,
-    "learning-output-style@claude-plugins-official": true,
+    "learning-output-style@claude-plugins-official": false,
     "plugin-dev@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": false,
@@ -173,7 +174,7 @@
     "insights-toolkit@local-marketplace": true,
     "claude-md-management@claude-plugins-official": true
   },
-  "outputStyle": "Learning",
+  "outputStyle": "10x Mentor",
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,

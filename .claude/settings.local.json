@@ -10,7 +10,8 @@
       "WebFetch(domain:eu-central-1-1.aws.cloud2.influxdata.com)",
       "WebFetch(domain:oauth2.googleapis.com)",
       "WebFetch(domain:cloudcode-pa.googleapis.com)",
-      "WebFetch(domain:mcp-proxy.anthropic.com)"
+      "WebFetch(domain:mcp-proxy.anthropic.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
