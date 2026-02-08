@@ -1,0 +1,19 @@
+{
+  "session_id": "daa631a8-4080-4a6b-9da0-b9f527390b64",
+  "underlying_goal": "To refine and reorganize a document of sandbagging-inducing prompts to improve its clarity and experimental utility, and to distinguish between instruction-based and incentive-based prompts.",
+  "goal_categories": {
+    "refactoring": 1,
+    "writing": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "iterative_refinement",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Correctly identifying the conceptual difference between instruction-based and incentive-based prompts, and then implementing a clear organizational structure in the document to reflect this distinction.",
+  "brief_summary": "The user asked Claude to clean up a document of sandbagging prompts. Claude first removed irrelevant prompts, then, prompted by the user, analyzed the difference between instruction-based and incentive-based prompts. It then refactored the document to make this crucial distinction clear, improving its utility for research.",
+  "project": "-Users-yulong-writing-brainstorming",
+  "start_timestamp": "2026-01-20T04:28:31.329Z",
+  "end_timestamp": "2026-01-20T19:50:08.184Z",
+  "_source_mtime": 1769891986.2642386
+}

@@ -1,0 +1,16 @@
+{
+  "session_id": "agent-aaa42d1",
+  "underlying_goal": "Initialize the session.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "This was a warmup session with no specific task or goal.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-07T05:54:45.153Z",
+  "end_timestamp": "2026-01-07T05:54:45.153Z",
+  "_source_mtime": 1767765285.1969917
+}

@@ -1,0 +1,16 @@
+{
+  "session_id": "61f8ac3a-9623-48c3-b793-3971315ab879",
+  "underlying_goal": "User wanted to start a new, clean session.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user cleared the session. No work was performed.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-21T00:38:01.984Z",
+  "end_timestamp": "2026-01-21T00:38:02.355Z",
+  "_source_mtime": 1768961408.2285771
+}

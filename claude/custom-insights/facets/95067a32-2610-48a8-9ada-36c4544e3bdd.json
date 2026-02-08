@@ -1,0 +1,22 @@
+{
+  "session_id": "95067a32-2610-48a8-9ada-36c4544e3bdd",
+  "underlying_goal": "User wanted to identify the worst-performing sandbagging prompts for the C3 detector on the USACO dataset and understand why C3 fails on them.",
+  "goal_categories": {
+    "research": 1,
+    "debugging": 1,
+    "writing": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "debugging",
+  "friction_counts": {
+    "misunderstanding": 1
+  },
+  "friction_detail": "Initial analysis was confused by multiple conflicting results files for the same experiment, one of which showed a completely inverted AUROC. Claude had to debug the discrepancy by comparing score distributions to determine which file was correct and which was buggy.",
+  "primary_success": "Resolved a major data inconsistency by proving a specific results file was buggy and identifying the true C3 performance on USACO. It then explained *why* certain 'stealth' prompts defeat C3 by analyzing the prompt's instructions and resolved a second inconsistency by showing how k-sample aggregation inflates recall scores on small datasets.",
+  "brief_summary": "User asked to find the worst prompts for C3 on USACO. Claude found conflicting result files and debugged the discrepancy, proving one file was buggy and identifying that 'v4.1 stealth' prompts defeat C3 (AUROC ~0.5). It then explained the failure mechanism by analyzing the prompt text and documented the inflation of recall scores due to bootstrap aggregation on small sample sizes.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-08T22:04:59.477Z",
+  "end_timestamp": "2026-01-09T06:34:37.647Z",
+  "_source_mtime": 1768953977.4189987
+}

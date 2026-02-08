@@ -1,0 +1,18 @@
+{
+  "session_id": "da2d7479-8a96-49b8-8855-521a3055eae6",
+  "underlying_goal": "Adjust the formatting of a figure in a LaTeX paper to span the full page width.",
+  "goal_categories": {
+    "writing": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Correctly identified and applied the `figure*` environment in LaTeX to make a figure span the full page width in a two-column document.",
+  "brief_summary": "The user asked to make a figure fill the page width in a LaTeX document. Claude correctly identified the need for the `figure*` environment, applied the change, and confirmed compilation.",
+  "project": "-Users-yulong-writing-paper-sandbagging-detection",
+  "start_timestamp": "2026-01-09T03:50:59.007Z",
+  "end_timestamp": "2026-01-09T03:51:35.701Z",
+  "_source_mtime": 1767930695.8639596
+}

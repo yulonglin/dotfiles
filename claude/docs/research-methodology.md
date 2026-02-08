@@ -17,6 +17,21 @@
 - **No mock data**, no fallback mechanisms, minimal try/except — let errors surface
 - See `specs/RESEARCH_SPEC.md` for project-specific details
 
+## Reasoning Transparency
+
+Transparent methodology (showing methods) ≠ transparent epistemology (showing what you know and don't know).
+
+For every claim in a writeup, be clear about:
+- **Evidence type**: Empirical result, inference from data, assumption, or intuition?
+- **Confidence**: How certain, and why? ("70% confident because N is small" not just "plausible")
+- **Load-bearing vs peripheral**: Which findings actually drive the conclusion?
+- **What would change your mind**: What result or evidence would flip the conclusion?
+- **Process disclosure**: How much effort went into this? ("Spent 2 hours on 3 experiments" vs "3-month study")
+
+Anti-patterns: Presenting all evidence as equally important. Burying key limitations. Stating conclusions without confidence calibration. Citing without specifying which claim the citation supports.
+
+Reference: https://coefficientgiving.org/research/reasoning-transparency/
+
 ## Workflow
 
 1. **Interview first** — use `/spec-interview-research` for experiments or `/spec-interview` for product features

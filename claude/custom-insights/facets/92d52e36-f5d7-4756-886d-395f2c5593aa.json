@@ -1,0 +1,19 @@
+{
+  "session_id": "92d52e36-f5d7-4756-886d-395f2c5593aa",
+  "underlying_goal": "To document a best practice for using `tmux-cli` to prevent output loss on command failure.",
+  "goal_categories": {
+    "writing": 1,
+    "configuration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Correctly identifying the right place to persist the guidance (`CLAUDE.md`) and completing the full workflow from edit to push.",
+  "brief_summary": "The user provided a best-practice pattern for using `tmux-cli` safely. The assistant updated the global `CLAUDE.md` documentation to include this pattern, incorporated a user suggestion for improvement, and then committed and pushed the change.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-21T02:23:02.155Z",
+  "end_timestamp": "2026-01-21T02:25:37.110Z",
+  "_source_mtime": 1769035744.3980885
+}

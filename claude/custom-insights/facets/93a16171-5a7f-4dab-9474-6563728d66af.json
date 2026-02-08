@@ -1,0 +1,20 @@
+{
+  "session_id": "93a16171-5a7f-4dab-9474-6563728d66af",
+  "underlying_goal": "To understand the differences and evolution between three versions of 'consistent sandbagger' system prompts.",
+  "goal_categories": {
+    "exploration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "misunderstanding": 1
+  },
+  "friction_detail": "A brief misunderstanding occurred where it wasn't clear which directories corresponded to v1, v2, and v3 of the prompts, but Claude quickly clarified with a list of paths.",
+  "primary_success": "Provided a detailed side-by-side comparison and summary assessment of three different versions of a complex system prompt, explaining the evolution of the underlying technique and framing.",
+  "brief_summary": "The user asked for an explanation of different 'consistent sandbagger' prompts. Claude compared the v1, v2, and v3 versions, providing a detailed breakdown of their structure, framing, and key differences. After a brief clarification, the user seemed satisfied with the explanation.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-20T22:06:48.510Z",
+  "end_timestamp": "2026-01-20T22:10:21.300Z",
+  "_source_mtime": 1768961333.7975485
+}

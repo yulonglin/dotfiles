@@ -1,0 +1,16 @@
+{
+  "session_id": "aef4b13c-af8c-47f1-9050-a029043979b4",
+  "underlying_goal": "User was inspecting the agent's context usage.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user ran the /context command to view the agent's current context usage statistics. This was a meta-command and did not involve a specific task.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-27T23:33:16.558Z",
+  "end_timestamp": "2026-01-27T23:33:16.559Z",
+  "_source_mtime": 1769592257.5524786
+}

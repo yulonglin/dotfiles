@@ -1,0 +1,1 @@
+The directory includes the system prompts and settings that we include for description, that is like text to speech services. So that includes things like granola and voice ink currently primarily on both my phone and my Mac for voice ink and then just universally for granola. 

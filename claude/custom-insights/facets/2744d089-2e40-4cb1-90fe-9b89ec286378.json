@@ -1,0 +1,18 @@
+{
+  "session_id": "2744d089-2e40-4cb1-90fe-9b89ec286378",
+  "underlying_goal": "To reorder slides in a presentation file to move the 'Questions?' slide before the Appendix.",
+  "goal_categories": {
+    "writing": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Correctly identifying the sections and reordering them as requested.",
+  "brief_summary": "The user asked to reorder slides in a markdown presentation. Claude correctly identified the 'Questions?' and 'Appendix' sections and swapped their positions to match the user's request.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": "2025-12-30T22:59:11.665Z",
+  "end_timestamp": "2025-12-30T23:00:14.911Z",
+  "_source_mtime": 1768959337.7952766
+}

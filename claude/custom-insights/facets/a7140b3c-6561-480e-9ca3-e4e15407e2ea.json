@@ -1,0 +1,16 @@
+{
+  "session_id": "a7140b3c-6561-480e-9ca3-e4e15407e2ea",
+  "underlying_goal": "User was interacting with local CLI commands, not engaging with the assistant.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "Session consists only of the user running local commands to change the output style. No task was given to the assistant.",
+  "project": "-Users-yulong",
+  "start_timestamp": "2026-02-04T17:31:01.631Z",
+  "end_timestamp": "2026-02-04T17:31:32.433Z",
+  "_source_mtime": 1770226297.0427778
+}

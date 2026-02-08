@@ -1,0 +1,16 @@
+{
+  "session_id": "agent-a39d329",
+  "underlying_goal": "User initiated a session to warm up the agent.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "A brief warmup session. The agent confirmed it was ready to work on the MATS 8.0 Slidev presentation project.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": "2026-01-08T02:52:22.662Z",
+  "end_timestamp": "2026-01-08T02:52:25.521Z",
+  "_source_mtime": 1767840745.5365992
+}

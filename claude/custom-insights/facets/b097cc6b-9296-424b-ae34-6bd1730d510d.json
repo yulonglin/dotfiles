@@ -1,0 +1,19 @@
+{
+  "session_id": "b097cc6b-9296-424b-ae34-6bd1730d510d",
+  "underlying_goal": "The user is testing the model switching functionality in Claude Code.",
+  "goal_categories": {
+    "tooling": 1,
+    "configuration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user tested the `/model` command, switching from the default model to Opus and then back to the default.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-25T01:26:18.024Z",
+  "end_timestamp": "2026-01-25T01:26:25.644Z",
+  "_source_mtime": 1769310235.023124
+}

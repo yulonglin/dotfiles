@@ -1,0 +1,18 @@
+{
+  "session_id": "254b4661-5e72-4912-a149-b1c0c41615d7",
+  "underlying_goal": "To export the presentation slides to a PDF file.",
+  "goal_categories": {
+    "deployment": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Executed the export command successfully.",
+  "brief_summary": "The user issued a simple 'export' command. Claude executed the command and confirmed that the slides were successfully exported to `slides.pdf`. The session was a single, successful task.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": "2026-01-11T05:08:54.935Z",
+  "end_timestamp": "2026-01-11T05:09:15.972Z",
+  "_source_mtime": 1768959341.8423507
+}

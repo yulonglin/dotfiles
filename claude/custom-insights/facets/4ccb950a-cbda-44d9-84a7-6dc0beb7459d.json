@@ -1,0 +1,19 @@
+{
+  "session_id": "4ccb950a-cbda-44d9-84a7-6dc0beb7459d",
+  "underlying_goal": "Review the paper's outline and contributions.",
+  "goal_categories": {
+    "review": 1,
+    "writing": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "This session contains only a summary log indicating a review of the paper's outline and contributions. There is no user-assistant interaction to analyze.",
+  "project": "-Users-yulong-writing-paper-sandbagging-detection",
+  "start_timestamp": null,
+  "end_timestamp": null,
+  "_source_mtime": 1767906957.8913343
+}

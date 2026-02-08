@@ -1,0 +1,16 @@
+{
+  "session_id": "agent-adcb854",
+  "underlying_goal": "User initiated a session to warm up the agent.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "A minimal warmup session. The user sent 'Warmup' and the agent replied that it was ready.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-08T01:32:15.281Z",
+  "end_timestamp": "2026-01-08T01:32:23.919Z",
+  "_source_mtime": 1767835943.93746
+}

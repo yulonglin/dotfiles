@@ -1,0 +1,20 @@
+{
+  "session_id": "96b670ae-9b85-4c5b-8703-296fac374646",
+  "underlying_goal": "Get help with an OAuth permission error.",
+  "goal_categories": {
+    "bug_fix": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "misunderstanding": 1
+  },
+  "friction_detail": "Claude completely ignored the user's pasted error message and instead gave a generic response about being in 'plan mode', failing to address the user's immediate problem.",
+  "primary_success": "",
+  "brief_summary": "The user pasted an OAuth error message seeking help. Claude completely ignored the error and responded with a generic 'I'm ready to plan' message, failing the task.",
+  "project": "-Users-yulong-writing-yulonglin-github-io",
+  "start_timestamp": "2026-02-04T03:10:33.923Z",
+  "end_timestamp": "2026-02-04T03:10:45.225Z",
+  "_source_mtime": 1770174645.3354168
+}

@@ -1,0 +1,18 @@
+{
+  "session_id": "6b11be79-766f-4bfa-816b-7e7876883c9d",
+  "underlying_goal": "Commit a large and complex set of changes related to new sandbagging methods.",
+  "goal_categories": {
+    "tooling": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "Session ended before the agent could complete its analysis and perform the commit.",
+  "primary_success": "",
+  "brief_summary": "The user requested to commit a large set of changes related to new sandbagging methods. The agent began analyzing the changes and noted their complexity, but the session ended before it could proceed with creating the commits.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-05T22:49:29.194Z",
+  "end_timestamp": "2026-01-05T22:50:18.771Z",
+  "_source_mtime": 1768959028.3591318
+}

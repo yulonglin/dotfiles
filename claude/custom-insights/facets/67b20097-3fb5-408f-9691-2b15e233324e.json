@@ -1,0 +1,18 @@
+{
+  "session_id": "67b20097-3fb5-408f-9691-2b15e233324e",
+  "underlying_goal": "Analyze combined lie detector signal across different model versions.",
+  "goal_categories": {
+    "research": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "This session contains only a summary line about analyzing lie detector signals. No user interaction or detailed work is shown.",
+  "project": "-Users-yulong-code-sandbagging-detection-LLM-LieDetector",
+  "start_timestamp": null,
+  "end_timestamp": null,
+  "_source_mtime": 1767768392.1178749
+}

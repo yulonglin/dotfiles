@@ -1,0 +1,19 @@
+{
+  "session_id": "113fee75-c31d-409f-bce1-b8e3af8badb6",
+  "underlying_goal": "The user was trying to debug a `ValueError` in the prompt selection pipeline.",
+  "goal_categories": {
+    "debugging": 1,
+    "bug_fix": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unclear",
+  "session_type": "debugging",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user reported a `ValueError` during the diversity selection stage of a prompt selection script, indicating an issue with embedding shapes. The session ended before a diagnosis or fix could be implemented.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-22T23:11:08.666Z",
+  "end_timestamp": "2026-01-22T23:11:36.127Z",
+  "_source_mtime": 1769123723.1838615
+}

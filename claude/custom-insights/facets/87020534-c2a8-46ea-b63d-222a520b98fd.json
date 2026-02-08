@@ -1,0 +1,18 @@
+{
+  "session_id": "87020534-c2a8-46ea-b63d-222a520b98fd",
+  "underlying_goal": "Unclear due to the session consisting of summaries and an error. The user might have tried to use a skill that doesn't exist.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "tool_failure": 1
+  },
+  "friction_detail": "User tried to invoke a skill named 'share' which does not exist.",
+  "primary_success": "",
+  "brief_summary": "The session consists of several summary lines from previous interactions and ends with an error when the user tried to invoke a non-existent skill 'share'.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-10T22:37:58.052Z",
+  "end_timestamp": "2026-01-10T22:37:58.052Z",
+  "_source_mtime": 1768955916.2366838
+}

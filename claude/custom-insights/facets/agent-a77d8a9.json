@@ -1,0 +1,18 @@
+{
+  "session_id": "agent-a77d8a9",
+  "underlying_goal": "User initiated a session to warm up the agent.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "slow_response": 1
+  },
+  "friction_detail": "Agent responded twice to the initial 'Warmup' message.",
+  "primary_success": "",
+  "brief_summary": "A warmup session where the agent responded twice. The first response was a generic exploration intent, and the second acknowledged the warmup and mentioned the Slidev project context.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": "2026-01-08T02:52:22.661Z",
+  "end_timestamp": "2026-01-08T02:52:29.961Z",
+  "_source_mtime": 1767840749.9836683
+}

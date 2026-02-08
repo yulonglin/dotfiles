@@ -1,0 +1,16 @@
+{
+  "session_id": "agent-a69fb95",
+  "underlying_goal": "Initialize the session.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "Session was empty with no assistant response.",
+  "primary_success": "",
+  "brief_summary": "An empty warmup session. The user sent 'Warmup' but the session ended before the assistant could respond.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-07T22:34:11.453Z",
+  "end_timestamp": "2026-01-07T22:34:11.453Z",
+  "_source_mtime": 1767825251.478902
+}

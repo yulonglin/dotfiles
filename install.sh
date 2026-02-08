@@ -271,7 +271,7 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
         fi
     fi
 
-    # Configure MCP servers
+    # Configure MCP servers (HTTP/npx)
     if cmd_exists claude; then
         log_info "Configuring MCP servers..."
         for server in "${MCP_SERVERS[@]}"; do
@@ -288,6 +288,49 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
                     log_success "$name configured" || log_warning "$name failed"
             fi
         done
+    fi
+
+    # Build and configure local MCP servers (stdio, built from source)
+    if cmd_exists go && cmd_exists claude && [[ ${#MCP_SERVERS_LOCAL[@]} -gt 0 ]]; then
+        log_info "Building local MCP servers..."
+        mcp_base="$HOME/code"
+        mkdir -p "$mcp_base"
+
+        for entry in "${MCP_SERVERS_LOCAL[@]}"; do
+            IFS=':' read -r name repo binary token_var <<< "$entry"
+            repo_dir="$mcp_base/$(basename "$repo")"
+            binary_path="$repo_dir/$binary"
+
+            # Clone or update
+            if [[ -d "$repo_dir/.git" ]]; then
+                log_info "  Updating $name..."
+                git -C "$repo_dir" pull --rebase --quiet 2>/dev/null || true
+            else
+                log_info "  Cloning $name..."
+                git clone --quiet "https://github.com/$repo.git" "$repo_dir" 2>/dev/null || {
+                    log_warning "$name: clone failed"; continue
+                }
+            fi
+
+            # Build
+            log_info "  Building $name..."
+            (cd "$repo_dir" && go build -o "$binary" ./cmd/"$binary") 2>/dev/null || {
+                log_warning "$name: build failed"; continue
+            }
+
+            # Configure MCP server with token from environment
+            token_value="${!token_var:-}"
+            claude mcp remove "$name" &>/dev/null || true
+            if [[ -n "$token_value" ]]; then
+                claude mcp add-json --scope user "$name" \
+                    "{\"command\":\"$binary_path\",\"args\":[\"--transport\",\"stdio\"],\"env\":{\"$token_var\":\"$token_value\"}}" 2>&1 && \
+                    log_success "$name configured" || log_warning "$name MCP registration failed"
+            else
+                log_warning "$name: $token_var not set — skipping MCP registration (build complete)"
+            fi
+        done
+    elif [[ ${#MCP_SERVERS_LOCAL[@]} -gt 0 ]]; then
+        log_warning "Go not installed — skipping local MCP servers"
     fi
 
     log_success "AI CLI tools installation complete"

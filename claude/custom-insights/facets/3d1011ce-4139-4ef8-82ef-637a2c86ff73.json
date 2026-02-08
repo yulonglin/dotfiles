@@ -1,0 +1,22 @@
+{
+  "session_id": "3d1011ce-4139-4ef8-82ef-637a2c86ff73",
+  "underlying_goal": "The user wanted to search their Notion workspace.",
+  "goal_categories": {
+    "exploration": 1,
+    "tooling": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "moderately_helpful",
+  "session_type": "debugging",
+  "friction_counts": {
+    "tool_failure": 3,
+    "misunderstanding": 1
+  },
+  "friction_detail": "Claude repeatedly failed to invoke the Notion MCP server, trying several incorrect tool names. It eventually realized its assumption of a generic 'search' tool was wrong and that only specialized skill-based workflows were available.",
+  "primary_success": "After several failed attempts to use a generic Notion search tool, Claude correctly deduced from the available skills that the Notion integration was built around specific workflows (like meeting-intelligence, knowledge-capture) and not a direct search API.",
+  "brief_summary": "The user attempted to search Notion. Claude struggled to find the correct tool, making several failed attempts to call an MCP server. It correctly concluded that the Notion plugin was structured around specific skills rather than a generic search function, at which point the user abandoned the original goal and began managing plugins.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-03T20:55:33.773Z",
+  "end_timestamp": "2026-02-03T21:03:27.253Z",
+  "_source_mtime": 1770152607.3564813
+}

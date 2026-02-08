@@ -1,0 +1,18 @@
+{
+  "session_id": "d8fec303-5b70-4425-a2e1-923edf06cdc3",
+  "underlying_goal": "To change the AI model being used for the chat session.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user changed the active model to Claude Haiku. No other actions were taken.",
+  "project": "-Users-yulong-projects-technical-ai-governance-hackathon-compliance-leaderboard",
+  "start_timestamp": "2026-02-01T20:07:43.193Z",
+  "end_timestamp": "2026-02-01T20:07:43.193Z",
+  "_source_mtime": 1769995524.350536
+}

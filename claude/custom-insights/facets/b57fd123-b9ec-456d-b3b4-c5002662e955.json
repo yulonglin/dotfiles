@@ -1,0 +1,18 @@
+{
+  "session_id": "b57fd123-b9ec-456d-b3b4-c5002662e955",
+  "underlying_goal": "To commit a large set of related changes involving the reorganization of sandbagging system prompts.",
+  "goal_categories": {
+    "tooling": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "moderately_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Correctly analyzed a large set of file changes and grouped them into logical commits with clear messages.",
+  "brief_summary": "The user invoked the commit skill to save a large number of changes. Claude analyzed the changes, which involved a major reorganization of system prompt files, and created three logical commits with descriptive messages.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-20T22:35:29.494Z",
+  "end_timestamp": "2026-01-20T22:36:35.634Z",
+  "_source_mtime": 1768961339.0678806
+}

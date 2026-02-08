@@ -1,0 +1,19 @@
+{
+  "session_id": "c45e6cb6-22b4-4fe7-aa4d-f31a2cb2f142",
+  "underlying_goal": "The user needed to correct wrong deadline dates in a presentation slide deck for 'week 21'.",
+  "goal_categories": {
+    "writing": 1,
+    "bug_fix": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Proactively identified and updated not just the primary deadlines but all dependent dates and timeline references for consistency.",
+  "brief_summary": "User reported incorrect deadlines in a slide deck. Claude correctly identified the errors, updated the primary deadlines, and also fixed all cascading dates and timeline references throughout the document to ensure consistency, then committed the changes.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": "2026-01-21T18:56:43.693Z",
+  "end_timestamp": "2026-01-21T19:15:13.207Z",
+  "_source_mtime": 1769025453.0930707
+}

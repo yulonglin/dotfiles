@@ -1,0 +1,20 @@
+{
+  "session_id": "a61d06cf-b810-4a49-b784-b6d5d9cb3667",
+  "underlying_goal": "The user was attempting to run a local CLI command which failed.",
+  "goal_categories": {
+    "tooling": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "tool_failure": 1
+  },
+  "friction_detail": "User attempted to run a local CLI command but the login was interrupted.",
+  "primary_success": "",
+  "brief_summary": "The session consists of a summary of a previous action ('Added shell commands & parallel tool call rules to CLAUDE.md') followed by a user's attempt to run a local command which was interrupted. Claude did not take any action.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2025-12-25T06:44:05.262Z",
+  "end_timestamp": "2025-12-25T06:44:05.262Z",
+  "_source_mtime": 1769024673.7114754
+}

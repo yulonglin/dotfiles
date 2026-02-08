@@ -1,0 +1,18 @@
+{
+  "session_id": "ace75956-8f4f-4f8c-8645-9948f3f54007",
+  "underlying_goal": "N/A - This session appears to be a list of summaries and a single, simple command execution.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "unclear",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "This session consists of a list of summaries related to behavioral probe evaluations and a single execution of a `terminal-setup` command.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2025-12-22T03:21:58.707Z",
+  "end_timestamp": "2025-12-22T03:21:58.708Z",
+  "_source_mtime": 1768953300.6187704
+}

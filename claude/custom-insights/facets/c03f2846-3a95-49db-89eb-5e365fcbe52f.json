@@ -1,0 +1,18 @@
+{
+  "session_id": "c03f2846-3a95-49db-89eb-5e365fcbe52f",
+  "underlying_goal": "User wanted to update their local repository and recompile a LaTeX document.",
+  "goal_categories": {
+    "configuration": 2
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Successfully pulled changes and recompiled the document as requested.",
+  "brief_summary": "The user pulled git changes, which included updates to a LaTeX document, and then successfully recompiled the document.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-14T03:22:08.333Z",
+  "end_timestamp": "2026-01-14T03:22:55.233Z",
+  "_source_mtime": 1768955919.546288
+}

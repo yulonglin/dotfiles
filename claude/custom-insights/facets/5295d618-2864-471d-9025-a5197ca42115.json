@@ -1,0 +1,21 @@
+{
+  "session_id": "5295d618-2864-471d-9025-a5197ca42115",
+  "underlying_goal": "To debug a performance issue with the Claude Code tool, which led to uninstalling a plugin.",
+  "goal_categories": {
+    "debugging": 1,
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "debugging",
+  "friction_counts": {
+    "slow_response": 1
+  },
+  "friction_detail": "The user was experiencing a slow session, with summaries indicating analysis of 'context bloat' and issues with concurrent agents, culminating in the user uninstalling a plugin.",
+  "primary_success": "",
+  "brief_summary": "This appears to be a meta-session where the user was debugging performance issues with Claude Code itself. Session summaries suggest analysis of slow performance, context bloat, and concurrent agents, leading to the user uninstalling the 'serena' plugin.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-19T18:28:45.801Z",
+  "end_timestamp": "2026-01-19T18:28:45.801Z",
+  "_source_mtime": 1768955385.5640109
+}

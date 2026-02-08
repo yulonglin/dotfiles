@@ -1,0 +1,16 @@
+{
+  "session_id": "d1b4418a-bfd3-4aad-9f93-824afe6377de",
+  "underlying_goal": "Unclear, session contains only a single command with no other context.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "This session was too short to analyze, containing only a single command to connect to Chrome. No user goal or outcome could be determined.",
+  "project": "-Users-yulong-scratch-mats-oa-progressive",
+  "start_timestamp": "2026-02-04T23:41:07.499Z",
+  "end_timestamp": "2026-02-04T23:41:07.500Z",
+  "_source_mtime": 1770248467.6032114
+}

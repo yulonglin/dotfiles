@@ -1,0 +1,16 @@
+{
+  "session_id": "317749ab-d245-44f7-8c18-cb529c65d751",
+  "underlying_goal": "To install a Slack app.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user ran a command to install a Slack app. The session is too short to analyze further.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-25T03:30:43.548Z",
+  "end_timestamp": "2026-01-25T03:30:43.827Z",
+  "_source_mtime": 1769377888.0858
+}

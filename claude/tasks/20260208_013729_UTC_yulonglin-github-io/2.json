@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Fix relative image path in adversarial-defenses.md",
+  "description": "CRITICAL: Verify whether `./defense-gan.png` resolves correctly in build output. If not, change to absolute path `/writing/adversarial-defenses/defense-gan.png`.",
+  "activeForm": "Fixing image path",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

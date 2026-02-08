@@ -1,0 +1,18 @@
+{
+  "session_id": "4799259b-f43e-42ee-aec5-ecc17c4791e6",
+  "underlying_goal": "To test or use a Claude plugin command.",
+  "goal_categories": {
+    "tooling": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "A very short session where the user executed the `/plugin` command. The session is too minimal to analyze intent or outcome.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-02T22:40:24.357Z",
+  "end_timestamp": "2026-02-02T22:40:24.357Z",
+  "_source_mtime": 1770072464.4508348
+}

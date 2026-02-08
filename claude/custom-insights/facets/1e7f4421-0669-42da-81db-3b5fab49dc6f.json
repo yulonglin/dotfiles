@@ -1,0 +1,21 @@
+{
+  "session_id": "1e7f4421-0669-42da-81db-3b5fab49dc6f",
+  "underlying_goal": "To critique and improve the Week 20 research presentation slides using a specialized skill.",
+  "goal_categories": {
+    "writing": 1,
+    "review": 1
+  },
+  "outcome": "partially_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "iterative_refinement",
+  "friction_counts": {
+    "tool_failure": 1
+  },
+  "friction_detail": "The '/fix-slide' command failed with 'Prompt is too long', preventing any fixes from being applied after the critique.",
+  "primary_success": "Provided a detailed, structured critique of the Week 20 slides, identifying several areas for improvement such as adding a decision prompt, defining acronyms, and showing uncertainty metrics.",
+  "brief_summary": "The user requested a review of their 'Week 20' slides. Claude activated a presentation skill and provided a structured critique with several high-quality suggestions for improvement. However, when the user attempted to proceed with fixing the slides, the session was terminated by a 'Prompt is too long' error, so no edits were actually applied.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": "2026-01-10T08:00:06.990Z",
+  "end_timestamp": "2026-01-10T08:01:21.249Z",
+  "_source_mtime": 1768959526.8543386
+}

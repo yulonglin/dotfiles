@@ -26,6 +26,7 @@ Before running deployment scripts, file system operations, or configuration task
 | `deploy.sh` / `install.sh` | Multiple operations may fail in sequence | Run with `--minimal` first to test subset |
 | Git hooks (pre-commit, etc.) | May lack execute permission or fail in sandbox | Check with `ls -la .git/hooks/`; use `--no-verify` only if user approves |
 | `launchd` / `cron` setup | May not have permissions to install agents | Warn user upfront; suggest manual installation |
+| Heredocs in commands | Shell creates temp file in `/tmp` → blocked | Use `git commit -F` with file in `$TMPDIR`, or `printf` piping (see Git Commands) |
 
 **When planning a task involving file system operations:** List anticipated sandbox issues BEFORE executing. Don't discover them one-by-one through failures — that wastes context and user patience.
 
@@ -41,3 +42,14 @@ Before running deployment scripts, file system operations, or configuration task
   - ✅ `git diff main..yulong/dev`
   - ❌ `git log 5f41114..a8084f7` (hard to read)
 - Only use hashes when refs don't exist (e.g., comparing arbitrary commits)
+
+### Commit Messages (Sandbox-Safe)
+
+**NEVER use heredoc (`<<EOF`) in commit commands** — the shell creates a temp file in `/tmp` which the sandbox blocks, producing an empty message and a failed commit.
+
+Instead, write the message to a file first (ensure `$TMPDIR` directory exists):
+```bash
+mkdir -p "$TMPDIR" && printf '%s\n' "feat: subject line" "" "Body details here" > "$TMPDIR/commit_msg.txt" && git commit -F "$TMPDIR/commit_msg.txt"
+```
+
+For single-line messages, `-m "message"` works fine without heredocs.

@@ -1,0 +1,16 @@
+{
+  "session_id": "agent-a57d6e3",
+  "underlying_goal": "Initialize the session.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "This was a warmup session with no specific task or goal.",
+  "project": "-Users-yulong-code-sandbagging-detection-LLM-LieDetector",
+  "start_timestamp": "2026-01-07T06:46:31.182Z",
+  "end_timestamp": "2026-01-07T06:46:31.182Z",
+  "_source_mtime": 1767768391.2244465
+}

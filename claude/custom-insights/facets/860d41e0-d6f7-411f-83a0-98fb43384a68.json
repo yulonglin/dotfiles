@@ -1,0 +1,18 @@
+{
+  "session_id": "860d41e0-d6f7-411f-83a0-98fb43384a68",
+  "underlying_goal": "Unclear, likely exploring available plugins.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "tool_failure": 1
+  },
+  "friction_detail": "The user tried a /plugin command that was not recognized.",
+  "primary_success": "",
+  "brief_summary": "The user issued a /plugin command which was not recognized and produced no output. The session was too short to determine the user's goal.",
+  "project": "-Users-yulong-writing-brainstorming",
+  "start_timestamp": "2026-02-01T16:00:38.010Z",
+  "end_timestamp": "2026-02-01T16:00:38.010Z",
+  "_source_mtime": 1769968791.7305372
+}

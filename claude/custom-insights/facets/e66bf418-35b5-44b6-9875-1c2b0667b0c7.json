@@ -1,0 +1,18 @@
+{
+  "session_id": "e66bf418-35b5-44b6-9875-1c2b0667b0c7",
+  "underlying_goal": "To interact with the plugin system.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user invoked the `/plugin` command. The session is too short to provide further analysis.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-30T15:51:52.282Z",
+  "end_timestamp": "2026-01-30T15:51:52.283Z",
+  "_source_mtime": 1769788346.793699
+}

@@ -1,0 +1,18 @@
+{
+  "session_id": "19d37d1c-2046-4708-9395-77e647225c99",
+  "underlying_goal": "Find a single sandbagging prompt for the gpt-5-nano model that is effective across multiple datasets (GPQA, MATH, USACO).",
+  "goal_categories": {
+    "research": 1
+  },
+  "outcome": "partially_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Quickly analyzing and summarizing cross-dataset prompt performance in a structured table with actionable insights.",
+  "brief_summary": "User asked for sandbagging prompts for gpt-5-nano that generalize across datasets. Claude analyzed the prompts, found none that worked on all three datasets, but provided a clear table of prompts that worked on two. It concluded with recommendations for the best cross-dataset candidates.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-24T06:06:59.622Z",
+  "end_timestamp": "2026-01-24T06:07:25.287Z",
+  "_source_mtime": 1769234847.8749847
+}

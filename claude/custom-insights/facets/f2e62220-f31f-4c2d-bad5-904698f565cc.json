@@ -1,0 +1,19 @@
+{
+  "session_id": "f2e62220-f31f-4c2d-bad5-904698f565cc",
+  "underlying_goal": "Add GDM safety review notes to a specification document.",
+  "goal_categories": {
+    "writing": 1,
+    "research": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "unclear",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "Session is too short to analyze. It contains a single summary line indicating that safety review notes were added to a spec.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": null,
+  "end_timestamp": null,
+  "_source_mtime": 1768864347.0948596
+}

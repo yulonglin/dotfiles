@@ -1,0 +1,20 @@
+{
+  "session_id": "e136da23-79eb-498d-9522-a18f2042e2b3",
+  "underlying_goal": "To correct an error in a previous edit where content was deleted instead of being marked as deprecated.",
+  "goal_categories": {
+    "bug_fix": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "moderately_helpful",
+  "session_type": "debugging",
+  "friction_counts": {
+    "wrong_approach": 1
+  },
+  "friction_detail": "Claude had previously deleted content that should have been struck through, requiring the user to point out the error and have it corrected.",
+  "primary_success": "Quickly understanding the error and correctly restoring the deleted content while applying the intended strikethrough formatting.",
+  "brief_summary": "The user pointed out that Claude had mistakenly deleted content from a spec file instead of striking it through. Claude acknowledged the error, restored the missing information, and correctly applied the strikethrough formatting to deprecated options.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-24T06:55:27.491Z",
+  "end_timestamp": "2026-01-24T06:56:07.469Z",
+  "_source_mtime": 1769237860.0558376
+}

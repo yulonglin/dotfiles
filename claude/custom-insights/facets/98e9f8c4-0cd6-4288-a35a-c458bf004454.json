@@ -1,0 +1,18 @@
+{
+  "session_id": "98e9f8c4-0cd6-4288-a35a-c458bf004454",
+  "underlying_goal": "To run the prompt selection pipeline for the MATH dataset.",
+  "goal_categories": {
+    "research": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "unclear",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user requested to run the MATH prompt selection pipeline, but interrupted the request before it could be completed.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-24T00:31:34.013Z",
+  "end_timestamp": "2026-01-24T00:31:55.721Z",
+  "_source_mtime": 1769217435.9588618
+}

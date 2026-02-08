@@ -1,0 +1,11 @@
+{
+  "id": "1",
+  "subject": "Document claude-mem architecture and capabilities",
+  "description": "Write down everything we've learned about claude-mem: hooks, file paths, timing, multi-agent support, strengths, limitations. Save to .claude/plans/ as research notes.",
+  "activeForm": "Documenting claude-mem architecture",
+  "status": "completed",
+  "blocks": [
+    "3"
+  ],
+  "blockedBy": []
+}

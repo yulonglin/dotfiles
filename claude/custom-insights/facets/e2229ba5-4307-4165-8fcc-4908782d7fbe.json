@@ -1,0 +1,20 @@
+{
+  "session_id": "e2229ba5-4307-4165-8fcc-4908782d7fbe",
+  "underlying_goal": "To add the session name to the Claude Code statusline display.",
+  "goal_categories": {
+    "feature_implementation": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "single_task",
+  "friction_counts": {
+    "wrong_approach": 1
+  },
+  "friction_detail": "Claude implemented the feature without first verifying that the necessary 'session_name' field was available in the JSON input, leading to the work being reverted.",
+  "primary_success": "",
+  "brief_summary": "The user asked to add the session name to a statusline script. Claude implemented the change, but the user pointed out that the underlying data wasn't available yet in the tool. Claude then correctly reverted its changes.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-06T23:51:17.639Z",
+  "end_timestamp": "2026-01-07T00:01:39.868Z",
+  "_source_mtime": 1768957982.8009236
+}

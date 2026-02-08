@@ -1,0 +1,21 @@
+{
+  "session_id": "fc7d4fcd-a329-4d7f-8919-b3b61c2bb439",
+  "underlying_goal": "Fix an OAuth permission error preventing the `/usage` command from working.",
+  "goal_categories": {
+    "bug_fix": 1,
+    "configuration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "permission_issue": 1
+  },
+  "friction_detail": "The user encountered an OAuth permission error when trying to view usage data.",
+  "primary_success": "Instantly and correctly diagnosed the OAuth scope error from the API response and provided the exact CLI command (`claude auth login`) to fix it.",
+  "brief_summary": "The user reported an OAuth error when running the `/usage` command. Claude correctly interpreted the error message, identified the missing 'user:profile' scope, and instructed the user to re-authenticate with `claude auth login` to fix the issue.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-04T03:10:59.126Z",
+  "end_timestamp": "2026-02-04T03:11:42.756Z",
+  "_source_mtime": 1770174709.687667
+}

@@ -1,0 +1,18 @@
+{
+  "session_id": "b848a9f8-b615-45c0-b098-3ffc1ef74281",
+  "underlying_goal": "To compile the LaTeX research paper.",
+  "goal_categories": {
+    "writing": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "moderately_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Claude successfully compiled the LaTeX paper.",
+  "brief_summary": "Following a long series of interactions related to overhauling a research paper, the user requested a compilation. Claude successfully compiled the LaTeX document, producing a 14-page PDF.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-10T18:35:57.051Z",
+  "end_timestamp": "2026-01-10T18:36:26.162Z",
+  "_source_mtime": 1768954438.7510178
+}

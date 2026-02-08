@@ -1,0 +1,20 @@
+{
+  "session_id": "64e9e75e-954b-4680-9c62-8b5c43dfd427",
+  "underlying_goal": "User wanted to catalogue, critically evaluate, and reorganize the project's sandbagging prompts.",
+  "goal_categories": {
+    "exploration": 1,
+    "refactoring": 1,
+    "writing": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "iterative_refinement",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Critically analyzed over 130 sandbagging prompts, identifying nonsensical 'fantasy mechanisms' and miscategorized prompts. This analysis enabled a major cleanup and reorganization of the prompt library.",
+  "brief_summary": "User asked for a catalogue of all sandbagging prompts. Claude first provided a comprehensive list, then a critical assessment identifying which prompts were nonsensical or miscategorized. Based on user feedback, Claude then archived/moved/fixed the prompts and created a final `CATALOGUE.yaml` file to index the cleaned-up prompt set.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-15T05:47:48.973Z",
+  "end_timestamp": "2026-01-20T04:46:40.843Z",
+  "_source_mtime": 1768953982.2343688
+}

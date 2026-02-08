@@ -1,0 +1,18 @@
+{
+  "session_id": "dcaa27bc-a6f9-4712-9b4a-ca76ee61a32b",
+  "underlying_goal": "Unclear, user just typed \"plugins\".",
+  "goal_categories": {},
+  "outcome": "abandoned",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "misunderstanding": 1
+  },
+  "friction_detail": "User provided a single word 'plugins' with no context, which was too ambiguous for Claude to act on.",
+  "primary_success": "",
+  "brief_summary": "The user typed the single word 'plugins'. Claude responded by asking for clarification, but the user did not elaborate, and the session ended.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-19T20:13:15.101Z",
+  "end_timestamp": "2026-01-19T20:13:24.729Z",
+  "_source_mtime": 1769061362.1966248
+}

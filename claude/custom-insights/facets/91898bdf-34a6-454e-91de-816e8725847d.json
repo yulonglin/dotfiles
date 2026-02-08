@@ -1,0 +1,19 @@
+{
+  "session_id": "91898bdf-34a6-454e-91de-816e8725847d",
+  "underlying_goal": "The user is installing several Claude Code plugins.",
+  "goal_categories": {
+    "tooling": 1,
+    "configuration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user installed three Claude Code plugins (`plugin-dev`, `commit-commands`, `pyright-lsp`) using the local `/plugin` command.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-25T03:09:16.769Z",
+  "end_timestamp": "2026-01-25T03:12:52.570Z",
+  "_source_mtime": 1769311802.9858022
+}

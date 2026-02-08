@@ -1,0 +1,16 @@
+{
+  "session_id": "c5b030fd-a1e0-4958-bee9-78addfcc324f",
+  "underlying_goal": "User starting a new session.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "Initial greeting from the user at the start of a session.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2025-12-25T21:59:59.204Z",
+  "end_timestamp": "2025-12-25T22:00:04.332Z",
+  "_source_mtime": 1769029952.7572691
+}

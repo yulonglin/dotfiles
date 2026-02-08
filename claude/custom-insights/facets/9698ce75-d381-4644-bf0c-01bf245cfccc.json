@@ -1,0 +1,18 @@
+{
+  "session_id": "9698ce75-d381-4644-bf0c-01bf245cfccc",
+  "underlying_goal": "The user was trying to start a session with Claude.",
+  "goal_categories": {},
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "tool_failure": 1
+  },
+  "friction_detail": "The first message resulted in a 500 Internal Server Error from the API.",
+  "primary_success": "",
+  "brief_summary": "The user's initial \"hello\" resulted in a 500 API error. On the second attempt (\"try\"), the connection was successful.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-22T22:17:39.609Z",
+  "end_timestamp": "2026-01-22T22:26:55.518Z",
+  "_source_mtime": 1769122219.7482626
+}

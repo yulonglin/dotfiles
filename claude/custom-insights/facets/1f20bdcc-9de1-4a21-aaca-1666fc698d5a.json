@@ -1,0 +1,18 @@
+{
+  "session_id": "1f20bdcc-9de1-4a21-aaca-1666fc698d5a",
+  "underlying_goal": "Complete TODO tasks for Week 19 slides.",
+  "goal_categories": {
+    "writing": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "This session contains only a summary line indicating that tasks for 'Week 19 Slides' were completed. No actual interaction is present.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": null,
+  "end_timestamp": null,
+  "_source_mtime": 1767765305.6205752
+}

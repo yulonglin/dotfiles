@@ -1,0 +1,19 @@
+{
+  "session_id": "agent-a443345",
+  "underlying_goal": "To determine the current and historical answerability/quality metrics for paraphrased questions across different datasets, especially for USACO.",
+  "goal_categories": {
+    "research": 1,
+    "eval_design": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Finding the exact, up-to-date answerability percentages for each dataset and precisely describing the complex, dataset-specific logic used to measure it from the source code.",
+  "brief_summary": "The user asked for data on paraphrase answerability. The agent investigated quality reports and source code to provide current answerability rates for GPQA, MATH, and USACO datasets (91.3% for USACO). It also detailed the specific criteria used for measuring answerability and correctly concluded that no historical baseline for USACO was documented.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-07T05:38:57.548Z",
+  "end_timestamp": "2026-01-07T05:40:31.387Z",
+  "_source_mtime": 1767764431.4974997
+}

@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "Fix dark: prefix incompatibility with data-theme theming",
+  "description": "CRITICAL: Replace `dark:` Tailwind utility classes in FeaturedCard.astro and ResearchCluster.astro with CSS custom property values, since the site uses `data-theme=\"dark\"` (not Tailwind's prefers-color-scheme).",
+  "activeForm": "Fixing dark mode badge colors",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

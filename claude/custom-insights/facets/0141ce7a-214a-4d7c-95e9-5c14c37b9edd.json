@@ -1,0 +1,20 @@
+{
+  "session_id": "0141ce7a-214a-4d7c-95e9-5c14c37b9edd",
+  "underlying_goal": "User was trying to interact with Claude Code's plugin and MCP system.",
+  "goal_categories": {
+    "tooling": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "tool_failure": 1
+  },
+  "friction_detail": "User tried to connect to MCP, but it failed.",
+  "primary_success": "",
+  "brief_summary": "The user attempted to use the /plugin and /mcp commands. The MCP connection failed, and the session ended.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-28T19:19:09.468Z",
+  "end_timestamp": "2026-01-28T19:19:16.126Z",
+  "_source_mtime": 1769628658.9199138
+}

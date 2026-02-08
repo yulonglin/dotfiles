@@ -1,0 +1,11 @@
+{
+  "id": "2",
+  "subject": "Research Beads - architecture, triggers, and capabilities",
+  "description": "Investigate the Beads project/approach for persistent memory. Understand its architecture, how it stores/retrieves context, triggers, multi-agent support, and how it differs from claude-mem.",
+  "activeForm": "Researching Beads architecture",
+  "status": "pending",
+  "blocks": [
+    "3"
+  ],
+  "blockedBy": []
+}

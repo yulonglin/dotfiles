@@ -1,0 +1,18 @@
+{
+  "session_id": "284f8956-1332-4122-8979-073e6efa32b4",
+  "underlying_goal": "User wanted a clear, simple explanation of the 'difficulty correlation' detection method.",
+  "goal_categories": {
+    "exploration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Providing a very clear and concise explanation for Slack: `suspicion = (expected \u2212 actual) \u00d7 easiness`.",
+  "brief_summary": "The user asked for a simple explanation of the difficulty correlation detection method. Claude provided several levels of explanation, from a conceptual overview to the specific formula, and clarified how the `expected` and `actual` values are calculated.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-09T07:17:37.639Z",
+  "end_timestamp": "2026-01-09T07:23:50.528Z",
+  "_source_mtime": 1768961413.1854498
+}

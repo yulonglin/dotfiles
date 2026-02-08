@@ -1,0 +1,23 @@
+{
+  "session_id": "b34dd75b-f51b-4316-8b48-8bbf5a750585",
+  "underlying_goal": "User wanted to run a USACO sandbagging detection accuracy experiment using gpt-5-nano.",
+  "goal_categories": {
+    "research": 1,
+    "debugging": 1,
+    "configuration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "debugging",
+  "friction_counts": {
+    "tool_failure": 1,
+    "permission_issue": 1
+  },
+  "friction_detail": "The gpt-5-nano experiment runs consistently failed with `APIConnectionError`. Claude systematically debugged the issue, ruling out the API key, network connectivity, and Docker sandbox before isolating the root cause: the `max_connections` setting in the `run_sweep` script was too high, causing timeouts. Reducing it from 100 to 10 resolved the issue.",
+  "primary_success": "Systematically debugged a persistent API connection error, isolating the root cause to an overly high `max_connections` setting in a script, and successfully launched the requested experiments.",
+  "brief_summary": "User asked to run an experiment from a spec file. The experiment runs repeatedly failed with API connection errors. Claude conducted a systematic debugging process, testing the API key, network, and various components in isolation, eventually identifying that the `max_connections` setting was too high. After fixing the configuration, the experiments were successfully launched.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-11T05:06:59.628Z",
+  "end_timestamp": "2026-01-11T06:12:49.031Z",
+  "_source_mtime": 1768953980.8053136
+}

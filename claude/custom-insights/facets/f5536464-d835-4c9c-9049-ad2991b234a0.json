@@ -1,0 +1,19 @@
+{
+  "session_id": "f5536464-d835-4c9c-9049-ad2991b234a0",
+  "underlying_goal": "To investigate the effectiveness of the 'Apollo' sandbagging prompts by reviewing experiment slides.",
+  "goal_categories": {
+    "research": 1,
+    "exploration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Located the relevant experiment results in past slide decks and synthesized a key finding: sandbagging was only triggered when the prompt included a heavy 'reasoning scaffold' that forced the model to consider the consequences before answering.",
+  "brief_summary": "The user asked which Apollo prompts induced sandbagging. After an initial search in the codebase, the user directed the agent to look at slide decks. The agent found the relevant slides and correctly identified that only one prompt variant worked, pinpointing that the critical feature was a 'reasoning scaffold' that forced the model to evaluate the consequences of its actions.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": "2026-01-21T19:57:48.670Z",
+  "end_timestamp": "2026-01-21T19:59:45.234Z",
+  "_source_mtime": 1769025585.374908
+}

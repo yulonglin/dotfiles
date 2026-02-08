@@ -1,0 +1,18 @@
+{
+  "session_id": "fd24a3c1-7f00-4170-a6ca-495412922e2f",
+  "underlying_goal": "The user wanted to understand which sandbagging prompts were most effective or common for a specific model across different datasets.",
+  "goal_categories": {
+    "research": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Quickly analyzed a data file and synthesized the results into a highly readable summary with tables and key insights, directly answering the user's research question.",
+  "brief_summary": "The user asked for an analysis of common sandbagging prompts for a specific model. The agent read the specified file, identified overlapping and unique prompts across datasets, and presented the findings in a clear, structured format with an insight summary.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-24T04:05:09.186Z",
+  "end_timestamp": "2026-01-24T04:05:35.897Z",
+  "_source_mtime": 1769227620.63549
+}

@@ -1,0 +1,22 @@
+{
+  "session_id": "21270551-9519-4a07-916c-713e486e3c54",
+  "underlying_goal": "To understand and configure the Claude Code sandboxing feature.",
+  "goal_categories": {
+    "configuration": 1,
+    "exploration": 1,
+    "tooling": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "exploratory",
+  "friction_counts": {
+    "tool_failure": 1
+  },
+  "friction_detail": "The sandbox ironically blocked the `git commit` command that was saving the sandbox configuration, because the git command's heredoc created a temp file outside the CWD. This required using the sandbox escape hatch.",
+  "primary_success": "Claude provided a very clear and effective mental model (bouncer vs. jail) to explain the complex interaction between the permission system and the OS-level sandbox, helping the user understand the security layers.",
+  "brief_summary": "The user engaged in a deep exploratory session to understand Claude Code's sandboxing feature. Claude provided detailed explanations using analogies, clarified the interaction with 'yolo mode' and various settings, and discussed edge cases like `pkill` and `docker`. The session concluded with the user making informed decisions to update their global configuration, which Claude implemented and committed.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-30T17:23:01.771Z",
+  "end_timestamp": "2026-01-30T17:51:05.996Z",
+  "_source_mtime": 1769799853.2042308
+}

@@ -1,0 +1,19 @@
+{
+  "session_id": "aabd0e3d-188f-4d6f-930f-201d7cf605d8",
+  "underlying_goal": "Analyze the performance and potential bugs in the USACO C\u00b3 sandbagging detection method.",
+  "goal_categories": {
+    "research": 1,
+    "debugging": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "unclear",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "A short, unclear session containing only summaries related to analyzing the USACO C\u00b3 sandbagging detection method, including performance, potential label flips, and evasion prompts.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": null,
+  "end_timestamp": null,
+  "_source_mtime": 1767938021.039416
+}

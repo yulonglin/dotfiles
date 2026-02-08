@@ -1,0 +1,19 @@
+{
+  "session_id": "decbf3f6-1894-42c8-a034-11f5c924a8bc",
+  "underlying_goal": "Manage git commits related to a blog post, including removing a specific section.",
+  "goal_categories": {
+    "writing": 1,
+    "tooling": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "unclear",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "Session contains only summary messages related to git commits for a blog post. The underlying tasks seem to be about reviewing changes, generating commit messages, and modifying the blog post content, but the details are absent.",
+  "project": "-Users-yulong-writing-yulonglin-github-io",
+  "start_timestamp": null,
+  "end_timestamp": null,
+  "_source_mtime": 1768776156.4746015
+}

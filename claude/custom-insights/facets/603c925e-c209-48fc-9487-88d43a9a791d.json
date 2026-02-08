@@ -1,0 +1,19 @@
+{
+  "session_id": "603c925e-c209-48fc-9487-88d43a9a791d",
+  "underlying_goal": "To explore the Claude CLI plugin system.",
+  "goal_categories": {
+    "exploration": 1,
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user ran the `/plugin` command. The session is too short to determine the user's goal or the outcome.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-21T03:36:21.591Z",
+  "end_timestamp": "2026-01-21T03:36:21.591Z",
+  "_source_mtime": 1768966593.7380512
+}

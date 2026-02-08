@@ -1,0 +1,18 @@
+{
+  "session_id": "72e9afd8-f12e-403d-864a-1cbc59b013a9",
+  "underlying_goal": "Unclear. User likely wanted to do something with the `config` directory but did not specify.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "misunderstanding": 1
+  },
+  "friction_detail": "User provided a single ambiguous word 'config', preventing any action.",
+  "primary_success": "",
+  "brief_summary": "The user typed the single word 'config'. Claude asked for clarification on what the user wanted to do, and the session ended.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2025-12-24T03:29:57.456Z",
+  "end_timestamp": "2025-12-24T03:30:07.031Z",
+  "_source_mtime": 1768957980.5290058
+}

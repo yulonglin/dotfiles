@@ -1,0 +1,18 @@
+{
+  "session_id": "d56f3f64-d217-47ed-8c5a-edaf8aea38ca",
+  "underlying_goal": "User was re-authenticating a plugin.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The session consists only of local commands to reconnect and authenticate a plugin, with no direct interaction or task for Claude.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-19T20:20:39.611Z",
+  "end_timestamp": "2026-01-19T20:22:32.565Z",
+  "_source_mtime": 1769060647.4146852
+}

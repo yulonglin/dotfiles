@@ -1,0 +1,16 @@
+{
+  "session_id": "4347b94a-2b69-421f-860d-678b61e351d1",
+  "underlying_goal": "Clear the conversation history.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The session was cleared at the start and contained no meaningful interaction.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-29T10:50:41.274Z",
+  "end_timestamp": "2026-01-29T10:50:41.413Z",
+  "_source_mtime": 1769685249.2988966
+}

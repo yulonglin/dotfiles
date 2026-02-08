@@ -1,0 +1,21 @@
+{
+  "session_id": "db4509d3-4ffb-4f25-9889-75ea5e510bf2",
+  "underlying_goal": "Reorganize a LaTeX research paper by moving figures and sections, and then commit the changes.",
+  "goal_categories": {
+    "writing": 5,
+    "tooling": 1
+  },
+  "outcome": "partially_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "iterative_refinement",
+  "friction_counts": {
+    "context_loss": 1
+  },
+  "friction_detail": "The edits were lost when an external file sync (Overleaf) overwrote the local file, forcing the agent to redo all the changes from scratch.",
+  "primary_success": "Successfully re-applying all the requested paper reorganization changes after they were accidentally reverted by an external file sync.",
+  "brief_summary": "The user requested to reorganize a LaTeX paper by moving a figure to the appendix and promoting other results. The agent performed the edits, but the changes were reverted by an external file sync. The agent then successfully reapplied all changes and committed them.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-29T04:10:07.696Z",
+  "end_timestamp": "2026-01-29T10:39:58.630Z",
+  "_source_mtime": 1769685251.8990586
+}

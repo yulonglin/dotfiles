@@ -1,0 +1,18 @@
+{
+  "session_id": "0feaa5cc-8d64-4045-a313-d173609108bb",
+  "underlying_goal": "User was managing Claude Code plugins.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user disabled the 'playwright' plugin. There was no interaction with Claude's reasoning capabilities.",
+  "project": "-Users-yulong-scratch-scratchpad",
+  "start_timestamp": "2026-02-03T23:22:23.102Z",
+  "end_timestamp": "2026-02-03T23:22:23.103Z",
+  "_source_mtime": 1770160974.1590495
+}

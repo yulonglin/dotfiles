@@ -1,0 +1,18 @@
+{
+  "session_id": "d1df75ed-375e-4f23-b0d3-3c873e130240",
+  "underlying_goal": "To enable the Claude Code GitHub plugin.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user ran a command to successfully enable the GitHub plugin.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-02T23:47:57.483Z",
+  "end_timestamp": "2026-02-02T23:47:57.483Z",
+  "_source_mtime": 1770076151.7380743
+}

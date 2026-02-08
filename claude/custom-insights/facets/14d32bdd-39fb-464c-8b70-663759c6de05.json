@@ -1,0 +1,16 @@
+{
+  "session_id": "14d32bdd-39fb-464c-8b70-663759c6de05",
+  "underlying_goal": "User cleared the session.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user cleared the screen. No task was given.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-03T21:03:30.257Z",
+  "end_timestamp": "2026-02-03T21:03:30.671Z",
+  "_source_mtime": 1770152610.77372
+}

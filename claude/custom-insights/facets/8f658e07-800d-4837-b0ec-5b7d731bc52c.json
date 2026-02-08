@@ -1,0 +1,19 @@
+{
+  "session_id": "8f658e07-800d-4837-b0ec-5b7d731bc52c",
+  "underlying_goal": "Make a small adjustment to a slide deck's agenda timing, and then commit and push all pending changes.",
+  "goal_categories": {
+    "writing": 1,
+    "tooling": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Noticed that the staged changes were much larger than the immediate task and correctly asked the user for confirmation before committing everything under a narrow commit message.",
+  "brief_summary": "The user asked to reduce the total time on a meeting agenda to 30 minutes. The agent made the adjustment, and then, when asked to commit, correctly identified that many other changes were pending and confirmed with the user before committing and pushing.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": "2026-01-15T02:21:10.986Z",
+  "end_timestamp": "2026-01-15T02:22:20.821Z",
+  "_source_mtime": 1768959973.3641207
+}

@@ -92,3 +92,19 @@ n ≈ 8 * Var(diff) / δ²
 - **Unpaired comparison**: Computing CIs separately then comparing (loses power)
 - **CI on small n**: Computing 95% CI with n=3 seeds (meaningless)
 - **Claiming significance**: When CIs overlap (they might still be significant, but can't claim from CI alone)
+
+## 7. Sensitivity & Robustness
+
+After computing main results, check at least one:
+- Drop outliers (top/bottom 5%): same conclusion?
+- Alternative aggregation (median, trimmed mean): same direction?
+- Subset analysis: consistent across subgroups?
+
+If conclusion changes → report as fragile. Always state which checks were run.
+
+## 8. Reporting Null Results
+
+Non-significant ≠ no effect. When reporting null findings:
+- Report the CI of the difference (not just "p > 0.05")
+- State the detectable effect size at your N (power analysis)
+- Example: "No significant difference (Δ = 1.2pp, 95% CI: [-2.1, 4.5], N=200, powered to detect ≥6pp)"

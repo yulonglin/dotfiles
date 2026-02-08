@@ -1,0 +1,18 @@
+{
+  "session_id": "cc167d4c-0b7f-4bf4-944a-c4eb924c588c",
+  "underlying_goal": "The user wanted to commit changes to meeting slides.",
+  "goal_categories": {
+    "writing": 1
+  },
+  "outcome": "partially_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Identified the relevant changes for the meeting slides, ignored untracked build artifacts, and created a clean commit.",
+  "brief_summary": "The user asked to commit changes. Claude identified modifications to 'week-21.md' slides, created a commit, and correctly identified that other untracked files were likely build artifacts or local configs that should not be committed. The agent prompted to push but the session ended.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": "2026-01-21T17:37:15.832Z",
+  "end_timestamp": "2026-01-21T17:37:46.268Z",
+  "_source_mtime": 1769021787.2191346
+}

@@ -1,82 +1,43 @@
-# Fix Duplicate Skills + Cross-Tool Sync Strategy (Final)
+# Fix Duplicate Skills — Final Step
 
-## Completed Steps
+## Context
 
-- [x] **Step 1**: `.gitignore` whitelist — `claude/skills/.gitignore` rewritten
-- [x] **Step 2**: Runtime cleanup — 81 symlinks, 6 agent wrapper dirs, 8 circular self-links removed
-- [x] Partial Step 4: Sync scripts updated (but need revision — see below)
-- [x] Partial Step 5: `docs/cross-tool-extensibility.md` updated (needs revision)
+All implementation for the duplicate skills fix is complete. The one remaining change — a "Known Issue" note in `docs/cross-tool-extensibility.md` — was made, then mistakenly reverted. It needs to be restored and committed.
 
-## Remaining Work
+**Why this doc change matters:** The cross-tool doc's "Deduplication" section documents how `enumerate_claude_skills.sh` works. That helper **skips symlinks** for the `user_skill` type specifically because of the plugin symlink bug. Without the "Known Issue" note, readers won't understand *why* symlinks get special treatment in the enumerate helper.
 
-### Step 3: Fix `enumerate_claude_skills.sh` — deduplicate with version awareness
+## Completed Work
 
-**Problem**: The enumerate helper emits duplicates from 3 plugin source locations:
-1. `marketplaces/` — canonical, always latest (git-cloned repos)
-2. `cache/local-marketplace/` — user's custom plugins (research/writing/code toolkit)
-3. `cache/claude-plugins-official/` — versioned snapshots (may have old versions)
+- [x] `scripts/cleanup/clean_plugin_symlinks.sh` — cleanup script
+- [x] `deploy.sh:473-476` — wired cleanup into `deploy_claude()`
+- [x] `config/aliases.sh:400` — `clean-skill-dupes` alias
+- [x] `CLAUDE.md:300` — Learnings entry
+- [x] GitHub issue [#23819](https://github.com/anthropics/claude-code/issues/23819) — filed
 
-**Fix**: Split into `_enumerate_raw()` and `enumerate_claude_skills()`:
-- `_enumerate_raw()` emits all entries in priority order:
-  1. User skills (from `skills/`)
-  2. Standalone skills (`.md` files in `skills/`)
-  3. Plugin skills from `marketplaces/` first (canonical/latest)
-  4. Plugin skills from `cache/local-marketplace/` second (user custom)
-  5. Plugin skills from remaining `cache/` last (versioned, may be stale)
-  6. Agent skills
-- `enumerate_claude_skills()` pipes through `awk -F'\t' '!seen[$2]++ { print }'` — first-wins dedup means marketplaces beat cache, user skills beat all.
+## Remaining
 
-**Result**: Each skill name emitted exactly once, from the best source.
+### Step 1: Re-add "Known Issue" to `docs/cross-tool-extensibility.md`
 
-**Conflict detection**: When deduplicating, emit warnings to stderr for shadowed skills:
+After the existing "Deduplication" section's last paragraph (ending with `...shadowed by marketplaces/...`), add:
+
+```markdown
+### Known Issue: Plugin Symlink Duplication
+
+Claude Code's plugin system creates symlinks in `~/.claude/skills/` pointing to `plugins/cache/` and `plugins/marketplaces/`. These cause every plugin skill to appear **twice** in the slash command picker: once as "(user)" from the symlink, once as "(plugin-name)" from the plugin registry. Related: [#14549](https://github.com/anthropics/claude-code/issues/14549), [#21891](https://github.com/anthropics/claude-code/issues/21891).
+
+**Workarounds:**
+- `clean-skill-dupes` alias removes the symlinks
+- `deploy.sh` auto-cleans during Claude Code deployment
+- Symlinks are **recreated on startup/plugin-sync**, so cleanup may need to be repeated
 ```
-⚠ Skill "brainstorming" from cache/superpowers/4.1.1 shadowed by marketplaces/superpowers
-```
-This alerts users when a user skill accidentally shadows a plugin skill (or vice versa).
-
-**File**: `scripts/helpers/enumerate_claude_skills.sh`
-
-### Step 4 (revised): Sync scripts — include ALL skill types, deduplicated
-
-**Change from previous plan**: Sync ALL plugin skills (not skip them). The enumerate helper's dedup ensures each skill appears once.
-
-**Revert the `plugin_skill) continue` change** in both sync scripts. Restore plugin_skill handling but simplify:
-
-```bash
-plugin_skill)
-    ln -sfn "$path" "$TARGET_DIR/$name"
-    echo "  Plugin Skill: $name"
-    ;;
-```
-
-No need for "user skill takes precedence" check — the enumerate helper handles priority.
-
-**Files**:
-- `scripts/sync_claude_to_gemini.sh`
-- `scripts/sync_claude_to_codex.sh`
-
-### Step 5 (revised): Update docs
-
-Revert the "plugin skills are NOT synced" text. Instead document:
-- All skill types sync (user, standalone, plugin, agent)
-- Enumerate helper deduplicates (user > standalone > plugin > agent priority)
-- `.gitignore` whitelist prevents runtime artifacts from being tracked in git
 
 **File**: `docs/cross-tool-extensibility.md`
 
-### Step 6: Verify
+### Step 2: Commit all outstanding changes
 
-1. `bash scripts/helpers/enumerate_claude_skills.sh` — each skill name appears exactly once
-2. `scripts/sync_claude_to_gemini.sh` — syncs ~95 unique skills (9 user + 2 standalone + ~81 plugin + 4 agent, minus overlaps)
-3. `scripts/sync_claude_to_codex.sh` — same count
-4. `git status` in `claude/skills/` — only user-authored files tracked
-5. No duplicate skill names in output
+Stage and commit all modified files from this fix (cleanup script, deploy.sh, aliases, CLAUDE.md, cross-tool doc).
 
-## Files to Modify
+## Verification
 
-| File | Action |
-|------|--------|
-| `scripts/helpers/enumerate_claude_skills.sh` | Add dedup logic (final `awk` pass) |
-| `scripts/sync_claude_to_gemini.sh` | Restore plugin_skill handling (remove `continue`) |
-| `scripts/sync_claude_to_codex.sh` | Restore plugin_skill handling (remove `continue`) |
-| `docs/cross-tool-extensibility.md` | Revert "not synced" text, document dedup |
+1. `git diff docs/cross-tool-extensibility.md` — shows the Known Issue addition
+2. Commit succeeds cleanly

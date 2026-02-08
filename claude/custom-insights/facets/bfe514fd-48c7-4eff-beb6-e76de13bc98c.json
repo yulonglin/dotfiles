@@ -1,0 +1,18 @@
+{
+  "session_id": "bfe514fd-48c7-4eff-beb6-e76de13bc98c",
+  "underlying_goal": "User wanted to change their privacy settings.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user successfully disabled the 'Help improve Claude' privacy setting via a local command.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-28T19:15:42.219Z",
+  "end_timestamp": "2026-01-28T19:15:42.219Z",
+  "_source_mtime": 1769627919.5708349
+}

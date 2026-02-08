@@ -1,0 +1,18 @@
+{
+  "session_id": "agent-ab9e2d6",
+  "underlying_goal": "To understand the project's codebase.",
+  "goal_categories": {
+    "exploration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "A 'Warmup' session that was too short to analyze, ending after the agent stated its intent to explore the project structure.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-07T05:16:44.033Z",
+  "end_timestamp": "2026-01-07T05:16:46.850Z",
+  "_source_mtime": 1767763006.8652685
+}

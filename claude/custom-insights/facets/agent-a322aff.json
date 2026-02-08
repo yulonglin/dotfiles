@@ -1,0 +1,19 @@
+{
+  "session_id": "agent-a322aff",
+  "underlying_goal": "Identify which sandbagging prompts defeat C\u00b3 detection on the USACO dataset and find the corresponding performance metrics.",
+  "goal_categories": {
+    "research": 1,
+    "debugging": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "exploratory",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Located and synthesized specific data proving C\u00b3 detection is 'essentially defeated' on USACO (0.55 AUROC), identified the failing 'stealth' prompts, and found the root cause analysis explaining that the signal is in code, not explanations.",
+  "brief_summary": "The user wanted to find data on why C\u00b3 detection fails on the USACO dataset. Claude searched through output files and specs to find specific prompts that defeat the detection method, providing AUROC and Recall metrics. The final summary explained that C\u00b3 fails because the sandbagging signal is in the generated code, not the natural language explanations C\u00b3 analyzes.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-07T05:51:44.903Z",
+  "end_timestamp": "2026-01-07T05:52:42.854Z",
+  "_source_mtime": 1767765162.9097543
+}

@@ -1,0 +1,16 @@
+{
+  "session_id": "45406fe2-bb0d-43cf-a4dc-aa01f71bcb44",
+  "underlying_goal": "To log into a system.",
+  "goal_categories": {},
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user successfully logged in using the /login command.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-01T17:55:19.497Z",
+  "end_timestamp": "2026-02-01T17:55:19.505Z",
+  "_source_mtime": 1769968760.7068417
+}

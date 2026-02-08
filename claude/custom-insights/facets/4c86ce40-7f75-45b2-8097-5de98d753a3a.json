@@ -1,0 +1,19 @@
+{
+  "session_id": "4c86ce40-7f75-45b2-8097-5de98d753a3a",
+  "underlying_goal": "The user wanted to fix a `ValueError` in the prompt selection pipeline caused by inhomogeneous embedding shapes.",
+  "goal_categories": {
+    "bug_fix": 1,
+    "debugging": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "debugging",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Claude correctly diagnosed that the cache was polluted with mock embeddings of the wrong dimension from previous dry runs, and implemented a robust fix.",
+  "brief_summary": "A script was failing with a `ValueError` due to inconsistent array shapes. Claude diagnosed that the cache was polluted with a mix of real 1536-dimension embeddings and mock 256-dimension embeddings from dry runs. Claude fixed the issue by adding dimension validation to the cache loading logic and correcting the mock data dimension to prevent future issues.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-22T22:50:14.292Z",
+  "end_timestamp": "2026-01-22T22:52:12.586Z",
+  "_source_mtime": 1769123470.088824
+}

@@ -1,0 +1,18 @@
+{
+  "session_id": "da65ccaf-dd2b-40c0-a63f-bae664a7c22c",
+  "underlying_goal": "User provided a single ambiguous word, making the goal unclear.",
+  "goal_categories": {},
+  "outcome": "abandoned",
+  "claude_helpfulness": "moderately_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {
+    "misunderstanding": 1
+  },
+  "friction_detail": "User provided a single, ambiguous word ('config'), requiring the assistant to ask for clarification.",
+  "primary_success": "",
+  "brief_summary": "The user entered the single word 'config'. The assistant correctly identified the ambiguity and responded with a helpful clarifying question listing potential user goals, but the session was abandoned.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2025-12-24T03:28:11.621Z",
+  "end_timestamp": "2025-12-24T03:28:25.776Z",
+  "_source_mtime": 1769035746.0563953
+}

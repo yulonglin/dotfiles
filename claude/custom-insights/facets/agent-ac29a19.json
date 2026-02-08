@@ -1,0 +1,16 @@
+{
+  "session_id": "agent-ac29a19",
+  "underlying_goal": "Initialize the agent.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "A minimal warmup session where the agent stated it was ready to help with the project.",
+  "project": "-Users-yulong-writing-paper-sandbagging-detection",
+  "start_timestamp": "2026-01-08T20:51:44.310Z",
+  "end_timestamp": "2026-01-08T20:51:49.234Z",
+  "_source_mtime": 1767905509.245904
+}

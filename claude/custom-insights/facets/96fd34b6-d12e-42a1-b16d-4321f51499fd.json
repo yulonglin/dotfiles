@@ -1,0 +1,21 @@
+{
+  "session_id": "96fd34b6-d12e-42a1-b16d-4321f51499fd",
+  "underlying_goal": "To commit a large number of disparate changes into logical, separate commits and then manage the git history after a mistake.",
+  "goal_categories": {
+    "tooling": 1,
+    "refactoring": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "debugging",
+  "friction_counts": {
+    "misunderstanding": 1
+  },
+  "friction_detail": "User was confused about the difference between 'untracked' and 'unstaged' files after a revert and restore operation, requiring Claude to explain the git state model.",
+  "primary_success": "Correctly splitting a large number of changes into logical commits, and then safely reverting one of those commits from the remote `main` branch while explaining the rationale to the user.",
+  "brief_summary": "Claude was asked to commit a wide range of changes. It correctly split them into four logical commits. The user then realized one feature was merged prematurely. Claude safely reverted the pushed commit, and then guided the user through restoring the local files and understanding the resulting git state.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-01-02T22:36:50.372Z",
+  "end_timestamp": "2026-01-02T22:46:57.353Z",
+  "_source_mtime": 1768957745.3588114
+}

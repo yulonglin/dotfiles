@@ -1,0 +1,19 @@
+{
+  "session_id": "9829f3b2-fbe5-42b0-9edf-8c00f535fd61",
+  "underlying_goal": "Create slides for week 20 with results from password-locked models.",
+  "goal_categories": {
+    "writing": 1,
+    "research": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "unclear",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "An extremely brief, unclear session with a single summary line about creating 'Week 20 slides' with results from password-locked models.",
+  "project": "-Users-yulong-writing-slides-mats-8-0-meetings",
+  "start_timestamp": null,
+  "end_timestamp": null,
+  "_source_mtime": 1768030340.4447832
+}

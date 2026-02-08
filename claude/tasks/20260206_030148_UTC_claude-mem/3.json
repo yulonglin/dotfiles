@@ -1,0 +1,14 @@
+{
+  "id": "3",
+  "subject": "Compare claude-mem vs Beads vs alternatives",
+  "description": "Side-by-side comparison on: triggers, storage, multi-agent support, context injection, ease of setup, overhead, and suitability for our workflow (multi-worktree, agent teams, research context).",
+  "activeForm": "Comparing memory solutions",
+  "status": "pending",
+  "blocks": [
+    "4"
+  ],
+  "blockedBy": [
+    "1",
+    "2"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "session_id": "bb2b8894-e907-4146-a329-1dafaf003a29",
+  "underlying_goal": "The user was likely exploring or trying to use the plugin system.",
+  "goal_categories": {
+    "exploration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user executed the local '/plugin' command twice. The session ended without any further interaction or requests for the assistant.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-02T22:48:57.059Z",
+  "end_timestamp": "2026-02-02T22:48:57.059Z",
+  "_source_mtime": 1770075561.0238695
+}

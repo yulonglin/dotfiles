@@ -1,0 +1,16 @@
+{
+  "session_id": "agent-ae48935",
+  "underlying_goal": "Initialize the agent.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "A minimal warmup session where the agent simply acknowledged it was ready to help.",
+  "project": "-Users-yulong-writing-paper-sandbagging-detection",
+  "start_timestamp": "2026-01-08T20:51:48.931Z",
+  "end_timestamp": "2026-01-08T20:51:51.682Z",
+  "_source_mtime": 1767905511.6935296
+}

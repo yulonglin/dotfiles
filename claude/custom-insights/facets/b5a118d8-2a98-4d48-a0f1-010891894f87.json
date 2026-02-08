@@ -1,0 +1,19 @@
+{
+  "session_id": "b5a118d8-2a98-4d48-a0f1-010891894f87",
+  "underlying_goal": "To commit all pending work into logical, well-documented commits and improve a specific piece of documentation.",
+  "goal_categories": {
+    "tooling": 1,
+    "writing": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "very_helpful",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Grouping a diverse set of file changes into six logical, well-messaged commits.",
+  "brief_summary": "The user asked to commit pending changes. Claude analyzed the diffs, grouped them into six logical commits, and wrote clear messages for each. The user then asked to improve one of the newly committed documentation sections, which Claude rewrote for clarity and amended to the existing commit.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2025-12-25T05:36:12.776Z",
+  "end_timestamp": "2025-12-25T06:07:09.317Z",
+  "_source_mtime": 1768961405.8043525
+}

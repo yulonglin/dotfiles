@@ -1,0 +1,16 @@
+{
+  "session_id": "agent-a1ad3b8",
+  "underlying_goal": "Initialize the agent for a new task.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "moderately_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "A minimal warmup session where the agent announced it was ready for a task.",
+  "project": "-Users-yulong-code-VoiceInk",
+  "start_timestamp": "2026-01-08T22:54:11.421Z",
+  "end_timestamp": "2026-01-08T22:54:15.184Z",
+  "_source_mtime": 1767912855.200182
+}

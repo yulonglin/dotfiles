@@ -1,0 +1,19 @@
+{
+  "session_id": "311a759a-0ffe-4d66-95e9-f6195053b42d",
+  "underlying_goal": "The user wanted to understand and fix a discrepancy between the script's console output and the generated report file.",
+  "goal_categories": {
+    "bug_fix": 1,
+    "debugging": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "debugging",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Claude correctly identified the root cause of the bug: two different functions in two different files were generating the same report filename with slightly different logic, leading to a mismatch.",
+  "brief_summary": "A user was confused when their script reported 10 selected prompts, but the report file they viewed only contained 2. Claude investigated and found a bug where two different parts of the code were generating the report filename with inconsistent logic. Claude fixed the bug to use a single source of truth for the path and archived the old, confusingly-named files.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-22T23:15:21.936Z",
+  "end_timestamp": "2026-01-22T23:23:53.996Z",
+  "_source_mtime": 1769126465.5742965
+}

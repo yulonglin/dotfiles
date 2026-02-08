@@ -53,6 +53,20 @@ For work taking >30 minutes:
 - **Piped output appears stuck?** The upstream program is block-buffering (libc switches from line to block buffering when stdout isn't a TTY). Fix with `stdbuf -oL cmd | ...` or Python's `-u` flag
 - **Prefer command-specific limits** over pipes: `git log -n 10` not `git log | head -10`
 
+## Mid-Implementation Checkpoints
+
+**Problem:** Claude reads code, makes assumptions, and starts implementing against a wrong mental model. This causes misunderstandings that waste context and require rework.
+
+**When to checkpoint:** After exploring/reading code and BEFORE writing changes for any task touching 3+ files or involving unfamiliar code.
+
+**Checkpoint format** (inline, not a separate document):
+1. **Current state**: What the code does now (1-2 sentences)
+2. **Goal mapping**: How planned changes achieve the objective
+3. **Risky assumptions**: What I'm assuming that could be wrong (explicit list)
+4. **Scope**: Files that will be touched
+
+**Skip when**: Single-file change, code already read this session, or user says "just do it"
+
 ## Output Strategy (CRITICAL)
 
 **Programmatic > contextual.** Code is reproducible; conversation context is not.

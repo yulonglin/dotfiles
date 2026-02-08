@@ -1,0 +1,18 @@
+{
+  "session_id": "ae1976b1-1658-4b0e-a776-af65dd34fef3",
+  "underlying_goal": "The user wanted to view or modify settings, but the initial query was ambiguous.",
+  "goal_categories": {
+    "exploration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "moderately_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Claude proactively provided a structured list of options to disambiguate a vague one-word query.",
+  "brief_summary": "User provided a vague query 'settings'. The assistant responded by asking for clarification and listing several possible intentions, helping to guide the user toward a more specific request. The session ended before the user provided more details.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-02T23:42:10.250Z",
+  "end_timestamp": "2026-02-02T23:42:16.226Z",
+  "_source_mtime": 1770075938.6222465
+}

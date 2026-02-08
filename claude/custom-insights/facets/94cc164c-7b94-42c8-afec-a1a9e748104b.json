@@ -1,0 +1,18 @@
+{
+  "session_id": "94cc164c-7b94-42c8-afec-a1a9e748104b",
+  "underlying_goal": "To generate and view a usage analytics report.",
+  "goal_categories": {
+    "review": 1
+  },
+  "outcome": "fully_achieved",
+  "claude_helpfulness": "essential",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "Successfully generated and displayed the detailed usage insights report.",
+  "brief_summary": "The user ran the `/insights` command, and Claude successfully generated and displayed the usage analytics report.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-05T19:07:17.900Z",
+  "end_timestamp": "2026-02-05T20:20:44.255Z",
+  "_source_mtime": 1770322844.3583624
+}

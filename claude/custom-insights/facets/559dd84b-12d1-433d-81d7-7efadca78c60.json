@@ -1,0 +1,18 @@
+{
+  "session_id": "559dd84b-12d1-433d-81d7-7efadca78c60",
+  "underlying_goal": "To change the active AI model.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The user ran the `/model` command to change the active AI model.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2026-02-03T14:55:10.998Z",
+  "end_timestamp": "2026-02-03T14:55:11.000Z",
+  "_source_mtime": 1770130511.094619
+}

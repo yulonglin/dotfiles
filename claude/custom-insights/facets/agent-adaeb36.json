@@ -1,0 +1,18 @@
+{
+  "session_id": "agent-adaeb36",
+  "underlying_goal": "Initialize the session.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "A minimal warmup session. The user sent 'Warmup' and Claude replied with a simple prompt asking for a task, without providing any context about the project.",
+  "project": "-Users-yulong-writing-yulonglin-github-io",
+  "start_timestamp": "2026-01-07T22:34:31.760Z",
+  "end_timestamp": "2026-01-07T22:34:36.851Z",
+  "_source_mtime": 1767825276.8843367
+}

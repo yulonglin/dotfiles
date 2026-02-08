@@ -1,0 +1,18 @@
+{
+  "session_id": "d1805be4-b237-4599-ae88-843fc767cf98",
+  "underlying_goal": "To manage Claude Code plugins by installing, uninstalling, enabling, and disabling them via local commands.",
+  "goal_categories": {
+    "configuration": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "unclear",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "This session consists only of logs from the user running local /plugin commands to manage their Claude Code plugins (installing, uninstalling, disabling). Claude did not participate in the interaction.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-19T18:53:23.469Z",
+  "end_timestamp": "2026-01-19T18:55:01.338Z",
+  "_source_mtime": 1768954754.3222184
+}

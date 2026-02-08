@@ -1,0 +1,11 @@
+{
+  "id": "4",
+  "subject": "Make recommendation for persistent memory approach",
+  "description": "Based on comparison, recommend which tool(s) to use, or whether a hybrid/custom approach makes more sense. Consider: our multi-worktree workflow, agent teams, research context needs.",
+  "activeForm": "Drafting recommendation",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [
+    "3"
+  ]
+}

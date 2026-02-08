@@ -1,0 +1,19 @@
+{
+  "session_id": "35994ee1-63fc-4997-9dbc-623fe66a094f",
+  "underlying_goal": "To address review comments on a paper.",
+  "goal_categories": {
+    "writing": 1,
+    "review": 1
+  },
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The session involved addressing review comments on a paper. The interaction was too brief to determine the specifics of the task or the outcome.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": null,
+  "end_timestamp": null,
+  "_source_mtime": 1768283755.5345194
+}

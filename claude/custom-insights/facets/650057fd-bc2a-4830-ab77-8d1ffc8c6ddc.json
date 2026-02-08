@@ -1,0 +1,18 @@
+{
+  "session_id": "650057fd-bc2a-4830-ab77-8d1ffc8c6ddc",
+  "underlying_goal": "User seems to be starting a new task, possibly related to reviewing recent changes.",
+  "goal_categories": {
+    "exploration": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "The session started with the user typing 'continue' and Claude began reviewing pending changes, but the user immediately interrupted the request and the session ended. No meaningful work was accomplished.",
+  "project": "-Users-yulong-code-dotfiles",
+  "start_timestamp": "2025-12-25T21:59:41.140Z",
+  "end_timestamp": "2025-12-25T21:59:52.343Z",
+  "_source_mtime": 1769017543.155139
+}

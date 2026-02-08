@@ -1,0 +1,16 @@
+{
+  "session_id": "df554cb0-ee02-4cd3-b0ac-18a229a6df7d",
+  "underlying_goal": "N/A - This session appears to be a meta-summary of other sessions, not a user-driven task.",
+  "goal_categories": {},
+  "outcome": "unclear",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "unclear",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "",
+  "brief_summary": "This session does not contain a user-Claude interaction. It is a list of summaries from other sessions.",
+  "project": "-Users-yulong-code-sandbagging-detection-dev",
+  "start_timestamp": "2026-01-10T07:27:14.847Z",
+  "end_timestamp": "2026-01-10T07:27:27.281Z",
+  "_source_mtime": 1768953302.7790587
+}

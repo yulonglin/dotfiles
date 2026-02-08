@@ -60,7 +60,12 @@ SECRETS_GIST_ID="3cc239f160a2fe8c9e6a14829d85a371"
 # MCP servers to configure for Claude Code
 MCP_SERVERS=(
     "context7:https://mcp.context7.com/mcp"
-    "gitmcp:npx mcp-remote https://gitmcp.io/docs"
+)
+
+# Local MCP servers built from source (require Go)
+# Format: "name:repo:binary_name:env_var_for_token"
+MCP_SERVERS_LOCAL=(
+    "slack:yulonglin/slack-mcp-server:slack-mcp-server:SLACK_MCP_XOXP_TOKEN"
 )
 
 # ─── Core Packages ────────────────────────────────────────────────────────────

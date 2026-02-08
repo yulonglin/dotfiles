@@ -1,0 +1,18 @@
+{
+  "session_id": "9c034bc1-2212-4f56-8433-bf8ca04ef2fc",
+  "underlying_goal": "User started to invoke a `/bulk-edit` command/skill.",
+  "goal_categories": {
+    "planning": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "User request was interrupted mid-command.",
+  "primary_success": "",
+  "brief_summary": "The user invoked the `/bulk-edit` command but the request was interrupted before any action could be taken.",
+  "project": "-Users-yulong-writing-papers-sandbagging-detection",
+  "start_timestamp": "2026-01-19T20:03:38.791Z",
+  "end_timestamp": "2026-01-19T20:03:40.915Z",
+  "_source_mtime": 1769028592.5585623
+}

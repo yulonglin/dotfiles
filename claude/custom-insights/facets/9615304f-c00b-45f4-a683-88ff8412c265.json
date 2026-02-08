@@ -1,0 +1,21 @@
+{
+  "session_id": "9615304f-c00b-45f4-a683-88ff8412c265",
+  "underlying_goal": "Start a local web server for the LLM Council application to ask it a question.",
+  "goal_categories": {
+    "configuration": 1,
+    "exploration": 1
+  },
+  "outcome": "abandoned",
+  "claude_helpfulness": "unhelpful",
+  "session_type": "debugging",
+  "friction_counts": {
+    "tool_failure": 2
+  },
+  "friction_detail": "The agent failed to start the local development servers. The backend server failed with exit code 127 (command not found), and a second attempt with `uv` failed with exit code 137 (killed). The frontend server also failed with exit code 137.",
+  "primary_success": "",
+  "brief_summary": "The user asked the agent to start the local web servers for an application. The agent's attempts to start both the backend and frontend servers failed with errors, and the task could not be completed.",
+  "project": "-Users-yulong-writing-llm-council",
+  "start_timestamp": "2026-01-14T21:31:06.216Z",
+  "end_timestamp": "2026-01-15T00:50:52.313Z",
+  "_source_mtime": 1769197215.430467
+}
