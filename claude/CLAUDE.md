@@ -137,6 +137,8 @@ claude-context research ml        # Compose: research + huggingface
 
 Templates: `~/.claude/templates/contexts/*.json`. Writes to `.claude/settings.local.json` (per-repo, gitignored). Restart Claude Code after applying.
 
+**Duplicate skills in slash picker?** Run `clean-skill-dupes` (alias) to remove plugin-created symlinks from `~/.claude/skills/`. Trigger is unclear but related to plugin operations. See [#14549](https://github.com/anthropics/claude-code/issues/14549).
+
 ---
 
 ## Notes
