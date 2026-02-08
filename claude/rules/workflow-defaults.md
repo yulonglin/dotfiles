@@ -52,6 +52,7 @@ For work taking >30 minutes:
 - **`tee` doesn't create parent directories** — always `mkdir -p dir/` before `cmd | tee dir/file.log`
 - **Piped output appears stuck?** The upstream program is block-buffering (libc switches from line to block buffering when stdout isn't a TTY). Fix with `stdbuf -oL cmd | ...` or Python's `-u` flag
 - **Prefer command-specific limits** over pipes: `git log -n 10` not `git log | head -10`
+- **Duplicate skills in slash picker?** Run `clean-skill-dupes` to remove plugin-created symlinks from `~/.claude/skills/`. Cause unclear; related to plugin operations ([#14549](https://github.com/anthropics/claude-code/issues/14549))
 
 ## Mid-Implementation Checkpoints
 
