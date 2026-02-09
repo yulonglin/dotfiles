@@ -382,40 +382,10 @@ if [[ "$DEPLOY_MATPLOTLIB" == "true" ]]; then
     fi
 fi
 
-# ─── Helper: Generate Claude Code plugin config files ────────────────────────
-
-deploy_plugins_config() {
-    local claude_plugins_dir="$HOME/.claude/plugins"
-    mkdir -p "$claude_plugins_dir"
-
-    # Generate known_marketplaces.json from template
-    if [[ -f "$DOT_DIR/claude/plugins/known_marketplaces.json.template" ]]; then
-        sed -e "s|\\\$HOME|$HOME|g" -e "s|\\\$DOTFILES_DIR|$DOT_DIR|g" \
-            "$DOT_DIR/claude/plugins/known_marketplaces.json.template" > "$claude_plugins_dir/known_marketplaces.json"
-        log_info "Generated known_marketplaces.json"
-
-        # Validate marketplace path exists
-        local marketplace_path=$(jq -r '.["local-marketplace"].source.path' "$claude_plugins_dir/known_marketplaces.json" 2>/dev/null)
-        if [[ -z "$marketplace_path" ]] || [[ ! -d "$marketplace_path" ]]; then
-            log_warn "Marketplace not found at: $marketplace_path"
-        fi
-    fi
-
-    # Generate installed_plugins.json from template
-    if [[ -f "$DOT_DIR/claude/plugins/installed_plugins.json.template" ]]; then
-        sed -e "s|\\\$HOME|$HOME|g" -e "s|\\\$DOTFILES_DIR|$DOT_DIR|g" \
-            "$DOT_DIR/claude/plugins/installed_plugins.json.template" > "$claude_plugins_dir/installed_plugins.json"
-        log_info "Generated installed_plugins.json"
-    fi
-}
-
 # ─── Claude Code ──────────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
     log_section "DEPLOYING CLAUDE CODE CONFIGURATION"
-
-    # Generate plugin config files first
-    deploy_plugins_config
 
     if [[ -d "$DOT_DIR/claude" ]]; then
         # Runtime files to preserve

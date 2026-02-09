@@ -185,7 +185,6 @@
     "stripe@claude-plugins-official": false,
     "example-plugin@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": false,
-    "insights-toolkit@local-marketplace": false,
     "learning-output-style@claude-plugins-official": false,
     "playwright@claude-plugins-official": false,
     "supabase@claude-plugins-official": false
@@ -205,6 +204,10 @@
       "git",
       "docker"
     ]
+  },
+  "chrome": {
+    "enabled": false,
+    "allowedOrigins": []
   },
   "alwaysThinkingEnabled": true,
   "teammateMode": "auto",

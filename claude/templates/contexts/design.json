@@ -31,7 +31,6 @@
     "example-plugin@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": false,
     "code-review@claude-plugins-official": false,
-    "insights-toolkit@local-marketplace": false,
     "learning-output-style@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
     "supabase@claude-plugins-official": false

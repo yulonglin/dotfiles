@@ -293,7 +293,7 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Build and configure local MCP servers (stdio, built from source)
     if cmd_exists go && cmd_exists claude && [[ ${#MCP_SERVERS_LOCAL[@]} -gt 0 ]]; then
         log_info "Building local MCP servers..."
-        mcp_base="$HOME/code"
+        mcp_base="$HOME/code/marketplaces"
         mkdir -p "$mcp_base"
 
         for entry in "${MCP_SERVERS_LOCAL[@]}"; do

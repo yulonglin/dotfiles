@@ -12,7 +12,9 @@ local-marketplace/
 └── plugins/
     ├── research-toolkit/   # Experiment design, execution, analysis, literature
     ├── writing-toolkit/    # Papers, drafts, presentations, multi-critic review
-    └── code-quality/       # Code review, debugging, performance, bulk editing
+    ├── code-toolkit/       # Dev workflow, debugging, delegation, code review
+    ├── workflow-toolkit/   # Agent teams, handover, conversation management, analytics
+    └── viz-toolkit/        # TikZ diagrams, Anthropic-style visualization
 ```
 
 Each plugin follows the standard structure:
@@ -34,7 +36,9 @@ claude plugin marketplace add ~/.claude/local-marketplace
 # 2. Install plugins
 claude plugin install research-toolkit@local-marketplace
 claude plugin install writing-toolkit@local-marketplace
-claude plugin install code-quality@local-marketplace
+claude plugin install code-toolkit@local-marketplace
+claude plugin install workflow-toolkit@local-marketplace
+claude plugin install viz-toolkit@local-marketplace
 ```
 
 ## Updating Plugins
