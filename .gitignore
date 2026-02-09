@@ -495,6 +495,8 @@ bash-history.jsonl
 # If you see these files in `git status`, they were committed by mistake.
 # Remove with: git rm --cached claude/plugins/*.json
 
+settings.local.json
+
 claude/plugins/installed_plugins.json
 claude/plugins/known_marketplaces.json
 claude/plugins/install-counts-cache.json

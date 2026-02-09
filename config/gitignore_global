@@ -457,6 +457,7 @@ TSWLatexianTemp*
 # Claude Code
 #-------------------------------------------------------------
 .claude/bash-history.jsonl
+settings.local.json
 
 #-------------------------------------------------------------
 # Custom Research Files
