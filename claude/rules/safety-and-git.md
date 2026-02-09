@@ -27,6 +27,7 @@ Before running deployment scripts, file system operations, or configuration task
 | Git hooks (pre-commit, etc.) | May lack execute permission or fail in sandbox | Check with `ls -la .git/hooks/`; use `--no-verify` only if user approves |
 | `launchd` / `cron` setup | May not have permissions to install agents | Warn user upfront; suggest manual installation |
 | Heredocs in commands | Shell creates temp file in `/tmp` → blocked | Use `git commit -F` with file in `$TMPDIR`, or `printf` piping (see Git Commands) |
+| `.claude/settings*.json` | Sandbox denies write/unlink on Claude Code's own settings files | Cannot `git stash` or `git checkout` these files. Commit everything else in `.claude/` normally (`.gitignore`, `settings.json` staging works). For pull-rebase with dirty settings, push first or use `git push` directly instead of stash-pull-push |
 
 **When planning a task involving file system operations:** List anticipated sandbox issues BEFORE executing. Don't discover them one-by-one through failures — that wastes context and user patience.
 
@@ -36,6 +37,7 @@ Before running deployment scripts, file system operations, or configuration task
 - **Default pull behavior**: When user says "pull", run `git stash && git pull --rebase && git stash pop`
   - Handles unstaged changes automatically
   - If merge conflicts occur after stash pop, notify user and help resolve
+  - If stash fails due to sandbox (e.g., `.claude/settings*.json` unlink errors), push directly or commit the non-settings files first
 - **Use readable refs** over commit hashes: branch names, tags, `origin/branch`
 - Examples:
   - ✅ `git log origin/main..feature-branch`

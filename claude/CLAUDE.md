@@ -125,17 +125,21 @@ Rules:
 
 **Context profiles** control which plugins load per-project via `claude-context`:
 ```bash
-claude-context                    # Show current profile
-claude-context writing            # Papers, blog posts, documentation
-claude-context research           # Experiments, evals, analysis
+claude-context                    # Show current / apply context.yaml
 claude-context code               # Software projects
-claude-context design             # Frontend, visualizations, web
-claude-context full               # Everything (dotfiles, meta-work)
-claude-context code python        # Compose: code + pyright-lsp
-claude-context research ml        # Compose: research + huggingface
+claude-context code web python    # Compose multiple profiles
+claude-context --check            # Detect registry drift
+claude-context --sync             # Fix drift in profiles.yaml
+claude-context --reset            # Clear project plugin config
 ```
 
-Templates: `~/.claude/templates/contexts/*.json`. Writes to `.claude/settings.local.json` (per-repo, gitignored). Restart Claude Code after applying.
+**Architecture:**
+- Profile definitions: `~/.claude/templates/contexts/profiles.yaml` (registry + base + per-profile enables)
+- Per-project config: `.claude/context.yaml` (profiles + optional enable/disable overrides, committed)
+- Output: `.claude/settings.json` `enabledPlugins` section (deterministic rebuild from profiles)
+- CLI args persist to `context.yaml` automatically; no-arg invocation re-applies it
+
+Adding a new plugin: one line in `profiles.yaml` registry. Restart Claude Code after applying.
 
 ---
 

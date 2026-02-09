@@ -1,6 +1,0 @@
-{
-  "$comment": "Python sub-profile: adds pyright-lsp. Compose with domain profiles.",
-  "enabledPlugins": {
-    "pyright-lsp@claude-plugins-official": true
-  }
-}

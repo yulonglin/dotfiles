@@ -1,6 +1,0 @@
-{
-  "$comment": "ML sub-profile: adds huggingface-skills. Compose with domain profiles.",
-  "enabledPlugins": {
-    "huggingface-skills@claude-plugins-official": true
-  }
-}

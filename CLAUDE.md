@@ -115,7 +115,7 @@ claude/                   # Symlinked to ~/.claude/
 ├── ai_docs -> docs       # Permanent backwards-compat symlink
 ├── hooks/                # Hook scripts (auto_log.sh, notify.sh)
 ├── templates/            # Templates for specs, reports, context profiles
-│   └── contexts/         # Plugin context profiles (writing, research, code, etc.)
+│   └── contexts/         # profiles.yaml (plugin registry + profile definitions)
 ├── projects/             # Project-specific settings overrides
 └── (runtime dirs)        # cache/, logs/, history.jsonl, todos/, etc.
 
@@ -124,7 +124,7 @@ codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 custom_bins/              # Custom utilities (added to PATH)
 ├── utc_date              # Outputs DD-MM-YYYY in UTC
 ├── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
-├── claude-context        # Apply context profiles for plugin loading
+├── claude-context        # YAML-driven plugin profiles (Python, reads profiles.yaml)
 └── claude-cache-clean    # Remove stale plugin cache versions
 
 lib/plotting/             # Python plotting library (deployed to ~/.local/lib/plotting/)
