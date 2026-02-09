@@ -304,9 +304,86 @@ def check_drift():
         sys.exit(1)
 
 
+def prompt_profile_assignment(short, qid, profile_names):
+    """Ask user which profiles a new plugin should be added to."""
+    options = "/".join(profile_names) + "/skip"
+    print(f"\n  {BOLD}{short}{NC} ({qid})")
+    while True:
+        try:
+            raw = input(f"    Add to profiles? [{options}]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return []
+        if not raw or raw.lower() == "skip":
+            return []
+        choices = [c.strip() for c in raw.replace(",", " ").split()]
+        invalid = [c for c in choices if c not in profile_names]
+        if invalid:
+            print(f"    {RED}Unknown: {', '.join(invalid)}{NC}. Try again.")
+            continue
+        return choices
+
+
+def _find_enable_insert_point(lines, profile_name):
+    """Find the line index after the last enable entry for a profile.
+
+    Handles both block style (multiline - items) and flow style ([a, b, c]).
+    Returns the index where a new "      - name" line should be inserted,
+    or None if the profile uses flow style (needs different handling).
+    """
+    # Find "  profile_name:" line
+    profile_line = None
+    for i, line in enumerate(lines):
+        if line == f"  {profile_name}:":
+            profile_line = i
+            break
+    if profile_line is None:
+        return None, "flow"  # not found
+
+    # Find "    enable:" within this profile (before next profile)
+    enable_line = None
+    for i in range(profile_line + 1, len(lines)):
+        stripped = lines[i].strip()
+        # Hit next profile definition (2-space indent key)
+        if lines[i] and not lines[i].startswith("    ") and not lines[i].startswith("  #") and stripped:
+            break
+        if stripped == "enable:":
+            enable_line = i
+            break
+        # Flow style: enable: [a, b, c]
+        if stripped.startswith("enable: ["):
+            return i, "flow"
+
+    if enable_line is None:
+        return None, "missing"
+
+    # Find the last "      - " item in this enable block
+    last_item = enable_line
+    for i in range(enable_line + 1, len(lines)):
+        stripped = lines[i].strip()
+        if stripped.startswith("- "):
+            last_item = i
+        elif stripped == "" or not lines[i].startswith("      "):
+            break
+
+    return last_item + 1, "block"
+
+
+def _insert_into_flow_enable(line, short):
+    """Insert a plugin name into a flow-style enable: [a, b, c] line."""
+    # enable: [pyright-lsp] -> enable: [pyright-lsp, linear]
+    bracket_end = line.rindex("]")
+    before = line[:bracket_end].rstrip()
+    after = line[bracket_end:]
+    return f"{before}, {short}{after}"
+
+
 def sync_registry():
-    """Add new plugins from global settings.json to registry in profiles.yaml."""
-    registry, _, _ = load_profiles()
+    """Add new plugins from global settings.json to registry in profiles.yaml.
+
+    Interactive: for each new plugin, asks which profiles to add it to.
+    """
+    registry, _, profiles = load_profiles()
 
     if not os.path.exists(GLOBAL_SETTINGS):
         sys.exit(f"{RED}Global settings not found: {GLOBAL_SETTINGS}{NC}")
@@ -327,37 +404,62 @@ def sync_registry():
         print(f"{GREEN}Registry already in sync.{NC}")
         return
 
-    # Read raw YAML to append to registry section
+    print(f"{YELLOW}Found {len(new_plugins)} new plugin(s):{NC}")
+
+    # Interactive profile assignment
+    profile_names = list(profiles.keys())
+    assignments = {}  # short -> list of profile names
+    for short, qid in sorted(new_plugins.items()):
+        chosen = prompt_profile_assignment(short, qid, profile_names)
+        assignments[short] = chosen
+
+    # Read raw YAML lines
     with open(PROFILES_PATH) as f:
         content = f.read()
-
-    # Find end of registry block (line before "base:" or "# Always-on")
     lines = content.split("\n")
+
+    # 1. Add to registry (find insertion point before "base:" or "# Always-on")
     insert_idx = None
     for i, line in enumerate(lines):
         if line.startswith("base:") or line.startswith("# Always-on"):
-            # Insert before the blank line preceding this
             insert_idx = i
             while insert_idx > 0 and lines[insert_idx - 1].strip() == "":
                 insert_idx -= 1
             break
 
     if insert_idx is None:
-        sys.exit(f"{RED}Could not find insertion point in profiles.yaml{NC}")
+        sys.exit(f"{RED}Could not find registry insertion point in profiles.yaml{NC}")
 
     new_lines = []
     for short, qid in sorted(new_plugins.items()):
         new_lines.append(f"  {short}: {qid}")
-
     lines = lines[:insert_idx] + new_lines + lines[insert_idx:]
+
+    # 2. Add to profiles (process each plugin, each chosen profile)
+    # Process insertions from bottom to top to avoid index shifting
+    insertions = []  # (line_idx, short, style) — "block" or "flow"
+    for short, chosen_profiles in assignments.items():
+        for pname in chosen_profiles:
+            idx, style = _find_enable_insert_point(lines, pname)
+            if idx is not None:
+                insertions.append((idx, short, style, pname))
+
+    # Sort by line index descending so insertions don't shift earlier indices
+    insertions.sort(key=lambda x: x[0], reverse=True)
+    for idx, short, style, pname in insertions:
+        if style == "block":
+            lines.insert(idx, f"      - {short}")
+        elif style == "flow":
+            lines[idx] = _insert_into_flow_enable(lines[idx], short)
 
     with open(PROFILES_PATH, "w") as f:
         f.write("\n".join(lines))
 
-    print(f"{GREEN}Added {len(new_plugins)} plugin(s) to registry:{NC}")
+    print(f"\n{GREEN}Added {len(new_plugins)} plugin(s) to registry:{NC}")
     for short, qid in sorted(new_plugins.items()):
-        print(f"  + {short}: {qid}")
-    print(f"\n{BLUE}Review profiles.yaml and add to profiles as needed.{NC}")
+        profs = assignments.get(short, [])
+        suffix = f" -> {', '.join(profs)}" if profs else " (registry only)"
+        print(f"  + {short}{suffix}")
 
 
 def reset():
