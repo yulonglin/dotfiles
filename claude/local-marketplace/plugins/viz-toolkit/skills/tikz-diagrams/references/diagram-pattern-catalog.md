@@ -615,3 +615,30 @@ anthropic = {
 8. **Nested fit nodes**: Inner nodes first, then `fit` on background layer
 9. **Arrows through equations**: Position formulas with `anchor=west`, clear spacing
 10. **Long text in layers**: Put inside card, not as side annotation that may overlap
+11. **Insufficient node distance** — set `node distance>=1.5cm`; default is too tight for readable diagrams
+12. **Arrows routing through nodes** — use waypoints: `(A.east) -- ++(1,0) |- (C.west)` to route around obstacles
+13. **Text touching box edges** — verify `inner sep>=8pt` on all text-containing nodes (basebox default is 8pt — if overriding, don't go below)
+14. **Inconsistent spacing between similar elements** — use `positioning` library with uniform `node distance` rather than manual coordinates
+15. **Container too tight around children** — for `fit` nodes use `inner sep>=15pt`; for `groupbox` use `inner sep>=10pt` (matches .sty defaults)
+
+---
+
+## Spacing Quick Reference
+
+Values match `anthropic-tikz.sty` defaults. Override only when necessary.
+
+| Element type | `inner sep` (in .sty) | Min gap between siblings |
+|-------------|----------------------|--------------------------|
+| basebox (content nodes) | 8pt | 1.5cm (node distance) |
+| card (containers) | 12pt | 1cm |
+| groupbox (dashed groups) | 10pt | 0.8cm |
+| fit nodes wrapping children | 15pt (manual) | N/A |
+| Labels/annotations | N/A | >=0.3cm below label |
+
+### Arrow Routing Rules
+
+1. Same-axis flow → straight horizontal/vertical arrows
+2. Cross-axis → 90-degree elbows: `(A.east) -| (B.north)` or `(A.north) |- (B.west)`
+3. Feedback/backward arcs → route above/below: `(C.north) -- ++(0,0.8) -| (A.north)`
+4. **Never** diagonal arrows crossing through other nodes
+5. Multiple parallel arrows → offset anchors: `A.north east` to `B.south west`

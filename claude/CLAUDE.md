@@ -91,6 +91,7 @@ Reference material in `~/.claude/docs/` — loaded by skills when relevant, NOT 
 - `docs/agent-teams-guide.md` — Team composition, communication, known limitations
 - `docs/documentation-lookup.md` — Context7, GitHub CLI, verified repos, decision tree
 - `docs/environment-setup.md` — Agent spawning fix, machine setup
+- `docs/visual-layout-quality.md` — CSS spacing safety net, cross-domain layout principles, anti-patterns
 
 ---
 
