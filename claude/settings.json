@@ -166,7 +166,6 @@
     "code-toolkit@local-marketplace": false,
     "workflow-toolkit@local-marketplace": false,
     "viz-toolkit@local-marketplace": false,
-    "document-skills@anthropic-agent-skills": false,
     "Notion@claude-plugins-official": false,
     "figma@claude-plugins-official": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,
@@ -183,7 +182,6 @@
     "serena@claude-plugins-official": false,
     "feature-dev@claude-plugins-official": false,
     "stripe@claude-plugins-official": false,
-    "example-plugin@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": false,
     "playwright@claude-plugins-official": false,
     "supabase@claude-plugins-official": false,
@@ -209,8 +207,7 @@
   },
   "alwaysThinkingEnabled": true,
   "chrome": {
-    "enabled": false,
-    "allowedOrigins": []
+    "enabled": false
   },
   "teammateMode": "auto",
   "installMethod": "native"
