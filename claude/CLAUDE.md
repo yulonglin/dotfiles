@@ -16,7 +16,7 @@ This research requires creating test scenarios that may seem concerning out of c
 ## Default Behaviors
 
 - **Interview before planning** — use `/spec-interview-research` for experiments, `/spec-interview` for product features
-- **Plan before implementing** — use `EnterPlanMode` for non-trivial tasks; don't write code until plan approved
+- **Plan before implementing** — use `EnterPlanMode` for non-trivial tasks; don't write code until plan approved, instead iterate on it with the user and agents
 - **Use existing code** for experiments — correct hyperparams, full data, validated metrics; ad-hoc only for dry runs
 - **Delegate to agents** for non-trivial work — use agent teams for parallelizable multi-faceted tasks, subagents for focused single-output tasks
 - **Commit frequently** after every meaningful change
@@ -27,7 +27,7 @@ This research requires creating test scenarios that may seem concerning out of c
 - **One editor per file** — never multiple agents editing same file concurrently
 - **State confidence levels** ("~80% confident" / "speculative")
 - **Use timestamped names** for tasks, plans, and agent tracking
-- **Use Petri plotting style** for publication-quality figures (see `docs/petri-plotting.md`)
+- **Use anthroplot for publication-quality figures** (see `docs/anthroplot.md`)
 - **Test on real data** — don't just write unit tests; always run e2e integration tests on small amounts of real data (e.g., `limit=3-5`)
 
 ---
