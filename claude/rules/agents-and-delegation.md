@@ -47,3 +47,19 @@ Task complexity?
 ├─ Parallel + needs inter-agent communication? → Agent Team
 └─ Unclear? → Start with subagents, escalate if needed
 ```
+
+## Known Issue: `classifyHandoffIfNeeded` False Failures (Temporary)
+
+**Bug:** Claude Code agents crash on completion with `classifyHandoffIfNeeded is not defined`. This is a build bug — the function is referenced but never defined. Tracked in 16+ issues: https://github.com/anthropics/claude-code/issues?q=classifyHandoffIfNeeded
+
+**What actually happens:** Agent work completes successfully (files written, commits made, all tool calls finish). The crash occurs AFTER completion during the handoff step. Task tool falsely reports `status: failed`.
+
+**Required behavior when you see this error:**
+
+1. **Do NOT treat as a real failure** — the work is done
+2. **Verify the output exists** — check files, git log, or expected artifacts on disk
+3. **If output exists → proceed as if agent succeeded** — use the results normally
+4. **Do NOT retry the agent** — retrying wastes context and produces duplicate work
+5. **For background agents** — read the output file; the data is there despite the failure notification
+
+**Remove this section** when the upstream fix lands (check: `claude --version` changelog).
