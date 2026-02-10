@@ -515,6 +515,18 @@ def main():
 
     if args.help:
         print(__doc__)
+        try:
+            _, _, profiles = load_profiles()
+            print("PROFILES:")
+            for name, pdata in profiles.items():
+                comment = pdata.get("comment", "")
+                plugins = pdata.get("enable", [])
+                print(f"    {name:<12} {comment}")
+                if plugins:
+                    print(f"                 [{', '.join(plugins)}]")
+            print()
+        except SystemExit:
+            pass  # profiles.yaml not found, skip listing
         parser.print_help()
         sys.exit(0)
 

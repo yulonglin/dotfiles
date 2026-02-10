@@ -511,3 +511,8 @@ claude/image-cache/
 
 .gemini/
 gha-creds-*.json
+
+# Codex CLI runtime state (machine-specific, auto-generated)
+codex/.codex-global-state.json
+codex/sqlite/
+codex/vendor_imports/

@@ -54,7 +54,8 @@ if __name__ == "__main__":
 
 ## Package Managers (preference order)
 
-1. **bun** — Fastest, includes runtime, good compatibility
+1. **bun** — Fastest, includes runtime, good compatibility  
+   - Prefer `bunx` over `npx` for executing CLI tools/scripts—`bunx` is significantly faster.
 2. **pnpm** — Efficient disk usage, strict dependencies
 3. **npm** — Universal fallback
 
@@ -62,4 +63,22 @@ Check for `bun.lockb`, `pnpm-lock.yaml`, or `package-lock.json` to detect which 
 
 ## CLI Tools Available
 
-ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, btop, dust, duf, bun, sd (prefer over `sed`), trash (macOS — prefer over `rm`)
+ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, btop, dust, duf, bun, bunx, sd (prefer over `sed`), trash (macOS — prefer over `rm`)
+
+## Visual Output Quality
+
+When generating any visual output (TikZ, HTML/CSS, Slidev, matplotlib):
+
+- **Verify visually** — CSS/TikZ/layout changes MUST be checked against rendered output (Playwright screenshot, compiled PDF, browser preview). Accessibility snapshots do NOT reveal spacing issues
+- **Act on reviewer layout feedback immediately** — visual bugs from CSS fragility are invisible in code review; when a reviewer flags it, fix it
+- **Use layout systems, not manual coordinates** — flexbox/grid (CSS), `positioning` library (TikZ), CSS Grid (Slidev). Manual pixel/pt values drift and overlap
+- **Container padding > per-child padding** — pad the container itself, not each child with `> :not(x)` selectors. Markdown renderers produce varying DOM structures
+- **Test with variable content** — would this layout still work if text were 20% longer or a list had 2x items?
+
+### Minimum Spacing (hard floor — never go below)
+
+| Domain | Container padding | Content-to-edge gap | Between sibling elements |
+|--------|------------------|--------------------|-----------------------|
+| **HTML/CSS** | `p-3` / `0.75rem` / `12px` | `p-2` / `0.5rem` / `8px` | `gap-2` / `0.5rem` |
+| **TikZ** | `inner sep>=10pt` | `inner sep>=8pt` | `node distance>=1.5cm` |
+| **Slidev** | `p-4` / `1rem` on slide content | `p-2` on nested elements | `gap-3` / `0.75rem` |

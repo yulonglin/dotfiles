@@ -21,7 +21,6 @@ registry:
   viz-toolkit: viz-toolkit@local-marketplace
 
   # Official plugins
-  document-skills: document-skills@anthropic-agent-skills
   Notion: Notion@claude-plugins-official
   figma: figma@claude-plugins-official
   ui-ux-pro-max: ui-ux-pro-max@ui-ux-pro-max-skill
@@ -38,7 +37,6 @@ registry:
   serena: serena@claude-plugins-official
   feature-dev: feature-dev@claude-plugins-official
   stripe: stripe@claude-plugins-official
-  example-plugin: example-plugin@claude-plugins-official
   claude-code-setup: claude-code-setup@claude-plugins-official
   playwright: playwright@claude-plugins-official
   supabase: supabase@claude-plugins-official
@@ -83,7 +81,6 @@ profiles:
       - writing-toolkit
       - viz-toolkit
       - workflow-toolkit
-      - document-skills
       - Notion
 
   design:
@@ -91,7 +88,6 @@ profiles:
     enable:
       - code-toolkit
       - viz-toolkit
-      - document-skills
       - figma
       - ui-ux-pro-max
       - frontend-design
@@ -106,7 +102,6 @@ profiles:
       - code-toolkit
       - workflow-toolkit
       - viz-toolkit
-      - document-skills
       - Notion
       - coderabbit
       - code-simplifier
