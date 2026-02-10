@@ -10,6 +10,8 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 |-------|---------|
 | `efficient-explorer` | Codebase exploration in large repos (>500 line files) |
 | `code-reviewer` | After ANY implementation — don't wait to be asked |
+| `plan-critic` | Before implementing plans with arch decisions, migrations, auth, concurrency |
+| `codex-reviewer` | After significant implementation, alongside code-reviewer |
 | `performance-optimizer` | Slow code, sequential API calls, missing caching |
 
 **Principles**: Parallelize agents • Be specific • Include size limits in prompts • ASK if unclear
@@ -31,8 +33,11 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 ```
 Need delegation?
 ├─ Large context (PDF, codebase)? → gemini-cli
-├─ Clear implementation spec? → code-toolkit:codex
+├─ Plan needs critique? → code-toolkit:plan-critic (+ code-toolkit:claude in parallel)
+├─ Clear implementation spec/plan? → code-toolkit:codex
+├─ Bug with clear repro? → code-toolkit:codex (+ debugger for investigation)
 ├─ Need judgment/taste? → code-toolkit:claude
+├─ Code review needed? → code-toolkit:code-reviewer (+ code-toolkit:codex-reviewer for significant changes)
 └─ Multi-step workflow? → Use skills
 ```
 

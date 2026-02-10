@@ -14,6 +14,7 @@ description: |
   - Quick edits under ~10 lines (faster to do directly)
   - Tasks requiring conversation context (Codex has no context)
   - Tasks requiring judgment, taste, or subjective design decisions (Codex is instruction-following, not taste-driven)
+  - Plan critique (use plan-critic agent instead)
 
   Also use when:
   - Listing available Codex/OpenAI models
@@ -32,14 +33,16 @@ Delegate well-scoped implementation tasks to Codex CLI for parallel, autonomous 
 | Bug fix with known root cause | Ambiguous "something is wrong" |
 | Scoped refactoring | Multi-file architectural changes |
 | Generate boilerplate from spec | Quick <10 line edits |
-| Second opinion on a plan/approach | Tasks needing conversation context |
-| Independent task while you work on something else | Judgment/taste/subjective design decisions |
+| Plan-driven implementation (step-by-step) | Tasks needing conversation context |
+| Debugging with clear repro steps | Judgment/taste/subjective design decisions |
+| Independent task while you work on something else | Plan critique (use `plan-critic` agent) |
 
 ## Strengths & Limitations
 
-- **Strong at**: Precise implementation, following specs exactly, catching concrete errors, structured code generation
+- **Strong at**: Precise implementation, following specs exactly, catching concrete errors, structured code generation, tracing execution paths for debugging
 - **Weak at**: Ambiguous requirements, architectural taste, naming/style judgment, subjective quality decisions
 - **Rule of thumb**: If you can write a verification command, Codex can probably do the task well
+- **Plan critique**: Use the `plan-critic` agent (not this skill) for reviewing plans before implementation
 
 ## Execution Modes
 
@@ -137,23 +140,14 @@ Run: pytest tests/test_time.py -v
 2. Wait for idle: `tmux-cli wait_idle --pane=delegates:<task-name>.1`
 3. Review with `git diff`, commit if good
 
-## Second Opinion on Plans
+## Plan Critique
 
-Use sync mode with xhigh reasoning to get Codex's critique of an implementation plan:
+For critiquing plans before implementation, use the dedicated `plan-critic` agent. It delegates to Codex with xhigh reasoning to find concrete implementation gaps (missing error paths, race conditions, sequencing issues).
 
-```bash
-codex exec --full-auto -c model_reasoning_effort="xhigh" -C <working-dir> -o ./tmp/review.txt \
-  "Review this plan: <plan text>. Identify: 1) Missed edge cases 2) Simpler alternatives 3) Potential issues"
 ```
-
-Or pipe a plan file:
-
-```bash
-codex exec --full-auto -c model_reasoning_effort="xhigh" -C <working-dir> -o ./tmp/review.txt \
-  "Review this implementation plan and identify missed edge cases, simpler alternatives, and potential issues: $(cat .claude/plans/plan.md)"
+# Don't use this skill for plan critique — use the agent instead:
+# code-toolkit:plan-critic
 ```
-
-Codex excels at spotting concrete implementation gaps (missing error paths, race conditions) but won't help with taste questions (naming, API design aesthetics).
 
 ## Session Naming Convention
 

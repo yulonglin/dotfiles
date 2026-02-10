@@ -1,6 +1,11 @@
 ---
 name: codex
-description: Delegate well-scoped implementation tasks to Codex CLI. Use for defined functions, bug fixes with known cause, scoped refactoring, and plan review.
+description: >
+  Delegate well-scoped tasks to Codex CLI. Use for: defined functions, bug fixes
+  with known cause, scoped refactoring, boilerplate generation, plan-driven
+  implementation (executing approved plans step-by-step), and debugging concrete
+  bugs with clear reproduction steps. Codex reasoning models excel at tracing
+  execution paths.
 
 model: inherit
 color: blue
@@ -59,11 +64,12 @@ Check if task is appropriate for Codex:
 | ✅ Good for Codex | ❌ Not for Codex |
 |------------------|------------------|
 | Well-defined function/module | Explore or understand code |
-| Bug fix with known cause | "Something is wrong" debugging |
-| Scoped refactoring | Architectural changes |
-| Template/boilerplate generation | Quick <10 line edits |
-| Independent task | Tasks needing conversation context |
-| Concrete verification | Subjective quality decisions |
+| Bug fix with known cause | Architectural changes |
+| Scoped refactoring | Quick <10 line edits |
+| Template/boilerplate generation | Tasks needing conversation context |
+| Plan-driven implementation | Subjective quality decisions |
+| Debugging with clear repro steps | Vague "something feels wrong" |
+| Independent task | Multi-turn refinement |
 
 **Rule of thumb**: If you can write a verification command, Codex can probably do the task well.
 
@@ -188,18 +194,24 @@ codex exec --full-auto -m "gpt-4o-2024-11-20" -C <dir> -o <out> "<prompt>"
 codex exec --full-auto -c model_reasoning_effort="xhigh" -C <dir> -o <out> "<prompt>"
 ```
 
-## Second Opinion on Plans
+## Plan-Driven Implementation
 
-Use Codex to critique implementation plans (with xhigh reasoning):
+When implementing from an approved plan, include plan context in the prompt:
 
-```bash
-codex exec --full-auto -c model_reasoning_effort="xhigh" -C <working-dir> -o ./tmp/review.txt \
-  "Review this plan and identify: 1) Missed edge cases 2) Simpler alternatives 3) Potential issues: $(cat .claude/plans/plan.md)"
+```
+[PLAN CONTEXT]
+Overall plan: <1-2 sentence summary>
+Current step: <step number and description>
+Previous steps completed: <what's already done>
 ```
 
-**What Codex finds well**: Concrete implementation gaps (missing error paths, race conditions, off-by-one errors).
+Chunk plans by size: 1-3 steps → single invocation, 4-7 → 2-3 chunks, 8+ → per-step. Commit after each verified chunk.
 
-**What Codex misses**: Taste questions (naming, API design aesthetics, architectural style).
+For chunking strategy and full template, read `references/plan-implementation.md`.
+
+## Plan Critique
+
+For critiquing plans before implementation, use the dedicated `plan-critic` agent instead. It uses xhigh reasoning to find concrete implementation gaps.
 
 ## Session Naming
 
@@ -232,8 +244,12 @@ Report errors to user with suggested fixes.
 
 | Agent | Use Case |
 |-------|----------|
-| **codex** | Precise implementation of clear specs |
+| **codex** (this) | Implementation, plan-driven coding, debugging with clear repro |
+| **plan-critic** | Pre-implementation plan critique (Codex xhigh reasoning) |
+| **codex-reviewer** | Post-implementation bug-focused review (Codex reasoning) |
 | **claude** | Judgment-heavy tasks, taste decisions, nuanced reasoning |
+| **code-reviewer** | Design quality, CLAUDE.md compliance review |
+| **debugger** | Systematic investigation of unclear bugs |
 | **gemini-cli** | Large context analysis (PDFs, entire codebases) |
 
-**Pattern**: Claude reviews the plan → Codex implements it → claude (or you) review the implementation.
+**Pattern**: claude + plan-critic review plan → codex implements → code-reviewer + codex-reviewer review in parallel.

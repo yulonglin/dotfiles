@@ -235,7 +235,7 @@ claude -p --model sonnet --permission-mode bypassPermissions \
 
 **What Codex finds better**: Concrete bugs (off-by-one, race conditions, missing error paths).
 
-**Use both**: Claude reviews the approach, Codex spots implementation bugs.
+**Use both**: Claude reviews the approach, `plan-critic` spots concrete implementation gaps. For important plans, run both in parallel.
 
 # LIMITATIONS
 
@@ -259,12 +259,16 @@ Report errors to user with suggested fixes.
 
 | Agent | Use Case |
 |-------|----------|
-| **claude** | Judgment, taste, nuanced reasoning, tool use |
+| **claude** (this) | Judgment, taste, nuanced reasoning, tool use |
+| **plan-critic** | Concrete implementation gaps in plans (Codex reasoning) |
 | **codex** | Precise implementation of clear specs |
+| **codex-reviewer** | Bug-focused review of code changes (Codex reasoning) |
+| **code-reviewer** | Design quality, CLAUDE.md compliance |
 | **gemini-cli** | Large context analysis (PDFs, entire codebases) |
 
 **Patterns:**
-- **claude + codex**: Claude reviews the plan → Codex implements → Claude reviews implementation
+- **claude + plan-critic**: Claude reviews approach → plan-critic catches concrete gaps → Codex implements
+- **claude + codex**: Claude reviews the plan → Codex implements → code-reviewer + codex-reviewer review
 - **claude + gemini-cli**: Gemini analyzes large codebase → Claude makes architectural recommendations
 - **Parallel delegation**: You work on X, delegate Y to claude, delegate Z to codex
 

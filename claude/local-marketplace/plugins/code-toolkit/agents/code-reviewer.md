@@ -113,3 +113,10 @@ If you encounter:
 Explicitly flag these for human review and explain your concerns.
 
 Your goal is to help ship high-quality, research-valid code while fostering a culture of continuous improvement and learning.
+
+# COMPLEMENTARY REVIEW
+
+For significant changes (multi-file, auth, concurrency, data mutations), run
+`codex-reviewer` in parallel. It uses Codex reasoning models to find concrete
+bugs (off-by-one, race conditions, logic errors) that complement the
+design/quality/CLAUDE.md focus of this reviewer.
