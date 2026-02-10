@@ -40,4 +40,22 @@ if echo "$COMMAND" | grep -qE '\bdocker\s+logs\b.*\|\s*tail\b'; then
     exit 0
 fi
 
+# --- Tier 3: Warn on high-output commands without limits ---
+
+# docker logs without --tail (and not piped)
+if echo "$COMMAND" | grep -qE '\bdocker\s+logs\b' && \
+   ! echo "$COMMAND" | grep -qF -- '--tail' && \
+   ! echo "$COMMAND" | grep -qE '\|'; then
+    echo "WARNING: 'docker logs' without --tail can produce huge output. Consider: docker logs --tail=200" >&2
+    exit 0
+fi
+
+# journalctl without -n/--lines (and not piped)
+if echo "$COMMAND" | grep -qE '\bjournalctl\b' && \
+   ! echo "$COMMAND" | grep -qE '(\s-n\b|--lines)' && \
+   ! echo "$COMMAND" | grep -qE '\|'; then
+    echo "WARNING: 'journalctl' without -n can produce huge output. Consider: journalctl -n 200" >&2
+    exit 0
+fi
+
 exit 0
