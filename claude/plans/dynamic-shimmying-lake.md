@@ -79,18 +79,65 @@ Fix the Plans/Tasks rows to reflect reality:
 
 Update "Standard paths" and Notes sections to match.
 
-### 4. (Optional) Remove duplicate `claude()` wrapper
+### 4. Merge duplicate `claude()` wrappers
 
 **File:** `config/aliases.sh`
 
-The simpler `claude()` at line 311-320 overrides the richer version at line 33-64. Remove the duplicate if it's unintentional.
+Delete version 2 (lines 309-320). Merge its "only set if unset" guard into version 1 (lines 33-64):
+
+```bash
+claude() {
+    # Use tmpfs for Claude Code temp files (faster, avoids disk I/O)
+    if [[ "$OSTYPE" == linux* ]] && [[ -d "/run/user/$(id -u)" ]]; then
+        export CLAUDE_CODE_TMPDIR="/run/user/$(id -u)"
+    fi
+
+    # Parse -t/--task argument for custom task name
+    local args=() task_name=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -t|--task)
+                task_name="$2"
+                shift 2
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Generate task list ID: -t flag always overrides, otherwise keep existing or auto-generate
+    if [[ -n "$task_name" ]]; then
+        # Explicit -t flag: always generate fresh with custom name
+        local timestamp
+        timestamp=$(date -u +%Y%m%d_%H%M%S)
+        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${task_name}"
+    elif [[ -z "$CLAUDE_CODE_TASK_LIST_ID" ]]; then
+        # No existing ID: auto-generate from directory name
+        local suffix timestamp
+        suffix=$(basename "$PWD" | tr ' ' '_')
+        timestamp=$(date -u +%Y%m%d_%H%M%S)
+        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${suffix}"
+    fi
+    # else: keep existing CLAUDE_CODE_TASK_LIST_ID (set by claude-new, claude-with, etc.)
+
+    activate_venv
+    command claude "${args[@]}"
+}
+```
+
+Key behaviors:
+- `-t <name>`: always generates fresh ID with custom name
+- Existing `CLAUDE_CODE_TASK_LIST_ID` (from `claude-new`, `claude-with`, etc.): preserved
+- Neither: auto-generates from `dirname + timestamp`
 
 ## Files to modify
 
 1. `claude/settings.json` — add `plansDirectory`
 2. `claude/rules/workflow-defaults.md` — replace fake exports with real docs
 3. `claude/CLAUDE.md` — fix directory convention table
-4. `config/aliases.sh` — (optional) remove duplicate claude() wrapper
+4. `config/aliases.sh` — merge duplicate `claude()` wrappers, remove lines 309-320
 
 ## Verification
 

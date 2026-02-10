@@ -52,12 +52,20 @@ claude() {
         esac
     done
 
-    # Always generate fresh task list ID: custom name or directory name
-    local suffix
-    suffix="${task_name:-$(basename "$PWD" | tr ' ' '_')}"
-    local timestamp
-    timestamp=$(date -u +%Y%m%d_%H%M%S)
-    export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${suffix}"
+    # Generate task list ID: -t flag always overrides, otherwise keep existing or auto-generate
+    if [[ -n "$task_name" ]]; then
+        # Explicit -t flag: always generate fresh with custom name
+        local timestamp
+        timestamp=$(date -u +%Y%m%d_%H%M%S)
+        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${task_name}"
+    elif [[ -z "$CLAUDE_CODE_TASK_LIST_ID" ]]; then
+        # No existing ID: auto-generate from directory name
+        local suffix timestamp
+        suffix=$(basename "$PWD" | tr ' ' '_')
+        timestamp=$(date -u +%Y%m%d_%H%M%S)
+        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${suffix}"
+    fi
+    # else: keep existing CLAUDE_CODE_TASK_LIST_ID (set by claude-new, claude-with, etc.)
 
     activate_venv
     command claude "${args[@]}"
@@ -304,19 +312,6 @@ codex-denials() {
   else
     command codex sandbox linux --log-denials -- "$@"
   fi
-}
-
-# Auto-generate task list ID from timestamp + directory name
-# This wraps `claude` so every session gets an informative task list name
-claude() {
-  if [ -z "$CLAUDE_CODE_TASK_LIST_ID" ]; then
-    local dir_name
-    dir_name=$(basename "$PWD" | tr ' ' '_')
-    local timestamp
-    timestamp=$(date -u +%Y%m%d_%H%M%S)
-    export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${dir_name}"
-  fi
-  command claude "$@"
 }
 
 # Claude Code Task List Management

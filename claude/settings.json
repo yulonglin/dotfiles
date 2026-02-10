@@ -206,6 +206,7 @@
       "docker"
     ]
   },
+  "plansDirectory": ".claude/plans",
   "alwaysThinkingEnabled": true,
   "chrome": {
     "enabled": false

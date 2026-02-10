@@ -55,18 +55,19 @@ This research requires creating test scenarios that may seem concerning out of c
 | Instructions | CLAUDE.md                    | CLAUDE.md                     |
 | Rules        | rules/*.md (auto-loaded)     | rules/*.md (auto-loaded)      |
 | Knowledge    | docs/ (on-demand, custom)    | docs/ (on-demand, custom)     |
-| Plans        | — (never global)             | plans/                        |
-| Tasks        | — (never global)             | tasks/                        |
+| Plans        | `~/.claude/plans/` (use `plansDirectory` for per-project) | plans/                        |
+| Tasks        | `~/.claude/tasks/` (no per-project option yet) | —                             |
 | Agents       | agents/*.md                  | agents/*.md                   |
 | Skills       | skills/                      | (via plugins)                 |
 
 Global = applies to ALL projects. Per-project = repo-specific, version-controlled.
-Plans and tasks are ALWAYS per-project (never global).
+Plans default to global but are configured per-project via `plansDirectory` in settings.json.
+Tasks are global only (`~/.claude/tasks/`) — per-project not yet available ([#20425](https://github.com/anthropics/claude-code/issues/20425)).
 `docs/` is a custom convention (not auto-loaded by Claude Code) — skills read from it on demand.
 
 Standard paths:
-- Global: `~/.claude/docs/` `~/.claude/rules/` (no plans/tasks globally)
-- Repo: `.claude/docs/` `.claude/rules/` `.claude/plans/` `.claude/tasks/`
+- Global: `~/.claude/docs/` `~/.claude/rules/` `~/.claude/tasks/`
+- Repo: `.claude/docs/` `.claude/rules/` `.claude/plans/` (via `plansDirectory`)
 
 ---
 
@@ -148,7 +149,8 @@ Adding a new plugin: one line in `profiles.yaml` registry. Restart Claude Code a
 
 - User specs: `specs/`
 - Knowledge base: `docs/` (search first with `/docs-search`, add useful findings)
-- Plans/Tasks: `.claude/plans/` and `.claude/tasks/` (per-project, version-controlled)
+- Plans: `.claude/plans/` (per-project via `plansDirectory` setting)
+- Tasks: `~/.claude/tasks/` (global, no per-project option — [#20425](https://github.com/anthropics/claude-code/issues/20425))
 - Don't be overconfident about recent models — search if unsure
 - Debugging: When something doesn't work after a few tries, step back and plan for alternatives
 - Permission errors: If sandboxing blocks you, step back and EnterPlanMode. Consider using `trash` or `mv` to `.bak` instead of `rm`

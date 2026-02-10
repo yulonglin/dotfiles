@@ -60,7 +60,7 @@ METHODS: dict[str, DetectionMethod] = {
     ),
     "tm": DetectionMethod(
         name="tm", display_label="Monitor Assessment",
-        csv_score_column="tm_score", score_range=(0.0, 1.0),
+        csv_score_column="score", score_range=(0.0, 1.0),  # Raw CSV column is "score", not "tm_score"
         csv_label_column="label",
     ),
     "probe": DetectionMethod(
@@ -72,10 +72,7 @@ METHODS: dict[str, DetectionMethod] = {
         name="code_metrics", display_label="Code Metrics",
         csv_score_column="code_metrics_score", score_range=(0.0, 1.0),
     ),
-    "code_semantic": DetectionMethod(
-        name="code_semantic", display_label="Code Semantic",
-        csv_score_column="semantic_score", score_range=(0.0, 1.0),
-    ),
+    # "code_semantic" omitted — no classifier script exists yet; add when implemented
     "interrogation": DetectionMethod(
         name="interrogation", display_label="Multi-Turn Interrogation",
         csv_score_column="sandbagging_score", score_range=(0.0, 1.0),
@@ -134,26 +131,46 @@ Delete `SCORE_COLUMN_MAP` and `SCORE_METHOD_NAME_MAP`. Import from registry.
 
 Replace `load_score_csv()`:
 ```python
-from src.annotation.method_registry import get_method, get_csv_column_renames, get_all_score_columns
+from src.annotation.method_registry import get_method, get_csv_column_renames, METHODS
 
 def load_score_csv(path, method):
+    m = get_method(method)
     df = pd.read_csv(path)
     renames = get_csv_column_renames(method)
+    # COMPAT: Guard against alias collision with existing ground_truth_label column
+    if "ground_truth_label" in df.columns:
+        renames = {k: v for k, v in renames.items() if v != "ground_truth_label"}
     df.rename(columns=renames, inplace=True)
+    score_col = f"{m.name}_score"  # e.g., "c3_score", "tm_score"
     # ... normalize ground_truth_label, extract original_id
 ```
 
-Replace hardcoded loops at lines 487 and 574:
+Replace `merge_scores()` score_col determination:
 ```python
-for col in get_all_score_columns():  # Was: ["c3_entropy_score", "lie_detector_score", ...]
+def merge_scores(samples_df, score_df, method):
+    m = get_method(method)
+    score_col = f"{m.name}_score"  # Was: iterating SCORE_COLUMN_MAP[method].values()
+    # ... rest of merge logic using score_col
+```
+
+Replace hardcoded loops at lines 487 and 574. Use study config keys (not full registry) to avoid checking 10 columns when only 2-4 are active:
+```python
+# Build active score columns from study config's score_csvs keys:
+active_methods = list(config.get("score_csvs", {}).keys())
+active_score_cols = [f"{m}_score" for m in active_methods]
+
+# At line 574 — populate detection_scores with CANONICAL method names as keys:
+for method_name in active_methods:
+    col = f"{method_name}_score"
+    if col in row and pd.notna(row[col]):
+        detection_scores[method_name] = float(row[col])  # key is "c3", NOT "c3_score"
 ```
 
 Replace `SCORE_METHOD_NAME_MAP` usage in `ingest_jsonl_to_sqlite()`:
 ```python
 # Before: method = SCORE_METHOD_NAME_MAP.get(raw_method, raw_method)
-# After: the score dict already uses canonical names
+# After: detection_scores already uses canonical names ("c3", "tm", etc.)
 for method_name, score in sample.detection_scores.items():
-    # method_name is already "c3", "lie_detector", etc.
     conn.execute("INSERT OR IGNORE INTO scores ...", (sample.sample_id, sample.model_pair, method_name, score))
 ```
 
@@ -169,14 +186,18 @@ if method not in METHODS:
     logger.warning("Method '%s' not in registry — using CSV columns as-is", method)
 ```
 
-#### 1c. Update `study-dev.yaml` key names
+#### 1c. Update ALL study YAML key names
 
-The YAML `score_csvs` keys must match registry names:
+The YAML `score_csvs` keys must match registry canonical names. Update both configs:
+
+`web/config/study-dev.yaml`:
 ```yaml
 score_csvs:
   c3: out/c3_gpqa_cot_sandbag.csv
   tm: out/tm_gpqa_cot.csv          # Was: trusted_monitor
 ```
+
+`web/config/study.yaml` (if it exists — check for `behavioral_probes` → `probe`, `trusted_monitor` → `tm`)
 
 #### 1d. Verify
 
@@ -187,11 +208,27 @@ uv run python -m src.annotation.prepare_study web/config/study-dev.yaml --db web
 # Verify: 156 samples, 156 C3 scores, TM logs explicit warning
 ```
 
-### PR 2: Export + Frontend + Docs (deferred, lower priority)
+#### 1e. Minimal fix to `src/annotation/export.py` (PR 1 scope)
 
-#### 2a. Fix `src/annotation/export.py`
+Replace the hardcoded `score_key_map` in `fetch_annotations_sqlite()` (line 206) with a registry-derived map so new methods aren't silently dropped:
+```python
+# COMPAT: Before — hardcoded reverse map
+# score_key_map = {"c3": "c3_entropy_score", ...}
+# After — dynamic from registry (stores as "{method}_score" key for to_rich_json compat)
+for s in scores:
+    sample_data[f"{s['method']}_score"] = s["score"]
+```
 
-Replace hardcoded score maps with dynamic DB queries:
+And update `to_rich_json()` (lines 148-153) to collect scores dynamically:
+```python
+"detection_scores": {k: v for k, v in task.items() if k.endswith("_score") and k != "probe_score" or k.endswith("_score") and v is not None}
+# Simplified: just collect all *_score keys
+"detection_scores": {k: v for k, v in task.items() if k.endswith("_score") and v is not None}
+```
+
+### PR 2: Frontend + Docs (deferred, lower priority)
+
+#### 2a. Fix `src/annotation/export.py` (remaining work)
 ```python
 # fetch_annotations_sqlite — query all methods:
 scores = conn.execute("SELECT method, score FROM scores WHERE sample_id = ? AND model_pair = ?", ...)
@@ -235,7 +272,9 @@ Existing classifier scripts keep their current output. Registry's `csv_score_col
 |------|--------|
 | `src/annotation/method_registry.py` | **NEW** — Central method definitions |
 | `src/annotation/prepare_study.py` | Import from registry; replace hardcoded loops/maps; add merge warnings |
+| `src/annotation/export.py` | Replace hardcoded `score_key_map` with registry import (minimal, prevents silent method drops) |
 | `web/config/study-dev.yaml` | Update `score_csvs` keys to match registry names |
+| `web/config/study.yaml` | Update keys if exists (`behavioral_probes` → `probe`, `trusted_monitor` → `tm`) |
 
 **PR 2 (deferred):**
 
@@ -352,13 +391,29 @@ def _detect_eval_format(log: EvalLog) -> str:
 - Does NOT migrate old eval files — they work as-is with warnings
 - Does NOT change eval file output format — that's the classifier scripts' job
 
+## Codex Critique Fixes Applied
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| C1 | TM `csv_score_column` was `"tm_score"` but CSV has `"score"` | Changed to `csv_score_column="score"` |
+| C2 | `merge_scores()` score_col determination underspecified | Added explicit `score_col = f"{m.name}_score"` |
+| C3 | `study.yaml` uses `behavioral_probes` but registry has `probe` | Added all study YAMLs to PR 1 file list |
+| C4 | `detection_scores` dict key format ambiguity (`c3_score` vs `c3`) | Keys are canonical names (`"c3"`, `"tm"`), `_score` suffix only in DataFrame columns |
+| C5 | `export.py` silently drops new methods | Moved minimal export fix into PR 1 |
+| I1 | `c3_entropy_score` → `c3_score` loses semantic info | Accepted — `display_label` carries semantics; internal column names are for machines |
+| I3 | Label alias collision with existing `ground_truth_label` | Added guard in `load_score_csv()` |
+| I6 | All 10 methods checked when only 2-4 active | Use study config's `score_csvs` keys for active methods |
+| S4 | `code_semantic` has no classifier script | Removed from registry (add when implemented) |
+
 ## Implementation Note
 
 **Codex will implement PR 1.** The implementation should:
 1. Create `method_registry.py` as specified
 2. Update `prepare_study.py` to import from registry, add all backward-compat warnings
-3. Update `study-dev.yaml` keys
-4. Run the pipeline end-to-end to verify no regressions
+3. Minimal fix to `export.py` (dynamic score_key_map + dynamic to_rich_json)
+4. Update all study YAML keys
+5. Tag all compat code with `# COMPAT:` comments
+6. Run the pipeline end-to-end to verify no regressions
 
 ## Compatibility Layer Removal (Future)
 
