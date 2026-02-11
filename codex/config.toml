@@ -68,3 +68,7 @@ shell_snapshot = true
 apps = true
 steer = true
 personality = true
+
+[mcp_servers.playwright]
+args = ["@playwright/mcp@latest"]
+command = "npx"

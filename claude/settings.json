@@ -124,6 +124,15 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto_background.sh"
+          }
+        ]
+      },
+      {
         "matcher": "Read",
         "hooks": [
           {

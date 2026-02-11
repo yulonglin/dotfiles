@@ -254,3 +254,4 @@ prefix_rule(pattern=["/bin/zsh", "-lc", "GIT_EDITOR=true git pull --rebase"], de
 prefix_rule(pattern=["bash", "-lc"], decision="allow")
 prefix_rule(pattern=["git", "add"], decision="allow")
 prefix_rule(pattern=["git", "commit"], decision="allow")
+prefix_rule(pattern=["git", "worktree", "add"], decision="allow")
