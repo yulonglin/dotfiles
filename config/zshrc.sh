@@ -16,6 +16,13 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
 fi
 export TERM="xterm-256color"
 
+# Editor - used by Claude Code (Ctrl+G), git, etc.
+if [[ -n $SSH_CONNECTION ]]; then
+  export EDITOR='edit'
+else
+  export EDITOR='cursor --wait'
+fi
+
 # Claude Code tmpdir - avoid root-owned /tmp/claude issues
 if [[ -n "$TMPDIR" && -w "$TMPDIR" ]]; then
     # Explicit TMPDIR takes priority (cloud environments, user preference)

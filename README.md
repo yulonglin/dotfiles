@@ -28,9 +28,10 @@ These modern alternatives are installed by default and significantly faster than
 | [`dust`](https://github.com/bootandy/dust) | `du` | Intuitive visualization of disk usage |
 | [`jless`](https://github.com/PaulJuliusMartinez/jless) | `less` (JSON) | Interactive JSON viewer with vim keybindings |
 
-**More Rust extras** (`--extras` flag): [`hyperfine`](https://github.com/sharkdp/hyperfine) (benchmarking)
-
-Also available: [`lazygit`](https://github.com/jesseduffield/lazygit) (TUI for git, written in Go)
+**Extras** (`--extras` flag):
+- [`hyperfine`](https://github.com/sharkdp/hyperfine) — statistical benchmarking with warmup and multiple runs
+- [`lazygit`](https://github.com/jesseduffield/lazygit) — TUI for git
+- [`code2prompt`](https://github.com/mufeedvh/code2prompt) — generate LLM prompts from codebases
 
 ## Installation
 

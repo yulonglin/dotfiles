@@ -13,7 +13,7 @@ Comprehensive dotfiles repository for ZSH, Tmux, Vim, SSH, and development tools
 **Flags are ADDITIVE to defaults unless `--minimal` is used**
 
 - `install.sh` defaults: macOS (`--zsh --tmux --ai-tools --cleanup`), Linux (`--zsh --tmux --ai-tools`)
-- `deploy.sh` defaults: `--vim --editor --claude --codex --ghostty --htop --matplotlib --git-hooks --secrets --cleanup --claude-cleanup --ai-update` (file cleanup macOS only, Claude/AI update both platforms)
+- `deploy.sh` defaults: `--vim --editor --claude --codex --ghostty --htop --matplotlib --git-hooks --secrets --cleanup --claude-cleanup --ai-update --brew-update` (file cleanup macOS only, rest both platforms)
 - Adding flags extends defaults (e.g., `./install.sh --extras` = defaults + extras)
 - `--minimal` flag disables all defaults (only installs what you specify)
 - Modifiers (`--append`, `--ascii`, `--force`) don't affect defaults
@@ -64,6 +64,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
 - Claude Code cleanup - No-output-for-24h session cleanup (tmux preserved, launchd/cron)
 - AI tools auto-update - Daily update of Claude Code, Gemini CLI, Codex CLI (6 AM, launchd/cron)
+- Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, brew/apt/dnf/pacman, launchd/cron)
 
 ## Architecture
 

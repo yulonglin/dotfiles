@@ -93,6 +93,7 @@ profiles:
       - frontend-design
       - vercel
       - playwright
+      - playground
 
   full:
     comment: "Everything enabled (dotfiles, meta-work)"

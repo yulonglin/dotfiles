@@ -45,6 +45,7 @@ DEPLOY_SECRETS=true             # Sync secrets with GitHub gist
 DEPLOY_CLEANUP=true             # File cleanup: Downloads/Screenshots (macOS only)
 DEPLOY_CLAUDE_CLEANUP=true      # Claude Code idle session cleanup (both platforms)
 DEPLOY_AI_UPDATE=true           # AI tools auto-update daily (both platforms)
+DEPLOY_BREW_UPDATE=true         # Weekly package upgrade + cleanup (brew/apt/dnf/pacman)
 DEPLOY_ALIASES=()               # Additional alias scripts: ("speechmatics" "inspect")
 
 # ─── Deploy Modifiers ─────────────────────────────────────────────────────────
@@ -149,6 +150,7 @@ apply_profile() {
             DEPLOY_CLEANUP=false
             DEPLOY_CLAUDE_CLEANUP=false
             DEPLOY_AI_UPDATE=false
+            DEPLOY_BREW_UPDATE=false
             DEPLOY_SECRETS=false
             ;;
         minimal)
@@ -174,6 +176,7 @@ apply_profile() {
             DEPLOY_CLEANUP=false
             DEPLOY_CLAUDE_CLEANUP=false
             DEPLOY_AI_UPDATE=false
+            DEPLOY_BREW_UPDATE=false
             ;;
         *)
             echo "Warning: Unknown profile '$profile', using personal" >&2

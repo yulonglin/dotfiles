@@ -52,6 +52,7 @@ OPTIONS:
     --cleanup         Install file cleanup: Downloads/Screenshots (macOS only)
     --claude-cleanup  Install Claude Code session cleanup (both platforms)
     --ai-update       Install AI tools auto-update (daily, both platforms)
+    --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
@@ -592,6 +593,17 @@ if [[ "$DEPLOY_AI_UPDATE" == "true" ]]; then
         "$DOT_DIR/scripts/cleanup/setup_ai_update.sh" || log_warning "AI update setup failed"
     else
         log_warning "AI update setup script not found"
+    fi
+fi
+
+# ─── Package Auto-Update (both platforms) ────────────────────────────────────
+
+if [[ "$DEPLOY_BREW_UPDATE" == "true" ]]; then
+    log_section "INSTALLING PACKAGE AUTO-UPDATE"
+    if [[ -f "$DOT_DIR/scripts/cleanup/setup_brew_update.sh" ]]; then
+        "$DOT_DIR/scripts/cleanup/setup_brew_update.sh" || log_warning "Package update setup failed"
+    else
+        log_warning "Brew update setup script not found"
     fi
 fi
 

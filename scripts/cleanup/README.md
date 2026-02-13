@@ -291,6 +291,64 @@ launchctl list | grep update-ai-tools
 crontab -l | grep update-ai-tools
 ```
 
+## System Package Auto-Update
+
+Weekly scheduled job (Sunday 5:00 AM) that detects the system package manager and runs update + upgrade + cleanup.
+
+### Supported Package Managers
+
+| Manager | Platform | Update | Upgrade | Cleanup |
+|---------|----------|--------|---------|---------|
+| **brew** | macOS | `brew update` | `brew upgrade` | `brew cleanup --prune=30` |
+| **apt** | Debian/Ubuntu | `apt update` | `apt upgrade -y` | `apt autoremove -y` |
+| **dnf** | Fedora/RHEL | (included) | `dnf upgrade -y` | `dnf autoremove -y` |
+| **pacman** | Arch | (included) | `pacman -Syu` | — |
+
+### Features
+
+- **Cross-platform**: Auto-detects brew, apt, dnf, or pacman
+- **Lock file**: Prevents concurrent runs with PID-based stale lock detection
+- **`--dry-run`**: Preview outdated packages without executing
+- **Smart sudo**: Uses sudo only when not already root (containers are often root)
+- **PATH setup**: Handles minimal launchd/cron PATH
+
+### Manual Usage
+
+```bash
+# Preview what's outdated
+update-packages --dry-run
+
+# Run full update + upgrade + cleanup
+update-packages
+# Or use the alias:
+pkg-update
+```
+
+### Setup / Uninstall
+
+```bash
+# Install scheduled job
+scripts/cleanup/setup_brew_update.sh
+
+# Uninstall scheduled job
+scripts/cleanup/setup_brew_update.sh --uninstall
+```
+
+### Logs
+
+- **macOS**: `~/Library/Logs/com.user.update-packages.log`
+- **Linux**: `~/.update-packages.log`
+
+### Checking Job Status
+
+```bash
+# macOS
+launchctl list | grep update-packages
+
+# Linux
+crontab -l | grep update-packages
+```
+
 ## Uninstalling
 
 To completely remove all traces:

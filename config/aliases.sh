@@ -156,6 +156,7 @@ alias code='cd $CODE_DIR'
 alias writing='cd $WRITING_DIR'
 alias scratch='cd $SCRATCH_DIR'
 alias projects='cd $PROJECTS_DIR'
+alias website='cd $WRITING_DIR/yulonglin.github.io'
 
 #-------------------------------------------------------------
 # git
@@ -390,6 +391,10 @@ alias cc-all='clear-claude-code --all'
 
 # Update all AI CLI tools (delegates to update-ai-tools script)
 alias ai-update='update-ai-tools'
+
+# System package update + upgrade + cleanup (delegates to update-packages script)
+# Detects: brew (macOS), apt/dnf/pacman (Linux)
+alias pkg-update='update-packages'
 
 # Clean duplicate skills from Claude Code (plugin symlinks cause 2x entries)
 alias clean-skill-dupes='"$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"'

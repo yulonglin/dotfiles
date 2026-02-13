@@ -2,7 +2,7 @@
 
 ## Setup: Git Worktree
 
-Work on a feature branch in a separate worktree:
+Create a fresh feature branch in a worktree:
 ```bash
 git worktree add ../dotfiles-vpn -b feat/vpn-split-tunnel
 ```

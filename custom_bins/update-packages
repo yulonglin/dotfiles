@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════════════════
+# System Package Auto-Update
+# ═══════════════════════════════════════════════════════════════════════════════
+# Cross-platform: detects brew (macOS), apt, dnf, or pacman (Linux).
+# Updates index, upgrades all packages, cleans up old versions.
+# Designed to run from launchd/cron (minimal PATH).
+#
+# Usage:
+#   update-packages              # Run full update + upgrade + cleanup
+#   update-packages --dry-run    # Preview what would be upgraded
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── PATH Setup (critical for launchd/cron which have minimal PATH) ──────────
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null)" || true
+fi
+export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:$PATH"
+
+# ─── Configuration ────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+DRY_RUN=false
+LOCK_FILE="$HOME/.update-packages.lock"
+BREW_CLEANUP_PRUNE_DAYS=30
+
+# ─── Argument Parsing ─────────────────────────────────────────────────────────
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=true; shift ;;
+        -h|--help)
+            echo "Usage: update-packages [--dry-run]"
+            echo ""
+            echo "Detects system package manager and runs update + upgrade + cleanup."
+            echo "Supports: brew (macOS), apt, dnf, pacman (Linux)."
+            echo ""
+            echo "Options:"
+            echo "  --dry-run    Preview what would be upgraded (no changes)"
+            echo "  -h, --help   Show this help"
+            exit 0
+            ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+
+log() { echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] $*"; }
+log_ok() { log "✓ $*"; }
+log_err() { log "✗ $*" >&2; }
+
+# ─── Lock File (prevent concurrent runs) ──────────────────────────────────────
+
+acquire_lock() {
+    if [[ -f "$LOCK_FILE" ]]; then
+        local pid
+        pid=$(cat "$LOCK_FILE" 2>/dev/null)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            log_err "Another instance is running (PID $pid). Exiting."
+            exit 1
+        fi
+        rm -f "$LOCK_FILE"
+    fi
+    echo "$$" > "$LOCK_FILE"
+}
+
+release_lock() {
+    rm -f "$LOCK_FILE"
+}
+
+trap release_lock EXIT
+
+# ─── Privilege helper ─────────────────────────────────────────────────────────
+# Use sudo only if not already root (containers are often root)
+
+run() {
+    if [[ "$(id -u)" -eq 0 ]]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
+# ─── Package Manager Implementations ─────────────────────────────────────────
+
+update_brew() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "Would run: brew update && brew upgrade && brew cleanup --prune=$BREW_CLEANUP_PRUNE_DAYS"
+        echo ""
+        log "Currently outdated:"
+        HOMEBREW_NO_AUTO_UPDATE=1 brew outdated 2>&1 || true
+        return 0
+    fi
+
+    log "Updating Homebrew index..."
+    NONINTERACTIVE=1 brew update 2>&1
+    log_ok "Index updated"
+
+    log "Upgrading all packages..."
+    NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade 2>&1
+    log_ok "Packages upgraded"
+
+    log "Cleaning up old versions (>${BREW_CLEANUP_PRUNE_DAYS} days)..."
+    HOMEBREW_NO_AUTO_UPDATE=1 brew cleanup --prune="$BREW_CLEANUP_PRUNE_DAYS" 2>&1
+    log_ok "Cleanup complete"
+}
+
+update_apt() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "Would run: apt update && apt upgrade -y && apt autoremove -y"
+        echo ""
+        log "Upgradable packages:"
+        run apt update -qq 2>&1
+        run apt list --upgradable 2>&1 || true
+        return 0
+    fi
+
+    log "Updating apt index..."
+    run apt update -qq 2>&1
+    log_ok "Index updated"
+
+    log "Upgrading all packages..."
+    DEBIAN_FRONTEND=noninteractive run apt upgrade -y 2>&1
+    log_ok "Packages upgraded"
+
+    log "Removing unused packages..."
+    DEBIAN_FRONTEND=noninteractive run apt autoremove -y 2>&1
+    log_ok "Cleanup complete"
+}
+
+update_dnf() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "Would run: dnf upgrade -y && dnf autoremove -y"
+        echo ""
+        log "Upgradable packages:"
+        run dnf check-update 2>&1 || true  # exit code 100 = updates available
+        return 0
+    fi
+
+    log "Upgrading all packages..."
+    run dnf upgrade -y 2>&1
+    log_ok "Packages upgraded"
+
+    log "Removing unused packages..."
+    run dnf autoremove -y 2>&1
+    log_ok "Cleanup complete"
+}
+
+update_pacman() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "Would run: pacman -Syu --noconfirm"
+        echo ""
+        log "Upgradable packages:"
+        run pacman -Qu 2>&1 || true
+        return 0
+    fi
+
+    log "Upgrading all packages..."
+    run pacman -Syu --noconfirm 2>&1
+    log_ok "Packages upgraded"
+}
+
+# ─── Detect Package Manager ──────────────────────────────────────────────────
+
+detect_pkg_manager() {
+    if command -v brew &>/dev/null; then
+        echo "brew"
+    elif command -v apt &>/dev/null; then
+        echo "apt"
+    elif command -v dnf &>/dev/null; then
+        echo "dnf"
+    elif command -v pacman &>/dev/null; then
+        echo "pacman"
+    else
+        echo "unknown"
+    fi
+}
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+
+acquire_lock
+
+PKG_MANAGER=$(detect_pkg_manager)
+
+log "═══ Package Update Started ($PKG_MANAGER) ═══"
+[[ "$DRY_RUN" == "true" ]] && log "MODE: dry-run (no changes will be made)"
+
+# Continue on individual step failures
+set +e
+
+case "$PKG_MANAGER" in
+    brew)   update_brew ;;
+    apt)    update_apt ;;
+    dnf)    update_dnf ;;
+    pacman) update_pacman ;;
+    *)
+        log_err "No supported package manager found (brew/apt/dnf/pacman)"
+        exit 1
+        ;;
+esac
+
+set -e
+
+log "═══ Package Update Complete ($PKG_MANAGER) ═══"
