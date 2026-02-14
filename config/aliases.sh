@@ -52,6 +52,15 @@ claude() {
         esac
     done
 
+    # Auto-cd to git root so plansDirectory: ".claude/plans" resolves correctly
+    # Must happen before task ID generation so auto-name reflects git root, not subdir
+    local git_root
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [[ -n "$git_root" && "$PWD" != "$git_root" ]]; then
+        echo "claude: moving to git root: $git_root"
+        cd "$git_root" || true
+    fi
+
     # Generate task list ID: -t flag always overrides, otherwise keep existing or auto-generate
     if [[ -n "$task_name" ]]; then
         # Explicit -t flag: always generate fresh with custom name

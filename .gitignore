@@ -503,6 +503,9 @@ claude/plugins/install-counts-cache.json
 claude/plugins/cache/
 claude/plugins/marketplaces/
 
+# Misplaced .claude/ created when CWD != git root (plansDirectory resolves relative to CWD)
+claude/.claude/
+
 # Agent team runtime state (inboxes, configs - ephemeral per session)
 claude/teams/
 
