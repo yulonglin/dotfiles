@@ -140,6 +140,15 @@
             "command": "~/.claude/hooks/check_read_size.sh"
           }
         ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/task_force_background.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -215,8 +224,9 @@
       "docker"
     ]
   },
-  "plansDirectory": ".claude/plans",
   "alwaysThinkingEnabled": true,
+  "plansDirectory": ".claude/plans",
+  "skipDangerousModePermissionPrompt": true,
   "chrome": {
     "enabled": false
   },
