@@ -156,14 +156,6 @@
       "docker"
     ]
   },
-  "hooks": {
-    "SessionStart": [
-      {
-        "type": "command",
-        "command": "~/.claude/hooks/check_git_root.sh"
-      }
-    ]
-  },
   "alwaysThinkingEnabled": true,
   "plansDirectory": ".claude/plans",
   "skipDangerousModePermissionPrompt": true,

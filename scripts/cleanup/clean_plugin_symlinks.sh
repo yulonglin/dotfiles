@@ -53,7 +53,7 @@ while IFS= read -r -d '' link; do
 done < <(find "$SKILLS_DIR" -maxdepth 1 -type l -print0)
 
 if [[ $count -eq 0 ]]; then
-  echo "No plugin symlinks found in $SKILLS_DIR"
+  echo "Skills directory clean (no stale plugin symlinks)"
 elif $DRY_RUN; then
   echo "Would remove $count symlink(s). Run without --dry-run to execute."
 else

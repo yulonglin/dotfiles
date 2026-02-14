@@ -457,14 +457,21 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"
         fi
 
-        # Deploy context templates
-        if [[ -d "$DOT_DIR/claude/templates/contexts" ]]; then
-            mkdir -p "$HOME/.claude/templates/contexts"
-            for tmpl in "$DOT_DIR/claude/templates/contexts"/*.json; do
+        # Deploy context templates (skip if ~/.claude already points here)
+        local ctx_src="$DOT_DIR/claude/templates/contexts"
+        local ctx_dst="$HOME/.claude/templates/contexts"
+        if [[ -d "$ctx_src" ]]; then
+            mkdir -p "$ctx_dst"
+            local tmpl_count=0
+            for tmpl in "$ctx_src"/*.json(N) "$ctx_src"/*.yaml(N); do
                 [[ -f "$tmpl" ]] || continue
-                ln -sf "$tmpl" "$HOME/.claude/templates/contexts/$(basename "$tmpl")"
+                local dst="$ctx_dst/$(basename "$tmpl")"
+                # Skip if source and destination resolve to the same file (symlinked ~/.claude)
+                [[ "$(realpath "$tmpl")" == "$(realpath "$dst" 2>/dev/null)" ]] && { tmpl_count=$((tmpl_count + 1)); continue; }
+                ln -sf "$tmpl" "$dst"
+                tmpl_count=$((tmpl_count + 1))
             done
-            log_success "Context templates deployed ($(ls "$DOT_DIR/claude/templates/contexts"/*.json 2>/dev/null | wc -l | tr -d ' ') profiles)"
+            log_success "Context templates deployed ($tmpl_count files)"
         fi
 
         log_success "Claude Code configuration deployed"

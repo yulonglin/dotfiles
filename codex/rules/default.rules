@@ -121,17 +121,6 @@ prefix_rule(pattern=["bash", "-lc", "touch"], decision="allow")
 prefix_rule(pattern=["touch"], decision="allow")
 # Skipped non-Bash permission (allow): WebSearch
 # Skipped non-Bash permission (allow): WebFetch
-# Skipped non-Bash permission (allow): WebFetch(domain:gitlab.com)
-# Skipped non-Bash permission (allow): WebFetch(domain:raw.githubusercontent.com)
-# Skipped non-Bash permission (allow): WebFetch(domain:docs.astral.sh)
-# Skipped non-Bash permission (allow): WebFetch(domain:openreview.net)
-# Skipped non-Bash permission (allow): WebFetch(domain:neurips.cc)
-# Skipped non-Bash permission (allow): WebFetch(domain:iclr.cc)
-# Skipped non-Bash permission (allow): WebFetch(domain:icml.cc)
-# Skipped non-Bash permission (allow): WebFetch(domain:papers.nips.cc)
-# Skipped non-Bash permission (allow): WebFetch(domain:proceedings.mlr.press)
-# Skipped non-Bash permission (allow): WebFetch(domain:github.com)
-# Skipped non-Bash permission (allow): WebFetch(domain:api.github.com)
 # Skipped non-Bash permission (allow): Read
 # Skipped non-Bash permission (allow): Read(//tmp/claude/**)
 
