@@ -1,8 +1,0 @@
-{
-  "name": "code-toolkit",
-  "description": "Code review, debugging, performance optimization, bulk editing, and CLI delegation workflows.",
-  "version": "1.0.0",
-  "author": {
-    "name": "yulong"
-  }
-}

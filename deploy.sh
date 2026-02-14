@@ -428,24 +428,28 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
         fi
 
-        # Register local plugin marketplace and install plugins
-        if [[ -d "$DOT_DIR/claude/local-marketplace/plugins" ]] && command -v claude &>/dev/null; then
-            if ! claude plugin marketplace list 2>/dev/null | grep -q "local-marketplace"; then
-                log_info "Registering local plugin marketplace..."
-                claude plugin marketplace add "$HOME/.claude/local-marketplace" 2>/dev/null || \
-                    log_warning "Failed to register marketplace — run manually: claude plugin marketplace add $HOME/.claude/local-marketplace"
-            fi
-
-            for plugin_dir in "$DOT_DIR/claude/local-marketplace/plugins"/*/; do
-                [[ -d "$plugin_dir" ]] || continue
-                plugin_name=$(basename "$plugin_dir")
-                if ! claude plugin list 2>/dev/null | grep -q "$plugin_name@local-marketplace"; then
-                    claude plugin install "$plugin_name@local-marketplace" 2>/dev/null || \
-                        log_warning "  Failed to install $plugin_name"
+        # Register ai-safety-plugins marketplace
+        if command -v claude &>/dev/null; then
+            MARKETPLACE_REPO="${CODE_DIR:-$HOME/code}/ai-safety-plugins"
+            if [[ -d "$MARKETPLACE_REPO/.claude-plugin" ]]; then
+                # Local development — register local path (zero-friction edits)
+                if ! claude plugin marketplace list 2>/dev/null | grep -q "ai-safety-plugins"; then
+                    log_info "Registering ai-safety-plugins marketplace (local)..."
+                    claude plugin marketplace add "$MARKETPLACE_REPO" 2>/dev/null || \
+                        log_warning "Failed to register marketplace — run manually: claude plugin marketplace add $MARKETPLACE_REPO"
                 fi
-            done
-        elif ! command -v claude &>/dev/null; then
-            log_info "Claude CLI not found — run after install: claude plugin marketplace add $HOME/.claude/local-marketplace"
+            else
+                # Other machines — register GitHub URL
+                if ! claude plugin marketplace list 2>/dev/null | grep -q "ai-safety-plugins"; then
+                    log_info "Registering ai-safety-plugins marketplace (GitHub)..."
+                    claude plugin marketplace add yulonglin/ai-safety-plugins 2>/dev/null || \
+                        log_warning "Failed to register marketplace — run manually: /plugin marketplace add yulonglin/ai-safety-plugins"
+                fi
+            fi
+            # Install/update all plugins from the marketplace
+            claude plugin marketplace update ai-safety-plugins 2>/dev/null || true
+        else
+            log_info "Claude CLI not found — run after install: /plugin marketplace add yulonglin/ai-safety-plugins"
         fi
 
         # Clean plugin-created symlinks from skills/ (they cause duplicate entries)
@@ -465,7 +469,7 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
 
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
-        log_info "  Plugins: local-marketplace (research-toolkit, writing-toolkit, code-toolkit, workflow-toolkit, viz-toolkit)"
+        log_info "  Plugins: ai-safety-plugins (core-toolkit, research-toolkit, writing-toolkit, code-toolkit, workflow-toolkit, viz-toolkit)"
     else
         log_warning "Claude directory not found at $DOT_DIR/claude"
     fi

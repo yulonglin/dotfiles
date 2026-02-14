@@ -116,9 +116,10 @@ Rules:
 
 ## Plugin Organization & Context Profiles
 
-**6 always-on plugins** load in every session: superpowers, hookify, plugin-dev, commit-commands, claude-md-management, context7.
+**7 always-on plugins** load in every session: superpowers, hookify, plugin-dev, commit-commands, claude-md-management, context7, core-toolkit.
 
-**5 local-marketplace plugins** are context-specific:
+**6 ai-safety-plugins** (`github.com/yulonglin/ai-safety-plugins`):
+- `core-toolkit` — foundational agents, skills, safety hooks (always-on)
 - `research-toolkit` — experiments, evals, analysis, literature
 - `writing-toolkit` — papers, drafts, presentations, multi-critic review
 - `code-toolkit` — dev workflow, debugging, delegation, code review

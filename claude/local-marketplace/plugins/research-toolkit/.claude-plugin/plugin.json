@@ -1,8 +1,0 @@
-{
-  "name": "research-toolkit",
-  "description": "AI safety research workflows: experiment design, execution, analysis, and literature review.",
-  "version": "1.0.0",
-  "author": {
-    "name": "yulong"
-  }
-}

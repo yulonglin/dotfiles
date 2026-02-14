@@ -13,12 +13,13 @@ registry:
   claude-md-management: claude-md-management@claude-plugins-official
   context7: context7@claude-plugins-official
 
-  # Local marketplace
-  code-toolkit: code-toolkit@local-marketplace
-  research-toolkit: research-toolkit@local-marketplace
-  writing-toolkit: writing-toolkit@local-marketplace
-  workflow-toolkit: workflow-toolkit@local-marketplace
-  viz-toolkit: viz-toolkit@local-marketplace
+  # AI safety plugins marketplace
+  core-toolkit: core-toolkit@ai-safety-plugins
+  code-toolkit: code-toolkit@ai-safety-plugins
+  research-toolkit: research-toolkit@ai-safety-plugins
+  writing-toolkit: writing-toolkit@ai-safety-plugins
+  workflow-toolkit: workflow-toolkit@ai-safety-plugins
+  viz-toolkit: viz-toolkit@ai-safety-plugins
 
   # Official plugins
   Notion: Notion@claude-plugins-official
@@ -52,6 +53,7 @@ base:
   - commit-commands
   - claude-md-management
   - context7
+  - core-toolkit
 
 # Profiles — only list what they ENABLE beyond base
 profiles:

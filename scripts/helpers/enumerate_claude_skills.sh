@@ -7,7 +7,7 @@
 #   1. User skills (real directories in claude/skills/)
 #   2. Standalone skill files (*.md directly in claude/skills/, not in dirs)
 #   3. Plugin skills from marketplaces/ (canonical, git-cloned, always latest)
-#   4. Plugin skills from cache/local-marketplace/ (user's custom plugins)
+#   4. Plugin skills from cache/ai-safety-plugins/ (user's custom plugins)
 #   5. Plugin skills from remaining cache/ dirs (versioned snapshots, may be stale)
 #   6. Agent skills (claude/agents/*.md, wrapped as skills)
 #
@@ -53,10 +53,10 @@ _enumerate_raw() {
         done
     fi
 
-    # 4. Plugin skills from cache/local-marketplace/ (user custom plugins)
-    local local_mp_cache="$claude_dir/plugins/cache/local-marketplace"
-    if [ -d "$local_mp_cache" ]; then
-        find "$local_mp_cache" -name "SKILL.md" -type f 2>/dev/null | while IFS= read -r skill_md; do
+    # 4. Plugin skills from cache/ai-safety-plugins/ (user custom plugins)
+    local custom_mp_cache="$claude_dir/plugins/cache/ai-safety-plugins"
+    if [ -d "$custom_mp_cache" ]; then
+        find "$custom_mp_cache" -name "SKILL.md" -type f 2>/dev/null | while IFS= read -r skill_md; do
             local skill_dir name
             skill_dir=$(dirname "$skill_md")
             name=$(basename "$skill_dir")
@@ -71,8 +71,8 @@ _enumerate_raw() {
             [ -d "$subdir" ] || continue
             local subdir_name
             subdir_name=$(basename "$subdir")
-            # Skip local-marketplace (already handled above)
-            [ "$subdir_name" = "local-marketplace" ] && continue
+            # Skip ai-safety-plugins (already handled above)
+            [ "$subdir_name" = "ai-safety-plugins" ] && continue
             find "$subdir" -name "SKILL.md" -type f 2>/dev/null | while IFS= read -r skill_md; do
                 local skill_dir name
                 skill_dir=$(dirname "$skill_md")

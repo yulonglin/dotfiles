@@ -99,75 +99,6 @@
     ],
     "defaultMode": "plan"
   },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/auto_log.sh START",
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/check_secrets.sh"
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/check_pipe_buffering.sh"
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/check_destructive_commands.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/auto_background.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/check_read_size.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/task_force_background.sh"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/auto_log.sh END",
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/truncate_output.sh"
-          }
-        ]
-      }
-    ]
-  },
   "statusLine": {
     "type": "command",
     "command": "~/.claude/statusline.sh",
@@ -180,11 +111,12 @@
     "commit-commands@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
-    "research-toolkit@local-marketplace": false,
-    "writing-toolkit@local-marketplace": false,
-    "code-toolkit@local-marketplace": false,
-    "workflow-toolkit@local-marketplace": false,
-    "viz-toolkit@local-marketplace": false,
+    "core-toolkit@ai-safety-plugins": true,
+    "research-toolkit@ai-safety-plugins": false,
+    "writing-toolkit@ai-safety-plugins": false,
+    "code-toolkit@ai-safety-plugins": false,
+    "workflow-toolkit@ai-safety-plugins": false,
+    "viz-toolkit@ai-safety-plugins": false,
     "Notion@claude-plugins-official": false,
     "figma@claude-plugins-official": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,

@@ -101,20 +101,13 @@ claude/                   # Symlinked to ~/.claude/
 ├── settings.json         # Claude Code settings
 ├── output-styles/        # Custom output styles (10x-mentor: 4-track growth coaching)
 ├── rules/                # Auto-loaded behavioral rules (safety, workflow, conventions)
-├── agents/               # Global agents (efficient-explorer, context-summariser, gemini)
-├── skills/               # Global skills (commit, custom-compact, fast-cli, etc.)
-├── local-marketplace/    # Local plugin marketplace (filesystem-based)
-│   ├── .claude-plugin/marketplace.json  # Marketplace manifest
-│   └── plugins/
-│       ├── research-toolkit/ # Experiment design, execution, analysis, literature
-│       ├── writing-toolkit/  # Papers, drafts, presentations, multi-critic review
-│       ├── code-toolkit/     # Dev workflow, debugging, delegation, code review
-│       ├── workflow-toolkit/ # Agent teams, handover, conversation mgmt, analytics
-│       └── viz-toolkit/      # TikZ diagrams, Anthropic-style visualization
+├── agents/               # Personal agents (llm-billing)
+├── skills/               # Personal skills (commit, anthropic-style, etc.)
+├── local-marketplace -> ~/code/ai-safety-plugins  # Symlink to marketplace repo
 ├── plugins/              # Plugin runtime (cache, installed_plugins.json)
 ├── docs/                 # On-demand knowledge (research, async, tmux, agent teams, etc.)
 ├── ai_docs -> docs       # Permanent backwards-compat symlink
-├── hooks/                # Hook scripts (auto_log.sh, notify.sh)
+├── hooks/                # Personal hook scripts (agent_spawned.sh, pre_session_start.sh)
 ├── templates/            # Templates for specs, reports, context profiles
 │   └── contexts/         # profiles.yaml (plugin registry + profile definitions)
 ├── projects/             # Project-specific settings overrides

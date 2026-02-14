@@ -40,10 +40,5 @@
 
 # AUTO-GENERATED: SKILL.md symlinks with non-portable absolute paths (do not edit manually)
 # Updated by scripts/hooks/dotfiles-pre-commit.sh
-context-summariser/SKILL.md
-docs-search/SKILL.md
-efficient-explorer/SKILL.md
-gemini-cli/SKILL.md
 llm-billing/SKILL.md
-task-management/SKILL.md
 # END AUTO-GENERATED
