@@ -8,7 +8,10 @@ if command -v eza &> /dev/null; then
     alias ll='eza -l --git'                     # Long format with git status indicators
     alias la='eza -la --git'                    # Show all files including hidden, with git status
     alias lt='eza -l --sort=modified --reverse' # Sort by modification time, newest first
-    alias tree='eza --tree'                     # Tree view of directories
+    alias tree='eza --tree --icons --git-ignore' # Tree view with icons, respects .gitignore
+    alias t1='eza --tree --level=1'              # 1-level tree
+    alias t2='eza --tree --level=2'              # 2-level tree
+    alias t3='eza --tree --level=3'              # 3-level tree
 fi
 
 # bat: Enhanced file viewer with syntax highlighting
@@ -202,6 +205,22 @@ dirsize() {
 # zoxide init is in zshrc.sh
 
 #-------------------------------------------------------------
+# dust: Modern du replacement with visual size breakdown
+if command -v dust &> /dev/null; then
+    alias du='dust'
+    alias usage='dust'
+fi
+
+# duf: Modern df replacement with color table
+if command -v duf &> /dev/null; then
+    alias df='duf'
+fi
+
+# htop: Better top replacement
+if command -v htop &> /dev/null; then
+    alias top='htop'
+fi
+
 # delta: Better diffs with syntax highlighting
 #-------------------------------------------------------------
 # delta is configured in gitconfig for git operations

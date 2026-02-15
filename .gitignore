@@ -506,6 +506,9 @@ claude/plugins/marketplaces/
 # Misplaced .claude/ created when CWD != git root (plansDirectory resolves relative to CWD)
 claude/.claude/
 
+# Usage data (analytics facets, session metadata - machine-specific, large)
+claude/usage-data/
+
 # Agent team runtime state (inboxes, configs - ephemeral per session)
 claude/teams/
 

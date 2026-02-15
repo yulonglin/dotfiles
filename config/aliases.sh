@@ -242,11 +242,10 @@ alias lu='ls -ltur'       # sort by and show access time, most recent last
 alias lt='ls -ltr'        # sort by date, most recent last
 alias lm='ls -al |more'   # pipe through 'more'
 alias lr='ls -lR'         # recursive ls
-# tree using eza (better git integration, colors)
-alias tree='eza --tree --icons --git-ignore'
-alias t1='eza --tree --level=1'
-alias t2='eza --tree --level=2'
-alias t3='eza --tree --level=3'
+# tree aliases (eza overrides in modern_tools.sh when available)
+alias t1='tree -L 1'
+alias t2='tree -L 2'
+alias t3='tree -L 3'
 
 #-------------------------------------------------------------
 # chmod
@@ -407,17 +406,6 @@ alias pkg-update='update-packages'
 
 # Clean duplicate skills from Claude Code (plugin symlinks cause 2x entries)
 alias clean-skill-dupes='"$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"'
-
-# # -------------------------------------------------------------------
-# # Better utils: https://www.lesswrong.com/posts/6P8GYb4AjtPXx6LLB/tips-and-code-for-empirical-research-workflows
-# # -------------------------------------------------------------------
-# alias grep='rg'    # use ripgrep as grep
-# alias du='dust'    # use dust as du
-# alias df='duf'     # use duf as df
-# # alias cat='bat'    # use bat as cat (commenting this out since the lines in bat can be annoying for parsing and copying)
-# alias find='fd'    # use fd as find
-# alias ls='eza'     # use eza as ls
-
 
 alias fda='fd -HI'  # fd all (include hidden + gitignored)
 
