@@ -93,6 +93,7 @@ Reference material in `~/.claude/docs/` — loaded by skills when relevant, NOT 
 - `docs/documentation-lookup.md` — Context7, GitHub CLI, verified repos, decision tree
 - `docs/environment-setup.md` — Agent spawning fix, machine setup
 - `docs/visual-layout-quality.md` — CSS spacing safety net, cross-domain layout principles, anti-patterns
+- `docs/apollo-eval-types.md` — Apollo Research eval taxonomy (scheming, situational awareness, corrigibility)
 
 ---
 
