@@ -142,7 +142,7 @@
   },
   "outputStyle": "10x Mentor",
   "sandbox": {
-    "enabled": true,
+    "enabled": false,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": true,
     "network": {
@@ -163,5 +163,6 @@
     "enabled": false
   },
   "teammateMode": "auto",
-  "installMethod": "native"
+  "installMethod": "native",
+  "autoUpdatesChannel": "latest"
 }
