@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Launch gpt-4o experiments (base + escalation + audit)",
+  "description": "Run 3 concurrent gpt-4o experiments: base (20 samples), escalation (20), supervisor audit (20)",
+  "activeForm": "Launching gpt-4o experiments",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "Add validate_sample() to score.py and call from eval.py",
+  "description": "Add validation function checking: exactly 0 or 1 projects cancelled, audit classification edge cases, A > B when honest_checklist=True, keyword matching failures. Call from eval.py after scoring.",
+  "activeForm": "Adding validation checks",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

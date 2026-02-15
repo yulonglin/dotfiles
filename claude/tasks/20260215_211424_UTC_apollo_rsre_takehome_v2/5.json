@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "Spot-check supervisor audit transcripts",
+  "description": "Read 3 transcripts from logs/20260113_200923/ (supervisor audit run), verify audit_classification matches actual model behavior, document findings",
+  "activeForm": "Spot-checking audit transcripts",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

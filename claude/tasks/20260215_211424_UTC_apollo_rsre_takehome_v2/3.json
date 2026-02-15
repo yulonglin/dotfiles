@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Enhance DESIGN_NOTES.md with missing sections",
+  "description": "Add: threat model, scheming literature connection, alternatives considered, measurement validity concerns (keyword scoring brittleness), key findings headline, what a stronger version would look like",
+  "activeForm": "Enhancing DESIGN_NOTES.md",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

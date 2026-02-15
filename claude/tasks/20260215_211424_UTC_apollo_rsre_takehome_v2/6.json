@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "Update research_report.tex with model comparison and validity sections",
+  "description": "Add model comparison table (O3 vs gpt-4o), design rationale section, strengthen limitations with ceiling effect, add measurement validity subsection. Depends on experiments completing.",
+  "activeForm": "Updating research report",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
