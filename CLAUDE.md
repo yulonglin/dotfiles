@@ -103,7 +103,7 @@ claude/                   # Symlinked to ~/.claude/
 ├── rules/                # Auto-loaded behavioral rules (safety, workflow, conventions)
 ├── agents/               # Personal agents (llm-billing)
 ├── skills/               # Personal skills (commit, anthropic-style, etc.)
-├── local-marketplace -> ~/code/ai-safety-plugins  # Symlink to marketplace repo
+├── ai-safety-plugins -> ~/code/ai-safety-plugins  # Symlink to marketplace repo
 ├── plugins/              # Plugin runtime (cache, installed_plugins.json)
 ├── docs/                 # On-demand knowledge (research, async, tmux, agent teams, etc.)
 ├── ai_docs -> docs       # Permanent backwards-compat symlink

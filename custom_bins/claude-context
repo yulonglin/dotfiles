@@ -121,12 +121,6 @@ def apply_to_settings(enabled_plugins):
             except json.JSONDecodeError:
                 pass
 
-    # Preserve unknown plugins from existing settings
-    old_plugins = existing.get("enabledPlugins", {})
-    for qid, val in old_plugins.items():
-        if qid not in enabled_plugins:
-            enabled_plugins[qid] = val
-
     existing["enabledPlugins"] = enabled_plugins
 
     # Atomic write

@@ -34,7 +34,7 @@ The enumerate helper (`scripts/helpers/enumerate_claude_skills.sh`) emits skills
 1. **User skills** — highest priority (your custom skills always win)
 2. **Standalone skills** — `.md` files directly in `skills/`
 3. **Plugin skills from `marketplaces/`** — canonical, git-cloned, always latest
-4. **Plugin skills from `cache/local-marketplace/`** — user's custom plugins
+4. **Plugin skills from `cache/ai-safety-plugins/`** — user's custom plugins
 5. **Plugin skills from remaining `cache/`** — versioned snapshots (may be stale)
 6. **Agent skills** — lowest priority
 
