@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# claude-cache-link — Symlink local plugin cache dirs to source repos.
+#
+# Replaces cache version dirs with symlinks so edits to the source repo
+# are immediately live. Similar to `npm link` for Claude Code plugins.
+#
+# After `claude plugin update` or `claude plugin install`, re-run this
+# script to restore the symlinks (those commands recreate real dirs).
+#
+# Usage:
+#   claude-cache-link           # Dry run — show what would be linked
+#   claude-cache-link --apply   # Create symlinks
+
+set -euo pipefail
+
+CACHE_DIR="${HOME}/.claude/plugins/cache"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+DRY_RUN=true
+[[ "${1:-}" == "--apply" ]] && DRY_RUN=false
+
+# Registry: marketplace → source root
+# Add entries here for any local plugin repos you develop
+declare -A LOCAL_SOURCES=(
+  ["ai-safety-plugins"]="${CODE_DIR:-${HOME}/code}/ai-safety-plugins/plugins"
+)
+
+already_linked=0
+pending=0
+skipped=0
+errors=0
+
+echo -e "${CYAN}Plugin cache linker${NC}"
+echo ""
+
+for marketplace in "${!LOCAL_SOURCES[@]}"; do
+  source_root="${LOCAL_SOURCES[$marketplace]}"
+  cache_marketplace="${CACHE_DIR}/${marketplace}"
+
+  if [[ ! -d "$cache_marketplace" ]]; then
+    echo -e "  ${YELLOW}SKIP${NC} ${marketplace} — not in cache"
+    continue
+  fi
+
+  if [[ ! -d "$source_root" ]]; then
+    echo -e "  ${RED}ERROR${NC} ${marketplace} — source not found: ${source_root}"
+    ((errors++)) || true
+    continue
+  fi
+
+  for plugin_dir in "$cache_marketplace"/*/; do
+    [[ -d "$plugin_dir" ]] || continue
+    plugin=$(basename "$plugin_dir")
+    source_plugin="${source_root}/${plugin}"
+
+    if [[ ! -d "$source_plugin" ]]; then
+      echo -e "  ${YELLOW}SKIP${NC} ${marketplace}/${plugin} — no source (stale cache?)"
+      ((skipped++)) || true
+      continue
+    fi
+
+    for version_dir in "$plugin_dir"*/; do
+      [[ -d "$version_dir" || -L "$version_dir" ]] || continue
+      version_path="${version_dir%/}"
+      version=$(basename "$version_path")
+
+      if [[ -L "$version_path" ]]; then
+        target=$(readlink "$version_path")
+        echo -e "  ${GREEN}LINKED${NC} ${marketplace}/${plugin}/${version} → ${target}"
+        ((already_linked++)) || true
+        continue
+      fi
+
+      if $DRY_RUN; then
+        echo -e "  ${YELLOW}WOULD LINK${NC} ${marketplace}/${plugin}/${version} → ${source_plugin}"
+      else
+        rm -rf "$version_path"
+        ln -s "$source_plugin" "$version_path"
+        echo -e "  ${GREEN}LINKED${NC} ${marketplace}/${plugin}/${version} → ${source_plugin}"
+      fi
+      ((pending++)) || true
+    done
+  done
+done
+
+echo ""
+if $DRY_RUN; then
+  echo -e "${GREEN}Already linked: ${already_linked}${NC}  ${YELLOW}Pending: ${pending}${NC}  ${YELLOW}Skipped: ${skipped}${NC}  ${RED}Errors: ${errors}${NC}"
+  if [[ $pending -gt 0 ]]; then
+    echo ""
+    echo -e "${YELLOW}Run 'claude-cache-link --apply' to create symlinks${NC}"
+  fi
+else
+  echo -e "${GREEN}Linked: $((already_linked + pending))${NC}  ${YELLOW}Skipped: ${skipped}${NC}  ${RED}Errors: ${errors}${NC}"
+fi
