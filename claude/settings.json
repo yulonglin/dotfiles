@@ -142,7 +142,7 @@
   },
   "outputStyle": "10x Mentor",
   "sandbox": {
-    "enabled": false,
+    "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": true,
     "network": {
