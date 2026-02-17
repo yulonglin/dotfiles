@@ -14,8 +14,8 @@ On-demand reference for visual output quality. Loaded by skills, not auto-loaded
 | Domain | Primary guide | Gap-filling guidance |
 |--------|--------------|---------------------|
 | **HTML/CSS** | ui-ux-pro-max plugin (Layout & Spacing, Pre-Delivery Checklist) | This doc (safety net when ui-ux-pro-max not loaded) |
-| **TikZ** | viz-toolkit → tikz-diagrams (Spacing Quick Reference, Arrow Routing Rules) | — |
-| **Slidev** | writing-toolkit → fix-slide | — |
+| **TikZ** | viz → tikz-diagrams (Spacing Quick Reference, Arrow Routing Rules) | — |
+| **Slidev** | writing → fix-slide | — |
 | **matplotlib** | `docs/petri-plotting.md`, anthropic.mplstyle | — |
 
 ## CSS Spacing Safety Net

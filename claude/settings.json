@@ -101,7 +101,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/statusline.sh",
+    "command": "claude-tools statusline",
     "padding": 1
   },
   "enabledPlugins": {
@@ -111,12 +111,12 @@
     "commit-commands@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
-    "core-toolkit@ai-safety-plugins": true,
-    "research-toolkit@ai-safety-plugins": false,
-    "writing-toolkit@ai-safety-plugins": false,
-    "code-toolkit@ai-safety-plugins": false,
-    "workflow-toolkit@ai-safety-plugins": false,
-    "viz-toolkit@ai-safety-plugins": false,
+    "core@ai-safety-plugins": true,
+    "research@ai-safety-plugins": false,
+    "writing@ai-safety-plugins": false,
+    "code@ai-safety-plugins": false,
+    "workflow@ai-safety-plugins": false,
+    "viz@ai-safety-plugins": false,
     "Notion@claude-plugins-official": false,
     "figma@claude-plugins-official": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,

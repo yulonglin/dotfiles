@@ -384,6 +384,21 @@ if [[ "$DEPLOY_MATPLOTLIB" == "true" ]]; then
     fi
 fi
 
+# ─── claude-tools (Rust binary) ───────────────────────────────────────────────
+
+if [[ -f "$DOT_DIR/tools/claude-tools/Cargo.toml" ]]; then
+    if cmd_exists cargo; then
+        log_info "Building claude-tools..."
+        (cd "$DOT_DIR/tools/claude-tools" && cargo build --release --quiet 2>&1) && {
+            cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/claude-tools"
+            chmod +x "$DOT_DIR/custom_bins/claude-tools"
+            log_success "claude-tools built and deployed to custom_bins/"
+        } || log_warning "claude-tools build failed (bash fallback will be used)"
+    else
+        log_info "Rust not installed — skipping claude-tools build (bash fallback will be used)"
+    fi
+fi
+
 # ─── Claude Code ──────────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
@@ -477,7 +492,7 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
 
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
-        log_info "  Plugins: ai-safety-plugins (core-toolkit, research-toolkit, writing-toolkit, code-toolkit, workflow-toolkit, viz-toolkit)"
+        log_info "  Plugins: ai-safety-plugins (core, research, writing, code, workflow, viz)"
     else
         log_warning "Claude directory not found at $DOT_DIR/claude"
     fi

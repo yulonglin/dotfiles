@@ -363,4 +363,4 @@ User feedback channel (TBD): Submit false positives, missed patterns, or refinem
 This pattern set will evolve based on:
 - User feedback on accuracy
 - New LLM releases and their characteristic patterns
-- Integration feedback from writing-toolkit users
+- Integration feedback from writing plugin users

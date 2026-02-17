@@ -27,17 +27,17 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 | Agent | Use Case | Strength |
 |-------|----------|----------|
 | **gemini-cli** | Large context analysis (>100KB) | 1M+ token window, PDFs, entire codebases |
-| **code-toolkit:codex** | Well-scoped implementation | Fast, precise, follows specs exactly |
-| **code-toolkit:claude** | Judgment-heavy tasks | Taste, tool use, MCP access, nuanced reasoning |
+| **core:codex** | Well-scoped implementation | Fast, precise, follows specs exactly |
+| **core:claude** | Judgment-heavy tasks | Taste, tool use, MCP access, nuanced reasoning |
 
 ```
 Need delegation?
 ├─ Large context (PDF, codebase)? → gemini-cli
-├─ Plan needs critique? → code-toolkit:plan-critic (+ code-toolkit:claude in parallel)
-├─ Clear implementation spec/plan? → code-toolkit:codex
-├─ Bug with clear repro? → code-toolkit:codex (+ debugger for investigation)
-├─ Need judgment/taste? → code-toolkit:claude
-├─ Code review needed? → code-toolkit:code-reviewer (+ code-toolkit:codex-reviewer for significant changes)
+├─ Plan needs critique? → code:plan-critic (+ core:claude in parallel)
+├─ Clear implementation spec/plan? → core:codex
+├─ Bug with clear repro? → core:codex (+ debugger for investigation)
+├─ Need judgment/taste? → core:claude
+├─ Code review needed? → code:code-reviewer (+ code:codex-reviewer for significant changes)
 └─ Multi-step workflow? → Use skills
 ```
 

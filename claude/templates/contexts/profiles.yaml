@@ -12,15 +12,15 @@ base:
   - commit-commands
   - claude-md-management
   - context7
-  - core-toolkit
+  - core
 
 # Profiles — only list what they ENABLE beyond base
 profiles:
   code:
     comment: "Software projects"
     enable:
-      - code-toolkit
-      - workflow-toolkit
+      - code
+      - workflow
       - coderabbit
       - code-simplifier
       - security-guidance
@@ -30,25 +30,25 @@ profiles:
   research:
     comment: "Experiments, evals, analysis"
     enable:
-      - research-toolkit
-      - writing-toolkit
-      - workflow-toolkit
-      - viz-toolkit
+      - research
+      - writing
+      - workflow
+      - viz
       - Notion
 
   writing:
     comment: "Papers, blog posts, documentation"
     enable:
-      - writing-toolkit
-      - viz-toolkit
-      - workflow-toolkit
+      - writing
+      - viz
+      - workflow
       - Notion
 
   design:
     comment: "Frontend, visualizations, web"
     enable:
-      - code-toolkit
-      - viz-toolkit
+      - code
+      - viz
       - figma
       - ui-ux-pro-max
       - frontend-design
@@ -59,11 +59,11 @@ profiles:
   full:
     comment: "Everything enabled (dotfiles, meta-work)"
     enable:
-      - research-toolkit
-      - writing-toolkit
-      - code-toolkit
-      - workflow-toolkit
-      - viz-toolkit
+      - research
+      - writing
+      - code
+      - workflow
+      - viz
       - Notion
       - coderabbit
       - code-simplifier

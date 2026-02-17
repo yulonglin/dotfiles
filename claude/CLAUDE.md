@@ -117,15 +117,15 @@ Rules:
 
 ## Plugin Organization & Context Profiles
 
-**7 always-on plugins** load in every session: superpowers, hookify, plugin-dev, commit-commands, claude-md-management, context7, core-toolkit.
+**7 always-on plugins** load in every session: superpowers, hookify, plugin-dev, commit-commands, claude-md-management, context7, core.
 
 **6 ai-safety-plugins** (`github.com/yulonglin/ai-safety-plugins`):
-- `core-toolkit` — foundational agents, skills, safety hooks (always-on)
-- `research-toolkit` — experiments, evals, analysis, literature
-- `writing-toolkit` — papers, drafts, presentations, multi-critic review
-- `code-toolkit` — dev workflow, debugging, delegation, code review
-- `workflow-toolkit` — agent teams, handover, conversation management, analytics
-- `viz-toolkit` — TikZ diagrams, Anthropic-style visualization
+- `core` — foundational agents, skills, safety hooks (always-on)
+- `research` — experiments, evals, analysis, literature
+- `writing` — papers, drafts, presentations, multi-critic review
+- `code` — dev workflow, debugging, delegation, code review
+- `workflow` — agent teams, handover, conversation management, analytics
+- `viz` — TikZ diagrams, Anthropic-style visualization
 
 **Context profiles** control which plugins load per-project via `claude-context`:
 ```bash
