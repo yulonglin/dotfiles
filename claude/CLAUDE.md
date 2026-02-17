@@ -133,7 +133,7 @@ claude-context                    # Show current state / apply context.yaml
 claude-context code               # Software projects
 claude-context code web python    # Compose multiple profiles
 claude-context --list             # Show active plugins and available profiles
-claude-context --reset            # Clear project plugin config
+claude-context --clean            # Remove project plugin config
 ```
 
 **Architecture:**

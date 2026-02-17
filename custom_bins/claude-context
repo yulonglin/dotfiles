@@ -9,7 +9,7 @@ Usage:
     claude-context                       Show current state / apply context.yaml
     claude-context <profile> [profiles]  Apply profiles, persist to context.yaml
     claude-context --list                Show active plugins and available profiles
-    claude-context --reset               Remove project plugin config
+    claude-context --clean                  Remove project plugin config
     claude-context --help                Show this help
 """
 
@@ -354,12 +354,12 @@ def reset():
 def main():
     parser = argparse.ArgumentParser(
         description="YAML-driven plugin profiles for Claude Code",
-        usage="claude-context [<profile> ...] [--list] [--reset]",
+        usage="claude-context [<profile> ...] [--list] [--clean]",
         add_help=False,
     )
     parser.add_argument("profiles", nargs="*", help="Profile names to apply")
     parser.add_argument("--list", action="store_true", help="Show active plugins and available profiles")
-    parser.add_argument("--reset", action="store_true", help="Remove project plugin config")
+    parser.add_argument("--clean", "--reset", action="store_true", dest="clean", help="Remove project plugin config")
     parser.add_argument("-h", "--help", action="store_true", help="Show help")
 
     args = parser.parse_args()
@@ -383,7 +383,7 @@ def main():
 
     if args.list:
         show_status()
-    elif args.reset:
+    elif args.clean:
         reset()
     elif args.profiles:
         apply_profiles_cmd(args.profiles)
