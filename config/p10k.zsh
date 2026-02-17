@@ -1717,31 +1717,14 @@
     51   # bright blue
   )
 
-  # Emoji palette for remote_host segment
-  local -a emoji_palette=(
-    "🚀"  # rocket
-    "💻"  # laptop
-    "🖥️"  # desktop
-    "⚡"  # lightning
-    "🔥"  # fire
-    "🌟"  # star
-    "🎯"  # target
-    "🧠"  # brain
-    "🛸"  # UFO
-    "🌊"  # wave
-    "🎨"  # palette
-    "🔮"  # crystal ball
-  )
-
-  # Get SSH alias and hash it for color/emoji selection
+  # Get SSH alias and hash it for color selection
+  # (Emoji selection is handled by machine-name script — single source of truth)
   local machine_name=$(_get_ssh_alias)
   local host_hash=$(( 0x$(echo -n "$machine_name" | md5sum 2>/dev/null | cut -c1-8 || echo "0") ))
   local color_index=$(( (host_hash % ${#color_palette[@]}) + 1 ))
-  local emoji_index=$(( ((host_hash / ${#color_palette[@]}) % ${#emoji_palette[@]}) + 1 ))
 
-  # Select color and emoji for this machine
+  # Select color for this machine
   local machine_color=${color_palette[$color_index]}
-  typeset -g MACHINE_EMOJI=${emoji_palette[$emoji_index]}
 
   # Apply machine-specific color to key segments
   typeset -g POWERLEVEL9K_OS_ICON_FOREGROUND=$machine_color

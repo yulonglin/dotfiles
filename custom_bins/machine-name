@@ -6,12 +6,13 @@
 # - config/p10k.zsh (prompt_remote_host)
 # - claude/statusline.sh (machine info display)
 #
-# Output format: "EMOJI NAME" (e.g., "🛜 hetzner-1")
+# Output format: "EMOJI NAME" (e.g., "🚀 hetzner-1")
 # Outputs nothing if not in SSH session.
+# Each machine gets a unique emoji based on its name hash.
 #
 # Environment variables:
 # - SERVER_NAME: Override the machine name entirely
-# - MACHINE_EMOJI: Override the default emoji (🛜)
+# - MACHINE_EMOJI: Override the emoji (otherwise auto-assigned per machine)
 #
 # Priority for name resolution:
 # 1. $SERVER_NAME env var
@@ -24,7 +25,6 @@
 # Exit early if not in SSH session
 [[ -z "$SSH_CONNECTION" ]] && exit 0
 
-icon="${MACHINE_EMOJI:-🛜}"
 hostname="${HOST:-$(hostname -s)}"
 short_name=""
 
@@ -100,6 +100,28 @@ if [[ -z "$short_name" ]]; then
   else
     short_name="$hostname"
   fi
+fi
+
+# Select emoji per-machine: use explicit override, or hash name into palette
+if [[ -n "$MACHINE_EMOJI" ]]; then
+  icon="$MACHINE_EMOJI"
+else
+  local_emojis=(
+    "🚀" "💻" "🖥️" "⚡" "🔥" "🌟" "🎯" "🧠" "🛸" "🌊" "🎨" "🔮"
+    "🦊" "🐙" "🦅" "🐋" "🐺" "🦈" "🦉" "🐝"
+    "🌵" "🍄" "🌶️" "🌻" "🍀" "🌴"
+    "⛏️" "🔧" "🧲" "💎" "🗡️" "🛡️"
+  )
+  # Hash the machine name for a stable emoji assignment
+  if command -v md5sum >/dev/null 2>&1; then
+    hash_val=$(echo -n "$short_name" | md5sum | cut -c1-8)
+  elif command -v md5 >/dev/null 2>&1; then
+    hash_val=$(echo -n "$short_name" | md5 | cut -c1-8)
+  else
+    hash_val="0"
+  fi
+  idx=$(( 16#$hash_val % ${#local_emojis[@]} ))
+  icon="${local_emojis[$idx]}"
 fi
 
 echo "$icon $short_name"

@@ -318,13 +318,16 @@ sync-secrets
 When SSH'd to a remote machine, the prompt shows a **consistent machine name** derived from your SSH config:
 
 ```
-🛜 mats ~/code/project (main)                   # Instead of: user@ip-172-31-42-17
+🌊 mats ~/code/project (main)                   # Instead of: user@ip-172-31-42-17
 ```
+
+Each machine gets a **unique emoji** based on its name hash, so you can visually distinguish machines at a glance.
 
 **How it works:**
 1. Looks up your public IP against `~/.ssh/config` `HostName` entries
 2. Uses the matching `Host` alias as the display name
 3. Falls back to abbreviated hostname if no match
+4. Hashes the name to assign a stable emoji from a curated palette
 
 **Example SSH config:**
 ```
@@ -337,18 +340,18 @@ Host hetzner-gpu
     User root
 ```
 
-SSH to `203.0.113.42` → prompt shows `🛜 mats` instead of the IP or hostname.
+SSH to `203.0.113.42` → prompt shows `🌊 mats` instead of the IP or hostname.
 
 **Customization:**
 - `SERVER_NAME` env var overrides everything
-- `MACHINE_EMOJI` env var changes the icon (default: 🛜)
+- `MACHINE_EMOJI` env var overrides the auto-assigned emoji
 
 ### Claude Code Statusline
 
 Claude Code displays a custom statusline with session info. Configuration: `claude/statusline.sh`
 
 ```
-🛜 mats ~/code/project (main*) +12,-3 · 📊 45% · $0.23
+🌊 mats ~/code/project (main*) +12,-3 · 📊 45% · $0.23
 │        │              │      │        │        └─ Session cost
 │        │              │      │        └─ Context usage (color-coded)
 │        │              │      └─ Git insertions/deletions
