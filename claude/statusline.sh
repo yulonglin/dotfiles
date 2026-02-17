@@ -49,6 +49,33 @@ if [ -n "$SSH_CONNECTION" ]; then
 fi
 
 # ============================================================================
+# CONTEXT PROFILES (from context.yaml if present)
+# ============================================================================
+context_profiles=""
+if [ -f "$cwd/.claude/context.yaml" ]; then
+    # Extract profile names from YAML using awk (no pyyaml dependency)
+    # Handles both block style ("- code\n- python") and flow style ("[code, python]")
+    profiles=$(awk '
+/^profiles:/ {
+    if (index($0, "[") > 0) {
+        s = $0; gsub(/.*\[/, "", s); gsub(/\].*/, "", s)
+        gsub(/,/, " ", s); gsub(/^ +| +$/, "", s); print s; exit
+    }
+    result = ""
+    while ((getline line) > 0) {
+        if (line ~ /^- /) {
+            sub(/^- /, "", line)
+            result = result (result ? " " : "") line
+        } else break
+    }
+    print result; exit
+}' "$cwd/.claude/context.yaml" 2>/dev/null)
+    if [ -n "$profiles" ]; then
+        context_profiles="[$(printf "\033[36m")${profiles}$(printf "\033[0m")] "
+    fi
+fi
+
+# ============================================================================
 # DIRECTORY PATH (full path, ~ for HOME)
 # ============================================================================
 if [ "$cwd" = "$HOME" ]; then
@@ -188,4 +215,4 @@ fi
 # ============================================================================
 # OUTPUT FORMATTED STATUS LINE
 # ============================================================================
-printf "%s\033[2m\033[36m%s\033[0m%s%s%s" "$machine_info" "$dir" "$git_info" "$context_info" "$cost_info"
+printf "%s%s\033[2m\033[36m%s\033[0m%s%s%s" "$machine_info" "$context_profiles" "$dir" "$git_info" "$context_info" "$cost_info"

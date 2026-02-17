@@ -1,49 +1,8 @@
-# profiles.yaml — Single source of truth for Claude Code plugin profiles.
+# profiles.yaml — composable plugin profiles for Claude Code.
 #
-# Short name → qualified plugin ID (registry)
+# Registry is auto-discovered from installed_plugins.json.
 # base → always-on plugins (never repeated in profiles)
 # profiles → only list what they ENABLE beyond base
-
-registry:
-  # Always-on (base)
-  superpowers: superpowers@claude-plugins-official
-  hookify: hookify@claude-plugins-official
-  plugin-dev: plugin-dev@claude-plugins-official
-  commit-commands: commit-commands@claude-plugins-official
-  claude-md-management: claude-md-management@claude-plugins-official
-  context7: context7@claude-plugins-official
-
-  # AI safety plugins marketplace
-  core-toolkit: core-toolkit@ai-safety-plugins
-  code-toolkit: code-toolkit@ai-safety-plugins
-  research-toolkit: research-toolkit@ai-safety-plugins
-  writing-toolkit: writing-toolkit@ai-safety-plugins
-  workflow-toolkit: workflow-toolkit@ai-safety-plugins
-  viz-toolkit: viz-toolkit@ai-safety-plugins
-
-  # Official plugins
-  Notion: Notion@claude-plugins-official
-  figma: figma@claude-plugins-official
-  ui-ux-pro-max: ui-ux-pro-max@ui-ux-pro-max-skill
-  frontend-design: frontend-design@claude-plugins-official
-  huggingface-skills: huggingface-skills@claude-plugins-official
-  vercel: vercel@claude-plugins-official
-  coderabbit: coderabbit@claude-plugins-official
-  code-simplifier: code-simplifier@claude-plugins-official
-  security-guidance: security-guidance@claude-plugins-official
-  code-review: code-review@claude-plugins-official
-  pyright-lsp: pyright-lsp@claude-plugins-official
-  typescript-lsp: typescript-lsp@claude-plugins-official
-  ralph-loop: ralph-loop@claude-plugins-official
-  serena: serena@claude-plugins-official
-  feature-dev: feature-dev@claude-plugins-official
-  stripe: stripe@claude-plugins-official
-  claude-code-setup: claude-code-setup@claude-plugins-official
-  playwright: playwright@claude-plugins-official
-  supabase: supabase@claude-plugins-official
-  pr-review-toolkit: pr-review-toolkit@claude-plugins-official
-  playground: playground@claude-plugins-official
-  linear: linear@claude-plugins-official
 
 # Always-on in every profile (declared once)
 base:

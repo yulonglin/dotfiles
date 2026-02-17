@@ -129,21 +129,23 @@ Rules:
 
 **Context profiles** control which plugins load per-project via `claude-context`:
 ```bash
-claude-context                    # Show current / apply context.yaml
+claude-context                    # Show current state / apply context.yaml
 claude-context code               # Software projects
 claude-context code web python    # Compose multiple profiles
-claude-context --check            # Detect registry drift
-claude-context --sync             # Fix drift in profiles.yaml
+claude-context --list             # Show active plugins and available profiles
 claude-context --reset            # Clear project plugin config
 ```
 
 **Architecture:**
-- Profile definitions: `~/.claude/templates/contexts/profiles.yaml` (registry + base + per-profile enables)
+- Plugin registry: auto-discovered from `~/.claude/plugins/installed_plugins.json` (source of truth)
+- Profile definitions: `~/.claude/templates/contexts/profiles.yaml` (base + per-profile enables)
 - Per-project config: `.claude/context.yaml` (profiles + optional enable/disable overrides, committed)
 - Output: `.claude/settings.json` `enabledPlugins` section (deterministic rebuild from profiles)
 - CLI args persist to `context.yaml` automatically; no-arg invocation re-applies it
+- SessionStart hook auto-applies `context.yaml` on every session start
+- Statusline shows active context profiles (e.g., `[code python]`)
 
-Adding a new plugin: one line in `profiles.yaml` registry. Restart Claude Code after applying.
+Adding a new plugin: install via Claude Code marketplace, then add to a profile in `profiles.yaml`.
 
 ---
 

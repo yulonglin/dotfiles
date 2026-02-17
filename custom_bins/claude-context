@@ -2,13 +2,13 @@
 """claude-context — YAML-driven plugin profiles for Claude Code.
 
 Manages which plugins load per-project via composable profiles defined in
-a single profiles.yaml. Writes deterministic enabledPlugins to settings.json.
+a single profiles.yaml. Auto-discovers installed plugins from
+installed_plugins.json (source of truth).
 
 Usage:
     claude-context                       Show current state / apply context.yaml
     claude-context <profile> [profiles]  Apply profiles, persist to context.yaml
-    claude-context --check               Detect registry drift vs global settings
-    claude-context --sync                Add missing plugins from global settings to registry
+    claude-context --list                Show active plugins and available profiles
     claude-context --reset               Remove project plugin config
     claude-context --help                Show this help
 """
@@ -26,6 +26,7 @@ except ImportError:
 
 # --- Constants ---
 
+INSTALLED_PLUGINS = os.path.expanduser("~/.claude/plugins/installed_plugins.json")
 PROFILES_PATH = os.path.expanduser("~/.claude/templates/contexts/profiles.yaml")
 GLOBAL_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 CONTEXT_FILE = ".claude/context.yaml"
@@ -36,6 +37,7 @@ RED = "\033[0;31m"
 GREEN = "\033[0;32m"
 YELLOW = "\033[0;33m"
 BLUE = "\033[0;34m"
+CYAN = "\033[0;36m"
 BOLD = "\033[1m"
 NC = "\033[0m"
 
@@ -43,27 +45,39 @@ NC = "\033[0m"
 # --- Core functions ---
 
 
+def load_registry():
+    """Build registry from installed_plugins.json (source of truth).
+
+    Returns dict mapping short_name -> qualified_id.
+    Handles collisions by keeping both with full qualified IDs.
+    """
+    if not os.path.exists(INSTALLED_PLUGINS):
+        sys.exit(f"{RED}installed_plugins.json not found{NC}")
+    with open(INSTALLED_PLUGINS) as f:
+        data = json.load(f)
+    registry = {}
+    for qid in data.get("plugins", {}):
+        short = qid.split("@")[0]
+        if short in registry:
+            # Collision: keep both with full qualified IDs
+            old_qid = registry.pop(short)
+            registry[old_qid] = old_qid
+            registry[qid] = qid
+        else:
+            registry[short] = qid
+    return registry
+
+
 def load_profiles():
-    """Parse profiles.yaml -> (registry, base, profiles)."""
+    """Parse profiles.yaml -> (base, profiles)."""
     if not os.path.exists(PROFILES_PATH):
         sys.exit(f"{RED}profiles.yaml not found at {PROFILES_PATH}{NC}\n"
                  "Run deploy.sh or create it manually.")
     with open(PROFILES_PATH) as f:
         data = yaml.safe_load(f)
-    registry = data.get("registry", {})
     base = data.get("base", [])
     profiles = data.get("profiles", {})
-    return registry, base, profiles
-
-
-def resolve_name(registry, name):
-    """Resolve short name to qualified plugin ID."""
-    if name in registry:
-        return registry[name]
-    # Maybe already qualified
-    if "@" in name:
-        return name
-    sys.exit(f"{RED}Unknown plugin: {name}{NC}")
+    return base, profiles
 
 
 def build_plugins(registry, base, profiles, profile_names, enable=None, disable=None):
@@ -91,13 +105,17 @@ def build_plugins(registry, base, profiles, profile_names, enable=None, disable=
                      f"Available: {', '.join(sorted(profiles.keys()))}")
         for plugin in profiles[pname].get("enable", []):
             if plugin not in state:
-                sys.exit(f"{RED}Profile '{pname}' references unknown plugin: {plugin}{NC}")
+                print(f"{YELLOW}Warning: profile '{pname}' references uninstalled plugin: {plugin} (skipped){NC}",
+                      file=sys.stderr)
+                continue
             state[plugin] = True
 
     # Step 4: overrides
     for name in (enable or []):
         if name not in state:
-            sys.exit(f"{RED}enable references unknown plugin: {name}{NC}")
+            print(f"{YELLOW}Warning: enable references uninstalled plugin: {name} (skipped){NC}",
+                  file=sys.stderr)
+            continue
         state[name] = True
     for name in (disable or []):
         if name in state:
@@ -110,7 +128,6 @@ def build_plugins(registry, base, profiles, profile_names, enable=None, disable=
 def apply_to_settings(enabled_plugins):
     """Write enabledPlugins to settings.json, preserving other keys.
 
-    Also preserves any plugins in existing settings.json that aren't in registry.
     Uses atomic write (temp file + rename).
     """
     existing = {}
@@ -166,61 +183,98 @@ def load_context_yaml():
     )
 
 
+def check_stale_settings():
+    """Warn if project settings.json references plugins with changed qualified IDs."""
+    if not os.path.exists(TARGET_FILE):
+        return
+    with open(TARGET_FILE) as f:
+        try:
+            project_plugins = json.load(f).get("enabledPlugins", {})
+        except json.JSONDecodeError:
+            return
+
+    registry = load_registry()
+    installed_qids = set(registry.values())
+
+    stale = []
+    for qid in project_plugins:
+        if qid not in installed_qids:
+            short = qid.split("@")[0]
+            # Check if same short name exists under different marketplace
+            new_qid = registry.get(short)
+            if new_qid and new_qid != qid:
+                stale.append((qid, new_qid))
+            elif not new_qid:
+                stale.append((qid, None))  # plugin no longer installed
+
+    if stale:
+        print(f"\n{YELLOW}Stale settings detected:{NC}")
+        for old, new in stale:
+            if new:
+                print(f"  {old} → {new}")
+            else:
+                print(f"  {old} (no longer installed)")
+        print(f"{BLUE}Run: claude-context <profile> to refresh{NC}")
+
+
 # --- Subcommands ---
 
 
-def show_status(registry, base, profiles):
-    """Show current state: available profiles, current config."""
-    print(f"{BLUE}{BOLD}Available profiles:{NC}")
-    print()
-
-    domain = []
-    sub = []
-    for name, pdata in profiles.items():
-        comment = pdata.get("comment", "")
-        entry = (name, comment)
-        if len(pdata.get("enable", [])) <= 4:
-            sub.append(entry)
-        else:
-            domain.append(entry)
-
-    print(f"  {BOLD}Domain:{NC}")
-    for name, comment in domain:
-        print(f"    {GREEN}{name:<12}{NC} {comment}")
-    print(f"\n  {BOLD}Sub-profiles:{NC}")
-    for name, comment in sub:
-        print(f"    {GREEN}{name:<12}{NC} {comment}")
-    print()
-
-    # Current state
-    ctx = load_context_yaml()
-    if ctx:
-        pnames, enable, disable = ctx
-        print(f"{GREEN}context.yaml:{NC} profiles={pnames}", end="")
-        if enable:
-            print(f" enable={enable}", end="")
-        if disable:
-            print(f" disable={disable}", end="")
-        print()
-    else:
-        print(f"{YELLOW}No .claude/context.yaml in current directory{NC}")
-
-    if os.path.exists(TARGET_FILE):
-        with open(TARGET_FILE) as f:
+def show_status():
+    """Show current active context and available profiles."""
+    # --- Active context ---
+    settings_path = TARGET_FILE if os.path.exists(TARGET_FILE) else GLOBAL_SETTINGS
+    plugins = {}
+    if os.path.exists(settings_path):
+        with open(settings_path) as f:
             try:
                 data = json.load(f)
             except json.JSONDecodeError:
                 data = {}
         plugins = data.get("enabledPlugins", {})
-        on = sorted(k.split("@")[0] for k, v in plugins.items() if v)
-        print(f"{GREEN}settings.json:{NC} {', '.join(on) if on else '(none)'}")
+
+    on = sorted(k.split("@")[0] for k, v in plugins.items() if v)
+    off = sorted(k.split("@")[0] for k, v in plugins.items() if not v)
+
+    # Context header
+    ctx = load_context_yaml()
+    if ctx:
+        pnames, enable, disable = ctx
+        print(f"{BOLD}Active context:{NC} {BLUE}{', '.join(pnames)}{NC}")
+        if enable:
+            print(f"  + {', '.join(enable)}")
+        if disable:
+            print(f"  - {', '.join(disable)}")
+    elif os.path.exists(TARGET_FILE):
+        print(f"{BOLD}Active context:{NC} {YELLOW}manual{NC} (no context.yaml)")
     else:
-        print(f"{YELLOW}No .claude/settings.json — using global defaults{NC}")
+        print(f"{BOLD}Active context:{NC} {YELLOW}global defaults{NC}")
+
+    # Plugin status
+    print(f"\n{GREEN}ON  ({len(on)}):{NC} {', '.join(on)}")
+    if off:
+        print(f"{YELLOW}OFF ({len(off)}):{NC} {', '.join(off)}")
+
+    # Warn about missing context.yaml
+    if not ctx and os.path.isdir(".claude") and not os.path.exists(CONTEXT_FILE):
+        print(f"\n{YELLOW}Warning: this project has .claude/ but no context.yaml{NC}")
+        print(f"  Run: claude-context <profile> to set up context")
+
+    # Check for stale settings
+    check_stale_settings()
+
+    # --- Available profiles ---
+    _, profiles = load_profiles()
+    print(f"\n{BOLD}Profiles:{NC}")
+    for name, pdata in profiles.items():
+        comment = pdata.get("comment", "")
+        print(f"  {GREEN}{name:<12}{NC} {comment}")
 
 
 def apply_profiles_cmd(profile_names):
     """Apply profiles, write settings.json + context.yaml."""
-    registry, base, profiles = load_profiles()
+    registry = load_registry()
+    base, profiles = load_profiles()
 
     # Validate
     for pname in profile_names:
@@ -248,7 +302,8 @@ def apply_context_yaml_cmd():
                  "Usage: claude-context <profile> [profiles]")
 
     pnames, enable, disable = ctx
-    registry, base, profiles = load_profiles()
+    registry = load_registry()
+    base, profiles = load_profiles()
     enabled = build_plugins(registry, base, profiles, pnames, enable, disable)
     apply_to_settings(enabled)
 
@@ -257,203 +312,6 @@ def apply_context_yaml_cmd():
     print(f"{GREEN}Enabled:{NC} {', '.join(on)}")
     print(f"  -> {TARGET_FILE}")
     print(f"{YELLOW}Restart Claude Code to apply changes.{NC}")
-
-
-def check_drift():
-    """Compare registry against global settings.json. Exit 0 if in sync, 1 if drift."""
-    registry, _, _ = load_profiles()
-
-    if not os.path.exists(GLOBAL_SETTINGS):
-        sys.exit(f"{RED}Global settings not found: {GLOBAL_SETTINGS}{NC}")
-
-    with open(GLOBAL_SETTINGS) as f:
-        global_data = json.load(f)
-
-    global_plugins = set(global_data.get("enabledPlugins", {}).keys())
-    registry_plugins = set(registry.values())
-
-    in_global_not_registry = global_plugins - registry_plugins
-    in_registry_not_global = registry_plugins - global_plugins
-
-    if not in_global_not_registry and not in_registry_not_global:
-        print(f"{GREEN}Registry is in sync with global settings.json{NC}")
-        print(f"  {len(registry_plugins)} plugins tracked")
-        sys.exit(0)
-
-    drift = False
-    if in_global_not_registry:
-        drift = True
-        print(f"{YELLOW}In global settings.json but NOT in registry:{NC}")
-        for p in sorted(in_global_not_registry):
-            print(f"  + {p}")
-
-    if in_registry_not_global:
-        drift = True
-        print(f"{YELLOW}In registry but NOT in global settings.json (stale?):{NC}")
-        for p in sorted(in_registry_not_global):
-            print(f"  - {p}")
-
-    if drift:
-        print(f"\n{BLUE}Run 'claude-context --sync' to add missing plugins to registry.{NC}")
-        sys.exit(1)
-
-
-def prompt_profile_assignment(short, qid, profile_names):
-    """Ask user which profiles a new plugin should be added to."""
-    options = "/".join(profile_names) + "/skip"
-    print(f"\n  {BOLD}{short}{NC} ({qid})")
-    while True:
-        try:
-            raw = input(f"    Add to profiles? [{options}]: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return []
-        if not raw or raw.lower() == "skip":
-            return []
-        choices = [c.strip() for c in raw.replace(",", " ").split()]
-        invalid = [c for c in choices if c not in profile_names]
-        if invalid:
-            print(f"    {RED}Unknown: {', '.join(invalid)}{NC}. Try again.")
-            continue
-        return choices
-
-
-def _find_enable_insert_point(lines, profile_name):
-    """Find the line index after the last enable entry for a profile.
-
-    Handles both block style (multiline - items) and flow style ([a, b, c]).
-    Returns the index where a new "      - name" line should be inserted,
-    or None if the profile uses flow style (needs different handling).
-    """
-    # Find "  profile_name:" line
-    profile_line = None
-    for i, line in enumerate(lines):
-        if line == f"  {profile_name}:":
-            profile_line = i
-            break
-    if profile_line is None:
-        return None, "flow"  # not found
-
-    # Find "    enable:" within this profile (before next profile)
-    enable_line = None
-    for i in range(profile_line + 1, len(lines)):
-        stripped = lines[i].strip()
-        # Hit next profile definition (2-space indent key)
-        if lines[i] and not lines[i].startswith("    ") and not lines[i].startswith("  #") and stripped:
-            break
-        if stripped == "enable:":
-            enable_line = i
-            break
-        # Flow style: enable: [a, b, c]
-        if stripped.startswith("enable: ["):
-            return i, "flow"
-
-    if enable_line is None:
-        return None, "missing"
-
-    # Find the last "      - " item in this enable block
-    last_item = enable_line
-    for i in range(enable_line + 1, len(lines)):
-        stripped = lines[i].strip()
-        if stripped.startswith("- "):
-            last_item = i
-        elif stripped == "" or not lines[i].startswith("      "):
-            break
-
-    return last_item + 1, "block"
-
-
-def _insert_into_flow_enable(line, short):
-    """Insert a plugin name into a flow-style enable: [a, b, c] line."""
-    # enable: [pyright-lsp] -> enable: [pyright-lsp, linear]
-    bracket_end = line.rindex("]")
-    before = line[:bracket_end].rstrip()
-    after = line[bracket_end:]
-    return f"{before}, {short}{after}"
-
-
-def sync_registry():
-    """Add new plugins from global settings.json to registry in profiles.yaml.
-
-    Interactive: for each new plugin, asks which profiles to add it to.
-    """
-    registry, _, profiles = load_profiles()
-
-    if not os.path.exists(GLOBAL_SETTINGS):
-        sys.exit(f"{RED}Global settings not found: {GLOBAL_SETTINGS}{NC}")
-
-    with open(GLOBAL_SETTINGS) as f:
-        global_data = json.load(f)
-
-    global_plugins = global_data.get("enabledPlugins", {})
-    registry_qids = set(registry.values())
-
-    new_plugins = {}
-    for qid in global_plugins:
-        if qid not in registry_qids:
-            short = qid.split("@")[0]
-            new_plugins[short] = qid
-
-    if not new_plugins:
-        print(f"{GREEN}Registry already in sync.{NC}")
-        return
-
-    print(f"{YELLOW}Found {len(new_plugins)} new plugin(s):{NC}")
-
-    # Interactive profile assignment
-    profile_names = list(profiles.keys())
-    assignments = {}  # short -> list of profile names
-    for short, qid in sorted(new_plugins.items()):
-        chosen = prompt_profile_assignment(short, qid, profile_names)
-        assignments[short] = chosen
-
-    # Read raw YAML lines
-    with open(PROFILES_PATH) as f:
-        content = f.read()
-    lines = content.split("\n")
-
-    # 1. Add to registry (find insertion point before "base:" or "# Always-on")
-    insert_idx = None
-    for i, line in enumerate(lines):
-        if line.startswith("base:") or line.startswith("# Always-on"):
-            insert_idx = i
-            while insert_idx > 0 and lines[insert_idx - 1].strip() == "":
-                insert_idx -= 1
-            break
-
-    if insert_idx is None:
-        sys.exit(f"{RED}Could not find registry insertion point in profiles.yaml{NC}")
-
-    new_lines = []
-    for short, qid in sorted(new_plugins.items()):
-        new_lines.append(f"  {short}: {qid}")
-    lines = lines[:insert_idx] + new_lines + lines[insert_idx:]
-
-    # 2. Add to profiles (process each plugin, each chosen profile)
-    # Process insertions from bottom to top to avoid index shifting
-    insertions = []  # (line_idx, short, style) — "block" or "flow"
-    for short, chosen_profiles in assignments.items():
-        for pname in chosen_profiles:
-            idx, style = _find_enable_insert_point(lines, pname)
-            if idx is not None:
-                insertions.append((idx, short, style, pname))
-
-    # Sort by line index descending so insertions don't shift earlier indices
-    insertions.sort(key=lambda x: x[0], reverse=True)
-    for idx, short, style, pname in insertions:
-        if style == "block":
-            lines.insert(idx, f"      - {short}")
-        elif style == "flow":
-            lines[idx] = _insert_into_flow_enable(lines[idx], short)
-
-    with open(PROFILES_PATH, "w") as f:
-        f.write("\n".join(lines))
-
-    print(f"\n{GREEN}Added {len(new_plugins)} plugin(s) to registry:{NC}")
-    for short, qid in sorted(new_plugins.items()):
-        profs = assignments.get(short, [])
-        suffix = f" -> {', '.join(profs)}" if profs else " (registry only)"
-        print(f"  + {short}{suffix}")
 
 
 def reset():
@@ -496,12 +354,11 @@ def reset():
 def main():
     parser = argparse.ArgumentParser(
         description="YAML-driven plugin profiles for Claude Code",
-        usage="claude-context [<profile> ...] [--check] [--sync] [--reset]",
+        usage="claude-context [<profile> ...] [--list] [--reset]",
         add_help=False,
     )
     parser.add_argument("profiles", nargs="*", help="Profile names to apply")
-    parser.add_argument("--check", action="store_true", help="Detect registry drift")
-    parser.add_argument("--sync", action="store_true", help="Sync registry from global settings")
+    parser.add_argument("--list", action="store_true", help="Show active plugins and available profiles")
     parser.add_argument("--reset", action="store_true", help="Remove project plugin config")
     parser.add_argument("-h", "--help", action="store_true", help="Show help")
 
@@ -510,7 +367,7 @@ def main():
     if args.help:
         print(__doc__)
         try:
-            _, _, profiles = load_profiles()
+            _, profiles = load_profiles()
             print("PROFILES:")
             for name, pdata in profiles.items():
                 comment = pdata.get("comment", "")
@@ -524,22 +381,18 @@ def main():
         parser.print_help()
         sys.exit(0)
 
-    if args.check:
-        check_drift()
-    elif args.sync:
-        sync_registry()
+    if args.list:
+        show_status()
     elif args.reset:
         reset()
     elif args.profiles:
         apply_profiles_cmd(args.profiles)
     else:
         # No args: show status, and auto-apply context.yaml if present
-        registry, base, profiles = load_profiles()
         ctx = load_context_yaml()
         if ctx:
             apply_context_yaml_cmd()
-        else:
-            show_status(registry, base, profiles)
+        show_status()
 
 
 if __name__ == "__main__":
