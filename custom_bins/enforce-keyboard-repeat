@@ -1,0 +1,12 @@
+#!/bin/bash
+# Enforce keyboard repeat settings (macOS Tahoe workaround)
+# Tahoe spontaneously resets these values after reboot/sleep
+[[ "$(uname -s)" != "Darwin" ]] && exit 0
+
+# Delete first to force a change event (Tahoe may ignore writes of same value)
+defaults delete -g InitialKeyRepeat 2>/dev/null || true
+defaults delete -g KeyRepeat 2>/dev/null || true
+
+defaults write -g InitialKeyRepeat -int 10
+defaults write -g KeyRepeat -int 1
+defaults write NSGlobalDomain ApplePressAndHoldEnabled -bool false
