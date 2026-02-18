@@ -592,17 +592,35 @@ sync_file() {
 deploy_git_config() {
     log_info "Deploying git configuration..."
 
-    # Deploy global gitignore
-    if [[ -f "$DOT_DIR/config/gitignore_global" ]]; then
-        cp "$DOT_DIR/config/gitignore_global" "$HOME/.gitignore_global"
-        log_success "Deployed ~/.gitignore_global"
+    # Deploy global gitignore (composed from universal + research patterns)
+    # Git sees both; search tools (rg, fd, Claude Code) see only universal.
+    if [[ -f "$DOT_DIR/config/ignore_global" ]] && [[ -f "$DOT_DIR/config/ignore_research" ]]; then
+        cat "$DOT_DIR/config/ignore_global" "$DOT_DIR/config/ignore_research" > "$HOME/.gitignore_global"
+        log_success "Deployed ~/.gitignore_global (universal + research)"
+    elif [[ -f "$DOT_DIR/config/ignore_global" ]]; then
+        cp "$DOT_DIR/config/ignore_global" "$HOME/.gitignore_global"
+        log_success "Deployed ~/.gitignore_global (universal only)"
     fi
 
-    # Deploy fd ignore
+    # Deploy search tool ignore files (universal only, symlinked for auto-update)
     if [[ -f "$DOT_DIR/config/ignore_global" ]]; then
-        mkdir -p "$HOME/.config/fd"
-        cp "$DOT_DIR/config/ignore_global" "$HOME/.config/fd/ignore"
-        log_success "Deployed ~/.config/fd/ignore"
+        # ripgrep + Claude Code: symlink universal ignore
+        ln -sf "$DOT_DIR/config/ignore_global" "$HOME/.ignore_global"
+        log_success "Symlinked ~/.ignore_global"
+
+        # fd: symlink to same file
+        local fd_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/fd"
+        mkdir -p "$fd_config_dir"
+        ln -sf "$DOT_DIR/config/ignore_global" "$fd_config_dir/ignore"
+        log_success "Symlinked $fd_config_dir/ignore"
+
+        # ripgrep config: skip git's global ignore, use universal-only ignore file
+        if cmd_exists rg; then
+            local rg_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/ripgrep"
+            mkdir -p "$rg_config_dir"
+            printf '%s\n' "--no-ignore-global" "--ignore-file" "$HOME/.ignore_global" > "$rg_config_dir/config"
+            log_success "Deployed $rg_config_dir/config"
+        fi
     fi
 
     # Load user config if exists

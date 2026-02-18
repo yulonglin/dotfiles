@@ -1,0 +1,14 @@
+# .ignore — let search tools (rg, fd, Claude Code, Cursor) see research files
+# Copy this to project root as .ignore when research patterns are in the
+# project's .gitignore (not just the global gitignore).
+# These negation patterns override .gitignore for search tools only.
+# Git still ignores these directories.
+
+!archive/
+!/data
+!/experiments
+!/results
+!/logs
+!/out
+!/output
+!/outputs

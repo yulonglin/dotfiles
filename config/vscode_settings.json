@@ -67,6 +67,7 @@
         "**/.cache": true,
         "**/.venv": true
     },
+    "search.useGlobalIgnoreFiles": false,
     "jupyter.widgetScriptSources": [
         "jsdelivr.com",
         "unpkg.com"

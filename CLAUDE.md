@@ -93,7 +93,9 @@ config/
 ├── serena/serena_config.yml  # Serena MCP config (symlinked, dashboard auto-open disabled)
 ├── key_bindings.sh       # ZSH key bindings (sourced by zshrc.sh)
 ├── gitconfig             # Git config template
-├── gitignore_global      # Global gitignore
+├── ignore_global         # Universal ignore patterns (OS, editors, Python, LaTeX, Claude Code)
+├── ignore_research       # Research-only ignore patterns (archive/, data/, experiments/, etc.)
+├── ignore_template       # Per-project .ignore template (negation patterns for search tools)
 └── user.conf.example     # User-specific git settings template
 
 claude/                   # Symlinked to ~/.claude/
@@ -170,6 +172,13 @@ export WRITING_DIR="$HOME/Documents/writing"
 - Reads `config/user.conf` for user-specific settings
 - Detects conflicts with existing git config
 - Prompts for resolution (keep/use new/merge/skip)
+- Deploys split ignore files for git vs search tools:
+  - `~/.gitignore_global` — concatenated from `config/ignore_global` + `config/ignore_research` (copy)
+  - `~/.ignore_global` — symlink to `config/ignore_global` (universal patterns only, for ripgrep)
+  - `~/.config/fd/ignore` — symlink to `config/ignore_global` (for fd's own ignore layer)
+  - `~/.config/ripgrep/config` — generated (`--no-ignore-global` + `--ignore-file ~/.ignore_global`)
+- Result: git ignores everything; rg/Claude Code/Cursor search can see research files (`data/`, `archive/`, etc.)
+- fd limitation: no `--no-ignore-global` flag, so fd still respects git's global ignore. Use `fd -I` for research dirs.
 
 **Editor Settings (`deploy_editor_settings()`)**:
 - Merges with existing VSCode/Cursor settings (doesn't overwrite)
@@ -278,7 +287,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ## Important Gotchas
 
 - **macOS vs Linux paths**: VSCode settings location differs by OS
-- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena), others copied (ZSH, git)
+- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git). `~/.gitignore_global` is composed (concatenated from `config/ignore_global` + `config/ignore_research`)
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env
 - **Claude Code directory**: `claude/` is symlinked to `~/.claude/` (not copied)

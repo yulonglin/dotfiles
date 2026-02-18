@@ -72,6 +72,10 @@ if [[ -d "$HOME/.local/lib/plotting" ]]; then
     export PYTHONPATH="$HOME/.local/lib/plotting:${PYTHONPATH}"
 fi
 
+# ripgrep config — skip git's global ignore (has research patterns), use universal-only ignore
+[[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/ripgrep/config" ]] && \
+    export RIPGREP_CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/ripgrep/config"
+
 # Source uv environment if installed
 [ -f "$HOME/.local/bin/env" ] && source "$HOME/.local/bin/env"
 

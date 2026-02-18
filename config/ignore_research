@@ -1,0 +1,14 @@
+# Research-specific ignore patterns — excluded from search tool configs
+# Used by: git only (via ~/.gitignore_global, combined with ignore_global)
+# NOT used by: ripgrep, fd, Claude Code, VS Code/Cursor search
+# This separation lets search tools index research files while git ignores them.
+
+archive/
+/tmp
+/data
+/experiments
+/results
+/logs
+/out
+/output
+/outputs
