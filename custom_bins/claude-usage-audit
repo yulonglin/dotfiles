@@ -1,0 +1,511 @@
+#!/usr/bin/env python3
+"""Audit Claude Code plugin/skill/agent/MCP usage from session transcripts.
+
+Scans all session JSONL files to find which components are actually used,
+then compares against what's installed/configured.
+
+Usage:
+    claude-usage-audit                 # Full report
+    claude-usage-audit --json          # Machine-readable output
+    claude-usage-audit --days 7        # Only last 7 days
+    claude-usage-audit --project dotfiles  # Filter by project name substring
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+import time
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+PROJECTS_DIR = Path.home() / ".claude" / "projects"
+PLUGINS_FILE = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+PROFILES_FILE = Path.home() / ".claude" / "templates" / "contexts" / "profiles.yaml"
+
+
+def parse_args():
+    p = argparse.ArgumentParser(description="Audit Claude Code component usage")
+    p.add_argument("--json", action="store_true", help="JSON output")
+    p.add_argument("--days", type=int, default=0, help="Only scan last N days (0=all)")
+    p.add_argument("--project", type=str, default="", help="Filter by project name substring")
+    p.add_argument("--verbose", "-v", action="store_true", help="Show per-project breakdown")
+    return p.parse_args()
+
+
+def get_installed_plugins():
+    """Parse installed_plugins.json to get all installed plugin names."""
+    if not PLUGINS_FILE.exists():
+        return {}
+    with open(PLUGINS_FILE) as f:
+        data = json.load(f)
+    plugins = {}
+    for name, installs in data.get("plugins", {}).items():
+        # name format: "pluginName@marketplace"
+        short = name.split("@")[0]
+        plugins[short] = {
+            "full_name": name,
+            "install_count": len(installs),
+        }
+    return plugins
+
+
+def get_profiles():
+    """Parse profiles.yaml for base + profile plugin lists."""
+    if not PROFILES_FILE.exists():
+        return {}, {}
+    try:
+        import yaml
+        with open(PROFILES_FILE) as f:
+            data = yaml.safe_load(f)
+        return data.get("base", []), data.get("profiles", {})
+    except ImportError:
+        # Fallback: simple regex parse
+        base = []
+        profiles = {}
+        with open(PROFILES_FILE) as f:
+            text = f.read()
+        # Extract base list
+        base_match = re.search(r"^base:\s*\n((?:\s+-\s+\S+\n)+)", text, re.MULTILINE)
+        if base_match:
+            base = re.findall(r"-\s+(\S+)", base_match.group(1))
+        # Extract profile enables
+        for m in re.finditer(
+            r"^\s{2}(\w[\w-]*):\s*\n(?:\s+comment:.*\n)?\s+enable:\s*\n?((?:\s+-\s+\S+\n)*|\[.*\])",
+            text,
+            re.MULTILINE,
+        ):
+            name = m.group(1)
+            enables_text = m.group(2)
+            if enables_text.strip().startswith("["):
+                enables = re.findall(r"[\w-]+", enables_text)
+            else:
+                enables = re.findall(r"-\s+([\w-]+)", enables_text)
+            profiles[name] = {"enable": enables}
+        return base, profiles
+
+
+def scan_session(filepath, cutoff_ts=0):
+    """Scan a single session JSONL file for component usage.
+
+    Returns dict with usage counters, or None if session is before cutoff.
+    """
+    skills = Counter()
+    agents = Counter()  # subagent_type values from Task tool
+    tools = Counter()  # all tool names
+    mcp_tools = Counter()  # mcp__* tool calls
+    mcp_deferred = Counter()  # ToolSearch queries
+    session_ts = 0
+
+    try:
+        with open(filepath) as f:
+            for line in f:
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                if entry.get("type") != "assistant":
+                    continue
+
+                msg = entry.get("message", {})
+                content = msg.get("content", [])
+                if not isinstance(content, list):
+                    continue
+
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("type") != "tool_use":
+                        continue
+
+                    tool_name = item.get("name", "")
+                    inp = item.get("input", {})
+                    tools[tool_name] += 1
+
+                    # Track timestamp from usage_metadata or snapshot
+                    ts = msg.get("usage", {}).get("timestamp", 0)
+                    if ts:
+                        session_ts = max(session_ts, ts)
+
+                    # Skill invocations
+                    if tool_name == "Skill":
+                        skill = inp.get("skill", "")
+                        if skill:
+                            skills[skill] += 1
+
+                    # Agent/subagent invocations
+                    elif tool_name == "Task":
+                        sat = inp.get("subagent_type", "")
+                        if sat:
+                            agents[sat] += 1
+
+                    # MCP tool calls
+                    elif tool_name.startswith("mcp__"):
+                        mcp_tools[tool_name] += 1
+
+                    # ToolSearch (deferred tool loading)
+                    elif tool_name == "ToolSearch":
+                        query = inp.get("query", "")
+                        if query:
+                            mcp_deferred[query] += 1
+
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    # Try to get session timestamp from file mtime if not found in content
+    if not session_ts:
+        session_ts = filepath.stat().st_mtime * 1000
+
+    if cutoff_ts and session_ts < cutoff_ts:
+        return None
+
+    return {
+        "skills": skills,
+        "agents": agents,
+        "tools": tools,
+        "mcp_tools": mcp_tools,
+        "mcp_deferred": mcp_deferred,
+        "timestamp": session_ts,
+    }
+
+
+def scan_all_sessions(args):
+    """Scan all session files, respecting filters."""
+    cutoff_ts = 0
+    if args.days:
+        cutoff_ts = (time.time() - args.days * 86400) * 1000
+
+    total_skills = Counter()
+    total_agents = Counter()
+    total_tools = Counter()
+    total_mcp = Counter()
+    total_deferred = Counter()
+    sessions_scanned = 0
+    sessions_with_usage = 0
+    per_project = defaultdict(lambda: {
+        "skills": Counter(),
+        "agents": Counter(),
+        "mcp": Counter(),
+        "sessions": 0,
+    })
+
+    # Collect all jsonl files
+    jsonl_files = []
+    if not PROJECTS_DIR.exists():
+        print("No projects directory found", file=sys.stderr)
+        return None
+
+    for project_dir in PROJECTS_DIR.iterdir():
+        if not project_dir.is_dir():
+            continue
+        project_name = project_dir.name
+
+        if args.project and args.project.lower() not in project_name.lower():
+            continue
+
+        for jf in project_dir.glob("*.jsonl"):
+            jsonl_files.append((jf, project_name))
+
+    total = len(jsonl_files)
+    print(f"Scanning {total} session files...", file=sys.stderr)
+
+    for i, (jf, project_name) in enumerate(jsonl_files):
+        if (i + 1) % 200 == 0:
+            print(f"  ...{i+1}/{total}", file=sys.stderr)
+
+        result = scan_session(jf, cutoff_ts)
+        if result is None:
+            continue
+
+        sessions_scanned += 1
+        has_usage = bool(
+            result["skills"] or result["agents"] or result["mcp_tools"]
+        )
+        if has_usage:
+            sessions_with_usage += 1
+
+        total_skills += result["skills"]
+        total_agents += result["agents"]
+        total_tools += result["tools"]
+        total_mcp += result["mcp_tools"]
+        total_deferred += result["mcp_deferred"]
+
+        proj = per_project[project_name]
+        proj["skills"] += result["skills"]
+        proj["agents"] += result["agents"]
+        proj["mcp"] += result["mcp_tools"]
+        proj["sessions"] += 1
+
+    return {
+        "total_skills": total_skills,
+        "total_agents": total_agents,
+        "total_tools": total_tools,
+        "total_mcp": total_mcp,
+        "total_deferred": total_deferred,
+        "sessions_scanned": sessions_scanned,
+        "sessions_with_usage": sessions_with_usage,
+        "per_project": per_project,
+    }
+
+
+def print_report(data, args):
+    installed = get_installed_plugins()
+    base_plugins, profiles = get_profiles()
+
+    # All known plugin names
+    all_plugins = set(installed.keys())
+
+    # Determine which plugins are referenced in skills/agents
+    # Skills are invoked as "plugin:skill" or just "skill"
+    used_plugin_prefixes = set()
+    for skill_name in data["total_skills"]:
+        parts = skill_name.split(":")
+        if len(parts) >= 2:
+            used_plugin_prefixes.add(parts[0])
+        # Also check if skill name matches a plugin
+        if skill_name in all_plugins:
+            used_plugin_prefixes.add(skill_name)
+
+    # Agent types that reference plugins
+    for agent_name in data["total_agents"]:
+        parts = agent_name.split(":")
+        if len(parts) >= 2:
+            used_plugin_prefixes.add(parts[0])
+
+    # MCP tool prefixes
+    mcp_prefixes = set()
+    for mcp_name in data["total_mcp"]:
+        # mcp__server__tool
+        parts = mcp_name.split("__")
+        if len(parts) >= 2:
+            mcp_prefixes.add(parts[1])
+
+    if args.json:
+        output = {
+            "sessions_scanned": data["sessions_scanned"],
+            "skills": dict(data["total_skills"].most_common()),
+            "agents": dict(data["total_agents"].most_common()),
+            "mcp_tools": dict(data["total_mcp"].most_common()),
+            "deferred_tools": dict(data["total_deferred"].most_common()),
+            "tool_usage": dict(data["total_tools"].most_common()),
+            "installed_plugins": list(all_plugins),
+            "plugins_never_referenced": sorted(
+                all_plugins - used_plugin_prefixes - mcp_prefixes
+            ),
+        }
+        print(json.dumps(output, indent=2))
+        return
+
+    # Header
+    print()
+    period = f"last {args.days} days" if args.days else "all time"
+    project_filter = f", project=*{args.project}*" if args.project else ""
+    print(f"=== Claude Code Usage Audit ({period}{project_filter}) ===")
+    print(f"Sessions scanned: {data['sessions_scanned']}")
+    print(f"Sessions with skill/agent/MCP usage: {data['sessions_with_usage']}")
+    print()
+
+    # Skills
+    print("--- Skill Invocations ---")
+    if data["total_skills"]:
+        for skill, count in data["total_skills"].most_common():
+            print(f"  {count:4d}x  {skill}")
+    else:
+        print("  (none)")
+    print()
+
+    # Agents
+    print("--- Agent/Subagent Types ---")
+    if data["total_agents"]:
+        for agent, count in data["total_agents"].most_common():
+            print(f"  {count:4d}x  {agent}")
+    else:
+        print("  (none)")
+    print()
+
+    # MCP tools
+    print("--- MCP Tool Calls ---")
+    if data["total_mcp"]:
+        for tool, count in data["total_mcp"].most_common():
+            print(f"  {count:4d}x  {tool}")
+    else:
+        print("  (none)")
+    print()
+
+    # Deferred tool searches
+    print("--- Deferred Tool Searches (ToolSearch) ---")
+    if data["total_deferred"]:
+        for query, count in data["total_deferred"].most_common(15):
+            print(f"  {count:4d}x  {query}")
+    else:
+        print("  (none)")
+    print()
+
+    # Core tool usage
+    print("--- Core Tool Usage ---")
+    for tool, count in data["total_tools"].most_common():
+        if not tool.startswith("mcp__"):
+            print(f"  {count:5d}x  {tool}")
+    print()
+
+    # Installed plugins analysis
+    print("--- Installed Plugins ({}) ---".format(len(all_plugins)))
+    # Categorize
+    referenced = set()
+    for skill_name in data["total_skills"]:
+        parts = skill_name.split(":")
+        if len(parts) >= 2:
+            referenced.add(parts[0])
+    for agent_name in data["total_agents"]:
+        parts = agent_name.split(":")
+        if len(parts) >= 2:
+            referenced.add(parts[0])
+    for mcp_name in data["total_mcp"]:
+        parts = mcp_name.split("__")
+        if len(parts) >= 2:
+            # Map MCP server names back to plugins
+            server = parts[1]
+            # Common mappings
+            if server in all_plugins:
+                referenced.add(server)
+            # Try plugin_ prefix removal
+            for p in all_plugins:
+                if server.startswith(f"plugin_{p.replace('-', '_')}"):
+                    referenced.add(p)
+
+    # Also count skills/agents that implicitly use plugins
+    # (e.g., "commit" skill comes from commit-commands plugin)
+    # Build a reverse map from skill/agent names to plugins by scanning plugin dirs
+    plugin_cache = Path.home() / ".claude" / "plugins" / "cache"
+    skill_to_plugin = {}
+    agent_to_plugin = {}
+    if plugin_cache.exists():
+        for marketplace_dir in plugin_cache.iterdir():
+            if not marketplace_dir.is_dir():
+                continue
+            for plugin_dir in marketplace_dir.iterdir():
+                if not plugin_dir.is_dir():
+                    continue
+                # Check version subdirs
+                for version_dir in plugin_dir.iterdir():
+                    if not version_dir.is_dir():
+                        continue
+                    # Scan skills (skills are directories, not .md files)
+                    skills_dir = version_dir / "skills"
+                    if skills_dir.exists():
+                        for sf in skills_dir.iterdir():
+                            if sf.is_dir():
+                                skill_to_plugin[sf.name] = plugin_dir.name
+                            elif sf.suffix == ".md":
+                                skill_to_plugin[sf.stem] = plugin_dir.name
+                    # Scan agents (agents are .md files)
+                    agents_dir = version_dir / "agents"
+                    if agents_dir.exists():
+                        for af in agents_dir.iterdir():
+                            if af.suffix == ".md":
+                                agent_to_plugin[af.stem] = plugin_dir.name
+
+    # Match unqualified skill names to plugins
+    for skill_name in data["total_skills"]:
+        if ":" not in skill_name:
+            if skill_name in skill_to_plugin:
+                referenced.add(skill_to_plugin[skill_name])
+            # Also check if skill name matches a plugin directly
+            if skill_name in all_plugins:
+                referenced.add(skill_name)
+        else:
+            # Handle old-style "plugin-toolkit:skill" → "plugin"
+            prefix = skill_name.split(":")[0]
+            normalized = re.sub(r"-toolkit$", "", prefix)
+            if normalized in all_plugins:
+                referenced.add(normalized)
+
+    # Match unqualified agent names to plugins
+    for agent_name in data["total_agents"]:
+        if ":" not in agent_name:
+            if agent_name in agent_to_plugin:
+                referenced.add(agent_to_plugin[agent_name])
+            if agent_name in all_plugins:
+                referenced.add(agent_name)
+        else:
+            prefix = agent_name.split(":")[0]
+            normalized = re.sub(r"-toolkit$", "", prefix)
+            if normalized in all_plugins:
+                referenced.add(normalized)
+
+    never_used = sorted(all_plugins - referenced)
+    used = sorted(referenced & all_plugins)
+
+    print(f"  Referenced in sessions: {len(used)}")
+    for p in used:
+        print(f"    [USED]   {p}")
+    print()
+    print(f"  Never referenced: {len(never_used)}")
+    for p in never_used:
+        in_base = " (base)" if p in (base_plugins or []) else ""
+        in_profiles = ""
+        for prof_name, prof_data in (profiles or {}).items():
+            enables = prof_data if isinstance(prof_data, list) else prof_data.get("enable", [])
+            if p in enables:
+                in_profiles += f" [{prof_name}]"
+        print(f"    [NEVER]  {p}{in_base}{in_profiles}")
+    print()
+
+    # Per-project breakdown
+    if args.verbose:
+        print("--- Per-Project Breakdown ---")
+        for proj, pdata in sorted(
+            data["per_project"].items(),
+            key=lambda x: x[1]["sessions"],
+            reverse=True,
+        ):
+            print(f"\n  {proj} ({pdata['sessions']} sessions)")
+            if pdata["skills"]:
+                print(f"    Skills: {dict(pdata['skills'].most_common(5))}")
+            if pdata["agents"]:
+                print(f"    Agents: {dict(pdata['agents'].most_common(5))}")
+            if pdata["mcp"]:
+                print(f"    MCP: {dict(pdata['mcp'].most_common(5))}")
+        print()
+
+    # Classify "never" plugins into truly unused vs implicit/passive
+    # Some plugins work via hooks, system prompts, or passive features
+    IMPLICIT_PLUGINS = {
+        "hookify": "provides hooks (PreToolUse/PostToolUse) — runs automatically, not via Skill/Task",
+        "claude-md-management": "provides /revise-claude-md skill — may be used but invoked differently",
+        "security-guidance": "provides system prompt guidance — passive, no explicit invocations",
+        "pyright-lsp": "provides type checking hooks — passive background tool",
+        "typescript-lsp": "provides type checking hooks — passive background tool",
+        "swift-lsp": "provides type checking hooks — passive background tool",
+    }
+
+    truly_unused = [p for p in never_used if p not in IMPLICIT_PLUGINS]
+    implicit_used = [(p, IMPLICIT_PLUGINS[p]) for p in never_used if p in IMPLICIT_PLUGINS]
+
+    # Recommendations
+    print("--- Recommendations ---")
+    if truly_unused:
+        print(f"  Likely safe to retire ({len(truly_unused)} plugins):")
+        for p in truly_unused:
+            print(f"    - {p}")
+    if implicit_used:
+        print(f"\n  Passive/implicit plugins ({len(implicit_used)} — no explicit invocations but may still be useful):")
+        for p, reason in implicit_used:
+            print(f"    - {p}: {reason}")
+    print()
+
+
+def main():
+    args = parse_args()
+    data = scan_all_sessions(args)
+    if data is None:
+        sys.exit(1)
+    print_report(data, args)
+
+
+if __name__ == "__main__":
+    main()
