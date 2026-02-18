@@ -54,9 +54,11 @@ claude() {
 
     # Auto-cd to git root so plansDirectory: ".claude/plans" resolves correctly
     # Must happen before task ID generation so auto-name reflects git root, not subdir
-    local git_root
+    # Use realpath to resolve symlinks — git rev-parse --show-toplevel returns physical paths
+    local git_root physical_cwd
     git_root=$(git rev-parse --show-toplevel 2>/dev/null)
-    if [[ -n "$git_root" && "$PWD" != "$git_root" ]]; then
+    physical_cwd=$(realpath "$PWD" 2>/dev/null || pwd -P)
+    if [[ -n "$git_root" && "$physical_cwd" != "$git_root" ]]; then
         echo "claude: moving to git root: $git_root"
         cd "$git_root" || true
     fi

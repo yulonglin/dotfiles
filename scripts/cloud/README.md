@@ -79,7 +79,7 @@ USERNAME=dev PERSISTENT=/data curl ... | bash
 
 ## What Gets Installed
 
-**System packages:** sudo, zsh, htop, ncdu, vim, nvtop (if available)
+**System packages:** sudo, zsh, htop, vim, nvtop (if available)
 
 **User tools:**
 - uv (Python package manager)

@@ -1,9 +1,10 @@
 .DS_Store
 *.swp
 
-# User-specific git configuration (copy from user.conf.example)
+# User-specific configuration (gitignored)
 config/user.conf
 config/secrets.sh
+config.local.sh
 
 # npm artifacts (not used - this repo uses system package managers)
 package.json

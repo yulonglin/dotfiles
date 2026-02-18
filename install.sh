@@ -32,7 +32,7 @@ Install dotfile dependencies on macOS or Linux.
 Configuration is in config.sh - edit it to change defaults.
 
 OPTIONS:
-    --profile=NAME    Use a profile: personal, work, server, minimal
+    --profile=NAME    Use a profile: personal, server, minimal
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
     --ai-tools        Enable AI CLI tools (Claude, Gemini, Codex)
@@ -46,7 +46,6 @@ OPTIONS:
 
 PROFILES (set in config.sh or via --profile):
     personal    Full setup with all tools (default)
-    work        Personal + work-specific aliases
     server      Minimal server setup (no GUI tools)
     minimal     Nothing enabled - specify what you want
 
@@ -216,6 +215,13 @@ fi
 
 if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     log_section "INSTALLING AI CLI TOOLS 🤖"
+
+    # Rust toolchain (needed for claude-tools build in deploy.sh)
+    if ! is_installed cargo; then
+        log_info "Installing Rust toolchain (user-level, no root needed)..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+        source "$HOME/.cargo/env" 2>/dev/null || true
+    fi
 
     # Claude Code
     if ! is_installed claude; then

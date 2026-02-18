@@ -43,8 +43,8 @@ Install dependencies (e.g. oh-my-zsh and related plugins). The installer auto-de
 # Install with defaults (recommended)
 ./install.sh
 
-# Install only specific components (--minimal disables defaults)
-./install.sh --minimal --tmux --zsh
+# Install only specific components
+./install.sh --minimal --tmux --zsh  # --minimal disables all defaults
 ```
 
 **Defaults by platform:**
@@ -64,11 +64,8 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 # Deploy with defaults (recommended)
 ./deploy.sh
 
-# Deploy with extra aliases (useful for remote machines)
-./deploy.sh --aliases=speechmatics
-
-# Deploy only specific components (--minimal disables defaults)
-./deploy.sh --minimal --vim --claude
+# Deploy only specific components
+./deploy.sh --minimal --vim --claude  # --minimal disables all defaults
 ```
 
 **Defaults:**
@@ -76,7 +73,7 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 - Experimental features (ty type checker)
 - Cleanup automation (macOS only)
 
-**Flags are additive** - e.g., `./deploy.sh --aliases=custom` deploys defaults + custom aliases. Use `--minimal` to disable defaults.
+**Flags are additive** - e.g., `./deploy.sh --extras` deploys defaults + extras. Use `--minimal` to disable all defaults, then specify only what you want.
 
 ### Claude Code (Primary AI Assistant)
 

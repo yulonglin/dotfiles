@@ -8,7 +8,7 @@
 #   ./deploy.sh                       # Deploy with defaults from config.sh
 #   ./deploy.sh --profile=server      # Use server profile
 #   ./deploy.sh --no-editor           # Skip editor settings
-#   ./deploy.sh --aliases=work,custom # Add extra aliases
+#   ./deploy.sh --aliases=inspect     # Add extra aliases
 #
 # See config.sh for all available settings.
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -37,7 +37,7 @@ Usage: ./deploy.sh [OPTIONS]
 Deploy dotfile configurations. Settings are in config.sh.
 
 OPTIONS:
-    --profile=NAME    Use a profile: personal, work, server, minimal
+    --profile=NAME    Use a profile: personal, server, minimal
     --vim             Deploy vimrc
     --editor          Deploy VSCode/Cursor settings
     --claude          Deploy Claude Code config (~/.claude symlink)
@@ -62,7 +62,7 @@ OPTIONS:
 EXAMPLES:
     ./deploy.sh                           # Use defaults from config.sh
     ./deploy.sh --profile=server          # Server profile
-    ./deploy.sh --aliases=speechmatics    # Add work aliases
+    ./deploy.sh --aliases=inspect          # Add extra aliases
 
 Git configuration is always deployed.
 EOF

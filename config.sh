@@ -13,9 +13,8 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ─── Profile ──────────────────────────────────────────────────────────────────
-# Available: personal, work, server, minimal
+# Available: personal, server, minimal
 # - personal: Full setup with all tools (default)
-# - work:     Personal + work-specific aliases
 # - server:   Minimal server setup (no GUI tools, no cleanup)
 # - minimal:  Nothing enabled by default
 PROFILE="${PROFILE:-personal}"
@@ -24,18 +23,17 @@ PROFILE="${PROFILE:-personal}"
 INSTALL_ZSH=true
 INSTALL_TMUX=true
 INSTALL_AI_TOOLS=true           # Claude Code, Gemini CLI, Codex CLI
-INSTALL_EXTRAS=false            # hyperfine, lazygit, code2prompt
 INSTALL_CLEANUP=true            # Automatic cleanup (macOS only)
 INSTALL_DOCKER=true             # Docker (Linux only)
-INSTALL_EXPERIMENTAL=false      # ty type checker
-INSTALL_CREATE_USER=false       # Create non-root dev user (Linux only)
+INSTALL_EXPERIMENTAL=true       # ty type checker
+INSTALL_CREATE_USER=true        # Create non-root dev user (Linux only, guarded by is_linux + EUID check)
+INSTALL_EXTRAS=false            # hyperfine, lazygit, code2prompt
 
 # ─── Deploy Components ────────────────────────────────────────────────────────
 DEPLOY_VIM=true
 DEPLOY_EDITOR=true              # VSCode/Cursor settings (merges with existing)
 DEPLOY_CLAUDE=true              # Claude Code config (~/.claude symlink)
 DEPLOY_CODEX=true               # Codex CLI config (~/.codex symlink)
-DEPLOY_SERENA=true              # Serena MCP config (~/.serena symlink)
 DEPLOY_GHOSTTY=true             # Ghostty terminal config
 DEPLOY_HTOP=true                # htop process viewer config
 DEPLOY_PDB=true                 # pdb++ debugger config (high-contrast colors)
@@ -47,7 +45,8 @@ DEPLOY_CLAUDE_CLEANUP=true      # Claude Code idle session cleanup (both platfor
 DEPLOY_AI_UPDATE=true           # AI tools auto-update daily (both platforms)
 DEPLOY_BREW_UPDATE=true         # Weekly package upgrade + cleanup (brew/apt/dnf/pacman)
 DEPLOY_KEYBOARD=true            # Keyboard repeat enforcement at login (macOS only)
-DEPLOY_ALIASES=()               # Additional alias scripts: ("speechmatics" "inspect")
+DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect")
+DEPLOY_SERENA=false             # Serena MCP config (~/.serena symlink)
 
 # ─── Deploy Modifiers ─────────────────────────────────────────────────────────
 DEPLOY_APPEND=false             # Append to existing configs instead of overwrite
@@ -56,7 +55,7 @@ DEPLOY_ASCII_FILE="start.txt"   # ASCII art file for shell startup
 # ─── Identity & Secrets ───────────────────────────────────────────────────────
 GIT_USER_NAME="yulonglin"
 GIT_USER_EMAIL="30549145+yulonglin@users.noreply.github.com"
-SECRETS_GIST_ID="3cc239f160a2fe8c9e6a14829d85a371"
+SECRETS_GIST_ID="3cc239f160a2fe8c9e6a14829d85a371"  # Public identifier (like repo name), not a secret
 
 # ─── AI Tools Configuration ───────────────────────────────────────────────────
 # MCP servers to configure for Claude Code
@@ -68,7 +67,7 @@ MCP_SERVERS=(
 # Format: "name:repo:binary_name:env_var_for_token"
 MCP_SERVERS_LOCAL=(
     "slack:yulonglin/slack-mcp-server:slack-mcp-server:SLACK_MCP_XOXP_TOKEN"
-)
+)  # Consider if this is safe to include here, or if it'll break something
 
 # ─── Core Packages ────────────────────────────────────────────────────────────
 # Installed on all platforms
@@ -76,7 +75,6 @@ PACKAGES_CORE=(
     "jq"
     "fzf"
     "htop"
-    "ncdu"
     "rsync"
     "shellcheck"  # Shell script linter
     "tldr"        # Simplified man pages
@@ -84,14 +82,15 @@ PACKAGES_CORE=(
 
 # macOS-specific packages (via Homebrew)
 PACKAGES_MACOS=(
-    "coreutils"
+    "coreutils"  # GNU utilities on macOS (gdate, gawk, gsed)
     "bat"
     "eza"
     "zoxide"
     "delta"
     "gitleaks"
-    "btop"
     "dust"
+    "fd"
+    "ripgrep"
     "jless"
 )
 
@@ -104,20 +103,18 @@ PACKAGES_LINUX_MISE=(
     "github:dandavison/delta"
     "github:bootandy/dust"
     "github:ajeetdsouza/zoxide"
-    "ubi:PaulJuliusMartinez/jless"
+    "ubi:PaulJuliusMartinez/jless"  # ubi: required — no aarch64-linux binaries in releases
 )
 
 # Extra packages (--extras flag)
 PACKAGES_EXTRAS_MACOS=(
-    "fd"
-    "ripgrep"
     "hyperfine"
     "lazygit"
 )
 
 PACKAGES_EXTRAS_LINUX=(
-    "ubi:sharkdp/hyperfine"
-    "ubi:jesseduffield/lazygit"
+    "github:sharkdp/hyperfine"
+    "github:jesseduffield/lazygit"
     "cargo:code2prompt"
 )
 
@@ -131,10 +128,6 @@ apply_profile() {
     case "$profile" in
         personal)
             # Default - everything enabled (values above)
-            ;;
-        work)
-            # Personal + work aliases
-            DEPLOY_ALIASES=("speechmatics")
             ;;
         server)
             # Minimal server setup
@@ -212,6 +205,10 @@ detect_platform
 
 # Apply profile if set (can be overridden by CLI)
 [[ -n "$PROFILE" ]] && apply_profile "$PROFILE"
+
+# User overrides (gitignored) — create config.local.sh to customize defaults
+# Precedence: defaults -> apply_profile() -> config.local.sh -> CLI flags (parse_args)
+[[ -n "$DOT_DIR" && -f "$DOT_DIR/config.local.sh" ]] && source "$DOT_DIR/config.local.sh"
 
 # Platform-specific defaults
 if is_linux; then

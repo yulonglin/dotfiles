@@ -25,7 +25,7 @@ echo ""
 
 # ─── System deps ──────────────────────────────────────────────────────────────
 echo "Installing system dependencies..."
-apt-get update && apt-get install -y sudo zsh htop ncdu vim cron curl ca-certificates
+apt-get update && apt-get install -y sudo zsh htop vim cron curl ca-certificates
 command -v nvtop &>/dev/null || apt-get install -y nvtop 2>/dev/null || true
 service cron start 2>/dev/null || true
 
