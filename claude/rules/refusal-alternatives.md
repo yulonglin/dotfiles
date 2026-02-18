@@ -43,8 +43,11 @@ When a tool or sandbox blocks you, don't retry the same thing — pivot immediat
 | Codex/delegated agent fails | Fall back to doing it yourself — don't retry delegation |
 | API/network timeout | Check if client-side config is the cause (e.g., `max_connections` too high) before blaming infrastructure |
 | MCP tool not found | Try alternative tool names, then fall back to Bash/direct approach |
+| **Auth-gated service** (Notion, Google Drive, private repos, Confluence, Jira, etc.) | **Ask user immediately** — don't try WebFetch, Playwright login pages, or unauthenticated API calls. Request: copy-paste content, export as file, or provide credentials/token to configure access |
 
 **Rule:** After any tool failure, **immediately** try an alternative approach. Never retry the same failing command more than once.
+
+**Rule:** When a task requires accessing an authenticated service you can't reach, **ask the user on the first attempt** — don't burn context trying multiple doomed approaches (WebFetch → Playwright → curl). Recognize auth walls instantly and escalate.
 
 ## Over-Caution Alternatives (Instead of Being Too Conservative)
 

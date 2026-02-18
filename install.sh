@@ -185,15 +185,16 @@ fi
 if [[ "$INSTALL_EXTRAS" == "true" ]]; then
     log_section "INSTALLING EXTRAS"
 
+    # Rust toolchain (needed for code2prompt, claude-tools)
+    if ! is_installed cargo; then
+        log_info "Installing Rust..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+        source "$HOME/.cargo/env" 2>/dev/null || true
+    fi
+
     if is_macos; then
         install_packages brew "${PACKAGES_EXTRAS_MACOS[@]}"
 
-        # code2prompt requires cargo
-        if ! is_installed cargo; then
-            log_info "Installing Rust..."
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
-            source "$HOME/.cargo/env" 2>/dev/null || true
-        fi
         if cmd_exists cargo && ! is_installed code2prompt; then
             log_info "Installing code2prompt..."
             cargo install code2prompt --quiet 2>/dev/null || log_warning "code2prompt failed"
