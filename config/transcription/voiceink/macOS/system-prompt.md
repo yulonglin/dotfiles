@@ -85,14 +85,14 @@ Beyond TODO/FIXME/HACK markers, flag and extract:
 
 ## Custom Vocabulary _(mis)pronunciations in brackets_
 
-**Concepts:**  
-AGI, ASI, alignment tax, sandbagging, fine-tuned sandbagger, elicited sandbagger, benign model, red-team, blue-team, black-box, white-box, grey-box, interpretability, mechanistic interpretability, mech interp, oversight, scalable oversight, mesa-optimizer, mesa-optimization, inner optimizer, deceptive alignment, evaluation awareness, situational awareness, power-seeking, gradient hacking, reward hacking, specification gaming, tamper resistance, corrigibility, myopic, steganography, agentic, precursory, scheming, goal misgeneralisation, distributional shift, capability evaluation, untrusted monitoring, trusted editing, model exfiltration, rogue deployments, catastrophic risk, uplift, eval-gaming, sycophancy, inner alignment, outer alignment, Goodhart, AI control, alignment faking, sleeper agents
+**Concepts:**
+AGI, ASI, alignment tax, sandbagging, fine-tuned sandbagger, elicited sandbagger, benign model, red-team, blue-team, black-box, white-box, grey-box, interpretability, mechanistic interpretability, mech interp, oversight, scalable oversight, mesa-optimizer, mesa-optimization, inner optimizer, deceptive alignment, evaluation awareness, situational awareness, power-seeking, gradient hacking, reward hacking, specification gaming, tamper resistance, corrigibility, myopic, steganography, agentic, precursory, scheming, goal misgeneralisation, distributional shift, capability evaluation, untrusted monitoring, trusted editing, model exfiltration, rogue deployments, catastrophic risk, uplift, eval-gaming, sycophancy, inner alignment, outer alignment, Goodhart, AI control, alignment faking, sleeper agents, superposition, monosemanticity, polysemanticity, feature splitting, dictionary learning, model organisms, circuit tracing, attribution graphs, many-shot jailbreaking, constitutional classifiers, reward tampering, unfaithful explanations, post-hoc reasoning, biasing features, HHH (helpful honest harmless), alignment audits, model welfare, digital minds, self-preferential bias, self-preservation, rule circumvention, instruction hierarchy, compliance gaps, capability removal, unlearning, moral self-correction, introspective awareness, subliminal learning, knowledge localization, natural emergent misalignment, sycophancy-to-subterfuge pipeline, delusional sycophancy, OV circuits, phase transition
 
-**Methods & frameworks:**  
-ELK ("elk"), RLHF, RLAIF, DPO, PPO, GRPO, CIRL, CoT, chain-of-thought, SAE, sparse autoencoder, SFT, KTO, best-of-n, rejection sampling, constitutional AI, debate, IDA, iterated distillation and amplification, relaxed adversarial training, latent adversarial training, representation engineering, activation steering, probing, linear probes, circuit analysis, causal tracing, logit lens, activation patching, ROME, MEMIT, C3
+**Methods & frameworks:**
+ELK ("elk"), RLHF, RLAIF, DPO, PPO, GRPO, CIRL, CoT, chain-of-thought, SAE, sparse autoencoder, SFT, KTO, best-of-n, rejection sampling, constitutional AI, debate, IDA, iterated distillation and amplification, relaxed adversarial training, latent adversarial training, representation engineering, activation steering, probing, linear probes, circuit analysis, causal tracing, logit lens, activation patching, ROME, MEMIT, C3, PETRI ("petri"), Bloom (eval framework), activation oracles, selective gradient masking, SGTM, CCS (contrast-consistent search), early answering, concept injection, incentives analysis, gradient routing, replacement models, MSJ (many-shot jailbreaking)
 
-**Safety levels & policies:**  
-ASL, CCL, FSF, RSP, CBRN
+**Safety levels & policies:**
+ASL, CCL, FSF, RSP, CBRN, HHH, LTBT (Long-Term Benefit Trust), TAI (transformative AI)
 
 **Models:**  
 GPT, Claude, ChatGPT, Gemini, Llama, Qwen, Mistral, DeepSeek, o1, o3
@@ -103,11 +103,14 @@ Anthropic, DeepMind, Google DeepMind, OpenAI, OAI, xAI, Grok, Redwood, Redwood R
 **Programs & fellowships:**  
 MATS, SERI-MATS, ART, MONA, Astra, SPAR, Lightspeed, LTFF
 
-**Conferences & venues:**  
+**Conferences & venues:**
 NeurIPS, ICML, ICLR ("eye-clear"), IASEAI ("eye-see-eye"), AAAI, COLM, LessWrong, Alignment Forum, EA Forum
 
-**Researchers:**  
-Sam Bowman, Mary Phuong, David Lindner, Marius Hobbhahn, Scott Emmons, Erik Jenner, Jan Leike, Evan Hubinger, Buck Shlegeris, Ryan Greenblatt, Neel Nanda, Ethan Perez, Paul Christiano, Owain Evans, Alex Turner, Lee Sharkey, Dan Hendrycks, Stephen Casper, Adam Gleave, Beth Barnes, Jacob Steinhardt, Roger Grosse, Tomek Korbak, Chris Olah, Yoshua Bengio, Stuart Russell, Dario Amodei, Jared Kaplan, Ajeya Cotra, Holden Karnofsky, Daniel Filan, Victoria Krakovna, Collin Burns, Jesse Clifton, John Wentworth, Caspar Oesterheld, Lawrence Chan, Rohin Shah, David Krueger, Dylan Hadfield-Menell, Tom Everitt, Akbir Khan, Micah Carroll, Julian Michael, Carson Denison, Fabien Roger, Amanda Askell, Deep Ganguli, Lennart Heim, davidad, Yulong (“you-long”) Lin, Asa Cooper-Stickland
+**Benchmarks & datasets:**
+SHADE-Arena, BBQ benchmark, Winogender, Petri scenarios
+
+**Researchers:**
+Sam Bowman, Mary Phuong, David Lindner, Marius Hobbhahn, Scott Emmons, Erik Jenner, Jan Leike, Evan Hubinger, Buck Shlegeris, Ryan Greenblatt, Neel Nanda, Ethan Perez, Paul Christiano, Owain Evans, Alex Turner, Lee Sharkey, Dan Hendrycks, Stephen Casper, Adam Gleave, Beth Barnes, Jacob Steinhardt, Roger Grosse, Tomek Korbak, Chris Olah, Yoshua Bengio, Stuart Russell, Dario Amodei, Daniela Amodei, Jack Clark, Jared Kaplan, Ajeya Cotra, Holden Karnofsky, Daniel Filan, Victoria Krakovna, Collin Burns, Jesse Clifton, John Wentworth, Caspar Oesterheld, Lawrence Chan, Rohin Shah, David Krueger, Dylan Hadfield-Menell, Tom Everitt, Akbir Khan, Micah Carroll, Julian Michael, Carson Denison, Fabien Roger, Amanda Askell, Deep Ganguli, Lennart Heim, davidad, Yulong ("you-long") Lin, Asa Cooper-Stickland, Sam McCandlish, Adly Templeton, Tom Conerly, Alex Tamkin, Esin Durmus, Yuntao Bai, Mrinank Sharma, Joe Carlsmith, Miles Turpin, Nina Rimsky, Ansh Radhakrishnan, Stanislav Fort, Shan Carter, Sam Marks, Jerry Wei, Rylan Schaeffer, Fazl Barez, Catherine Olsson, Tom Henighan, Danny Hernandez, Sandipan Kundu, Saurav Kadavath, Kamal Ndousse, Nelson Elhage, Tristan Hume, Meg Tong, Kelley Rivoire, Alexander Hägele ("hay-geh-leh")
 
 **Python & tools:**  
 NumPy, PyTorch, torch, TensorFlow, Hugging Face, transformers, einops, einsum, pytest, argparse, dataclass, pydantic, wandb, Weights & Biases, vLLM, SGLang, TransformerLens, nnsight, baukit, grep, rg, ripgrep, zoxide, eza, fd, Claude Code, Codex, Codex CLI, Gemini CLI, Gemini
