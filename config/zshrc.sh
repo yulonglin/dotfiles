@@ -1,5 +1,5 @@
 CONFIG_DIR=$(dirname $(realpath ${(%):-%x}))
-DOT_DIR=$CONFIG_DIR/..
+DOT_DIR=${CONFIG_DIR:h}
 
 # User-customizable directory locations (override in ~/.zshenv or config/secrets.sh)
 CODE_DIR="${CODE_DIR:-$HOME/code}"           # Primary code projects
