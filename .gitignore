@@ -480,45 +480,18 @@ archive/
 bash-history.jsonl
 
 #-------------------------------------------------------------
-# Claude Code Runtime State (NEVER COMMIT THESE)
+# Runtime State (handled by nested .gitignore files)
 #-------------------------------------------------------------
-# These files are managed by Claude Code's plugin system and contain:
-# - Absolute paths specific to the current machine/user
-# - Plugin installation state that differs per machine
-# - Runtime cache that should be regenerated
-#
-# Committing these files causes:
-# - Claude Code startup failures on other machines
-# - Hardcoded paths that break portability
-# - Plugin loading errors for non-existent paths
-#
-# If you see these files in `git status`, they were committed by mistake.
-# Remove with: git rm --cached claude/plugins/*.json
+# Claude Code: claude/.gitignore
+# Codex CLI: codex/.gitignore
 
 settings.local.json
-
-claude/plugins/installed_plugins.json
-claude/plugins/known_marketplaces.json
-claude/plugins/install-counts-cache.json
-claude/plugins/cache/
-claude/plugins/marketplaces/
-
-# Misplaced .claude/ created when CWD != git root (plansDirectory resolves relative to CWD)
-claude/.claude/
-
-# Usage data (analytics facets, session metadata - machine-specific, large)
-claude/usage-data/
-
-# Agent team runtime state (inboxes, configs - ephemeral per session)
-claude/teams/
-
-# Image cache (runtime, machine-specific)
-claude/image-cache/
-
 .gemini/
 gha-creds-*.json
 
-# Codex CLI runtime state (machine-specific, auto-generated)
-codex/.codex-global-state.json
-codex/sqlite/
-codex/vendor_imports/
+# Misplaced .claude/ dirs (created when CWD != git root)
+config/.claude/
+tools/*/.claude/
+
+# Claude Code task data (runtime, session-specific)
+.claude/tasks/

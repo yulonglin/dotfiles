@@ -9,3 +9,6 @@ version
 version.json
 rules/claude_sync.generated.rules
 shell_snapshots
+.codex-global-state.json
+sqlite/
+vendor_imports/
