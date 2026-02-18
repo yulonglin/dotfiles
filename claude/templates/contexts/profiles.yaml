@@ -21,11 +21,8 @@ profiles:
     enable:
       - code
       - workflow
-      - coderabbit
       - code-simplifier
       - security-guidance
-      - code-review
-      - feature-dev
 
   research:
     comment: "Experiments, evals, analysis"
@@ -35,6 +32,7 @@ profiles:
       - workflow
       - viz
       - Notion
+      - linear
 
   writing:
     comment: "Papers, blog posts, documentation"
@@ -43,6 +41,7 @@ profiles:
       - viz
       - workflow
       - Notion
+      - linear
 
   design:
     comment: "Frontend, visualizations, web"
@@ -65,10 +64,10 @@ profiles:
       - workflow
       - viz
       - Notion
+      - linear
       - coderabbit
       - code-simplifier
       - security-guidance
-      - code-review
 
   # Sub-profiles (compose with domain)
   python:
@@ -76,8 +75,8 @@ profiles:
     enable: [pyright-lsp]
 
   web:
-    comment: "Adds vercel, stripe, typescript-lsp, supabase"
-    enable: [vercel, stripe, typescript-lsp, supabase]
+    comment: "Adds vercel, typescript-lsp, supabase"
+    enable: [vercel, typescript-lsp, supabase]
 
   ml:
     comment: "Adds huggingface-skills"
