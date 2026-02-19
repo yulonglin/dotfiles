@@ -1,0 +1,73 @@
+[
+  {
+    "name": "Coding",
+    "emoji": "💻",
+    "isAIEnhancementEnabled": true,
+    "selectedPrompt": "technical",
+    "useScreenCapture": false,
+    "isAutoSendEnabled": false,
+    "isEnabled": true,
+    "isDefault": false,
+    "appConfigs": [
+      {"bundleIdentifier": "com.apple.Terminal", "appName": "Terminal"},
+      {"bundleIdentifier": "net.kovidgoyal.kitty", "appName": "kitty"},
+      {"bundleIdentifier": "dev.warp.Warp-Stable", "appName": "Warp"},
+      {"bundleIdentifier": "com.mitchellh.ghostty", "appName": "Ghostty"},
+      {"bundleIdentifier": "com.googlecode.iterm2", "appName": "iTerm2"},
+      {"bundleIdentifier": "com.todesktop.230313mzl4w4u92", "appName": "Cursor"},
+      {"bundleIdentifier": "dev.zed.Zed", "appName": "Zed"},
+      {"bundleIdentifier": "com.google.antigravity", "appName": "Antigravity"}
+    ]
+  },
+  {
+    "name": "Messaging",
+    "emoji": "💬",
+    "isAIEnhancementEnabled": true,
+    "selectedPrompt": "messaging",
+    "useScreenCapture": false,
+    "isAutoSendEnabled": false,
+    "isEnabled": true,
+    "isDefault": false,
+    "appConfigs": [
+      {"bundleIdentifier": "net.whatsapp.WhatsApp", "appName": "WhatsApp"},
+      {"bundleIdentifier": "com.tinyspeck.slackmacgap", "appName": "Slack"},
+      {"bundleIdentifier": "ru.keepcoder.Telegram", "appName": "Telegram"},
+      {"bundleIdentifier": "org.whispersystems.signal-desktop", "appName": "Signal"},
+      {"bundleIdentifier": "com.apple.MobileSMS", "appName": "Messages"},
+      {"bundleIdentifier": "com.apple.Safari.WebApp.16BDF69C-045F-405F-86D9-27D60158838E", "appName": "Messenger"}
+    ]
+  },
+  {
+    "name": "Email",
+    "emoji": "📧",
+    "isAIEnhancementEnabled": true,
+    "selectedPrompt": "email",
+    "useScreenCapture": false,
+    "isAutoSendEnabled": false,
+    "isEnabled": true,
+    "isDefault": false,
+    "appConfigs": [
+      {"bundleIdentifier": "com.readdle.SparkDesktop", "appName": "Spark"},
+      {"bundleIdentifier": "com.microsoft.Outlook", "appName": "Outlook"},
+      {"bundleIdentifier": "com.electron.shortwave", "appName": "Shortwave"},
+      {"bundleIdentifier": "com.apple.mail", "appName": "Mail"}
+    ]
+  },
+  {
+    "name": "AI Chat",
+    "emoji": "🤖",
+    "isAIEnhancementEnabled": true,
+    "selectedPrompt": "technical",
+    "useScreenCapture": false,
+    "isAutoSendEnabled": false,
+    "isEnabled": true,
+    "isDefault": false,
+    "appConfigs": [
+      {"bundleIdentifier": "com.anthropic.claudefordesktop", "appName": "Claude"},
+      {"bundleIdentifier": "com.openai.chat", "appName": "ChatGPT"},
+      {"bundleIdentifier": "com.apple.Safari.WebApp.4DE5FBAE-B227-403A-AD8F-6D3E2BF94714", "appName": "Grok"},
+      {"bundleIdentifier": "com.apple.Safari.WebApp.D676D419-962D-4E32-B806-6DCA25C31E88", "appName": "Gemini"},
+      {"bundleIdentifier": "com.apple.Safari.WebApp.2B595E90-CD84-4657-BCFB-ED1C3BDC6286", "appName": "Perplexity"}
+    ]
+  }
+]

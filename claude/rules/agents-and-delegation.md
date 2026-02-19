@@ -26,13 +26,15 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 
 | Agent | Use Case | Strength |
 |-------|----------|----------|
-| **gemini-cli** | Large context analysis (>100KB) | 1M+ token window, PDFs, entire codebases |
+| **gemini-cli** | Large context analysis (>100KB); image generation/editing (Nano Banana / Nano Banana Pro); Google Workspace (Docs, Sheets, Drive) | 1M+ token window, PDFs, entire codebases, multimodal, native Google auth |
 | **core:codex** | Well-scoped implementation | Fast, precise, follows specs exactly |
 | **core:claude** | Judgment-heavy tasks | Taste, tool use, MCP access, nuanced reasoning |
 
 ```
 Need delegation?
 ├─ Large context (PDF, codebase)? → gemini-cli
+├─ Generate or edit images? → gemini-cli (Nano/Flash/Pro)
+├─ Create/edit Google Docs, Sheets, Drive files? → gemini-cli
 ├─ Plan needs critique? → code:plan-critic (+ core:claude in parallel)
 ├─ Clear implementation spec/plan? → core:codex
 ├─ Bug with clear repro? → core:codex (+ debugger for investigation)

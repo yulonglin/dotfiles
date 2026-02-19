@@ -37,6 +37,7 @@ tasks/
 teams/
 usage-data/
 image-cache/
+backups/
 bash-commands.log
 logs/
 

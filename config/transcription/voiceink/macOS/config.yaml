@@ -1,0 +1,27 @@
+# VoiceInk configuration
+# Seeds UserDefaults on first run / after reinstall. UI changes persist normally.
+# Only missing keys are seeded — existing UserDefaults values are never overwritten.
+
+# AI Enhancement
+enhancement_enabled: true
+selected_prompt: Technical
+ai_provider: anthropic
+ai_model: claude-haiku-4-5
+clipboard_context: false
+screen_capture_context: false
+
+# Recording
+selected_language: en
+recorder_type: mini
+streaming_enabled: false
+live_paste_enabled: false
+
+# Behavior
+menu_bar_only: false
+restore_clipboard: false
+mute_system: false
+pause_media: false
+
+# Hotkeys (raw values from HotkeyOption enum)
+hotkey1: rightCommand
+hotkey2: none
