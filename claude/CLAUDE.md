@@ -79,7 +79,7 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/workflow-defaults.md` — Task/agent organization, file creation policy, output strategy
 - `rules/context-management.md` — PDF/large file rules, bulk edit constraints, verbose output handling
 - `rules/agents-and-delegation.md` — Subagent strategy, delegation decision tree, team escalation
-- `rules/coding-conventions.md` — Python/shell basics, date formatting, package managers
+- `rules/coding-conventions.md` — Python/TypeScript/shell basics, language selection, package managers
 - `rules/refusal-alternatives.md` — Friction prevention: ambiguity resolution, non-destructive editing, tool failure pivots, over-caution fixes
 
 ## Knowledge Docs (On-Demand)

@@ -31,6 +31,12 @@ if __name__ == "__main__":
     add_project_root()
 ```
 
+## TypeScript
+
+- Prefer TypeScript over JavaScript for all frontend/Node work
+- Tooling: bun (runtime + pkg mgr) + tsc (types) + Biome (lint + format)
+- Biome replaces ESLint + Prettier — single Rust-based binary
+
 ## Date & Timestamp Formatting
 
 - **Always use UTC timezone** for all timestamps
@@ -49,7 +55,7 @@ if __name__ == "__main__":
 ## General Programming
 
 - Match existing code style
-- Run linting (ruff/ty) after changes
+- Run linting (`ruff`) and type checking (`ty`) after changes
 - Refactor when unwieldy (>50 lines/function, >500 lines/file)
 
 ## Package Managers (preference order)
@@ -60,6 +66,17 @@ if __name__ == "__main__":
 3. **npm** — Universal fallback
 
 Check for `bun.lockb`, `pnpm-lock.yaml`, or `package-lock.json` to detect which is in use.
+
+## Language Selection
+
+| Need | Default | When to reconsider |
+|------|---------|-------------------|
+| ML / research / prototyping | Python | — |
+| Frontend / scripting / APIs | TypeScript | Plain JS only for trivial scripts |
+| Performance-critical CLI/tools | Rust | Go if team familiarity matters; Zig for low-level/embedded |
+| Shell glue | Bash/Zsh | Python if >50 lines or needs error handling |
+
+This is a preference order, not a mandate. Match the tool to the job.
 
 ## CLI Tools Available
 
