@@ -33,11 +33,26 @@ Before running deployment scripts, file system operations, or configuration task
 
 ## Git Commands (Readability)
 
-- **Prefer rebase over merge** for `git pull` — keeps history linear and clean
-- **Default pull behavior**: When user says "pull", run `git stash && git pull --rebase && git stash pop`
-  - Handles unstaged changes automatically
+- **Smart pull strategy** — choose the safest sync method based on context, not unconditional rebase:
+  ```
+  After git fetch origin:
+  +-- Local ahead, remote has nothing     -> just push (no pull needed)
+  +-- Local behind, no local commits      -> git pull --ff-only
+  +-- Diverged:
+  |   +-- Local has merge commits?        -> git pull --no-rebase (merge)
+  |   +-- >20 local commits to replay?    -> git pull --no-rebase (merge)
+  |   +-- Few commits, no merges          -> git pull --rebase
+  |   +-- Any pull fails?                 -> abort, show state, ask user
+  +-- @{u} not configured                 -> commit, git push -u origin <branch>
+  ```
+  **Principle:** Rebase only when cheap and safe (few commits, no merges). Never rebase merge commits — rebase drops them and replays their individual commits, causing massive conflicts.
+- **Default pull behavior**: When user says "pull":
+  1. Determine correct remote: `UPSTREAM_REMOTE=$(git rev-parse --abbrev-ref @{u} 2>/dev/null | cut -d/ -f1)` then `git fetch "${UPSTREAM_REMOTE:-origin}"` (always)
+  2. Evaluate state: `git log @{u}.. --oneline`, `git log ..@{u} --oneline`, `git log @{u}.. --merges --oneline`
+  3. Apply decision tree above
+  4. If unstaged changes: stash first, sync, then stash pop
+  - If stash fails due to sandbox (e.g., `.claude/settings*.json` unlink errors), commit the non-settings files first, then push directly
   - If merge conflicts occur after stash pop, notify user and help resolve
-  - If stash fails due to sandbox (e.g., `.claude/settings*.json` unlink errors), push directly or commit the non-settings files first
 - **Use readable refs** over commit hashes: branch names, tags, `origin/branch`
 - Examples:
   - ✅ `git log origin/main..feature-branch`
