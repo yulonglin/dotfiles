@@ -166,12 +166,37 @@ cwport() {
 }
 
 cwmerge() {
-  # Merge a worktree branch into the current branch
-  # Auto-aborts on conflict, leaving repo clean
-  # Usage: cwmerge <worktree-name>
+  # Merge a worktree branch into the parent branch
+  # Works from main tree OR from inside a worktree (auto-detects)
+  # Auto-aborts on conflict, suggests /merge-worktree skill for AI resolution
+  # Usage: cwmerge [worktree-name]  (name optional when inside a worktree)
   local name="$1"
+  local merge_dir=""
+
+  # Auto-detect if we're inside a worktree
+  local git_dir common_dir
+  git_dir=$(git rev-parse --git-dir 2>/dev/null)
+  common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
+
+  if [[ "$git_dir" != "$common_dir" ]]; then
+    # We're inside a worktree — infer name from branch, merge into main tree
+    if [[ -z "$name" ]]; then
+      local current_branch
+      current_branch=$(git rev-parse --abbrev-ref HEAD)
+      name="${current_branch#worktree-}"
+      if [[ "$name" == "$current_branch" ]]; then
+        # Branch doesn't have worktree- prefix, use directory name
+        name=$(basename "$(git rev-parse --show-toplevel)")
+      fi
+    fi
+    # Find main worktree path (first entry in worktree list)
+    merge_dir=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
+    echo "Inside worktree — merging into main tree at $merge_dir"
+  fi
+
   if [[ -z "$name" ]]; then
     echo "Usage: cwmerge <worktree-name>"
+    echo "  (or run from inside a worktree to auto-detect)"
     return 1
   fi
 
@@ -181,27 +206,34 @@ cwmerge() {
     return 1
   fi
 
-  local current_branch ahead
-  current_branch=$(git rev-parse --abbrev-ref HEAD)
-  ahead=$(git rev-list --count "$current_branch..$branch" 2>/dev/null || echo 0)
+  # Determine target branch and merge directory
+  local target_branch
+  if [[ -n "$merge_dir" ]]; then
+    target_branch=$(git -C "$merge_dir" rev-parse --abbrev-ref HEAD)
+  else
+    merge_dir=$(git rev-parse --show-toplevel)
+    target_branch=$(git rev-parse --abbrev-ref HEAD)
+  fi
+
+  local ahead
+  ahead=$(git rev-list --count "$target_branch..$branch" 2>/dev/null || echo 0)
 
   if [[ "$ahead" -eq 0 ]]; then
-    echo "Already up to date ($branch has no new commits vs $current_branch)."
+    echo "Already up to date ($branch has no new commits vs $target_branch)."
     return 0
   fi
 
-  echo "Merging $branch ($ahead commit(s)) into $current_branch..."
-  if git merge --no-edit "$branch"; then
+  echo "Merging $branch ($ahead commit(s)) into $target_branch..."
+  if git -C "$merge_dir" merge --no-edit "$branch"; then
     echo "Merged successfully."
   else
-    git merge --abort
+    git -C "$merge_dir" merge --abort
     echo "Conflict — merge aborted (repo is clean). Conflicting files:"
-    git diff --name-only "$current_branch" "$branch"
+    git diff --name-only "$target_branch" "$branch"
     echo ""
-    echo "To resolve manually:"
-    echo "  git merge worktree-$name"
-    echo "To accept worktree version:"
-    echo "  git merge -X theirs worktree-$name"
+    echo "To resolve with Claude:  /merge-worktree"
+    echo "To resolve manually:     git -C $merge_dir merge worktree-$name"
+    echo "To accept worktree version: git -C $merge_dir merge -X theirs worktree-$name"
     return 1
   fi
 }

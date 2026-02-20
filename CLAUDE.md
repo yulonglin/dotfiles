@@ -34,7 +34,8 @@ See README.md for detailed usage.
 | `cw [name]` | Worktree + tmux (with permission prompts) |
 | `cwy [name]` | Worktree + tmux + skip permissions |
 | `cwl` | List all worktrees |
-| `cwmerge <name>` | Merge worktree branch into current branch (safe: auto-aborts on conflict) |
+| `cwmerge [name]` | Merge worktree branch into parent (auto-detects from inside worktree) |
+| `/merge-worktree` | Claude skill: merge + AI conflict resolution |
 | `cwport <name> [dirs...]` | Copy artifacts (out/, logs/, etc.) from worktree to main tree |
 | `cwrm [--no-merge] <name>` | Merge branch → remove worktree → delete branch |
 | `cwclean [--dry-run]` | Remove clean worktrees (no changes, no artifacts) |
