@@ -443,8 +443,34 @@ def apply_context_yaml_cmd():
     print(f"{YELLOW}Restart Claude Code to apply changes.{NC}")
 
 
-def reset():
+def _is_git_tracked(path):
+    """Check if a file is tracked by git."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", path],
+            capture_output=True, text=True
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+def reset(force=False):
     """Remove enabledPlugins from project settings.json, delete context.yaml."""
+    # Guard: refuse to delete git-tracked files without --force
+    if not force:
+        tracked = []
+        if os.path.exists(CONTEXT_FILE) and _is_git_tracked(CONTEXT_FILE):
+            tracked.append(CONTEXT_FILE)
+        if os.path.exists(TARGET_FILE) and _is_git_tracked(TARGET_FILE):
+            tracked.append(TARGET_FILE)
+        if tracked:
+            print(f"{RED}Refusing to modify git-tracked files:{NC}")
+            for f in tracked:
+                print(f"  {f}")
+            print(f"\nUse {BOLD}--force{NC} to override (changes will show in git diff).")
+            sys.exit(1)
+
     changed = False
 
     if os.path.exists(CONTEXT_FILE):
@@ -491,6 +517,7 @@ def main():
     parser.add_argument("--clean", "--reset", action="store_true", dest="clean", help="Remove project plugin config")
     parser.add_argument("--sync-marketplaces", "--sync", action="store_true", dest="sync", help="Sync plugin marketplaces from profiles.yaml")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output (for --sync)")
+    parser.add_argument("--force", "-f", action="store_true", help="Force --clean even on git-tracked files")
     parser.add_argument("-h", "--help", action="store_true", help="Show help")
 
     args = parser.parse_args()
@@ -518,7 +545,7 @@ def main():
     elif args.list:
         show_status()
     elif args.clean:
-        reset()
+        reset(force=args.force)
     elif args.profiles:
         apply_profiles_cmd(args.profiles)
     else:
