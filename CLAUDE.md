@@ -26,17 +26,19 @@ See README.md for detailed usage.
 
 ### Worktree Workflow
 
-**`yolo` always creates a worktree** — every yolo session runs in an isolated `.claude/worktrees/<name>/` directory with its own branch. `resume`/`cont` bypass worktree (they resume existing sessions).
+`yolo` works as before (skip permissions, no worktree). Use `cw`/`cwy` for isolated worktree sessions.
 
 | Command | What it does |
 |---------|-------------|
-| `yolo` | Auto-named worktree + tmux + skip permissions |
-| `cw [name]` | Named/auto worktree + tmux (with permission prompts) |
-| `cwy [name]` | Named/auto worktree + tmux + skip permissions |
+| `yolo` | Skip permissions (no worktree, no tmux) |
+| `cw [name]` | Worktree + tmux (with permission prompts) |
+| `cwy [name]` | Worktree + tmux + skip permissions |
 | `cwl` | List all worktrees |
 | `cwport <name> [dirs...]` | Copy artifacts (out/, logs/, etc.) from worktree to main tree |
-| `cwrm [--force] <name>` | Remove worktree + branch (warns about artifacts) |
+| `cwrm [--no-merge] <name>` | Merge branch → remove worktree → delete branch |
 | `cwclean [--prune]` | List worktree status; `--prune` removes clean ones |
+
+**`cwrm` merges by default** — the worktree branch is merged into your current branch before removal. Use `--no-merge` to skip. `--force` skips artifact warnings.
 
 **Gitignored files** (.env, out/, logs/) do NOT exist in new worktrees. Each worktree starts clean with only tracked files.
 

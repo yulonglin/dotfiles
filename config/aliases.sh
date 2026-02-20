@@ -81,14 +81,12 @@ claude() {
     activate_venv
     command claude "${args[@]}"
 }
-# yolo — always creates isolated worktree + tmux
-yolo() { claude --worktree --tmux --dangerously-skip-permissions "$@"; }
-
-# resume/continue bypass worktree (resuming existing sessions)
-alias resume='claude --dangerously-skip-permissions --resume'
-alias cont='claude --dangerously-skip-permissions --continue'
-alias continue='claude --dangerously-skip-permissions --continue'
-alias yn='yolo -t'  # yn <name>: yolo with task name (auto-named worktree)
+# yolo — skip permissions (no worktree, no tmux)
+alias yolo='claude --dangerously-skip-permissions'
+alias resume='yolo --resume'
+alias cont='yolo --continue'
+alias continue='yolo --continue'
+alias yn='yolo -t'  # yn <name>: yolo with task name
 
 # Artifact dirs checked across worktree commands (port, remove, clean)
 _CW_ARTIFACT_DIRS=(out logs data results experiments)
@@ -168,14 +166,21 @@ cwport() {
 }
 
 cwrm() {
-  # Remove a Claude-created worktree + its branch
+  # Remove a Claude-created worktree: merge branch → remove dir → delete branch
+  # Merges into current branch by default (use --no-merge to skip)
   # Warns if gitignored artifacts exist (use cwport first or --force)
-  local force=false
-  if [[ "$1" == "--force" ]]; then force=true; shift; fi
+  local force=false no_merge=false
+  while [[ "$1" == --* ]]; do
+    case "$1" in
+      --force) force=true; shift ;;
+      --no-merge) no_merge=true; shift ;;
+      *) break ;;
+    esac
+  done
 
   local name="$1"
   if [[ -z "$name" ]]; then
-    echo "Usage: cwrm [--force] <worktree-name>"
+    echo "Usage: cwrm [--force] [--no-merge] <worktree-name>"
     echo ""; cwl; return 1
   fi
 
@@ -205,6 +210,23 @@ cwrm() {
     fi
   fi
 
+  # Merge worktree branch into current branch (default behavior)
+  local branch="worktree-$name"
+  if ! $no_merge && git rev-parse --verify "$branch" &>/dev/null; then
+    local current_branch ahead
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+    ahead=$(git rev-list --count "$current_branch..$branch" 2>/dev/null || echo 0)
+    if [[ "$ahead" -gt 0 ]]; then
+      echo "Merging $branch ($ahead commit(s)) into $current_branch..."
+      if ! git merge --no-edit "$branch"; then
+        echo "Merge conflict! Resolve manually, then run:"
+        echo "  git branch -D $branch"
+        echo "  git worktree remove $wt_path"
+        return 1
+      fi
+    fi
+  fi
+
   echo "Removing worktree: $wt_path"
   if $force; then
     git worktree remove --force "$wt_path" && echo "Worktree removed."
@@ -212,7 +234,6 @@ cwrm() {
     git worktree remove "$wt_path" && echo "Worktree removed."
   fi
 
-  local branch="worktree-$name"
   if git rev-parse --verify "$branch" &>/dev/null; then
     echo "Deleting branch: $branch"
     git branch -D "$branch"
