@@ -24,6 +24,28 @@ See README.md for detailed usage.
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
 
+### Worktree Workflow
+
+`yolo` works as before (skip permissions, no worktree). Use `cw`/`cwy` for isolated worktree sessions.
+
+| Command | What it does |
+|---------|-------------|
+| `yolo` | Skip permissions (no worktree, no tmux) |
+| `cw [name]` | Worktree + tmux (with permission prompts) |
+| `cwy [name]` | Worktree + tmux + skip permissions |
+| `cwl` | List all worktrees |
+| `cwmerge [name]` | Merge worktree branch into parent (auto-detects from inside worktree) |
+| `/merge-worktree` | Claude skill: merge + AI conflict resolution |
+| `cwport <name> [dirs...]` | Copy artifacts (out/, logs/, etc.) from worktree to main tree |
+| `cwrm [--no-merge] <name>` | Merge branch → remove worktree → delete branch |
+| `cwclean [--dry-run]` | Remove clean worktrees (no changes, no artifacts) |
+
+**`cwrm` merges by default** — the worktree branch is merged into your current branch before removal. Use `--no-merge` to skip. `--force` skips artifact warnings.
+
+**Gitignored files** (.env, out/, logs/) do NOT exist in new worktrees. Each worktree starts clean with only tracked files.
+
+**Artifact lifecycle**: `cw auth-fix` → work → `cwport auth-fix` → `cwrm auth-fix`
+
 ### Claude Code Verification Planning
 
 **Use EnterPlanMode for verification activities, not just implementation:**

@@ -462,4 +462,5 @@ TSWLatexianTemp*
 # Claude Code
 #-------------------------------------------------------------
 .claude/bash-history.jsonl
+.claude/worktrees/
 settings.local.json
