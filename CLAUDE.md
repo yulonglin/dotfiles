@@ -36,7 +36,7 @@ See README.md for detailed usage.
 | `cwl` | List all worktrees |
 | `cwport <name> [dirs...]` | Copy artifacts (out/, logs/, etc.) from worktree to main tree |
 | `cwrm [--no-merge] <name>` | Merge branch → remove worktree → delete branch |
-| `cwclean [--prune]` | List worktree status; `--prune` removes clean ones |
+| `cwclean [--dry-run]` | Remove clean worktrees (no changes, no artifacts) |
 
 **`cwrm` merges by default** — the worktree branch is merged into your current branch before removal. Use `--no-merge` to skip. `--force` skips artifact warnings.
 

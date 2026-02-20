@@ -241,12 +241,12 @@ cwrm() {
 }
 
 cwclean() {
-  # List Claude worktrees with status, optionally prune stale ones
-  # Usage: cwclean [--prune]
-  local prune=false
-  [[ "$1" == "--prune" ]] && prune=true
+  # Remove clean worktrees (no uncommitted changes, no artifacts)
+  # Usage: cwclean [--dry-run]
+  local dry_run=false
+  [[ "$1" == "--dry-run" ]] && dry_run=true
 
-  git worktree prune  # always clean up metadata for deleted dirs
+  git worktree prune  # clean up metadata for deleted dirs
 
   local git_root
   git_root=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -261,8 +261,7 @@ cwclean() {
     return 0
   fi
 
-  echo "Claude worktrees:"
-  local stale=0 name status has_artifacts
+  local cleaned=0 skipped=0 name status has_artifacts
   for wt in "$wt_dir"/*/; do
     [[ ! -d "$wt" ]] && continue
     name=$(basename "$wt")
@@ -270,32 +269,36 @@ cwclean() {
 
     # Check if tmux session for this worktree is alive
     if ! tmux has-session -t "worktree-$name" 2>/dev/null; then
-      # Check for uncommitted changes
       if git -C "$wt" diff --quiet HEAD 2>/dev/null && \
          [[ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ]]; then
         status="clean"
-        stale=$(( stale + 1 ))
       else
         status="dirty"
       fi
     fi
 
-    # Check for artifacts
     has_artifacts=""
     for dir in "${_CW_ARTIFACT_DIRS[@]}"; do
       [[ -d "$wt/$dir" ]] && has_artifacts=" +artifacts"
     done
 
-    printf "  %-30s [%s%s]\n" "$name" "$status" "$has_artifacts"
-
-    if $prune && [[ "$status" == "clean" ]] && [[ -z "$has_artifacts" ]]; then
-      cwrm --force "$name"
+    if [[ "$status" == "clean" ]] && [[ -z "$has_artifacts" ]]; then
+      if $dry_run; then
+        printf "  %-30s [would remove]\n" "$name"
+      else
+        cwrm --force --no-merge "$name"
+      fi
+      cleaned=$(( cleaned + 1 ))
+    else
+      printf "  %-30s [%s%s] — kept\n" "$name" "$status" "$has_artifacts"
+      skipped=$(( skipped + 1 ))
     fi
   done
 
-  if ! $prune && [[ $stale -gt 0 ]]; then
-    echo ""
-    echo "Run 'cwclean --prune' to remove clean worktrees without artifacts."
+  if $dry_run; then
+    echo "Would remove $cleaned worktree(s), keep $skipped."
+  elif [[ $cleaned -gt 0 || $skipped -gt 0 ]]; then
+    echo "Removed $cleaned, kept $skipped (dirty/active/has artifacts)."
   fi
 }
 
