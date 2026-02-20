@@ -11,6 +11,7 @@ set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 CONFIG_FILE="${SCRIPT_DIR}/../config/clear_mac_apps.conf"
+REGISTRY_FILE="${SCRIPT_DIR}/../config/safari_web_apps.local"
 DRY_RUN=false
 
 # Parse flags
@@ -43,19 +44,23 @@ get_apps_in_section() {
     awk -v section="[$section]" '
         /^\[.*\]$/ { in_section = ($0 == section); next }
         in_section && !/^#/ && !/^[[:space:]]*$/ {
+            sub(/#.*/, "")
             gsub(/^[[:space:]]+|[[:space:]]+$/, "")
             if (length > 0) print
         }
     ' "$CONFIG_FILE"
 }
 
-# Get list of running GUI apps (one per line)
+# Get list of running GUI apps as "name|bundle_id" per line
 get_running_apps() {
     osascript -e 'tell application "System Events"
-        set appList to name of every process whose background only is false
+        set procList to every process whose background only is false
         set output to ""
-        repeat with appName in appList
-            set output to output & appName & linefeed
+        repeat with proc in procList
+            set procName to name of proc
+            set procBID to bundle identifier of proc
+            if procBID is missing value then set procBID to ""
+            set output to output & procName & "|" & procBID & linefeed
         end repeat
         return output
     end tell'
@@ -107,6 +112,15 @@ close_app_windows() {
 }
 
 main() {
+    # Load Safari web app registry for bundle ID fallback matching
+    typeset -A registry  # registry[lowercase_name] = bundle_id
+    if [[ -f "$REGISTRY_FILE" ]]; then
+        while IFS='|' read -r name bid _path; do
+            [[ "$name" == \#* || -z "$name" ]] && continue
+            registry[${(L)name}]="$bid"
+        done < "$REGISTRY_FILE"
+    fi
+
     # Build associative arrays for O(1) lookup (keys are lowercase)
     typeset -A no_touch_set
     typeset -A close_windows_set
@@ -124,25 +138,46 @@ main() {
         [[ -n "$app" ]] && slow_close_set[${(L)app}]=1
     done < <(get_apps_in_section "slow-close")
 
-    # Get running apps
-    local -a running_apps=()
-    while IFS= read -r app; do
-        [[ -n "$app" ]] && running_apps+=("$app")
+    # Build bundle ID sets for fallback matching (from registry)
+    typeset -A no_touch_bids
+    typeset -A close_windows_bids
+    typeset -A slow_close_bids
+
+    for name in ${(k)no_touch_set}; do
+        [[ -n "${registry[$name]:-}" ]] && no_touch_bids[${registry[$name]}]=1
+    done
+    for name in ${(k)close_windows_set}; do
+        [[ -n "${registry[$name]:-}" ]] && close_windows_bids[${registry[$name]}]=1
+    done
+    for name in ${(k)slow_close_set}; do
+        [[ -n "${registry[$name]:-}" ]] && slow_close_bids[${registry[$name]}]=1
+    done
+
+    # Get running apps with bundle IDs (tab-separated: "name<TAB>bid")
+    # Tab-separated to handle multiple processes with the same name (e.g. Safari web apps)
+    local SEP=$'\t'
+    local -a running_entries=()
+    while IFS='|' read -r name bid; do
+        [[ -n "$name" ]] || continue
+        running_entries+=("${name}${SEP}${bid}")
     done < <(get_running_apps)
 
-    # Separate apps by action type
+    # Classify: check name match first, bundle ID as fallback
     local -a apps_to_quit=()
     local -a apps_close_windows=()
     local -a apps_slow_close=()
+    local -a apps_skipped=()
 
-    for app in "${running_apps[@]}"; do
+    for entry in "${running_entries[@]}"; do
+        local app="${entry%%${SEP}*}"
+        local bid="${entry#*${SEP}}"
         local app_lower="${(L)app}"
 
-        if (( ${+no_touch_set[$app_lower]} )); then
-            continue
-        elif (( ${+slow_close_set[$app_lower]} )); then
+        if (( ${+no_touch_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+no_touch_bids[$bid]} )) }; then
+            apps_skipped+=("$app")
+        elif (( ${+slow_close_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+slow_close_bids[$bid]} )) }; then
             apps_slow_close+=("$app")
-        elif (( ${+close_windows_set[$app_lower]} )); then
+        elif (( ${+close_windows_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+close_windows_bids[$bid]} )) }; then
             apps_close_windows+=("$app")
         else
             apps_to_quit+=("$app")
@@ -169,11 +204,8 @@ main() {
         done
         echo ""
         echo "Would SKIP (no-touch):"
-        for app in "${running_apps[@]}"; do
-            local app_lower="${(L)app}"
-            if (( ${+no_touch_set[$app_lower]} )); then
-                echo "  - $app"
-            fi
+        for app in "${apps_skipped[@]}"; do
+            echo "  - $app"
         done
         return 0
     fi

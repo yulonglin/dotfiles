@@ -4,6 +4,7 @@
 # User-specific configuration (gitignored)
 config/user.conf
 config/secrets.sh
+config/safari_web_apps.local
 config.local.sh
 
 # npm artifacts (not used - this repo uses system package managers)

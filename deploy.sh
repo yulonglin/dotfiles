@@ -630,6 +630,12 @@ if [[ "$DEPLOY_KEYBOARD" == "true" ]] && is_macos; then
     fi
 fi
 
+# ─── Safari Web App Registry (macOS only) ────────────────────────────────────
+
+if is_macos && [[ -f "$DOT_DIR/custom_bins/safari-web-apps-scan" ]]; then
+    "$DOT_DIR/custom_bins/safari-web-apps-scan" || log_warning "Safari web app scan failed (non-critical)"
+fi
+
 # ─── Done ─────────────────────────────────────────────────────────────────────
 
 echo ""
