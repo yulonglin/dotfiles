@@ -43,6 +43,7 @@ When a tool or sandbox blocks you, don't retry the same thing — pivot immediat
 | Codex/delegated agent fails | Fall back to doing it yourself — don't retry delegation |
 | API/network timeout | Check if client-side config is the cause (e.g., `max_connections` too high) before blaming infrastructure |
 | MCP tool not found | Try alternative tool names, then fall back to Bash/direct approach |
+| Read/Glob file not found | **Search before giving up**: `Glob("**/<basename>")` from git root. Preserve directory hints (if path had `specs/foo.md`, try `**/specs/foo.md` first). Single match → use it. Multiple → list candidates and ask. Zero → ask user for correct path/repo. **Never silently skip a referenced file.** |
 | **Auth-gated service** (Notion, Google Drive, private repos, Confluence, Jira, etc.) | **Ask user immediately** — don't try WebFetch, Playwright login pages, or unauthenticated API calls. Request: copy-paste content, export as file, or provide credentials/token to configure access |
 
 **Rule:** After any tool failure, **immediately** try an alternative approach. Never retry the same failing command more than once.
