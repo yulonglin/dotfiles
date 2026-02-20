@@ -120,7 +120,7 @@ codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 custom_bins/              # Custom utilities (added to PATH)
 ├── utc_date              # Outputs DD-MM-YYYY in UTC
 ├── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
-├── claude-context        # YAML-driven plugin profiles (auto-discovers from installed_plugins.json)
+├── claude-context        # YAML-driven plugin profiles + marketplace sync (--sync)
 └── claude-cache-clean    # Remove stale plugin cache versions
 
 lib/plotting/             # Python plotting library (deployed to ~/.local/lib/plotting/)

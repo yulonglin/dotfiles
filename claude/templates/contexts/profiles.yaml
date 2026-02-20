@@ -4,6 +4,19 @@
 # base → always-on plugins (never repeated in profiles)
 # profiles → only list what they ENABLE beyond base
 
+# Plugin marketplaces — registered + synced by `claude-context --sync`
+# local: preferred when directory has .claude-plugin (live dev); github: fallback
+marketplaces:
+  claude-plugins-official:
+    github: anthropics/claude-plugins-official
+
+  ai-safety-plugins:
+    local: ${CODE_DIR}/ai-safety-plugins
+    github: yulonglin/ai-safety-plugins
+
+  ui-ux-pro-max-skill:
+    github: nextlevelbuilder/ui-ux-pro-max-skill
+
 # Always-on in every profile (declared once)
 base:
   - superpowers

@@ -134,18 +134,20 @@ claude-context code               # Software projects
 claude-context code web python    # Compose multiple profiles
 claude-context --list             # Show active plugins and available profiles
 claude-context --clean            # Remove project plugin config
+claude-context --sync [-v]        # Register + update all plugin marketplaces
 ```
 
 **Architecture:**
 - Plugin registry: auto-discovered from `~/.claude/plugins/installed_plugins.json` (source of truth)
-- Profile definitions: `~/.claude/templates/contexts/profiles.yaml` (base + per-profile enables)
+- Marketplace manifest: `~/.claude/templates/contexts/profiles.yaml` `marketplaces:` section (declarative)
+- Profile definitions: same file, `base:` + `profiles:` sections (per-profile enables)
 - Per-project config: `.claude/context.yaml` (profiles + optional enable/disable overrides, committed)
 - Output: `.claude/settings.json` `enabledPlugins` section (deterministic rebuild from profiles)
 - CLI args persist to `context.yaml` automatically; no-arg invocation re-applies it
 - SessionStart hook auto-applies `context.yaml` on every session start
 - Statusline shows active context profiles (e.g., `[code python]`)
 
-Adding a new plugin: install via Claude Code marketplace, then add to a profile in `profiles.yaml`.
+Adding a new plugin: add its marketplace to `marketplaces:` in `profiles.yaml`, run `claude-context --sync`, then add to a profile.
 
 ---
 

@@ -444,48 +444,13 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
         fi
 
-        # Register ai-safety-plugins marketplace
-        if command -v claude &>/dev/null; then
-            MARKETPLACE_REPO="${CODE_DIR:-$HOME/code}/ai-safety-plugins"
-            if [[ -d "$MARKETPLACE_REPO/.claude-plugin" ]]; then
-                # Local development — register local path (zero-friction edits)
-                if ! claude plugin marketplace list 2>/dev/null | grep -q "ai-safety-plugins"; then
-                    log_info "Registering ai-safety-plugins marketplace (local)..."
-                    claude plugin marketplace add "$MARKETPLACE_REPO" 2>/dev/null || \
-                        log_warning "Failed to register marketplace — run manually: claude plugin marketplace add $MARKETPLACE_REPO"
-                fi
-            else
-                # Other machines — register GitHub URL
-                if ! claude plugin marketplace list 2>/dev/null | grep -q "ai-safety-plugins"; then
-                    log_info "Registering ai-safety-plugins marketplace (GitHub)..."
-                    claude plugin marketplace add yulonglin/ai-safety-plugins 2>/dev/null || \
-                        log_warning "Failed to register marketplace — run manually: /plugin marketplace add yulonglin/ai-safety-plugins"
-                fi
-            fi
-            # Install/update all plugins from the marketplace
-            claude plugin marketplace update ai-safety-plugins 2>/dev/null || true
-
-            # Install official marketplace plugins
-            if [[ ${#OFFICIAL_PLUGINS[@]} -gt 0 ]]; then
-                log_info "Installing official marketplace plugins..."
-                local _inst=0 _skip=0 _fail=0
-                for plugin in "${OFFICIAL_PLUGINS[@]}"; do
-                    local qualified="${plugin}@claude-plugins-official"
-                    if claude plugin list 2>/dev/null | grep -q "$qualified"; then
-                        _skip=$((_skip + 1))
-                        continue
-                    fi
-                    if claude plugin install "$qualified" --scope user 2>&1; then
-                        _inst=$((_inst + 1))
-                    else
-                        log_warning "Failed to install: $qualified"
-                        _fail=$((_fail + 1))
-                    fi
-                done
-                log_success "Official plugins: installed=$_inst, skipped=$_skip, failed=$_fail"
-            fi
+        # Sync plugin marketplaces (declarative, from profiles.yaml)
+        if command -v claude-context &>/dev/null; then
+            log_info "Syncing plugin marketplaces..."
+            claude-context --sync -v || \
+                log_warning "Marketplace sync had issues — run manually: claude-context --sync"
         else
-            log_info "Claude CLI not found — run after install: /plugin marketplace add yulonglin/ai-safety-plugins"
+            log_warning "claude-context not found — skipping marketplace sync"
         fi
 
         # Clean plugin-created symlinks from skills/ (they cause duplicate entries)

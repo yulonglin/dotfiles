@@ -9,13 +9,17 @@ Usage:
     claude-context                       Show current state / apply context.yaml
     claude-context <profile> [profiles]  Apply profiles, persist to context.yaml
     claude-context --list                Show active plugins and available profiles
-    claude-context --clean                  Remove project plugin config
+    claude-context --clean               Remove project plugin config
+    claude-context --sync [-v]           Sync plugin marketplaces from profiles.yaml
     claude-context --help                Show this help
 """
 
 import argparse
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -217,6 +221,131 @@ def check_stale_settings():
         print(f"{BLUE}Run: claude-context <profile> to refresh{NC}")
 
 
+# --- Marketplace sync ---
+
+
+def load_marketplaces():
+    """Parse marketplaces: section from profiles.yaml -> dict[name, config]."""
+    if not os.path.exists(PROFILES_PATH):
+        sys.exit(f"{RED}profiles.yaml not found at {PROFILES_PATH}{NC}")
+    with open(PROFILES_PATH) as f:
+        data = yaml.safe_load(f)
+    if not data:
+        return {}
+    return data.get("marketplaces", {})
+
+
+ENV_DEFAULTS = {
+    "CODE_DIR": os.path.expanduser("~/code"),
+}
+
+
+def expand_env(s):
+    """Expand ${VAR} with os.environ, falling back to ENV_DEFAULTS."""
+    def _replace(m):
+        key = m.group(1)
+        return os.environ.get(key, ENV_DEFAULTS.get(key, m.group(0)))
+    return os.path.expanduser(re.sub(r"\$\{(\w+)\}", _replace, s))
+
+
+def resolve_marketplace_source(name, config):
+    """Return (source_string, source_type) for a marketplace.
+
+    Prefers local path if it exists and has .claude-plugin, else GitHub.
+    """
+    local = config.get("local")
+    if local:
+        expanded = expand_env(local)
+        if os.path.isdir(os.path.join(expanded, ".claude-plugin")):
+            return expanded, "local"
+    github = config.get("github")
+    if github:
+        return github, "github"
+    return None, None
+
+
+def sync_marketplaces(verbose=False):
+    """Register and update all marketplaces from profiles.yaml."""
+    if not shutil.which("claude"):
+        print(f"{YELLOW}Claude CLI not found — skipping marketplace sync.{NC}")
+        print(f"  Install: https://docs.anthropic.com/en/docs/claude-code")
+        return False
+
+    marketplaces = load_marketplaces()
+    if not marketplaces:
+        print(f"{YELLOW}No marketplaces defined in profiles.yaml{NC}")
+        return True
+
+    # Get currently registered marketplaces (parse "❯ name" lines)
+    registered = set()
+    try:
+        result = subprocess.run(
+            ["claude", "plugin", "marketplace", "list"],
+            capture_output=True, text=True, timeout=30,
+        )
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("❯ "):
+                registered.add(line[2:].strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    synced = 0
+    errors = 0
+
+    for name, config in marketplaces.items():
+        source, source_type = resolve_marketplace_source(name, config)
+        if not source:
+            print(f"{RED}  {name}: no valid source configured{NC}")
+            errors += 1
+            continue
+
+        # Check if already registered
+        already_registered = name in registered
+
+        if not already_registered:
+            if verbose:
+                print(f"  Registering {name} ({source_type}: {source})...")
+            try:
+                result = subprocess.run(
+                    ["claude", "plugin", "marketplace", "add", source],
+                    capture_output=True, text=True, timeout=60,
+                )
+                if result.returncode != 0:
+                    print(f"{RED}  {name}: registration failed — {result.stderr.strip()}{NC}")
+                    errors += 1
+                    continue
+            except subprocess.TimeoutExpired:
+                print(f"{RED}  {name}: registration timed out{NC}")
+                errors += 1
+                continue
+        elif verbose:
+            print(f"  {name}: already registered ({source_type})")
+
+        # Update (installs all plugins from marketplace)
+        if verbose:
+            print(f"  Updating {name}...")
+        try:
+            result = subprocess.run(
+                ["claude", "plugin", "marketplace", "update", name],
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode != 0:
+                print(f"{YELLOW}  {name}: update warning — {result.stderr.strip()}{NC}")
+        except subprocess.TimeoutExpired:
+            print(f"{YELLOW}  {name}: update timed out (plugins may be partially synced){NC}")
+
+        synced += 1
+
+    total = len(marketplaces)
+    if errors:
+        print(f"{YELLOW}Synced {synced}/{total} marketplaces ({errors} error(s)){NC}")
+    else:
+        print(f"{GREEN}Synced {synced}/{total} marketplaces{NC}")
+
+    return errors == 0
+
+
 # --- Subcommands ---
 
 
@@ -354,12 +483,14 @@ def reset():
 def main():
     parser = argparse.ArgumentParser(
         description="YAML-driven plugin profiles for Claude Code",
-        usage="claude-context [<profile> ...] [--list] [--clean]",
+        usage="claude-context [<profile> ...] [--list] [--clean] [--sync]",
         add_help=False,
     )
     parser.add_argument("profiles", nargs="*", help="Profile names to apply")
     parser.add_argument("--list", action="store_true", help="Show active plugins and available profiles")
     parser.add_argument("--clean", "--reset", action="store_true", dest="clean", help="Remove project plugin config")
+    parser.add_argument("--sync-marketplaces", "--sync", action="store_true", dest="sync", help="Sync plugin marketplaces from profiles.yaml")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output (for --sync)")
     parser.add_argument("-h", "--help", action="store_true", help="Show help")
 
     args = parser.parse_args()
@@ -381,7 +512,10 @@ def main():
         parser.print_help()
         sys.exit(0)
 
-    if args.list:
+    if args.sync:
+        success = sync_marketplaces(verbose=args.verbose)
+        sys.exit(0 if success else 1)
+    elif args.list:
         show_status()
     elif args.clean:
         reset()

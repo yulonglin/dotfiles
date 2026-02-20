@@ -5,12 +5,16 @@
 - Run from project root with `uv` and `python -m`
 - Type hints required, imports at top
 - Let errors propagate (no unnecessary try/except)
-- Testing: `pytest` exclusively
+- Testing: `pytest`
 - **Read .eval files** using Inspect AI's `read_eval_log()` (look up via MCP server)
-- **Load `.env` before API calls**:
+- **Config via pydantic-settings** (preferred for 3+ env vars):
   ```python
-  from dotenv import load_dotenv
-  load_dotenv()  # Call before os.getenv() or API client init
+  from pydantic_settings import BaseSettings
+
+  class Config(BaseSettings):
+      api_key: str  # reads API_KEY from env/.env automatically
+
+  config = Config()
   ```
 
 ### sys.path.insert (Safe Pattern)
@@ -30,6 +34,29 @@ if __name__ == "__main__":
     from src.utils.paths import add_project_root
     add_project_root()
 ```
+
+### Python Tooling (preference order)
+
+| Need | Tool | Over | Why |
+|------|------|------|-----|
+| Package mgmt | `uv` | pip/poetry | 10-100x faster, single binary, replaces pip+venv+poetry |
+| Lint + format | `ruff` | flake8/black/isort | Single Rust binary replaces 3 tools, near-instant |
+| Type check | `ty` | mypy/pyright | Rust-based, 10-60x faster; beta — fall back to pyright if ty gaps block you |
+| Task runner | `just` | Makefile / shell scripts | Simpler syntax, no tab sensitivity, cross-platform |
+| CLI | `cyclopts` | argparse/typer | Pydantic-native, `Annotated` types, 38% less code; niche — LLM codegen may need corrections |
+| Config/env | `pydantic-settings` | python-dotenv / manual `os.getenv` | Typed config with `SecretStr`, env/file/vault sources |
+| Validation | `pydantic` | manual parsing | Schema validation + serialization, ecosystem standard |
+| Testing | `pytest` | unittest | Less boilerplate, fixtures, parametrize, rich plugin ecosystem |
+| HTTP client | `httpx` | requests | Async-native, HTTP/2, drop-in requests-compatible API |
+| Async | `anyio` | raw asyncio / trio | Structured concurrency on asyncio backend; proper task group cancellation, cleaner API |
+
+### Python Practices
+
+- **Don't mutate objects** — copy/`deepcopy` configs, prompts, and shared data structures. Mutation causes silent bugs
+- **Python over complex bash** — if a shell script exceeds ~50 lines or needs error handling, rewrite it in Python. Python is a scripting language — use it
+- **No YAML-as-code** — YAML for static config is fine; YAML that branches, loops, or templates is not. Prefer Python so you can "Go to References" in your editor
+- **Pydantic models over DataFrames** — pass data as `BaseModel` / `dataclass`, not `pd.DataFrame`. DataFrames are untyped, lossy, and opaque to both humans and LLMs. Use JSONL for intermediate storage
+- **Pandas at the edges only** — use pandas for computing metrics / aggregations at the end of a pipeline, not as the data transport format throughout
 
 ## TypeScript
 
@@ -55,7 +82,7 @@ if __name__ == "__main__":
 ## General Programming
 
 - Match existing code style
-- Run linting (`ruff`) and type checking (`ty`) after changes
+- Run linting and type checking after Python changes (see Python Tooling table)
 - Refactor when unwieldy (>50 lines/function, >500 lines/file)
 
 ## Package Managers (preference order)
@@ -74,7 +101,7 @@ Check for `bun.lockb`, `pnpm-lock.yaml`, or `package-lock.json` to detect which 
 | ML / research / prototyping | Python | — |
 | Frontend / scripting / APIs | TypeScript | Plain JS only for trivial scripts |
 | Performance-critical CLI/tools | Rust | Go if team familiarity matters; Zig for low-level/embedded |
-| Shell glue | Bash/Zsh | Python if >50 lines or needs error handling |
+| Shell glue | Bash/Zsh | Python if >50 lines, needs error handling, or involves data manipulation |
 
 This is a preference order, not a mandate. Match the tool to the job.
 

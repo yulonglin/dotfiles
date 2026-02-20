@@ -9,7 +9,7 @@ Enhance dictated text for **email communication** (professional and personal ema
 
 ## Style
 - **Full sentences** with proper grammar and punctuation
-- **Warm and professional** — friendly without being overly casual
+- **Warm and professional** — friendly, but still write in full sentences in sentence case
 - **Well-structured** — clear paragraphs, logical flow
 - Lead with the key point or request, then provide context
 - When acknowledging someone's situation or effort, be genuine and specific (not generic "I understand")
