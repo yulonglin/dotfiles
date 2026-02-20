@@ -24,6 +24,24 @@ See README.md for detailed usage.
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
 
+### Worktree Workflow
+
+**`yolo` always creates a worktree** — every yolo session runs in an isolated `.claude/worktrees/<name>/` directory with its own branch. `resume`/`cont` bypass worktree (they resume existing sessions).
+
+| Command | What it does |
+|---------|-------------|
+| `yolo` | Auto-named worktree + tmux + skip permissions |
+| `cw [name]` | Named/auto worktree + tmux (with permission prompts) |
+| `cwy [name]` | Named/auto worktree + tmux + skip permissions |
+| `cwl` | List all worktrees |
+| `cwport <name> [dirs...]` | Copy artifacts (out/, logs/, etc.) from worktree to main tree |
+| `cwrm [--force] <name>` | Remove worktree + branch (warns about artifacts) |
+| `cwclean [--prune]` | List worktree status; `--prune` removes clean ones |
+
+**Gitignored files** (.env, out/, logs/) do NOT exist in new worktrees. Each worktree starts clean with only tracked files.
+
+**Artifact lifecycle**: `cw auth-fix` → work → `cwport auth-fix` → `cwrm auth-fix`
+
 ### Claude Code Verification Planning
 
 **Use EnterPlanMode for verification activities, not just implementation:**

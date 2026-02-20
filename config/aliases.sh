@@ -81,11 +81,202 @@ claude() {
     activate_venv
     command claude "${args[@]}"
 }
-alias yolo='claude --dangerously-skip-permissions'
-alias resume='yolo --resume'
-alias cont='yolo --continue'
-alias continue='yolo --continue'
-alias yn='yolo -t'  # yn <name>: yolo with task name
+# yolo — always creates isolated worktree + tmux
+yolo() { claude --worktree --tmux --dangerously-skip-permissions "$@"; }
+
+# resume/continue bypass worktree (resuming existing sessions)
+alias resume='claude --dangerously-skip-permissions --resume'
+alias cont='claude --dangerously-skip-permissions --continue'
+alias continue='claude --dangerously-skip-permissions --continue'
+alias yn='yolo -t'  # yn <name>: yolo with task name (auto-named worktree)
+
+# Artifact dirs checked across worktree commands (port, remove, clean)
+_CW_ARTIFACT_DIRS=(out logs data results experiments)
+
+# worktree commands
+cw() {
+  # Launch Claude in isolated worktree with tmux (without yolo)
+  # Usage: cw [name] [extra args...]
+  local wt_args=("--worktree")
+  if [[ $# -gt 0 && "$1" != -* ]]; then
+    wt_args+=("$1")
+    shift
+  fi
+  claude "${wt_args[@]}" --tmux "$@"
+}
+
+cwy() {
+  # cw + yolo (skip permissions), with optional name
+  local wt_args=("--worktree")
+  if [[ $# -gt 0 && "$1" != -* ]]; then
+    wt_args+=("$1")
+    shift
+  fi
+  claude "${wt_args[@]}" --tmux --dangerously-skip-permissions "$@"
+}
+
+alias cwl='git worktree list'
+
+cwport() {
+  # Port gitignored artifacts from a worktree to main tree
+  # Usage: cwport <name> [dirs...]
+  #   cwport refactor-auth              # ports default dirs
+  #   cwport refactor-auth out logs     # ports specific dirs
+  local name="$1"
+  if [[ -z "$name" ]]; then
+    echo "Usage: cwport <worktree-name> [dirs...]"
+    return 1
+  fi
+  shift
+
+  local git_root
+  git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+  if [[ -z "$git_root" ]]; then
+    echo "cwport: not in a git repository" >&2
+    return 1
+  fi
+  local wt_path="$git_root/.claude/worktrees/$name"
+  if [[ ! -d "$wt_path" ]]; then
+    echo "cwport: worktree not found: $wt_path" >&2
+    return 1
+  fi
+
+  local dirs
+  if [[ $# -gt 0 ]]; then
+    dirs=("$@")
+  else
+    dirs=("${_CW_ARTIFACT_DIRS[@]}")
+  fi
+  local dest
+  dest="$git_root/out/worktree-${name}-$(date -u +%Y%m%d_%H%M%S)"
+  local ported=0
+
+  for dir in "${dirs[@]}"; do
+    if [[ -d "$wt_path/$dir" ]]; then
+      mkdir -p "$dest"
+      echo "Porting $dir/ → $dest/$dir/"
+      cp -r "$wt_path/$dir" "$dest/$dir"
+      ported=$(( ported + 1 ))
+    fi
+  done
+
+  if [[ $ported -eq 0 ]]; then
+    echo "No artifacts found in: ${dirs[*]}"
+  else
+    echo "Ported $ported dir(s) to $dest"
+  fi
+}
+
+cwrm() {
+  # Remove a Claude-created worktree + its branch
+  # Warns if gitignored artifacts exist (use cwport first or --force)
+  local force=false
+  if [[ "$1" == "--force" ]]; then force=true; shift; fi
+
+  local name="$1"
+  if [[ -z "$name" ]]; then
+    echo "Usage: cwrm [--force] <worktree-name>"
+    echo ""; cwl; return 1
+  fi
+
+  local git_root
+  git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+  if [[ -z "$git_root" ]]; then
+    echo "cwrm: not in a git repository" >&2
+    return 1
+  fi
+  local wt_path="$git_root/.claude/worktrees/$name"
+  if [[ ! -d "$wt_path" ]]; then
+    echo "cwrm: worktree not found: $wt_path" >&2
+    cwl; return 1
+  fi
+
+  # Check for gitignored artifacts
+  if ! $force; then
+    local artifacts=()
+    for dir in "${_CW_ARTIFACT_DIRS[@]}"; do
+      [[ -d "$wt_path/$dir" ]] && artifacts+=("$dir/")
+    done
+    if [[ ${#artifacts[@]} -gt 0 ]]; then
+      echo "Warning: worktree has artifacts: ${artifacts[*]}"
+      echo "  Port first: cwport $name"
+      echo "  Or force:   cwrm --force $name"
+      return 1
+    fi
+  fi
+
+  echo "Removing worktree: $wt_path"
+  if $force; then
+    git worktree remove --force "$wt_path" && echo "Worktree removed."
+  else
+    git worktree remove "$wt_path" && echo "Worktree removed."
+  fi
+
+  local branch="worktree-$name"
+  if git rev-parse --verify "$branch" &>/dev/null; then
+    echo "Deleting branch: $branch"
+    git branch -D "$branch"
+  fi
+}
+
+cwclean() {
+  # List Claude worktrees with status, optionally prune stale ones
+  # Usage: cwclean [--prune]
+  local prune=false
+  [[ "$1" == "--prune" ]] && prune=true
+
+  git worktree prune  # always clean up metadata for deleted dirs
+
+  local git_root
+  git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+  if [[ -z "$git_root" ]]; then
+    echo "cwclean: not in a git repository" >&2
+    return 1
+  fi
+  local wt_dir="$git_root/.claude/worktrees"
+
+  if [[ ! -d "$wt_dir" ]] || [[ -z "$(ls -A "$wt_dir" 2>/dev/null)" ]]; then
+    echo "No Claude worktrees found."
+    return 0
+  fi
+
+  echo "Claude worktrees:"
+  local stale=0 name status has_artifacts
+  for wt in "$wt_dir"/*/; do
+    [[ ! -d "$wt" ]] && continue
+    name=$(basename "$wt")
+    status="active"
+
+    # Check if tmux session for this worktree is alive
+    if ! tmux has-session -t "worktree-$name" 2>/dev/null; then
+      # Check for uncommitted changes
+      if git -C "$wt" diff --quiet HEAD 2>/dev/null && \
+         [[ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ]]; then
+        status="clean"
+        stale=$(( stale + 1 ))
+      else
+        status="dirty"
+      fi
+    fi
+
+    # Check for artifacts
+    has_artifacts=""
+    for dir in "${_CW_ARTIFACT_DIRS[@]}"; do
+      [[ -d "$wt/$dir" ]] && has_artifacts=" +artifacts"
+    done
+
+    printf "  %-30s [%s%s]\n" "$name" "$status" "$has_artifacts"
+
+    if $prune && [[ "$status" == "clean" ]] && [[ -z "$has_artifacts" ]]; then
+      cwrm --force "$name"
+    fi
+  done
+
+  if ! $prune && [[ $stale -gt 0 ]]; then
+    echo ""
+    echo "Run 'cwclean --prune' to remove clean worktrees without artifacts."
+  fi
+}
 
 # -------------------------------------------------------------------
 # general
