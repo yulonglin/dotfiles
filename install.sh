@@ -91,7 +91,7 @@ elif is_linux; then
 
     # Core packages via apt
     log_info "Installing core packages via apt..."
-    install_packages apt "${PACKAGES_CORE[@]}" less nano nvtop lsof
+    install_packages apt "${PACKAGES_CORE[@]}" less nano nvtop lsof unzip
 
     # Install mise for modern CLI tools
     install_mise
@@ -188,8 +188,8 @@ if [[ "$INSTALL_EXTRAS" == "true" ]]; then
     if ! is_installed cargo; then
         log_info "Installing Rust..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
-        source "$HOME/.cargo/env" 2>/dev/null || true
     fi
+    source "$HOME/.cargo/env" 2>/dev/null || true
 
     if is_macos; then
         install_packages brew "${PACKAGES_EXTRAS_MACOS[@]}"
@@ -220,8 +220,9 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     if ! is_installed cargo; then
         log_info "Installing Rust toolchain (user-level, no root needed)..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
-        source "$HOME/.cargo/env" 2>/dev/null || true
     fi
+    # Ensure cargo is in PATH for this session (installer modifies shell profile, not current env)
+    source "$HOME/.cargo/env" 2>/dev/null || true
 
     # Claude Code
     if ! is_installed claude; then
@@ -235,6 +236,8 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
             export USE_BUILTIN_RIPGREP=0
         fi
     fi
+    # Ensure claude is in PATH for this session
+    [[ -d "$HOME/.claude/bin" ]] && export PATH="$HOME/.claude/bin:$PATH"
 
     # Install bun (preferred package manager for global CLI tools on Linux)
     if is_linux && ! cmd_exists bun; then
