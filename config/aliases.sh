@@ -165,6 +165,47 @@ cwport() {
   fi
 }
 
+cwmerge() {
+  # Merge a worktree branch into the current branch
+  # Auto-aborts on conflict, leaving repo clean
+  # Usage: cwmerge <worktree-name>
+  local name="$1"
+  if [[ -z "$name" ]]; then
+    echo "Usage: cwmerge <worktree-name>"
+    return 1
+  fi
+
+  local branch="worktree-$name"
+  if ! git rev-parse --verify "$branch" &>/dev/null; then
+    echo "cwmerge: branch not found: $branch" >&2
+    return 1
+  fi
+
+  local current_branch ahead
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+  ahead=$(git rev-list --count "$current_branch..$branch" 2>/dev/null || echo 0)
+
+  if [[ "$ahead" -eq 0 ]]; then
+    echo "Already up to date ($branch has no new commits vs $current_branch)."
+    return 0
+  fi
+
+  echo "Merging $branch ($ahead commit(s)) into $current_branch..."
+  if git merge --no-edit "$branch"; then
+    echo "Merged successfully."
+  else
+    git merge --abort
+    echo "Conflict — merge aborted (repo is clean). Conflicting files:"
+    git diff --name-only "$current_branch" "$branch"
+    echo ""
+    echo "To resolve manually:"
+    echo "  git merge worktree-$name"
+    echo "To accept worktree version:"
+    echo "  git merge -X theirs worktree-$name"
+    return 1
+  fi
+}
+
 cwrm() {
   # Remove a Claude-created worktree: merge branch → remove dir → delete branch
   # Merges into current branch by default (use --no-merge to skip)
@@ -210,21 +251,9 @@ cwrm() {
     fi
   fi
 
-  # Merge worktree branch into current branch (default behavior)
-  local branch="worktree-$name"
-  if ! $no_merge && git rev-parse --verify "$branch" &>/dev/null; then
-    local current_branch ahead
-    current_branch=$(git rev-parse --abbrev-ref HEAD)
-    ahead=$(git rev-list --count "$current_branch..$branch" 2>/dev/null || echo 0)
-    if [[ "$ahead" -gt 0 ]]; then
-      echo "Merging $branch ($ahead commit(s)) into $current_branch..."
-      if ! git merge --no-edit "$branch"; then
-        echo "Merge conflict! Resolve manually, then run:"
-        echo "  git branch -D $branch"
-        echo "  git worktree remove $wt_path"
-        return 1
-      fi
-    fi
+  # Merge worktree branch into current branch (default)
+  if ! $no_merge; then
+    cwmerge "$name" || return 1
   fi
 
   echo "Removing worktree: $wt_path"
@@ -234,6 +263,7 @@ cwrm() {
     git worktree remove "$wt_path" && echo "Worktree removed."
   fi
 
+  local branch="worktree-$name"
   if git rev-parse --verify "$branch" &>/dev/null; then
     echo "Deleting branch: $branch"
     git branch -D "$branch"
