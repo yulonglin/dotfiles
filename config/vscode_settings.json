@@ -88,6 +88,10 @@
     "explorer.confirmDelete": false,
     "workbench.colorTheme": "One Dark Pro",
     "vsicons.dontShowNewVersionMessage": true,
+    "vsicons.associations.folders": [
+        { "icon": "test", "extensions": ["experiments"], "format": "svg" },
+        { "icon": "log", "extensions": ["journal"], "format": "svg" }
+    ],
     "python.analysis.packageIndexDepths": [
         {
             "name": "sklearn",
