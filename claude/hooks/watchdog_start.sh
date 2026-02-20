@@ -9,6 +9,8 @@ set -euo pipefail
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
+CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+CWD="${CWD:-$PWD}"
 
 if [[ -z "$SESSION_ID" || -z "$TRANSCRIPT_PATH" ]]; then
   exit 0
@@ -33,7 +35,7 @@ if [[ -f "$PID_FILE" ]]; then
 fi
 
 # Launch watchdog detached
-nohup "$HOOKS_DIR/watchdog.sh" "$SESSION_ID" "$TRANSCRIPT_PATH" \
+nohup "$HOOKS_DIR/watchdog.sh" "$SESSION_ID" "$TRANSCRIPT_PATH" "$CWD" \
   >/dev/null 2>&1 &
 disown
 

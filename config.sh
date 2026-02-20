@@ -137,6 +137,7 @@ PACKAGES_LINUX_MISE=(
 PACKAGES_EXTRAS_MACOS=(
     "hyperfine"
     "lazygit"
+    "terminal-notifier"
 )
 
 PACKAGES_EXTRAS_LINUX=(
