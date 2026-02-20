@@ -87,7 +87,13 @@ if is_macos; then
     install_packages brew "${PACKAGES_CORE[@]}" "${PACKAGES_MACOS[@]}"
 
 elif is_linux; then
-    apt update -y 2>/dev/null || log_info "Skipping apt update (no permissions)"
+    # Skip apt update if cache is less than 1 hour old
+    apt_cache="/var/lib/apt/lists/partial"
+    if [[ ! -d "$apt_cache" ]] || [[ $(( $(date +%s) - $(stat -c %Y "$apt_cache" 2>/dev/null || echo 0) )) -gt 3600 ]]; then
+        apt update 2>/dev/null || log_info "Skipping apt update (no permissions)"
+    else
+        log_info "apt cache fresh (< 1h old) — skipping update"
+    fi
 
     # Core packages via apt
     log_info "Installing core packages via apt..."
