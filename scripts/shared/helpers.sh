@@ -854,23 +854,30 @@ parse_args() {
             --aliases=*)
                 IFS=',' read -r -a DEPLOY_ALIASES <<< "${1#*=}"
                 ;;
+            --minimal)
+                apply_profile "minimal"
+                ;;
+            --server)
+                apply_profile "server"
+                ;;
+            --personal)
+                apply_profile "personal"
+                ;;
             --no-*)
                 # Disable a component: --no-zsh, --no-claude, etc.
                 local component="${1#--no-}"
                 component="${(U)component}"  # uppercase (zsh/bash compatible)
                 component="${component//-/_}"  # dashes to underscores
-                typeset -g "INSTALL_${component}=false" 2>/dev/null || \
-                typeset -g "DEPLOY_${component}=false" 2>/dev/null || \
-                log_warning "Unknown component: $1"
+                typeset -g "INSTALL_${component}=false"
+                typeset -g "DEPLOY_${component}=false"
                 ;;
             --*)
                 # Enable a component: --zsh, --claude, etc.
                 local component="${1#--}"
                 component="${(U)component}"  # uppercase (zsh/bash compatible)
                 component="${component//-/_}"
-                typeset -g "INSTALL_${component}=true" 2>/dev/null || \
-                typeset -g "DEPLOY_${component}=true" 2>/dev/null || \
-                log_warning "Unknown component: $1"
+                typeset -g "INSTALL_${component}=true"
+                typeset -g "DEPLOY_${component}=true"
                 ;;
             *)
                 log_warning "Unknown argument: $1"

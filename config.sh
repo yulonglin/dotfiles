@@ -69,6 +69,13 @@ MCP_SERVERS_LOCAL=(
     "slack:yulonglin/slack-mcp-server:slack-mcp-server:SLACK_MCP_XOXP_TOKEN"
 )  # Consider if this is safe to include here, or if it'll break something
 
+# Claude Code Plugin Marketplaces
+# Format: "name:source" (source = GitHub user/repo)
+# Official plugins (claude-plugins-official) are built-in — no registration needed
+PLUGIN_MARKETPLACES=(
+    "ai-safety-plugins:yulonglin/ai-safety-plugins"
+)
+
 # ─── Core Packages ────────────────────────────────────────────────────────────
 # Installed on all platforms
 PACKAGES_CORE=(

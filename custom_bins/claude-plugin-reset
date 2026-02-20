@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# claude-plugin-reset — Reinstall plugin defaults for Claude Code.
+#
+# Bundles the full plugin reset workflow:
+#   1. Update all plugins from ai-safety-plugins marketplace
+#   2. Clean stale plugin cache versions
+#   3. Clean duplicate skill symlinks
+#   4. Re-apply context profile (or reset to global defaults)
+#
+# Usage:
+#   claude-plugin-reset            # Full reset, re-apply current context.yaml
+#   claude-plugin-reset --global   # Reset to global defaults (remove per-project config)
+#   claude-plugin-reset --dry-run  # Preview what would happen
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+DOT_DIR="${DOT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+GLOBAL_RESET=false
+DRY_RUN=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --global)  GLOBAL_RESET=true ;;
+    --dry-run|-n) DRY_RUN=true ;;
+    --help|-h)
+      echo "Usage: $(basename "$0") [--global] [--dry-run]"
+      echo ""
+      echo "Reinstall plugin defaults for Claude Code."
+      echo ""
+      echo "Options:"
+      echo "  --global    Reset to global defaults (remove per-project plugin config)"
+      echo "  --dry-run   Preview what would happen without making changes"
+      echo "  --help      Show this help"
+      exit 0
+      ;;
+  esac
+done
+
+step=0
+run_step() {
+  step=$((step + 1))
+  echo -e "\n${BOLD}[$step]${NC} $1"
+}
+
+# --- Step 1: Update plugin marketplaces ---
+source "$DOT_DIR/config.sh"
+run_step "Updating plugin marketplaces..."
+
+if ! command -v claude &>/dev/null; then
+  echo -e "  ${RED}claude CLI not found — skipping marketplace update${NC}"
+else
+  for entry in "${PLUGIN_MARKETPLACES[@]}"; do
+    name="${entry%%:*}"
+    src="${entry#*:}"
+
+    if $DRY_RUN; then
+      echo -e "  ${YELLOW}Would ensure marketplace: $name ($src)${NC}"
+      continue
+    fi
+
+    # Register if not already added
+    if ! claude plugin marketplace list 2>/dev/null | grep -q "$name"; then
+      echo -e "  ${CYAN}Adding marketplace: $name from $src...${NC}"
+      if ! claude plugin marketplace add "$src" 2>&1; then
+        echo -e "  ${RED}Failed to add $name — skipping${NC}"
+        continue
+      fi
+    fi
+
+    # Update
+    claude plugin marketplace update "$name" 2>&1 || \
+      echo -e "  ${YELLOW}$name update had warnings (may be OK)${NC}"
+  done
+fi
+
+# --- Step 2: Clean stale cache ---
+run_step "Cleaning stale plugin cache..."
+
+if [[ -f "$DOT_DIR/custom_bins/claude-cache-clean" ]]; then
+  if $DRY_RUN; then
+    "$DOT_DIR/custom_bins/claude-cache-clean"
+  else
+    "$DOT_DIR/custom_bins/claude-cache-clean" --apply
+  fi
+else
+  echo -e "  ${YELLOW}claude-cache-clean not found — skipping${NC}"
+fi
+
+# --- Step 3: Clean duplicate skill symlinks ---
+run_step "Cleaning duplicate skill symlinks..."
+
+if [[ -f "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh" ]]; then
+  if $DRY_RUN; then
+    bash "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh" --dry-run
+  else
+    bash "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"
+  fi
+else
+  echo -e "  ${YELLOW}clean_plugin_symlinks.sh not found — skipping${NC}"
+fi
+
+# --- Step 4: Re-apply context profile ---
+if $GLOBAL_RESET; then
+  run_step "Resetting to global plugin defaults..."
+  if command -v claude-context &>/dev/null; then
+    if $DRY_RUN; then
+      echo -e "  ${YELLOW}Would run: claude-context --clean${NC}"
+    else
+      claude-context --clean
+    fi
+  else
+    echo -e "  ${YELLOW}claude-context not found — skipping${NC}"
+  fi
+else
+  run_step "Re-applying context profile..."
+  if command -v claude-context &>/dev/null; then
+    if $DRY_RUN; then
+      echo -e "  ${YELLOW}Would re-apply current context.yaml${NC}"
+      claude-context --list
+    else
+      claude-context
+    fi
+  else
+    echo -e "  ${YELLOW}claude-context not found — skipping${NC}"
+  fi
+fi
+
+# --- Done ---
+echo ""
+if $DRY_RUN; then
+  echo -e "${YELLOW}Dry run complete. Run without --dry-run to apply changes.${NC}"
+else
+  echo -e "${GREEN}Plugin reset complete.${NC} Restart Claude Code to apply changes."
+fi
