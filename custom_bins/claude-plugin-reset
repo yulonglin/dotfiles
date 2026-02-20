@@ -2,10 +2,11 @@
 # claude-plugin-reset — Reinstall plugin defaults for Claude Code.
 #
 # Bundles the full plugin reset workflow:
-#   1. Update all plugins from ai-safety-plugins marketplace
-#   2. Clean stale plugin cache versions
-#   3. Clean duplicate skill symlinks
-#   4. Re-apply context profile (or reset to global defaults)
+#   1. Update all plugins from registered marketplaces
+#   2. Install official marketplace plugins
+#   3. Clean stale plugin cache versions
+#   4. Clean duplicate skill symlinks
+#   5. Re-apply context profile (or reset to global defaults)
 #
 # Usage:
 #   claude-plugin-reset            # Full reset, re-apply current context.yaml
@@ -80,7 +81,37 @@ else
   done
 fi
 
-# --- Step 2: Clean stale cache ---
+# --- Step 2: Install official marketplace plugins ---
+run_step "Installing official marketplace plugins..."
+
+if ! command -v claude &>/dev/null; then
+  echo -e "  ${RED}claude CLI not found — skipping${NC}"
+else
+  installed=0 skipped=0 failed=0
+  for plugin in "${OFFICIAL_PLUGINS[@]}"; do
+    qualified="${plugin}@claude-plugins-official"
+    if $DRY_RUN; then
+      echo -e "  ${YELLOW}Would ensure: $qualified${NC}"
+      continue
+    fi
+    # Skip if already installed
+    if claude plugin list 2>/dev/null | grep -q "$qualified"; then
+      skipped=$((skipped + 1))
+      continue
+    fi
+    if claude plugin install "$qualified" --scope user 2>&1; then
+      installed=$((installed + 1))
+    else
+      echo -e "  ${YELLOW}Failed: $qualified${NC}"
+      failed=$((failed + 1))
+    fi
+  done
+  if ! $DRY_RUN; then
+    echo -e "  ${GREEN}Installed: $installed${NC}, Skipped: $skipped, Failed: $failed"
+  fi
+fi
+
+# --- Step 3: Clean stale cache ---
 run_step "Cleaning stale plugin cache..."
 
 if [[ -f "$DOT_DIR/custom_bins/claude-cache-clean" ]]; then
@@ -93,7 +124,7 @@ else
   echo -e "  ${YELLOW}claude-cache-clean not found — skipping${NC}"
 fi
 
-# --- Step 3: Clean duplicate skill symlinks ---
+# --- Step 4: Clean duplicate skill symlinks ---
 run_step "Cleaning duplicate skill symlinks..."
 
 if [[ -f "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh" ]]; then
@@ -106,7 +137,7 @@ else
   echo -e "  ${YELLOW}clean_plugin_symlinks.sh not found — skipping${NC}"
 fi
 
-# --- Step 4: Re-apply context profile ---
+# --- Step 5: Re-apply context profile ---
 if $GLOBAL_RESET; then
   run_step "Resetting to global plugin defaults..."
   if command -v claude-context &>/dev/null; then

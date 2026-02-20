@@ -203,12 +203,12 @@
     ]
   },
   "alwaysThinkingEnabled": true,
+  "autoUpdatesChannel": "latest",
   "plansDirectory": ".claude/plans",
   "skipDangerousModePermissionPrompt": true,
   "chrome": {
     "enabled": false
   },
   "teammateMode": "auto",
-  "installMethod": "native",
-  "autoUpdatesChannel": "latest"
+  "installMethod": "native"
 }

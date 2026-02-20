@@ -71,9 +71,27 @@ MCP_SERVERS_LOCAL=(
 
 # Claude Code Plugin Marketplaces
 # Format: "name:source" (source = GitHub user/repo)
-# Official plugins (claude-plugins-official) are built-in — no registration needed
+# Both official and custom marketplaces need explicit registration + plugin install
 PLUGIN_MARKETPLACES=(
+    "claude-plugins-official:anthropics/claude-plugins-official"
     "ai-safety-plugins:yulonglin/ai-safety-plugins"
+)
+
+# Official plugins to auto-install from claude-plugins-official marketplace.
+# Matches everything referenced in settings.json enabledPlugins.
+OFFICIAL_PLUGINS=(
+    # Base profile (always-on)
+    "superpowers" "hookify" "plugin-dev" "commit-commands"
+    "claude-md-management" "context7"
+    # Development
+    "code-simplifier" "code-review" "security-guidance" "feature-dev"
+    "pr-review-toolkit" "playground" "ralph-loop" "claude-code-setup"
+    # Integrations
+    "Notion" "linear" "figma" "vercel" "supabase" "stripe" "playwright"
+    # Language servers
+    "pyright-lsp" "typescript-lsp"
+    # Specialized
+    "frontend-design" "huggingface-skills" "coderabbit" "serena"
 )
 
 # ─── Core Packages ────────────────────────────────────────────────────────────
@@ -99,6 +117,7 @@ PACKAGES_MACOS=(
     "fd"
     "ripgrep"
     "jless"
+    "just"
 )
 
 # Linux packages (via mise github: backend)
@@ -111,6 +130,7 @@ PACKAGES_LINUX_MISE=(
     "github:bootandy/dust"
     "github:ajeetdsouza/zoxide"
     "ubi:PaulJuliusMartinez/jless"  # ubi: required — no aarch64-linux binaries in releases
+    "github:casey/just"
 )
 
 # Extra packages (--extras flag)

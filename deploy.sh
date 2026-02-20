@@ -464,6 +464,26 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             fi
             # Install/update all plugins from the marketplace
             claude plugin marketplace update ai-safety-plugins 2>/dev/null || true
+
+            # Install official marketplace plugins
+            if [[ ${#OFFICIAL_PLUGINS[@]} -gt 0 ]]; then
+                log_info "Installing official marketplace plugins..."
+                local _inst=0 _skip=0 _fail=0
+                for plugin in "${OFFICIAL_PLUGINS[@]}"; do
+                    local qualified="${plugin}@claude-plugins-official"
+                    if claude plugin list 2>/dev/null | grep -q "$qualified"; then
+                        _skip=$((_skip + 1))
+                        continue
+                    fi
+                    if claude plugin install "$qualified" --scope user 2>&1; then
+                        _inst=$((_inst + 1))
+                    else
+                        log_warning "Failed to install: $qualified"
+                        _fail=$((_fail + 1))
+                    fi
+                done
+                log_success "Official plugins: installed=$_inst, skipped=$_skip, failed=$_fail"
+            fi
         else
             log_info "Claude CLI not found — run after install: /plugin marketplace add yulonglin/ai-safety-plugins"
         fi
@@ -492,7 +512,7 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
 
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
-        log_info "  Plugins: ai-safety-plugins (core, research, writing, code, workflow, viz)"
+        log_info "  Plugins: claude-plugins-official (27), ai-safety-plugins (core, research, writing, code, workflow, viz)"
     else
         log_warning "Claude directory not found at $DOT_DIR/claude"
     fi

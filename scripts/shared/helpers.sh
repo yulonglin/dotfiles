@@ -65,10 +65,10 @@ is_cask_installed() {
 # Backup a file with timestamp
 # Usage: backup_file <path>
 backup_file() {
-    local path="$1"
-    if [[ -e "$path" && ! -L "$path" ]]; then
-        local backup="${path}.backup.$(date -u +%d-%m-%Y_%H-%M-%S)"
-        mv "$path" "$backup"
+    local filepath="$1"
+    if [[ -e "$filepath" && ! -L "$filepath" ]]; then
+        local backup="${filepath}.backup.$(date -u +%d-%m-%Y_%H-%M-%S)"
+        mv "$filepath" "$backup"
         log_info "Backed up to $backup"
         echo "$backup"  # Return backup path
     fi
