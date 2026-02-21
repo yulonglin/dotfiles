@@ -803,16 +803,16 @@ gtheme() {
 # Quick theme aliases - 10 dark themes, diverse backgrounds + cursors
 # Default (ghostty.conf): Catppuccin Mocha — pastel purple-blue, pink cursor
 # Run `ghostty +list-themes` for full list, or `gtheme <name>` for any theme
-g0() { gtheme "TokyoNight" --title "${1:+$1 | }[g0] TokyoNight"; }                 # Deep blue bg, blue cursor — neon city
-g1() { gtheme "Dracula" --title "${1:+$1 | }[g1] Dracula"; }                     # Purple-grey bg, white cursor — vibrant classic
-g2() { gtheme "Nord" --title "${1:+$1 | }[g2] Nord"; }                           # Arctic blue-grey bg, white cursor — calm
-g3() { gtheme "Rose Pine" --title "${1:+$1 | }[g3] Rose Pine"; }                 # Deep purple bg, lavender cursor — botanical
-g4() { gtheme "Kanagawa Dragon" --title "${1:+$1 | }[g4] Kanagawa Dragon"; }     # Warm near-black bg, warm cursor — Japanese ink
-g5() { gtheme "Gruvbox Dark" --title "${1:+$1 | }[g5] Gruvbox Dark"; }           # Neutral warm bg, cream cursor — retro
-g6() { gtheme "Everforest Dark Hard" --title "${1:+$1 | }[g6] Everforest"; }     # Green-grey bg, orange cursor — forest
-g7() { gtheme "Solarized Dark Higher Contrast" --title "${1:+$1 | }[g7] Solarized"; } # Dark teal bg, red-orange cursor
-g8() { gtheme "Melange Dark" --title "${1:+$1 | }[g8] Melange Dark"; }           # Warm brown bg, parchment cursor — earthy
-g9() { gtheme "Material Ocean" --title "${1:+$1 | }[g9] Material Ocean"; }       # Near-black bg, yellow cursor — minimal
+g0() { gtheme "TokyoNight" --title "${1:+$1 | }🌃 [g0] TokyoNight"; }             # Deep blue bg, blue cursor — neon city
+g1() { gtheme "Dracula" --title "${1:+$1 | }🧛 [g1] Dracula"; }                 # Purple-grey bg, white cursor — vibrant classic
+g2() { gtheme "Nord" --title "${1:+$1 | }❄️ [g2] Nord"; }                        # Arctic blue-grey bg, white cursor — calm
+g3() { gtheme "Rose Pine" --title "${1:+$1 | }🌹 [g3] Rose Pine"; }              # Deep purple bg, lavender cursor — botanical
+g4() { gtheme "Kanagawa Dragon" --title "${1:+$1 | }🐉 [g4] Kanagawa Dragon"; }  # Warm near-black bg, warm cursor — Japanese ink
+g5() { gtheme "Gruvbox Dark" --title "${1:+$1 | }🍂 [g5] Gruvbox Dark"; }        # Neutral warm bg, cream cursor — retro
+g6() { gtheme "Everforest Dark Hard" --title "${1:+$1 | }🌲 [g6] Everforest"; }   # Green-grey bg, orange cursor — forest
+g7() { gtheme "Solarized Dark Higher Contrast" --title "${1:+$1 | }☀️ [g7] Solarized"; } # Dark teal bg, red-orange cursor
+g8() { gtheme "Melange Dark" --title "${1:+$1 | }🪨 [g8] Melange Dark"; }         # Warm brown bg, parchment cursor — earthy
+g9() { gtheme "Material Ocean" --title "${1:+$1 | }🌊 [g9] Material Ocean"; }     # Near-black bg, yellow cursor — minimal
 
 #-------------------------------------------------------------
 # SSH with terminal color changes
