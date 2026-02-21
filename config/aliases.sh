@@ -800,14 +800,19 @@ gtheme() {
     fi
 }
 
-# Quick theme aliases - visually distinct, good readability, popular
+# Quick theme aliases - 10 dark themes, diverse backgrounds + cursors
+# Default (ghostty.conf): Catppuccin Mocha — pastel purple-blue, pink cursor
 # Run `ghostty +list-themes` for full list, or `gtheme <name>` for any theme
-alias g1='gtheme "Catppuccin Mocha"'      # Pastel dark, lavender/pink
-alias g2='gtheme "TokyoNight"'            # Cool dark, deep blue/purple
-alias g3='gtheme "Gruvbox Dark"'          # Retro warm, orange/brown earth
-alias g4='gtheme "Kanagawa Dragon"'       # Muted ink, dark slate/jade
-alias g5='gtheme "Everforest Dark Hard"'  # Forest green, olive/sage
-alias g6='gtheme "Solarized Dark Higher Contrast"' # Teal-gray, classic readable
+alias g0='gtheme "TokyoNight" --title "[g0] TokyoNight"'                        # Deep blue bg, blue cursor — neon city
+alias g1='gtheme "Dracula" --title "[g1] Dracula"'                              # Purple-grey bg, white cursor — vibrant classic
+alias g2='gtheme "Nord" --title "[g2] Nord"'                                    # Arctic blue-grey bg, white cursor — calm
+alias g3='gtheme "Rose Pine" --title "[g3] Rose Pine"'                          # Deep purple bg, lavender cursor — botanical
+alias g4='gtheme "Kanagawa Dragon" --title "[g4] Kanagawa Dragon"'              # Warm near-black bg, warm cursor — Japanese ink
+alias g5='gtheme "Gruvbox Dark" --title "[g5] Gruvbox Dark"'                    # Neutral warm bg, cream cursor — retro
+alias g6='gtheme "Everforest Dark Hard" --title "[g6] Everforest Dark Hard"'    # Green-grey bg, orange cursor — forest
+alias g7='gtheme "Solarized Dark Higher Contrast" --title "[g7] Solarized DHC"' # Dark teal bg, red-orange cursor — classic
+alias g8='gtheme "Melange Dark" --title "[g8] Melange Dark"'                    # Warm brown bg, parchment cursor — earthy
+alias g9='gtheme "Material Ocean" --title "[g9] Material Ocean"'                # Near-black bg, yellow cursor — minimal
 
 #-------------------------------------------------------------
 # SSH with terminal color changes
