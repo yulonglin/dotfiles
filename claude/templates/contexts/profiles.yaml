@@ -17,6 +17,9 @@ marketplaces:
   ui-ux-pro-max-skill:
     github: nextlevelbuilder/ui-ux-pro-max-skill
 
+  alignment-hive:
+    github: Crazytieguy/alignment-hive
+
 # Always-on in every profile (declared once)
 base:
   - superpowers
@@ -26,6 +29,7 @@ base:
   - claude-md-management
   - context7
   - core
+  - llms-fetch-mcp
 
 # Profiles — only list what they ENABLE beyond base
 profiles:
@@ -46,6 +50,7 @@ profiles:
       - viz
       - Notion
       - linear
+      - remote-kernels
 
   writing:
     comment: "Papers, blog posts, documentation"
