@@ -287,6 +287,12 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
         fi
     fi
 
+    # Coven (lightweight Claude interface with better display than raw `claude -p`)
+    if is_macos && ! is_installed coven; then
+        log_info "Installing Coven..."
+        brew tap Crazytieguy/tap 2>/dev/null && brew_install coven || log_warning "Coven installation failed"
+    fi
+
     # Configure MCP servers (HTTP/npx)
     if cmd_exists claude; then
         log_info "Configuring MCP servers..."
