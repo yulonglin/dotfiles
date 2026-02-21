@@ -92,26 +92,69 @@ alias yn='yolo -t'  # yn <name>: yolo with task name
 _CW_ARTIFACT_DIRS=(out logs data results experiments)
 
 # worktree commands
-cw() {
-  # Launch Claude in isolated worktree with tmux (without yolo)
-  # Usage: cw [name] [extra args...]
-  local wt_args=("--worktree")
+_cw_launch() {
+  # Shared implementation for cw/cwy — idempotent worktree launcher
+  # Usage: _cw_launch [--yolo] [name] [extra args...]
+  local yolo=false
+  if [[ "$1" == "--yolo" ]]; then yolo=true; shift; fi
+
+  local name=""
   if [[ $# -gt 0 && "$1" != -* ]]; then
-    wt_args+=("$1")
-    shift
+    name="$1"; shift
   fi
-  claude "${wt_args[@]}" --tmux "$@"
+
+  local extra=("$@")
+  $yolo && extra=("--dangerously-skip-permissions" "${extra[@]}")
+
+  # Resume existing worktree if it exists
+  if [[ -n "$name" ]]; then
+    local git_root
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [[ -z "$git_root" ]]; then
+      echo "cw: not in a git repository" >&2
+      return 1
+    fi
+    local wt_path="$git_root/.claude/worktrees/$name"
+
+    if [[ -d "$wt_path" ]]; then
+      local session="worktree-$name"
+
+      # Case 1: tmux session alive → attach/switch
+      # Use = prefix for exact session name match (prevents prefix matching)
+      if tmux has-session -t "=$session" 2>/dev/null; then
+        echo "Attaching to session: $session"
+        if [[ -n "$TMUX" ]]; then
+          tmux switch-client -t "=$session"
+        else
+          tmux attach -t "=$session"
+        fi
+        return
+      fi
+
+      # Case 2: worktree exists, no tmux → create session, run claude (no --tmux)
+      echo "Resuming worktree: $name"
+      local cmd="claude"
+      for arg in "${extra[@]}"; do
+        cmd+=" $(printf '%q' "$arg")"
+      done
+      if [[ -n "$TMUX" ]]; then
+        tmux new-session -d -s "$session" -c "$wt_path" "$cmd; exec \$SHELL"
+        tmux switch-client -t "=$session"
+      else
+        tmux new-session -s "$session" -c "$wt_path" "$cmd; exec \$SHELL"
+      fi
+      return
+    fi
+  fi
+
+  # Case 3: no existing worktree → create new (original behavior)
+  local wt_args=("--worktree")
+  [[ -n "$name" ]] && wt_args+=("$name")
+  claude "${wt_args[@]}" --tmux "${extra[@]}"
 }
 
-cwy() {
-  # cw + yolo (skip permissions), with optional name
-  local wt_args=("--worktree")
-  if [[ $# -gt 0 && "$1" != -* ]]; then
-    wt_args+=("$1")
-    shift
-  fi
-  claude "${wt_args[@]}" --tmux --dangerously-skip-permissions "$@"
-}
+cw() { _cw_launch "$@"; }
+cwy() { _cw_launch --yolo "$@"; }
 
 alias cwl='git worktree list'
 
@@ -323,19 +366,19 @@ cwclean() {
     return 0
   fi
 
-  local cleaned=0 skipped=0 name status has_artifacts
+  local cleaned=0 skipped=0 name wt_status has_artifacts
   for wt in "$wt_dir"/*/; do
     [[ ! -d "$wt" ]] && continue
     name=$(basename "$wt")
-    status="active"
+    wt_status="active"
 
-    # Check if tmux session for this worktree is alive
-    if ! tmux has-session -t "worktree-$name" 2>/dev/null; then
+    # Check if tmux session for this worktree is alive (= for exact match)
+    if ! tmux has-session -t "=worktree-$name" 2>/dev/null; then
       if git -C "$wt" diff --quiet HEAD 2>/dev/null && \
          [[ -z "$(git -C "$wt" status --porcelain 2>/dev/null)" ]]; then
-        status="clean"
+        wt_status="clean"
       else
-        status="dirty"
+        wt_status="dirty"
       fi
     fi
 
@@ -344,7 +387,7 @@ cwclean() {
       [[ -d "$wt/$dir" ]] && has_artifacts=" +artifacts"
     done
 
-    if [[ "$status" == "clean" ]] && [[ -z "$has_artifacts" ]]; then
+    if [[ "$wt_status" == "clean" ]] && [[ -z "$has_artifacts" ]]; then
       if $dry_run; then
         printf "  %-30s [would remove]\n" "$name"
       else
@@ -352,7 +395,7 @@ cwclean() {
       fi
       cleaned=$(( cleaned + 1 ))
     else
-      printf "  %-30s [%s%s] — kept\n" "$name" "$status" "$has_artifacts"
+      printf "  %-30s [%s%s] — kept\n" "$name" "$wt_status" "$has_artifacts"
       skipped=$(( skipped + 1 ))
     fi
   done
