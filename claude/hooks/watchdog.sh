@@ -8,7 +8,7 @@
 #   CLAUDE_WATCHDOG_TIMEOUT  - seconds before alerting (default: 600)
 #   CLAUDE_WATCHDOG_INTERVAL - check frequency in seconds (default: 60)
 #   CLAUDE_WATCHDOG_MAX_LIFE - max lifetime in seconds (default: 28800 = 8h)
-#   ANTHROPIC_API_KEY        - enables Haiku triage to reduce false positives
+#   Requires: claude CLI in PATH with valid auth (Claude Max / OAuth)
 
 set -uo pipefail
 
@@ -76,9 +76,9 @@ send_notification() {
 triage_with_haiku() {
   local transcript_path="$1" stale_min="$2"
 
-  # Gate: need API key
-  if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    return 0  # No key — assume stuck, notify
+  # Gate: need claude CLI
+  if ! command -v claude &>/dev/null; then
+    return 0  # No CLI — assume stuck, notify
   fi
 
   # Read last ~8KB of transcript for context
@@ -88,38 +88,33 @@ triage_with_haiku() {
     return 0
   fi
 
-  # Escape for JSON embedding
-  local escaped_context
-  escaped_context=$(printf '%s' "$context" | jq -Rs '.')
+  local prompt="The following Claude Code session transcript has had no new output for ${stale_min} minutes. Is the session stuck (e.g., error loop, hanging tool call, no progress) or not stuck (e.g., finished successfully, waiting for user input, completed its task)? Reply with exactly STUCK or NOT_STUCK followed by a one-sentence reason.
 
-  local escaped_prompt
-  escaped_prompt=$(printf '%s' "The transcript has had no new output for ${stale_min} minutes. Based on the conversation, is the session stuck (e.g., error loop, hanging tool call, no progress) or not stuck (e.g., finished successfully, waiting for user input, completed its task)? Reply with exactly one word: STUCK or NOT_STUCK, followed by a brief reason (one sentence)." | jq -Rs '.')
+Transcript (last 8KB):
+${context}"
 
-  local response
-  response=$(curl -s --max-time 10 \
-    -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-    -H "anthropic-version: 2023-06-01" \
-    -H "content-type: application/json" \
-    -d "{
-      \"model\": \"claude-haiku-4-5-20251001\",
-      \"max_tokens\": 150,
-      \"system\": \"You are a session health monitor. Analyze the Claude Code session transcript and determine if the session is stuck or not. Be concise.\",
-      \"messages\": [{
-        \"role\": \"user\",
-        \"content\": [{\"type\": \"text\", \"text\": ${escaped_prompt}}, {\"type\": \"text\", \"text\": ${escaped_context}}]
-      }]
-    }" \
-    "https://api.anthropic.com/v1/messages" 2>/dev/null)
-
-  if [[ -z "$response" ]]; then
-    return 0  # API failed — assume stuck
-  fi
+  # Runs synchronously — timeout caps at 45s, loop can't overlap itself
+  # Empty MCP config prevents connecting to external services (GitHub, Linear, etc.)
+  local mcp_config="${TMPDIR}/claude-watchdog-mcp.json"
+  [[ -f "$mcp_config" ]] || printf '{"mcpServers":{}}\n' > "$mcp_config"
 
   local verdict
-  verdict=$(printf '%s' "$response" | jq -r '.content[0].text // empty' 2>/dev/null)
+  verdict=$(
+    printf '%s' "$prompt" | \
+    env -u CLAUDECODE CLAUDE_WATCHDOG_ENABLED=0 \
+    timeout 45 claude -p \
+      --model haiku \
+      --output-format text \
+      --no-session-persistence \
+      --tools "" \
+      --disable-slash-commands \
+      --mcp-config "$mcp_config" \
+      --strict-mcp-config \
+      2>/dev/null
+  ) || true
 
   if [[ -z "$verdict" ]]; then
-    return 0
+    return 0  # CLI failed — assume stuck
   fi
 
   # Store reason for notification message

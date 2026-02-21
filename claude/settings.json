@@ -60,6 +60,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_webfetch_domain.sh",
+            "timeout": 3
+          }
+        ]
       }
     ]
   },
@@ -255,6 +265,8 @@
         "cloudcode-pa.googleapis.com",
         "github.com",
         "api.github.com",
+        "raw.githubusercontent.com",
+        "objects.githubusercontent.com",
         "mcp.linear.app"
       ]
     },
