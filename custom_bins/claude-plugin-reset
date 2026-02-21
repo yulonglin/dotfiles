@@ -25,18 +25,21 @@ NC='\033[0m'
 DOT_DIR="${DOT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 GLOBAL_RESET=false
 DRY_RUN=false
+FORCE=false
 
 for arg in "$@"; do
   case "$arg" in
     --global)  GLOBAL_RESET=true ;;
+    --force|-f) FORCE=true ;;
     --dry-run|-n) DRY_RUN=true ;;
     --help|-h)
-      echo "Usage: $(basename "$0") [--global] [--dry-run]"
+      echo "Usage: $(basename "$0") [--global] [--force] [--dry-run]"
       echo ""
       echo "Reinstall plugin defaults for Claude Code."
       echo ""
       echo "Options:"
       echo "  --global    Reset to global defaults (remove per-project plugin config)"
+      echo "  --force     Force --global even when files are git-tracked"
       echo "  --dry-run   Preview what would happen without making changes"
       echo "  --help      Show this help"
       exit 0
@@ -141,10 +144,12 @@ fi
 if $GLOBAL_RESET; then
   run_step "Resetting to global plugin defaults..."
   if command -v claude-context &>/dev/null; then
+    local force_flag=""
+    $FORCE && force_flag="--force"
     if $DRY_RUN; then
-      echo -e "  ${YELLOW}Would run: claude-context --clean${NC}"
+      echo -e "  ${YELLOW}Would run: claude-context --clean $force_flag${NC}"
     else
-      claude-context --clean
+      claude-context --clean $force_flag
     fi
   else
     echo -e "  ${YELLOW}claude-context not found — skipping${NC}"
