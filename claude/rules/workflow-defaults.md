@@ -32,6 +32,7 @@ Save with: claude-agent-save <id> <suggested-name>
 - `.claude/plans/` — implementation plans
 - `.claude/docs/` — project knowledge and references
 - `.claude/rules/` — behavioral rules
+- `docs/` — project documentation (top-level)
 - `CLAUDE.md` — project instructions and learnings
 - `specs/` — specifications and requirements
 - `memory/` files — persistent cross-session context
