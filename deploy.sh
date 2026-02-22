@@ -54,6 +54,7 @@ OPTIONS:
     --ai-update       Install AI tools auto-update (daily, both platforms)
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
+    --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
@@ -627,6 +628,17 @@ if [[ "$DEPLOY_KEYBOARD" == "true" ]] && is_macos; then
         "$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh" || log_warning "Keyboard repeat setup failed"
     else
         log_warning "Keyboard repeat setup script not found"
+    fi
+fi
+
+# ─── Bedtime Timezone Enforcement (macOS only) ───────────────────────────────
+
+if [[ "$DEPLOY_BEDTIME" == "true" ]] && is_macos; then
+    log_info "Setting up bedtime timezone enforcement..."
+    if [[ -f "$DOT_DIR/scripts/cleanup/setup_bedtime_enforce.sh" ]]; then
+        "$DOT_DIR/scripts/cleanup/setup_bedtime_enforce.sh" || log_warning "Bedtime enforcement setup failed"
+    else
+        log_warning "Bedtime enforcement setup script not found"
     fi
 fi
 

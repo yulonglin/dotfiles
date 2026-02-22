@@ -1,0 +1,163 @@
+#!/bin/bash
+# Bedtime timezone enforcement daemon
+# Detects and reverts timezone bypass attempts (manual TZ change, NTP disable, auto-TZ disable)
+# Runs as root via LaunchDaemon every 2 min + on /etc/localtime changes
+# NOTE: No set -eo pipefail — daemon must never crash, always exit 0
+# Using set -u to catch variable typos (safe — doesn't cause crashes, just errors on undefined vars)
+set -u
+
+CACHE_FILE="/var/db/enforce-timezone.last"
+RESTART_FILE="/var/db/enforce-timezone.restarts"
+CONSISTENT_FILE="/var/db/enforce-timezone.consistent"
+RATE_LIMIT=5
+RATE_WINDOW=600  # 10 minutes in seconds
+AUTO_ACCEPT_THRESHOLD=3  # consecutive consistent runs to auto-accept new TZ
+TAG="enforce-timezone"
+
+log() { logger -t "$TAG" "$1"; }
+
+# ─── Resolve current timezone robustly ───────────────────────────────────────
+get_current_tz() {
+    local tz
+    tz=$(/usr/bin/readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
+    if [[ -z "$tz" ]]; then
+        tz=$(/usr/sbin/systemsetup -gettimezone 2>/dev/null | sed 's/.*: //')
+    fi
+    echo "$tz"
+}
+
+# ─── Status: print current state for debugging ──────────────────────────────
+if [[ "${1:-}" == "--status" ]]; then
+    echo "Cache TZ:    $(cat "$CACHE_FILE" 2>/dev/null || echo '<none>')"
+    echo "Current TZ:  $(get_current_tz)"
+    echo "Restarts:    $(wc -l < "$RESTART_FILE" 2>/dev/null || echo 0)"
+    echo "Consistent:  $(cat "$CONSISTENT_FILE" 2>/dev/null || echo '<none>')"
+    echo "Auto-TZ:     $(defaults read /Library/Preferences/com.apple.timezone.auto Active 2>/dev/null || echo '?')"
+    echo "NTP:         $(systemsetup -getusingnetworktime 2>/dev/null | sed 's/.*: //' || echo '?')"
+    exit 0
+fi
+
+# ─── Travel: update cache to accept current timezone ─────────────────────────
+if [[ "${1:-}" == "--set-timezone" ]]; then
+    current_tz=$(get_current_tz)
+    if [[ -z "$current_tz" ]]; then
+        echo "Error: Could not determine current timezone" >&2
+        exit 1
+    fi
+    echo "$current_tz" > "$CACHE_FILE"
+    rm -f "$RESTART_FILE" "$CONSISTENT_FILE"
+    log "Cache updated to $current_tz (travel/manual override)"
+    exit 0
+fi
+
+# ─── Rate limiting ───────────────────────────────────────────────────────────
+# Returns 0 if under limit, 1 if over. Appends a timestamp on success.
+check_rate_limit() {
+    local now
+    now=$(date +%s)
+
+    if [[ ! -f "$RESTART_FILE" ]]; then
+        echo "$now" > "$RESTART_FILE"
+        return 0
+    fi
+
+    # Count recent restarts within window, prune old entries
+    local count=0
+    local new_entries=()
+    while IFS= read -r ts; do
+        # Skip malformed lines
+        [[ "$ts" =~ ^[0-9]+$ ]] || continue
+        if (( now - ts < RATE_WINDOW )); then
+            count=$((count + 1))
+            new_entries+=("$ts")
+        fi
+    done < "$RESTART_FILE"
+
+    if (( count >= RATE_LIMIT )); then
+        log "Rate limit hit ($count restarts in ${RATE_WINDOW}s). Skipping restart. Run: sudo enforce-timezone --set-timezone"
+        return 1
+    fi
+
+    new_entries+=("$now")
+    printf '%s\n' "${new_entries[@]}" > "$RESTART_FILE"
+    return 0
+}
+
+# ─── Checks ──────────────────────────────────────────────────────────────────
+CHANGED=0
+
+# Check 1: Auto-timezone enabled
+auto_tz=$(defaults read /Library/Preferences/com.apple.timezone.auto Active 2>/dev/null || echo "0")
+if [[ "$auto_tz" != "1" ]]; then
+    log "Bypass detected: auto-timezone was disabled. Re-enabling."
+    defaults write /Library/Preferences/com.apple.timezone.auto Active -bool true
+    killall locationd 2>/dev/null || true
+    CHANGED=1
+fi
+
+# Check 2: NTP enabled
+ntp_status=$(systemsetup -getusingnetworktime 2>/dev/null || echo "")
+if [[ "$ntp_status" == *"Off"* ]]; then
+    log "Bypass detected: NTP was disabled. Re-enabling."
+    systemsetup -setusingnetworktime on 2>/dev/null || true
+    CHANGED=1
+fi
+
+# Check 3: Timezone delta
+current_tz=$(get_current_tz)
+if [[ -z "$current_tz" ]]; then
+    log "Failed to determine current timezone. Skipping."
+    exit 0
+fi
+
+# Initialize cache if missing (don't exit early — still run post-check actions)
+if [[ ! -f "$CACHE_FILE" ]]; then
+    echo "$current_tz" > "$CACHE_FILE"
+    cached_tz="$current_tz"
+else
+    cached_tz=$(cat "$CACHE_FILE" 2>/dev/null || echo "")
+fi
+
+if [[ -n "$cached_tz" && "$current_tz" != "$cached_tz" ]]; then
+    # Track consecutive runs seeing the same new TZ (travel auto-accept)
+    consistent_entry=$(cat "$CONSISTENT_FILE" 2>/dev/null || echo "")
+    consistent_tz="${consistent_entry%%:*}"
+    consistent_count="${consistent_entry##*:}"
+    [[ "$consistent_count" =~ ^[0-9]+$ ]] || consistent_count=0
+
+    if [[ "$current_tz" == "$consistent_tz" ]]; then
+        consistent_count=$((consistent_count + 1))
+    else
+        consistent_tz="$current_tz"
+        consistent_count=1
+    fi
+    echo "${consistent_tz}:${consistent_count}" > "$CONSISTENT_FILE"
+
+    if (( consistent_count >= AUTO_ACCEPT_THRESHOLD )); then
+        # locationd keeps setting the same new TZ — this is real travel, not a bypass
+        log "Auto-accepting timezone $current_tz (consistent for $consistent_count runs)."
+        echo "$current_tz" > "$CACHE_FILE"
+        rm -f "$RESTART_FILE" "$CONSISTENT_FILE"
+        # No revert, no restart — accept the new timezone
+    else
+        log "Timezone changed from $cached_tz to $current_tz. Reverting to $cached_tz."
+        /usr/sbin/systemsetup -settimezone "$cached_tz" 2>/dev/null || true
+        CHANGED=1
+        # DON'T update cache — leave as last known-good value
+    fi
+fi
+
+# ─── Post-check actions ─────────────────────────────────────────────────────
+if (( CHANGED == 0 )); then
+    # Clean run — update cache and reset counters
+    echo "$current_tz" > "$CACHE_FILE"
+    rm -f "$RESTART_FILE" "$CONSISTENT_FILE"
+else
+    # Something was changed — check rate limit once, then restart services
+    if check_rate_limit; then
+        killall locationd 2>/dev/null || true
+        killall timed 2>/dev/null || true
+    fi
+fi
+
+exit 0

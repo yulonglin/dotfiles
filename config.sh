@@ -45,6 +45,7 @@ DEPLOY_CLAUDE_CLEANUP=true      # Claude Code idle session cleanup (both platfor
 DEPLOY_AI_UPDATE=true           # AI tools auto-update daily (both platforms)
 DEPLOY_BREW_UPDATE=true         # Weekly package upgrade + cleanup (brew/apt/dnf/pacman)
 DEPLOY_KEYBOARD=true            # Keyboard repeat enforcement at login (macOS only)
+DEPLOY_BEDTIME=false            # Bedtime timezone enforcement (macOS only, opt-in)
 DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect")
 DEPLOY_SERENA=false             # Serena MCP config (~/.serena symlink)
 
@@ -174,6 +175,7 @@ apply_profile() {
             DEPLOY_AI_UPDATE=false
             DEPLOY_BREW_UPDATE=false
             DEPLOY_KEYBOARD=false
+            DEPLOY_BEDTIME=false
             DEPLOY_SECRETS=false
             ;;
         minimal)
@@ -201,6 +203,7 @@ apply_profile() {
             DEPLOY_AI_UPDATE=false
             DEPLOY_BREW_UPDATE=false
             DEPLOY_KEYBOARD=false
+            DEPLOY_BEDTIME=false
             ;;
         *)
             echo "Warning: Unknown profile '$profile', using personal" >&2
