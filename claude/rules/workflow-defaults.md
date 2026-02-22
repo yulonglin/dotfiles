@@ -28,7 +28,15 @@ agentId: <id>
 Save with: claude-agent-save <id> <suggested-name>
 ```
 
-**Always commit plan files** — include `.claude/plans/` in every commit-push-sync. Plans provide valuable context for resuming work across sessions.
+**Always version project knowledge artifacts** — include these in every commit-push-sync:
+- `.claude/plans/` — implementation plans
+- `.claude/docs/` — project knowledge and references
+- `.claude/rules/` — behavioral rules
+- `CLAUDE.md` — project instructions and learnings
+- `specs/` — specifications and requirements
+- `memory/` files — persistent cross-session context
+
+These are durable project context, not ephemeral. Version them like code.
 
 For work taking >30 minutes:
 - Automatically use background agents when appropriate
