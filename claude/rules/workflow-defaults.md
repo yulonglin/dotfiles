@@ -28,7 +28,7 @@ agentId: <id>
 Save with: claude-agent-save <id> <suggested-name>
 ```
 
-**Commit plans and tasks** regularly — they provide valuable context for resuming work.
+**Always commit plan files** — include `.claude/plans/` in every commit-push-sync. Plans provide valuable context for resuming work across sessions.
 
 For work taking >30 minutes:
 - Automatically use background agents when appropriate
