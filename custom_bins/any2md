@@ -1,0 +1,427 @@
+#!/usr/bin/env python3
+"""any2md - Convert anything to LLM-friendly Markdown.
+
+Routes files, URLs, arxiv papers, and directories to the right converter
+and outputs Markdown to stdout.
+"""
+from __future__ import annotations
+
+import argparse
+import enum
+import json
+import os
+import platform
+import re
+import signal
+import subprocess
+import sys
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlparse
+from urllib.request import Request, urlopen
+
+# Handle SIGPIPE cleanly (e.g., any2md ... | head)
+if hasattr(signal, "SIGPIPE"):
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+# ── Constants ────────────────────────────────────────────────────────────────
+
+ARXIV_PATTERN = re.compile(r"arxiv\.org/(abs|pdf|html)/(\d{4}\.\d{4,5})(v\d+)?")
+ARXIV_ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$")
+YOUTUBE_PATTERN = re.compile(r"(youtube\.com|youtu\.be)")
+ARXIV2MD_API = "https://arxiv2md.org/api/markdown"
+
+TEXT_EXTENSIONS = {".md", ".txt", ".markdown", ".rst", ".org", ".text"}
+
+AUTH_DOMAINS = {
+    "docs.google.com",
+    "drive.google.com",
+    "notion.so",
+    "www.notion.so",
+    "confluence.atlassian.net",
+    "jira.atlassian.net",
+}
+
+SUBPROCESS_TIMEOUT = 120
+LLMS_TXT_TIMEOUT = 2
+ARXIV_TIMEOUT = 30
+
+
+# ── Types ────────────────────────────────────────────────────────────────────
+
+
+class InputType(enum.Enum):
+    LOCAL_TEXT = "local_text"
+    LOCAL_FILE = "local_file"
+    DIRECTORY = "directory"
+    ARXIV_URL = "arxiv_url"
+    ARXIV_ID = "arxiv_id"
+    YOUTUBE_URL = "youtube_url"
+    WEB_URL = "web_url"
+
+
+# ── Classification ───────────────────────────────────────────────────────────
+
+
+def classify_input(arg: str) -> tuple[InputType, str]:
+    """Classify an input argument and return (type, normalized_value).
+
+    Priority: file:// URL → filesystem → URL patterns → bare arxiv ID.
+    """
+    # Strip file:// prefix and treat as local path
+    if arg.startswith("file://"):
+        from urllib.parse import unquote
+
+        parsed = urlparse(arg)
+        arg = unquote(parsed.path) if parsed.path else arg[7:]
+
+    # Filesystem checks first (a local file named "2312.00752" must be a file)
+    expanded = os.path.expanduser(arg)
+    path = Path(expanded)
+
+    if path.is_file():
+        if path.suffix.lower() in TEXT_EXTENSIONS:
+            return InputType.LOCAL_TEXT, str(path)
+        return InputType.LOCAL_FILE, str(path)
+
+    if path.is_dir():
+        return InputType.DIRECTORY, str(path)
+
+    # URL patterns
+    if re.match(r"https?://", arg, re.IGNORECASE):
+        if ARXIV_PATTERN.search(arg):
+            return InputType.ARXIV_URL, arg
+        if YOUTUBE_PATTERN.search(arg):
+            return InputType.YOUTUBE_URL, arg
+        return InputType.WEB_URL, arg
+
+    # Bare arxiv ID
+    if ARXIV_ID_PATTERN.match(arg):
+        return InputType.ARXIV_ID, arg
+
+    # Nothing matched
+    print(f"error: cannot classify input: {arg}", file=sys.stderr)
+    sys.exit(1)
+
+
+# ── Converters ───────────────────────────────────────────────────────────────
+
+quiet_mode = False
+
+
+def info(msg: str):
+    """Print info message to stderr (suppressed in quiet mode)."""
+    if not quiet_mode:
+        print(msg, file=sys.stderr)
+
+
+def require_tool(name: str, install_hint: str):
+    """Check that a CLI tool is available, exit with helpful message if not."""
+    from shutil import which
+
+    if which(name) is None:
+        print(f"error: {name} not found. Install with: {install_hint}", file=sys.stderr)
+        sys.exit(2)
+
+
+def convert_text(path: str) -> str:
+    """Read text/markdown files directly (no subprocess needed)."""
+    return Path(path).read_text(encoding="utf-8", errors="replace")
+
+
+def convert_file(path: str) -> str:
+    """Convert local file via markitdown CLI."""
+    require_tool("markitdown", "uv tool install 'markitdown[pdf,docx,pptx,xlsx]'")
+    info(f"[any2md] converting file: {path}")
+    result = subprocess.run(
+        ["markitdown", path],
+        capture_output=True,
+        text=True,
+        timeout=SUBPROCESS_TIMEOUT,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        print(f"error: markitdown failed for {path}: {stderr}", file=sys.stderr)
+        sys.exit(1)
+    return result.stdout
+
+
+def convert_dir(path: str) -> str:
+    """Convert directory via code2prompt CLI."""
+    require_tool(
+        "code2prompt",
+        "cargo install code2prompt  (or ./install.sh --extras)",
+    )
+    info(f"[any2md] converting directory: {path}")
+    result = subprocess.run(
+        ["code2prompt", path],
+        capture_output=True,
+        text=True,
+        timeout=SUBPROCESS_TIMEOUT,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        print(f"error: code2prompt failed for {path}: {stderr}", file=sys.stderr)
+        sys.exit(1)
+    return result.stdout
+
+
+def convert_arxiv(id_or_url: str) -> str:
+    """Fetch arxiv paper markdown via arxiv2md API."""
+    # Normalize to URL for the API
+    if ARXIV_ID_PATTERN.match(id_or_url):
+        paper_url = f"https://arxiv.org/abs/{id_or_url}"
+    else:
+        paper_url = id_or_url
+
+    api_url = f"{ARXIV2MD_API}?url={quote(paper_url, safe='')}"
+    info(f"[any2md] fetching arxiv paper: {paper_url}")
+
+    try:
+        req = Request(api_url, headers={"User-Agent": "any2md/1.0"})
+        with urlopen(req, timeout=ARXIV_TIMEOUT) as resp:
+            body = resp.read().decode("utf-8")
+    except HTTPError as e:
+        if e.code == 429:
+            print("error: arxiv2md rate limited. Wait a moment and retry.", file=sys.stderr)
+            sys.exit(3)
+        print(f"error: arxiv2md returned HTTP {e.code}", file=sys.stderr)
+        sys.exit(3)
+    except URLError as e:
+        print(f"error: network error fetching arxiv paper: {e.reason}", file=sys.stderr)
+        sys.exit(3)
+    except (TimeoutError, OSError):
+        print(f"error: timed out fetching arxiv paper (waited {ARXIV_TIMEOUT}s)", file=sys.stderr)
+        sys.exit(3)
+
+    # Check for JSON error responses (arxiv2md returns 200 with error JSON sometimes)
+    stripped = body.lstrip()
+    if stripped.startswith("{"):
+        try:
+            data = json.loads(stripped)
+            if "error" in data:
+                print(f"error: arxiv2md: {data['error']}", file=sys.stderr)
+                sys.exit(3)
+            if "detail" in data:
+                print(f"error: arxiv2md: {data['detail']}", file=sys.stderr)
+                sys.exit(3)
+        except json.JSONDecodeError:
+            pass  # Not JSON, treat as markdown
+
+    return body
+
+
+def convert_youtube(url: str) -> str:
+    """Convert YouTube video via markitdown (transcription)."""
+    require_tool("markitdown", "uv tool install 'markitdown[youtube-transcription]'")
+    info(f"[any2md] fetching YouTube transcript: {url}")
+    result = subprocess.run(
+        ["markitdown", url],
+        capture_output=True,
+        text=True,
+        timeout=SUBPROCESS_TIMEOUT,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        print(f"error: markitdown failed for YouTube URL: {stderr}", file=sys.stderr)
+        sys.exit(1)
+    return result.stdout
+
+
+def try_fetch_llms_txt(url: str) -> str | None:
+    """Try to fetch llms.txt from the domain root. Returns content or None."""
+    parsed = urlparse(url)
+    llms_url = f"{parsed.scheme}://{parsed.netloc}/llms.txt"
+    info(f"[any2md] probing {llms_url}")
+
+    try:
+        req = Request(llms_url, headers={"User-Agent": "any2md/1.0"})
+        with urlopen(req, timeout=LLMS_TXT_TIMEOUT) as resp:
+            ct = resp.headers.get("Content-Type", "").lower()
+            if "text/plain" not in ct and "text/markdown" not in ct:
+                return None
+
+            # Read up to 1MB
+            body = resp.read(1_048_576).decode("utf-8", errors="replace")
+            if len(body.strip()) == 0:
+                return None
+
+            info(f"[any2md] found llms.txt ({len(body)} bytes) — use --no-llms-txt for page-specific content")
+            return body
+    except (HTTPError, URLError, TimeoutError, OSError):
+        return None
+
+
+def check_auth_domain(url: str):
+    """Warn and exit if URL is a known auth-gated domain."""
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+
+    # Check exact matches and *.atlassian.net
+    if hostname in AUTH_DOMAINS or hostname.endswith(".atlassian.net"):
+        print(
+            f"error: {hostname} requires authentication. "
+            "Download the file locally first, then run: any2md <file>",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def convert_web(url: str, skip_llms_txt: bool = False) -> str:
+    """Convert web URL: try llms.txt first, then markitdown fallback."""
+    check_auth_domain(url)
+
+    if not skip_llms_txt:
+        llms_content = try_fetch_llms_txt(url)
+        if llms_content is not None:
+            return llms_content
+
+    # Fallback to markitdown
+    require_tool("markitdown", "uv tool install markitdown")
+    info(f"[any2md] converting web URL: {url}")
+    result = subprocess.run(
+        ["markitdown", url],
+        capture_output=True,
+        text=True,
+        timeout=SUBPROCESS_TIMEOUT,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+
+        # Heuristic: detect login/auth pages from stderr or empty output
+        if any(word in stderr.lower() for word in ("401", "403", "forbidden", "unauthorized")):
+            print(
+                f"error: {url} returned an auth error. "
+                "Download the file locally first, then run: any2md <file>",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        print(f"error: markitdown failed for {url}: {stderr}", file=sys.stderr)
+        sys.exit(1)
+    return result.stdout
+
+
+# ── Routing ──────────────────────────────────────────────────────────────────
+
+CONVERTERS = {
+    InputType.LOCAL_TEXT: lambda val, **_: convert_text(val),
+    InputType.LOCAL_FILE: lambda val, **_: convert_file(val),
+    InputType.DIRECTORY: lambda val, **_: convert_dir(val),
+    InputType.ARXIV_URL: lambda val, **_: convert_arxiv(val),
+    InputType.ARXIV_ID: lambda val, **_: convert_arxiv(val),
+    InputType.YOUTUBE_URL: lambda val, **_: convert_youtube(val),
+    InputType.WEB_URL: lambda val, **kw: convert_web(val, skip_llms_txt=kw.get("skip_llms_txt", False)),
+}
+
+
+def convert_one(arg: str, skip_llms_txt: bool = False) -> str:
+    """Classify and convert a single input."""
+    input_type, value = classify_input(arg)
+    converter = CONVERTERS[input_type]
+    return converter(value, skip_llms_txt=skip_llms_txt)
+
+
+# ── Clipboard ────────────────────────────────────────────────────────────────
+
+
+def read_clipboard() -> str:
+    """Read clipboard content (macOS: pbpaste, Linux: xclip)."""
+    if platform.system() == "Darwin":
+        cmd = ["pbpaste"]
+    elif os.environ.get("WAYLAND_DISPLAY"):
+        cmd = ["wl-paste"]
+    else:
+        cmd = ["xclip", "-selection", "clipboard", "-o"]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            print("error: failed to read clipboard", file=sys.stderr)
+            sys.exit(1)
+        return result.stdout.strip()
+    except FileNotFoundError:
+        tool = cmd[0]
+        print(f"error: {tool} not found. Cannot read clipboard.", file=sys.stderr)
+        sys.exit(2)
+
+
+# ── CLI ──────────────────────────────────────────────────────────────────────
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="any2md",
+        description="Convert anything to LLM-friendly Markdown.",
+        epilog=(
+            "examples:\n"
+            "  any2md paper.pdf                     # Local file\n"
+            "  any2md 2312.00752                    # arxiv paper\n"
+            "  any2md https://docs.anthropic.com    # Web URL (llms.txt)\n"
+            "  any2md ./src/                        # Directory\n"
+            "  any2md -c                            # From clipboard\n"
+            "  any2md file1.pdf file2.docx          # Multiple inputs\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("inputs", nargs="*", help="Files, URLs, arxiv IDs, or directories")
+    parser.add_argument("-c", "--clipboard", action="store_true", help="Read input from clipboard")
+    parser.add_argument("-o", "--output", metavar="FILE", help="Write output to file instead of stdout")
+    parser.add_argument("--no-llms-txt", action="store_true", help="Skip llms.txt probe for web URLs")
+    parser.add_argument("-q", "--quiet", action="store_true", help="Suppress info messages")
+    return parser
+
+
+def main():
+    global quiet_mode
+
+    parser = build_parser()
+    args = parser.parse_args()
+    quiet_mode = args.quiet
+
+    # Collect inputs
+    inputs = list(args.inputs)
+    if args.clipboard:
+        clip = read_clipboard()
+        if not clip:
+            print("error: clipboard is empty", file=sys.stderr)
+            sys.exit(1)
+        inputs.append(clip)
+
+    if not inputs:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+
+    # Convert each input
+    parts = []
+    for i, inp in enumerate(inputs):
+        try:
+            md = convert_one(inp, skip_llms_txt=args.no_llms_txt)
+            if len(inputs) > 1:
+                # Add header between multiple inputs
+                name = Path(inp).name if Path(inp).exists() else inp
+                header = f"## {name or inp}\n\n"
+                parts.append(header + md)
+            else:
+                parts.append(md)
+        except subprocess.TimeoutExpired:
+            print(f"error: timed out processing: {inp}", file=sys.stderr)
+            sys.exit(1)
+        except KeyboardInterrupt:
+            sys.exit(130)
+
+    output = "\n\n".join(parts)
+
+    # Write output
+    if args.output:
+        Path(args.output).write_text(output, encoding="utf-8")
+        info(f"[any2md] written to {args.output}")
+    else:
+        sys.stdout.write(output)
+        # Ensure trailing newline
+        if output and not output.endswith("\n"):
+            sys.stdout.write("\n")
+
+
+if __name__ == "__main__":
+    main()

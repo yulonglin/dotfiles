@@ -146,7 +146,8 @@ custom_bins/              # Custom utilities (added to PATH)
 ├── utc_date              # Outputs DD-MM-YYYY in UTC
 ├── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
 ├── claude-context        # YAML-driven plugin profiles + marketplace sync (--sync)
-└── claude-cache-clean    # Remove stale plugin cache versions
+├── claude-cache-clean    # Remove stale plugin cache versions
+└── any2md                # Universal content-to-markdown converter (files, URLs, arxiv, dirs)
 
 lib/plotting/             # Python plotting library (deployed to ~/.local/lib/plotting/)
 ├── anthro_colors.py      # Anthropic brand colors (ground truth)
