@@ -32,7 +32,7 @@ Save with: claude-agent-save <id> <suggested-name>
 - **Always version** (durable config): `CLAUDE.md`, `.claude/rules/`, `.claude/agents/`
 - **Version when useful** (descriptive content): `docs/`, `specs/`, `plans/`
 - **Ephemeral by default**: Auto-generated plans (random names) — version if referenced, prune freely otherwise
-- `memory/` files — persistent cross-session context
+- **Context persistence**: `memory/` files — cross-session context
 
 For work taking >30 minutes:
 - Automatically use background agents when appropriate

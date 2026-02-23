@@ -137,6 +137,9 @@ claude/                   # Symlinked to ~/.claude/
 ├── projects/             # Project-specific settings overrides
 └── (runtime dirs)        # cache/, logs/, history.jsonl, todos/, etc.
 
+plans/                    # Per-project implementation plans (via plansDirectory setting)
+specs/                    # Specifications and requirements
+
 codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 
 custom_bins/              # Custom utilities (added to PATH)

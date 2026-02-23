@@ -32,6 +32,6 @@ I currently believe that the specs workflow is fine, I don't know what todos is 
 
 **Dropped**: claude-mem (over-engineered), vector embeddings (context window bottleneck), continuous-learning hooks (noise).
 
-**See**: `.claude/plans/prancy-sparking-waffle.md` for full rationale.
+**See**: `plans/prancy-sparking-waffle.md` for full rationale.
 
 **Update (2026-02-05)**: `ai_docs/` has been renamed to `docs/` (with permanent symlink `ai_docs -> docs` for backwards compat). Global knowledge lives at `~/.claude/docs/`, per-project at `<repo>/docs/`.
