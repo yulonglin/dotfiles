@@ -355,6 +355,18 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
         log_warning "Go not installed — skipping local MCP servers"
     fi
 
+    # markitdown (universal document-to-markdown converter, used by any2md)
+    if ! is_installed markitdown; then
+        log_info "Installing markitdown..."
+        if cmd_exists uv; then
+            uv tool install 'markitdown[pdf,docx,pptx,xlsx,youtube-transcription]' 2>/dev/null
+        elif cmd_exists pipx; then
+            pipx install 'markitdown[pdf,docx,pptx,xlsx,youtube-transcription]' 2>/dev/null
+        else
+            pip install 'markitdown[pdf,docx,pptx,xlsx,youtube-transcription]' 2>/dev/null
+        fi || log_warning "markitdown installation failed"
+    fi
+
     log_success "AI CLI tools installation complete"
 fi
 
