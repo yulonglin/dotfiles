@@ -278,7 +278,7 @@
   },
   "alwaysThinkingEnabled": true,
   "autoUpdatesChannel": "latest",
-  "plansDirectory": ".claude/plans",
+  "plansDirectory": "plans",
   "skipDangerousModePermissionPrompt": true,
   "chrome": {
     "enabled": false

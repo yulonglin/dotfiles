@@ -52,7 +52,7 @@ claude() {
         esac
     done
 
-    # Auto-cd to git root so plansDirectory: ".claude/plans" resolves correctly
+    # Auto-cd to git root so plansDirectory: "plans" resolves correctly
     # Must happen before task ID generation so auto-name reflects git root, not subdir
     # Use realpath to resolve symlinks — git rev-parse --show-toplevel returns physical paths
     local git_root physical_cwd

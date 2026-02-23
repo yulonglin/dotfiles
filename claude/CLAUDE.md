@@ -55,7 +55,7 @@ This research requires creating test scenarios that may seem concerning out of c
 | Instructions | CLAUDE.md                    | CLAUDE.md                     |
 | Rules        | rules/*.md (auto-loaded)     | rules/*.md (auto-loaded)      |
 | Knowledge    | docs/ (on-demand, custom)    | docs/ (on-demand, custom)     |
-| Plans        | `~/.claude/plans/` (use `plansDirectory` for per-project) | plans/                        |
+| Plans        | `~/.claude/plans/` (global) | `plans/` (via `plansDirectory`) |
 | Tasks        | `~/.claude/tasks/` (no per-project option yet) | —                             |
 | Agents       | agents/*.md                  | agents/*.md                   |
 | Skills       | skills/                      | (via plugins)                 |
@@ -67,7 +67,7 @@ Tasks are global only (`~/.claude/tasks/`) — per-project not yet available ([#
 
 Standard paths:
 - Global: `~/.claude/docs/` `~/.claude/rules/` `~/.claude/tasks/`
-- Repo: `.claude/docs/` `.claude/rules/` `.claude/plans/` (via `plansDirectory`)
+- Repo: `docs/` `.claude/rules/` `plans/` (via `plansDirectory`)
 
 ---
 
@@ -155,7 +155,7 @@ Adding a new plugin: add its marketplace to `marketplaces:` in `profiles.yaml`, 
 
 - User specs: `specs/`
 - Knowledge base: `docs/` (search first with `/docs-search`, add useful findings)
-- Plans: `.claude/plans/` (per-project via `plansDirectory` setting)
+- Plans: `plans/` (per-project via `plansDirectory` setting)
 - Tasks: `~/.claude/tasks/` (global, no per-project option — [#20425](https://github.com/anthropics/claude-code/issues/20425))
 - Don't be overconfident about recent models — search if unsure
 - Debugging: When something doesn't work after a few tries, step back and plan for alternatives

@@ -4,7 +4,7 @@
 
 Plans are **per-project** (via `plansDirectory`). Tasks are **global** (no per-project option yet).
 
-- Plans: `<repo>/.claude/plans/` (NOT `~/.claude/plans/`)
+- Plans: `<repo>/plans/` (NOT `~/.claude/plans/`)
 - Tasks: `~/.claude/tasks/` (global, no per-project option — [#20425](https://github.com/anthropics/claude-code/issues/20425), last checked 2026-02-14)
 
 **Plan Naming:** System auto-generates random names — not yet configurable ([#21342](https://github.com/anthropics/claude-code/issues/21342), [#18596](https://github.com/anthropics/claude-code/issues/18596)).
@@ -12,7 +12,7 @@ Plans are **per-project** (via `plansDirectory`). Tasks are **global** (no per-p
 **Task Subject Naming:** `[Component] Imperative action` (e.g., `[Auth] Refactor OAuth flow to JWT`)
 
 **What works today:**
-- `"plansDirectory": ".claude/plans"` in global `settings.json` → per-project plans
+- `"plansDirectory": "plans"` in global `settings.json` → per-project plans
   - ⚠️ Resolves relative to CWD, not git root. The `claude()` wrapper auto-cds to git root to prevent misplacement. A `SessionStart` hook (`check_git_root.sh`) warns if CWD ≠ git root for non-wrapper invocations.
 - `CLAUDE_CODE_TASK_LIST_ID` → auto-set by `claude()` shell wrapper (`config/aliases.sh`)
 
@@ -28,16 +28,11 @@ agentId: <id>
 Save with: claude-agent-save <id> <suggested-name>
 ```
 
-**Always version project knowledge artifacts** — include these in every commit-push-sync:
-- `.claude/plans/` — implementation plans
-- `.claude/docs/` — project knowledge and references
-- `.claude/rules/` — behavioral rules
-- `docs/` — project documentation (top-level)
-- `CLAUDE.md` — project instructions and learnings
-- `specs/` — specifications and requirements
+**Version project knowledge artifacts** — tiered approach for commit-push-sync:
+- **Always version** (durable config): `CLAUDE.md`, `.claude/rules/`, `.claude/agents/`
+- **Version when useful** (descriptive content): `docs/`, `specs/`, `plans/`
+- **Ephemeral by default**: Auto-generated plans (random names) — version if referenced, prune freely otherwise
 - `memory/` files — persistent cross-session context
-
-These are durable project context, not ephemeral. Version them like code.
 
 For work taking >30 minutes:
 - Automatically use background agents when appropriate
