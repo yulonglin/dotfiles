@@ -19,6 +19,7 @@ eye-see-eye, ICI → IASEAI
 Teachman → Teichman
 mats, mets → MATS
 Acer, Aesha → Asa (pronounced "A-sir")
+ClockCode, Cloud Code, Clock Code → Claude Code
 
 **Models:**
 GPT, Claude, ChatGPT, Gemini, Llama, Qwen, Mistral, DeepSeek, o1, o3
