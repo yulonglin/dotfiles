@@ -46,6 +46,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_stop.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/auto_commit.sh",
+            "timeout": 120
           }
         ]
       }
