@@ -253,6 +253,11 @@ install_gh_cli() {
         echo ""
         gh auth login --web --git-protocol https || log_warning "gh auth failed - run 'gh auth login' manually"
     fi
+
+    # Prefer SSH for git operations via gh
+    if cmd_exists gh; then
+        gh config set git_protocol ssh
+    fi
 }
 
 # Fallback: Install gh from GitHub releases
