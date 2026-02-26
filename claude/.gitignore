@@ -41,4 +41,7 @@ backups/
 bash-commands.log
 logs/
 
+chrome/
+mcp-needs-auth-cache.json
+
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh
