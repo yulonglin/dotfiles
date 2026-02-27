@@ -95,7 +95,10 @@
         { "icon": "todo", "extensions": ["tasks"], "format": "svg" },
         { "icon": "config", "extensions": ["rules"], "format": "svg" },
         { "icon": "plugin", "extensions": ["skills"], "format": "svg" },
-        { "icon": "bot", "extensions": ["agents"], "format": "svg" }
+        { "icon": "bot", "extensions": ["agents"], "format": "svg" },
+        { "icon": "claude", "extensions": ["claude"], "format": "svg" },
+        { "icon": "gemini", "extensions": ["gemini"], "format": "svg" },
+        { "icon": "cli",    "extensions": ["codex"],  "format": "svg" }
     ],
     "python.analysis.packageIndexDepths": [
         {
