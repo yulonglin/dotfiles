@@ -800,11 +800,22 @@ merge_json_settings() {
 import json, sys
 with open(sys.argv[1]) as f: dotfiles = json.load(f)
 with open(sys.argv[2]) as f: existing = json.load(f)
-merged = {**dotfiles, **existing}  # existing wins
+# Deep merge: scalars/objects → existing wins; arrays → dotfiles wins (dotfiles is source of truth)
+merged = {}
+all_keys = set(dotfiles) | set(existing)
+for k in all_keys:
+    if k not in dotfiles:
+        merged[k] = existing[k]
+    elif k not in existing:
+        merged[k] = dotfiles[k]
+    elif isinstance(dotfiles[k], list):
+        merged[k] = dotfiles[k]  # dotfiles wins for arrays
+    else:
+        merged[k] = existing[k]  # existing wins for scalars/objects
 with open(sys.argv[2], 'w') as f: json.dump(merged, f, indent=4); f.write('\n')
 MERGE
 
-    log_success "Merged $name settings (existing preserved)"
+    log_success "Merged $name settings (existing preserved, arrays from dotfiles)"
 }
 
 # Install editor extensions
