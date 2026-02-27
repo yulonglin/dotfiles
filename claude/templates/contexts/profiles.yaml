@@ -11,7 +11,7 @@ marketplaces:
     github: anthropics/claude-plugins-official
 
   ai-safety-plugins:
-    local: ${CODE_DIR}/ai-safety-plugins
+    local: ${CODE_DIR}/marketplaces/ai-safety-plugins
     github: yulonglin/ai-safety-plugins
 
   ui-ux-pro-max-skill:

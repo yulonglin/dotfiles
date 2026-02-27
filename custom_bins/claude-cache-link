@@ -27,7 +27,7 @@ DRY_RUN=true
 # Registry: marketplace → source root
 # Add entries here for any local plugin repos you develop
 declare -A LOCAL_SOURCES=(
-  ["ai-safety-plugins"]="${CODE_DIR:-${HOME}/code}/ai-safety-plugins/plugins"
+  ["ai-safety-plugins"]="${CODE_DIR:-${HOME}/code}/marketplaces/ai-safety-plugins/plugins"
 )
 
 already_linked=0
