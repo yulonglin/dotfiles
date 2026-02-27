@@ -98,7 +98,7 @@
         { "icon": "bot", "extensions": ["agents"], "format": "svg" },
         { "icon": "claude",  "extensions": ["claude"],   "format": "svg" },
         { "icon": "gemini",  "extensions": ["gemini"],   "format": "svg" },
-        { "icon": "cli",     "extensions": ["codex"],    "format": "svg" },
+        { "icon": "bot",     "extensions": ["codex"],    "format": "svg" },
         { "icon": "python",  "extensions": ["plotting"], "format": "svg" }
     ],
     "python.analysis.packageIndexDepths": [
