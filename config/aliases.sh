@@ -737,6 +737,17 @@ alias cc-force='clear-claude-code --force'
 alias cca='clear-claude-code --all'           # kill everything (confirms)
 alias cc-all='clear-claude-code --all'
 
+ccusage() {
+  if command -v bunx >/dev/null 2>&1; then
+    bunx ccusage@latest "$@"
+  elif command -v npx >/dev/null 2>&1; then
+    npx ccusage@latest "$@"
+  else
+    echo "Error: Neither 'bunx' nor 'npx' is installed. Please install one to run 'ccusage'."
+    return 1
+  fi
+}
+
 # Update all AI CLI tools (delegates to update-ai-tools script)
 alias ai-update='update-ai-tools'
 

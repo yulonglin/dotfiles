@@ -1,29 +1,37 @@
-# Things 3 + Slack MCP — Productivity Plugins Plan
+# Things 3 + Slack MCP — mac-tools Marketplace Plan
 
 ## Context
 
-Neither Things 3 nor a self-hosted Slack MCP is currently integrated. Adding both would let Claude Code interact with your task manager and Slack natively — creating tasks, querying views, reacting to messages, tracking unreads — all via natural language.
-
-Goal: stand up both MCP servers, host their manifests under a single `mac-tools` marketplace repo, and wire into the dotfiles plugin system via a new `personal` profile.
+Neither Things 3 nor the existing Slack MCP fork is wired into the dotfiles plugin system. The Slack fork already exists at `~/code/marketplaces/slack-mcp-server` (`github.com/yulonglin/slack-mcp-server`, fork of korotovsky, with custom security hardening + channel recency sorting). Goal: fork Things 3, move the Slack fork to `~/code/mcps/`, create a `mac-tools` manifest repo on GitHub, and wire both into the plugin system via a new `personal` profile.
 
 ---
 
-## Marketplace Naming: `mac-tools`
-
-The unifying theme is "Claude talking to native macOS desktop apps" (Things via URL scheme, Slack via API, potentially Calendar / Reminders / Contacts someday). Recommendation: **`mac-tools`**.
+## Final Architecture
 
 ```
-~/code/marketplaces/mac-tools/     ← new marketplace repo
+~/code/mcps/                                    ← MCP server code (forks)
+├── slack-mcp-server/                           ← moved from ~/code/marketplaces/slack-mcp-server/
+└── things-mcp/                                 ← new fork of hald/things-mcp
+
+~/code/marketplaces/mac-tools/                  ← new manifest repo (github.com/yulonglin/mac-tools)
+├── .claude-plugin/
+│   └── marketplace.json                        ← REQUIRED for claude-context to detect local marketplace
 └── plugins/
     ├── things-mcp/
-    │   ├── plugin.json
-    │   └── .mcp.json
+    │   └── .claude-plugin/
+    │       └── plugin.json                     ← plugin.json MUST be inside .claude-plugin/
     └── slack-mcp/
-        ├── plugin.json
-        └── .mcp.json
+        └── .claude-plugin/
+            └── plugin.json
+```
 
-~/code/things-mcp/                 ← fork of hald/things-mcp (Python + uv)
-~/code/slack-mcp/                  ← fork of korotovsky/slack-mcp-server (Go)
+### profiles.yaml entry (follows ai-safety-plugins pattern)
+
+```yaml
+marketplaces:
+  mac-tools:
+    local: ${CODE_DIR}/marketplaces/mac-tools
+    github: yulonglin/mac-tools
 ```
 
 ---
@@ -31,73 +39,105 @@ The unifying theme is "Claude talking to native macOS desktop apps" (Things via 
 ## Server Selection
 
 ### Things 3: Fork `hald/things-mcp`
+325 stars, v0.7.3, Feb 2026, active. Python + uv. 20+ tools via Things URL scheme. All views, checklists, tags, areas, search.
 
-| | |
-|---|---|
-| Stars | 325, v0.7.3 (Feb 2026), active |
-| Stack | Python + things.py + uv |
-| Tools | 20+ (all views, checklist, tags, areas, search) |
-| Connection | Things URL scheme (safe, native) |
-
-### Slack: Fork `korotovsky/slack-mcp-server`
-
-| | |
-|---|---|
-| Stars | 1.4k, 245 forks, active |
-| Stack | Go, stdio/SSE/HTTP transports |
-| Tools | 15 tools (reactions, usergroups, unreads, smart history caching) |
-| Auth | Browser tokens (xoxc/xoxd), Bot token, or User OAuth |
-
-**Why korotovsky over alternatives:** Complements your existing Claude.ai Slack integration. The Claude.ai tools already handle send/read/search — korotovsky adds the gaps: reaction management, user groups, unreads tracking, message editing, and smart history caching. No permission creep.
+### Slack: Existing fork `yulonglin/slack-mcp-server`
+Fork of korotovsky/slack-mcp-server (1.4k stars). Currently at `~/code/marketplaces/slack-mcp-server/` — to be moved to `~/code/mcps/slack-mcp-server/`. Custom commits: "Add channel recency sorting and security hardening". Binary already built.
 
 ---
 
 ## Implementation Steps
 
-### 1. Fork + Clone Both Servers
+### 1. Move Slack Fork to ~/code/mcps/
 
 ```bash
-# Fork hald/things-mcp and korotovsky/slack-mcp-server on GitHub, then:
-git clone git@github.com:<you>/things-mcp.git ~/code/things-mcp
-git clone git@github.com:<you>/slack-mcp.git ~/code/slack-mcp
+mkdir -p ~/code/mcps
+mv ~/code/marketplaces/slack-mcp-server ~/code/mcps/slack-mcp-server
+cd ~/code/mcps/slack-mcp-server
 
-cd ~/code/things-mcp && uv sync
-cd ~/code/slack-mcp && go build .  # or: go install .
+# Verify upstream remote exists (add if missing)
+git remote get-url upstream 2>/dev/null || \
+  git remote add upstream https://github.com/korotovsky/slack-mcp-server.git
+
+git fetch upstream
+git log upstream/main..HEAD --oneline   # review custom commits
+git rebase upstream/main                # brings in upstream, preserves custom commits
+go build -o slack-mcp-server .
+git push --force-with-lease origin main  # rebase requires force-push
 ```
 
-### 2. Create the mac-tools Marketplace Repo
+### 2. Fork + Clone Things 3
 
 ```bash
-mkdir -p ~/code/marketplaces/mac-tools/plugins/{things-mcp,slack-mcp}
-cd ~/code/marketplaces/mac-tools && git init
+# Fork on GitHub (--fork-name flag does NOT exist in gh; default name is fine)
+gh repo fork hald/things-mcp --clone=false
+
+# Clone locally
+git clone git@github.com:yulonglin/things-mcp.git ~/code/mcps/things-mcp
+# Note: no uv sync needed — plugin uses uvx --from git+https://... directly
 ```
 
-**`plugins/things-mcp/plugin.json`:**
+### 3. Create mac-tools Repo on GitHub + Init Locally
+
+```bash
+gh repo create yulonglin/mac-tools --public \
+  --description "Claude Code MCP plugin manifests for macOS apps"
+
+mkdir -p ~/code/marketplaces/mac-tools
+cd ~/code/marketplaces/mac-tools
+git init
+git remote add origin git@github.com:yulonglin/mac-tools.git
+```
+
+### 4. Create Marketplace Structure
+
+**Required structure** (`.claude-plugin/` at both marketplace root AND each plugin dir):
+
+```bash
+mkdir -p ~/code/marketplaces/mac-tools/.claude-plugin
+mkdir -p ~/code/marketplaces/mac-tools/plugins/things-mcp/.claude-plugin
+mkdir -p ~/code/marketplaces/mac-tools/plugins/slack-mcp/.claude-plugin
+```
+
+**`~/code/marketplaces/mac-tools/.claude-plugin/marketplace.json`:**
+```json
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "mac-tools",
+  "plugins": [
+    { "name": "things-mcp", "source": "./plugins/things-mcp", "version": "0.1.0" },
+    { "name": "slack-mcp",  "source": "./plugins/slack-mcp",  "version": "1.0.0" }
+  ]
+}
+```
+
+**`plugins/things-mcp/.claude-plugin/plugin.json`:**
 ```json
 {
   "name": "things-mcp",
-  "version": "0.7.3",
+  "version": "0.1.0",
   "description": "Things 3 task manager — all views, projects, tags, checklists",
   "mcpServers": {
     "things": {
-      "command": "uv",
-      "args": ["run", "--project", "/Users/yulong/code/things-mcp", "things-mcp"]
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/yulonglin/things-mcp", "things-mcp"]
     }
   }
 }
 ```
 
-**`plugins/slack-mcp/plugin.json`:**
+**`plugins/slack-mcp/.claude-plugin/plugin.json`:**
 ```json
 {
   "name": "slack-mcp",
   "version": "1.0.0",
-  "description": "Slack — reactions, usergroups, unreads, history (complements Claude.ai Slack)",
+  "description": "Slack extensions — reactions, usergroups, unreads (adds to Claude.ai Slack)",
   "mcpServers": {
     "slack": {
-      "command": "/Users/yulong/code/slack-mcp/slack-mcp-server",
+      "command": "slack-mcp-server",
       "args": ["--transport", "stdio"],
       "env": {
+        "SLACK_TEAM_ID": "${SLACK_TEAM_ID}",
         "SLACK_TOKEN": "${SLACK_TOKEN}"
       }
     }
@@ -105,75 +145,110 @@ cd ~/code/marketplaces/mac-tools && git init
 }
 ```
 
-(`.mcp.json` mirrors `mcpServers` block from each `plugin.json`)
-
-### 3. Register mac-tools in Plugin System
-
-**`profiles.yaml`** — add local marketplace:
-```yaml
-marketplaces:
-  - name: mac-tools
-    path: ~/code/marketplaces/mac-tools
-    type: local
-  # ... existing marketplaces
+Note: `slack-mcp-server` referenced by name only (not hardcoded path) — requires the binary to be on PATH. Install step:
+```bash
+cd ~/code/mcps/slack-mcp-server && go install .
+# Binary lands at ~/go/bin/slack-mcp-server (ensure ~/go/bin is in PATH)
 ```
 
-**New `personal` profile:**
+### 5. Commit and Push mac-tools (BEFORE claude-context --sync)
+
+```bash
+cd ~/code/marketplaces/mac-tools
+git add -A
+git commit -m "feat: add things-mcp and slack-mcp plugin manifests"
+git push -u origin main
+```
+
+### 6. Register in Dotfiles
+
+**Edit `claude/templates/contexts/profiles.yaml`:**
+
 ```yaml
+marketplaces:
+  # ... existing entries
+  mac-tools:
+    local: ${CODE_DIR}/marketplaces/mac-tools
+    github: yulonglin/mac-tools
+
 profiles:
+  # ... existing profiles
   personal:
-    description: "Life and productivity tools — Things 3, Slack extensions"
-    plugins:
+    comment: "Life and productivity — Things 3, Slack extensions"
+    enable:
       - things-mcp
       - slack-mcp
 ```
 
-Run `claude-context --sync` to register, then `claude-context personal` (or compose: `claude-context code personal`).
+**Commit the dotfiles change:**
+```bash
+cd ~/code/dotfiles
+git add claude/templates/contexts/profiles.yaml
+git commit -m "feat: add mac-tools marketplace and personal profile"
+git push
+```
 
-### 4. Slack Auth Setup
+### 7. Sync + Activate
 
-korotovsky supports multiple auth methods. Simplest for personal use:
-- Browser tokens (xoxc + xoxd cookies from browser devtools) — no scope configuration needed
-- Or: create a Slack Bot with scopes `channels:history`, `reactions:write`, `usergroups:read` etc.
+```bash
+claude-context --sync          # registers mac-tools, updates installed_plugins.json
+claude-context personal        # activates plugins in settings.json (required separate step)
+```
 
-Store token in `~/.zshenv`: `export SLACK_TOKEN="xoxb-..."` (picked up by the plugin env block above).
+### 8. Slack Auth
 
-### 5. Custom Extensions (v2, after core works)
+Ensure in `~/.zshenv`:
+```bash
+export SLACK_TOKEN="xoxb-..."
+export SLACK_TEAM_ID="T..."
+```
 
-**Things 3:**
-- **Natural language scheduling** — `dateparser` library: "next Monday" → Things date format, wired into `create_task`/`update_task`
-- **Cross-app linking** — `link_to_task(task_id, url, app)` appends structured URL to task notes; Claude can create a Things task + link to Linear issue in one shot
-- **Bulk operations** — `bulk_complete(task_ids)`, `bulk_tag(task_ids, tags)`, `bulk_move(task_ids, project_id)`
+### 9. Custom Extensions (v2 — after core works)
 
-**Slack (gaps korotovsky doesn't cover):**
-- Custom reaction aliases ("use :white_check_mark: for done" → maps to API call)
+**Things 3 additions** (in fork at `~/code/mcps/things-mcp/`):
+- NL scheduling: `dateparser` → "next Monday" into Things date format in `create_task`/`update_task`
+- Cross-app linking: `link_to_task(task_id, url, app)` appends URL to task notes
+- Bulk ops: `bulk_complete/tag/move(task_ids, ...)` over filter results
+
+**Slack additions** (in fork at `~/code/mcps/slack-mcp-server/`):
+- Reaction aliases ("done" → `:white_check_mark:`)
 
 ---
 
-## Critical Files to Modify (Dotfiles)
+## Critical Files (Dotfiles)
 
 | File | Change |
 |------|--------|
 | `claude/templates/contexts/profiles.yaml` | Add `mac-tools` marketplace + `personal` profile |
-| `claude/plugins/installed_plugins.json` | Register things-mcp + slack-mcp |
-| `claude/settings.json` | No new sandbox domains needed (stdio transport) |
+| `claude/plugins/installed_plugins.json` | Auto-updated by `claude-context --sync` |
+| `claude/settings.json` | No new sandbox domains (stdio transport) |
 
 ---
 
 ## Verification
 
-1. `claude-context --list` — confirms things-mcp + slack-mcp show as registered
-2. `claude-context personal` → start Claude Code session
-3. Ask: "Show my Things inbox" → tasks appear
-4. Ask: "Add a reaction 👍 to the last message in #general" → reaction appears in Slack
-5. Ask: "Create a Things task: Review mac-tools MCP integration, due next Monday" → task appears with correct date
+1. `which slack-mcp-server` → confirms binary is on PATH
+2. `claude-context --list` → things-mcp + slack-mcp show under `personal`
+3. Start Claude Code session with `personal` profile
+4. "Show my Things inbox" → task list appears
+5. "React 👍 to last message in #general" → reaction appears in Slack
+6. "Create Things task: Review mac-tools integration, due next Monday" → task with correct date
+
+Smoke tests before wiring:
+```bash
+# Things 3
+uvx --from git+https://github.com/yulonglin/things-mcp things-mcp --help
+
+# Slack
+echo '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}' | slack-mcp-server --transport stdio
+```
 
 ---
 
 ## New Repos Summary
 
-| Repo | Location | Base |
-|------|----------|------|
+| Repo | Local path | Status |
+|------|-----------|--------|
 | `mac-tools` | `~/code/marketplaces/mac-tools/` | new (manifests only) |
-| `things-mcp` | `~/code/things-mcp/` | fork of hald/things-mcp |
-| `slack-mcp` | `~/code/slack-mcp/` | fork of korotovsky/slack-mcp-server |
+| `things-mcp` | `~/code/mcps/things-mcp/` | new fork of hald/things-mcp |
+| `slack-mcp-server` | `~/code/mcps/slack-mcp-server/` | existing fork — move + sync upstream |
