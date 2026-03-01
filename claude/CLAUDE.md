@@ -160,4 +160,3 @@ Adding a new plugin: add its marketplace to `marketplaces:` in `profiles.yaml`, 
 - Don't be overconfident about recent models — search if unsure
 - Debugging: When something doesn't work after a few tries, step back and plan for alternatives
 - Permission errors: If sandboxing blocks you, step back and EnterPlanMode. Consider using `trash` or `mv` to `.bak` instead of `rm`
-- Codex runtime files (`codex/cache/`, `codex/state_*.sqlite`) can change during normal use and even around commits/hooks; keep them gitignored to avoid commit churn.
