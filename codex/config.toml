@@ -75,3 +75,6 @@ personality = true
 [mcp_servers.playwright]
 args = ["@playwright/mcp@latest"]
 command = "npx"
+
+[tui]
+status_line = ["session-id", "model-with-reasoning", "current-dir", "git-branch", "five-hour-limit", "weekly-limit", "context-remaining"]
