@@ -1,84 +1,65 @@
 #!/usr/bin/env bash
-# Hook: Auto-commit any uncommitted changes at session end
-# Event: SessionEnd
-# Replicates the /commit skill via `claude -p` for LLM-generated commit messages.
-# Per-project opt-out: touch .no-auto-commit in repo root
-#                   or: export CLAUDE_AUTO_COMMIT=0
+# Hook: enqueue guarded auto-commit worker at SessionEnd.
 
 set -euo pipefail
 
-# ── Parse input ───────────────────────────────────────────────────────────────
-INPUT=$(cat)
-CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${CWD:-$(pwd)}}"
-[ -z "$PROJECT_DIR" ] && exit 0
+resolve_script_path() {
+  local src="${BASH_SOURCE[0]}"
+  while [[ -h "$src" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  printf '%s\n' "$(cd -P "$(dirname "$src")" && pwd)/$(basename "$src")"
+}
 
-# ── Opt-out: env var ──────────────────────────────────────────────────────────
-[[ "${CLAUDE_AUTO_COMMIT:-1}" == "0" ]] && exit 0
-
-# ── Must be a git repo ────────────────────────────────────────────────────────
-REPO_ROOT=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null) || exit 0
-
-# ── Opt-out: sentinel file ────────────────────────────────────────────────────
-[[ -f "$REPO_ROOT/.no-auto-commit" ]] && exit 0
-
-# ── Guard: detached HEAD (commit would create orphaned commit) ────────────────
-if ! git -C "$REPO_ROOT" symbolic-ref HEAD >/dev/null 2>&1; then
-  echo "auto-commit skipped: detached HEAD" >&2
-  exit 0
-fi
-
-# ── Guard: in-progress git operations ────────────────────────────────────────
-GIT_DIR=$(git -C "$REPO_ROOT" rev-parse --git-dir)
-for sentinel in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply BISECT_LOG; do
-  if [ -e "$GIT_DIR/$sentinel" ]; then
-    echo "auto-commit skipped: $sentinel in progress" >&2
-    exit 0
+hash_string() {
+  local input="$1"
+  if command -v sha1sum >/dev/null 2>&1; then
+    printf '%s' "$input" | sha1sum | awk '{print $1}'
+    return
   fi
-done
+  printf '%s' "$input" | shasum -a 1 | awk '{print $1}'
+}
 
-# ── Guard: unresolved conflicts ───────────────────────────────────────────────
-CONFLICTS=$(git -C "$REPO_ROOT" diff --name-only --diff-filter=U 2>/dev/null || true)
-if [[ -n "$CONFLICTS" ]]; then
-  echo "auto-commit skipped: unresolved conflicts" >&2
+script_file="$(resolve_script_path)"
+hook_dir="$(cd "$(dirname "$script_file")" && pwd)"
+dot_dir="$(cd "$hook_dir/../.." && pwd)"
+CONFIG_PATH="${dot_dir}/config/ai_automation.sh"
+if [[ -f "$HOME/.claude/ai_automation.sh" ]]; then
+  CONFIG_PATH="$HOME/.claude/ai_automation.sh"
+fi
+if [[ -f "$CONFIG_PATH" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_PATH"
+fi
+
+: "${AUTO_AGENT_DISABLED_SENTINEL:=$HOME/.claude/flags/auto-agent-disabled}"
+: "${AUTO_AGENT_REPO_DISABLED_DIR:=$HOME/.claude/state/repo-disabled}"
+: "${AUTO_COMMIT_USE_ASYNC:=1}"
+
+INPUT="$(cat)"
+CWD="$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${CWD:-$(pwd)}}"
+[[ -z "$PROJECT_DIR" ]] && exit 0
+
+[[ "${CLAUDE_AUTO_COMMIT:-1}" == "0" ]] && exit 0
+[[ "${AUTO_AGENT_INTERNAL:-0}" == "1" ]] && exit 0
+[[ -f "$AUTO_AGENT_DISABLED_SENTINEL" ]] && exit 0
+
+REPO_ROOT="$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[[ -f "$REPO_ROOT/.no-auto-commit" ]] && exit 0
+repo_hash="$(hash_string "$REPO_ROOT")"
+repo_disabled_sentinel="${AUTO_AGENT_REPO_DISABLED_DIR}/auto-agent-disabled-${repo_hash}"
+[[ -f "$repo_disabled_sentinel" ]] && exit 0
+
+worker="${hook_dir}/auto_commit_worker.sh"
+[[ -x "$worker" ]] || exit 0
+
+if [[ "${AUTO_COMMIT_USE_ASYNC:-1}" == "1" ]]; then
+  nohup env AUTO_AGENT_INTERNAL=1 CLAUDE_AUTO_COMMIT=0 "$worker" "$REPO_ROOT" >/dev/null 2>&1 &
   exit 0
 fi
 
-# ── Early exit: nothing to commit ─────────────────────────────────────────────
-# Check both tracked changes (diff HEAD) and new untracked files (ls-files -o)
-UNTRACKED=$(git -C "$REPO_ROOT" ls-files --others --exclude-standard 2>/dev/null | head -1)
-if git -C "$REPO_ROOT" diff HEAD --quiet 2>/dev/null && [[ -z "$UNTRACKED" ]]; then
-  exit 0
-fi
-
-# ── Delegate to claude -p (replicates /commit skill) ─────────────────────────
-# Build git context exactly as the /commit skill does via its !` inline commands
-GIT_STATUS=$(git -C "$REPO_ROOT" status 2>/dev/null)
-GIT_DIFF=$(git -C "$REPO_ROOT" diff HEAD 2>/dev/null | head -300)
-GIT_BRANCH=$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null)
-GIT_LOG=$(git -C "$REPO_ROOT" log --oneline -10 2>/dev/null)
-
-PROMPT="Based on the above changes, create a single git commit.
-
-## Context
-
-- Current git status:
-$GIT_STATUS
-
-- Current git diff (staged and unstaged changes):
-$GIT_DIFF
-
-- Current branch: $GIT_BRANCH
-
-- Recent commits:
-$GIT_LOG
-
-## Your task
-
-Stage and create the commit using a single message. Do not use any other tools or do anything else.
-Do not send any other text or messages besides these tool calls.
-Working directory: $REPO_ROOT"
-
-(cd "$REPO_ROOT" && claude -p "$PROMPT" \
-  --allowedTools "Bash(git add:*),Bash(git status:*),Bash(git commit:*)" \
-  2>/dev/null) || echo "auto-commit: claude invocation failed" >&2
+env AUTO_AGENT_INTERNAL=1 CLAUDE_AUTO_COMMIT=0 "$worker" "$REPO_ROOT"

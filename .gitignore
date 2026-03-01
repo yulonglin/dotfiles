@@ -7,6 +7,12 @@ config/secrets.sh
 config/safari_web_apps.local
 config.local.sh
 
+# Claude runtime state (local operational artifacts)
+claude/diagnostics/
+claude/state/
+claude/flags/
+claude/logs/
+
 # npm artifacts (not used - this repo uses system package managers)
 package.json
 package-lock.json

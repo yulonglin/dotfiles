@@ -201,6 +201,16 @@
         ]
       },
       {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_agent_depth.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
         "matcher": "WebFetch",
         "hooks": [
           {

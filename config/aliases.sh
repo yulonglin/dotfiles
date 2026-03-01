@@ -744,6 +744,13 @@ alias ai-update='update-ai-tools'
 # Detects: brew (macOS), apt/dnf/pacman (Linux)
 alias pkg-update='update-packages'
 
+# Auto-agent guard controls
+alias auto-guard='auto-agent-guardctl status'
+alias auto-approve='auto-agent-guardctl approve'
+alias auto-disable='auto-agent-guardctl disable'
+alias auto-enable='auto-agent-guardctl enable'
+alias auto-trace='auto-agent-guardctl trace'
+
 # Clean duplicate skills from Claude Code (plugin symlinks cause 2x entries)
 alias clean-skill-dupes='"$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"'
 

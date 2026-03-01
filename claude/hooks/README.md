@@ -26,6 +26,47 @@ Hooks for automating task and agent management workflows.
 ═══════════════════════════════════════════════════
 ```
 
+### auto_commit.sh
+
+**Purpose:** SessionEnd trigger that enqueues guarded auto-commit work.
+
+**Behavior:**
+- Resolves repo from hook payload and exits fast on opt-out conditions.
+- Delegates to `auto_commit_worker.sh` (async by default).
+- Honors global disable sentinel and `.no-auto-commit`.
+
+### auto_commit_worker.sh
+
+**Purpose:** Executes auto-commit with safety and cost controls.
+
+**Key safeguards:**
+- Depth gate via `AUTO_AGENT_MAX_DEPTH` / `AUTO_AGENT_DEPTH`.
+- Per-repo lock, cooldown, and hourly cap.
+- Skips gitlinks/submodules and `.claude/worktrees/*` paths.
+- Anomaly gating through `custom_bins/ccusage-guard` with weekly pace WARN/STOP states.
+- Anomaly STOP is repo-scoped by default (repo disable sentinel).
+- Hard projected-limit STOP is global (global emergency sentinel).
+- Default backend order is non-Claude (`codex,gemini`); Claude fallback is opt-in.
+
+### check_agent_depth.sh
+
+**Purpose:** `PreToolUse` guard for `Task` delegation depth.
+
+**Behavior:**
+- Blocks tool call when `AUTO_AGENT_DEPTH >= AUTO_AGENT_MAX_DEPTH`.
+- Intended to cap recursive delegation chains.
+
+## Runtime Policy
+
+Shared config is in `config/ai_automation.sh` (optionally overridden by `~/.claude/ai_automation.local.sh`).
+
+Useful controls:
+- `auto-guard` → show current guard state
+- `auto-approve [minutes]` → temporary WARN override
+- `auto-disable` / `auto-enable` → repo-scoped stop / resume
+- `auto-disable --global` / `auto-enable --global` → global emergency stop / resume
+- `auto-trace [project]` → generate anomaly trace report
+
 ## Hook Integration
 
 ### Automatic Integration (If Supported)

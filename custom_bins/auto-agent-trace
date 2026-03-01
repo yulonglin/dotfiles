@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_script_path() {
+  local src="${BASH_SOURCE[0]}"
+  while [[ -h "$src" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  printf '%s\n' "$(cd -P "$(dirname "$src")" && pwd)/$(basename "$src")"
+}
+
+script_file="$(resolve_script_path)"
+bin_dir="$(cd "$(dirname "$script_file")" && pwd)"
+dot_dir="$(cd "$bin_dir/.." && pwd)"
+CONFIG_PATH="${dot_dir}/config/ai_automation.sh"
+if [[ -f "$HOME/.claude/ai_automation.sh" ]]; then
+  CONFIG_PATH="$HOME/.claude/ai_automation.sh"
+fi
+if [[ -f "$CONFIG_PATH" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_PATH"
+fi
+
+: "${AUTO_AGENT_TRACE_DIR:=$HOME/.claude/diagnostics}"
+: "${AUTO_AGENT_DISABLED_SENTINEL:=$HOME/.claude/flags/auto-agent-disabled}"
+: "${AUTO_AGENT_APPROVAL_FILE:=$HOME/.claude/flags/auto-agent-approved-until}"
+
+PROJECT_PATH="${1:-$PWD}"
+export PROJECT_PATH
+mkdir -p "$AUTO_AGENT_TRACE_DIR"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+OUT="${AUTO_AGENT_TRACE_DIR}/anomaly-${TS}.md"
+
+PROJECT_SLUG="$(python3 - <<'PY'
+import os
+import pathlib
+print(str(pathlib.Path(os.environ.get("PROJECT_PATH", ".")).resolve()).replace("/", "-"))
+PY
+)"
+export PROJECT_SLUG
+
+{
+  echo "# Auto-Agent Anomaly Trace"
+  echo ""
+  echo "- Timestamp (UTC): $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+  echo "- Project: ${PROJECT_PATH}"
+  echo "- Slug: ${PROJECT_SLUG}"
+  echo "- Host: $(hostname)"
+  echo ""
+
+  echo "## Process Snapshot"
+  echo '```text'
+  ps -eo pid,ppid,etime,command | rg 'claude -p|codex exec|gemini|auto_commit|auto_commit_worker' || true
+  echo '```'
+  echo ""
+
+  echo "## Hook Config Snapshot"
+  echo '```text'
+  rg -n 'SessionEnd|PreToolUse|Task|auto_commit|check_agent_depth|watchdog' "$HOME/.claude/settings.json" 2>/dev/null || true
+  echo '```'
+  echo ""
+
+  echo "## Recent Session Rates"
+  python3 - <<'PY'
+import os
+import pathlib
+import time
+home = pathlib.Path.home()
+slug = os.environ.get("PROJECT_SLUG", "")
+project_dir = home / ".claude" / "projects" / slug
+now = time.time()
+hour = 0
+day = 0
+auto_prompt = 0
+if project_dir.exists():
+    for fp in project_dir.glob("*.jsonl"):
+        try:
+            m = fp.stat().st_mtime
+        except OSError:
+            continue
+        if now - m <= 3600:
+            hour += 1
+            try:
+                txt = fp.read_text(encoding="utf-8", errors="ignore")[:4000]
+                if (
+                    "Based on the above changes, create a single git commit" in txt
+                    or "Follow the /commit workflow strictly and keep output minimal." in txt
+                ):
+                    auto_prompt += 1
+            except OSError:
+                pass
+        if now - m <= 86400:
+            day += 1
+print("```text")
+print(f"sessions_last_1h={hour}")
+print(f"sessions_last_24h={day}")
+print(f"auto_commit_prompt_sessions_last_1h={auto_prompt}")
+print("```")
+PY
+  echo ""
+
+  if git -C "$PROJECT_PATH" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "## Git Status"
+    echo '```text'
+    git -C "$PROJECT_PATH" status --short || true
+    echo '```'
+    echo ""
+  fi
+
+  echo "## Guard State"
+  echo '```text'
+  if [[ -f "$AUTO_AGENT_DISABLED_SENTINEL" ]]; then
+    echo "auto_agent_disabled=true"
+  else
+    echo "auto_agent_disabled=false"
+  fi
+  if [[ -f "$AUTO_AGENT_APPROVAL_FILE" ]]; then
+    echo "approval_file=$(cat "$AUTO_AGENT_APPROVAL_FILE" 2>/dev/null || true)"
+  else
+    echo "approval_file=absent"
+  fi
+  echo '```'
+} > "$OUT"
+
+echo "$OUT"
