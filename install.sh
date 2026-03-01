@@ -253,16 +253,6 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
         export PATH="$BUN_INSTALL/bin:$PATH"
     fi
 
-    # Ensure npm as fallback for global CLI installs
-    if ! cmd_exists bun && ! cmd_exists npm; then
-        log_info "Installing npm..."
-        if is_macos; then
-            brew_install node
-        else
-            apt_install npm
-        fi
-    fi
-
     # Gemini CLI
     if ! is_installed gemini; then
         log_info "Installing Gemini CLI..."
@@ -270,8 +260,8 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
             brew_install gemini-cli
         elif cmd_exists bun; then
             bun add -g @google/gemini-cli &>/dev/null || log_warning "Gemini CLI failed"
-        elif cmd_exists npm; then
-            npm install -g @google/gemini-cli &>/dev/null || log_warning "Gemini CLI failed"
+        else
+            log_warning "bun is required to install Gemini CLI on Linux; skipping"
         fi
     fi
 
@@ -282,8 +272,8 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
             brew_install codex
         elif cmd_exists bun; then
             bun add -g @openai/codex &>/dev/null || log_warning "Codex CLI failed"
-        elif cmd_exists npm; then
-            npm install -g @openai/codex &>/dev/null || log_warning "Codex CLI failed"
+        else
+            log_warning "bun is required to install Codex CLI on Linux; skipping"
         fi
     fi
 

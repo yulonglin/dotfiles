@@ -3,7 +3,7 @@
 # AI CLI Tools Auto-Update
 # ═══════════════════════════════════════════════════════════════════════════════
 # Updates Claude Code, Gemini CLI, and Codex CLI using the correct method
-# per tool (brew, bun, npm). Designed to run from launchd/cron (minimal PATH).
+# per tool (brew on macOS, bun on Linux). Designed to run from launchd/cron.
 #
 # Usage:
 #   update-ai-tools              # Run updates
@@ -18,7 +18,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 fi
 
 # Add common paths for globally installed tools
-export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH"
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH"
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: update-ai-tools [--dry-run]"
             echo ""
             echo "Updates Claude Code, Gemini CLI, and Codex CLI."
-            echo "Detects per-tool installation method (brew/bun/npm)."
+            echo "Uses brew on macOS and bun on Linux."
             echo ""
             echo "Options:"
             echo "  --dry-run    Preview what would be updated"
@@ -80,10 +80,10 @@ trap release_lock EXIT
 
 # ─── Core Update Logic ──────────────────────────────────────────────────────
 
-# Update a tool by detecting its installation method (brew/bun/npm)
-# Usage: update_tool <command_name> <brew_package> <npm_package>
+# Update a tool using platform-appropriate manager (brew on macOS, bun on Linux)
+# Usage: update_tool <command_name> <brew_package> <package_name>
 update_tool() {
-    local tool_name="$1" brew_name="$2" npm_name="$3"
+    local tool_name="$1" brew_name="$2" package_name="$3"
 
     # Skip if tool not installed
     if ! command -v "$tool_name" &>/dev/null; then
@@ -96,20 +96,17 @@ update_tool() {
     local tool_path
     tool_path=$(command -v "$tool_name" 2>/dev/null || true)
 
-    if is_macos && [[ "$tool_path" == "$(brew --prefix 2>/dev/null)"* ]]; then
+    if is_macos && command -v brew &>/dev/null && [[ "$tool_path" == "$(brew --prefix 2>/dev/null)"* ]]; then
         method="brew"
-    elif [[ "$tool_path" == "$HOME/.bun/"* ]]; then
+    elif command -v bun &>/dev/null; then
         method="bun"
-    elif [[ "$tool_path" == "$HOME/.npm-global/"* ]] || command -v npm &>/dev/null; then
-        method="npm"
     fi
 
     # Dry-run: show what would happen, then exit
     if [[ "$DRY_RUN" == "true" ]]; then
         case "$method" in
             brew) log "[DRY RUN] Would run: brew upgrade $brew_name" ;;
-            bun)  log "[DRY RUN] Would run: bun add -g ${npm_name}@latest" ;;
-            npm)  log "[DRY RUN] Would run: npm install -g ${npm_name}@latest" ;;
+            bun)  log "[DRY RUN] Would run: bun add -g ${package_name}@latest" ;;
             *)    log "[DRY RUN] $tool_name: no known update method" ;;
         esac
         return 0
@@ -123,15 +120,11 @@ update_tool() {
                 || log_err "$tool_name brew upgrade failed"
             ;;
         bun)
-            bun add -g "${npm_name}@latest" 2>&1 \
+            bun add -g "${package_name}@latest" 2>&1 \
                 || log_err "$tool_name bun update failed"
             ;;
-        npm)
-            npm install -g "${npm_name}@latest" 2>&1 \
-                || log_err "$tool_name npm update failed"
-            ;;
         *)
-            log_err "$tool_name installed but no known update method (not brew/bun/npm)"
+            log_err "$tool_name installed but no known update method (expected brew or bun)"
             return 1
             ;;
     esac
