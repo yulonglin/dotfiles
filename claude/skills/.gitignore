@@ -17,10 +17,6 @@
 # Track this file
 !.gitignore
 
-# Track plugin system directory (needed for extensionless .codex-system-skills.marker)
-!.system/
-!.system/**
-
 # Allow git to traverse into skill directories
 !*/
 !**/*/
@@ -34,6 +30,10 @@
 
 # === DENY LIST ===
 # Re-ignore files/dirs that !**/*.* would incorrectly allow
+
+# Generated Codex system skills (machine-specific/runtime; do not track)
+.system/
+.system/**
 
 # macOS metadata
 **/.DS_Store
