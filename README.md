@@ -345,25 +345,33 @@ SSH to `203.0.113.42` → prompt shows `🌊 mats` instead of the IP or hostname
 
 ### Claude Code Statusline
 
-Claude Code displays a custom statusline with session info. Configuration: `claude/statusline.sh`
+Claude Code displays a custom statusline with session info. Configuration: `claude/settings.json` (`statusLine.command = "claude-tools statusline"`).
 
 ```
-🌊 mats ~/code/project (main*) +12,-3 · 📊 45% · $0.23
-│        │              │      │        │        └─ Session cost
-│        │              │      │        └─ Context usage (color-coded)
-│        │              │      └─ Git insertions/deletions
-│        │              └─ Branch (* = dirty)
+🌊 mats [code python] ~/code/project (main*) · 📊 45% · $0.23 · 12m
+│        │             │              │      │        │        └─ Session duration
+│        │             │              │      │        └─ Session cost
+│        │             │              │      └─ Context usage (color-coded)
+│        │             │              └─ Branch (* = dirty)
+│        │             └─ Active Claude context profiles
 │        └─ Directory
 └─ Machine name (SSH only, same as p10k)
 ```
 
 **Features:**
 - **Machine name**: Uses same `machine-name` script as Powerlevel10k for consistency
-- **Git info**: Branch with dirty indicator, line change stats
+- **Git info**: Branch with dirty indicator
 - **Context %**: Color-coded usage (green <70%, yellow 70-89%, red 90%+)
 - **Cost**: Running session total in USD
+- **Duration**: Session runtime in minutes/hours
+
+`ccusage statusline` is not wired into the live Claude hook path because it can OOM on large local histories; guard logic still uses lightweight `ccusage blocks --active --json` where available.
 
 Both the shell prompt and Claude Code statusline use your SSH config aliases, so machine identification is consistent across tools.
+
+### Codex Statusline
+
+Codex uses built-in status items configured in `codex/config.toml` under `[tui].status_line` (for example: model, current dir, git branch, weekly/5h limits, context remaining).
 
 ### SSH Key Management
 

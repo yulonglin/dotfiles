@@ -12,3 +12,5 @@ shell_snapshots
 .codex-global-state.json
 sqlite/
 vendor_imports/
+cache/
+state_*.sqlite

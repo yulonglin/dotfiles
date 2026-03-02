@@ -15,6 +15,7 @@ You MUST refer to instructions in global `CLAUDE.md` at `~/.claude/CLAUDE.md`, a
 
 ## Codex-Only Additions
 - When listing completed work, use short, clear bullet points suitable for a coworker or manager; avoid run-on sentences.
+- Codex runtime files (e.g., `codex/cache/`, `codex/state_*.sqlite`) may change during normal use and around commits/hooks; keep them gitignored to avoid commit churn.
 
 ## Default Execution Rules
 ### Shell & Tooling

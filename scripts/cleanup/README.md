@@ -248,11 +248,12 @@ Daily scheduled job (6:00 AM) that updates Claude Code, Gemini CLI, and Codex CL
 
 ### Features
 
-- **Per-tool detection**: Detects how each tool was installed (brew, bun, npm) and uses the correct update command
+- **Manager selection**: Uses brew on macOS and bun on Linux for Gemini/Codex updates
 - **`claude update`**: Works universally regardless of Claude Code install method
 - **Lock file**: Prevents concurrent runs with PID-based stale lock detection
 - **`--dry-run`**: Preview what would be updated without executing
 - **PATH setup**: Handles minimal launchd/cron PATH by sourcing brew and adding common paths
+- **Linux bootstrap**: `setup_ai_update.sh` installs bun automatically if missing
 
 ### Manual Usage
 

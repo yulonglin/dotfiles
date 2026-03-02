@@ -882,7 +882,7 @@ parse_args() {
             --no-*)
                 # Disable a component: --no-zsh, --no-claude, etc.
                 local component="${1#--no-}"
-                component="${(U)component}"  # uppercase (zsh/bash compatible)
+                component="$(printf '%s' "$component" | tr '[:lower:]' '[:upper:]')"
                 component="${component//-/_}"  # dashes to underscores
                 typeset -g "INSTALL_${component}=false"
                 typeset -g "DEPLOY_${component}=false"
@@ -890,7 +890,7 @@ parse_args() {
             --*)
                 # Enable a component: --zsh, --claude, etc.
                 local component="${1#--}"
-                component="${(U)component}"  # uppercase (zsh/bash compatible)
+                component="$(printf '%s' "$component" | tr '[:lower:]' '[:upper:]')"
                 component="${component//-/_}"
                 typeset -g "INSTALL_${component}=true"
                 typeset -g "DEPLOY_${component}=true"

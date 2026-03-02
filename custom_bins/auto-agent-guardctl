@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_script_path() {
+  local src="${BASH_SOURCE[0]}"
+  while [[ -h "$src" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  printf '%s\n' "$(cd -P "$(dirname "$src")" && pwd)/$(basename "$src")"
+}
+
+hash_string() {
+  local input="$1"
+  if command -v sha1sum >/dev/null 2>&1; then
+    printf '%s' "$input" | sha1sum | awk '{print $1}'
+    return
+  fi
+  printf '%s' "$input" | shasum -a 1 | awk '{print $1}'
+}
+
+get_repo_root() {
+  git rev-parse --show-toplevel 2>/dev/null || true
+}
+
+repo_disabled_sentinel_path() {
+  local repo_root="$1"
+  local repo_hash
+  repo_hash="$(hash_string "$repo_root")"
+  printf '%s/auto-agent-disabled-%s\n' "$AUTO_AGENT_REPO_DISABLED_DIR" "$repo_hash"
+}
+
+script_file="$(resolve_script_path)"
+bin_dir="$(cd "$(dirname "$script_file")" && pwd)"
+dot_dir="$(cd "$bin_dir/.." && pwd)"
+CONFIG_PATH="${dot_dir}/config/ai_automation.sh"
+if [[ -f "$HOME/.claude/ai_automation.sh" ]]; then
+  CONFIG_PATH="$HOME/.claude/ai_automation.sh"
+fi
+if [[ -f "$CONFIG_PATH" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_PATH"
+fi
+
+: "${AUTO_AGENT_DISABLED_SENTINEL:=$HOME/.claude/flags/auto-agent-disabled}"
+: "${AUTO_AGENT_REPO_DISABLED_DIR:=$HOME/.claude/state/repo-disabled}"
+: "${AUTO_AGENT_APPROVAL_FILE:=$HOME/.claude/flags/auto-agent-approved-until}"
+: "${AUTO_AGENT_APPROVAL_TTL_MIN:=120}"
+
+GLOBAL_MODE=0
+args=()
+for token in "$@"; do
+  if [[ "$token" == "--global" ]]; then
+    GLOBAL_MODE=1
+    continue
+  fi
+  args+=("$token")
+done
+
+cmd="${args[0]:-status}"
+arg="${args[1]:-}"
+
+mkdir -p "$(dirname "$AUTO_AGENT_DISABLED_SENTINEL")" "$AUTO_AGENT_REPO_DISABLED_DIR"
+
+case "$cmd" in
+  status)
+    if (( GLOBAL_MODE == 1 )); then
+      echo "scope: global"
+      echo "disabled_sentinel: $AUTO_AGENT_DISABLED_SENTINEL"
+      if [[ -f "$AUTO_AGENT_DISABLED_SENTINEL" ]]; then
+        echo "disabled: true"
+      else
+        echo "disabled: false"
+      fi
+    else
+      repo_root="$(get_repo_root)"
+      if [[ -z "$repo_root" ]]; then
+        echo "Not in a git repository. Use --global for global status." >&2
+        exit 1
+      fi
+      repo_disabled_sentinel="$(repo_disabled_sentinel_path "$repo_root")"
+      echo "scope: repo"
+      echo "repo_root: $repo_root"
+      echo "repo_disabled_sentinel: $repo_disabled_sentinel"
+      if [[ -f "$repo_disabled_sentinel" ]]; then
+        echo "repo_disabled: true"
+      else
+        echo "repo_disabled: false"
+      fi
+      echo "global_disabled_sentinel: $AUTO_AGENT_DISABLED_SENTINEL"
+      if [[ -f "$AUTO_AGENT_DISABLED_SENTINEL" ]]; then
+        echo "global_disabled: true"
+      else
+        echo "global_disabled: false"
+      fi
+    fi
+
+    if [[ -f "$AUTO_AGENT_APPROVAL_FILE" ]]; then
+      now="$(date +%s)"
+      exp="$(cat "$AUTO_AGENT_APPROVAL_FILE" 2>/dev/null || echo 0)"
+      if [[ "$exp" =~ ^[0-9]+$ ]] && (( exp > now )); then
+        echo "approved_until_epoch: $exp"
+      else
+        echo "approved_until_epoch: expired"
+      fi
+    else
+      echo "approved_until_epoch: none"
+    fi
+    ;;
+  approve)
+    minutes="${arg:-$AUTO_AGENT_APPROVAL_TTL_MIN}"
+    now="$(date +%s)"
+    exp=$((now + minutes * 60))
+    mkdir -p "$(dirname "$AUTO_AGENT_APPROVAL_FILE")"
+    echo "$exp" > "$AUTO_AGENT_APPROVAL_FILE"
+    echo "Approved automated actions until epoch=${exp} (${minutes}m)."
+    ;;
+  disable)
+    if (( GLOBAL_MODE == 1 )); then
+      : > "$AUTO_AGENT_DISABLED_SENTINEL"
+      echo "Disabled global automated agent actions."
+    else
+      repo_root="$(get_repo_root)"
+      if [[ -z "$repo_root" ]]; then
+        echo "Not in a git repository. Use --global to disable globally." >&2
+        exit 1
+      fi
+      repo_disabled_sentinel="$(repo_disabled_sentinel_path "$repo_root")"
+      : > "$repo_disabled_sentinel"
+      echo "Disabled automated agent actions for repo: $repo_root"
+    fi
+    ;;
+  enable)
+    if (( GLOBAL_MODE == 1 )); then
+      rm -f "$AUTO_AGENT_DISABLED_SENTINEL"
+      echo "Enabled global automated agent actions."
+    else
+      repo_root="$(get_repo_root)"
+      if [[ -z "$repo_root" ]]; then
+        echo "Not in a git repository. Use --global to enable globally." >&2
+        exit 1
+      fi
+      repo_disabled_sentinel="$(repo_disabled_sentinel_path "$repo_root")"
+      rm -f "$repo_disabled_sentinel"
+      echo "Enabled automated agent actions for repo: $repo_root"
+    fi
+    ;;
+  trace)
+    project="${arg:-$PWD}"
+    "${bin_dir}/auto-agent-trace" "$project"
+    ;;
+  *)
+    echo "Usage: auto-agent-guardctl [--global] {status|approve [minutes]|disable|enable|trace [project]}" >&2
+    exit 1
+    ;;
+esac

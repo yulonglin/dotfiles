@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_script_path() {
+  local src="${BASH_SOURCE[0]}"
+  while [[ -h "$src" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  printf '%s\n' "$(cd -P "$(dirname "$src")" && pwd)/$(basename "$src")"
+}
+
+hash_string() {
+  local input="$1"
+  if command -v sha1sum >/dev/null 2>&1; then
+    printf '%s' "$input" | sha1sum | awk '{print $1}'
+    return
+  fi
+  printf '%s' "$input" | shasum -a 1 | awk '{print $1}'
+}
+
+state_rank() {
+  case "$1" in
+    normal) echo 0 ;;
+    warn) echo 1 ;;
+    stop) echo 2 ;;
+    *) echo 0 ;;
+  esac
+}
+
+promote_state() {
+  local candidate_state="$1"
+  local candidate_reason="$2"
+  local candidate_scope="$3"
+
+  local current_rank candidate_rank
+  current_rank="$(state_rank "$FINAL_STATE")"
+  candidate_rank="$(state_rank "$candidate_state")"
+  if (( candidate_rank > current_rank )); then
+    FINAL_STATE="$candidate_state"
+    FINAL_REASON="$candidate_reason"
+    FINAL_SCOPE="$candidate_scope"
+  fi
+}
+
+ensure_numeric_var() {
+  local var_name="$1"
+  local fallback="$2"
+  local current="${!var_name:-}"
+  if [[ ! "$current" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+    printf -v "$var_name" '%s' "$fallback"
+  fi
+}
+
+script_file="$(resolve_script_path)"
+bin_dir="$(cd "$(dirname "$script_file")" && pwd)"
+dot_dir="$(cd "$bin_dir/.." && pwd)"
+CONFIG_PATH="${dot_dir}/config/ai_automation.sh"
+if [[ -f "$HOME/.claude/ai_automation.sh" ]]; then
+  CONFIG_PATH="$HOME/.claude/ai_automation.sh"
+fi
+if [[ -f "$CONFIG_PATH" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_PATH"
+fi
+
+: "${AUTO_AGENT_WARN_MULTIPLIER:=1.8}"
+: "${AUTO_AGENT_RATE_WINDOW_DAYS:=7}"
+: "${AUTO_AGENT_PERCENTILE_WINDOW_DAYS:=30}"
+: "${AUTO_AGENT_DAILY_COST_LIMIT_USD:=200}"
+: "${AUTO_AGENT_BLOCK_PROJECTED_COST_LIMIT_USD:=100}"
+: "${AUTO_AGENT_BLOCK_PROJECTED_TOKEN_LIMIT:=50000000}"
+: "${AUTO_AGENT_WEEKLY_WARN_RATIO:=1.25}"
+: "${AUTO_AGENT_WEEKLY_STOP_RATIO:=1.75}"
+: "${AUTO_AGENT_DISABLED_SENTINEL:=$HOME/.claude/flags/auto-agent-disabled}"
+: "${AUTO_AGENT_REPO_DISABLED_DIR:=$HOME/.claude/state/repo-disabled}"
+
+ensure_numeric_var AUTO_AGENT_WARN_MULTIPLIER 1.8
+ensure_numeric_var AUTO_AGENT_RATE_WINDOW_DAYS 7
+ensure_numeric_var AUTO_AGENT_PERCENTILE_WINDOW_DAYS 30
+ensure_numeric_var AUTO_AGENT_DAILY_COST_LIMIT_USD 200
+ensure_numeric_var AUTO_AGENT_BLOCK_PROJECTED_COST_LIMIT_USD 100
+ensure_numeric_var AUTO_AGENT_BLOCK_PROJECTED_TOKEN_LIMIT 50000000
+ensure_numeric_var AUTO_AGENT_WEEKLY_WARN_RATIO 1.25
+ensure_numeric_var AUTO_AGENT_WEEKLY_STOP_RATIO 1.75
+
+PROJECT_PATH="${PWD}"
+ENFORCE=0
+JSON_OUT=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --project)
+      if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+        PROJECT_PATH="$PWD"
+        shift
+      else
+        PROJECT_PATH="$2"
+        shift 2
+      fi
+      ;;
+    --enforce)
+      ENFORCE=1
+      shift
+      ;;
+    --json)
+      JSON_OUT=1
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ccusage-guard: jq is required but not installed." >&2
+  exit 1
+fi
+
+PROJECT_PATH="$(cd "$PROJECT_PATH" && pwd)"
+repo_hash="$(hash_string "$PROJECT_PATH")"
+repo_disabled_sentinel="${AUTO_AGENT_REPO_DISABLED_DIR}/auto-agent-disabled-${repo_hash}"
+
+mkdir -p \
+  "$(dirname "$AUTO_AGENT_DISABLED_SENTINEL")" \
+  "$AUTO_AGENT_REPO_DISABLED_DIR"
+
+METRICS_JSON="$(
+python3 - "$PROJECT_PATH" "$AUTO_AGENT_WARN_MULTIPLIER" "$AUTO_AGENT_RATE_WINDOW_DAYS" "$AUTO_AGENT_PERCENTILE_WINDOW_DAYS" <<'PY'
+import json
+import statistics
+import sys
+import time
+from pathlib import Path
+
+project_path = Path(sys.argv[1]).resolve()
+warn_mult = float(sys.argv[2])
+window_7 = int(sys.argv[3])
+window_30 = int(sys.argv[4])
+
+projects_dir = Path.home() / ".claude" / "projects"
+slug = str(project_path).replace("/", "-")
+project_dir = projects_dir / slug
+
+now = time.time()
+day_secs = 86400
+
+def percentile(values, p):
+    if not values:
+        return 0.0
+    s = sorted(values)
+    if len(s) == 1:
+        return float(s[0])
+    rank = (len(s) - 1) * p
+    lo = int(rank)
+    hi = min(lo + 1, len(s) - 1)
+    frac = rank - lo
+    return float(s[lo] + (s[hi] - s[lo]) * frac)
+
+daily_30 = [0] * window_30
+current_hour = 0
+
+if project_dir.exists():
+    for fp in project_dir.glob("*.jsonl"):
+        try:
+            mtime = fp.stat().st_mtime
+        except OSError:
+            continue
+        age = now - mtime
+        if age <= 3600:
+            current_hour += 1
+        if age < window_30 * day_secs:
+            day_idx = int(age // day_secs)
+            if 0 <= day_idx < window_30:
+                daily_30[day_idx] += 1
+
+daily_7 = daily_30[:window_7]
+median_7_daily = statistics.median(daily_7) if daily_7 else 0.0
+p90_30_daily = percentile(daily_30, 0.9)
+
+# Raise floor to avoid false-positive spikes on low-volume/new projects.
+baseline_hourly = max(median_7_daily / 24.0, p90_30_daily / 24.0, 1.0)
+ratio = current_hour / baseline_hourly if baseline_hourly > 0 else 0.0
+
+state = "warn" if ratio > warn_mult else "normal"
+reason = "local_rate_anomaly" if ratio > warn_mult else "within_baseline"
+
+print(json.dumps({
+    "source": "session_file_rate_fallback",
+    "project_slug": slug,
+    "current_hourly_rate": current_hour,
+    "baseline_hourly_rate": round(baseline_hourly, 4),
+    "ratio": round(ratio, 4),
+    "warn_multiplier": warn_mult,
+    "median_7d_daily_sessions": median_7_daily,
+    "p90_30d_daily_sessions": round(p90_30_daily, 4),
+    "fallback_state": state,
+    "fallback_reason": reason,
+}))
+PY
+)"
+
+FALLBACK_STATE="$(printf '%s' "$METRICS_JSON" | jq -r '.fallback_state')"
+FALLBACK_REASON="$(printf '%s' "$METRICS_JSON" | jq -r '.fallback_reason')"
+
+FINAL_STATE="$FALLBACK_STATE"
+FINAL_REASON="$FALLBACK_REASON"
+FINAL_SCOPE="repo"
+
+if [[ -f "$AUTO_AGENT_DISABLED_SENTINEL" ]]; then
+  FINAL_STATE="stop"
+  FINAL_REASON="global_disabled_sentinel_present"
+  FINAL_SCOPE="global"
+elif [[ -f "$repo_disabled_sentinel" ]]; then
+  FINAL_STATE="stop"
+  FINAL_REASON="repo_disabled_sentinel_present"
+  FINAL_SCOPE="repo"
+fi
+
+weekly_budget_usd="$(awk "BEGIN {printf \"%.6f\", $AUTO_AGENT_DAILY_COST_LIMIT_USD * 7}")"
+METRICS_JSON="$(printf '%s' "$METRICS_JSON" | jq \
+  --arg project_path "$PROJECT_PATH" \
+  --arg repo_hash "$repo_hash" \
+  --argjson weekly_budget "$weekly_budget_usd" \
+  '. + {project_path: $project_path, repo_hash: $repo_hash, weekly_budget_usd: $weekly_budget}')"
+
+CCUSAGE_CMD=()
+if command -v ccusage >/dev/null 2>&1; then
+  CCUSAGE_CMD=(ccusage)
+elif command -v bunx >/dev/null 2>&1; then
+  CCUSAGE_CMD=(bunx ccusage)
+fi
+
+if [[ ${#CCUSAGE_CMD[@]} -gt 0 ]]; then
+  ACTIVE_JSON="$("${CCUSAGE_CMD[@]}" blocks --active --json 2>/dev/null || true)"
+  if [[ -n "$ACTIVE_JSON" ]] && printf '%s' "$ACTIVE_JSON" | jq -e '.blocks | length > 0' >/dev/null 2>&1; then
+    ACTIVE_COST="$(printf '%s' "$ACTIVE_JSON" | jq -r '.blocks[0].costUSD // 0')"
+    ACTIVE_PROJECTED_COST="$(printf '%s' "$ACTIVE_JSON" | jq -r '.blocks[0].projection.totalCost // .blocks[0].costUSD // 0')"
+    ACTIVE_PROJECTED_TOKENS="$(printf '%s' "$ACTIVE_JSON" | jq -r '.blocks[0].projection.totalTokens // .blocks[0].totalTokens // 0')"
+
+    consumed_ratio="0"
+    projected_ratio="0"
+    if awk "BEGIN {exit !($weekly_budget_usd > 0)}"; then
+      consumed_ratio="$(awk "BEGIN {printf \"%.6f\", $ACTIVE_COST / $weekly_budget_usd}")"
+      projected_ratio="$(awk "BEGIN {printf \"%.6f\", $ACTIVE_PROJECTED_COST / $weekly_budget_usd}")"
+    fi
+    effective_ratio="$(awk "BEGIN {print ($consumed_ratio > $projected_ratio) ? $consumed_ratio : $projected_ratio}")"
+
+    METRICS_JSON="$(printf '%s' "$METRICS_JSON" | jq \
+      --argjson active_cost "$ACTIVE_COST" \
+      --argjson projected_cost "$ACTIVE_PROJECTED_COST" \
+      --argjson projected_tokens "$ACTIVE_PROJECTED_TOKENS" \
+      --argjson consumed_ratio "$consumed_ratio" \
+      --argjson projected_ratio "$projected_ratio" \
+      --argjson effective_ratio "$effective_ratio" \
+      '. + {
+        source: "ccusage_active_block",
+        active_block_cost_usd: $active_cost,
+        active_block_projected_cost_usd: $projected_cost,
+        active_block_projected_tokens: $projected_tokens,
+        consumed_weekly_ratio: $consumed_ratio,
+        projected_weekly_ratio: $projected_ratio,
+        effective_weekly_ratio: $effective_ratio
+      }')"
+
+    if awk "BEGIN {exit !($ACTIVE_PROJECTED_COST > $AUTO_AGENT_BLOCK_PROJECTED_COST_LIMIT_USD)}"; then
+      promote_state "stop" "projected_cost_limit_exceeded" "global"
+    fi
+    if awk "BEGIN {exit !($ACTIVE_PROJECTED_TOKENS > $AUTO_AGENT_BLOCK_PROJECTED_TOKEN_LIMIT)}"; then
+      promote_state "stop" "projected_token_limit_exceeded" "global"
+    fi
+
+    if awk "BEGIN {exit !($effective_ratio >= $AUTO_AGENT_WEEKLY_STOP_RATIO)}"; then
+      promote_state "stop" "weekly_pace_above_stop_ratio" "repo"
+    elif awk "BEGIN {exit !($effective_ratio >= $AUTO_AGENT_WEEKLY_WARN_RATIO)}"; then
+      promote_state "warn" "weekly_pace_above_warn_ratio" "repo"
+    fi
+  fi
+fi
+
+if [[ "$JSON_OUT" == "1" ]]; then
+  printf '%s\n' "$METRICS_JSON" | jq \
+    --arg final_state "$FINAL_STATE" \
+    --arg final_reason "$FINAL_REASON" \
+    --arg final_scope "$FINAL_SCOPE" \
+    --arg global_sentinel "$AUTO_AGENT_DISABLED_SENTINEL" \
+    --arg repo_sentinel "$repo_disabled_sentinel" \
+    '. + {
+      final_state: $final_state,
+      final_reason: $final_reason,
+      final_scope: $final_scope,
+      global_disabled_sentinel: $global_sentinel,
+      repo_disabled_sentinel: $repo_sentinel
+    }'
+else
+  printf 'ccusage-guard: state=%s reason=%s scope=%s project=%s\n' \
+    "$FINAL_STATE" "$FINAL_REASON" "$FINAL_SCOPE" "$PROJECT_PATH"
+fi
+
+if [[ "$ENFORCE" == "1" ]]; then
+  if [[ "$FINAL_STATE" == "stop" ]]; then
+    if [[ "$FINAL_SCOPE" == "global" ]]; then
+      : > "$AUTO_AGENT_DISABLED_SENTINEL"
+    else
+      : > "$repo_disabled_sentinel"
+    fi
+    exit 20
+  fi
+  if [[ "$FINAL_STATE" == "warn" ]]; then
+    exit 10
+  fi
+fi
+
+exit 0
