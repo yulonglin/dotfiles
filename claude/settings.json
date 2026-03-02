@@ -283,7 +283,7 @@
     ]
   },
   "chrome": {
-    "enabled": true
+    "enabled": false
   },
   "alwaysThinkingEnabled": true,
   "autoUpdatesChannel": "latest",
