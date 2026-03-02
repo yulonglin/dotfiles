@@ -282,6 +282,9 @@
       "docker"
     ]
   },
+  "chrome": {
+    "enabled": true
+  },
   "alwaysThinkingEnabled": true,
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
