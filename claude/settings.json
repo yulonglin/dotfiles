@@ -285,6 +285,7 @@
   "chrome": {
     "enabled": false
   },
+  "cleanupPeriodDays": 999999,
   "alwaysThinkingEnabled": true,
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
