@@ -83,6 +83,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Claude Code - AI assistant configuration (symlinked)
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
+- Mouseless - Keyboard-driven mouse control (macOS only, copied not symlinked, opt-in --mouseless flag)
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
 - Claude Code cleanup - No-output-for-24h session cleanup (tmux preserved, launchd/cron)
 - AI tools auto-update - Daily update of Claude Code, Gemini CLI, Codex CLI (6 AM, launchd/cron)
@@ -113,6 +114,7 @@ config/
 ├── ghostty               # Ghostty terminal config (symlinked to platform-specific path)
 ├── htop/htoprc           # htop config (symlinked, uses dynamic CPU meters)
 ├── serena/serena_config.yml  # Serena MCP config (symlinked, dashboard auto-open disabled)
+├── mouseless/config.yaml # Mouseless keyboard mouse config (macOS only, copied not symlinked)
 ├── key_bindings.sh       # ZSH key bindings (sourced by zshrc.sh)
 ├── gitconfig             # Git config template
 ├── ignore_global         # Universal ignore patterns (OS, editors, Python, LaTeX, Claude Code)
@@ -313,7 +315,8 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ## Important Gotchas
 
 - **macOS vs Linux paths**: VSCode settings location differs by OS
-- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git). `~/.gitignore_global` is composed (concatenated from `config/ignore_global` + `config/ignore_research`)
+- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git, Mouseless). `~/.gitignore_global` is composed (concatenated from `config/ignore_global` + `config/ignore_research`)
+- **Mouseless config**: Copied (not symlinked) because Mouseless uses atomic `rename()` on UI save which destroys symlinks. Use `sync-mouseless` to pull UI changes back to dotfiles
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env
 - **Claude Code directory**: `claude/` is symlinked to `~/.claude/` (not copied)
