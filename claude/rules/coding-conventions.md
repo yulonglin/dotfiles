@@ -83,6 +83,7 @@ if __name__ == "__main__":
 
 - Match existing code style
 - Run linting and type checking after Python changes (see Python Tooling table)
+- **Use `uv run`** for `ruff`, `ty`, `pytest` — avoids stale `VIRTUAL_ENV` issues (see `docs/environment-setup.md`)
 - Refactor when unwieldy (>50 lines/function, >500 lines/file)
 
 ## Package Managers (preference order)

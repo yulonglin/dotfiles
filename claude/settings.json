@@ -149,6 +149,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_start.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_venv.sh",
+            "timeout": 3
           }
         ]
       }
@@ -301,5 +306,13 @@
     "enabled": false
   },
   "teammateMode": "auto",
-  "installMethod": "native"
+  "installMethod": "native",
+  "extraKnownMarketplaces": {
+    "mac-tools": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/yulong/code/marketplaces/mac-tools"
+      }
+    }
+  }
 }

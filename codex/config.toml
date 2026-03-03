@@ -76,5 +76,14 @@ personality = true
 args = ["@playwright/mcp@latest"]
 command = "npx"
 
+[mcp_servers.notion]
+url = "https://mcp.notion.com/mcp"
+
+[mcp_servers.linear]
+url = "https://mcp.linear.app/mcp"
+
+[mcp_servers.figma]
+url = "https://mcp.figma.com/mcp"
+
 [tui]
 status_line = ["session-id", "model-with-reasoning", "current-dir", "git-branch", "five-hour-limit", "weekly-limit", "context-remaining"]
