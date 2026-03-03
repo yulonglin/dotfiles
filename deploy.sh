@@ -36,8 +36,26 @@ Usage: ./deploy.sh [OPTIONS]
 
 Deploy dotfile configurations. Settings are in config.sh.
 
-OPTIONS:
+PROFILES:
     --profile=NAME    Use a profile: personal, server, minimal
+    --default         Safe base for shared/new machines (alias for --profile=server)
+    --minimal         Suppress ALL components — specify what you want explicitly
+    --no-defaults     Same as --minimal (clearer name)
+    --server          Server-appropriate subset
+    --personal        Full personal setup (default)
+
+SELECTIVE DEPLOYMENT:
+    --only COMP...    Deploy ONLY these components, nothing else
+                      Examples:
+                        --only vim claude         # space-separated
+                        --only vim,claude         # comma-separated
+                        --only vim --only claude  # repeatable
+                      Cannot be mixed with profiles or --component flags.
+
+COMPONENTS:
+    --shell           Deploy ZSH/bash shell configuration
+    --tmux            Deploy tmux configuration
+    --git-config      Deploy gitconfig and global ignore files
     --vim             Deploy vimrc
     --editor          Deploy VSCode/Cursor settings
     --claude          Deploy Claude Code config (~/.claude symlink)
@@ -62,10 +80,11 @@ OPTIONS:
 
 EXAMPLES:
     ./deploy.sh                           # Use defaults from config.sh
-    ./deploy.sh --profile=server          # Server profile
-    ./deploy.sh --aliases=inspect          # Add extra aliases
-
-Git configuration is always deployed.
+    ./deploy.sh --default                 # Safe base for shared machines
+    ./deploy.sh --default --serena        # Default + add-on
+    ./deploy.sh --only vim claude         # Only vim and claude, nothing else
+    ./deploy.sh --no-defaults --vim       # Empty base + vim
+    ./deploy.sh --aliases=inspect         # Add extra aliases
 EOF
 }
 
@@ -94,10 +113,15 @@ fi
 OP=">"
 [[ "$DEPLOY_APPEND" == "true" ]] && OP=">>"
 
+# Default RC_FILE (overwritten by shell block if DEPLOY_SHELL=true)
+RC_FILE="$HOME/.zshrc"
+
 # ─── tmux ─────────────────────────────────────────────────────────────────────
 
-log_info "Deploying tmux configuration..."
-eval "echo \"source $DOT_DIR/config/tmux.conf\" $OP \"\$HOME/.tmux.conf\""
+if [[ "$DEPLOY_TMUX" == "true" ]]; then
+    log_info "Deploying tmux configuration..."
+    eval "echo \"source $DOT_DIR/config/tmux.conf\" $OP \"\$HOME/.tmux.conf\""
+fi
 
 # ─── Vim ──────────────────────────────────────────────────────────────────────
 
@@ -108,25 +132,30 @@ fi
 
 # ─── Shell Configuration ──────────────────────────────────────────────────────
 
-# Determine shell
-if cmd_exists zsh; then
-    CURRENT_SHELL="zsh"
-else
-    CURRENT_SHELL="${SHELL##*/}"
+if [[ "$DEPLOY_SHELL" != "true" ]] && [[ ${#DEPLOY_ALIASES[@]} -gt 0 ]]; then
+    log_warning "DEPLOY_ALIASES set but DEPLOY_SHELL=false — aliases will not be appended"
 fi
 
-log_info "Deploying shell configuration for $CURRENT_SHELL..."
-
-if [[ "$CURRENT_SHELL" == "zsh" ]]; then
-    eval "echo \"source $DOT_DIR/config/zshrc.sh\" $OP \"\$HOME/.zshrc\""
-    RC_FILE="$HOME/.zshrc"
-elif [[ "$CURRENT_SHELL" == "bash" ]]; then
-    # Minimal bashrc that sources essential files
-    if [[ "$DEPLOY_APPEND" == "false" ]]; then
-        > "$HOME/.bashrc"
+if [[ "$DEPLOY_SHELL" == "true" ]]; then
+    # Determine shell
+    if cmd_exists zsh; then
+        CURRENT_SHELL="zsh"
+    else
+        CURRENT_SHELL="${SHELL##*/}"
     fi
 
-    cat >> "$HOME/.bashrc" <<BASHRC
+    log_info "Deploying shell configuration for $CURRENT_SHELL..."
+
+    if [[ "$CURRENT_SHELL" == "zsh" ]]; then
+        eval "echo \"source $DOT_DIR/config/zshrc.sh\" $OP \"\$HOME/.zshrc\""
+        RC_FILE="$HOME/.zshrc"
+    elif [[ "$CURRENT_SHELL" == "bash" ]]; then
+        # Minimal bashrc that sources essential files
+        if [[ "$DEPLOY_APPEND" == "false" ]]; then
+            > "$HOME/.bashrc"
+        fi
+
+        cat >> "$HOME/.bashrc" <<BASHRC
 # Dotfiles configuration
 export DOT_DIR=$DOT_DIR
 source $DOT_DIR/config/aliases.sh
@@ -151,47 +180,48 @@ fi
 [[ \$- == *i* ]] && [ -f $DOT_DIR/config/start.txt ] && cat $DOT_DIR/config/start.txt
 BASHRC
 
-    # Update .bash_profile
-    if ! grep -q "source.*\.bashrc" ~/.bash_profile 2>/dev/null; then
-        cat >> "$HOME/.bash_profile" <<'PROFILE'
+        # Update .bash_profile
+        if ! grep -q "source.*\.bashrc" ~/.bash_profile 2>/dev/null; then
+            cat >> "$HOME/.bash_profile" <<'PROFILE'
 
 # Source .bashrc for login shells
 if [ -f "$HOME/.bashrc" ]; then
     . "$HOME/.bashrc"
 fi
 PROFILE
+        fi
+
+        if ! grep -q "bash_zsh_switcher.sh" ~/.bash_profile 2>/dev/null; then
+            echo "[ -f $DOT_DIR/config/bash_zsh_switcher.sh ] && source $DOT_DIR/config/bash_zsh_switcher.sh" >> "$HOME/.bash_profile"
+        fi
+
+        RC_FILE="$HOME/.bashrc"
+    else
+        log_warning "Unknown shell '$CURRENT_SHELL', defaulting to zsh"
+        eval "echo \"source $DOT_DIR/config/zshrc.sh\" $OP \"\$HOME/.zshrc\""
+        RC_FILE="$HOME/.zshrc"
     fi
 
-    if ! grep -q "bash_zsh_switcher.sh" ~/.bash_profile 2>/dev/null; then
-        echo "[ -f $DOT_DIR/config/bash_zsh_switcher.sh ] && source $DOT_DIR/config/bash_zsh_switcher.sh" >> "$HOME/.bash_profile"
+    # Deploy Atuin config if exists
+    if [[ -f "$DOT_DIR/config/atuin.toml" ]]; then
+        mkdir -p "$HOME/.config/atuin"
+        cp "$DOT_DIR/config/atuin.toml" "$HOME/.config/atuin/config.toml"
+        log_success "Deployed Atuin configuration"
     fi
 
-    RC_FILE="$HOME/.bashrc"
-else
-    log_warning "Unknown shell '$CURRENT_SHELL', defaulting to zsh"
-    eval "echo \"source $DOT_DIR/config/zshrc.sh\" $OP \"\$HOME/.zshrc\""
-    RC_FILE="$HOME/.zshrc"
-fi
+    # Append additional aliases
+    if [[ ${#DEPLOY_ALIASES[@]} -gt 0 ]]; then
+        log_info "Adding aliases: ${DEPLOY_ALIASES[*]}"
+        for alias_name in "${DEPLOY_ALIASES[@]}"; do
+            echo "source $DOT_DIR/config/aliases_${alias_name}.sh" >> "$RC_FILE"
+        done
+    fi
 
-# Deploy Atuin config if exists
-if [[ -f "$DOT_DIR/config/atuin.toml" ]]; then
-    mkdir -p "$HOME/.config/atuin"
-    cp "$DOT_DIR/config/atuin.toml" "$HOME/.config/atuin/config.toml"
-    log_success "Deployed Atuin configuration"
-fi
-
-# Append additional aliases
-if [[ ${#DEPLOY_ALIASES[@]} -gt 0 ]]; then
-    log_info "Adding aliases: ${DEPLOY_ALIASES[*]}"
-    for alias_name in "${DEPLOY_ALIASES[@]}"; do
-        echo "source $DOT_DIR/config/aliases_${alias_name}.sh" >> "$RC_FILE"
-    done
-fi
-
-# Custom ASCII art
-if [[ "$DEPLOY_ASCII_FILE" != "start.txt" ]]; then
-    log_info "Using custom ASCII art: $DEPLOY_ASCII_FILE"
-    cp "$DOT_DIR/config/ascii_arts/$DEPLOY_ASCII_FILE" "$DOT_DIR/config/start.txt"
+    # Custom ASCII art
+    if [[ "$DEPLOY_ASCII_FILE" != "start.txt" ]]; then
+        log_info "Using custom ASCII art: $DEPLOY_ASCII_FILE"
+        cp "$DOT_DIR/config/ascii_arts/$DEPLOY_ASCII_FILE" "$DOT_DIR/config/start.txt"
+    fi
 fi
 
 # ─── Secrets Sync ─────────────────────────────────────────────────────────────
@@ -207,8 +237,12 @@ fi
 
 # ─── Git Configuration ────────────────────────────────────────────────────────
 
-log_section "DEPLOYING GIT CONFIGURATION"
-deploy_git_config
+if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
+    log_section "DEPLOYING GIT CONFIGURATION"
+    deploy_git_config
+else
+    log_warning "Skipping git config — ~/.gitignore_global and ~/.ignore_global will not be deployed"
+fi
 
 # ─── Git Hooks ────────────────────────────────────────────────────────────────
 
