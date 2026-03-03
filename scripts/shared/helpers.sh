@@ -838,6 +838,11 @@ install_editor_extensions() {
 # Parse CLI arguments and override config
 # Usage: parse_args "$@"
 parse_args() {
+    # --only accumulator (deferred two-pass parsing)
+    typeset -a _only_components
+    _only_components=()
+    local _only_mode=false
+
     while (( "$#" )); do
         case "$1" in
             -h|--help)
@@ -845,6 +850,10 @@ parse_args() {
                 exit 0
                 ;;
             --profile=*)
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
                 apply_profile "${1#*=}"
                 ;;
             --force|--force-reinstall)
@@ -860,15 +869,60 @@ parse_args() {
                 IFS=',' read -r -a DEPLOY_ALIASES <<< "${1#*=}"
                 ;;
             --minimal)
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
                 apply_profile "minimal"
                 ;;
             --server)
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
                 apply_profile "server"
                 ;;
             --personal)
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
                 apply_profile "personal"
                 ;;
+            --default)
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
+                apply_profile "server"
+                ;;
+            --no-defaults)
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
+                apply_profile "minimal"
+                ;;
+            --only=*)
+                _only_mode=true
+                IFS=',' read -rA _parsed_comps <<< "${1#--only=}"
+                _only_components+=("${_parsed_comps[@]}")
+                ;;
+            --only)
+                _only_mode=true
+                shift
+                while [[ $# -gt 0 && "${1:0:1}" != "-" ]]; do
+                    IFS=',' read -rA _parsed_comps <<< "$1"
+                    _only_components+=("${_parsed_comps[@]}")
+                    shift
+                done
+                continue  # skip outer shift — args already consumed
+                ;;
             --no-*)
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
                 # Disable a component: --no-zsh, --no-claude, etc.
                 local component="${1#--no-}"
                 component="${(U)component}"  # uppercase (zsh/bash compatible)
@@ -877,6 +931,10 @@ parse_args() {
                 typeset -g "DEPLOY_${component}=false"
                 ;;
             --*)
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
                 # Enable a component: --zsh, --claude, etc.
                 local component="${1#--}"
                 component="${(U)component}"  # uppercase (zsh/bash compatible)
@@ -890,4 +948,32 @@ parse_args() {
         esac
         shift
     done
+
+    # Deferred --only apply: validate components, then set minimal + enable selected
+    if [[ "$_only_mode" == true ]]; then
+        local _known_components=(vim editor claude codex ghostty htop pdb matplotlib
+            git_hooks secrets cleanup claude_cleanup ai_update brew_update keyboard
+            bedtime serena zsh tmux ai_tools docker extras experimental create_user
+            shell git_config)
+
+        for _comp in "${_only_components[@]}"; do
+            _comp="${_comp// /}"
+            [[ -z "$_comp" ]] && continue
+            local _comp_lower="${_comp:l}"
+            _comp_lower="${_comp_lower//-/_}"
+            if (( ! ${_known_components[(Ie)$_comp_lower]} )); then
+                echo "Error: Unknown component '${_comp}'. Valid: ${(j:, :)_known_components}" >&2
+                exit 1
+            fi
+        done
+
+        apply_profile "minimal"
+        for _comp in "${_only_components[@]}"; do
+            _comp="${_comp// /}"
+            [[ -z "$_comp" ]] && continue
+            local _comp_upper="${(U)_comp//-/_}"
+            typeset -g "INSTALL_${_comp_upper}=true"
+            typeset -g "DEPLOY_${_comp_upper}=true"
+        done
+    fi
 }

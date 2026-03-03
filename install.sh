@@ -31,8 +31,23 @@ Usage: ./install.sh [OPTIONS]
 Install dotfile dependencies on macOS or Linux.
 Configuration is in config.sh - edit it to change defaults.
 
-OPTIONS:
+PROFILES:
     --profile=NAME    Use a profile: personal, server, minimal
+    --default         Safe base for shared/new machines (alias for --profile=server)
+    --minimal         Suppress ALL components — specify what you want explicitly
+    --no-defaults     Same as --minimal (clearer name)
+    --server          Server-appropriate subset
+    --personal        Full personal setup (default)
+
+SELECTIVE INSTALLATION:
+    --only COMP...    Install ONLY these components, nothing else
+                      Examples:
+                        --only zsh tmux           # space-separated
+                        --only zsh,tmux           # comma-separated
+                        --only zsh --only tmux    # repeatable
+                      Cannot be mixed with profiles or --component flags.
+
+COMPONENTS:
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
     --ai-tools        Enable AI CLI tools (Claude, Gemini, Codex)
@@ -44,14 +59,10 @@ OPTIONS:
     --no-<component>  Disable a component (e.g., --no-ai-tools)
     --force-reinstall Reinstall tools even if present
 
-PROFILES (set in config.sh or via --profile):
-    personal    Full setup with all tools (default)
-    server      Minimal server setup (no GUI tools)
-    minimal     Nothing enabled - specify what you want
-
 EXAMPLES:
     ./install.sh                        # Use defaults from config.sh
-    ./install.sh --profile=server       # Server setup
+    ./install.sh --default              # Safe base for shared machines
+    ./install.sh --only zsh tmux        # Only zsh and tmux, nothing else
     ./install.sh --extras --no-cleanup  # Add extras, skip cleanup
 EOF
 }

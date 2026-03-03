@@ -46,6 +46,9 @@ DEPLOY_AI_UPDATE=true           # AI tools auto-update daily (both platforms)
 DEPLOY_BREW_UPDATE=true         # Weekly package upgrade + cleanup (brew/apt/dnf/pacman)
 DEPLOY_KEYBOARD=true            # Keyboard repeat enforcement at login (macOS only)
 DEPLOY_BEDTIME=false            # Bedtime timezone enforcement (macOS only, opt-in)
+DEPLOY_SHELL=true               # ZSH/bash shell configuration
+DEPLOY_TMUX=true                # tmux configuration
+DEPLOY_GIT_CONFIG=true          # Git configuration (gitconfig, global gitignore)
 DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect")
 DEPLOY_SERENA=false             # Serena MCP config (~/.serena symlink)
 
@@ -179,7 +182,7 @@ apply_profile() {
             DEPLOY_SECRETS=false
             ;;
         minimal)
-            # Nothing enabled - specify what you want explicitly
+            # Nothing enabled — specify everything explicitly
             INSTALL_ZSH=false
             INSTALL_TMUX=false
             INSTALL_AI_TOOLS=false
@@ -187,6 +190,9 @@ apply_profile() {
             INSTALL_EXTRAS=false
             INSTALL_CLEANUP=false
             INSTALL_EXPERIMENTAL=false
+            DEPLOY_SHELL=false
+            DEPLOY_TMUX=false
+            DEPLOY_GIT_CONFIG=false
             DEPLOY_VIM=false
             DEPLOY_EDITOR=false
             DEPLOY_CLAUDE=false
