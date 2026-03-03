@@ -48,6 +48,7 @@ DEPLOY_KEYBOARD=true            # Keyboard repeat enforcement at login (macOS on
 DEPLOY_BEDTIME=false            # Bedtime timezone enforcement (macOS only, opt-in)
 DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect")
 DEPLOY_SERENA=false             # Serena MCP config (~/.serena symlink)
+DEPLOY_MOUSELESS=false          # Mouseless keyboard mouse control (macOS only, opt-in)
 
 # ─── Deploy Modifiers ─────────────────────────────────────────────────────────
 DEPLOY_APPEND=false             # Append to existing configs instead of overwrite
