@@ -1,0 +1,23 @@
+{
+  "skill_name": "anthropic-style",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Create a bar chart comparing GPT-4, Claude 3.5 Sonnet, and Gemini Pro on MMLU accuracy (89.2%, 88.7%, 83.7%). Save it as a PNG.",
+      "expected_output": "A matplotlib bar chart using Anthropic style (white background, PRETTY_CYCLE colors, no top/right spines) with use_anthropic_defaults() called",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "Generate a TikZ diagram showing a simple neural network with input layer (3 nodes), hidden layer (4 nodes), and output layer (2 nodes). Save the .tex file.",
+      "expected_output": "A TikZ .tex file using Anthropic color definitions (slate, ivory, clay, sky) with proper node styling",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Build a small HTML page showing a comparison table of 3 model architectures (Transformer, Mamba, RWKV) with columns for parameters, speed, and memory usage. Save as .html.",
+      "expected_output": "An HTML file using Anthropic CSS custom properties (--slate, --ivory, --clay) with proper typography",
+      "files": []
+    }
+  ]
+}

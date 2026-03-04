@@ -1,73 +1,55 @@
 ---
 name: anthropic-style
-description: Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply. Taken from https://github.com/anthropics/skills/blob/main/skills/brand-guidelines/SKILL.md
-license: Complete terms in LICENSE.txt
+description: Anthropic visual style for plots, diagrams, slides, and web. Use when creating any visual output that should have Anthropic's look-and-feel — matplotlib charts, TikZ diagrams, HTML/CSS, or presentations.
 ---
 
-# Anthropic Brand Styling
+# Anthropic Visual Style
 
-## Overview
+Use this skill when generating any visual output that should look Anthropic-branded: plots, charts, diagrams, slides, or web pages.
 
-To access Anthropic's official brand identity and style resources, use this skill.
+## Quick Start (matplotlib — primary use case)
 
-**Keywords**: branding, corporate identity, visual identity, post-processing, styling, brand colors, typography, Anthropic brand, visual formatting, visual design
+```python
+from anthro_colors import use_anthropic_defaults
+use_anthropic_defaults()
 
-## Brand Guidelines
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+# All plots now use Anthropic style automatically
+```
 
-### Colors
+This loads `~/.config/matplotlib/stylelib/anthropic.mplstyle` which sets:
+- White background (`#FFFFFF`)
+- PRETTY_CYCLE colors (see `references/colors.md`)
+- No top/right spines, clean typography
+- 300 DPI saves with tight bbox
 
-**Main Colors:**
+## Domain-Specific References
 
-- Dark: `#141413` - Primary text and dark backgrounds
-- Light: `#faf9f5` - Light backgrounds and text on dark
-- Mid Gray: `#b0aea5` - Secondary elements
-- Light Gray: `#e8e6dc` - Subtle backgrounds
+Load the relevant reference for your output type:
 
-**Accent Colors:**
+| Domain | Reference | When |
+|--------|-----------|------|
+| **matplotlib** | `references/matplotlib.md` | Python plots, charts, figures |
+| **Colors** | `references/colors.md` | Color palette lookup for any domain |
+| **HTML/CSS** | `references/web-css.md` | Web pages, HTML artifacts |
+| **TikZ** | `references/tikz.md` | LaTeX diagrams for papers |
 
-- Orange: `#d97757` - Primary accent
-- Blue: `#6a9bcc` - Secondary accent
-- Green: `#788c5d` - Tertiary accent
+## Key Colors (quick reference)
 
-### Typography
+| Name | Hex | Use |
+|------|-----|-----|
+| DARK_ORANGE (BOOK_CLOTH) | `#B86046` | Primary accent, first in cycle |
+| GREY | `#656565` | Secondary, neutral elements |
+| DARK_BLUE | `#40668C` | Tertiary accent |
+| SLATE (GREY_950) | `#141413` | Text, axes |
+| IVORY (GREY_050) | `#FAF9F5` | Light backgrounds (brand) |
+| CLAY | `#D97757` | Warm accent |
+| SKY | `#6A9BCC` | Cool accent |
+| OLIVE | `#788C5D` | Nature/green accent |
 
-- **Headings**: Poppins (with Arial fallback)
-- **Body Text**: Lora (with Georgia fallback)
-- **Note**: Fonts should be pre-installed in your environment for best results
+Full palette with all 9 hue ramps (orange through red, 100-900 each) in `references/colors.md`.
 
-## Features
+## Ground Truth
 
-### Smart Font Application
-
-- Applies Poppins font to headings (24pt and larger)
-- Applies Lora font to body text
-- Automatically falls back to Arial/Georgia if custom fonts unavailable
-- Preserves readability across all systems
-
-### Text Styling
-
-- Headings (24pt+): Poppins font
-- Body text: Lora font
-- Smart color selection based on background
-- Preserves text hierarchy and formatting
-
-### Shape and Accent Colors
-
-- Non-text shapes use accent colors
-- Cycles through orange, blue, and green accents
-- Maintains visual interest while staying on-brand
-
-## Technical Details
-
-### Font Management
-
-- Uses system-installed Poppins and Lora fonts when available
-- Provides automatic fallback to Arial (headings) and Georgia (body)
-- No font installation required - works with existing system fonts
-- For best results, pre-install Poppins and Lora fonts in your environment
-
-### Color Application
-
-- Uses RGB color values for precise brand matching
-- Applied via python-pptx's RGBColor class
-- Maintains color fidelity across different systems
+All color values come from `lib/plotting/anthro_colors.py` — that file is the single source of truth. If a hex code here conflicts with that file, the file wins.
