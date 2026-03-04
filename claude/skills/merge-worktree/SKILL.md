@@ -50,7 +50,17 @@ git rev-list --count <PARENT_BRANCH>..<WORKTREE_BRANCH>
 
 If 0 commits ahead, report "Already up to date" and exit.
 
-### 3. Attempt Merge
+### 3. Check Main Tree State
+
+Before merging, verify the main tree has no uncommitted changes:
+
+```bash
+git -C <MAIN_TREE_PATH> status --porcelain
+```
+
+If the main tree has uncommitted changes, warn the user and ask them to commit or stash first. Do NOT proceed with the merge — it will mix their uncommitted work with the merge result.
+
+### 4. Attempt Merge
 
 Run the merge from the main tree:
 
@@ -58,11 +68,11 @@ Run the merge from the main tree:
 git -C <MAIN_TREE_PATH> merge --no-edit <WORKTREE_BRANCH>
 ```
 
-**If merge succeeds:** Report success with commit count, skip to step 5.
+**If merge succeeds:** Report success with commit count, skip to step 6.
 
-**If merge fails (conflicts):** Continue to step 4.
+**If merge fails (conflicts):** Continue to step 5.
 
-### 4. Resolve Conflicts
+### 5. Resolve Conflicts
 
 Do NOT abort the merge. Instead:
 
@@ -86,7 +96,7 @@ Do NOT abort the merge. Instead:
 
 4. If you cannot confidently resolve a conflict, leave it and tell the user which files need manual attention.
 
-### 5. Mark for Cleanup
+### 6. Mark for Cleanup
 
 After successful merge, tell the user:
 
@@ -104,4 +114,4 @@ Or continue working — run /merge-worktree again later to sync new commits.
 - **Never force-push or rebase** the parent branch
 - **Never delete the worktree branch** — `cwrm` handles that
 - **Prefer the worktree's version** when both sides changed the same thing and intent is unclear (the worktree has the newer work)
-- **If the main tree has uncommitted changes**, warn the user and ask them to commit or stash first before merging
+- **Main tree uncommitted changes** are checked in step 3 — do not skip this check

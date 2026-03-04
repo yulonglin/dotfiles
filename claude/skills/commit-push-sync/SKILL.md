@@ -220,9 +220,8 @@ Output summary:
 For users with unstaged changes who prefer stash over committing. **Only use when remote actually has commits to pull** (check after fetch).
 
 **WARNING:** `.claude/settings*.json` files cannot be stashed — the sandbox denies write/unlink on these files. If the working tree has dirty settings files:
-1. Check if stash will fail: `git stash --dry-run 2>&1` (if this errors on settings files, skip stash)
-2. Fallback: commit the non-settings dirty files first, then push directly
-3. Or: just push if local is strictly ahead (stash is unnecessary)
+1. Fallback: commit the non-settings dirty files first, then push directly
+2. Or: just push if local is strictly ahead (stash is unnecessary)
 
 ```bash
 git fetch origin

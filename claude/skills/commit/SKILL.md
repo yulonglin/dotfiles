@@ -26,7 +26,11 @@ description: Commit current work with optional message. Handles git status/diff 
    - For each logical change, write a commit message in the following format:
      - Short title description (< 80 characters)
      - 2~3 bullet points (< 80 characters) with a quick description
-   - Use `git commit -m "..."` to commit the changes.
+   - For single-line messages: `git commit -m "subject line"`
+   - For multi-line messages (sandbox-safe, NEVER use heredoc):
+     ```bash
+     mkdir -p "$TMPDIR" && printf '%s\n' "subject line" "" "- bullet 1" "- bullet 2" > "$TMPDIR/commit_msg.txt" && git commit -F "$TMPDIR/commit_msg.txt"
+     ```
 
 ## Important Notes
 - Prepend `GIT_EDITOR=true` to all git commands you run, especially the ones looking at diffs, to avoid blocking.
