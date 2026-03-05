@@ -319,10 +319,10 @@
   "teammateMode": "auto",
   "installMethod": "native",
   "extraKnownMarketplaces": {
-    "mac-tools": {
+    "productivity-tools": {
       "source": {
         "source": "directory",
-        "path": "/Users/yulong/code/marketplaces/mac-tools"
+        "path": "/Users/yulong/code/marketplaces/productivity-tools"
       }
     }
   }

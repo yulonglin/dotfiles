@@ -20,9 +20,9 @@ marketplaces:
   alignment-hive:
     github: Crazytieguy/alignment-hive
 
-  mac-tools:
-    local: ${CODE_DIR}/marketplaces/mac-tools
-    github: yulonglin/mac-tools
+  productivity-tools:
+    local: ${CODE_DIR}/marketplaces/productivity-tools
+    github: yulonglin/productivity-tools
 
 # Always-on in every profile (declared once)
 base:
