@@ -231,7 +231,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "claude-tools statusline",
+    "command": "bash $HOME/.claude/statusline.sh",
     "padding": 1
   },
   "enabledPlugins": {
