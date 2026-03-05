@@ -1,0 +1,9 @@
+{
+  "eval_id": 1,
+  "config": "with_skill",
+  "expectations": [
+    {"text": "tex_file_created", "passed": true, "evidence": "neural_network.tex exists"},
+    {"text": "defines_anthropic_colors", "passed": true, "evidence": "Uses definecolor with slate/clay/sky and Anthropic hex values"},
+    {"text": "uses_positioning_library", "passed": true, "evidence": "positioning library loaded"}
+  ]
+}

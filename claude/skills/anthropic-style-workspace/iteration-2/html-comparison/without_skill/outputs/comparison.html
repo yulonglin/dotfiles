@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude 3.5 Sonnet vs GPT-4 — Feature Comparison</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    /* ── Reset & Base ────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* Anthropic brand palette */
+      --clay:        #D97757;
+      --clay-light:  #E8A88E;
+      --clay-dark:   #BF5A38;
+      --sky:         #5B9BD5;
+      --cactus:      #4A7A6F;
+      --ivory:       #FAF7F2;
+      --slate:       #3B3B3B;
+      --slate-light: #6B6B6B;
+      --sand:        #E8E0D4;
+      --sand-light:  #F2EDE6;
+      --white:       #FFFFFF;
+
+      /* Semantic */
+      --bg:          var(--white);
+      --surface:     var(--ivory);
+      --text:        var(--slate);
+      --text-muted:  var(--slate-light);
+      --accent:      var(--clay);
+      --accent-alt:  var(--sky);
+      --border:      var(--sand);
+
+      /* Typography */
+      --font-sans:  'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-serif: 'Source Serif 4', Georgia, serif;
+
+      /* Spacing */
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2rem;
+      --space-2xl: 3rem;
+      --space-3xl: 4rem;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Layout ──────────────────────────────────────── */
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: var(--space-2xl) var(--space-lg);
+    }
+
+    /* ── Header ──────────────────────────────────────── */
+    .header {
+      text-align: center;
+      margin-bottom: var(--space-3xl);
+    }
+
+    .header__eyebrow {
+      font-family: var(--font-sans);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: var(--space-sm);
+    }
+
+    .header__title {
+      font-family: var(--font-serif);
+      font-size: 2.25rem;
+      font-weight: 600;
+      line-height: 1.2;
+      color: var(--text);
+      margin-bottom: var(--space-md);
+    }
+
+    .header__subtitle {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* ── Legend ───────────────────────────────────────── */
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: var(--space-xl);
+      margin-bottom: var(--space-2xl);
+    }
+
+    .legend__item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .legend__swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    .legend__swatch--claude { background: var(--clay); }
+    .legend__swatch--gpt    { background: var(--sky); }
+
+    /* ── Category Section ────────────────────────────── */
+    .category {
+      margin-bottom: var(--space-2xl);
+    }
+
+    .category__header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-lg);
+      padding-bottom: var(--space-sm);
+      border-bottom: 2px solid var(--border);
+    }
+
+    .category__icon {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    .category__name {
+      font-family: var(--font-serif);
+      font-size: 1.35rem;
+      font-weight: 600;
+    }
+
+    /* ── Comparison Row ──────────────────────────────── */
+    .comparison-row {
+      display: grid;
+      grid-template-columns: 180px 1fr 1fr;
+      gap: var(--space-md);
+      align-items: start;
+      padding: var(--space-md) 0;
+      border-bottom: 1px solid var(--sand-light);
+    }
+
+    .comparison-row:last-child {
+      border-bottom: none;
+    }
+
+    .comparison-row__label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      padding-top: var(--space-xs);
+    }
+
+    .comparison-row__cell {
+      background: var(--surface);
+      border-radius: 8px;
+      padding: var(--space-md);
+      min-height: 60px;
+    }
+
+    .comparison-row__cell--claude {
+      border-left: 3px solid var(--clay);
+    }
+
+    .comparison-row__cell--gpt {
+      border-left: 3px solid var(--sky);
+    }
+
+    .comparison-row__rating {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-xs);
+    }
+
+    .rating-bar {
+      flex: 1;
+      height: 6px;
+      background: var(--sand);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .rating-bar__fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+
+    .rating-bar__fill--claude { background: var(--clay); }
+    .rating-bar__fill--gpt    { background: var(--sky); }
+
+    .rating-score {
+      font-size: 0.8rem;
+      font-weight: 600;
+      min-width: 32px;
+      text-align: right;
+    }
+
+    .rating-score--claude { color: var(--clay-dark); }
+    .rating-score--gpt    { color: var(--accent-alt); }
+
+    .comparison-row__note {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── Summary Cards ───────────────────────────────── */
+    .summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-lg);
+      margin-top: var(--space-3xl);
+    }
+
+    .summary-card {
+      border-radius: 12px;
+      padding: var(--space-xl);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .summary-card--claude {
+      background: linear-gradient(135deg, #FDF6F2 0%, #FAF0EB 100%);
+      border: 1px solid var(--clay-light);
+    }
+
+    .summary-card--gpt {
+      background: linear-gradient(135deg, #F2F7FC 0%, #EBF1F8 100%);
+      border: 1px solid #A3C8E8;
+    }
+
+    .summary-card__name {
+      font-family: var(--font-serif);
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: var(--space-md);
+    }
+
+    .summary-card__list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .summary-card__list li {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      padding: var(--space-xs) 0;
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-sm);
+    }
+
+    .summary-card__list li::before {
+      content: "✓";
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .summary-card--claude .summary-card__list li::before { color: var(--clay); }
+    .summary-card--gpt .summary-card__list li::before    { color: var(--sky); }
+
+    /* ── Footer ──────────────────────────────────────── */
+    .footer {
+      text-align: center;
+      margin-top: var(--space-3xl);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── Responsive ──────────────────────────────────── */
+    @media (max-width: 720px) {
+      .comparison-row {
+        grid-template-columns: 1fr;
+        gap: var(--space-sm);
+      }
+
+      .comparison-row__label {
+        font-weight: 600;
+        padding-bottom: var(--space-xs);
+        border-bottom: 1px solid var(--sand-light);
+      }
+
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      .header__title {
+        font-size: 1.75rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- Header -->
+    <header class="header">
+      <p class="header__eyebrow">Model Comparison</p>
+      <h1 class="header__title">Claude 3.5 Sonnet vs GPT-4</h1>
+      <p class="header__subtitle">
+        A side-by-side comparison of capabilities across key evaluation categories.
+        Scores reflect publicly reported benchmarks and qualitative assessments.
+      </p>
+    </header>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend__item">
+        <span class="legend__swatch legend__swatch--claude"></span>
+        Claude 3.5 Sonnet
+      </div>
+      <div class="legend__item">
+        <span class="legend__swatch legend__swatch--gpt"></span>
+        GPT-4
+      </div>
+    </div>
+
+    <!-- ═══════════ Reasoning ═══════════ -->
+    <section class="category">
+      <div class="category__header">
+        <div class="category__icon">🧠</div>
+        <h2 class="category__name">Reasoning</h2>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Graduate-level QA<br><small style="color:var(--text-muted)">(GPQA Diamond)</small></div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:65%"></div></div>
+            <span class="rating-score rating-score--claude">65.0%</span>
+          </div>
+          <p class="comparison-row__note">Strong multi-step reasoning with fewer hallucinations on ambiguous prompts.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:53.6%"></div></div>
+            <span class="rating-score rating-score--gpt">53.6%</span>
+          </div>
+          <p class="comparison-row__note">Solid reasoning but more prone to confident-sounding errors on edge cases.</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Multi-hop Inference</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:88%"></div></div>
+            <span class="rating-score rating-score--claude">88</span>
+          </div>
+          <p class="comparison-row__note">Excels at chaining facts across long contexts with 200K token window.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:82%"></div></div>
+            <span class="rating-score rating-score--gpt">82</span>
+          </div>
+          <p class="comparison-row__note">Capable, but performance degrades in longer contexts (128K window).</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Logical Consistency</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:90%"></div></div>
+            <span class="rating-score rating-score--claude">90</span>
+          </div>
+          <p class="comparison-row__note">More likely to self-correct and flag contradictions in its own outputs.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:85%"></div></div>
+            <span class="rating-score rating-score--gpt">85</span>
+          </div>
+          <p class="comparison-row__note">Generally consistent, occasional contradictions in complex multi-turn dialogues.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Coding ═══════════ -->
+    <section class="category">
+      <div class="category__header">
+        <div class="category__icon">💻</div>
+        <h2 class="category__name">Coding</h2>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Code Generation<br><small style="color:var(--text-muted)">(HumanEval)</small></div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:92%"></div></div>
+            <span class="rating-score rating-score--claude">92.0%</span>
+          </div>
+          <p class="comparison-row__note">Near-best-in-class code generation; produces clean, idiomatic code.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:87%"></div></div>
+            <span class="rating-score rating-score--gpt">87.0%</span>
+          </div>
+          <p class="comparison-row__note">Strong across languages; occasionally verbose or over-engineered solutions.</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Debugging &amp; Refactoring</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:91%"></div></div>
+            <span class="rating-score rating-score--claude">91</span>
+          </div>
+          <p class="comparison-row__note">Excellent at understanding existing codebases and suggesting targeted fixes.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:86%"></div></div>
+            <span class="rating-score rating-score--gpt">86</span>
+          </div>
+          <p class="comparison-row__note">Good at debugging; sometimes proposes sweeping rewrites instead of minimal fixes.</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Multi-file Context</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:93%"></div></div>
+            <span class="rating-score rating-score--claude">93</span>
+          </div>
+          <p class="comparison-row__note">200K context allows reasoning across many files simultaneously.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:78%"></div></div>
+            <span class="rating-score rating-score--gpt">78</span>
+          </div>
+          <p class="comparison-row__note">128K window sufficient for most tasks; loses track in very large projects.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Math ═══════════ -->
+    <section class="category">
+      <div class="category__header">
+        <div class="category__icon">📐</div>
+        <h2 class="category__name">Math</h2>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Grade School Math<br><small style="color:var(--text-muted)">(GSM8K)</small></div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:96%"></div></div>
+            <span class="rating-score rating-score--claude">96.4%</span>
+          </div>
+          <p class="comparison-row__note">Near-perfect on elementary math word problems.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:95.3%"></div></div>
+            <span class="rating-score rating-score--gpt">95.3%</span>
+          </div>
+          <p class="comparison-row__note">Also near-perfect; essentially tied at this difficulty level.</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Competition Math<br><small style="color:var(--text-muted)">(MATH benchmark)</small></div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:71.1%"></div></div>
+            <span class="rating-score rating-score--claude">71.1%</span>
+          </div>
+          <p class="comparison-row__note">Strong on algebra and geometry; cleaner step-by-step explanations.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:68.4%"></div></div>
+            <span class="rating-score rating-score--gpt">68.4%</span>
+          </div>
+          <p class="comparison-row__note">Competitive performance; sometimes skips intermediate steps.</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Symbolic &amp; Formal</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:80%"></div></div>
+            <span class="rating-score rating-score--claude">80</span>
+          </div>
+          <p class="comparison-row__note">Handles LaTeX proofs and symbolic manipulation reliably.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:78%"></div></div>
+            <span class="rating-score rating-score--gpt">78</span>
+          </div>
+          <p class="comparison-row__note">Comparable; strong with code-assisted math (Wolfram plugin).</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Creative Writing ═══════════ -->
+    <section class="category">
+      <div class="category__header">
+        <div class="category__icon">✍️</div>
+        <h2 class="category__name">Creative Writing</h2>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Prose Quality</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:92%"></div></div>
+            <span class="rating-score rating-score--claude">92</span>
+          </div>
+          <p class="comparison-row__note">Natural, varied sentence structure. Less likely to default to listicle format.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:85%"></div></div>
+            <span class="rating-score rating-score--gpt">85</span>
+          </div>
+          <p class="comparison-row__note">Competent prose; tends toward formulaic structures and superlatives.</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Style Matching</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:90%"></div></div>
+            <span class="rating-score rating-score--claude">90</span>
+          </div>
+          <p class="comparison-row__note">Excellent at adapting tone to match given examples or instructions.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:83%"></div></div>
+            <span class="rating-score rating-score--gpt">83</span>
+          </div>
+          <p class="comparison-row__note">Good at mimicry, but a recognizable "GPT voice" often bleeds through.</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Long-form Coherence</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:91%"></div></div>
+            <span class="rating-score rating-score--claude">91</span>
+          </div>
+          <p class="comparison-row__note">Maintains narrative threads and character consistency over thousands of words.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:80%"></div></div>
+            <span class="rating-score rating-score--gpt">80</span>
+          </div>
+          <p class="comparison-row__note">Good in short pieces; longer outputs can lose plot threads or repeat motifs.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Safety ═══════════ -->
+    <section class="category">
+      <div class="category__header">
+        <div class="category__icon">🛡️</div>
+        <h2 class="category__name">Safety</h2>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Refusal Accuracy</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:94%"></div></div>
+            <span class="rating-score rating-score--claude">94</span>
+          </div>
+          <p class="comparison-row__note">Appropriately refuses harmful requests while minimizing over-refusal on benign ones.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:85%"></div></div>
+            <span class="rating-score rating-score--gpt">85</span>
+          </div>
+          <p class="comparison-row__note">Generally safe; higher over-refusal rate on edge cases (educational, research contexts).</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Honesty &amp; Calibration</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:92%"></div></div>
+            <span class="rating-score rating-score--claude">92</span>
+          </div>
+          <p class="comparison-row__note">More willing to say "I don't know" and express genuine uncertainty.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:79%"></div></div>
+            <span class="rating-score rating-score--gpt">79</span>
+          </div>
+          <p class="comparison-row__note">Tends to present uncertain information with high confidence ("sycophancy").</p>
+        </div>
+      </div>
+
+      <div class="comparison-row">
+        <div class="comparison-row__label">Jailbreak Resistance</div>
+        <div class="comparison-row__cell comparison-row__cell--claude">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--claude" style="width:90%"></div></div>
+            <span class="rating-score rating-score--claude">90</span>
+          </div>
+          <p class="comparison-row__note">Constitutional AI training provides robust resistance to prompt injection.</p>
+        </div>
+        <div class="comparison-row__cell comparison-row__cell--gpt">
+          <div class="comparison-row__rating">
+            <div class="rating-bar"><div class="rating-bar__fill rating-bar__fill--gpt" style="width:82%"></div></div>
+            <span class="rating-score rating-score--gpt">82</span>
+          </div>
+          <p class="comparison-row__note">Improved significantly over time; occasional vulnerabilities to novel techniques.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Summary Cards ═══════════ -->
+    <div class="summary">
+      <div class="summary-card summary-card--claude">
+        <h3 class="summary-card__name">Claude 3.5 Sonnet Strengths</h3>
+        <ul class="summary-card__list">
+          <li>200K context window for large codebases and documents</li>
+          <li>More natural, less formulaic writing style</li>
+          <li>Better calibrated uncertainty and honesty</li>
+          <li>Strong Constitutional AI safety foundations</li>
+          <li>Cleaner code generation with idiomatic patterns</li>
+        </ul>
+      </div>
+      <div class="summary-card summary-card--gpt">
+        <h3 class="summary-card__name">GPT-4 Strengths</h3>
+        <ul class="summary-card__list">
+          <li>Broad plugin ecosystem (browsing, code interpreter, DALL-E)</li>
+          <li>Strong multi-modal capabilities (vision, voice)</li>
+          <li>Extensive fine-tuning API and customization options</li>
+          <li>Large community and third-party integration library</li>
+          <li>Wolfram and other tool-use partnerships</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>
+        Benchmark data sourced from public evaluations and model cards as of mid-2024.
+        Qualitative assessments based on community consensus and independent testing.
+        <br>
+        Comparison is illustrative, not exhaustive. Results may vary by task and prompt design.
+      </p>
+    </footer>
+
+  </div>
+</body>
+</html>

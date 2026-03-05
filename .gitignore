@@ -504,3 +504,4 @@ tools/*/.claude/
 # Claude Code task data (runtime, session-specific)
 .claude/tasks/
 .claude/worktrees/
+*archive*

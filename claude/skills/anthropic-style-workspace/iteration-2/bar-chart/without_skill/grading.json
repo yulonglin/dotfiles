@@ -1,0 +1,36 @@
+{
+  "eval_id": 0,
+  "config": "without_skill",
+  "expectations": [
+    {
+      "text": "calls_use_anthropic_defaults",
+      "passed": true,
+      "evidence": "Script loads anthropic.mplstyle directly: plt.style.use(\"/Users/yulong/.config/matplotlib/stylelib/anthropic.mplstyle\") on line 14"
+    },
+    {
+      "text": "png_file_created",
+      "passed": true,
+      "evidence": "PNG file exists at /Users/yulong/code/dotfiles/claude/skills/anthropic-style-workspace/iteration-2/bar-chart/without_skill/outputs/mmlu_benchmark_chart.png and is readable as an image"
+    },
+    {
+      "text": "uses_pretty_cycle_colors",
+      "passed": true,
+      "evidence": "Script defines PRETTY_CYCLE with exact Anthropic colors: BOOK_CLOTH = \"#B86046\", GREY = \"#656565\", DARK_BLUE = \"#40668C\", KRAFT = \"#D19B75\" (lines 7-11). Chart bars use these four colors in order: orange, grey, dark blue, tan"
+    },
+    {
+      "text": "no_default_matplotlib_blue",
+      "passed": true,
+      "evidence": "Chart does not use default matplotlib blue (#1f77b4). All bar colors are from PRETTY_CYCLE (B86046, 656565, 40668C, D19B75). Dark blue bar is #40668C (Anthropic DARK_BLUE), not matplotlib default"
+    },
+    {
+      "text": "has_error_bars",
+      "passed": true,
+      "evidence": "Script uses yerr parameter in bar call (line 25: ax.bar(..., yerr=errors, ...) with errors=[1.2, 0.9, 1.5, 1.1]). Chart visually shows error bars on all four bars with dark caps"
+    },
+    {
+      "text": "annotations_not_bold",
+      "passed": false,
+      "evidence": "Annotations use fontweight=\"medium\" (line 44), not normal weight. Script specifies fontweight=\"medium\" in the text call, which is heavier than normal (normal weight would be fontweight=\"normal\" or omitted)"
+    }
+  ]
+}

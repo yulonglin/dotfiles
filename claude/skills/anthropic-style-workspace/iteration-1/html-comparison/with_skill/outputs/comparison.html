@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Architecture Comparison</title>
+  <style>
+    :root {
+      /* Primary */
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --clay: #D97757;
+
+      /* Secondary */
+      --sky: #6A9BCC;
+      --olive: #788C5D;
+      --fig: #C46686;
+      --cactus: #BCD1CA;
+      --oat: #E3DACC;
+
+      /* Neutrals */
+      --gray-700: #3D3D3A;
+      --gray-400: #B0AEA5;
+      --gray-200: #E8E6DC;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Styrene B LC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--slate);
+      font-size: 16px;
+      line-height: 1.5;
+      background-color: var(--ivory);
+      padding: 3rem 1.5rem;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-family: "Styrene B LC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-weight: 600;
+      font-size: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      color: var(--gray-700);
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+
+    .table-wrapper {
+      background: #FFFFFF;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--gray-200);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      background: var(--slate);
+      color: #FFFFFF;
+      font-weight: 600;
+      font-size: 0.8rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.875rem 1.25rem;
+      text-align: left;
+    }
+
+    thead th:first-child {
+      width: 26%;
+    }
+
+    tbody td {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--gray-200);
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background-color: var(--ivory);
+    }
+
+    .arch-name {
+      font-weight: 600;
+      color: var(--slate);
+    }
+
+    .arch-tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 0.15rem 0.5rem;
+      border-radius: 3px;
+      margin-top: 0.25rem;
+    }
+
+    .tag-attention {
+      background-color: var(--oat);
+      color: var(--gray-700);
+    }
+
+    .tag-ssm {
+      background-color: #D6E8F4;
+      color: #2D5A82;
+    }
+
+    .tag-rnn {
+      background-color: #E2D8ED;
+      color: #5A3D72;
+    }
+
+    .metric-value {
+      font-weight: 600;
+      font-size: 1.05rem;
+    }
+
+    .metric-detail {
+      color: var(--gray-700);
+      font-size: 0.82rem;
+      margin-top: 0.15rem;
+    }
+
+    .bar-container {
+      height: 6px;
+      background: var(--gray-200);
+      border-radius: 3px;
+      margin-top: 0.4rem;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+    }
+
+    .bar-clay { background-color: var(--clay); }
+    .bar-sky { background-color: var(--sky); }
+    .bar-olive { background-color: var(--olive); }
+
+    .footnote {
+      margin-top: 1.25rem;
+      font-size: 0.78rem;
+      color: var(--gray-400);
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Model Architecture Comparison</h1>
+    <p class="subtitle">Representative configurations at comparable scale (~1.3B parameters)</p>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Architecture</th>
+            <th>Parameters</th>
+            <th>Inference Speed</th>
+            <th>Memory Usage</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="arch-name">Transformer</div>
+              <span class="arch-tag tag-attention">Attention</span>
+            </td>
+            <td>
+              <div class="metric-value">1.3B</div>
+              <div class="metric-detail">24 layers, d=2048</div>
+              <div class="bar-container"><div class="bar-fill bar-clay" style="width: 65%;"></div></div>
+            </td>
+            <td>
+              <div class="metric-value">32 tok/s</div>
+              <div class="metric-detail">O(n&sup2;) attention cost</div>
+              <div class="bar-container"><div class="bar-fill bar-sky" style="width: 40%;"></div></div>
+            </td>
+            <td>
+              <div class="metric-value">14.2 GB</div>
+              <div class="metric-detail">KV cache grows with context</div>
+              <div class="bar-container"><div class="bar-fill bar-olive" style="width: 90%;"></div></div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="arch-name">Mamba</div>
+              <span class="arch-tag tag-ssm">SSM</span>
+            </td>
+            <td>
+              <div class="metric-value">1.4B</div>
+              <div class="metric-detail">48 layers, d=2048</div>
+              <div class="bar-container"><div class="bar-fill bar-clay" style="width: 70%;"></div></div>
+            </td>
+            <td>
+              <div class="metric-value">58 tok/s</div>
+              <div class="metric-detail">O(n) selective scan</div>
+              <div class="bar-container"><div class="bar-fill bar-sky" style="width: 72%;"></div></div>
+            </td>
+            <td>
+              <div class="metric-value">6.8 GB</div>
+              <div class="metric-detail">Fixed-size state, no KV cache</div>
+              <div class="bar-container"><div class="bar-fill bar-olive" style="width: 43%;"></div></div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="arch-name">RWKV</div>
+              <span class="arch-tag tag-rnn">Linear RNN</span>
+            </td>
+            <td>
+              <div class="metric-value">1.5B</div>
+              <div class="metric-detail">24 layers, d=2048</div>
+              <div class="bar-container"><div class="bar-fill bar-clay" style="width: 75%;"></div></div>
+            </td>
+            <td>
+              <div class="metric-value">67 tok/s</div>
+              <div class="metric-detail">O(n) linear attention</div>
+              <div class="bar-container"><div class="bar-fill bar-sky" style="width: 83%;"></div></div>
+            </td>
+            <td>
+              <div class="metric-value">5.9 GB</div>
+              <div class="metric-detail">Constant memory per token</div>
+              <div class="bar-container"><div class="bar-fill bar-olive" style="width: 37%;"></div></div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="footnote">
+      Values are approximate and based on published benchmarks at ~1.3B parameter scale.
+      Speed measured on a single A100 GPU with 2048-token context. Memory includes model weights and activation/cache overhead during inference.
+    </p>
+  </div>
+</body>
+</html>

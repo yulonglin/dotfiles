@@ -1,0 +1,35 @@
+{
+  "reviews": [
+    {
+      "run_id": "bar-chart-with_skill",
+      "feedback": "Generally fair/good! Except there are no error bars?",
+      "timestamp": "2026-03-04T21:10:22.938Z"
+    },
+    {
+      "run_id": "bar-chart-without_skill",
+      "feedback": "Slightly less nie without skill, but still ok. Also: numbers shouldn't be so bold. And again, no error bars??",
+      "timestamp": "2026-03-04T21:10:22.938Z"
+    },
+    {
+      "run_id": "tikz-neural-net-with_skill",
+      "feedback": "The 3 layers should be centralised vertically. Now it's cascading/staircase-like which is weird",
+      "timestamp": "2026-03-04T21:10:22.938Z"
+    },
+    {
+      "run_id": "tikz-neural-net-without_skill",
+      "feedback": "I don't see anything here. Can't grade",
+      "timestamp": "2026-03-04T21:10:22.938Z"
+    },
+    {
+      "run_id": "html-comparison-with_skill",
+      "feedback": "I don't see anything here. Can't grade",
+      "timestamp": "2026-03-04T21:10:22.938Z"
+    },
+    {
+      "run_id": "html-comparison-without_skill",
+      "feedback": "I don't see anything here. Can't grade",
+      "timestamp": "2026-03-04T21:10:22.938Z"
+    }
+  ],
+  "status": "in_progress"
+}

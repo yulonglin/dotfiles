@@ -1,0 +1,10 @@
+{
+  "eval_id": 2,
+  "eval_name": "html-comparison",
+  "prompt": "Build a small HTML page showing a comparison table of 3 model architectures (Transformer, Mamba, RWKV) with columns for parameters, speed, and memory usage. Save as .html.",
+  "assertions": [
+    {"text": "html_file_created", "description": "A .html file exists in the outputs directory"},
+    {"text": "uses_anthropic_colors", "description": "CSS references Anthropic hex values (#141413, #D97757, #FAF9F5, etc.)"},
+    {"text": "uses_correct_fonts", "description": "References Styrene B LC or the Helvetica/Arial fallback stack"}
+  ]
+}

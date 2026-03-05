@@ -1,0 +1,10 @@
+{
+  "eval_id": 2,
+  "eval_name": "html-comparison",
+  "prompt": "Create an HTML comparison page showing side-by-side feature comparison between Claude 3.5 Sonnet and GPT-4. Include categories: Reasoning, Coding, Math, Creative Writing, and Safety. Use Anthropic's visual style with proper typography and colors.",
+  "assertions": [
+    {"text": "html_file_created", "description": "An HTML output file exists"},
+    {"text": "uses_anthropic_colors", "description": "CSS uses Anthropic palette hex values"},
+    {"text": "uses_correct_fonts", "description": "Font stack includes Styrene B LC"}
+  ]
+}

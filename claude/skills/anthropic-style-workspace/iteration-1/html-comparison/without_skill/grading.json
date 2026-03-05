@@ -1,0 +1,9 @@
+{
+  "eval_id": 2,
+  "config": "without_skill",
+  "expectations": [
+    {"text": "html_file_created", "passed": true, "evidence": "comparison.html exists"},
+    {"text": "uses_anthropic_colors", "passed": false, "evidence": "Uses generic CSS colors, not Anthropic palette"},
+    {"text": "uses_correct_fonts", "passed": false, "evidence": "Uses default system fonts, no Styrene B LC reference"}
+  ]
+}

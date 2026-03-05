@@ -1,0 +1,123 @@
+{
+  "metadata": {
+    "skill_name": "anthropic-style",
+    "skill_path": "/Users/yulong/code/dotfiles/claude/skills/anthropic-style",
+    "executor_model": "claude-opus-4-6",
+    "analyzer_model": "claude-opus-4-6",
+    "timestamp": "2026-03-04T20:55:20Z",
+    "evals_run": ["bar-chart", "tikz-neural-net", "html-comparison"],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_name": "bar-chart",
+      "config": "with_skill",
+      "pass_rate": 1.0,
+      "passed": 4,
+      "total": 4,
+      "time_seconds": 90.3,
+      "tokens": 46311,
+      "expectations": [
+        {"text": "calls_use_anthropic_defaults", "passed": true, "evidence": "Script loads anthropic.mplstyle directly"},
+        {"text": "png_file_created", "passed": true, "evidence": "mmlu_bar_chart.png exists"},
+        {"text": "uses_pretty_cycle_colors", "passed": true, "evidence": "Uses B86046, 40668C, 656565 from PRETTY_CYCLE"},
+        {"text": "no_default_matplotlib_blue", "passed": true, "evidence": "No #1f77b4 found in script"}
+      ]
+    },
+    {
+      "eval_name": "bar-chart",
+      "config": "without_skill",
+      "pass_rate": 0.5,
+      "passed": 2,
+      "total": 4,
+      "time_seconds": 38.8,
+      "tokens": 33798,
+      "expectations": [
+        {"text": "calls_use_anthropic_defaults", "passed": false, "evidence": "No reference to use_anthropic_defaults or anthropic.mplstyle"},
+        {"text": "png_file_created", "passed": true, "evidence": "mmlu_comparison.png exists"},
+        {"text": "uses_pretty_cycle_colors", "passed": false, "evidence": "Uses custom colors but not PRETTY_CYCLE hex values"},
+        {"text": "no_default_matplotlib_blue", "passed": true, "evidence": "No #1f77b4 found — used custom brand-ish colors"}
+      ]
+    },
+    {
+      "eval_name": "tikz-neural-net",
+      "config": "with_skill",
+      "pass_rate": 1.0,
+      "passed": 3,
+      "total": 3,
+      "time_seconds": 36.2,
+      "tokens": 34528,
+      "expectations": [
+        {"text": "tex_file_created", "passed": true, "evidence": "neural_network.tex exists"},
+        {"text": "defines_anthropic_colors", "passed": true, "evidence": "Uses definecolor with slate/clay/sky and Anthropic hex values"},
+        {"text": "uses_positioning_library", "passed": true, "evidence": "positioning library loaded"}
+      ]
+    },
+    {
+      "eval_name": "tikz-neural-net",
+      "config": "without_skill",
+      "pass_rate": 0.33,
+      "passed": 1,
+      "total": 3,
+      "time_seconds": 17.3,
+      "tokens": 29597,
+      "expectations": [
+        {"text": "tex_file_created", "passed": true, "evidence": "neural_network.tex exists"},
+        {"text": "defines_anthropic_colors", "passed": false, "evidence": "Uses generic green/blue/red colors, not Anthropic palette"},
+        {"text": "uses_positioning_library", "passed": false, "evidence": "Uses manual coordinate placement"}
+      ]
+    },
+    {
+      "eval_name": "html-comparison",
+      "config": "with_skill",
+      "pass_rate": 1.0,
+      "passed": 3,
+      "total": 3,
+      "time_seconds": 45.1,
+      "tokens": 35619,
+      "expectations": [
+        {"text": "html_file_created", "passed": true, "evidence": "comparison.html exists"},
+        {"text": "uses_anthropic_colors", "passed": true, "evidence": "CSS uses #141413, #D97757, #FAF9F5, #6A9BCC"},
+        {"text": "uses_correct_fonts", "passed": true, "evidence": "Font stack includes Styrene B LC with Helvetica/Arial fallback"}
+      ]
+    },
+    {
+      "eval_name": "html-comparison",
+      "config": "without_skill",
+      "pass_rate": 0.33,
+      "passed": 1,
+      "total": 3,
+      "time_seconds": 24.4,
+      "tokens": 30146,
+      "expectations": [
+        {"text": "html_file_created", "passed": true, "evidence": "comparison.html exists"},
+        {"text": "uses_anthropic_colors", "passed": false, "evidence": "Uses generic CSS colors, not Anthropic palette"},
+        {"text": "uses_correct_fonts", "passed": false, "evidence": "Uses default system fonts, no Styrene B LC reference"}
+      ]
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": "1.00 ± 0.00",
+      "mean_time_seconds": 57.2,
+      "mean_tokens": 38819
+    },
+    "without_skill": {
+      "pass_rate": "0.39 ± 0.10",
+      "mean_time_seconds": 26.8,
+      "mean_tokens": 31180
+    },
+    "delta": {
+      "pass_rate": "+0.61",
+      "time_seconds": "+30.4",
+      "tokens": "+7639"
+    }
+  },
+  "notes": [
+    "With-skill achieves 100% pass rate on all Anthropic-style assertions across all 3 domains",
+    "Without-skill passes file-creation assertions but fails all style-specific ones (expected)",
+    "With-skill uses ~30s more and ~7.6K more tokens on average — mostly from reading skill references",
+    "Bar chart with-skill took 90s due to retries working around anthro_colors.py dependency issues (log, seaborn not available in isolated uv run). The agent inlined the constants instead.",
+    "Non-discriminating assertion: file_created passes in both configs — it tests task completion, not style"
+  ]
+}

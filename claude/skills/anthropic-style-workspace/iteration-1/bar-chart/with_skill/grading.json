@@ -1,0 +1,10 @@
+{
+  "eval_id": 0,
+  "config": "with_skill",
+  "expectations": [
+    {"text": "calls_use_anthropic_defaults", "passed": true, "evidence": "Script loads anthropic.mplstyle directly"},
+    {"text": "png_file_created", "passed": true, "evidence": "mmlu_bar_chart.png exists"},
+    {"text": "uses_pretty_cycle_colors", "passed": true, "evidence": "Uses B86046, 40668C, 656565 from PRETTY_CYCLE"},
+    {"text": "no_default_matplotlib_blue", "passed": true, "evidence": "No #1f77b4 found in script"}
+  ]
+}

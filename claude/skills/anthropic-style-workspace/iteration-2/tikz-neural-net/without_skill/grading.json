@@ -1,0 +1,26 @@
+{
+  "eval_id": 1,
+  "config": "without_skill",
+  "expectations": [
+    {
+      "text": "tex_file_created",
+      "passed": true,
+      "evidence": "File exists: neural_net.tex (3.1k, modified 4 Mar 21:07)"
+    },
+    {
+      "text": "defines_anthropic_colors",
+      "passed": true,
+      "evidence": "Lines 5-14 define Anthropic brand colors with hex values: \\definecolor{clay}{HTML}{D97757}, \\definecolor{sky}{HTML}{6A9BCC}, \\definecolor{cactus}{HTML}{BCD1CA}, \\definecolor{slate}{HTML}{141413}, \\definecolor{ivory}{HTML}{FAF9F5}, \\definecolor{fig}{HTML}{C46686}, \\definecolor{olive}{HTML}{788C5D}, \\definecolor{oat}{HTML}{E3DACC}, \\definecolor{gray500}{HTML}{87867F}"
+    },
+    {
+      "text": "uses_positioning_library",
+      "passed": true,
+      "evidence": "Line 16: \\usetikzlibrary{positioning, calc}"
+    },
+    {
+      "text": "layers_vertically_centered",
+      "passed": true,
+      "evidence": "Lines 63-70 define vertical centering offsets: \\def\\hiddenoffset{0} (reference layer with 6 nodes), \\def\\inputoffset{1.1} (input layer: (6-4)/2 * nodesep = 1.1), \\def\\outputoffset{2.2} (output layer: (6-2)/2 * nodesep = 2.2). Offsets applied in node positioning lines 74, 79, 84 using -\\i*\\nodesep - \\{input,hidden,output}offset pattern"
+    }
+  ]
+}

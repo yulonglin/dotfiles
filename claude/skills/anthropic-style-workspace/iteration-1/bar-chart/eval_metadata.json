@@ -1,0 +1,11 @@
+{
+  "eval_id": 0,
+  "eval_name": "bar-chart",
+  "prompt": "Create a bar chart comparing GPT-4, Claude 3.5 Sonnet, and Gemini Pro on MMLU accuracy (89.2%, 88.7%, 83.7%). Save it as a PNG.",
+  "assertions": [
+    {"text": "calls_use_anthropic_defaults", "description": "Script calls use_anthropic_defaults() or loads anthropic.mplstyle"},
+    {"text": "png_file_created", "description": "A .png file exists in the outputs directory"},
+    {"text": "uses_pretty_cycle_colors", "description": "Uses PRETTY_CYCLE hex values (B86046, 656565, 40668C, etc.)"},
+    {"text": "no_default_matplotlib_blue", "description": "Does not use default matplotlib blue (#1f77b4)"}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "eval_id": 0,
+  "config": "without_skill",
+  "expectations": [
+    {"text": "calls_use_anthropic_defaults", "passed": false, "evidence": "No reference to use_anthropic_defaults or anthropic.mplstyle"},
+    {"text": "png_file_created", "passed": true, "evidence": "mmlu_comparison.png exists"},
+    {"text": "uses_pretty_cycle_colors", "passed": false, "evidence": "Uses custom colors but not PRETTY_CYCLE hex values"},
+    {"text": "no_default_matplotlib_blue", "passed": true, "evidence": "No #1f77b4 found — used custom brand-ish colors"}
+  ]
+}

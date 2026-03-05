@@ -1,0 +1,130 @@
+{
+  "metadata": {
+    "skill_name": "anthropic-style",
+    "skill_path": "/Users/yulong/code/dotfiles/claude/skills/anthropic-style",
+    "executor_model": "claude-opus-4-6",
+    "analyzer_model": "claude-opus-4-6",
+    "timestamp": "2026-03-04T21:30:00Z",
+    "evals_run": ["bar-chart", "tikz-neural-net", "html-comparison"],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_name": "bar-chart",
+      "config": "with_skill",
+      "pass_rate": 1.0,
+      "passed": 6,
+      "total": 6,
+      "time_seconds": 90.9,
+      "tokens": 42278,
+      "expectations": [
+        {"text": "calls_use_anthropic_defaults", "passed": true, "evidence": "Script loads anthropic.mplstyle with fallback rcParams"},
+        {"text": "png_file_created", "passed": true, "evidence": "mmlu_bar_chart.png exists (106KB)"},
+        {"text": "uses_pretty_cycle_colors", "passed": true, "evidence": "All 6 PRETTY_CYCLE hex values defined and used"},
+        {"text": "no_default_matplotlib_blue", "passed": true, "evidence": "No #1f77b4 anywhere in script"},
+        {"text": "has_error_bars", "passed": true, "evidence": "yerr=stds with capsize=4 and error_kw styling"},
+        {"text": "annotations_not_bold", "passed": true, "evidence": "fontweight='normal' on bar annotations"}
+      ]
+    },
+    {
+      "eval_name": "bar-chart",
+      "config": "without_skill",
+      "pass_rate": 0.83,
+      "passed": 5,
+      "total": 6,
+      "time_seconds": 110.7,
+      "tokens": 40887,
+      "expectations": [
+        {"text": "calls_use_anthropic_defaults", "passed": true, "evidence": "Script loads anthropic.mplstyle directly"},
+        {"text": "png_file_created", "passed": true, "evidence": "mmlu_benchmark_chart.png exists"},
+        {"text": "uses_pretty_cycle_colors", "passed": true, "evidence": "Uses B86046, 656565, 40668C, D19B75"},
+        {"text": "no_default_matplotlib_blue", "passed": true, "evidence": "No #1f77b4 found"},
+        {"text": "has_error_bars", "passed": true, "evidence": "yerr parameter with capsize=5"},
+        {"text": "annotations_not_bold", "passed": false, "evidence": "Uses fontweight='medium' instead of normal"}
+      ]
+    },
+    {
+      "eval_name": "tikz-neural-net",
+      "config": "with_skill",
+      "pass_rate": 1.0,
+      "passed": 4,
+      "total": 4,
+      "time_seconds": 116.6,
+      "tokens": 48608,
+      "expectations": [
+        {"text": "tex_file_created", "passed": true, "evidence": "neural_net.tex exists"},
+        {"text": "defines_anthropic_colors", "passed": true, "evidence": "7 Anthropic brand colors with correct hex codes"},
+        {"text": "uses_positioning_library", "passed": true, "evidence": "positioning library imported"},
+        {"text": "layers_vertically_centered", "passed": true, "evidence": "Y-offset calculations center each layer at y=0"}
+      ]
+    },
+    {
+      "eval_name": "tikz-neural-net",
+      "config": "without_skill",
+      "pass_rate": 1.0,
+      "passed": 4,
+      "total": 4,
+      "time_seconds": 56.8,
+      "tokens": 36567,
+      "expectations": [
+        {"text": "tex_file_created", "passed": true, "evidence": "neural_net.tex exists"},
+        {"text": "defines_anthropic_colors", "passed": true, "evidence": "9 Anthropic brand colors with correct hex values"},
+        {"text": "uses_positioning_library", "passed": true, "evidence": "positioning and calc libraries loaded"},
+        {"text": "layers_vertically_centered", "passed": true, "evidence": "Explicit offset calculations for centering"}
+      ]
+    },
+    {
+      "eval_name": "html-comparison",
+      "config": "with_skill",
+      "pass_rate": 1.0,
+      "passed": 3,
+      "total": 3,
+      "time_seconds": 101.0,
+      "tokens": 41307,
+      "expectations": [
+        {"text": "html_file_created", "passed": true, "evidence": "comparison.html exists"},
+        {"text": "uses_anthropic_colors", "passed": true, "evidence": "CSS uses #141413, #D97757, #FAF9F5, #6A9BCC, #B86046, #788C5D, #C46686"},
+        {"text": "uses_correct_fonts", "passed": true, "evidence": "Styrene B LC in multiple CSS selectors"}
+      ]
+    },
+    {
+      "eval_name": "html-comparison",
+      "config": "without_skill",
+      "pass_rate": 0.67,
+      "passed": 2,
+      "total": 3,
+      "time_seconds": 109.4,
+      "tokens": 37647,
+      "expectations": [
+        {"text": "html_file_created", "passed": true, "evidence": "comparison.html exists"},
+        {"text": "uses_anthropic_colors", "passed": true, "evidence": "CSS contains #D97757 (clay) but some colors approximate (#5B9BD5 vs #6A9BCC for sky)"},
+        {"text": "uses_correct_fonts", "passed": false, "evidence": "Uses Inter and Source Serif 4, not Styrene B LC"}
+      ]
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": "1.00 ± 0.00",
+      "mean_time_seconds": 102.8,
+      "mean_tokens": 44064
+    },
+    "without_skill": {
+      "pass_rate": "0.83 ± 0.17",
+      "mean_time_seconds": 92.3,
+      "mean_tokens": 38367
+    },
+    "delta": {
+      "pass_rate": "+0.17",
+      "time_seconds": "+10.5",
+      "tokens": "+5697"
+    }
+  },
+  "notes": [
+    "With-skill maintains 100% pass rate across all 3 domains with new assertions (error bars, annotation weight, vertical centering)",
+    "Without-skill improved from 39% (iter1) to 83% — partly because agents discovered anthropic.mplstyle on their own, and TikZ prompt hinted 'vertically centered'",
+    "Discriminating assertions in iter2: annotations_not_bold (bar-chart) and uses_correct_fonts (html) — these require skill-provided knowledge",
+    "Non-discriminating: tikz-neural-net passed 4/4 in both configs — the prompt contained enough hints for the model to succeed without the skill",
+    "HTML without-skill uses approximate colors (#5B9BD5 vs #6A9BCC for sky) — grader was lenient on uses_anthropic_colors since #D97757 (clay) was exact",
+    "anthro_colors.py dependency issue persists — with-skill agent inlined constants again due to log module import"
+  ]
+}

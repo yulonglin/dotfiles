@@ -1,0 +1,9 @@
+{
+  "eval_id": 2,
+  "config": "with_skill",
+  "expectations": [
+    {"text": "html_file_created", "passed": true, "evidence": "comparison.html exists"},
+    {"text": "uses_anthropic_colors", "passed": true, "evidence": "CSS uses #141413, #D97757, #FAF9F5, #6A9BCC"},
+    {"text": "uses_correct_fonts", "passed": true, "evidence": "Font stack includes Styrene B LC with Helvetica/Arial fallback"}
+  ]
+}

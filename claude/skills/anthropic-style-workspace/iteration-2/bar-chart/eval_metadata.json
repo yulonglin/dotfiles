@@ -1,0 +1,13 @@
+{
+  "eval_id": 0,
+  "eval_name": "bar-chart",
+  "prompt": "Create a bar chart comparing MMLU benchmark scores across 4 models: GPT-4 (86.4% ± 1.2%), Claude 3.5 Sonnet (88.7% ± 0.9%), Gemini Ultra (83.7% ± 1.5%), Llama 3.1 405B (85.2% ± 1.1%). The chart should have proper axis labels, a title, and use Anthropic's visual style. Include error bars showing the standard deviations.",
+  "assertions": [
+    {"text": "calls_use_anthropic_defaults", "description": "Script calls use_anthropic_defaults() or loads anthropic.mplstyle"},
+    {"text": "png_file_created", "description": "A PNG output file exists"},
+    {"text": "uses_pretty_cycle_colors", "description": "Uses PRETTY_CYCLE hex values from anthro_colors"},
+    {"text": "no_default_matplotlib_blue", "description": "No #1f77b4 default matplotlib blue"},
+    {"text": "has_error_bars", "description": "Chart includes error bars (yerr parameter or errorbar call)"},
+    {"text": "annotations_not_bold", "description": "Bar annotations use normal weight, not bold"}
+  ]
+}

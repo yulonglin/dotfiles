@@ -1,0 +1,26 @@
+{
+  "eval_id": 1,
+  "config": "with_skill",
+  "expectations": [
+    {
+      "text": "tex_file_created",
+      "passed": true,
+      "evidence": "neural_net.tex exists in outputs directory with 94 lines of valid LaTeX code"
+    },
+    {
+      "text": "defines_anthropic_colors",
+      "passed": true,
+      "evidence": "Lines 6-12 define colors with \\definecolor commands using Anthropic hex values: slate (141413), ivory (FAF9F5), clay (D97757), sky (6A9BCC), olive (788C5D), gray400 (B0AEA5), gray700 (3D3D3A)"
+    },
+    {
+      "text": "uses_positioning_library",
+      "passed": true,
+      "evidence": "Line 3: \\usetikzlibrary{positioning} is present"
+    },
+    {
+      "text": "layers_vertically_centered",
+      "passed": true,
+      "evidence": "Lines 55-70 use explicit y-offset calculations: input layer \\ypos={(\\i - 2.5) * \\nodesep}, hidden layer \\ypos={(\\i - 3.5) * \\nodesep}, output layer \\ypos={(\\i - 1.5) * \\nodesep}. Each layer is independently centered around y=0, not chained with 'below=' positioning"
+    }
+  ]
+}

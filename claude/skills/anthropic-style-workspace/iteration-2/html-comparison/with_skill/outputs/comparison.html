@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude 3.5 Sonnet vs GPT-4 | Feature Comparison</title>
+  <style>
+    :root {
+      /* Primary */
+      --slate: #141413;
+      --ivory: #FAF9F5;
+      --clay: #D97757;
+
+      /* Secondary */
+      --sky: #6A9BCC;
+      --olive: #788C5D;
+      --fig: #C46686;
+      --cactus: #BCD1CA;
+      --oat: #E3DACC;
+
+      /* Neutrals */
+      --gray-700: #3D3D3A;
+      --gray-400: #B0AEA5;
+      --gray-200: #E8E6DC;
+
+      /* PRETTY_CYCLE */
+      --dark-orange: #B86046;
+      --grey: #656565;
+      --dark-blue: #40668C;
+      --kraft: #D19B75;
+      --light-purple: #8778AB;
+      --dark-purple: #4A366F;
+
+      /* Hue ramps */
+      --orange-100: #FAEFEB;
+      --blue-100: #EDF5FC;
+      --green-100: #F1F7E9;
+      --violet-100: #F1F0FF;
+      --red-100: #FCEDED;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Styrene B LC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--slate);
+      font-size: 16px;
+      line-height: 1.5;
+      background: #FFFFFF;
+    }
+
+    /* Header */
+    .header {
+      background: var(--ivory);
+      border-bottom: 1px solid var(--gray-200);
+      padding: 2.5rem 2rem;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-family: "Styrene B LC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-weight: 600;
+      font-size: 2rem;
+      color: var(--slate);
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      font-family: "Tiempos Text", Georgia, serif;
+      color: var(--gray-700);
+      font-size: 1.1rem;
+    }
+
+    /* Main container */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    /* Model header row */
+    .model-header {
+      display: grid;
+      grid-template-columns: 180px 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid var(--slate);
+    }
+
+    .model-header .label {
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-400);
+      align-self: end;
+    }
+
+    .model-name {
+      text-align: center;
+      padding: 0.75rem;
+      border-radius: 8px;
+    }
+
+    .model-name.claude {
+      background: var(--orange-100);
+      border: 1px solid var(--clay);
+    }
+
+    .model-name.gpt {
+      background: var(--blue-100);
+      border: 1px solid var(--dark-blue);
+    }
+
+    .model-name h2 {
+      font-family: "Styrene B LC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+
+    .model-name.claude h2 {
+      color: var(--dark-orange);
+    }
+
+    .model-name.gpt h2 {
+      color: var(--dark-blue);
+    }
+
+    .model-name span {
+      font-size: 0.8rem;
+      color: var(--gray-700);
+    }
+
+    /* Category sections */
+    .category {
+      margin-bottom: 2rem;
+    }
+
+    .category-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+    }
+
+    .category-title h3 {
+      font-family: "Styrene B LC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-weight: 600;
+      font-size: 1rem;
+    }
+
+    .category-title .icon {
+      font-size: 1.2rem;
+      width: 2rem;
+      height: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    /* Category-specific colors */
+    .category.reasoning .category-title { background: var(--violet-100); }
+    .category.reasoning .icon { background: var(--light-purple); color: #fff; }
+
+    .category.coding .category-title { background: var(--blue-100); }
+    .category.coding .icon { background: var(--dark-blue); color: #fff; }
+
+    .category.math .category-title { background: var(--orange-100); }
+    .category.math .icon { background: var(--dark-orange); color: #fff; }
+
+    .category.writing .category-title { background: var(--green-100); }
+    .category.writing .icon { background: var(--olive); color: #fff; }
+
+    .category.safety .category-title { background: var(--red-100); }
+    .category.safety .icon { background: var(--fig); color: #fff; }
+
+    /* Feature rows */
+    .feature-row {
+      display: grid;
+      grid-template-columns: 180px 1fr 1fr;
+      gap: 1rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--gray-200);
+      align-items: start;
+    }
+
+    .feature-row:last-child {
+      border-bottom: none;
+    }
+
+    .feature-label {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--gray-700);
+      padding-top: 0.125rem;
+    }
+
+    .feature-cell {
+      padding: 0.75rem;
+      border-radius: 6px;
+      background: var(--ivory);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .feature-cell.highlight {
+      background: var(--orange-100);
+      border-left: 3px solid var(--clay);
+    }
+
+    .feature-cell.highlight-blue {
+      background: var(--blue-100);
+      border-left: 3px solid var(--dark-blue);
+    }
+
+    /* Rating badges */
+    .rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-weight: 600;
+      font-size: 0.8rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 100px;
+      margin-bottom: 0.35rem;
+    }
+
+    .rating.excellent {
+      background: #E8F0E0;
+      color: var(--olive);
+    }
+
+    .rating.strong {
+      background: var(--cactus);
+      color: #1a4a3a;
+    }
+
+    .rating.good {
+      background: var(--oat);
+      color: var(--gray-700);
+    }
+
+    .rating.moderate {
+      background: var(--gray-200);
+      color: var(--gray-700);
+    }
+
+    .detail {
+      font-family: "Tiempos Text", Georgia, serif;
+      color: var(--gray-700);
+      font-size: 0.85rem;
+      margin-top: 0.25rem;
+    }
+
+    /* Summary bar */
+    .summary {
+      margin-top: 2.5rem;
+      padding: 1.5rem;
+      background: var(--ivory);
+      border-radius: 8px;
+      border: 1px solid var(--gray-200);
+    }
+
+    .summary h3 {
+      font-family: "Styrene B LC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-weight: 600;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      color: var(--slate);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .summary-card {
+      padding: 1rem;
+      border-radius: 8px;
+      background: #FFFFFF;
+      border: 1px solid var(--gray-200);
+    }
+
+    .summary-card h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .summary-card.claude-card h4 {
+      color: var(--dark-orange);
+    }
+
+    .summary-card.gpt-card h4 {
+      color: var(--dark-blue);
+    }
+
+    .summary-card ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .summary-card li {
+      font-family: "Tiempos Text", Georgia, serif;
+      font-size: 0.85rem;
+      color: var(--gray-700);
+      padding: 0.2rem 0;
+      padding-left: 1rem;
+      position: relative;
+    }
+
+    .summary-card.claude-card li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.55rem;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--clay);
+    }
+
+    .summary-card.gpt-card li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.55rem;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--dark-blue);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem;
+      color: var(--gray-400);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--gray-200);
+      margin-top: 2rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 700px) {
+      .model-header,
+      .feature-row {
+        grid-template-columns: 1fr;
+      }
+
+      .model-header .label {
+        display: none;
+      }
+
+      .feature-label {
+        font-weight: 600;
+        padding-bottom: 0.25rem;
+        border-bottom: 1px solid var(--gray-200);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Claude 3.5 Sonnet vs GPT-4</h1>
+    <p>A side-by-side comparison across five capability dimensions</p>
+  </div>
+
+  <div class="container">
+
+    <!-- Model Headers -->
+    <div class="model-header">
+      <div class="label">Category</div>
+      <div class="model-name claude">
+        <h2>Claude 3.5 Sonnet</h2>
+        <span>Anthropic</span>
+      </div>
+      <div class="model-name gpt">
+        <h2>GPT-4</h2>
+        <span>OpenAI</span>
+      </div>
+    </div>
+
+    <!-- Reasoning -->
+    <div class="category reasoning">
+      <div class="category-title">
+        <div class="icon">R</div>
+        <h3>Reasoning</h3>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Complex Analysis</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Strong multi-step reasoning with nuanced chain-of-thought. Excels at synthesizing across long contexts.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Reliable logical reasoning. Effective at structured problem decomposition.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Long Context</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">200K tokens</div>
+          <div class="detail">Maintains coherence across very long documents. Strong needle-in-haystack retrieval.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">128K tokens</div>
+          <div class="detail">Large context window with good retrieval, though performance can degrade at extremes.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Instruction Following</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Precise adherence to complex, multi-constraint instructions. Handles edge cases in formatting.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Generally follows instructions well. Occasionally deviates on nuanced formatting requests.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Coding -->
+    <div class="category coding">
+      <div class="category-title">
+        <div class="icon">C</div>
+        <h3>Coding</h3>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Code Generation</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Top-tier on HumanEval and SWE-bench. Generates production-quality code with minimal revision.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Solid code generation across languages. Good at common patterns and standard library usage.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Debugging</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Identifies root causes efficiently. Strong at reading stack traces and suggesting targeted fixes.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Good diagnostic ability. Sometimes requires additional context to pinpoint subtle bugs.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Agentic Coding</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Powers Claude Code (CLI) for autonomous multi-file edits, test execution, and iterative development.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating good">Good</div>
+          <div class="detail">Supports tool use and function calling. Less mature agentic coding ecosystem.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Math -->
+    <div class="category math">
+      <div class="category-title">
+        <div class="icon">M</div>
+        <h3>Math</h3>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Arithmetic</div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Reliable on standard arithmetic. Occasional errors on very large numbers without tool use.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Comparable arithmetic accuracy. Benefits from Code Interpreter for verification.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Word Problems</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Strong at translating natural language to formal math. Handles multi-step word problems cleanly.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Good at standard word problems. Solid GSM8K and MATH benchmark performance.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Formal Proofs</div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Can construct and verify proofs. Stronger with guided prompting than open-ended proof search.</div>
+        </div>
+        <div class="feature-cell highlight-blue">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Comparable proof ability. Benefits from structured step-by-step verification prompts.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Creative Writing -->
+    <div class="category writing">
+      <div class="category-title">
+        <div class="icon">W</div>
+        <h3>Creative Writing</h3>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Prose Quality</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Natural, varied prose style. Avoids repetitive phrasing and maintains consistent voice across long outputs.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Good prose generation. Can tend toward formulaic structures in longer pieces.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Style Adaptation</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Skilled at matching requested tone, genre, and authorial voice. Strong pastiche ability.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating good">Good</div>
+          <div class="detail">Capable of style shifts but can blend into a default GPT register under some prompts.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Dialogue</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Writes distinct character voices. Dialogue feels natural with appropriate subtext.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Functional dialogue. Characters occasionally share similar speech patterns.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Safety -->
+    <div class="category safety">
+      <div class="category-title">
+        <div class="icon">S</div>
+        <h3>Safety</h3>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Harmful Content</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Constitutional AI training provides robust refusal of harmful requests while minimizing false positives.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">RLHF-based safety training. Effective filtering with occasional over-refusal.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Hallucination</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Low hallucination rate. Tends to express uncertainty rather than fabricate. Strong calibration.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating strong">Strong</div>
+          <div class="detail">Improved hallucination rates over GPT-3.5. Can still confabulate on obscure topics.</div>
+        </div>
+      </div>
+
+      <div class="feature-row">
+        <div class="feature-label">Transparency</div>
+        <div class="feature-cell highlight">
+          <div class="rating excellent">Excellent</div>
+          <div class="detail">Openly acknowledges limitations and uncertainty. Provides nuanced caveats without excessive hedging.</div>
+        </div>
+        <div class="feature-cell">
+          <div class="rating good">Good</div>
+          <div class="detail">Acknowledges some limitations. Can occasionally present uncertain information with unwarranted confidence.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary">
+      <h3>Key Takeaways</h3>
+      <div class="summary-grid">
+        <div class="summary-card claude-card">
+          <h4>Claude 3.5 Sonnet Strengths</h4>
+          <ul>
+            <li>Superior long-context handling (200K tokens)</li>
+            <li>Best-in-class coding and agentic workflows</li>
+            <li>Natural, varied creative writing</li>
+            <li>Strong safety calibration with Constitutional AI</li>
+            <li>Precise instruction following</li>
+          </ul>
+        </div>
+        <div class="summary-card gpt-card">
+          <h4>GPT-4 Strengths</h4>
+          <ul>
+            <li>Broad multi-modal capabilities (vision, DALL-E)</li>
+            <li>Mature plugin and tool-use ecosystem</li>
+            <li>Strong Code Interpreter for math verification</li>
+            <li>Wide third-party integration support</li>
+            <li>Established enterprise adoption</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    Comparison based on publicly available benchmarks and qualitative assessment. Performance varies by task and prompt. Last updated March 2026.
+  </div>
+
+</body>
+</html>
