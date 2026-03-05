@@ -635,7 +635,7 @@ else
     # First pass: SIGTERM to parent + children (use process groups for atomicity)
     for pid in "${PIDS_TO_KILL[@]}"; do
         # Try to kill entire process group (parent + all descendants atomically)
-        local pgid=$(ps -p "$pid" -o pgid= 2>/dev/null | tr -d ' ')
+        pgid=$(ps -p "$pid" -o pgid= 2>/dev/null | tr -d ' ')
         if [[ -n "$pgid" && "$pgid" != "0" && "$pgid" != "$pid" ]]; then
             # Kill entire process group
             kill -- -"$pgid" 2>/dev/null || true
