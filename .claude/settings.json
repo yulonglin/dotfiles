@@ -36,7 +36,7 @@
     "learning-output-style@claude-plugins-official": false,
     "core@ai-safety-plugins": true,
     "swift-lsp@claude-plugins-official": false,
-    "slack-mcp@mac-tools": false
+    "slack-mcp@productivity-tools": false
   },
   "permissions": {
     "allow": [
