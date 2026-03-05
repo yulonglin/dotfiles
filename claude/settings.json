@@ -252,12 +252,6 @@
     "commit-commands@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
-    "core@ai-safety-plugins": true,
-    "research@ai-safety-plugins": false,
-    "writing@ai-safety-plugins": false,
-    "code@ai-safety-plugins": false,
-    "workflow@ai-safety-plugins": false,
-    "viz@ai-safety-plugins": false,
     "Notion@claude-plugins-official": false,
     "figma@claude-plugins-official": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,
@@ -279,7 +273,33 @@
     "supabase@claude-plugins-official": false,
     "pr-review-toolkit@claude-plugins-official": false,
     "playground@claude-plugins-official": false,
-    "linear@claude-plugins-official": false
+    "linear@claude-plugins-official": false,
+    "core@ai-safety-plugins": true,
+    "research@ai-safety-plugins": true,
+    "writing@ai-safety-plugins": true,
+    "code@ai-safety-plugins": true,
+    "workflow@ai-safety-plugins": true,
+    "viz@ai-safety-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "mac-tools": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/yulong/code/marketplaces/mac-tools"
+      }
+    },
+    "ai-safety-plugins": {
+      "source": {
+        "source": "directory",
+        "path": "/home/yulong/code/marketplaces/ai-safety-plugins"
+      }
+    },
+    "productivity-tools": {
+      "source": {
+        "source": "github",
+        "repo": "yulonglin/mac-tools"
+      }
+    }
   },
   "outputStyle": "10x Mentor",
   "sandbox": {
@@ -317,13 +337,5 @@
     "enabled": false
   },
   "teammateMode": "auto",
-  "installMethod": "native",
-  "extraKnownMarketplaces": {
-    "mac-tools": {
-      "source": {
-        "source": "directory",
-        "path": "/Users/yulong/code/marketplaces/mac-tools"
-      }
-    }
-  }
+  "installMethod": "native"
 }

@@ -54,7 +54,9 @@ profiles:
       - viz
       - Notion
       - linear
-      - remote-kernels
+      # optional: remote-kernels (cloud GPU via RunPod, from alignment-hive)
+      # install: claude plugin install remote-kernels@alignment-hive
+      # https://github.com/Crazytieguy/alignment-hive
 
   writing:
     comment: "Papers, blog posts, documentation"
