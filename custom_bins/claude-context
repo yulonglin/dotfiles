@@ -343,7 +343,42 @@ def sync_marketplaces(verbose=False):
     else:
         print(f"{GREEN}Synced {synced}/{total} marketplaces{NC}")
 
+    normalize_scopes(verbose=verbose)
     return errors == 0
+
+
+def normalize_scopes(verbose=False):
+    """Replace 'local' scope with 'project' in installed_plugins.json.
+
+    Marketplace updates default new plugins to 'local' scope. For personal
+    repos, 'project' scope is functionally identical and simplifies the
+    mental model (project + user only).
+    """
+    if not os.path.exists(INSTALLED_PLUGINS):
+        return
+    with open(INSTALLED_PLUGINS) as f:
+        data = json.load(f)
+    changed = []
+    for qid, entries in data.get("plugins", {}).items():
+        for entry in entries:
+            if entry.get("scope") == "local":
+                entry["scope"] = "project"
+                changed.append(qid.split("@")[0])
+    if changed:
+        dir_name = os.path.dirname(os.path.abspath(INSTALLED_PLUGINS))
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".json")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(data, f, indent=2)
+                f.write("\n")
+            os.rename(tmp_path, INSTALLED_PLUGINS)
+        except Exception:
+            os.unlink(tmp_path)
+            raise
+        print(f"{GREEN}Normalized {len(changed)} plugin scope(s): local → project{NC}")
+        if verbose:
+            for name in changed:
+                print(f"  {name}")
 
 
 # --- Subcommands ---
