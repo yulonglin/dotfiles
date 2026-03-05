@@ -434,7 +434,11 @@ def apply_context_yaml_cmd():
     registry = load_registry()
     base, profiles = load_profiles()
     enabled = build_plugins(registry, base, profiles, pnames, enable, disable)
-    apply_to_settings(enabled)
+    try:
+        apply_to_settings(enabled)
+    except (PermissionError, OSError) as e:
+        print(f"{YELLOW}Warning: could not write {TARGET_FILE}: {e}{NC}",
+              file=sys.stderr)
 
     on = sorted(k.split("@")[0] for k, v in enabled.items() if v)
     print(f"{GREEN}Applied from context.yaml:{NC} profiles={pnames}")
