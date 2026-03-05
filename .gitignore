@@ -497,6 +497,9 @@ settings.local.json
 .gemini/
 gha-creds-*.json
 
+# Compiled binaries (built per-platform by deploy.sh)
+custom_bins/claude-tools
+
 # Misplaced .claude/ dirs (created when CWD != git root)
 config/.claude/
 tools/*/.claude/
@@ -504,4 +507,5 @@ tools/*/.claude/
 # Claude Code task data (runtime, session-specific)
 .claude/tasks/
 .claude/worktrees/
+.claude/autopilot/
 *archive*

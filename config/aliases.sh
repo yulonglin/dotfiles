@@ -115,6 +115,12 @@ alias cont='yolo --continue'
 alias continue='yolo --continue'
 alias yn='yolo -t'  # yn <name>: yolo with task name
 
+# auto — acceptEdits + auto-deny hook (middle ground between yolo and default)
+alias auto='claude --permission-mode acceptEdits'
+alias an='auto -t'  # an <name>: auto with task name
+alias auto-on='mkdir -p .claude/autopilot && echo '\''{"autonomous_mode":true}'\'' > .claude/autopilot/state.json'
+alias auto-off='rm -f .claude/autopilot/state.json'
+
 # Artifact dirs checked across worktree commands (port, remove, clean)
 _CW_ARTIFACT_DIRS=(out logs data results experiments)
 

@@ -463,4 +463,5 @@ TSWLatexianTemp*
 #-------------------------------------------------------------
 .claude/bash-history.jsonl
 .claude/worktrees/
+.claude/autopilot/
 settings.local.json
