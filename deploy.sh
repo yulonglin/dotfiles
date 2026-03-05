@@ -241,6 +241,10 @@ fi
 if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     log_section "DEPLOYING GIT CONFIGURATION"
     deploy_git_config
+
+    # Global gitattributes
+    safe_symlink "$DOT_DIR/config/gitattributes_global" "$HOME/.gitattributes"
+    git config --global core.attributesFile "$HOME/.gitattributes"
 else
     log_warning "Skipping git config — ~/.gitignore_global and ~/.ignore_global will not be deployed"
 fi
@@ -284,6 +288,24 @@ fi
 if [[ "$DEPLOY_EDITOR" == "true" ]]; then
     log_section "DEPLOYING EDITOR SETTINGS"
     deploy_editor_settings || log_warning "Editor settings deployment failed"
+fi
+
+# ─── Developer Config Files ──────────────────────────────────────────────────
+
+if [[ "$DEPLOY_EDITOR" == "true" ]]; then
+    log_info "Deploying developer config files..."
+
+    # EditorConfig — universal editor formatting
+    safe_symlink "$DOT_DIR/config/editorconfig" "$HOME/.editorconfig"
+
+    # curl defaults
+    safe_symlink "$DOT_DIR/config/curlrc" "$HOME/.curlrc"
+
+    # Readline config (bash, python3 REPL, node REPL, psql — not ZSH)
+    safe_symlink "$DOT_DIR/config/inputrc" "$HOME/.inputrc"
+
+    # .hushlogin — suppress "Last login" message
+    touch "$HOME/.hushlogin"
 fi
 
 # ─── Finicky (macOS) ──────────────────────────────────────────────────────────

@@ -1,0 +1,18 @@
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# Binary files — no diff, no merge
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

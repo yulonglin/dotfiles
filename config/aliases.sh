@@ -801,6 +801,21 @@ alias clean-skill-dupes='"$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"'
 alias fda='fd -HI'  # fd all (include hidden + gitignored)
 
 #-------------------------------------------------------------
+# System utilities
+#-------------------------------------------------------------
+
+# Flush DNS cache
+if [[ "$(uname)" == "Darwin" ]]; then
+    alias flush='dscacheutil -flushcache && killall -HUP mDNSResponder'
+    alias afk='pmset displaysleepnow'
+else
+    alias flush='sudo resolvectl flush-caches'
+fi
+
+# ISO week number
+alias week='date +%V'
+
+#-------------------------------------------------------------
 # Ghostty themed windows
 #-------------------------------------------------------------
 

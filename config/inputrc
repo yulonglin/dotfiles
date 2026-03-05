@@ -1,0 +1,15 @@
+# Readline configuration
+# Affects: bash, python3 REPL, node REPL, psql, etc.
+# Does NOT affect ZSH (uses zle, not readline)
+
+# Case-insensitive completion
+set completion-ignore-case on
+
+# Show all completions on single Tab press
+set show-all-if-ambiguous on
+
+# Color file type indicators in completion
+set colored-stats on
+
+# Show common prefix, then cycle
+set menu-complete-display-prefix on

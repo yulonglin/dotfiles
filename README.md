@@ -69,7 +69,8 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 ```
 
 **Defaults:**
-- Git config, VSCode/Cursor settings, vim, Claude Code, Codex CLI, Ghostty, htop, matplotlib styles
+- Git config (+ global gitattributes), VSCode/Cursor settings, vim, Claude Code, Codex CLI, Ghostty, htop, matplotlib styles
+- Developer config files: `.editorconfig`, `.curlrc`, `.inputrc`, `.hushlogin` (deployed with `--editor`)
 - Experimental features (ty type checker)
 - Cleanup automation (macOS only)
 
@@ -406,6 +407,9 @@ Configuration: [`config/ssh_setup.sh`](config/ssh_setup.sh)
 * Any software or command line tools you need, add them to the [install.sh](./install.sh) script. Try adding a new command line tool to the install script.
 * Any new plugins or environment setup, add them to the [config/zshrc.sh](./config/zshrc.sh) script.
 * Any aliases you need, add them to the [config/aliases.sh](./config/aliases.sh) script. Try adding your own alias to the bottom of the file. For example, try setting `cd1` to your most used git repo so you can just type `cd1` to get to it.
+* **Utility functions** in `config/modern_tools.sh`: `mkd` (mkdir+cd), `cdf` (cd to Finder window, macOS), `targz` (smart compression), `dataurl`, `digga` (DNS lookup), `getcertnames` (SSL certs), `o` (cross-platform open), `server` (quick HTTP server)
+* **System aliases** in `config/aliases.sh`: `flush` (DNS cache), `afk` (lock screen, macOS), `week` (ISO week number)
+
 ## Cloud Setup (RunPod, Hetzner, etc.)
 
 One-command setup for cloud VMs and containers:
