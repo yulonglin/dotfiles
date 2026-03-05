@@ -964,7 +964,8 @@ parse_args() {
     if [[ "$_only_mode" == true ]]; then
         local _known_components=(vim editor claude codex ghostty htop pdb matplotlib
             git_hooks secrets cleanup claude_cleanup ai_update brew_update keyboard
-            bedtime serena zsh tmux ai_tools docker extras experimental create_user
+            bedtime serena mouseless text_replacements
+            zsh tmux ai_tools docker extras experimental create_user
             shell git_config)
 
         for _comp in "${_only_components[@]}"; do

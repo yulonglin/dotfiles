@@ -13,6 +13,9 @@ alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
 alias sync-secrets='"$DOT_DIR/scripts/sync_secrets.sh"'
+alias sync-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" sync'
+alias export-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" export'
+alias snippets-diff='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" diff'
 
 # Sync Mouseless UI config changes back to dotfiles (macOS only)
 if [[ "$(uname)" == "Darwin" ]]; then

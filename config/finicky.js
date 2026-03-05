@@ -41,6 +41,13 @@ export default {
       browser: "notion.id"
     },
     {
+      // Linear MCP OAuth → Safari
+      match: [
+        "mcp.linear.app*"
+      ],
+      browser: "Safari"
+    },
+    {
       // Linear → Linear app
       match: [
         "linear.app*",
