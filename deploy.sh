@@ -74,6 +74,7 @@ COMPONENTS:
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
     --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
+    --vpn             Install NordVPN+Tailscale split tunnel daemon (macOS only)
     --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
@@ -744,6 +745,48 @@ if [[ "${DEPLOY_TEXT_REPLACEMENTS:-false}" == "true" ]] && is_macos; then
         fi
     else
         log_warning "uv not found — skipping text replacements sync"
+    fi
+fi
+
+# ─── VPN Split Tunneling (macOS only) ────────────────────────────────────────
+
+if [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos; then
+    log_section "INSTALLING VPN SPLIT TUNNEL DAEMON"
+
+    VPN_PLIST_LABEL="com.dotfiles.tailscale-route-fix"
+    VPN_PLIST_PATH="/Library/LaunchDaemons/${VPN_PLIST_LABEL}.plist"
+    VPN_SCRIPT_PATH="/usr/local/bin/tailscale-route-fix"
+
+    sudo -v  # Acquire sudo upfront
+
+    # Idempotent: unload existing before loading new
+    sudo launchctl bootout "system/${VPN_PLIST_LABEL}" 2>/dev/null || true
+
+    # Install script
+    sudo mkdir -p /usr/local/bin
+    sudo cp "$DOT_DIR/scripts/vpn/tailscale_route_fix.sh" "$VPN_SCRIPT_PATH"
+    sudo chmod 755 "$VPN_SCRIPT_PATH"
+    sudo chown root:wheel "$VPN_SCRIPT_PATH"
+
+    # Install plist
+    sudo cp "$DOT_DIR/scripts/vpn/${VPN_PLIST_LABEL}.plist" "$VPN_PLIST_PATH"
+    sudo chmod 644 "$VPN_PLIST_PATH"
+    sudo chown root:wheel "$VPN_PLIST_PATH"
+
+    # Log rotation: 5 files, 1MB max, compressed
+    echo "/var/log/tailscale-route-fix.log 640 5 1000 * J" | \
+        sudo tee /etc/newsyslog.d/tailscale-route-fix.conf > /dev/null
+
+    # Load daemon
+    sudo launchctl bootstrap system "$VPN_PLIST_PATH"
+    sudo launchctl enable "system/${VPN_PLIST_LABEL}"
+    sudo launchctl kickstart -k "system/${VPN_PLIST_LABEL}"
+
+    # Verify
+    if sudo launchctl print "system/${VPN_PLIST_LABEL}" &>/dev/null; then
+        log_success "VPN split tunnel daemon installed and running"
+    else
+        log_warning "VPN daemon installed but may not be running — check: sudo launchctl print system/${VPN_PLIST_LABEL}"
     fi
 fi
 

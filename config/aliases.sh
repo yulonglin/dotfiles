@@ -1002,6 +1002,10 @@ sshc() {
     fi
 }
 
+# VPN split tunneling
+alias vpn-status='tailscale-route-fix status'
+alias vpn-fix='sudo tailscale-route-fix once'
+
 # Auto-use sshc in Ghostty (color-changing ssh)
 if [[ "$TERM_PROGRAM" == "ghostty" ]]; then
     alias ssh='sshc'
