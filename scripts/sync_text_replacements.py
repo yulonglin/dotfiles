@@ -237,7 +237,10 @@ def write_macos_entries(entries: list[Snippet], prune: bool = False, dry_run: bo
     # Sync the NSGlobalDomain plist (legacy store that System Settings also reads)
     _sync_nsglobaldomain_plist(entries)
 
+    # Restart cfprefsd (flushes plist cache) and kbd (triggers iCloud sync)
     subprocess.run(["killall", "cfprefsd"], capture_output=True)
+    subprocess.run(["killall", "kbd"], capture_output=True)
+    # kbd auto-restarts via launchd; it reads ZNEEDSSAVETOCLOUD=1 and syncs to iCloud
 
 
 # ── Alfred Snippets (JSON) ──────────────────────────────────────────────────
@@ -586,6 +589,14 @@ def macos_eligible(s: Snippet) -> bool:
     return not s.alfred_only and s.enabled
 
 
+def prefixed_shortcut(s: Snippet, meta: dict[str, CollectionMeta]) -> str:
+    """Return shortcut with collection prefix applied (for macOS)."""
+    cm = meta.get(s.collection)
+    if cm and cm.prefix:
+        return cm.prefix + s.shortcut
+    return s.shortcut
+
+
 # ── Commands ─────────────────────────────────────────────────────────────────
 
 
@@ -601,12 +612,26 @@ def cmd_export(args: argparse.Namespace) -> None:
 
     # Read existing YAML to preserve manual edits
     existing_collections, existing_meta = read_yaml(YAML_PATH)
+    merged_meta = {**existing_meta, **alfred_meta}
     existing_map: dict[str, Snippet] = {}
     for snippets in existing_collections.values():
         for s in snippets:
             existing_map[s.shortcut] = s
 
-    macos_map = {e.shortcut: e for e in macos_entries}
+    # Build prefix reverse map from YAML entries
+    prefix_to_raw: dict[str, str] = {}
+    for s in existing_map.values():
+        ps = prefixed_shortcut(s, merged_meta)
+        if ps != s.shortcut:
+            prefix_to_raw[ps] = s.shortcut
+
+    # macOS map keyed by raw shortcut (strip prefix if recognized)
+    macos_map: dict[str, Snippet] = {}
+    for e in macos_entries:
+        raw = prefix_to_raw.get(e.shortcut, e.shortcut)
+        macos_map[raw] = Snippet(shortcut=raw, phrase=e.phrase, uid=e.uid,
+                                 collection=e.collection, enabled=e.enabled)
+
     alfred_map = {e.shortcut: e for e in alfred_entries}
 
     # Build merged collections
@@ -649,9 +674,6 @@ def cmd_export(args: argparse.Namespace) -> None:
         entry.collection = DEFAULT_COLLECTION
         collections.setdefault(DEFAULT_COLLECTION, []).append(entry)
 
-    # Merge metadata
-    merged_meta = {**existing_meta, **alfred_meta}
-
     write_yaml(YAML_PATH, collections, merged_meta, dry_run=args.dry_run)
 
 
@@ -671,11 +693,15 @@ def cmd_import(args: argparse.Namespace) -> None:
     collections, collection_meta = read_yaml(YAML_PATH)
     all_entries = all_snippets(collections)
 
-    # macOS: all enabled, non-alfred-only entries
-    macos_entries = [s for s in all_entries if macos_eligible(s)]
+    # macOS: all enabled, non-alfred-only entries (with collection prefix applied)
+    macos_entries = [
+        Snippet(shortcut=prefixed_shortcut(s, collection_meta), phrase=s.phrase,
+                uid=s.uid, collection=s.collection, enabled=s.enabled)
+        for s in all_entries if macos_eligible(s)
+    ]
     write_macos_entries(macos_entries, prune=args.prune, dry_run=args.dry_run)
 
-    # Alfred: all entries (alfred_only and shared alike)
+    # Alfred: all entries with raw shortcuts (Alfred applies prefix at runtime)
     if snippets_dir:
         restart = not getattr(args, "no_restart_alfred", False)
         write_alfred_entries(
@@ -699,13 +725,28 @@ def cmd_sync(args: argparse.Namespace) -> None:
         read_alfred_entries(snippets_dir) if snippets_dir else ([], {})
     )
 
+    merged_meta = {**yaml_meta, **alfred_meta}
+
     # Build lookup maps
     yaml_map: dict[str, Snippet] = {}
     for snippets in yaml_collections.values():
         for s in snippets:
             yaml_map[s.shortcut] = s
 
-    macos_map = {e.shortcut: e for e in macos_entries}
+    # Build reverse prefix map: prefixed_shortcut -> raw_shortcut
+    prefix_to_raw: dict[str, str] = {}
+    for s in yaml_map.values():
+        ps = prefixed_shortcut(s, merged_meta)
+        if ps != s.shortcut:
+            prefix_to_raw[ps] = s.shortcut
+
+    # Map macOS entries by raw shortcut (strip prefix if recognized)
+    macos_map: dict[str, Snippet] = {}
+    for e in macos_entries:
+        raw = prefix_to_raw.get(e.shortcut, e.shortcut)
+        macos_map[raw] = Snippet(shortcut=raw, phrase=e.phrase, uid=e.uid,
+                                 collection=e.collection, enabled=e.enabled)
+
     alfred_map = {e.shortcut: e for e in alfred_entries}
 
     # Warn on case-only duplicates
@@ -757,16 +798,21 @@ def cmd_sync(args: argparse.Namespace) -> None:
         entry.collection = DEFAULT_COLLECTION
         collections.setdefault(DEFAULT_COLLECTION, []).append(entry)
 
-    merged_meta = {**yaml_meta, **alfred_meta}
-
     # Write YAML
     write_yaml(YAML_PATH, collections, merged_meta, dry_run=args.dry_run)
 
     # Write back to systems
     all_entries = all_snippets(collections)
-    macos_import = [s for s in all_entries if macos_eligible(s)]
+
+    # macOS: apply collection prefix to shortcuts
+    macos_import = [
+        Snippet(shortcut=prefixed_shortcut(s, merged_meta), phrase=s.phrase,
+                uid=s.uid, collection=s.collection, enabled=s.enabled)
+        for s in all_entries if macos_eligible(s)
+    ]
     write_macos_entries(macos_import, prune=args.prune, dry_run=args.dry_run)
 
+    # Alfred: raw shortcuts (Alfred applies prefix at runtime)
     if snippets_dir:
         restart = not getattr(args, "no_restart_alfred", False)
         write_alfred_entries(
@@ -778,16 +824,33 @@ def cmd_sync(args: argparse.Namespace) -> None:
 def cmd_diff(args: argparse.Namespace) -> None:
     """Show differences between YAML, macOS, and Alfred."""
     snippets_dir = get_alfred_snippets_dir()
-    yaml_collections, _ = read_yaml(YAML_PATH)
+    yaml_collections, yaml_meta = read_yaml(YAML_PATH)
     macos_entries = read_macos_entries()
-    alfred_entries, _ = read_alfred_entries(snippets_dir) if snippets_dir else ([], {})
+    alfred_entries, alfred_meta = read_alfred_entries(snippets_dir) if snippets_dir else ([], {})
 
+    merged_meta = {**yaml_meta, **alfred_meta}
+
+    # YAML map keyed by raw shortcut
     yaml_map: dict[str, Snippet] = {}
     for snippets in yaml_collections.values():
         for s in snippets:
             yaml_map[s.shortcut] = s
 
-    macos_map = {e.shortcut: e for e in macos_entries}
+    # Build prefixed→raw reverse map for macOS comparison
+    prefix_to_raw: dict[str, str] = {}
+    raw_to_prefixed: dict[str, str] = {}
+    for s in yaml_map.values():
+        ps = prefixed_shortcut(s, merged_meta)
+        if ps != s.shortcut:
+            prefix_to_raw[ps] = s.shortcut
+            raw_to_prefixed[s.shortcut] = ps
+
+    # macOS map keyed by raw shortcut (strip prefix if recognized)
+    macos_map: dict[str, Snippet] = {}
+    for e in macos_entries:
+        raw = prefix_to_raw.get(e.shortcut, e.shortcut)
+        macos_map[raw] = Snippet(shortcut=raw, phrase=e.phrase)
+
     alfred_map = {e.shortcut: e for e in alfred_entries}
 
     all_shortcuts = sorted(set(yaml_map) | set(macos_map) | set(alfred_map))
