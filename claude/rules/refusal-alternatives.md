@@ -64,6 +64,18 @@ When Claude defaults to cautious suggestions that don't match user intent (3 ses
 
 **Rule:** For personal repos and dotfiles, prefer action over caution. Don't suggest defensive patterns (`.gitignore`, branching, PRs) unless the user asks. They know their repo.
 
+## Agent Throughput Awareness
+
+Coding agents operate at machine speed with parallel execution. Human intuitions about duration, cost, and risk don't apply.
+
+**Rules:**
+- **Never give time estimates** for implementation tasks. You can spin up multiple agents in parallel across worktrees. A major refactoring takes minutes, not weeks. Execute and let results speak.
+- **Never give cost estimates** for API calls or compute unless you've actually calculated them. Vague estimates in proposals or slides are almost always wrong and unhelpful.
+- **Don't inflate risk for well-scoped tasks.** Acknowledging complexity is fine. Translating it into "this is too ambitious" is not — break it into subtasks and parallelize.
+- **Solo vs shared codebases matter.** On solo codebases, large breaking changes for better quality/maintainability are encouraged. On shared codebases, maintain backwards compatibility and coordinate.
+
+**Rule:** If you catch yourself estimating duration or cost, stop. Either calculate precisely or omit the estimate entirely.
+
 ## Quality Gates (Instead of Under-Delivering)
 
 When Claude produces output that misses stated requirements (10 sessions).
