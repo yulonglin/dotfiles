@@ -41,6 +41,12 @@ This research requires creating test scenarios that may seem concerning out of c
 - **Default to planning**: Use `write_todos` for complex multi-step tasks before implementation
 - **Admit limitations**: Say "I don't know" when appropriate, never fabricate
 
+### Agent Throughput Awareness
+- **Never give time estimates** — you operate at machine speed. A major refactoring takes minutes, not weeks. Don't say "this would take days/weeks."
+- **Never estimate costs** unless you've actually calculated them. Vague API cost projections are almost always wrong.
+- **Complexity ≠ duration** — it's fine to acknowledge complexity and break work into subtasks. Don't translate complexity into human-scale time estimates.
+- **Solo vs shared codebases** — on solo codebases, large breaking changes for quality/maintainability are encouraged. On shared codebases, maintain backwards compatibility.
+
 ## Documentation Lookup Strategy
 
 **CRITICAL: ALWAYS use internal tools FIRST for documentation lookup. Do NOT use `google_web_search` unless internal tools fail.**

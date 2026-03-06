@@ -84,9 +84,12 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
 - Mouseless - Keyboard-driven mouse control (macOS only, copied not symlinked, opt-in --mouseless flag)
+- Text replacements - Bidirectional sync with macOS + Alfred snippets (daily 9 AM, requires Full Disk Access for terminal app). macOS uses raw shortcuts; Alfred applies collection prefix at runtime (e.g., `fm.hi`)
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
 - Claude Code cleanup - No-output-for-24h session cleanup (tmux preserved, launchd/cron)
 - AI tools auto-update - Daily update of Claude Code, Gemini CLI, Codex CLI (6 AM, launchd/cron)
+- Developer config files - EditorConfig, curlrc, inputrc, .hushlogin (deployed with --editor flag)
+- Global gitattributes - Binary file handling + line endings (deployed with --git-config flag)
 - Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, brew/apt/dnf/pacman, launchd/cron)
 
 ## Architecture
@@ -120,7 +123,11 @@ config/
 ├── ignore_global         # Universal ignore patterns (OS, editors, Python, LaTeX, Claude Code)
 ├── ignore_research       # Research-only ignore patterns (archive/, data/, experiments/, etc.)
 ├── ignore_template       # Per-project .ignore template (negation patterns for search tools)
-└── user.conf.example     # User-specific git settings template
+├── user.conf.example     # User-specific git settings template
+├── editorconfig          # EditorConfig formatting defaults (symlinked to ~/.editorconfig)
+├── curlrc                # curl defaults: follow redirects, show errors (symlinked to ~/.curlrc)
+├── inputrc               # Readline config for bash/python/node REPLs (symlinked to ~/.inputrc)
+└── gitattributes_global  # Binary file handling + line endings (symlinked to ~/.gitattributes)
 
 claude/                   # Symlinked to ~/.claude/
 ├── CLAUDE.md             # Global AI instructions (slim ~120 lines, identity + pointers)

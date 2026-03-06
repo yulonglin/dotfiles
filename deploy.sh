@@ -74,6 +74,7 @@ COMPONENTS:
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
     --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
+    --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
@@ -241,6 +242,10 @@ fi
 if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     log_section "DEPLOYING GIT CONFIGURATION"
     deploy_git_config
+
+    # Global gitattributes
+    safe_symlink "$DOT_DIR/config/gitattributes_global" "$HOME/.gitattributes"
+    git config --global core.attributesFile "$HOME/.gitattributes"
 else
     log_warning "Skipping git config — ~/.gitignore_global and ~/.ignore_global will not be deployed"
 fi
@@ -284,6 +289,24 @@ fi
 if [[ "$DEPLOY_EDITOR" == "true" ]]; then
     log_section "DEPLOYING EDITOR SETTINGS"
     deploy_editor_settings || log_warning "Editor settings deployment failed"
+fi
+
+# ─── Developer Config Files ──────────────────────────────────────────────────
+
+if [[ "$DEPLOY_EDITOR" == "true" ]]; then
+    log_info "Deploying developer config files..."
+
+    # EditorConfig — universal editor formatting
+    safe_symlink "$DOT_DIR/config/editorconfig" "$HOME/.editorconfig"
+
+    # curl defaults
+    safe_symlink "$DOT_DIR/config/curlrc" "$HOME/.curlrc"
+
+    # Readline config (bash, python3 REPL, node REPL, psql — not ZSH)
+    safe_symlink "$DOT_DIR/config/inputrc" "$HOME/.inputrc"
+
+    # .hushlogin — suppress "Last login" message
+    touch "$HOME/.hushlogin"
 fi
 
 # ─── Finicky (macOS) ──────────────────────────────────────────────────────────
@@ -702,6 +725,25 @@ if [[ "$DEPLOY_BEDTIME" == "true" ]] && is_macos; then
         "$DOT_DIR/scripts/cleanup/setup_bedtime_enforce.sh" || log_warning "Bedtime enforcement setup failed"
     else
         log_warning "Bedtime enforcement setup script not found"
+    fi
+fi
+
+
+# ─── Text Replacements Sync (macOS only) ─────────────────────────────────
+
+if [[ "${DEPLOY_TEXT_REPLACEMENTS:-false}" == "true" ]] && is_macos; then
+    log_info "Syncing text replacements..."
+    if command -v uv &>/dev/null; then
+        uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" sync || \
+            log_warning "Text replacements sync failed"
+
+        # Install automated daily sync
+        if [[ -f "$DOT_DIR/scripts/cleanup/setup_text_replacements_sync.sh" ]]; then
+            "$DOT_DIR/scripts/cleanup/setup_text_replacements_sync.sh" || \
+                log_warning "Failed to setup automated text replacements sync"
+        fi
+    else
+        log_warning "uv not found — skipping text replacements sync"
     fi
 fi
 

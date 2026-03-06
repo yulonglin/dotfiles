@@ -228,3 +228,127 @@ fi
 if command -v delta &> /dev/null; then
     alias diff='delta'                         # Use delta for standalone diffs
 fi
+
+#-------------------------------------------------------------
+# Utility functions (inspired by mathiasbynens/dotfiles)
+#-------------------------------------------------------------
+
+# mkd: Create directory and cd into it
+mkd() {
+    command mkdir -p "$1" && cd "$1"
+}
+
+# cdf: cd to the frontmost Finder window (macOS only)
+if [[ "$(uname)" == "Darwin" ]]; then
+    cdf() {
+        local target
+        target="$(osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)' 2>/dev/null)"
+        if [[ -z "$target" ]]; then
+            echo "No Finder window found" >&2
+            return 1
+        fi
+        cd "$target" || return
+    }
+fi
+
+# targz: Create a .tar.gz archive using best available compression
+targz() {
+    local tmpFile="${1%/}.tar"
+    tar -cf "$tmpFile" "${1}" || return 1
+
+    local size
+    size=$(stat -f"%z" "$tmpFile" 2>/dev/null || stat -c"%s" "$tmpFile" 2>/dev/null)
+
+    local cmd=""
+    if (( size < 52428800 )) && command -v zopfli &>/dev/null; then
+        cmd="zopfli"
+    elif command -v pigz &>/dev/null; then
+        cmd="pigz"
+    else
+        cmd="gzip"
+    fi
+
+    echo "Compressing with ${cmd}..."
+    "${cmd}" -f "$tmpFile" || return 1
+    [ -f "${tmpFile}" ] && rm "$tmpFile"
+
+    local gzFile="${tmpFile}.gz"
+    local origSize
+    origSize=$(stat -f"%z" "${1}" 2>/dev/null || stat -c"%s" "${1}" 2>/dev/null)
+    local gzSize
+    gzSize=$(stat -f"%z" "$gzFile" 2>/dev/null || stat -c"%s" "$gzFile" 2>/dev/null)
+    echo "${gzFile} ($(( origSize / 1000 ))kB → $(( gzSize / 1000 ))kB)"
+}
+
+# dataurl: Create a base64 data URL from a file
+dataurl() {
+    local mimeType
+    mimeType=$(file -b --mime-type "$1")
+    if [[ "$mimeType" == text/* ]]; then
+        mimeType="${mimeType};charset=utf-8"
+    fi
+    echo "data:${mimeType};base64,$(openssl base64 -in "$1" | tr -d '\n')"
+}
+
+# digga: All DNS records for a domain
+digga() {
+    if \! command -v dig &>/dev/null; then
+        echo "dig not found — install via: brew install bind" >&2
+        return 1
+    fi
+    dig +nocmd "$1" any +multiline +noall +answer
+}
+
+# getcertnames: Show CN and SANs for an SSL certificate
+getcertnames() {
+    if [[ -z "$1" ]]; then
+        echo "Usage: getcertnames <domain>" >&2
+        return 1
+    fi
+
+    local domain="${1}"
+    echo "Testing ${domain}..."
+
+    local tmp
+    tmp=$(echo -e "GET / HTTP/1.0\nEOT" \
+        | openssl s_client -connect "${domain}:443" -servername "${domain}" 2>&1)
+
+    if [[ "${tmp}" == *"-----BEGIN CERTIFICATE-----"* ]]; then
+        local certText
+        certText=$(echo "${tmp}" \
+            | openssl x509 -text -certopt "no_aux, no_header, no_issuer, no_pubkey, \
+            no_serial, no_sigdump, no_signame, no_validity, no_version")
+        echo ""
+        echo "Common Name:"
+        echo "${certText}" | grep "Subject:" | sed -e "s/^.*CN=//" | sed -e "s/\/.*$//"
+        echo ""
+        echo "Subject Alternative Name(s):"
+        echo "${certText}" | grep -A 1 "Subject Alternative Name:" \
+            | sed -e "2s/DNS://g" -e "s/ //g" | tr "," "\n" | tail -n +2
+    else
+        echo "ERROR: Certificate not found." >&2
+        return 1
+    fi
+}
+
+# o: Cross-platform open command
+o() {
+    if [[ $# -eq 0 ]]; then
+        if [[ "$(uname)" == "Darwin" ]]; then
+            open .
+        elif command -v xdg-open &>/dev/null; then
+            xdg-open .
+        fi
+    else
+        if [[ "$(uname)" == "Darwin" ]]; then
+            open "$@"
+        elif command -v xdg-open &>/dev/null; then
+            xdg-open "$@"
+        fi
+    fi
+}
+
+# server: Start a simple HTTP server in the current directory
+server() {
+    python3 -m http.server "${1:-8000}"
+}

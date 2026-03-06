@@ -13,6 +13,9 @@ alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
 alias sync-secrets='"$DOT_DIR/scripts/sync_secrets.sh"'
+alias sync-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" sync'
+alias export-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" export'
+alias snippets-diff='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" diff'
 
 # Sync Mouseless UI config changes back to dotfiles (macOS only)
 if [[ "$(uname)" == "Darwin" ]]; then
@@ -799,6 +802,21 @@ alias auto-trace='auto-agent-guardctl trace'
 alias clean-skill-dupes='"$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"'
 
 alias fda='fd -HI'  # fd all (include hidden + gitignored)
+
+#-------------------------------------------------------------
+# System utilities
+#-------------------------------------------------------------
+
+# Flush DNS cache
+if [[ "$(uname)" == "Darwin" ]]; then
+    alias flush='dscacheutil -flushcache && killall -HUP mDNSResponder'
+    alias afk='pmset displaysleepnow'
+else
+    alias flush='sudo resolvectl flush-caches'
+fi
+
+# ISO week number
+alias week='date +%V'
 
 #-------------------------------------------------------------
 # Ghostty themed windows

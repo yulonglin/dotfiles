@@ -55,6 +55,12 @@ You MUST refer to instructions in global `CLAUDE.md` at `~/.claude/CLAUDE.md`, a
 - Follow the CLI styling: optional short headers, `-` bullets, inline code for commands/paths, fenced code blocks with info strings for multi-line snippets.
 - When listing completed work, use short, clear bullet points suitable for a coworker or manager; avoid run-on sentences.
 
+## Agent Throughput Awareness
+- **Never give time estimates** — you operate at machine speed. A major refactoring takes minutes, not weeks. Don't say "this would take days/weeks."
+- **Never estimate costs** unless you've actually calculated them. Vague API cost projections are almost always wrong.
+- **Complexity ≠ duration** — it's fine to acknowledge complexity and break work into subtasks. Don't translate complexity into human-scale time estimates.
+- **Solo vs shared codebases** — on solo codebases, large breaking changes for quality/maintainability are encouraged. On shared codebases, maintain backwards compatibility.
+
 ## Additional Expectations
 - Run commands the user explicitly requests when safe (e.g., `date`). Provide the relevant result rather than saying you ran it.
 - Never expose full command output when unnecessary; summarize key lines instead.

@@ -274,6 +274,7 @@
     "pr-review-toolkit@claude-plugins-official": false,
     "playground@claude-plugins-official": false,
     "linear@claude-plugins-official": false,
+    "swift-lsp@claude-plugins-official": false,
     "core@ai-safety-plugins": true,
     "research@ai-safety-plugins": true,
     "writing@ai-safety-plugins": true,
@@ -282,12 +283,6 @@
     "viz@ai-safety-plugins": true
   },
   "extraKnownMarketplaces": {
-    "mac-tools": {
-      "source": {
-        "source": "directory",
-        "path": "/Users/yulong/code/marketplaces/mac-tools"
-      }
-    },
     "ai-safety-plugins": {
       "source": {
         "source": "directory",
@@ -296,8 +291,8 @@
     },
     "productivity-tools": {
       "source": {
-        "source": "github",
-        "repo": "yulonglin/mac-tools"
+        "source": "directory",
+        "path": "/home/yulong/code/marketplaces/productivity-tools"
       }
     }
   },
