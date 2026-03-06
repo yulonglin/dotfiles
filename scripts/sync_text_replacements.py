@@ -151,6 +151,21 @@ def read_macos_entries() -> list[Snippet]:
     return entries
 
 
+def _sync_nsglobaldomain_plist(entries: list[Snippet]) -> None:
+    """Sync entries to NSGlobalDomain NSUserDictionaryReplacementItems (legacy plist store)."""
+    plist_path = Path.home() / "Library" / "Preferences" / ".GlobalPreferences.plist"
+    if not plist_path.exists():
+        return
+    with open(plist_path, "rb") as f:
+        prefs = plistlib.load(f)
+    prefs["NSUserDictionaryReplacementItems"] = [
+        {"on": True, "replace": e.shortcut, "with": e.phrase}
+        for e in entries
+    ]
+    with open(plist_path, "wb") as f:
+        plistlib.dump(prefs, f)
+
+
 def write_macos_entries(entries: list[Snippet], prune: bool = False, dry_run: bool = False) -> None:
     if platform.system() != "Darwin":
         return
@@ -218,6 +233,9 @@ def write_macos_entries(entries: list[Snippet], prune: bool = False, dry_run: bo
         print(f"  macOS: {new_count} added, {updated_count} updated, {pruned_count} pruned")
     finally:
         conn.close()
+
+    # Sync the NSGlobalDomain plist (legacy store that System Settings also reads)
+    _sync_nsglobaldomain_plist(entries)
 
     subprocess.run(["killall", "cfprefsd"], capture_output=True)
 
