@@ -84,6 +84,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
 - Mouseless - Keyboard-driven mouse control (macOS only, copied not symlinked, opt-in --mouseless flag)
+- Text replacements - Bidirectional sync with macOS + Alfred snippets (daily 9 AM, requires Full Disk Access for terminal app). macOS uses raw shortcuts; Alfred applies collection prefix at runtime (e.g., `fm.hi`)
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
 - Claude Code cleanup - No-output-for-24h session cleanup (tmux preserved, launchd/cron)
 - AI tools auto-update - Daily update of Claude Code, Gemini CLI, Codex CLI (6 AM, launchd/cron)
