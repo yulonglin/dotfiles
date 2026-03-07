@@ -17,9 +17,8 @@ fi
 # bat: Enhanced file viewer with syntax highlighting
 if command -v bat &> /dev/null; then
     alias view='bat'                            # Enhanced file viewer with syntax highlighting
-    alias less='bat --paging=always'           # Use bat as pager with syntax highlighting
+    alias bat-less='bat --paging=always'        # bat as pager (not overriding less — different flags)
     export MANPAGER="sh -c 'col -bx | bat -l man -p'"  # Use bat for colorized man pages
-    alias plaincat='command cat'               # Access original cat when needed
 fi
 
 # fd: Fast file finder (available as separate command)
@@ -205,29 +204,18 @@ dirsize() {
 # zoxide init is in zshrc.sh
 
 #-------------------------------------------------------------
-# dust: Modern du replacement with visual size breakdown
-if command -v dust &> /dev/null; then
-    alias du='dust'
-    alias usage='dust'
-fi
+# dust: Modern du with visual size breakdown (NOT aliasing du — different flags)
+# Usage: dust (current dir), dust <path>
 
-# duf: Modern df replacement with color table
-if command -v duf &> /dev/null; then
-    alias df='duf'
-fi
+# duf: Modern df with color table (NOT aliasing df — different flags)
+# Usage: duf
 
-# htop: Better top replacement
-if command -v htop &> /dev/null; then
-    alias top='htop'
-fi
+# htop: Better top (NOT aliasing top — different flags)
+# Usage: htop
 
 # delta: Better diffs with syntax highlighting
-#-------------------------------------------------------------
-# delta is configured in gitconfig for git operations
-# This alias makes it available for standalone file diffs
-if command -v delta &> /dev/null; then
-    alias diff='delta'                         # Use delta for standalone diffs
-fi
+# delta is configured in gitconfig for git operations (NOT aliasing diff — different interface)
+# Usage: delta <file1> <file2>
 
 #-------------------------------------------------------------
 # Utility functions (inspired by mathiasbynens/dotfiles)

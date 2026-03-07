@@ -215,6 +215,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/check_loop_bypass.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_modern_tools.sh",
+            "timeout": 3
           }
         ]
       },
@@ -280,7 +285,8 @@
     "writing@ai-safety-plugins": true,
     "code@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
-    "viz@ai-safety-plugins": true
+    "viz@ai-safety-plugins": true,
+    "dev-browser@dev-browser-marketplace": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -293,6 +299,12 @@
       "source": {
         "source": "directory",
         "path": "/home/yulong/code/marketplaces/productivity-tools"
+      }
+    },
+    "dev-browser-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "sawyerhood/dev-browser"
       }
     }
   },
