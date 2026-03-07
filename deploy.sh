@@ -174,9 +174,9 @@ export PATH="\$DOT_DIR/custom_bins:\$PATH"
 # Atuin - unified shell history
 if [ -f "\$HOME/.atuin/bin/env" ]; then
     source "\$HOME/.atuin/bin/env"
-    eval "\$(atuin init bash --disable-up-arrow)"
+    eval "\$(atuin init bash --disable-up-arrow --disable-ctrl-r)"
 elif command -v atuin &> /dev/null; then
-    eval "\$(atuin init bash --disable-up-arrow)"
+    eval "\$(atuin init bash --disable-up-arrow --disable-ctrl-r)"
 fi
 
 # ASCII art in interactive shells

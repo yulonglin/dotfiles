@@ -134,9 +134,9 @@ fi
 # Atuin - unified shell history
 if [ -f "$HOME/.atuin/bin/env" ]; then
     source "$HOME/.atuin/bin/env"
-    eval "$(atuin init zsh --disable-up-arrow)"
+    eval "$(atuin init zsh --disable-up-arrow --disable-ctrl-r)"
 elif command -v atuin &> /dev/null; then
-    eval "$(atuin init zsh --disable-up-arrow)"
+    eval "$(atuin init zsh --disable-up-arrow --disable-ctrl-r)"
 fi
 
 fs() {
