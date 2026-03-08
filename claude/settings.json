@@ -154,6 +154,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/check_venv.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session_start_notes.sh",
+            "timeout": 5
           }
         ]
       }
