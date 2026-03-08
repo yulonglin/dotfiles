@@ -85,11 +85,7 @@ The daemon runs as root (required for route manipulation) via launchd with
 
 ### Uninstall
 
-```bash
-./deploy.sh --no-vpn
-```
-
-Or manually:
+`--no-vpn` skips VPN deployment; it does not uninstall an existing daemon. To fully remove:
 
 ```bash
 sudo tailscale-route-fix uninstall
@@ -146,6 +142,6 @@ vpn-fix      # → sudo tailscale-route-fix once
 - AC-3: `ping 100.100.100.100` succeeds (MagicDNS reachable)
 - AC-4: Daemon running after `deploy.sh --vpn`: `sudo launchctl print system/com.dotfiles.tailscale-route-fix`
 - AC-5: After reboot with both VPNs auto-starting, peers reachable within 15s
-- AC-6: After `deploy.sh --no-vpn`, daemon fully removed, no route injection
+- AC-6: After `sudo tailscale-route-fix uninstall`, daemon fully removed, no route injection
 - AC-7: NordVPN server switch → Tailscale peers recover within 5s
 - AC-8: `deploy.sh --vpn` run twice succeeds without errors (idempotent)

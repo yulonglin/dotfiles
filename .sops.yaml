@@ -1,0 +1,3 @@
+creation_rules:
+  - path_regex: \.enc$
+    age: "age1..."  # placeholder — replaced by secrets-init

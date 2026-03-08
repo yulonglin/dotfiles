@@ -150,6 +150,60 @@ if ! is_installed gitleaks; then
     fi
 fi
 
+# ─── SOPS + age + direnv (Encrypted Secrets) ─────────────────────────────────
+
+if ! is_installed sops; then
+    log_info "Installing sops..."
+    if is_macos; then
+        brew_install sops
+    else
+        sops_ver=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        sops_ver="${sops_ver:-3.9.4}"
+        case "$(uname -m)" in
+            x86_64)  sops_arch="amd64" ;;
+            aarch64) sops_arch="arm64" ;;
+        esac
+        if [[ -n "${sops_arch:-}" ]]; then
+            mkdir -p "$HOME/.local/bin"
+            curl -sSL "https://github.com/getsops/sops/releases/download/v${sops_ver}/sops-v${sops_ver}.linux.${sops_arch}" -o "$HOME/.local/bin/sops" && \
+                chmod +x "$HOME/.local/bin/sops"
+        fi
+    fi
+fi
+
+if ! is_installed age; then
+    log_info "Installing age..."
+    if is_macos; then
+        brew_install age
+    else
+        age_ver=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        age_ver="${age_ver:-1.2.1}"
+        case "$(uname -m)" in
+            x86_64)  age_arch="amd64" ;;
+            aarch64) age_arch="arm64" ;;
+        esac
+        if [[ -n "${age_arch:-}" ]]; then
+            mkdir -p "$HOME/.local/bin"
+            curl -sSL "https://github.com/FiloSottile/age/releases/download/v${age_ver}/age-v${age_ver}-linux-${age_arch}.tar.gz" -o /tmp/age.tar.gz && \
+                tar -xzf /tmp/age.tar.gz -C /tmp && \
+                mv /tmp/age/age /tmp/age/age-keygen "$HOME/.local/bin/" && \
+                rm -rf /tmp/age.tar.gz /tmp/age
+        fi
+    fi
+fi
+
+if ! is_installed direnv; then
+    log_info "Installing direnv..."
+    if is_macos; then
+        brew_install direnv
+    else
+        curl -sfL https://direnv.net/install.sh | bash 2>/dev/null || log_warning "direnv installation failed"
+    fi
+fi
+
+# Ensure ~/.local/bin is in PATH for this session (Linux binary installs)
+[[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
+
 # ─── Atuin (Shell History) ────────────────────────────────────────────────────
 
 if ! is_installed atuin; then

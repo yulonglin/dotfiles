@@ -310,7 +310,7 @@ create_dev_user() {
         return 0
     fi
 
-    local username="${DEV_USERNAME:-$GIT_USER_NAME}"
+    local username="${DEV_USERNAME:-${DOTFILES_USERNAME:-$GIT_USER_NAME}}"
     username="${username:-yulong}"
 
     if id "$username" &>/dev/null; then
@@ -521,6 +521,15 @@ print('yes' if '$1' in data['files'] else 'no')
     # Sync user.conf (git identity)
     log_info "Syncing git identity..."
     sync_file "$DOT_DIR/config/user.conf" "user.conf" "$gist_id" "$gist_updated_at" && changes_made=true
+
+    # Sync age key (SOPS encryption)
+    local age_key_path="$HOME/.config/sops/age/keys.txt"
+    if [[ -f "$age_key_path" ]] || [[ "$(gist_has_file "age_keys.txt")" == "yes" ]]; then
+        log_info "Syncing age key..."
+        mkdir -p "$(dirname "$age_key_path")"
+        (umask 077 && sync_file "$age_key_path" "age_keys.txt" "$gist_id" "$gist_updated_at") && changes_made=true
+        [[ -f "$age_key_path" ]] && chmod 600 "$age_key_path"
+    fi
 
     if [[ "$changes_made" == "true" ]]; then
         log_success "Secrets synced with gist"
@@ -963,8 +972,8 @@ parse_args() {
     # Deferred --only apply: validate components, then set minimal + enable selected
     if [[ "$_only_mode" == true ]]; then
         local _known_components=(vim editor claude codex ghostty htop pdb matplotlib
-            git_hooks secrets cleanup claude_cleanup ai_update brew_update keyboard
-            bedtime serena mouseless text_replacements
+            git_hooks secrets secrets_env cleanup claude_cleanup ai_update brew_update keyboard
+            bedtime serena mouseless text_replacements vpn
             zsh tmux ai_tools docker extras experimental create_user
             shell git_config)
 

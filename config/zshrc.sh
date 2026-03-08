@@ -46,6 +46,7 @@ if [ -f "$ZSH/oh-my-zsh.sh" ]; then
 fi
 source $CONFIG_DIR/aliases.sh
 [ -f $CONFIG_DIR/secrets.sh ] && source $CONFIG_DIR/secrets.sh
+if [ -f "$DOT_DIR/.secrets" ]; then set -a; source "$DOT_DIR/.secrets"; set +a; fi
 source $CONFIG_DIR/ssh_setup.sh
 source $CONFIG_DIR/p10k.zsh
 source $CONFIG_DIR/extras.sh
@@ -93,6 +94,9 @@ fi
 # zoxide (smarter cd - use 'z' command, not replacing cd)
 # Note: If installed via mise, it's already in PATH after mise activate
 command -v zoxide &> /dev/null && eval "$(zoxide init zsh)"
+
+# direnv — auto-load .envrc per-directory (SOPS secrets, env vars)
+command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
 
 # Legacy version managers (used if mise is not available)
 if [ -d "$HOME/.pyenv" ] && ! command -v mise &>/dev/null; then

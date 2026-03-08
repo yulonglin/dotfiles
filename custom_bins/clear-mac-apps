@@ -2,10 +2,11 @@
 # Clear Mac Apps - Manage running apps with configurable behavior
 # Used by macOS Shortcuts via "Run Shell Script" action
 #
-# Config file supports three sections:
-#   [no-touch]      - Apps to leave completely alone
-#   [close-windows] - Apps where we close windows but don't quit
-#   [slow-close]    - Apps needing extra time for cleanup (backup, sync)
+# Config file supports four sections:
+#   [no-touch]           - Apps to leave completely alone
+#   [close-windows]      - Apps where we close windows but don't quit
+#   [slow-close]         - Apps needing extra time for cleanup (backup, sync)
+#   [protected-windows]  - Tab title patterns: close non-matching windows, keep app alive
 
 set -euo pipefail
 
@@ -34,8 +35,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Parse apps from a specific section in config
-# Usage: get_apps_in_section "no-touch"
-get_apps_in_section() {
+# Usage: get_entries_in_section "no-touch"
+get_entries_in_section() {
     local section="$1"
     if [[ ! -f "$CONFIG_FILE" ]]; then
         echo "Error: Config file not found: $CONFIG_FILE" >&2
@@ -111,6 +112,77 @@ close_app_windows() {
     " 2>/dev/null || true
 }
 
+# Get all Chrome window IDs and tab titles as "window_id|tab_title" per line
+get_chrome_window_tabs() {
+    osascript <<'APPLESCRIPT'
+tell application "Google Chrome"
+    set output to ""
+    repeat with w in every window
+        repeat with t in every tab of w
+            set output to output & (id of w) & "|" & (title of t) & linefeed
+        end repeat
+    end repeat
+    return output
+end tell
+APPLESCRIPT
+}
+
+# Selectively close non-protected windows of an app
+# Usage: close_app_selectively "Google Chrome" "Google Meet" "pattern2" ...
+close_app_selectively() {
+    local app="$1"; shift
+    local -a protected_patterns=("$@")
+
+    if [[ "$app" != "Google Chrome" ]]; then
+        # Non-Chrome fallback: close all windows (best-effort)
+        close_app_windows "$app" 3
+        return
+    fi
+
+    # Pass 1: fetch window/tab data, filter in zsh
+    local -A protected_windows all_windows
+    while IFS='|' read -r wid title; do
+        [[ -z "$wid" ]] && continue
+        all_windows[$wid]=1
+        for pattern in "${protected_patterns[@]}"; do
+            if [[ "${(L)title}" == *"${(L)pattern}"* ]]; then
+                protected_windows[$wid]=1
+                break
+            fi
+        done
+    done < <(get_chrome_window_tabs)
+
+    # Collect IDs to close
+    local -a ids_to_close=()
+    for wid in ${(k)all_windows}; do
+        (( ${+protected_windows[$wid]} )) || ids_to_close+=("$wid")
+    done
+
+    # All windows protected → nothing to do
+    (( ${#ids_to_close} == 0 )) && return 0
+
+    # No protected windows → quit entirely
+    if (( ${#protected_windows} == 0 )); then
+        quit_app "$app"
+        return
+    fi
+
+    # Pass 2: close non-protected windows by ID
+    local script='tell application "Google Chrome"'$'\n'
+    for wid in "${ids_to_close[@]}"; do
+        script+="    close (every window whose id is ${wid})"$'\n'
+    done
+    script+='end tell'
+    osascript -e "$script"
+
+    # Zombie check: if 0 windows remain after close, quit the app
+    local remaining
+    remaining=$(osascript -e 'tell application "Google Chrome" to return count of windows')
+    if [[ "$remaining" == "0" ]]; then
+        quit_app "$app"
+    fi
+}
+
 main() {
     # Load Safari web app registry for bundle ID fallback matching
     typeset -A registry  # registry[lowercase_name] = bundle_id
@@ -128,15 +200,21 @@ main() {
 
     while IFS= read -r app; do
         [[ -n "$app" ]] && no_touch_set[${(L)app}]=1
-    done < <(get_apps_in_section "no-touch")
+    done < <(get_entries_in_section "no-touch")
 
     while IFS= read -r app; do
         [[ -n "$app" ]] && close_windows_set[${(L)app}]=1
-    done < <(get_apps_in_section "close-windows")
+    done < <(get_entries_in_section "close-windows")
 
     while IFS= read -r app; do
         [[ -n "$app" ]] && slow_close_set[${(L)app}]=1
-    done < <(get_apps_in_section "slow-close")
+    done < <(get_entries_in_section "slow-close")
+
+    # Load protected-window patterns
+    local -a protected_patterns=()
+    while IFS= read -r pattern; do
+        [[ -n "$pattern" ]] && protected_patterns+=("$pattern")
+    done < <(get_entries_in_section "protected-windows")
 
     # Build bundle ID sets for fallback matching (from registry)
     typeset -A no_touch_bids
@@ -166,6 +244,7 @@ main() {
     local -a apps_to_quit=()
     local -a apps_close_windows=()
     local -a apps_slow_close=()
+    local -a apps_selective_close=()
     local -a apps_skipped=()
 
     for entry in "${running_entries[@]}"; do
@@ -179,6 +258,30 @@ main() {
             apps_slow_close+=("$app")
         elif (( ${+close_windows_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+close_windows_bids[$bid]} )) }; then
             apps_close_windows+=("$app")
+        elif (( ${#protected_patterns} > 0 )); then
+            # Check if this app has any protected windows
+            local has_protected=false
+            if [[ "$app" == "Google Chrome" ]]; then
+                # Chrome: check all tab titles (only fetch once, cache result)
+                if [[ -z "${_chrome_tabs_fetched:-}" ]]; then
+                    _chrome_tabs_cache=$(get_chrome_window_tabs)
+                    _chrome_tabs_fetched=1
+                fi
+                while IFS='|' read -r _wid _title; do
+                    [[ -z "$_wid" ]] && continue
+                    for pattern in "${protected_patterns[@]}"; do
+                        if [[ "${(L)_title}" == *"${(L)pattern}"* ]]; then
+                            has_protected=true
+                            break 2
+                        fi
+                    done
+                done <<< "$_chrome_tabs_cache"
+            fi
+            if $has_protected; then
+                apps_selective_close+=("$app")
+            else
+                apps_to_quit+=("$app")
+            fi
         else
             apps_to_quit+=("$app")
         fi
@@ -203,6 +306,14 @@ main() {
             echo "  - $app"
         done
         echo ""
+        if (( ${#apps_selective_close} > 0 )); then
+            local patterns_display="${(j:, :)${(@qq)protected_patterns}}"
+            echo "Would SELECTIVE-CLOSE (matching: ${patterns_display}):"
+            for app in "${apps_selective_close[@]}"; do
+                echo "  - $app"
+            done
+            echo ""
+        fi
         echo "Would SKIP (no-touch):"
         for app in "${apps_skipped[@]}"; do
             echo "  - $app"
@@ -225,10 +336,24 @@ main() {
         close_app_windows "$app" 3
     done
 
-    # Slow-close apps sequentially with more patience
+    # Slow-close apps sequentially with staged attempts to allow sync/cleanup
     for app in "${apps_slow_close[@]}"; do
-        echo "Closing windows (slow): $app"
-        close_app_windows "$app" 10
+        echo "Closing windows (slow, staged): $app"
+        # First phase: two quick passes with low patience
+        close_app_windows "$app" 2
+        close_app_windows "$app" 2
+        # Give the app time to finish background work (sync, backup, etc.)
+        echo "Waiting 60s for $app to finish background work..."
+        sleep 60
+        # Second phase: two more passes after the pause
+        close_app_windows "$app" 2
+        close_app_windows "$app" 2
+    done
+
+    # Selective-close: close non-protected windows, keep app alive
+    for app in "${apps_selective_close[@]}"; do
+        echo "Selective-close: $app"
+        close_app_selectively "$app" "${protected_patterns[@]}"
     done
 
     echo ""

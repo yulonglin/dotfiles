@@ -14,6 +14,9 @@ marketplaces:
     local: ${CODE_DIR}/marketplaces/ai-safety-plugins
     github: yulonglin/ai-safety-plugins
 
+  dev-browser:
+    github: sawyerhood/dev-browser
+
   ui-ux-pro-max-skill:
     github: nextlevelbuilder/ui-ux-pro-max-skill
 
@@ -68,15 +71,13 @@ profiles:
       - linear
 
   design:
-    comment: "Frontend, visualizations, web"
+    comment: "Frontend, visualizations, design systems"
     enable:
       - code
       - viz
       - figma
       - ui-ux-pro-max
       - frontend-design
-      - vercel
-      - playwright
       - playground
 
   full:
@@ -92,6 +93,7 @@ profiles:
       - coderabbit
       - code-simplifier
       - security-guidance
+      - dev-browser
 
   # Sub-profiles (compose with domain)
   python:
@@ -99,8 +101,8 @@ profiles:
     enable: [pyright-lsp]
 
   web:
-    comment: "Adds vercel, typescript-lsp, supabase"
-    enable: [vercel, typescript-lsp, supabase]
+    comment: "Web dev + browser automation"
+    enable: [vercel, typescript-lsp, supabase, dev-browser]
 
   ml:
     comment: "Adds huggingface-skills"

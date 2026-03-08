@@ -52,7 +52,7 @@ detect_nordvpn_if() {
   # Match CGNAT IP prefix (100.64-127.x) with broad netmask, not exact /10
   ifconfig 2>/dev/null | awk '
     /^[a-z]/ { iface = $1; sub(/:$/, "", iface) }
-    /inet 100\.(6[4-9]|[7-9][0-9]|1[0-2][0-7])\./ && /netmask 0xff[c-f]/ {
+    /inet 100\.(6[4-9]|[7-9][0-9]|10[0-9]|11[0-9]|12[0-7])\./ && /netmask 0xff[c-f]00000/ {
       print iface; exit
     }
   '
@@ -192,8 +192,8 @@ cmd_watch() {
 
   # Primary: event-driven via route monitor (PF_ROUTE kernel socket)
   route monitor | while IFS= read -r _; do
-    # Drain burst: keep reading until quiet for 300ms
-    while read -t 0.3 -r _; do :; done
+    # Drain burst: keep reading until quiet for 1s (integer for bash 3.2 compat)
+    while read -t 1 -r _; do :; done
     check_and_fix_routes || echo "$LOG_PREFIX WARNING: check failed, will retry on next event"
   done
 }

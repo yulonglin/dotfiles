@@ -53,15 +53,19 @@ DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect")
 DEPLOY_SERENA=false             # Serena MCP config (~/.serena symlink)
 DEPLOY_MOUSELESS=false          # Mouseless keyboard mouse control (macOS only, opt-in)
 DEPLOY_VPN=false                # NordVPN+Tailscale split tunnel daemon (macOS only, opt-in)
+DEPLOY_SECRETS_ENV=true         # Decrypt SOPS-encrypted secrets (requires sops + age)
 
 # ─── Deploy Modifiers ─────────────────────────────────────────────────────────
 DEPLOY_APPEND=false             # Append to existing configs instead of overwrite
 DEPLOY_ASCII_FILE="start.txt"   # ASCII art file for shell startup
 
 # ─── Identity & Secrets ───────────────────────────────────────────────────────
+# Edit these values for your setup. Everything else should work out of the box.
+DOTFILES_USERNAME="${DOTFILES_USERNAME:-yulong}"
+DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yulonglin/dotfiles.git}"
 GIT_USER_NAME="yulonglin"
 GIT_USER_EMAIL="30549145+yulonglin@users.noreply.github.com"
-SECRETS_GIST_ID="3cc239f160a2fe8c9e6a14829d85a371"  # Public identifier (like repo name), not a secret
+SECRETS_GIST_ID="${SECRETS_GIST_ID:-3cc239f160a2fe8c9e6a14829d85a371}"  # Public identifier (like repo name), not a secret
 
 # ─── AI Tools Configuration ───────────────────────────────────────────────────
 # MCP servers to configure for Claude Code
@@ -182,6 +186,7 @@ apply_profile() {
             DEPLOY_KEYBOARD=false
             DEPLOY_BEDTIME=false
             DEPLOY_SECRETS=false
+            DEPLOY_SECRETS_ENV=false
             ;;
         minimal)
             # Nothing enabled — specify everything explicitly
@@ -212,6 +217,7 @@ apply_profile() {
             DEPLOY_BREW_UPDATE=false
             DEPLOY_KEYBOARD=false
             DEPLOY_BEDTIME=false
+            DEPLOY_SECRETS_ENV=false
             ;;
         *)
             echo "Warning: Unknown profile '$profile', using personal" >&2

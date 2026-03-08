@@ -68,6 +68,7 @@ COMPONENTS:
     --matplotlib      Deploy matplotlib styles
     --git-hooks       Deploy global git hooks
     --secrets         Sync secrets with GitHub gist
+    --secrets-env     Decrypt SOPS-encrypted API keys (requires sops + age)
     --cleanup         Install file cleanup: Downloads/Screenshots (macOS only)
     --claude-cleanup  Install Claude Code session cleanup (both platforms)
     --ai-update       Install AI tools auto-update (daily, both platforms)
@@ -236,6 +237,31 @@ if [[ "$DEPLOY_SECRETS" == "true" ]]; then
     # Install automated daily sync
     log_info "Setting up automated daily secrets sync..."
     "$DOT_DIR/scripts/cleanup/setup_secrets_sync.sh" || log_warning "Failed to setup automated sync"
+fi
+
+# ─── Encrypted Secrets (SOPS + age) ──────────────────────────────────────────
+
+if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
+    log_section "DECRYPTING SECRETS"
+    enc="$DOT_DIR/config/secrets.env.enc"
+    out="$DOT_DIR/.secrets"
+    age_key="$HOME/.config/sops/age/keys.txt"
+
+    if [[ ! -f "$enc" ]]; then
+        log_warning "No encrypted secrets found — run 'secrets-init' to set up"
+    elif ! cmd_exists sops; then
+        log_warning "sops not installed — run install.sh"
+    elif [[ ! -f "$age_key" ]]; then
+        log_warning "Age key not found at $age_key — run 'secrets-init' or 'sync-secrets'"
+    else
+        if (umask 077 && sops -d "$enc" > "${out}.tmp"); then
+            mv "${out}.tmp" "$out"
+            log_success "Decrypted secrets to $out"
+        else
+            rm -f "${out}.tmp"
+            log_warning "Failed to decrypt secrets"
+        fi
+    fi
 fi
 
 # ─── Git Configuration ────────────────────────────────────────────────────────

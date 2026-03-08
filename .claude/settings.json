@@ -37,7 +37,8 @@
     "core@ai-safety-plugins": true,
     "swift-lsp@claude-plugins-official": false,
     "slack@claude-plugins-official": false,
-    "slack-mcp@productivity-tools": false
+    "slack-mcp@productivity-tools": false,
+    "dev-browser@dev-browser-marketplace": false
   },
   "permissions": {
     "allow": [

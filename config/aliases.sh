@@ -13,6 +13,121 @@ alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
 alias sync-secrets='"$DOT_DIR/scripts/sync_secrets.sh"'
+
+# SOPS-encrypted secrets management
+secrets-edit() {
+    if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
+    sops "$DOT_DIR/config/secrets.env.enc"
+}
+secrets-decrypt() {
+    local enc="$DOT_DIR/config/secrets.env.enc"
+    local out="$DOT_DIR/.secrets"
+    if [[ ! -f "$enc" ]]; then echo "No encrypted secrets — run secrets-init"; return 1; fi
+    if (umask 077 && sops -d "$enc" > "${out}.tmp"); then
+        mv "${out}.tmp" "$out"
+        echo "Decrypted to $out"
+    else
+        rm -f "${out}.tmp"
+        echo "Failed to decrypt secrets" >&2; return 1
+    fi
+}
+secrets-init() {
+    local age_dir="$HOME/.config/sops/age"
+    local age_key="$age_dir/keys.txt"
+    local sops_yaml="$DOT_DIR/.sops.yaml"
+    local enc="$DOT_DIR/config/secrets.env.enc"
+
+    if [[ ! -f "$age_key" ]]; then
+        mkdir -p "$age_dir"
+        age-keygen -o "$age_key" 2>&1
+        chmod 600 "$age_key"
+        echo "Generated age key at $age_key"
+    else
+        echo "Age key already exists at $age_key"
+    fi
+
+    local pub_key
+    pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
+
+    if [[ ! -f "$sops_yaml" ]]; then
+        cat > "$sops_yaml" <<YAML
+creation_rules:
+  - path_regex: \\.enc$
+    age: "$pub_key"
+YAML
+        echo "Created $sops_yaml with public key"
+    else
+        echo "$sops_yaml already exists, skipping"
+    fi
+
+    if [[ ! -f "$enc" ]]; then
+        local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
+        printf '%s\n' \
+            "# Encrypted API keys (edit with: secrets-edit)" \
+            "PLACEHOLDER=replace_me" \
+            "# ANTHROPIC_API_KEY=" \
+            "# OPENAI_API_KEY=" \
+            "# HF_TOKEN=" \
+            "# GITHUB_TOKEN=" \
+            > "$tmpfile"
+        sops -e "$tmpfile" > "$enc"
+        rm -f "$tmpfile"
+        echo "Created $enc — edit with: secrets-edit"
+    else
+        echo "Encrypted secrets already exist at $enc"
+    fi
+
+    echo ""
+    echo "Next steps:"
+    echo "  1. secrets-edit          # Add your API keys"
+    echo "  2. sync-secrets          # Sync age key to gist"
+    echo "  3. source ~/.zshrc       # Load secrets into shell"
+}
+secrets-init-project() {
+    local sops_yaml=".sops.yaml"
+    local enc="secrets.env.enc"
+    local envrc=".envrc"
+    local age_key="$HOME/.config/sops/age/keys.txt"
+
+    if [[ ! -f "$age_key" ]]; then
+        echo "No age key found — run secrets-init first"
+        return 1
+    fi
+
+    local pub_key
+    pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
+
+    if [[ ! -f "$sops_yaml" ]]; then
+        cat > "$sops_yaml" <<YAML
+creation_rules:
+  - path_regex: \\.enc$
+    age: "$pub_key"
+YAML
+        echo "Created $sops_yaml"
+    fi
+
+    if [[ ! -f "$enc" ]]; then
+        local tmpfile="${TMPDIR:-/tmp}/proj_secrets.env"
+        printf '%s\n' "# Project secrets (edit with: sops $enc)" "PLACEHOLDER=replace_me" > "$tmpfile"
+        sops -e "$tmpfile" > "$enc"
+        rm -f "$tmpfile"
+        echo "Created $enc"
+    fi
+
+    if [[ ! -f "$envrc" ]]; then
+        if [[ -f "$DOT_DIR/config/envrc_sops_template" ]]; then
+            cp "$DOT_DIR/config/envrc_sops_template" "$envrc"
+        else
+            printf '%s\n' '# Auto-decrypt SOPS secrets on cd' \
+                'if command -v sops &>/dev/null && [ -f secrets.env.enc ]; then' \
+                '    dotenv <(sops -d --output-type dotenv secrets.env.enc 2>/dev/null)' \
+                'fi' > "$envrc"
+        fi
+        echo "Created $envrc — run: direnv allow"
+    fi
+
+    echo "Done. Edit secrets: sops $enc"
+}
 alias sync-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" sync'
 alias export-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" export'
 alias snippets-diff='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" diff'
@@ -523,7 +638,7 @@ alias code='cd $CODE_DIR'
 alias writing='cd $WRITING_DIR'
 alias scratch='cd $SCRATCH_DIR'
 alias projects='cd $PROJECTS_DIR'
-alias website='cd $WRITING_DIR/yulonglin.github.io'
+alias website='cd $WRITING_DIR/${DOTFILES_WEBSITE:-yulonglin.github.io}'
 
 #-------------------------------------------------------------
 # git

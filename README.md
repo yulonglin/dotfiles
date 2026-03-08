@@ -13,6 +13,24 @@ This setup reflects workflows optimized for ML research: reproducibility, experi
 
 > Originally forked from [jplhughes/dotfiles](https://github.com/jplhughes/dotfiles) - thanks John for the solid foundation!
 
+## Adopting These Dotfiles
+
+This repo is highly personal — it reflects one person's workflow, opinions, and tooling choices. The best way to use it is to **point a coding agent at this repo and ask it to extract the parts you find useful** into your own dotfiles.
+
+**What's generalizable vs personal:**
+
+| Generalizable (worth extracting) | Personal (skip or replace) |
+|----------------------------------|---------------------------|
+| Shell config (zsh/tmux/p10k) | Claude Code plugins/agents/skills |
+| Modern CLI tools (bat, eza, fd, rg, etc.) | Website alias, SSH host colors |
+| Git config + global gitignore/gitattributes | Mouseless config |
+| Editor settings (VSCode/Cursor merge logic) | Ghostty theme aliases |
+| Cleanup automation (Downloads/Screenshots) | Specific API keys and gist IDs |
+| Secrets sync pattern (bidirectional gist sync) | Cloud setup scripts (RunPod user) |
+| SOPS + age encrypted secrets workflow | Plugin marketplace selections |
+
+All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `SECRETS_GIST_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
+
 ## Rust CLI Tools
 
 These modern alternatives are installed by default and significantly faster than their traditional counterparts:
@@ -101,6 +119,25 @@ This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/c
 - **`templates/`** - Reproducibility reports, research specs
 
 **Smart merge preserves your data** - if `~/.claude` already exists, credentials, history, and cache are automatically restored after symlinking.
+
+#### Claude Code Plugin Marketplaces
+
+Claude Code supports community plugin marketplaces. These are worth exploring independently:
+
+| Marketplace | What's in it |
+|-------------|-------------|
+| **[superpowers](https://github.com/anthropics/claude-plugins-official)** (official) | TDD, brainstorming, code review, agent teams, worktree workflows |
+| **[ui-ux-pro-max](https://github.com/nicekid1/ui-ux-pro-max)** | 50 design styles, 21 palettes, production-grade frontend |
+| **[ai-safety-plugins](https://github.com/yulonglin/ai-safety-plugins)** | Research experiments, paper writing, literature review |
+| **[productivity-tools](https://github.com/anthropics/claude-plugins-official)** | Hookify, plugin dev tools |
+
+Profiles are managed via the `claude-context` CLI — compose multiple profiles to control which plugins load per-project:
+
+```bash
+claude-context code               # Software projects
+claude-context code web python    # Compose multiple profiles
+claude-context --list             # Show active plugins and available profiles
+```
 
 ### Codex CLI (OpenAI)
 
@@ -293,6 +330,30 @@ sync-secrets
 # Uninstall automation
 ./scripts/cleanup/setup_secrets_sync.sh --uninstall
 ```
+
+### Encrypted Secrets (SOPS + age)
+
+[SOPS](https://github.com/getsops/sops) encrypts file **values** while keeping structure visible (you can diff and review encrypted files). [age](https://github.com/FiloSottile/age) provides the keypair. Works offline, git-versioned, no service dependency.
+
+**Architecture:**
+
+| File | Purpose | Git status |
+|------|---------|------------|
+| `config/secrets.env.enc` | SOPS-encrypted API keys | Committed |
+| `.sops.yaml` | SOPS config with age public key | Committed |
+| `$DOT_DIR/.secrets` | Decrypted env vars (created at deploy time) | Gitignored |
+| `~/.config/sops/age/keys.txt` | age private key (synced via gist) | Not in repo |
+
+**Commands:**
+
+```bash
+secrets-init             # Generate age keypair + create .sops.yaml + initial secrets file
+secrets-edit             # Decrypt → edit → re-encrypt (opens $EDITOR)
+secrets-decrypt          # Decrypt to $DOT_DIR/.secrets (run by deploy.sh --secrets-env)
+secrets-init-project     # Bootstrap per-project: .sops.yaml + secrets.env.enc + .envrc
+```
+
+**Per-project usage:** Run `secrets-init-project` in any repo to create a `.sops.yaml`, `secrets.env.enc`, and `.envrc` that auto-loads secrets via `direnv allow`.
 
 ### Step 3: Configure Powerlevel10k theme
 

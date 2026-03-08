@@ -151,6 +151,10 @@ Adding a new plugin: add its marketplace to `marketplaces:` in `profiles.yaml`, 
 
 ---
 
+## User Identity
+
+- **Author name on papers**: Lin Yulong (family name first). Never use "Yulong Lin".
+
 ## Notes
 
 - User specs: `specs/`
