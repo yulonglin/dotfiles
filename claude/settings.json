@@ -154,6 +154,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/check_venv.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session_start_notes.sh",
+            "timeout": 5
           }
         ]
       }
@@ -247,7 +252,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "bash $HOME/.claude/statusline.sh",
+    "command": "claude-tools statusline || bash $HOME/.claude/statusline.sh",
     "padding": 1
   },
   "enabledPlugins": {

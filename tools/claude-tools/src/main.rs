@@ -2,6 +2,7 @@ mod check_git_root;
 mod context_apply;
 mod resolve_file_path;
 mod statusline;
+mod usage;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
