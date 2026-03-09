@@ -38,7 +38,8 @@
     "swift-lsp@claude-plugins-official": false,
     "slack@claude-plugins-official": false,
     "slack-mcp@productivity-tools": false,
-    "dev-browser@dev-browser-marketplace": false
+    "dev-browser@dev-browser-marketplace": false,
+    "rust-analyzer-lsp@claude-plugins-official": false
   },
   "permissions": {
     "allow": [

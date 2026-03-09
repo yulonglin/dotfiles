@@ -286,7 +286,8 @@
     "code@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
     "viz@ai-safety-plugins": true,
-    "dev-browser@dev-browser-marketplace": true
+    "dev-browser@dev-browser-marketplace": true,
+    "rust-analyzer-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
