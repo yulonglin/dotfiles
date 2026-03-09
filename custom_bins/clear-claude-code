@@ -390,6 +390,38 @@ get_claude_ps_lines() {
     fi
 }
 
+# Check dmesg/journalctl for recent OOM kills targeting claude processes
+show_oom_diagnostics() {
+    local oom_lines=""
+
+    if command -v dmesg &>/dev/null; then
+        # dmesg -T for human-readable timestamps (Linux only, may need root)
+        oom_lines=$(dmesg -T 2>/dev/null | grep -i 'oom.*claude\|killed.*claude\|out of memory.*claude\|claude.*killed' 2>/dev/null || true)
+        # Also check for generic OOM kills (python subprocesses, node, etc.) in last 7 days
+        if [[ -z "$oom_lines" ]]; then
+            oom_lines=$(dmesg -T 2>/dev/null | grep -i 'out of memory\|oom-kill' 2>/dev/null | tail -5 || true)
+        fi
+    fi
+
+    # Fallback to journalctl if dmesg is empty or unavailable
+    if [[ -z "$oom_lines" ]] && command -v journalctl &>/dev/null; then
+        oom_lines=$(journalctl --since "7 days ago" -k 2>/dev/null | grep -i 'oom.*claude\|killed.*claude\|out of memory' 2>/dev/null | tail -10 || true)
+        if [[ -z "$oom_lines" ]]; then
+            oom_lines=$(journalctl --since "7 days ago" -k 2>/dev/null | grep -i 'out of memory\|oom-kill' 2>/dev/null | tail -5 || true)
+        fi
+    fi
+
+    if [[ -n "$oom_lines" ]]; then
+        echo -e "\n🧠 Recent OOM kills (kernel out-of-memory):"
+        echo "$oom_lines" | while IFS= read -r line; do
+            echo "  $line"
+        done
+        echo ""
+        echo "  Tip: Claude Code has known memory leaks (GitHub #4953, #27421, #29576)."
+        echo "  Use /compact regularly or restart long-running sessions."
+    fi
+}
+
 # Show detailed status of all Claude Code processes
 show_status() {
     local scope="user: $TARGET_USER"
@@ -482,6 +514,9 @@ show_status() {
             echo "  PID $pid | reason: $reason"
         done < <(get_claude_ps_lines)
     fi
+
+    # OOM kill diagnostics — check recent kernel OOM kills targeting claude
+    show_oom_diagnostics
 }
 
 # Handle --status mode
@@ -632,18 +667,12 @@ else
     failed_pids=()
     stubborn_pids=()
 
-    # First pass: SIGTERM to parent + children (use process groups for atomicity)
+    # First pass: SIGTERM to children then parent
+    # NEVER use kill -- -$pgid (process group kill) — an orphaned process can share
+    # a PGID with a live tmux session, causing collateral kills.
     for pid in "${PIDS_TO_KILL[@]}"; do
-        # Try to kill entire process group (parent + all descendants atomically)
-        pgid=$(ps -p "$pid" -o pgid= 2>/dev/null | tr -d ' ')
-        if [[ -n "$pgid" && "$pgid" != "0" && "$pgid" != "$pid" ]]; then
-            # Kill entire process group
-            kill -- -"$pgid" 2>/dev/null || true
-        else
-            # Fallback: kill children first, then parent
-            pkill -P "$pid" 2>/dev/null || true
-            kill "$pid" 2>/dev/null || true
-        fi
+        pkill -P "$pid" 2>/dev/null || true
+        kill "$pid" 2>/dev/null || true
     done
 
     # Brief wait for graceful shutdown

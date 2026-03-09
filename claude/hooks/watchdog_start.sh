@@ -34,8 +34,12 @@ if [[ -f "$PID_FILE" ]]; then
   rm -f "$PID_FILE"
 fi
 
+# Detect the parent claude process PID
+# $PPID is the hook runner, its parent should be the claude CLI process
+CLAUDE_PID=$(ps -p "$PPID" -o ppid= 2>/dev/null | tr -d ' ' || echo "")
+
 # Launch watchdog detached
-nohup "$HOOKS_DIR/watchdog.sh" "$SESSION_ID" "$TRANSCRIPT_PATH" "$CWD" \
+nohup "$HOOKS_DIR/watchdog.sh" "$SESSION_ID" "$TRANSCRIPT_PATH" "$CWD" "$CLAUDE_PID" \
   >/dev/null 2>&1 &
 disown
 
