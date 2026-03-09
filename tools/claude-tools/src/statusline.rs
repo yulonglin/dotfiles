@@ -7,8 +7,14 @@ use std::io::Read;
 #[derive(Deserialize)]
 struct Input {
     workspace: Option<Workspace>,
+    model: Option<Model>,
     cost: Option<Cost>,
     context_window: Option<ContextWindow>,
+}
+
+#[derive(Deserialize)]
+struct Model {
+    display_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -18,7 +24,6 @@ struct Workspace {
 
 #[derive(Deserialize)]
 struct Cost {
-    total_cost_usd: Option<f64>,
     total_duration_ms: Option<u64>,
 }
 
@@ -54,14 +59,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // 4. Git branch + dirty status
     format_git_info(&mut output, cwd);
 
-    // 5. Context usage percentage
-    format_context_usage(&mut output, input.context_window.as_ref());
+    // 5. Model name
+    format_model(&mut output, input.model.as_ref());
 
-    // 6. Session cost
-    format_cost(&mut output, &input.cost);
+    // 6. Context usage percentage
+    format_context_usage(&mut output, input.context_window.as_ref());
 
     // 7. Session duration
     format_duration(&mut output, &input.cost);
+
+    // 8. API usage (5h + 7d rate limits)
+    crate::usage::format_usage(&mut output);
 
     print!("{}", output);
     Ok(())
@@ -209,6 +217,15 @@ fn format_git_info(output: &mut String, cwd: &str) {
     }
 }
 
+/// Model display name in brackets.
+fn format_model(output: &mut String, model: Option<&Model>) {
+    let name = match model.and_then(|m| m.display_name.as_deref()) {
+        Some(n) if !n.is_empty() => n,
+        _ => return,
+    };
+    let _ = write!(output, " \u{00b7} \x1b[34m[{}]\x1b[0m", name);
+}
+
 /// Context usage percentage from `context_window.used_percentage` (pre-computed by Claude Code).
 fn format_context_usage(output: &mut String, context_window: Option<&ContextWindow>) {
     let pct = match context_window.and_then(|cw| cw.used_percentage) {
@@ -225,7 +242,7 @@ fn format_context_usage(output: &mut String, context_window: Option<&ContextWind
     } else {
         "\x1b[32m" // Green
     };
-    let _ = write!(output, " \u{00b7} \u{1f4ca} {}{}%\x1b[0m", color, pct);
+    let _ = write!(output, " \u{00b7} {}ctx:{}%\x1b[0m", color, pct);
 }
 
 /// Session duration from `cost.total_duration_ms`.
@@ -246,14 +263,3 @@ fn format_duration(output: &mut String, cost: &Option<Cost>) {
     let _ = write!(output, " \u{00b7} \x1b[2m{}\x1b[0m", display);
 }
 
-/// Session cost in USD.
-fn format_cost(output: &mut String, cost: &Option<Cost>) {
-    let total_cost = match cost {
-        Some(c) => c.total_cost_usd.unwrap_or(0.0),
-        None => return,
-    };
-
-    if total_cost > 0.0 {
-        let _ = write!(output, " \u{00b7} \x1b[35m${:.2}\x1b[0m", total_cost);
-    }
-}
