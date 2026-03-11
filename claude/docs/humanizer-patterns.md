@@ -2,13 +2,15 @@
 
 ## Overview
 
-This document explains the 15 high-confidence LLM-ism patterns used by the humanizer agent. Each pattern is documented with:
+This document explains the 23 high-confidence LLM-ism patterns used by the humanizer agent. Each pattern is documented with:
 - **Why it's problematic** - with citations
 - **False positive scenarios** - when NOT to flag
 - **Fix suggestions** - concrete rewrites
 - **Confidence level** - how certain we are it's LLM-generated
 
 **Goal**: Precision >90% (very few false positives) and recall >70% (catch most obvious patterns).
+
+**Categories**: 6 categories — Blatant Hedging (5), Chatbot Artifacts (3), AI Vocabulary (3), False Enthusiasm (2), Filler Phrases (2), Structural/Rhetorical Tropes (8).
 
 ---
 
@@ -181,6 +183,86 @@ Unnecessarily wordy substitutes for simpler words. Pure wordiness indicator.
 
 ---
 
+### Category 6: Structural/Rhetorical Tropes (8 patterns)
+
+Higher-level structural patterns that go beyond individual phrases. These are rhetorical moves that LLMs overuse to create false drama, breadth, or authority.
+
+**Source**: LinkedIn post by editors (via Helmuth Rosales), identifying common AI writing tropes that signal machine-generated content.
+
+#### Negative parallelism
+- **Why problematic**: "It's not X. It's Y." creates false drama through contrast. LLMs use this to sound punchy without substance.
+- **Confidence**: 85% (can appear in skilled rhetoric, but LLMs overuse dramatically)
+- **Sources**: LinkedIn AI tropes list
+- **False positives**: Deliberate rhetorical contrast in speeches, opinion pieces, or advertising copy
+- **Fix**: State the actual point without the dramatic setup
+  - ❌ "It's not bold. It's backwards."
+  - ✅ "This approach is backwards."
+
+#### Self-posed rhetorical questions
+- **Why problematic**: "The worst part? Nobody saw it coming." manufactures suspense. LLMs use this as a structural crutch to create drama.
+- **Confidence**: 85% (the "X? Y." fragment pattern is distinctive)
+- **Sources**: LinkedIn AI tropes list
+- **False positives**: Genuine rhetorical questions in persuasive essays or speeches
+- **Fix**: Integrate the point into the paragraph naturally
+  - ❌ "The worst part? Nobody saw it coming."
+  - ✅ "Nobody anticipated the failure."
+
+#### False ranges
+- **Why problematic**: "From X to Y to Z" tricolons with abstract nouns create an illusion of breadth without specifics. LLMs use these to sound comprehensive.
+- **Confidence**: 87% (the "From [abstract] to [abstract] to [abstract]" form is distinctive)
+- **Sources**: LinkedIn AI tropes list
+- **False positives**: Concrete, specific ranges ("from 10ms to 500ms to 3s")
+- **Fix**: Be specific about what you actually mean
+  - ❌ "From innovation to implementation to cultural transformation."
+  - ✅ "We need to build it, ship it, and get teams to adopt it."
+
+#### Gerund sentence fragments
+- **Why problematic**: "Shipping faster. Moving quicker. Delivering more." Staccato fragments create false energy. LLMs use these for rhythm without content.
+- **Confidence**: 92% (almost never natural in prose — very distinctive pattern)
+- **Sources**: LinkedIn AI tropes list
+- **False positives**: Rare. Creative writing might use deliberately for effect.
+- **Fix**: Write complete sentences with actual content
+  - ❌ "Shipping faster. Moving quicker. Delivering more."
+  - ✅ "We shipped three features this quarter with half the QA time."
+
+#### False suspense transitions
+- **Why problematic**: "Here's where it gets interesting" / "Here's the kicker" / "But here's the thing" — patronizing buildup that tells the reader to be excited instead of writing something actually interesting.
+- **Confidence**: 90% (zero legitimate uses in professional writing)
+- **Sources**: LinkedIn AI tropes list
+- **False positives**: Very rare. Casual blog posts might use ironically.
+- **Fix**: Just state the interesting thing
+  - ❌ "Here's where it gets interesting."
+  - ✅ [Just write the interesting part directly]
+
+#### Patronizing analogies
+- **Why problematic**: "Think of it as a Swiss Army knife for your workflow." Dumbed-down comparisons that assume the reader can't handle the actual concept.
+- **Confidence**: 88% (the "Think of it as..." pattern is very LLM-coded)
+- **Sources**: LinkedIn AI tropes list
+- **False positives**: Genuine pedagogical writing for beginners, children's content
+- **Fix**: Explain the actual thing, or use a precise analogy
+  - ❌ "Think of it as a Swiss Army knife for your workflow."
+  - ✅ "It handles formatting, linting, and testing in one tool."
+
+#### Historical dash-enumeration
+- **Why problematic**: "Every major shift — the web, mobile, social, cloud — followed the same pattern." Uses em-dash lists of historical examples to manufacture false authority and inevitability.
+- **Confidence**: 82% (can be legitimate in historical analysis, but LLMs use it to avoid specifics)
+- **Sources**: LinkedIn AI tropes list
+- **False positives**: Actual historical analysis with specific evidence for each example
+- **Fix**: Pick one example and make a specific argument
+  - ❌ "Every major technological shift — the web, mobile, social, cloud — followed the same pattern."
+  - ✅ "Mobile adoption followed the same infrastructure-then-apps pattern we saw with the web."
+
+#### Asserting obviousness
+- **Why problematic**: "The reality is simpler and less flattering." / "Let's break this down." Claims insight or simplicity without delivering it. Used as a transition that sounds smart but says nothing.
+- **Confidence**: 80% (most context-dependent — can appear in opinion pieces legitimately)
+- **Sources**: LinkedIn AI tropes list
+- **False positives**: Opinion journalism, analysis pieces where the author then delivers the insight
+- **Fix**: Just deliver the insight without announcing it
+  - ❌ "The reality is simpler and less flattering."
+  - ✅ "The model memorized the training data."
+
+---
+
 ## Patterns NOT Included (v0.1 MVP)
 
 These high-value patterns are saved for v0.2+ because they require statistical analysis:
@@ -206,7 +288,7 @@ These high-value patterns are saved for v0.2+ because they require statistical a
 - **Patterns**: 15 high-confidence patterns
 - **Approach**: Phrase detection only (exact string matching)
 - **Scope**: Prioritized precision over recall
-- **Coverage**: ~43% of total identified patterns (15 out of 35+)
+- **Coverage**: ~43% of total identified patterns (15 out of 35+, phrase-level only)
 - **Test Corpus**: 50 samples (10 per category)
 - **Success Criteria**: Precision >90%, Recall >70%
 
@@ -216,10 +298,15 @@ These high-value patterns are saved for v0.2+ because they require statistical a
 - Selected top 15 with >2 source agreement
 - Excluded statistical/heuristic patterns for MVP simplicity
 
-### v0.2 (Coming Soon)
+### v0.2 (2026-03-11)
+- **Status**: Added 8 structural/rhetorical trope patterns (Category 6)
+- **Patterns**: 23 total (15 phrase-level + 8 structural)
+- **New source**: LinkedIn AI tropes list (via Helmuth Rosales)
+- **New patterns**: Negative parallelism, self-posed rhetorical questions, false ranges, gerund fragments, false suspense transitions, patronizing analogies, historical dash-enumeration, asserting obviousness
+- **Key shift**: From phrase-only detection to structural pattern recognition
+
+### v0.3 (Coming Soon)
 - Add statistical analysis (em-dash frequency, sentence length variance)
-- Increase patterns to ~20-25
-- Agent size: 600 tokens
 
 ### v0.3 (Coming Later)
 - Add generic description detection
@@ -274,6 +361,14 @@ The 15 patterns were selected specifically to minimize false positives:
 | "Interestingly," | Medium | Academic transitions |
 | "Absolutely!" | Medium | Can be emphatic |
 | "In fact," | Medium | Can be emphatic |
+| Gerund fragments | Low | Rare creative use |
+| False suspense | Low | Very rare ironic use |
+| Patronizing analogies | Low | Pedagogical writing |
+| Negative parallelism | Medium | Skilled rhetoric |
+| Self-posed rhetorical | Medium | Persuasive essays |
+| False ranges | Low | Concrete ranges OK |
+| Historical dash-enum | Medium | Real historical analysis |
+| Asserting obviousness | Medium | Opinion journalism |
 
 **Conservative approach**: If uncertain, don't flag. False negatives are better than false positives.
 
@@ -312,6 +407,11 @@ The 15 patterns were selected specifically to minimize false positives:
    - Voice and tone guidance
    - Preference for active voice, concrete verbs
    - Validated pattern selections
+
+5. **LinkedIn AI Writing Tropes List** (via Helmuth Rosales)
+   - 8 structural/rhetorical tropes commonly used by LLMs
+   - Focus on higher-level patterns beyond individual phrases
+   - Source for Category 6 patterns (v0.2)
 
 ### Pattern Selection Criteria
 
