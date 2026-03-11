@@ -30,11 +30,27 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 | **core:codex** | Well-scoped implementation | Fast, precise, follows specs exactly |
 | **core:claude** | Judgment-heavy tasks | Taste, tool use, MCP access, nuanced reasoning |
 
+### Google Workspace Access
+
+Two options for Google Docs/Sheets/Drive/Gmail/Calendar:
+
+| Tool | Use Case | How |
+|------|----------|-----|
+| **gws** (Google Workspace CLI) | Direct API calls — read/write Docs, Sheets, Drive, Gmail, Calendar | `gws docs documents get --id <docId>`, `gws drive files list` — structured JSON output, works from Bash |
+| **gemini-cli** (via agent) | AI-mediated Google Workspace tasks — summarize, analyze, compose | Delegate via `core:gemini-cli` agent — native Google auth, can reason over content |
+
+**Decision tree:**
+- Need raw content (read a doc, list files, export)? → `gws` via Bash (faster, no agent overhead)
+- Need AI reasoning over Google content (summarize, draft, analyze)? → `gemini-cli` agent
+- Both fail? → Ask user to export/copy-paste
+
 ```
 Need delegation?
 ├─ Large context (PDF, codebase)? → gemini-cli
 ├─ Generate or edit images? → gemini-cli (Nano/Flash/Pro)
-├─ Create/edit Google Docs, Sheets, Drive files? → gemini-cli
+├─ Google Workspace (read/write)?
+│   ├─ Raw API call (get doc, list files)? → gws via Bash
+│   └─ AI reasoning over content? → gemini-cli agent
 ├─ Plan needs critique? → code:plan-critic (+ core:claude in parallel)
 ├─ Clear implementation spec/plan? → core:codex
 ├─ Bug with clear repro? → core:codex (+ debugger for investigation)
