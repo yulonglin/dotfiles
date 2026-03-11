@@ -141,6 +141,7 @@ _reset_terminal_modes_soft() {
     reset+='\e[?1002l'  # mouse button-event tracking
     reset+='\e[?1003l'  # mouse any-event tracking
     reset+='\e[?1006l'  # SGR mouse mode (the 35M sequences)
+    reset+='\e[?1007l'  # alternate scroll mode (scroll → arrow keys)
     reset+='\e[?1004l'  # focus event reporting
     reset+='\e[?2004l'  # bracketed paste mode
     reset+='\e[?1l'     # application cursor keys
