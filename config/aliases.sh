@@ -1105,17 +1105,24 @@ sshc() {
         IFS=':' read -r bg fg cursor <<< "$colors"
         _ssh_set_colors "$bg" "$fg" "$cursor"
 
-        # Run SSH, restore colors on exit
+        # Run SSH, restore colors and terminal modes on exit
         command ssh "$host" "$@"
         local exit_code=$?
 
+        _reset_terminal_modes
         _ssh_restore_colors
         return $exit_code
     else
         # No color config, just run ssh normally
         command ssh "$host" "$@"
+        local exit_code=$?
+        _reset_terminal_modes
+        return $exit_code
     fi
 }
+
+# Fix corrupted terminal state (preserves scrollback, unlike `reset`)
+alias fix-term='_reset_terminal_modes'
 
 # VPN split tunneling
 alias vpn-status='tailscale-route-fix status'

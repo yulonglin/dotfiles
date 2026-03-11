@@ -130,6 +130,32 @@ if command -v ask-sh &> /dev/null; then
   eval "$(ask-sh --init)"
 fi
 
+# Reset terminal modes that may be left enabled after ungraceful process exit
+# (e.g., SSH disconnect while running mouse-enabled app like tmux/vim/htop)
+# _reset_terminal_modes_soft: safe for precmd (no alt screen exit — that can wipe display)
+# _reset_terminal_modes: full reset including alt screen, for manual fix-term / sshc
+_reset_terminal_modes_soft() {
+    [[ -t 1 ]] || return
+    local reset=''
+    reset+='\e[?1000l'  # mouse click tracking
+    reset+='\e[?1002l'  # mouse button-event tracking
+    reset+='\e[?1003l'  # mouse any-event tracking
+    reset+='\e[?1006l'  # SGR mouse mode (the 35M sequences)
+    reset+='\e[?1004l'  # focus event reporting
+    reset+='\e[?2004l'  # bracketed paste mode
+    reset+='\e[?1l'     # application cursor keys
+    reset+='\e[?66l'    # application keypad mode
+    reset+='\e[?25h'    # cursor visible
+    reset+='\e(B'       # ASCII charset
+    printf "$reset"
+}
+_reset_terminal_modes() {
+    _reset_terminal_modes_soft
+    [[ -t 1 ]] && printf '\e[?1049l'  # exit alternate screen buffer
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _reset_terminal_modes_soft
+
 # Only display ASCII art in interactive shells
 if [[ -o interactive ]]; then
   cat $CONFIG_DIR/start.txt
