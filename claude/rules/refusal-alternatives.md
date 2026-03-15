@@ -44,7 +44,8 @@ When a tool or sandbox blocks you, don't retry the same thing — pivot immediat
 | API/network timeout | Check if client-side config is the cause (e.g., `max_connections` too high) before blaming infrastructure |
 | MCP tool not found | Try alternative tool names, then fall back to Bash/direct approach |
 | Read/Glob file not found | **Search before giving up**: `Glob("**/<basename>")` from git root. Preserve directory hints (if path had `specs/foo.md`, try `**/specs/foo.md` first). Single match → use it. Multiple → list candidates and ask. Zero → ask user for correct path/repo. **Never silently skip a referenced file.** |
-| **Auth-gated service** (Notion, Google Drive, private repos, Confluence, Jira, etc.) | **Ask user immediately** — don't try WebFetch, Playwright login pages, or unauthenticated API calls. Request: copy-paste content, export as file, or provide credentials/token to configure access |
+| **Auth-gated service** (Notion, private repos, Confluence, Jira, etc.) | **Ask user immediately** — don't try WebFetch, Playwright login pages, or unauthenticated API calls. Request: copy-paste content, export as file, or provide credentials/token to configure access |
+| **Google Workspace** (Docs, Sheets, Drive, Gmail, Calendar) | Use `gws` CLI via Bash for direct API access (`gws docs documents get --id <id>`), or delegate to `gemini-cli` agent for AI-mediated tasks. Only ask user if both fail |
 
 **Rule:** After any tool failure, **immediately** try an alternative approach. Never retry the same failing command more than once.
 

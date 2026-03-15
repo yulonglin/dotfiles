@@ -55,8 +55,6 @@ profiles:
       - writing
       - workflow
       - viz
-      - Notion
-      - linear
       # optional: remote-kernels (cloud GPU via RunPod, from alignment-hive)
       # install: claude plugin install remote-kernels@alignment-hive
       # https://github.com/Crazytieguy/alignment-hive
@@ -67,8 +65,6 @@ profiles:
       - writing
       - viz
       - workflow
-      - Notion
-      - linear
 
   design:
     comment: "Frontend, visualizations, design systems"
@@ -111,5 +107,7 @@ profiles:
   personal:
     comment: "Life and productivity — Things 3, Slack extensions"
     enable:
+      - Notion
+      - linear
       - things-mcp
       - slack-mcp

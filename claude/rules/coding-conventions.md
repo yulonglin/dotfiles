@@ -108,7 +108,7 @@ This is a preference order, not a mandate. Match the tool to the job.
 
 ## CLI Tools Available
 
-ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, btop, dust, duf, bun, bunx, sd (prefer over `sed`), trash (macOS — prefer over `rm`)
+ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, btop, dust, duf, bun, bunx, sd (prefer over `sed`), trash (macOS — prefer over `rm`), gws (Google Workspace CLI — Docs, Sheets, Drive, Gmail, Calendar)
 
 ## Visual Output Quality
 
