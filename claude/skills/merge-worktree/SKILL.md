@@ -41,7 +41,9 @@ If NOT in a worktree, tell the user and exit. This skill is designed to run from
 git status --porcelain
 ```
 
-If there are uncommitted changes, commit them first using the `/commit` skill or ask the user.
+If there are uncommitted changes:
+- **`.claude/settings.json`**: This file is auto-managed by Claude Code at runtime. Deep-compare (parse JSON, compare key-value pairs ignoring order) against the committed version. If semantically equivalent, `git restore` it. If there are real value differences, `git restore` it anyway — runtime settings changes are ephemeral and should not be merged.
+- **Other files**: Commit them first using the `/commit` skill or ask the user.
 
 ### 3. Commit Plan Files
 
@@ -105,7 +107,8 @@ Do NOT abort the merge. Instead:
    - Read the file (it has conflict markers `<<<<<<<`, `=======`, `>>>>>>>`)
    - Read the worktree's version: `git show <WORKTREE_BRANCH>:<file>`
    - Read the parent branch's version: `git show <PARENT_BRANCH>:<file>`
-   - **Resolve the conflict** by understanding both sides' intent
+   - **For JSON files** (`.claude/settings.json`, etc.): do a deep comparison — parse both sides and check if the actual key-value pairs are semantically equivalent (ignoring key ordering, whitespace). If equivalent, keep the parent branch's version. Only treat as a real conflict if values differ.
+   - **For other files**: resolve the conflict by understanding both sides' intent
    - Write the resolved file
    - Stage it: `git -C <MAIN_TREE_PATH> add <file>`
 
