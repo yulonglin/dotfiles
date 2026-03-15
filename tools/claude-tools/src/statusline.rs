@@ -59,16 +59,23 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // 4. Git branch + dirty status
     format_git_info(&mut output, cwd);
 
-    // 5. Model name
-    format_model(&mut output, input.model.as_ref());
+    // Line 2: session state (collect parts, join with " · ")
+    let mut session_parts: Vec<String> = Vec::new();
+    if let Some(s) = format_model_str(input.model.as_ref()) {
+        session_parts.push(s);
+    }
+    if let Some(s) = format_context_usage_str(input.context_window.as_ref()) {
+        session_parts.push(s);
+    }
+    if let Some(s) = format_duration_str(&input.cost) {
+        session_parts.push(s);
+    }
+    if !session_parts.is_empty() {
+        output.push('\n');
+        output.push_str(&session_parts.join(" \u{00b7} "));
+    }
 
-    // 6. Context usage percentage
-    format_context_usage(&mut output, input.context_window.as_ref());
-
-    // 7. Session duration
-    format_duration(&mut output, &input.cost);
-
-    // 8. API usage (5h + 7d rate limits)
+    // Line 3: API usage (5h + 7d rate limits)
     crate::usage::format_usage(&mut output);
 
     print!("{}", output);
@@ -218,22 +225,16 @@ fn format_git_info(output: &mut String, cwd: &str) {
 }
 
 /// Model display name in brackets.
-fn format_model(output: &mut String, model: Option<&Model>) {
-    let name = match model.and_then(|m| m.display_name.as_deref()) {
-        Some(n) if !n.is_empty() => n,
-        _ => return,
-    };
-    let _ = write!(output, " \u{00b7} \x1b[34m[{}]\x1b[0m", name);
+fn format_model_str(model: Option<&Model>) -> Option<String> {
+    let name = model.and_then(|m| m.display_name.as_deref()).filter(|n| !n.is_empty())?;
+    Some(format!("\x1b[34m[{}]\x1b[0m", name))
 }
 
 /// Context usage percentage from `context_window.used_percentage` (pre-computed by Claude Code).
-fn format_context_usage(output: &mut String, context_window: Option<&ContextWindow>) {
-    let pct = match context_window.and_then(|cw| cw.used_percentage) {
-        Some(p) => p.round() as u64,
-        None => return,
-    };
+fn format_context_usage_str(context_window: Option<&ContextWindow>) -> Option<String> {
+    let pct = context_window.and_then(|cw| cw.used_percentage)?.round() as u64;
     if pct == 0 {
-        return;
+        return None;
     }
     let color = if pct >= 90 {
         "\x1b[31m" // Red
@@ -242,24 +243,24 @@ fn format_context_usage(output: &mut String, context_window: Option<&ContextWind
     } else {
         "\x1b[32m" // Green
     };
-    let _ = write!(output, " \u{00b7} {}ctx:{}%\x1b[0m", color, pct);
+    Some(format!("{}ctx:{}%\x1b[0m", color, pct))
 }
 
 /// Session duration from `cost.total_duration_ms`.
-fn format_duration(output: &mut String, cost: &Option<Cost>) {
+fn format_duration_str(cost: &Option<Cost>) -> Option<String> {
     let ms = match cost.as_ref().and_then(|c| c.total_duration_ms) {
         Some(ms) if ms > 0 => ms,
-        _ => return,
+        _ => return None,
     };
     let total_mins = ms / 60_000;
     if total_mins == 0 {
-        return;
+        return None;
     }
     let display = if total_mins >= 60 {
         format!("{}h {}m", total_mins / 60, total_mins % 60)
     } else {
         format!("{}m", total_mins)
     };
-    let _ = write!(output, " \u{00b7} \x1b[2m{}\x1b[0m", display);
+    Some(format!("\x1b[2m{}\x1b[0m", display))
 }
 

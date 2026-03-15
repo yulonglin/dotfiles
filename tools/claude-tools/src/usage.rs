@@ -14,7 +14,7 @@ use std::time::Duration;
 
 const API_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const CACHE_FILENAME: &str = "claude-statusline-usage.json";
-const CACHE_MAX_AGE: Duration = Duration::from_secs(60);
+const CACHE_MAX_AGE: Duration = Duration::from_secs(300);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 
 const SEVEN_DAY_SECS: f64 = 7.0 * 86400.0;
@@ -51,6 +51,8 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
     let seven = usage.seven_day.as_ref().and_then(|b| b.utilization);
 
     if five.is_none() && seven.is_none() {
+        output.push('\n');
+        let _ = write!(output, "\x1b[2m\u{2014}\x1b[0m"); // dim em-dash placeholder
         return;
     }
 
@@ -414,7 +416,18 @@ fn fetch_cached_usage() -> Result<UsageResponse, String> {
     if let Ok(ref token) = token {
         match fetch_from_api(token) {
             Ok((usage, raw)) => {
-                write_cache(&raw);
+                // Only cache and return if at least one utilization value is present,
+                // otherwise fall through to stale cache
+                let has_data = usage.five_hour.as_ref().and_then(|b| b.utilization).is_some()
+                    || usage.seven_day.as_ref().and_then(|b| b.utilization).is_some();
+                if has_data {
+                    write_cache(&raw);
+                    return Ok(usage);
+                }
+                // Null utilization — prefer stale cache if available
+                if let Some((stale, _)) = &cached {
+                    return Ok(stale.clone());
+                }
                 return Ok(usage);
             }
             Err(fetch_err) => {
