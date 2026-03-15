@@ -43,6 +43,26 @@ git status --porcelain
 
 If there are uncommitted changes, commit them first using the `/commit` skill or ask the user.
 
+### 3. Commit Plan Files
+
+Plan files are versioned artifacts that should travel with the branch. Before merging, ensure any plan files created during this worktree session are committed.
+
+```bash
+# Check for untracked or modified plan files
+PLANS_DIR=$(git rev-parse --show-toplevel)/plans
+if [ -d "$PLANS_DIR" ]; then
+  git status --porcelain "$PLANS_DIR"
+fi
+```
+
+If there are uncommitted plan files:
+1. Stage them: `git add plans/`
+2. Commit with message: `chore: commit plan files from worktree session`
+
+This prevents plan files from being orphaned when the worktree is removed (gitignored files and untracked files don't survive `cwrm`).
+
+### 4. Check Commits to Merge
+
 ```bash
 # Check how many commits to merge
 git rev-list --count <PARENT_BRANCH>..<WORKTREE_BRANCH>
@@ -50,7 +70,7 @@ git rev-list --count <PARENT_BRANCH>..<WORKTREE_BRANCH>
 
 If 0 commits ahead, report "Already up to date" and exit.
 
-### 3. Check Main Tree State
+### 5. Check Main Tree State
 
 Before merging, verify the main tree has no uncommitted changes:
 
@@ -60,7 +80,7 @@ git -C <MAIN_TREE_PATH> status --porcelain
 
 If the main tree has uncommitted changes, warn the user and ask them to commit or stash first. Do NOT proceed with the merge — it will mix their uncommitted work with the merge result.
 
-### 4. Attempt Merge
+### 6. Attempt Merge
 
 Run the merge from the main tree:
 
@@ -68,11 +88,11 @@ Run the merge from the main tree:
 git -C <MAIN_TREE_PATH> merge --no-edit <WORKTREE_BRANCH>
 ```
 
-**If merge succeeds:** Report success with commit count, skip to step 6.
+**If merge succeeds:** Report success with commit count, skip to step 8.
 
-**If merge fails (conflicts):** Continue to step 5.
+**If merge fails (conflicts):** Continue to step 7.
 
-### 5. Resolve Conflicts
+### 7. Resolve Conflicts
 
 Do NOT abort the merge. Instead:
 
@@ -96,7 +116,7 @@ Do NOT abort the merge. Instead:
 
 4. If you cannot confidently resolve a conflict, leave it and tell the user which files need manual attention.
 
-### 6. Mark for Cleanup
+### 8. Mark for Cleanup
 
 After successful merge, tell the user:
 
@@ -114,4 +134,4 @@ Or continue working — run /merge-worktree again later to sync new commits.
 - **Never force-push or rebase** the parent branch
 - **Never delete the worktree branch** — `cwrm` handles that
 - **Prefer the worktree's version** when both sides changed the same thing and intent is unclear (the worktree has the newer work)
-- **Main tree uncommitted changes** are checked in step 3 — do not skip this check
+- **Main tree uncommitted changes** are checked in step 5 — do not skip this check
