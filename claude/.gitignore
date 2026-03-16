@@ -40,6 +40,7 @@ image-cache/
 backups/
 bash-commands.log
 logs/
+sessions/
 
 chrome/
 mcp-needs-auth-cache.json

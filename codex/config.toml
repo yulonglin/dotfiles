@@ -3,3 +3,6 @@ url = "https://mcp.linear.app/mcp"
 
 [mcp_servers.figma]
 url = "https://mcp.figma.com/mcp"
+
+[projects."/Users/yulong/code/automated-researchers"]
+trust_level = "trusted"
