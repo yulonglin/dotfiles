@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explains the 23 high-confidence LLM-ism patterns used by the humanizer agent. Each pattern is documented with:
+This document explains the 25 high-confidence LLM-ism patterns used by the humanizer agent. Each pattern is documented with:
 - **Why it's problematic** - with citations
 - **False positive scenarios** - when NOT to flag
 - **Fix suggestions** - concrete rewrites
@@ -10,7 +10,7 @@ This document explains the 23 high-confidence LLM-ism patterns used by the human
 
 **Goal**: Precision >90% (very few false positives) and recall >70% (catch most obvious patterns).
 
-**Categories**: 6 categories — Blatant Hedging (5), Chatbot Artifacts (3), AI Vocabulary (3), False Enthusiasm (2), Filler Phrases (2), Structural/Rhetorical Tropes (8).
+**Categories**: 7 categories — Blatant Hedging (5), Chatbot Artifacts (3), AI Vocabulary (3), Em-Dash and Dash Misuse (2), False Enthusiasm (2), Filler Phrases (2), Structural/Rhetorical Tropes (8).
 
 ---
 
@@ -135,7 +135,33 @@ Business/technical jargon heavily overused by LLMs. Humans prefer simpler altern
 
 ---
 
-### Category 4: False Enthusiasm (2 patterns)
+### Category 4: Em-Dash and Dash Misuse (2 patterns)
+
+LLMs vastly overuse em-dashes for parenthetical asides. This creates a distinctive "AI voice" even when individual word choices are fine.
+
+#### Em-dash (—) parenthetical asides
+- **Why problematic**: LLMs insert em-dashes at 3-5x the rate of human writers. Used as a crutch to shoehorn extra information into sentences instead of restructuring. A hallmark of AI-generated text per Wikipedia's "Signs of AI writing" (Ferenc Huszár).
+- **Confidence**: 75% per instance (frequency-dependent — 1-2 per page is fine; 3+ per page is a strong signal)
+- **Sources**: Wikipedia AI writing signs, blader/humanizer, clear-writing.md
+- **False positives**: Legitimate stylistic use (Emily Dickinson, informal blogs). 1-2 per page is normal. Flag when clustered or when commas/parentheses would work better.
+- **Fix**: Restructure using commas, parentheses, or separate sentences
+  - ❌ "The model — which was trained on 1B tokens — achieved SOTA results."
+  - ✅ "The model, trained on 1B tokens, achieved SOTA results."
+  - ✅ "The model (trained on 1B tokens) achieved SOTA results."
+
+#### Hyphens used as em-dashes ( - as parenthetical separator)
+- **Why problematic**: LLMs frequently use ` - ` (space-hyphen-space) as a parenthetical separator, mimicking em-dash usage with worse typography. This is a strong LLM signal because human writers who use dashes typically use proper em-dashes or `--`.
+- **Confidence**: 82% (LLMs do this frequently; humans rarely use bare ` - ` for asides)
+- **Sources**: Typography conventions, AI writing detection
+- **False positives**: Markdown list items, code contexts, plain-text emails where em-dash input isn't available.
+- **Fix**: Restructure to avoid the aside, or use commas/parentheses
+  - ❌ "The system - built last year - handles 10k req/s."
+  - ✅ "The system, built last year, handles 10k req/s."
+- **Note**: Double-hyphens (`--`) are not flagged as an LLM-ism since LLMs don't typically produce them, though they are typographically ugly.
+
+---
+
+### Category 5: False Enthusiasm (2 patterns)
 
 Performative engagement without substance. Signals AI-generated filler.
 
@@ -159,7 +185,7 @@ Performative engagement without substance. Signals AI-generated filler.
 
 ---
 
-### Category 5: Filler Phrases (2 patterns)
+### Category 6: Filler Phrases (2 patterns)
 
 Unnecessarily wordy substitutes for simpler words. Pure wordiness indicator.
 
@@ -183,7 +209,7 @@ Unnecessarily wordy substitutes for simpler words. Pure wordiness indicator.
 
 ---
 
-### Category 6: Structural/Rhetorical Tropes (8 patterns)
+### Category 7: Structural/Rhetorical Tropes (8 patterns)
 
 Higher-level structural patterns that go beyond individual phrases. These are rhetorical moves that LLMs overuse to create false drama, breadth, or authority.
 
@@ -267,8 +293,8 @@ Higher-level structural patterns that go beyond individual phrases. These are rh
 
 These high-value patterns are saved for v0.2+ because they require statistical analysis:
 
-### Statistical Patterns (v0.2)
-- **Em-dash overuse**: >2 per 100 words
+### Statistical Patterns (v0.4)
+- **Em-dash frequency analysis**: Per-instance detection added in v0.3; statistical frequency threshold (>2 per 100 words) still pending
 - **Sentence length uniformity**: Low variance (40-50 words consistently)
 - **List overuse**: >3 lists per 500 words
 - **Paragraph length uniformity**: Similar length throughout
@@ -305,10 +331,16 @@ These high-value patterns are saved for v0.2+ because they require statistical a
 - **New patterns**: Negative parallelism, self-posed rhetorical questions, false ranges, gerund fragments, false suspense transitions, patronizing analogies, historical dash-enumeration, asserting obviousness
 - **Key shift**: From phrase-only detection to structural pattern recognition
 
-### v0.3 (Coming Soon)
-- Add statistical analysis (em-dash frequency, sentence length variance)
+### v0.3 (2026-03-18)
+- **Status**: Added em-dash and dash misuse patterns (Category 4)
+- **Patterns**: 25 total (15 phrase-level + 2 dash misuse + 8 structural)
+- **New patterns**: Em-dash parenthetical overuse, hyphens/double-hyphens used as em-dashes
+- **Key shift**: Em-dash overuse moved from "statistical v0.3" to phrase-level detection (per-instance flagging with frequency context)
 
-### v0.3 (Coming Later)
+### v0.4 (Coming Soon)
+- Add remaining statistical analysis (sentence length variance, list overuse)
+
+### v0.4 (Coming Later)
 - Add generic description detection
 - Requires custom heuristics (complex)
 - Might be separate `generic-detector` agent
@@ -361,6 +393,8 @@ The 15 patterns were selected specifically to minimize false positives:
 | "Interestingly," | Medium | Academic transitions |
 | "Absolutely!" | Medium | Can be emphatic |
 | "In fact," | Medium | Can be emphatic |
+| Em-dash asides | Medium | 1-2 per page normal |
+| Hyphen-as-em-dash | Low | Plain-text/code |
 | Gerund fragments | Low | Rare creative use |
 | False suspense | Low | Very rare ironic use |
 | Patronizing analogies | Low | Pedagogical writing |
