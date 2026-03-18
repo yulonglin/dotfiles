@@ -59,6 +59,32 @@ Need delegation?
 └─ Multi-step workflow? → Use skills
 ```
 
+## CLI Agent Delegation Enforcement
+
+**Problem:** `core:codex`, `core:gemini-cli`, and `core:claude` agents are Claude instances that can answer directly instead of calling their CLI. Without explicit CLI invocation in the prompt, they sometimes just respond with their own reasoning — defeating the purpose.
+
+**Rule:** When spawning CLI-backed agents, the prompt MUST include the exact Bash command to run.
+
+| Agent | Required prompt pattern |
+|-------|------------------------|
+| `core:codex` | `You MUST use the Bash tool to run: codex exec --full-auto -C <dir> -o <out> "<prompt>"` |
+| `core:gemini-cli` | `You MUST use the Bash tool to run: gemini -p "<prompt>"` |
+| `core:claude` | `You MUST use the Bash tool to run: claude -p --model <model> --permission-mode bypassPermissions "<prompt>"` |
+
+**Anti-pattern** (agent answers directly instead of delegating):
+```
+prompt: "What's the architecture of this codebase?"
+→ Agent writes a text response using its own reasoning ❌
+```
+
+**Correct pattern** (agent delegates to CLI):
+```
+prompt: "You MUST use the Bash tool to run: gemini -p '@src/ Summarize the architecture of this codebase'"
+→ Agent calls Bash with the gemini command ✅
+```
+
+**Diagnostic:** If a CLI agent returns with 0 tool_uses, it failed to delegate — the prompt was too question-like. Rephrase as an explicit CLI command.
+
 ## Agent Teams (Escalation)
 
 For multi-agent communication, see `~/.claude/docs/agent-teams-guide.md`.
