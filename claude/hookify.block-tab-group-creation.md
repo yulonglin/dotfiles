@@ -3,7 +3,7 @@ name: block-tab-group-creation
 enabled: true
 event: all
 pattern: createIfEmpty
-action: block
+action: warn
 ---
 
 **Tab group creation blocked.**
