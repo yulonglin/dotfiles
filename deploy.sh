@@ -81,7 +81,6 @@ COMPONENTS:
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
     --no-<component>  Disable a component (e.g., --no-editor)
-    --non-interactive Skip interactive component menu
 
 EXAMPLES:
     ./deploy.sh                           # Use defaults from config.sh
@@ -95,7 +94,6 @@ EOF
 
 # Parse CLI arguments (overrides config.sh)
 parse_args "$@"
-show_component_menu deploy
 
 # ─── Main Deployment ──────────────────────────────────────────────────────────
 
@@ -277,47 +275,53 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
             mkdir -p "$(dirname "$age_key")"
             age-keygen -o "$age_key" 2>&1
             chmod 600 "$age_key"
-            local pub_key
-            pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
             log_success "Generated age keypair"
             log_info "IMPORTANT: Store the private key in Bitwarden now!"
             echo "  cat $age_key"
             echo ""
-
-            # Create or update .sops.yaml with real public key
-            if [[ ! -f "$sops_yaml" ]] || grep -q 'age1\.\.\.' "$sops_yaml"; then
-                cat > "$sops_yaml" <<SOPSYAML
-creation_rules:
-  - path_regex: \\.enc$
-    age: "$pub_key"
-SOPSYAML
-                log_success "Created $sops_yaml"
-            fi
-
-            # Create template secrets.env.enc (or recreate if empty/corrupt)
-            if [[ ! -s "$enc" ]]; then
-                local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
-                printf '%s\n' \
-                    "# Encrypted API keys (edit with: secrets-edit)" \
-                    "PLACEHOLDER=replace_me" \
-                    "# ANTHROPIC_API_KEY=" \
-                    "# OPENAI_API_KEY=" \
-                    "# HF_TOKEN=" \
-                    "# GITHUB_TOKEN=" \
-                    > "$tmpfile"
-                if sops -e --age "$pub_key" "$tmpfile" > "${enc}.tmp"; then
-                    mv "${enc}.tmp" "$enc"
-                    log_success "Created $enc — edit with: secrets-edit"
-                else
-                    rm -f "${enc}.tmp"
-                    log_warning "Failed to create encrypted secrets"
-                fi
-                rm -f "$tmpfile"
-            fi
         fi
     fi
 
-    # Decrypt if key and encrypted file both exist (and file is non-empty)
+    # Extract public key once for subsequent steps
+    local pub_key=""
+    if [[ -f "$age_key" ]]; then
+        pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
+    fi
+
+    # Ensure .sops.yaml has real public key (not placeholder)
+    if [[ -n "$pub_key" ]]; then
+        if [[ ! -f "$sops_yaml" ]] || grep -q 'age1\.\.\.' "$sops_yaml"; then
+            cat > "$sops_yaml" <<SOPSYAML
+creation_rules:
+  - path_regex: \\.enc\$
+    age: "$pub_key"
+SOPSYAML
+            log_success "Wrote $sops_yaml with age public key"
+        fi
+    fi
+
+    # Create template encrypted file if missing
+    if [[ ! -s "$enc" ]] && [[ -n "$pub_key" ]] && cmd_exists sops; then
+        local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
+        printf '%s\n' \
+            "# Encrypted API keys (edit with: secrets-edit)" \
+            "PLACEHOLDER=replace_me" \
+            "# ANTHROPIC_API_KEY=" \
+            "# OPENAI_API_KEY=" \
+            "# HF_TOKEN=" \
+            "# GITHUB_TOKEN=" \
+            > "$tmpfile"
+        if sops -e --age "$pub_key" "$tmpfile" > "${enc}.tmp"; then
+            mv "${enc}.tmp" "$enc"
+            log_success "Created $enc — edit with: secrets-edit"
+        else
+            rm -f "${enc}.tmp"
+            log_warning "Failed to create encrypted secrets"
+        fi
+        rm -f "$tmpfile"
+    fi
+
+    # Decrypt if key and encrypted file both exist
     if [[ -s "$enc" ]] && cmd_exists sops && [[ -f "$age_key" ]]; then
         if (umask 077 && sops -d "$enc" > "${out}.tmp"); then
             mv "${out}.tmp" "$out"
