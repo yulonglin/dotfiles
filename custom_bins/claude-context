@@ -248,20 +248,73 @@ def expand_env(s):
     return os.path.expanduser(re.sub(r"\$\{(\w+)\}", _replace, s))
 
 
+KNOWN_MARKETPLACES = os.path.expanduser("~/.claude/plugins/known_marketplaces.json")
+
+
 def resolve_marketplace_source(name, config):
     """Return (source_string, source_type) for a marketplace.
 
-    Prefers local path if it exists and has .claude-plugin, else GitHub.
+    Uses GitHub by default. Set CLAUDE_CONTEXT_LOCAL=1 to prefer local paths.
     """
-    local = config.get("local")
-    if local:
-        expanded = expand_env(local)
-        if os.path.isdir(os.path.join(expanded, ".claude-plugin")):
-            return expanded, "local"
+    if os.environ.get("CLAUDE_CONTEXT_LOCAL") == "1":
+        local = config.get("local")
+        if local:
+            expanded = expand_env(local)
+            if os.path.isdir(os.path.join(expanded, ".claude-plugin")):
+                return expanded, "local"
     github = config.get("github")
     if github:
         return github, "github"
     return None, None
+
+
+def apply_auto_update(verbose=False):
+    """Patch known_marketplaces.json with autoUpdate flags from profiles.yaml.
+
+    Uses atomic temp-file write to avoid partial updates.
+    """
+    marketplaces = load_marketplaces()
+    if not marketplaces:
+        return
+
+    if not os.path.isfile(KNOWN_MARKETPLACES):
+        if verbose:
+            print(f"  {YELLOW}known_marketplaces.json not found — skipping autoUpdate{NC}")
+        return
+
+    try:
+        with open(KNOWN_MARKETPLACES) as f:
+            known = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        if verbose:
+            print(f"  {YELLOW}known_marketplaces.json unreadable ({e}) — skipping autoUpdate{NC}")
+        return
+
+    changed = 0
+    for name, config in marketplaces.items():
+        auto_update = config.get("autoUpdate", False)
+        if name in known:
+            if known[name].get("autoUpdate") != auto_update:
+                known[name]["autoUpdate"] = auto_update
+                changed += 1
+                if verbose:
+                    print(f"  {name}: autoUpdate → {auto_update}")
+
+    if changed:
+        # Atomic write via temp file
+        tmp_path = KNOWN_MARKETPLACES + ".tmp"
+        try:
+            with open(tmp_path, "w") as f:
+                json.dump(known, f, indent=4)
+                f.write("\n")
+            os.replace(tmp_path, KNOWN_MARKETPLACES)
+            print(f"{GREEN}Applied autoUpdate to {changed} marketplace(s){NC}")
+        except OSError as e:
+            print(f"{RED}Failed to write known_marketplaces.json: {e}{NC}")
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+    elif verbose:
+        print(f"  autoUpdate: all up to date")
 
 
 def sync_marketplaces(verbose=False):
@@ -343,6 +396,7 @@ def sync_marketplaces(verbose=False):
     else:
         print(f"{GREEN}Synced {synced}/{total} marketplaces{NC}")
 
+    apply_auto_update(verbose=verbose)
     normalize_scopes(verbose=verbose)
     return errors == 0
 

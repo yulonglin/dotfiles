@@ -5,27 +5,37 @@
 # profiles → only list what they ENABLE beyond base
 
 # Plugin marketplaces — registered + synced by `claude-context --sync`
-# local: preferred when directory has .claude-plugin (live dev); github: fallback
+# All use GitHub repos for portability. autoUpdate: true enables startup auto-update.
+# For local dev, set CLAUDE_CONTEXT_LOCAL=1 and add local: paths.
+#
+# Three config layers (intentionally separate):
+#   1. profiles.yaml — declarative source of truth (autoUpdate, GitHub repos)
+#   2. settings.json extraKnownMarketplaces — Claude Code's native portable registration
+#   3. known_marketplaces.json — runtime state (patched by claude-context --sync)
 marketplaces:
   claude-plugins-official:
     github: anthropics/claude-plugins-official
+    autoUpdate: true
 
   ai-safety-plugins:
-    local: ${CODE_DIR}/marketplaces/ai-safety-plugins
     github: yulonglin/ai-safety-plugins
+    autoUpdate: true
 
   dev-browser:
     github: sawyerhood/dev-browser
+    autoUpdate: true
 
   ui-ux-pro-max-skill:
     github: nextlevelbuilder/ui-ux-pro-max-skill
+    autoUpdate: true
 
   alignment-hive:
     github: Crazytieguy/alignment-hive
+    autoUpdate: true
 
   productivity-tools:
-    local: ${CODE_DIR}/marketplaces/productivity-tools
     github: yulonglin/productivity-tools
+    autoUpdate: true
 
 # Always-on in every profile (declared once)
 base:
