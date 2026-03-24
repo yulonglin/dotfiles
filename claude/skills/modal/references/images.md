@@ -129,7 +129,7 @@ image = modal.Image.debian_slim().add_local_dir("data", "/root/data", copy=True)
 
 # With a remote path
 image = modal.Image.debian_slim().add_local_dir(
-    "/user/erikbern/.aws", remote_path="/root/.aws"
+    "~/.aws", remote_path="/root/.aws"
 )
 ```
 

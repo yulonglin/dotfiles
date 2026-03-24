@@ -283,7 +283,10 @@ def main():
 ## References
 
 Local references in `references/`:
+- `functions.md` — Decorators, `.remote()`, `.map()`, classes, async, retries
+- `gpu.md` — GPU types, multi-GPU, fallback chains, PyTorch setup
+- `images.md` — Base images, packages, local code mounting, caching
 - `secrets.md` — Environment variables, auth patterns
 - `scheduled-jobs.md` — Cron, periodic tasks
 
-For images, functions, GPUs, volumes, and scaling, use context7 (`mcp__context7__query-docs` with library ID `/llmstxt/modal_llms-full_txt`) or https://modal.com/docs/guide — Modal's API evolves frequently so live docs are more reliable than static snapshots.
+For volumes, scaling, and the latest API changes, use context7 (`mcp__context7__query-docs` with library ID `/llmstxt/modal_llms-full_txt`) or https://modal.com/docs/guide.
