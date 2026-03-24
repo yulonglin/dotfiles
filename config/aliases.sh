@@ -951,6 +951,12 @@ alias ai-update='update-ai-tools'
 # Detects: brew (macOS), apt/dnf/pacman (Linux)
 alias pkg-update='update-packages'
 
+# zerobrew: faster Homebrew client (use zb for interactive installs, brew for scripts)
+if command -v zb &>/dev/null; then
+    alias zbi='zb install'
+    alias zbu='zb uninstall'
+fi
+
 # Auto-agent guard controls
 alias auto-guard='auto-agent-guardctl status'
 alias auto-approve='auto-agent-guardctl approve'

@@ -54,7 +54,7 @@ COMPONENTS:
     --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
-    --experimental    Enable experimental features (ty type checker)
+    --experimental    Enable experimental features (ty type checker, zerobrew)
     --create-user     Create non-root dev user (Linux only)
     --no-<component>  Disable a component (e.g., --no-ai-tools)
     --force-reinstall Reinstall tools even if present
@@ -451,6 +451,12 @@ if [[ "$INSTALL_EXPERIMENTAL" == "true" ]]; then
     if ! is_installed ty && cmd_exists uv; then
         log_info "Installing ty via uv..."
         uv tool install ty 2>/dev/null || log_warning "ty installation failed"
+    fi
+
+    # zerobrew: fast Rust-based Homebrew client (installs to /opt/zerobrew, won't touch /opt/homebrew)
+    if ! is_installed zb; then
+        log_info "Installing zerobrew (experimental Homebrew alternative)..."
+        curl --proto '=https' --tlsv1.2 -fsSL https://zerobrew.rs/install | bash 2>/dev/null || log_warning "zerobrew installation failed"
     fi
 
     log_success "Experimental features installation complete"
