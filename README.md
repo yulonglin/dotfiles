@@ -544,8 +544,9 @@ Decryption:  config/secrets.env.enc  →  sops -d  →  .secrets (gitignored, so
 
 ```bash
 secrets-init             # First-time setup: generate age keypair + .sops.yaml + initial encrypted file
-secrets-edit             # Decrypt → edit in $EDITOR → re-encrypt on save
-secrets-decrypt          # Manual decrypt to .secrets (deploy.sh --secrets-env does this automatically)
+secrets-edit             # Decrypt → edit in $EDITOR → re-encrypt on save → auto-refresh .secrets
+secrets-encrypt          # Encrypt .secrets → secrets.env.enc (for when you edit .secrets directly)
+secrets-decrypt          # Decrypt secrets.env.enc → .secrets (after git pull, or on new machines)
 secrets-init-project     # Bootstrap per-project: .sops.yaml + secrets.env.enc + .envrc
 ```
 

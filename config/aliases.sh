@@ -28,6 +28,22 @@ secrets-edit() {
     sops_dotenv --config "$DOT_DIR/.sops.yaml" "$DOT_DIR/config/secrets.env.enc"
     secrets-decrypt
 }
+secrets-encrypt() {
+    if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
+    local src="$DOT_DIR/.secrets"
+    local enc="$DOT_DIR/config/secrets.env.enc"
+    local sops_yaml="$DOT_DIR/.sops.yaml"
+    if [[ ! -f "$src" ]]; then echo "No .secrets file at $src"; return 1; fi
+    if [[ ! -f "$sops_yaml" ]]; then echo "No .sops.yaml at $sops_yaml — run secrets-init"; return 1; fi
+    echo "Encrypting $src → $enc"
+    if sops_dotenv -e --config "$sops_yaml" "$src" > "${enc}.tmp"; then
+        mv "${enc}.tmp" "$enc"
+        echo "Encrypted to $enc"
+    else
+        rm -f "${enc}.tmp"
+        echo "Failed to encrypt" >&2; return 1
+    fi
+}
 secrets-decrypt() {
     if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
     local enc="$DOT_DIR/config/secrets.env.enc"

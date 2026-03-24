@@ -1,0 +1,12 @@
+#!/bin/bash
+# Auto-generated wrapper for scheduled text replacements sync
+set -euo pipefail
+
+YAML_FILE="/Users/yulong/code/dotfiles/config/text_replacements.yaml"
+if [[ ! -f "$YAML_FILE" ]]; then
+    echo "YAML config not found, skipping sync"
+    exit 0
+fi
+
+# Use uv to run with ruamel.yaml dependency
+exec uv run --with ruamel.yaml "/Users/yulong/code/dotfiles/scripts/sync_text_replacements.py" sync --prune --no-restart-alfred

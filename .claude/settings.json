@@ -28,7 +28,6 @@
     "security-guidance@claude-plugins-official": true,
     "serena@claude-plugins-official": false,
     "slack-mcp@productivity-tools": false,
-    "slack@claude-plugins-official": false,
     "stripe@claude-plugins-official": false,
     "supabase@claude-plugins-official": false,
     "superpowers@claude-plugins-official": true,
