@@ -63,24 +63,22 @@ if [[ -d "$USER_HOME" ]]; then
 fi
 
 # ─── SSH keys (for direct SSH access as non-root) ────────────────────────────
+# Use sudo -u to create files as the target user (avoids chown on mounts that don't support it)
 GITHUB_USER="${GITHUB_USER:-yulonglin}"
-mkdir -p "$USER_HOME/.ssh"
+sudo -u "$USERNAME" mkdir -p "$USER_HOME/.ssh"
 
 # Try root's keys first, then fetch from GitHub
 if [ -f /root/.ssh/authorized_keys ]; then
     echo "Copying SSH keys from root..."
-    cp /root/.ssh/authorized_keys "$USER_HOME/.ssh/"
+    cat /root/.ssh/authorized_keys | sudo -u "$USERNAME" tee "$USER_HOME/.ssh/authorized_keys" > /dev/null
 else
     echo "Fetching SSH keys from GitHub ($GITHUB_USER)..."
-    curl -fsSL "https://github.com/$GITHUB_USER.keys" > "$USER_HOME/.ssh/authorized_keys"
+    curl -fsSL "https://github.com/$GITHUB_USER.keys" | sudo -u "$USERNAME" tee "$USER_HOME/.ssh/authorized_keys" > /dev/null
 fi
 
 # Copy root's SSH config if it exists (e.g., provider-specific settings)
-[ -f /root/.ssh/config ] && cp /root/.ssh/config "$USER_HOME/.ssh/" 2>/dev/null || true
+[ -f /root/.ssh/config ] && cat /root/.ssh/config | sudo -u "$USERNAME" tee "$USER_HOME/.ssh/config" > /dev/null 2>&1 || true
 
-sudo chown -R "$USERNAME:$USERNAME" "$USER_HOME/.ssh" 2>&1 | while read -r line; do
-    echo "  [warn] $line"
-done || true
 chmod 700 "$USER_HOME/.ssh" 2>/dev/null || true
 chmod 600 "$USER_HOME/.ssh/authorized_keys" 2>/dev/null || true
 
@@ -129,8 +127,7 @@ if [ ! -f "$AGE_KEY_DIR/keys.txt" ]; then
     if [[ -n "$AGE_KEY" ]]; then
         sudo -u "$USERNAME" mkdir -p "$AGE_KEY_DIR"
         printf '%s\n' "$AGE_KEY" | sudo -u "$USERNAME" tee "$AGE_KEY_DIR/keys.txt" > /dev/null
-        chmod 600 "$AGE_KEY_DIR/keys.txt"
-        chown "$USERNAME:$USERNAME" "$AGE_KEY_DIR/keys.txt"
+        chmod 600 "$AGE_KEY_DIR/keys.txt" 2>/dev/null || true
         echo "Age key saved."
     else
         echo "Skipping — run secrets-init after login to set up SOPS"
