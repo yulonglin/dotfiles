@@ -366,6 +366,9 @@ SOPSYAML
         if sops_err=$( (umask 077 && sops_dotenv -d --config "$sops_yaml" "$enc" > "${out}.tmp") 2>&1); then
             mv "${out}.tmp" "$out"
             log_success "Decrypted secrets to $out"
+            # Symlink .env → .secrets so tools expecting .env read SOPS-managed secrets
+            ln -sf .secrets "$DOT_DIR/.env"
+            log_success "Symlinked .env → .secrets"
         else
             rm -f "${out}.tmp"
             log_warning "Failed to decrypt secrets"
