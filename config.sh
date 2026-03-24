@@ -281,11 +281,7 @@ if is_linux; then
     DEPLOY_CLEANUP=false        # File cleanup uses launchd (macOS only)
     # DEPLOY_CLAUDE_CLEANUP stays true - works with cron on Linux
     INSTALL_CREATE_USER=true    # Useful for containers
-    # Skip Docker inside containers (Docker-in-Docker needs privileged mode)
-    if [[ -f /.dockerenv ]] || grep -q 'docker\|lxc' /proc/1/cgroup 2>/dev/null; then
-        INSTALL_DOCKER=false
-    fi
-    # INSTALL_DOCKER=true is already default for bare-metal Linux
+    # INSTALL_DOCKER=true is already default
 elif is_macos; then
     INSTALL_DOCKER=false        # Use Docker Desktop on macOS
 fi
