@@ -228,15 +228,15 @@ PROFILE
     fi
 fi
 
-# ─── Secrets Sync ─────────────────────────────────────────────────────────────
+# ─── Gist Sync (SSH config, authorized_keys, git identity) ───────────────────
 
 if [[ "$DEPLOY_SECRETS" == "true" ]]; then
-    log_section "SYNCING SECRETS"
-    sync_secrets || log_warning "Secrets sync failed (continuing anyway)"
+    log_section "SYNCING GIST"
+    sync_gist || log_warning "Gist sync failed (continuing anyway)"
 
     # Install automated daily sync
-    log_info "Setting up automated daily secrets sync..."
-    "$DOT_DIR/scripts/cleanup/setup_secrets_sync.sh" || log_warning "Failed to setup automated sync"
+    log_info "Setting up automated daily gist sync..."
+    "$DOT_DIR/scripts/cleanup/setup_gist_sync.sh" || log_warning "Failed to setup automated gist sync"
 fi
 
 # ─── Encrypted Secrets (SOPS + age) ──────────────────────────────────────────
@@ -252,7 +252,7 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
     elif ! cmd_exists sops; then
         log_warning "sops not installed — run install.sh"
     elif [[ ! -f "$age_key" ]]; then
-        log_warning "Age key not found at $age_key — run 'secrets-init' or 'sync-secrets'"
+        log_warning "Age key not found at $age_key — run 'secrets-init' (paste age key from Bitwarden)"
     else
         if (umask 077 && sops -d "$enc" > "${out}.tmp"); then
             mv "${out}.tmp" "$out"

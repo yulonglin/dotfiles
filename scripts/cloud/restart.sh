@@ -2,41 +2,53 @@
 # Quick restore after container restart (user home already exists in persistent storage)
 #
 # RunPod containers lose /etc/passwd on restart, so we need to recreate the user entry.
-# The home directory and all config persists in /workspace.
+# The home directory and all config persists in persistent storage.
 #
 # Usage:
-#   ./restart.sh                         # Use defaults
+#   ./restart.sh                         # Auto-detect provider
 #   ./restart.sh dev                     # Custom username
-#   ./restart.sh dev /data               # Custom username and path
 #
 # One-liner:
 #   curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/restart.sh | bash
 
 USERNAME="${1:-${USERNAME:-yulong}}"
-PERSISTENT="${2:-${PERSISTENT:-/workspace}}"
-HOME_DIR="$PERSISTENT/$USERNAME"
+
+# Auto-detect provider (same logic as setup.sh)
+if [[ -n "$USER_HOME" ]]; then
+    :
+elif [[ -d /workspace ]] || [[ -n "$RUNPOD_POD_ID" ]]; then
+    USER_HOME="/workspace/$USERNAME"
+else
+    USER_HOME="/home/$USERNAME"
+fi
 
 echo "=== Restoring User ==="
 echo "Username: $USERNAME"
-echo "Home: $HOME_DIR"
+echo "Home: $USER_HOME"
 
 # Check home dir exists
-if [ ! -d "$HOME_DIR" ]; then
-    echo "Error: $HOME_DIR does not exist. Run setup.sh first."
+if [ ! -d "$USER_HOME" ]; then
+    echo "Error: $USER_HOME does not exist. Run setup.sh first."
     exit 1
 fi
 
 # Recreate user entry (home dir already exists)
-useradd -d "$HOME_DIR" -s /usr/bin/zsh "$USERNAME" 2>/dev/null || true
+useradd -d "$USER_HOME" -s /usr/bin/zsh "$USERNAME" 2>/dev/null || true
 echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME"
 
-# Restore SSH access (RunPod injects keys to root on each start)
-if [ -d /root/.ssh ]; then
-    cp -r /root/.ssh "$HOME_DIR/" 2>/dev/null || true
-    chown -R "$USERNAME:$USERNAME" "$HOME_DIR/.ssh"
-    chmod 700 "$HOME_DIR/.ssh"
-    chmod 600 "$HOME_DIR/.ssh/authorized_keys" 2>/dev/null || true
+# Restore SSH access
+GITHUB_USER="${GITHUB_USER:-yulonglin}"
+mkdir -p "$USER_HOME/.ssh"
+if [ -f /root/.ssh/authorized_keys ]; then
+    cp /root/.ssh/authorized_keys "$USER_HOME/.ssh/"
+else
+    curl -fsSL "https://github.com/$GITHUB_USER.keys" > "$USER_HOME/.ssh/authorized_keys"
 fi
+[ -f /root/.ssh/config ] && cp /root/.ssh/config "$USER_HOME/.ssh/" 2>/dev/null || true
+chown -R "$USERNAME:$USERNAME" "$USER_HOME/.ssh"
+chmod 700 "$USER_HOME/.ssh"
+chmod 600 "$USER_HOME/.ssh/authorized_keys"
+chmod 755 "$USER_HOME"  # sshd refuses key auth if home is group/world-writable
 
 echo ""
 echo "=== User Restored ==="

@@ -65,7 +65,7 @@ DOTFILES_USERNAME="${DOTFILES_USERNAME:-yulong}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yulonglin/dotfiles.git}"
 GIT_USER_NAME="yulonglin"
 GIT_USER_EMAIL="30549145+yulonglin@users.noreply.github.com"
-SECRETS_GIST_ID="${SECRETS_GIST_ID:-3cc239f160a2fe8c9e6a14829d85a371}"  # Public identifier (like repo name), not a secret
+GIST_SYNC_ID="${GIST_SYNC_ID:-3cc239f160a2fe8c9e6a14829d85a371}"  # Gist used for config sync (SSH, git identity)
 
 # ─── AI Tools Configuration ───────────────────────────────────────────────────
 # MCP servers to configure for Claude Code

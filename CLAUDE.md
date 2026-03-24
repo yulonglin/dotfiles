@@ -75,7 +75,7 @@ Verification is a design problem—you need to plan *how* you'll verify before y
 
 Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - ZSH configuration - Main shell setup
-- Secrets sync - Bidirectional sync with GitHub gist (SSH config, git identity), automated daily at 8 AM
+- Gist sync - Bidirectional sync of SSH config and git identity with GitHub gist, automated daily at 8 AM
 - Git config - Smart conflict resolution with user prompts
 - VSCode/Cursor settings - Merges with existing settings
 - Finicky - Browser routing (macOS only, symlinked)
@@ -199,19 +199,19 @@ export WRITING_DIR="$HOME/Documents/writing"
 
 ### Important Behaviors
 
-**Secrets Sync (`deploy_secrets()`)**:
+**Gist Sync (`deploy_secrets()`)**:
 - Bidirectional sync with GitHub gist (ID: `3cc239f160a2fe8c9e6a14829d85a371`)
 - Syncs: `~/.ssh/config`, `~/.ssh/authorized_keys`, `config/user.conf` (git identity)
 - Auto-adds local public key to `authorized_keys` before sync (enables SSH between your machines)
 - Last-modified wins: compares local mtime vs gist updated_at
 - Requires `gh auth login` (browser OAuth, no extra keys needed)
 - Runs before git config (user.conf provides git identity)
-- Automated: Runs daily at 8:00 AM (launchd/cron), uninstall with `scripts/cleanup/setup_secrets_sync.sh --uninstall`
-- Manual: `sync-secrets` (alias) or `scripts/sync_secrets.sh`
+- Automated: Runs daily at 8:00 AM (launchd/cron), uninstall with `scripts/cleanup/setup_gist_sync.sh --uninstall`
+- Manual: `sync-gist` (alias) or `scripts/sync_gist.sh`
 
 **Encrypted Secrets (SOPS + age)**:
 - Decrypts `config/secrets.env.enc` to `$DOT_DIR/.secrets` using `sops -d` with age key
-- Age private key at `~/.config/sops/age/keys.txt` (synced via existing gist mechanism)
+- Age private key at `~/.config/sops/age/keys.txt` (stored in Bitwarden, pasted during cloud setup)
 - Shell integration: `.secrets` sourced by zshrc.sh, direnv for per-project secrets
 - Commands: `secrets-init` (first-time setup), `secrets-edit` (edit encrypted), `secrets-decrypt` (manual decrypt), `secrets-init-project` (per-project setup)
 - Graceful degradation: no errors if sops/age not installed or no encrypted file exists
@@ -343,7 +343,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - **Codex CLI directory**: `codex/` is symlinked to `~/.codex/` (not copied)
 - **Serena MCP config**: `config/serena/serena_config.yml` symlinked to `~/.serena/serena_config.yml` (dashboard auto-open disabled)
 - **Ghostty config**: Symlinked to platform-specific path, requires reload after changes (Cmd+Shift+Comma)
-- **SOPS + age**: Age private key must exist at `~/.config/sops/age/keys.txt` before decrypt works. Run `secrets-init` on new machines, or `sync-secrets` to pull from gist
+- **SOPS + age**: Age private key must exist at `~/.config/sops/age/keys.txt` before decrypt works. Run `secrets-init` on new machines (paste age key from Bitwarden)
 
 ## Cross-Reference
 

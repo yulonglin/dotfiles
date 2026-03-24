@@ -12,7 +12,7 @@ fi
 alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
-alias sync-secrets='"$DOT_DIR/scripts/sync_secrets.sh"'
+alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 
 # SOPS-encrypted secrets management
 secrets-edit() {
@@ -80,7 +80,7 @@ YAML
     echo ""
     echo "Next steps:"
     echo "  1. secrets-edit          # Add your API keys"
-    echo "  2. sync-secrets          # Sync age key to gist"
+    echo "  2. sync-gist             # Sync SSH config + git identity"
     echo "  3. source ~/.zshrc       # Load secrets into shell"
 }
 secrets-init-project() {
