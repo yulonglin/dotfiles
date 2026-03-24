@@ -85,7 +85,6 @@ profiles:
       - code
       - workflow
       - viz
-      - linear
       - coderabbit
       - code-simplifier
       - security-guidance
@@ -107,6 +106,4 @@ profiles:
   personal:
     comment: "Life and productivity — Things 3, Slack extensions"
     enable:
-      - linear
       - things-mcp
-      - slack-mcp
