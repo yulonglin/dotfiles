@@ -56,7 +56,9 @@ fi
 if [[ -d "$USER_HOME" ]]; then
     echo "Fixing ownership of $USER_HOME..."
     # Some files may be on read-only layers (e.g., .bash_logout in containers)
-    sudo chown -R "$USERNAME:$USERNAME" "$USER_HOME" 2>/dev/null || true
+    sudo chown -R "$USERNAME:$USERNAME" "$USER_HOME" 2>&1 | while read -r line; do
+        echo "  [warn] $line"
+    done || true
     sudo chmod 755 "$USER_HOME"  # sshd refuses key auth if home is group/world-writable
 fi
 
@@ -76,7 +78,9 @@ fi
 # Copy root's SSH config if it exists (e.g., provider-specific settings)
 [ -f /root/.ssh/config ] && cp /root/.ssh/config "$USER_HOME/.ssh/" 2>/dev/null || true
 
-sudo chown -R "$USERNAME:$USERNAME" "$USER_HOME/.ssh" 2>/dev/null || true
+sudo chown -R "$USERNAME:$USERNAME" "$USER_HOME/.ssh" 2>&1 | while read -r line; do
+    echo "  [warn] $line"
+done || true
 chmod 700 "$USER_HOME/.ssh" 2>/dev/null || true
 chmod 600 "$USER_HOME/.ssh/authorized_keys" 2>/dev/null || true
 
