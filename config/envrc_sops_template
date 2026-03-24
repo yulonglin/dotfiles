@@ -1,4 +1,4 @@
 # Auto-decrypt SOPS secrets on cd (requires sops + age + direnv)
 if command -v sops &>/dev/null && [ -f secrets.env.enc ]; then
-    dotenv <(sops -d --config .sops.yaml --output-type dotenv secrets.env.enc 2>/dev/null)
+    dotenv <(sops -d --input-type dotenv --output-type dotenv --config .sops.yaml secrets.env.enc 2>/dev/null)
 fi

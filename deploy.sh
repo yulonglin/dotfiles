@@ -361,7 +361,7 @@ SOPSYAML
     if [[ -s "$enc" ]] && cmd_exists sops && [[ -f "$age_key" ]]; then
         log_info "Decrypting $enc → $out"
         local sops_err
-        if sops_err=$( (umask 077 && sops -d --config "$sops_yaml" "$enc" > "${out}.tmp") 2>&1); then
+        if sops_err=$( (umask 077 && sops -d --input-type dotenv --output-type dotenv --config "$sops_yaml" "$enc" > "${out}.tmp") 2>&1); then
             mv "${out}.tmp" "$out"
             log_success "Decrypted secrets to $out"
         else

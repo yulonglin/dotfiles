@@ -17,7 +17,7 @@ alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 # SOPS-encrypted secrets management
 secrets-edit() {
     if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
-    sops --config "$DOT_DIR/.sops.yaml" "$DOT_DIR/config/secrets.env.enc"
+    sops --input-type dotenv --output-type dotenv --config "$DOT_DIR/.sops.yaml" "$DOT_DIR/config/secrets.env.enc"
 }
 secrets-decrypt() {
     local enc="$DOT_DIR/config/secrets.env.enc"
@@ -26,7 +26,7 @@ secrets-decrypt() {
     if [[ ! -f "$enc" ]]; then echo "No encrypted secrets at $enc — run secrets-init"; return 1; fi
     if [[ ! -f "$sops_yaml" ]]; then echo "No .sops.yaml at $sops_yaml — run secrets-init"; return 1; fi
     echo "Decrypting $enc → $out"
-    if (umask 077 && sops -d --config "$sops_yaml" "$enc" > "${out}.tmp"); then
+    if (umask 077 && sops -d --input-type dotenv --output-type dotenv --config "$sops_yaml" "$enc" > "${out}.tmp"); then
         mv "${out}.tmp" "$out"
         echo "Decrypted to $out"
     else
@@ -152,7 +152,7 @@ YAML
         else
             printf '%s\n' '# Auto-decrypt SOPS secrets on cd' \
                 'if command -v sops &>/dev/null && [ -f secrets.env.enc ]; then' \
-                '    dotenv <(sops -d --config .sops.yaml --output-type dotenv secrets.env.enc 2>/dev/null)' \
+                '    dotenv <(sops -d --input-type dotenv --output-type dotenv --config .sops.yaml secrets.env.enc 2>/dev/null)' \
                 'fi' > "$envrc"
         fi
         echo "Created $envrc — run: direnv allow"
