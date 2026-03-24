@@ -1,6 +1,5 @@
 {
   "enabledPlugins": {
-    "Notion@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": true,
     "code-review@claude-plugins-official": false,

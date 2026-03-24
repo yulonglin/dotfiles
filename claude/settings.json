@@ -272,7 +272,6 @@
     "commit-commands@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
-    "Notion@claude-plugins-official": false,
     "figma@claude-plugins-official": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,
     "frontend-design@claude-plugins-official": false,
