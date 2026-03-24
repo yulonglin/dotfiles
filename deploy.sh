@@ -252,8 +252,26 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
     elif ! cmd_exists sops; then
         log_warning "sops not installed — run install.sh"
     elif [[ ! -f "$age_key" ]]; then
-        log_warning "Age key not found at $age_key — run 'secrets-init' (paste age key from Bitwarden)"
-    else
+        # Prompt for age key (same pattern as cloud setup.sh)
+        echo ""
+        log_info "Age key not found at $age_key"
+        echo "Paste your age private key (from Bitwarden), then press Enter:"
+        echo "(starts with AGE-SECRET-KEY-, leave empty to skip)"
+        local age_input=""
+        if [[ -e /dev/tty ]]; then
+            read -rs age_input </dev/tty
+        fi
+        if [[ -n "$age_input" ]]; then
+            mkdir -p "$(dirname "$age_key")"
+            printf '%s\n' "$age_input" > "$age_key"
+            chmod 600 "$age_key"
+            log_success "Age key saved to $age_key"
+        else
+            log_warning "Skipping — run 'secrets-init' or re-run deploy.sh to set up"
+        fi
+    fi
+    # Decrypt if key now exists
+    if [[ -f "$enc" ]] && cmd_exists sops && [[ -f "$age_key" ]]; then
         if (umask 077 && sops -d "$enc" > "${out}.tmp"); then
             mv "${out}.tmp" "$out"
             log_success "Decrypted secrets to $out"
