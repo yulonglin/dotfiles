@@ -26,10 +26,10 @@ This repo is highly personal — it reflects one person's workflow, opinions, an
 | Git config + global gitignore/gitattributes | Mouseless config |
 | Editor settings (VSCode/Cursor merge logic) | Ghostty theme aliases |
 | Cleanup automation (Downloads/Screenshots) | Specific API keys and gist IDs |
-| Secrets sync pattern (bidirectional gist sync) | Cloud setup scripts (RunPod user) |
+| Gist sync (bidirectional SSH config/identity sync) | Cloud setup scripts (RunPod user) |
 | SOPS + age encrypted secrets workflow | Plugin marketplace selections |
 
-All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `SECRETS_GIST_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
+All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIST_SYNC_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
 
 ## Rust CLI Tools
 
@@ -358,9 +358,9 @@ Pre-commit hooks for secret detection across all repositories:
 
 Scans staged files for API keys, tokens, and credentials before each commit.
 
-### Secrets Sync Automation (both platforms)
+### Gist Sync Automation (both platforms)
 
-Automatically sync secrets with GitHub gist daily at 08:00:
+Automatically sync config with GitHub gist daily at 08:00:
 
 ```bash
 ./deploy.sh --secrets  # Part of defaults
@@ -375,11 +375,13 @@ Automatically sync secrets with GitHub gist daily at 08:00:
 
 ```bash
 # Manual sync
-sync-secrets
+sync-gist
 
 # Uninstall automation
-./scripts/cleanup/setup_secrets_sync.sh --uninstall
+./scripts/cleanup/setup_gist_sync.sh --uninstall
 ```
+
+> **Note:** Secret gists are unlisted, not encrypted. Only non-secret config (SSH config, authorized_keys, git identity) should be synced via gist.
 
 ### Encrypted Secrets (SOPS + age)
 
@@ -392,7 +394,7 @@ sync-secrets
 | `config/secrets.env.enc` | SOPS-encrypted API keys | Committed |
 | `.sops.yaml` | SOPS config with age public key | Committed |
 | `$DOT_DIR/.secrets` | Decrypted env vars (created at deploy time) | Gitignored |
-| `~/.config/sops/age/keys.txt` | age private key (synced via gist) | Not in repo |
+| `~/.config/sops/age/keys.txt` | age private key (stored in Bitwarden) | Not in repo |
 
 **Commands:**
 
@@ -533,7 +535,7 @@ curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/clo
 curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/restart.sh | bash
 
 # Hetzner / standard VPS (persistent /home)
-curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | PERSISTENT=/home bash
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | USER_HOME=/home bash
 ```
 
 Then SSH as `yulong@<ip>` (not root). See [`scripts/cloud/README.md`](./scripts/cloud/README.md) for details.
