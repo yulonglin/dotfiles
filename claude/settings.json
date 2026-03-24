@@ -303,18 +303,6 @@
     "rust-analyzer-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
-    "ai-safety-plugins": {
-      "source": {
-        "source": "directory",
-        "path": "/home/yulong/code/marketplaces/ai-safety-plugins"
-      }
-    },
-    "productivity-tools": {
-      "source": {
-        "source": "directory",
-        "path": "/home/yulong/code/marketplaces/productivity-tools"
-      }
-    },
     "dev-browser-marketplace": {
       "source": {
         "source": "github",

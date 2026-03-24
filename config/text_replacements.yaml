@@ -69,6 +69,13 @@ coding-agents:
   phrase: Come up with criteria for a good plan for this task. Then use appropriate sub-agents, including Codex and 
     Gemini, to critique and improve on this plan.
   uid: 03D92E43-C6F9-4B65-B44C-89CD8FED8504
+- shortcut: review
+  phrase: Come up with criteria and tests/checks. Then review the code with multiple subagents including Codex and 
+    Gemini.
+  uid: A1EF3E27-115A-41E8-988D-5FB693A2A779
+- shortcut: txt
+  phrase: 'Critique and improve on the following for clarity, friendliness and persuasiveness. Context:  '
+  uid: AC7FD1C1-92AB-46C8-8717-24F419273D1D
 - shortcut: txt1
   phrase: |
     Critique and improve on the following text message. Allow it to be friendly and informal, but prioritise clarity, persuasiveness and directness! The data is provided so:
@@ -111,7 +118,7 @@ emojis:
   uid: 8A8372A9-AAFB-4FEE-83B9-45E4256D88A3
 focusmate:
 - shortcut: atb
-  phrase: well atb then, see you at the end :)
+  phrase: nice! well atb then, see you at the end :)
   uid: 9A43CF60-15C3-42DF-B7B3-BC14FE94EF7B
 - shortcut: bye
   phrase: thanks for your help! see you around, and have a great rest of your day :)
