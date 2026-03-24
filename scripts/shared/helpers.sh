@@ -463,11 +463,14 @@ ensure_local_key_in_authorized_keys() {
 }
 
 # Sync secrets bidirectionally with GitHub gist
-sync_secrets() {
-    local gist_id="${SECRETS_GIST_ID:-3cc239f160a2fe8c9e6a14829d85a371}"
+# Bidirectional sync with GitHub gist (SSH config, authorized_keys, git identity)
+# WARNING: Secret gists are unlisted, not encrypted — anyone with the URL can read them.
+# Do NOT add secrets (API keys, private keys, tokens) to this sync.
+sync_gist() {
+    local gist_id="${GIST_SYNC_ID:-3cc239f160a2fe8c9e6a14829d85a371}"
 
     if ! gh auth status &>/dev/null 2>&1; then
-        log_warning "gh not authenticated - run 'gh auth login' to sync secrets"
+        log_warning "gh not authenticated - run 'gh auth login' to sync gist"
         return 1
     fi
 
@@ -523,9 +526,9 @@ print('yes' if '$1' in data['files'] else 'no')
     sync_file "$DOT_DIR/config/user.conf" "user.conf" "$gist_id" "$gist_updated_at" && changes_made=true
 
     if [[ "$changes_made" == "true" ]]; then
-        log_success "Secrets synced with gist"
+        log_success "Gist sync complete"
     else
-        log_success "All secrets already in sync"
+        log_success "Gist already in sync"
     fi
 }
 

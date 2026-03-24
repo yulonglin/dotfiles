@@ -1,0 +1,19 @@
+#!/usr/bin/env zsh
+# Sync config with GitHub gist (scheduled wrapper)
+# WARNING: Gist is unlisted, not encrypted. Do NOT sync secrets here.
+
+set -euo pipefail
+
+DOT_DIR="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
+
+source "$DOT_DIR/config.sh"
+source "$DOT_DIR/scripts/shared/helpers.sh"
+
+log_info "Starting scheduled gist sync..."
+if sync_gist; then
+    log_success "Gist sync completed"
+    exit 0
+else
+    log_error "Gist sync failed"
+    exit 1
+fi
