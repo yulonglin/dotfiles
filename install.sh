@@ -276,9 +276,13 @@ if [[ "$INSTALL_EXTRAS" == "true" ]]; then
     fi
 
     # shell-ask
-    if cmd_exists npm && ! is_installed ask; then
+    if ! is_installed ask; then
         log_info "Installing shell-ask..."
-        npm i -g shell-ask 2>/dev/null || true
+        if cmd_exists bun; then
+            bun add -g shell-ask &>/dev/null || true
+        elif cmd_exists npm; then
+            npm i -g shell-ask 2>/dev/null || true
+        fi
     fi
 fi
 
@@ -310,12 +314,39 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Ensure claude is in PATH for this session
     [[ -d "$HOME/.claude/bin" ]] && export PATH="$HOME/.claude/bin:$PATH"
 
-    # Install bun (preferred package manager for global CLI tools on Linux)
-    if is_linux && ! cmd_exists bun; then
+    # Claude Code sandbox dependencies (Linux only)
+    # bubblewrap: filesystem sandboxing, socat: unix socket proxying
+    if is_linux; then
+        log_info "Installing Claude Code sandbox dependencies..."
+        if cmd_exists apt; then
+            apt_install bubblewrap
+            apt_install socat
+        elif cmd_exists apk; then
+            apk add bubblewrap socat 2>/dev/null || log_warning "Sandbox deps failed (Alpine)"
+        fi
+    fi
+
+    # Install bun (preferred JS package manager / runtime)
+    if ! cmd_exists bun; then
         log_info "Installing bun..."
-        curl -fsSL https://bun.sh/install | bash
-        export BUN_INSTALL="$HOME/.bun"
-        export PATH="$BUN_INSTALL/bin:$PATH"
+        if is_macos; then
+            brew_install bun
+        else
+            curl -fsSL https://bun.sh/install | bash
+            export BUN_INSTALL="$HOME/.bun"
+            export PATH="$BUN_INSTALL/bin:$PATH"
+        fi
+    fi
+
+    # Install Node.js/npm as fallback (Linux only — macOS gets it via brew/nvm)
+    if is_linux && ! cmd_exists npm; then
+        log_info "Installing Node.js (npm fallback)..."
+        if cmd_exists mise; then
+            mise use -g node@lts 2>/dev/null || log_warning "Node.js install via mise failed"
+        elif cmd_exists apt; then
+            apt_install nodejs
+            apt_install npm
+        fi
     fi
 
     # Gemini CLI
@@ -324,9 +355,11 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
         if is_macos; then
             brew_install gemini-cli
         elif cmd_exists bun; then
-            bun add -g @google/gemini-cli &>/dev/null || log_warning "Gemini CLI failed"
+            bun add -g @google/gemini-cli &>/dev/null || log_warning "Gemini CLI failed (bun)"
+        elif cmd_exists npm; then
+            npm install -g @google/gemini-cli &>/dev/null || log_warning "Gemini CLI failed (npm)"
         else
-            log_warning "bun is required to install Gemini CLI on Linux; skipping"
+            log_warning "bun or npm required for Gemini CLI; skipping"
         fi
     fi
 
@@ -336,9 +369,29 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
         if is_macos; then
             brew_install codex
         elif cmd_exists bun; then
-            bun add -g @openai/codex &>/dev/null || log_warning "Codex CLI failed"
+            bun add -g @openai/codex &>/dev/null || log_warning "Codex CLI failed (bun)"
+        elif cmd_exists npm; then
+            npm install -g @openai/codex &>/dev/null || log_warning "Codex CLI failed (npm)"
         else
-            log_warning "bun is required to install Codex CLI on Linux; skipping"
+            log_warning "bun or npm required for Codex CLI; skipping"
+        fi
+    fi
+
+    # Claude Code seccomp filter (Linux only)
+    # Blocks unix domain sockets for sandbox security
+    if is_linux; then
+        seccomp_installed=false
+        bun pm ls -g 2>/dev/null | grep -q sandbox-runtime && seccomp_installed=true
+        npm list -g @anthropic-ai/sandbox-runtime &>/dev/null 2>&1 && seccomp_installed=true
+        if [[ "$seccomp_installed" == "false" ]]; then
+            log_info "Installing Claude Code seccomp filter..."
+            if cmd_exists bun; then
+                bun add -g @anthropic-ai/sandbox-runtime &>/dev/null || log_warning "sandbox-runtime install failed"
+            elif cmd_exists npm; then
+                npm install -g @anthropic-ai/sandbox-runtime &>/dev/null || log_warning "sandbox-runtime install failed"
+            else
+                log_warning "bun or npm required for @anthropic-ai/sandbox-runtime; skipping"
+            fi
         fi
     fi
 
@@ -348,17 +401,22 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
         brew tap Crazytieguy/tap 2>/dev/null && brew_install coven || log_warning "Coven installation failed"
     fi
 
-    # Configure MCP servers (HTTP/npx)
+    # Configure MCP servers (HTTP/bunx/npx)
     if cmd_exists claude; then
         log_info "Configuring MCP servers..."
         for server in "${MCP_SERVERS[@]}"; do
             IFS=':' read -r name url <<< "$server"
             claude mcp remove "$name" &>/dev/null || true
             if [[ "$url" == npx* ]]; then
-                # JSON-based config for npx
+                # JSON-based config — prefer bunx over npx
                 args="${url#npx }"
-                claude mcp add-json --scope user "$name" "{\"command\":\"npx\",\"args\":[\"${args}\"]}" 2>&1 && \
-                    log_success "$name configured" || log_warning "$name failed"
+                if cmd_exists bunx; then
+                    claude mcp add-json --scope user "$name" "{\"command\":\"bunx\",\"args\":[\"${args}\"]}" 2>&1 && \
+                        log_success "$name configured (bunx)" || log_warning "$name failed"
+                else
+                    claude mcp add-json --scope user "$name" "{\"command\":\"npx\",\"args\":[\"${args}\"]}" 2>&1 && \
+                        log_success "$name configured (npx)" || log_warning "$name failed"
+                fi
             else
                 # HTTP transport
                 claude mcp add --scope user --transport http "$name" "$url" 2>&1 && \
