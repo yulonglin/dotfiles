@@ -303,10 +303,28 @@
     "rust-analyzer-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
+    "ai-safety-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "yulonglin/ai-safety-plugins"
+      }
+    },
+    "productivity-tools": {
+      "source": {
+        "source": "github",
+        "repo": "yulonglin/productivity-tools"
+      }
+    },
     "dev-browser-marketplace": {
       "source": {
         "source": "github",
         "repo": "sawyerhood/dev-browser"
+      }
+    },
+    "ui-ux-pro-max-skill": {
+      "source": {
+        "source": "github",
+        "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
       }
     }
   },
