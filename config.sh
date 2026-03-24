@@ -52,6 +52,7 @@ DEPLOY_GIT_CONFIG=true          # Git configuration (gitconfig, global gitignore
 DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect")
 DEPLOY_SERENA=false             # Serena MCP config (~/.serena symlink)
 DEPLOY_MOUSELESS=false          # Mouseless keyboard mouse control (macOS only, opt-in)
+DEPLOY_TEXT_REPLACEMENTS=false  # Sync text replacements: macOS + Alfred (macOS only, opt-in)
 DEPLOY_VPN=false                # NordVPN+Tailscale split tunnel daemon (macOS only, opt-in)
 DEPLOY_SECRETS_ENV=true         # Decrypt SOPS-encrypted secrets (requires sops + age)
 
@@ -218,6 +219,7 @@ apply_profile() {
             DEPLOY_BREW_UPDATE=false
             DEPLOY_KEYBOARD=false
             DEPLOY_BEDTIME=false
+            DEPLOY_TEXT_REPLACEMENTS=false
             DEPLOY_SECRETS_ENV=false
             ;;
         *)
