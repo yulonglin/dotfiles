@@ -27,7 +27,7 @@ INSTALL_CLEANUP=true            # Automatic cleanup (macOS only)
 INSTALL_DOCKER=true             # Docker (Linux only)
 INSTALL_EXPERIMENTAL=true       # ty type checker
 INSTALL_CREATE_USER=true        # Create non-root dev user (Linux only, guarded by is_linux + EUID check)
-INSTALL_EXTRAS=false            # hyperfine, gitui, terminal-notifier
+INSTALL_EXTRAS=false            # hyperfine, gitui, code2prompt, terminal-notifier
 
 # ─── Deploy Components ────────────────────────────────────────────────────────
 DEPLOY_VIM=true
@@ -154,6 +154,7 @@ PACKAGES_EXTRAS_MACOS=(
 PACKAGES_EXTRAS_LINUX=(
     "github:sharkdp/hyperfine"
     "github:extrawurst/gitui"
+    "cargo:code2prompt"
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

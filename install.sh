@@ -51,7 +51,7 @@ COMPONENTS:
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
     --ai-tools        Enable AI CLI tools (Claude, Gemini, Codex)
-    --extras          Enable extra CLI tools (hyperfine, lazygit, code2prompt)
+    --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
     --experimental    Enable experimental features (ty type checker)
@@ -255,8 +255,20 @@ fi
 if [[ "$INSTALL_EXTRAS" == "true" ]]; then
     log_section "INSTALLING EXTRAS"
 
+    # Rust toolchain (needed for code2prompt)
+    if ! is_installed cargo; then
+        log_info "Installing Rust..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+    fi
+    source "$HOME/.cargo/env" 2>/dev/null || true
+
     if is_macos; then
         install_packages brew "${PACKAGES_EXTRAS_MACOS[@]}"
+
+        if cmd_exists cargo && ! is_installed code2prompt; then
+            log_info "Installing code2prompt..."
+            cargo install code2prompt --quiet 2>/dev/null || log_warning "code2prompt failed"
+        fi
     else
         for pkg in "${PACKAGES_EXTRAS_LINUX[@]}"; do
             mise_install "$pkg"
