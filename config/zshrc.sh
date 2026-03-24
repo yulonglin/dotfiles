@@ -35,6 +35,11 @@ else
     export CLAUDE_CODE_TMPDIR="$HOME/tmp/claude"
 fi
 
+# RunPod/container: allow Claude Code bypass-permissions as root
+if [[ "$(id -u)" == "0" ]] && { [[ -n "$RUNPOD_POD_ID" ]] || [[ -d /workspace ]]; }; then
+    export IS_SANDBOX=1
+fi
+
 ZSH_DISABLE_COMPFIX=true
 ZSH_THEME="powerlevel10k/powerlevel10k"
 ZSH=$HOME/.oh-my-zsh

@@ -72,28 +72,20 @@ else
     ok "Node $(node -v) already installed"
 fi
 
-# ─── Create non-root user ────────────────────────────────────────────────────
-# Always needed: Claude Code blocks --permission-mode bypass as root (no override exists)
-# RunPod: user for Claude Code only, everything else runs as root
-# VPS:    user is the primary account
-step "User account"
-if ! id "$USERNAME" &>/dev/null; then
-    if [[ "$PROVIDER" == "runpod" ]]; then
-        # RunPod: home on /workspace is root-owned, create user with /home/<user>
-        log "Creating user $USERNAME (for Claude Code — bypass-permissions requires non-root)..."
-        useradd -m -d "/home/$USERNAME" -s /usr/bin/zsh "$USERNAME"
-    else
+# ─── Create non-root user (VPS only) ─────────────────────────────────────────
+# RunPod: stay as root, use IS_SANDBOX=1 for Claude Code bypass-permissions
+# VPS:    create non-root user as primary account
+if [[ "$PROVIDER" != "runpod" ]]; then
+    step "User account"
+    if ! id "$USERNAME" &>/dev/null; then
         log "Creating user $USERNAME with home $USER_HOME..."
         useradd -m -d "$USER_HOME" -s /usr/bin/zsh "$USERNAME"
+        echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME"
+        ok "User $USERNAME created (uid=$(id -u "$USERNAME"), gid=$(id -g "$USERNAME"))"
+    else
+        ok "User $USERNAME already exists (uid=$(id -u "$USERNAME"))"
     fi
-    echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME"
-    ok "User $USERNAME created (uid=$(id -u "$USERNAME"), gid=$(id -g "$USERNAME"))"
-else
-    ok "User $USERNAME already exists (uid=$(id -u "$USERNAME"))"
-fi
 
-# Fix home directory ownership (VPS only — RunPod mounts don't support chown)
-if [[ "$PROVIDER" != "runpod" ]]; then
     step "Home directory ownership"
     if [[ -d "$USER_HOME" ]]; then
         OWNER=$(stat -c '%U:%G' "$USER_HOME" 2>/dev/null || stat -f '%Su:%Sg' "$USER_HOME")
@@ -265,18 +257,14 @@ step "deploy.sh"
 run_as "cd $DOTFILES && ./deploy.sh"
 ok "deploy.sh complete"
 
-# ─── Claude Code (always as non-root — bypass-permissions requires it) ───────
+# ─── Claude Code ─────────────────────────────────────────────────────────────
 step "Claude Code"
-CLAUDE_USER="$USERNAME"  # never root — Claude Code blocks bypass-permissions as root
-if ! sudo -u "$CLAUDE_USER" -i bash -c 'command -v claude' &>/dev/null; then
-    log "Installing Claude Code as $CLAUDE_USER..."
-    sudo -u "$CLAUDE_USER" -i bash -c 'curl -fsSL https://claude.ai/install.sh | sh'
-    ok "Claude Code installed for $CLAUDE_USER"
+if ! run_as 'command -v claude' &>/dev/null; then
+    log "Installing Claude Code..."
+    run_as 'curl -fsSL https://claude.ai/install.sh | sh'
+    ok "Claude Code installed"
 else
-    ok "Claude Code already installed for $CLAUDE_USER"
-fi
-if [[ "$PROVIDER" == "runpod" ]]; then
-    log "Run Claude Code with: sudo -u $CLAUDE_USER claude --permission-mode bypass"
+    ok "Claude Code already installed"
 fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
@@ -285,7 +273,7 @@ echo "=== Setup Complete ==="
 if [[ "$PROVIDER" == "runpod" ]]; then
     log "RunPod: running as root, workspace = $USER_HOME"
     log "SSH:      ssh root@<ip> -p <port>"
-    log "Claude:   sudo -u $USERNAME claude --permission-mode bypass"
+    log "Claude:   IS_SANDBOX=1 claude --permission-mode bypass"
 else
     log "SSH:      ssh $USERNAME@<ip>"
 fi
