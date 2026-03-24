@@ -317,6 +317,196 @@ install_packages() {
     done
 }
 
+# ─── Parallelizable Install Functions ────────────────────────────────────────
+
+install_gitleaks() {
+    if is_installed gitleaks; then return 0; fi
+    log_info "Installing gitleaks..."
+    if is_macos; then
+        brew_install gitleaks
+    else
+        local version arch tmpd
+        version=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "8.24.3")
+        case "$(uname -m)" in
+            x86_64)  arch="x64" ;;
+            aarch64) arch="arm64" ;;
+            *)       log_warning "Unsupported architecture for gitleaks"; return 1 ;;
+        esac
+        tmpd=$(mktemp -d)
+        mkdir -p "$HOME/.local/bin"
+        curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_${arch}.tar.gz" -o "$tmpd/gitleaks.tar.gz" && \
+        tar -xzf "$tmpd/gitleaks.tar.gz" -C "$tmpd" && \
+        mv "$tmpd/gitleaks" "$HOME/.local/bin/" && \
+        log_success "gitleaks $version installed" || { log_warning "gitleaks installation failed"; rm -rf "$tmpd"; return 1; }
+        rm -rf "$tmpd"
+    fi
+}
+
+install_sops() {
+    if is_installed sops; then return 0; fi
+    log_info "Installing sops..."
+    if is_macos; then
+        brew_install sops
+    else
+        local sops_ver sops_arch
+        sops_ver=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        sops_ver="${sops_ver:-3.9.4}"
+        case "$(uname -m)" in
+            x86_64)  sops_arch="amd64" ;;
+            aarch64) sops_arch="arm64" ;;
+            *)       log_warning "Unsupported architecture for sops"; return 1 ;;
+        esac
+        mkdir -p "$HOME/.local/bin"
+        curl -sSL "https://github.com/getsops/sops/releases/download/v${sops_ver}/sops-v${sops_ver}.linux.${sops_arch}" -o "$HOME/.local/bin/sops" && \
+            chmod +x "$HOME/.local/bin/sops" && \
+            log_success "sops $sops_ver installed" || { log_warning "sops installation failed"; return 1; }
+    fi
+}
+
+install_age() {
+    if is_installed age; then return 0; fi
+    log_info "Installing age..."
+    if is_macos; then
+        brew_install age
+    else
+        local age_ver age_arch tmpd
+        age_ver=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        age_ver="${age_ver:-1.2.1}"
+        case "$(uname -m)" in
+            x86_64)  age_arch="amd64" ;;
+            aarch64) age_arch="arm64" ;;
+            *)       log_warning "Unsupported architecture for age"; return 1 ;;
+        esac
+        tmpd=$(mktemp -d)
+        mkdir -p "$HOME/.local/bin"
+        curl -sSL "https://github.com/FiloSottile/age/releases/download/v${age_ver}/age-v${age_ver}-linux-${age_arch}.tar.gz" -o "$tmpd/age.tar.gz" && \
+            tar -xzf "$tmpd/age.tar.gz" -C "$tmpd" && \
+            mv "$tmpd/age/age" "$tmpd/age/age-keygen" "$HOME/.local/bin/" && \
+            log_success "age $age_ver installed" || { log_warning "age installation failed"; rm -rf "$tmpd"; return 1; }
+        rm -rf "$tmpd"
+    fi
+}
+
+install_direnv() {
+    if is_installed direnv; then return 0; fi
+    log_info "Installing direnv..."
+    if is_macos; then
+        brew_install direnv
+    else
+        curl -sfL https://direnv.net/install.sh | bash 2>/dev/null || { log_warning "direnv installation failed"; return 1; }
+    fi
+}
+
+install_claude_code() {
+    if is_installed claude; then return 0; fi
+    log_info "Installing Claude Code..."
+    curl -fsSL https://claude.ai/install.sh | bash || { log_warning "Claude Code installation failed"; return 1; }
+    # Alpine Linux dependencies
+    if is_linux && cmd_exists apk; then
+        apk add libgcc libstdc++ ripgrep 2>/dev/null || true
+        export USE_BUILTIN_RIPGREP=0
+    fi
+}
+
+install_gemini_cli() {
+    if is_installed gemini; then return 0; fi
+    log_info "Installing Gemini CLI..."
+    if is_macos; then
+        brew_install gemini-cli
+    elif cmd_exists bun; then
+        bun add -g @google/gemini-cli &>/dev/null || { log_warning "Gemini CLI failed"; return 1; }
+    else
+        log_warning "bun is required to install Gemini CLI on Linux; skipping"
+        return 1
+    fi
+}
+
+install_codex_cli() {
+    if is_installed codex; then return 0; fi
+    log_info "Installing Codex CLI..."
+    if is_macos; then
+        brew_install codex
+    elif cmd_exists bun; then
+        bun add -g @openai/codex &>/dev/null || { log_warning "Codex CLI failed"; return 1; }
+    else
+        log_warning "bun is required to install Codex CLI on Linux; skipping"
+        return 1
+    fi
+}
+
+# ─── Parallel Execution ──────────────────────────────────────────────────────
+
+# Run multiple commands in parallel with grouped log replay.
+# Usage: run_parallel "group label" "job_name|command_or_function" ...
+# - Each job runs in a subshell with set +e, stdout+stderr captured to a temp log
+# - Exit code captured via trap (always written, even on early exit)
+# - After all jobs finish: replay each job's log grouped under its name
+# - Print summary with pass/fail counts and list of failures
+# - Sets PARALLEL_FAILURES array in caller's scope
+# - Always returns 0 (continue-on-failure)
+run_parallel() {
+    local group_label="$1"
+    shift
+
+    local tmpdir
+    tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/parallel_run.XXXXXX")
+
+    typeset -A pids
+    local job_names=()
+
+    log_info "$group_label..."
+
+    for entry in "$@"; do
+        local name="${entry%%|*}"
+        local cmd="${entry#*|}"
+        job_names+=("$name")
+
+        (
+            set +e
+            local rc=0
+            trap 'echo $rc > "'"$tmpdir/$name"'.exitcode"' EXIT
+            eval "$cmd"
+            rc=$?
+        ) &>"$tmpdir/$name.log" &
+        pids[$name]=$!
+    done
+
+    # Wait for all jobs
+    for name in "${job_names[@]}"; do
+        wait ${pids[$name]} 2>/dev/null || true
+    done
+
+    # Replay logs and collect results
+    local passed=0 failed=0
+    PARALLEL_FAILURES=()
+
+    for name in "${job_names[@]}"; do
+        local rc=0
+        [[ -f "$tmpdir/$name.exitcode" ]] && rc=$(<"$tmpdir/$name.exitcode")
+
+        if [[ "$rc" -eq 0 ]]; then
+            echo "  ── $name ──"
+            ((passed++))
+        else
+            echo "  ── $name (FAILED) ──"
+            PARALLEL_FAILURES+=("$name")
+            ((failed++))
+        fi
+        cat "$tmpdir/$name.log" 2>/dev/null
+    done
+
+    # Summary
+    if [[ $failed -gt 0 ]]; then
+        log_warning "$group_label: $passed passed, $failed failed: ${PARALLEL_FAILURES[*]}"
+    else
+        log_success "$group_label: $passed/$passed completed"
+    fi
+
+    # Cleanup
+    rm -rf "$tmpdir"
+    return 0
+}
+
 # ─── ZSH Setup ────────────────────────────────────────────────────────────────
 
 # Set ZSH as default shell if possible
