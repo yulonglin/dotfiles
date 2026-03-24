@@ -1,10 +1,10 @@
 #!/bin/bash
 # Cloud VM/container first-boot setup
-# Works across providers: RunPod, Hetzner, etc.
+# Auto-detects provider (RunPod, Hetzner, generic Linux)
 #
 # Usage:
-#   ./setup.sh                           # Use defaults (RunPod-style)
-#   PERSISTENT=/home ./setup.sh          # Custom persistent path (Hetzner)
+#   ./setup.sh                           # Auto-detect provider
+#   USER_HOME=/custom/path ./setup.sh    # Override home directory
 #   USERNAME=dev ./setup.sh              # Custom username
 #
 # One-liner:
@@ -14,13 +14,20 @@ set -e
 
 # ─── Configuration (override via env vars) ───────────────────────────────────
 USERNAME="${USERNAME:-yulong}"
-PERSISTENT="${PERSISTENT:-/workspace}"           # RunPod default
-HOME_DIR="${HOME_DIR:-$PERSISTENT/$USERNAME}"    # /workspace/yulong
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yulonglin/dotfiles.git}"
+
+# Auto-detect provider and set home directory
+if [[ -n "$USER_HOME" ]]; then
+    :  # explicitly provided, use as-is
+elif [[ -d /workspace ]] || [[ -n "$RUNPOD_POD_ID" ]]; then
+    USER_HOME="/workspace/$USERNAME"    # RunPod: persistent volume
+else
+    USER_HOME="/home/$USERNAME"         # Standard unix
+fi
 
 echo "=== Cloud Setup ==="
 echo "Username: $USERNAME"
-echo "Home: $HOME_DIR"
+echo "Home: $USER_HOME"
 echo ""
 
 # ─── System deps ──────────────────────────────────────────────────────────────
@@ -39,26 +46,38 @@ fi
 # ─── Create non-root user ─────────────────────────────────────────────────────
 if ! id "$USERNAME" &>/dev/null; then
     echo "Creating user $USERNAME..."
-    useradd -m -d "$HOME_DIR" -s /usr/bin/zsh "$USERNAME"
+    useradd -m -d "$USER_HOME" -s /usr/bin/zsh "$USERNAME"
     echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME"
 else
     echo "User $USERNAME already exists"
 fi
 
-# ─── Fix ownership of user's home (handles root-created files) ───────────────
-if [[ -d "$HOME_DIR" ]]; then
-    echo "Fixing ownership of $HOME_DIR..."
-    chown -R "$USERNAME:$USERNAME" "$HOME_DIR"
+# ─── Fix ownership & permissions of user's home (handles root-created files) ──
+if [[ -d "$USER_HOME" ]]; then
+    echo "Fixing ownership of $USER_HOME..."
+    chown -R "$USERNAME:$USERNAME" "$USER_HOME"
+    chmod 755 "$USER_HOME"  # sshd refuses key auth if home is group/world-writable
 fi
 
 # ─── SSH keys (for direct SSH access as non-root) ────────────────────────────
-if [ -d /root/.ssh ]; then
-    echo "Copying SSH keys..."
-    cp -r /root/.ssh "$HOME_DIR/" 2>/dev/null || true
-    chown -R "$USERNAME:$USERNAME" "$HOME_DIR/.ssh"
-    chmod 700 "$HOME_DIR/.ssh"
-    chmod 600 "$HOME_DIR/.ssh/authorized_keys" 2>/dev/null || true
+GITHUB_USER="${GITHUB_USER:-yulonglin}"
+mkdir -p "$USER_HOME/.ssh"
+
+# Try root's keys first, then fetch from GitHub
+if [ -f /root/.ssh/authorized_keys ]; then
+    echo "Copying SSH keys from root..."
+    cp /root/.ssh/authorized_keys "$USER_HOME/.ssh/"
+else
+    echo "Fetching SSH keys from GitHub ($GITHUB_USER)..."
+    curl -fsSL "https://github.com/$GITHUB_USER.keys" > "$USER_HOME/.ssh/authorized_keys"
 fi
+
+# Copy root's SSH config if it exists (e.g., provider-specific settings)
+[ -f /root/.ssh/config ] && cp /root/.ssh/config "$USER_HOME/.ssh/" 2>/dev/null || true
+
+chown -R "$USERNAME:$USERNAME" "$USER_HOME/.ssh"
+chmod 700 "$USER_HOME/.ssh"
+chmod 600 "$USER_HOME/.ssh/authorized_keys"
 
 # ─── Bun (preferred for global CLI tools on Linux) ───────────────────────────
 if ! command -v bun &>/dev/null; then
@@ -71,27 +90,51 @@ echo "Installing uv..."
 sudo -u "$USERNAME" -i bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
 
 # ─── Clone dotfiles to ~/code/dotfiles ────────────────────────────────────────
-DOTFILES="$HOME_DIR/code/dotfiles"
+DOTFILES="$USER_HOME/code/dotfiles"
 if [ ! -d "$DOTFILES" ]; then
     echo "Cloning dotfiles..."
-    sudo -u "$USERNAME" mkdir -p "$HOME_DIR/code"
+    sudo -u "$USERNAME" mkdir -p "$USER_HOME/code"
     sudo -u "$USERNAME" git clone "$DOTFILES_REPO" "$DOTFILES"
 else
     echo "Dotfiles already exist at $DOTFILES"
 fi
 
-# ─── Run install and deploy as user ───────────────────────────────────────────
+# ─── Run install as user ─────────────────────────────────────────────────────
 echo "Running install.sh..."
-sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./install.sh --zsh --tmux --ai-tools"
+sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./install.sh"
 
-echo "Running deploy.sh..."
-sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./deploy.sh"
-
-# ─── Authenticate gh if needed ────────────────────────────────────────────────
+# ─── Authenticate gh (needed for gist secrets sync in deploy) ────────────────
 if ! sudo -u "$USERNAME" -i bash -c 'gh auth status' &>/dev/null; then
     echo "Authenticating GitHub CLI..."
     sudo -u "$USERNAME" -i bash -c 'gh auth login --web --git-protocol ssh'
 fi
+
+# ─── Age key for SOPS secrets (paste from Bitwarden) ─────────────────────────
+AGE_KEY_DIR="$USER_HOME/.config/sops/age"
+if [ ! -f "$AGE_KEY_DIR/keys.txt" ]; then
+    echo ""
+    echo "Paste your age private key (from Bitwarden), then press Enter:"
+    echo "(starts with AGE-SECRET-KEY-, leave empty to skip)"
+    if [[ -e /dev/tty ]]; then
+        read -rs AGE_KEY </dev/tty
+    else
+        echo "Non-interactive — skipping age key prompt. Paste after login with: secrets-init"
+        AGE_KEY=""
+    fi
+    if [[ -n "$AGE_KEY" ]]; then
+        sudo -u "$USERNAME" mkdir -p "$AGE_KEY_DIR"
+        printf '%s\n' "$AGE_KEY" | sudo -u "$USERNAME" tee "$AGE_KEY_DIR/keys.txt" > /dev/null
+        chmod 600 "$AGE_KEY_DIR/keys.txt"
+        chown "$USERNAME:$USERNAME" "$AGE_KEY_DIR/keys.txt"
+        echo "Age key saved."
+    else
+        echo "Skipping — run secrets-init after login to set up SOPS"
+    fi
+fi
+
+# ─── Deploy configs (with secrets now available) ─────────────────────────────
+echo "Running deploy.sh..."
+sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./deploy.sh"
 
 # ─── Install Claude Code as user ──────────────────────────────────────────────
 echo "Installing Claude Code..."
@@ -100,5 +143,5 @@ sudo -u "$USERNAME" -i bash -c 'curl -fsSL https://claude.ai/install.sh | sh'
 echo ""
 echo "=== Setup Complete ==="
 echo "SSH with: ssh $USERNAME@<ip>"
-echo "Home: $HOME_DIR"
-echo "Code: ~/code = $HOME_DIR/code"
+echo "Home: $USER_HOME"
+echo "Code: ~/code = $USER_HOME/code"
