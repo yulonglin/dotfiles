@@ -253,7 +253,7 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
     if ! cmd_exists sops || ! cmd_exists age-keygen; then
         log_warning "sops/age not installed — run install.sh"
     elif [[ ! -f "$age_key" ]]; then
-        if [[ -f "$enc" ]]; then
+        if [[ -s "$enc" ]]; then
             # Second machine: encrypted secrets exist, need age key to decrypt
             echo ""
             log_info "Age key not found — encrypted secrets exist but can't be decrypted"
@@ -294,24 +294,31 @@ SOPSYAML
                 log_success "Created $sops_yaml"
             fi
 
-            # Create template secrets.env.enc if missing
-            local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
-            printf '%s\n' \
-                "# Encrypted API keys (edit with: secrets-edit)" \
-                "PLACEHOLDER=replace_me" \
-                "# ANTHROPIC_API_KEY=" \
-                "# OPENAI_API_KEY=" \
-                "# HF_TOKEN=" \
-                "# GITHUB_TOKEN=" \
-                > "$tmpfile"
-            sops -e --age "$pub_key" "$tmpfile" > "$enc"
-            rm -f "$tmpfile"
-            log_success "Created $enc — edit with: secrets-edit"
+            # Create template secrets.env.enc (or recreate if empty/corrupt)
+            if [[ ! -s "$enc" ]]; then
+                local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
+                printf '%s\n' \
+                    "# Encrypted API keys (edit with: secrets-edit)" \
+                    "PLACEHOLDER=replace_me" \
+                    "# ANTHROPIC_API_KEY=" \
+                    "# OPENAI_API_KEY=" \
+                    "# HF_TOKEN=" \
+                    "# GITHUB_TOKEN=" \
+                    > "$tmpfile"
+                if sops -e --age "$pub_key" "$tmpfile" > "${enc}.tmp"; then
+                    mv "${enc}.tmp" "$enc"
+                    log_success "Created $enc — edit with: secrets-edit"
+                else
+                    rm -f "${enc}.tmp"
+                    log_warning "Failed to create encrypted secrets"
+                fi
+                rm -f "$tmpfile"
+            fi
         fi
     fi
 
-    # Decrypt if key and encrypted file both exist
-    if [[ -f "$enc" ]] && cmd_exists sops && [[ -f "$age_key" ]]; then
+    # Decrypt if key and encrypted file both exist (and file is non-empty)
+    if [[ -s "$enc" ]] && cmd_exists sops && [[ -f "$age_key" ]]; then
         if (umask 077 && sops -d "$enc" > "${out}.tmp"); then
             mv "${out}.tmp" "$out"
             log_success "Decrypted secrets to $out"

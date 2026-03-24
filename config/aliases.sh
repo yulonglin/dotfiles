@@ -60,7 +60,7 @@ YAML
         echo "$sops_yaml already exists, skipping"
     fi
 
-    if [[ ! -f "$enc" ]]; then
+    if [[ ! -s "$enc" ]]; then
         local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
         printf '%s\n' \
             "# Encrypted API keys (edit with: secrets-edit)" \
@@ -70,9 +70,14 @@ YAML
             "# HF_TOKEN=" \
             "# GITHUB_TOKEN=" \
             > "$tmpfile"
-        sops -e --age "$pub_key" "$tmpfile" > "$enc"
+        if sops -e --age "$pub_key" "$tmpfile" > "${enc}.tmp"; then
+            mv "${enc}.tmp" "$enc"
+            echo "Created $enc — edit with: secrets-edit"
+        else
+            rm -f "${enc}.tmp"
+            echo "Failed to create encrypted secrets" >&2
+        fi
         rm -f "$tmpfile"
-        echo "Created $enc — edit with: secrets-edit"
     else
         echo "Encrypted secrets already exist at $enc"
     fi
@@ -106,12 +111,17 @@ YAML
         echo "Created $sops_yaml"
     fi
 
-    if [[ ! -f "$enc" ]]; then
+    if [[ ! -s "$enc" ]]; then
         local tmpfile="${TMPDIR:-/tmp}/proj_secrets.env"
         printf '%s\n' "# Project secrets (edit with: sops $enc)" "PLACEHOLDER=replace_me" > "$tmpfile"
-        sops -e --age "$pub_key" "$tmpfile" > "$enc"
+        if sops -e --age "$pub_key" "$tmpfile" > "${enc}.tmp"; then
+            mv "${enc}.tmp" "$enc"
+            echo "Created $enc"
+        else
+            rm -f "${enc}.tmp"
+            echo "Failed to create encrypted secrets" >&2
+        fi
         rm -f "$tmpfile"
-        echo "Created $enc"
     fi
 
     if [[ ! -f "$envrc" ]]; then
