@@ -209,6 +209,7 @@ apply_profile() {
             INSTALL_EXTRAS=false
             INSTALL_CLEANUP=false
             INSTALL_EXPERIMENTAL=false
+            INSTALL_CREATE_USER=false
             INSTALL_MACOS_SETTINGS=false
             INSTALL_FINICKY=false
             DEPLOY_SHELL=false
@@ -232,6 +233,8 @@ apply_profile() {
             DEPLOY_KEYBOARD=false
             DEPLOY_BEDTIME=false
             DEPLOY_TEXT_REPLACEMENTS=false
+            DEPLOY_MOUSELESS=false
+            DEPLOY_VPN=false
             DEPLOY_FINICKY=false
             DEPLOY_CLAUDE_TOOLS=false
             DEPLOY_SECRETS_ENV=false

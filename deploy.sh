@@ -344,8 +344,6 @@ if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     # Global gitattributes
     safe_symlink "$DOT_DIR/config/gitattributes_global" "$HOME/.gitattributes"
     git config --global core.attributesFile "$HOME/.gitattributes"
-else
-    log_warning "Skipping git config — ~/.gitignore_global and ~/.ignore_global will not be deployed"
 fi
 
 # ─── Git Hooks ────────────────────────────────────────────────────────────────
