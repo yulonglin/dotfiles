@@ -96,6 +96,12 @@ if [[ -d "$HOME/.local/lib/plotting" ]]; then
     export PYTHONPATH="$HOME/.local/lib/plotting:${PYTHONPATH}"
 fi
 
+# LS_COLORS — use vivid with catppuccin-mocha theme (matches Ghostty terminal theme)
+# Fixes unreadable directory colors (default ow=34;42 is blue-on-green)
+if command -v vivid &>/dev/null; then
+    export LS_COLORS="$(vivid generate catppuccin-mocha)"
+fi
+
 # ripgrep config — skip git's global ignore (has research patterns), use universal-only ignore
 [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/ripgrep/config" ]] && \
     export RIPGREP_CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/ripgrep/config"

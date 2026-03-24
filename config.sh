@@ -134,6 +134,7 @@ PACKAGES_MACOS=(
     "just"
     "sd"          # sed replacement (preferred over sed)
     "gum"         # interactive shell UI (toggle menus)
+    "vivid"       # LS_COLORS theme generator (catppuccin-mocha)
 )
 
 # Linux packages (via mise github: backend)
@@ -148,6 +149,7 @@ PACKAGES_LINUX_MISE=(
     "github:PaulJuliusMartinez/jless"
     "github:casey/just"
     "github:charmbracelet/gum"
+    "github:sharkdp/vivid"
 )
 
 # Extra packages (--extras flag)
