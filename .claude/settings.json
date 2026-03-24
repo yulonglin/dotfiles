@@ -1,11 +1,11 @@
 {
   "enabledPlugins": {
+    "Notion@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": true,
     "code-review@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": true,
     "code@ai-safety-plugins": true,
-    "coderabbit@claude-plugins-official": false,
     "commit-commands@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "core@ai-safety-plugins": true,
@@ -34,7 +34,6 @@
     "swift-lsp@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,
-    "vercel@claude-plugins-official": false,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
     "writing@ai-safety-plugins": true
