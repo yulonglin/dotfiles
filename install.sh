@@ -416,7 +416,7 @@ fi
 # ─── Docker (Linux) ──────────────────────────────────────────────────────────
 
 if [[ "$INSTALL_DOCKER" == "true" ]] && is_linux; then
-    install_docker
+    install_docker || log_warning "Docker installation failed — continuing"
 fi
 
 # ─── Cleanup Automation ───────────────────────────────────────────────────────
