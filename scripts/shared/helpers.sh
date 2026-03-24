@@ -33,66 +33,82 @@ show_component_menu() {
         return 0
     fi
 
-    # Define components and their current state
-    # Format: "name:variable_value" — order determines display order
+    # Define components with descriptions and current state
+    # Format: "name|description|variable_value"
     typeset -a comp_defs
     if [[ "$mode" == "install" ]]; then
         comp_defs=(
-            "zsh:$INSTALL_ZSH"
-            "tmux:$INSTALL_TMUX"
-            "ai-tools:$INSTALL_AI_TOOLS"
-            "extras:$INSTALL_EXTRAS"
-            "cleanup:$INSTALL_CLEANUP"
-            "experimental:$INSTALL_EXPERIMENTAL"
+            "zsh|ZSH + oh-my-zsh + powerlevel10k theme|$INSTALL_ZSH"
+            "tmux|Terminal multiplexer|$INSTALL_TMUX"
+            "ai-tools|Claude Code, Gemini CLI, Codex CLI, MCP servers|$INSTALL_AI_TOOLS"
+            "extras|hyperfine, lazygit, code2prompt|$INSTALL_EXTRAS"
+            "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|$INSTALL_CLEANUP"
+            "experimental|ty type checker (alpha)|$INSTALL_EXPERIMENTAL"
         )
         if is_linux; then
-            comp_defs+=("docker:$INSTALL_DOCKER" "create-user:$INSTALL_CREATE_USER")
+            comp_defs+=(
+                "docker|Docker engine + compose|$INSTALL_DOCKER"
+                "create-user|Create non-root dev user|$INSTALL_CREATE_USER"
+            )
         fi
     elif [[ "$mode" == "deploy" ]]; then
         comp_defs=(
-            "shell:$DEPLOY_SHELL"
-            "tmux:$DEPLOY_TMUX"
-            "git-config:$DEPLOY_GIT_CONFIG"
-            "vim:$DEPLOY_VIM"
-            "editor:$DEPLOY_EDITOR"
-            "claude:$DEPLOY_CLAUDE"
-            "codex:$DEPLOY_CODEX"
-            "ghostty:$DEPLOY_GHOSTTY"
-            "htop:$DEPLOY_HTOP"
-            "pdb:$DEPLOY_PDB"
-            "matplotlib:$DEPLOY_MATPLOTLIB"
-            "git-hooks:$DEPLOY_GIT_HOOKS"
-            "secrets:$DEPLOY_SECRETS"
-            "secrets-env:$DEPLOY_SECRETS_ENV"
-            "cleanup:$DEPLOY_CLEANUP"
-            "claude-cleanup:$DEPLOY_CLAUDE_CLEANUP"
-            "ai-update:$DEPLOY_AI_UPDATE"
-            "brew-update:$DEPLOY_BREW_UPDATE"
+            "shell|ZSH config, aliases, key bindings|$DEPLOY_SHELL"
+            "tmux|tmux.conf + TPM plugins|$DEPLOY_TMUX"
+            "git-config|gitconfig, global gitignore, ripgrep config|$DEPLOY_GIT_CONFIG"
+            "vim|vimrc|$DEPLOY_VIM"
+            "editor|VSCode/Cursor settings + extensions (merges)|$DEPLOY_EDITOR"
+            "claude|Claude Code config symlink (~/.claude)|$DEPLOY_CLAUDE"
+            "codex|Codex CLI config symlink (~/.codex)|$DEPLOY_CODEX"
+            "ghostty|Ghostty terminal config (symlinked)|$DEPLOY_GHOSTTY"
+            "htop|htop config with dynamic CPU meters|$DEPLOY_HTOP"
+            "pdb|pdb++ debugger config (high-contrast)|$DEPLOY_PDB"
+            "matplotlib|Style files: anthropic, deepmind, petri|$DEPLOY_MATPLOTLIB"
+            "git-hooks|Global pre-commit secret detection|$DEPLOY_GIT_HOOKS"
+            "secrets|Sync SSH/git identity via GitHub gist|$DEPLOY_SECRETS"
+            "secrets-env|Decrypt SOPS-encrypted API keys (age)|$DEPLOY_SECRETS_ENV"
+            "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|$DEPLOY_CLEANUP"
+            "claude-cleanup|Remove idle Claude sessions after 24h|$DEPLOY_CLAUDE_CLEANUP"
+            "ai-update|Daily auto-update: Claude, Gemini, Codex|$DEPLOY_AI_UPDATE"
+            "brew-update|Weekly package upgrade + cleanup|$DEPLOY_BREW_UPDATE"
         )
         if is_macos; then
-            comp_defs+=("keyboard:$DEPLOY_KEYBOARD" "bedtime:$DEPLOY_BEDTIME"
-                        "text-replacements:${DEPLOY_TEXT_REPLACEMENTS:-false}"
-                        "mouseless:$DEPLOY_MOUSELESS" "vpn:$DEPLOY_VPN")
+            comp_defs+=(
+                "keyboard|Keyboard repeat rate enforcement at login|$DEPLOY_KEYBOARD"
+                "bedtime|Bedtime timezone enforcement|$DEPLOY_BEDTIME"
+                "text-replacements|Sync macOS + Alfred text replacements|${DEPLOY_TEXT_REPLACEMENTS:-false}"
+                "mouseless|Keyboard-driven mouse control|$DEPLOY_MOUSELESS"
+                "vpn|NordVPN + Tailscale split tunnel daemon|$DEPLOY_VPN"
+            )
         fi
-        comp_defs+=("serena:$DEPLOY_SERENA")
+        comp_defs+=("serena|Serena MCP server config (symlinked)|$DEPLOY_SERENA")
     fi
 
-    # Build items and selected lists
+    # Build display items (with descriptions) and selected list
     typeset -a items
     local selected_csv=""
     for def in "${comp_defs[@]}"; do
-        local name="${def%%:*}"
-        local value="${def#*:}"
-        items+=("$name")
+        local name="${def%%|*}"
+        local rest="${def#*|}"
+        local desc="${rest%%|*}"
+        local value="${rest##*|}"
+        items+=("${name} — ${desc}")
         if [[ "$value" == "true" ]]; then
             [[ -n "$selected_csv" ]] && selected_csv+=","
-            selected_csv+="$name"
+            selected_csv+="${name} — ${desc}"
         fi
     done
+
+    # Calculate height: all items + 2 for header/padding, capped at terminal height - 4
+    local menu_height=$(( ${#items[@]} + 2 ))
+    local term_height
+    term_height=$(tput lines 2>/dev/null || echo 40)
+    (( menu_height > term_height - 4 )) && menu_height=$(( term_height - 4 ))
 
     # Show gum menu
     local result
     local gum_args=(choose --no-limit --ordered
+        --height "$menu_height"
         --header "Select ${mode} components (space=toggle, enter=confirm):"
         --cursor-prefix "• " --selected-prefix "✓ " --unselected-prefix "• ")
     [[ -n "$selected_csv" ]] && gum_args+=(--selected "$selected_csv")
@@ -101,7 +117,7 @@ show_component_menu() {
 
     # Disable all components in this mode, then re-enable selected
     for def in "${comp_defs[@]}"; do
-        local name="${def%%:*}"
+        local name="${def%%|*}"
         local var_name="${(U)name//-/_}"
         if [[ "$mode" == "install" ]]; then
             typeset -g "INSTALL_${var_name}=false"
@@ -110,9 +126,11 @@ show_component_menu() {
         fi
     done
 
+    # Parse selected items: extract name before " — "
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
-        local var_name="${(U)line//-/_}"
+        local name="${line%% — *}"
+        local var_name="${(U)name//-/_}"
         if [[ "$mode" == "install" ]]; then
             typeset -g "INSTALL_${var_name}=true"
         else
