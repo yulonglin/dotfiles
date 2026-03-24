@@ -2,16 +2,26 @@
 # Modern CLI Tools Enhancements
 #-------------------------------------------------------------
 
-# eza: Modern ls enhancement with git integration and colors
+# eza: Modern ls replacement with git integration and colors
+# ALL ls/tree aliases live here — single source of truth
 if command -v eza &> /dev/null; then
-    alias ls='eza'                              # Enhanced ls with colors (widely accepted override)
-    alias ll='eza -l --git'                     # Long format with git status indicators
-    alias la='eza -la --git'                    # Show all files including hidden, with git status
-    alias lt='eza -l --sort=modified --reverse' # Sort by modification time, newest first
-    alias tree='eza --tree --icons --git-ignore' # Tree view with icons, respects .gitignore
-    alias t1='eza --tree --level=1'              # 1-level tree
-    alias t2='eza --tree --level=2'              # 2-level tree
-    alias t3='eza --tree --level=3'              # 3-level tree
+    alias ls='eza'
+    alias l='eza -F'                                 # Classify with type indicators
+    alias ll='eza -lah --git'                        # Long, hidden, headers, git status
+    alias la='eza -lah --git'                        # Same as ll (muscle memory)
+    alias lt='eza -l --sort=modified --reverse'      # Sort by modification time, newest last
+    alias tree='eza --tree --icons --git-ignore'     # Tree view with icons
+    alias t1='eza --tree --level=1'
+    alias t2='eza --tree --level=2'
+    alias t3='eza --tree --level=3'
+else
+    alias l='ls -CF --color=auto'
+    alias ll='ls -lah --group-directories-first'
+    alias la='ls -Al'
+    alias lt='ls -ltr'                               # Sort by date, most recent last
+    alias t1='tree -L 1'
+    alias t2='tree -L 2'
+    alias t3='tree -L 3'
 fi
 
 # bat: Enhanced file viewer with syntax highlighting

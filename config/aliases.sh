@@ -786,24 +786,7 @@ alias tl="tmux list-sessions"
 alias tkill="tmux kill-server"
 alias tdel="tmux kill-session -t"
 
-#-------------------------------------------------------------
-# ls
-#-------------------------------------------------------------
-
-alias l="ls -CF --color=auto"
-alias ll="ls -lah --group-directories-first"
-alias la='ls -Al'         # show hidden files
-alias lx='ls -lXB'        # sort by extension
-alias lk='ls -lSr'        # sort by size, biggest last
-alias lc='ls -ltcr'       # sort by and show change time, most recent last
-alias lu='ls -ltur'       # sort by and show access time, most recent last
-alias lt='ls -ltr'        # sort by date, most recent last
-alias lm='ls -al |more'   # pipe through 'more'
-alias lr='ls -lR'         # recursive ls
-# tree aliases (eza overrides in modern_tools.sh when available)
-alias t1='tree -L 1'
-alias t2='tree -L 2'
-alias t3='tree -L 3'
+# ls/tree aliases → config/modern_tools.sh (single source of truth)
 
 #-------------------------------------------------------------
 # chmod
