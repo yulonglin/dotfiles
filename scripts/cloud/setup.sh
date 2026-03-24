@@ -204,25 +204,41 @@ step "Restart sshd"
 service ssh restart 2>/dev/null || systemctl restart sshd 2>/dev/null || warn "Could not restart sshd"
 ok "sshd restarted"
 
-# ─── Bun ─────────────────────────────────────────────────────────────────────
-step "Bun"
+# ─── Bun + uv (parallel) ────────────────────────────────────────────────────
+step "Bun + uv"
+
+bun_pid="" bun_log=""
+uv_pid="" uv_log=""
+
 if ! run_as 'command -v bun' &>/dev/null; then
-    log "Installing bun..."
-    run_as 'curl -fsSL https://bun.sh/install | bash'
-    ok "Bun installed"
+    bun_log=$(mktemp)
+    run_as 'curl -fsSL https://bun.sh/install | bash' &>"$bun_log" &
+    bun_pid=$!
 else
     ok "Bun already installed"
 fi
 
-# ─── uv ──────────────────────────────────────────────────────────────────────
-step "uv"
 if ! run_as 'command -v uv' &>/dev/null; then
-    log "Installing uv..."
-    run_as 'curl -LsSf https://astral.sh/uv/install.sh | sh'
-    ok "uv installed"
+    uv_log=$(mktemp)
+    run_as 'curl -LsSf https://astral.sh/uv/install.sh | sh' &>"$uv_log" &
+    uv_pid=$!
 else
     ok "uv already installed"
 fi
+
+for name in bun uv; do
+    eval "pid=\${${name}_pid:-}"
+    eval "logfile=\${${name}_log:-}"
+    [[ -z "$pid" ]] && continue
+    if wait "$pid" 2>/dev/null; then
+        ok "$name installed"
+    else
+        warn "$name installation failed"
+    fi
+    echo "  ── $name ──"
+    cat "$logfile" 2>/dev/null
+    rm -f "$logfile"
+done
 
 # ─── Dotfiles ────────────────────────────────────────────────────────────────
 step "Dotfiles"
