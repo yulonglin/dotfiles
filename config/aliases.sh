@@ -26,6 +26,7 @@ sops_dotenv() { sops --input-type dotenv --output-type dotenv "$@"; }
 secrets-edit() {
     if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
     sops_dotenv --config "$DOT_DIR/.sops.yaml" "$DOT_DIR/config/secrets.env.enc"
+    secrets-decrypt
 }
 secrets-decrypt() {
     if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
