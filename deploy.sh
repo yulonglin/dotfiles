@@ -81,6 +81,7 @@ COMPONENTS:
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
     --no-<component>  Disable a component (e.g., --no-editor)
+    --non-interactive Skip interactive component menu
 
 EXAMPLES:
     ./deploy.sh                           # Use defaults from config.sh
@@ -94,6 +95,7 @@ EOF
 
 # Parse CLI arguments (overrides config.sh)
 parse_args "$@"
+show_component_menu deploy
 
 # ─── Main Deployment ──────────────────────────────────────────────────────────
 

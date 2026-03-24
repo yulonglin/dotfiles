@@ -58,6 +58,7 @@ COMPONENTS:
     --create-user     Create non-root dev user (Linux only)
     --no-<component>  Disable a component (e.g., --no-ai-tools)
     --force-reinstall Reinstall tools even if present
+    --non-interactive Skip interactive component menu
 
 EXAMPLES:
     ./install.sh                        # Use defaults from config.sh
@@ -69,6 +70,7 @@ EOF
 
 # Parse CLI arguments (overrides config.sh)
 parse_args "$@"
+show_component_menu install
 
 # ─── Main Installation ────────────────────────────────────────────────────────
 
