@@ -6,14 +6,7 @@ set -e
 
 USERNAME="${USERNAME:-yulong}"
 
-# Auto-detect provider (same logic as setup.sh)
-if [[ -n "$USER_HOME" ]]; then
-    :
-elif [[ -d /workspace ]] || [[ -n "$RUNPOD_POD_ID" ]]; then
-    USER_HOME="/workspace/$USERNAME"
-else
-    USER_HOME="/home/$USERNAME"
-fi
+USER_HOME="/home/$USERNAME"
 
 echo "=== Fixing Permissions ==="
 echo "User: $USERNAME"

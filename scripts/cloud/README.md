@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/clo
 # 2. Switch to user
 su - yulong
 
-# 3. After pod restart (recreates user entry lost from /etc/passwd)
+# 3. After pod restart (recreates user + symlinks lost from ephemeral /home)
 curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/restart.sh | bash
 su - yulong
 ```
@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/clo
 su - yulong
 ```
 
-Then SSH directly as user: `ssh yulong@<ip>`
+Then SSH directly as user: `ssh yulong@<ip> -p <port>`
 
 ## Hetzner / Standard VPS
 
@@ -55,34 +55,46 @@ Then: `ssh yulong@<ip>`
 
 ## How It Works
 
-| Provider | Persistence | Home Dir | Code Dir |
-|----------|-------------|----------|----------|
-| RunPod | Only `/workspace` | `/workspace/yulong` | `~/code` |
-| Hetzner | Full VM | `/home/yulong` | `~/code` |
+| Provider | Home Dir | Persistent Data | What Survives Restart |
+|----------|----------|-----------------|----------------------|
+| RunPod | `/home/yulong` (ephemeral) | `/workspace` (FUSE volume) | `~/code`, `~/.claude`, `~/.local`, `~/.config` via symlinks |
+| Hetzner | `/home/yulong` (full VM) | Everything | Everything |
 
-RunPod containers lose `/etc/passwd` on restart, so the restart script recreates the user entry.
+**RunPod architecture:** `/workspace` is a FUSE-mounted network volume that doesn't support `chown`/`chmod`. So the user home lives on the local FS (`/home/yulong`) where permissions work, and working directories are symlinked to `/workspace` for persistence:
+
+```
+/home/yulong/          ← local FS (chown works, SSH happy)
+├── .ssh/              ← local FS (recreated by restart.sh)
+├── code/              → /workspace/code (symlink)
+├── .claude/           → /workspace/.claude (symlink)
+├── .local/            → /workspace/.local (symlink)
+└── .config/           → /workspace/.config (symlink)
+```
+
+On container restart, `/etc/passwd` and `/home` are lost. `restart.sh` recreates the user entry and re-establishes the symlinks.
 
 ## Configuration
 
 Override via env vars:
 
 ```bash
-USERNAME=dev USER_HOME=/data/dev curl ... | bash
+USERNAME=dev curl ... | bash
 ```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `USERNAME` | `yulong` | Non-root username to create |
-| `USER_HOME` | Auto-detected | User home directory (`/workspace/$USERNAME` on RunPod, `/home/$USERNAME` otherwise) |
+| `USER_HOME` | `/home/$USERNAME` | User home directory |
 | `GITHUB_USER` | `yulonglin` | GitHub username (for SSH key import) |
 | `DOTFILES_REPO` | `https://github.com/yulonglin/dotfiles.git` | Dotfiles repo URL |
 
 ## What Gets Installed
 
-**System packages:** sudo, zsh, htop, vim, nvtop (if available)
+**System packages:** sudo, zsh, htop, vim, nvtop (if available), cron
 
 **User tools:**
 - uv (Python package manager)
+- bun (JS runtime + package manager)
 - oh-my-zsh with powerlevel10k
 - tmux with custom config
 - Claude Code CLI
@@ -91,3 +103,4 @@ USERNAME=dev USER_HOME=/data/dev curl ... | bash
 - ZSH with custom aliases and functions
 - Git config with user settings
 - Claude Code settings and skills
+- SOPS encrypted secrets (with age key)

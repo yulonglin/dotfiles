@@ -2,9 +2,8 @@
 # Cloud VM/container first-boot setup
 # Auto-detects provider (RunPod, Hetzner, generic Linux)
 #
-# Both providers: creates non-root user
-# RunPod: home = /workspace/$USERNAME (persistent volume)
-# VPS:    home = /home/$USERNAME
+# Both providers: creates non-root user with home at /home/$USERNAME
+# RunPod: persistent data symlinked from ~/code → /workspace/code, etc.
 #
 # Usage:
 #   ./setup.sh                           # Auto-detect provider
@@ -42,13 +41,9 @@ else
     PROVIDER="generic"
 fi
 
-# RunPod: /workspace/$USERNAME (persistent across restarts)
-# VPS: /home/$USERNAME
-if [[ "$PROVIDER" == "runpod" ]]; then
-    USER_HOME="${USER_HOME:-/workspace/$USERNAME}"
-else
-    USER_HOME="${USER_HOME:-/home/$USERNAME}"
-fi
+# Always use /home/$USERNAME — local FS where chown/chmod work
+# RunPod persistent data lives on /workspace, symlinked into home
+USER_HOME="${USER_HOME:-/home/$USERNAME}"
 
 echo "=== Cloud Setup ==="
 log "Provider: $PROVIDER"
@@ -94,6 +89,32 @@ if [[ -d "$USER_HOME" ]]; then
     ok "Home dir ownership fixed"
 else
     fail "$USER_HOME does not exist"
+fi
+
+# ─── RunPod: symlink persistent dirs from /workspace ─────────────────────────
+# /home is ephemeral (lost on container restart), /workspace persists.
+# Symlink working directories so data survives restarts.
+if [[ "$PROVIDER" == "runpod" ]]; then
+    step "Persistent storage symlinks"
+    PERSIST="/workspace"
+    for dir in code .claude .local .config; do
+        target="$PERSIST/$dir"
+        link="$USER_HOME/$dir"
+        mkdir -p "$target"
+        if [[ -d "$link" && ! -L "$link" ]]; then
+            # Move existing contents to persistent storage, then symlink
+            cp -a "$link/." "$target/" 2>/dev/null || true
+            rm -rf "$link"
+        fi
+        if [[ ! -e "$link" ]]; then
+            ln -sf "$target" "$link"
+            log "$link → $target"
+        else
+            ok "$link already linked"
+        fi
+    done
+    chown -R "$USERNAME:$USERNAME" "$USER_HOME" 2>/dev/null || true
+    ok "Persistent symlinks configured"
 fi
 
 # ─── sshd config ─────────────────────────────────────────────────────────────
