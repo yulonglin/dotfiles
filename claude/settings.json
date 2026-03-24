@@ -5,7 +5,8 @@
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "ENABLE_TOOL_SEARCH": "1",
     "BASH_MAX_OUTPUT_LENGTH": "100000",
-    "CLAUDECODE": ""
+    "CLAUDECODE": "",
+    "CLAUDE_CODE_AUTO_COMPACT_THRESHOLD": "250000"
   },
   "includeCoAuthoredBy": false,
   "permissions": {
@@ -139,7 +140,7 @@
       "Read(**/.env.*)",
       "Read(**/.envrc)"
     ],
-    "defaultMode": "plan"
+    "defaultMode": "default"
   },
   "hooks": {
     "SessionStart": [
@@ -158,6 +159,11 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/session_start_notes.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/show_auth_account.sh",
             "timeout": 5
           }
         ]
@@ -357,6 +363,7 @@
     ]
   },
   "alwaysThinkingEnabled": true,
+  "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
   "autoMemoryDirectory": "memory",
