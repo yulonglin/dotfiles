@@ -36,6 +36,8 @@
 .system/**
 
 # Plugin-materialized skills (owned by plugins, not personal skills)
+# Note: use both with and without trailing slash — symlinks match as files, not dirs
+transformers.js
 transformers.js/
 
 # macOS metadata
