@@ -31,7 +31,7 @@ Then SSH directly as user: `ssh yulong@<ip>`
 
 **Option A: User-only** (same as RunPod)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | PERSISTENT=/home bash
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
 su - yulong
 ```
 
@@ -67,14 +67,14 @@ RunPod containers lose `/etc/passwd` on restart, so the restart script recreates
 Override via env vars:
 
 ```bash
-USERNAME=dev PERSISTENT=/data curl ... | bash
+USERNAME=dev USER_HOME=/data/dev curl ... | bash
 ```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `USERNAME` | `yulong` | Non-root username to create |
-| `PERSISTENT` | `/workspace` | Persistent storage path |
-| `HOME_DIR` | `$PERSISTENT/$USERNAME` | User home directory |
+| `USER_HOME` | Auto-detected | User home directory (`/workspace/$USERNAME` on RunPod, `/home/$USERNAME` otherwise) |
+| `GITHUB_USER` | `yulonglin` | GitHub username (for SSH key import) |
 | `DOTFILES_REPO` | `https://github.com/yulonglin/dotfiles.git` | Dotfiles repo URL |
 
 ## What Gets Installed

@@ -5,12 +5,19 @@
 set -e
 
 USERNAME="${USERNAME:-yulong}"
-PERSISTENT="${PERSISTENT:-/workspace}"
-HOME_DIR="${HOME_DIR:-$PERSISTENT/$USERNAME}"
+
+# Auto-detect provider (same logic as setup.sh)
+if [[ -n "$USER_HOME" ]]; then
+    :
+elif [[ -d /workspace ]] || [[ -n "$RUNPOD_POD_ID" ]]; then
+    USER_HOME="/workspace/$USERNAME"
+else
+    USER_HOME="/home/$USERNAME"
+fi
 
 echo "=== Fixing Permissions ==="
 echo "User: $USERNAME"
-echo "Home: $HOME_DIR"
+echo "Home: $USER_HOME"
 echo ""
 
 # Must run as root
@@ -20,15 +27,15 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 # Fix user home
-if [[ -d "$HOME_DIR" ]]; then
-    echo "Fixing $HOME_DIR..."
-    chown -R "$USERNAME:$USERNAME" "$HOME_DIR"
+if [[ -d "$USER_HOME" ]]; then
+    echo "Fixing $USER_HOME..."
+    chown -R "$USERNAME:$USERNAME" "$USER_HOME"
+    chmod 755 "$USER_HOME"
 fi
 
 # Fix global npm if exists and has issues
 if [[ -d /usr/local/lib/node_modules ]]; then
     echo "Fixing /usr/local/lib/node_modules..."
-    # Just ensure it's accessible, don't change ownership
     chmod -R a+r /usr/local/lib/node_modules
 fi
 
