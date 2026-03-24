@@ -361,7 +361,9 @@ install_ohmyzsh() {
 
     log_info "Installing oh-my-zsh..."
     rm -rf "$zsh_dir"
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    # Unset ZSH so the official installer doesn't refuse when $ZSH points elsewhere
+    # (e.g., RunPod containers where /root/.oh-my-zsh exists but HOME=/workspace)
+    ZSH="$zsh_dir" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
     log_info "Installing powerlevel10k theme..."
     git clone --quiet https://github.com/romkatv/powerlevel10k.git \

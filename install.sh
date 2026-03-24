@@ -135,22 +135,21 @@ if ! is_installed gitleaks; then
     if is_macos; then
         brew_install gitleaks
     else
-        apt_install gitleaks || {
-            log_info "Installing gitleaks from GitHub releases..."
-            version=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "8.21.2")
-            case "$(uname -m)" in
-                x86_64)  arch="x64" ;;
-                aarch64) arch="arm64" ;;
-                *)       log_warning "Unsupported architecture for gitleaks" ;;
-            esac
-            if [[ -n "${arch:-}" ]]; then
-                mkdir -p "$HOME/.local/bin"
-                curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_${arch}.tar.gz" -o /tmp/gitleaks.tar.gz && \
-                tar -xzf /tmp/gitleaks.tar.gz -C /tmp && \
-                mv /tmp/gitleaks "$HOME/.local/bin/" && \
-                rm -f /tmp/gitleaks.tar.gz
-            fi
-        }
+        # gitleaks is not in Ubuntu/Debian repos — install from GitHub releases directly
+        version=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "8.24.3")
+        case "$(uname -m)" in
+            x86_64)  arch="x64" ;;
+            aarch64) arch="arm64" ;;
+            *)       log_warning "Unsupported architecture for gitleaks" ;;
+        esac
+        if [[ -n "${arch:-}" ]]; then
+            mkdir -p "$HOME/.local/bin"
+            curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_${arch}.tar.gz" -o /tmp/gitleaks.tar.gz && \
+            tar -xzf /tmp/gitleaks.tar.gz -C /tmp && \
+            mv /tmp/gitleaks "$HOME/.local/bin/" && \
+            rm -f /tmp/gitleaks.tar.gz && \
+            log_success "gitleaks $version installed" || log_warning "gitleaks installation failed"
+        fi
     fi
 fi
 

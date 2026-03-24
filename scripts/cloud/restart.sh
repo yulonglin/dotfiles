@@ -50,6 +50,11 @@ chmod 700 "$USER_HOME/.ssh"
 chmod 600 "$USER_HOME/.ssh/authorized_keys"
 chmod 755 "$USER_HOME"  # sshd refuses key auth if home is group/world-writable
 
+# Restart sshd (container restart may have stopped it)
+service ssh restart 2>/dev/null || systemctl restart sshd 2>/dev/null || true
+# Start cron (container restart stops it)
+service cron start 2>/dev/null || true
+
 echo ""
 echo "=== User Restored ==="
 echo "SSH with: ssh $USERNAME@<ip>"

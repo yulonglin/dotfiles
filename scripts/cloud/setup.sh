@@ -2,8 +2,9 @@
 # Cloud VM/container first-boot setup
 # Auto-detects provider (RunPod, Hetzner, generic Linux)
 #
-# RunPod: runs as root (their model), home = /workspace, SSH via root
-# VPS:    creates non-root user, home = /home/$USERNAME, SSH via user
+# Both providers: creates non-root user
+# RunPod: home = /workspace/$USERNAME (persistent volume)
+# VPS:    home = /home/$USERNAME
 #
 # Usage:
 #   ./setup.sh                           # Auto-detect provider
@@ -22,15 +23,9 @@ warn() { echo "  ⚠ $*" >&2; }
 fail() { echo "  ✗ $*" >&2; exit 1; }
 step() { echo ""; echo "── $* ──"; }
 
-# Run a command as $RUN_USER (root on RunPod, $USERNAME on VPS)
-# Uses HOME from /etc/passwd via sudo -i (login shell)
+# Run a command as $USERNAME
 run_as() {
-    if [[ "$RUN_USER" == "root" && "$(id -u)" == "0" ]]; then
-        # Already root — use env to ensure HOME is correct (sudo -i may cache stale HOME)
-        HOME="$USER_HOME" bash -l -c "$*"
-    else
-        sudo -u "$RUN_USER" -i bash -c "$*"
-    fi
+    sudo -u "$USERNAME" -i bash -c "$*"
 }
 
 # ─── Configuration (override via env vars) ───────────────────────────────────
@@ -47,32 +42,18 @@ else
     PROVIDER="generic"
 fi
 
-# RunPod: stay as root, use /workspace as home (persistent across restarts)
-# VPS: create non-root user with /home/$USERNAME
+# RunPod: /workspace/$USERNAME (persistent across restarts)
+# VPS: /home/$USERNAME
 if [[ "$PROVIDER" == "runpod" ]]; then
-    RUN_USER="root"
-    USER_HOME="${USER_HOME:-/workspace}"
+    USER_HOME="${USER_HOME:-/workspace/$USERNAME}"
 else
-    RUN_USER="$USERNAME"
     USER_HOME="${USER_HOME:-/home/$USERNAME}"
 fi
 
 echo "=== Cloud Setup ==="
 log "Provider: $PROVIDER"
-log "User:     $RUN_USER"
+log "User:     $USERNAME"
 log "Home:     $USER_HOME"
-
-# ─── Set root HOME to /workspace on RunPod ──────────────────────────────────
-# /root is ephemeral (container-local), /workspace is the persistent volume.
-# Changing HOME here means all config deploys to the persistent volume.
-if [[ "$PROVIDER" == "runpod" ]]; then
-    CURRENT_ROOT_HOME=$(getent passwd root | cut -d: -f6)
-    if [[ "$CURRENT_ROOT_HOME" != "$USER_HOME" ]]; then
-        sed -i "s|^root:\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):${CURRENT_ROOT_HOME}:|root:\1:\2:\3:\4:${USER_HOME}:|" /etc/passwd
-        export HOME="$USER_HOME"
-        log "Changed root HOME: $CURRENT_ROOT_HOME → $USER_HOME (persistent)"
-    fi
-fi
 
 # ─── System deps ──────────────────────────────────────────────────────────────
 step "System dependencies"
@@ -92,31 +73,27 @@ else
     ok "Node $(node -v) already installed"
 fi
 
-# ─── Create non-root user (VPS only) ─────────────────────────────────────────
-# RunPod: stay as root, use IS_SANDBOX=1 for Claude Code bypass-permissions
-# VPS:    create non-root user as primary account
-if [[ "$PROVIDER" != "runpod" ]]; then
-    step "User account"
-    if ! id "$USERNAME" &>/dev/null; then
-        log "Creating user $USERNAME with home $USER_HOME..."
-        useradd -m -d "$USER_HOME" -s /usr/bin/zsh "$USERNAME"
-        echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME"
-        ok "User $USERNAME created (uid=$(id -u "$USERNAME"), gid=$(id -g "$USERNAME"))"
-    else
-        ok "User $USERNAME already exists (uid=$(id -u "$USERNAME"))"
-    fi
+# ─── Create non-root user ─────────────────────────────────────────────────────
+step "User account"
+if ! id "$USERNAME" &>/dev/null; then
+    log "Creating user $USERNAME with home $USER_HOME..."
+    useradd -m -d "$USER_HOME" -s /usr/bin/zsh "$USERNAME"
+    echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME"
+    ok "User $USERNAME created (uid=$(id -u "$USERNAME"), gid=$(id -g "$USERNAME"))"
+else
+    ok "User $USERNAME already exists (uid=$(id -u "$USERNAME"))"
+fi
 
-    step "Home directory ownership"
-    if [[ -d "$USER_HOME" ]]; then
-        OWNER=$(stat -c '%U:%G' "$USER_HOME" 2>/dev/null || stat -f '%Su:%Sg' "$USER_HOME")
-        log "Current: $USER_HOME owner=$OWNER"
-        chown "$USERNAME:$USERNAME" "$USER_HOME" || fail "Cannot chown $USER_HOME — SSH login will not work"
-        chmod 755 "$USER_HOME"
-        chown -R "$USERNAME:$USERNAME" "$USER_HOME" 2>/dev/null || warn "Could not chown all files (sub-mounts?)"
-        ok "Home dir ownership fixed"
-    else
-        fail "$USER_HOME does not exist"
-    fi
+step "Home directory ownership"
+if [[ -d "$USER_HOME" ]]; then
+    OWNER=$(stat -c '%U:%G' "$USER_HOME" 2>/dev/null || stat -f '%Su:%Sg' "$USER_HOME")
+    log "Current: $USER_HOME owner=$OWNER"
+    chown "$USERNAME:$USERNAME" "$USER_HOME" || fail "Cannot chown $USER_HOME — SSH login will not work"
+    chmod 755 "$USER_HOME"
+    chown -R "$USERNAME:$USERNAME" "$USER_HOME" 2>/dev/null || warn "Could not chown all files (sub-mounts?)"
+    ok "Home dir ownership fixed"
+else
+    fail "$USER_HOME does not exist"
 fi
 
 # ─── sshd config ─────────────────────────────────────────────────────────────
@@ -185,10 +162,7 @@ printf '%s\n' "$ALL_KEYS" > "$SSH_DIR/authorized_keys"
 chmod 700 "$SSH_DIR"
 chmod 600 "$SSH_DIR/authorized_keys"
 
-# On VPS, fix ownership
-if [[ "$PROVIDER" != "runpod" ]]; then
-    chown -R "$USERNAME:$USERNAME" "$SSH_DIR"
-fi
+chown -R "$USERNAME:$USERNAME" "$SSH_DIR"
 
 KEY_COUNT=$(echo "$ALL_KEYS" | wc -l | tr -d ' ')
 ok "$KEY_COUNT key(s) installed"
@@ -199,17 +173,6 @@ log "Mode:  .ssh=$(stat -c '%a' "$SSH_DIR" 2>/dev/null || stat -f '%Lp' "$SSH_DI
 step "Restart sshd"
 service ssh restart 2>/dev/null || systemctl restart sshd 2>/dev/null || warn "Could not restart sshd"
 ok "sshd restarted"
-
-# ─── Set default shell to zsh ────────────────────────────────────────────────
-if [[ "$PROVIDER" == "runpod" ]]; then
-    step "Default shell"
-    if [[ "$(getent passwd root | cut -d: -f7)" != */zsh ]]; then
-        chsh -s /usr/bin/zsh root 2>/dev/null || sed -i 's|^root:\(.*\):/bin/bash$|root:\1:/usr/bin/zsh|' /etc/passwd
-        ok "Root shell set to zsh"
-    else
-        ok "Root shell already zsh"
-    fi
-fi
 
 # ─── Bun ─────────────────────────────────────────────────────────────────────
 step "Bun"
@@ -310,12 +273,13 @@ fi
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Setup Complete ==="
+log "User:     $USERNAME"
+log "Home:     $USER_HOME"
+log "Dotfiles: $USER_HOME/code/dotfiles"
 if [[ "$PROVIDER" == "runpod" ]]; then
-    log "RunPod: running as root, workspace = $USER_HOME"
-    log "SSH:      ssh root@<ip> -p <port>"
-    log "Claude:   IS_SANDBOX=1 claude --permission-mode bypass"
+    log "SSH:      ssh $USERNAME@<ip> -p <port>"
+    log "Switch:   su - $USERNAME"
+    log "Restart:  curl -fsSL .../restart.sh | bash && su - $USERNAME"
 else
     log "SSH:      ssh $USERNAME@<ip>"
 fi
-log "Home:     $USER_HOME"
-log "Dotfiles: $USER_HOME/code/dotfiles"
