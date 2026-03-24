@@ -515,3 +515,7 @@ tools/*/.claude/
 .claude/worktrees/
 .claude/autopilot/
 *archive*
+
+# Plugin registry (machine-specific absolute paths, rebuilt by `claude-context --sync`)
+claude/plugins/known_marketplaces.json
+claude/plugins/installed_plugins.json
