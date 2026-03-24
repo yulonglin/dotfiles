@@ -29,10 +29,11 @@ Save with: claude-agent-save <id> <suggested-name>
 ```
 
 **Version project knowledge artifacts** — tiered approach for commit-push-sync:
-- **Always version** (durable config): `CLAUDE.md`, `.claude/rules/`, `.claude/agents/`
-- **Version when useful** (descriptive content): `docs/`, `specs/`, `plans/`
-- **Ephemeral by default**: Auto-generated plans (random names) — version if referenced, prune freely otherwise
+- **Always version** (durable config): `CLAUDE.md`, `.claude/rules/`, `.claude/agents/`, `plans/`
+- **Version when useful** (descriptive content): `docs/`, `specs/`
 - **Context persistence**: `memory/` files — cross-session context
+
+Plans are committed by default (even auto-generated ones with random names) so they sync across machines and provide cross-session context for ongoing work.
 
 For work taking >30 minutes:
 - Automatically use background agents when appropriate
