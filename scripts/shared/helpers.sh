@@ -334,7 +334,7 @@ install_gitleaks() {
         esac
         tmpd=$(mktemp -d)
         mkdir -p "$HOME/.local/bin"
-        curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_${arch}.tar.gz" -o "$tmpd/gitleaks.tar.gz" && \
+        curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_${arch}.tar.gz" -o "$tmpd/gitleaks.tar.gz" && \
         tar -xzf "$tmpd/gitleaks.tar.gz" -C "$tmpd" && \
         mv "$tmpd/gitleaks" "$HOME/.local/bin/" && \
         log_success "gitleaks $version installed" || { log_warning "gitleaks installation failed"; rm -rf "$tmpd"; return 1; }
@@ -357,7 +357,7 @@ install_sops() {
             *)       log_warning "Unsupported architecture for sops"; return 1 ;;
         esac
         mkdir -p "$HOME/.local/bin"
-        curl -sSL "https://github.com/getsops/sops/releases/download/v${sops_ver}/sops-v${sops_ver}.linux.${sops_arch}" -o "$HOME/.local/bin/sops" && \
+        curl -fsSL "https://github.com/getsops/sops/releases/download/v${sops_ver}/sops-v${sops_ver}.linux.${sops_arch}" -o "$HOME/.local/bin/sops" && \
             chmod +x "$HOME/.local/bin/sops" && \
             log_success "sops $sops_ver installed" || { log_warning "sops installation failed"; return 1; }
     fi
@@ -379,7 +379,7 @@ install_age() {
         esac
         tmpd=$(mktemp -d)
         mkdir -p "$HOME/.local/bin"
-        curl -sSL "https://github.com/FiloSottile/age/releases/download/v${age_ver}/age-v${age_ver}-linux-${age_arch}.tar.gz" -o "$tmpd/age.tar.gz" && \
+        curl -fsSL "https://github.com/FiloSottile/age/releases/download/v${age_ver}/age-v${age_ver}-linux-${age_arch}.tar.gz" -o "$tmpd/age.tar.gz" && \
             tar -xzf "$tmpd/age.tar.gz" -C "$tmpd" && \
             mv "$tmpd/age/age" "$tmpd/age/age-keygen" "$HOME/.local/bin/" && \
             log_success "age $age_ver installed" || { log_warning "age installation failed"; rm -rf "$tmpd"; return 1; }
@@ -463,10 +463,8 @@ run_parallel() {
 
         (
             set +e
-            local rc=0
-            trap 'echo $rc > "'"$tmpdir/$name"'.exitcode"' EXIT
+            trap 'echo $? > "'"$tmpdir/$name"'.exitcode"' EXIT
             eval "$cmd"
-            rc=$?
         ) &>"$tmpdir/$name.log" &
         pids[$name]=$!
     done
