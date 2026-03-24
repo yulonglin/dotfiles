@@ -79,7 +79,9 @@ echo "Platform: $PLATFORM"
 echo "Profile: $PROFILE"
 echo ""
 
-# ─── Platform-Specific Package Managers ───────────────────────────────────────
+# ─── Core Packages & Tools ────────────────────────────────────────────────────
+
+if [[ "$INSTALL_CORE" == "true" ]]; then
 
 if is_macos; then
     # Ensure Homebrew is installed
@@ -223,6 +225,8 @@ if ! is_installed uv; then
     log_info "Installing uv..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
+
+fi  # INSTALL_CORE
 
 # ─── ZSH ──────────────────────────────────────────────────────────────────────
 
@@ -460,14 +464,14 @@ fi
 
 # ─── macOS Settings ───────────────────────────────────────────────────────────
 
-if is_macos && [[ -f "$DOT_DIR/config/macos_settings.sh" ]]; then
+if [[ "$INSTALL_MACOS_SETTINGS" == "true" ]] && is_macos && [[ -f "$DOT_DIR/config/macos_settings.sh" ]]; then
     log_info "Configuring macOS system defaults..."
     "$DOT_DIR/config/macos_settings.sh" || log_warning "macOS settings had some errors"
 fi
 
 # ─── Finicky (macOS) ──────────────────────────────────────────────────────────
 
-if is_macos && ! is_cask_installed finicky; then
+if [[ "$INSTALL_FINICKY" == "true" ]] && is_macos && ! is_cask_installed finicky; then
     log_info "Installing Finicky..."
     brew_install finicky true
 fi

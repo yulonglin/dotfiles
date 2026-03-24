@@ -38,13 +38,20 @@ show_component_menu() {
     typeset -a comp_defs
     if [[ "$mode" == "install" ]]; then
         comp_defs=(
+            "core|Core packages, CLI tools, gh, SOPS/age, Atuin, uv|$INSTALL_CORE"
             "zsh|ZSH + oh-my-zsh + powerlevel10k theme|$INSTALL_ZSH"
             "tmux|Terminal multiplexer|$INSTALL_TMUX"
             "ai-tools|Claude Code, Gemini CLI, Codex CLI, MCP servers|$INSTALL_AI_TOOLS"
-            "extras|hyperfine, lazygit, code2prompt|$INSTALL_EXTRAS"
+            "extras|hyperfine, gitui, code2prompt|$INSTALL_EXTRAS"
             "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|$INSTALL_CLEANUP"
             "experimental|ty type checker (alpha)|$INSTALL_EXPERIMENTAL"
         )
+        if is_macos; then
+            comp_defs+=(
+                "macos-settings|Dock, Finder, keyboard system defaults|$INSTALL_MACOS_SETTINGS"
+                "finicky|Browser routing (Safari/Chrome/Zoom)|$INSTALL_FINICKY"
+            )
+        fi
         if is_linux; then
             comp_defs+=(
                 "docker|Docker engine + compose|$INSTALL_DOCKER"
@@ -71,9 +78,11 @@ show_component_menu() {
             "claude-cleanup|Remove idle Claude sessions after 24h|$DEPLOY_CLAUDE_CLEANUP"
             "ai-update|Daily auto-update: Claude, Gemini, Codex|$DEPLOY_AI_UPDATE"
             "brew-update|Weekly package upgrade + cleanup|$DEPLOY_BREW_UPDATE"
+            "claude-tools|Build claude-tools Rust binary|$DEPLOY_CLAUDE_TOOLS"
         )
         if is_macos; then
             comp_defs+=(
+                "finicky|Browser routing config (symlinked)|$DEPLOY_FINICKY"
                 "keyboard|Keyboard repeat rate enforcement at login|$DEPLOY_KEYBOARD"
                 "bedtime|Bedtime timezone enforcement|$DEPLOY_BEDTIME"
                 "text-replacements|Sync macOS + Alfred text replacements|${DEPLOY_TEXT_REPLACEMENTS:-false}"
@@ -1087,9 +1096,9 @@ parse_args() {
 
     # Deferred --only apply: validate components, then set minimal + enable selected
     if [[ "$_only_mode" == true ]]; then
-        local _known_components=(vim editor claude codex ghostty htop pdb matplotlib
+        local _known_components=(core vim editor claude codex ghostty htop pdb matplotlib
             git_hooks secrets secrets_env cleanup claude_cleanup ai_update brew_update keyboard
-            bedtime serena mouseless text_replacements vpn
+            bedtime serena mouseless text_replacements vpn finicky claude_tools macos_settings
             zsh tmux ai_tools docker extras experimental create_user
             shell git_config)
 

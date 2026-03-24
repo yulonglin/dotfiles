@@ -105,16 +105,6 @@ echo "Profile: $PROFILE"
 echo "Append mode: $DEPLOY_APPEND"
 echo ""
 
-# Install zsh if not present
-if ! cmd_exists zsh; then
-    log_info "ZSH not found, installing..."
-    if is_macos; then
-        brew_install zsh
-    else
-        apt_install zsh
-    fi
-fi
-
 # Set operator based on append flag
 OP=">"
 [[ "$DEPLOY_APPEND" == "true" ]] && OP=">>"
@@ -143,6 +133,16 @@ if [[ "$DEPLOY_SHELL" != "true" ]] && [[ ${#DEPLOY_ALIASES[@]} -gt 0 ]]; then
 fi
 
 if [[ "$DEPLOY_SHELL" == "true" ]]; then
+    # Install zsh if not present
+    if ! cmd_exists zsh; then
+        log_info "ZSH not found, installing..."
+        if is_macos; then
+            brew_install zsh
+        else
+            apt_install zsh
+        fi
+    fi
+
     # Determine shell
     if cmd_exists zsh; then
         CURRENT_SHELL="zsh"
@@ -409,7 +409,7 @@ fi
 
 # ─── Finicky (macOS) ──────────────────────────────────────────────────────────
 
-if is_macos && [[ -f "$DOT_DIR/config/finicky.js" ]]; then
+if [[ "$DEPLOY_FINICKY" == "true" ]] && is_macos && [[ -f "$DOT_DIR/config/finicky.js" ]]; then
     log_info "Deploying Finicky configuration..."
     safe_symlink "$DOT_DIR/config/finicky.js" "$HOME/.finicky.js"
     log_info "  Safari default, Chrome for Google apps, Zoom for meetings"
@@ -543,7 +543,7 @@ fi
 
 # ─── claude-tools (Rust binary) ───────────────────────────────────────────────
 
-if [[ -f "$DOT_DIR/tools/claude-tools/Cargo.toml" ]]; then
+if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/Cargo.toml" ]]; then
     if cmd_exists cargo; then
         log_info "Building claude-tools..."
         (cd "$DOT_DIR/tools/claude-tools" && cargo build --release --quiet 2>&1) && {
@@ -889,7 +889,7 @@ fi
 
 # ─── Safari Web App Registry (macOS only) ────────────────────────────────────
 
-if is_macos && [[ -f "$DOT_DIR/custom_bins/safari-web-apps-scan" ]]; then
+if [[ "$DEPLOY_EDITOR" == "true" ]] && is_macos && [[ -f "$DOT_DIR/custom_bins/safari-web-apps-scan" ]]; then
     "$DOT_DIR/custom_bins/safari-web-apps-scan" || log_warning "Safari web app scan failed (non-critical)"
 fi
 

@@ -20,6 +20,7 @@
 PROFILE="${PROFILE:-personal}"
 
 # ─── Install Components ───────────────────────────────────────────────────────
+INSTALL_CORE=true               # Core packages, CLI tools, GitHub CLI, SOPS/age, Atuin, uv
 INSTALL_ZSH=true
 INSTALL_TMUX=true
 INSTALL_AI_TOOLS=true           # Claude Code, Gemini CLI, Codex CLI
@@ -28,6 +29,8 @@ INSTALL_DOCKER=true             # Docker (Linux only)
 INSTALL_EXPERIMENTAL=true       # ty type checker
 INSTALL_CREATE_USER=true        # Create non-root dev user (Linux only, guarded by is_linux + EUID check)
 INSTALL_EXTRAS=false            # hyperfine, gitui, code2prompt, terminal-notifier
+INSTALL_MACOS_SETTINGS=true     # macOS system defaults (Dock, Finder, keyboard)
+INSTALL_FINICKY=true            # Finicky browser routing (macOS only)
 
 # ─── Deploy Components ────────────────────────────────────────────────────────
 DEPLOY_VIM=true
@@ -54,6 +57,8 @@ DEPLOY_SERENA=false             # Serena MCP config (~/.serena symlink)
 DEPLOY_MOUSELESS=false          # Mouseless keyboard mouse control (macOS only, opt-in)
 DEPLOY_TEXT_REPLACEMENTS=false  # Sync text replacements: macOS + Alfred (macOS only, opt-in)
 DEPLOY_VPN=false                # NordVPN+Tailscale split tunnel daemon (macOS only, opt-in)
+DEPLOY_FINICKY=true             # Finicky config symlink (macOS only)
+DEPLOY_CLAUDE_TOOLS=true        # Build claude-tools Rust binary
 DEPLOY_SECRETS_ENV=true         # Decrypt SOPS-encrypted secrets (requires sops + age)
 
 # ─── Deploy Modifiers ─────────────────────────────────────────────────────────
@@ -175,6 +180,8 @@ apply_profile() {
             INSTALL_CLEANUP=false
             INSTALL_DOCKER=false
             INSTALL_EXTRAS=false
+            INSTALL_MACOS_SETTINGS=false
+            INSTALL_FINICKY=false
             DEPLOY_EDITOR=false
             DEPLOY_SERENA=false
             DEPLOY_GHOSTTY=false
@@ -189,9 +196,12 @@ apply_profile() {
             DEPLOY_BEDTIME=false
             DEPLOY_SECRETS=false
             DEPLOY_SECRETS_ENV=false
+            DEPLOY_FINICKY=false
+            DEPLOY_CLAUDE_TOOLS=false
             ;;
         minimal)
             # Nothing enabled — specify everything explicitly
+            INSTALL_CORE=false
             INSTALL_ZSH=false
             INSTALL_TMUX=false
             INSTALL_AI_TOOLS=false
@@ -199,6 +209,8 @@ apply_profile() {
             INSTALL_EXTRAS=false
             INSTALL_CLEANUP=false
             INSTALL_EXPERIMENTAL=false
+            INSTALL_MACOS_SETTINGS=false
+            INSTALL_FINICKY=false
             DEPLOY_SHELL=false
             DEPLOY_TMUX=false
             DEPLOY_GIT_CONFIG=false
@@ -220,6 +232,8 @@ apply_profile() {
             DEPLOY_KEYBOARD=false
             DEPLOY_BEDTIME=false
             DEPLOY_TEXT_REPLACEMENTS=false
+            DEPLOY_FINICKY=false
+            DEPLOY_CLAUDE_TOOLS=false
             DEPLOY_SECRETS_ENV=false
             ;;
         *)
