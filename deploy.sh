@@ -566,19 +566,19 @@ if [[ "$DEPLOY_MATPLOTLIB" == "true" ]]; then
     fi
 fi
 
-# ─── claude-tools (Rust binary) ───────────────────────────────────────────────
+# ─── claude-tools (Rust binary, backgrounded) ───────────────────────────────
 
-if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/Cargo.toml" ]]; then
-    if cmd_exists cargo; then
-        log_info "Building claude-tools..."
-        (cd "$DOT_DIR/tools/claude-tools" && cargo build --release --quiet 2>&1) && {
-            cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/claude-tools"
-            chmod +x "$DOT_DIR/custom_bins/claude-tools"
-            log_success "claude-tools built and deployed to custom_bins/"
-        } || log_warning "claude-tools build failed (bash fallback will be used)"
-    else
-        log_info "Rust not installed — skipping claude-tools build (bash fallback will be used)"
-    fi
+CLAUDE_TOOLS_PID=""
+CLAUDE_TOOLS_LOG=""
+if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/Cargo.toml" ]] && cmd_exists cargo; then
+    log_info "Building claude-tools (background)..."
+    CLAUDE_TOOLS_LOG=$(mktemp)
+    (
+        cd "$DOT_DIR/tools/claude-tools" && cargo build --release --quiet 2>&1 && \
+        cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/claude-tools" && \
+        chmod +x "$DOT_DIR/custom_bins/claude-tools"
+    ) &>"$CLAUDE_TOOLS_LOG" &
+    CLAUDE_TOOLS_PID=$!
 fi
 
 # ─── Claude Code ──────────────────────────────────────────────────────────────
@@ -791,54 +791,38 @@ if [[ "$DEPLOY_CLEANUP" == "true" ]] && is_macos; then
     fi
 fi
 
-# ─── Claude Code Cleanup (both platforms) ─────────────────────────────────────
+# ─── Scheduled Tasks (parallel — independent launchd/cron jobs) ──────────────
 
-if [[ "$DEPLOY_CLAUDE_CLEANUP" == "true" ]]; then
-    log_section "INSTALLING CLAUDE CODE SESSION CLEANUP"
-    if [[ -f "$DOT_DIR/scripts/cleanup/setup_claude_cleanup.sh" ]]; then
-        "$DOT_DIR/scripts/cleanup/setup_claude_cleanup.sh" || log_warning "Claude cleanup installation failed"
-    else
-        log_warning "Claude cleanup script not found"
+{
+    local scheduled_jobs=()
+
+    if [[ "$DEPLOY_CLAUDE_CLEANUP" == "true" ]]; then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_claude_cleanup.sh" ]] && \
+            scheduled_jobs+=("claude-cleanup|$DOT_DIR/scripts/cleanup/setup_claude_cleanup.sh")
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_claude_tmpdir_cleanup.sh" ]] && \
+            scheduled_jobs+=("tmpdir-cleanup|$DOT_DIR/scripts/cleanup/setup_claude_tmpdir_cleanup.sh")
     fi
 
-    # Weekly tmpdir cleanup (deletes files >7 days old)
-    if [[ -f "$DOT_DIR/scripts/cleanup/setup_claude_tmpdir_cleanup.sh" ]]; then
-        "$DOT_DIR/scripts/cleanup/setup_claude_tmpdir_cleanup.sh" || log_warning "Claude tmpdir cleanup installation failed"
+    if [[ "$DEPLOY_AI_UPDATE" == "true" ]]; then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_ai_update.sh" ]] && \
+            scheduled_jobs+=("ai-update|$DOT_DIR/scripts/cleanup/setup_ai_update.sh")
     fi
-fi
 
-# ─── AI Tools Auto-Update (both platforms) ──────────────────────────────────
-
-if [[ "$DEPLOY_AI_UPDATE" == "true" ]]; then
-    log_section "INSTALLING AI TOOLS AUTO-UPDATE"
-    if [[ -f "$DOT_DIR/scripts/cleanup/setup_ai_update.sh" ]]; then
-        "$DOT_DIR/scripts/cleanup/setup_ai_update.sh" || log_warning "AI update setup failed"
-    else
-        log_warning "AI update setup script not found"
+    if [[ "$DEPLOY_BREW_UPDATE" == "true" ]]; then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_brew_update.sh" ]] && \
+            scheduled_jobs+=("brew-update|$DOT_DIR/scripts/cleanup/setup_brew_update.sh")
     fi
-fi
 
-# ─── Package Auto-Update (both platforms) ────────────────────────────────────
-
-if [[ "$DEPLOY_BREW_UPDATE" == "true" ]]; then
-    log_section "INSTALLING PACKAGE AUTO-UPDATE"
-    if [[ -f "$DOT_DIR/scripts/cleanup/setup_brew_update.sh" ]]; then
-        "$DOT_DIR/scripts/cleanup/setup_brew_update.sh" || log_warning "Package update setup failed"
-    else
-        log_warning "Brew update setup script not found"
+    if [[ "$DEPLOY_KEYBOARD" == "true" ]] && is_macos; then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh" ]] && \
+            scheduled_jobs+=("keyboard-repeat|$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh")
     fi
-fi
 
-# ─── Keyboard Repeat Enforcement (macOS only) ─────────────────────────────────
-
-if [[ "$DEPLOY_KEYBOARD" == "true" ]] && is_macos; then
-    log_info "Setting up keyboard repeat enforcement..."
-    if [[ -f "$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh" ]]; then
-        "$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh" || log_warning "Keyboard repeat setup failed"
-    else
-        log_warning "Keyboard repeat setup script not found"
+    if (( ${#scheduled_jobs[@]} > 0 )); then
+        log_section "INSTALLING SCHEDULED TASKS"
+        run_parallel "Setting up scheduled tasks" "${scheduled_jobs[@]}"
     fi
-fi
+}
 
 # ─── Bedtime Timezone Enforcement (macOS only) ───────────────────────────────
 
@@ -916,6 +900,17 @@ fi
 
 if [[ "$DEPLOY_EDITOR" == "true" ]] && is_macos && [[ -f "$DOT_DIR/custom_bins/safari-web-apps-scan" ]]; then
     "$DOT_DIR/custom_bins/safari-web-apps-scan" || log_warning "Safari web app scan failed (non-critical)"
+fi
+
+# ─── Wait for background builds ─────────────────────────────────────────────
+
+if [[ -n "${CLAUDE_TOOLS_PID:-}" ]]; then
+    if wait "$CLAUDE_TOOLS_PID" 2>/dev/null; then
+        log_success "claude-tools built and deployed to custom_bins/"
+    else
+        log_warning "claude-tools build failed (bash fallback will be used)"
+    fi
+    [[ -f "$CLAUDE_TOOLS_LOG" ]] && cat "$CLAUDE_TOOLS_LOG" && rm -f "$CLAUDE_TOOLS_LOG"
 fi
 
 # ─── Done ─────────────────────────────────────────────────────────────────────
