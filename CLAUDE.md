@@ -343,7 +343,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - **Codex CLI directory**: `codex/` is symlinked to `~/.codex/` (not copied)
 - **Serena MCP config**: `config/serena/serena_config.yml` symlinked to `~/.serena/serena_config.yml` (dashboard auto-open disabled)
 - **Ghostty config**: Symlinked to platform-specific path, requires reload after changes (Cmd+Shift+Comma)
-- **SOPS + age**: Age private key must exist at `~/.config/sops/age/keys.txt` before decrypt works. Run `secrets-init` on new machines, or `sync-gist` to pull from gist
+- **SOPS + age**: Age private key must exist at `~/.config/sops/age/keys.txt` before decrypt works. Run `secrets-init` on new machines (paste age key from Bitwarden)
 
 ## Cross-Reference
 

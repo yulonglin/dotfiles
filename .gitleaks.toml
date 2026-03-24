@@ -8,7 +8,7 @@ title = "Dotfiles Gitleaks Config"
 
   # GitHub Gist IDs are not secrets - they're public identifiers
   regexes = [
-    '''SECRETS_GIST_ID="[a-f0-9]{32}"''',
+    '''GIST_SYNC_ID="[a-f0-9]{32}"''',
     '''gist_id="[a-f0-9]{32}"''',
   ]
 

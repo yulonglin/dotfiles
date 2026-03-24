@@ -103,10 +103,10 @@ fi
 echo "Running install.sh..."
 sudo -u "$USERNAME" -i bash -c "cd $DOTFILES && ./install.sh"
 
-# ─── Authenticate gh (needed for gist secrets sync in deploy) ────────────────
+# ─── Authenticate gh (needed for gist sync in deploy) ────────────────────────
 if ! sudo -u "$USERNAME" -i bash -c 'gh auth status' &>/dev/null; then
     echo "Authenticating GitHub CLI..."
-    sudo -u "$USERNAME" -i bash -c 'gh auth login --web --git-protocol ssh'
+    sudo -u "$USERNAME" -i bash -c 'gh auth login --web --git-protocol ssh </dev/tty'
 fi
 
 # ─── Age key for SOPS secrets (paste from Bitwarden) ─────────────────────────
