@@ -284,8 +284,8 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
             echo "  cat $age_key"
             echo ""
 
-            # Create .sops.yaml if missing
-            if [[ ! -f "$sops_yaml" ]]; then
+            # Create or update .sops.yaml with real public key
+            if [[ ! -f "$sops_yaml" ]] || grep -q 'age1\.\.\.' "$sops_yaml"; then
                 cat > "$sops_yaml" <<SOPSYAML
 creation_rules:
   - path_regex: \\.enc$
@@ -304,7 +304,7 @@ SOPSYAML
                 "# HF_TOKEN=" \
                 "# GITHUB_TOKEN=" \
                 > "$tmpfile"
-            sops -e "$tmpfile" > "$enc"
+            sops -e --age "$pub_key" "$tmpfile" > "$enc"
             rm -f "$tmpfile"
             log_success "Created $enc — edit with: secrets-edit"
         fi

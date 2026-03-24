@@ -49,7 +49,7 @@ secrets-init() {
     local pub_key
     pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
 
-    if [[ ! -f "$sops_yaml" ]]; then
+    if [[ ! -f "$sops_yaml" ]] || grep -q 'age1\.\.\.' "$sops_yaml"; then
         cat > "$sops_yaml" <<YAML
 creation_rules:
   - path_regex: \\.enc$
@@ -70,7 +70,7 @@ YAML
             "# HF_TOKEN=" \
             "# GITHUB_TOKEN=" \
             > "$tmpfile"
-        sops -e "$tmpfile" > "$enc"
+        sops -e --age "$pub_key" "$tmpfile" > "$enc"
         rm -f "$tmpfile"
         echo "Created $enc — edit with: secrets-edit"
     else
@@ -109,7 +109,7 @@ YAML
     if [[ ! -f "$enc" ]]; then
         local tmpfile="${TMPDIR:-/tmp}/proj_secrets.env"
         printf '%s\n' "# Project secrets (edit with: sops $enc)" "PLACEHOLDER=replace_me" > "$tmpfile"
-        sops -e "$tmpfile" > "$enc"
+        sops -e --age "$pub_key" "$tmpfile" > "$enc"
         rm -f "$tmpfile"
         echo "Created $enc"
     fi
