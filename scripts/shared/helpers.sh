@@ -522,15 +522,6 @@ print('yes' if '$1' in data['files'] else 'no')
     log_info "Syncing git identity..."
     sync_file "$DOT_DIR/config/user.conf" "user.conf" "$gist_id" "$gist_updated_at" && changes_made=true
 
-    # Sync age key (SOPS encryption)
-    local age_key_path="$HOME/.config/sops/age/keys.txt"
-    if [[ -f "$age_key_path" ]] || [[ "$(gist_has_file "age_keys.txt")" == "yes" ]]; then
-        log_info "Syncing age key..."
-        mkdir -p "$(dirname "$age_key_path")"
-        (umask 077 && sync_file "$age_key_path" "age_keys.txt" "$gist_id" "$gist_updated_at") && changes_made=true
-        [[ -f "$age_key_path" ]] && chmod 600 "$age_key_path"
-    fi
-
     if [[ "$changes_made" == "true" ]]; then
         log_success "Secrets synced with gist"
     else
