@@ -43,5 +43,7 @@ logs/
 
 chrome/
 mcp-needs-auth-cache.json
+sessions/
+vercel-plugin-telemetry-preference
 
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh

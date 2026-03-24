@@ -35,6 +35,9 @@
 .system/
 .system/**
 
+# Plugin-materialized skills (owned by plugins, not personal skills)
+transformers.js/
+
 # macOS metadata
 **/.DS_Store
 
