@@ -76,9 +76,9 @@ fi
 # Copy root's SSH config if it exists (e.g., provider-specific settings)
 [ -f /root/.ssh/config ] && cp /root/.ssh/config "$USER_HOME/.ssh/" 2>/dev/null || true
 
-chown -R "$USERNAME:$USERNAME" "$USER_HOME/.ssh"
-chmod 700 "$USER_HOME/.ssh"
-chmod 600 "$USER_HOME/.ssh/authorized_keys"
+sudo chown -R "$USERNAME:$USERNAME" "$USER_HOME/.ssh" 2>/dev/null || true
+chmod 700 "$USER_HOME/.ssh" 2>/dev/null || true
+chmod 600 "$USER_HOME/.ssh/authorized_keys" 2>/dev/null || true
 
 # ─── Bun (preferred for global CLI tools on Linux) ───────────────────────────
 if ! command -v bun &>/dev/null; then
