@@ -13,6 +13,58 @@ This setup reflects workflows optimized for ML research: reproducibility, experi
 
 > Originally forked from [jplhughes/dotfiles](https://github.com/jplhughes/dotfiles) - thanks John for the solid foundation!
 
+## Quickstart
+
+```bash
+git clone https://github.com/yulonglin/dotfiles.git && cd dotfiles
+
+# 1. Install dependencies (zsh, tmux, CLI tools, AI assistants)
+./install.sh
+
+# 2. Deploy configurations (symlinks, shell config, secrets, automation)
+./deploy.sh
+
+# 3. Restart your shell
+source ~/.zshrc
+```
+
+`install.sh` installs software. `deploy.sh` deploys config files. Both are idempotent — safe to re-run.
+
+All settings live in [`config.sh`](./config.sh). Flags are **additive** to defaults (e.g., `--mouseless` adds mouseless on top of defaults). Use `--minimal` to start from nothing.
+
+## Table of Contents
+
+- [Quickstart](#quickstart)
+- [Adopting These Dotfiles](#adopting-these-dotfiles)
+- [Rust CLI Tools](#rust-cli-tools)
+- [Installation](#installation)
+  - [Step 1: Install dependencies](#step-1-install-dependencies)
+  - [Step 2: Deploy configurations](#step-2-deploy-configurations)
+- [AI Assistants](#ai-assistants)
+  - [Claude Code](#claude-code-primary-ai-assistant)
+  - [Codex CLI](#codex-cli-openai)
+  - [Gemini CLI](#gemini-cli-google)
+- [Terminal & Shell](#terminal--shell)
+  - [Ghostty](#ghostty-terminal-emulator)
+  - [Powerlevel10k Prompt](#powerlevel10k-prompt)
+  - [Claude Code Statusline](#claude-code-statusline)
+  - [SSH Key Management](#ssh-key-management)
+- [Dev Tools](#dev-tools)
+  - [htop](#htop-process-monitor)
+  - [pdb++](#pdb-python-debugger)
+- [Secrets & Security](#secrets--security)
+  - [Encrypted Secrets (SOPS + age)](#encrypted-secrets-sops--age)
+  - [Gist Sync](#gist-sync-automation-both-platforms)
+  - [Global Git Hooks](#global-git-hooks)
+- [Automation](#automation)
+  - [Automatic Cleanup](#automatic-cleanup-macos)
+  - [Claude Code Session Cleanup](#claude-code-session-cleanup-both-platforms)
+  - [AI Tools Auto-Update](#ai-tools-auto-update-both-platforms)
+  - [Package Auto-Update](#package-auto-update-both-platforms)
+  - [Text Replacements](#text-replacements-macos)
+- [Cloud Setup](#cloud-setup-runpod-hetzner-etc)
+- [Getting to Know These Dotfiles](#getting-to-know-these-dotfiles)
+
 ## Adopting These Dotfiles
 
 This repo is highly personal — it reflects one person's workflow, opinions, and tooling choices. The best way to use it is to **point a coding agent at this repo and ask it to extract the parts you find useful** into your own dotfiles.
@@ -104,6 +156,8 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 
 **Flags are additive** — e.g., `./deploy.sh --mouseless` deploys defaults + mouseless. Use `--minimal` to disable all defaults, then specify only what you want.
 
+## AI Assistants
+
 ### Claude Code (Primary AI Assistant)
 
 This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/claude-code) customization optimized for AI safety research:
@@ -180,6 +234,8 @@ The configuration follows the same research discipline as Claude Code but adapte
 
 **Note:** Gemini CLI uses a different skills format. The sync script adapts Claude's configuration but some features may not translate directly.
 
+## Terminal & Shell
+
 ### Ghostty (Terminal Emulator)
 
 [Ghostty](https://ghostty.org/) is a fast, GPU-accelerated terminal written in Zig. Config is symlinked to the platform-specific location:
@@ -237,185 +293,13 @@ SSH_HOST_COLORS[default]="#0d1926:#c5d4dd:#88c0d0"    # Blue-gray fallback
 
 Patterns support wildcards (`prod*` matches `prod1`, `prod-web`, etc.). The `default` key applies to any host without a specific match.
 
-### htop (Process Monitor)
-
-Dynamic [htop](https://htop.dev/) configuration that adapts CPU meters to your core count:
-
-```bash
-./deploy.sh --htop  # Part of defaults
-```
-
-The config in `config/htop/htoprc` uses a dynamic layout that works across machines with different CPU counts—no manual adjustment needed.
-
-### pdb++ (Python Debugger)
-
-High-contrast color scheme for [pdb++](https://github.com/pdbpp/pdbpp), the enhanced Python debugger:
-
-```bash
-./deploy.sh --pdb  # Part of defaults
-```
-
-**Global config works with per-project installations**. The config is deployed to `~/.pdbrc.py` (symlinked), but pdb++ is installed per-project via `uv add --dev pdbpp`. This works because pdb++ reads the global config at runtime.
-
-**Auto-detects terminal background** using OSC 11 escape sequence:
-- **Light terminals**: Dark colors on light background (solarized-light theme)
-- **Dark terminals**: Bright colors on dark background (monokai theme)
-- **Fallback**: Defaults to dark theme if detection fails (SSH, older terminals)
-
-Detection succeeds in modern terminals (iTerm2, Ghostty, Kitty, Alacritty) and fails gracefully elsewhere.
-
-**Test it works:**
-```bash
-cd /path/to/project
-uv add --dev pdbpp
-python -c "import pdb; pdb.set_trace()" <<< "c"
-# Should show high-contrast colors
-```
-
-**Per-project override** (advanced): Create `.pdbrc.py` in project root. It takes precedence over the global config. See [pdb++ docs](https://github.com/pdbpp/pdbpp#configuration) for details.
-
-### Automatic Cleanup (macOS)
-
-Scheduled cleanup of old files from `~/Downloads` and `~/Screenshots`:
-
-```bash
-./deploy.sh --cleanup  # Part of macOS defaults
-```
-
-**How it works:**
-- Moves files older than 180 days (configurable) to **Trash** (not permanent delete)
-- Runs monthly via launchd
-- Only deletes files not accessed AND not modified in retention period
-
-```bash
-# Preview what would be cleaned
-./scripts/cleanup/cleanup_old_files.sh --dry-run
-
-# Custom retention (90 days) and schedule (weekly)
-./scripts/cleanup/install.sh --days 90 --schedule weekly
-```
-
-See [`scripts/cleanup/README.md`](./scripts/cleanup/README.md) for full documentation.
-
-### Claude Code Session Cleanup (both platforms)
-
-Automatically kills idle Claude Code processes daily at 17:00:
-
-```bash
-./deploy.sh --claude-cleanup  # Part of defaults (both macOS and Linux)
-```
-
-**How it works:**
-- Only kills processes with **no output activity for 24h** (preserves active + tmux sessions)
-- Runs daily via launchd (macOS) or cron (Linux)
-- Manual control via `clear-claude-code` command (aliases: `ccl`, `cci`, `ccf`)
-
-```bash
-# Check status
-clear-claude-code --list
-
-# Uninstall
-./scripts/cleanup/setup_claude_cleanup.sh --uninstall
-```
-
-### AI Tools Auto-Update (both platforms)
-
-Daily automatic updates for Claude Code, Gemini CLI, and Codex CLI at 06:00:
-
-```bash
-./deploy.sh --ai-update  # Part of defaults
-```
-
-Runs via launchd (macOS) or cron (Linux). Uninstall with `scripts/cleanup/setup_ai_update.sh --uninstall`.
-
-### Package Auto-Update (both platforms)
-
-Weekly package upgrade + cleanup on Sundays at 05:00:
-
-```bash
-./deploy.sh --brew-update  # Part of defaults
-```
-
-Supports Homebrew (macOS), apt, dnf, and pacman (Linux). Includes cleanup of stale caches.
-
-### Text Replacements (macOS)
-
-Bidirectional sync between macOS text replacements and [Alfred](https://www.alfredapp.com/) snippets. Runs daily at 09:00:
-
-```bash
-./deploy.sh --text-replacements  # macOS only, opt-in
-```
-
-macOS uses raw shortcuts; Alfred applies a collection prefix at runtime (e.g., `fm.hi`). Requires Full Disk Access for your terminal app.
-
-### Global Git Hooks
-
-Pre-commit hooks for secret detection across all repositories:
-
-```bash
-./deploy.sh --git-hooks  # Part of defaults
-```
-
-Scans staged files for API keys, tokens, and credentials before each commit.
-
-### Gist Sync Automation (both platforms)
-
-Automatically sync config with GitHub gist daily at 08:00:
-
-```bash
-./deploy.sh --secrets  # Part of defaults
-```
-
-**How it works:**
-- Bidirectional sync with GitHub gist (SSH config, authorized_keys, git identity)
-- Auto-adds local public key to `authorized_keys` (enables SSH between your machines)
-- Last-modified wins: compares local vs gist timestamps
-- Requires `gh auth login` (run once for authentication)
-- Runs daily via launchd (macOS) or cron (Linux)
-
-```bash
-# Manual sync
-sync-gist
-
-# Uninstall automation
-./scripts/cleanup/setup_gist_sync.sh --uninstall
-```
-
-> **Note:** Secret gists are unlisted, not encrypted. Only non-secret config (SSH config, authorized_keys, git identity) should be synced via gist.
-
-### Encrypted Secrets (SOPS + age)
-
-[SOPS](https://github.com/getsops/sops) encrypts file **values** while keeping structure visible (you can diff and review encrypted files). [age](https://github.com/FiloSottile/age) provides the keypair. Works offline, git-versioned, no service dependency.
-
-**Architecture:**
-
-| File | Purpose | Git status |
-|------|---------|------------|
-| `config/secrets.env.enc` | SOPS-encrypted API keys | Committed |
-| `.sops.yaml` | SOPS config with age public key | Committed |
-| `$DOT_DIR/.secrets` | Decrypted env vars (created at deploy time) | Gitignored |
-| `~/.config/sops/age/keys.txt` | age private key (stored in Bitwarden) | Not in repo |
-
-**Commands:**
-
-```bash
-secrets-init             # Generate age keypair + create .sops.yaml + initial secrets file
-secrets-edit             # Decrypt → edit → re-encrypt (opens $EDITOR)
-secrets-decrypt          # Decrypt to $DOT_DIR/.secrets (run by deploy.sh --secrets-env)
-secrets-init-project     # Bootstrap per-project: .sops.yaml + secrets.env.enc + .envrc
-```
-
-**Per-project usage:** Run `secrets-init-project` in any repo to create a `.sops.yaml`, `secrets.env.enc`, and `.envrc` that auto-loads secrets via `direnv allow`.
-
-### Step 3: Configure Powerlevel10k theme
+### Powerlevel10k Prompt
 
 [Powerlevel10k](https://github.com/romkatv/powerlevel10k) provides a fast, feature-rich ZSH prompt. This config includes custom segments for SSH-aware machine identification.
 
 **Requirements**: Install a [Nerd Font](https://github.com/romkatv/powerlevel10k#meslo-nerd-font-patched-for-powerlevel10k) for icons.
 
 **Reconfigure**: Run `p10k configure` (when prompted, overwrite `p10k.zsh` but don't apply to `.zshrc`).
-
-#### Prompt Features
 
 | Segment | Description |
 |---------|-------------|
@@ -514,6 +398,200 @@ export SSH_KEY_PATH=~/.ssh/id_rsa  # Use RSA key instead
 ```
 
 Configuration: [`config/ssh_setup.sh`](config/ssh_setup.sh)
+
+## Dev Tools
+
+### htop (Process Monitor)
+
+Dynamic [htop](https://htop.dev/) configuration that adapts CPU meters to your core count:
+
+```bash
+./deploy.sh --htop  # Part of defaults
+```
+
+The config in `config/htop/htoprc` uses a dynamic layout that works across machines with different CPU counts—no manual adjustment needed.
+
+### pdb++ (Python Debugger)
+
+High-contrast color scheme for [pdb++](https://github.com/pdbpp/pdbpp), the enhanced Python debugger:
+
+```bash
+./deploy.sh --pdb  # Part of defaults
+```
+
+**Global config works with per-project installations**. The config is deployed to `~/.pdbrc.py` (symlinked), but pdb++ is installed per-project via `uv add --dev pdbpp`. This works because pdb++ reads the global config at runtime.
+
+**Auto-detects terminal background** using OSC 11 escape sequence:
+- **Light terminals**: Dark colors on light background (solarized-light theme)
+- **Dark terminals**: Bright colors on dark background (monokai theme)
+- **Fallback**: Defaults to dark theme if detection fails (SSH, older terminals)
+
+Detection succeeds in modern terminals (iTerm2, Ghostty, Kitty, Alacritty) and fails gracefully elsewhere.
+
+**Test it works:**
+```bash
+cd /path/to/project
+uv add --dev pdbpp
+python -c "import pdb; pdb.set_trace()" <<< "c"
+# Should show high-contrast colors
+```
+
+**Per-project override** (advanced): Create `.pdbrc.py` in project root. It takes precedence over the global config. See [pdb++ docs](https://github.com/pdbpp/pdbpp#configuration) for details.
+
+## Automation
+
+### Automatic Cleanup (macOS)
+
+Scheduled cleanup of old files from `~/Downloads` and `~/Screenshots`:
+
+```bash
+./deploy.sh --cleanup  # Part of macOS defaults
+```
+
+**How it works:**
+- Moves files older than 180 days (configurable) to **Trash** (not permanent delete)
+- Runs monthly via launchd
+- Only deletes files not accessed AND not modified in retention period
+
+```bash
+# Preview what would be cleaned
+./scripts/cleanup/cleanup_old_files.sh --dry-run
+
+# Custom retention (90 days) and schedule (weekly)
+./scripts/cleanup/install.sh --days 90 --schedule weekly
+```
+
+See [`scripts/cleanup/README.md`](./scripts/cleanup/README.md) for full documentation.
+
+### Claude Code Session Cleanup (both platforms)
+
+Automatically kills idle Claude Code processes daily at 17:00:
+
+```bash
+./deploy.sh --claude-cleanup  # Part of defaults (both macOS and Linux)
+```
+
+**How it works:**
+- Only kills processes with **no output activity for 24h** (preserves active + tmux sessions)
+- Runs daily via launchd (macOS) or cron (Linux)
+- Manual control via `clear-claude-code` command (aliases: `ccl`, `cci`, `ccf`)
+
+```bash
+# Check status
+clear-claude-code --list
+
+# Uninstall
+./scripts/cleanup/setup_claude_cleanup.sh --uninstall
+```
+
+### AI Tools Auto-Update (both platforms)
+
+Daily automatic updates for Claude Code, Gemini CLI, and Codex CLI at 06:00:
+
+```bash
+./deploy.sh --ai-update  # Part of defaults
+```
+
+Runs via launchd (macOS) or cron (Linux). Uninstall with `scripts/cleanup/setup_ai_update.sh --uninstall`.
+
+### Package Auto-Update (both platforms)
+
+Weekly package upgrade + cleanup on Sundays at 05:00:
+
+```bash
+./deploy.sh --brew-update  # Part of defaults
+```
+
+Supports Homebrew (macOS), apt, dnf, and pacman (Linux). Includes cleanup of stale caches.
+
+### Text Replacements (macOS)
+
+Bidirectional sync between macOS text replacements and [Alfred](https://www.alfredapp.com/) snippets. Runs daily at 09:00:
+
+```bash
+./deploy.sh --text-replacements  # macOS only, opt-in
+```
+
+macOS uses raw shortcuts; Alfred applies a collection prefix at runtime (e.g., `fm.hi`). Requires Full Disk Access for your terminal app.
+
+## Secrets & Security
+
+### Encrypted Secrets (SOPS + age)
+
+[SOPS](https://github.com/getsops/sops) (**S**ecrets **OP**eration**S**, by Mozilla) encrypts file **values** while keeping keys/structure visible — you can `git diff` and review encrypted files. [age](https://github.com/FiloSottile/age) provides the keypair (modern, simple alternative to PGP). Works offline, git-versioned, no service dependency.
+
+**How it works:**
+
+```
+age keypair (one-time setup)
+├── Private key: ~/.config/sops/age/keys.txt   ← secret, stored in Bitwarden
+└── Public key:  extracted from private key     ← committed in .sops.yaml
+
+Encryption:  plaintext env vars  →  sops -e  →  config/secrets.env.enc (committed)
+Decryption:  config/secrets.env.enc  →  sops -d  →  .secrets (gitignored, sourced by zshrc)
+```
+
+**File locations:**
+
+| File | Location | Purpose | Git status |
+|------|----------|---------|------------|
+| `.sops.yaml` | `<dotfiles>/.sops.yaml` (repo root) | SOPS config — tells sops which age public key to encrypt with | Committed |
+| `secrets.env.enc` | `<dotfiles>/config/secrets.env.enc` | Encrypted API keys (values encrypted, key names visible) | Committed |
+| `.secrets` | `<dotfiles>/.secrets` | Decrypted env vars (created by `deploy.sh`, sourced by zshrc) | Gitignored |
+| `keys.txt` | `~/.config/sops/age/keys.txt` | age private key (paste from Bitwarden on new machines) | Not in repo |
+
+**Commands:**
+
+```bash
+secrets-init             # First-time setup: generate age keypair + .sops.yaml + initial encrypted file
+secrets-edit             # Decrypt → edit in $EDITOR → re-encrypt on save
+secrets-decrypt          # Manual decrypt to .secrets (deploy.sh --secrets-env does this automatically)
+secrets-init-project     # Bootstrap per-project: .sops.yaml + secrets.env.enc + .envrc
+```
+
+**New machine setup:**
+1. Install sops + age (`./install.sh` handles this)
+2. Paste age private key from Bitwarden: `secrets-init` (or manually to `~/.config/sops/age/keys.txt`)
+3. Run `./deploy.sh` — decrypts `config/secrets.env.enc` to `.secrets` automatically
+
+**Per-project usage:** Run `secrets-init-project` in any repo to create a `.sops.yaml`, `secrets.env.enc`, and `.envrc` that auto-loads secrets via [`direnv`](https://direnv.net/).
+
+**Further reading:** [SOPS README](https://github.com/getsops/sops#readme) · [age README](https://github.com/FiloSottile/age#readme) · [SOPS + age tutorial](https://devops.novalagung.com/en/cicd/sops-age-encryption.html)
+
+### Gist Sync Automation (both platforms)
+
+Automatically sync config with GitHub gist daily at 08:00:
+
+```bash
+./deploy.sh --secrets  # Part of defaults
+```
+
+**How it works:**
+- Bidirectional sync with GitHub gist (SSH config, authorized_keys, git identity)
+- Auto-adds local public key to `authorized_keys` (enables SSH between your machines)
+- Last-modified wins: compares local vs gist timestamps
+- Requires `gh auth login` (run once for authentication)
+- Runs daily via launchd (macOS) or cron (Linux)
+
+```bash
+# Manual sync
+sync-gist
+
+# Uninstall automation
+./scripts/cleanup/setup_gist_sync.sh --uninstall
+```
+
+> **Note:** Secret gists are unlisted, not encrypted. Only non-secret config (SSH config, authorized_keys, git identity) should be synced via gist.
+
+### Global Git Hooks
+
+Pre-commit hooks for secret detection across all repositories:
+
+```bash
+./deploy.sh --git-hooks  # Part of defaults
+```
+
+Scans staged files for API keys, tokens, and credentials before each commit.
 
 ## Getting to know these dotfiles
 

@@ -242,18 +242,87 @@ fi
 # ─── Encrypted Secrets (SOPS + age) ──────────────────────────────────────────
 
 if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
-    log_section "DECRYPTING SECRETS"
+    log_section "ENCRYPTED SECRETS (SOPS + age)"
     enc="$DOT_DIR/config/secrets.env.enc"
     out="$DOT_DIR/.secrets"
     age_key="$HOME/.config/sops/age/keys.txt"
+    sops_yaml="$DOT_DIR/.sops.yaml"
 
-    if [[ ! -f "$enc" ]]; then
-        log_warning "No encrypted secrets found — run 'secrets-init' to set up"
-    elif ! cmd_exists sops; then
-        log_warning "sops not installed — run install.sh"
+    if ! cmd_exists sops || ! cmd_exists age-keygen; then
+        log_warning "sops/age not installed — run install.sh"
     elif [[ ! -f "$age_key" ]]; then
-        log_warning "Age key not found at $age_key — run 'secrets-init' (paste age key from Bitwarden)"
-    else
+        if [[ -s "$enc" ]]; then
+            # Second machine: encrypted secrets exist, need age key to decrypt
+            echo ""
+            log_info "Age key not found — encrypted secrets exist but can't be decrypted"
+            echo "Paste your age private key (from Bitwarden), then press Enter:"
+            echo "(starts with AGE-SECRET-KEY-, leave empty to skip)"
+            local age_input=""
+            if [[ -e /dev/tty ]]; then
+                read -rs age_input </dev/tty
+            fi
+            if [[ -n "$age_input" ]]; then
+                mkdir -p "$(dirname "$age_key")"
+                printf '%s\n' "$age_input" > "$age_key"
+                chmod 600 "$age_key"
+                log_success "Age key saved"
+            else
+                log_warning "Skipping — re-run deploy.sh when you have the key"
+            fi
+        else
+            # First machine: no key, no encrypted secrets — generate everything
+            log_info "Setting up SOPS encryption (first time)..."
+            mkdir -p "$(dirname "$age_key")"
+            age-keygen -o "$age_key" 2>&1
+            chmod 600 "$age_key"
+            log_success "Generated age keypair"
+            log_info "IMPORTANT: Store the private key in Bitwarden now!"
+            echo "  cat $age_key"
+            echo ""
+        fi
+    fi
+
+    # Extract public key once for subsequent steps
+    local pub_key=""
+    if [[ -f "$age_key" ]]; then
+        pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
+    fi
+
+    # Ensure .sops.yaml has real public key (not placeholder)
+    if [[ -n "$pub_key" ]]; then
+        if [[ ! -f "$sops_yaml" ]] || grep -q 'age1\.\.\.' "$sops_yaml"; then
+            cat > "$sops_yaml" <<SOPSYAML
+creation_rules:
+  - path_regex: \\.enc\$
+    age: "$pub_key"
+SOPSYAML
+            log_success "Wrote $sops_yaml with age public key"
+        fi
+    fi
+
+    # Create template encrypted file if missing
+    if [[ ! -s "$enc" ]] && [[ -n "$pub_key" ]] && cmd_exists sops; then
+        local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
+        printf '%s\n' \
+            "# Encrypted API keys (edit with: secrets-edit)" \
+            "PLACEHOLDER=replace_me" \
+            "# ANTHROPIC_API_KEY=" \
+            "# OPENAI_API_KEY=" \
+            "# HF_TOKEN=" \
+            "# GITHUB_TOKEN=" \
+            > "$tmpfile"
+        if sops -e --age "$pub_key" "$tmpfile" > "${enc}.tmp"; then
+            mv "${enc}.tmp" "$enc"
+            log_success "Created $enc — edit with: secrets-edit"
+        else
+            rm -f "${enc}.tmp"
+            log_warning "Failed to create encrypted secrets"
+        fi
+        rm -f "$tmpfile"
+    fi
+
+    # Decrypt if key and encrypted file both exist
+    if [[ -s "$enc" ]] && cmd_exists sops && [[ -f "$age_key" ]]; then
         if (umask 077 && sops -d "$enc" > "${out}.tmp"); then
             mv "${out}.tmp" "$out"
             log_success "Decrypted secrets to $out"
