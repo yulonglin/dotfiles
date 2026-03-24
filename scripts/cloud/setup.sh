@@ -76,8 +76,17 @@ if ! id "$USERNAME" &>/dev/null; then
     echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME"
     ok "User $USERNAME created (uid=$(id -u "$USERNAME"), gid=$(id -g "$USERNAME"))"
 else
-    ok "User $USERNAME already exists (uid=$(id -u "$USERNAME"))"
+    # User exists but home dir might be wrong (e.g., previously set to /workspace/yulong)
+    CURRENT_HOME=$(getent passwd "$USERNAME" | cut -d: -f6)
+    if [[ "$CURRENT_HOME" != "$USER_HOME" ]]; then
+        log "Updating home: $CURRENT_HOME → $USER_HOME"
+        usermod -d "$USER_HOME" "$USERNAME"
+    fi
+    ok "User $USERNAME exists (uid=$(id -u "$USERNAME"))"
 fi
+
+# Ensure home directory exists
+mkdir -p "$USER_HOME"
 
 step "Home directory ownership"
 if [[ -d "$USER_HOME" ]]; then
