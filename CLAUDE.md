@@ -210,10 +210,12 @@ export WRITING_DIR="$HOME/Documents/writing"
 - Manual: `sync-gist` (alias) or `scripts/sync_gist.sh`
 
 **Encrypted Secrets (SOPS + age)**:
-- Decrypts `config/secrets.env.enc` to `$DOT_DIR/.secrets` using `sops -d` with age key
+- Decrypts `config/secrets.env.enc` to `$DOT_DIR/.secrets` using `sops -d --config .sops.yaml` with age key
 - Age private key at `~/.config/sops/age/keys.txt` (stored in Bitwarden, pasted during cloud setup)
 - Shell integration: `.secrets` sourced by zshrc.sh, direnv for per-project secrets
 - Commands: `secrets-init` (first-time setup), `secrets-edit` (edit encrypted), `secrets-decrypt` (manual decrypt), `secrets-init-project` (per-project setup)
+- All sops commands use explicit `--config` flag — sops searches from input file's directory by default, which fails when input is in `$TMPDIR`
+- Bootstrap encryption uses `--config /dev/null` to bypass creation rules (tmpfile doesn't match `.enc$` regex); decryption uses `--config "$DOT_DIR/.sops.yaml"`
 - Graceful degradation: no errors if sops/age not installed or no encrypted file exists
 
 **Git Config (`deploy_git_config()`)**:
