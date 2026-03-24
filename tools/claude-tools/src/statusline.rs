@@ -84,14 +84,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 // --- Section formatters ---
 
-/// Machine name shown only in SSH sessions.
-/// Shells out to `machine-name` (custom_bins/) which handles SSH config alias
-/// lookup, public IP caching, and emoji.
+/// Machine name for registered machines + SSH fallback.
+/// Shells out to `machine-name` (custom_bins/) which checks the machine registry
+/// first, then falls back to SSH config alias lookup.
 fn format_machine_name(output: &mut String) {
-    if std::env::var("SSH_CONNECTION").is_err() {
-        return;
-    }
-
     let cmd_output = match std::process::Command::new("machine-name")
         .stderr(std::process::Stdio::null())
         .output()

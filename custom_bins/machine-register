@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+
+# Machine Register — add/list/remove machines in the registry
+#
+# Usage:
+#   machine-register              # Interactive: prompt for name
+#   machine-register <name>       # Register current machine with given name
+#   machine-register --list       # Show all registered machines
+#   machine-register --remove     # Remove current machine from registry
+#
+# Registry: config/machines.conf in the dotfiles repo
+# Format: machine_id|name|emoji
+
+set -euo pipefail
+
+# Locate dotfiles repo (follow symlinks from custom_bins)
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")")" && pwd)"
+DOT_DIR="${SCRIPT_DIR%/custom_bins}"
+REGISTRY="${DOT_DIR}/config/machines.conf"
+
+# Emoji palette (same as machine-name)
+EMOJIS=(
+  "🚀" "💻" "🖥️" "⚡" "🔥" "🌟" "🎯" "🧠" "🛸" "🌊" "🎨" "🔮"
+  "🦊" "🐙" "🦅" "🐋" "🐺" "🦈" "🦉" "🐝"
+  "🌵" "🍄" "🌶️" "🌻" "🍀" "🌴"
+  "⛏️" "🔧" "🧲" "💎" "🗡️" "🛡️"
+)
+
+# Get machine ID (cross-platform)
+get_machine_id() {
+  if [[ -f /etc/machine-id ]]; then
+    cat /etc/machine-id
+  elif command -v ioreg >/dev/null 2>&1; then
+    ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/{print $4}' | tr '[:upper:]' '[:lower:]'
+  else
+    # Fallback: hostname-based ID (less stable but works everywhere)
+    echo "hostname-$(hostname -s 2>/dev/null || echo unknown)"
+  fi
+}
+
+# Hash name to emoji index
+name_to_emoji() {
+  local name="$1"
+  local hash_val
+  if command -v md5sum >/dev/null 2>&1; then
+    hash_val=$(echo -n "$name" | md5sum | cut -c1-8)
+  elif command -v md5 >/dev/null 2>&1; then
+    hash_val=$(echo -n "$name" | md5 | cut -c1-8)
+  else
+    hash_val="0"
+  fi
+  local idx=$(( 16#$hash_val % ${#EMOJIS[@]} ))
+  echo "${EMOJIS[$idx]}"
+}
+
+# Lookup current machine in registry
+lookup_machine() {
+  local machine_id="$1"
+  [[ ! -f "$REGISTRY" ]] && return 1
+  grep "^${machine_id}|" "$REGISTRY" 2>/dev/null | head -1 || true
+}
+
+# --- Commands ---
+
+cmd_list() {
+  if [[ ! -f "$REGISTRY" ]]; then
+    echo "No registry found at $REGISTRY"
+    exit 1
+  fi
+
+  local machine_id
+  machine_id=$(get_machine_id)
+  local count=0
+
+  echo "Registered machines:"
+  echo ""
+  while IFS='|' read -r id name emoji rest; do
+    [[ "$id" =~ ^#.*$ || -z "$id" ]] && continue
+    # Auto-assign emoji if empty
+    [[ -z "$emoji" ]] && emoji=$(name_to_emoji "$name")
+    local marker=""
+    [[ "$id" == "$machine_id" ]] && marker=" ← this machine"
+    printf "  %s %-20s %s\n" "$emoji" "$name" "$marker"
+    count=$((count + 1))
+  done < "$REGISTRY"
+
+  if [[ $count -eq 0 ]]; then
+    echo "  (none)"
+  fi
+}
+
+cmd_remove() {
+  local machine_id
+  machine_id=$(get_machine_id)
+  local entry
+  entry=$(lookup_machine "$machine_id")
+
+  if [[ -z "$entry" ]]; then
+    echo "Current machine is not registered."
+    exit 1
+  fi
+
+  local name
+  name=$(echo "$entry" | cut -d'|' -f2)
+
+  # Remove the line
+  local tmp="${REGISTRY}.tmp"
+  { grep -v "^${machine_id}|" "$REGISTRY" || true; } > "$tmp"
+  mv "$tmp" "$REGISTRY"
+  echo "Removed '$name' from registry."
+}
+
+cmd_register() {
+  local name="${1:-}"
+  local machine_id
+  machine_id=$(get_machine_id)
+
+  # Check if already registered
+  local existing
+  existing=$(lookup_machine "$machine_id")
+  if [[ -n "$existing" ]]; then
+    local existing_name
+    existing_name=$(echo "$existing" | cut -d'|' -f2)
+    echo "This machine is already registered as '$existing_name'."
+    if [[ -z "$name" ]]; then
+      printf "Enter new name (or press Enter to keep '%s'): " "$existing_name"
+      read -r name
+      [[ -z "$name" ]] && { echo "Kept '$existing_name'."; return; }
+    fi
+    # Remove old entry before re-adding
+    local tmp="${REGISTRY}.tmp"
+    { grep -v "^${machine_id}|" "$REGISTRY" || true; } > "$tmp"
+    mv "$tmp" "$REGISTRY"
+  fi
+
+  # Interactive prompt if no name given
+  if [[ -z "$name" ]]; then
+    local hostname="${HOST:-$(hostname -s 2>/dev/null || echo unknown)}"
+    printf "🆕 Register this machine (hostname: %s)\n" "$hostname"
+    printf "   Enter a name: "
+    read -r name
+    if [[ -z "$name" ]]; then
+      echo "Skipped. Run 'machine-register <name>' later to register."
+      return
+    fi
+  fi
+
+  # Assign emoji
+  local emoji
+  if [[ -n "${MACHINE_EMOJI:-}" ]]; then
+    emoji="$MACHINE_EMOJI"
+  else
+    emoji=$(name_to_emoji "$name")
+  fi
+
+  # Append to registry
+  echo "${machine_id}|${name}|${emoji}" >> "$REGISTRY"
+  echo "${emoji} Registered as '${name}'"
+
+  # Clear the "already prompted" flag so machine-name picks up the new entry
+  rm -f "${HOME}/.cache/machine-register-prompted" 2>/dev/null
+}
+
+# --- Main ---
+
+case "${1:-}" in
+  --list|-l)    cmd_list ;;
+  --remove|-r)  cmd_remove ;;
+  --help|-h)
+    echo "Usage: machine-register [name]        Register current machine"
+    echo "       machine-register --list         Show all registered machines"
+    echo "       machine-register --remove       Remove current machine"
+    ;;
+  *)            cmd_register "${1:-}" ;;
+esac

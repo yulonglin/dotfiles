@@ -13,16 +13,14 @@ input=$(cat)
 cwd=$(echo "$input" | jq -r ".workspace.current_dir")
 
 # ============================================================================
-# MACHINE NAME (SSH only)
+# MACHINE NAME (registered machines + SSH fallback)
 # ============================================================================
 machine_prefix=""
-if [ -n "$SSH_CONNECTION" ]; then
-  machine_name_output=$(machine-name 2>/dev/null)
-  if [ -n "$machine_name_output" ]; then
-    icon="${machine_name_output%% *}"
-    name="${machine_name_output#* }"
-    machine_prefix="$icon $(printf '\033[35m')${name}$(printf '\033[0m') "
-  fi
+machine_name_output=$(machine-name 2>/dev/null)
+if [ -n "$machine_name_output" ]; then
+  icon="${machine_name_output%% *}"
+  name="${machine_name_output#* }"
+  machine_prefix="$icon $(printf '\033[35m')${name}$(printf '\033[0m') "
 fi
 
 # ============================================================================

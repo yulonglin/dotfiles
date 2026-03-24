@@ -129,6 +129,7 @@ config/
 ├── curlrc                # curl defaults: follow redirects, show errors (symlinked to ~/.curlrc)
 ├── inputrc               # Readline config for bash/python/node REPLs (symlinked to ~/.inputrc)
 ├── gitattributes_global  # Binary file handling + line endings (symlinked to ~/.gitattributes)
+├── machines.conf         # Machine registry (machine-id → name + emoji, for prompt/statusline)
 ├── secrets.env.enc       # SOPS-encrypted API keys (committed, requires age key to decrypt)
 └── envrc_sops_template   # Template .envrc for per-project SOPS secrets
 
@@ -160,6 +161,8 @@ codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 custom_bins/              # Custom utilities (added to PATH)
 ├── utc_date              # Outputs DD-MM-YYYY in UTC
 ├── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
+├── machine-name          # Machine name for prompt/statusline (registry → SSH config → hostname)
+├── machine-register      # Register/list/remove machines in config/machines.conf
 ├── claude-context        # YAML-driven plugin profiles + marketplace sync (--sync)
 ├── claude-cache-clean    # Remove stale plugin cache versions
 └── any2md                # Universal content-to-markdown converter (files, URLs, arxiv, dirs)

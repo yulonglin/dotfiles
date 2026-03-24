@@ -1589,13 +1589,11 @@
     fi
   }
 
-  # Remote host indicator - shows short name + emoji when in SSH session
-  # Priority: $SERVER_NAME env var > SSH config alias (by IP) > abbreviated hostname
+  # Machine name indicator - shows for registered machines + SSH sessions
+  # Priority: $SERVER_NAME > machine registry > SSH config alias > abbreviated hostname
   function prompt_remote_host() {
     # Uses shared machine-name script (custom_bins/machine-name)
     # See that script for priority logic and caching details
-    [[ -z "$SSH_CONNECTION" ]] && return
-
     local output icon short_name
     output=$(machine-name 2>/dev/null)
     [[ -z "$output" ]] && return

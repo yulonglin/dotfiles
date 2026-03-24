@@ -60,6 +60,24 @@ source $CONFIG_DIR/key_bindings.sh
 source $CONFIG_DIR/completions.sh
 add_to_path "${DOT_DIR}/custom_bins"
 
+# Machine auto-registration: prompt once on unregistered machines (interactive shells only)
+if [[ -o interactive && ! -f "${HOME}/.cache/machine-register-prompted" ]]; then
+  _machine_registry="${DOT_DIR}/config/machines.conf"
+  _machine_id=""
+  if [[ -f /etc/machine-id ]]; then
+    _machine_id=$(cat /etc/machine-id)
+  elif command -v ioreg >/dev/null 2>&1; then
+    _machine_id=$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/{print $4}' | tr '[:upper:]' '[:lower:]')
+  fi
+  if [[ -n "$_machine_id" && -f "$_machine_registry" ]] && ! grep -q "^${_machine_id}|" "$_machine_registry" 2>/dev/null; then
+    printf '\n🆕 Unregistered machine detected (hostname: %s)\n' "${HOST:-$(hostname -s)}"
+    printf '   Run \033[1mmachine-register\033[0m to name this machine for prompt/statusline display.\n\n'
+    mkdir -p "${HOME}/.cache"
+    touch "${HOME}/.cache/machine-register-prompted"
+  fi
+  unset _machine_registry _machine_id
+fi
+
 # Add ~/.local/bin to PATH (for Claude Code, gh, gitleaks, uv tools)
 add_to_path "$HOME/.local/bin"
 
