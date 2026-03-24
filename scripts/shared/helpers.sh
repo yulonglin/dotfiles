@@ -20,6 +20,107 @@ log_warning() { echo "⚠️  $*"; }
 log_error()   { echo "✗ $*" >&2; }
 log_section() { echo ""; echo "───────── $* ─────────"; }
 
+# ─── Interactive Component Menu ──────────────────────────────────────────────
+
+# Show interactive toggle menu for component selection
+# Usage: show_component_menu install|deploy
+# Requires: gum (graceful fallback to defaults if unavailable)
+show_component_menu() {
+    local mode="$1"
+
+    # Skip if non-interactive
+    if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]] || ! cmd_exists gum; then
+        return 0
+    fi
+
+    # Define components and their current state
+    # Format: "name:variable_value" — order determines display order
+    typeset -a comp_defs
+    if [[ "$mode" == "install" ]]; then
+        comp_defs=(
+            "zsh:$INSTALL_ZSH"
+            "tmux:$INSTALL_TMUX"
+            "ai-tools:$INSTALL_AI_TOOLS"
+            "extras:$INSTALL_EXTRAS"
+            "cleanup:$INSTALL_CLEANUP"
+            "experimental:$INSTALL_EXPERIMENTAL"
+        )
+        if is_linux; then
+            comp_defs+=("docker:$INSTALL_DOCKER" "create-user:$INSTALL_CREATE_USER")
+        fi
+    elif [[ "$mode" == "deploy" ]]; then
+        comp_defs=(
+            "shell:$DEPLOY_SHELL"
+            "tmux:$DEPLOY_TMUX"
+            "git-config:$DEPLOY_GIT_CONFIG"
+            "vim:$DEPLOY_VIM"
+            "editor:$DEPLOY_EDITOR"
+            "claude:$DEPLOY_CLAUDE"
+            "codex:$DEPLOY_CODEX"
+            "ghostty:$DEPLOY_GHOSTTY"
+            "htop:$DEPLOY_HTOP"
+            "pdb:$DEPLOY_PDB"
+            "matplotlib:$DEPLOY_MATPLOTLIB"
+            "git-hooks:$DEPLOY_GIT_HOOKS"
+            "secrets:$DEPLOY_SECRETS"
+            "secrets-env:$DEPLOY_SECRETS_ENV"
+            "cleanup:$DEPLOY_CLEANUP"
+            "claude-cleanup:$DEPLOY_CLAUDE_CLEANUP"
+            "ai-update:$DEPLOY_AI_UPDATE"
+            "brew-update:$DEPLOY_BREW_UPDATE"
+        )
+        if is_macos; then
+            comp_defs+=("keyboard:$DEPLOY_KEYBOARD" "bedtime:$DEPLOY_BEDTIME"
+                        "text-replacements:${DEPLOY_TEXT_REPLACEMENTS:-false}"
+                        "mouseless:$DEPLOY_MOUSELESS" "vpn:$DEPLOY_VPN")
+        fi
+        comp_defs+=("serena:$DEPLOY_SERENA")
+    fi
+
+    # Build items and selected lists
+    typeset -a items
+    local selected_csv=""
+    for def in "${comp_defs[@]}"; do
+        local name="${def%%:*}"
+        local value="${def#*:}"
+        items+=("$name")
+        if [[ "$value" == "true" ]]; then
+            [[ -n "$selected_csv" ]] && selected_csv+=","
+            selected_csv+="$name"
+        fi
+    done
+
+    # Show gum menu
+    local result
+    local gum_args=(choose --no-limit --ordered
+        --header "Select ${mode} components (space=toggle, enter=confirm):"
+        --cursor-prefix "• " --selected-prefix "✓ " --unselected-prefix "• ")
+    [[ -n "$selected_csv" ]] && gum_args+=(--selected "$selected_csv")
+
+    result=$(gum "${gum_args[@]}" -- "${items[@]}") || return 0  # user cancelled (ctrl-c)
+
+    # Disable all components in this mode, then re-enable selected
+    for def in "${comp_defs[@]}"; do
+        local name="${def%%:*}"
+        local var_name="${(U)name//-/_}"
+        if [[ "$mode" == "install" ]]; then
+            typeset -g "INSTALL_${var_name}=false"
+        else
+            typeset -g "DEPLOY_${var_name}=false"
+        fi
+    done
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        local var_name="${(U)line//-/_}"
+        if [[ "$mode" == "install" ]]; then
+            typeset -g "INSTALL_${var_name}=true"
+        else
+            typeset -g "DEPLOY_${var_name}=true"
+        fi
+    done <<< "$result"
+}
+
 # ─── Command Checking ─────────────────────────────────────────────────────────
 
 # Check if command exists
@@ -931,6 +1032,9 @@ parse_args() {
                     shift
                 done
                 continue  # skip outer shift — args already consumed
+                ;;
+            --non-interactive)
+                NON_INTERACTIVE=true
                 ;;
             --no-*)
                 if [[ "$_only_mode" == true ]]; then
