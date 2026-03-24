@@ -81,6 +81,7 @@ COMPONENTS:
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
     --no-<component>  Disable a component (e.g., --no-editor)
+    --non-interactive Skip interactive component menu
 
 EXAMPLES:
     ./deploy.sh                           # Use defaults from config.sh
@@ -94,6 +95,7 @@ EOF
 
 # Parse CLI arguments (overrides config.sh)
 parse_args "$@"
+show_component_menu deploy
 
 # ─── Main Deployment ──────────────────────────────────────────────────────────
 
@@ -242,24 +244,130 @@ fi
 # ─── Encrypted Secrets (SOPS + age) ──────────────────────────────────────────
 
 if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
-    log_section "DECRYPTING SECRETS"
+    log_section "ENCRYPTED SECRETS (SOPS + age)"
     enc="$DOT_DIR/config/secrets.env.enc"
     out="$DOT_DIR/.secrets"
     age_key="$HOME/.config/sops/age/keys.txt"
+    sops_yaml="$DOT_DIR/.sops.yaml"
 
-    if [[ ! -f "$enc" ]]; then
-        log_warning "No encrypted secrets found — run 'secrets-init' to set up"
-    elif ! cmd_exists sops; then
-        log_warning "sops not installed — run install.sh"
+    log_info "enc=$enc"
+    log_info "age_key=$age_key"
+    log_info "sops_yaml=$sops_yaml"
+
+    if ! cmd_exists sops || ! cmd_exists age-keygen; then
+        log_warning "sops/age not installed — run install.sh"
     elif [[ ! -f "$age_key" ]]; then
-        log_warning "Age key not found at $age_key — run 'secrets-init' (paste age key from Bitwarden)"
+        log_info "Age key not found at $age_key"
+        if [[ -s "$enc" ]]; then
+            # Second machine: encrypted secrets exist, need age key to decrypt
+            echo ""
+            log_info "Encrypted secrets exist but can't be decrypted without age key"
+            echo "Paste your age private key (from Bitwarden), then press Enter:"
+            echo "(starts with AGE-SECRET-KEY-, leave empty to skip)"
+            local age_input=""
+            if [[ -e /dev/tty ]]; then
+                read -rs age_input </dev/tty
+            fi
+            if [[ -n "$age_input" ]]; then
+                mkdir -p "$(dirname "$age_key")"
+                printf '%s\n' "$age_input" > "$age_key"
+                chmod 600 "$age_key"
+                log_success "Age key saved to $age_key"
+            else
+                log_warning "Skipping — re-run deploy.sh when you have the key"
+            fi
+        else
+            # First machine: no key, no encrypted secrets — generate everything
+            log_info "Setting up SOPS encryption (first time)..."
+            mkdir -p "$(dirname "$age_key")"
+            age-keygen -o "$age_key" 2>&1
+            chmod 600 "$age_key"
+            log_success "Generated age keypair at $age_key"
+            log_info "IMPORTANT: Store the private key in Bitwarden now!"
+            echo "  cat $age_key"
+            echo ""
+        fi
     else
-        if (umask 077 && sops -d "$enc" > "${out}.tmp"); then
+        log_info "Age key found at $age_key"
+    fi
+
+    # Extract public key once for subsequent steps
+    local pub_key=""
+    if [[ -f "$age_key" ]]; then
+        pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
+        if [[ -n "$pub_key" ]]; then
+            log_info "Public key: ${pub_key:0:20}..."
+        else
+            log_warning "Could not extract public key from $age_key"
+        fi
+    fi
+
+    # Ensure .sops.yaml has real public key (not placeholder)
+    if [[ -n "$pub_key" ]]; then
+        if [[ ! -f "$sops_yaml" ]] || grep -q 'age1\.\.\.' "$sops_yaml"; then
+            cat > "$sops_yaml" <<SOPSYAML
+creation_rules:
+  - path_regex: \\.enc\$
+    age: "$pub_key"
+SOPSYAML
+            log_success "Wrote $sops_yaml with age public key"
+        else
+            # Warn if local key doesn't match the key in .sops.yaml
+            local config_key
+            config_key=$(grep -o 'age1[a-z0-9]*' "$sops_yaml" | head -1)
+            if [[ -n "$config_key" && "$config_key" != "$pub_key" ]]; then
+                log_warning "Key mismatch! Local age key does not match .sops.yaml"
+                log_warning "  Local key:      ${pub_key:0:30}..."
+                log_warning "  .sops.yaml key: ${config_key:0:30}..."
+                log_warning "  You won't be able to decrypt existing secrets with this key"
+                log_warning "  To fix: paste the original age key from Bitwarden into $age_key"
+            else
+                log_info ".sops.yaml already configured at $sops_yaml"
+            fi
+        fi
+    fi
+
+    # Create template encrypted file if missing
+    if [[ ! -s "$enc" ]] && [[ -n "$pub_key" ]] && cmd_exists sops; then
+        log_info "Creating template encrypted secrets..."
+        local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
+        printf '%s\n' \
+            "# Encrypted API keys (edit with: secrets-edit)" \
+            "PLACEHOLDER=replace_me" \
+            "# ANTHROPIC_API_KEY=" \
+            "# OPENAI_API_KEY=" \
+            "# HF_TOKEN=" \
+            "# GITHUB_TOKEN=" \
+            > "$tmpfile"
+        # Use --config /dev/null to skip creation rule matching — the repo
+        # .sops.yaml path_regex matches .enc files, but the tmpfile is .env.
+        # With /dev/null config, sops uses --age from CLI directly.
+        log_info "Running: sops -e --config /dev/null --age <key> $tmpfile"
+        local sops_err
+        if sops_err=$( (sops -e --config /dev/null --age "$pub_key" "$tmpfile" > "${enc}.tmp") 2>&1); then
+            mv "${enc}.tmp" "$enc"
+            log_success "Created $enc — edit with: secrets-edit"
+        else
+            rm -f "${enc}.tmp"
+            log_warning "Failed to create encrypted secrets"
+            log_error "sops error: $sops_err"
+        fi
+        rm -f "$tmpfile"
+    elif [[ -s "$enc" ]]; then
+        log_info "Encrypted secrets already exist at $enc"
+    fi
+
+    # Decrypt if key and encrypted file both exist
+    if [[ -s "$enc" ]] && cmd_exists sops && [[ -f "$age_key" ]]; then
+        log_info "Decrypting $enc → $out"
+        local sops_err
+        if sops_err=$( (umask 077 && sops -d --config "$sops_yaml" "$enc" > "${out}.tmp") 2>&1); then
             mv "${out}.tmp" "$out"
             log_success "Decrypted secrets to $out"
         else
             rm -f "${out}.tmp"
             log_warning "Failed to decrypt secrets"
+            log_error "sops error: $sops_err"
         fi
     fi
 fi

@@ -17,18 +17,21 @@ alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 # SOPS-encrypted secrets management
 secrets-edit() {
     if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
-    sops "$DOT_DIR/config/secrets.env.enc"
+    sops --config "$DOT_DIR/.sops.yaml" "$DOT_DIR/config/secrets.env.enc"
 }
 secrets-decrypt() {
     local enc="$DOT_DIR/config/secrets.env.enc"
     local out="$DOT_DIR/.secrets"
-    if [[ ! -f "$enc" ]]; then echo "No encrypted secrets — run secrets-init"; return 1; fi
-    if (umask 077 && sops -d "$enc" > "${out}.tmp"); then
+    local sops_yaml="$DOT_DIR/.sops.yaml"
+    if [[ ! -f "$enc" ]]; then echo "No encrypted secrets at $enc — run secrets-init"; return 1; fi
+    if [[ ! -f "$sops_yaml" ]]; then echo "No .sops.yaml at $sops_yaml — run secrets-init"; return 1; fi
+    echo "Decrypting $enc → $out"
+    if (umask 077 && sops -d --config "$sops_yaml" "$enc" > "${out}.tmp"); then
         mv "${out}.tmp" "$out"
         echo "Decrypted to $out"
     else
         rm -f "${out}.tmp"
-        echo "Failed to decrypt secrets" >&2; return 1
+        echo "Failed to decrypt (sops -d --config $sops_yaml $enc)" >&2; return 1
     fi
 }
 secrets-init() {
@@ -36,6 +39,10 @@ secrets-init() {
     local age_key="$age_dir/keys.txt"
     local sops_yaml="$DOT_DIR/.sops.yaml"
     local enc="$DOT_DIR/config/secrets.env.enc"
+
+    echo "Config: age_key=$age_key"
+    echo "Config: sops_yaml=$sops_yaml"
+    echo "Config: enc=$enc"
 
     if [[ ! -f "$age_key" ]]; then
         mkdir -p "$age_dir"
@@ -48,8 +55,9 @@ secrets-init() {
 
     local pub_key
     pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
+    echo "Public key: ${pub_key:0:20}..."
 
-    if [[ ! -f "$sops_yaml" ]]; then
+    if [[ ! -f "$sops_yaml" ]] || grep -q 'age1\.\.\.' "$sops_yaml"; then
         cat > "$sops_yaml" <<YAML
 creation_rules:
   - path_regex: \\.enc$
@@ -57,10 +65,21 @@ creation_rules:
 YAML
         echo "Created $sops_yaml with public key"
     else
-        echo "$sops_yaml already exists, skipping"
+        # Warn if local key doesn't match the key in .sops.yaml
+        local config_key
+        config_key=$(grep -o 'age1[a-z0-9]*' "$sops_yaml" | head -1)
+        if [[ -n "$config_key" && "$config_key" != "$pub_key" ]]; then
+            echo "⚠️  Key mismatch! Local age key does not match $sops_yaml"
+            echo "  Local key:      ${pub_key:0:30}..."
+            echo "  .sops.yaml key: ${config_key:0:30}..."
+            echo "  You won't be able to decrypt existing secrets with this key"
+            echo "  To fix: paste the original age key from Bitwarden into $age_key"
+        else
+            echo "$sops_yaml already exists, skipping"
+        fi
     fi
 
-    if [[ ! -f "$enc" ]]; then
+    if [[ ! -s "$enc" ]]; then
         local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
         printf '%s\n' \
             "# Encrypted API keys (edit with: secrets-edit)" \
@@ -70,9 +89,15 @@ YAML
             "# HF_TOKEN=" \
             "# GITHUB_TOKEN=" \
             > "$tmpfile"
-        sops -e "$tmpfile" > "$enc"
+        echo "Running: sops -e --config /dev/null --age <key> $tmpfile > $enc"
+        if sops -e --config /dev/null --age "$pub_key" "$tmpfile" > "${enc}.tmp"; then
+            mv "${enc}.tmp" "$enc"
+            echo "Created $enc — edit with: secrets-edit"
+        else
+            rm -f "${enc}.tmp"
+            echo "Failed to encrypt (sops -e --config /dev/null --age ... $tmpfile)" >&2
+        fi
         rm -f "$tmpfile"
-        echo "Created $enc — edit with: secrets-edit"
     else
         echo "Encrypted secrets already exist at $enc"
     fi
@@ -90,12 +115,13 @@ secrets-init-project() {
     local age_key="$HOME/.config/sops/age/keys.txt"
 
     if [[ ! -f "$age_key" ]]; then
-        echo "No age key found — run secrets-init first"
+        echo "No age key found at $age_key — run secrets-init first"
         return 1
     fi
 
     local pub_key
     pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
+    echo "Public key: ${pub_key:0:20}..."
 
     if [[ ! -f "$sops_yaml" ]]; then
         cat > "$sops_yaml" <<YAML
@@ -103,15 +129,21 @@ creation_rules:
   - path_regex: \\.enc$
     age: "$pub_key"
 YAML
-        echo "Created $sops_yaml"
+        echo "Created $sops_yaml in $(pwd)"
     fi
 
-    if [[ ! -f "$enc" ]]; then
+    if [[ ! -s "$enc" ]]; then
         local tmpfile="${TMPDIR:-/tmp}/proj_secrets.env"
         printf '%s\n' "# Project secrets (edit with: sops $enc)" "PLACEHOLDER=replace_me" > "$tmpfile"
-        sops -e "$tmpfile" > "$enc"
+        echo "Running: sops -e --config /dev/null --age <key> $tmpfile > $enc"
+        if sops -e --config /dev/null --age "$pub_key" "$tmpfile" > "${enc}.tmp"; then
+            mv "${enc}.tmp" "$enc"
+            echo "Created $enc"
+        else
+            rm -f "${enc}.tmp"
+            echo "Failed to encrypt (sops -e --config /dev/null --age ... $tmpfile)" >&2
+        fi
         rm -f "$tmpfile"
-        echo "Created $enc"
     fi
 
     if [[ ! -f "$envrc" ]]; then
@@ -120,13 +152,13 @@ YAML
         else
             printf '%s\n' '# Auto-decrypt SOPS secrets on cd' \
                 'if command -v sops &>/dev/null && [ -f secrets.env.enc ]; then' \
-                '    dotenv <(sops -d --output-type dotenv secrets.env.enc 2>/dev/null)' \
+                '    dotenv <(sops -d --config .sops.yaml --output-type dotenv secrets.env.enc 2>/dev/null)' \
                 'fi' > "$envrc"
         fi
         echo "Created $envrc — run: direnv allow"
     fi
 
-    echo "Done. Edit secrets: sops $enc"
+    echo "Done. Edit secrets: sops --config $sops_yaml $enc"
 }
 alias sync-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" sync'
 alias export-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" export'

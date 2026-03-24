@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env zsh
 # ═══════════════════════════════════════════════════════════════════════════════
 # Dotfiles Installation Script
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -51,13 +51,14 @@ COMPONENTS:
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
     --ai-tools        Enable AI CLI tools (Claude, Gemini, Codex)
-    --extras          Enable extra CLI tools (hyperfine, lazygit, code2prompt)
+    --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
     --experimental    Enable experimental features (ty type checker)
     --create-user     Create non-root dev user (Linux only)
     --no-<component>  Disable a component (e.g., --no-ai-tools)
     --force-reinstall Reinstall tools even if present
+    --non-interactive Skip interactive component menu
 
 EXAMPLES:
     ./install.sh                        # Use defaults from config.sh
@@ -69,6 +70,7 @@ EOF
 
 # Parse CLI arguments (overrides config.sh)
 parse_args "$@"
+show_component_menu install
 
 # ─── Main Installation ────────────────────────────────────────────────────────
 
@@ -255,7 +257,7 @@ fi
 if [[ "$INSTALL_EXTRAS" == "true" ]]; then
     log_section "INSTALLING EXTRAS"
 
-    # Rust toolchain (needed for code2prompt, claude-tools)
+    # Rust toolchain (needed for code2prompt)
     if ! is_installed cargo; then
         log_info "Installing Rust..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet

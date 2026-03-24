@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env zsh
 # ═══════════════════════════════════════════════════════════════════════════════
 # Dotfiles Configuration
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -27,7 +27,7 @@ INSTALL_CLEANUP=true            # Automatic cleanup (macOS only)
 INSTALL_DOCKER=true             # Docker (Linux only)
 INSTALL_EXPERIMENTAL=true       # ty type checker
 INSTALL_CREATE_USER=true        # Create non-root dev user (Linux only, guarded by is_linux + EUID check)
-INSTALL_EXTRAS=false            # hyperfine, lazygit, code2prompt
+INSTALL_EXTRAS=false            # hyperfine, gitui, code2prompt, terminal-notifier
 
 # ─── Deploy Components ────────────────────────────────────────────────────────
 DEPLOY_VIM=true
@@ -52,6 +52,7 @@ DEPLOY_GIT_CONFIG=true          # Git configuration (gitconfig, global gitignore
 DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect")
 DEPLOY_SERENA=false             # Serena MCP config (~/.serena symlink)
 DEPLOY_MOUSELESS=false          # Mouseless keyboard mouse control (macOS only, opt-in)
+DEPLOY_TEXT_REPLACEMENTS=false  # Sync text replacements: macOS + Alfred (macOS only, opt-in)
 DEPLOY_VPN=false                # NordVPN+Tailscale split tunnel daemon (macOS only, opt-in)
 DEPLOY_SECRETS_ENV=true         # Decrypt SOPS-encrypted secrets (requires sops + age)
 
@@ -75,9 +76,7 @@ MCP_SERVERS=(
 
 # Local MCP servers built from source (require Go)
 # Format: "name:repo:binary_name:env_var_for_token"
-MCP_SERVERS_LOCAL=(
-    "slack:yulonglin/slack-mcp-server:slack-mcp-server:SLACK_MCP_XOXP_TOKEN"
-)  # Consider if this is safe to include here, or if it'll break something
+MCP_SERVERS_LOCAL=()
 
 # Claude Code Plugin Marketplaces
 # Format: "name:source" (source = GitHub user/repo)
@@ -95,13 +94,13 @@ OFFICIAL_PLUGINS=(
     "claude-md-management" "context7"
     # Development
     "code-simplifier" "code-review" "security-guidance" "feature-dev"
-    "pr-review-toolkit" "playground" "ralph-loop" "claude-code-setup"
+    "pr-review-toolkit" "playground" "ralph-loop"
     # Integrations
-    "Notion" "linear" "figma" "vercel" "supabase" "stripe" "playwright"
+    "Notion" "linear" "vercel" "playwright"
     # Language servers
     "pyright-lsp" "typescript-lsp"
     # Specialized
-    "frontend-design" "huggingface-skills" "coderabbit" "serena"
+    "frontend-design"
 )
 
 # ─── Core Packages ────────────────────────────────────────────────────────────
@@ -128,6 +127,8 @@ PACKAGES_MACOS=(
     "ripgrep"
     "jless"
     "just"
+    "sd"          # sed replacement (preferred over sed)
+    "gum"         # interactive shell UI (toggle menus)
 )
 
 # Linux packages (via mise github: backend)
@@ -141,18 +142,19 @@ PACKAGES_LINUX_MISE=(
     "github:ajeetdsouza/zoxide"
     "ubi:PaulJuliusMartinez/jless"  # ubi: required — no aarch64-linux binaries in releases
     "github:casey/just"
+    "github:charmbracelet/gum"
 )
 
 # Extra packages (--extras flag)
 PACKAGES_EXTRAS_MACOS=(
     "hyperfine"
-    "lazygit"
+    "gitui"
     "terminal-notifier"
 )
 
 PACKAGES_EXTRAS_LINUX=(
     "github:sharkdp/hyperfine"
-    "github:jesseduffield/lazygit"
+    "github:extrawurst/gitui"
     "cargo:code2prompt"
 )
 
@@ -217,6 +219,7 @@ apply_profile() {
             DEPLOY_BREW_UPDATE=false
             DEPLOY_KEYBOARD=false
             DEPLOY_BEDTIME=false
+            DEPLOY_TEXT_REPLACEMENTS=false
             DEPLOY_SECRETS_ENV=false
             ;;
         *)
