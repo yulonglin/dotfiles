@@ -55,8 +55,9 @@ fi
 # ─── Fix ownership & permissions of user's home (handles root-created files) ──
 if [[ -d "$USER_HOME" ]]; then
     echo "Fixing ownership of $USER_HOME..."
-    chown -R "$USERNAME:$USERNAME" "$USER_HOME"
-    chmod 755 "$USER_HOME"  # sshd refuses key auth if home is group/world-writable
+    # Some files may be on read-only layers (e.g., .bash_logout in containers)
+    sudo chown -R "$USERNAME:$USERNAME" "$USER_HOME" 2>/dev/null || true
+    sudo chmod 755 "$USER_HOME"  # sshd refuses key auth if home is group/world-writable
 fi
 
 # ─── SSH keys (for direct SSH access as non-root) ────────────────────────────
