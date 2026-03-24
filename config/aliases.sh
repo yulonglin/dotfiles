@@ -19,18 +19,23 @@ alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 # os.UserConfigDir), not ~/.config/. Point it to the XDG-conventional location.
 export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
 
+# Thin wrapper: secrets are dotenv format but files end in .enc, so sops
+# can't infer the format. This sets --input-type/--output-type once.
+sops_dotenv() { sops --input-type dotenv --output-type dotenv "$@"; }
+
 secrets-edit() {
     if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
-    sops --input-type dotenv --output-type dotenv --config "$DOT_DIR/.sops.yaml" "$DOT_DIR/config/secrets.env.enc"
+    sops_dotenv --config "$DOT_DIR/.sops.yaml" "$DOT_DIR/config/secrets.env.enc"
 }
 secrets-decrypt() {
+    if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
     local enc="$DOT_DIR/config/secrets.env.enc"
     local out="$DOT_DIR/.secrets"
     local sops_yaml="$DOT_DIR/.sops.yaml"
     if [[ ! -f "$enc" ]]; then echo "No encrypted secrets at $enc — run secrets-init"; return 1; fi
     if [[ ! -f "$sops_yaml" ]]; then echo "No .sops.yaml at $sops_yaml — run secrets-init"; return 1; fi
     echo "Decrypting $enc → $out"
-    if (umask 077 && sops -d --input-type dotenv --output-type dotenv --config "$sops_yaml" "$enc" > "${out}.tmp"); then
+    if (umask 077 && sops_dotenv -d --config "$sops_yaml" "$enc" > "${out}.tmp"); then
         mv "${out}.tmp" "$out"
         echo "Decrypted to $out"
     else
@@ -125,6 +130,9 @@ secrets-init-project() {
 
     local pub_key
     pub_key=$(grep -o 'age1[a-z0-9]*' "$age_key" | head -1)
+    if [[ -z "$pub_key" ]]; then
+        echo "Could not extract public key from $age_key" >&2; return 1
+    fi
     echo "Public key: ${pub_key:0:20}..."
 
     if [[ ! -f "$sops_yaml" ]]; then
