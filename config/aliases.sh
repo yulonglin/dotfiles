@@ -35,8 +35,12 @@ secrets-encrypt() {
     local sops_yaml="$DOT_DIR/.sops.yaml"
     if [[ ! -f "$src" ]]; then echo "No .secrets file at $src"; return 1; fi
     if [[ ! -f "$sops_yaml" ]]; then echo "No .sops.yaml at $sops_yaml — run secrets-init"; return 1; fi
+    # Extract age public key — bypass creation rules since input (.secrets) doesn't match .enc$ regex
+    local pub_key
+    pub_key=$(grep -o 'age1[a-z0-9]*' "$sops_yaml" | head -1)
+    if [[ -z "$pub_key" ]]; then echo "No age public key found in $sops_yaml"; return 1; fi
     echo "Encrypting $src → $enc"
-    if sops_dotenv -e --config "$sops_yaml" "$src" > "${enc}.tmp"; then
+    if sops_dotenv -e --config /dev/null --age "$pub_key" "$src" > "${enc}.tmp"; then
         mv "${enc}.tmp" "$enc"
         echo "Encrypted to $enc"
     else
