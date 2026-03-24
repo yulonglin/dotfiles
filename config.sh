@@ -145,7 +145,7 @@ PACKAGES_LINUX_MISE=(
     "github:dandavison/delta"
     "github:bootandy/dust"
     "github:ajeetdsouza/zoxide"
-    "ubi:PaulJuliusMartinez/jless"  # ubi: required — no aarch64-linux binaries in releases
+    "github:PaulJuliusMartinez/jless"
     "github:casey/just"
     "github:charmbracelet/gum"
 )

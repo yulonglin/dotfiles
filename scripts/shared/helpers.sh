@@ -276,12 +276,14 @@ apt_install() {
 # Install package via mise (Linux)
 mise_install() {
     local pkg="$1"
-    if cmd_exists mise; then
-        mise use -g "$pkg" || log_warning "$pkg installation via mise failed"
-    else
+    if ! cmd_exists mise; then
         log_warning "mise not available for $pkg"
         return 1
     fi
+    if mise where "$pkg" &>/dev/null; then
+        return 0
+    fi
+    mise use -g "$pkg" || log_warning "$pkg installation via mise failed"
 }
 
 # Install multiple packages
