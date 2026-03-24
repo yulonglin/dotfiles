@@ -15,6 +15,10 @@ alias hn="hostname"
 alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 
 # SOPS-encrypted secrets management
+# On macOS, sops checks ~/Library/Application Support/sops/age/keys.txt (Go's
+# os.UserConfigDir), not ~/.config/. Point it to the XDG-conventional location.
+export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
+
 secrets-edit() {
     if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
     sops --input-type dotenv --output-type dotenv --config "$DOT_DIR/.sops.yaml" "$DOT_DIR/config/secrets.env.enc"
