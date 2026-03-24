@@ -291,7 +291,9 @@ claude() {
     activate_venv
     command claude "${args[@]}"
 }
-# yolo — skip permissions (no worktree, no tmux)
+# cc* — claude code aliases (no worktree, no tmux)
+alias ccy='claude --dangerously-skip-permissions'   # cc yolo
+alias ccd='claude --dangerously-skip-permissions'   # cc dangerous
 alias yolo='claude --dangerously-skip-permissions'
 alias resume='yolo --resume'
 alias cont='yolo --continue'
@@ -789,7 +791,7 @@ alias tdel="tmux kill-session -t"
 #-------------------------------------------------------------
 
 alias l="ls -CF --color=auto"
-alias ll="ls -l --group-directories-first"
+alias ll="ls -lah --group-directories-first"
 alias la='ls -Al'         # show hidden files
 alias lx='ls -lXB'        # sort by extension
 alias lk='ls -lSr'        # sort by size, biggest last
@@ -940,6 +942,9 @@ claude-with() {
   echo "Using task list: $task_list_id"
   claude
 }
+
+# Switch Claude Code account (full logout + login, not just restart)
+alias claude-switch='claude auth logout && claude auth login'
 
 # Clear Claude Code processes
 alias ccl='clear-claude-code --list'          # list/status
