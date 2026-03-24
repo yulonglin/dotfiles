@@ -72,6 +72,14 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
         format_bar(output, "7d", pct);
         format_pace(output, pct, usage.seven_day.as_ref());
     }
+
+    // Near-limit reminder: nudge to logout+login when approaching cap
+    let five_pct = five.unwrap_or(0.0).round() as u8;
+    let seven_pct = seven.unwrap_or(0.0).round() as u8;
+    if five_pct >= 95 || seven_pct >= 95 {
+        output.push('\n');
+        output.push_str("\x1b[31;1m\u{1F6A8} Near limit! `claude-switch` to logout+login \u{2014} logout clears cached usage, restart alone won't help \u{1F6A8}\x1b[0m");
+    }
 }
 
 // --- Bar rendering ---

@@ -318,6 +318,11 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
         [ -n "$seven_datetime" ] && printf " \033[2m⟳ %s\033[0m" "$seven_datetime"
       fi
     fi
+
+    # Near-limit reminder: suggest account switch when approaching cap
+    if [ "$five_pct" -ge 95 ] 2>/dev/null || [ "$seven_pct" -ge 95 ] 2>/dev/null; then
+      printf "\n\033[31;1m🚨 Near limit! \`claude-switch\` to logout+login — logout clears cached usage, restart alone won't help 🚨\033[0m"
+    fi
   fi
 else
   if [ -n "$token" ] || [ -z "$(get_oauth_token)" ]; then
