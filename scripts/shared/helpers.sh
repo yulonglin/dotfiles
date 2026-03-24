@@ -259,9 +259,17 @@ brew_install() {
     fi
 }
 
+# Check if apt package is installed
+apt_is_installed() {
+    dpkg -s "$1" &>/dev/null
+}
+
 # Install package via apt (Linux)
 apt_install() {
     local pkg="$1"
+    if apt_is_installed "$pkg"; then
+        return 0
+    fi
     sudo apt install -y "$pkg" 2>/dev/null || log_warning "$pkg installation via apt failed"
 }
 
@@ -278,14 +286,30 @@ mise_install() {
 
 # Install multiple packages
 # Usage: install_packages <manager> <pkg1> <pkg2> ...
+# For apt: filters already-installed packages, installs remaining in one call
 install_packages() {
     local manager="$1"
     shift
 
+    if [[ "$manager" == "apt" ]]; then
+        local missing=()
+        for pkg in "$@"; do
+            if ! apt_is_installed "$pkg"; then
+                missing+=("$pkg")
+            fi
+        done
+        if (( ${#missing[@]} == 0 )); then
+            log_info "All packages already installed"
+            return 0
+        fi
+        log_info "Installing ${#missing[@]} missing package(s): ${missing[*]}"
+        sudo apt install -y "${missing[@]}" 2>/dev/null || log_warning "Some apt packages failed to install"
+        return
+    fi
+
     for pkg in "$@"; do
         case "$manager" in
             brew) brew_install "$pkg" ;;
-            apt)  apt_install "$pkg" ;;
             mise) mise_install "$pkg" ;;
         esac
     done
