@@ -174,14 +174,6 @@ export PATH="\$DOT_DIR/custom_bins:\$PATH"
 [ -d "\$HOME/.cargo" ] && . "\$HOME/.cargo/env"
 [ -d "\$HOME/.local/bin" ] && [ -f "\$HOME/.local/bin/env" ] && source "\$HOME/.local/bin/env"
 
-# Atuin - unified shell history
-if [ -f "\$HOME/.atuin/bin/env" ]; then
-    source "\$HOME/.atuin/bin/env"
-    eval "\$(atuin init bash --disable-up-arrow --disable-ctrl-r)"
-elif command -v atuin &> /dev/null; then
-    eval "\$(atuin init bash --disable-up-arrow --disable-ctrl-r)"
-fi
-
 # ASCII art in interactive shells
 [[ \$- == *i* ]] && [ -f $DOT_DIR/config/start.txt ] && cat $DOT_DIR/config/start.txt
 BASHRC
@@ -206,13 +198,6 @@ PROFILE
         log_warning "Unknown shell '$CURRENT_SHELL', defaulting to zsh"
         eval "echo \"source $DOT_DIR/config/zshrc.sh\" $OP \"\$HOME/.zshrc\""
         RC_FILE="$HOME/.zshrc"
-    fi
-
-    # Deploy Atuin config if exists
-    if [[ -f "$DOT_DIR/config/atuin.toml" ]]; then
-        mkdir -p "$HOME/.config/atuin"
-        cp "$DOT_DIR/config/atuin.toml" "$HOME/.config/atuin/config.toml"
-        log_success "Deployed Atuin configuration"
     fi
 
     # Append additional aliases

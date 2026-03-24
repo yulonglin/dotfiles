@@ -208,17 +208,6 @@ fi
 # Ensure ~/.local/bin is in PATH for this session (Linux binary installs)
 [[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
 
-# ─── Atuin (Shell History) ────────────────────────────────────────────────────
-
-if ! is_installed atuin; then
-    log_info "Installing Atuin..."
-    if is_macos; then
-        brew_install atuin
-    else
-        curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh 2>/dev/null || log_warning "Atuin installation failed"
-    fi
-fi
-
 # ─── uv (Python Package Manager) ──────────────────────────────────────────────
 
 if ! is_installed uv; then

@@ -20,7 +20,7 @@
 PROFILE="${PROFILE:-personal}"
 
 # ─── Install Components ───────────────────────────────────────────────────────
-INSTALL_CORE=true               # Core packages, CLI tools, GitHub CLI, SOPS/age, Atuin, uv
+INSTALL_CORE=true               # Core packages, CLI tools, GitHub CLI, SOPS/age, uv
 INSTALL_ZSH=true
 INSTALL_TMUX=true
 INSTALL_AI_TOOLS=true           # Claude Code, Gemini CLI, Codex CLI

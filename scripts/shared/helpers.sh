@@ -38,7 +38,7 @@ show_component_menu() {
     typeset -a comp_defs
     if [[ "$mode" == "install" ]]; then
         comp_defs=(
-            "core|Core packages, CLI tools, gh, SOPS/age, Atuin, uv|$INSTALL_CORE"
+            "core|Core packages, CLI tools, gh, SOPS/age, uv|$INSTALL_CORE"
             "zsh|ZSH + oh-my-zsh + powerlevel10k theme|$INSTALL_ZSH"
             "tmux|Terminal multiplexer|$INSTALL_TMUX"
             "ai-tools|Claude Code, Gemini CLI, Codex CLI, MCP servers|$INSTALL_AI_TOOLS"
