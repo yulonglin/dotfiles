@@ -19,10 +19,16 @@ export default {
         "colab.research.google.com*",
         "chromewebstore.google.com*",
         "scholar.google.com*",
+      ],
+      browser: "Google Chrome"
+    },
+    {
+      // Local development → default browser (Safari)
+      match: [
         "localhost*",
         "127.0.0.1*"
       ],
-      browser: "Google Chrome"
+      browser: "Safari"
     },
     {
       // Zoom meetings → Zoom app

@@ -21,6 +21,8 @@ case "$first_word" in
     find)   nudge="Prefer \`fd\` over \`find\` — faster, simpler syntax (e.g., \`fd -t f pattern\`)." ;;
     cat)    nudge="Prefer \`bat\` over \`cat\` for viewing files — syntax highlighting included." ;;
     sed)    nudge="Prefer \`sd\` over \`sed\` — simpler regex syntax (e.g., \`sd 'old' 'new' file\`)." ;;
+    curl)   nudge="Prefer WebFetch over \`curl\` for fetching URLs — it's domain-gated, auditable, and doesn't need Bash." ;;
+    wget)   nudge="Prefer WebFetch over \`wget\` for fetching URLs — it's domain-gated, auditable, and doesn't need Bash." ;;
 esac
 
 # No nudge needed

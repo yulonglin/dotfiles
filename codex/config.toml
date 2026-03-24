@@ -1,5 +1,28 @@
+model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
 [mcp_servers.linear]
 url = "https://mcp.linear.app/mcp"
 
 [mcp_servers.figma]
 url = "https://mcp.figma.com/mcp"
+
+[projects."/Users/yulong/code/automated-researchers"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/writing/interviews/mats-10-metr-kinniment/work-test/submission"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/code/oss/popclip-extensions"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/code/oss/cmux"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/writing/interviews/mats-10-metr-kinniment"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/writing/interviews/mats-10-metr-kinniment/hard-task"]
+trust_level = "trusted"
+
+[notice.model_migrations]
+"gpt-5.3-codex" = "gpt-5.4"

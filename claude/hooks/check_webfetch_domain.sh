@@ -74,5 +74,5 @@ for allowed in "${ALLOWED_DOMAINS[@]}"; do
 done
 
 # Domain not in allowlist — block and tell the LLM to ask the user
-echo "BLOCKED: WebFetch to '$DOMAIN' is not in the allowed domain list. Ask the user for permission before fetching from this domain, or use WebSearch instead." >&2
+echo "BLOCKED: WebFetch to '$DOMAIN' is not in the allowed domain list. Ask the user for permission to add this domain, or ask the user to provide the content directly." >&2
 exit 2

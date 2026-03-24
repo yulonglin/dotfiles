@@ -5,7 +5,7 @@
 # Config file supports four sections:
 #   [no-touch]           - Apps to leave completely alone
 #   [close-windows]      - Apps where we close windows but don't quit
-#   [slow-close]         - Apps needing extra time for cleanup (backup, sync)
+#   [slow-quit]          - Apps that ignore keystrokes; quit then poll for exit
 #   [protected-windows]  - Tab title patterns: close non-matching windows, keep app alive
 
 set -euo pipefail
@@ -196,7 +196,7 @@ main() {
     # Build associative arrays for O(1) lookup (keys are lowercase)
     typeset -A no_touch_set
     typeset -A close_windows_set
-    typeset -A slow_close_set
+    typeset -A slow_quit_set
 
     while IFS= read -r app; do
         [[ -n "$app" ]] && no_touch_set[${(L)app}]=1
@@ -207,8 +207,8 @@ main() {
     done < <(get_entries_in_section "close-windows")
 
     while IFS= read -r app; do
-        [[ -n "$app" ]] && slow_close_set[${(L)app}]=1
-    done < <(get_entries_in_section "slow-close")
+        [[ -n "$app" ]] && slow_quit_set[${(L)app}]=1
+    done < <(get_entries_in_section "slow-quit")
 
     # Load protected-window patterns
     local -a protected_patterns=()
@@ -219,7 +219,7 @@ main() {
     # Build bundle ID sets for fallback matching (from registry)
     typeset -A no_touch_bids
     typeset -A close_windows_bids
-    typeset -A slow_close_bids
+    typeset -A slow_quit_bids
 
     for name in ${(k)no_touch_set}; do
         [[ -n "${registry[$name]:-}" ]] && no_touch_bids[${registry[$name]}]=1
@@ -227,8 +227,8 @@ main() {
     for name in ${(k)close_windows_set}; do
         [[ -n "${registry[$name]:-}" ]] && close_windows_bids[${registry[$name]}]=1
     done
-    for name in ${(k)slow_close_set}; do
-        [[ -n "${registry[$name]:-}" ]] && slow_close_bids[${registry[$name]}]=1
+    for name in ${(k)slow_quit_set}; do
+        [[ -n "${registry[$name]:-}" ]] && slow_quit_bids[${registry[$name]}]=1
     done
 
     # Get running apps with bundle IDs (tab-separated: "name<TAB>bid")
@@ -243,7 +243,7 @@ main() {
     # Classify: check name match first, bundle ID as fallback
     local -a apps_to_quit=()
     local -a apps_close_windows=()
-    local -a apps_slow_close=()
+    local -a apps_slow_quit=()
     local -a apps_selective_close=()
     local -a apps_skipped=()
 
@@ -254,8 +254,8 @@ main() {
 
         if (( ${+no_touch_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+no_touch_bids[$bid]} )) }; then
             apps_skipped+=("$app")
-        elif (( ${+slow_close_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+slow_close_bids[$bid]} )) }; then
-            apps_slow_close+=("$app")
+        elif (( ${+slow_quit_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+slow_quit_bids[$bid]} )) }; then
+            apps_slow_quit+=("$app")
         elif (( ${+close_windows_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+close_windows_bids[$bid]} )) }; then
             apps_close_windows+=("$app")
         elif (( ${#protected_patterns} > 0 )); then
@@ -301,8 +301,8 @@ main() {
             echo "  - $app"
         done
         echo ""
-        echo "Would SLOW-CLOSE (${#apps_slow_close}):"
-        for app in "${apps_slow_close[@]}"; do
+        echo "Would SLOW-QUIT (${#apps_slow_quit}):"
+        for app in "${apps_slow_quit[@]}"; do
             echo "  - $app"
         done
         echo ""
@@ -336,18 +336,25 @@ main() {
         close_app_windows "$app" 3
     done
 
-    # Slow-close apps sequentially with staged attempts to allow sync/cleanup
-    for app in "${apps_slow_close[@]}"; do
-        echo "Closing windows (slow, staged): $app"
-        # First phase: two quick passes with low patience
-        close_app_windows "$app" 2
-        close_app_windows "$app" 2
-        # Give the app time to finish background work (sync, backup, etc.)
-        echo "Waiting 60s for $app to finish background work..."
-        sleep 60
-        # Second phase: two more passes after the pause
-        close_app_windows "$app" 2
-        close_app_windows "$app" 2
+    # Slow-quit apps: send quit, then poll until process exits (max 30s)
+    for app in "${apps_slow_quit[@]}"; do
+        echo "Quitting (slow): $app"
+        quit_app "$app"
+        local elapsed=0
+        while (( elapsed < 30 )); do
+            sleep 2
+            elapsed=$((elapsed + 2))
+            # Check if process is still running via System Events
+            local still_running
+            still_running=$(osascript -e "tell application \"System Events\" to return (name of every process whose name is \"$app\")" 2>/dev/null || echo "")
+            if [[ -z "$still_running" ]]; then
+                echo "  $app exited after ${elapsed}s"
+                break
+            fi
+        done
+        if (( elapsed >= 30 )); then
+            echo "  Warning: $app still running after 30s, moving on"
+        fi
     done
 
     # Selective-close: close non-protected windows, keep app alive
@@ -360,7 +367,7 @@ main() {
     echo "Done."
     (( ${#no_touch_set} > 0 )) && echo "  No-touch: ${(k)no_touch_set}"
     (( ${#close_windows_set} > 0 )) && echo "  Close-windows: ${(k)close_windows_set}"
-    (( ${#slow_close_set} > 0 )) && echo "  Slow-close: ${(k)slow_close_set}"
+    (( ${#slow_quit_set} > 0 )) && echo "  Slow-quit: ${(k)slow_quit_set}"
 }
 
 main "$@"

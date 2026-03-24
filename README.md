@@ -76,23 +76,33 @@ Installation on macOS requires Homebrew - install from [brew.sh](https://brew.sh
 
 ### Step 2: Deploy configurations
 
-Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, etc.)
+Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, etc.). All settings live in [`config.sh`](./config.sh) — edit once, deploy everywhere.
 
 ```bash
 # Deploy with defaults (recommended)
 ./deploy.sh
 
+# Profiles
+./deploy.sh --profile=server    # Safe base for shared machines
+./deploy.sh --profile=minimal   # Nothing enabled — specify what you want
+
 # Deploy only specific components
-./deploy.sh --minimal --vim --claude  # --minimal disables all defaults
+./deploy.sh --only vim claude   # Only vim and claude, nothing else
+
+# Add to defaults
+./deploy.sh --mouseless         # Defaults + mouseless
 ```
 
-**Defaults:**
-- Git config (+ global gitattributes), VSCode/Cursor settings, vim, Claude Code, Codex CLI, Ghostty, htop, matplotlib styles
-- Developer config files: `.editorconfig`, `.curlrc`, `.inputrc`, `.hushlogin` (deployed with `--editor`)
-- Experimental features (ty type checker)
-- Cleanup automation (macOS only)
+**Default components:**
+- **Shell**: ZSH, tmux, vim, Powerlevel10k
+- **Editors**: VSCode/Cursor settings (merged, not overwritten), `.editorconfig`, `.curlrc`, `.inputrc`
+- **AI tools**: Claude Code, Codex CLI, Ghostty terminal
+- **Git**: gitconfig, global gitignore/gitattributes, global git hooks (secret detection)
+- **Dev tools**: htop, pdb++, matplotlib styles
+- **Secrets**: GitHub gist sync, SOPS-encrypted API keys
+- **Automation**: file cleanup (macOS), Claude Code session cleanup, AI tools auto-update, package auto-update, keyboard repeat enforcement (macOS)
 
-**Flags are additive** - e.g., `./deploy.sh --extras` deploys defaults + extras. Use `--minimal` to disable all defaults, then specify only what you want.
+**Flags are additive** — e.g., `./deploy.sh --mouseless` deploys defaults + mouseless. Use `--minimal` to disable all defaults, then specify only what you want.
 
 ### Claude Code (Primary AI Assistant)
 
@@ -307,6 +317,46 @@ clear-claude-code --list
 # Uninstall
 ./scripts/cleanup/setup_claude_cleanup.sh --uninstall
 ```
+
+### AI Tools Auto-Update (both platforms)
+
+Daily automatic updates for Claude Code, Gemini CLI, and Codex CLI at 06:00:
+
+```bash
+./deploy.sh --ai-update  # Part of defaults
+```
+
+Runs via launchd (macOS) or cron (Linux). Uninstall with `scripts/cleanup/setup_ai_update.sh --uninstall`.
+
+### Package Auto-Update (both platforms)
+
+Weekly package upgrade + cleanup on Sundays at 05:00:
+
+```bash
+./deploy.sh --brew-update  # Part of defaults
+```
+
+Supports Homebrew (macOS), apt, dnf, and pacman (Linux). Includes cleanup of stale caches.
+
+### Text Replacements (macOS)
+
+Bidirectional sync between macOS text replacements and [Alfred](https://www.alfredapp.com/) snippets. Runs daily at 09:00:
+
+```bash
+./deploy.sh --text-replacements  # macOS only, opt-in
+```
+
+macOS uses raw shortcuts; Alfred applies a collection prefix at runtime (e.g., `fm.hi`). Requires Full Disk Access for your terminal app.
+
+### Global Git Hooks
+
+Pre-commit hooks for secret detection across all repositories:
+
+```bash
+./deploy.sh --git-hooks  # Part of defaults
+```
+
+Scans staged files for API keys, tokens, and credentials before each commit.
 
 ### Secrets Sync Automation (both platforms)
 

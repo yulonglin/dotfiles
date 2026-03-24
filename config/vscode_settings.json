@@ -1,7 +1,7 @@
 {
     "files.autoSave": "afterDelay",
     "files.autoSaveDelay": 100,
-    "editor.multiCursorModifier": "ctrlCmd",
+    "editor.multiCursorModifier": "alt",
     "git.autofetch": true,
     "diffEditor.ignoreTrimWhitespace": false,
     "[python]": {

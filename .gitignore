@@ -498,6 +498,11 @@ settings.local.json
 .gemini/
 gha-creds-*.json
 
+# Runtime artifacts
+codex/*.sqlite
+claude/vercel-plugin-telemetry-preference
+claude/*.local.md
+
 # Compiled binaries (built per-platform by deploy.sh)
 custom_bins/claude-tools
 

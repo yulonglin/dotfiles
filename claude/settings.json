@@ -247,6 +247,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "mcp__claude-in-chrome__tabs_context_mcp",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block_tab_group_creation.sh",
+            "timeout": 3
+          }
+        ]
       }
     ]
   },
@@ -345,6 +355,7 @@
   "alwaysThinkingEnabled": true,
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
+  "autoMemoryDirectory": "memory",
   "skipDangerousModePermissionPrompt": true,
   "chrome": {
     "enabled": false
