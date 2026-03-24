@@ -23,7 +23,15 @@ fail() { echo "  ✗ $*" >&2; exit 1; }
 step() { echo ""; echo "── $* ──"; }
 
 # Run a command as $RUN_USER (root on RunPod, $USERNAME on VPS)
-run_as() { sudo -u "$RUN_USER" -i bash -c "$*"; }
+# Uses HOME from /etc/passwd via sudo -i (login shell)
+run_as() {
+    if [[ "$RUN_USER" == "root" && "$(id -u)" == "0" ]]; then
+        # Already root — use env to ensure HOME is correct (sudo -i may cache stale HOME)
+        HOME="$USER_HOME" bash -l -c "$*"
+    else
+        sudo -u "$RUN_USER" -i bash -c "$*"
+    fi
+}
 
 # ─── Configuration (override via env vars) ───────────────────────────────────
 USERNAME="${USERNAME:-yulong}"
@@ -39,7 +47,7 @@ else
     PROVIDER="generic"
 fi
 
-# RunPod: stay as root, use /workspace as home
+# RunPod: stay as root, use /workspace as home (persistent across restarts)
 # VPS: create non-root user with /home/$USERNAME
 if [[ "$PROVIDER" == "runpod" ]]; then
     RUN_USER="root"
@@ -53,6 +61,18 @@ echo "=== Cloud Setup ==="
 log "Provider: $PROVIDER"
 log "User:     $RUN_USER"
 log "Home:     $USER_HOME"
+
+# ─── Set root HOME to /workspace on RunPod ──────────────────────────────────
+# /root is ephemeral (container-local), /workspace is the persistent volume.
+# Changing HOME here means all config deploys to the persistent volume.
+if [[ "$PROVIDER" == "runpod" ]]; then
+    CURRENT_ROOT_HOME=$(getent passwd root | cut -d: -f6)
+    if [[ "$CURRENT_ROOT_HOME" != "$USER_HOME" ]]; then
+        sed -i "s|^root:\([^:]*\):\([^:]*\):\([^:]*\):\([^:]*\):${CURRENT_ROOT_HOME}:|root:\1:\2:\3:\4:${USER_HOME}:|" /etc/passwd
+        export HOME="$USER_HOME"
+        log "Changed root HOME: $CURRENT_ROOT_HOME → $USER_HOME (persistent)"
+    fi
+fi
 
 # ─── System deps ──────────────────────────────────────────────────────────────
 step "System dependencies"
@@ -102,13 +122,12 @@ fi
 # ─── sshd config ─────────────────────────────────────────────────────────────
 step "sshd configuration"
 SSHD_CONFIG="/etc/ssh/sshd_config"
-SSHD_CHANGED=false
 
 # Generate host keys if missing (common in containers)
 if ! ls /etc/ssh/ssh_host_*_key &>/dev/null; then
     log "Generating SSH host keys..."
     ssh-keygen -A
-    SSHD_CHANGED=true
+
     ok "Host keys generated"
 else
     ok "Host keys present"
@@ -117,14 +136,31 @@ fi
 # Ensure PubkeyAuthentication is enabled (first-match-wins in sshd_config)
 if grep -q '^PubkeyAuthentication no' "$SSHD_CONFIG" 2>/dev/null; then
     sed -i 's/^PubkeyAuthentication no/PubkeyAuthentication yes/' "$SSHD_CONFIG"
-    SSHD_CHANGED=true
+
     log "Enabled PubkeyAuthentication (was disabled)"
 elif ! grep -q '^PubkeyAuthentication' "$SSHD_CONFIG" 2>/dev/null; then
     echo 'PubkeyAuthentication yes' >> "$SSHD_CONFIG"
-    SSHD_CHANGED=true
+
     log "Added PubkeyAuthentication yes"
 else
     ok "PubkeyAuthentication already enabled"
+fi
+
+# Container/volume mounts often don't support chmod — sshd refuses authorized_keys
+# with wrong permissions unless StrictModes is disabled
+if ! grep -q '^StrictModes no' "$SSHD_CONFIG" 2>/dev/null; then
+    # Test if chmod actually works on the target filesystem
+    _test_file="$USER_HOME/.ssh_chmod_test"
+    touch "$_test_file" 2>/dev/null
+    chmod 600 "$_test_file" 2>/dev/null
+    _actual_mode=$(stat -c '%a' "$_test_file" 2>/dev/null || stat -f '%Lp' "$_test_file" 2>/dev/null)
+    rm -f "$_test_file"
+    if [[ "$_actual_mode" != "600" ]]; then
+        sed -i 's/^StrictModes yes/StrictModes no/' "$SSHD_CONFIG"
+        grep -q '^StrictModes' "$SSHD_CONFIG" || echo 'StrictModes no' >> "$SSHD_CONFIG"
+    
+        log "Added StrictModes no (filesystem ignores chmod)"
+    fi
 fi
 
 # ─── SSH keys ────────────────────────────────────────────────────────────────
@@ -159,18 +195,16 @@ ok "$KEY_COUNT key(s) installed"
 log "Owner: $(stat -c '%U:%G' "$SSH_DIR/authorized_keys" 2>/dev/null || stat -f '%Su:%Sg' "$SSH_DIR/authorized_keys")"
 log "Mode:  .ssh=$(stat -c '%a' "$SSH_DIR" 2>/dev/null || stat -f '%Lp' "$SSH_DIR") authorized_keys=$(stat -c '%a' "$SSH_DIR/authorized_keys" 2>/dev/null || stat -f '%Lp' "$SSH_DIR/authorized_keys")"
 
-# Restart sshd if config changed
-if [[ "$SSHD_CHANGED" == true ]]; then
-    step "Restart sshd"
-    service ssh restart 2>/dev/null || systemctl restart sshd 2>/dev/null || warn "Could not restart sshd"
-    ok "sshd restarted"
-fi
+# Always restart sshd — keys or config may have changed
+step "Restart sshd"
+service ssh restart 2>/dev/null || systemctl restart sshd 2>/dev/null || warn "Could not restart sshd"
+ok "sshd restarted"
 
 # ─── Set default shell to zsh ────────────────────────────────────────────────
 if [[ "$PROVIDER" == "runpod" ]]; then
     step "Default shell"
     if [[ "$(getent passwd root | cut -d: -f7)" != */zsh ]]; then
-        chsh -s /usr/bin/zsh root 2>/dev/null || sed -i 's|^root:.*:/bin/bash|root:x:0:0:root:/root:/usr/bin/zsh|' /etc/passwd
+        chsh -s /usr/bin/zsh root 2>/dev/null || sed -i 's|^root:\(.*\):/bin/bash$|root:\1:/usr/bin/zsh|' /etc/passwd
         ok "Root shell set to zsh"
     else
         ok "Root shell already zsh"
@@ -222,8 +256,14 @@ ok "install.sh complete"
 step "GitHub CLI auth"
 if ! run_as 'gh auth status' &>/dev/null; then
     log "Authenticating GitHub CLI..."
-    run_as 'gh auth login --web --git-protocol ssh </dev/tty'
-    ok "GitHub CLI authenticated"
+    # --git-protocol requires gh >= 2.13; fall back without it
+    if run_as 'gh auth login --web --git-protocol ssh </dev/tty' 2>/dev/null; then
+        ok "GitHub CLI authenticated"
+    elif run_as 'gh auth login --web </dev/tty' 2>/dev/null; then
+        ok "GitHub CLI authenticated (without git-protocol flag)"
+    else
+        warn "gh auth failed — run 'gh auth login' manually after setup"
+    fi
 else
     ok "GitHub CLI already authenticated"
 fi

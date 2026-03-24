@@ -985,7 +985,7 @@ parse_args() {
     _only_components=()
     local _only_mode=false
 
-    while (( "$#" )); do
+    while (( $# )); do
         case "$1" in
             -h|--help)
                 show_help
