@@ -300,20 +300,15 @@ alias cont='yolo --continue'
 alias continue='yolo --continue'
 alias yn='yolo -t'  # yn <name>: yolo with task name
 
-# auto — classifier-based auto mode (middle ground between yolo and default)
-alias auto='claude --enable-auto-mode'
-alias an='auto -t'  # an <name>: auto with task name
-
 # Artifact dirs checked across worktree commands (port, remove, clean)
 _CW_ARTIFACT_DIRS=(out logs data results experiments)
 
 # worktree commands
 _cw_launch() {
-  # Shared implementation for cw/cwy/cwa — idempotent worktree launcher
-  # Usage: _cw_launch [--yolo|--auto] [name] [extra args...]
-  local yolo=false auto=false
-  if [[ "$1" == "--yolo" ]]; then yolo=true; shift
-  elif [[ "$1" == "--auto" ]]; then auto=true; shift; fi
+  # Shared implementation for cw/cwy — idempotent worktree launcher
+  # Usage: _cw_launch [--yolo] [name] [extra args...]
+  local yolo=false
+  if [[ "$1" == "--yolo" ]]; then yolo=true; shift; fi
 
   local name=""
   if [[ $# -gt 0 && "$1" != -* ]]; then
@@ -322,7 +317,6 @@ _cw_launch() {
 
   local extra=("$@")
   $yolo && extra=("--dangerously-skip-permissions" "${extra[@]}")
-  $auto && extra=("--enable-auto-mode" "${extra[@]}")
 
   # Resume existing worktree if it exists
   if [[ -n "$name" ]]; then
@@ -373,7 +367,6 @@ _cw_launch() {
 
 cw() { _cw_launch "$@"; }
 cwy() { _cw_launch --yolo "$@"; }
-cwa() { _cw_launch --auto "$@"; }
 
 alias cwl='git worktree list'
 

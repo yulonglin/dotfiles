@@ -140,7 +140,7 @@
       "Read(**/.env.*)",
       "Read(**/.envrc)"
     ],
-    "defaultMode": "auto"
+    "defaultMode": "bypassPermissions"
   },
   "hooks": {
     "SessionStart": [
@@ -212,8 +212,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/auto_deny.sh",
-            "timeout": 5
+            "command": "python3 $HOME/.claude/hooks/auto_classify.py",
+            "timeout": 15
           }
         ]
       }
@@ -363,7 +363,7 @@
     ]
   },
   "alwaysThinkingEnabled": true,
-  "effortLevel": "medium",
+  "effortLevel": "auto",
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
   "autoMemoryDirectory": "memory",
