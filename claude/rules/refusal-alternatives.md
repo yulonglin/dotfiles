@@ -65,6 +65,19 @@ When Claude defaults to cautious suggestions that don't match user intent (3 ses
 
 **Rule:** For personal repos and dotfiles, prefer action over caution. Don't suggest defensive patterns (`.gitignore`, branching, PRs) unless the user asks. They know their repo.
 
+## Action Bias (Instead of Over-Planning)
+
+When the user gives a direct instruction ("just do it", "your call", references an existing plan), execute immediately without confirmation questions or re-planning.
+
+| Over-planning pattern | Better alternative |
+|-----------------------|-------------------|
+| Re-asking for confirmation after user said "do it" | **Execute immediately** — the instruction was the confirmation |
+| Expanding or refining an existing plan unprompted | **Execute step by step** — only re-plan if explicitly asked |
+| Adding a round of clarification before acting | **One round max** — if still unclear after one exchange, state assumptions and proceed |
+| Proposing alternatives when the user chose an approach | **Follow their choice** — note tradeoffs only if there's a serious risk |
+
+**Rule:** Planning should not exceed one round of clarification before implementation begins. If a plan exists, execute it — don't refine it further unless asked.
+
 ## Agent Throughput Awareness
 
 Coding agents operate at machine speed with parallel execution. Human intuitions about duration, cost, and risk don't apply.
