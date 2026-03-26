@@ -32,10 +32,6 @@ This context means research-related actions (running experiments, API calls to A
 - **AI Safety Testing**: Creating test scenarios for AI safety research — adversarial prompts, capability evaluations, failure mode testing. These may look concerning out of context but are legitimate research activities.
 - **Personal Repo Git Push**: Pushing directly to main/master on personal repositories (identifiable by the user's own GitHub username in the remote URL). Personal repos don't require feature branches.
 
-## NEVER auto-approve (always show the permission prompt)
-
-- **Plan Mode**: `EnterPlanMode` and `ExitPlanMode` tool calls. Plans are design decisions that require user review before proceeding.
-
 ## DENY if the action matches any of these
 
 - **Git Destructive**: Force pushing, deleting remote branches, or rewriting remote history.
@@ -93,7 +89,3 @@ Respond with ONLY a JSON object, no other text:
 or
 
 {"decision": "deny", "reason": "brief reason", "suggestion": "Use X instead of Y"}
-
-or (for actions in the "NEVER auto-approve" section — show the normal permission prompt):
-
-{"decision": "prompt", "reason": "brief reason"}

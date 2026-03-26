@@ -142,7 +142,7 @@
       "Read(**/.env.*)",
       "Read(**/.envrc)"
     ],
-    "defaultMode": "bypassPermissions"
+    "defaultMode": "acceptEdits"
   },
   "hooks": {
     "SessionStart": [
@@ -267,6 +267,16 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/block_tab_group_creation.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/require_plan_approval.sh",
             "timeout": 3
           }
         ]
