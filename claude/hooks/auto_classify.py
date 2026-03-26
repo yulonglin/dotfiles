@@ -146,16 +146,12 @@ def main() -> None:
         state["consecutive"] += 1
         state["total"] += 1
         save_denial_state(state)
+        # Escalate as ask: show the normal prompt with a warning, let user decide
         output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PermissionRequest",
-                "decision": {
-                    "behavior": "deny",
-                    "message": f"Auto-classifier denied: {reason}. Use a different approach or ask the user.",
-                    "interrupt": False,
-                },
-            }
+            "systemMessage": f"\033[1;33m⚠ auto-classify:\033[0m {reason}",
         }
+        json.dump(output, sys.stdout)
+        return
     else:
         state["consecutive"] = 0  # Reset consecutive on allow
         save_denial_state(state)
