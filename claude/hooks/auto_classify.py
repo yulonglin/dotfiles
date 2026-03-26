@@ -19,11 +19,18 @@ MAX_TOKENS = 100
 TIMEOUT_SECONDS = 12
 LOG_PATH = os.path.expanduser("~/.cache/claude/auto-classify.log")
 MAX_INPUT_CHARS = 2000
+MAX_LOG_BYTES = 1_000_000  # 1MB
 
 
 def log(msg: str) -> None:
     try:
         os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+        # Rotate if log exceeds 1MB
+        if os.path.exists(LOG_PATH) and os.path.getsize(LOG_PATH) > MAX_LOG_BYTES:
+            with open(LOG_PATH, "r") as f:
+                lines = f.readlines()
+            with open(LOG_PATH, "w") as f:
+                f.writelines(lines[len(lines) // 2 :])
         with open(LOG_PATH, "a") as f:
             from datetime import datetime, timezone
             ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
