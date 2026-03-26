@@ -105,8 +105,8 @@ if [[ -n "$block_reason" ]]; then
     jq -n --arg reason "$block_reason" '{
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
-        decision: "block",
-        reason: $reason
+        permissionDecision: "deny",
+        permissionDecisionReason: $reason
       }
     }'
     exit 0
