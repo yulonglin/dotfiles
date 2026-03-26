@@ -15,7 +15,7 @@ marketplaces:
     github: yulonglin/ai-safety-plugins
     autoUpdate: true
 
-  dev-browser:
+  dev-browser-marketplace:
     github: sawyerhood/dev-browser
     autoUpdate: true
 

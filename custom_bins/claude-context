@@ -252,13 +252,14 @@ def expand_env(s):
 def resolve_marketplace_source(name, config):
     """Return (source_string, source_type) for a marketplace.
 
-    Prefers local path if it exists and has .claude-plugin, else GitHub.
+    Uses GitHub by default. Set CLAUDE_CONTEXT_LOCAL=1 to prefer local paths.
     """
-    local = config.get("local")
-    if local:
-        expanded = expand_env(local)
-        if os.path.isdir(os.path.join(expanded, ".claude-plugin")):
-            return expanded, "local"
+    if os.environ.get("CLAUDE_CONTEXT_LOCAL") == "1":
+        local = config.get("local")
+        if local:
+            expanded = expand_env(local)
+            if os.path.isdir(os.path.join(expanded, ".claude-plugin")):
+                return expanded, "local"
     github = config.get("github")
     if github:
         return github, "github"

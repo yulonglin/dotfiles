@@ -316,6 +316,12 @@
     "rust-analyzer-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    },
     "ai-safety-plugins": {
       "source": {
         "source": "github",
@@ -326,6 +332,12 @@
       "source": {
         "source": "github",
         "repo": "yulonglin/productivity-tools"
+      }
+    },
+    "alignment-hive": {
+      "source": {
+        "source": "github",
+        "repo": "Crazytieguy/alignment-hive"
       }
     },
     "dev-browser-marketplace": {
