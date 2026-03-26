@@ -85,6 +85,16 @@ prompt: "You MUST use the Bash tool to run: gemini -p '@src/ Summarize the archi
 
 **Diagnostic:** If a CLI agent returns with 0 tool_uses, it failed to delegate — the prompt was too question-like. Rephrase as an explicit CLI command.
 
+## Known Issue: Codex CLI Sandbox Crash on macOS (Temporary)
+
+**Bug:** `codex exec` panics inside Claude Code's sandbox with `SCDynamicStoreCreate NULL` (system-configuration crate v0.6.1). The sandbox blocks access to macOS's `configd` daemon unix socket, and the Rust crate panics on NULL instead of handling it gracefully. Tracked: openai/codex#15640, #15296.
+
+**Workaround:** ALL Bash tool calls that invoke `codex exec` (directly or via agents like `core:codex`, `code:plan-critic`, `code:codex-reviewer`) MUST use `dangerouslyDisableSandbox: true`. The agent definitions include this instruction, but the parent agent spawning them should also be aware.
+
+**Not affected:** `codex --version`, `codex --help`, `codex models` (no HTTP client initialization).
+
+**Remove this section** when codex upgrades the `system-configuration` crate.
+
 ## Agent Teams (Escalation)
 
 For multi-agent communication, see `~/.claude/docs/agent-teams-guide.md`.
