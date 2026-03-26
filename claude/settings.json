@@ -140,7 +140,7 @@
       "Read(**/.env.*)",
       "Read(**/.envrc)"
     ],
-    "defaultMode": "default"
+    "defaultMode": "auto"
   },
   "hooks": {
     "SessionStart": [
