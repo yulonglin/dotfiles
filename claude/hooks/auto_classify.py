@@ -147,8 +147,12 @@ def main() -> None:
         state["total"] += 1
         save_denial_state(state)
         # Escalate as ask: show the normal prompt with a warning, let user decide
+        suggestion = result.get("suggestion", "")
+        msg = f"\033[1;33m⚠ auto-classify:\033[0m {reason}"
+        if suggestion:
+            msg += f"\n\033[1;36m💡 Suggestion:\033[0m {suggestion}"
         output = {
-            "systemMessage": f"\033[1;33m⚠ auto-classify:\033[0m {reason}",
+            "systemMessage": msg,
         }
         json.dump(output, sys.stdout)
         return

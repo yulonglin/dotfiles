@@ -4,6 +4,8 @@ set -euo pipefail
 # PreToolUse(Bash) hook: nudge agents toward built-in tools and modern CLI.
 # BLOCKS: grep/find/cat/head/tail/sed when used as standalone file operations
 #         (built-in Grep/Glob/Read/Edit tools are strictly better for files)
+# REDIRECTS: "ask"-category commands that have auto-allowed alternatives
+#            (blocks with specific suggestion, avoids permission prompt entirely)
 # ALLOWS: same commands in pipelines/streams (no built-in equivalent)
 # NUDGES: awk, curl, wget, ls, echo/printf redirection (soft suggestions)
 
@@ -46,8 +48,14 @@ has_cmd() {
 
 if has_cmd grep && ! is_piped_only grep; then
     block_reason="Use the built-in **Grep** tool instead of \`grep\` for searching files. It's ripgrep-based, faster, and respects sandbox. For CLI: \`rg\`."
+# -exec/-execdir/--exec flags: only block when find or fd is the command using them.
+# Avoids false positives on docker exec, kubectl exec, git bisect --exec, etc.
+elif (has_cmd find || has_cmd fd) && [[ "$command" =~ [[:space:]](-exec(dir)?|--exec(-batch)?)[[:space:]] ]] && ! is_piped_only find && ! is_piped_only fd; then
+    block_reason="**\`-exec\`** flags require confirmation. Use the built-in **Glob** tool + a \`for\` loop, or pipe to \`while IFS= read -r\`."
 elif has_cmd find && ! is_piped_only find; then
     block_reason="Use the built-in **Glob** tool instead of \`find\` for finding files. It supports patterns like \`**/*.py\`. For CLI: \`fd\`."
+elif has_cmd fd && ! is_piped_only fd && [[ "$command" =~ [[:space:]](-[xX])([[:space:]]|$) ]]; then
+    block_reason="**\`fd -x/-X\`** (exec shorthand) requires confirmation. Use \`fd\` piped to \`while IFS= read -r\` instead."
 elif has_cmd sed && ! is_piped_only sed; then
     block_reason="Use the built-in **Edit** tool instead of \`sed\` for file modifications. For stream editing: \`sd\`."
 elif (has_cmd cat || has_cmd head || has_cmd tail) && ! is_piped_only cat && ! is_piped_only head && ! is_piped_only tail; then
@@ -58,13 +66,34 @@ elif (has_cmd cat || has_cmd head || has_cmd tail) && ! is_piped_only cat && ! i
         block_reason="Use the built-in **Read** tool instead of \`cat\`/\`head\`/\`tail\` for reading files. It supports \`offset\` and \`limit\` for partial reads. For CLI: \`bat\`."
     fi
 
+# REDIRECT: "ask"-category commands with clear auto-allowed alternatives.
+# Blocks with a specific suggestion, preventing the permission prompt entirely.
+# These would otherwise trigger the "ask" permission list in settings.json.
+
+elif [[ "$command" =~ ^(python3?|uv\ run\ python3?)\ -c\  ]] && ! is_piped_only python && ! is_piped_only python3; then
+    block_reason="**\`python -c\`** requires confirmation. Write the code to a temp file with **Write** tool, then run \`python \$TMPDIR/check.py\` (auto-allowed)."
+elif [[ "$command" =~ ^node\ -e\  ]]; then
+    block_reason="**\`node -e\`** requires confirmation. Write the code to a temp file with **Write** tool, then run \`node \$TMPDIR/check.js\` (auto-allowed)."
+elif [[ "$command" =~ ^(perl\ -e|ruby\ -e)\  ]]; then
+    block_reason="**Inline eval** requires confirmation. Write the code to a temp file with **Write** tool, then run the file directly (auto-allowed)."
+elif [[ "$command" =~ ^timeout\  ]]; then
+    block_reason="**\`timeout\`** requires confirmation. Use the Bash tool's \`timeout\` parameter instead (e.g., \`timeout: 30000\` for 30s). It's built-in and auto-allowed."
+elif [[ "$command" =~ ^nohup\  ]]; then
+    block_reason="**\`nohup\`** requires confirmation. Use the Bash tool's \`run_in_background: true\` parameter instead — it's built-in and auto-allowed."
+elif [[ "$command" =~ ^env\  ]] && ! is_piped_only env; then
+    block_reason="**\`env\`** requires confirmation. Set environment variables with \`export VAR=val\` then run the command directly, or use \`VAR=val command\` syntax (auto-allowed)."
+elif has_cmd xargs && ! is_piped_only xargs; then
+    block_reason="**\`xargs\`** requires confirmation. Use a shell \`for\` loop or \`while IFS= read -r\` instead (auto-allowed)."
+
 # NUDGE: soft suggestions for commands with partial alternatives
 elif has_cmd awk; then
     nudge="Consider the built-in **Grep** tool (extraction) or \`jq\` (structured data) over \`awk\`."
 elif has_cmd curl; then
-    nudge="Prefer **WebFetch** over \`curl\` — domain-gated, auditable, doesn't need Bash."
+    nudge="**\`curl\`** requires confirmation. Prefer **WebFetch** tool (domain-gated, auditable, auto-allowed). If you need curl specifically, the user will be prompted."
 elif has_cmd wget; then
-    nudge="Prefer **WebFetch** over \`wget\` — domain-gated, auditable, doesn't need Bash."
+    nudge="**\`wget\`** requires confirmation. Prefer **WebFetch** tool (domain-gated, auditable, auto-allowed). If you need wget specifically, the user will be prompted."
+elif has_cmd xargs && is_piped_only xargs; then
+    nudge="**\`xargs\`** in pipes requires confirmation. Consider \`while IFS= read -r\` as an auto-allowed alternative."
 elif has_cmd ls; then
     nudge="Prefer \`eza\` over \`ls\` — better defaults, git integration, tree view (\`eza --tree\`)."
 elif [[ "$command" =~ (echo|printf).*\>[^\&] ]]; then
