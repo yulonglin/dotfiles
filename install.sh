@@ -112,7 +112,7 @@ elif is_linux; then
 
     # Core packages via apt
     log_info "Installing core packages via apt..."
-    install_packages apt "${PACKAGES_CORE[@]}" less nano nvtop lsof unzip
+    install_packages apt "${PACKAGES_CORE[@]}" less nano nvtop lsof unzip bubblewrap socat
 
     # Install mise for modern CLI tools
     install_mise

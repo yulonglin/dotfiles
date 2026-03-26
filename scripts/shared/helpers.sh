@@ -406,6 +406,16 @@ install_claude_code() {
         apk add libgcc libstdc++ ripgrep 2>/dev/null || true
         export USE_BUILTIN_RIPGREP=0
     fi
+    # Linux sandbox dependencies (bubblewrap + socat installed via apt in install.sh)
+    if is_linux; then
+        if cmd_exists bun; then
+            bun add -g @anthropic-ai/sandbox-runtime &>/dev/null || log_warning "sandbox-runtime install failed"
+        elif cmd_exists npm; then
+            npm install -g @anthropic-ai/sandbox-runtime &>/dev/null || log_warning "sandbox-runtime install failed"
+        else
+            log_warning "No npm/bun — skipping sandbox-runtime (install manually)"
+        fi
+    fi
 }
 
 install_gemini_cli() {
