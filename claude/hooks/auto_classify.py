@@ -142,7 +142,11 @@ def main() -> None:
     reason = result.get("reason", "")
     log(f"{decision.upper()}: {tool_name} — {reason}")
 
-    if decision == "deny":
+    if decision == "prompt":
+        # Never auto-approve: fall through to normal permission prompt
+        log(f"PROMPT: {tool_name} — {reason}")
+        sys.exit(0)
+    elif decision == "deny":
         state["consecutive"] += 1
         state["total"] += 1
         save_denial_state(state)
