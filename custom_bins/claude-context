@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import yaml
@@ -144,7 +145,17 @@ def apply_to_settings(enabled_plugins):
             except json.JSONDecodeError:
                 pass
 
-    existing["enabledPlugins"] = enabled_plugins
+    # Sort enabledPlugins: enabled first, then disabled.
+    # Within each group, sort by marketplace then plugin name.
+    # Result: enabled ai-safety, enabled official, ..., disabled ai-safety, disabled official, ...
+    def _sort_key(kv):
+        qid, enabled = kv
+        name, _, marketplace = qid.partition("@")
+        return (not enabled, marketplace, name)
+
+    existing["enabledPlugins"] = dict(
+        sorted(enabled_plugins.items(), key=_sort_key)
+    )
 
     # Atomic write
     os.makedirs(os.path.dirname(TARGET_FILE) or ".", exist_ok=True)
@@ -293,9 +304,9 @@ def sync_marketplaces(verbose=False):
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
-    synced = 0
+    # Phase 1: Register any new marketplaces (sequential — rare, usually all registered)
+    to_update = []
     errors = 0
-
     for name, config in marketplaces.items():
         source, source_type = resolve_marketplace_source(name, config)
         if not source:
@@ -303,10 +314,7 @@ def sync_marketplaces(verbose=False):
             errors += 1
             continue
 
-        # Check if already registered
-        already_registered = name in registered
-
-        if not already_registered:
+        if name not in registered:
             if verbose:
                 print(f"  Registering {name} ({source_type}: {source})...")
             try:
@@ -325,20 +333,37 @@ def sync_marketplaces(verbose=False):
         elif verbose:
             print(f"  {name}: already registered ({source_type})")
 
-        # Update (installs all plugins from marketplace)
-        if verbose:
-            print(f"  Updating {name}...")
+        to_update.append(name)
+
+    # Phase 2: Update all marketplaces in parallel
+    synced = 0
+
+    def _update_one(name):
+        """Update a single marketplace. Returns (name, ok, msg)."""
         try:
             result = subprocess.run(
                 ["claude", "plugin", "marketplace", "update", name],
                 capture_output=True, text=True, timeout=120,
             )
             if result.returncode != 0:
-                print(f"{YELLOW}  {name}: update warning — {result.stderr.strip()}{NC}")
+                return name, False, result.stderr.strip()
+            return name, True, None
         except subprocess.TimeoutExpired:
-            print(f"{YELLOW}  {name}: update timed out (plugins may be partially synced){NC}")
+            return name, False, "timed out"
 
-        synced += 1
+    if verbose:
+        print(f"  Updating {len(to_update)} marketplaces in parallel...")
+
+    with ThreadPoolExecutor(max_workers=len(to_update) or 1) as pool:
+        futures = {pool.submit(_update_one, name): name for name in to_update}
+        for future in as_completed(futures):
+            name, ok, msg = future.result()
+            if ok:
+                synced += 1
+                if verbose:
+                    print(f"  {GREEN}✔{NC} {name}")
+            else:
+                print(f"{YELLOW}  {name}: {msg}{NC}")
 
     total = len(marketplaces)
     if errors:
