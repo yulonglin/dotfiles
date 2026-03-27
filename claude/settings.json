@@ -41,7 +41,7 @@
       "Bash(git worktree list *)",
       "Bash(git add *)",
       "Bash(git diff *)",
-      "Bash(git commit:*)",
+      "Bash(git commit *)",
       "Bash(git stash push *)",
       "Bash(git stash pop *)",
       "Bash(git stash list *)",
