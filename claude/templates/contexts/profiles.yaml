@@ -33,14 +33,15 @@ marketplaces:
 
 # Always-on in every profile (declared once)
 base:
+  - core
   - superpowers
+  - context7
   - hookify
   - plugin-dev
   - commit-commands
   - claude-md-management
-  - context7
-  - core
   - llms-fetch-mcp
+  - remember
 
 # Profiles — only list what they ENABLE beyond base
 profiles:

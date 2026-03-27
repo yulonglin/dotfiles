@@ -55,17 +55,11 @@
       "Bash(gh pr *)",
       "Bash(claude config list *)",
       "Bash(uv add *)",
-      "Bash(uv run *)",
+      "Bash(uv venv *)",
       "Bash(uv sync *)",
-      "Bash(python *)",
-      "Bash(python3 *)",
-      "Bash(uv run python *)",
-      "Bash(uv run python3 *)",
       "Bash(HYDRA_FULL_ERROR=1 uv run python *)",
       "Bash(pytest *)",
       "Bash(uv run pytest *)",
-      "Bash(for *)",
-      "Bash(while *)",
       "Bash(bun run dev *)",
       "Bash(bun run test *)",
       "Bash(bun run build *)",
@@ -114,6 +108,11 @@
       "Bash(sudo *)"
     ],
     "ask": [
+      "Bash(uv run *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(uv run python *)",
+      "Bash(uv run python3 *)",
       "Bash(kill *)",
       "Bash(killall *)",
       "Bash(pkill *)",
@@ -232,6 +231,18 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/retry_omitted_grep.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -308,6 +319,7 @@
     "hookify@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
+    "remember@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "dev-browser@dev-browser-marketplace": true,
@@ -381,14 +393,10 @@
         "mcp-proxy.anthropic.com",
         "api.githubcopilot.com",
         "mcp.context7.com",
-        "http-intake.logs.us5.datadoghq.com",
-        "eu-central-1-1.aws.cloud2.influxdata.com",
         "oauth2.googleapis.com",
         "cloudcode-pa.googleapis.com",
         "github.com",
         "api.github.com",
-        "raw.githubusercontent.com",
-        "objects.githubusercontent.com",
         "mcp.linear.app"
       ]
     },
