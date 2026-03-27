@@ -32,6 +32,7 @@ except ImportError:
 
 INSTALLED_PLUGINS = os.path.expanduser("~/.claude/plugins/installed_plugins.json")
 KNOWN_MARKETPLACES = os.path.expanduser("~/.claude/plugins/known_marketplaces.json")
+MARKETPLACES_DIR = os.path.expanduser("~/.claude/plugins/marketplaces")
 PROFILES_PATH = os.path.expanduser("~/.claude/templates/contexts/profiles.yaml")
 GLOBAL_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 CONTEXT_FILE = ".claude/context.yaml"
@@ -345,9 +346,32 @@ def sync_marketplaces(verbose=False):
     else:
         print(f"{GREEN}Synced {synced}/{total} marketplaces{NC}")
 
+    fix_hook_permissions(verbose=verbose)
     apply_auto_update(marketplaces, verbose=verbose)
     normalize_scopes(verbose=verbose)
     return errors == 0
+
+
+def fix_hook_permissions(verbose=False):
+    """Ensure all .sh hook scripts in marketplaces are executable.
+
+    Marketplace updates download tarballs from GCS which may lose execute bits.
+    """
+    if not os.path.isdir(MARKETPLACES_DIR):
+        return
+    fixed = 0
+    for root, _dirs, files in os.walk(MARKETPLACES_DIR):
+        for f in files:
+            if f.endswith(".sh"):
+                path = os.path.join(root, f)
+                mode = os.stat(path).st_mode
+                if not (mode & 0o111):
+                    os.chmod(path, mode | 0o755)
+                    fixed += 1
+                    if verbose:
+                        print(f"  Fixed permissions: {os.path.relpath(path, MARKETPLACES_DIR)}")
+    if fixed and verbose:
+        print(f"{GREEN}Fixed {fixed} hook script(s) missing execute permission{NC}")
 
 
 def apply_auto_update(marketplaces, verbose=False):

@@ -151,7 +151,14 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_start.sh",
-            "timeout": 5
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/fix_hook_permissions.sh",
+            "timeout": 5,
+            "async": true
           },
           {
             "type": "command",
