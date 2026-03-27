@@ -41,6 +41,9 @@ fi
 
 # Always clean stale plugin symlinks (sync recreates them, but they also appear from other operations)
 CLEAN_SCRIPT="${DOT_DIR:-$HOME/code/dotfiles}/scripts/cleanup/clean_plugin_symlinks.sh"
-[ -f "$CLEAN_SCRIPT" ] && bash "$CLEAN_SCRIPT" &>/dev/null
+if [ -f "$CLEAN_SCRIPT" ]; then
+    bash "$CLEAN_SCRIPT" &>/dev/null &
+    disown 2>/dev/null
+fi
 
 exit 0  # Don't block session start
