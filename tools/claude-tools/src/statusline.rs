@@ -1,3 +1,6 @@
+//! Claude Code status line (Rust primary, for low-latency rendering).
+//! Bash fallback: claude/statusline.sh (keep feature-parity when editing either).
+
 use serde::Deserialize;
 use std::fmt::Write;
 use std::io::Read;
@@ -70,6 +73,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(s) = format_duration_str(&input.cost) {
         session_parts.push(s);
     }
+    session_parts.push(format_peak_str());
     if !session_parts.is_empty() {
         output.push('\n');
         output.push_str(&session_parts.join(" \u{00b7} "));
@@ -77,6 +81,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Line 3: API usage (5h + 7d rate limits)
     crate::usage::format_usage(&mut output);
+
+    // Line 4: Workday remaining (macOS only)
+    format_workday(&mut output);
 
     print!("{}", output);
     Ok(())
@@ -258,5 +265,120 @@ fn format_duration_str(cost: &Option<Cost>) -> Option<String> {
         format!("{}m", total_mins)
     };
     Some(format!("\x1b[2m{}\x1b[0m", display))
+}
+
+/// Format minutes as compact countdown: "2d5h" / "3h20m" / "45m".
+fn fmt_countdown(mins: u32) -> String {
+    let h = mins / 60;
+    let m = mins % 60;
+    if h >= 24 {
+        format!("{}d{}h", h / 24, h % 24)
+    } else if h > 0 {
+        format!("{}h{}m", h, m)
+    } else {
+        format!("{}m", m)
+    }
+}
+
+/// Minutes remaining in the current day from hour:minute until midnight.
+fn mins_until_midnight(hour: u32, minute: u32) -> u32 {
+    (23 - hour) * 60 + (60 - minute)
+}
+
+/// Peak hours indicator with countdown (weekdays 5am-11am PT = peak 1x, off-peak = 2x bonus).
+/// See also: claude/statusline.sh (bash fallback).
+fn format_peak_str() -> String {
+    let output = match std::process::Command::new("date")
+        .env("TZ", "America/Los_Angeles")
+        .args(["+%u %-H %-M"])
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return "\x1b[32m2x\x1b[0m".to_string(),
+    };
+
+    let s = String::from_utf8_lossy(&output.stdout);
+    let parts: Vec<&str> = s.trim().split(' ').collect();
+    if parts.len() != 3 {
+        return "\x1b[32m2x\x1b[0m".to_string();
+    }
+
+    let dow: u32 = parts[0].parse().unwrap_or(0);
+    let hour: u32 = parts[1].parse().unwrap_or(0);
+    let minute: u32 = parts[2].parse().unwrap_or(0);
+    let is_weekday = dow >= 1 && dow <= 5;
+
+    if is_weekday && hour >= 5 && hour < 11 {
+        // In peak — countdown to 11am PT
+        let left = (10 - hour) * 60 + (60 - minute);
+        format!("\x1b[33m1x peak \x1b[2m{}\x1b[0m", fmt_countdown(left))
+    } else {
+        // Off-peak — countdown to next peak (next weekday 5am PT)
+        let rest_of_day = mins_until_midnight(hour, minute);
+        let to_peak = if !is_weekday {
+            let days_to_mon = if dow == 6 { 2 } else { 1 };
+            (days_to_mon - 1) * 1440 + rest_of_day + 5 * 60
+        } else if hour < 5 {
+            (4 - hour) * 60 + (60 - minute)
+        } else {
+            // After peak; next is tomorrow 5am (or Monday if Friday)
+            let skip_days = if dow == 5 { 2 } else { 0 };
+            rest_of_day + skip_days * 1440 + 5 * 60
+        };
+        format!("\x1b[32m2x \x1b[2m{}\x1b[0m", fmt_countdown(to_peak))
+    }
+}
+
+/// Workday remaining (ends at midnight, bedtime nudges — macOS only).
+/// See also: claude/statusline.sh (bash fallback).
+fn format_workday(output: &mut String) {
+    if std::env::consts::OS != "macos" {
+        return;
+    }
+
+    let date_output = match std::process::Command::new("date")
+        .args(["+%-H %-M"])
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return,
+    };
+
+    let s = String::from_utf8_lossy(&date_output.stdout);
+    let parts: Vec<&str> = s.trim().split(' ').collect();
+    if parts.len() != 2 {
+        return;
+    }
+
+    let hour: i32 = parts[0].parse().unwrap_or(0);
+    let minute: i32 = parts[1].parse().unwrap_or(0);
+
+    if hour < 6 {
+        // Past midnight — should be in bed
+        let over = if hour == 0 && minute == 0 {
+            "midnight".to_string()
+        } else if hour == 0 {
+            format!("{}m", minute)
+        } else {
+            format!("{}h {}m", hour, minute)
+        };
+        let _ = write!(
+            output,
+            "\n\x1b[31;1m\u{1f6cf}\u{fe0f}  {} past bedtime — stop and go to sleep!\x1b[0m",
+            over
+        );
+    } else {
+        let left = (23 - hour) * 60 + (60 - minute);
+        let (icon, color, msg) = if left <= 30 {
+            ("\u{1f6cf}\u{fe0f} ", "\x1b[31;1m", format!("{}m — wrap up and get to bed!", left % 60))
+        } else if left <= 60 {
+            ("\u{1f319}", "\x1b[31m", format!(" {}m left — start wrapping up", left))
+        } else if left <= 120 {
+            ("\u{1f319}", "\x1b[33m", format!(" {}h {}m left", left / 60, left % 60))
+        } else {
+            ("\u{1f319}", "\x1b[2m", format!(" {}h {}m left", left / 60, left % 60))
+        };
+        let _ = write!(output, "\n{}{}{}\x1b[0m", color, icon, msg);
+    }
 }
 

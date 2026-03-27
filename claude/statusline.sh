@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Claude Code Status Line Script (bash fallback)
+# Rust primary: tools/claude-tools/src/statusline.rs (recompile with cargo build --release)
 #
-# Displays on 3 lines:
+# Displays on 3+ lines:
 # Line 1 (location): Machine name (SSH) + profiles + directory + git branch
 # Line 2 (session): Model name + context % + duration
 # Line 3 (usage): 5h and 7d API usage bars (cached, from /api/oauth/usage)
@@ -116,6 +117,37 @@ if [ "$duration_ms" -gt 60000 ] 2>/dev/null; then
 fi
 
 # ============================================================================
+# PEAK HOURS with countdown (weekdays 5am-11am PT = peak 1x, off-peak = 2x bonus)
+# ============================================================================
+peak_info=""
+read -r pt_dow pt_hour pt_min <<< "$(TZ=America/Los_Angeles date '+%u %-H %-M')"
+rest_of_day=$(( (23 - pt_hour) * 60 + (60 - pt_min) ))
+
+# Helper: format minutes as compact countdown
+fmt_cd() {
+  local h=$(($1 / 60)) m=$(($1 % 60))
+  if [ "$h" -ge 24 ]; then printf '%dd%dh' $((h/24)) $((h%24))
+  elif [ "$h" -gt 0 ]; then printf '%dh%dm' "$h" "$m"
+  else printf '%dm' "$m"; fi
+}
+
+if [ "$pt_dow" -le 5 ] && [ "$pt_hour" -ge 5 ] && [ "$pt_hour" -lt 11 ]; then
+  pk_left=$(( (10 - pt_hour) * 60 + (60 - pt_min) ))
+  peak_info="$(printf '\033[33m')1x peak $(printf '\033[2m')$(fmt_cd $pk_left)$(printf '\033[0m')"
+else
+  if [ "$pt_dow" -gt 5 ]; then
+    d2m=$(( pt_dow == 6 ? 2 : 1 ))
+    pk_left=$(( (d2m - 1) * 1440 + rest_of_day + 300 ))
+  elif [ "$pt_hour" -lt 5 ]; then
+    pk_left=$(( (4 - pt_hour) * 60 + (60 - pt_min) ))
+  else
+    skip=$(( pt_dow == 5 ? 2 : 0 ))
+    pk_left=$(( rest_of_day + skip * 1440 + 300 ))
+  fi
+  peak_info="$(printf '\033[32m')2x $(printf '\033[2m')$(fmt_cd $pk_left)$(printf '\033[0m')"
+fi
+
+# ============================================================================
 # OUTPUT: Line 1 (location) + Line 2 (session)
 # ============================================================================
 # Line 1: location
@@ -126,6 +158,7 @@ session_parts=()
 [ -n "$model_info" ] && session_parts+=("$model_info")
 [ -n "$context_info" ] && session_parts+=("$context_info")
 [ -n "$duration_info" ] && session_parts+=("$duration_info")
+[ -n "$peak_info" ] && session_parts+=("$peak_info")
 if [ ${#session_parts[@]} -gt 0 ]; then
   printf "\n"
   for i in "${!session_parts[@]}"; do
@@ -330,4 +363,40 @@ else
   else
     printf "\n\033[2m\033[31mapi request failed\033[0m"
   fi
+fi
+
+# ============================================================================
+# WORKDAY REMAINING (ends at midnight, bedtime nudges — macOS only)
+# ============================================================================
+if [ "$(uname)" = "Darwin" ]; then
+now_h=$(date +%-H)
+now_m=$(date +%-M)
+
+if [ "$now_h" -lt 6 ]; then
+  # Past midnight, before 6am — should be in bed
+  if [ "$now_h" -eq 0 ] && [ "$now_m" -eq 0 ]; then
+    over_str="midnight"
+  elif [ "$now_h" -eq 0 ]; then
+    over_str="${now_m}m"
+  else
+    over_str="${now_h}h ${now_m}m"
+  fi
+  printf "\n\033[31;1m🛏️  %s past bedtime — stop and go to sleep!\033[0m" "$over_str"
+else
+  # Minutes until midnight
+  mins_left=$(( (23 - now_h) * 60 + (60 - now_m) ))
+  [ "$mins_left" -ge 1440 ] && mins_left=0
+  h_left=$((mins_left / 60))
+  m_left=$((mins_left % 60))
+
+  if [ "$mins_left" -le 30 ]; then
+    printf "\n\033[31;1m🛏️  %dm — wrap up and get to bed!\033[0m" "$m_left"
+  elif [ "$mins_left" -le 60 ]; then
+    printf "\n\033[31m🌙 %dm left — start wrapping up\033[0m" "$mins_left"
+  elif [ "$mins_left" -le 120 ]; then
+    printf "\n\033[33m🌙 %dh %dm left\033[0m" "$h_left" "$m_left"
+  else
+    printf "\n\033[2m🌙 %dh %dm left\033[0m" "$h_left" "$m_left"
+  fi
+fi
 fi
