@@ -220,12 +220,27 @@ fn apply_to_settings(
         serde_json::Value::Object(serde_json::Map::new())
     };
 
-    // Build enabledPlugins JSON object
-    let plugins_value: serde_json::Value = enabled_plugins
-        .iter()
-        .map(|(k, v)| (k.clone(), serde_json::Value::Bool(*v)))
-        .collect::<serde_json::Map<String, serde_json::Value>>()
-        .into();
+    // Sort enabledPlugins: enabled first, then disabled.
+    // Within each group, sort by marketplace then plugin name.
+    let mut sorted: Vec<(&String, &bool)> = enabled_plugins.iter().collect();
+    sorted.sort_by(|(a_qid, a_on), (b_qid, b_on)| {
+        let a_enabled = !**a_on; // false sorts before true, so negate
+        let b_enabled = !**b_on;
+        let a_parts: Vec<&str> = a_qid.splitn(2, '@').collect();
+        let b_parts: Vec<&str> = b_qid.splitn(2, '@').collect();
+        let a_marketplace = a_parts.get(1).unwrap_or(&"");
+        let b_marketplace = b_parts.get(1).unwrap_or(&"");
+        let a_name = a_parts.first().unwrap_or(&"");
+        let b_name = b_parts.first().unwrap_or(&"");
+        (a_enabled, *a_marketplace, *a_name).cmp(&(b_enabled, *b_marketplace, *b_name))
+    });
+
+    // Build enabledPlugins JSON object (preserving sort order via IndexMap-like insertion)
+    let mut plugins_map = serde_json::Map::new();
+    for (k, v) in sorted {
+        plugins_map.insert(k.clone(), serde_json::Value::Bool(*v));
+    }
+    let plugins_value: serde_json::Value = plugins_map.into();
 
     existing
         .as_object_mut()

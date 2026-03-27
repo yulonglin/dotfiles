@@ -81,19 +81,6 @@ profiles:
       - frontend-design
       - playground
 
-  full:
-    comment: "Everything enabled (dotfiles, meta-work)"
-    enable:
-      - research
-      - writing
-      - code
-      - workflow
-      - viz
-      - coderabbit
-      - code-simplifier
-      - security-guidance
-      - dev-browser
-
   # Sub-profiles (compose with domain)
   python:
     comment: "Adds pyright-lsp"
@@ -101,13 +88,13 @@ profiles:
 
   web:
     comment: "Web dev + browser automation"
-    enable: [vercel, typescript-lsp, supabase, dev-browser]
+    enable: [typescript-lsp, dev-browser]
 
   ml:
     comment: "Adds huggingface-skills"
     enable: [huggingface-skills]
 
   personal:
-    comment: "Life and productivity — Things 3, Slack extensions"
+    comment: "Life and productivity — Things 3"
     enable:
       - things-mcp
