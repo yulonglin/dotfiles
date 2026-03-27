@@ -1,0 +1,44 @@
+#!/bin/bash
+# Keep iPhone hotspot at lowest WiFi priority
+# Ensures any newly joined WiFi network is preferred over hotspot
+#
+# Usage: wifi-hotspot-deprioritize [--dry-run]
+
+set -euo pipefail
+
+HOTSPOT_NAME="disruptwo mobile"
+INTERFACE="en0"
+
+dry_run=false
+[[ "${1:-}" == "--dry-run" ]] && dry_run=true
+
+# Get current preferred networks
+preferred=$(networksetup -listpreferredwirelessnetworks "$INTERFACE" 2>/dev/null || true)
+
+if ! echo "$preferred" | grep -qF "$HOTSPOT_NAME"; then
+    echo "[wifi] Adding '$HOTSPOT_NAME' to preferred networks (lowest priority)..."
+    if $dry_run; then
+        echo "[wifi] Would add '$HOTSPOT_NAME' at lowest priority"
+        exit 0
+    fi
+    networksetup -addpreferredwirelessnetworkatindex "$INTERFACE" "$HOTSPOT_NAME" 99 WPA2
+    echo "[wifi] Done"
+    exit 0
+fi
+
+# Check if already last
+last_network=$(echo "$preferred" | tail -1 | sed 's/^[[:space:]]*//')
+if [[ "$last_network" == "$HOTSPOT_NAME" ]]; then
+    echo "[wifi] Hotspot '$HOTSPOT_NAME' already at lowest priority"
+    exit 0
+fi
+
+if $dry_run; then
+    echo "[wifi] Would move '$HOTSPOT_NAME' to lowest priority"
+    exit 0
+fi
+
+echo "[wifi] Moving '$HOTSPOT_NAME' to lowest priority..."
+networksetup -removepreferredwirelessnetwork "$INTERFACE" "$HOTSPOT_NAME" >/dev/null 2>&1
+networksetup -addpreferredwirelessnetworkatindex "$INTERFACE" "$HOTSPOT_NAME" 99 WPA2
+echo "[wifi] Done"
