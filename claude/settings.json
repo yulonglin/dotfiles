@@ -69,6 +69,9 @@
       "Bash(npm run build *)",
       "Bash(npm run lint *)",
       "Bash(npm run start *)",
+      "Glob",
+      "Grep",
+      "Search",
       "WebSearch",
       "WebFetch",
       "Read",
@@ -397,7 +400,9 @@
         "cloudcode-pa.googleapis.com",
         "github.com",
         "api.github.com",
-        "mcp.linear.app"
+        "mcp.linear.app",
+        "export.arxiv.org",
+        "arxiv.org"
       ]
     },
     "excludedCommands": [
