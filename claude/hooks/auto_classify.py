@@ -20,10 +20,6 @@ TIMEOUT_SECONDS = 12
 LOG_PATH = os.path.expanduser("~/.cache/claude/auto-classify.log")
 MAX_INPUT_CHARS = 2000
 MAX_LOG_BYTES = 1_000_000  # 1MB
-# Denial escalation: after too many denials, fall back to showing the prompt
-MAX_CONSECUTIVE_DENIALS = 3
-MAX_TOTAL_DENIALS = 20
-DENIAL_STATE_PATH = os.path.expanduser("~/.cache/claude/auto-classify-denials.json")
 
 
 def log(msg: str) -> None:
@@ -90,23 +86,6 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str) -> dict | N
         return None
 
 
-def load_denial_state() -> dict:
-    """Load denial counters. Returns {consecutive: int, total: int, session: str}."""
-    try:
-        with open(DENIAL_STATE_PATH) as f:
-            return json.load(f)
-    except Exception:
-        return {"consecutive": 0, "total": 0, "session": ""}
-
-
-def save_denial_state(state: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(DENIAL_STATE_PATH), exist_ok=True)
-        with open(DENIAL_STATE_PATH, "w") as f:
-            json.dump(state, f)
-    except Exception:
-        pass
-
 
 def main() -> None:
     try:
@@ -118,14 +97,6 @@ def main() -> None:
     tool_input = hook_input.get("tool_input", {})
     cwd = hook_input.get("cwd", "")
     session_id = hook_input.get("session_id", "")
-
-    # Check denial escalation — too many denials → fall back to normal prompt
-    state = load_denial_state()
-    if state.get("session") != session_id:
-        state = {"consecutive": 0, "total": 0, "session": session_id}
-    if state["consecutive"] >= MAX_CONSECUTIVE_DENIALS or state["total"] >= MAX_TOTAL_DENIALS:
-        log(f"ESCALATE: too many denials (consecutive={state['consecutive']}, total={state['total']}), showing prompt")
-        sys.exit(0)
 
     try:
         with open(RULES_PATH) as f:
@@ -143,10 +114,7 @@ def main() -> None:
     log(f"{decision.upper()}: {tool_name} — {reason}")
 
     if decision == "deny":
-        state["consecutive"] += 1
-        state["total"] += 1
-        save_denial_state(state)
-        # Escalate as ask: show the normal prompt with a warning, let user decide
+        # Show warning but don't block — let user decide
         suggestion = result.get("suggestion", "")
         msg = f"\033[1;33m⚠ auto-classify:\033[0m {reason}"
         if suggestion:
@@ -157,8 +125,6 @@ def main() -> None:
         json.dump(output, sys.stdout)
         return
     else:
-        state["consecutive"] = 0  # Reset consecutive on allow
-        save_denial_state(state)
         output = {
             "hookSpecificOutput": {
                 "hookEventName": "PermissionRequest",

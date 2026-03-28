@@ -57,6 +57,10 @@
       "Bash(uv add *)",
       "Bash(uv venv *)",
       "Bash(uv sync *)",
+      "Bash(uv run python *)",
+      "Bash(uv run python3 *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
       "Bash(HYDRA_FULL_ERROR=1 uv run python *)",
       "Bash(pytest *)",
       "Bash(uv run pytest *)",
@@ -118,17 +122,11 @@
     ],
     "ask": [
       "Bash(uv run *)",
-      "Bash(python *)",
-      "Bash(python3 *)",
-      "Bash(uv run python *)",
-      "Bash(uv run python3 *)",
       "Bash(kill *)",
       "Bash(killall *)",
       "Bash(pkill *)",
       "Bash(env *)",
       "Bash(nohup *)",
-      "Bash(python -c *)",
-      "Bash(python3 -c *)",
       "Bash(node -e *)",
       "Bash(perl -e *)",
       "Bash(ruby -e *)",
@@ -439,5 +437,6 @@
     "enabled": false
   },
   "teammateMode": "auto",
-  "installMethod": "native"
+  "installMethod": "native",
+  "voiceEnabled": true
 }
