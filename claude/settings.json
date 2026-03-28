@@ -41,7 +41,7 @@
       "Bash(git worktree list *)",
       "Bash(git add *)",
       "Bash(git diff *)",
-      "Bash(git commit:*)",
+      "Bash(git commit *)",
       "Bash(git stash push *)",
       "Bash(git stash pop *)",
       "Bash(git stash list *)",
@@ -105,7 +105,13 @@
       "Bash(exec *)",
       "Bash(xargs sh *)",
       "Bash(xargs bash *)",
-      "Bash(sudo *)"
+      "Bash(sudo *)",
+      "Bash(curl * | bash *)",
+      "Bash(curl * | sh *)",
+      "Bash(wget * | bash *)",
+      "Bash(wget * | sh *)",
+      "Bash(nc -l *)",
+      "Bash(nc -lp *)"
     ],
     "ask": [
       "Bash(uv run *)",
@@ -136,6 +142,17 @@
       "Bash(ssh *)",
       "Bash(scp *)",
       "Bash(nc *)",
+      "Bash(kubectl exec *)",
+      "Bash(kubectl delete *)",
+      "Bash(docker exec *)",
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(uv pip install *)",
+      "Bash(python -m pip install *)",
+      "Bash(python3 -m pip install *)",
+      "Bash(npm install *)",
+      "Bash(bun add *)",
+      "Bash(python -m http.server *)",
       "Bash(cat)",
       "Read(**/.env)",
       "Read(**/.env.*)",
@@ -403,7 +420,9 @@
     "excludedCommands": [
       "gh",
       "git",
-      "docker"
+      "docker",
+      "codex",
+      "gemini"
     ]
   },
   "alwaysThinkingEnabled": true,
