@@ -57,6 +57,7 @@ source $CONFIG_DIR/p10k.zsh
 source $CONFIG_DIR/extras.sh
 source $CONFIG_DIR/modern_tools.sh
 source $CONFIG_DIR/key_bindings.sh
+source $CONFIG_DIR/ssh_themes.sh
 source $CONFIG_DIR/completions.sh
 add_to_path "${DOT_DIR}/custom_bins"
 
