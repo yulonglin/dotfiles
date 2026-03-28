@@ -701,6 +701,13 @@ alias scratch='cd $SCRATCH_DIR'
 alias projects='cd $PROJECTS_DIR'
 alias website='cd $WRITING_DIR/${DOTFILES_WEBSITE:-yulonglin.github.io}'
 
+# Quick open in editor
+alias edit-dotfiles='$EDITOR $DOT_DIR'
+alias edit-ssh='$EDITOR ~/.ssh/config'
+alias edit-claude='$EDITOR $DOT_DIR/claude/settings.json'
+alias edit-profiles='$EDITOR $DOT_DIR/claude/templates/contexts/profiles.yaml'
+alias edit-voiceink='$EDITOR $DOT_DIR/config/transcription/voiceink/macOS/prompts/'
+
 #-------------------------------------------------------------
 # git
 #-------------------------------------------------------------
