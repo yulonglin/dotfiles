@@ -159,7 +159,7 @@
       "Read(**/.env.*)",
       "Read(**/.envrc)"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "bypassPermissions"
   },
   "hooks": {
     "SessionStart": [
@@ -429,6 +429,7 @@
     ]
   },
   "alwaysThinkingEnabled": true,
+  "showThinkingSummaries": true,
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
   "autoMemoryDirectory": "memory",

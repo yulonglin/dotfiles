@@ -75,6 +75,7 @@ Verification is a design problem—you need to plan *how* you'll verify before y
 
 Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - ZSH configuration - Main shell setup
+- Tmux configuration - Shell multiplexer config + TPM plugins (resurrect, continuum) for session persistence
 - Gist sync - Bidirectional sync of SSH config and git identity with GitHub gist, automated daily at 8 AM
 - Git config - Smart conflict resolution with user prompts
 - VSCode/Cursor settings - Merges with existing settings
@@ -351,6 +352,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - **Mouseless config**: Copied (not symlinked) because Mouseless uses atomic `rename()` on UI save which destroys symlinks. Use `sync-mouseless` to pull UI changes back to dotfiles
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env
+- **TPM plugins**: Guarded with `if-shell` so tmux works fine without TPM installed. Deploy auto-installs plugins to disk, but already-running tmux sessions need `prefix + I` or a tmux restart to load them. `prefix + Ctrl-s` saves session, `prefix + Ctrl-r` restores. Continuum auto-restores last saved session on first server start after reboot; `touch ~/tmux_no_auto_restore` to suppress. Save files: `~/.tmux/resurrect/` (portable, auto-cleaned after 30 days)
 - **Claude Code directory**: `claude/` is symlinked to `~/.claude/` (not copied)
 - **Codex CLI directory**: `codex/` is symlinked to `~/.codex/` (not copied)
 - **Serena MCP config**: `config/serena/serena_config.yml` symlinked to `~/.serena/serena_config.yml` (dashboard auto-open disabled)

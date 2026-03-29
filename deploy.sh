@@ -117,6 +117,19 @@ RC_FILE="$HOME/.zshrc"
 if [[ "$DEPLOY_TMUX" == "true" ]]; then
     log_info "Deploying tmux configuration..."
     eval "echo \"source $DOT_DIR/config/tmux.conf\" $OP \"\$HOME/.tmux.conf\""
+
+    # Ensure TPM is installed (idempotent — skips if already present)
+    install_tpm
+
+    # Install plugins directly (avoids needing a tmux server running)
+    local plugin_dir="$HOME/.tmux/plugins"
+    for plugin in tmux-resurrect tmux-continuum; do
+        if [[ ! -d "$plugin_dir/$plugin" ]]; then
+            log_info "Installing $plugin..."
+            git clone --quiet "https://github.com/tmux-plugins/$plugin" "$plugin_dir/$plugin" 2>/dev/null || \
+                log_warning "$plugin clone failed"
+        fi
+    done
 fi
 
 # ─── Vim ──────────────────────────────────────────────────────────────────────
