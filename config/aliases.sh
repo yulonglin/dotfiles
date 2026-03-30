@@ -930,17 +930,6 @@ claude-with() {
 # Switch Claude Code account (full logout + login, not just restart)
 alias claude-switch='claude auth logout && claude auth login'
 
-# Clear Claude Code processes
-alias ccl='clear-claude-code --list'          # list/status
-alias cc-list='clear-claude-code --list'
-alias ccp='clear-claude-code --preview'       # preview/dry-run
-alias cc-preview='clear-claude-code --preview'
-alias cci='clear-claude-code'                 # kill idle only (safe)
-alias cc-idle='clear-claude-code'
-alias ccf='clear-claude-code --force'         # kill all except current (confirms)
-alias cc-force='clear-claude-code --force'
-alias cca='clear-claude-code --all'           # kill everything (confirms)
-alias cc-all='clear-claude-code --all'
 
 ccusage() {
   if command -v bunx >/dev/null 2>&1; then

@@ -69,6 +69,8 @@
       "Bash(npm run build *)",
       "Bash(npm run lint *)",
       "Bash(npm run start *)",
+      "Bash(codex *)",
+      "Bash(gemini *)",
       "Glob",
       "Grep",
       "Search",
@@ -117,18 +119,11 @@
       "Bash(nc -lp *)"
     ],
     "ask": [
-      "Bash(uv run *)",
-      "Bash(python *)",
-      "Bash(python3 *)",
-      "Bash(uv run python *)",
-      "Bash(uv run python3 *)",
       "Bash(kill *)",
       "Bash(killall *)",
       "Bash(pkill *)",
       "Bash(env *)",
       "Bash(nohup *)",
-      "Bash(python -c *)",
-      "Bash(python3 -c *)",
       "Bash(node -e *)",
       "Bash(perl -e *)",
       "Bash(ruby -e *)",
@@ -148,11 +143,6 @@
       "Bash(kubectl exec *)",
       "Bash(kubectl delete *)",
       "Bash(docker exec *)",
-      "Bash(pip install *)",
-      "Bash(pip3 install *)",
-      "Bash(uv pip install *)",
-      "Bash(python -m pip install *)",
-      "Bash(python3 -m pip install *)",
       "Bash(npm install *)",
       "Bash(bun add *)",
       "Bash(python -m http.server *)",
@@ -161,7 +151,7 @@
       "Read(**/.env.*)",
       "Read(**/.envrc)"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "bypassPermissions"
   },
   "hooks": {
     "SessionStart": [
