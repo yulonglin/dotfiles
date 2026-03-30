@@ -74,6 +74,7 @@ COMPONENTS:
     --ai-update       Install AI tools auto-update (daily, both platforms)
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
+    --file-apps       Set default editor for coding file types (macOS only)
     --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
     --vpn             Install NordVPN+Tailscale split tunnel daemon (macOS only)
     --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
@@ -913,6 +914,37 @@ fi
 
 if [[ "$DEPLOY_EDITOR" == "true" ]] && is_macos && [[ -f "$DOT_DIR/custom_bins/safari-web-apps-scan" ]]; then
     "$DOT_DIR/custom_bins/safari-web-apps-scan" || log_warning "Safari web app scan failed (non-critical)"
+fi
+
+# ─── File Type Associations (macOS only) ─────────────────────────────────────
+
+if [[ "$DEPLOY_FILE_APPS" == "true" ]] && is_macos; then
+    log_section "SETTING DEFAULT FILE ASSOCIATIONS"
+
+    ASSOC_CONF="$DOT_DIR/config/file_associations.conf"
+    if [[ ! -f "$ASSOC_CONF" ]]; then
+        log_warning "config/file_associations.conf not found, skipping"
+    else
+        source "$ASSOC_CONF"
+
+        # Compile Swift tool if needed (binary missing or source newer)
+        tool_dir="$DOT_DIR/tools/set-default-app"
+        tool_bin="$tool_dir/set-default-app"
+        if [[ ! -x "$tool_bin" ]] || [[ "$tool_dir/main.swift" -nt "$tool_bin" ]]; then
+            log_info "Compiling set-default-app..."
+            if swiftc -O -o "$tool_bin" "$tool_dir/main.swift" 2>/dev/null; then
+                log_success "Compiled set-default-app"
+            else
+                log_warning "Swift compilation failed — skipping file associations"
+                DEPLOY_FILE_APPS=false
+            fi
+        fi
+
+        if [[ "$DEPLOY_FILE_APPS" == "true" ]]; then
+            "$tool_bin" "$EDITOR_BUNDLE_ID" "${EXTENSIONS[@]}"
+            log_success "File associations set to $EDITOR_BUNDLE_ID"
+        fi
+    fi
 fi
 
 # ─── Wait for background builds ─────────────────────────────────────────────
