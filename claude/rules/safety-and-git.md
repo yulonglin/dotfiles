@@ -9,6 +9,7 @@
 | **NEVER fabricate information** | Say "I don't know" when uncertain |
 | **NEVER ignore unexpected results** | Surprisingly good/bad → investigate before concluding. A hidden bug is worse than a failed experiment |
 | **NEVER commit secrets** | API keys, tokens, credentials |
+| **NEVER globally export API keys** | Source `.secrets` without `set -a`. No keys are exported globally — all stay shell-local. Access per-project via direnv/`.envrc` or symlinked `.env` files. Principle: no code running on this machine should have automatic access to API keys unless intentionally configured per-repo |
 | **NEVER run `git checkout --`** or any destructive Git (e.g. `git reset --hard`, `git clean -fd`): ALWAYS prefer safe, reversible alternatives, and ask the user if best practice is to do so | Can trigger catastrophic, irreversible data loss |
 | **NEVER use `sys.path.insert`** directly | Crashes Claude Code session (see `rules/coding-conventions.md` for safe pattern) |
 | **NEVER rewrite full file during race conditions** | If Edit fails with "file modified since read", pause and wait (exponential backoff), then ask user—NEVER use Write to overwrite entire file as workaround |

@@ -215,13 +215,9 @@ export WRITING_DIR="$HOME/Documents/writing"
 **Encrypted Secrets (SOPS + age)**:
 - Decrypts `config/secrets.env.enc` to `$DOT_DIR/.secrets` using `sops -d --config .sops.yaml` with age key
 - Age private key at `~/.config/sops/age/keys.txt` (stored in Bitwarden, pasted during cloud setup)
-- Shell integration: `.secrets` sourced by zshrc.sh (`set -a` exports all vars), direnv for per-project secrets
-- **Managed secrets** (all exported as env vars):
-  - `OPENAI_API_KEY` — OpenAI API access
-  - `OPENROUTER_API_KEY` — OpenRouter API access
-  - `ANTHROPIC_API_KEY` — Anthropic API access
-  - `HF_TOKEN` — Hugging Face Hub access
-  - `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` — Modal CLI/SDK auth (env vars replace `~/.modal.toml`)
+- Shell integration: `.secrets` sourced by zshrc.sh (no `set -a` — vars are NOT auto-exported). Only explicitly global keys are exported; project-specific keys stay shell-local
+- **No keys are globally exported.** All stay as shell-local vars (available in interactive shell, NOT inherited by subprocesses). Export per-project via direnv/`.envrc` or symlinked `.env` files
+- **Managed secrets**: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `HF_TOKEN`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`
 - **Adding new secrets**: Edit `.secrets` directly, then run `secrets-encrypt` to update the encrypted file. Or use `secrets-edit` to edit the encrypted file in-place (auto-decrypts after)
 - Commands: `secrets-init` (first-time setup), `secrets-edit` (edit encrypted, auto-refreshes `.secrets`), `secrets-encrypt` (encrypt `.secrets` → `secrets.env.enc`), `secrets-decrypt` (decrypt `secrets.env.enc` → `.secrets`), `secrets-init-project` (per-project setup)
 - All sops commands use explicit `--config` flag — sops searches from input file's directory by default, which fails when input is in `$TMPDIR`

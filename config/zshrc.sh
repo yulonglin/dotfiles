@@ -51,7 +51,13 @@ if [ -f "$ZSH/oh-my-zsh.sh" ]; then
 fi
 source $CONFIG_DIR/aliases.sh
 [ -f $CONFIG_DIR/secrets.sh ] && source $CONFIG_DIR/secrets.sh
-if [ -f "$DOT_DIR/.secrets" ]; then set -a; source "$DOT_DIR/.secrets"; set +a; fi
+if [ -f "$DOT_DIR/.secrets" ]; then
+  source "$DOT_DIR/.secrets"
+  # No keys are globally exported. All stay as shell-local vars.
+  # Export per-project via direnv/.envrc or symlinked .env files.
+  # Ad-hoc: `with-keys <cmd>` to run a single command with all keys exported.
+  with-keys() { ( set -a; source "$DOT_DIR/.secrets"; set +a; "$@" ) }
+fi
 source $CONFIG_DIR/ssh_setup.sh
 source $CONFIG_DIR/p10k.zsh
 source $CONFIG_DIR/extras.sh
@@ -155,8 +161,8 @@ if [ -d "$FNM_PATH" ] && ! command -v mise &>/dev/null; then
 fi
 
 if command -v ask-sh &> /dev/null; then
-  export ASK_SH_OPENAI_API_KEY=$(cat $HOME/.openai_api_key)
-  export ASK_SH_OPENAI_MODEL=gpt-4o-mini
+  ASK_SH_OPENAI_API_KEY=$(cat $HOME/.openai_api_key 2>/dev/null)
+  ASK_SH_OPENAI_MODEL=gpt-4o-mini
   eval "$(ask-sh --init)"
 fi
 
