@@ -13,7 +13,7 @@ Comprehensive dotfiles repository for ZSH, Tmux, Vim, SSH, and development tools
 **Flags are ADDITIVE to defaults unless `--minimal` is used**
 
 - `install.sh` defaults: macOS (`--zsh --tmux --ai-tools --cleanup`), Linux (`--zsh --tmux --ai-tools`)
-- `deploy.sh` defaults: `--vim --editor --claude --codex --ghostty --htop --matplotlib --git-hooks --secrets --secrets-env --cleanup --claude-cleanup --ai-update --brew-update` (file cleanup macOS only, rest both platforms)
+- `deploy.sh` defaults: `--vim --editor --claude --codex --ghostty --htop --matplotlib --git-hooks --secrets --secrets-env --cleanup --claude-cleanup --ai-update --brew-update --file-apps` (file cleanup macOS only, rest both platforms)
 - Adding flags extends defaults (e.g., `./install.sh --extras` = defaults + extras)
 - `--minimal` flag disables all defaults (only installs what you specify)
 - Modifiers (`--append`, `--ascii`, `--force`) don't affect defaults
@@ -92,6 +92,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - AI tools auto-update - Daily update of Claude Code, Gemini CLI, Codex CLI (6 AM, launchd/cron)
 - Developer config files - EditorConfig, curlrc, inputrc, .hushlogin (deployed with --editor flag)
 - Global gitattributes - Binary file handling + line endings (deployed with --git-config flag)
+- File associations - Set default editor for coding file types (macOS only, reads `config/file_associations.conf`)
 - Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, brew/apt/dnf/pacman, launchd/cron)
 
 ## Architecture
@@ -121,6 +122,7 @@ config/
 ├── serena/serena_config.yml  # Serena MCP config (symlinked, dashboard auto-open disabled)
 ├── mouseless/config.yaml # Mouseless keyboard mouse config (macOS only, copied not symlinked)
 ├── key_bindings.sh       # ZSH key bindings (sourced by zshrc.sh)
+├── file_associations.conf    # Default editor + file type associations (single source of truth)
 ├── gitconfig             # Git config template
 ├── ignore_global         # Universal ignore patterns (OS, editors, Python, LaTeX, Claude Code)
 ├── ignore_research       # Research-only ignore patterns (archive/, data/, experiments/, etc.)
@@ -176,6 +178,10 @@ config/matplotlib/        # Matplotlib style files (.mplstyle only)
 ├── anthropic.mplstyle    # Anthropic brand (white bg, PRETTY_CYCLE)
 ├── deepmind.mplstyle     # DeepMind (Google colors, white bg)
 └── petri.mplstyle        # Petri (ivory bg, editorial aesthetic)
+
+tools/
+├── claude-tools/         # Rust binary (statusline, usage)
+└── set-default-app/      # Swift CLI (macOS file type associations)
 ```
 
 ### Directory Environment Variables
@@ -270,6 +276,13 @@ export WRITING_DIR="$HOME/Documents/writing"
 - PYTHONPATH auto-configured in zshrc to include `~/.local/lib/plotting/`
 - Requires `--matplotlib` flag to deploy
 - Note: Python module updates require re-running `deploy.sh --matplotlib`
+
+**File Associations (`deploy --file-apps`)**:
+- Reads `config/file_associations.conf` for editor bundle ID and extension list
+- Compiles `tools/set-default-app/main.swift` (cached, rebuilds only when source changes)
+- Calls `LSSetDefaultRoleHandlerForContentType` per extension (deprecated macOS API, no replacement, works on Sequoia)
+- Same config drives `$EDITOR` and `$VISUAL` in zshrc.sh
+- macOS only (Linux uses `xdg-mime`, not implemented)
 
 **Claude Code Deployment** (Smart Merge):
 - Symlinks `claude/` to `~/.claude`
