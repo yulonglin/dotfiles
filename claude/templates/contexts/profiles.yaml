@@ -30,6 +30,9 @@ marketplaces:
   openai-codex:
     github: openai/codex-plugin-cc
     autoUpdate: true
+  rust-skills:
+    github: actionbook/rust-skills
+    autoUpdate: true
   ui-ux-pro-max-skill:
     github: nextlevelbuilder/ui-ux-pro-max-skill
     autoUpdate: true
@@ -98,6 +101,14 @@ profiles:
   python:
     comment: "Adds pyright-lsp"
     enable: [pyright-lsp]
+
+  rust:
+    comment: "Adds rust-skills (ownership, concurrency, architecture)"
+    enable: [rust-skills, rust-analyzer-lsp]
+
+  go:
+    comment: "Adds gopls-lsp"
+    enable: [gopls-lsp]
 
   web:
     comment: "Web dev + browser automation"
