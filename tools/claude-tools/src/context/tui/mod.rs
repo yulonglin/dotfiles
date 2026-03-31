@@ -11,23 +11,70 @@ use state::AppState;
 use crate::context::{builder, profiles, registry, settings};
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    // Load data
+    // Load data before entering TUI
     let (_base, profile_defs) = profiles::load_profiles()?;
     let active = settings::load_context_yaml()?
         .map(|(p, _, _)| p)
         .unwrap_or_default();
+
+    if profile_defs.is_empty() {
+        println!("No profiles defined in profiles.yaml");
+        return Ok(());
+    }
 
     let mut state = AppState::new(&profile_defs, &active);
 
     // Setup terminal
     enable_raw_mode()?;
     std::io::stdout().execute(EnterAlternateScreen)?;
+
+    // Run the main loop, ensuring terminal is always restored
+    let result = run_loop(&mut state);
+
+    // Always restore terminal, even on error
+    let _ = disable_raw_mode();
+    let _ = std::io::stdout().execute(LeaveAlternateScreen);
+
+    // Propagate any error from the loop
+    result?;
+
+    // Apply if user pressed enter
+    if state.apply {
+        let selected = state.selected_profile_names();
+        if selected.is_empty() {
+            println!("No profiles selected. Use --clean to remove context config.");
+            return Ok(());
+        }
+        if !state.is_modified() {
+            println!("No changes.");
+            return Ok(());
+        }
+        let reg = registry::load_registry()?;
+        let (base, profile_defs) = profiles::load_profiles()?;
+        let enabled = builder::build_plugins(&reg, &base, &profile_defs, &selected, &[], &[])?;
+        settings::apply_to_settings(&enabled)?;
+        settings::write_context_yaml(&selected, &[], &[])?;
+
+        let mut on: Vec<&str> = enabled
+            .iter()
+            .filter(|(_, v)| **v)
+            .map(|(k, _)| k.split('@').next().unwrap_or(k.as_str()))
+            .collect();
+        on.sort();
+        println!("\x1b[0;32mApplied:\x1b[0m {}", selected.join(", "));
+        println!("\x1b[0;32mEnabled:\x1b[0m {}", on.join(", "));
+        println!("\x1b[0;33mRestart Claude Code to apply changes.\x1b[0m");
+    }
+
+    Ok(())
+}
+
+fn run_loop(state: &mut AppState) -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(std::io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    // Main loop
     loop {
-        terminal.draw(|frame| view(frame, &state))?;
+        terminal.draw(|frame| view(frame, state))?;
 
         if let Event::Key(key) = event::read()? {
             if key.kind != KeyEventKind::Press {
@@ -50,32 +97,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 _ => {}
             }
         }
-    }
-
-    // Restore terminal
-    disable_raw_mode()?;
-    std::io::stdout().execute(LeaveAlternateScreen)?;
-
-    // Apply if user pressed enter
-    if state.apply && state.is_modified() {
-        let selected = state.selected_profile_names();
-        let reg = registry::load_registry()?;
-        let (base, profile_defs) = profiles::load_profiles()?;
-        let enabled = builder::build_plugins(&reg, &base, &profile_defs, &selected, &[], &[])?;
-        settings::apply_to_settings(&enabled)?;
-        settings::write_context_yaml(&selected, &[], &[])?;
-
-        let mut on: Vec<&str> = enabled
-            .iter()
-            .filter(|(_, v)| **v)
-            .map(|(k, _)| k.split('@').next().unwrap_or(k.as_str()))
-            .collect();
-        on.sort();
-        println!("\x1b[0;32mApplied:\x1b[0m {}", selected.join(", "));
-        println!("\x1b[0;32mEnabled:\x1b[0m {}", on.join(", "));
-        println!("\x1b[0;33mRestart Claude Code to apply changes.\x1b[0m");
-    } else if state.apply {
-        println!("No changes.");
     }
 
     Ok(())
@@ -129,7 +150,7 @@ fn view(frame: &mut Frame, state: &AppState) {
             Span::styled(symbol, name_style),
             Span::raw(" "),
             Span::styled(format!("{:<12}", profile.name), name_style),
-            Span::styled(&*profile.comment, theme::hint()),
+            Span::styled(profile.comment.as_str(), theme::hint()),
         ]));
 
         // Expand plugins for highlighted profile
@@ -154,6 +175,10 @@ fn view(frame: &mut Frame, state: &AppState) {
     lines.push(Line::from(vec![
         Span::styled("  space", theme::hint()),
         Span::raw(": toggle  "),
+        Span::styled("a", theme::hint()),
+        Span::raw(": all  "),
+        Span::styled("n", theme::hint()),
+        Span::raw(": none  "),
         Span::styled("enter", theme::hint()),
         Span::raw(": apply  "),
         Span::styled("q", theme::hint()),
