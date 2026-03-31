@@ -641,12 +641,12 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
         fi
 
         # Sync plugin marketplaces (declarative, from profiles.yaml)
-        if command -v claude-context &>/dev/null; then
+        if command -v claude-tools &>/dev/null; then
             log_info "Syncing plugin marketplaces..."
-            claude-context --sync -v || \
-                log_warning "Marketplace sync had issues — run manually: claude-context --sync"
+            claude-tools context --sync -v || \
+                log_warning "Marketplace sync had issues — run manually: claude-tools context --sync"
         else
-            log_warning "claude-context not found — skipping marketplace sync"
+            log_warning "claude-tools not found — skipping marketplace sync"
         fi
 
         # Clean plugin-created symlinks from skills/ (they cause duplicate entries)

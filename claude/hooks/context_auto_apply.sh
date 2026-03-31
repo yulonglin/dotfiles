@@ -3,13 +3,13 @@
 # Also triggers background marketplace sync if stale (>6h since last sync).
 CONTEXT_FILE=".claude/context.yaml"
 if [ -f "$CONTEXT_FILE" ]; then
-    claude-context 2>/dev/null
+    claude-tools context --apply 2>/dev/null
 else
     # Warn if inside a git repo without context profiles
     if git rev-parse --is-inside-work-tree &>/dev/null; then
         echo -e "\033[0;33mNo context profiles configured for this project.\033[0m"
-        echo -e "Run: claude-context <profile>  (e.g., claude-context code python)"
-        echo -e "List profiles: claude-context --list"
+        echo -e "Run: claude-tools context <profile>  (e.g., claude-tools context code python)"
+        echo -e "List profiles: claude-tools context --list"
     fi
 fi
 
@@ -32,10 +32,10 @@ elif command -v stat &>/dev/null; then
     fi
 fi
 
-if $should_sync && command -v claude-context &>/dev/null; then
+if $should_sync && command -v claude-tools &>/dev/null; then
     # Run sync in background, then clean plugin symlinks (anthropics/claude-code#14549)
     CLEAN_SCRIPT="${DOT_DIR:-$HOME/code/dotfiles}/scripts/cleanup/clean_plugin_symlinks.sh"
-    (claude-context --sync &>/dev/null && touch "$SYNC_STAMP"; bash "$CLEAN_SCRIPT" &>/dev/null) &
+    (claude-tools context --sync &>/dev/null && touch "$SYNC_STAMP"; bash "$CLEAN_SCRIPT" &>/dev/null) &
     disown 2>/dev/null
 fi
 
