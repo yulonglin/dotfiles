@@ -65,6 +65,9 @@ pub fn write_context_yaml(
     enable: &[String],
     disable: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if profile_names.is_empty() {
+        return Err("cannot write context.yaml with empty profiles".into());
+    }
     let mut lines = vec![
         "# .claude/context.yaml — committed, declares project's plugin needs".to_string(),
         format!("profiles:\n{}", profile_names.iter().map(|p| format!("  - {}", p)).collect::<Vec<_>>().join("\n")),
@@ -124,12 +127,11 @@ pub fn reset(force: bool) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         if !tracked.is_empty() {
-            eprintln!("\x1b[0;31mRefusing to modify git-tracked files:\x1b[0m");
-            for f in &tracked {
-                eprintln!("  {}", f);
-            }
-            eprintln!("\nUse \x1b[1m--force\x1b[0m to override (changes will show in git diff).");
-            std::process::exit(1);
+            let files = tracked.iter().map(|f| format!("  {}", f)).collect::<Vec<_>>().join("\n");
+            return Err(format!(
+                "Refusing to modify git-tracked files:\n{}\n\nUse --force to override (changes will show in git diff).",
+                files
+            ).into());
         }
     }
 

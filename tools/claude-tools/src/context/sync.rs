@@ -175,7 +175,7 @@ fn fix_hook_permissions(verbose: bool) {
                 use std::os::unix::fs::PermissionsExt;
                 let mode = meta.permissions().mode();
                 if mode & 0o111 == 0 {
-                    let _ = std::fs::set_permissions(&entry, std::fs::Permissions::from_mode(mode | 0o755));
+                    let _ = std::fs::set_permissions(&entry, std::fs::Permissions::from_mode(mode | 0o111));
                     fixed += 1;
                     if verbose {
                         if let Ok(rel) = Path::new(&entry).strip_prefix(&dir) {

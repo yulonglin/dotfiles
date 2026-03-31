@@ -60,7 +60,9 @@ pub fn build_plugins(
 
     let mut result = BTreeMap::new();
     for (name, enabled) in state {
-        let qid = registry.get(name).unwrap_or(&name.to_string()).clone();
+        let qid = registry.get(name)
+            .expect("state keys come from registry.keys(), so this should never fail")
+            .clone();
         result.insert(qid, enabled);
     }
 
