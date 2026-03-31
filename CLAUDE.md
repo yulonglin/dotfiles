@@ -20,6 +20,11 @@ Comprehensive dotfiles repository for ZSH, Tmux, Vim, SSH, and development tools
 
 See README.md for detailed usage.
 
+### Spec and Plan Locations
+
+- **Specs** go in `specs/`, not `docs/superpowers/specs/` (overrides brainstorming skill default)
+- **Plans** go in `plans/` (via `plansDirectory` setting)
+
 ### Git Workflow
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
@@ -166,7 +171,6 @@ custom_bins/              # Custom utilities (added to PATH)
 ├── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
 ├── machine-name          # Machine name for prompt/statusline (registry → SSH config → hostname)
 ├── machine-register      # Register/list/remove machines in config/machines.conf
-├── claude-context        # YAML-driven plugin profiles + marketplace sync (--sync)
 ├── claude-cache-clean    # Remove stale plugin cache versions
 └── any2md                # Universal content-to-markdown converter (files, URLs, arxiv, dirs)
 
@@ -382,7 +386,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 
 ## Learnings
 <!-- Claude: add project-specific discoveries below. Prune entries >2 weeks old. Keep under 20 entries. -->
-- Plugin reorganization: code-quality → code, added workflow (agent-teams, handover, compact, insights) and viz (tikz-diagrams). Context profiles via `claude-context` CLI. Global settings now explicitly disable all non-essential plugins. insights absorbed into workflow. humanize-draft merged into review-draft as 5th critic. Renamed *-toolkit → * for shorter agent prefixes (2026-02-17)
+- Plugin reorganization: code-quality → code, added workflow (agent-teams, handover, compact, insights) and viz (tikz-diagrams). Context profiles via `claude-tools context` CLI. Global settings now explicitly disable all non-essential plugins. insights absorbed into workflow. humanize-draft merged into review-draft as 5th critic. Renamed *-toolkit → * for shorter agent prefixes (2026-02-17)
 - Rate limit account switching: restarting Claude Code does NOT clear cached usage — must fully logout (`claude auth logout`) then login again. `claude-switch` alias does both. Statusline shows 🚨 reminder at ≥95% usage. SessionStart hook shows current auth account. `claude-tools` binary (Rust, `tools/claude-tools/`) can be recompiled with `cargo build --release` and copied to `custom_bins/` (2026-03-25)
 - Codex CLI `codex exec` crashes inside Claude Code sandbox on macOS with `SCDynamicStoreCreate NULL` panic (`system-configuration` crate v0.6.1). Workaround: use `dangerouslyDisableSandbox: true` on Bash calls to `codex exec`. `codex --version`/`--help` work fine (no HTTP client init). Tracked: openai/codex#15640, #15296. Remove workaround when crate is upgraded (2026-03-26)
-- Marketplace auto-update: three config layers — (1) `extraKnownMarketplaces` in settings.json declares sources (portable), (2) `autoUpdate: true` in profiles.yaml is source of truth, (3) `claude-context --sync` patches runtime `known_marketplaces.json`. All marketplaces use GitHub repos; local paths opt-in via `CLAUDE_CONTEXT_LOCAL=1`. SessionStart hook warns when no context profile configured (2026-03-26)
+- Marketplace auto-update: three config layers — (1) `extraKnownMarketplaces` in settings.json declares sources (portable), (2) `autoUpdate: true` in profiles.yaml is source of truth, (3) `claude-tools context --sync` patches runtime `known_marketplaces.json`. All marketplaces use GitHub repos; local paths opt-in via `CLAUDE_CONTEXT_LOCAL=1`. SessionStart hook warns when no context profile configured (2026-03-26)

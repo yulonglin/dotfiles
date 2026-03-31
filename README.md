@@ -247,12 +247,12 @@ Claude Code supports community plugin marketplaces. These are worth exploring in
 | **[productivity-tools](https://github.com/anthropics/claude-plugins-official)**     | Hookify, plugin dev tools                                        |
 
 
-Profiles are managed via the `claude-context` CLI — compose multiple profiles to control which plugins load per-project:
+Profiles are managed via the `claude-tools context` CLI — compose multiple profiles to control which plugins load per-project:
 
 ```bash
-claude-context code               # Software projects
-claude-context code web python    # Compose multiple profiles
-claude-context --list             # Show active plugins and available profiles
+claude-tools context code               # Software projects
+claude-tools context code web python    # Compose multiple profiles
+claude-tools context --list             # Show active plugins and available profiles
 ```
 
 ### Codex CLI (OpenAI)

@@ -127,14 +127,14 @@ Rules:
 - `workflow` — agent teams, handover, conversation management, analytics
 - `viz` — TikZ diagrams, Anthropic-style visualization
 
-**Context profiles** control which plugins load per-project via `claude-context`:
+**Context profiles** control which plugins load per-project via `claude-tools context`:
 ```bash
-claude-context                    # Show current state / apply context.yaml
-claude-context code               # Software projects
-claude-context code web python    # Compose multiple profiles
-claude-context --list             # Show active plugins and available profiles
-claude-context --clean            # Remove project plugin config
-claude-context --sync [-v]        # Register + update all plugin marketplaces
+claude-tools context                    # Show current state / apply context.yaml
+claude-tools context code               # Software projects
+claude-tools context code web python    # Compose multiple profiles
+claude-tools context --list             # Show active plugins and available profiles
+claude-tools context --clean            # Remove project plugin config
+claude-tools context --sync [-v]        # Register + update all plugin marketplaces
 ```
 
 **Architecture:**
@@ -147,7 +147,7 @@ claude-context --sync [-v]        # Register + update all plugin marketplaces
 - SessionStart hook auto-applies `context.yaml` on every session start
 - Statusline shows active context profiles (e.g., `[code python]`)
 
-Adding a new plugin: add its marketplace to `marketplaces:` in `profiles.yaml`, run `claude-context --sync`, then add to a profile.
+Adding a new plugin: add its marketplace to `marketplaces:` in `profiles.yaml`, run `claude-tools context --sync`, then add to a profile.
 
 ---
 
