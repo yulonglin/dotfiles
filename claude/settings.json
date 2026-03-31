@@ -6,7 +6,9 @@
     "ENABLE_TOOL_SEARCH": "1",
     "BASH_MAX_OUTPUT_LENGTH": "100000",
     "CLAUDECODE": "",
-    "CLAUDE_CODE_AUTO_COMPACT_THRESHOLD": "250000"
+    "CLAUDE_CODE_AUTO_COMPACT_THRESHOLD": "250000",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "CLAUDE_CODE_COORDINATOR_MODE=1": "1"
   },
   "includeCoAuthoredBy": false,
   "permissions": {
@@ -159,7 +161,7 @@
       "Read(**/.env.*)",
       "Read(**/.envrc)"
     ],
-    "defaultMode": "bypassPermissions"
+    "defaultMode": "acceptEdits"
   },
   "hooks": {
     "SessionStart": [
@@ -398,6 +400,12 @@
         "source": "github",
         "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
       }
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
     }
   },
   "outputStyle": "10x Mentor",
@@ -429,15 +437,15 @@
     ]
   },
   "alwaysThinkingEnabled": true,
-  "showThinkingSummaries": true,
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
+  "voiceEnabled": true,
   "autoMemoryDirectory": "memory",
+  "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
   "chrome": {
-    "enabled": false
+    "enabled": true
   },
   "teammateMode": "auto",
-  "installMethod": "native",
-  "voiceEnabled": true
+  "installMethod": "native"
 }
