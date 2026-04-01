@@ -2,6 +2,9 @@
   "restrictions": {
     "allow_remote_control": {
       "allowed": false
+    },
+    "allow_quick_web_setup": {
+      "allowed": false
     }
   }
 }

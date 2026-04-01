@@ -103,8 +103,17 @@ pub fn apply_from_context_yaml() -> Result<Option<(Vec<String>, BTreeMap<String,
         return Ok(None);
     }
 
-    let reg = super::registry::load_registry()?;
-    let (base, profiles) = super::profiles::load_profiles()?;
+    // Graceful degradation: if profiles.yaml or installed_plugins.json is missing
+    // (e.g., cloned project on a machine without dotfiles deployed), skip silently.
+    // settings.json is already correct from the last successful apply.
+    let reg = match super::registry::load_registry() {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
+    let (base, profiles) = match super::profiles::load_profiles() {
+        Ok(p) => p,
+        Err(_) => return Ok(None),
+    };
     let enabled = super::builder::build_plugins(&reg, &base, &profiles, &profile_names, &enable, &disable)?;
     apply_to_settings(&enabled)?;
     Ok(Some((profile_names, enabled)))

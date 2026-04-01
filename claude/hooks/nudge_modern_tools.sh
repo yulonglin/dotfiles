@@ -7,7 +7,8 @@ set -euo pipefail
 # REDIRECTS: "ask"-category commands that have auto-allowed alternatives
 #            (blocks with specific suggestion, avoids permission prompt entirely)
 # ALLOWS: same commands in pipelines/streams (no built-in equivalent)
-# NUDGES: awk, curl, wget, ls, echo/printf redirection (soft suggestions)
+# NUDGES: awk, curl (complex), wget (complex), ls, echo/printf redirection (soft suggestions)
+# BLOCKS: curl/wget simple GETs (WebFetch is strictly better, no permission prompt)
 
 input=$(cat)
 command=$(echo "$input" | jq -r '.tool_input.command // ""')
@@ -89,10 +90,21 @@ elif has_cmd xargs && ! is_piped_only xargs; then
 # NUDGE: soft suggestions for commands with partial alternatives
 elif has_cmd awk; then
     nudge="Consider the built-in **Grep** tool (extraction) or \`jq\` (structured data) over \`awk\`."
-elif has_cmd curl; then
-    nudge="**\`curl\`** requires confirmation. Prefer **WebFetch** tool (domain-gated, auditable, auto-allowed). If you need curl specifically, the user will be prompted."
-elif has_cmd wget; then
-    nudge="**\`wget\`** requires confirmation. Prefer **WebFetch** tool (domain-gated, auditable, auto-allowed). If you need wget specifically, the user will be prompted."
+elif has_cmd curl && ! is_piped_only curl; then
+    # Block simple GETs (WebFetch is strictly better), nudge complex usage
+    if [[ "$command" =~ curl[[:space:]]+(-s[[:space:]]+|-S[[:space:]]+|-sS[[:space:]]+|-Ss[[:space:]]+)*https?:// ]] \
+       && ! [[ "$command" =~ curl.*[[:space:]](-[a-zA-Z]*[oOHdXu]|--output|--header|--data|--request|--user|--upload-file|-fsSL|-LO) ]]; then
+        block_reason="Use the built-in **WebFetch** tool instead of \`curl\` for simple GETs — auto-allowed, no permission prompt. Use \`curl\` for downloads (\`-o\`), installs (\`-fsSL\`), or API calls (\`-H\`/\`-d\`)."
+    else
+        nudge="**\`curl\`** requires confirmation. Prefer **WebFetch** tool when fetching page/API content. curl is fine for binary downloads, installs, and complex requests."
+    fi
+elif has_cmd wget && ! is_piped_only wget; then
+    if [[ "$command" =~ wget[[:space:]]+(-q[[:space:]]+|-nv[[:space:]]+)*https?:// ]] \
+       && ! [[ "$command" =~ wget.*[[:space:]](-[a-zA-Z]*[oO]|--output-document|--header|--post-data) ]]; then
+        block_reason="Use the built-in **WebFetch** tool instead of \`wget\` for simple GETs — auto-allowed, no permission prompt."
+    else
+        nudge="**\`wget\`** requires confirmation. Prefer **WebFetch** tool when fetching page/API content."
+    fi
 elif has_cmd xargs && is_piped_only xargs; then
     nudge="**\`xargs\`** in pipes requires confirmation. Consider \`while IFS= read -r\` as an auto-allowed alternative."
 elif has_cmd ls; then
