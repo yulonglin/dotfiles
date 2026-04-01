@@ -193,7 +193,7 @@ _reset_terminal_modes() {
     [[ -t 1 ]] && printf '\e[?1049l'  # exit alternate screen buffer
 }
 autoload -Uz add-zsh-hook
-add-zsh-hook precmd _reset_terminal_modes_soft
+add-zsh-hook precmd _reset_terminal_modes
 
 # Only display ASCII art in interactive shells
 if [[ -o interactive ]]; then
