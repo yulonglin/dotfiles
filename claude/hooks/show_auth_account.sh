@@ -3,56 +3,35 @@
 
 auth_json=$(claude auth status 2>&1) || true
 
-msg=$(echo "$auth_json" | python3 -c "
-import json, sys, os, subprocess
-
-# Parse auth info
+account=$(echo "$auth_json" | python3 -c "
+import json, sys
 try:
     d = json.load(sys.stdin)
     email = d.get('email')
     method = d.get('authMethod', 'unknown')
     source = d.get('apiKeySource', '')
-    if email:
-        auth = f'{email} ({method})'
-    elif source:
-        auth = f'{method} via {source}'
-    else:
-        auth = method
-except:
-    auth = 'unknown'
-
-parts = [f'Auth: {auth}']
-
-# Check usage — warn if near limit
-try:
-    token = subprocess.check_output(
-        ['claude', 'auth', 'token'], stderr=subprocess.DEVNULL, text=True
-    ).strip()
-    if token:
-        import urllib.request
-        req = urllib.request.Request(
-            'https://api.anthropic.com/api/oauth/usage',
-            headers={'Authorization': f'Bearer {token}'}
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            usage = json.loads(resp.read())
-        five_pct = round(usage.get('five_hour', {}).get('utilization', 0))
-        seven_pct = round(usage.get('seven_day', {}).get('utilization', 0))
-        if five_pct >= 95 or seven_pct >= 95:
-            parts.append(f'Near limit (5h:{five_pct}% 7d:{seven_pct}%)! \`claude-switch\` to logout+login — restart alone won\\'t clear cached usage')
-except:
-    pass
-
-print('\\n'.join(parts))
+    if email: print(f'{email} ({method})')
+    elif source: print(f'{method} via {source}')
+    else: print(method)
+except: print('unknown')
 " 2>/dev/null)
 
+msg="Auth: ${account}"
+
+# Check cached usage for near-limit warning
+cache_file="${TMPDIR:-/tmp/claude}/claude-statusline-usage.json"
+if [[ -f "$cache_file" ]]; then
+  read -r five_pct seven_pct < <(python3 -c "
+import json, sys
+with open('$cache_file') as f: d = json.load(f)
+print(round(d.get('five_hour',{}).get('utilization',0)), round(d.get('seven_day',{}).get('utilization',0)))
+" 2>/dev/null) || true
+  if [[ "${five_pct:-0}" -ge 95 ]] 2>/dev/null || [[ "${seven_pct:-0}" -ge 95 ]] 2>/dev/null; then
+    msg="${msg}
+Near limit (5h:${five_pct}% 7d:${seven_pct}%)! \`claude-switch\` to logout+login — restart alone won't clear cached usage"
+  fi
+fi
+
 python3 -c "
-import json
-output = {
-    'hookSpecificOutput': {
-        'hookEventName': 'SessionStart',
-        'additionalContext': '''$msg'''
-    }
-}
-print(json.dumps(output))
-"
+import json, sys
+print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': sys.stdin.read().strip()}}))" <<< "$msg"
