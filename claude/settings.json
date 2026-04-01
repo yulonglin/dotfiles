@@ -8,7 +8,7 @@
     "CLAUDECODE": "",
     "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "250000",
     "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
-    "CLAUDE_CODE_COORDINATOR_MODE=1": "1",
+    "CLAUDE_CODE_COORDINATOR_MODE": "1",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50"
   },
   "includeCoAuthoredBy": false,
@@ -457,6 +457,9 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": true,
+    "filesystem": {
+      "allowWrite": ["~/.Trash"]
+    },
     "network": {
       "allowedDomains": [
         "api.anthropic.com",
@@ -470,7 +473,8 @@
         "mcp.linear.app",
         "export.arxiv.org",
         "arxiv.org"
-      ]
+      ],
+      "allowLocalBinding": true
     },
     "excludedCommands": [
       "gh",
@@ -491,5 +495,16 @@
     "enabled": true
   },
   "teammateMode": "auto",
-  "installMethod": "native"
+  "installMethod": "native",
+  "worktree": {
+    "symlinkDirectories": [".venv", "node_modules", "target", ".git/lfs"]
+  },
+  "claudeMdExcludes": ["node_modules", "vendor", ".venv", "target"],
+  "fileSuggestion": {
+    "type": "command",
+    "command": "fd --type f --hidden --exclude .git"
+  },
+  "feedbackSurveyRate": 0,
+  "showTurnDuration": true,
+  "terminalProgressBarEnabled": true
 }
