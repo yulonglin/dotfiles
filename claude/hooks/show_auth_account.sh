@@ -23,9 +23,9 @@ cache_file="${TMPDIR:-/tmp/claude}/claude-statusline-usage.json"
 if [[ -f "$cache_file" ]]; then
   read -r five_pct seven_pct < <(python3 -c "
 import json, sys
-with open('$cache_file') as f: d = json.load(f)
+with open(sys.argv[1]) as f: d = json.load(f)
 print(round(d.get('five_hour',{}).get('utilization',0)), round(d.get('seven_day',{}).get('utilization',0)))
-" 2>/dev/null) || true
+" "$cache_file" 2>/dev/null) || true
   if [[ "${five_pct:-0}" -ge 95 ]] 2>/dev/null || [[ "${seven_pct:-0}" -ge 95 ]] 2>/dev/null; then
     msg="${msg}
 Near limit (5h:${five_pct}% 7d:${seven_pct}%)! \`claude-switch\` to logout+login — restart alone won't clear cached usage"
