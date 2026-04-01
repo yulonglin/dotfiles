@@ -194,7 +194,8 @@ _reset_terminal_modes() {
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd _reset_terminal_modes_soft
-# Exit alt screen once at shell startup (recovers scrollback after SSH disconnect)
+# Exit alt screen once at shell startup (recovers scrollback after SSH disconnect;
+# mid-session kill -9 of alt-screen apps needs manual fix-term)
 _reset_terminal_modes
 
 # Only display ASCII art in interactive shells
