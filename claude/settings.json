@@ -204,6 +204,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_mark.sh idle",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_remember.sh",
+            "timeout": 3
           }
         ]
       }
