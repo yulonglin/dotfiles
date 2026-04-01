@@ -8,6 +8,15 @@ pub mod tui;
 
 use clap::Parser;
 
+// Shared path constants
+pub const CONTEXT_FILE: &str = ".claude/context.yaml";
+pub const TARGET_FILE: &str = ".claude/settings.json";
+pub const INSTALLED_PLUGINS_PATH: &str = "~/.claude/plugins/installed_plugins.json";
+pub const KNOWN_MARKETPLACES_PATH: &str = "~/.claude/plugins/known_marketplaces.json";
+pub const MARKETPLACES_DIR: &str = "~/.claude/plugins/marketplaces";
+pub const PROFILES_PATH: &str = "~/.claude/templates/contexts/profiles.yaml";
+pub const GLOBAL_SETTINGS: &str = "~/.claude/settings.json";
+
 #[derive(Parser, Debug)]
 #[command(name = "context", about = "YAML-driven plugin profiles for Claude Code")]
 pub struct ContextArgs {
@@ -63,10 +72,9 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
         settings::write_context_yaml(&ctx_args.profiles, &[], &[])?;
         display::print_apply_summary(&ctx_args.profiles, &enabled);
     } else if ctx_args.apply {
-        // Explicit apply from context.yaml (hook path)
-        let applied = settings::apply_from_context_yaml()?;
-        if applied {
-            display::print_context_yaml_summary()?;
+        // Explicit apply from context.yaml (hook path — keep lean)
+        if let Some((pnames, enabled)) = settings::apply_from_context_yaml()? {
+            display::print_applied_context(&pnames, &enabled);
         }
     } else if ctx_args.tui || std::io::IsTerminal::is_terminal(&std::io::stdout()) {
         // Interactive TUI

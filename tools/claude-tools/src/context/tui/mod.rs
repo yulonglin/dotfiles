@@ -8,11 +8,12 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use state::AppState;
-use crate::context::{builder, profiles, registry, settings};
+use crate::context::{builder, display, profiles, registry, settings};
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    // Load data before entering TUI
-    let (_base, profile_defs) = profiles::load_profiles()?;
+    // Load data before entering TUI (reused in apply path)
+    let reg = registry::load_registry()?;
+    let (base, profile_defs) = profiles::load_profiles()?;
     let active = settings::load_context_yaml()?
         .map(|(p, _, _)| p)
         .unwrap_or_default();
@@ -49,21 +50,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("No changes.");
             return Ok(());
         }
-        let reg = registry::load_registry()?;
-        let (base, profile_defs) = profiles::load_profiles()?;
         let enabled = builder::build_plugins(&reg, &base, &profile_defs, &selected, &[], &[])?;
         settings::apply_to_settings(&enabled)?;
         settings::write_context_yaml(&selected, &[], &[])?;
-
-        let mut on: Vec<&str> = enabled
-            .iter()
-            .filter(|(_, v)| **v)
-            .map(|(k, _)| k.split('@').next().unwrap_or(k.as_str()))
-            .collect();
-        on.sort();
-        println!("\x1b[0;32mApplied:\x1b[0m {}", selected.join(", "));
-        println!("\x1b[0;32mEnabled:\x1b[0m {}", on.join(", "));
-        println!("\x1b[0;33mRestart Claude Code to apply changes.\x1b[0m");
+        display::print_apply_summary(&selected, &enabled);
     }
 
     Ok(())

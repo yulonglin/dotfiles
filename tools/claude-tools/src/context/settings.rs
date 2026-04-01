@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 use serde::Deserialize;
-
-const CONTEXT_FILE: &str = ".claude/context.yaml";
-const TARGET_FILE: &str = ".claude/settings.json";
+use crate::util::{self, atomic_write_json};
 
 #[derive(Deserialize)]
 struct ContextYaml {
@@ -14,12 +12,12 @@ struct ContextYaml {
 
 /// Write enabledPlugins to .claude/settings.json, preserving other keys.
 /// Sorts: enabled first (by marketplace, then name), then disabled.
-/// Uses atomic write (temp file + rename).
 pub fn apply_to_settings(
     enabled_plugins: &BTreeMap<String, bool>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut existing: serde_json::Value = if Path::new(TARGET_FILE).exists() {
-        let content = std::fs::read_to_string(TARGET_FILE)?;
+    let target = super::TARGET_FILE;
+    let mut existing: serde_json::Value = if Path::new(target).exists() {
+        let content = std::fs::read_to_string(target)?;
         serde_json::from_str(&content)
             .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()))
     } else {
@@ -49,14 +47,7 @@ pub fn apply_to_settings(
         .ok_or("settings.json is not a JSON object")?
         .insert("enabledPlugins".to_string(), plugins_map.into());
 
-    let dir = Path::new(TARGET_FILE).parent().unwrap_or(Path::new("."));
-    std::fs::create_dir_all(dir)?;
-    let tmp_path = format!("{}.tmp", TARGET_FILE);
-    let content = serde_json::to_string_pretty(&existing)?;
-    std::fs::write(&tmp_path, format!("{}\n", content))?;
-    std::fs::rename(&tmp_path, TARGET_FILE)?;
-
-    Ok(())
+    atomic_write_json(target, &existing)
 }
 
 /// Write .claude/context.yaml with profile selection.
@@ -68,6 +59,7 @@ pub fn write_context_yaml(
     if profile_names.is_empty() {
         return Err("cannot write context.yaml with empty profiles".into());
     }
+    let ctx_file = super::CONTEXT_FILE;
     let mut lines = vec![
         "# .claude/context.yaml — committed, declares project's plugin needs".to_string(),
         format!("profiles:\n{}", profile_names.iter().map(|p| format!("  - {}", p)).collect::<Vec<_>>().join("\n")),
@@ -79,18 +71,19 @@ pub fn write_context_yaml(
         lines.push(format!("disable:\n{}", disable.iter().map(|d| format!("  - {}", d)).collect::<Vec<_>>().join("\n")));
     }
 
-    let dir = Path::new(CONTEXT_FILE).parent().unwrap_or(Path::new("."));
+    let dir = Path::new(ctx_file).parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir)?;
-    std::fs::write(CONTEXT_FILE, lines.join("\n") + "\n")?;
+    std::fs::write(ctx_file, lines.join("\n") + "\n")?;
     Ok(())
 }
 
 /// Load .claude/context.yaml. Returns None if it doesn't exist.
 pub fn load_context_yaml() -> Result<Option<(Vec<String>, Vec<String>, Vec<String>)>, Box<dyn std::error::Error>> {
-    if !Path::new(CONTEXT_FILE).exists() {
+    let ctx_file = super::CONTEXT_FILE;
+    if !Path::new(ctx_file).exists() {
         return Ok(None);
     }
-    let content = std::fs::read_to_string(CONTEXT_FILE)?;
+    let content = std::fs::read_to_string(ctx_file)?;
     let ctx: ContextYaml = serde_yaml::from_str(&content)?;
     Ok(Some((
         ctx.profiles.unwrap_or_default(),
@@ -99,29 +92,32 @@ pub fn load_context_yaml() -> Result<Option<(Vec<String>, Vec<String>, Vec<Strin
     )))
 }
 
-/// Apply context.yaml to settings.json. Returns true if applied.
-pub fn apply_from_context_yaml() -> Result<bool, Box<dyn std::error::Error>> {
+/// Apply context.yaml to settings.json. Returns profile names and enabled map if applied.
+pub fn apply_from_context_yaml() -> Result<Option<(Vec<String>, BTreeMap<String, bool>)>, Box<dyn std::error::Error>> {
     let ctx = match load_context_yaml()? {
         Some(c) => c,
-        None => return Ok(false),
+        None => return Ok(None),
     };
     let (profile_names, enable, disable) = ctx;
     if profile_names.is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
 
     let reg = super::registry::load_registry()?;
     let (base, profiles) = super::profiles::load_profiles()?;
     let enabled = super::builder::build_plugins(&reg, &base, &profiles, &profile_names, &enable, &disable)?;
     apply_to_settings(&enabled)?;
-    Ok(true)
+    Ok(Some((profile_names, enabled)))
 }
 
 /// Remove project plugin config. Guards git-tracked files unless force=true.
 pub fn reset(force: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let ctx_file = super::CONTEXT_FILE;
+    let target = super::TARGET_FILE;
+
     if !force {
         let mut tracked = Vec::new();
-        for path in [CONTEXT_FILE, TARGET_FILE] {
+        for path in [ctx_file, target] {
             if Path::new(path).exists() && is_git_tracked(path) {
                 tracked.push(path);
             }
@@ -137,26 +133,25 @@ pub fn reset(force: bool) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut changed = false;
 
-    if Path::new(CONTEXT_FILE).exists() {
-        std::fs::remove_file(CONTEXT_FILE)?;
-        println!("\x1b[0;32mRemoved:\x1b[0m {}", CONTEXT_FILE);
+    if Path::new(ctx_file).exists() {
+        std::fs::remove_file(ctx_file)?;
+        println!("{}Removed:{} {}", util::GREEN, util::RESET, ctx_file);
         changed = true;
     }
 
-    if Path::new(TARGET_FILE).exists() {
-        let content = std::fs::read_to_string(TARGET_FILE)?;
+    if Path::new(target).exists() {
+        let content = std::fs::read_to_string(target)?;
         let mut data: serde_json::Value = serde_json::from_str(&content)
             .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
 
         if let Some(obj) = data.as_object_mut() {
             if obj.remove("enabledPlugins").is_some() {
                 if obj.is_empty() {
-                    std::fs::remove_file(TARGET_FILE)?;
-                    println!("\x1b[0;32mRemoved:\x1b[0m {} (was empty after cleanup)", TARGET_FILE);
+                    std::fs::remove_file(target)?;
+                    println!("{}Removed:{} {} (was empty after cleanup)", util::GREEN, util::RESET, target);
                 } else {
-                    let out = serde_json::to_string_pretty(&data)?;
-                    std::fs::write(TARGET_FILE, format!("{}\n", out))?;
-                    println!("\x1b[0;32mRemoved enabledPlugins from:\x1b[0m {}", TARGET_FILE);
+                    atomic_write_json(target, &data)?;
+                    println!("{}Removed enabledPlugins from:{} {}", util::GREEN, util::RESET, target);
                 }
                 changed = true;
             }
@@ -164,9 +159,9 @@ pub fn reset(force: bool) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if !changed {
-        println!("\x1b[0;33mNothing to reset.\x1b[0m");
+        println!("{}Nothing to reset.{}", util::YELLOW, util::RESET);
     } else {
-        println!("\x1b[0;33mRestart Claude Code to apply changes.\x1b[0m");
+        println!("{}Restart Claude Code to apply changes.{}", util::YELLOW, util::RESET);
     }
     Ok(())
 }

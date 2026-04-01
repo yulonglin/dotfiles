@@ -2,36 +2,30 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
 use super::profiles::MarketplaceConfig;
-use crate::util::expand_home;
-
-const KNOWN_MARKETPLACES: &str = "~/.claude/plugins/known_marketplaces.json";
-const MARKETPLACES_DIR: &str = "~/.claude/plugins/marketplaces";
-const INSTALLED_PLUGINS: &str = "~/.claude/plugins/installed_plugins.json";
+use crate::util::{self, expand_home, plugin_short_name, atomic_write_json};
 
 /// Main sync entry point.
 pub fn run(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
-    // Check claude CLI exists
     if which("claude").is_none() {
-        println!("\x1b[0;33mClaude CLI not found — skipping marketplace sync.\x1b[0m");
+        println!("{}Claude CLI not found — skipping marketplace sync.{}", util::YELLOW, util::RESET);
         return Ok(());
     }
 
     let marketplaces = super::profiles::load_marketplaces()?;
     if marketplaces.is_empty() {
-        println!("\x1b[0;33mNo marketplaces defined in profiles.yaml\x1b[0m");
+        println!("{}No marketplaces defined in profiles.yaml{}", util::YELLOW, util::RESET);
         return Ok(());
     }
 
-    // Get currently registered marketplaces
     let registered = get_registered_marketplaces();
 
-    // Phase 1: Register new marketplaces (sequential)
+    // Phase 1: Register new marketplaces (sequential — rare)
     let mut to_update = Vec::new();
     let mut errors = 0;
     for (name, config) in &marketplaces {
         let source = resolve_source(name, config);
         let Some(source) = source else {
-            eprintln!("\x1b[0;31m  {}: no valid source configured\x1b[0m", name);
+            eprintln!("{}  {}: no valid source configured{}", util::RED, name, util::RESET);
             errors += 1;
             continue;
         };
@@ -46,12 +40,12 @@ pub fn run(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
             match result {
                 Ok(out) if !out.status.success() => {
                     let err = String::from_utf8_lossy(&out.stderr);
-                    eprintln!("\x1b[0;31m  {}: registration failed — {}\x1b[0m", name, err.trim());
+                    eprintln!("{}  {}: registration failed — {}{}", util::RED, name, err.trim(), util::RESET);
                     errors += 1;
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("\x1b[0;31m  {}: registration failed — {}\x1b[0m", name, e);
+                    eprintln!("{}  {}: registration failed — {}{}", util::RED, name, e, util::RESET);
                     errors += 1;
                     continue;
                 }
@@ -87,21 +81,20 @@ pub fn run(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
         if ok {
             synced += 1;
             if verbose {
-                println!("  \x1b[0;32m✔\x1b[0m {}", name);
+                println!("  {}✔{} {}", util::GREEN, util::RESET, name);
             }
         } else {
-            println!("\x1b[0;33m  {}: {}\x1b[0m", name, msg);
+            println!("{}  {}: {}{}", util::YELLOW, name, msg, util::RESET);
         }
     }
 
     let total = marketplaces.len();
     if errors > 0 {
-        println!("\x1b[0;33mSynced {}/{} marketplaces ({} error(s))\x1b[0m", synced, total, errors);
+        println!("{}Synced {}/{} marketplaces ({} error(s)){}", util::YELLOW, synced, total, errors, util::RESET);
     } else {
-        println!("\x1b[0;32mSynced {}/{} marketplaces\x1b[0m", synced, total);
+        println!("{}Synced {}/{} marketplaces{}", util::GREEN, synced, total, util::RESET);
     }
 
-    // Post-sync steps
     fix_hook_permissions(verbose);
     apply_auto_update(&marketplaces, verbose)?;
     normalize_scopes(verbose)?;
@@ -129,7 +122,6 @@ fn get_registered_marketplaces() -> std::collections::HashSet<String> {
 }
 
 fn resolve_source(_name: &str, config: &MarketplaceConfig) -> Option<String> {
-    // CLAUDE_CONTEXT_LOCAL=1 prefers local paths
     if std::env::var("CLAUDE_CONTEXT_LOCAL").as_deref() == Ok("1") {
         if let Some(local) = &config.local {
             let expanded = expand_env(local);
@@ -141,16 +133,17 @@ fn resolve_source(_name: &str, config: &MarketplaceConfig) -> Option<String> {
     config.github.clone()
 }
 
+/// Expand ${VAR} syntax only (not bare $VAR).
 fn expand_env(s: &str) -> String {
     let mut result = String::new();
     let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '$' && chars.peek() == Some(&'{') {
-            chars.next(); // consume '{'
+            chars.next();
             let key: String = chars.by_ref().take_while(|&c| c != '}').collect();
             let val = std::env::var(&key).unwrap_or_else(|_| {
                 match key.as_str() {
-                    "CODE_DIR" => crate::util::expand_home("~/code"),
+                    "CODE_DIR" => expand_home("~/code"),
                     _ => format!("${{{}}}", key),
                 }
             });
@@ -159,12 +152,12 @@ fn expand_env(s: &str) -> String {
             result.push(c);
         }
     }
-    crate::util::expand_home(&result)
+    expand_home(&result)
 }
 
-/// chmod +x all .sh files under marketplaces dir.
+/// Marketplace hooks may lose execute bits when cloned from git tarballs.
 fn fix_hook_permissions(verbose: bool) {
-    let dir = expand_home(MARKETPLACES_DIR);
+    let dir = expand_home(super::MARKETPLACES_DIR);
     if !Path::new(&dir).is_dir() {
         return;
     }
@@ -187,16 +180,15 @@ fn fix_hook_permissions(verbose: bool) {
         }
     }
     if fixed > 0 && verbose {
-        println!("\x1b[0;32mFixed {} hook script(s) missing execute permission\x1b[0m", fixed);
+        println!("{}Fixed {} hook script(s) missing execute permission{}", util::GREEN, fixed, util::RESET);
     }
 }
 
-/// Set autoUpdate in known_marketplaces.json from profiles.yaml config.
 fn apply_auto_update(
     marketplaces: &BTreeMap<String, MarketplaceConfig>,
     verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let path = expand_home(KNOWN_MARKETPLACES);
+    let path = expand_home(super::KNOWN_MARKETPLACES_PATH);
     if !Path::new(&path).exists() {
         return Ok(());
     }
@@ -217,10 +209,7 @@ fn apply_auto_update(
     }
 
     if !changed.is_empty() {
-        let tmp = format!("{}.tmp", path);
-        let out = serde_json::to_string_pretty(&data)?;
-        std::fs::write(&tmp, format!("{}\n", out))?;
-        std::fs::rename(&tmp, &path)?;
+        atomic_write_json(&path, &data)?;
         if verbose {
             println!("  autoUpdate set for: {}", changed.join(", "));
         }
@@ -228,9 +217,8 @@ fn apply_auto_update(
     Ok(())
 }
 
-/// Replace "local" scope with "project" in installed_plugins.json.
 fn normalize_scopes(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let path = expand_home(INSTALLED_PLUGINS);
+    let path = expand_home(super::INSTALLED_PLUGINS_PATH);
     if !Path::new(&path).exists() {
         return Ok(());
     }
@@ -244,7 +232,7 @@ fn normalize_scopes(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
                 for entry in arr.iter_mut() {
                     if entry.get("scope").and_then(|v| v.as_str()) == Some("local") {
                         entry.as_object_mut().map(|e| e.insert("scope".into(), "project".into()));
-                        changed.push(qid.split('@').next().unwrap_or(qid).to_string());
+                        changed.push(plugin_short_name(qid).to_string());
                     }
                 }
             }
@@ -252,11 +240,8 @@ fn normalize_scopes(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if !changed.is_empty() {
-        let tmp = format!("{}.tmp", path);
-        let out = serde_json::to_string_pretty(&data)?;
-        std::fs::write(&tmp, format!("{}\n", out))?;
-        std::fs::rename(&tmp, &path)?;
-        println!("\x1b[0;32mNormalized {} plugin scope(s): local → project\x1b[0m", changed.len());
+        atomic_write_json(&path, &data)?;
+        println!("{}Normalized {} plugin scope(s): local → project{}", util::GREEN, changed.len(), util::RESET);
         if verbose {
             for name in &changed {
                 println!("  {}", name);
@@ -266,7 +251,6 @@ fn normalize_scopes(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Simple recursive directory walker returning file paths.
 fn walkdir(dir: &str) -> Vec<String> {
     let mut result = Vec::new();
     fn walk(dir: &Path, result: &mut Vec<String>) {

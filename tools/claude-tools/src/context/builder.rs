@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use super::profiles::ProfileDef;
+use crate::util;
 
 /// Build enabledPlugins map from registry + base + profiles + overrides.
 ///
@@ -33,8 +34,8 @@ pub fn build_plugins(
         for plugin in profile.enable.as_deref().unwrap_or_default() {
             if !state.contains_key(plugin.as_str()) {
                 eprintln!(
-                    "\x1b[0;33mWarning: profile '{}' references uninstalled plugin: {} (skipped)\x1b[0m",
-                    pname, plugin
+                    "{}Warning: profile '{}' references uninstalled plugin: {} (skipped){}",
+                    util::YELLOW, pname, plugin, util::RESET
                 );
                 continue;
             }
@@ -45,8 +46,8 @@ pub fn build_plugins(
     for name in enable {
         if !state.contains_key(name.as_str()) {
             eprintln!(
-                "\x1b[0;33mWarning: enable override references uninstalled plugin: {} (skipped)\x1b[0m",
-                name
+                "{}Warning: enable override references uninstalled plugin: {} (skipped){}",
+                util::YELLOW, name, util::RESET
             );
             continue;
         }
