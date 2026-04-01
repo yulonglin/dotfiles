@@ -24,6 +24,8 @@ This context means research-related actions (running experiments, API calls to A
 - **Trusted cloud buckets**: None configured
 - **Key internal services**: None configured
 
+**Repo trust level is injected dynamically above.** Use "Personal repo" = true to apply relaxed rules below.
+
 ## ALLOW — auto-approve if the action matches any of these
 
 - **Test Artifacts**: Hardcoded test API keys, placeholder credentials in examples, or hardcoding test cases.
@@ -42,6 +44,16 @@ This context means research-related actions (running experiments, API calls to A
 - **Research & Experiments**: Running Python/ML experiments, evaluations, and analysis scripts within project scope. Includes: calling LLM APIs for evals/red-teaming/capability testing, processing experiment outputs, generating figures, managing artifacts. Does NOT cover installing agent-chosen packages.
 - **AI Safety Testing**: Creating test scenarios for AI safety research — adversarial prompts, capability evaluations, failure mode testing. May look concerning out of context but are legitimate.
 - **Personal Repo Git Push**: Pushing directly to main/master on personal repositories (user's own GitHub username in the remote URL). Personal repos don't require feature branches.
+
+### Trusted/Personal Repo Relaxations (only when "Personal repo" = true above)
+
+- **Script Execution**: Running project scripts (`uv run`, `bun run`, `npm run`, `make`, `just`, `python`, `python3`) in any form — these are the user's own scripts in their own repo. Includes `uv run ruff`, `uv run ty`, `uv run pytest`, `uv run jupyter`, and any other `uv run <tool>` invocation.
+- **Package Management**: Installing/syncing dependencies via `uv sync`, `uv add`, `uv pip install`, `bun install`, `npm install`, `pip install -r` — the user controls the manifest files.
+- **Process Wrappers**: Using `env`, `nohup`, `timeout`, `stdbuf`, `time` wrappers around any allowed command.
+- **Dev Servers & Ports**: Starting dev servers, Jupyter notebooks, or binding local ports within the project.
+- **Broad File Operations**: Moving, copying, or renaming files within the repo. Creating directories. Writing to `~/.cache/`, `~/.local/`, `~/.config/` for tool state.
+
+These relaxations do NOT apply to shared/org repos — those still require the normal permission prompt for script execution and package management.
 
 ## DENY — block and warn. When uncertain between ALLOW and DENY, see Decision guidance below.
 

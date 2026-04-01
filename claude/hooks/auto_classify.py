@@ -21,6 +21,67 @@ LOG_PATH = os.path.expanduser("~/.cache/claude/auto-classify.log")
 MAX_INPUT_CHARS = 2000
 MAX_LOG_BYTES = 1_000_000  # 1MB
 
+# GitHub owners (users + orgs) whose repos are trusted for relaxed permissions.
+# Add orgs you work with regularly. Personal repos get extra relaxations.
+TRUSTED_GITHUB_OWNERS = {"yulonglin", "anthropics", "alignment-research"}
+PERSONAL_GITHUB_USERS = {"yulonglin"}
+
+# Cache file written by SessionStart hook (detect_repo_trust.sh)
+TRUST_CACHE = os.path.expanduser("~/.cache/claude/repo-trust.json")
+
+
+def detect_repo_trust(cwd: str) -> dict:
+    """Read cached repo trust level, falling back to git detection.
+
+    The cache is written once per session by the SessionStart hook.
+    This avoids a subprocess call on every PermissionRequest.
+    """
+    # Try cache first (written by SessionStart hook for the session's CWD)
+    try:
+        with open(TRUST_CACHE) as f:
+            cached = json.load(f)
+        if cached.get("cwd") == cwd:
+            return cached
+    except Exception:
+        pass
+
+    # Fallback: detect and cache
+    import subprocess
+
+    result = {"trusted": False, "personal": False, "remote_url": "", "owner": "", "cwd": cwd}
+    try:
+        proc = subprocess.run(
+            ["git", "-C", cwd, "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if proc.returncode != 0:
+            return result
+        url = proc.stdout.strip()
+        result["remote_url"] = url
+
+        # Extract owner from github.com URLs
+        # git@github.com:owner/repo.git or https://github.com/owner/repo.git
+        owner = ""
+        if "github.com:" in url:
+            owner = url.split("github.com:")[1].split("/")[0]
+        elif "github.com/" in url:
+            owner = url.split("github.com/")[1].split("/")[0]
+
+        result["owner"] = owner
+        result["trusted"] = owner.lower() in {u.lower() for u in TRUSTED_GITHUB_OWNERS}
+        result["personal"] = owner.lower() in {u.lower() for u in PERSONAL_GITHUB_USERS}
+
+        # Cache for subsequent calls
+        try:
+            os.makedirs(os.path.dirname(TRUST_CACHE), exist_ok=True)
+            with open(TRUST_CACHE, "w") as f:
+                json.dump(result, f)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return result
+
 
 def log(msg: str) -> None:
     try:
@@ -104,6 +165,21 @@ def main() -> None:
     except Exception:
         log("Cannot read rules file")
         sys.exit(0)
+
+    # Inject repo trust context into rules
+    trust = detect_repo_trust(cwd)
+    trust_section = f"""
+## Repo Trust Context (auto-detected)
+
+- **Remote URL**: {trust['remote_url'] or 'unknown'}
+- **Owner**: {trust['owner'] or 'unknown'}
+- **Trusted repo**: {trust['trusted']}
+- **Personal repo**: {trust['personal']}
+"""
+    rules = rules.replace(
+        "## Environment",
+        f"## Environment\n{trust_section}",
+    )
 
     result = classify(tool_name, tool_input, cwd, rules)
     if result is None:
