@@ -90,6 +90,10 @@ profiles:
       - writing
 
   # Sub-profiles — compose with domain profiles above
+  messaging:
+    comment: "Messaging and communication tools"
+    enable: [telegram]
+
   ml:
     comment: "Adds huggingface-skills"
     enable: [huggingface-skills]
@@ -110,6 +114,10 @@ profiles:
     comment: "Adds gopls-lsp"
     enable: [gopls-lsp]
 
+  swift:
+    comment: "Adds swift-lsp"
+    enable: [swift-lsp]
+
   web:
     comment: "Web dev + browser automation"
-    enable: [dev-browser, typescript-lsp]
+    enable: [dev-browser, playwright, typescript-lsp]
