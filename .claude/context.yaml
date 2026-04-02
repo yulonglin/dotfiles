@@ -1,6 +1,6 @@
 # .claude/context.yaml — committed, declares project's plugin needs
 profiles:
-  - code
-  - productivity
-  - python
-  - rust
+- code
+- research
+- writing
+- python

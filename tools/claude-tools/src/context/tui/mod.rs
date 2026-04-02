@@ -7,14 +7,15 @@ use crossterm::ExecutableCommand;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
 
-use state::{AppState, Override, View};
-use crate::context::{builder, display, profiles, registry, settings, sync};
+use state::AppState;
+use crate::context::{builder, display, profiles, registry, settings};
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    // Load data before entering TUI
+    // Load data before entering TUI (reused in apply path)
     let reg = registry::load_registry()?;
     let (base, profile_defs) = profiles::load_profiles()?;
-    let (active_profiles, active_enable, active_disable) = settings::load_context_yaml()?
+    let active = settings::load_context_yaml()?
+        .map(|(p, _, _)| p)
         .unwrap_or_default();
 
     if profile_defs.is_empty() {
@@ -22,53 +23,25 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let mut state = AppState::new(&reg, &base, &profile_defs, &active_profiles, &active_enable, &active_disable);
+    let mut state = AppState::new(&profile_defs, &active);
 
-    loop {
-        // Setup terminal
-        enable_raw_mode()?;
-        std::io::stdout().execute(EnterAlternateScreen)?;
+    // Setup terminal
+    enable_raw_mode()?;
+    std::io::stdout().execute(EnterAlternateScreen)?;
 
-        // Run the main loop, ensuring terminal is always restored
-        let result = run_loop(&mut state);
+    // Run the main loop, ensuring terminal is always restored
+    let result = run_loop(&mut state);
 
-        // Always restore terminal, even on error
-        let _ = disable_raw_mode();
-        let _ = std::io::stdout().execute(LeaveAlternateScreen);
+    // Always restore terminal, even on error
+    let _ = disable_raw_mode();
+    let _ = std::io::stdout().execute(LeaveAlternateScreen);
 
-        // Propagate any error from the loop
-        result?;
-
-        if state.sync {
-            state.sync = false;
-            // Run sync outside of TUI (it spawns subprocesses and prints output)
-            println!();
-            sync::run(true, false)?;
-            println!("\nPress any key to return to TUI...");
-            // Re-enable raw mode briefly to capture a keypress
-            enable_raw_mode()?;
-            let _ = event::read();
-            let _ = disable_raw_mode();
-
-            // Reload data after sync (new plugins may have been installed)
-            let reg = registry::load_registry()?;
-            let (base, profile_defs) = profiles::load_profiles()?;
-            let selected = state.selected_profile_names();
-            let enable = state.enable_overrides();
-            let disable = state.disable_overrides();
-            state = AppState::new(&reg, &base, &profile_defs, &selected, &enable, &disable);
-            continue;
-        }
-
-        break;
-    }
+    // Propagate any error from the loop
+    result?;
 
     // Apply if user pressed enter
     if state.apply {
         let selected = state.selected_profile_names();
-        let enable = state.enable_overrides();
-        let disable = state.disable_overrides();
-
         if selected.is_empty() {
             println!("No profiles selected. Use --clean to remove context config.");
             return Ok(());
@@ -77,12 +50,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("No changes.");
             return Ok(());
         }
-
-        let reg = registry::load_registry()?;
-        let (base, profile_defs) = profiles::load_profiles()?;
-        let enabled = builder::build_plugins(&reg, &base, &profile_defs, &selected, &enable, &disable)?;
+        let enabled = builder::build_plugins(&reg, &base, &profile_defs, &selected, &[], &[])?;
         settings::apply_to_settings(&enabled)?;
-        settings::write_context_yaml(&selected, &enable, &disable)?;
+        settings::write_context_yaml(&selected, &[], &[])?;
         display::print_apply_summary(&selected, &enabled);
     }
 
@@ -109,17 +79,11 @@ fn run_loop(state: &mut AppState) -> Result<(), Box<dyn std::error::Error>> {
                     state.apply = true;
                     break;
                 }
-                KeyCode::Tab | KeyCode::BackTab | KeyCode::Left | KeyCode::Right
-                | KeyCode::Char('h') | KeyCode::Char('l') => state.switch_view(),
                 KeyCode::Up | KeyCode::Char('k') => state.move_up(),
                 KeyCode::Down | KeyCode::Char('j') => state.move_down(),
                 KeyCode::Char(' ') => state.toggle_current(),
                 KeyCode::Char('a') => state.select_all(),
                 KeyCode::Char('n') => state.select_none(),
-                KeyCode::Char('s') => {
-                    state.sync = true;
-                    break;
-                }
                 _ => {}
             }
         }
@@ -132,26 +96,7 @@ fn view(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
     let mut lines: Vec<Line> = Vec::new();
 
-    // Tab bar
-    let profiles_tab = if state.view == View::Profiles {
-        Span::styled(" Profiles ", theme::tab_active())
-    } else {
-        Span::styled(" Profiles ", theme::tab_inactive())
-    };
-    let plugins_tab = if state.view == View::Plugins {
-        Span::styled(" Plugins ", theme::tab_active())
-    } else {
-        Span::styled(" Plugins ", theme::tab_inactive())
-    };
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        profiles_tab,
-        Span::styled("  │  ", theme::hint()),
-        plugins_tab,
-    ]));
-    lines.push(Line::from(""));
-
-    // Status header
+    // Header: Active profiles
     let active: Vec<&str> = state
         .profiles
         .iter()
@@ -167,67 +112,15 @@ fn view(frame: &mut Frame, state: &AppState) {
         Span::styled("  Active: ", theme::header()),
         Span::styled(header_text, Style::default().fg(theme::BLUE)),
     ];
-    let overrides = state.override_count();
-    if overrides > 0 {
-        header_line.push(Span::styled(
-            format!("  ({} override{})", overrides, if overrides == 1 { "" } else { "s" }),
-            theme::override_on(),
-        ));
-    }
     if state.is_modified() {
         header_line.push(Span::styled("  [modified]", theme::modified_indicator()));
     }
     lines.push(Line::from(header_line));
     lines.push(Line::from(""));
 
-    match state.view {
-        View::Profiles => render_profiles(&mut lines, state),
-        View::Plugins => render_plugins(&mut lines, state),
-    }
-
-    // Footer
-    lines.push(Line::from(""));
-    let mut footer = vec![
-        Span::styled("  space", theme::hint()),
-        Span::raw(": toggle  "),
-        Span::styled("tab", theme::hint()),
-        Span::raw(": switch view  "),
-        Span::styled("s", theme::hint()),
-        Span::raw(": sync  "),
-    ];
-    if state.view == View::Profiles {
-        footer.extend_from_slice(&[
-            Span::styled("a", theme::hint()),
-            Span::raw(": all  "),
-            Span::styled("n", theme::hint()),
-            Span::raw(": none  "),
-        ]);
-    } else {
-        footer.extend_from_slice(&[
-            Span::styled("n", theme::hint()),
-            Span::raw(": clear overrides  "),
-        ]);
-    }
-    footer.extend_from_slice(&[
-        Span::styled("enter", theme::hint()),
-        Span::raw(": apply  "),
-        Span::styled("q", theme::hint()),
-        Span::raw(": quit"),
-    ]);
-    lines.push(Line::from(footer));
-
-    let block = Block::default()
-        .title(theme::TITLE)
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme::GRAY));
-
-    let paragraph = Paragraph::new(lines).block(block);
-    frame.render_widget(paragraph, area);
-}
-
-fn render_profiles<'a>(lines: &mut Vec<Line<'a>>, state: &'a AppState) {
+    // Profile list
     for (i, profile) in state.profiles.iter().enumerate() {
-        let is_cursor = state.view == View::Profiles && i == state.profile_cursor;
+        let is_cursor = i == state.cursor;
         let symbol = if profile.enabled {
             theme::FILLED
         } else {
@@ -246,7 +139,7 @@ fn render_profiles<'a>(lines: &mut Vec<Line<'a>>, state: &'a AppState) {
             Span::raw("  "),
             Span::styled(symbol, name_style),
             Span::raw(" "),
-            Span::styled(format!("{:<14}", profile.name), name_style),
+            Span::styled(format!("{:<12}", profile.name), name_style),
             Span::styled(profile.comment.as_str(), theme::hint()),
         ]));
 
@@ -266,36 +159,27 @@ fn render_profiles<'a>(lines: &mut Vec<Line<'a>>, state: &'a AppState) {
             }
         }
     }
-}
 
-fn render_plugins<'a>(lines: &mut Vec<Line<'a>>, state: &'a AppState) {
-    for (i, plugin) in state.plugins.iter().enumerate() {
-        let is_cursor = state.view == View::Plugins && i == state.plugin_cursor;
+    // Footer
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("  space", theme::hint()),
+        Span::raw(": toggle  "),
+        Span::styled("a", theme::hint()),
+        Span::raw(": all  "),
+        Span::styled("n", theme::hint()),
+        Span::raw(": none  "),
+        Span::styled("enter", theme::hint()),
+        Span::raw(": apply  "),
+        Span::styled("q", theme::hint()),
+        Span::raw(": quit"),
+    ]));
 
-        let (symbol, sym_style) = match plugin.override_state {
-            Override::ForceOn => (theme::OVERRIDE_ON, theme::override_on()),
-            Override::ForceOff => (theme::OVERRIDE_OFF, theme::override_off()),
-            Override::Inherit if plugin.effective() => (theme::FILLED, theme::selected()),
-            Override::Inherit => (theme::EMPTY, theme::unselected()),
-        };
+    let block = Block::default()
+        .title(theme::TITLE)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme::GRAY));
 
-        let name_style = if is_cursor {
-            theme::cursor()
-        } else {
-            sym_style
-        };
-
-        let source = plugin.source();
-        let mut spans = vec![
-            Span::raw("  "),
-            Span::styled(symbol, if is_cursor { theme::cursor() } else { sym_style }),
-            Span::raw(" "),
-            Span::styled(format!("{:<24}", plugin.name), name_style),
-        ];
-        if !source.is_empty() {
-            spans.push(Span::styled(source, theme::hint()));
-        }
-
-        lines.push(Line::from(spans));
-    }
+    let paragraph = Paragraph::new(lines).block(block);
+    frame.render_widget(paragraph, area);
 }

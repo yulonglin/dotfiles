@@ -134,6 +134,7 @@ PACKAGES_MACOS=(
     "jless"
     "just"
     "sd"          # sed replacement (preferred over sed)
+    "duf"         # df replacement (disk free space)
     "gum"         # interactive shell UI (toggle menus)
     "vivid"       # LS_COLORS theme generator (catppuccin-mocha)
 )
@@ -149,6 +150,8 @@ PACKAGES_LINUX_MISE=(
     "github:ajeetdsouza/zoxide"
     "github:PaulJuliusMartinez/jless"
     "github:casey/just"
+    "github:chmln/sd"
+    "github:muesli/duf"
     "github:charmbracelet/gum"
     "github:sharkdp/vivid"
 )

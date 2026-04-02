@@ -502,7 +502,7 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
                 echo "  [d] Keep dotfiles config (discard local changes)"
                 echo "  [s] Skip htop deployment"
                 echo ""
-                read -rp "Choice [l/d/s]: " htop_choice
+                read -r "htop_choice?Choice [l/d/s]: "
 
                 case "$htop_choice" in
                     l|L)
