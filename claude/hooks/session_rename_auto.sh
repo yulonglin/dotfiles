@@ -58,15 +58,13 @@ fi
 # --- Async Haiku call in background subshell ---
 # shellcheck disable=SC2030,SC2031
 (
-  # Extract first ~TRANSCRIPT_HEAD_LINES of transcript for context
-  # Each line is a JSONL object with type/message fields
-  # Collect user and assistant text lines
+  # Extract user messages from first ~TRANSCRIPT_HEAD_LINES of transcript
+  # Session name should reflect what the USER is working on, not assistant responses
   CONTEXT=""
   line_count=0
   while IFS= read -r line && [[ "$line_count" -lt "$TRANSCRIPT_HEAD_LINES" ]]; do
     entry_type=$(echo "$line" | jq -r '.type // empty' 2>/dev/null)
-    if [[ "$entry_type" == "human" ]] || [[ "$entry_type" == "assistant" ]]; then
-      # Extract text content: message.content can be string or array
+    if [[ "$entry_type" == "human" ]]; then
       text=$(echo "$line" | jq -r '
         .message.content |
         if type == "string" then .
@@ -75,9 +73,7 @@ fi
         end
       ' 2>/dev/null | head -c 300)
       if [[ -n "$text" ]]; then
-        role="User"
-        [[ "$entry_type" == "assistant" ]] && role="Assistant"
-        CONTEXT="${CONTEXT}${role}: ${text}
+        CONTEXT="${CONTEXT}User: ${text}
 "
       fi
     fi
@@ -90,7 +86,7 @@ fi
 
   # Build API payload
   # shellcheck disable=SC2016
-  PROMPT="Based on this conversation excerpt, generate a short (2-5 words) descriptive name for this session. Output ONLY the name, no quotes, no punctuation, no explanation.
+  PROMPT="Based on these user messages, generate a short (2-5 words) descriptive session name. Focus on what the user is working on. Output ONLY the name, no quotes, no punctuation, no explanation.
 
 ${CONTEXT}"
 
