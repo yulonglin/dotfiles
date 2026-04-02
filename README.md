@@ -598,7 +598,7 @@ age keypair (one-time setup)
 └── Public key:  extracted from private key     ← committed in .sops.yaml
 
 Encryption:  plaintext env vars  →  sops -e  →  config/secrets.env.enc (committed)
-Decryption:  config/secrets.env.enc  →  sops -d  →  .secrets (gitignored, sourced by zshrc, NOT exported)
+Decryption:  config/secrets.env.enc  →  sops -d  →  .secrets (gitignored, sourced by zshrc)
 ```
 
 **File locations:**
@@ -608,7 +608,7 @@ Decryption:  config/secrets.env.enc  →  sops -d  →  .secrets (gitignored, so
 | ----------------- | ----------------------------------- | ------------------------------------------------------------- | ----------- |
 | `.sops.yaml`      | `<dotfiles>/.sops.yaml` (repo root) | SOPS config — tells sops which age public key to encrypt with | Committed   |
 | `secrets.env.enc` | `<dotfiles>/config/secrets.env.enc` | Encrypted API keys (values encrypted, key names visible)      | Committed   |
-| `.secrets`        | `<dotfiles>/.secrets`               | Decrypted env vars (sourced as shell-local, NOT exported — use direnv per-project) | Gitignored  |
+| `.secrets`        | `<dotfiles>/.secrets`               | Decrypted env vars (created by `deploy.sh`, sourced by zshrc) | Gitignored  |
 | `keys.txt`        | `~/.config/sops/age/keys.txt`       | age private key (paste from Bitwarden on new machines)        | Not in repo |
 
 

@@ -574,10 +574,31 @@ install_ohmyzsh() {
     clone_zsh_plugin "https://github.com/zsh-users/zsh-history-substring-search"
     clone_zsh_plugin "https://github.com/jirutka/zsh-shift-select.git" "zsh-shift-select"
 
-    log_info "Installing tmux theme pack..."
-    git clone --quiet https://github.com/jimeh/tmux-themepack.git ~/.tmux-themepack 2>/dev/null || true
+    if [[ ! -d "$HOME/.tmux-themepack" ]]; then
+        log_info "Installing tmux theme pack..."
+        git clone --quiet https://github.com/jimeh/tmux-themepack.git "$HOME/.tmux-themepack" 2>/dev/null || log_warning "tmux-themepack clone failed"
+    else
+        log_info "tmux-themepack already installed"
+    fi
 
     log_success "oh-my-zsh installation complete"
+}
+
+# ─── TPM (Tmux Plugin Manager) ───────────────────────────────────────────────
+
+install_tpm() {
+    local tpm_dir="$HOME/.tmux/plugins/tpm"
+    if [[ -d "$tpm_dir" ]]; then
+        log_info "TPM already installed"
+        return 0
+    fi
+    log_info "Installing TPM (Tmux Plugin Manager)..."
+    mkdir -p "$HOME/.tmux/plugins"
+    git clone --quiet https://github.com/tmux-plugins/tpm "$tpm_dir" 2>/dev/null || {
+        log_warning "TPM clone failed (no network?) — tmux will work without plugins"
+        return 0
+    }
+    log_success "TPM installed"
 }
 
 # ─── GitHub CLI ───────────────────────────────────────────────────────────────

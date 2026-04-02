@@ -70,8 +70,9 @@ elif (has_cmd cat || has_cmd head || has_cmd tail) && ! is_piped_only cat && ! i
 # Blocks with a specific suggestion, preventing the permission prompt entirely.
 # These would otherwise trigger the "ask" permission list in settings.json.
 
-elif [[ "$command" =~ ^(python3?|uv\ run\ python3?)\ -c\  ]] && ! is_piped_only python && ! is_piped_only python3; then
-    block_reason="**\`python -c\`** requires confirmation. Write the code to a temp file with **Write** tool, then run \`python \$TMPDIR/check.py\` (auto-allowed)."
+# python -c is allowed — inline checks are routine for research workflows
+# elif [[ "$command" =~ ^(python3?|uv\ run\ python3?)\ -c\  ]] && ! is_piped_only python && ! is_piped_only python3; then
+#     block_reason="**\`python -c\`** requires confirmation. Write the code to a temp file with **Write** tool, then run \`python \$TMPDIR/check.py\` (auto-allowed)."
 elif [[ "$command" =~ ^node\ -e\  ]]; then
     block_reason="**\`node -e\`** requires confirmation. Write the code to a temp file with **Write** tool, then run \`node \$TMPDIR/check.js\` (auto-allowed)."
 elif [[ "$command" =~ ^(perl\ -e|ruby\ -e)\  ]]; then

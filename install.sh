@@ -183,6 +183,7 @@ if [[ "$INSTALL_TMUX" == "true" ]]; then
             apt_install tmux
         fi
     fi
+    install_tpm
 fi
 
 # ─── Extras ───────────────────────────────────────────────────────────────────

@@ -75,6 +75,7 @@ Verification is a design problem—you need to plan *how* you'll verify before y
 
 Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - ZSH configuration - Main shell setup
+- Tmux configuration - Shell multiplexer config + TPM plugins (resurrect, continuum) for session persistence
 - Gist sync - Bidirectional sync of SSH config and git identity with GitHub gist, automated daily at 8 AM
 - Git config - Smart conflict resolution with user prompts
 - VSCode/Cursor settings - Merges with existing settings
@@ -215,9 +216,13 @@ export WRITING_DIR="$HOME/Documents/writing"
 **Encrypted Secrets (SOPS + age)**:
 - Decrypts `config/secrets.env.enc` to `$DOT_DIR/.secrets` using `sops -d --config .sops.yaml` with age key
 - Age private key at `~/.config/sops/age/keys.txt` (stored in Bitwarden, pasted during cloud setup)
-- Shell integration: `.secrets` sourced by zshrc.sh (no `set -a` — vars are NOT auto-exported). Only explicitly global keys are exported; project-specific keys stay shell-local
-- **No keys are globally exported.** All stay as shell-local vars (available in interactive shell, NOT inherited by subprocesses). Export per-project via direnv/`.envrc` or symlinked `.env` files
-- **Managed secrets**: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `HF_TOKEN`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`
+- Shell integration: `.secrets` sourced by zshrc.sh (`set -a` exports all vars), direnv for per-project secrets
+- **Managed secrets** (all exported as env vars):
+  - `OPENAI_API_KEY` — OpenAI API access
+  - `OPENROUTER_API_KEY` — OpenRouter API access
+  - `ANTHROPIC_API_KEY` — Anthropic API access
+  - `HF_TOKEN` — Hugging Face Hub access
+  - `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` — Modal CLI/SDK auth (env vars replace `~/.modal.toml`)
 - **Adding new secrets**: Edit `.secrets` directly, then run `secrets-encrypt` to update the encrypted file. Or use `secrets-edit` to edit the encrypted file in-place (auto-decrypts after)
 - Commands: `secrets-init` (first-time setup), `secrets-edit` (edit encrypted, auto-refreshes `.secrets`), `secrets-encrypt` (encrypt `.secrets` → `secrets.env.enc`), `secrets-decrypt` (decrypt `secrets.env.enc` → `.secrets`), `secrets-init-project` (per-project setup)
 - All sops commands use explicit `--config` flag — sops searches from input file's directory by default, which fails when input is in `$TMPDIR`
@@ -347,6 +352,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - **Mouseless config**: Copied (not symlinked) because Mouseless uses atomic `rename()` on UI save which destroys symlinks. Use `sync-mouseless` to pull UI changes back to dotfiles
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env
+- **TPM plugins**: Guarded with `if-shell` so tmux works fine without TPM installed. Deploy auto-installs plugins to disk, but already-running tmux sessions need `prefix + I` or a tmux restart to load them. `prefix + Ctrl-s` saves session, `prefix + Ctrl-r` restores. Continuum auto-restores last saved session on first server start after reboot; `touch ~/tmux_no_auto_restore` to suppress. Save files: `~/.tmux/resurrect/` (portable, auto-cleaned after 30 days)
 - **Claude Code directory**: `claude/` is symlinked to `~/.claude/` (not copied)
 - **Codex CLI directory**: `codex/` is symlinked to `~/.codex/` (not copied)
 - **Serena MCP config**: `config/serena/serena_config.yml` symlinked to `~/.serena/serena_config.yml` (dashboard auto-open disabled)

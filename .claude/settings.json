@@ -33,6 +33,7 @@
     "stripe@claude-plugins-official": false,
     "supabase@claude-plugins-official": false,
     "swift-lsp@claude-plugins-official": false,
+    "telegram@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": false,
     "dev-browser@dev-browser-marketplace": false,
     "slack-mcp@productivity-tools": false,
