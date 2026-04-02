@@ -33,8 +33,10 @@ if [[ "$exit_code" != "0" ]] || \
    [[ "$output" == *"could not apply"* ]] || \
    [[ "$output" == *"merge failed"* ]] || \
    [[ "$output" == *"Cannot rebase"* ]]; then
-    # Create marker
     date +%s > "$git_dir/POST_SYNC_GUARD"
+else
+    # Successful sync — clear any previous marker
+    rm -f "$git_dir/POST_SYNC_GUARD"
 fi
 
 exit 0
