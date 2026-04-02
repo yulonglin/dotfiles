@@ -94,9 +94,9 @@ profiles:
     comment: "Adds huggingface-skills"
     enable: [huggingface-skills]
 
-  personal:
-    comment: "Life and productivity — Things 3"
-    enable: [things-mcp]
+  productivity:
+    comment: "Task and project management — Things 3, Linear"
+    enable: [linear, things-mcp]
 
   python:
     comment: "Adds pyright-lsp"

@@ -483,6 +483,7 @@ fn normalize_scopes(wanted: &HashSet<String>, verbose: bool) -> Result<(), Box<d
     let mut data: serde_json::Value = serde_json::from_str(&content)?;
     let mut upgraded = Vec::new();
     let mut deduped = Vec::new();
+    let mut stale_project = Vec::new();
 
     if let Some(plugins) = data.get_mut("plugins").and_then(|v| v.as_object_mut()) {
         for (qid, entries) in plugins.iter_mut() {
@@ -499,7 +500,6 @@ fn normalize_scopes(wanted: &HashSet<String>, verbose: bool) -> Result<(), Box<d
                 }
             } else if wanted.contains(&short) {
                 // Upgrade wanted plugins (managed by --sync) to user scope.
-                // Manually-installed project-scoped plugins are left alone.
                 for entry in arr.iter_mut() {
                     let scope = entry.get("scope").and_then(|v| v.as_str()).unwrap_or("");
                     if scope == "local" || scope == "project" {
@@ -509,6 +509,15 @@ fn normalize_scopes(wanted: &HashSet<String>, verbose: bool) -> Result<(), Box<d
                         }
                         upgraded.push(short.clone());
                     }
+                }
+            } else {
+                // Warn about non-wanted plugins stuck at project scope.
+                let is_project = arr.iter().any(|e| {
+                    let s = e.get("scope").and_then(|v| v.as_str()).unwrap_or("");
+                    s == "local" || s == "project"
+                });
+                if is_project {
+                    stale_project.push(qid.clone());
                 }
             }
         }
@@ -528,6 +537,13 @@ fn normalize_scopes(wanted: &HashSet<String>, verbose: bool) -> Result<(), Box<d
                 for name in &deduped { println!("  {}", name); }
             }
         }
+    }
+    if !stale_project.is_empty() {
+        println!("{}  {} plugin(s) still project-scoped (may fail in other projects):{}", util::YELLOW, stale_project.len(), util::RESET);
+        for qid in &stale_project {
+            println!("    {}", qid);
+        }
+        println!("    Fix: claude plugin install <name> --scope user");
     }
     Ok(())
 }
