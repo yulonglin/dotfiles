@@ -44,6 +44,7 @@ This context means research-related actions (running experiments, API calls to A
 - **Research & Experiments**: Running Python/ML experiments, evaluations, and analysis scripts within project scope. Includes: calling LLM APIs for evals/red-teaming/capability testing, processing experiment outputs, generating figures, managing artifacts. Does NOT cover installing agent-chosen packages.
 - **AI Safety Testing**: Creating test scenarios for AI safety research — adversarial prompts, capability evaluations, failure mode testing. May look concerning out of context but are legitimate.
 - **Personal Repo Git Push**: Pushing directly to main/master on personal repositories (user's own GitHub username in the remote URL). Personal repos don't require feature branches.
+- **Session Renaming**: Terminal title changes via ANSI escape sequences (`printf '\033]0;...\007'`), tmux window renaming (`tmux rename-window`), and writing session state files to `$TMPDIR`. These are cosmetic operations from session-naming hooks — not persistence or self-modification.
 
 ### Trusted/Personal Repo Relaxations (only when "Personal repo" = true above)
 
