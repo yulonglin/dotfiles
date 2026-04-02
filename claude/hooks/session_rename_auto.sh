@@ -20,6 +20,7 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 STATE_FILE="${TMPDIR:-/tmp}/claude-rename-auto-${SESSION_ID}"
 TURN=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
 [[ "$TURN" == "-1" ]] && exit 0
+[[ "$TURN" =~ ^[0-9]+$ ]] || TURN=0
 TURN=$((TURN + 1))
 if [[ "$TURN" -lt "$TRIGGER_TURN" ]]; then
   echo "$TURN" > "$STATE_FILE"
@@ -61,22 +62,19 @@ grep -q '"custom-title"' "$TRANSCRIPT_PATH" 2>/dev/null && exit 0
     }')" \
     "https://api.anthropic.com/v1/messages" 2>/dev/null) || exit 0
 
-  # Strip quotes and control characters from model output
   NAME=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null \
-    | tr -d '"' | tr -d '\000-\037' | head -c 60)
+    | tr -d '"\000-\037' | head -c 60)
   [[ -z "$NAME" ]] && exit 0
-
-  # Mark as fired only after we have a valid name
   echo "-1" > "$STATE_FILE"
 
-  # 1. Claude Code session name (custom-title in transcript JSONL)
+  # Claude Code session name
   jq -nc --arg t "$NAME" --arg s "$SESSION_ID" \
     '{"type":"custom-title","customTitle":$t,"sessionId":$s}' >> "$TRANSCRIPT_PATH"
 
-  # 2. Terminal / Ghostty tab title
-  printf '\033]0;%s\033\\\033]2;%s\033\\' "$NAME" "$NAME" > /dev/tty 2>/dev/null || true
+  # Terminal / Ghostty tab title (OSC 0 sets both icon name + window title)
+  printf '\033]0;%s\033\\' "$NAME" > /dev/tty 2>/dev/null || true
 
-  # 3. tmux window name
+  # tmux window name (disable automatic-rename so it sticks)
   if [[ -n "${TMUX:-}" ]]; then
     tmux set-option -w automatic-rename off 2>/dev/null || true
     tmux rename-window "$NAME" 2>/dev/null || true
