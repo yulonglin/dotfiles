@@ -1,5 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "fileSuggestion": {
+    "type": "command",
+    "command": "fd --type f --hidden --exclude .git"
+  },
   "cleanupPeriodDays": 999999,
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
@@ -18,25 +22,80 @@
   },
   "permissions": {
     "allow": [
-      "Bash(git *)", "Bash(gh *)",
-      "Bash(python *)", "Bash(python3 *)", "Bash(uv *)", "Bash(pytest *)", "Bash(ruff *)", "Bash(ty *)",
-      "Bash(bun *)", "Bash(npm run *)", "Bash(npm start *)",
-      "Bash(cargo *)", "Bash(go *)",
-      "Bash(just *)", "Bash(make *)",
-      "Bash(claude *)", "Bash(codex *)", "Bash(gemini *)",
-      "Bash(docker ps *)", "Bash(docker images *)", "Bash(docker inspect *)", "Bash(docker logs *)", "Bash(docker compose *)", "Bash(docker build *)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(uv *)",
+      "Bash(pytest *)",
+      "Bash(ruff *)",
+      "Bash(ty *)",
+      "Bash(bun *)",
+      "Bash(npm run *)",
+      "Bash(npm start *)",
+      "Bash(cargo *)",
+      "Bash(go *)",
+      "Bash(just *)",
+      "Bash(make *)",
+      "Bash(claude *)",
+      "Bash(codex *)",
+      "Bash(gemini *)",
+      "Bash(docker ps *)",
+      "Bash(docker images *)",
+      "Bash(docker inspect *)",
+      "Bash(docker logs *)",
+      "Bash(docker compose *)",
+      "Bash(docker build *)",
       "Bash(HYDRA_FULL_ERROR=1 *)",
-      "Bash(grep *)", "Bash(rg *)", "Bash(find *)", "Bash(fd *)",
-      "Bash(ls *)", "Bash(eza *)", "Bash(cat *)", "Bash(bat *)", "Bash(head *)", "Bash(tail *)",
-      "Bash(wc *)", "Bash(du *)", "Bash(dust *)", "Bash(df *)", "Bash(duf *)",
-      "Bash(echo *)", "Bash(printf *)",
-      "Bash(mkdir *)", "Bash(touch *)", "Bash(chmod *)", "Bash(cp *)", "Bash(mv *)", "Bash(ln *)", "Bash(tee *)",
-      "Bash(sleep *)", "Bash(time *)",
-      "Bash(jq *)", "Bash(jless *)", "Bash(sd *)",
-      "Bash(sort *)", "Bash(uniq *)", "Bash(cut *)", "Bash(tr *)", "Bash(diff *)",
-      "Bash(shellcheck *)", "Bash(which *)", "Bash(type *)", "Bash(file *)", "Bash(realpath *)", "Bash(dirname *)", "Bash(basename *)",
-      "Bash(any2md *)", "Bash(trash *)",
-      "Glob", "Grep", "Search", "WebSearch", "WebFetch", "Read"
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(find *)",
+      "Bash(fd *)",
+      "Bash(ls *)",
+      "Bash(eza *)",
+      "Bash(cat *)",
+      "Bash(bat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(du *)",
+      "Bash(dust *)",
+      "Bash(df *)",
+      "Bash(duf *)",
+      "Bash(echo *)",
+      "Bash(printf *)",
+      "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(chmod *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(ln *)",
+      "Bash(tee *)",
+      "Bash(sleep *)",
+      "Bash(time *)",
+      "Bash(jq *)",
+      "Bash(jless *)",
+      "Bash(sd *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(cut *)",
+      "Bash(tr *)",
+      "Bash(diff *)",
+      "Bash(shellcheck *)",
+      "Bash(which *)",
+      "Bash(type *)",
+      "Bash(file *)",
+      "Bash(realpath *)",
+      "Bash(dirname *)",
+      "Bash(basename *)",
+      "Bash(any2md *)",
+      "Bash(trash *)",
+      "Glob",
+      "Grep",
+      "Search",
+      "WebSearch",
+      "WebFetch",
+      "Read"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -209,6 +268,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/nudge_remember.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session_rename_auto.sh",
+            "timeout": 5
           }
         ]
       }
@@ -247,6 +311,16 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/retry_omitted_grep.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session_rename_commit.sh",
             "timeout": 5
           }
         ]
@@ -310,6 +384,14 @@
       }
     ]
   },
+  "worktree": {
+    "symlinkDirectories": [
+      ".venv",
+      "node_modules",
+      "target",
+      ".git/lfs"
+    ]
+  },
   "statusLine": {
     "type": "command",
     "command": "claude-tools statusline || bash $HOME/.claude/statusline.sh",
@@ -326,7 +408,6 @@
     "commit-commands@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
     "remember@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
@@ -348,12 +429,13 @@
     "security-guidance@claude-plugins-official": false,
     "serena@claude-plugins-official": false,
     "supabase@claude-plugins-official": false,
-    "swift-lsp@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": false,
     "slack-mcp@productivity-tools": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,
     "gopls-lsp@claude-plugins-official": true,
-    "rust-skills@rust-skills": true
+    "rust-skills@rust-skills": true,
+    "codex@openai-codex": true,
+    "llms-fetch-mcp@alignment-hive": true
   },
   "extraKnownMarketplaces": {
     "claude-plugins-official": {
@@ -410,9 +492,6 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": true,
-    "filesystem": {
-      "allowWrite": ["~/.Trash"]
-    },
     "network": {
       "allowedDomains": [
         "api.anthropic.com",
@@ -429,6 +508,11 @@
       ],
       "allowLocalBinding": true
     },
+    "filesystem": {
+      "allowWrite": [
+        "~/.Trash"
+      ]
+    },
     "excludedCommands": [
       "gh",
       "git",
@@ -438,6 +522,7 @@
       "trash"
     ]
   },
+  "feedbackSurveyRate": 0,
   "alwaysThinkingEnabled": true,
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
@@ -445,20 +530,17 @@
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
+  "claudeMdExcludes": [
+    "node_modules",
+    "vendor",
+    ".venv",
+    "target"
+  ],
   "chrome": {
     "enabled": true
   },
   "teammateMode": "auto",
   "installMethod": "native",
-  "worktree": {
-    "symlinkDirectories": [".venv", "node_modules", "target", ".git/lfs"]
-  },
-  "claudeMdExcludes": ["node_modules", "vendor", ".venv", "target"],
-  "fileSuggestion": {
-    "type": "command",
-    "command": "fd --type f --hidden --exclude .git"
-  },
-  "feedbackSurveyRate": 0,
   "showTurnDuration": true,
   "terminalProgressBarEnabled": true
 }
