@@ -1,11 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::process::Command;
 use super::profiles::MarketplaceConfig;
 use crate::util::{self, expand_home, plugin_short_name, atomic_write_json};
 
 /// Main sync entry point.
-pub fn run(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(verbose: bool, prune: bool) -> Result<(), Box<dyn std::error::Error>> {
     if which("claude").is_none() {
         println!("{}Claude CLI not found — skipping marketplace sync.{}", util::YELLOW, util::RESET);
         return Ok(());
@@ -17,10 +17,14 @@ pub fn run(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    let wanted = super::profiles::collect_wanted_plugins()?;
+    if verbose {
+        println!("  Wanted plugins (from profiles): {}", wanted.len());
+    }
+
     let registered = get_registered_marketplaces();
 
     // Phase 1: Register new marketplaces (sequential — rare)
-    let mut to_update = Vec::new();
     let mut errors = 0;
     for (name, config) in &marketplaces {
         let source = resolve_source(name, config);
@@ -42,25 +46,49 @@ pub fn run(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
                     let err = String::from_utf8_lossy(&out.stderr);
                     eprintln!("{}  {}: registration failed — {}{}", util::RED, name, err.trim(), util::RESET);
                     errors += 1;
-                    continue;
                 }
                 Err(e) => {
                     eprintln!("{}  {}: registration failed — {}{}", util::RED, name, e, util::RESET);
                     errors += 1;
-                    continue;
                 }
                 _ => {}
             }
         } else if verbose {
             println!("  {}: already registered", name);
         }
-        to_update.push(name.clone());
     }
 
-    // Phase 2: Update all in parallel via std::thread
+    // Phase 2: Update only marketplaces that contain wanted plugins
+    let marketplace_index = build_marketplace_index(None);
+    let needed_marketplaces: HashSet<&str> = wanted.iter()
+        .filter_map(|p| marketplace_index.get(p.as_str()).map(|s| s.as_str()))
+        .collect();
+
+    // Also include marketplaces for plugins not yet in the index (not cloned yet)
+    let unmapped: Vec<&str> = wanted.iter()
+        .filter(|p| !marketplace_index.contains_key(p.as_str()))
+        .map(|s| s.as_str())
+        .collect();
+
+    let to_update: Vec<String> = marketplaces.keys()
+        .filter(|name| {
+            needed_marketplaces.contains(name.as_str())
+                || (!unmapped.is_empty() && registered.contains(*name))
+        })
+        .cloned()
+        .collect();
+
     if verbose {
-        println!("  Updating {} marketplaces in parallel...", to_update.len());
+        let skipped = marketplaces.len() - to_update.len();
+        if skipped > 0 {
+            println!("  Skipping {} marketplace(s) with no wanted plugins", skipped);
+        }
+        if !unmapped.is_empty() {
+            println!("  Unmapped plugins (updating all registered): {:?}", unmapped);
+        }
+        println!("  Updating {} marketplace(s) in parallel...", to_update.len());
     }
+
     let handles: Vec<_> = to_update.iter().map(|name| {
         let name = name.clone();
         std::thread::spawn(move || {
@@ -88,16 +116,245 @@ pub fn run(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let total = marketplaces.len();
+    let total = to_update.len();
     if errors > 0 {
-        println!("{}Synced {}/{} marketplaces ({} error(s)){}", util::YELLOW, synced, total, errors, util::RESET);
+        println!("{}Synced {}/{} marketplace(s) ({} error(s)){}", util::YELLOW, synced, total, errors, util::RESET);
     } else {
-        println!("{}Synced {}/{} marketplaces{}", util::GREEN, synced, total, util::RESET);
+        println!("{}Synced {}/{} marketplace(s){}", util::GREEN, synced, total, util::RESET);
     }
 
+    // Phase 3: Selective install — install wanted plugins not yet installed
+    // Rebuild index after marketplace updates (new plugins may now be discoverable).
+    // Load installed_plugins.json once and share across Phase 3-4.
+    let installed_data = load_installed_json().unwrap_or_else(|_| serde_json::json!({"plugins": {}}));
+    let marketplace_index = build_marketplace_index(Some(&installed_data));
+    let installed_short = installed_short_names(&installed_data);
+    selective_install(&wanted, &marketplace_index, &installed_short, verbose)?;
+
+    // Phase 4: Prune orphans (opt-in)
+    let orphans = find_orphans(&wanted, &installed_data);
+    if prune {
+        prune_orphans(&orphans, verbose)?;
+    } else if !orphans.is_empty() {
+        println!("{}  {} orphan plugin(s) not in profiles (use --prune to remove): {}{}",
+            util::YELLOW, orphans.len(), orphans.join(", "), util::RESET);
+    }
+
+    // Phase 5: Post-fixups (unchanged)
     fix_hook_permissions(verbose);
     apply_auto_update(&marketplaces, verbose)?;
     normalize_scopes(verbose)?;
+
+    Ok(())
+}
+
+/// Load and parse installed_plugins.json.
+fn load_installed_json() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let path = expand_home(super::INSTALLED_PLUGINS_PATH);
+    let content = std::fs::read_to_string(&path)?;
+    Ok(serde_json::from_str(&content)?)
+}
+
+/// Extract short plugin names from parsed installed data.
+fn installed_short_names(data: &serde_json::Value) -> HashSet<String> {
+    data.get("plugins").and_then(|v| v.as_object())
+        .map(|plugins| plugins.keys().map(|qid| plugin_short_name(qid).to_string()).collect())
+        .unwrap_or_default()
+}
+
+/// Build plugin_short_name -> marketplace_name index by scanning marketplace dirs.
+/// If `installed_data` is provided, augments from it; otherwise reads from disk.
+fn build_marketplace_index(installed_data: Option<&serde_json::Value>) -> BTreeMap<String, String> {
+    let dir = expand_home(super::MARKETPLACES_DIR);
+    let mut index = BTreeMap::new();
+
+    let Ok(entries) = std::fs::read_dir(&dir) else { return index };
+    for entry in entries.flatten() {
+        let marketplace_name = entry.file_name().to_string_lossy().to_string();
+        let marketplace_path = entry.path();
+        let plugins_dir = marketplace_path.join("plugins");
+
+        if plugins_dir.is_dir() {
+            // Multi-plugin marketplace: each subdir is a plugin
+            if let Ok(plugins) = std::fs::read_dir(&plugins_dir) {
+                for plugin in plugins.flatten() {
+                    if plugin.path().is_dir() {
+                        let plugin_name = plugin.file_name().to_string_lossy().to_string();
+                        index.insert(plugin_name, marketplace_name.clone());
+                    }
+                }
+            }
+        } else {
+            // Single-plugin marketplace: derive name from package.json or installed_plugins.json
+            let plugin_name = single_plugin_name(&marketplace_path, &marketplace_name);
+            index.insert(plugin_name, marketplace_name.clone());
+        }
+    }
+
+    // Also include mappings from installed_plugins.json (authoritative for already-installed)
+    let loaded;
+    let data = match installed_data {
+        Some(d) => d,
+        None => {
+            loaded = load_installed_json().ok();
+            match loaded.as_ref() {
+                Some(d) => d,
+                None => return index,
+            }
+        }
+    };
+    if let Some(plugins) = data.get("plugins").and_then(|v| v.as_object()) {
+        for qid in plugins.keys() {
+            let short = plugin_short_name(qid).to_string();
+            if let Some(at_pos) = qid.find('@') {
+                let marketplace = &qid[at_pos + 1..];
+                index.insert(short, marketplace.to_string());
+            }
+        }
+    }
+
+    index
+}
+
+/// Derive plugin name for a single-plugin marketplace.
+fn single_plugin_name(marketplace_path: &Path, marketplace_name: &str) -> String {
+    // Try package.json "name" field
+    let pkg = marketplace_path.join("package.json");
+    if let Ok(content) = std::fs::read_to_string(&pkg) {
+        if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(name) = data.get("name").and_then(|v| v.as_str()) {
+                return name.to_string();
+            }
+        }
+    }
+    // Fallback: marketplace name itself (works for rust-skills, etc.)
+    marketplace_name.to_string()
+}
+
+/// Sequentially install wanted plugins not yet installed.
+/// Sequential because `claude plugin install` does read-modify-write on
+/// installed_plugins.json — parallel installs would race on that file.
+fn selective_install(
+    wanted: &HashSet<String>,
+    marketplace_index: &BTreeMap<String, String>,
+    installed_short: &HashSet<String>,
+    verbose: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let to_install: Vec<(String, String)> = wanted.iter()
+        .filter(|p| !installed_short.contains(*p))
+        .filter_map(|p| {
+            marketplace_index.get(p.as_str())
+                .map(|m| (p.clone(), format!("{}@{}", p, m)))
+        })
+        .collect();
+
+    if to_install.is_empty() {
+        if verbose {
+            println!("  All wanted plugins already installed");
+        }
+        return Ok(());
+    }
+
+    let unmapped: Vec<&String> = wanted.iter()
+        .filter(|p| !installed_short.contains(p.as_str()) && !marketplace_index.contains_key(p.as_str()))
+        .collect();
+    if !unmapped.is_empty() {
+        println!("{}  Could not find marketplace for: {}{}", util::YELLOW,
+            unmapped.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "), util::RESET);
+    }
+
+    println!("  Installing {} new plugin(s)...", to_install.len());
+    for (short, qualified) in &to_install {
+        let result = Command::new("claude")
+            .args(["plugin", "install", qualified, "--scope", "user"])
+            .output();
+        match result {
+            Ok(out) if out.status.success() => {
+                println!("  {}✔{} installed {}", util::GREEN, util::RESET, short);
+            }
+            Ok(out) => {
+                let err = String::from_utf8_lossy(&out.stderr);
+                println!("{}  {}: {}{}", util::YELLOW, short, err.trim(), util::RESET);
+            }
+            Err(e) => {
+                println!("{}  {}: {}{}", util::YELLOW, short, e, util::RESET);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Find orphan plugins (installed but not in any profile).
+fn find_orphans(wanted: &HashSet<String>, installed_data: &serde_json::Value) -> Vec<String> {
+    let Some(plugins) = installed_data.get("plugins").and_then(|v| v.as_object()) else { return vec![] };
+    plugins.keys()
+        .filter(|qid| !wanted.contains(&*plugin_short_name(qid)))
+        .cloned()
+        .collect()
+}
+
+/// Remove orphan plugins directly from installed_plugins.json and enabledPlugins.
+/// Direct manipulation avoids Claude CLI's refusal to uninstall plugins referenced
+/// in project settings.json (even when set to false).
+fn prune_orphans(orphans: &[String], verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if orphans.is_empty() {
+        if verbose {
+            println!("  No orphan plugins to prune");
+        }
+        return Ok(());
+    }
+
+    // Re-read installed_plugins.json for mutation (Phase 3 installs may have modified it)
+    let installed_path = expand_home(super::INSTALLED_PLUGINS_PATH);
+    let content = std::fs::read_to_string(&installed_path)?;
+    let mut data: serde_json::Value = serde_json::from_str(&content)?;
+
+    if let Some(plugins) = data.get_mut("plugins").and_then(|v| v.as_object_mut()) {
+        for qid in orphans {
+            plugins.remove(qid);
+        }
+    }
+    atomic_write_json(&installed_path, &data)?;
+
+    // Remove from enabledPlugins in both project and global settings.
+    // Write may fail due to sandbox restrictions on settings.json — that's OK,
+    // enabledPlugins gets rebuilt on next `claude-tools context <profile>` apply.
+    for settings_path in &[super::TARGET_FILE, super::GLOBAL_SETTINGS] {
+        let path = expand_home(settings_path);
+        if !Path::new(&path).exists() { continue; }
+        let Ok(content) = std::fs::read_to_string(&path) else { continue };
+        let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) else { continue };
+
+        let mut changed = false;
+        if let Some(enabled) = settings.get_mut("enabledPlugins").and_then(|v| v.as_object_mut()) {
+            for qid in orphans {
+                if enabled.remove(qid).is_some() {
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            match atomic_write_json(&path, &settings) {
+                Ok(()) => {
+                    if verbose {
+                        println!("  Cleaned enabledPlugins in {}", settings_path);
+                    }
+                }
+                Err(e) => {
+                    if verbose {
+                        println!("{}  Could not update {} ({}), will be cleaned on next profile apply{}",
+                            util::YELLOW, settings_path, e, util::RESET);
+                    }
+                }
+            }
+        }
+    }
+
+    println!("  Pruned {} orphan plugin(s):", orphans.len());
+    for qid in orphans {
+        println!("  {}✔{} {}", util::GREEN, util::RESET, plugin_short_name(qid));
+    }
 
     Ok(())
 }
@@ -108,8 +365,8 @@ fn which(cmd: &str) -> Option<String> {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
 }
 
-fn get_registered_marketplaces() -> std::collections::HashSet<String> {
-    let mut set = std::collections::HashSet::new();
+fn get_registered_marketplaces() -> HashSet<String> {
+    let mut set = HashSet::new();
     if let Ok(out) = Command::new("claude").args(["plugin", "marketplace", "list"]).output() {
         for line in String::from_utf8_lossy(&out.stdout).lines() {
             let line = line.trim();

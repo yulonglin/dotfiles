@@ -40,6 +40,10 @@ pub struct ContextArgs {
     #[arg(long, alias = "sync-marketplaces")]
     pub sync: bool,
 
+    /// Uninstall plugins not referenced in any profile
+    #[arg(long)]
+    pub prune: bool,
+
     /// Verbose output (for --sync)
     #[arg(short, long)]
     pub verbose: bool,
@@ -58,7 +62,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     let ctx_args = ContextArgs::parse_from(args);
 
     if ctx_args.sync {
-        sync::run(ctx_args.verbose)?;
+        sync::run(ctx_args.verbose, ctx_args.prune)?;
     } else if ctx_args.list {
         display::show_status()?;
     } else if ctx_args.clean {

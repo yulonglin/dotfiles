@@ -189,7 +189,6 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_messag
         return None
 
 
-
 def main() -> None:
     try:
         hook_input = json.load(sys.stdin)

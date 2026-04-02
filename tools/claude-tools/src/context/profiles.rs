@@ -43,3 +43,15 @@ pub fn load_marketplaces() -> Result<BTreeMap<String, MarketplaceConfig>, Box<dy
     let data = load_profiles_yaml()?;
     Ok(data.marketplaces.unwrap_or_default())
 }
+
+/// Collect all plugin short names referenced in base + all profiles.
+pub fn collect_wanted_plugins() -> Result<std::collections::HashSet<String>, Box<dyn std::error::Error>> {
+    let (base, profiles) = load_profiles()?;
+    let mut wanted: std::collections::HashSet<String> = base.into_iter().collect();
+    for (_name, pdef) in &profiles {
+        if let Some(ref enable) = pdef.enable {
+            wanted.extend(enable.iter().cloned());
+        }
+    }
+    Ok(wanted)
+}

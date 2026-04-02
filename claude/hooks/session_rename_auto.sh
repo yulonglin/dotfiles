@@ -1,128 +1,86 @@
 #!/usr/bin/env bash
-# Hook: Auto-rename terminal/tmux window based on session content
+# Hook: Auto-rename Claude Code session, Ghostty tab, and tmux window
 # Event: Stop
-# Triggers ONCE at turn 3, calls Haiku async to generate a descriptive name,
-# then sets terminal title (OSC) and tmux window name.
+# Triggers ONCE at turn 3. Calls Haiku to generate a short name, then:
+#   1. Appends custom-title entry to transcript JSONL (Claude Code /resume)
+#   2. Sets terminal/Ghostty tab title via OSC
+#   3. Renames tmux window
+# Skips if user already set a name via --name.
 
 set -euo pipefail
 
 TRIGGER_TURN=3
 MODEL="claude-haiku-4-5-20251001"
-MAX_TOKENS=30
-TRANSCRIPT_HEAD_LINES=30
 
-# Read session_id and transcript_path from stdin JSON
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-if [[ -z "$SESSION_ID" ]]; then
-  exit 0
-fi
+[[ -z "$SESSION_ID" ]] && exit 0
 
+# Turn counter — file stores count, -1 = already fired
 STATE_FILE="${TMPDIR:-/tmp}/claude-rename-auto-${SESSION_ID}"
-
-# Initialize state file on first run (turn 0 = not yet counted)
-if [[ ! -f "$STATE_FILE" ]]; then
-  printf '%s\n' "0" > "$STATE_FILE"
+TURN=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
+[[ "$TURN" == "-1" ]] && exit 0
+TURN=$((TURN + 1))
+if [[ "$TURN" -lt "$TRIGGER_TURN" ]]; then
+  echo "$TURN" > "$STATE_FILE"
   exit 0
 fi
 
-# Read current turn count
-TURN_COUNT=$(cat "$STATE_FILE")
-
-# -1 means already triggered — never fire again
-if [[ "$TURN_COUNT" == "-1" ]]; then
-  exit 0
-fi
-
-# Increment turn count
-TURN_COUNT=$((TURN_COUNT + 1))
-
-# Only trigger at exactly turn 3
-if [[ "$TURN_COUNT" -lt "$TRIGGER_TURN" ]]; then
-  printf '%s\n' "$TURN_COUNT" > "$STATE_FILE"
-  exit 0
-fi
-
-# At turn 3: mark as triggered (prevent future runs)
-printf '%s\n' "-1" > "$STATE_FILE"
-
-# Check prerequisites
+# Don't mark as fired yet — defer until background succeeds (bug fix:
+# if Haiku call fails, we retry on next turn instead of giving up forever)
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
-if [[ -z "$TRANSCRIPT_PATH" ]] || [[ ! -f "$TRANSCRIPT_PATH" ]]; then
-  exit 0
-fi
-if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-  exit 0
-fi
+[[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]] && exit 0
+[[ -z "${ANTHROPIC_API_KEY:-}" ]] && exit 0
 
-# --- Async Haiku call in background subshell ---
-# shellcheck disable=SC2030,SC2031
+# Skip if user already named this session
+grep -q '"custom-title"' "$TRANSCRIPT_PATH" 2>/dev/null && exit 0
+
+# --- Background: call Haiku, then apply name ---
 (
-  # Extract user messages from first ~TRANSCRIPT_HEAD_LINES of transcript
-  # Session name should reflect what the USER is working on, not assistant responses
-  CONTEXT=""
-  line_count=0
-  while IFS= read -r line && [[ "$line_count" -lt "$TRANSCRIPT_HEAD_LINES" ]]; do
-    entry_type=$(echo "$line" | jq -r '.type // empty' 2>/dev/null)
-    if [[ "$entry_type" == "human" ]]; then
-      text=$(echo "$line" | jq -r '
-        .message.content |
-        if type == "string" then .
-        elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ")
-        else ""
-        end
-      ' 2>/dev/null | head -c 300)
-      if [[ -n "$text" ]]; then
-        CONTEXT="${CONTEXT}User: ${text}
-"
-      fi
-    fi
-    ((line_count++)) || true
-  done < "$TRANSCRIPT_PATH"
+  # Collect user messages. Use grep to pre-filter human entries so jq only
+  # parses relevant lines (avoids failure on truncated last line from live writes).
+  CONTEXT=$(grep '"type":"human"' "$TRANSCRIPT_PATH" 2>/dev/null \
+    | head -20 \
+    | jq -r '
+      .message.content // empty |
+      if type == "string" then .
+      elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ")
+      else empty
+      end
+    ' 2>/dev/null \
+    | head -c 1500) || true
+  [[ -z "$CONTEXT" ]] && exit 0
 
-  if [[ -z "$CONTEXT" ]]; then
-    exit 0
-  fi
-
-  # Build API payload
-  # shellcheck disable=SC2016
-  PROMPT="Based on these user messages, generate a short (2-5 words) descriptive session name. Focus on what the user is working on. Output ONLY the name, no quotes, no punctuation, no explanation.
-
-${CONTEXT}"
-
-  PAYLOAD=$(jq -n \
-    --arg model "$MODEL" \
-    --argjson max_tokens "$MAX_TOKENS" \
-    --arg prompt "$PROMPT" \
-    '{
-      model: $model,
-      max_tokens: $max_tokens,
-      messages: [{ role: "user", content: $prompt }]
-    }')
-
-  RESPONSE=$(curl -s --max-time 10 \
+  RESPONSE=$(curl -sf --max-time 10 \
     -H "x-api-key: ${ANTHROPIC_API_KEY}" \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
-    -d "$PAYLOAD" \
-    "https://api.anthropic.com/v1/messages" 2>/dev/null)
+    -d "$(jq -nc --arg m "$MODEL" --arg c "$CONTEXT" '{
+      model: $m, max_tokens: 30,
+      messages: [{role: "user", content: ("Generate a short (2-5 word) session name for this work. Output ONLY the name.\n\n" + $c)}]
+    }')" \
+    "https://api.anthropic.com/v1/messages" 2>/dev/null) || exit 0
 
-  NAME=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null | tr -d '"' | head -c 60)
-  if [[ -z "$NAME" ]]; then
-    exit 0
-  fi
+  # Strip quotes and control characters from model output
+  NAME=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null \
+    | tr -d '"' | tr -d '\000-\037' | head -c 60)
+  [[ -z "$NAME" ]] && exit 0
 
-  # Set terminal title via ANSI OSC escape
-  printf '\033]0;%s\007' "$NAME" > /dev/tty 2>/dev/null || true
+  # Mark as fired only after we have a valid name
+  echo "-1" > "$STATE_FILE"
 
-  # Set tmux window name if inside a tmux session
+  # 1. Claude Code session name (custom-title in transcript JSONL)
+  jq -nc --arg t "$NAME" --arg s "$SESSION_ID" \
+    '{"type":"custom-title","customTitle":$t,"sessionId":$s}' >> "$TRANSCRIPT_PATH"
+
+  # 2. Terminal / Ghostty tab title
+  printf '\033]0;%s\033\\\033]2;%s\033\\' "$NAME" "$NAME" > /dev/tty 2>/dev/null || true
+
+  # 3. tmux window name
   if [[ -n "${TMUX:-}" ]]; then
+    tmux set-option -w automatic-rename off 2>/dev/null || true
     tmux rename-window "$NAME" 2>/dev/null || true
   fi
 ) & disown
 
-# Return synchronous systemMessage
-jq -n '{
-  systemMessage: "Session auto-rename triggered at turn 3: generating a descriptive name for the terminal/tmux window in the background."
-}'
 exit 0
