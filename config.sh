@@ -58,6 +58,7 @@ DEPLOY_MOUSELESS=false          # Mouseless keyboard mouse control (macOS only, 
 DEPLOY_TEXT_REPLACEMENTS=false  # Sync text replacements: macOS + Alfred (macOS only, opt-in)
 DEPLOY_VPN=false                # NordVPN+Tailscale split tunnel daemon (macOS only, opt-in)
 DEPLOY_FINICKY=true             # Finicky config symlink (macOS only)
+DEPLOY_FILE_APPS=true           # Set default editor for coding file types (macOS only)
 DEPLOY_CLAUDE_TOOLS=true        # Build claude-tools Rust binary
 DEPLOY_SECRETS_ENV=true         # Decrypt SOPS-encrypted secrets (requires sops + age)
 
@@ -199,6 +200,7 @@ apply_profile() {
             DEPLOY_SECRETS=false
             DEPLOY_SECRETS_ENV=false
             DEPLOY_FINICKY=false
+            DEPLOY_FILE_APPS=false
             DEPLOY_CLAUDE_TOOLS=false
             ;;
         minimal)
@@ -238,6 +240,7 @@ apply_profile() {
             DEPLOY_MOUSELESS=false
             DEPLOY_VPN=false
             DEPLOY_FINICKY=false
+            DEPLOY_FILE_APPS=false
             DEPLOY_CLAUDE_TOOLS=false
             DEPLOY_SECRETS_ENV=false
             ;;

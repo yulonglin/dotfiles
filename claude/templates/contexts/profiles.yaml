@@ -7,60 +7,77 @@
 # Plugin marketplaces — registered + synced by `claude-context --sync`
 # autoUpdate: true → claude-context --sync sets autoUpdate in known_marketplaces.json
 marketplaces:
+  # Anthropic
   claude-plugins-official:
     github: anthropics/claude-plugins-official
     autoUpdate: true
 
+  # Own
   ai-safety-plugins:
     github: yulonglin/ai-safety-plugins
     autoUpdate: true
-
-  dev-browser-marketplace:
-    github: sawyerhood/dev-browser
-    autoUpdate: true
-
-  ui-ux-pro-max-skill:
-    github: nextlevelbuilder/ui-ux-pro-max-skill
-    autoUpdate: true
-
-  alignment-hive:
-    github: Crazytieguy/alignment-hive
-    autoUpdate: true
-
   productivity-tools:
     github: yulonglin/productivity-tools
     autoUpdate: true
 
+  # Third-party
+  alignment-hive:
+    github: Crazytieguy/alignment-hive
+    autoUpdate: true
+  dev-browser-marketplace:
+    github: sawyerhood/dev-browser
+    autoUpdate: true
+  openai-codex:
+    github: openai/codex-plugin-cc
+    autoUpdate: true
+  rust-skills:
+    github: actionbook/rust-skills
+    autoUpdate: true
+  ui-ux-pro-max-skill:
+    github: nextlevelbuilder/ui-ux-pro-max-skill
+    autoUpdate: true
+
 # Always-on in every profile (declared once)
 base:
-  - core
-  - superpowers
-  - context7
-  - hookify
-  - plugin-dev
-  - commit-commands
   - claude-md-management
+  - commit-commands
+  - context7
+  - core
+  - hookify
   - llms-fetch-mcp
+  - plugin-dev
   - remember
+  - superpowers
 
-# Profiles — only list what they ENABLE beyond base
+# Domain profiles — primary workflow contexts
 profiles:
   code:
     comment: "Software projects"
     enable:
       - code
-      - workflow
       - code-simplifier
+      - codex
       - security-guidance
+      - workflow
+
+  design:
+    comment: "Frontend, visualizations, design systems"
+    enable:
+      - code
+      - figma
+      - frontend-design
+      - playground
+      - ui-ux-pro-max
+      - viz
 
   research:
     comment: "Experiments, evals, analysis"
     enable:
-      - research
-      - writing
-      - workflow
-      - viz
       - ralph-loop
+      - research
+      - viz
+      - workflow
+      - writing
       # optional: remote-kernels (cloud GPU via RunPod, from alignment-hive)
       # install: claude plugin install remote-kernels@alignment-hive
       # https://github.com/Crazytieguy/alignment-hive
@@ -68,34 +85,31 @@ profiles:
   writing:
     comment: "Papers, blog posts, documentation"
     enable:
-      - writing
       - viz
       - workflow
+      - writing
 
-  design:
-    comment: "Frontend, visualizations, design systems"
-    enable:
-      - code
-      - viz
-      - figma
-      - ui-ux-pro-max
-      - frontend-design
-      - playground
-
-  # Sub-profiles (compose with domain)
-  python:
-    comment: "Adds pyright-lsp"
-    enable: [pyright-lsp]
-
-  web:
-    comment: "Web dev + browser automation"
-    enable: [typescript-lsp, dev-browser]
-
+  # Sub-profiles — compose with domain profiles above
   ml:
     comment: "Adds huggingface-skills"
     enable: [huggingface-skills]
 
   personal:
     comment: "Life and productivity — Things 3"
-    enable:
-      - things-mcp
+    enable: [things-mcp]
+
+  python:
+    comment: "Adds pyright-lsp"
+    enable: [pyright-lsp]
+
+  rust:
+    comment: "Adds rust-skills (ownership, concurrency, architecture)"
+    enable: [rust-skills, rust-analyzer-lsp]
+
+  go:
+    comment: "Adds gopls-lsp"
+    enable: [gopls-lsp]
+
+  web:
+    comment: "Web dev + browser automation"
+    enable: [dev-browser, typescript-lsp]

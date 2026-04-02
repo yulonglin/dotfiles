@@ -505,6 +505,7 @@ claude/*.local.md
 
 # Compiled binaries (built per-platform by deploy.sh)
 custom_bins/claude-tools
+tools/set-default-app/set-default-app
 
 # Misplaced .claude/ dirs (created when CWD != git root)
 config/.claude/

@@ -16,12 +16,20 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
 fi
 export TERM="xterm-256color"
 
-# Editor - used by Claude Code (Ctrl+G), git, etc.
-if [[ -n $SSH_CONNECTION ]]; then
-  export EDITOR='edit'
-else
-  export EDITOR='cursor --wait'
+# Editor — reads from file_associations.conf (single source of truth)
+_fa_conf="$DOT_DIR/config/file_associations.conf"
+if [[ -f "$_fa_conf" ]]; then
+  # Source only the EDITOR_CLI* variables (fast, no array eval)
+  EDITOR_CLI=$(sed -n 's/^EDITOR_CLI="\(.*\)"/\1/p' "$_fa_conf" | head -1)
+  EDITOR_CLI_SSH=$(sed -n 's/^EDITOR_CLI_SSH="\(.*\)"/\1/p' "$_fa_conf" | head -1)
 fi
+if [[ -n $SSH_CONNECTION ]]; then
+  export EDITOR="${EDITOR_CLI_SSH:-edit}"
+else
+  export EDITOR="${EDITOR_CLI:-cursor --wait}"
+fi
+export VISUAL="$EDITOR"
+unset _fa_conf EDITOR_CLI EDITOR_CLI_SSH
 
 # Claude Code tmpdir - avoid root-owned /tmp/claude issues
 if [[ -n "$TMPDIR" && -w "$TMPDIR" ]]; then
@@ -192,6 +200,9 @@ _reset_terminal_modes() {
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd _reset_terminal_modes_soft
+# Exit alt screen once at shell startup (recovers scrollback after SSH disconnect;
+# mid-session kill -9 of alt-screen apps needs manual fix-term)
+_reset_terminal_modes
 
 # Only display ASCII art in interactive shells
 if [[ -o interactive ]]; then
