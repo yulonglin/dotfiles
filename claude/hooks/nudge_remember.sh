@@ -61,10 +61,7 @@ if [[ "$SHOULD_NUDGE" == "true" ]]; then
   # Return message to assistant (non-blocking nudge)
   cat <<'HOOK_EOF'
 {
-  "hookSpecificOutput": {
-    "hookEventName": "Stop",
-    "message": "Session milestone: this session has been running for a while. Consider reminding the user to run /remember or externalize important state to files (plans/, CLAUDE.md learnings, specs/) before context gets too large to summarize well."
-  }
+  "systemMessage": "Session milestone: this session has been running for a while. Consider reminding the user to run /remember or externalize important state to files (plans/, CLAUDE.md learnings, specs/) before context gets too large to summarize well."
 }
 HOOK_EOF
   exit 0
