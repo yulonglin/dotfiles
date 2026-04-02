@@ -654,6 +654,11 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"
         fi
 
+        # Clean stale plugin cache versions (prevents skill shadowing warnings)
+        if command -v claude-cache-clean &>/dev/null; then
+            claude-cache-clean --apply
+        fi
+
         # Deploy context templates (skip if ~/.claude already points here)
         local ctx_src="$DOT_DIR/claude/templates/contexts"
         local ctx_dst="$HOME/.claude/templates/contexts"

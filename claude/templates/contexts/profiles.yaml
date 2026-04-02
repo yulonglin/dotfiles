@@ -48,6 +48,7 @@ base:
   - plugin-dev
   - remember
   - superpowers
+  - workflow
 
 # Domain profiles — primary workflow contexts
 profiles:
