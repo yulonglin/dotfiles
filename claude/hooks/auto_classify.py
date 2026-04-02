@@ -20,6 +20,7 @@ TIMEOUT_SECONDS = 12
 LOG_PATH = os.path.expanduser("~/.cache/claude/auto-classify.log")
 MAX_INPUT_CHARS = 2000
 MAX_LOG_BYTES = 1_000_000  # 1MB
+MAX_USER_MSG_CHARS = 200  # Truncation limit for user message context
 
 # GitHub owners (users + orgs) whose repos are trusted for relaxed permissions.
 # Add orgs you work with regularly. Personal repos get extra relaxations.
@@ -28,6 +29,9 @@ PERSONAL_GITHUB_USERS = {"yulonglin"}
 
 # Cache file written by SessionStart hook (detect_repo_trust.sh)
 TRUST_CACHE = os.path.expanduser("~/.cache/claude/repo-trust.json")
+
+# Feature flags (set via environment variables)
+INCLUDE_USER_MESSAGE = os.environ.get("AUTO_CLASSIFY_USER_MESSAGE", "1") != "0"
 
 
 def detect_repo_trust(cwd: str) -> dict:
@@ -100,7 +104,43 @@ def log(msg: str) -> None:
         pass
 
 
-def classify(tool_name: str, tool_input: dict, cwd: str, rules: str) -> dict | None:
+def extract_last_user_message(transcript_path: str) -> str:
+    """Extract the last user message from the transcript JSONL. Fails silently."""
+    try:
+        with open(transcript_path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 20_000))
+            tail = f.read().decode("utf-8", errors="replace")
+
+        for line in reversed(tail.strip().splitlines()):
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("type") != "human":
+                continue
+            text = _extract_text(entry.get("message", ""))
+            if text:
+                return text[:MAX_USER_MSG_CHARS] + "..." if len(text) > MAX_USER_MSG_CHARS else text
+    except Exception:
+        pass
+    return ""
+
+
+def _extract_text(msg: str | dict | list) -> str:
+    """Pull plain text from a transcript message field."""
+    if isinstance(msg, str):
+        return msg.strip()
+    if isinstance(msg, dict):
+        return _extract_text(msg.get("content", ""))
+    if isinstance(msg, list):
+        return " ".join(
+            b.get("text", "") for b in msg if isinstance(b, dict) and b.get("type") == "text"
+        ).strip()
+    return ""
+
+
+def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_message: str = "") -> dict | None:
     """Call Haiku to classify the action. Returns parsed response or None."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -113,6 +153,8 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str) -> dict | N
         input_str = input_str[:MAX_INPUT_CHARS] + "\n... (truncated)"
 
     user_msg = f"Tool: {tool_name}\nInput: {input_str}\nWorking directory: {cwd}"
+    if user_message:
+        user_msg += f"\nUser's request: {user_message}"
 
     body = json.dumps({
         "model": MODEL,
@@ -157,7 +199,7 @@ def main() -> None:
     tool_name = hook_input.get("tool_name", "unknown")
     tool_input = hook_input.get("tool_input", {})
     cwd = hook_input.get("cwd", "")
-    session_id = hook_input.get("session_id", "")
+    transcript_path = hook_input.get("transcript_path", "")
 
     try:
         with open(RULES_PATH) as f:
@@ -181,7 +223,11 @@ def main() -> None:
         f"## Environment\n{trust_section}",
     )
 
-    result = classify(tool_name, tool_input, cwd, rules)
+    user_message = ""
+    if INCLUDE_USER_MESSAGE and transcript_path:
+        user_message = extract_last_user_message(transcript_path)
+
+    result = classify(tool_name, tool_input, cwd, rules, user_message)
     if result is None:
         sys.exit(0)
 
