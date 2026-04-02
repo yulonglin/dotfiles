@@ -47,8 +47,8 @@ if [[ -z "$SUBJECT" ]]; then
   SUBJECT="git commit"
 fi
 
-# Truncate to a reasonable title length
-TITLE="${SUBJECT:0:60}"
+# Truncate and prefix with ✅
+TITLE="✅ ${SUBJECT:0:60}"
 
 # Set terminal title via OSC escape (works in most terminals)
 printf '\033]0;%s\007' "$TITLE" > /dev/tty 2>/dev/null || true
@@ -60,6 +60,6 @@ fi
 
 # Output systemMessage nudging Claude to run /rename
 jq -n --arg subject "$SUBJECT" '{
-  systemMessage: ("First commit made: \"" + $subject + "\". Consider running /rename to give this session a descriptive name based on what was just committed.")
+  systemMessage: ("✅ First commit made: \"" + $subject + "\". The terminal title has been updated. Consider suggesting /rename to the user with a descriptive session name.")
 }'
 exit 0
