@@ -40,7 +40,7 @@ grep -q '"custom-title"' "$TRANSCRIPT_PATH" 2>/dev/null && exit 0
 (
   # Collect user messages. Use grep to pre-filter human entries so jq only
   # parses relevant lines (avoids failure on truncated last line from live writes).
-  CONTEXT=$(grep '"type":"human"' "$TRANSCRIPT_PATH" 2>/dev/null \
+  CONTEXT=$(grep '"type":"user"' "$TRANSCRIPT_PATH" 2>/dev/null \
     | head -20 \
     | jq -r '
       .message.content // empty |

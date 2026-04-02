@@ -110,10 +110,6 @@
     }
   },
   "feedbackSurveyRate": 0,
-  "fileSuggestion": {
-    "command": "fd --type f --hidden --exclude .git",
-    "type": "command"
-  },
   "hooks": {
     "PermissionRequest": [
       {
