@@ -90,13 +90,17 @@ profiles:
       - writing
 
   # Sub-profiles — compose with domain profiles above
+  messaging:
+    comment: "Messaging and communication tools"
+    enable: [telegram]
+
   ml:
     comment: "Adds huggingface-skills"
     enable: [huggingface-skills]
 
-  personal:
-    comment: "Life and productivity — Things 3"
-    enable: [things-mcp]
+  productivity:
+    comment: "Task and project management — Things 3, Linear"
+    enable: [linear, things-mcp]
 
   python:
     comment: "Adds pyright-lsp"
@@ -110,6 +114,10 @@ profiles:
     comment: "Adds gopls-lsp"
     enable: [gopls-lsp]
 
+  swift:
+    comment: "Adds swift-lsp"
+    enable: [swift-lsp]
+
   web:
     comment: "Web dev + browser automation"
-    enable: [dev-browser, typescript-lsp]
+    enable: [dev-browser, playwright, typescript-lsp]

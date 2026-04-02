@@ -7,6 +7,8 @@ pub const YELLOW: Color = Color::Yellow;
 pub const BLUE: Color = Color::Blue;
 pub const GRAY: Color = Color::DarkGray;
 pub const WHITE: Color = Color::White;
+pub const RED: Color = Color::Red;
+pub const CYAN: Color = Color::Cyan;
 
 pub fn selected() -> Style {
     Style::default().fg(GREEN).add_modifier(Modifier::BOLD)
@@ -36,7 +38,27 @@ pub fn tree_branch() -> Style {
     Style::default().fg(GRAY)
 }
 
+pub fn tab_active() -> Style {
+    Style::default()
+        .fg(WHITE)
+        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+}
+
+pub fn tab_inactive() -> Style {
+    Style::default().fg(GRAY)
+}
+
+pub fn override_on() -> Style {
+    Style::default().fg(CYAN).add_modifier(Modifier::BOLD)
+}
+
+pub fn override_off() -> Style {
+    Style::default().fg(RED)
+}
+
 pub const FILLED: &str = "●";
 pub const EMPTY: &str = "○";
+pub const OVERRIDE_ON: &str = "+";
+pub const OVERRIDE_OFF: &str = "−";
 pub const BRANCH: &str = "├";
 pub const BRANCH_LAST: &str = "└";

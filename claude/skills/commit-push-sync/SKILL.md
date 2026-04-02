@@ -173,6 +173,40 @@ If rebase conflicts occur:
   - For rebase: resolve, `git add`, `git rebase --continue`, or `git rebase --abort`
   - For merge: resolve, `git add`, `git commit`, or `git merge --abort`
 
+#### CRITICAL: Working tree contamination after failed rebase/merge
+
+**A failed `git pull --rebase` or `git pull --no-rebase` can leave the working tree in a MIXED state** — some files reverted to the remote's version, others untouched. This is the #1 source of silent regressions.
+
+**What happens:** The rebase/merge starts applying remote changes to the working tree, then aborts (due to conflicts, sandbox issues, dirty files). The abort restores HEAD but may NOT fully restore the working tree. Files that were cleanly merged get the remote's version; files that conflicted get restored.
+
+**Required behavior after ANY failed pull (rebase or merge):**
+
+1. **STOP.** Do NOT proceed to commit dirty files.
+2. **Check for contamination**: Run `git diff` on all dirty files and compare against the COMMIT you just made (not HEAD, which may be wrong after abort).
+3. **Look for regressions**: If a diff shows your recent changes being REMOVED (lines you added are gone, renames reverted), the working tree is contaminated.
+4. **Restore from your commit**: `git checkout <your-commit-hash> -- <contaminated-files>` to restore your version.
+5. **If unsure**, ask the user: "The failed rebase left some files modified. These diffs show [your changes] being reverted. Should I restore from your commit or keep the current state?"
+
+**Anti-pattern (caused the 2026-04-03 profiles.yaml regression):**
+```
+git commit -m "my changes"           # Committed profiles.yaml with new profiles
+git pull --rebase                    # FAILED (sandbox blocked settings.json)
+# Working tree now has REMOTE's old profiles.yaml!
+git add profiles.yaml                # Staged the REGRESSION
+git commit -m "sync"                 # Committed the regression ❌
+```
+
+**Correct pattern:**
+```
+git commit -m "my changes"           # Committed profiles.yaml with new profiles
+git pull --rebase                    # FAILED
+git diff                             # Check what changed — profiles.yaml shows YOUR additions removed!
+git checkout HEAD -- profiles.yaml   # Restore YOUR version
+# Now decide: push directly, or try merge instead
+```
+
+**Rule:** After a failed rebase/merge, treat EVERY dirty file as potentially contaminated. Verify each diff is a genuine change, not a reversion of your recent commit.
+
 ### Step 4: Push to Remote
 
 Push commits to remote:

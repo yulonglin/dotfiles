@@ -143,7 +143,7 @@ pub fn run(verbose: bool, prune: bool) -> Result<(), Box<dyn std::error::Error>>
     // Phase 5: Post-fixups (unchanged)
     fix_hook_permissions(verbose);
     apply_auto_update(&marketplaces, verbose)?;
-    normalize_scopes(verbose)?;
+    normalize_scopes(&wanted, verbose)?;
 
     Ok(())
 }
@@ -474,36 +474,76 @@ fn apply_auto_update(
     Ok(())
 }
 
-fn normalize_scopes(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn normalize_scopes(wanted: &HashSet<String>, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
     let path = expand_home(super::INSTALLED_PLUGINS_PATH);
     if !Path::new(&path).exists() {
         return Ok(());
     }
     let content = std::fs::read_to_string(&path)?;
     let mut data: serde_json::Value = serde_json::from_str(&content)?;
-    let mut changed = Vec::new();
+    let mut upgraded = Vec::new();
+    let mut deduped = Vec::new();
+    let mut stale_project = Vec::new();
 
     if let Some(plugins) = data.get_mut("plugins").and_then(|v| v.as_object_mut()) {
         for (qid, entries) in plugins.iter_mut() {
-            if let Some(arr) = entries.as_array_mut() {
+            let short = plugin_short_name(qid).to_string();
+            let Some(arr) = entries.as_array_mut() else { continue };
+            let has_user = arr.iter().any(|e| e.get("scope").and_then(|v| v.as_str()) == Some("user"));
+
+            if has_user && arr.len() > 1 {
+                // Drop stale non-user entries when a user-scoped entry exists.
+                let before = arr.len();
+                arr.retain(|e| e.get("scope").and_then(|v| v.as_str()) == Some("user"));
+                if arr.len() < before {
+                    deduped.push(short);
+                }
+            } else if wanted.contains(&short) {
+                // Upgrade wanted plugins (managed by --sync) to user scope.
                 for entry in arr.iter_mut() {
-                    if entry.get("scope").and_then(|v| v.as_str()) == Some("local") {
-                        entry.as_object_mut().map(|e| e.insert("scope".into(), "project".into()));
-                        changed.push(plugin_short_name(qid).to_string());
+                    let scope = entry.get("scope").and_then(|v| v.as_str()).unwrap_or("");
+                    if scope == "local" || scope == "project" {
+                        if let Some(e) = entry.as_object_mut() {
+                            e.insert("scope".into(), "user".into());
+                            e.remove("projectPath");
+                        }
+                        upgraded.push(short.clone());
                     }
+                }
+            } else {
+                // Warn about non-wanted plugins stuck at project scope.
+                let is_project = arr.iter().any(|e| {
+                    let s = e.get("scope").and_then(|v| v.as_str()).unwrap_or("");
+                    s == "local" || s == "project"
+                });
+                if is_project {
+                    stale_project.push(qid.clone());
                 }
             }
         }
     }
 
-    if !changed.is_empty() {
+    if !upgraded.is_empty() || !deduped.is_empty() {
         atomic_write_json(&path, &data)?;
-        println!("{}Normalized {} plugin scope(s): local → project{}", util::GREEN, changed.len(), util::RESET);
-        if verbose {
-            for name in &changed {
-                println!("  {}", name);
+        if !upgraded.is_empty() {
+            println!("{}Upgraded {} plugin scope(s) → user{}", util::GREEN, upgraded.len(), util::RESET);
+            if verbose {
+                for name in &upgraded { println!("  {}", name); }
             }
         }
+        if !deduped.is_empty() {
+            println!("{}Removed {} duplicate non-user entries{}", util::GREEN, deduped.len(), util::RESET);
+            if verbose {
+                for name in &deduped { println!("  {}", name); }
+            }
+        }
+    }
+    if !stale_project.is_empty() {
+        println!("{}  {} plugin(s) still project-scoped (may fail in other projects):{}", util::YELLOW, stale_project.len(), util::RESET);
+        for qid in &stale_project {
+            println!("    {}", qid);
+        }
+        println!("    Fix: claude plugin install <name> --scope user");
     }
     Ok(())
 }

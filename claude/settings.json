@@ -31,6 +31,7 @@
     "gopls-lsp@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
     "huggingface-skills@claude-plugins-official": false,
+    "linear@claude-plugins-official": false,
     "llms-fetch-mcp@alignment-hive": true,
     "playground@claude-plugins-official": false,
     "plugin-dev@claude-plugins-official": true,
@@ -143,6 +144,11 @@
             "command": "$HOME/.claude/hooks/session_rename_commit.sh",
             "timeout": 5,
             "type": "command"
+          },
+          {
+            "command": "$HOME/.claude/hooks/mark_failed_sync.sh",
+            "timeout": 5,
+            "type": "command"
           }
         ],
         "matcher": "Bash"
@@ -159,6 +165,11 @@
           {
             "command": "$HOME/.claude/hooks/nudge_modern_tools.sh",
             "timeout": 3,
+            "type": "command"
+          },
+          {
+            "command": "$HOME/.claude/hooks/guard_post_rebase.sh",
+            "timeout": 5,
             "type": "command"
           }
         ],
