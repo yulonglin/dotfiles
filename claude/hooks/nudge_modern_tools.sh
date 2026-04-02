@@ -8,7 +8,7 @@ set -euo pipefail
 #            (blocks with specific suggestion, avoids permission prompt entirely)
 # ALLOWS: same commands in pipelines/streams (no built-in equivalent)
 # NUDGES: awk, curl (complex), wget (complex), ls, echo/printf redirection (soft suggestions)
-# BLOCKS: curl/wget simple GETs (WebFetch is strictly better, no permission prompt)
+# BLOCKS: curl/wget bare GETs (URL only, optionally -s/-S/-q; WebFetch is strictly better)
 
 input=$(cat)
 command=$(echo "$input" | jq -r '.tool_input.command // ""')
@@ -28,14 +28,25 @@ nudge=""
 # Check if cmd appears ONLY after a pipe (stream usage = allow)
 is_piped_only() {
     local cmd="$1"
-    # Remove everything before pipes, check if cmd appears in non-piped positions
-    # Strategy: split on | and check if cmd appears in the first segment or after && / ;
-    local first_segment="${command%%|*}"
-    # If command has no pipe at all, it's not piped
+    # Check if cmd ONLY appears in pipe-receiving positions (after |).
+    # Must also check for && / ; in later segments that start a new standalone command.
     [[ "$command" != *"|"* ]] && return 1
-    # If cmd appears in the first segment (before any pipe), it's not pipe-only
-    [[ "$first_segment" =~ (^|[&;[:space:]])$cmd([[:space:]]|$) ]] && return 1
-    # cmd only appears after a pipe
+    # Split on | and check each segment. First segment is always standalone.
+    # Later segments: the part after && or ; is also standalone.
+    local IFS='|' seg i=0
+    for seg in $command; do
+        if (( i == 0 )); then
+            # First segment: any match means not pipe-only
+            [[ "$seg" =~ (^|[&;[:space:]])$cmd([[:space:]]|$) ]] && return 1
+        else
+            # Later segments: check for cmd after && or ; (standalone position)
+            local after_chain
+            # Extract parts after && or ; within this segment
+            after_chain=$(echo "$seg" | sed -E 's/^[^&;]*(&&|;)//')
+            [[ "$after_chain" != "$seg" && "$after_chain" =~ (^|[[:space:]])$cmd([[:space:]]|$) ]] && return 1
+        fi
+        ((i++))
+    done
     return 0
 }
 
@@ -59,9 +70,9 @@ elif has_cmd fd && ! is_piped_only fd && [[ "$command" =~ [[:space:]](-[xX])([[:
     block_reason="**\`fd -x/-X\`** (exec shorthand) requires confirmation. Use \`fd\` piped to \`while IFS= read -r\` instead."
 elif has_cmd sed && ! is_piped_only sed; then
     block_reason="Use the built-in **Edit** tool instead of \`sed\` for file modifications. For stream editing: \`sd\`."
-elif (has_cmd cat || has_cmd head || has_cmd tail) && ! is_piped_only cat && ! is_piped_only head && ! is_piped_only tail; then
-    # Extra check: "cat <<" is heredoc, not file reading — allow it
-    if [[ "$command" =~ cat[[:space:]]+\<\< ]]; then
+elif (has_cmd cat && ! is_piped_only cat) || (has_cmd head && ! is_piped_only head) || (has_cmd tail && ! is_piped_only tail); then
+    # Extra check: "cat <<" or "cat > file <<" is heredoc, not file reading — allow it
+    if [[ "$command" =~ cat[[:space:]].*\<\< ]]; then
         : # heredoc usage, skip
     else
         block_reason="Use the built-in **Read** tool instead of \`cat\`/\`head\`/\`tail\` for reading files. It supports \`offset\` and \`limit\` for partial reads. For CLI: \`bat\`."
@@ -91,16 +102,16 @@ elif has_cmd xargs && ! is_piped_only xargs; then
 elif has_cmd awk; then
     nudge="Consider the built-in **Grep** tool (extraction) or \`jq\` (structured data) over \`awk\`."
 elif has_cmd curl && ! is_piped_only curl; then
-    # Block simple GETs (WebFetch is strictly better), nudge complex usage
-    if [[ "$command" =~ curl[[:space:]]+(-s[[:space:]]+|-S[[:space:]]+|-sS[[:space:]]+|-Ss[[:space:]]+)*https?:// ]] \
-       && ! [[ "$command" =~ curl.*[[:space:]](-[a-zA-Z]*[oOHdXu]|--output|--header|--data|--request|--user|--upload-file|-fsSL|-LO) ]]; then
+    # Whitelist approach: block ONLY bare GETs (URL + optional -s/-S/-sS/-Ss, nothing else).
+    # Anything with extra flags falls through to nudge — no false positives on complex usage.
+    if [[ "$command" =~ ^[[:space:]]*curl[[:space:]]+(-[sSq]+[[:space:]]+)*\"?https?://[^[:space:]]+\"?[[:space:]]*$ ]]; then
         block_reason="Use the built-in **WebFetch** tool instead of \`curl\` for simple GETs — auto-allowed, no permission prompt. Use \`curl\` for downloads (\`-o\`), installs (\`-fsSL\`), or API calls (\`-H\`/\`-d\`)."
     else
         nudge="**\`curl\`** requires confirmation. Prefer **WebFetch** tool when fetching page/API content. curl is fine for binary downloads, installs, and complex requests."
     fi
 elif has_cmd wget && ! is_piped_only wget; then
-    if [[ "$command" =~ wget[[:space:]]+(-q[[:space:]]+|-nv[[:space:]]+)*https?:// ]] \
-       && ! [[ "$command" =~ wget.*[[:space:]](-[a-zA-Z]*[oO]|--output-document|--header|--post-data) ]]; then
+    # Same whitelist approach for wget
+    if [[ "$command" =~ ^[[:space:]]*wget[[:space:]]+(-[qnv]+[[:space:]]+)*\"?https?://[^[:space:]]+\"?[[:space:]]*$ ]]; then
         block_reason="Use the built-in **WebFetch** tool instead of \`wget\` for simple GETs — auto-allowed, no permission prompt."
     else
         nudge="**\`wget\`** requires confirmation. Prefer **WebFetch** tool when fetching page/API content."
