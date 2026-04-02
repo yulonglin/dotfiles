@@ -146,7 +146,7 @@ These modern alternatives are installed by default and significantly faster than
 **Extras** (`--extras` flag):
 
 - `[hyperfine](https://github.com/sharkdp/hyperfine)` — statistical benchmarking with warmup and multiple runs
-- `[lazygit](https://github.com/jesseduffield/lazygit)` — TUI for git
+- `[gitui](https://github.com/extrawurst/gitui)` — TUI for git
 - `[code2prompt](https://github.com/mufeedvh/code2prompt)` — generate LLM prompts from codebases
 
 ## Installation
