@@ -2,7 +2,8 @@
 # PreToolUse:Bash hook — supply chain warning on package install commands
 set -euo pipefail
 
-command=$(jq -r '.tool_input.command // ""')
+input=$(cat)
+command=$(echo "$input" | jq -r '.tool_input.command // ""')
 [[ -z "$command" ]] && exit 0
 
 case "$command" in

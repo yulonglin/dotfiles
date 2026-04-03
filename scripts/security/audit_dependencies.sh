@@ -46,7 +46,7 @@ for dir in "${SCAN_DIRS[@]}"; do
                 log "CRITICAL: $lockfile has $matches known-bad package match(es)"
                 issues_found=$((issues_found + matches))
             fi
-        done < <(find "$dir" -maxdepth 4 \( -name "package-lock.json" -o -name "yarn.lock" -o -name "pnpm-lock.yaml" \) -not -path "*/node_modules/*" 2>/dev/null)
+        done < <(find "$dir" -maxdepth 4 \( -name "package-lock.json" -o -name "yarn.lock" -o -name "pnpm-lock.yaml" -o -name "bun.lockb" -o -name "bun.lock" \) -not -path "*/node_modules/*" 2>/dev/null)
     fi
 
     if [[ ${#pypi_names[@]} -gt 0 ]]; then

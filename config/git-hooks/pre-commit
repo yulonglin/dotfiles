@@ -48,7 +48,7 @@ fi
 STAGED_FILES=$(git diff --cached --name-only 2>/dev/null || true)
 LOCKFILE_CHANGED=""
 
-for pattern in package-lock.json bun.lockb pnpm-lock.yaml yarn.lock uv.lock poetry.lock Pipfile.lock; do
+for pattern in package-lock.json bun.lockb bun.lock pnpm-lock.yaml yarn.lock uv.lock poetry.lock Pipfile.lock; do
     if echo "$STAGED_FILES" | grep -q "$pattern"; then
         LOCKFILE_CHANGED="$pattern"
         break
@@ -59,7 +59,7 @@ if [ -n "$LOCKFILE_CHANGED" ]; then
     echo "Pre-commit: Lockfile changed ($LOCKFILE_CHANGED) — checking for supply chain issues..."
 
     # Socket CLI (JS ecosystem lockfiles)
-    if command -v socket &>/dev/null && echo "$LOCKFILE_CHANGED" | grep -qE '^(package-lock|bun\.lockb|pnpm-lock|yarn\.lock)'; then
+    if command -v socket &>/dev/null && echo "$LOCKFILE_CHANGED" | grep -qE '^(package-lock|bun\.lock|pnpm-lock|yarn\.lock)'; then
         if ! socket report --json 2>/dev/null | jq -e '.issues | length == 0' >/dev/null 2>&1; then
             echo "Pre-commit: socket found potential issues in $LOCKFILE_CHANGED. Review with: socket report"
             echo "  To bypass: git commit --no-verify"
