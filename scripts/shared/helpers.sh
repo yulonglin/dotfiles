@@ -1346,7 +1346,7 @@ parse_args() {
     if [[ "$_only_mode" == true ]]; then
         local _known_components=(core vim editor claude codex ghostty htop pdb matplotlib
             git_hooks secrets secrets_env cleanup claude_cleanup ai_update brew_update keyboard
-            bedtime serena mouseless text_replacements vpn finicky file_apps claude_tools macos_settings
+            bedtime serena mouseless text_replacements vpn pueue finicky file_apps claude_tools macos_settings
             zsh tmux ai_tools docker extras experimental create_user
             shell git_config)
 

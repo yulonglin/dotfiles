@@ -77,6 +77,7 @@ COMPONENTS:
     --file-apps       Set default editor for coding file types (macOS only)
     --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
     --vpn             Install NordVPN+Tailscale split tunnel daemon (macOS only)
+    --pueue           Deploy Pueue + systemd resource management (Linux only)
     --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
@@ -807,6 +808,103 @@ if [[ "$DEPLOY_CLEANUP" == "true" ]] && is_macos; then
         "$DOT_DIR/scripts/cleanup/install.sh" --non-interactive || log_warning "File cleanup installation failed"
     else
         log_warning "File cleanup install script not found"
+    fi
+fi
+
+# ─── Pueue + Resource Slices (Linux) ─────────────────────────────────────────
+
+if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
+    log_section "PUEUE + RESOURCE MANAGEMENT"
+
+    if ! systemctl --user status &>/dev/null; then
+        log_warning "systemd --user not available — skipping resource management"
+        log_info "  Try: loginctl enable-linger $(whoami)"
+    else
+        # Source resource config
+        local resources_conf="$DOT_DIR/config/resources.conf"
+        if [[ -f "$resources_conf" ]]; then
+            source "$resources_conf"
+        else
+            log_warning "config/resources.conf not found — using defaults"
+            EXPERIMENTS_CPU_QUOTA=200%; EXPERIMENTS_MEMORY_MAX=24G; EXPERIMENTS_MEMORY_HIGH=20G; EXPERIMENTS_PARALLEL=1
+            AGENTS_CPU_QUOTA=200%; AGENTS_MEMORY_MAX=8G; AGENTS_MEMORY_HIGH=6G; AGENTS_PARALLEL=3
+        fi
+
+        # Deploy systemd user units
+        local systemd_user_dir="$HOME/.config/systemd/user"
+        mkdir -p "$systemd_user_dir"
+
+        # Template slice files with values from resources.conf
+        for slice in experiments agents; do
+            local src="$DOT_DIR/config/systemd-user/${slice}.slice"
+            local dst="$systemd_user_dir/${slice}.slice"
+            if [[ -f "$src" ]]; then
+                local cpu_var="${slice^^}_CPU_QUOTA"
+                local mem_max_var="${slice^^}_MEMORY_MAX"
+                local mem_high_var="${slice^^}_MEMORY_HIGH"
+                sed -e "s|CPUQuota=.*|CPUQuota=${!cpu_var}|" \
+                    -e "s|MemoryMax=.*|MemoryMax=${!mem_max_var}|" \
+                    -e "s|MemoryHigh=.*|MemoryHigh=${!mem_high_var}|" \
+                    "$src" > "$dst"
+                log_info "Deployed ${slice}.slice (CPU=${!cpu_var}, Mem=${!mem_max_var})"
+            fi
+        done
+
+        # Deploy pueued service
+        local pueued_src="$DOT_DIR/config/systemd-user/pueued.service"
+        [[ -f "$pueued_src" ]] && cp "$pueued_src" "$systemd_user_dir/pueued.service"
+
+        systemctl --user daemon-reload
+        log_success "systemd user units deployed"
+
+        # Check cgroup delegation
+        local uid; uid=$(id -u)
+        local user_cgroup="/sys/fs/cgroup/user.slice/user-${uid}.slice"
+        if [[ -f "$user_cgroup/cgroup.subtree_control" ]]; then
+            local controls; controls=$(< "$user_cgroup/cgroup.subtree_control")
+            if [[ "$controls" != *"memory"* ]] || [[ "$controls" != *"cpu"* ]]; then
+                log_warning "cgroup delegation incomplete: $controls"
+                log_info "Run once: sudo systemctl set-property user-${uid}.slice Delegate=yes && sudo systemctl daemon-reload"
+            else
+                log_success "cgroup delegation OK: $controls"
+            fi
+        fi
+
+        # Deploy Pueue config and create groups
+        if cmd_exists pueue; then
+            local pueue_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/pueue"
+            mkdir -p "$pueue_config_dir"
+            cp "$DOT_DIR/config/pueue.yml" "$pueue_config_dir/pueue.yml"
+
+            # Enable and start pueued via systemd
+            systemctl --user enable pueued.service 2>/dev/null
+            systemctl --user start pueued.service 2>/dev/null || {
+                log_info "systemd start failed, falling back to direct pueued..."
+                pueued --daemonize 2>/dev/null
+            }
+
+            # Wait for pueued to be ready (group creation needs running daemon)
+            local retries=0
+            while ! pueue status &>/dev/null && (( retries < 10 )); do
+                sleep 0.5
+                retries=$((retries + 1))
+            done
+
+            if pueue status &>/dev/null; then
+                pueue group add experiments 2>/dev/null
+                pueue group add agents 2>/dev/null
+                pueue parallel "$EXPERIMENTS_PARALLEL" --group experiments
+                pueue parallel "$AGENTS_PARALLEL" --group agents
+                log_success "Pueue groups: experiments(${EXPERIMENTS_PARALLEL}), agents(${AGENTS_PARALLEL})"
+            else
+                log_warning "pueued failed to start — groups not configured"
+            fi
+
+            # Enable linger (services persist after logout)
+            loginctl enable-linger "$(whoami)" 2>/dev/null
+        else
+            log_warning "pueue not installed — run: ./install.sh --pueue"
+        fi
     fi
 fi
 

@@ -839,6 +839,66 @@ qrun() {
 }
 
 # -------------------------------------------------------------------
+# Pueue (local job queue + resource slices)
+# -------------------------------------------------------------------
+# j* prefix to avoid collision with q* (SLURM)
+if command -v pueue &>/dev/null; then
+
+  # Submit job to a group with systemd cgroup enforcement
+  # Usage: jrun <group> <cmd...>
+  jrun() {
+    local group="${1:?Usage: jrun <group> <cmd...> (groups: experiments, agents)}"
+    shift
+    if [[ "$group" != "experiments" && "$group" != "agents" ]]; then
+      echo "Unknown group: $group (expected: experiments, agents)" >&2; return 1
+    fi
+    if ! pueue status &>/dev/null; then
+      echo "pueued not running. Start with: systemctl --user start pueued" >&2; return 1
+    fi
+    if ! systemctl --user status &>/dev/null; then
+      echo "ERROR: systemd --user not available — cannot enforce resource limits" >&2
+      echo "  Jobs would run without CPU/memory caps. Aborting." >&2
+      echo "  Fix: loginctl enable-linger $(whoami)" >&2
+      return 1
+    fi
+    pueue add --group "$group" --label "$(basename "$1")" -- \
+      systemd-run --user --scope --slice="${group}.slice" -- "$@"
+  }
+
+  # Shortcuts
+  jexp() { jrun experiments "$@"; }
+  jagent() { jrun agents "$@"; }
+  jclaude() { jrun agents claude --print "$@"; }
+
+  # Status
+  alias jls='pueue status'
+  alias jlog='pueue log'
+  alias jfollow='pueue follow'
+  alias jclean='pueue clean'
+  alias jwatch='watch -n2 pueue status'
+
+  # Control
+  jpause() {
+    local group="${1:?Usage: jpause <group|all>}"
+    [[ "$group" == "all" ]] && pueue pause || pueue pause --group "$group"
+  }
+  jresume() {
+    local group="${1:?Usage: jresume <group|all>}"
+    [[ "$group" == "all" ]] && pueue start || pueue start --group "$group"
+  }
+  alias jkill='pueue kill'
+
+  # Overview with resource usage
+  jtop() {
+    pueue status
+    echo ""
+    systemctl --user status experiments.slice agents.slice 2>/dev/null \
+      || echo "(systemd slices not available)"
+  }
+
+fi
+
+# -------------------------------------------------------------------
 # AI CLI Tools
 # -------------------------------------------------------------------
 # Health check for all AI CLI tools

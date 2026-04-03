@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# jguard — check memory pressure (PSI) for resource-managed workloads
+# Usage: jguard [--threshold N] [--watch]
+
+THRESHOLD=50
+PSI="/proc/pressure/memory"
+[[ -f "$PSI" ]] || { echo "PSI not available"; exit 1; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --watch) MODE="watch"; shift ;;
+    --threshold) THRESHOLD="$2"; shift 2 ;;
+    -h|--help) echo "Usage: jguard [--watch] [--threshold N]"; exit 0 ;;
+    *) echo "Unknown: $1" >&2; exit 1 ;;
+  esac
+done
+
+check() {
+  local avg10
+  avg10=$(awk '/^some/{for(i=1;i<=NF;i++) if($i ~ /^avg10=/) print substr($i,7)}' "$PSI")
+  local int="${avg10%%.*}"
+  if (( int >= THRESHOLD )); then
+    echo "WARNING: memory pressure avg10=${avg10}% (threshold: ${THRESHOLD}%)" >&2
+    command -v pueue &>/dev/null && pueue status 2>/dev/null
+    return 1
+  fi
+  echo "OK: memory pressure avg10=${avg10}%"
+}
+
+case "${MODE:-check}" in
+  watch) while true; do clear; check || true; sleep 10; done ;;
+  *) check ;;
+esac

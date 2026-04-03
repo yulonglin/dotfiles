@@ -29,6 +29,7 @@ INSTALL_DOCKER=true             # Docker (Linux only)
 INSTALL_EXPERIMENTAL=true       # ty type checker, zerobrew
 INSTALL_CREATE_USER=true        # Create non-root dev user (Linux only, guarded by is_linux + EUID check)
 INSTALL_EXTRAS=true             # hyperfine, gitui, code2prompt, terminal-notifier
+INSTALL_PUEUE=true              # Pueue job scheduler (Linux only)
 INSTALL_MACOS_SETTINGS=true     # macOS system defaults (Dock, Finder, keyboard)
 INSTALL_FINICKY=true            # Finicky browser routing (macOS only)
 
@@ -57,6 +58,7 @@ DEPLOY_SERENA=true              # Serena MCP config (~/.serena symlink)
 DEPLOY_MOUSELESS=true           # Mouseless keyboard mouse control (macOS only)
 DEPLOY_TEXT_REPLACEMENTS=true   # Sync text replacements: macOS + Alfred (macOS only)
 DEPLOY_VPN=true                 # NordVPN+Tailscale split tunnel daemon (macOS only)
+DEPLOY_PUEUE=true               # Pueue + systemd slices for resource management (Linux only)
 DEPLOY_FINICKY=true             # Finicky config symlink (macOS only)
 DEPLOY_FILE_APPS=true           # Set default editor for coding file types (macOS only)
 DEPLOY_CLAUDE_TOOLS=true        # Build claude-tools Rust binary

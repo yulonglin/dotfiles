@@ -1,0 +1,13 @@
+# Pueue daemon configuration
+# Groups are created at runtime by deploy.sh (persist in Pueue state)
+shared:
+  use_unix_socket: true
+  host: "127.0.0.1"
+  port: "6924"
+
+daemon:
+  default_parallel_tasks: 1
+  pause_group_on_failure: false
+  pause_all_on_failure: false
+  callback: ""
+  callback_log_lines: 15

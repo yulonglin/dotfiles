@@ -331,6 +331,22 @@ if [[ "$INSTALL_DOCKER" == "true" ]] && is_linux; then
     install_docker || log_warning "Docker installation failed — continuing"
 fi
 
+# ─── Pueue (Linux) ───────────────────────────────────────────────────────────
+
+if [[ "$INSTALL_PUEUE" == "true" ]] && is_linux; then
+    log_section "INSTALLING PUEUE"
+    if ! cmd_exists pueue; then
+        if cmd_exists cargo; then
+            log_info "Installing pueue + pueued via cargo..."
+            cargo install pueue pueued --quiet 2>/dev/null || log_warning "pueue install failed"
+        else
+            log_warning "cargo not found — install Rust first, then: cargo install pueue pueued"
+        fi
+    else
+        log_info "pueue already installed ($(pueue --version 2>/dev/null || echo 'unknown'))"
+    fi
+fi
+
 # ─── Cleanup Automation ───────────────────────────────────────────────────────
 
 if [[ "$INSTALL_CLEANUP" == "true" ]] && is_macos; then

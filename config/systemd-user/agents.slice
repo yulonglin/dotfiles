@@ -1,0 +1,9 @@
+[Unit]
+Description=Coding Agents slice (Claude Code, Codex CLI)
+Before=slices.target
+
+[Slice]
+CPUQuota=200%
+MemoryMax=8G
+MemoryHigh=6G
+ManagedOOMMemoryPressure=kill
