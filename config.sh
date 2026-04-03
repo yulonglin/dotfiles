@@ -19,50 +19,82 @@
 # - minimal:  Nothing enabled by default
 PROFILE="${PROFILE:-personal}"
 
-# ─── Install Components ───────────────────────────────────────────────────────
-INSTALL_CORE=true               # Core packages, CLI tools, GitHub CLI, SOPS/age, uv
-INSTALL_ZSH=true
-INSTALL_TMUX=true
-INSTALL_AI_TOOLS=true           # Claude Code, Gemini CLI, Codex CLI
-INSTALL_CLEANUP=true            # Automatic cleanup (macOS only)
-INSTALL_DOCKER=true             # Docker (Linux only)
-INSTALL_EXPERIMENTAL=true       # ty type checker, zerobrew
-INSTALL_CREATE_USER=true        # Create non-root dev user (Linux only, guarded by is_linux + EUID check)
-INSTALL_EXTRAS=true             # hyperfine, gitui, code2prompt, terminal-notifier
-INSTALL_PUEUE=true              # Pueue job scheduler (Linux only)
-INSTALL_MACOS_SETTINGS=true     # macOS system defaults (Dock, Finder, keyboard)
-INSTALL_FINICKY=true            # Finicky browser routing (macOS only)
+# ─── Component Registry (single source of truth) ────────────────────────────
+# Format: "name|description|platform|default"
+# - name: CLI flag name (dashes OK, auto-converted to UPPER_SNAKE for variables)
+# - description: TUI menu display text
+# - platform: all, macos, linux (controls TUI visibility; actual code may have its own guards)
+# - default: true/false (initial value, overridden by profiles → config.local.sh → CLI flags)
+#
+# To add a new component: add one line here, then add the implementation block
+# in install.sh/deploy.sh. TUI menu, --flag, --no-flag, --only all work automatically.
 
-# ─── Deploy Components ────────────────────────────────────────────────────────
-DEPLOY_VIM=true
-DEPLOY_EDITOR=true              # VSCode/Cursor settings (merges with existing)
-DEPLOY_CLAUDE=true              # Claude Code config (~/.claude symlink)
-DEPLOY_CODEX=true               # Codex CLI config (~/.codex symlink)
-DEPLOY_GHOSTTY=true             # Ghostty terminal config
-DEPLOY_HTOP=true                # htop process viewer config
-DEPLOY_PDB=true                 # pdb++ debugger config (high-contrast colors)
-DEPLOY_MATPLOTLIB=true          # Matplotlib styles (anthropic, deepmind)
-DEPLOY_GIT_HOOKS=true           # Global git hooks (secret detection)
-DEPLOY_SECRETS=true             # Sync secrets with GitHub gist
-DEPLOY_CLEANUP=true             # File cleanup: Downloads/Screenshots (macOS only)
-DEPLOY_CLAUDE_CLEANUP=true      # Claude Code idle session cleanup (both platforms)
-DEPLOY_AI_UPDATE=true           # AI tools auto-update daily (both platforms)
-DEPLOY_BREW_UPDATE=true         # Weekly package upgrade + cleanup (brew/apt/dnf/pacman)
-DEPLOY_KEYBOARD=true            # Keyboard repeat enforcement at login (macOS only)
-DEPLOY_BEDTIME=true             # Bedtime timezone enforcement (macOS only)
-DEPLOY_SHELL=true               # ZSH/bash shell configuration
-DEPLOY_TMUX=true                # tmux configuration
-DEPLOY_GIT_CONFIG=true          # Git configuration (gitconfig, global gitignore)
-DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect")
-DEPLOY_SERENA=true              # Serena MCP config (~/.serena symlink)
-DEPLOY_MOUSELESS=true           # Mouseless keyboard mouse control (macOS only)
-DEPLOY_TEXT_REPLACEMENTS=true   # Sync text replacements: macOS + Alfred (macOS only)
-DEPLOY_VPN=true                 # NordVPN+Tailscale split tunnel daemon (macOS only)
-DEPLOY_PUEUE=true               # Pueue + systemd slices for resource management (Linux only)
-DEPLOY_FINICKY=true             # Finicky config symlink (macOS only)
-DEPLOY_FILE_APPS=true           # Set default editor for coding file types (macOS only)
-DEPLOY_CLAUDE_TOOLS=true        # Build claude-tools Rust binary
-DEPLOY_SECRETS_ENV=true         # Decrypt SOPS-encrypted secrets (requires sops + age)
+INSTALL_REGISTRY=(
+    "core|Core packages, CLI tools, gh, SOPS/age, uv|all|true"
+    "zsh|ZSH + oh-my-zsh + powerlevel10k theme|all|true"
+    "tmux|Terminal multiplexer|all|true"
+    "ai-tools|Claude Code, Gemini CLI, Codex CLI|all|true"
+    "extras|hyperfine, gitui, code2prompt, terminal-notifier|all|true"
+    "cleanup|Automatic cleanup (macOS only)|all|true"
+    "experimental|ty type checker, zerobrew|all|true"
+    "macos-settings|macOS system defaults (Dock, Finder, keyboard)|macos|true"
+    "finicky|Finicky browser routing|macos|true"
+    "docker|Docker engine + compose|linux|true"
+    "pueue|Pueue job scheduler + pueued daemon|linux|true"
+    "create-user|Create non-root dev user|linux|true"
+)
+
+DEPLOY_REGISTRY=(
+    "shell|ZSH config, aliases, key bindings|all|true"
+    "tmux|tmux.conf + TPM plugins|all|true"
+    "git-config|gitconfig, global gitignore, ripgrep config|all|true"
+    "vim|vimrc|all|true"
+    "editor|VSCode/Cursor settings + extensions (merges)|all|true"
+    "claude|Claude Code config symlink (~/.claude)|all|true"
+    "codex|Codex CLI config symlink (~/.codex)|all|true"
+    "ghostty|Ghostty terminal config (symlinked)|all|true"
+    "htop|htop config with dynamic CPU meters|all|true"
+    "pdb|pdb++ debugger config (high-contrast)|all|true"
+    "matplotlib|Style files: anthropic, deepmind, petri|all|true"
+    "git-hooks|Global pre-commit secret detection|all|true"
+    "secrets|Sync SSH/git identity via GitHub gist|all|true"
+    "secrets-env|Decrypt SOPS-encrypted API keys (age)|all|true"
+    "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|all|true"
+    "claude-cleanup|Remove idle Claude sessions after 24h|all|true"
+    "ai-update|Daily auto-update: Claude, Gemini, Codex|all|true"
+    "brew-update|Weekly package upgrade + cleanup|all|true"
+    "claude-tools|Build claude-tools Rust binary|all|true"
+    "finicky|Browser routing config (symlinked)|macos|true"
+    "file-apps|Default editor for coding file types|macos|true"
+    "keyboard|Keyboard repeat rate enforcement at login|macos|true"
+    "bedtime|Bedtime timezone enforcement|macos|true"
+    "text-replacements|Sync macOS + Alfred text replacements|macos|true"
+    "mouseless|Keyboard-driven mouse control|macos|true"
+    "vpn|NordVPN + Tailscale split tunnel daemon|macos|true"
+    "pueue|Pueue + systemd resource slices|linux|true"
+    "serena|Serena MCP server config (symlinked)|all|true"
+)
+
+# Initialize INSTALL_*/DEPLOY_* variables from registry
+_init_component_vars() {
+    local entry name var_name default
+    for entry in "${INSTALL_REGISTRY[@]}"; do
+        name="${entry%%|*}"
+        default="${entry##*|}"
+        var_name="${(U)name//-/_}"
+        typeset -g "INSTALL_${var_name}=${default}"
+    done
+    for entry in "${DEPLOY_REGISTRY[@]}"; do
+        name="${entry%%|*}"
+        default="${entry##*|}"
+        var_name="${(U)name//-/_}"
+        typeset -g "DEPLOY_${var_name}=${default}"
+    done
+}
+_init_component_vars
+
+# ─── Non-Registry Variables ──────────────────────────────────────────────────
+DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect") — array, not boolean
 
 # ─── Deploy Modifiers ─────────────────────────────────────────────────────────
 DEPLOY_APPEND=false             # Append to existing configs instead of overwrite
@@ -209,47 +241,16 @@ apply_profile() {
             DEPLOY_CLAUDE_TOOLS=false
             ;;
         minimal)
-            # Nothing enabled — specify everything explicitly
-            INSTALL_CORE=false
-            INSTALL_ZSH=false
-            INSTALL_TMUX=false
-            INSTALL_AI_TOOLS=false
-            INSTALL_DOCKER=false
-            INSTALL_EXTRAS=false
-            INSTALL_PUEUE=false
-            INSTALL_CLEANUP=false
-            INSTALL_EXPERIMENTAL=false
-            INSTALL_CREATE_USER=false
-            INSTALL_MACOS_SETTINGS=false
-            INSTALL_FINICKY=false
-            DEPLOY_SHELL=false
-            DEPLOY_TMUX=false
-            DEPLOY_GIT_CONFIG=false
-            DEPLOY_VIM=false
-            DEPLOY_EDITOR=false
-            DEPLOY_CLAUDE=false
-            DEPLOY_CODEX=false
-            DEPLOY_SERENA=false
-            DEPLOY_GHOSTTY=false
-            DEPLOY_HTOP=false
-            DEPLOY_PDB=false
-            DEPLOY_MATPLOTLIB=false
-            DEPLOY_GIT_HOOKS=false
-            DEPLOY_SECRETS=false
-            DEPLOY_CLEANUP=false
-            DEPLOY_CLAUDE_CLEANUP=false
-            DEPLOY_AI_UPDATE=false
-            DEPLOY_BREW_UPDATE=false
-            DEPLOY_KEYBOARD=false
-            DEPLOY_BEDTIME=false
-            DEPLOY_TEXT_REPLACEMENTS=false
-            DEPLOY_MOUSELESS=false
-            DEPLOY_VPN=false
-            DEPLOY_PUEUE=false
-            DEPLOY_FINICKY=false
-            DEPLOY_FILE_APPS=false
-            DEPLOY_CLAUDE_TOOLS=false
-            DEPLOY_SECRETS_ENV=false
+            # Nothing enabled — derived from registry (no manual list to drift)
+            local _entry _name _var
+            for _entry in "${INSTALL_REGISTRY[@]}"; do
+                _name="${_entry%%|*}"; _var="${(U)_name//-/_}"
+                typeset -g "INSTALL_${_var}=false"
+            done
+            for _entry in "${DEPLOY_REGISTRY[@]}"; do
+                _name="${_entry%%|*}"; _var="${(U)_name//-/_}"
+                typeset -g "DEPLOY_${_var}=false"
+            done
             ;;
         *)
             echo "Warning: Unknown profile '$profile', using personal" >&2

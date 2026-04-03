@@ -33,66 +33,34 @@ show_component_menu() {
         return 0
     fi
 
-    # Define components with descriptions and current state
-    # Format: "name|description|variable_value"
+    # Build comp_defs from registry (single source of truth in config.sh)
     typeset -a comp_defs
+    local registry_name prefix
     if [[ "$mode" == "install" ]]; then
-        comp_defs=(
-            "core|Core packages, CLI tools, gh, SOPS/age, uv|$INSTALL_CORE"
-            "zsh|ZSH + oh-my-zsh + powerlevel10k theme|$INSTALL_ZSH"
-            "tmux|Terminal multiplexer|$INSTALL_TMUX"
-            "ai-tools|Claude Code, Gemini CLI, Codex CLI, MCP servers|$INSTALL_AI_TOOLS"
-            "extras|hyperfine, gitui, code2prompt|$INSTALL_EXTRAS"
-            "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|$INSTALL_CLEANUP"
-            "experimental|ty type checker (alpha)|$INSTALL_EXPERIMENTAL"
-        )
-        if is_macos; then
-            comp_defs+=(
-                "macos-settings|Dock, Finder, keyboard system defaults|$INSTALL_MACOS_SETTINGS"
-                "finicky|Browser routing (Safari/Chrome/Zoom)|$INSTALL_FINICKY"
-            )
-        fi
-        if is_linux; then
-            comp_defs+=(
-                "docker|Docker engine + compose|$INSTALL_DOCKER"
-                "create-user|Create non-root dev user|$INSTALL_CREATE_USER"
-            )
-        fi
+        registry_name="INSTALL_REGISTRY"
+        prefix="INSTALL"
     elif [[ "$mode" == "deploy" ]]; then
-        comp_defs=(
-            "shell|ZSH config, aliases, key bindings|$DEPLOY_SHELL"
-            "tmux|tmux.conf + TPM plugins|$DEPLOY_TMUX"
-            "git-config|gitconfig, global gitignore, ripgrep config|$DEPLOY_GIT_CONFIG"
-            "vim|vimrc|$DEPLOY_VIM"
-            "editor|VSCode/Cursor settings + extensions (merges)|$DEPLOY_EDITOR"
-            "claude|Claude Code config symlink (~/.claude)|$DEPLOY_CLAUDE"
-            "codex|Codex CLI config symlink (~/.codex)|$DEPLOY_CODEX"
-            "ghostty|Ghostty terminal config (symlinked)|$DEPLOY_GHOSTTY"
-            "htop|htop config with dynamic CPU meters|$DEPLOY_HTOP"
-            "pdb|pdb++ debugger config (high-contrast)|$DEPLOY_PDB"
-            "matplotlib|Style files: anthropic, deepmind, petri|$DEPLOY_MATPLOTLIB"
-            "git-hooks|Global pre-commit secret detection|$DEPLOY_GIT_HOOKS"
-            "secrets|Sync SSH/git identity via GitHub gist|$DEPLOY_SECRETS"
-            "secrets-env|Decrypt SOPS-encrypted API keys (age)|$DEPLOY_SECRETS_ENV"
-            "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|$DEPLOY_CLEANUP"
-            "claude-cleanup|Remove idle Claude sessions after 24h|$DEPLOY_CLAUDE_CLEANUP"
-            "ai-update|Daily auto-update: Claude, Gemini, Codex|$DEPLOY_AI_UPDATE"
-            "brew-update|Weekly package upgrade + cleanup|$DEPLOY_BREW_UPDATE"
-            "claude-tools|Build claude-tools Rust binary|$DEPLOY_CLAUDE_TOOLS"
-        )
-        if is_macos; then
-            comp_defs+=(
-                "finicky|Browser routing config (symlinked)|$DEPLOY_FINICKY"
-                "file-apps|Default editor for coding file types|$DEPLOY_FILE_APPS"
-                "keyboard|Keyboard repeat rate enforcement at login|$DEPLOY_KEYBOARD"
-                "bedtime|Bedtime timezone enforcement|$DEPLOY_BEDTIME"
-                "text-replacements|Sync macOS + Alfred text replacements|${DEPLOY_TEXT_REPLACEMENTS:-false}"
-                "mouseless|Keyboard-driven mouse control|$DEPLOY_MOUSELESS"
-                "vpn|NordVPN + Tailscale split tunnel daemon|$DEPLOY_VPN"
-            )
-        fi
-        comp_defs+=("serena|Serena MCP server config (symlinked)|$DEPLOY_SERENA")
+        registry_name="DEPLOY_REGISTRY"
+        prefix="DEPLOY"
     fi
+
+    local entry name rest desc platform var_name current_val
+    # Indirect array expansion: ${(P)var} expands the array named by $var
+    for entry in "${(P)${registry_name}[@]}"; do
+        name="${entry%%|*}"
+        rest="${entry#*|}"
+        desc="${rest%%|*}"
+        rest="${rest#*|}"
+        platform="${rest%%|*}"
+
+        # Platform filter
+        if [[ "$platform" == "macos" ]] && ! is_macos; then continue; fi
+        if [[ "$platform" == "linux" ]] && ! is_linux; then continue; fi
+
+        var_name="${(U)name//-/_}"
+        current_val="${(P)${prefix}_${var_name}}"
+        comp_defs+=("${name}|${desc}|${current_val}")
+    done
 
     # Build display items (with descriptions) and selected list
     typeset -a items
@@ -1344,11 +1312,16 @@ parse_args() {
 
     # Deferred --only apply: validate components, then set minimal + enable selected
     if [[ "$_only_mode" == true ]]; then
-        local _known_components=(core vim editor claude codex ghostty htop pdb matplotlib
-            git_hooks secrets secrets_env cleanup claude_cleanup ai_update brew_update keyboard
-            bedtime serena mouseless text_replacements vpn pueue finicky file_apps claude_tools macos_settings
-            zsh tmux ai_tools docker extras experimental create_user
-            shell git_config)
+        # Build _known_components from registries (lowercase, no hardcoded list to drift)
+        local _known_components=()
+        local _entry _name _var
+        for _entry in "${INSTALL_REGISTRY[@]}" "${DEPLOY_REGISTRY[@]}"; do
+            _name="${_entry%%|*}"
+            _var="${_name//-/_}"  # lowercase with underscores (matches validation lookup)
+            if (( ! ${_known_components[(Ie)$_var]} )); then
+                _known_components+=("$_var")
+            fi
+        done
 
         for _comp in "${_only_components[@]}"; do
             _comp="${_comp// /}"
