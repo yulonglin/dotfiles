@@ -31,7 +31,6 @@
     "gopls-lsp@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
     "huggingface-skills@claude-plugins-official": false,
-    "linear@claude-plugins-official": false,
     "llms-fetch-mcp@alignment-hive": true,
     "playground@claude-plugins-official": false,
     "plugin-dev@claude-plugins-official": true,
