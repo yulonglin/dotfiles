@@ -10,6 +10,31 @@ PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"  # General projects
 # Disable AUTO_CD - require explicit cd commands
 unsetopt AUTO_CD
 
+# Auto-attach tmux over SSH — survives disconnects, preserves scrollback
+# Guards: interactive only, SSH only, not already in tmux, not a forced command,
+#         tmux available, opt-out with NO_AUTO_TMUX=1
+if [[ -o interactive && -n "$SSH_CONNECTION" && -z "$TMUX" && -z "$NO_AUTO_TMUX" ]] \
+   && command -v tmux &>/dev/null; then
+  _tmux_sessions=$(tmux list-sessions 2>/dev/null)
+  _tmux_count=$(echo "$_tmux_sessions" | grep -c '^' 2>/dev/null || echo 0)
+  if [[ $_tmux_count -eq 0 ]]; then
+    # No sessions — create one
+    exec tmux new-session -s main
+  elif [[ $_tmux_count -eq 1 ]]; then
+    # One session — attach it
+    _tmux_name=${_tmux_sessions%%:*}
+    exec tmux attach -t "$_tmux_name"
+  else
+    # Multiple sessions — show picker, let user choose
+    echo "tmux sessions:"
+    echo "$_tmux_sessions"
+    echo ""
+    echo "  ta        attach last    taa <name>  attach named"
+    echo "  tn <name> new session    NO_AUTO_TMUX=1 ssh ...  skip"
+  fi
+  unset _tmux_sessions _tmux_count _tmux_name
+fi
+
 # Instant prompt
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
