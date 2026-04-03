@@ -946,24 +946,24 @@ deploy_git_config() {
 
     # Deploy global gitignore (composed from universal + research patterns)
     # Git sees both; search tools (rg, fd, Claude Code) see only universal.
-    if [[ -f "$DOT_DIR/config/ignore_global" ]] && [[ -f "$DOT_DIR/config/ignore_research" ]]; then
-        cat "$DOT_DIR/config/ignore_global" "$DOT_DIR/config/ignore_research" > "$HOME/.gitignore_global"
+    if [[ -f "$DOT_DIR/config/ignore/gitignore_base" ]] && [[ -f "$DOT_DIR/config/ignore/gitignore_research" ]]; then
+        cat "$DOT_DIR/config/ignore/gitignore_base" "$DOT_DIR/config/ignore/gitignore_research" > "$HOME/.gitignore_global"
         log_success "Deployed ~/.gitignore_global (universal + research)"
-    elif [[ -f "$DOT_DIR/config/ignore_global" ]]; then
-        cp "$DOT_DIR/config/ignore_global" "$HOME/.gitignore_global"
+    elif [[ -f "$DOT_DIR/config/ignore/gitignore_base" ]]; then
+        cp "$DOT_DIR/config/ignore/gitignore_base" "$HOME/.gitignore_global"
         log_success "Deployed ~/.gitignore_global (universal only)"
     fi
 
     # Deploy search tool ignore files (universal only, symlinked for auto-update)
-    if [[ -f "$DOT_DIR/config/ignore_global" ]]; then
+    if [[ -f "$DOT_DIR/config/ignore/gitignore_base" ]]; then
         # ripgrep + Claude Code: symlink universal ignore
-        ln -sf "$DOT_DIR/config/ignore_global" "$HOME/.ignore_global"
+        ln -sf "$DOT_DIR/config/ignore/gitignore_base" "$HOME/.ignore_global"
         log_success "Symlinked ~/.ignore_global"
 
         # fd: symlink to same file
         local fd_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/fd"
         mkdir -p "$fd_config_dir"
-        ln -sf "$DOT_DIR/config/ignore_global" "$fd_config_dir/ignore"
+        ln -sf "$DOT_DIR/config/ignore/gitignore_base" "$fd_config_dir/ignore"
         log_success "Symlinked $fd_config_dir/ignore"
 
         # ripgrep config: skip git's global ignore, use universal-only ignore file
@@ -1329,7 +1329,6 @@ parse_args() {
 
     # Deferred --only apply: validate components, then set minimal + enable selected
     if [[ "$_only_mode" == true ]]; then
-<<<<<<< Updated upstream
         # Build _known_components from registries (lowercase, no hardcoded list to drift)
         local _known_components=()
         local _entry _name _var
@@ -1340,13 +1339,6 @@ parse_args() {
                 _known_components+=("$_var")
             fi
         done
-=======
-        local _known_components=(core vim editor claude codex ghostty zed htop pdb matplotlib
-            git_hooks secrets secrets_env cleanup claude_cleanup ai_update brew_update keyboard
-            bedtime serena mouseless text_replacements vpn finicky file_apps claude_tools macos_settings
-            zsh tmux ai_tools docker extras experimental create_user
-            shell git_config pkg_configs dep_audit)
->>>>>>> Stashed changes
 
         for _comp in "${_only_components[@]}"; do
             _comp="${_comp// /}"

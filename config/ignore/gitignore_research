@@ -1,0 +1,21 @@
+# gitignore_research — Research-specific ignore patterns
+#
+# Consumers:
+#   - git ONLY: via ~/.gitignore_global (concatenated after gitignore_base)
+#   - NOT used by: ripgrep, fd, Claude Code, Cursor
+#
+# Purpose: These directories are git-ignored but remain searchable by rg/fd/Claude.
+# This separation lets search tools index research files while git ignores them.
+#
+# Deployment: `deploy.sh --git-config` (see scripts/shared/helpers.sh)
+# Source of truth: config/ignore/gitignore_research (this file)
+
+archive/
+/tmp
+/data
+/experiments
+/results
+/logs
+/out
+/output
+/outputs

@@ -134,9 +134,10 @@ config/
 ├── key_bindings.sh       # ZSH key bindings (sourced by zshrc.sh)
 ├── file_associations.conf    # Default editor + file type associations (single source of truth)
 ├── gitconfig             # Git config template
-├── ignore_global         # Universal ignore patterns (OS, editors, Python, LaTeX, Claude Code)
-├── ignore_research       # Research-only ignore patterns (archive/, data/, experiments/, etc.)
-├── ignore_template       # Per-project .ignore template (negation patterns for search tools)
+├── ignore/                   # Ignore pattern management
+│   ├── gitignore_base        # Universal patterns — deployed to git AND search tools
+│   ├── gitignore_research    # Research dirs — deployed to git ONLY (search tools skip)
+│   └── patterns              # Pattern definitions for `claude-tools ignore apply` TUI
 ├── user.conf.example     # User-specific git settings template
 ├── editorconfig          # EditorConfig formatting defaults (symlinked to ~/.editorconfig)
 ├── curlrc                # curl defaults: follow redirects, show errors (symlinked to ~/.curlrc)
@@ -253,9 +254,9 @@ export WRITING_DIR="$HOME/Documents/writing"
 - Detects conflicts with existing git config
 - Prompts for resolution (keep/use new/merge/skip)
 - Deploys split ignore files for git vs search tools:
-  - `~/.gitignore_global` — concatenated from `config/ignore_global` + `config/ignore_research` (copy)
-  - `~/.ignore_global` — symlink to `config/ignore_global` (universal patterns only, for ripgrep)
-  - `~/.config/fd/ignore` — symlink to `config/ignore_global` (for fd's own ignore layer)
+  - `~/.gitignore_global` — concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research` (copy)
+  - `~/.ignore_global` — symlink to `config/ignore/gitignore_base` (universal patterns only, for ripgrep)
+  - `~/.config/fd/ignore` — symlink to `config/ignore/gitignore_base` (for fd's own ignore layer)
   - `~/.config/ripgrep/config` — generated (`--no-ignore-global` + `--ignore-file ~/.ignore_global`)
 - Result: git ignores everything; rg/Claude Code/Cursor search can see research files (`data/`, `archive/`, etc.)
 - fd limitation: no `--no-ignore-global` flag, so fd still respects git's global ignore. Use `fd -I` for research dirs.
@@ -384,7 +385,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ## Important Gotchas
 
 - **macOS vs Linux paths**: VSCode settings location differs by OS
-- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git, Mouseless). `~/.gitignore_global` is composed (concatenated from `config/ignore_global` + `config/ignore_research`)
+- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git, Mouseless). `~/.gitignore_global` is composed (concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research`)
 - **Mouseless config**: Copied (not symlinked) because Mouseless uses atomic `rename()` on UI save which destroys symlinks. Use `sync-mouseless` to pull UI changes back to dotfiles
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env

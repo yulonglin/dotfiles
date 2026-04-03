@@ -1,7 +1,16 @@
-# Global ignore patterns — universal (OS, editors, Python, LaTeX, Claude Code)
-# Used by: git (via ~/.gitignore_global, combined with ignore_research),
-#          ripgrep (via RIPGREP_CONFIG_PATH), fd (via ~/.config/fd/ignore)
-# Source of truth: config/ignore_global (this file)
+# gitignore_base — Universal ignore patterns (OS, editors, Python, LaTeX, Claude Code)
+#
+# Consumers:
+#   - git: via ~/.gitignore_global (concatenated with gitignore_research)
+#   - ripgrep: via ~/.ignore_global (symlink to this file)
+#   - fd: via ~/.config/fd/ignore (symlink to this file)
+#   - Claude Code / Cursor: via ripgrep (Glob/Grep tools)
+#
+# Deployment: `deploy.sh --git-config` (see scripts/shared/helpers.sh)
+# Source of truth: config/ignore/gitignore_base (this file)
+#
+# Adding entries: Add universal patterns here. For project-specific patterns
+# that should be interactively selectable, add to config/ignore/patterns instead.
 
 #-------------------------------------------------------------
 # Linux
@@ -99,6 +108,7 @@ celerybeat-schedule
 celerybeat.pid
 *.sage.py
 .env
+.envrc
 .venv
 env/
 venv/
