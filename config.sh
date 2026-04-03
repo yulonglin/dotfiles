@@ -53,12 +53,15 @@ DEPLOY_REGISTRY=(
     "claude|Claude Code config symlink (~/.claude)|all|true"
     "codex|Codex CLI config symlink (~/.codex)|all|true"
     "ghostty|Ghostty terminal config (symlinked)|all|true"
+    "zed|Zed editor config (symlinked)|all|true"
     "htop|htop config with dynamic CPU meters|all|true"
     "pdb|pdb++ debugger config (high-contrast)|all|true"
     "matplotlib|Style files: anthropic, deepmind, petri|all|true"
     "git-hooks|Global pre-commit secret detection|all|true"
     "secrets|Sync SSH/git identity via GitHub gist|all|true"
     "secrets-env|Decrypt SOPS-encrypted API keys (age)|all|true"
+    "pkg-configs|Package manager security configs (min-release-age)|all|true"
+    "dep-audit|Weekly dependency audit (supply chain defense)|all|true"
     "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|all|true"
     "claude-cleanup|Remove idle Claude sessions after 24h|all|true"
     "ai-update|Daily auto-update: Claude, Gemini, Codex|all|true"
@@ -225,6 +228,7 @@ apply_profile() {
             DEPLOY_EDITOR=false
             DEPLOY_SERENA=false
             DEPLOY_GHOSTTY=false
+            DEPLOY_ZED=false
             DEPLOY_HTOP=false
             DEPLOY_PDB=false
             DEPLOY_MATPLOTLIB=false

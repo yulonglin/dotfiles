@@ -63,6 +63,7 @@ COMPONENTS:
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
     --ghostty         Deploy Ghostty terminal config
+    --zed             Deploy Zed editor config (settings + keymap, symlinked)
     --htop            Deploy htop configuration
     --pdb             Deploy pdb++ debugger config
     --matplotlib      Deploy matplotlib styles
@@ -480,6 +481,39 @@ if [[ "$DEPLOY_GHOSTTY" == "true" ]]; then
         log_info "  Key bindings: Shift+Enter (newline), Cmd+C (copy)"
     else
         log_warning "Ghostty config not found"
+    fi
+fi
+
+# ─── Zed ──────────────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_ZED" == "true" ]]; then
+    log_info "Deploying Zed configuration..."
+
+    ZED_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/zed"
+
+    if [[ -d "$DOT_DIR/config/zed" ]]; then
+        mkdir -p "$ZED_DIR"
+
+        # Settings
+        if [[ -f "$ZED_DIR/settings.json" && ! -L "$ZED_DIR/settings.json" ]]; then
+            backup_file "$ZED_DIR/settings.json"
+        fi
+        safe_symlink "$DOT_DIR/config/zed/settings.json" "$ZED_DIR/settings.json"
+
+        # Keymap
+        if [[ -f "$DOT_DIR/config/zed/keymap.json" ]]; then
+            if [[ -f "$ZED_DIR/keymap.json" && ! -L "$ZED_DIR/keymap.json" ]]; then
+                backup_file "$ZED_DIR/keymap.json"
+            fi
+            safe_symlink "$DOT_DIR/config/zed/keymap.json" "$ZED_DIR/keymap.json"
+        fi
+
+        log_info "  Search: gitignored files included"
+        log_info "  AI: Cmd+K for inline edit, Anthropic agent"
+        log_info "  Theme: One Dark Pro (auto dark/light switching)"
+        log_info "  SSH: reads hosts from ~/.ssh/config"
+    else
+        log_warning "Zed config not found at $DOT_DIR/config/zed/"
     fi
 fi
 
