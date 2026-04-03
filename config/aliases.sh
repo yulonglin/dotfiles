@@ -861,8 +861,20 @@ if command -v pueue &>/dev/null; then
       echo "  Fix: loginctl enable-linger $(whoami)" >&2
       return 1
     fi
+    # Set thread caps for experiments to prevent oversubscription
+    local env_args=()
+    if [[ "$group" == "experiments" ]]; then
+      local threads="${EXPERIMENTS_THREADS:-2}"
+      env_args=(env
+        OMP_NUM_THREADS="$threads"
+        MKL_NUM_THREADS="$threads"
+        OPENBLAS_NUM_THREADS="$threads"
+        NUMEXPR_NUM_THREADS="$threads"
+        RAYON_NUM_THREADS="$threads"
+        TOKENIZERS_PARALLELISM=false)
+    fi
     pueue add --group "$group" --label "$(basename "$1")" -- \
-      systemd-run --user --scope --slice="${group}.slice" -- "$@"
+      systemd-run --user --service-type=exec --wait --collect --slice="${group}.slice" -- "${env_args[@]}" "$@"
   }
 
   # Shortcuts

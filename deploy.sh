@@ -850,9 +850,11 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
             fi
         done
 
-        # Deploy pueued service
-        local pueued_src="$DOT_DIR/config/systemd-user/pueued.service"
-        [[ -f "$pueued_src" ]] && cp "$pueued_src" "$systemd_user_dir/pueued.service"
+        # Deploy service/timer units
+        for unit in pueued.service reset-failed.service reset-failed.timer; do
+            local unit_src="$DOT_DIR/config/systemd-user/$unit"
+            [[ -f "$unit_src" ]] && cp "$unit_src" "$systemd_user_dir/$unit"
+        done
 
         systemctl --user daemon-reload
         log_success "systemd user units deployed"
@@ -899,6 +901,9 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
             else
                 log_warning "pueued failed to start — groups not configured"
             fi
+
+            # Enable reset-failed timer (hourly stale unit cleanup)
+            systemctl --user enable --now reset-failed.timer 2>/dev/null
 
             # Enable linger (services persist after logout)
             loginctl enable-linger "$(whoami)" 2>/dev/null

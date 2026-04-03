@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly cleanup of failed systemd-run units
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=Clean up stale failed systemd-run units
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --user reset-failed

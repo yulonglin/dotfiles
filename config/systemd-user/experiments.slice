@@ -7,4 +7,6 @@ Before=slices.target
 CPUQuota=200%
 MemoryMax=24G
 MemoryHigh=20G
+MemorySwapMax=0
+IOWeight=50
 ManagedOOMMemoryPressure=kill
