@@ -27,7 +27,7 @@ All package managers are configured with a **7-day quarantine** (`min-release-ag
 - npm: `npm install --min-release-age=0 <pkg>`
 - bun: `bun add --minimumReleaseAge=0 <pkg>` (or remove from bunfig.toml temporarily)
 - pnpm: `pnpm add --minimum-release-age=0 <pkg>` (or set to 0 in global rc temporarily)
-- uv: `uv pip install --exclude-newer '' <pkg>`
+- uv: `UV_EXCLUDE_NEWER= uv pip install <pkg>` (unset the env var for this command)
 
 ## Python Dependencies
 

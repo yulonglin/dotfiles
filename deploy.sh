@@ -68,8 +68,10 @@ COMPONENTS:
     --pdb             Deploy pdb++ debugger config
     --matplotlib      Deploy matplotlib styles
     --git-hooks       Deploy global git hooks
+    --pkg-configs     Deploy package manager security configs (7-day quarantine)
     --secrets         Sync secrets with GitHub gist
     --secrets-env     Decrypt SOPS-encrypted API keys (requires sops + age)
+    --dep-audit       Install weekly dependency audit (supply chain defense)
     --cleanup         Install file cleanup: Downloads/Screenshots (macOS only)
     --claude-cleanup  Install Claude Code session cleanup (both platforms)
     --ai-update       Install AI tools auto-update (daily, both platforms)
