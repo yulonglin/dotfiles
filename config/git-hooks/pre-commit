@@ -63,6 +63,7 @@ if [ -n "$LOCKFILE_CHANGED" ]; then
         if ! socket report --json 2>/dev/null | jq -e '.issues | length == 0' >/dev/null 2>&1; then
             echo "Pre-commit: socket found potential issues in $LOCKFILE_CHANGED. Review with: socket report"
             echo "  To bypass: git commit --no-verify"
+            exit 1
         fi
     fi
 
