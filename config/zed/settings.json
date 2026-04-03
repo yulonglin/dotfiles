@@ -41,8 +41,7 @@
     "show_diagnostics": "errors"
   },
   "toolbar": {
-    "breadcrumbs": false,
-    "quick_actions": false
+    "breadcrumbs": false
   },
 
   // === Search (CRITICAL: include gitignored files) ===
