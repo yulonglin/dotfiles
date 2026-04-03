@@ -21,20 +21,22 @@ All repos committed and pushed:
 
 ### Claude Code Sessions (12 running)
 
-| Tmux Session | Repo / CWD | Context | CC Version | Rebuttal-Related? |
-|-------------|------------|---------|------------|-------------------|
-| **protocolqa** | sandbagging-detection/dev | active tasks | — | **YES — TOP PRIORITY** |
-| discovered-incentives4 | sandbagging-detection/dev | 58% | 2.1.87 | Yes — new sandbagging prompts |
-| discovered-incentives5 | sandbagging-detection/dev | 26% | 2.1.87 | Yes — new sandbagging prompts |
-| discovered-incentives-tm | sandbagging-detection/dev | 18% | 2.1.87 | Yes — TM detection variant |
-| discovered-incentives | sandbagging-detection/dev | 34% | 2.1.86 | Yes — earlier run |
-| icml-confound4 | sandbagging-detection/dev | 37% | 2.1.87 | Yes — confound analysis |
-| icml-confound2 | sandbagging-detection/dev | 38% | 2.1.84 | Yes — earlier confound |
-| honest-wrong-5_4 | sandbagging-detection/dev | 15% | 2.1.87 | Yes — GPT-5.4 honest-wrong |
-| 3-model-fpr | sandbagging-detection/dev | 23% | 2.1.87 | Yes — FPR comparison |
-| autodetect | sandbagging-detection/dev | 8% | — | Marginal |
-| debug-env-dotfiles | dotfiles | 8% | 2.1.87 | No |
-| swordsmith | swordsmith | 8% | 2.1.90 | No |
+| Tmux Session | Task List ID | Repo / CWD | Context | CC Version | Rebuttal? |
+|-------------|-------------|------------|---------|------------|-----------|
+| **protocolqa** | `20260402_195928_UTC_dev` | sandbagging-detection/dev | active tasks | — | **TOP PRIORITY** |
+| discovered-incentives4 | `20260330_072632_UTC_dev` (approx) | sandbagging-detection/dev | 58% | 2.1.87 | Yes |
+| discovered-incentives5 | `20260330_105528_UTC_dev` (approx) | sandbagging-detection/dev | 26% | 2.1.87 | Yes |
+| discovered-incentives-tm | `20260330_083018_UTC_dev` (approx) | sandbagging-detection/dev | 18% | 2.1.87 | Yes |
+| discovered-incentives | `20260328_140036_UTC_dev` | sandbagging-detection/dev | 34% | 2.1.86 | Yes |
+| icml-confound4 | `20260329_135632_UTC_dev` (approx) | sandbagging-detection/dev | 37% | 2.1.87 | Yes |
+| icml-confound2 | `20260326_185957_UTC_dev` (approx) | sandbagging-detection/dev | 38% | 2.1.84 | Yes |
+| honest-wrong-5_4 | `20260330_153104_UTC_dev` (approx) | sandbagging-detection/dev | 15% | 2.1.87 | Yes |
+| 3-model-fpr | `20260329_183152_UTC_dev` | sandbagging-detection/dev | 23% | 2.1.87 | Yes |
+| autodetect | `20260326_194004_UTC_dev` | sandbagging-detection/dev | 8% | — | Marginal |
+| debug-env-dotfiles | `20260330_075821_UTC_dev` (approx) | dotfiles | 8% | 2.1.87 | No |
+| swordsmith | (no task list — different repo) | swordsmith | 8% | 2.1.90 | No |
+
+**Note:** Task list IDs are correlated by timestamp proximity (server is UTC). Task list dirs in `~/.claude/tasks/` have no `tasks.json` — they're empty directories used as session identifiers. Matches marked "(approx)" have ~1-3 minute timestamp offsets due to multiple sessions created around the same time on Mar 30.
 
 ### Non-Claude Sessions (2 remaining)
 
