@@ -1,17 +1,65 @@
-# VSCode/Cursor Recommended Extensions
-# Format: one extension ID per line
-# Comments start with #
+# VSCode/Cursor/Antigravity Extensions
+# Deployed by: ./deploy.sh --editor
+# Curated from 67 installed → 38 tracked. One extension ID per line.
 
-# Theme
-zhuangtongfa.Material-theme
-
-# Icons
-vscode-icons-team.vscode-icons
-
-# Python Development
+# === Core Python ===
 ms-python.python
-ms-python.black-formatter
-ms-toolsai.jupyter
+ms-python.debugpy
+charliermarsh.ruff
+astral-sh.ty
 
-# General Development
+# === Jupyter + Data ===
+ms-toolsai.jupyter
+ms-toolsai.jupyter-keymap
+ms-toolsai.jupyter-renderers
+ms-toolsai.datawrangler
+
+# === Rust ===
+rust-lang.rust-analyzer
+vadimcn.vscode-lldb
+serayuzgur.crates
+
+# === TypeScript / Web ===
+esbenp.prettier-vscode
+astro-build.astro-vscode
+mattpocock.ts-error-translator
+ms-vscode.live-server
+
+# === Remote Development ===
+ms-vscode-remote.remote-ssh
+ms-vscode-remote.remote-ssh-edit
+ms-vscode.remote-explorer
+
+# === Git ===
 eamodio.gitlens
+
+# === Data & Config Formats ===
+mechatroner.rainbow-csv
+lehoanganh298.json-lines-viewer
+richie5um2.vscode-sort-json
+redhat.vscode-yaml
+tamasfe.even-better-toml
+dotjoshjohnson.xml
+dnicolson.binary-plist
+
+# === Writing ===
+james-yu.latex-workshop
+ltex-plus.vscode-ltex-plus
+mermaidchart.vscode-mermaid-chart
+
+# === AI / Research ===
+ukaisi.inspect-ai
+rsip-vision.nvidia-smi-plus
+
+# === Productivity ===
+usernamehw.errorlens
+Gruntfuggly.todo-tree
+aaron-bond.better-comments
+johnpapa.vscode-peacock
+oderwat.indent-rainbow
+alefragnani.project-manager
+
+# === Utilities ===
+wakatime.vscode-wakatime
+tomoki1207.pdf
+vscode-icons-team.vscode-icons
