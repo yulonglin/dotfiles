@@ -42,10 +42,12 @@ tamasfe.even-better-toml
 dotjoshjohnson.xml
 dnicolson.binary-plist
 
-# === Writing ===
+# === Writing / Markdown ===
 james-yu.latex-workshop
 ltex-plus.vscode-ltex-plus
 mermaidchart.vscode-mermaid-chart
+yzhang.markdown-all-in-one
+davidanson.vscode-markdownlint
 
 # === AI / Research ===
 ukaisi.inspect-ai
