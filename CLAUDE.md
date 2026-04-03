@@ -98,6 +98,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Developer config files - EditorConfig, curlrc, inputrc, .hushlogin (deployed with --editor flag)
 - Global gitattributes - Binary file handling + line endings (deployed with --git-config flag)
 - File associations - Set default editor for coding file types (macOS only, reads `config/file_associations.conf`)
+- Pueue + resource slices - Local job queue with cgroup-enforced CPU/memory limits (Linux only, systemd user slices, `j*` aliases)
 - Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, brew/apt/dnf/pacman, launchd/cron)
 
 ## Architecture
@@ -139,7 +140,10 @@ config/
 ├── gitattributes_global  # Binary file handling + line endings (symlinked to ~/.gitattributes)
 ├── machines.conf         # Machine registry (machine-id → name + emoji, for prompt/statusline)
 ├── secrets.env.enc       # SOPS-encrypted API keys (committed, requires age key to decrypt)
-└── envrc_sops_template   # Template .envrc for per-project SOPS secrets
+├── envrc_sops_template   # Template .envrc for per-project SOPS secrets
+├── resources.conf        # Resource partitioning for Pueue job management (CPU, memory, parallelism)
+├── pueue.yml             # Pueue daemon config (symlinked to ~/.config/pueue/)
+└── systemd-user/         # systemd user units (slices, pueued service, reset-failed timer)
 
 claude/                   # Symlinked to ~/.claude/
 ├── CLAUDE.md             # Global AI instructions (slim ~120 lines, identity + pointers)
@@ -147,7 +151,7 @@ claude/                   # Symlinked to ~/.claude/
 ├── output-styles/        # Custom output styles (10x-mentor: 4-track growth coaching)
 ├── rules/                # Auto-loaded behavioral rules (safety, workflow, conventions)
 ├── agents/               # Personal agents (llm-billing)
-├── skills/               # Personal skills (commit, anthropic-style, etc.)
+├── skills/               # Personal skills (commit, anthropic-style, jobs, etc.)
 ├── ai-safety-plugins -> ~/code/marketplaces/ai-safety-plugins  # Symlink to marketplace repo
 ├── plugins/              # Plugin runtime (cache, installed_plugins.json)
 ├── docs/                 # On-demand knowledge (research, async, tmux, agent teams, etc.)
@@ -172,7 +176,8 @@ custom_bins/              # Custom utilities (added to PATH)
 ├── machine-name          # Machine name for prompt/statusline (registry → SSH config → hostname)
 ├── machine-register      # Register/list/remove machines in config/machines.conf
 ├── claude-cache-clean    # Remove stale plugin cache versions
-└── any2md                # Universal content-to-markdown converter (files, URLs, arxiv, dirs)
+├── any2md                # Universal content-to-markdown converter (files, URLs, arxiv, dirs)
+└── jguard                # Memory pressure monitor for Pueue workloads (PSI-based)
 
 lib/plotting/             # Python plotting library (deployed to ~/.local/lib/plotting/)
 ├── anthro_colors.py      # Anthropic brand colors (ground truth)
@@ -375,6 +380,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - **Serena MCP config**: `config/serena/serena_config.yml` symlinked to `~/.serena/serena_config.yml` (dashboard auto-open disabled)
 - **Ghostty config**: Symlinked to platform-specific path, requires reload after changes (Cmd+Shift+Comma)
 - **SOPS + age**: Age private key must exist at `~/.config/sops/age/keys.txt` before decrypt works. Run `secrets-init` on new machines (paste age key from Bitwarden)
+- **Pueue + systemd slices**: `j*` aliases require pueue + systemd user session. `systemd --user` doesn't work inside Claude Code sandbox (bubblewrap blocks D-Bus) — test from normal shell. Cgroup delegation may need one-time `sudo systemctl set-property user-$(id -u).slice Delegate=yes`. Config in `config/resources.conf` (edit when scaling machine).
 - **Rust + bash dual implementations**: Some tools have a Rust version (for speed) and a bash fallback. Keep both in sync. Rust source lives in `tools/claude-tools/src/`, bash in `claude/`. Recompile with `cd tools/claude-tools && cargo build --release` then `cp target/release/claude-tools ../../custom_bins/`. Current dual-impl tools: statusline (`statusline.rs` + `claude/statusline.sh`), usage (`usage.rs` + inline in `statusline.sh`)
 
 ## Cross-Reference
