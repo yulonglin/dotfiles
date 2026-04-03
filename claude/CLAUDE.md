@@ -134,7 +134,8 @@ claude-tools context code               # Software projects
 claude-tools context code web python    # Compose multiple profiles
 claude-tools context --list             # Show active plugins and available profiles
 claude-tools context --clean            # Remove project plugin config
-claude-tools context --sync [-v]        # Register + update all plugin marketplaces
+claude-tools context --sync [-v]        # Register + update + install wanted + prune orphans
+claude-tools context --sync --no-prune  # Sync without removing orphan plugins
 ```
 
 **Architecture:**

@@ -182,5 +182,17 @@
   // Zed reads hosts from ~/.ssh/config (managed by gist sync).
   // This array stores recently-used connections with project paths.
   // Machine-specific — added via Zed UI, not hardcoded.
-  "ssh_connections": []
+  "ssh_connections": [
+    {
+      "host": "hn",
+      "args": [],
+      "projects": [
+        {
+          "paths": [
+            "/home/yulong/code/swordsmith/./"
+          ]
+        }
+      ]
+    }
+  ]
 }

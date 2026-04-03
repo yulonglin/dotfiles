@@ -40,9 +40,9 @@ pub struct ContextArgs {
     #[arg(long, alias = "sync-marketplaces")]
     pub sync: bool,
 
-    /// Uninstall plugins not referenced in any profile
+    /// Skip pruning plugins not referenced in any profile
     #[arg(long)]
-    pub prune: bool,
+    pub no_prune: bool,
 
     /// Verbose output (for --sync)
     #[arg(short, long)]
@@ -62,7 +62,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     let ctx_args = ContextArgs::parse_from(args);
 
     if ctx_args.sync {
-        sync::run(ctx_args.verbose, ctx_args.prune)?;
+        sync::run(ctx_args.verbose, !ctx_args.no_prune)?;
     } else if ctx_args.list {
         display::show_status()?;
     } else if ctx_args.clean {
