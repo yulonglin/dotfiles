@@ -1,0 +1,20 @@
+// Zed keymap — Cursor-compatible bindings
+// Deployed via: ./deploy.sh --zed (symlinked to ~/.config/zed/keymap.json)
+[
+  // Cmd+K for inline AI edit (matches Cursor's Cmd+K)
+  // Note: this overrides Zed's cmd-k chord prefix.
+  // If you need cmd-k chords back, change to "cmd-k cmd-k" or "cmd-i"
+  {
+    "context": "Editor && mode == full",
+    "bindings": {
+      "cmd-k": "assistant::InlineAssist"
+    }
+  },
+  // Toggle terminal (matches Cursor's Ctrl+`)
+  {
+    "context": "Workspace",
+    "bindings": {
+      "ctrl-`": "workspace::ToggleBottomDock"
+    }
+  }
+]

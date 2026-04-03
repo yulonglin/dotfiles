@@ -1,0 +1,187 @@
+// Zed editor settings — feature parity with Cursor config
+// Deployed via: ./deploy.sh --zed (symlinked to ~/.config/zed/settings.json)
+//
+// Only non-default settings are listed. For all defaults, run:
+//   zed: open default settings (from command palette)
+{
+  // === Privacy & Security ===
+  "redact_private_values": true,
+
+  // === Theme & Appearance ===
+  "theme": {
+    "mode": "system",
+    "dark": "One Dark Pro",
+    "light": "One Light"
+  },
+  "icon_theme": "Material Icon Theme",
+  "ui_font_size": 16,
+  "buffer_font_family": "Menlo",
+  "buffer_font_size": 16,
+
+  // === Editor Behavior (non-default only) ===
+  "base_keymap": "VSCode",
+  "autosave": "on_focus_change",
+  "format_on_save": "off",
+  "remove_trailing_whitespace_on_save": false,
+  "multi_cursor_modifier": "cmd_or_ctrl",
+  "soft_wrap": "editor_width",
+
+  // === Display (non-default only) ===
+  "minimap": {
+    "show": "auto"
+  },
+  "indent_guides": {
+    "enabled": true,
+    "coloring": "indent_aware"
+  },
+  "inlay_hints": {
+    "enabled": true
+  },
+  "tabs": {
+    "show_diagnostics": "errors"
+  },
+  "toolbar": {
+    "breadcrumbs": false,
+    "quick_actions": false
+  },
+
+  // === Search (CRITICAL: include gitignored files) ===
+  "search": {
+    "include_ignored": true
+  },
+  "use_smartcase_search": true,
+
+  // === File Scanning (extends defaults with project-specific exclusions) ===
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/.svn",
+    "**/.hg",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/.cache",
+    "**/.venv",
+    "**/node_modules",
+    "**/__pycache__",
+    "**/*.pyc",
+    "**/prompt_history"
+  ],
+
+  // === Git (inline blame = built-in GitLens) ===
+  "git": {
+    "inline_blame": {
+      "enabled": true,
+      "delay_ms": 600,
+      "show_commit_summary": true,
+      "min_column": 40
+    }
+  },
+
+  // === Edit Predictions (Zeta — Zed's native AI completion) ===
+  "edit_predictions": {
+    "provider": "zed",
+    "disabled_globs": [
+      "**/.env*",
+      "**/secrets*"
+    ]
+  },
+
+  // === AI / Agent ===
+  "agent": {
+    "default_model": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6-latest"
+    }
+  },
+
+  // === Telemetry (disabled) ===
+  "telemetry": {
+    "diagnostics": false,
+    "metrics": false
+  },
+
+  // === Terminal (non-default only) ===
+  "terminal": {
+    "option_as_meta": true,
+    "font_family": "Menlo",
+    "font_size": 14,
+    "detect_venv": {
+      "on": {
+        "directories": [".venv", "venv", ".env", "env"],
+        "activate_script": "default"
+      }
+    }
+  },
+
+  // === Panels (non-default only) ===
+  "outline_panel": {
+    "dock": "right"
+  },
+  "notification_panel": {
+    "button": false
+  },
+  "collaboration_panel": {
+    "button": false
+  },
+
+  // === Auto-install Extensions ===
+  "auto_install_extensions": {
+    "one-dark-pro": true,
+    "ruff": true,
+    "toml": true,
+    "dockerfile": true,
+    "git-firefly": true,
+    "csv": true,
+    "just": true,
+    "html": true
+  },
+
+  // === Language Overrides ===
+  "languages": {
+    "Python": {
+      "tab_size": 4,
+      "format_on_save": "off",
+      "preferred_line_length": 100,
+      "language_servers": ["pyright", "ruff"]
+    },
+    "TypeScript": {
+      "tab_size": 2,
+      "format_on_save": "on",
+      "formatter": "language_server"
+    },
+    "JavaScript": {
+      "tab_size": 2,
+      "format_on_save": "on"
+    },
+    "JSON": {
+      "tab_size": 2
+    },
+    "JSONC": {
+      "tab_size": 2
+    },
+    "YAML": {
+      "tab_size": 2
+    },
+    "Markdown": {
+      "soft_wrap": "editor_width",
+      "show_edit_predictions": false
+    },
+    "Rust": {
+      "tab_size": 4,
+      "format_on_save": "on",
+      "formatter": "language_server",
+      "preferred_line_length": 100
+    }
+  },
+
+  // === File Type Associations ===
+  "file_types": {
+    "JSONC": ["**/.zed/**/*.json", "tsconfig.json", "tsconfig.*.json"],
+    "XML": ["*.strings", "*.plist"]
+  },
+
+  // === SSH Connections ===
+  // Zed reads hosts from ~/.ssh/config (managed by gist sync).
+  // This array stores recently-used connections with project paths.
+  // Machine-specific — added via Zed UI, not hardcoded.
+  "ssh_connections": []
+}
