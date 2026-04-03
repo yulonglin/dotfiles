@@ -1,0 +1,30 @@
+#!/bin/bash
+# Bootstrap a .envrc for the current project (non-interactive)
+# Usage: envrc-init ANTHROPIC_API_KEY OPENAI_API_KEY  # Specific keys
+#        envrc-init --all                              # All keys (NOT recommended)
+#        envrc-init --sops                             # SOPS-based decryption template
+# For interactive picker, use: env-context
+set -euo pipefail
+
+DOT_DIR="${DOT_DIR:-$HOME/code/dotfiles}"
+SECRETS_FILE="$DOT_DIR/.secrets"
+
+case "${1:-}" in
+    --sops)
+        cp "$DOT_DIR/config/envrc_sops_template" .envrc
+        echo "Created .envrc with SOPS decryption template"
+        direnv allow .
+        exit 0
+        ;;
+    --all)
+        exec env-context $(sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' "$SECRETS_FILE" | grep -E 'API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL')
+        ;;
+    "")
+        echo "Usage: envrc-init KEY1 [KEY2 ...]" >&2
+        echo "  For interactive picker: env-context" >&2
+        exit 1
+        ;;
+    *)
+        exec env-context "$@"
+        ;;
+esac

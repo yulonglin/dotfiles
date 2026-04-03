@@ -311,6 +311,19 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
         log_warning "Go not installed — skipping local MCP servers"
     fi
 
+    # Supply chain defense tools
+    # Socket CLI — wraps npm/npx with supply chain scanning
+    if ! cmd_exists socket; then
+        log_info "Installing Socket CLI..."
+        npm install -g @socketsecurity/cli 2>/dev/null || log_warning "Socket CLI install failed (npm required)"
+    fi
+
+    # pip-audit — vulnerability scanner for Python dependencies
+    if ! cmd_exists pip-audit; then
+        log_info "Installing pip-audit..."
+        uv tool install pip-audit 2>/dev/null || log_warning "pip-audit install failed"
+    fi
+
     # markitdown
     if ! is_installed markitdown; then
         log_info "Installing markitdown..."

@@ -1,0 +1,15 @@
+# Known compromised packages (ecosystem:name:bad_versions:description)
+# Lines starting with # are comments. Fields separated by colons.
+npm:event-stream:3.3.6:cryptominer via flatmap-stream (2018)
+npm:ua-parser-js:0.7.29:cryptominer (2021)
+npm:coa:2.0.3:malware (2021)
+npm:rc:1.2.9:malware (2021)
+npm:colors:1.4.1:protestware infinite loop (2022)
+npm:node-ipc:10.1.1,10.1.2,10.1.3:protestware peacenotwar (2022)
+npm:axios:1.14.1:RAT via plain-crypto-js (2026-03)
+npm:axios:0.30.4:RAT via plain-crypto-js (2026-03)
+npm:plain-crypto-js:4.2.1:RAT payload for axios attack (2026-03)
+pypi:litellm:1.82.8:credential exfil + K8s backdoor (2026-03)
+# Filesystem IOC artifacts (type:path:description)
+ioc:/Library/Caches/com.apple.act.mond:axios RAT macOS binary
+ioc:/tmp/ld.py:axios RAT Linux payload

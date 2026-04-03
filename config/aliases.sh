@@ -1142,4 +1142,13 @@ alias fix-term='_reset_terminal_modes'
 alias vpn-status='tailscale-route-fix status'
 alias vpn-fix='sudo tailscale-route-fix once'
 
+# Supply chain: manual dependency audit
+alias dep-audit='"$DOT_DIR/scripts/security/audit_dependencies.sh"'
+
+# Supply chain defense: socket wraps npm/npx with security scanning
+if command -v socket &>/dev/null; then
+    alias npm="socket npm"
+    alias npx="socket npx"
+fi
+
 # SSH theme switching moved to config/ssh_themes.sh (sourced by zshrc.sh)

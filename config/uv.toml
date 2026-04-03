@@ -1,0 +1,3 @@
+# Global uv config — deployed by dotfiles (deploy.sh --pkg-configs)
+# uv's exclude-newer requires an absolute date (RFC 3339), not a relative duration.
+# 7-day quarantine is enforced via UV_EXCLUDE_NEWER env var (set dynamically in aliases.sh).

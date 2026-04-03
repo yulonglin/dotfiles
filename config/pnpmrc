@@ -1,0 +1,5 @@
+# Global pnpm config — deployed by dotfiles (deploy.sh --pkg-configs)
+# pnpm ignores lifecycle scripts by default in global installs
+# 7-day quarantine on new releases (10080 minutes)
+# Note: global rc uses kebab-case (INI); per-project pnpm-workspace.yaml uses camelCase (YAML)
+minimum-release-age=10080

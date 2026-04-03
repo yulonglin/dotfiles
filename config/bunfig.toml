@@ -1,0 +1,5 @@
+# Global bunfig — deployed by dotfiles (deploy.sh --pkg-configs)
+# bun already ignores lifecycle scripts by default (trustedDependencies)
+# 7-day quarantine on new releases (604800 seconds)
+[install]
+minimumReleaseAge = 604800

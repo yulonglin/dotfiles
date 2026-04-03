@@ -427,6 +427,31 @@ if [[ "$DEPLOY_GIT_HOOKS" == "true" ]]; then
     fi
 fi
 
+# ─── Package Manager Security Configs ────────────────────────────────────────
+
+if [[ "$DEPLOY_PKG_CONFIGS" == "true" ]]; then
+    log_info "Deploying package manager security configs..."
+
+    safe_symlink "$DOT_DIR/config/npmrc" "$HOME/.npmrc"
+    safe_symlink "$DOT_DIR/config/bunfig.toml" "$HOME/.bunfig.toml"
+
+    # pnpm global rc path is platform-specific
+    local pnpm_config_dir
+    if is_macos; then
+        pnpm_config_dir="$HOME/Library/Preferences/pnpm"
+    else
+        pnpm_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/pnpm"
+    fi
+    mkdir -p "$pnpm_config_dir"
+    safe_symlink "$DOT_DIR/config/pnpmrc" "$pnpm_config_dir/rc"
+
+    local uv_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/uv"
+    mkdir -p "$uv_config_dir"
+    safe_symlink "$DOT_DIR/config/uv.toml" "$uv_config_dir/uv.toml"
+
+    log_success "Package manager configs deployed — 7-day quarantine active"
+fi
+
 # ─── Editor Settings ──────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_EDITOR" == "true" ]]; then
@@ -971,6 +996,11 @@ fi
     if [[ "$DEPLOY_BREW_UPDATE" == "true" ]]; then
         [[ -f "$DOT_DIR/scripts/cleanup/setup_brew_update.sh" ]] && \
             scheduled_jobs+=("brew-update|$DOT_DIR/scripts/cleanup/setup_brew_update.sh")
+    fi
+
+    if [[ "$DEPLOY_DEP_AUDIT" == "true" ]]; then
+        [[ -f "$DOT_DIR/scripts/security/setup_dep_audit.sh" ]] && \
+            scheduled_jobs+=("dep-audit|$DOT_DIR/scripts/security/setup_dep_audit.sh")
     fi
 
     if [[ "$DEPLOY_KEYBOARD" == "true" ]] && is_macos; then

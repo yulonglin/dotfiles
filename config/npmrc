@@ -1,0 +1,5 @@
+# Global npmrc — deployed by dotfiles (deploy.sh --pkg-configs)
+# Supply chain defense: blocks postinstall scripts + quarantines new releases
+# Override per-install: npm install --ignore-scripts=false
+ignore-scripts=true
+min-release-age=7

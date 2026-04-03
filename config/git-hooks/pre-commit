@@ -43,6 +43,39 @@ else
     fi
 fi
 
+# === LOCKFILE CHANGE DETECTION (Supply Chain Defense) ===
+
+STAGED_FILES=$(git diff --cached --name-only 2>/dev/null || true)
+LOCKFILE_CHANGED=""
+
+for pattern in package-lock.json bun.lockb pnpm-lock.yaml yarn.lock uv.lock poetry.lock Pipfile.lock; do
+    if echo "$STAGED_FILES" | grep -q "$pattern"; then
+        LOCKFILE_CHANGED="$pattern"
+        break
+    fi
+done
+
+if [ -n "$LOCKFILE_CHANGED" ]; then
+    echo "Pre-commit: Lockfile changed ($LOCKFILE_CHANGED) — checking for supply chain issues..."
+
+    # Socket CLI (JS ecosystem lockfiles)
+    if command -v socket &>/dev/null && echo "$LOCKFILE_CHANGED" | grep -qE '^(package-lock|bun\.lockb|pnpm-lock|yarn\.lock)'; then
+        if ! socket report --json 2>/dev/null | jq -e '.issues | length == 0' >/dev/null 2>&1; then
+            echo "Pre-commit: socket found potential issues in $LOCKFILE_CHANGED. Review with: socket report"
+            echo "  To bypass: git commit --no-verify"
+        fi
+    fi
+
+    # pip-audit (Python lockfiles)
+    if command -v pip-audit &>/dev/null && echo "$LOCKFILE_CHANGED" | grep -qE '^(uv\.lock|poetry\.lock|Pipfile\.lock)'; then
+        if ! pip-audit 2>/dev/null; then
+            echo "Pre-commit: pip-audit found vulnerabilities. Review above."
+            echo "  To bypass: git commit --no-verify"
+            exit 1
+        fi
+    fi
+fi
+
 # === REPO-SPECIFIC HOOKS (Additive) ===
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")

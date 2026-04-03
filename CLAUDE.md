@@ -101,6 +101,8 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - File associations - Set default editor for coding file types (macOS only, reads `config/file_associations.conf`)
 - Pueue + resource slices - Local job queue with cgroup-enforced CPU/memory limits (Linux only, systemd user slices, `j*` aliases)
 - Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, brew/apt/dnf/pacman, launchd/cron)
+- Package manager configs - Global npmrc, bunfig.toml, pnpm rc, uv.toml with 7-day min-release-age + ignore-scripts (symlinked)
+- Dependency audit - Weekly scan for known-bad packages across all repos (Sunday 10 AM, launchd/cron)
 
 ## Architecture
 
@@ -110,6 +112,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - `deploy.sh` - Configuration deployment (uses helper functions, supports --append/--backup)
 - `config/macos_settings.sh` - macOS system defaults (run automatically on macOS)
 - `scripts/cleanup/` - Automatic cleanup system (launchd/cron scheduled jobs)
+- `scripts/security/` - Supply chain defense (dependency audit, known-bad package IOC registry)
 
 ### Configuration Structure
 
@@ -146,6 +149,10 @@ config/
 ├── machines.conf         # Machine registry (machine-id → name + emoji, for prompt/statusline)
 ├── secrets.env.enc       # SOPS-encrypted API keys (committed, requires age key to decrypt)
 ├── envrc_sops_template   # Template .envrc for per-project SOPS secrets
+├── npmrc                 # Global npm config: ignore-scripts + 7-day min-release-age (symlinked)
+├── bunfig.toml           # Global bun config: 7-day min-release-age (symlinked)
+├── pnpmrc                # Global pnpm config: 7-day min-release-age (symlinked)
+├── uv.toml               # Global uv config: 7-day exclude-newer (symlinked)
 ├── resources.conf        # Resource partitioning for Pueue job management (CPU, memory, parallelism)
 ├── pueue.yml             # Pueue daemon config (symlinked to ~/.config/pueue/)
 └── systemd-user/         # systemd user units (slices, pueued service, reset-failed timer)
@@ -182,7 +189,9 @@ custom_bins/              # Custom utilities (added to PATH)
 ├── machine-register      # Register/list/remove machines in config/machines.conf
 ├── claude-cache-clean    # Remove stale plugin cache versions
 ├── any2md                # Universal content-to-markdown converter (files, URLs, arxiv, dirs)
-└── jguard                # Memory pressure monitor for Pueue workloads (PSI-based)
+├── jguard                # Memory pressure monitor for Pueue workloads (PSI-based)
+├── env-context           # Per-project secret picker (fzf multi-select or CLI args)
+└── envrc-init            # Non-interactive .envrc bootstrap (delegates to env-context)
 
 lib/plotting/             # Python plotting library (deployed to ~/.local/lib/plotting/)
 ├── anthro_colors.py      # Anthropic brand colors (ground truth)
@@ -194,7 +203,7 @@ config/matplotlib/        # Matplotlib style files (.mplstyle only)
 └── petri.mplstyle        # Petri (ivory bg, editorial aesthetic)
 
 tools/
-├── claude-tools/         # Rust binary (statusline, usage)
+├── claude-tools/         # Rust binary (statusline, context, ignore)
 └── set-default-app/      # Swift CLI (macOS file type associations)
 ```
 
@@ -236,8 +245,8 @@ export WRITING_DIR="$HOME/Documents/writing"
 **Encrypted Secrets (SOPS + age)**:
 - Decrypts `config/secrets.env.enc` to `$DOT_DIR/.secrets` using `sops -d --config .sops.yaml` with age key
 - Age private key at `~/.config/sops/age/keys.txt` (stored in Bitwarden, pasted during cloud setup)
-- Shell integration: `.secrets` sourced by zshrc.sh (`set -a` exports all vars), direnv for per-project secrets
-- **Managed secrets** (all exported as env vars):
+- Shell integration: `.secrets` sourced by zshrc.sh but API keys are **NOT globally exported** (supply chain defense). Use `env-context` (fzf picker) or `envrc-init` per-project via direnv. `with-keys <cmd>` for ad-hoc one-off commands.
+- **Managed secrets** (available as shell-local vars, exported only per-project):
   - `OPENAI_API_KEY` — OpenAI API access
   - `OPENROUTER_API_KEY` — OpenRouter API access
   - `ANTHROPIC_API_KEY` — Anthropic API access
@@ -397,6 +406,8 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - **Zed config**: Symlinked (like Ghostty/Claude). `ssh_connections` are machine-specific (added via Zed UI, hosts from ~/.ssh/config)
 - **Antigravity config**: VSCode fork by Google (`com.google.antigravity`). Same settings as Cursor, deployed via `--editor` flag. CLI at `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`
 - **SOPS + age**: Age private key must exist at `~/.config/sops/age/keys.txt` before decrypt works. Run `secrets-init` on new machines (paste age key from Bitwarden)
+- **Secrets are per-project**: API keys require `env-context` or `envrc-init` in each project. Running `npm postinstall` or `pip install` in a project without `.envrc` cannot access secrets (this is intentional — supply chain defense)
+- **min-release-age quarantine**: All package managers have a 7-day delay on new releases. Packages published <7 days ago will fail to install. This is intentional. See `claude/rules/supply-chain-security.md` for override syntax
 - **Pueue + systemd slices**: `j*` aliases require pueue + systemd user session. `systemd --user` doesn't work inside Claude Code sandbox (bubblewrap blocks D-Bus) — test from normal shell. Cgroup delegation may need one-time `sudo systemctl set-property user-$(id -u).slice Delegate=yes`. Config in `config/resources.conf` (edit when scaling machine).
 - **Rust + bash dual implementations**: Some tools have a Rust version (for speed) and a bash fallback. Keep both in sync. Rust source lives in `tools/claude-tools/src/`, bash in `claude/`. Recompile with `cd tools/claude-tools && cargo build --release` then `cp target/release/claude-tools ../../custom_bins/`. Current dual-impl tools: statusline (`statusline.rs` + `claude/statusline.sh`), usage (`usage.rs` + inline in `statusline.sh`)
 

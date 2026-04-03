@@ -162,6 +162,11 @@
             "type": "command"
           },
           {
+            "command": "$HOME/.claude/hooks/warn_dep_install.sh",
+            "timeout": 3,
+            "type": "command"
+          },
+          {
             "command": "$HOME/.claude/hooks/guard_post_rebase.sh",
             "timeout": 5,
             "type": "command"
