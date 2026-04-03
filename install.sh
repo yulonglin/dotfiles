@@ -54,6 +54,7 @@ COMPONENTS:
     --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
+    --pueue           Enable Pueue job scheduler (Linux only)
     --experimental    Enable experimental features (ty type checker, zerobrew)
     --create-user     Create non-root dev user (Linux only)
     --no-<component>  Disable a component (e.g., --no-ai-tools)

@@ -816,7 +816,7 @@ fi
 if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
     log_section "PUEUE + RESOURCE MANAGEMENT"
 
-    if ! systemctl --user status &>/dev/null; then
+    if ! systemctl --user is-system-running &>/dev/null 2>&1; then
         log_warning "systemd --user not available — skipping resource management"
         log_info "  Try: loginctl enable-linger $(whoami)"
     else
@@ -839,14 +839,14 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
             local src="$DOT_DIR/config/systemd-user/${slice}.slice"
             local dst="$systemd_user_dir/${slice}.slice"
             if [[ -f "$src" ]]; then
-                local cpu_var="${slice^^}_CPU_QUOTA"
-                local mem_max_var="${slice^^}_MEMORY_MAX"
-                local mem_high_var="${slice^^}_MEMORY_HIGH"
-                sed -e "s|CPUQuota=.*|CPUQuota=${!cpu_var}|" \
-                    -e "s|MemoryMax=.*|MemoryMax=${!mem_max_var}|" \
-                    -e "s|MemoryHigh=.*|MemoryHigh=${!mem_high_var}|" \
+                local cpu_var="${(U)slice}_CPU_QUOTA"
+                local mem_max_var="${(U)slice}_MEMORY_MAX"
+                local mem_high_var="${(U)slice}_MEMORY_HIGH"
+                sed -e "s|CPUQuota=.*|CPUQuota=${(P)cpu_var}|" \
+                    -e "s|MemoryMax=.*|MemoryMax=${(P)mem_max_var}|" \
+                    -e "s|MemoryHigh=.*|MemoryHigh=${(P)mem_high_var}|" \
                     "$src" > "$dst"
-                log_info "Deployed ${slice}.slice (CPU=${!cpu_var}, Mem=${!mem_max_var})"
+                log_info "Deployed ${slice}.slice (CPU=${(P)cpu_var}, Mem=${(P)mem_max_var})"
             fi
         done
 

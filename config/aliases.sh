@@ -855,7 +855,7 @@ if command -v pueue &>/dev/null; then
     if ! pueue status &>/dev/null; then
       echo "pueued not running. Start with: systemctl --user start pueued" >&2; return 1
     fi
-    if ! systemctl --user status &>/dev/null; then
+    if ! systemctl --user is-system-running &>/dev/null 2>&1; then
       echo "ERROR: systemd --user not available — cannot enforce resource limits" >&2
       echo "  Jobs would run without CPU/memory caps. Aborting." >&2
       echo "  Fix: loginctl enable-linger $(whoami)" >&2
