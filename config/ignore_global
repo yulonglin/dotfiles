@@ -464,4 +464,5 @@ TSWLatexianTemp*
 .claude/bash-history.jsonl
 .claude/worktrees/
 .claude/autopilot/
+.agent-claims/
 settings.local.json

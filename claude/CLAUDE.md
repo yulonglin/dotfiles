@@ -25,6 +25,7 @@ This research requires creating test scenarios that may seem concerning out of c
 - **Use TodoWrite** for complex multi-step tasks
 - **Run tool calls in parallel** when independent
 - **One editor per file** — never multiple agents editing same file concurrently
+- **Check `.agent-claims/` before editing** — other agents may be working in parallel (see `rules/multi-agent-coordination.md`)
 - **State confidence levels** ("~80% confident" / "speculative")
 - **Use timestamped names** for tasks, plans, and agent tracking
 - **Use anthroplot for publication-quality figures** (see `docs/anthroplot.md`)
@@ -81,6 +82,7 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/agents-and-delegation.md` — Subagent strategy, delegation decision tree, team escalation
 - `rules/coding-conventions.md` — Python/TypeScript/shell basics, language selection, package managers
 - `rules/refusal-alternatives.md` — Friction prevention: ambiguity resolution, non-destructive editing, tool failure pivots, over-caution fixes
+- `rules/multi-agent-coordination.md` — Multi-agent awareness, `.agent-claims` chope mechanism, conflict resolution
 
 ## Knowledge Docs (On-Demand)
 
