@@ -46,7 +46,7 @@ show_component_menu() {
 
     local entry name rest desc platform var_name current_val
     # Indirect array expansion: ${(P)var} expands the array named by $var
-    for entry in "${(P)${registry_name}[@]}"; do
+    for entry in "${(@P)registry_name}"; do
         name="${entry%%|*}"
         rest="${entry#*|}"
         desc="${rest%%|*}"
@@ -57,8 +57,8 @@ show_component_menu() {
         if [[ "$platform" == "macos" ]] && ! is_macos; then continue; fi
         if [[ "$platform" == "linux" ]] && ! is_linux; then continue; fi
 
-        var_name="${(U)name//-/_}"
-        current_val="${(P)${prefix}_${var_name}}"
+        var_name="${prefix}_${(U)name//-/_}"
+        current_val="${(P)var_name}"
         comp_defs+=("${name}|${desc}|${current_val}")
     done
 
@@ -1182,10 +1182,11 @@ MERGE
     log_success "Merged $name settings (existing preserved, arrays from dotfiles)"
 }
 
-# Install editor extensions
+# Install editor extensions (concurrent, up to 8 at a time)
 install_editor_extensions() {
     local cli="$1"
     local extensions_file="$2"
+    local max_jobs="${3:-8}"
 
     if ! cmd_exists "$cli"; then
         log_info "$cli CLI not found, skipping extensions"
@@ -1196,14 +1197,28 @@ install_editor_extensions() {
         return 0
     fi
 
-    log_info "Installing extensions..."
-    local count=0
+    # Collect extension IDs
+    typeset -a ext_ids
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-        local ext_id
-        ext_id=$(echo "$line" | xargs)
-        $cli --install-extension "$ext_id" --force &>/dev/null && ((count++))
+        ext_ids+=("${line// /}")
     done < "$extensions_file"
+
+    [[ ${#ext_ids[@]} -eq 0 ]] && return 0
+
+    log_info "Installing ${#ext_ids[@]} extensions (${max_jobs} concurrent)..."
+
+    local count=0
+    local tmpdir="${TMPDIR:-/tmp}/ext_install_$$"
+    mkdir -p "$tmpdir"
+
+    # Launch all installs with xargs for simple concurrency control
+    printf '%s\n' "${ext_ids[@]}" | xargs -P "$max_jobs" -I{} \
+        sh -c "'$cli' --install-extension '{}' --force >/dev/null 2>&1 && touch '$tmpdir/{}'"
+
+    # Count successes
+    count=$(find "$tmpdir" -type f 2>/dev/null | wc -l | tr -d ' ')
+    rm -rf "$tmpdir"
 
     [[ $count -gt 0 ]] && log_success "Installed $count extension(s)"
 }

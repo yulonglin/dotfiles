@@ -189,7 +189,17 @@
       "projects": [
         {
           "paths": [
+            "/home/yulong/code/sandbagging-detection/dev"
+          ]
+        },
+        {
+          "paths": [
             "/home/yulong/code/swordsmith/./"
+          ]
+        },
+        {
+          "paths": [
+            "/home/yulong/writing/papers/sandbagging-detection-paper/./"
           ]
         }
       ]
