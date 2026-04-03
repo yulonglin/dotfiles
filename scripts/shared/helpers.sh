@@ -1090,7 +1090,7 @@ apply_nonconflicting_git_settings() {
 
 # ─── Editor Settings ──────────────────────────────────────────────────────────
 
-# Deploy VSCode/Cursor settings
+# Deploy VSCode/Cursor/Antigravity settings
 deploy_editor_settings() {
     local settings_file="$DOT_DIR/config/vscode_settings.json"
 
@@ -1100,13 +1100,15 @@ deploy_editor_settings() {
     fi
 
     # Determine paths
-    local vscode_dir cursor_dir
+    local vscode_dir cursor_dir antigravity_dir
     if is_macos; then
         vscode_dir="$HOME/Library/Application Support/Code/User"
         cursor_dir="$HOME/Library/Application Support/Cursor/User"
+        antigravity_dir="$HOME/Library/Application Support/Antigravity/User"
     else
         vscode_dir="$HOME/.config/Code/User"
         cursor_dir="$HOME/.config/Cursor/User"
+        antigravity_dir=""  # macOS only
     fi
 
     local deployed=false
@@ -1125,8 +1127,23 @@ deploy_editor_settings() {
         deployed=true
     fi
 
+    # Deploy to Antigravity (macOS-only VSCode fork by Google)
+    if [[ -n "$antigravity_dir" && -d "$antigravity_dir" ]]; then
+        merge_json_settings "$settings_file" "$antigravity_dir/settings.json" "Antigravity"
+        # CLI not in PATH by default — use full path if available
+        local ag_cli="/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity"
+        if [[ -x "$ag_cli" ]]; then
+            install_editor_extensions "$ag_cli" "$DOT_DIR/config/vscode_extensions.txt"
+        elif cmd_exists antigravity; then
+            install_editor_extensions "antigravity" "$DOT_DIR/config/vscode_extensions.txt"
+        else
+            log_info "Antigravity CLI not found, skipping extensions"
+        fi
+        deployed=true
+    fi
+
     if ! $deployed; then
-        log_warning "Neither VSCode nor Cursor found"
+        log_warning "Neither VSCode, Cursor, nor Antigravity found"
         return 1
     fi
 }
