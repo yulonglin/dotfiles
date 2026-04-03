@@ -97,6 +97,7 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
   - [Encrypted Secrets (SOPS + age)](#encrypted-secrets-sops--age)
   - [Gist Sync](#gist-sync-automation-both-platforms)
   - [Global Git Hooks](#global-git-hooks)
+  - [Supply Chain Defense](#supply-chain-defense)
 - [Automation](#automation)
   - [Automatic Cleanup](#automatic-cleanup-macos)
   - [Claude Code Session Cleanup](#claude-code-session-cleanup-both-platforms)
@@ -686,6 +687,84 @@ Pre-commit hooks for secret detection across all repositories:
 ```
 
 Scans staged files for API keys, tokens, and credentials before each commit.
+
+### Supply Chain Defense
+
+Multi-layer defense against npm/PyPI supply chain attacks (axios 2026, litellm 2026, shai-hulud 2025). Deployed automatically with `./deploy.sh`.
+
+**What it does:**
+
+| Layer | Defense | What it blocks |
+|-------|---------|----------------|
+| 7-day quarantine | `min-release-age` on all package managers | Freshly-published malicious versions (caught within days) |
+| Script blocking | `ignore-scripts=true` in npm/pnpm | Postinstall scripts that exfiltrate secrets or install RATs |
+| Credential isolation | API keys scoped per-project via direnv | Compromised package in project A can't read project B's keys |
+| Lockfile scanning | Pre-commit hook checks changed lockfiles | Known-bad packages entering your lockfile |
+| Weekly audit | Scans all repos for known-bad IOCs | Packages you already have that were later found compromised |
+| Claude Code hook | Warns before any `npm install` / `pip install` | AI assistant installing packages without checking them first |
+
+**Day-to-day workflow:**
+
+```bash
+# Installing packages works normally — quarantine is transparent
+npm install express          # Works (express is >7 days old)
+bun add zod                  # Works
+uv add httpx                 # Works
+
+# New packages published <7 days ago are blocked (intentional)
+npm install some-brand-new-pkg
+# Error: min-release-age — package was published 2 days ago
+
+# Override for a specific install (after checking it's safe)
+npm install --min-release-age=0 some-brand-new-pkg   # npm
+bun add --minimumReleaseAge=0 some-brand-new-pkg      # bun
+UV_EXCLUDE_NEWER= uv pip install some-brand-new-pkg   # uv
+```
+
+**Credential isolation:**
+
+API keys are sourced from `.secrets` but NOT globally exported. Each project gets only the keys it needs:
+
+```bash
+# Interactive picker (fzf)
+cd ~/code/my-project
+env-context                  # Select keys with TAB, confirm with ENTER
+# → Creates .envrc, direnv auto-loads on cd
+
+# Non-interactive
+envrc-init ANTHROPIC_API_KEY OPENAI_API_KEY
+
+# Check what's configured
+env-context --list           # Show keys in current .envrc
+env-context --clean          # Remove .envrc
+
+# One-off command with all keys (no .envrc needed)
+with-keys python my_script.py
+```
+
+**Manual audit:**
+
+```bash
+dep-audit                    # Scan all repos for known-bad packages now
+# Runs automatically every Sunday at 10 AM
+```
+
+**Config files deployed:**
+
+| File | Deployed to | Purpose |
+|------|-------------|---------|
+| `config/npmrc` | `~/.npmrc` | `ignore-scripts=true` + `min-release-age=7` |
+| `config/bunfig.toml` | `~/.bunfig.toml` | `minimumReleaseAge=604800` (seconds) |
+| `config/pnpmrc` | `~/Library/Preferences/pnpm/rc` | `minimum-release-age=10080` (minutes) |
+| `config/uv.toml` | `~/.config/uv/uv.toml` | `exclude-newer` (via `UV_EXCLUDE_NEWER` env var) |
+
+**Selective deploy:**
+
+```bash
+./deploy.sh --only pkg-configs    # Just package manager configs
+./deploy.sh --no-pkg-configs      # Everything except package configs
+./deploy.sh --only dep-audit      # Just the weekly audit
+```
 
 ## Getting to know these dotfiles
 
