@@ -579,7 +579,7 @@ Supports Homebrew (macOS), apt, dnf, and pacman (Linux). Includes cleanup of sta
 Bidirectional sync between macOS text replacements and [Alfred](https://www.alfredapp.com/) snippets. Runs daily at 09:00:
 
 ```bash
-./deploy.sh --text-replacements  # macOS only, opt-in
+./deploy.sh --text-replacements  # macOS only, part of defaults
 ```
 
 macOS uses raw shortcuts; Alfred applies a collection prefix at runtime (e.g., `fm.hi`). Requires Full Disk Access for your terminal app.

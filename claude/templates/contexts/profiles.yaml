@@ -100,8 +100,8 @@ profiles:
     enable: [huggingface-skills]
 
   productivity:
-    comment: "Task and project management — Things 3, Linear"
-    enable: [linear, things-mcp]
+    comment: "Task and project management — Things 3"
+    enable: [things-mcp]
 
   python:
     comment: "Adds pyright-lsp"

@@ -28,7 +28,7 @@ INSTALL_CLEANUP=true            # Automatic cleanup (macOS only)
 INSTALL_DOCKER=true             # Docker (Linux only)
 INSTALL_EXPERIMENTAL=true       # ty type checker, zerobrew
 INSTALL_CREATE_USER=true        # Create non-root dev user (Linux only, guarded by is_linux + EUID check)
-INSTALL_EXTRAS=false            # hyperfine, gitui, code2prompt, terminal-notifier
+INSTALL_EXTRAS=true             # hyperfine, gitui, code2prompt, terminal-notifier
 INSTALL_MACOS_SETTINGS=true     # macOS system defaults (Dock, Finder, keyboard)
 INSTALL_FINICKY=true            # Finicky browser routing (macOS only)
 
@@ -48,15 +48,15 @@ DEPLOY_CLAUDE_CLEANUP=true      # Claude Code idle session cleanup (both platfor
 DEPLOY_AI_UPDATE=true           # AI tools auto-update daily (both platforms)
 DEPLOY_BREW_UPDATE=true         # Weekly package upgrade + cleanup (brew/apt/dnf/pacman)
 DEPLOY_KEYBOARD=true            # Keyboard repeat enforcement at login (macOS only)
-DEPLOY_BEDTIME=false            # Bedtime timezone enforcement (macOS only, opt-in)
+DEPLOY_BEDTIME=true             # Bedtime timezone enforcement (macOS only)
 DEPLOY_SHELL=true               # ZSH/bash shell configuration
 DEPLOY_TMUX=true                # tmux configuration
 DEPLOY_GIT_CONFIG=true          # Git configuration (gitconfig, global gitignore)
 DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect")
-DEPLOY_SERENA=false             # Serena MCP config (~/.serena symlink)
-DEPLOY_MOUSELESS=false          # Mouseless keyboard mouse control (macOS only, opt-in)
-DEPLOY_TEXT_REPLACEMENTS=false  # Sync text replacements: macOS + Alfred (macOS only, opt-in)
-DEPLOY_VPN=false                # NordVPN+Tailscale split tunnel daemon (macOS only, opt-in)
+DEPLOY_SERENA=true              # Serena MCP config (~/.serena symlink)
+DEPLOY_MOUSELESS=true           # Mouseless keyboard mouse control (macOS only)
+DEPLOY_TEXT_REPLACEMENTS=true   # Sync text replacements: macOS + Alfred (macOS only)
+DEPLOY_VPN=true                 # NordVPN+Tailscale split tunnel daemon (macOS only)
 DEPLOY_FINICKY=true             # Finicky config symlink (macOS only)
 DEPLOY_FILE_APPS=true           # Set default editor for coding file types (macOS only)
 DEPLOY_CLAUDE_TOOLS=true        # Build claude-tools Rust binary
@@ -102,7 +102,7 @@ OFFICIAL_PLUGINS=(
     "code-simplifier" "code-review" "security-guidance" "feature-dev"
     "pr-review-toolkit" "playground" "ralph-loop"
     # Integrations
-    "Notion" "linear" "vercel" "playwright"
+    "Notion" "vercel" "playwright"
     # Language servers
     "pyright-lsp" "typescript-lsp"
     # Specialized

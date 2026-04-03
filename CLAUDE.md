@@ -12,9 +12,9 @@ Comprehensive dotfiles repository for ZSH, Tmux, Vim, SSH, and development tools
 
 **Flags are ADDITIVE to defaults unless `--minimal` is used**
 
-- `install.sh` defaults: macOS (`--zsh --tmux --ai-tools --cleanup`), Linux (`--zsh --tmux --ai-tools`)
-- `deploy.sh` defaults: `--vim --editor --claude --codex --ghostty --htop --matplotlib --git-hooks --secrets --secrets-env --cleanup --claude-cleanup --ai-update --brew-update --file-apps` (file cleanup macOS only, rest both platforms)
-- Adding flags extends defaults (e.g., `./install.sh --extras` = defaults + extras)
+- `install.sh` defaults: all components enabled (use `--no-<component>` to disable)
+- `deploy.sh` defaults: all components enabled (use `--no-<component>` to disable)
+- Adding flags extends defaults; `--no-<component>` disables specific ones
 - `--minimal` flag disables all defaults (only installs what you specify)
 - Modifiers (`--append`, `--ascii`, `--force`) don't affect defaults
 
@@ -89,7 +89,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Claude Code - AI assistant configuration (symlinked)
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
-- Mouseless - Keyboard-driven mouse control (macOS only, copied not symlinked, opt-in --mouseless flag)
+- Mouseless - Keyboard-driven mouse control (macOS only, copied not symlinked)
 - Text replacements - Bidirectional sync with macOS + Alfred snippets (daily 9 AM, requires Full Disk Access for terminal app). macOS uses raw shortcuts; Alfred applies collection prefix at runtime (e.g., `fm.hi`)
 - Encrypted secrets (SOPS + age) - Decrypts `config/secrets.env.enc` to `$DOT_DIR/.secrets` using age key, both platforms
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
