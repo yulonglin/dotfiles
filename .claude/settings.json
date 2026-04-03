@@ -20,7 +20,6 @@
     "plugin-dev@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "ralph-loop@claude-plugins-official": false,
-    "remember@claude-plugins-official": true,
     "research@ai-safety-plugins": false,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "rust-skills@rust-skills": true,
