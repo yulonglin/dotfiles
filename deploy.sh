@@ -262,11 +262,15 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
             # Second machine: encrypted secrets exist, need age key to decrypt
             echo ""
             log_info "Encrypted secrets exist but can't be decrypted without age key"
-            echo "Paste your age private key (from Bitwarden), then press Enter:"
-            echo "(starts with AGE-SECRET-KEY-, leave empty to skip)"
             local age_input=""
-            if [[ -e /dev/tty ]]; then
-                read -rs age_input </dev/tty
+            if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; then
+                log_warning "Non-interactive — skipping age key prompt. Run: secrets-init"
+            else
+                echo "Paste your age private key (from Bitwarden), then press Enter:"
+                echo "(starts with AGE-SECRET-KEY-, leave empty to skip)"
+                if [[ -e /dev/tty ]]; then
+                    read -rs age_input </dev/tty
+                fi
             fi
             if [[ -n "$age_input" ]]; then
                 mkdir -p "$(dirname "$age_key")"
@@ -497,13 +501,19 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
         if [[ -f "$HTOP_LOCAL" && ! -L "$HTOP_LOCAL" ]]; then
             if ! diff -q "$HTOP_LOCAL" "$HTOP_DOTFILES" >/dev/null 2>&1; then
                 log_warning "Local htop config differs from dotfiles (htop overwrites symlinks)"
-                echo ""
-                echo "Options:"
-                echo "  [l] Keep local config (update dotfiles)"
-                echo "  [d] Keep dotfiles config (discard local changes)"
-                echo "  [s] Skip htop deployment"
-                echo ""
-                read -r "htop_choice?Choice [l/d/s]: "
+                local htop_choice=""
+                if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; then
+                    log_info "Non-interactive — skipping htop (use --force to overwrite)"
+                    htop_choice="s"
+                else
+                    echo ""
+                    echo "Options:"
+                    echo "  [l] Keep local config (update dotfiles)"
+                    echo "  [d] Keep dotfiles config (discard local changes)"
+                    echo "  [s] Skip htop deployment"
+                    echo ""
+                    read -r "htop_choice?Choice [l/d/s]: "
+                fi
 
                 case "$htop_choice" in
                     l|L)
