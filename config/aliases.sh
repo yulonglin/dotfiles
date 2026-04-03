@@ -890,14 +890,12 @@ if command -v pueue &>/dev/null; then
   alias jwatch='watch -n2 pueue status'
 
   # Control
-  jpause() {
-    local group="${1:?Usage: jpause <group|all>}"
-    [[ "$group" == "all" ]] && pueue pause || pueue pause --group "$group"
+  _jctl() {
+    local action="$1" group="${2:?Usage: j${1} <group|all>}"
+    [[ "$group" == "all" ]] && pueue "$action" || pueue "$action" --group "$group"
   }
-  jresume() {
-    local group="${1:?Usage: jresume <group|all>}"
-    [[ "$group" == "all" ]] && pueue start || pueue start --group "$group"
-  }
+  jpause()  { _jctl pause "$@"; }
+  jresume() { _jctl start "$@"; }
   alias jkill='pueue kill'
 
   # Overview with resource usage

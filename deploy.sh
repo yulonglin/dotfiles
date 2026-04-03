@@ -876,7 +876,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
         if cmd_exists pueue; then
             local pueue_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/pueue"
             mkdir -p "$pueue_config_dir"
-            cp "$DOT_DIR/config/pueue.yml" "$pueue_config_dir/pueue.yml"
+            safe_symlink "$DOT_DIR/config/pueue.yml" "$pueue_config_dir/pueue.yml"
 
             # Enable and start pueued via systemd
             systemctl --user enable pueued.service 2>/dev/null
@@ -886,13 +886,14 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
             }
 
             # Wait for pueued to be ready (group creation needs running daemon)
+            log_info "Waiting for pueued..."
             local retries=0
             while ! pueue status &>/dev/null && (( retries < 10 )); do
                 sleep 0.5
                 retries=$((retries + 1))
             done
 
-            if pueue status &>/dev/null; then
+            if (( retries < 10 )); then
                 pueue group add experiments 2>/dev/null
                 pueue group add agents 2>/dev/null
                 pueue parallel "$EXPERIMENTS_PARALLEL" --group experiments

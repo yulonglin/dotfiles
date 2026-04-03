@@ -2,7 +2,8 @@
 Description=Pueue Daemon
 
 [Service]
-ExecStart=%h/.cargo/bin/pueued --verbose
+Environment=PATH=%h/.cargo/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=pueued --verbose
 Restart=on-failure
 RestartSec=5
 

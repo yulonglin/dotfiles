@@ -3,6 +3,7 @@ Description=Coding Agents slice (Claude Code, Codex CLI)
 Before=slices.target
 
 [Slice]
+# Values templated by deploy.sh from config/resources.conf
 CPUQuota=200%
 MemoryMax=8G
 MemoryHigh=6G

@@ -216,6 +216,7 @@ apply_profile() {
             INSTALL_AI_TOOLS=false
             INSTALL_DOCKER=false
             INSTALL_EXTRAS=false
+            INSTALL_PUEUE=false
             INSTALL_CLEANUP=false
             INSTALL_EXPERIMENTAL=false
             INSTALL_CREATE_USER=false
@@ -244,6 +245,7 @@ apply_profile() {
             DEPLOY_TEXT_REPLACEMENTS=false
             DEPLOY_MOUSELESS=false
             DEPLOY_VPN=false
+            DEPLOY_PUEUE=false
             DEPLOY_FINICKY=false
             DEPLOY_FILE_APPS=false
             DEPLOY_CLAUDE_TOOLS=false
