@@ -1329,6 +1329,7 @@ parse_args() {
 
     # Deferred --only apply: validate components, then set minimal + enable selected
     if [[ "$_only_mode" == true ]]; then
+<<<<<<< Updated upstream
         # Build _known_components from registries (lowercase, no hardcoded list to drift)
         local _known_components=()
         local _entry _name _var
@@ -1339,6 +1340,13 @@ parse_args() {
                 _known_components+=("$_var")
             fi
         done
+=======
+        local _known_components=(core vim editor claude codex ghostty zed htop pdb matplotlib
+            git_hooks secrets secrets_env cleanup claude_cleanup ai_update brew_update keyboard
+            bedtime serena mouseless text_replacements vpn finicky file_apps claude_tools macos_settings
+            zsh tmux ai_tools docker extras experimental create_user
+            shell git_config pkg_configs dep_audit)
+>>>>>>> Stashed changes
 
         for _comp in "${_only_components[@]}"; do
             _comp="${_comp// /}"

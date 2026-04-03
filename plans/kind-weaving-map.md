@@ -4,7 +4,9 @@
 
 **Goal:** Add TPM (Tmux Plugin Manager) with resurrect + continuum plugins for persistent tmux sessions across reboots/crashes on macOS and Linux.
 
-**Architecture:** TPM is git-cloned to `~/.tmux/plugins/tpm/`. Plugin declarations go in `config/tmux.conf`. A shared `install_tpm()` helper in `helpers.sh` handles idempotent cloning, called from both `install.sh` and `deploy.sh`. Plugin installation runs via TPM's `bin/install_plugins` script post-clone.
+**Architecture:** TPM is git-cloned to `~/.tmux/plugins/tpm/`. Plugin declarations go in `config/tmux.conf`. A shared `install_tpm()` helper in `helpers.sh` handles idempotent cloning, called from both `install.sh` and `deploy.sh`. Plugins are installed via direct git clone (not `bin/install_plugins`) to avoid requiring a tmux server.
+
+**Status:** ✅ Complete — all tasks implemented and committed (`51346e3`, `0a98f2e`).
 
 **Tech Stack:** tmux, TPM, tmux-resurrect, tmux-continuum, bash/zsh
 
@@ -44,7 +46,7 @@ No process relaunching (`@resurrect-processes 'false'`) — processes aren't ide
 **Files:**
 - Modify: `config/tmux.conf:88` (append at end)
 
-- [ ] **Step 1: Add plugin block to end of `config/tmux.conf`**
+- [x] **Step 1: Add plugin block to end of `config/tmux.conf`**
 
 Append after the `update-environment` line (line 88):
 
@@ -63,12 +65,12 @@ set -g @continuum-restore 'on'
 set -g @resurrect-processes 'false'
 
 # Initialize TPM (keep this line at the very bottom of tmux.conf)
-run-shell '~/.tmux/plugins/tpm/tpm'
+if-shell "test -f ~/.tmux/plugins/tpm/tpm" "run-shell '~/.tmux/plugins/tpm/tpm'"
 ```
 
-Note: `run-shell` is the canonical TPM form (not `run`). Fails silently if TPM isn't cloned — tmux still starts fine.
+Note: Uses `if-shell` guard (not bare `run-shell`) so tmux starts cleanly even without TPM installed.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add config/tmux.conf
@@ -82,7 +84,7 @@ git commit -m "feat(tmux): add TPM plugin declarations for session persistence"
 **Files:**
 - Modify: `scripts/shared/helpers.sh:577-578` (tmux-themepack area)
 
-- [ ] **Step 1: Add `install_tpm` function after the tmux-themepack block**
+- [x] **Step 1: Add `install_tpm` function after the tmux-themepack block**
 
 Insert after the tmux-themepack clone (after line 578):
 
@@ -103,7 +105,7 @@ install_tpm() {
 }
 ```
 
-- [ ] **Step 2: Fix tmux-themepack idempotency (drive-by)**
+- [x] **Step 2: Fix tmux-themepack idempotency (drive-by)**
 
 Replace lines 577-578:
 
@@ -121,7 +123,7 @@ else
 fi
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/shared/helpers.sh
@@ -135,7 +137,7 @@ git commit -m "feat(tmux): add idempotent install_tpm helper, fix themepack idem
 **Files:**
 - Modify: `install.sh:175-186` (tmux install block)
 
-- [ ] **Step 1: Add `install_tpm` call after tmux binary installation**
+- [x] **Step 1: Add `install_tpm` call after tmux binary installation**
 
 The tmux block in install.sh currently installs the tmux binary. Add `install_tpm` after it:
 
@@ -155,7 +157,7 @@ fi
 
 This keeps TPM installation gated on `INSTALL_TMUX` (not buried inside `install_ohmyzsh()` where it doesn't belong — TPM is a tmux concern, not a zsh concern).
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add install.sh
@@ -169,9 +171,9 @@ git commit -m "feat(tmux): install TPM alongside tmux binary"
 **Files:**
 - Modify: `deploy.sh:117-120` (expand existing tmux block)
 
-- [ ] **Step 1: Expand the tmux deploy block to include TPM + plugin install**
+- [x] **Step 1: Expand the tmux deploy block to include TPM + plugin install**
 
-The existing eval line is preserved. New code is added after it:
+The existing eval line is preserved. New code added after it uses **direct git clone** (not `bin/install_plugins`) to avoid requiring a tmux server — this was redesigned after discovering that `bin/install_plugins` needs `TMUX_PLUGIN_MANAGER_PATH` set via a running tmux server, which risks killing user sessions.
 
 ```bash
 if [[ "$DEPLOY_TMUX" == "true" ]]; then
@@ -181,17 +183,21 @@ if [[ "$DEPLOY_TMUX" == "true" ]]; then
     # Ensure TPM is installed (idempotent — skips if already present)
     install_tpm
 
-    # Install plugins via TPM (idempotent — skips already-installed)
-    local tpm_dir="$HOME/.tmux/plugins/tpm"
-    if [[ -x "$tpm_dir/bin/install_plugins" ]]; then
-        "$tpm_dir/bin/install_plugins" >/dev/null 2>&1 || log_warning "TPM plugin install failed"
-    fi
+    # Install plugins directly (avoids needing a tmux server running)
+    local plugin_dir="$HOME/.tmux/plugins"
+    for plugin in tmux-resurrect tmux-continuum; do
+        if [[ ! -d "$plugin_dir/$plugin" ]]; then
+            log_info "Installing $plugin..."
+            git clone --quiet "https://github.com/tmux-plugins/$plugin" "$plugin_dir/$plugin" 2>/dev/null || \
+                log_warning "$plugin clone failed"
+        fi
+    done
 fi
 ```
 
 `install_tpm` is available because `deploy.sh` sources `helpers.sh` (line 29). No duplication.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add deploy.sh
@@ -205,7 +211,7 @@ git commit -m "feat(tmux): install TPM and plugins during deployment"
 **Files:**
 - Modify: `CLAUDE.md` (deployment components, gotchas)
 
-- [ ] **Step 1: Update deployment components description**
+- [x] **Step 1: Update deployment components description**
 
 In the "Deployment Components" section, update the tmux bullet:
 
@@ -213,7 +219,7 @@ In the "Deployment Components" section, update the tmux bullet:
 - Tmux configuration - Shell multiplexer config + TPM plugins (resurrect, continuum) for session persistence
 ```
 
-- [ ] **Step 2: Add tmux plugins gotcha**
+- [x] **Step 2: Add tmux plugins gotcha**
 
 Add to the "Important Gotchas" section:
 
@@ -221,7 +227,7 @@ Add to the "Important Gotchas" section:
 - **TPM plugins**: `run-shell` in tmux.conf fails silently if TPM isn't cloned — tmux works fine without plugins. Deploy auto-installs plugins to disk, but already-running tmux sessions need `prefix + I` or a tmux restart to load them. `prefix + Ctrl-s` saves session, `prefix + Ctrl-r` restores.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add CLAUDE.md
@@ -232,7 +238,7 @@ git commit -m "docs: document tmux plugin behavior and keybindings"
 
 ### Task 6: End-to-end verification
 
-- [ ] **Step 1: Run deploy with tmux flag**
+- [x] **Step 1: Run deploy with tmux flag**
 
 ```bash
 ./deploy.sh --only tmux
@@ -240,7 +246,7 @@ git commit -m "docs: document tmux plugin behavior and keybindings"
 
 Expected: tmux config deployed, TPM cloned to `~/.tmux/plugins/tpm/`, plugins installed to `~/.tmux/plugins/tmux-resurrect/` and `~/.tmux/plugins/tmux-continuum/`.
 
-- [ ] **Step 2: Verify idempotency**
+- [x] **Step 2: Verify idempotency**
 
 ```bash
 ./deploy.sh --only tmux
@@ -248,7 +254,7 @@ Expected: tmux config deployed, TPM cloned to `~/.tmux/plugins/tpm/`, plugins in
 
 Expected: Same output, "TPM already installed", no errors, no duplicate work.
 
-- [ ] **Step 3: Verify tmux loads cleanly**
+- [x] **Step 3: Verify tmux loads cleanly**
 
 ```bash
 tmux new-session -d -s tpm-test && tmux kill-session -t tpm-test
@@ -256,7 +262,7 @@ tmux new-session -d -s tpm-test && tmux kill-session -t tpm-test
 
 Expected: No errors.
 
-- [ ] **Step 4: Verify plugins are loaded**
+- [x] **Step 4: Verify plugins are loaded**
 
 ```bash
 tmux new-session -d -s tpm-test
@@ -266,7 +272,7 @@ tmux kill-session -t tpm-test
 
 Expected: Key bindings for resurrect-save and resurrect-restore visible.
 
-- [ ] **Step 5: Test graceful degradation (no TPM)**
+- [x] **Step 5: Test graceful degradation (no TPM)**
 
 ```bash
 mv ~/.tmux/plugins/tpm ~/.tmux/plugins/tpm.bak
