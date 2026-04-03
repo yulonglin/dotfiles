@@ -95,6 +95,18 @@ prompt: "You MUST use the Bash tool to run: gemini -p '@src/ Summarize the archi
 
 **Remove this section** when codex upgrades the `system-configuration` crate.
 
+## Consuming Agent Results
+
+**Use the returned result directly.** When an Agent tool completes, the result is in the tool response — don't read `.output` files.
+
+| Do this | NOT this |
+|---------|----------|
+| Use the Agent tool's returned result | Read/Search/Grep on `.output` task files |
+| If result feels incomplete, re-invoke with a more specific prompt | Parse raw `.output` files for additional detail |
+| For background agents, use `TaskOutput` or check artifacts on disk | Grep `.output` (produces `[Omitted long matching line]` on long lines) |
+
+**Exception:** The `classifyHandoffIfNeeded` bug (below) — when an agent falsely reports failure, verify artifacts on disk.
+
 ## Agent Teams (Escalation)
 
 For multi-agent communication, see `~/.claude/docs/agent-teams-guide.md`.
