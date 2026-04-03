@@ -494,17 +494,10 @@ if [[ "$DEPLOY_ZED" == "true" ]]; then
     if [[ -d "$DOT_DIR/config/zed" ]]; then
         mkdir -p "$ZED_DIR"
 
-        # Settings
-        if [[ -f "$ZED_DIR/settings.json" && ! -L "$ZED_DIR/settings.json" ]]; then
-            backup_file "$ZED_DIR/settings.json"
-        fi
+        # Settings + Keymap (safe_symlink handles backup internally)
         safe_symlink "$DOT_DIR/config/zed/settings.json" "$ZED_DIR/settings.json"
 
-        # Keymap
         if [[ -f "$DOT_DIR/config/zed/keymap.json" ]]; then
-            if [[ -f "$ZED_DIR/keymap.json" && ! -L "$ZED_DIR/keymap.json" ]]; then
-                backup_file "$ZED_DIR/keymap.json"
-            fi
             safe_symlink "$DOT_DIR/config/zed/keymap.json" "$ZED_DIR/keymap.json"
         fi
 

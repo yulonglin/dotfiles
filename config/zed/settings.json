@@ -21,7 +21,7 @@
   // === Editor Behavior (non-default only) ===
   "base_keymap": "VSCode",
   "autosave": "on_focus_change",
-  "format_on_save": "off",
+  "format_on_save": "off", // globally off; enabled per-language for TS/JS/Rust
   "remove_trailing_whitespace_on_save": false,
   "multi_cursor_modifier": "cmd_or_ctrl",
   "soft_wrap": "editor_width",
