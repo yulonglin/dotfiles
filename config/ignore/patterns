@@ -1,0 +1,50 @@
+# Pattern definitions for `claude-tools ignore apply`
+#
+# This file defines patterns available in the interactive TUI.
+# Users select per-repo which patterns to apply to .gitignore and .ignore.
+#
+# Format:
+#   - Lines starting with ## are category headers: ## name — description
+#   - Each pattern line: glob  # description [default]
+#   - Defaults: [G+S] = gitignore + searchable, [G] = gitignore only
+#   - Blank lines and # comments are ignored by the parser
+#
+# Adding patterns: append to an existing category or create a new ## section.
+# The TUI groups patterns by category and shows descriptions inline.
+
+## research — Research project directories
+data/                    # Dataset files [G+S]
+experiments/             # Experiment outputs [G+S]
+results/                 # Result artifacts [G+S]
+out/                     # Output directory [G+S]
+output/                  # Output directory (alt) [G+S]
+outputs/                 # Output directory (alt) [G+S]
+logs/                    # Log files [G+S]
+archive/                 # Archived runs [G]
+
+## python — Python build and runtime artifacts
+.venv/                   # Virtual environment [G]
+__pycache__/             # Bytecode cache [G]
+*.egg-info/              # Package metadata [G]
+.eggs/                   # Egg build dir [G]
+dist/                    # Distribution packages [G]
+build/                   # Build output [G]
+.mypy_cache/             # Mypy cache [G]
+.ruff_cache/             # Ruff cache [G]
+.pytest_cache/           # Pytest cache [G]
+
+## node — Node.js artifacts
+node_modules/            # Dependencies [G]
+.next/                   # Next.js build [G]
+.nuxt/                   # Nuxt build [G]
+
+## ml — Machine learning artifacts
+checkpoints/             # Model checkpoints [G+S]
+wandb/                   # W&B run logs [G+S]
+models/                  # Saved models [G]
+.cache/huggingface/      # HF model cache [G]
+
+## misc — Common project artifacts
+.env                     # Environment secrets [G]
+.env.*                   # Environment variants [G]
+*.sqlite                 # SQLite databases [G]
