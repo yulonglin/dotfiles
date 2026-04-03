@@ -430,6 +430,25 @@ Claude Code displays a custom statusline with session info. Configuration: `clau
 
 Both the shell prompt and Claude Code statusline use your SSH config aliases, so machine identification is consistent across tools.
 
+### Ignore Pattern Management
+
+`claude-tools ignore` manages per-repo `.gitignore` and `.ignore` patterns interactively.
+
+```bash
+claude-tools ignore                    # Launch TUI (same as `ignore apply`)
+claude-tools ignore apply              # Interactive pattern selection
+claude-tools ignore apply --dry-run    # Preview without writing
+claude-tools ignore apply --non-interactive  # Apply defaults without TUI
+claude-tools ignore status             # Show current managed patterns
+```
+
+The TUI shows patterns grouped by category with tri-state toggles:
+- `[   ]` skip — pattern not applied
+- `[ G ]` gitignore — added to `.gitignore` only
+- `[G+S]` gitignore + searchable — added to `.gitignore` AND negated in `.ignore`
+
+Patterns in `[G+S]` state are git-ignored but remain searchable by rg, fd, Claude Code, and Cursor. Pattern definitions live in `config/ignore/patterns`.
+
 ### Codex Statusline
 
 Codex uses built-in status items configured in `codex/config.toml` under `[tui].status_line` (for example: model, current dir, git branch, weekly/5h limits, context remaining).
