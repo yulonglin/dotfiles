@@ -83,9 +83,10 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Tmux configuration - Shell multiplexer config + TPM plugins (resurrect, continuum) for session persistence
 - Gist sync - Bidirectional sync of SSH config and git identity with GitHub gist, automated daily at 8 AM
 - Git config - Smart conflict resolution with user prompts
-- VSCode/Cursor settings - Merges with existing settings
+- VSCode/Cursor/Antigravity settings - Merges with existing settings
 - Finicky - Browser routing (macOS only, symlinked)
 - Ghostty - Terminal emulator configuration (symlinked to platform-specific path)
+- Zed - Editor config (settings + keymap, symlinked to ~/.config/zed/)
 - Claude Code - AI assistant configuration (symlinked)
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
@@ -120,8 +121,11 @@ config/
 ├── tmux.conf             # Tmux configuration
 ├── p10k.zsh              # Powerlevel10k theme
 ├── vimrc                 # Vim configuration
-├── vscode_settings.json  # VSCode/Cursor settings (merged, not overwritten)
-├── vscode_extensions.txt # Auto-installed extensions
+├── vscode_settings.json  # VSCode/Cursor/Antigravity settings (merged, not overwritten)
+├── vscode_extensions.txt # Auto-installed extensions (38 curated, categorized)
+├── zed/                      # Zed editor config (symlinked to ~/.config/zed/)
+│   ├── settings.json         # Zed settings (JSONC, feature parity with Cursor)
+│   └── keymap.json           # Custom keybindings (Cmd+K = inline AI edit)
 ├── finicky.js            # Browser routing (macOS, symlinked)
 ├── ghostty               # Ghostty terminal config (symlinked to platform-specific path)
 ├── htop/htoprc           # htop config (symlinked, uses dynamic CPU meters)
@@ -257,10 +261,20 @@ export WRITING_DIR="$HOME/Documents/writing"
 - fd limitation: no `--no-ignore-global` flag, so fd still respects git's global ignore. Use `fd -I` for research dirs.
 
 **Editor Settings (`deploy_editor_settings()`)**:
-- Merges with existing VSCode/Cursor settings (doesn't overwrite)
+- Merges with existing VSCode/Cursor/Antigravity settings (doesn't overwrite)
 - Existing settings take precedence
-- Auto-installs extensions from `config/vscode_extensions.txt`
-- Deploys to both VSCode and Cursor if installed
+- Auto-installs extensions from `config/vscode_extensions.txt` (38 curated)
+- Deploys to VSCode, Cursor, and Antigravity if installed
+- Antigravity CLI: uses full path `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`
+
+**Zed Deployment**:
+- Symlinks `config/zed/settings.json` → `~/.config/zed/settings.json`
+- Symlinks `config/zed/keymap.json` → `~/.config/zed/keymap.json`
+- Backs up existing files if not already symlinks
+- SSH connections: Zed reads hosts from `~/.ssh/config` (managed by gist sync). Project paths are machine-specific, added via Zed UI
+- Search includes gitignored files by default (`search.include_ignored: true`)
+- Extensions auto-installed via `auto_install_extensions` setting (no CLI needed)
+- Cmd+K mapped to inline AI edit (overrides Zed's chord prefix — see keymap.json comments for alternatives)
 
 **Finicky Deployment**:
 - Symlinks `config/finicky.js` to `~/.finicky.js`
@@ -379,6 +393,8 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - **Codex CLI directory**: `codex/` is symlinked to `~/.codex/` (not copied)
 - **Serena MCP config**: `config/serena/serena_config.yml` symlinked to `~/.serena/serena_config.yml` (dashboard auto-open disabled)
 - **Ghostty config**: Symlinked to platform-specific path, requires reload after changes (Cmd+Shift+Comma)
+- **Zed config**: Symlinked (like Ghostty/Claude). `ssh_connections` are machine-specific (added via Zed UI, hosts from ~/.ssh/config)
+- **Antigravity config**: VSCode fork by Google (`com.google.antigravity`). Same settings as Cursor, deployed via `--editor` flag. CLI at `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`
 - **SOPS + age**: Age private key must exist at `~/.config/sops/age/keys.txt` before decrypt works. Run `secrets-init` on new machines (paste age key from Bitwarden)
 - **Pueue + systemd slices**: `j*` aliases require pueue + systemd user session. `systemd --user` doesn't work inside Claude Code sandbox (bubblewrap blocks D-Bus) — test from normal shell. Cgroup delegation may need one-time `sudo systemctl set-property user-$(id -u).slice Delegate=yes`. Config in `config/resources.conf` (edit when scaling machine).
 - **Rust + bash dual implementations**: Some tools have a Rust version (for speed) and a bash fallback. Keep both in sync. Rust source lives in `tools/claude-tools/src/`, bash in `claude/`. Recompile with `cd tools/claude-tools && cargo build --release` then `cp target/release/claude-tools ../../custom_bins/`. Current dual-impl tools: statusline (`statusline.rs` + `claude/statusline.sh`), usage (`usage.rs` + inline in `statusline.sh`)
