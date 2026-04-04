@@ -96,6 +96,7 @@ Reference material in `~/.claude/docs/` — loaded by skills when relevant, NOT 
 - `docs/environment-setup.md` — Agent spawning fix, machine setup
 - `docs/visual-layout-quality.md` — CSS spacing safety net, cross-domain layout principles, anti-patterns
 - `docs/apollo-eval-types.md` — Apollo Research eval taxonomy (scheming, situational awareness, corrigibility)
+- `docs/per-project-telegram.md` — Per-repo Telegram bots: TELEGRAM_STATE_DIR, --channels flag, gotchas
 
 ---
 

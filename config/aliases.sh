@@ -288,6 +288,21 @@ claude() {
     fi
     # else: keep existing CLAUDE_CODE_TASK_LIST_ID (set by claude-new, claude-with, etc.)
 
+    # Per-project channels: auto-detect and enable
+    local channels=()
+    if [[ -f ".claude/channels/telegram/.env" ]]; then
+        export TELEGRAM_STATE_DIR="$PWD/.claude/channels/telegram"
+        channels+=(plugin:telegram@claude-plugins-official)
+    else
+        unset TELEGRAM_STATE_DIR
+    fi
+    if [[ -f ".claude/channels/imessage/.env" ]] || command -v imessage-mcp &>/dev/null; then
+        channels+=(plugin:imessage@claude-plugins-official)
+    fi
+    if [[ ${#channels[@]} -gt 0 ]]; then
+        args+=(--channels "${channels[@]}")
+    fi
+
     activate_venv
     command claude "${args[@]}"
 }
