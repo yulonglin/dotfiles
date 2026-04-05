@@ -1,8 +1,14 @@
 // Finicky Configuration
 // Browser routing for specific URLs
 // See: https://github.com/johnste/finicky
+//
+// Claude Desktop auth flow (com.anthropic.claudefordesktop):
+// 1. App opens claude.ai/login/app-google-auth → route to Safari for Google OAuth
+// 2. Google redirects back to claude.ai callback → must NOT be intercepted by Finicky
+// 3. claude.ai fires claude:// deep link → macOS handles natively (no Finicky rule needed)
+// Only match the specific app-google-auth URL. Do NOT add broad claude.ai rules.
 
-export default {
+module.exports = {
   defaultBrowser: "Safari",
 
   handlers: [
@@ -60,6 +66,14 @@ export default {
         "*.linear.app*"
       ],
       browser: "com.linear"
+    },
+    {
+      // Claude Desktop auth: only intercept the initial Google OAuth URL → Safari
+      // Do NOT match broad claude.ai paths — the OAuth callback must stay unintercepted
+      match: ({ url }) =>
+        url.host === "claude.ai" &&
+        url.pathname.startsWith("/login/app-google-auth"),
+      browser: "Safari"
     }
   ]
 };
