@@ -8,10 +8,12 @@ use std::io::{self, Write};
 // --- Timezone options ---
 
 const TIMEZONES: &[(&str, &str, &str)] = &[
-    ("UK",     "Europe/London",       "GMT/BST (UTC+0 winter, UTC+1 summer)"),
-    ("PT",     "America/Los_Angeles", "PST/PDT (UTC−8 winter, UTC−7 summer)"),
-    ("SGT",    "Asia/Singapore",      "SGT (UTC+8, no DST)"),
-    ("Brazil", "America/Sao_Paulo",   "BRT/BRST (UTC−3 winter, UTC−2 summer)"),
+    ("UK",        "Europe/London",       "GMT/BST (UTC+0 winter, UTC+1 summer)"),
+    ("PT",        "America/Los_Angeles", "PST/PDT (UTC−8 winter, UTC−7 summer)"),
+    ("SGT",       "Asia/Singapore",      "SGT (UTC+8, no DST)"),
+    ("Brazil",    "America/Sao_Paulo",   "BRT/BRST (UTC−3 winter, UTC−2 summer)"),
+    ("Korea",     "Asia/Seoul",          "KST (UTC+9, no DST)"),
+    ("Australia", "Australia/Sydney",    "AEST/AEDT (UTC+10 winter, UTC+11 summer)"),
 ];
 
 // --- Config path ---
