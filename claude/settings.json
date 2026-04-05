@@ -1,4 +1,547 @@
 {
-  "model": "opus",
-  "skipDangerousModePermissionPrompt": true
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "cleanupPeriodDays": 999999,
+  "env": {
+    "BASH_MAX_OUTPUT_LENGTH": "100000",
+    "CLAUDECODE": "",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "250000",
+    "CLAUDE_CODE_COORDINATOR_MODE": "1",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_NO_FLICKER": "1",
+    "ENABLE_TOOL_SEARCH": "1"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(uv *)",
+      "Bash(pytest *)",
+      "Bash(ruff *)",
+      "Bash(ty *)",
+      "Bash(bun *)",
+      "Bash(npm run *)",
+      "Bash(npm start *)",
+      "Bash(cargo *)",
+      "Bash(go *)",
+      "Bash(just *)",
+      "Bash(make *)",
+      "Bash(claude *)",
+      "Bash(codex *)",
+      "Bash(gemini *)",
+      "Bash(docker ps *)",
+      "Bash(docker images *)",
+      "Bash(docker inspect *)",
+      "Bash(docker logs *)",
+      "Bash(docker compose *)",
+      "Bash(docker build *)",
+      "Bash(HYDRA_FULL_ERROR=1 *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(find *)",
+      "Bash(fd *)",
+      "Bash(ls *)",
+      "Bash(eza *)",
+      "Bash(cat *)",
+      "Bash(bat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(du *)",
+      "Bash(dust *)",
+      "Bash(df *)",
+      "Bash(duf *)",
+      "Bash(echo *)",
+      "Bash(printf *)",
+      "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(chmod *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(ln *)",
+      "Bash(tee *)",
+      "Bash(sleep *)",
+      "Bash(time *)",
+      "Bash(jq *)",
+      "Bash(jless *)",
+      "Bash(sd *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(cut *)",
+      "Bash(tr *)",
+      "Bash(diff *)",
+      "Bash(shellcheck *)",
+      "Bash(which *)",
+      "Bash(type *)",
+      "Bash(file *)",
+      "Bash(realpath *)",
+      "Bash(dirname *)",
+      "Bash(basename *)",
+      "Bash(any2md *)",
+      "Bash(trash *)",
+      "Glob",
+      "Grep",
+      "Search",
+      "WebSearch",
+      "WebFetch",
+      "Read"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(rm -r *)",
+      "Bash(shred *)",
+      "Bash(> *)",
+      "Bash(truncate *)",
+      "Bash(git checkout -- *)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(git push --force *)",
+      "Bash(git push --force-with-lease *)",
+      "Bash(git push -f *)",
+      "Bash(git branch -D *)",
+      "Bash(dd *)",
+      "Bash(mkfs *)",
+      "Bash(fdisk *)",
+      "Bash(chmod -R 777 *)",
+      "Bash(chown -R *)",
+      "Bash(shutdown *)",
+      "Bash(reboot *)",
+      "Bash(halt *)",
+      "Bash(wipefs *)",
+      "Bash(chmod 000 *)",
+      "Bash(mv / *)",
+      "Bash(bash -c *)",
+      "Bash(sh -c *)",
+      "Bash(zsh -c *)",
+      "Bash(eval *)",
+      "Bash(exec *)",
+      "Bash(xargs sh *)",
+      "Bash(xargs bash *)",
+      "Bash(xargs zsh *)",
+      "Bash(sudo *)",
+      "Bash(curl * | bash *)",
+      "Bash(curl * | sh *)",
+      "Bash(wget * | bash *)",
+      "Bash(wget * | sh *)",
+      "Bash(nohup *)",
+      "Bash(find * -delete *)",
+      "Bash(find * -exec *)",
+      "Bash(find * -execdir *)",
+      "Bash(fd * -x *)",
+      "Bash(fd * -X *)",
+      "Bash(fd * --exec *)",
+      "Bash(fd * --exec-batch *)",
+      "Bash(chmod +s *)",
+      "Bash(chmod u+s *)",
+      "Bash(chmod g+s *)",
+      "Bash(nc -l *)",
+      "Bash(nc -lp *)"
+    ],
+    "ask": [
+      "Bash(kill *)",
+      "Bash(killall *)",
+      "Bash(pkill *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(nc *)",
+      "Bash(kubectl exec *)",
+      "Bash(kubectl delete *)",
+      "Bash(docker exec *)",
+      "Bash(docker run *)",
+      "Bash(docker container exec *)",
+      "Bash(env *)",
+      "Bash(timeout *)",
+      "Bash(stdbuf *)",
+      "Bash(xargs *)",
+      "Bash(npx *)",
+      "Bash(git remote set-url *)",
+      "Bash(git remote add *)",
+      "Bash(git config --global *)",
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(uv add *)",
+      "Bash(uv pip install *)",
+      "Bash(python -m pip install *)",
+      "Bash(python3 -m pip install *)",
+      "Bash(npm install *)",
+      "Bash(bun install *)",
+      "Bash(bun add *)",
+      "Bash(cargo install *)",
+      "Bash(go install *)",
+      "Bash(brew install *)",
+      "Bash(apt install *)",
+      "Bash(apt-get install *)",
+      "Bash(dnf install *)",
+      "Bash(pacman -S *)",
+      "Bash(yarn add *)",
+      "Bash(pnpm add *)",
+      "Bash(pnpm install *)",
+      "Bash(gem install *)",
+      "Bash(poetry add *)",
+      "Bash(conda install *)",
+      "Bash(pipx install *)",
+      "Bash(go get *)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/.envrc)"
+    ],
+    "defaultMode": "acceptEdits"
+  },
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/auto_classify.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/retry_omitted_grep.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session_rename_commit.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/mark_failed_sync.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_loop_bypass.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_modern_tools.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/warn_dep_install.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/guard_post_rebase.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_agent_depth.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_webfetch_domain.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__claude-in-chrome__tabs_context_mcp",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block_tab_group_creation.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/require_plan_approval.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/watchdog_stop.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/auto_commit.sh",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/watchdog_start.sh",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/fix_hook_permissions.sh",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/detect_repo_trust.sh",
+            "timeout": 3,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_venv.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session_start_notes.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/show_auth_account.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/context_auto_apply.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/watchdog_mark.sh idle",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_remember.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session_rename_auto.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/watchdog_mark.sh working",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  },
+  "worktree": {
+    "symlinkDirectories": [
+      ".venv",
+      "node_modules",
+      "target",
+      ".git/lfs"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "claude-tools statusline || bash $HOME/.claude/statusline.sh",
+    "padding": 1
+  },
+  "enabledPlugins": {
+    "claude-md-management@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": false,
+    "code@ai-safety-plugins": true,
+    "codex@openai-codex": true,
+    "commit-commands@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "core@ai-safety-plugins": true,
+    "dev-browser@dev-browser-marketplace": true,
+    "figma@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": false,
+    "gopls-lsp@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "huggingface-skills@claude-plugins-official": false,
+    "llms-fetch-mcp@alignment-hive": true,
+    "playground@claude-plugins-official": false,
+    "plugin-dev@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": false,
+    "ralph-loop@claude-plugins-official": false,
+    "remember@claude-plugins-official": true,
+    "research@ai-safety-plugins": true,
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "rust-skills@rust-skills": true,
+    "security-guidance@claude-plugins-official": false,
+    "superpowers@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": false,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": false,
+    "viz@ai-safety-plugins": true,
+    "workflow@ai-safety-plugins": true,
+    "writing@ai-safety-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "ai-safety-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "yulonglin/ai-safety-plugins"
+      }
+    },
+    "alignment-hive": {
+      "source": {
+        "source": "github",
+        "repo": "Crazytieguy/alignment-hive"
+      }
+    },
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    },
+    "dev-browser-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "sawyerhood/dev-browser"
+      }
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
+    },
+    "productivity-tools": {
+      "source": {
+        "source": "github",
+        "repo": "yulonglin/productivity-tools"
+      }
+    },
+    "rust-skills": {
+      "source": {
+        "source": "github",
+        "repo": "actionbook/rust-skills"
+      }
+    },
+    "ui-ux-pro-max-skill": {
+      "source": {
+        "source": "github",
+        "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
+      }
+    }
+  },
+  "outputStyle": "10x Mentor",
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": true,
+    "network": {
+      "allowedDomains": [
+        "api.anthropic.com",
+        "mcp-proxy.anthropic.com",
+        "api.githubcopilot.com",
+        "mcp.context7.com",
+        "oauth2.googleapis.com",
+        "cloudcode-pa.googleapis.com",
+        "github.com",
+        "api.github.com",
+        "mcp.linear.app",
+        "export.arxiv.org",
+        "arxiv.org"
+      ],
+      "allowLocalBinding": true
+    },
+    "filesystem": {
+      "allowWrite": [
+        "~/.Trash"
+      ]
+    },
+    "excludedCommands": [
+      "gh",
+      "git",
+      "docker",
+      "codex",
+      "gemini",
+      "trash"
+    ]
+  },
+  "feedbackSurveyRate": 0,
+  "alwaysThinkingEnabled": true,
+  "autoUpdatesChannel": "latest",
+  "plansDirectory": "plans",
+  "voiceEnabled": true,
+  "autoMemoryDirectory": "memory",
+  "showThinkingSummaries": true,
+  "skipDangerousModePermissionPrompt": true,
+  "claudeMdExcludes": [
+    "node_modules",
+    "vendor",
+    ".venv",
+    "target"
+  ],
+  "chrome": {
+    "enabled": true
+  },
+  "installMethod": "native",
+  "showTurnDuration": true,
+  "teammateMode": "auto",
+  "terminalProgressBarEnabled": true
 }
