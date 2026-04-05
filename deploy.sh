@@ -1099,9 +1099,9 @@ fi
 if [[ "$DEPLOY_FILE_APPS" == "true" ]] && is_macos; then
     log_section "SETTING DEFAULT FILE ASSOCIATIONS"
 
-    ASSOC_CONF="$DOT_DIR/config/file_associations.conf"
+    ASSOC_CONF="$DOT_DIR/config/macos_default_apps.conf"
     if [[ ! -f "$ASSOC_CONF" ]]; then
-        log_warning "config/file_associations.conf not found, skipping"
+        log_warning "config/macos_default_apps.conf not found, skipping"
     else
         source "$ASSOC_CONF"
 

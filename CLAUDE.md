@@ -98,7 +98,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - AI tools auto-update - Daily update of Claude Code, Gemini CLI, Codex CLI (6 AM, launchd/cron)
 - Developer config files - EditorConfig, curlrc, inputrc, .hushlogin (deployed with --editor flag)
 - Global gitattributes - Binary file handling + line endings (deployed with --git-config flag)
-- File associations - Set default editor for coding file types (macOS only, reads `config/file_associations.conf`)
+- File associations - Set default editor for coding file types (macOS only, reads `config/macos_default_apps.conf`)
 - Pueue + resource slices - Local job queue with cgroup-enforced CPU/memory limits (Linux only, systemd user slices, `j*` aliases)
 - Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, brew/apt/dnf/pacman, launchd/cron)
 - Package manager configs - Global npmrc, bunfig.toml, pnpm rc, uv.toml with 7-day min-release-age + ignore-scripts (symlinked)
@@ -311,7 +311,7 @@ export WRITING_DIR="$HOME/Documents/writing"
 - Note: Python module updates require re-running `deploy.sh --matplotlib`
 
 **File Associations (`deploy --file-apps`)**:
-- Reads `config/file_associations.conf` for editor bundle ID and extension list
+- Reads `config/macos_default_apps.conf` for editor bundle ID and extension list
 - Compiles `tools/set-default-app/main.swift` (cached, rebuilds only when source changes)
 - Calls `LSSetDefaultRoleHandlerForContentType` per extension (deprecated macOS API, no replacement, works on Sequoia)
 - Same config drives `$EDITOR` and `$VISUAL` in zshrc.sh

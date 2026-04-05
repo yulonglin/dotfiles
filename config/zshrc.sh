@@ -41,8 +41,8 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
 fi
 export TERM="xterm-256color"
 
-# Editor — reads from file_associations.conf (single source of truth)
-_fa_conf="$DOT_DIR/config/file_associations.conf"
+# Editor — reads from macos_default_apps.conf (single source of truth)
+_fa_conf="$DOT_DIR/config/macos_default_apps.conf"
 if [[ -f "$_fa_conf" ]]; then
   # Source only the EDITOR_CLI* variables (fast, no array eval)
   EDITOR_CLI=$(sed -n 's/^EDITOR_CLI="\(.*\)"/\1/p' "$_fa_conf" | head -1)
