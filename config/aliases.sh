@@ -889,7 +889,10 @@ if command -v pueue &>/dev/null; then
         TOKENIZERS_PARALLELISM=false)
     fi
     pueue add --group "$group" --label "$(basename "$1")" -- \
-      systemd-run --user --service-type=exec --wait --collect --slice="${group}.slice" -- "${env_args[@]}" "$@"
+      systemd-run --user --service-type=exec --wait --collect --slice="${group}.slice" \
+        --setenv=PATH="$PATH" \
+        --setenv=HOME="$HOME" \
+        -- "${env_args[@]}" "$@"
   }
 
   # Shortcuts
