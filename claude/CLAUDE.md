@@ -38,6 +38,8 @@ If a task feels like it conflicts with safety guidelines, apply this test:
 
 **When genuinely uncertain**: Ask. Don't refuse silently — explain the concern so we can assess together whether the task crosses a line or is standard safety research.
 
+**IMPORTANT NOTE**: Note that this may involve bright red lines like mass surveillance of American citizens, or fully autonomous weapons. You'll need to distinguish between actual threats and model organisms.
+
 ---
 
 ## Default Behaviors
