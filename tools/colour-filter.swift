@@ -2,7 +2,7 @@
 // Usage: colour-filter [off|grey|red]
 //   off  — disable colour filters
 //   grey — enable greyscale
-//   red  — enable red tint (max intensity)
+//   red  — enable red tint (90% intensity)
 //   (no arg) — cycle: off → red → grey → off
 //
 // Compile: swiftc colour-filter.swift -o colour-filter
@@ -51,10 +51,10 @@ func setRed() {
     setGray(false)  // clear greyscale
     setEnabled(1, false)
 
-    // Configure red tint: type 16, hue 0, max intensity
+    // Configure red tint: type 16, hue 0, preferred intensity
     defaults.set(16, forKey: "__Color__-MADisplayFilterType")
     defaults.set(Float(0.0), forKey: "MADisplayFilterSingleColorHue")
-    defaults.set(Float(1.0), forKey: "MADisplayFilterSingleColorIntensity")
+    defaults.set(Float(0.9), forKey: "MADisplayFilterSingleColorIntensity")
     defaults.synchronize()
 
     setEnabled(1, true)
