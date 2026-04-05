@@ -1169,9 +1169,31 @@ if command -v socket &>/dev/null; then
     alias npx="socket npx"
 fi
 
-# SSH wrapper: nudge towards mosh/et for persistent sessions
+# SSH wrapper: nudge towards et/mosh for interactive sessions
+# Neither is a drop-in replacement (different ports, tunnel syntax, no -i/-L/-D flags),
+# so we only nudge when it looks like a plain interactive connection.
 ssh() {
-    printf '\033[33m⚠ Consider mosh or et (Eternal Terminal) for persistent sessions.\033[0m\n' >&2
+    if [[ -t 1 && $# -ge 1 ]]; then
+        # Check for flags that indicate non-interactive use (forwarding, proxy, etc.)
+        local interactive=true
+        local arg
+        for arg in "$@"; do
+            case "$arg" in
+                -N|-W|-L|-D|-R|-f|-G) interactive=false; break ;;
+                -[A-Za-z]*[NWLDRF]*) interactive=false; break ;;  # combined flags like -fNL
+            esac
+        done
+        if $interactive; then
+            local host="${@: -1}"
+            local alts=()
+            command -v mosh &>/dev/null && alts+=("mosh $host")
+            command -v et &>/dev/null && alts+=("et $host")
+            if [[ ${#alts[@]} -gt 0 ]]; then
+                local IFS=', '
+                printf '\033[33m⚠ Persistent session? %s\033[0m\n' "${alts[*]}" >&2
+            fi
+        fi
+    fi
     command ssh "$@"
 }
 
