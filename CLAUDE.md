@@ -135,7 +135,7 @@ config/
 ├── serena/serena_config.yml  # Serena MCP config (symlinked, dashboard auto-open disabled)
 ├── mouseless/config.yaml # Mouseless keyboard mouse config (macOS only, copied not symlinked)
 ├── key_bindings.sh       # ZSH key bindings (sourced by zshrc.sh)
-├── file_associations.conf    # Default editor + file type associations (single source of truth)
+├── macos_default_apps.conf   # Default editor + file type associations (single source of truth)
 ├── gitconfig             # Git config template
 ├── ignore/                   # Ignore pattern management
 │   ├── gitignore_base        # Universal patterns — deployed to git AND search tools
