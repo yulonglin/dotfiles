@@ -716,12 +716,12 @@ alias scratch='cd $SCRATCH_DIR'
 alias projects='cd $PROJECTS_DIR'
 alias website='cd $WRITING_DIR/${DOTFILES_WEBSITE:-yulonglin.github.io}'
 
-# Quick open in editor (${=EDITOR} forces word splitting in zsh for "cursor --wait")
-alias edit-dotfiles='${=EDITOR} $DOT_DIR'
-alias edit-ssh='${=EDITOR} ~/.ssh/config'
-alias edit-claude='${=EDITOR} $DOT_DIR/claude/settings.json'
-alias edit-profiles='${=EDITOR} $DOT_DIR/claude/templates/contexts/profiles.yaml'
-alias edit-voiceink='${=EDITOR} $DOT_DIR/config/transcription/voiceink/macOS/prompts/'
+# Quick open in editor (functions instead of aliases so zsh-syntax-highlighting recognizes them)
+edit-dotfiles()  { ${=EDITOR} "$DOT_DIR"; }
+edit-ssh()       { ${=EDITOR} ~/.ssh/config; }
+edit-claude()    { ${=EDITOR} "$DOT_DIR/claude/settings.json"; }
+edit-profiles()  { ${=EDITOR} "$DOT_DIR/claude/templates/contexts/profiles.yaml"; }
+edit-voiceink()  { ${=EDITOR} "$DOT_DIR/config/transcription/voiceink/macOS/prompts/"; }
 
 #-------------------------------------------------------------
 # git
