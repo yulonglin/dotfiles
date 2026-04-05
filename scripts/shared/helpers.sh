@@ -1210,7 +1210,7 @@ install_editor_extensions() {
     [[ ${#ext_ids[@]} -eq 0 ]] && return 0
 
     # ── Install missing extensions ──
-    log_info "Installing ${#ext_ids[@]} extensions (${max_jobs} concurrent)..."
+    log_info "Syncing ${#ext_ids[@]} extensions (${max_jobs} concurrent)..."
 
     local tmpdir="${TMPDIR:-/tmp}/ext_install_$$"
     mkdir -p "$tmpdir"
@@ -1222,11 +1222,11 @@ install_editor_extensions() {
     install_count=$(find "$tmpdir" -type f 2>/dev/null | wc -l | tr -d ' ')
     rm -rf "$tmpdir"
 
-    [[ $install_count -gt 0 ]] && log_success "Installed $install_count extension(s)"
+    [[ $install_count -gt 0 ]] && log_success "Synced $install_count extension(s)"
 
     # ── Uninstall unlisted extensions ──
     typeset -a installed
-    installed=($("$cli" --list-extensions 2>/dev/null))
+    installed=($("$cli" --list-extensions 2>/dev/null | tr -d '\r'))
 
     typeset -a to_remove
     for ext in "${installed[@]}"; do
@@ -1237,7 +1237,13 @@ install_editor_extensions() {
     done
 
     if [[ ${#to_remove[@]} -gt 0 ]]; then
-        log_info "Removing ${#to_remove[@]} unlisted extension(s)..."
+        # Safety: refuse to bulk-remove more extensions than we track (truncated file?)
+        if [[ ${#to_remove[@]} -gt ${#ext_ids[@]} ]]; then
+            log_warning "Would remove ${#to_remove[@]} extensions (more than ${#ext_ids[@]} tracked). Skipping as safety check."
+            return 0
+        fi
+
+        log_info "Removing ${#to_remove[@]} unlisted extension(s): ${to_remove[*]}"
         local tmpdir_rm="${TMPDIR:-/tmp}/ext_remove_$$"
         mkdir -p "$tmpdir_rm"
 
