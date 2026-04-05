@@ -85,6 +85,7 @@
       "Bash(basename *)",
       "Bash(any2md *)",
       "Bash(trash *)",
+      "Bash(codex-companion *)",
       "Glob",
       "Grep",
       "Search",
@@ -256,6 +257,11 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/guard_post_rebase.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/guard_settings_commit.sh",
             "timeout": 5
           }
         ]
@@ -466,7 +472,7 @@
     "openai-codex": {
       "source": {
         "source": "github",
-        "repo": "openai/codex-plugin-cc"
+        "repo": "crazytieguy/codex-plugin-cc"
       }
     },
     "productivity-tools": {
@@ -511,7 +517,9 @@
     },
     "filesystem": {
       "allowWrite": [
-        "~/.Trash"
+        "~/.Trash",
+        "~/.cache/uv",
+        "/tmp/tmux-*"
       ]
     },
     "excludedCommands": [
@@ -520,6 +528,8 @@
       "docker",
       "codex",
       "gemini",
+      "tmux",
+      "tmux-cli",
       "trash"
     ]
   },

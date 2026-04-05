@@ -77,6 +77,73 @@ if [ -n "$LOCKFILE_CHANGED" ]; then
     fi
 fi
 
+# === CLAUDE CODE SETTINGS INTEGRITY CHECK ===
+#
+# Blocks commits that would replace a substantial claude/settings.json with a
+# degraded stub. The file is dual-written (Claude Code + manual edits), and stash
+# operations can silently capture a stripped-down working-tree version.
+#
+# Validation: if the file existed in HEAD with >50 lines, the staged version must
+# contain the three structural keys (statusLine, hooks, permissions). These are
+# hand-crafted and not auto-regenerated — their absence means accidental wipe.
+
+_validate_claude_settings() {
+    local file="$1"
+
+    # Only validate if HEAD had a substantial settings.json
+    local prev_lines
+    prev_lines=$(git show "HEAD:${file}" 2>/dev/null | wc -l || echo 0)
+    [ "${prev_lines}" -lt 50 ] && return 0  # New file or was already minimal
+
+    local staged_content
+    staged_content=$(git show ":${file}" 2>/dev/null) || return 0
+
+    local staged_lines
+    staged_lines=$(echo "${staged_content}" | wc -l)
+
+    # Run JSON key validation
+    local missing
+    missing=$(echo "${staged_content}" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except json.JSONDecodeError as e:
+    print(f'invalid-json ({e})')
+    sys.exit(1)
+required = ['statusLine', 'hooks', 'permissions']
+missing = [k for k in required if k not in d]
+if missing:
+    print(' '.join(missing))
+    sys.exit(1)
+" 2>&1) || {
+        echo ""
+        echo "⛔  Pre-commit: claude/settings.json integrity check FAILED"
+        echo "    Missing required keys: ${missing}"
+        echo "    HEAD version: ${prev_lines} lines  →  staged: ${staged_lines} lines"
+        echo "    This looks like a degraded stub captured by a stash or auto-write."
+        echo ""
+        echo "    Restore and re-stage:"
+        echo "      git restore --staged ${file}"
+        echo "      git show HEAD:${file} > ${file}"
+        echo "      git add ${file}"
+        echo ""
+        echo "    To bypass (only if you intentionally want a minimal settings.json):"
+        echo "      git commit --no-verify"
+        echo ""
+        return 1
+    }
+
+    return 0
+}
+
+while IFS= read -r _staged_file; do
+    case "${_staged_file}" in
+        claude/settings.json|.claude/settings.json)
+            _validate_claude_settings "${_staged_file}" || exit 1
+            ;;
+    esac
+done < <(git diff --cached --name-only 2>/dev/null)
+
 # === REPO-SPECIFIC HOOKS (Additive) ===
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")

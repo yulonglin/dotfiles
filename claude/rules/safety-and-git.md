@@ -12,6 +12,7 @@
 | **NEVER run `git checkout --`** or any destructive Git (e.g. `git reset --hard`, `git clean -fd`): ALWAYS prefer safe, reversible alternatives, and ask the user if best practice is to do so | Can trigger catastrophic, irreversible data loss |
 | **NEVER use `sys.path.insert`** directly | Crashes Claude Code session (see `rules/coding-conventions.md` for safe pattern) |
 | **NEVER rewrite full file during race conditions** | If Edit fails with "file modified since read", pause and wait (exponential backoff), then ask user—NEVER use Write to overwrite entire file as workaround |
+| **NEVER stage `claude/settings.json` without verifying it has `statusLine`, `hooks`, and `permissions` keys** | The file is dual-written by Claude Code and manual edits; stash operations can capture a degraded stub. Verify: `python3 -c "import json; d=json.load(open('claude/settings.json')); assert all(k in d for k in ['statusLine','hooks','permissions'])"` |
 
 ## Sandbox Awareness (Proactive)
 

@@ -405,13 +405,13 @@ if [[ "$DEPLOY_GIT_HOOKS" == "true" ]]; then
 
         for hook in "$DOT_DIR/config/git-hooks"/*; do
             if [[ -f "$hook" ]]; then
-                cp "$hook" "$HOME/.git-hooks/"
-                chmod +x "$HOME/.git-hooks/$(basename "$hook")"
+                ln -sf "$hook" "$HOME/.git-hooks/$(basename "$hook")"
+                chmod +x "$hook"
             fi
         done
 
         git config --global core.hooksPath "$HOME/.git-hooks"
-        log_success "Deployed global git hooks to ~/.git-hooks"
+        log_success "Deployed global git hooks to ~/.git-hooks (symlinked — live updates)"
         log_info "  Features: Secret detection, layered with repo hooks"
 
         if ! cmd_exists gitleaks; then

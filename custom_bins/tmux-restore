@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# tmux-restore — interactively restore windows from tmux-resurrect saves
+#
+# Usage: tmux-restore [save_file]
+#   No args     — fzf: pick save file → pick windows → restore
+#   save_file   — skip file picker, go straight to window picker
+#
+# Keybinding: prefix + R  (requires tmux >= 3.2 for display-popup)
+# Requires: fzf
+
+set -euo pipefail
+
+RESURRECT_DIR="${HOME}/.tmux/resurrect"
+
+die() { printf 'tmux-restore: %s\n' "$*" >&2; exit 1; }
+command -v fzf >/dev/null 2>&1 || die "fzf not found in PATH"
+[[ -d "$RESURRECT_DIR" ]] || die "resurrect directory not found: $RESURRECT_DIR"
+
+# Parse resurrect save file.
+# Resurrect format (tab-separated):
+#   pane    session_name  win_index  pane_index  win_active  pane_active  pane_title  pane_path  pane_cmd
+#   window  session_name  win_index  win_active  win_flags   win_layout   win_name
+#
+# Outputs TSV: session_name \t win_index \t win_name \t pane_dir
+parse_windows() {
+    awk 'BEGIN { FS="\t" }
+        $1 == "pane" {
+            key = $2 SUBSEP $3
+            if (!(key in dirs)) dirs[key] = $8   # pane_current_path (first pane wins)
+        }
+        $1 == "window" {
+            key = $2 SUBSEP $3
+            dir = (key in dirs) ? dirs[key] : "~"
+            print $2 "\t" $3 "\t" $7 "\t" dir    # session, win_index, win_name, dir
+        }
+    ' "$1" | sort -t$'\t' -k1,1 -k2,2n
+}
+
+# ── Step 1: Choose save file ──────────────────────────────────────────────────
+
+save_files=()
+while IFS= read -r f; do
+    save_files+=("$f")
+done < <(ls -t "$RESURRECT_DIR"/tmux_resurrect_*.txt 2>/dev/null)
+
+[[ ${#save_files[@]} -gt 0 ]] || die "no save files found in $RESURRECT_DIR"
+
+if [[ $# -ge 1 ]]; then
+    [[ -f "$1" ]] || die "file not found: $1"
+    save_file="$1"
+elif [[ ${#save_files[@]} -eq 1 ]]; then
+    save_file="${save_files[0]}"
+else
+    # Multiple saves — pick one, preview shows session/window list
+    save_file=$(printf '%s\n' "${save_files[@]}" | \
+        fzf --prompt="Restore from: " \
+            --preview='
+                ts=$(basename {} .txt | sed "s/tmux_resurrect_//")
+                printf "Saved: %s\n\n" "$ts"
+                awk "BEGIN{FS=\"\t\"}
+                    \$1==\"pane\"{k=\$2 SUBSEP \$3; if(!(k in d)) d[k]=\$8}
+                    \$1==\"window\"{k=\$2 SUBSEP \$3; dir=(k in d)?d[k]:\"~\";
+                        printf \"[%s] %s: %-20s  %s\n\",\$2,\$3,\$7,dir}
+                " {} | sort
+            ' \
+            --preview-window="right:55%:wrap" \
+            --height=60% \
+            --reverse) || exit 0
+fi
+
+# ── Step 2: Choose windows ────────────────────────────────────────────────────
+
+windows_tsv=$(parse_windows "$save_file")
+[[ -n "$windows_tsv" ]] || die "no windows found in $(basename "$save_file")"
+
+selected=$(awk 'BEGIN{FS="\t"} {printf "[%s] %s: %-20s  %s\n", $1, $2, $3, $4}' \
+        <<< "$windows_tsv" | \
+    fzf --multi \
+        --prompt="Windows to restore (Tab=multi-select, Ctrl-A=all): " \
+        --header="$(basename "$save_file" .txt | sed 's/tmux_resurrect_/Saved: /')" \
+        --height=60% \
+        --reverse \
+        --bind="ctrl-a:select-all") || exit 0
+
+[[ -n "$selected" ]] || exit 0
+
+# ── Step 3: Restore ───────────────────────────────────────────────────────────
+
+[[ -n "$TMUX" ]] || die "not inside a tmux session — attach first"
+
+restored=0
+skipped=0
+
+while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+
+    # Parse display line: [session_name] win_index: win_name  ...  dir
+    session="${line#[}"; session="${session%%]*}"
+    after_bracket="${line#*] }"
+    win_index="${after_bracket%%:*}"
+
+    # Look up canonical data from TSV (avoids fragile display re-parsing)
+    win_name=$(awk -v s="$session" -v i="$win_index" \
+        'BEGIN{FS="\t"} $1==s && $2==i {print $3; exit}' <<< "$windows_tsv")
+    dir=$(awk -v s="$session" -v i="$win_index" \
+        'BEGIN{FS="\t"} $1==s && $2==i {print $4; exit}' <<< "$windows_tsv")
+    dir="${dir/#\~/$HOME}"
+
+    if [[ ! -d "$dir" ]]; then
+        printf '  skip (dir gone): [%s] %s  (%s)\n' "$session" "$win_name" "$dir"
+        skipped=$((skipped + 1))
+        continue
+    fi
+
+    tmux new-window -n "$win_name" -c "$dir"
+    printf '  restored: [%s] %s  (%s)\n' "$session" "$win_name" "$dir"
+    restored=$((restored + 1))
+done <<< "$selected"
+
+printf '\nDone — %d restored' "$restored"
+[[ $skipped -gt 0 ]] && printf ', %d skipped (dir not found)' "$skipped"
+printf '.\n'
