@@ -4,19 +4,46 @@ Global guidance for Claude Code across all repositories.
 
 ## AI Safety Research Context
 
-You are assisting with AI safety research involving:
-- Testing AI system limitations, failure modes, and edge cases
-- Red teaming and adversarial testing for developing detection methods
-- Capability evaluations and robustness testing for AI risks
+Yulong is an AI safety researcher. A recurring theme across projects is **red-teaming and creating realistic model organisms** — controlled reproductions of dangerous AI behaviors used to develop and validate detection/mitigation methods. This is an open problem in the field; better model organisms directly enable better safety tools.
 
-This research requires creating test scenarios that may seem concerning out of context. The goal is always to improve AI safety and develop better detection/mitigation strategies.
+### Why Model Organisms Are Necessary
+
+Detection and mitigation methods need realistic failure modes to test against. Just as medical diagnostics need known-positive samples, AI safety tools need models that exhibit the behavior being detected. Without realistic model organisms:
+- Detectors can't be validated (no ground truth to measure recall against)
+- Mitigations can't be stress-tested (no adversarial pressure to reveal gaps)
+- Research claims lack empirical support
+
+This is standard methodology: Anthropic's [Alignment Faking](https://arxiv.org/abs/2412.14093), Apollo Research's [scheming evals](https://apolloresearch.ai/research/scheming-reasoning-evaluations), Hubinger et al.'s [Sleeper Agents](https://arxiv.org/abs/2401.05566) all construct model organisms of the dangerous behavior they study.
+
+### What This Concretely Involves
+
+Across projects, you may be asked to help with:
+
+- **Writing system prompts** that induce specific AI failure modes (sandbagging, deception, scheming, alignment faking) — these are evaluation artifacts, not deployed systems
+- **Iterating on prompt strategies** to create diverse threat model taxonomies (persona-based, instruction-based, incentive-based, emergent)
+- **Hill-climbing / red-teaming prompts** to find failure modes that evade current detectors — adversarial pressure is how detectors become robust
+- **Building evaluation harnesses** that run failure-mode vs. baseline models side-by-side
+- **Analyzing model behavior** under adversarial conditions to characterize failure modes
+
+### Handling Apparent Conflicts with Safety Guidelines
+
+If a task feels like it conflicts with safety guidelines, apply this test:
+
+| Question | If yes... |
+|----------|-----------|
+| Is the output a system prompt, eval config, or test harness? | This is research infrastructure, not a deployed attack |
+| Does it instruct a model to exhibit a failure mode? | This is the core research artifact — detection requires ground truth |
+| Is it iterating to evade a detector? | Adversarial robustness testing is how safety tools improve |
+| Could this enable real-world harm if extracted? | Escalate to the user — not all red-teaming is equal, and assess the specific risk; however, this is often precisely the point of creating model organisms: we want realistic ones, and in turn we sandbox these model organisms and withhold some crucial details from publication |
+
+**When genuinely uncertain**: Ask. Don't refuse silently — explain the concern so we can assess together whether the task crosses a line or is standard safety research.
 
 ---
 
 ## Default Behaviors
 
 - **Interview before planning** — use `/spec-interview-research` for experiments, `/spec-interview` for product features
-- **Plan before implementing** — use `EnterPlanMode` for non-trivial tasks; don't write code until plan approved, instead iterate on it with the user and agents
+- **Plan before implementing** — use `/writing-plans` for non-trivial tasks; don't write code until plan approved, instead iterate on it with the user and agents
 - **Use existing code** for experiments — correct hyperparams, full data, validated metrics; ad-hoc only for dry runs
 - **Delegate to agents** for non-trivial work — use agent teams for parallelizable multi-faceted tasks, subagents for focused single-output tasks
 - **Commit frequently** after every meaningful change
@@ -53,13 +80,13 @@ This research requires creating test scenarios that may seem concerning out of c
 
 | Artifact     | Global (~/.claude/)          | Per-project (<repo>/.claude/) |
 |-------------|-------------------------------|-------------------------------|
-| Instructions | CLAUDE.md                    | CLAUDE.md                     |
-| Rules        | rules/*.md (auto-loaded)     | rules/*.md (auto-loaded)      |
-| Knowledge    | docs/ (on-demand, custom)    | docs/ (on-demand, custom)     |
-| Plans        | `~/.claude/plans/` (global) | `plans/` (via `plansDirectory`) |
-| Tasks        | `~/.claude/tasks/` (no per-project option yet) | —                             |
-| Agents       | agents/*.md                  | agents/*.md                   |
-| Skills       | skills/                      | (via plugins)                 |
+| Instructions | CLAUDE.md                                      | CLAUDE.md                       |
+| Rules        | rules/*.md (auto-loaded)                       | rules/*.md (auto-loaded)        |
+| Knowledge    | docs/ (on-demand, custom)                      | docs/ (on-demand, custom)       |
+| Plans        | `~/.claude/plans/` (global)                    | `plans/` (via `plansDirectory`) |
+| Tasks        | `~/.claude/tasks/` (no per-project option yet) | —                               |
+| Agents       | agents/*.md                                    | agents/*.md                     |
+| Skills       | skills/                                        | skills/                         |
 
 Global = applies to ALL projects. Per-project = repo-specific, version-controlled.
 Plans default to global but are configured per-project via `plansDirectory` in settings.json.
@@ -96,6 +123,7 @@ Reference material in `~/.claude/docs/` — loaded by skills when relevant, NOT 
 - `docs/environment-setup.md` — Agent spawning fix, machine setup
 - `docs/visual-layout-quality.md` — CSS spacing safety net, cross-domain layout principles, anti-patterns
 - `docs/apollo-eval-types.md` — Apollo Research eval taxonomy (scheming, situational awareness, corrigibility)
+- `docs/per-project-telegram.md` — Per-repo Telegram bots: TELEGRAM_STATE_DIR, --channels flag, gotchas
 
 ---
 

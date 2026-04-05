@@ -288,6 +288,21 @@ claude() {
     fi
     # else: keep existing CLAUDE_CODE_TASK_LIST_ID (set by claude-new, claude-with, etc.)
 
+    # Per-project channels: auto-detect and enable
+    local channels=()
+    if [[ -f ".claude/channels/telegram/.env" ]]; then
+        export TELEGRAM_STATE_DIR="$PWD/.claude/channels/telegram"
+        channels+=(plugin:telegram@claude-plugins-official)
+    else
+        unset TELEGRAM_STATE_DIR
+    fi
+    if [[ -f ".claude/channels/imessage/.env" ]] || command -v imessage-mcp &>/dev/null; then
+        channels+=(plugin:imessage@claude-plugins-official)
+    fi
+    if [[ ${#channels[@]} -gt 0 ]]; then
+        args+=(--channels "${channels[@]}")
+    fi
+
     activate_venv
     command claude "${args[@]}"
 }
@@ -701,12 +716,12 @@ alias scratch='cd $SCRATCH_DIR'
 alias projects='cd $PROJECTS_DIR'
 alias website='cd $WRITING_DIR/${DOTFILES_WEBSITE:-yulonglin.github.io}'
 
-# Quick open in editor (${=EDITOR} forces word splitting in zsh for "cursor --wait")
-alias edit-dotfiles='${=EDITOR} $DOT_DIR'
-alias edit-ssh='${=EDITOR} ~/.ssh/config'
-alias edit-claude='${=EDITOR} $DOT_DIR/claude/settings.json'
-alias edit-profiles='${=EDITOR} $DOT_DIR/claude/templates/contexts/profiles.yaml'
-alias edit-voiceink='${=EDITOR} $DOT_DIR/config/transcription/voiceink/macOS/prompts/'
+# Quick open in editor (functions instead of aliases so zsh-syntax-highlighting recognizes them)
+edit-dotfiles()  { ${=EDITOR} "$DOT_DIR"; }
+edit-ssh()       { ${=EDITOR} ~/.ssh/config; }
+edit-claude()    { ${=EDITOR} "$DOT_DIR/claude/settings.json"; }
+edit-profiles()  { ${=EDITOR} "$DOT_DIR/claude/templates/contexts/profiles.yaml"; }
+edit-voiceink()  { ${=EDITOR} "$DOT_DIR/config/transcription/voiceink/macOS/prompts/"; }
 
 #-------------------------------------------------------------
 # git

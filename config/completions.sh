@@ -19,3 +19,11 @@ _python_module_complete() {
 }
 
 compdef _python_module_complete python python3
+
+# Tmux session name completion
+_tmux_sessions() {
+    local sessions
+    sessions=(${(f)"$(tmux list-sessions -F '#{session_name}' 2>/dev/null)"})
+    compadd -a sessions
+}
+compdef _tmux_sessions taa tad tdel

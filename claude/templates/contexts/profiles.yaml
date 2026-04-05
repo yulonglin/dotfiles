@@ -93,7 +93,7 @@ profiles:
   # Sub-profiles — compose with domain profiles above
   messaging:
     comment: "Messaging and communication tools"
-    enable: [telegram]
+    enable: [telegram, imessage]
 
   ml:
     comment: "Adds huggingface-skills"
