@@ -1182,7 +1182,7 @@ MERGE
     log_success "Merged $name settings (existing preserved, arrays from dotfiles)"
 }
 
-# Install editor extensions (concurrent, up to 8 at a time)
+# Sync editor extensions: install missing, uninstall unlisted (concurrent, up to 8 at a time)
 install_editor_extensions() {
     local cli="$1"
     local extensions_file="$2"
@@ -1197,30 +1197,59 @@ install_editor_extensions() {
         return 0
     fi
 
-    # Collect extension IDs
+    # Collect wanted extension IDs (lowercased for case-insensitive comparison)
     typeset -a ext_ids
+    typeset -A wanted_map
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-        ext_ids+=("${line// /}")
+        local id="${line// /}"
+        ext_ids+=("$id")
+        wanted_map[${id:l}]=1
     done < "$extensions_file"
 
     [[ ${#ext_ids[@]} -eq 0 ]] && return 0
 
+    # ── Install missing extensions ──
     log_info "Installing ${#ext_ids[@]} extensions (${max_jobs} concurrent)..."
 
-    local count=0
     local tmpdir="${TMPDIR:-/tmp}/ext_install_$$"
     mkdir -p "$tmpdir"
 
-    # Launch all installs with xargs for simple concurrency control
     printf '%s\n' "${ext_ids[@]}" | xargs -P "$max_jobs" -I{} \
         sh -c "'$cli' --install-extension '{}' --force >/dev/null 2>&1 && touch '$tmpdir/{}'"
 
-    # Count successes
-    count=$(find "$tmpdir" -type f 2>/dev/null | wc -l | tr -d ' ')
+    local install_count
+    install_count=$(find "$tmpdir" -type f 2>/dev/null | wc -l | tr -d ' ')
     rm -rf "$tmpdir"
 
-    [[ $count -gt 0 ]] && log_success "Installed $count extension(s)"
+    [[ $install_count -gt 0 ]] && log_success "Installed $install_count extension(s)"
+
+    # ── Uninstall unlisted extensions ──
+    typeset -a installed
+    installed=($("$cli" --list-extensions 2>/dev/null))
+
+    typeset -a to_remove
+    for ext in "${installed[@]}"; do
+        [[ -z "$ext" ]] && continue
+        if [[ -z "${wanted_map[${ext:l}]}" ]]; then
+            to_remove+=("$ext")
+        fi
+    done
+
+    if [[ ${#to_remove[@]} -gt 0 ]]; then
+        log_info "Removing ${#to_remove[@]} unlisted extension(s)..."
+        local tmpdir_rm="${TMPDIR:-/tmp}/ext_remove_$$"
+        mkdir -p "$tmpdir_rm"
+
+        printf '%s\n' "${to_remove[@]}" | xargs -P "$max_jobs" -I{} \
+            sh -c "'$cli' --uninstall-extension '{}' >/dev/null 2>&1 && touch '$tmpdir_rm/{}'"
+
+        local remove_count
+        remove_count=$(find "$tmpdir_rm" -type f 2>/dev/null | wc -l | tr -d ' ')
+        rm -rf "$tmpdir_rm"
+
+        [[ $remove_count -gt 0 ]] && log_success "Removed $remove_count extension(s)"
+    fi
 }
 
 # ─── CLI Argument Parsing ─────────────────────────────────────────────────────

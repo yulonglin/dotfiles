@@ -3,6 +3,7 @@
 ## Python Basics
 
 - Run from project root with `uv` and `python -m`
+- **`uv run --no-sync`** for experiment runs where deps haven't changed — skips lock resolution overhead
 - Type hints required, imports at top
 - Let errors propagate (no unnecessary try/except)
 - Testing: `pytest`
