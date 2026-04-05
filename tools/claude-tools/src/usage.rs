@@ -96,14 +96,20 @@ fn format_bar(output: &mut String, label: &str, pct: u8) {
     let _ = write!(output, "\x1b[0m {}{}%\x1b[0m", color, pct);
 }
 
-/// Append reset time for a bucket (e.g., "⟳ 4:30pm").
+/// Append time remaining until reset for a bucket (e.g., "⟳ 2h30m").
+/// Uses countdown (timezone-independent) so it works correctly on remote servers.
 fn format_reset_time(output: &mut String, bucket: Option<&UsageBucket>) {
     let resets_at = match bucket.and_then(|b| b.resets_at.as_deref()) {
         Some(s) => s,
         None => return,
     };
     if let Some(epoch) = parse_iso_epoch(resets_at) {
-        let display = format_epoch_time(epoch);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let remaining_secs = (epoch - now).max(0) as f64;
+        let display = fmt_time_remaining(remaining_secs);
         if !display.is_empty() {
             let _ = write!(output, " \x1b[2m\u{27f3} {}\x1b[0m", display);
         }
@@ -145,73 +151,27 @@ fn format_pace(output: &mut String, pct: u8, bucket: Option<&UsageBucket>) {
 
         let _ = write!(output, " {}{}{}%\x1b[0m", pace_color, sign, delta);
 
-        // Reset datetime
-        let reset_display = format_epoch_datetime(reset_epoch);
+        // Time remaining until reset
+        let reset_display = fmt_time_remaining(remaining_secs);
         if !reset_display.is_empty() {
             let _ = write!(output, " \x1b[2m\u{27f3} {}\x1b[0m", reset_display);
         }
     }
 }
 
-/// Format epoch as time: "4:30pm".
-fn format_epoch_time(epoch: i64) -> String {
-    // macOS
-    let output = std::process::Command::new("date")
-        .args(["-j", "-r", &epoch.to_string(), "+%l:%M%p"])
-        .stderr(std::process::Stdio::null())
-        .output();
-
-    if let Ok(o) = &output {
-        if o.status.success() {
-            let s = String::from_utf8_lossy(&o.stdout).trim().to_lowercase();
-            // Remove leading space from %l
-            return s.trim_start().to_string();
-        }
-    }
-
-    // Linux fallback
-    let output = std::process::Command::new("date")
-        .args(["-d", &format!("@{}", epoch), "+%l:%M%P"])
-        .stderr(std::process::Stdio::null())
-        .output();
-
-    match output {
-        Ok(o) if o.status.success() => {
-            String::from_utf8_lossy(&o.stdout).trim().to_string()
-        }
-        _ => String::new(),
+/// Format remaining seconds as a compact countdown: "2h30m" / "45m" / "5d3h".
+fn fmt_time_remaining(secs: f64) -> String {
+    let mins = (secs / 60.0).round() as u32;
+    let h = mins / 60;
+    let m = mins % 60;
+    if h >= 24 {
+        format!("{}d{}h", h / 24, h % 24)
+    } else if h > 0 {
+        format!("{}h{}m", h, m)
+    } else {
+        format!("{}m", m)
     }
 }
-
-/// Format epoch as date + time: "mar 12 4:30pm".
-fn format_epoch_datetime(epoch: i64) -> String {
-    let output = std::process::Command::new("date")
-        .args(["-j", "-r", &epoch.to_string(), "+%b %-d %l:%M%p"])
-        .stderr(std::process::Stdio::null())
-        .output();
-
-    match output {
-        Ok(o) if o.status.success() => {
-            let s = String::from_utf8_lossy(&o.stdout).trim().to_lowercase();
-            // Clean up double spaces from %l
-            s.replace("  ", " ")
-        }
-        _ => {
-            let output = std::process::Command::new("date")
-                .args(["-d", &format!("@{}", epoch), "+%b %-d %l:%M%P"])
-                .stderr(std::process::Stdio::null())
-                .output();
-            match output {
-                Ok(o) if o.status.success() => {
-                    let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                    s.replace("  ", " ")
-                }
-                _ => String::new(),
-            }
-        }
-    }
-}
-
 
 /// Parse ISO 8601 timestamp to unix epoch. Handles common formats from the API.
 fn parse_iso_epoch(iso: &str) -> Option<i64> {

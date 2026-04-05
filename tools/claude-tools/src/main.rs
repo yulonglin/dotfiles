@@ -3,6 +3,7 @@ mod context;
 mod ignore;
 mod resolve_file_path;
 mod statusline;
+mod timezone;
 mod usage;
 mod util;
 
@@ -11,12 +12,13 @@ fn main() {
 
     if args.len() < 2 {
         eprintln!("Usage: claude-tools <subcommand>");
-        eprintln!("Subcommands: statusline, context, ignore, check-git-root, resolve-file-path");
+        eprintln!("Subcommands: statusline, timezone, context, ignore, check-git-root, resolve-file-path");
         std::process::exit(1);
     }
 
     let result = match args[1].as_str() {
         "statusline" => statusline::run(),
+        "timezone" => timezone::run(),
         "context" | "context-apply" => {
             // Pass "claude-tools context" as argv[0] for clap, then remaining args
             let mut ctx_args = vec!["claude-tools-context".to_string()];

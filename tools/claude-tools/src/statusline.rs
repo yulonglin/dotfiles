@@ -329,17 +329,19 @@ fn format_peak_str() -> String {
     }
 }
 
-/// Workday remaining (ends at midnight, bedtime nudges — macOS only).
+/// Workday remaining (ends at midnight, bedtime nudges).
+/// Respects the home timezone configured via `claude-tools timezone`.
+/// Falls back to server local time if no timezone is set.
 /// See also: claude/statusline.sh (bash fallback).
 fn format_workday(output: &mut String) {
-    if std::env::consts::OS != "macos" {
-        return;
-    }
+    let home_tz = crate::timezone::read_home_timezone();
 
-    let date_output = match std::process::Command::new("date")
-        .args(["+%-H %-M"])
-        .output()
-    {
+    let mut cmd = std::process::Command::new("date");
+    if let Some(ref tz) = home_tz {
+        cmd.env("TZ", tz);
+    }
+    // %H %M: 24h, zero-padded — parses cleanly on macOS and Linux
+    let date_output = match cmd.args(["+%H %M"]).output() {
         Ok(o) if o.status.success() => o,
         _ => return,
     };
