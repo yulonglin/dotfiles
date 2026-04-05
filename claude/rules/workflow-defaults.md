@@ -62,6 +62,29 @@ For work taking >30 minutes:
 - **Prefer command-specific limits** over pipes: `git log -n 10` not `git log | head -10`
 - **Duplicate skills in slash picker?** Run `clean-skill-dupes` to remove plugin-created symlinks from `~/.claude/skills/`. Cause unclear; related to plugin operations ([#14549](https://github.com/anthropics/claude-code/issues/14549))
 
+## Experiment Execution (Resource Management)
+
+**Use `jexp` for experiments and compute-heavy commands.** Don't run `uv run python -m ...` or `python train.py` directly for anything beyond a quick dry-run.
+
+| Situation | Command |
+|-----------|---------|
+| Experiment / training / sweep | `jexp uv run python -m ...` |
+| Quick dry-run (limit=3, --dry-run) | Direct `uv run python ...` OK |
+| Agent CLI job (claude --print, codex) | `jagent ...` |
+| Check queue | `jls` |
+| Stream live output | `jfollow <id>` |
+| Machine feels slow | `jguard` then `jpause experiments` |
+
+**Why:** `jexp` submits through Pueue with systemd cgroup enforcement (CPU/memory caps from `config/resources.conf`). Direct runs have no resource limits and can starve other processes.
+
+**Prerequisites (if `jexp` fails):**
+1. **pueued not running:** `systemctl --user start pueued`
+2. **systemd --user unavailable:** `loginctl enable-linger $(whoami)`
+3. **Memory limits ignored:** `sudo systemctl set-property user-$(id -u).slice Delegate=yes`
+4. **pueue not installed:** `cargo install pueue` or `brew install pueue`, then `./deploy.sh --pueue`
+
+**Sandbox note:** `pueue` and `systemctl` are in `excludedCommands` — they bypass the sandbox so `jexp` works from Claude Code sessions.
+
 ## Mid-Implementation Checkpoints
 
 **Problem:** Claude reads code, makes assumptions, and starts implementing against a wrong mental model. This causes misunderstandings that waste context and require rework.

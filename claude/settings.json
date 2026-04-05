@@ -95,7 +95,17 @@
       "Bash(pueue group *)",
       "Bash(pueue group)",
       "Bash(pueue wait *)",
+      "Bash(pueue pause *)",
+      "Bash(pueue pause)",
+      "Bash(pueue start *)",
+      "Bash(pueue start)",
       "Bash(pueued *)",
+      "Bash(pueue add *)",
+      "Bash(pueue restart *)",
+      "Bash(pueue switch *)",
+      "Bash(systemctl --user status *)",
+      "Bash(systemctl --user is-system-running *)",
+      "Bash(systemctl --user is-system-running)",
       "Glob",
       "Grep",
       "Search",
@@ -155,16 +165,11 @@
       "Bash(nc -lp *)"
     ],
     "ask": [
-      "Bash(pueue add *)",
       "Bash(pueue kill *)",
       "Bash(pueue remove *)",
       "Bash(pueue reset *)",
-      "Bash(pueue restart *)",
-      "Bash(pueue pause *)",
-      "Bash(pueue start *)",
       "Bash(pueue send *)",
       "Bash(pueue edit *)",
-      "Bash(pueue switch *)",
       "Bash(kill *)",
       "Bash(killall *)",
       "Bash(pkill *)",
@@ -283,6 +288,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/guard_settings_commit.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_experiment_jobs.sh",
+            "timeout": 3
           }
         ]
       },
@@ -551,7 +561,23 @@
       "gemini",
       "tmux",
       "tmux-cli",
-      "trash"
+      "trash",
+      "pueue",
+      "systemctl",
+      "jrun",
+      "jexp",
+      "jagent",
+      "jclaude",
+      "jls",
+      "jlog",
+      "jfollow",
+      "jclean",
+      "jwatch",
+      "jpause",
+      "jresume",
+      "jkill",
+      "jtop",
+      "jguard"
     ]
   },
   "feedbackSurveyRate": 0,
