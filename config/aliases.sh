@@ -1154,4 +1154,10 @@ if command -v socket &>/dev/null; then
     alias npx="socket npx"
 fi
 
+# SSH wrapper: nudge towards mosh/et for persistent sessions
+ssh() {
+    printf '\033[33m⚠ Consider mosh or et (Eternal Terminal) for persistent sessions.\033[0m\n' >&2
+    command ssh "$@"
+}
+
 # SSH theme switching moved to config/ssh_themes.sh (sourced by zshrc.sh)
