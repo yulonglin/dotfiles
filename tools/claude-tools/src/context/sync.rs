@@ -134,7 +134,7 @@ pub fn run(verbose: bool, prune: bool) -> Result<(), Box<dyn std::error::Error>>
     let installed_data = load_installed_json().unwrap_or_else(|_| serde_json::json!({"plugins": {}}));
     let marketplace_index = build_marketplace_index(Some(&installed_data));
     let installed_short = installed_short_names(&installed_data);
-    selective_install(&wanted, &marketplace_index, &installed_short, verbose)?;
+    let install_results = selective_install(&wanted, &marketplace_index, &installed_short, verbose)?;
 
     // Phase 4: Prune orphans (opt-in)
     let orphans = find_orphans(&wanted, &installed_data);
@@ -153,6 +153,9 @@ pub fn run(verbose: bool, prune: bool) -> Result<(), Box<dyn std::error::Error>>
     // Phase 6: Validate enabled-vs-installed consistency
     let final_installed = load_installed_json().unwrap_or_else(|_| serde_json::json!({"plugins": {}}));
     warn_enabled_not_installed(&final_installed, verbose);
+
+    // Phase 7: Summary
+    print_sync_summary(&install_results, &final_installed, &wanted, &orphans, verbose);
 
     Ok(())
 }
@@ -325,6 +328,15 @@ fn single_plugin_name(marketplace_path: &Path, marketplace_name: &str) -> String
     marketplace_name.to_string()
 }
 
+/// Results from selective_install for summary reporting.
+#[derive(Default)]
+struct InstallResults {
+    installed: Vec<String>,
+    not_found: Vec<String>,
+    up_to_date: usize,
+    unmapped_installed: Vec<String>,
+}
+
 /// Sequentially install wanted plugins not yet installed.
 /// Sequential because `claude plugin install` does read-modify-write on
 /// installed_plugins.json — parallel installs would race on that file.
@@ -333,7 +345,9 @@ fn selective_install(
     marketplace_index: &BTreeMap<String, String>,
     installed_short: &HashSet<String>,
     verbose: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<InstallResults, Box<dyn std::error::Error>> {
+    let mut results = InstallResults::default();
+
     let to_install: Vec<(String, String)> = wanted.iter()
         .filter(|p| !installed_short.contains(*p))
         .filter_map(|p| {
@@ -347,12 +361,14 @@ fn selective_install(
         .cloned()
         .collect();
 
+    results.up_to_date = wanted.len() - to_install.len() - unmapped.len();
+
     let total = to_install.len() + unmapped.len();
     if total == 0 {
         if verbose {
             println!("  All wanted plugins already installed");
         }
-        return Ok(());
+        return Ok(results);
     }
     println!("  Installing {} new plugin(s)...", total);
     for (short, qualified) in &to_install {
@@ -362,13 +378,16 @@ fn selective_install(
         match result {
             Ok(out) if out.status.success() => {
                 println!("  {}✔{} installed {}", util::GREEN, util::RESET, short);
+                results.installed.push(short.clone());
             }
             Ok(out) => {
                 let err = String::from_utf8_lossy(&out.stderr);
                 println!("{}  {}: {}{}", util::YELLOW, short, err.trim(), util::RESET);
+                results.not_found.push(short.clone());
             }
             Err(e) => {
                 println!("{}  {}: {}{}", util::YELLOW, short, e, util::RESET);
+                results.not_found.push(short.clone());
             }
         }
     }
@@ -376,28 +395,50 @@ fn selective_install(
     // Fallback: try installing unmapped plugins by name alone.
     // Some plugins exist in the registry but aren't in the local marketplace clone
     // (e.g., added after last git pull, or use a non-standard directory structure).
+    if !unmapped.is_empty() {
+        println!("{}  {} plugin(s) not in local marketplace index — trying unqualified install:{}", util::YELLOW, unmapped.len(), util::RESET);
+        println!("{}  Tip: use 'plugin@marketplace' format in profiles.yaml to pin the source{}", util::YELLOW, util::RESET);
+    }
     for name in &unmapped {
         if verbose {
-            println!("  Trying unqualified install for unmapped plugin: {}", name);
+            println!("  Trying unqualified install for: {}", name);
         }
         let result = Command::new("claude")
             .args(["plugin", "install", name, "--scope", "user"])
             .output();
         match result {
             Ok(out) if out.status.success() => {
-                println!("  {}✔{} installed {} (unqualified)", util::GREEN, util::RESET, name);
+                // Check what qualified ID was actually installed
+                let resolved_qid = resolve_installed_qid(name);
+                match &resolved_qid {
+                    Some(qid) => println!("  {}✔{} installed {} (resolved to {})", util::GREEN, util::RESET, name, qid),
+                    None => println!("  {}✔{} installed {} (unqualified)", util::GREEN, util::RESET, name),
+                }
+                results.unmapped_installed.push(name.clone());
+                results.installed.push(name.clone());
             }
             Ok(out) => {
                 let err = String::from_utf8_lossy(&out.stderr);
-                println!("{}  {}: not in marketplace index and unqualified install failed: {}{}", util::YELLOW, name, err.trim(), util::RESET);
+                println!("{}  {}: {}{}", util::YELLOW, name, err.trim(), util::RESET);
+                results.not_found.push(name.clone());
             }
             Err(e) => {
                 println!("{}  {}: {}{}", util::YELLOW, name, e, util::RESET);
+                results.not_found.push(name.clone());
             }
         }
     }
 
-    Ok(())
+    Ok(results)
+}
+
+/// After an unqualified install, look up the actual qualified ID in installed_plugins.json.
+fn resolve_installed_qid(short_name: &str) -> Option<String> {
+    let data = load_installed_json().ok()?;
+    let plugins = data.get("plugins")?.as_object()?;
+    plugins.keys()
+        .find(|qid| plugin_short_name(qid) == short_name)
+        .cloned()
 }
 
 /// Find orphan plugins (installed but not in any profile).
@@ -698,6 +739,85 @@ fn warn_enabled_not_installed(installed_data: &serde_json::Value, verbose: bool)
             println!("  All enabled plugins in {} are installed", settings_path);
         }
     }
+}
+
+/// Print a structured sync summary after all phases complete.
+fn print_sync_summary(
+    results: &InstallResults,
+    installed_data: &serde_json::Value,
+    wanted: &HashSet<String>,
+    orphans: &[String],
+    verbose: bool,
+) {
+    // Collect disabled plugins: installed + wanted but enabledPlugins[qid] != true
+    let enabled_qids = collect_enabled_qids();
+    let installed_qids: HashSet<String> = installed_data
+        .get("plugins").and_then(|v| v.as_object())
+        .map(|plugins| plugins.keys().cloned().collect())
+        .unwrap_or_default();
+
+    let disabled: Vec<String> = wanted.iter()
+        .filter(|short| {
+            // Find the qualified ID for this short name
+            installed_qids.iter()
+                .find(|qid| plugin_short_name(qid) == short.as_str())
+                .map(|qid| !enabled_qids.contains(qid))
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+
+    // Only print summary if there's something interesting to report
+    let has_changes = !results.installed.is_empty()
+        || !results.not_found.is_empty()
+        || !disabled.is_empty()
+        || !orphans.is_empty();
+
+    if !has_changes && !verbose {
+        return;
+    }
+
+    println!("\n  Sync summary:");
+    if !results.installed.is_empty() {
+        println!("    {}✔{} installed: {}", util::GREEN, util::RESET, results.installed.join(", "));
+    }
+    if results.up_to_date > 0 {
+        println!("    {}✔{} up to date: {} plugin(s)", util::GREEN, util::RESET, results.up_to_date);
+    }
+    if !results.not_found.is_empty() {
+        println!("    {}✘{} not found: {}", util::YELLOW, util::RESET, results.not_found.join(", "));
+    }
+    if !disabled.is_empty() {
+        let mut sorted = disabled;
+        sorted.sort();
+        println!("    {}○{} installed but disabled: {}", util::YELLOW, util::RESET, sorted.join(", "));
+    }
+    if !orphans.is_empty() {
+        let short_orphans: Vec<&str> = orphans.iter().map(|qid| plugin_short_name(qid)).collect();
+        println!("    {}○{} orphans (not in profiles): {}", util::YELLOW, util::RESET, short_orphans.join(", "));
+    }
+    if !results.unmapped_installed.is_empty() {
+        println!("    {}⚠{} unmapped (pin with 'plugin@marketplace' in profiles.yaml): {}", util::YELLOW, util::RESET,
+            results.unmapped_installed.join(", "));
+    }
+}
+
+/// Collect all qualified IDs that are enabled (true) across project + global settings.
+fn collect_enabled_qids() -> HashSet<String> {
+    let mut enabled = HashSet::new();
+    for settings_path in &[super::TARGET_FILE, super::GLOBAL_SETTINGS] {
+        let path = expand_home(settings_path);
+        let Ok(content) = std::fs::read_to_string(&path) else { continue };
+        let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) else { continue };
+        if let Some(ep) = settings.get("enabledPlugins").and_then(|v| v.as_object()) {
+            for (qid, val) in ep {
+                if val.as_bool() == Some(true) {
+                    enabled.insert(qid.clone());
+                }
+            }
+        }
+    }
+    enabled
 }
 
 fn walkdir(dir: &str) -> Vec<String> {
