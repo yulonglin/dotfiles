@@ -123,6 +123,11 @@ pub fn run(verbose: bool, prune: bool) -> Result<(), Box<dyn std::error::Error>>
         println!("{}Synced {}/{} marketplace(s){}", util::GREEN, synced, total, util::RESET);
     }
 
+    // Phase 2.5: Refresh stale caches — detect installed plugins whose marketplace
+    // source has been updated (git HEAD differs from cached gitCommitSha).
+    // Removing stale entries lets Phase 3 reinstall them with fresh content.
+    refresh_stale_caches(&wanted, verbose)?;
+
     // Phase 3: Selective install — install wanted plugins not yet installed
     // Rebuild index after marketplace updates (new plugins may now be discoverable).
     // Load installed_plugins.json once and share across Phase 3-4.
@@ -140,10 +145,99 @@ pub fn run(verbose: bool, prune: bool) -> Result<(), Box<dyn std::error::Error>>
             util::YELLOW, orphans.len(), orphans.join(", "), util::RESET);
     }
 
-    // Phase 5: Post-fixups (unchanged)
+    // Phase 5: Post-fixups
     fix_hook_permissions(verbose);
     apply_auto_update(&marketplaces, verbose)?;
     normalize_scopes(&wanted, verbose)?;
+
+    // Phase 6: Validate enabled-vs-installed consistency
+    let final_installed = load_installed_json().unwrap_or_else(|_| serde_json::json!({"plugins": {}}));
+    warn_enabled_not_installed(&final_installed, verbose);
+
+    Ok(())
+}
+
+/// Detect installed plugins whose marketplace source has a newer commit than the
+/// cached gitCommitSha.  Remove stale entries from installed_plugins.json and
+/// delete their cache directories so Phase 3 reinstalls them.
+fn refresh_stale_caches(wanted: &HashSet<String>, verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let installed_path = expand_home(super::INSTALLED_PLUGINS_PATH);
+    let content = std::fs::read_to_string(&installed_path)?;
+    let mut data: serde_json::Value = serde_json::from_str(&content)?;
+
+    let marketplaces_dir = expand_home(super::MARKETPLACES_DIR);
+    let mut refreshed = Vec::new();
+
+    if let Some(plugins) = data.get_mut("plugins").and_then(|v| v.as_object_mut()) {
+        let qids: Vec<String> = plugins.keys().cloned().collect();
+        for qid in &qids {
+            let short = plugin_short_name(qid).to_string();
+            if !wanted.contains(&short) {
+                continue; // Only refresh wanted plugins
+            }
+
+            let Some(at_pos) = qid.find('@') else { continue };
+            let marketplace_name = &qid[at_pos + 1..];
+
+            // Get cached gitCommitSha
+            let cached_sha = plugins.get(qid.as_str())
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|e| e.get("gitCommitSha"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if cached_sha.is_empty() {
+                continue; // No SHA to compare — skip
+            }
+
+            // Get current marketplace HEAD
+            let marketplace_path = format!("{}/{}", marketplaces_dir, marketplace_name);
+            if !Path::new(&marketplace_path).is_dir() {
+                continue;
+            }
+            let head_sha = match Command::new("git")
+                .args(["-C", &marketplace_path, "rev-parse", "HEAD"])
+                .output()
+            {
+                Ok(out) if out.status.success() => {
+                    String::from_utf8_lossy(&out.stdout).trim().to_string()
+                }
+                _ => continue,
+            };
+
+            if head_sha == cached_sha {
+                continue; // Cache is fresh
+            }
+
+            if verbose {
+                println!("  {} cache stale: {} → {}", short, &cached_sha[..7.min(cached_sha.len())], &head_sha[..7.min(head_sha.len())]);
+            }
+
+            // Delete cache directory
+            let cache_path = plugins.get(qid.as_str())
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|e| e.get("installPath"))
+                .and_then(|v| v.as_str());
+            if let Some(cp) = cache_path {
+                let _ = std::fs::remove_dir_all(cp);
+            }
+
+            // Remove from installed_plugins.json so Phase 3 reinstalls
+            plugins.remove(qid.as_str());
+            refreshed.push(short);
+        }
+    }
+
+    if !refreshed.is_empty() {
+        atomic_write_json(&installed_path, &data)?;
+        println!("{}Refreshing {} stale plugin cache(s):{}", util::GREEN, refreshed.len(), util::RESET);
+        for name in &refreshed {
+            println!("  {}↻{} {}", util::GREEN, util::RESET, name);
+        }
+    } else if verbose {
+        println!("  All plugin caches up to date");
+    }
 
     Ok(())
 }
@@ -567,6 +661,43 @@ fn normalize_scopes(wanted: &HashSet<String>, verbose: bool) -> Result<(), Box<d
         println!("    Fix: claude plugin install <name> --scope user");
     }
     Ok(())
+}
+
+/// Warn about plugins enabled in settings.json but missing from installed_plugins.json.
+/// These cause silent failures (hooks reference files that don't exist, agents don't load).
+fn warn_enabled_not_installed(installed_data: &serde_json::Value, verbose: bool) {
+    let installed_qids: HashSet<String> = installed_data
+        .get("plugins").and_then(|v| v.as_object())
+        .map(|plugins| plugins.keys().cloned().collect())
+        .unwrap_or_default();
+
+    // Check both project and global settings
+    for settings_path in &[super::TARGET_FILE, super::GLOBAL_SETTINGS] {
+        let path = expand_home(settings_path);
+        let Ok(content) = std::fs::read_to_string(&path) else { continue };
+        let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) else { continue };
+
+        let Some(enabled) = settings.get("enabledPlugins").and_then(|v| v.as_object()) else { continue };
+
+        let missing: Vec<&String> = enabled.keys()
+            .filter(|qid| {
+                // Only warn for plugins set to true (enabled)
+                enabled.get(*qid).and_then(|v| v.as_bool()) == Some(true)
+            })
+            .filter(|qid| !installed_qids.contains(*qid))
+            .collect();
+
+        if !missing.is_empty() {
+            println!("{}  {} plugin(s) enabled in {} but not installed:{}",
+                util::YELLOW, missing.len(), settings_path, util::RESET);
+            for qid in &missing {
+                println!("    {}", qid);
+            }
+            println!("    Fix: claude plugin install <name> --scope user");
+        } else if verbose {
+            println!("  All enabled plugins in {} are installed", settings_path);
+        }
+    }
 }
 
 fn walkdir(dir: &str) -> Vec<String> {
