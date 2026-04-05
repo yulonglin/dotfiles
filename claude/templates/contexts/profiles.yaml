@@ -28,7 +28,7 @@ marketplaces:
     github: sawyerhood/dev-browser
     autoUpdate: true
   openai-codex:
-    github: openai/codex-plugin-cc
+    github: crazytieguy/codex-plugin-cc
     autoUpdate: true
   rust-skills:
     github: actionbook/rust-skills

@@ -248,22 +248,19 @@ fn selective_install(
         })
         .collect();
 
-    if to_install.is_empty() {
+    let unmapped: Vec<String> = wanted.iter()
+        .filter(|p| !installed_short.contains(p.as_str()) && !marketplace_index.contains_key(p.as_str()))
+        .cloned()
+        .collect();
+
+    let total = to_install.len() + unmapped.len();
+    if total == 0 {
         if verbose {
             println!("  All wanted plugins already installed");
         }
         return Ok(());
     }
-
-    let unmapped: Vec<&String> = wanted.iter()
-        .filter(|p| !installed_short.contains(p.as_str()) && !marketplace_index.contains_key(p.as_str()))
-        .collect();
-    if !unmapped.is_empty() {
-        println!("{}  Could not find marketplace for: {}{}", util::YELLOW,
-            unmapped.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "), util::RESET);
-    }
-
-    println!("  Installing {} new plugin(s)...", to_install.len());
+    println!("  Installing {} new plugin(s)...", total);
     for (short, qualified) in &to_install {
         let result = Command::new("claude")
             .args(["plugin", "install", qualified, "--scope", "user"])
@@ -278,6 +275,30 @@ fn selective_install(
             }
             Err(e) => {
                 println!("{}  {}: {}{}", util::YELLOW, short, e, util::RESET);
+            }
+        }
+    }
+
+    // Fallback: try installing unmapped plugins by name alone.
+    // Some plugins exist in the registry but aren't in the local marketplace clone
+    // (e.g., added after last git pull, or use a non-standard directory structure).
+    for name in &unmapped {
+        if verbose {
+            println!("  Trying unqualified install for unmapped plugin: {}", name);
+        }
+        let result = Command::new("claude")
+            .args(["plugin", "install", name, "--scope", "user"])
+            .output();
+        match result {
+            Ok(out) if out.status.success() => {
+                println!("  {}✔{} installed {} (unqualified)", util::GREEN, util::RESET, name);
+            }
+            Ok(out) => {
+                let err = String::from_utf8_lossy(&out.stderr);
+                println!("{}  {}: not in marketplace index and unqualified install failed: {}{}", util::YELLOW, name, err.trim(), util::RESET);
+            }
+            Err(e) => {
+                println!("{}  {}: {}{}", util::YELLOW, name, e, util::RESET);
             }
         }
     }
