@@ -61,7 +61,7 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
     if let Some(pct) = five {
         let pct = pct.round().clamp(0.0, 100.0) as u8;
         format_bar(output, "5h", pct);
-        format_reset_time(output, usage.five_hour.as_ref());
+        format_pace(output, pct, usage.five_hour.as_ref(), 5.0 * 3600.0);
     }
 
     if let Some(pct) = seven {
@@ -70,7 +70,7 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
             output.push_str("  \u{00b7}  ");
         }
         format_bar(output, "7d", pct);
-        format_pace(output, pct, usage.seven_day.as_ref());
+        format_pace(output, pct, usage.seven_day.as_ref(), SEVEN_DAY_SECS);
     }
 
 }
@@ -96,32 +96,12 @@ fn format_bar(output: &mut String, label: &str, pct: u8) {
     let _ = write!(output, "\x1b[0m {}{}%\x1b[0m", color, pct);
 }
 
-/// Append time remaining until reset for a bucket (e.g., "⟳ 2h30m").
-/// Uses countdown (timezone-independent) so it works correctly on remote servers.
-fn format_reset_time(output: &mut String, bucket: Option<&UsageBucket>) {
-    let resets_at = match bucket.and_then(|b| b.resets_at.as_deref()) {
-        Some(s) => s,
-        None => return,
-    };
-    if let Some(epoch) = parse_iso_epoch(resets_at) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        let remaining_secs = (epoch - now).max(0) as f64;
-        let display = fmt_time_remaining(remaining_secs);
-        if !display.is_empty() {
-            let _ = write!(output, " \x1b[2m\u{27f3} {}\x1b[0m", display);
-        }
-    }
-}
-
-/// Show pace indicator and reset date for the 7-day bucket.
+/// Show pace indicator (+/- vs linear burn rate) and countdown for any rate-limit bucket.
 ///
+/// `window_secs` is the full window duration (e.g., 5*3600 for 5h, 7*86400 for 7d).
 /// Pace = how far ahead or behind the linear burn rate you are.
-/// If the window is 4/7 elapsed and you've used 61%, expected is ~57%,
-/// so you're +4% ahead of pace.
-fn format_pace(output: &mut String, pct: u8, bucket: Option<&UsageBucket>) {
+/// If 4/7 of the window has elapsed and you've used 61%, expected is ~57% → +4% ahead.
+fn format_pace(output: &mut String, pct: u8, bucket: Option<&UsageBucket>, window_secs: f64) {
     let resets_at = match bucket.and_then(|b| b.resets_at.as_deref()) {
         Some(s) => s,
         None => return,
@@ -134,8 +114,8 @@ fn format_pace(output: &mut String, pct: u8, bucket: Option<&UsageBucket>) {
             .as_secs() as i64;
 
         let remaining_secs = (reset_epoch - now).max(0) as f64;
-        let elapsed_secs = SEVEN_DAY_SECS - remaining_secs;
-        let elapsed_frac = (elapsed_secs / SEVEN_DAY_SECS).clamp(0.0, 1.0);
+        let elapsed_secs = window_secs - remaining_secs;
+        let elapsed_frac = (elapsed_secs / window_secs).clamp(0.0, 1.0);
 
         let expected_pct = (elapsed_frac * 100.0).round() as i16;
         let delta = pct as i16 - expected_pct;
