@@ -86,6 +86,16 @@
       "Bash(any2md *)",
       "Bash(trash *)",
       "Bash(codex-companion *)",
+      "Bash(pueue status *)",
+      "Bash(pueue status)",
+      "Bash(pueue log *)",
+      "Bash(pueue follow *)",
+      "Bash(pueue clean *)",
+      "Bash(pueue clean)",
+      "Bash(pueue group *)",
+      "Bash(pueue group)",
+      "Bash(pueue wait *)",
+      "Bash(pueued *)",
       "Glob",
       "Grep",
       "Search",
@@ -145,6 +155,16 @@
       "Bash(nc -lp *)"
     ],
     "ask": [
+      "Bash(pueue add *)",
+      "Bash(pueue kill *)",
+      "Bash(pueue remove *)",
+      "Bash(pueue reset *)",
+      "Bash(pueue restart *)",
+      "Bash(pueue pause *)",
+      "Bash(pueue start *)",
+      "Bash(pueue send *)",
+      "Bash(pueue edit *)",
+      "Bash(pueue switch *)",
       "Bash(kill *)",
       "Bash(killall *)",
       "Bash(pkill *)",
@@ -519,7 +539,8 @@
       "allowWrite": [
         "~/.Trash",
         "~/.cache/uv",
-        "/tmp/tmux-*"
+        "/tmp/tmux-*",
+        "/run/user/*/pueue*.socket"
       ]
     },
     "excludedCommands": [
