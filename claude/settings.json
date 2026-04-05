@@ -293,6 +293,42 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/nudge_experiment_jobs.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "if": "Bash(git add *)",
+            "command": "node $HOME/.claude/scripts/git-add-reminder.mjs",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOME/.claude/scripts/plan-write-reminder.mjs",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/scripts/lib/run-with-session-env.sh $HOME/.claude/scripts/exit-plan-mode-enforce.mjs",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOME/.claude/scripts/simplify-reminder.mjs",
+            "timeout": 5
           }
         ]
       },
