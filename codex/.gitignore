@@ -1,5 +1,7 @@
 tmp
+.tmp
 sessions
+session_index.jsonl
 log
 history.jsonl
 auth.json
