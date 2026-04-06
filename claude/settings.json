@@ -271,6 +271,18 @@
           },
           {
             "type": "command",
+            "command": "$HOME/.claude/hooks/block_email_send.sh",
+            "statusMessage": "Checking for email send commands",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block_gws_delete.sh",
+            "statusMessage": "Checking for GWS deletion commands",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/nudge_modern_tools.sh",
             "timeout": 3
           },
