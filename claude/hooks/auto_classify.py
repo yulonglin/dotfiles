@@ -54,6 +54,8 @@ FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # inspect eval/experiment commands (AI safety research tooling)
     (re.compile(r"^(uv run\b.*\s+)?inspect\s+(eval|run|log|list|info|view|score)\b"), "inspect eval/experiment"),
     (re.compile(r"^(uv run\b.*\s+)?python3?\s+-m\s+inspect_ai\b"), "inspect_ai module"),
+    # .agent-claims/ operations (multi-agent coordination, ephemeral files only)
+    (re.compile(r"\.agent-claims"), "agent claims coordination"),
 ]
 
 
