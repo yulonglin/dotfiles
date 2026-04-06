@@ -281,12 +281,6 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/block_email_send.sh",
-            "statusMessage": "Checking for email send commands",
-            "timeout": 5
-          },
-          {
-            "type": "command",
             "command": "$HOME/.claude/hooks/guard_post_rebase.sh",
             "timeout": 5
           },
@@ -302,8 +296,8 @@
           },
           {
             "type": "command",
-            "command": "node $HOME/.claude/scripts/git-add-reminder.mjs",
             "if": "Bash(git add *)",
+            "command": "node $HOME/.claude/scripts/git-add-reminder.mjs",
             "timeout": 5
           }
         ]
@@ -487,7 +481,7 @@
   },
   "enabledPlugins": {
     "claude-md-management@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": false,
     "code@ai-safety-plugins": true,
     "codex@openai-codex": true,
     "commit-commands@claude-plugins-official": true,
@@ -495,23 +489,23 @@
     "core@ai-safety-plugins": true,
     "dev-browser@dev-browser-marketplace": true,
     "figma@claude-plugins-official": false,
-    "frontend-design@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": false,
     "gopls-lsp@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
     "huggingface-skills@claude-plugins-official": false,
     "llms-fetch-mcp@alignment-hive": true,
-    "playground@claude-plugins-official": true,
+    "playground@claude-plugins-official": false,
     "plugin-dev@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": false,
+    "ralph-loop@claude-plugins-official": false,
     "remember@claude-plugins-official": true,
     "research@ai-safety-plugins": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "rust-skills@rust-skills": true,
-    "security-guidance@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": false,
     "superpowers@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
+    "typescript-lsp@claude-plugins-official": false,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": false,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
     "writing@ai-safety-plugins": true
@@ -591,7 +585,6 @@
       "allowWrite": [
         "~/.Trash",
         "~/.cache/uv",
-        "~/.local/share/inspect_ai",
         "/tmp/tmux-*",
         "/run/user/*/pueue*.socket"
       ]
