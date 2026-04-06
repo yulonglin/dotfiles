@@ -2,7 +2,9 @@
 """PermissionRequest hook: LLM-based permission classifier.
 
 Calls Haiku to classify tool actions as allow/deny, mimicking auto mode.
-Fails open (exit 0 = normal prompt) on any error.
+Fails open (exit 0 = normal prompt) on any error, but emits a loud warning
+instead of failing silently when the hook is misconfigured or Anthropic rejects
+the request.
 Always active — no env var gate.
 """
 from __future__ import annotations
@@ -10,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 RULES_PATH = os.path.join(os.path.dirname(__file__), "auto_classify_rules.md")
@@ -32,6 +35,45 @@ TRUST_CACHE = os.path.expanduser("~/.cache/claude/repo-trust.json")
 
 # Feature flags (set via environment variables)
 INCLUDE_USER_MESSAGE = os.environ.get("AUTO_CLASSIFY_USER_MESSAGE", "1") != "0"
+
+ANSI_RESET = "\033[0m"
+ANSI_RED = "\033[1;31m"
+ANSI_YELLOW = "\033[1;33m"
+ANSI_CYAN = "\033[1;36m"
+
+# ── Fast-path allowlist ──────────────────────────────────────────────
+# Patterns that bypass the API call entirely. These are commands where
+# Haiku repeatedly hallucinates false positives despite explicit rules.
+import re
+
+# Commands that are always safe when run in a trusted/personal repo.
+# Checked against the Bash tool's "command" field.
+FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # python -c / python3 -c with multiline code (Haiku false-positives on # comments)
+    (re.compile(r"^(uv run\b.*\s+)?python3?\s+-c\s"), "python -c one-liner check"),
+    # inspect eval/experiment commands (AI safety research tooling)
+    (re.compile(r"^(uv run\b.*\s+)?inspect\s+(eval|run|log|list|info|view|score)\b"), "inspect eval/experiment"),
+    (re.compile(r"^(uv run\b.*\s+)?python3?\s+-m\s+inspect_ai\b"), "inspect_ai module"),
+]
+
+
+def fast_classify_bash(command: str) -> str | None:
+    """Return an allow reason if the command matches a known-safe pattern, else None."""
+    cmd = command.strip()
+    for pattern, reason in FAST_ALLOW_PATTERNS:
+        if pattern.search(cmd):
+            return reason
+    return None
+
+
+class AutoClassifyWarning(RuntimeError):
+    """Fail-open warning that should be surfaced to the user."""
+
+    def __init__(self, headline: str, details: str = "", suggestion: str = "") -> None:
+        super().__init__(headline)
+        self.headline = headline
+        self.details = details
+        self.suggestion = suggestion
 
 
 def detect_repo_trust(cwd: str) -> dict:
@@ -104,6 +146,75 @@ def log(msg: str) -> None:
         pass
 
 
+def build_warning_message(headline: str, details: str = "", suggestion: str = "") -> str:
+    lines = [f"{ANSI_RED}🚨 auto-classify problem:{ANSI_RESET} {headline}"]
+    if details:
+        lines.append(f"{ANSI_YELLOW}⚠ Details:{ANSI_RESET} {details}")
+    if suggestion:
+        lines.append(f"{ANSI_CYAN}💡 Action:{ANSI_RESET} {suggestion}")
+    return "\n".join(lines)
+
+
+def emit_warning(headline: str, details: str = "", suggestion: str = "") -> None:
+    msg = build_warning_message(headline, details, suggestion)
+    log(f"WARNING: {headline} — {details or 'no details'}")
+    json.dump({"systemMessage": msg}, sys.stdout)
+
+
+def parse_anthropic_error(exc: urllib.error.HTTPError) -> tuple[str, str]:
+    raw = ""
+    error_type = ""
+    message = str(exc)
+
+    try:
+        raw = exc.read().decode("utf-8", errors="replace")
+    except Exception:
+        raw = ""
+
+    if raw:
+        try:
+            payload = json.loads(raw)
+            error = payload.get("error", {})
+            if isinstance(error, dict):
+                error_type = str(error.get("type", "") or "")
+                message = str(error.get("message", "") or message)
+        except Exception:
+            message = raw[:500]
+
+    return error_type.lower(), message
+
+
+def classify_api_problem(status: int, error_type: str, message: str) -> AutoClassifyWarning:
+    combined = f"{error_type} {message}".lower()
+
+    if any(token in combined for token in ("credit", "balance", "quota", "billing", "payment")):
+        return AutoClassifyWarning(
+            "Anthropic API key appears to be out of credits.",
+            f"HTTP {status}: {message}",
+            "Top up Anthropic credits or switch to a funded key. Claude will fall back to the normal permission prompt until this is fixed.",
+        )
+
+    if status in (401, 403) or "authentication" in combined or "invalid x-api-key" in combined:
+        return AutoClassifyWarning(
+            "Anthropic API key was rejected.",
+            f"HTTP {status}: {message}",
+            "Check ANTHROPIC_API_KEY in dotfiles-secrets or the hook wrapper, then retry.",
+        )
+
+    if status == 429 or "rate limit" in combined:
+        return AutoClassifyWarning(
+            "Anthropic auto-classify is rate limited.",
+            f"HTTP {status}: {message}",
+            "Wait for the rate limit window to clear or use the normal permission prompt for now.",
+        )
+
+    return AutoClassifyWarning(
+        "Anthropic auto-classify request failed.",
+        f"HTTP {status}: {message}",
+        "Check ~/.cache/claude/auto-classify.log for details. Claude will use the normal permission prompt.",
+    )
+
+
 def extract_last_user_message(transcript_path: str) -> str:
     """Extract the last user message from the transcript JSONL. Fails silently."""
     try:
@@ -144,8 +255,11 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_messag
     """Call Haiku to classify the action. Returns parsed response or None."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        log("SKIP: ANTHROPIC_API_KEY not set")
-        return None
+        raise AutoClassifyWarning(
+            "ANTHROPIC_API_KEY is not set for the auto-classify hook.",
+            "The hook cannot call Anthropic, so it is falling back to the normal permission prompt.",
+            "Run `secrets-edit` / `setup-envrc`, or fix `with-anthropic-key.sh` so the hook gets a key.",
+        )
 
     # Truncate large tool inputs (e.g., Write with full file content)
     input_str = json.dumps(tool_input, indent=2)
@@ -181,12 +295,29 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_messag
         start = text.find("{")
         end = text.rfind("}")
         if start == -1 or end == -1:
-            log(f"No JSON found in response: {text[:200]}")
-            return None
+            raise AutoClassifyWarning(
+                "Anthropic returned a malformed auto-classify response.",
+                text[:200],
+                "Check ~/.cache/claude/auto-classify.log. Claude will fall back to the normal permission prompt.",
+            )
         return json.loads(text[start : end + 1])
+    except urllib.error.HTTPError as e:
+        error_type, message = parse_anthropic_error(e)
+        raise classify_api_problem(e.code, error_type, message) from e
+    except urllib.error.URLError as e:
+        raise AutoClassifyWarning(
+            "Anthropic auto-classify could not reach the API.",
+            str(e.reason),
+            "Check your network connection. Claude will fall back to the normal permission prompt.",
+        ) from e
+    except AutoClassifyWarning:
+        raise
     except Exception as e:
-        log(f"API error: {e}")
-        return None
+        raise AutoClassifyWarning(
+            "Anthropic auto-classify crashed unexpectedly.",
+            str(e),
+            "Check ~/.cache/claude/auto-classify.log. Claude will fall back to the normal permission prompt.",
+        ) from e
 
 
 def main() -> None:
@@ -200,12 +331,30 @@ def main() -> None:
     cwd = hook_input.get("cwd", "")
     transcript_path = hook_input.get("transcript_path", "")
 
+    # Fast-path: bypass API for known-safe Bash patterns
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", "")
+        fast_reason = fast_classify_bash(cmd)
+        if fast_reason:
+            log(f"ALLOW (fast-path): {tool_name} — {fast_reason}")
+            json.dump({
+                "hookSpecificOutput": {
+                    "hookEventName": "PermissionRequest",
+                    "decision": {"behavior": "allow"},
+                }
+            }, sys.stdout)
+            return
+
     try:
         with open(RULES_PATH) as f:
             rules = f.read()
     except Exception:
-        log("Cannot read rules file")
-        sys.exit(0)
+        emit_warning(
+            "auto-classify rules file could not be read.",
+            RULES_PATH,
+            "Check the dotfiles checkout on this machine. Claude will use the normal permission prompt.",
+        )
+        return
 
     # Inject repo trust context into rules
     trust = detect_repo_trust(cwd)
@@ -226,9 +375,11 @@ def main() -> None:
     if INCLUDE_USER_MESSAGE and transcript_path:
         user_message = extract_last_user_message(transcript_path)
 
-    result = classify(tool_name, tool_input, cwd, rules, user_message)
-    if result is None:
-        sys.exit(0)
+    try:
+        result = classify(tool_name, tool_input, cwd, rules, user_message)
+    except AutoClassifyWarning as warning:
+        emit_warning(warning.headline, warning.details, warning.suggestion)
+        return
 
     decision = result.get("decision", "allow").lower()
     reason = result.get("reason", "")
