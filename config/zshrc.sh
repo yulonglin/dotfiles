@@ -40,6 +40,7 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 export TERM="xterm-256color"
+export COLORTERM="truecolor"
 
 # Editor — reads from macos_default_apps.conf (single source of truth)
 _fa_conf="$DOT_DIR/config/macos_default_apps.conf"
