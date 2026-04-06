@@ -102,15 +102,34 @@ _validate_claude_settings() {
     staged_lines=$(echo "${staged_content}" | wc -l)
 
     # Run JSON key validation
+    # Per-project .claude/settings.json may only have enabledPlugins + hooks.
+    # Global ~/.claude/settings.json should have statusLine, hooks, permissions.
+    # Detect context: if file is in a repo (not ~/.claude/), use relaxed check.
+    local is_global=false
+    local repo_root
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+    if [ -n "$repo_root" ] && [[ "$repo_root" == "$HOME" ]]; then
+        is_global=true
+    fi
+
     local missing
-    missing=$(echo "${staged_content}" | python3 -c "
-import json, sys
+    missing=$(echo "${staged_content}" | IS_GLOBAL="${is_global}" python3 -c "
+import json, sys, os
 try:
     d = json.load(sys.stdin)
 except json.JSONDecodeError as e:
     print(f'invalid-json ({e})')
     sys.exit(1)
-required = ['statusLine', 'hooks', 'permissions']
+is_global = os.environ.get('IS_GLOBAL', 'false') == 'true'
+if is_global:
+    required = ['statusLine', 'hooks', 'permissions']
+else:
+    # Per-project: just needs to be valid JSON with at least one known key
+    required = []
+    known_keys = {'enabledPlugins', 'hooks', 'permissions', 'statusLine'}
+    if not any(k in d for k in known_keys):
+        print('no-known-keys')
+        sys.exit(1)
 missing = [k for k in required if k not in d]
 if missing:
     print(' '.join(missing))
