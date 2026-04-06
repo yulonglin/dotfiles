@@ -48,23 +48,147 @@ import re
 
 # Commands that are always safe when run in a trusted/personal repo.
 # Checked against the Bash tool's "command" field.
+# Optional prefix: direnv exec . (used in projects with .envrc)
+_DIRENV_PREFIX = r"(?:direnv\s+exec\s+\.\s+)?"
+# Optional prefix: uv run [flags]
+_UV_PREFIX = r"(?:uv\s+run\b.*?\s+)?"
+# Combined optional prefix
+_CMD_PREFIX = _DIRENV_PREFIX + _UV_PREFIX
+
 FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # python -c / python3 -c with multiline code (Haiku false-positives on # comments)
-    (re.compile(r"^(uv run\b.*\s+)?python3?\s+-c\s"), "python -c one-liner check"),
+    (re.compile(rf"^{_CMD_PREFIX}python3?\s+-c\s"), "python -c one-liner check"),
     # inspect eval/experiment commands (AI safety research tooling)
-    (re.compile(r"^(uv run\b.*\s+)?inspect\s+(eval|run|log|list|info|view|score)\b"), "inspect eval/experiment"),
-    (re.compile(r"^(uv run\b.*\s+)?python3?\s+-m\s+inspect_ai\b"), "inspect_ai module"),
+    (re.compile(rf"^{_CMD_PREFIX}inspect\s+(eval|run|log|list|info|view|score)\b"), "inspect eval/experiment"),
+    (re.compile(rf"^{_CMD_PREFIX}python3?\s+-m\s+inspect_ai\b"), "inspect_ai module"),
     # .agent-claims/ operations (multi-agent coordination, ephemeral files only)
-    (re.compile(r"\.agent-claims"), "agent claims coordination"),
+    (re.compile(r"^(?:mkdir\s+-p|cat|ls|rm\s+-f|printf|for\b).*\.agent-claims"), "agent claims coordination"),
 ]
 
 
+# Commands that are always read-only or harmless — used to auto-allow
+# compound shell statements (for/while/if/&&) that Claude Code's parser
+# can't handle ("Unhandled node type: string").
+SAFE_SHELL_COMMANDS: set[str] = {
+    # File inspection (read-only)
+    "cat", "head", "tail", "less", "more", "bat", "wc", "file", "stat",
+    "ls", "eza", "tree", "du", "dust", "df", "duf", "realpath", "dirname",
+    "basename", "readlink",
+    # Search (read-only)
+    "grep", "rg", "find", "fd", "ag", "ack",
+    # Text processing (read-only — sed/sd without -i, awk)
+    "sed", "awk", "cut", "tr", "sort", "uniq", "diff", "comm", "paste",
+    "column", "fmt", "fold", "rev", "tac", "nl", "expand", "unexpand",
+    "jq", "jless",
+    # Shell builtins / control flow
+    "echo", "printf", "test", "[", "true", "false", ":", "read",
+    "break", "continue", "return", "exit", "shift", "set",
+    # Variable / environment
+    "export", "local", "declare", "typeset", "unset", "env", "printenv",
+    # Git (read-only subcommands checked via UNSAFE_SHELL_PATTERNS denylist)
+    "git",
+    # Misc safe
+    "date", "sleep", "which", "type", "command", "hash", "id", "whoami",
+    "hostname", "uname", "arch", "nproc", "sha256sum", "md5sum", "b2sum",
+    "any2md", "shellcheck",
+    # Filesystem (write ops — acceptable risk for personal repos, destructive
+    # variants caught by UNSAFE_SHELL_PATTERNS)
+    "mkdir", "touch", "chmod", "ln", "tee", "cp", "mv",
+}
+# NOTE: python, python3, uv, rm, kill intentionally excluded — they are
+# handled by FAST_ALLOW_PATTERNS for specific safe invocations only.
+# sd intentionally excluded — it modifies files in-place by default.
+
+# Commands that are destructive or need review even inside compound statements.
+# Denylist checked BEFORE any allowlist — makes the denylist authoritative.
+UNSAFE_SHELL_PATTERNS: list[re.Pattern[str]] = [
+    # Destructive file operations
+    re.compile(r"\brm\s+-r"),           # rm -rf, rm -r (recursive delete)
+    re.compile(r"\bsed\s+-i\b"),        # in-place file modification
+    re.compile(r"\bsd\b"),              # sd modifies files in-place by default
+    # Network access
+    re.compile(r"\bcurl\b"),
+    re.compile(r"\bwget\b"),
+    re.compile(r"\bssh\b"),
+    re.compile(r"\bscp\b"),
+    # Git destructive operations
+    re.compile(r"\bgit\s+push\b"),
+    re.compile(r"\bgit\s+reset\b"),
+    re.compile(r"\bgit\s+checkout\s+--"),
+    re.compile(r"\bgit\s+clean\b"),
+    re.compile(r"\bgit\s+rebase\b"),
+    re.compile(r"\bgit\s+branch\s+-[dD]\b"),
+    re.compile(r"\bgit\s+stash\s+drop\b"),
+    # Privilege escalation / code execution
+    re.compile(r"\bsudo\b"),
+    re.compile(r"\bdd\b"),
+    re.compile(r"\bmkfs\b"),
+    re.compile(r"\beval\b"),
+    re.compile(r"\bexec\b"),
+    re.compile(r"\bsource\b"),
+    # Package installation (typosquat risk)
+    re.compile(r"\bpip\s+install\b"),
+    re.compile(r"\bnpm\s+install\b"),
+    re.compile(r"\buv\s+pip\s+install\b"),
+]
+
+# Regex to extract command names from shell text (first word of each statement).
+_CMD_NAME_RE = re.compile(r"(?:^|[;&|]\s*|do\s+|then\s+|else\s+)([a-zA-Z_][\w.-]*)")
+# Matches VAR=value or VAR="..." (shell variable assignment, not a command).
+_VAR_ASSIGN_RE = re.compile(r"^[A-Z_][A-Z0-9_]*=")
+
+_SHELL_KEYWORDS = frozenset({
+    "for", "while", "until", "if", "then", "else", "elif",
+    "fi", "do", "done", "in", "case", "esac", "function",
+    "select", "time", "coproc", "name",
+})
+
+
+def _is_compound_shell_safe(command: str) -> bool:
+    """Check if a compound shell command only uses safe sub-commands."""
+    # First: reject if any explicitly unsafe pattern appears
+    for pat in UNSAFE_SHELL_PATTERNS:
+        if pat.search(command):
+            return False
+
+    # Extract command names and check against safe set
+    cmd_names = _CMD_NAME_RE.findall(command)
+    if not cmd_names:
+        return False
+
+    # Filter out shell keywords and variable assignments (VAR=value).
+    # The regex captures "CLAIMS_DIR" from 'CLAIMS_DIR="..."' — detect by
+    # checking if NAME= appears in the original command.
+    actual_cmds = [c for c in cmd_names
+                   if c not in _SHELL_KEYWORDS
+                   and f"{c}=" not in command]
+
+    return bool(actual_cmds) and all(c in SAFE_SHELL_COMMANDS for c in actual_cmds)
+
+
 def fast_classify_bash(command: str) -> str | None:
-    """Return an allow reason if the command matches a known-safe pattern, else None."""
+    """Return an allow reason if the command matches a known-safe pattern, else None.
+
+    Architecture:
+    1. FAST_ALLOW_PATTERNS — high-confidence, specific patterns (e.g., python -c,
+       inspect eval). Checked first because they match exact command structures where
+       substring-based denylists produce false positives (e.g., "eval" in "inspect eval").
+    2. _is_compound_shell_safe — fallback for compound commands (for/while/&&) that
+       Claude Code's parser can't handle. This has its own denylist (UNSAFE_SHELL_PATTERNS)
+       checked before the allowlist, so compound commands with dangerous subcommands
+       are still caught.
+    """
     cmd = command.strip()
+
+    # Step 1: Specific allowlist patterns (high-confidence, bypass denylist)
     for pattern, reason in FAST_ALLOW_PATTERNS:
         if pattern.search(cmd):
             return reason
+
+    # Step 2: Compound shell safety check (has its own denylist internally)
+    if _is_compound_shell_safe(cmd):
+        return "compound shell with safe commands only"
+
     return None
 
 
