@@ -18,23 +18,6 @@ if [[ -z "$REPO_ROOT" ]] || [[ ! -f "$GITIGNORE" ]]; then
     exit 0
 fi
 
-# ── SOPS format check: secrets.env.enc must be dotenv, not JSON ──
-# sops defaults to JSON when called without --input-type dotenv, which breaks
-# deploy.sh decryption. Catch this before it gets committed.
-
-SECRETS_ENC="$REPO_ROOT/config/secrets.env.enc"
-if git diff --cached --name-only | grep -q 'config/secrets.env.enc'; then
-    if [[ -f "$SECRETS_ENC" ]]; then
-        first_char=$(head -c1 "$SECRETS_ENC")
-        if [[ "$first_char" == "{" ]]; then
-            echo "pre-commit: BLOCKED — config/secrets.env.enc is JSON format, must be dotenv"
-            echo "  This happens when sops is called without --input-type dotenv"
-            echo "  Fix: secrets-decrypt && secrets-encrypt (or use secrets-edit)"
-            exit 1
-        fi
-    fi
-fi
-
 # ── Find all SKILL.md symlinks (non-portable, must be ignored) ──
 
 SYMLINKS=""

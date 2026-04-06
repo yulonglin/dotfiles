@@ -615,10 +615,10 @@ macOS uses raw shortcuts; Alfred applies a collection prefix at runtime (e.g., `
 ```
 age keypair (one-time setup)
 ├── Private key: ~/.config/sops/age/keys.txt   ← secret, stored in Bitwarden
-└── Public key:  extracted from private key     ← committed in .sops.yaml
+└── Public key:  extracted from private key     ← stored in private secrets repo .sops.yaml
 
-Encryption:  plaintext env vars  →  sops -e  →  config/secrets.env.enc (committed)
-Decryption:  config/secrets.env.enc  →  sops -d  →  .secrets (gitignored, sourced by zshrc)
+Encryption:  plaintext env vars  →  sops -e  →  ~/.config/dotfiles-secrets/secrets.env.enc (private git repo)
+Decryption:  private secrets repo  →  sops -d  →  process memory / repo-scoped .envrc exports
 ```
 
 **File locations:**
@@ -626,29 +626,35 @@ Decryption:  config/secrets.env.enc  →  sops -d  →  .secrets (gitignored, so
 
 | File              | Location                            | Purpose                                                       | Git status  |
 | ----------------- | ----------------------------------- | ------------------------------------------------------------- | ----------- |
-| `.sops.yaml`      | `<dotfiles>/.sops.yaml` (repo root) | SOPS config — tells sops which age public key to encrypt with | Committed   |
-| `secrets.env.enc` | `<dotfiles>/config/secrets.env.enc` | Encrypted API keys (values encrypted, key names visible)      | Committed   |
-| `.secrets`        | `<dotfiles>/.secrets`               | Decrypted env vars (created by `deploy.sh`, sourced by zshrc) | Gitignored  |
-| `keys.txt`        | `~/.config/sops/age/keys.txt`       | age private key (paste from Bitwarden on new machines)        | Not in repo |
+| `DOTFILES_SECRETS_DIR` | `~/.config/dotfiles-secrets` by default | Private repo/path for the encrypted dotfiles secrets store | Private |
+| `.sops.yaml`      | `$DOTFILES_SECRETS_DIR/.sops.yaml`  | SOPS config for the private secrets repo                     | Private |
+| `secrets.env.enc` | `$DOTFILES_SECRETS_DIR/secrets.env.enc` | Encrypted API keys (values encrypted, key names visible)  | Private |
+| `keys.txt`        | `~/.config/sops/age/keys.txt`       | age private key (paste from Bitwarden on new machines)       | Not in repo |
+
+`.secrets` is now treated as a legacy migration artifact rather than the normal runtime path. The intended flow is encrypted-at-rest plus on-demand decryption.
 
 
 **Commands:**
 
 ```bash
-secrets-init             # First-time setup: generate age keypair + .sops.yaml + initial encrypted file
-secrets-edit             # Decrypt → edit in $EDITOR → re-encrypt on save → auto-refresh .secrets
-secrets-encrypt          # Encrypt .secrets → secrets.env.enc (for when you edit .secrets directly)
-secrets-decrypt          # Decrypt secrets.env.enc → .secrets (after git pull, or on new machines)
+secrets-init             # First-time setup: generate age keypair + initialize $DOTFILES_SECRETS_DIR
+secrets-edit             # Edit the encrypted dotenv file in place (no plaintext runtime file needed)
+secrets-paths            # Show the resolved private secrets repo paths
 secrets-init-project     # Bootstrap per-project: .sops.yaml + secrets.env.enc + .envrc
 ```
 
 **New machine setup:**
 
 1. Install sops + age (`./install.sh` handles this)
-2. Paste age private key from Bitwarden: `secrets-init` (or manually to `~/.config/sops/age/keys.txt`)
-3. Run `./deploy.sh` — decrypts `config/secrets.env.enc` to `.secrets` automatically
+2. Clone or create your private secrets repo at `$DOTFILES_SECRETS_DIR` (default `~/.config/dotfiles-secrets`)
+3. Paste age private key from Bitwarden: `secrets-init` (or manually to `~/.config/sops/age/keys.txt`)
+4. Run `./deploy.sh` — verifies the encrypted store can be decrypted on demand
 
-**Per-project usage:** Run `secrets-init-project` in any repo to create a `.sops.yaml`, `secrets.env.enc`, and `.envrc` that auto-loads secrets via `[direnv](https://direnv.net/)`.
+Least-privilege hardening now runs automatically in `secrets-init`, `secrets-edit`, `secrets-updatekeys`, `secrets-rotate-data-key`, `setup-envrc`, and `deploy.sh`. `secrets-fix-perms` remains available as a manual repair command for the private secrets repo (`700` dir, `600` files) and repo-local secret state (`.env`, `.envrc`, `.claude/channels/telegram/`, local `.sops.yaml`, `secrets.env.enc`).
+
+**Per-project usage:** Run `setup-envrc` in any repo to create a `.envrc` that selectively exposes only the secrets that repo should see. It supports direct exports (`KEY`), renamed exports (`ENV_VAR=SECRET_NAME`), and a repo-specific Telegram plugin binding (`--telegram-secret SECRET_NAME`) that materializes `.claude/channels/telegram/.env` only when Claude launches. If local `.env` files already exist, the TUI scans the repo root recursively, flags drift against the encrypted store, and can offer to delete selected files. Use `secrets-init-project` only when the repo needs its *own* SOPS-managed secrets file.
+
+`setup-envrc` tries `direnv allow` automatically. If that cannot update direnv's allowlist (for example in a sandboxed or read-only environment), it now prints the manual `direnv allow .` command and still completes the rest of the setup.
 
 **Further reading:** [SOPS README](https://github.com/getsops/sops#readme) · [age README](https://github.com/FiloSottile/age#readme) · [SOPS + age tutorial](https://devops.novalagung.com/en/cicd/sops-age-encryption.html)
 
@@ -723,23 +729,30 @@ UV_EXCLUDE_NEWER= uv pip install some-brand-new-pkg   # uv
 
 **Credential isolation:**
 
-API keys are sourced from `.secrets` but NOT globally exported. Each project gets only the keys it needs:
+API keys stay in `$DOTFILES_SECRETS_DIR/secrets.env.enc` and are NOT globally exported. Each project gets only the keys it needs:
 
 ```bash
 # Interactive picker (fzf)
 cd ~/code/my-project
-env-context                  # Select keys with TAB, confirm with ENTER
-# → Creates .envrc, direnv auto-loads on cd
+setup-envrc                  # Select keys with TAB, confirm with ENTER
+# → Creates .envrc with eval-based exports, direnv auto-loads on cd
 
 # Non-interactive
-envrc-init ANTHROPIC_API_KEY OPENAI_API_KEY
+setup-envrc ANTHROPIC_API_KEY OPENAI_API_KEY
+
+# Map a namespaced secret into the env var your app expects
+setup-envrc ANTHROPIC_API_KEY TELEGRAM_BOT_TOKEN=NUDGE_TELEGRAM_BOT_TOKEN
+
+# Claude Telegram plugin: keep the token canonical in dotfiles-secrets,
+# and generate .claude/channels/telegram/.env only at launch time
+setup-envrc --telegram-secret AMBASSADOR_TELEGRAM_BOT_TOKEN
 
 # Check what's configured
-env-context --list           # Show keys in current .envrc
-env-context --clean          # Remove .envrc
+setup-envrc --list           # Show keys in current .envrc
+setup-envrc --clean          # Remove .envrc
 
-# One-off command with all keys (no .envrc needed)
-with-keys python my_script.py
+# One-off command with selected keys (no .envrc needed)
+with-secrets ANTHROPIC_API_KEY OPENAI_API_KEY -- python my_script.py
 ```
 
 **Manual audit:**
@@ -796,4 +809,3 @@ Then SSH as `yulong@<ip>` (not root). See `[scripts/cloud/README.md](./scripts/c
 - Creates non-root user in persistent storage (`/workspace/yulong` on RunPod)
 - Installs uv, dotfiles, Claude Code
 - Copies SSH keys for direct access
-

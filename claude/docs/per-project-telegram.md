@@ -15,15 +15,28 @@ Two things are needed:
 
 Each project gets its own bot (e.g., `ambassador_bot`, `nudge_bot`).
 
-### 2. Store token project-locally
+### 2. Store the canonical token in `dotfiles-secrets`
 
 ```bash
-mkdir -p .claude/channels/telegram
-echo "TELEGRAM_BOT_TOKEN=<your-token>" > .claude/channels/telegram/.env
-chmod 600 .claude/channels/telegram/.env
+secrets-edit
+# Add a namespaced key such as:
+#   AMBASSADOR_TELEGRAM_BOT_TOKEN=123456789:AAH...
 ```
 
-### 3. Gitignore the credentials
+Then bind the repo to that secret:
+
+```bash
+setup-envrc --telegram-secret AMBASSADOR_TELEGRAM_BOT_TOKEN
+```
+
+This records the secret name in `.envrc` and exports:
+
+- `TELEGRAM_STATE_DIR=<repo>/.claude/channels/telegram`
+- `DOTFILES_TELEGRAM_BOT_SECRET=AMBASSADOR_TELEGRAM_BOT_TOKEN`
+
+The `claude()` shell wrapper then generates `.claude/channels/telegram/.env` just before launch. Treat that file as a runtime artifact, not the source of truth.
+
+### 3. Gitignore the runtime state
 
 ```gitignore
 .claude/channels/
@@ -53,8 +66,13 @@ The `claude()` function in `config/aliases.sh` auto-detects and configures:
 ```bash
 # Per-project channels: auto-detect and enable
 local channels=()
-if [[ -f ".claude/channels/telegram/.env" ]]; then
-    export TELEGRAM_STATE_DIR="$PWD/.claude/channels/telegram"
+if [[ -n "${DOTFILES_TELEGRAM_BOT_SECRET:-}" ]]; then
+    export TELEGRAM_STATE_DIR="${TELEGRAM_STATE_DIR:-$PWD/.claude/channels/telegram}"
+    "$DOT_DIR/custom_bins/dotfiles-secrets" write-telegram-env \
+        "$DOTFILES_TELEGRAM_BOT_SECRET" "$TELEGRAM_STATE_DIR" >/dev/null
+    channels+=(plugin:telegram@claude-plugins-official)
+elif [[ -f ".claude/channels/telegram/.env" ]]; then
+    export TELEGRAM_STATE_DIR="${TELEGRAM_STATE_DIR:-$PWD/.claude/channels/telegram}"
     channels+=(plugin:telegram@claude-plugins-official)
 fi
 if [[ ${#channels[@]} -gt 0 ]]; then
@@ -90,7 +108,8 @@ Choosing "install for this repo only" still writes config to `~/.claude/channels
 
 | What | Where |
 |------|-------|
-| Project token | `.claude/channels/telegram/.env` |
+| Canonical project token | `dotfiles-secrets/secrets.env.enc` |
+| Runtime plugin token file | `.claude/channels/telegram/.env` |
 | Project access | `.claude/channels/telegram/access.json` |
 | Global token (fallback) | `~/.claude/channels/telegram/.env` |
 | Shell wrapper | `dotfiles/config/aliases.sh` → `claude()` |

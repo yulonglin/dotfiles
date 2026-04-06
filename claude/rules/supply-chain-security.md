@@ -53,5 +53,5 @@ All package managers are configured with a **7-day quarantine** (`min-release-ag
 ## Secrets Awareness
 
 - API keys are scoped per-project via direnv `.envrc`, NOT globally exported
-- If a project needs an API key, use `env-context` (fzf picker) or `envrc-init` to set up
+- If a project needs an API key, use `setup-envrc` to set up the repo `.envrc`
 - Never hardcode secrets; verify `.envrc` is in `.gitignore`

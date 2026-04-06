@@ -85,12 +85,39 @@ if [ -f "$ZSH/oh-my-zsh.sh" ]; then
 fi
 source $CONFIG_DIR/aliases.sh
 [ -f $CONFIG_DIR/secrets.sh ] && source $CONFIG_DIR/secrets.sh
-if [ -f "$DOT_DIR/.secrets" ]; then
-  source "$DOT_DIR/.secrets"
-  # No keys are globally exported. All stay as shell-local vars.
-  # Export per-project via direnv/.envrc or symlinked .env files.
-  # Ad-hoc: `with-keys <cmd>` to run a single command with all keys exported.
-  with-keys() { ( set -a; source "$DOT_DIR/.secrets"; set +a; "$@" ) }
+if [ -x "$DOT_DIR/custom_bins/dotfiles-secrets" ]; then
+  # Ad-hoc least-privilege helper for one-off commands.
+  # Usage: with-secrets KEY1 [KEY2 ...] -- command [args...]
+  with-secrets() {
+    local args=("$@")
+    local keys=()
+    local saw_separator=false
+    local i
+
+    [[ $# -gt 0 ]] || { echo "Usage: with-secrets KEY1 [KEY2 ...] -- command [args...]" >&2; return 1; }
+
+    for ((i = 1; i <= $#; i++)); do
+      if [[ "${args[i]}" == "--" ]]; then
+        saw_separator=true
+        break
+      fi
+      keys+=("${args[i]}")
+    done
+
+    [[ "$saw_separator" == true ]] || { echo "Usage: with-secrets KEY1 [KEY2 ...] -- command [args...]" >&2; return 1; }
+    [[ ${#keys[@]} -gt 0 ]] || { echo "Provide at least one key or use --all before --" >&2; return 1; }
+    shift $(( ${#keys[@]} + 1 ))
+    [[ $# -gt 0 ]] || { echo "Provide a command after --" >&2; return 1; }
+
+    (
+      if [[ "${keys[1]}" == "--all" ]]; then
+        source <("$DOT_DIR/custom_bins/dotfiles-secrets" shell --all)
+      else
+        source <("$DOT_DIR/custom_bins/dotfiles-secrets" shell "${keys[@]}")
+      fi
+      "$@"
+    )
+  }
 fi
 source $CONFIG_DIR/ssh_setup.sh
 source $CONFIG_DIR/p10k.zsh

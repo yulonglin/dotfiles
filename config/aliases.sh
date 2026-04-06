@@ -14,70 +14,86 @@ alias jp="jupyter lab"
 alias hn="hostname"
 alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 
+# shellcheck source=/dev/null
+source "$DOT_DIR/scripts/helpers/dotfiles_secrets.sh"
+
 # SOPS-encrypted secrets management
 # On macOS, sops checks ~/Library/Application Support/sops/age/keys.txt (Go's
 # os.UserConfigDir), not ~/.config/. Point it to the XDG-conventional location.
-export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
+export SOPS_AGE_KEY_FILE="$(dotfiles_secrets_age_key)"
 
 # Thin wrapper: secrets are dotenv format but files end in .enc, so sops
 # can't infer the format. This sets --input-type/--output-type once.
 sops_dotenv() { sops --input-type dotenv --output-type dotenv "$@"; }
 
+secrets-paths() {
+    "$DOT_DIR/custom_bins/dotfiles-secrets" paths
+}
+
+secrets-fix-perms() {
+    dotfiles_secrets_harden_permissions
+    project_secret_harden_permissions "$PWD"
+}
+
+secrets-recipients-edit() {
+    local sops_yaml
+    sops_yaml=$(dotfiles_secrets_sops_config)
+    mkdir -p "$(dotfiles_secrets_dir)"
+    "${EDITOR:-vim}" "$sops_yaml"
+    dotfiles_secrets_harden_permissions
+}
+
+secrets-updatekeys() {
+    if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
+    local sops_yaml enc
+    sops_yaml=$(dotfiles_secrets_sops_config)
+    enc=$(dotfiles_secrets_enc)
+    sops --config "$sops_yaml" updatekeys --yes "$enc"
+    dotfiles_secrets_harden_permissions
+}
+
+secrets-rotate-data-key() {
+    if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
+    local sops_yaml enc
+    sops_yaml=$(dotfiles_secrets_sops_config)
+    enc=$(dotfiles_secrets_enc)
+    sops --config "$sops_yaml" rotate -i --input-type dotenv --output-type dotenv "$enc"
+    dotfiles_secrets_harden_permissions
+}
+
 secrets-edit() {
     if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
-    sops_dotenv --config "$DOT_DIR/.sops.yaml" "$DOT_DIR/config/secrets.env.enc"
-    secrets-decrypt
-}
-secrets-encrypt() {
-    if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
-    local src="$DOT_DIR/.secrets"
-    local enc="$DOT_DIR/config/secrets.env.enc"
-    local sops_yaml="$DOT_DIR/.sops.yaml"
-    if [[ ! -f "$src" ]]; then echo "No .secrets file at $src"; return 1; fi
-    if [[ ! -f "$sops_yaml" ]]; then echo "No .sops.yaml at $sops_yaml — run secrets-init"; return 1; fi
-    # Extract age public key — bypass creation rules since input (.secrets) doesn't match .enc$ regex
-    local pub_key
-    pub_key=$(grep -o 'age1[a-z0-9]*' "$sops_yaml" | head -1)
-    if [[ -z "$pub_key" ]]; then echo "No age public key found in $sops_yaml"; return 1; fi
-    echo "Encrypting $src → $enc"
-    if sops_dotenv -e --config /dev/null --age "$pub_key" "$src" > "${enc}.tmp"; then
-        mv "${enc}.tmp" "$enc"
-        echo "Encrypted to $enc"
-    else
-        rm -f "${enc}.tmp"
-        echo "Failed to encrypt" >&2; return 1
-    fi
-}
-secrets-decrypt() {
-    if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
-    local enc="$DOT_DIR/config/secrets.env.enc"
-    local out="$DOT_DIR/.secrets"
-    local sops_yaml="$DOT_DIR/.sops.yaml"
-    if [[ ! -f "$enc" ]]; then echo "No encrypted secrets at $enc — run secrets-init"; return 1; fi
-    if [[ ! -f "$sops_yaml" ]]; then echo "No .sops.yaml at $sops_yaml — run secrets-init"; return 1; fi
-    echo "Decrypting $enc → $out"
-    if (umask 077 && sops_dotenv -d --config "$sops_yaml" "$enc" > "${out}.tmp"); then
-        mv "${out}.tmp" "$out"
-        echo "Decrypted to $out"
-    else
-        rm -f "${out}.tmp"
-        echo "Failed to decrypt (sops -d --config $sops_yaml $enc)" >&2; return 1
-    fi
+    local sops_yaml
+    local enc
+    sops_yaml=$(dotfiles_secrets_sops_config)
+    enc=$(dotfiles_secrets_enc)
+    mkdir -p "$(dotfiles_secrets_dir)"
+    sops_dotenv --config "$sops_yaml" "$enc"
+    dotfiles_secrets_harden_permissions
 }
 secrets-init() {
-    local age_dir="$HOME/.config/sops/age"
-    local age_key="$age_dir/keys.txt"
-    local sops_yaml="$DOT_DIR/.sops.yaml"
-    local enc="$DOT_DIR/config/secrets.env.enc"
+    local age_key
+    local age_dir
+    local secrets_dir
+    local sops_yaml
+    local enc
+
+    age_key=$(dotfiles_secrets_age_key)
+    age_dir=$(dirname "$age_key")
+    secrets_dir=$(dotfiles_secrets_dir)
+    sops_yaml=$(dotfiles_secrets_sops_config)
+    enc=$(dotfiles_secrets_enc)
+
+    mkdir -p "$secrets_dir"
 
     echo "Config: age_key=$age_key"
+    echo "Config: secrets_dir=$secrets_dir"
     echo "Config: sops_yaml=$sops_yaml"
     echo "Config: enc=$enc"
 
     if [[ ! -f "$age_key" ]]; then
         mkdir -p "$age_dir"
         age-keygen -o "$age_key" 2>&1
-        chmod 600 "$age_key"
         echo "Generated age key at $age_key"
     else
         echo "Age key already exists at $age_key"
@@ -132,11 +148,13 @@ YAML
         echo "Encrypted secrets already exist at $enc"
     fi
 
+    dotfiles_secrets_harden_permissions
+
     echo ""
     echo "Next steps:"
     echo "  1. secrets-edit          # Add your API keys"
     echo "  2. sync-gist             # Sync SSH config + git identity"
-    echo "  3. source ~/.zshrc       # Load secrets into shell"
+    echo "  3. setup-envrc           # Export selected keys in the current repo"
 }
 secrets-init-project() {
     local sops_yaml=".sops.yaml"
@@ -167,7 +185,7 @@ YAML
 
     if [[ ! -s "$enc" ]]; then
         local tmpfile="${TMPDIR:-/tmp}/proj_secrets.env"
-        printf '%s\n' "# Project secrets (edit with: sops $enc)" "PLACEHOLDER=replace_me" > "$tmpfile"
+        printf '%s\n' "# Project secrets (edit with: sops --input-type dotenv --output-type dotenv --config $sops_yaml $enc)" "PLACEHOLDER=replace_me" > "$tmpfile"
         echo "Running: sops -e --config /dev/null --age <key> $tmpfile > $enc"
         if sops -e --config /dev/null --age "$pub_key" "$tmpfile" > "${enc}.tmp"; then
             mv "${enc}.tmp" "$enc"
@@ -191,7 +209,9 @@ YAML
         echo "Created $envrc — run: direnv allow"
     fi
 
-    echo "Done. Edit secrets: sops --config $sops_yaml $enc"
+    project_secret_harden_permissions "$PWD"
+
+    echo "Done. Edit secrets: sops --input-type dotenv --output-type dotenv --config $sops_yaml $enc"
 }
 alias sync-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" sync'
 alias export-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" export'
@@ -237,6 +257,26 @@ activate_venv() {
             # shellcheck disable=SC1091
             source "$repo_root/.venv/bin/activate"
         fi
+    fi
+}
+
+_claude_prepare_telegram_state() {
+    local state_dir="$1"
+    local secret_name="$2"
+
+    if [[ -z "$state_dir" || -z "$secret_name" ]]; then
+        echo "claude: TELEGRAM_STATE_DIR and DOTFILES_TELEGRAM_BOT_SECRET must both be set" >&2
+        return 1
+    fi
+
+    if [[ ! -x "$DOT_DIR/custom_bins/dotfiles-secrets" ]]; then
+        echo "claude: $DOT_DIR/custom_bins/dotfiles-secrets not found" >&2
+        return 1
+    fi
+
+    if ! "$DOT_DIR/custom_bins/dotfiles-secrets" write-telegram-env "$secret_name" "$state_dir" >/dev/null; then
+        echo "claude: failed to materialize Telegram token from $secret_name" >&2
+        return 1
     fi
 }
 
@@ -290,11 +330,18 @@ claude() {
 
     # Per-project channels: auto-detect and enable
     local channels=()
-    if [[ -f ".claude/channels/telegram/.env" ]]; then
-        export TELEGRAM_STATE_DIR="$PWD/.claude/channels/telegram"
+    if [[ -n "${DOTFILES_TELEGRAM_BOT_SECRET:-}" ]]; then
+        export TELEGRAM_STATE_DIR="${TELEGRAM_STATE_DIR:-$PWD/.claude/channels/telegram}"
+        if ! _claude_prepare_telegram_state "$TELEGRAM_STATE_DIR" "$DOTFILES_TELEGRAM_BOT_SECRET"; then
+            return 1
+        fi
+        channels+=(plugin:telegram@claude-plugins-official)
+    elif [[ -f ".claude/channels/telegram/.env" ]]; then
+        export TELEGRAM_STATE_DIR="${TELEGRAM_STATE_DIR:-$PWD/.claude/channels/telegram}"
         channels+=(plugin:telegram@claude-plugins-official)
     else
         unset TELEGRAM_STATE_DIR
+        unset DOTFILES_TELEGRAM_BOT_SECRET
     fi
     if [[ -f ".claude/channels/imessage/.env" ]] || command -v imessage-mcp &>/dev/null; then
         channels+=(plugin:imessage@claude-plugins-official)

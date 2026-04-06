@@ -1,0 +1,741 @@
+#!/bin/bash
+# shellcheck shell=bash
+# Configure repo-scoped secret exports via .envrc.
+# Usage:
+#   setup-envrc                                  # interactive picker for the repo root
+#   setup-envrc KEY1 KEY2                       # export secrets with matching env names
+#   setup-envrc ENV_VAR=SECRET_NAME             # map a secret to a repo-local env var name
+#   setup-envrc --telegram-secret SECRET_NAME   # materialize Telegram plugin token at Claude launch
+#   setup-envrc --all                           # export every managed key
+#   setup-envrc --list                          # show current repo .envrc bindings
+#   setup-envrc --clean                         # remove repo .envrc
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+DOT_DIR="${DOT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+SECRETS_HELPER="$DOT_DIR/custom_bins/dotfiles-secrets"
+# shellcheck source=/dev/null
+source "$DOT_DIR/scripts/helpers/dotfiles_secrets.sh"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+ENVRC="$REPO_ROOT/.envrc"
+KEY_PATTERN='API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL'
+TELEGRAM_SECRET_PATTERN='TELEGRAM|BOT_TOKEN'
+SECRETS_CACHE=""
+
+die() {
+    echo "Error: $*" >&2
+    exit 1
+}
+
+usage() {
+    cat <<'EOF'
+Usage:
+  setup-envrc
+  setup-envrc KEY1 KEY2
+  setup-envrc ENV_VAR=SECRET_NAME
+  setup-envrc --telegram-secret SECRET_NAME
+  setup-envrc --all
+  setup-envrc --list
+  setup-envrc --clean
+EOF
+}
+
+safe_remove() {
+    local path="$1"
+    if command -v trash >/dev/null 2>&1; then
+        trash "$path"
+    else
+        rm "$path"
+    fi
+}
+
+load_secrets_cache() {
+    [[ -n "$SECRETS_CACHE" ]] && return 0
+    [[ -x "$SECRETS_HELPER" ]] || die "$SECRETS_HELPER not found"
+    SECRETS_CACHE=$("$SECRETS_HELPER" dotenv)
+}
+
+normalize_value() {
+    local value="$1"
+    value="${value%$'\r'}"
+
+    if [[ "$value" =~ ^\"(.*)\"$ ]]; then
+        value="${BASH_REMATCH[1]}"
+        value="${value//\\n/$'\n'}"
+        value="${value//\\r/$'\r'}"
+        value="${value//\\t/$'\t'}"
+        value="${value//\\\"/\"}"
+        value="${value//\\\\/\\}"
+    elif [[ "$value" =~ ^\'(.*)\'$ ]]; then
+        value="${BASH_REMATCH[1]}"
+        value="${value//\\\'/\'}"
+        value="${value//\\\\/\\}"
+    fi
+
+    printf '%s' "$value"
+}
+
+content_has_key() {
+    local content="$1"
+    local key="$2"
+
+    [[ -n "$content" ]] || return 1
+
+    printf '%s\n' "$content" | awk -v key="$key" '
+        /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+        {
+            line = $0
+            sub(/\r$/, "", line)
+            sub(/^[[:space:]]*export[[:space:]]+/, "", line)
+            if (line ~ ("^" key "=")) {
+                found = 1
+                exit
+            }
+        }
+        END { exit(found ? 0 : 1) }
+    '
+}
+
+get_value_from_content() {
+    local content="$1"
+    local key="$2"
+    local raw_value
+
+    raw_value=$(printf '%s\n' "$content" | awk -v key="$key" '
+        /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+        {
+            line = $0
+            sub(/\r$/, "", line)
+            sub(/^[[:space:]]*export[[:space:]]+/, "", line)
+            if (line ~ ("^" key "=")) {
+                print substr(line, length(key) + 2)
+                exit
+            }
+        }
+    ')
+
+    normalize_value "$raw_value"
+}
+
+list_sensitive_keys() {
+    load_secrets_cache
+    printf '%s\n' "$SECRETS_CACHE" \
+        | sed -n 's/^[[:space:]]*\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' \
+        | grep -E "$KEY_PATTERN" \
+        | sort -u || true
+}
+
+validate_env_name() {
+    local name="$1"
+    [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "Invalid environment variable name: $name"
+}
+
+binding_env_key() {
+    local binding="$1"
+    if [[ "$binding" == *=* ]]; then
+        printf '%s\n' "${binding%%=*}"
+    else
+        printf '%s\n' "$binding"
+    fi
+}
+
+binding_secret_key() {
+    local binding="$1"
+    if [[ "$binding" == *=* ]]; then
+        printf '%s\n' "${binding#*=}"
+    else
+        printf '%s\n' "$binding"
+    fi
+}
+
+canonicalize_binding() {
+    local binding="$1"
+    local env_key secret_key
+
+    env_key=$(binding_env_key "$binding")
+    secret_key=$(binding_secret_key "$binding")
+    validate_env_name "$env_key"
+    validate_env_name "$secret_key"
+
+    if [[ "$env_key" == "$secret_key" ]]; then
+        printf '%s\n' "$env_key"
+    else
+        printf '%s=%s\n' "$env_key" "$secret_key"
+    fi
+}
+
+binding_display() {
+    local binding="$1"
+    local env_key secret_key
+
+    env_key=$(binding_env_key "$binding")
+    secret_key=$(binding_secret_key "$binding")
+
+    if [[ "$env_key" == "$secret_key" ]]; then
+        printf 'export %s\n' "$env_key"
+    else
+        printf 'export %s <- %s\n' "$env_key" "$secret_key"
+    fi
+}
+
+normalize_export_bindings() {
+    local binding canonical env_key
+    local normalized=()
+    local seen_envs=""
+
+    for binding in "$@"; do
+        [[ -n "$binding" ]] || continue
+        canonical=$(canonicalize_binding "$binding")
+        env_key=$(binding_env_key "$canonical")
+
+        if has_line "$env_key" "$seen_envs"; then
+            die "Duplicate export binding for $env_key"
+        fi
+
+        normalized+=("$canonical")
+        seen_envs+="$env_key"$'\n'
+    done
+
+    if [[ ${#normalized[@]} -gt 0 ]]; then
+        printf '%s\n' "${normalized[@]}"
+    fi
+}
+
+current_envrc_export_bindings() {
+    [[ -f "$ENVRC" ]] || return 0
+
+    if grep -q '^# setup-envrc exports:' "$ENVRC"; then
+        sed -n 's/^# setup-envrc exports:[[:space:]]*//p' "$ENVRC" | tr ' ' '\n' | sed '/^$/d'
+        return 0
+    fi
+
+    if grep -q '^# setup-envrc:' "$ENVRC"; then
+        sed -n 's/^# setup-envrc:[[:space:]]*//p' "$ENVRC" | tr ' ' '\n' | sed '/^$/d'
+        return 0
+    fi
+
+    if grep -q '^# env-context:' "$ENVRC"; then
+        sed -n 's/^# env-context:[[:space:]]*//p' "$ENVRC" | tr ' ' '\n' | sed '/^$/d'
+        return 0
+    fi
+
+    sed -n 's/^export[[:space:]]\+\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' "$ENVRC"
+}
+
+current_envrc_telegram_secret() {
+    [[ -f "$ENVRC" ]] || return 0
+    sed -n 's/^# setup-envrc telegram-secret:[[:space:]]*//p' "$ENVRC" | head -n 1
+}
+
+has_line() {
+    local needle="$1"
+    local haystack="$2"
+
+    [[ -n "$haystack" ]] || return 1
+    printf '%s\n' "$haystack" | grep -Fxq "$needle"
+}
+
+binding_for_secret() {
+    local target_secret="$1"
+    shift
+    local binding
+
+    for binding in "$@"; do
+        [[ "$(binding_secret_key "$binding")" == "$target_secret" ]] || continue
+        printf '%s\n' "$binding"
+        return 0
+    done
+
+    return 1
+}
+
+bound_secret_for_env_key() {
+    local env_key="$1"
+    local telegram_secret="$2"
+    local available_keys="$3"
+    shift 3
+    local binding
+
+    for binding in "$@"; do
+        [[ "$(binding_env_key "$binding")" == "$env_key" ]] || continue
+        printf '%s\n' "$(binding_secret_key "$binding")"
+        return 0
+    done
+
+    if [[ "$env_key" == "TELEGRAM_BOT_TOKEN" && -n "$telegram_secret" ]]; then
+        printf '%s\n' "$telegram_secret"
+        return 0
+    fi
+
+    if has_line "$env_key" "$available_keys"; then
+        printf '%s\n' "$env_key"
+        return 0
+    fi
+
+    return 1
+}
+
+repo_uses_telegram_plugin() {
+    [[ -d "$REPO_ROOT/.claude/channels/telegram" ]] && return 0
+    [[ -f "$REPO_ROOT/.claude/settings.json" ]] || return 1
+    grep -Eq '"telegram@claude-plugins-official"[[:space:]]*:[[:space:]]*true' "$REPO_ROOT/.claude/settings.json"
+}
+
+telegram_secret_candidates() {
+    list_sensitive_keys | grep -E "$TELEGRAM_SECRET_PATTERN" || true
+}
+
+write_envrc() {
+    local telegram_secret="$1"
+    shift
+    local export_bindings=("$@")
+    local helper_bin="$DOT_DIR/custom_bins/dotfiles-secrets"
+    local secrets_enc
+    local sops_config
+    local binding env_key secret_key
+    local required_secrets=()
+    local final_env_names=""
+
+    secrets_enc=$(dotfiles_secrets_enc)
+    sops_config=$(dotfiles_secrets_sops_config)
+
+    for binding in "${export_bindings[@]}"; do
+        env_key=$(binding_env_key "$binding")
+        secret_key=$(binding_secret_key "$binding")
+        final_env_names+="$env_key"$'\n'
+        if ! has_line "$secret_key" "$(printf '%s\n' "${required_secrets[@]}")"; then
+            required_secrets+=("$secret_key")
+        fi
+    done
+
+    {
+        echo "# Auto-generated by setup-envrc -- re-run to modify, --clean to remove"
+        printf '# setup-envrc exports:'
+        for binding in "${export_bindings[@]}"; do
+            printf ' %s' "$binding"
+        done
+        echo ""
+        if [[ -n "$telegram_secret" ]]; then
+            printf '# setup-envrc telegram-secret: %s\n' "$telegram_secret"
+        fi
+        printf 'watch_file %q\n' "$helper_bin"
+        printf 'watch_file %q\n' "$secrets_enc"
+        printf 'watch_file %q\n' "$sops_config"
+        printf 'DOTFILES_SECRETS_BIN=%q\n' "$helper_bin"
+
+        if [[ ${#required_secrets[@]} -gt 0 ]]; then
+            # shellcheck disable=SC2016
+            printf 'eval "$("$DOTFILES_SECRETS_BIN" shell'
+            for secret_key in "${required_secrets[@]}"; do
+                printf ' %q' "$secret_key"
+            done
+            echo ')"'
+
+            for binding in "${export_bindings[@]}"; do
+                env_key=$(binding_env_key "$binding")
+                secret_key=$(binding_secret_key "$binding")
+                if [[ "$env_key" != "$secret_key" ]]; then
+                    printf 'export %s="$%s"\n' "$env_key" "$secret_key"
+                fi
+            done
+
+            for secret_key in "${required_secrets[@]}"; do
+                if ! has_line "$secret_key" "$final_env_names"; then
+                    printf 'unset %s\n' "$secret_key"
+                fi
+            done
+        fi
+
+        echo 'unset DOTFILES_SECRETS_BIN'
+
+        if [[ -n "$telegram_secret" ]]; then
+            printf 'export TELEGRAM_STATE_DIR=%q\n' "$REPO_ROOT/.claude/channels/telegram"
+            printf 'export DOTFILES_TELEGRAM_BOT_SECRET=%q\n' "$telegram_secret"
+        else
+            echo 'unset TELEGRAM_STATE_DIR'
+            echo 'unset DOTFILES_TELEGRAM_BOT_SECRET'
+        fi
+    } > "$ENVRC"
+}
+
+ensure_envrc_gitignored() {
+    local gitignore="$REPO_ROOT/.gitignore"
+
+    if ! { [[ -f "$gitignore" ]] && grep -q '^\.envrc$' "$gitignore"; }; then
+        echo ".envrc" >> "$gitignore"
+        echo "Added .envrc to $gitignore"
+    fi
+}
+
+attempt_direnv_allow() {
+    local allow_err=""
+
+    if ! command -v direnv >/dev/null 2>&1; then
+        echo "direnv not found; install it to auto-load .envrc" >&2
+        return 0
+    fi
+
+    if allow_err=$(cd "$REPO_ROOT" && direnv allow . 2>&1); then
+        return 0
+    fi
+
+    if printf '%s' "$allow_err" | grep -Eqi 'read-only file system|operation not permitted|permission denied'; then
+        echo "direnv allow could not update its allowlist automatically in this environment." >&2
+    else
+        echo "direnv allow failed for $REPO_ROOT." >&2
+    fi
+    echo "Run manually: cd $REPO_ROOT && direnv allow ." >&2
+}
+
+harden_repo_secret_permissions() {
+    dotfiles_secrets_harden_permissions
+    project_secret_harden_permissions "$REPO_ROOT"
+
+    if [[ -n "${1:-}" ]]; then
+        telegram_state_harden_permissions "$1"
+    fi
+}
+
+find_env_files() {
+    find "$REPO_ROOT" \
+        \( \
+            -path "$REPO_ROOT/.git" -o \
+            -path "$REPO_ROOT/.direnv" -o \
+            -path "$REPO_ROOT/node_modules" -o \
+            -path "$REPO_ROOT/.venv" -o \
+            -path "$REPO_ROOT/venv" -o \
+            -path "$REPO_ROOT/build" -o \
+            -path "$REPO_ROOT/dist" -o \
+            -path "$REPO_ROOT/claude/plugins/cache" -o \
+            -path "$REPO_ROOT/claude/plugins/plugins.bak" -o \
+            -path "$REPO_ROOT/codex/.tmp" \
+        \) -prune -o \
+        \( -type f -o -type l \) -name '.env' -print | sort
+}
+
+list_file_keys() {
+    local env_file="$1"
+
+    awk '
+        /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+        {
+            line = $0
+            sub(/\r$/, "", line)
+            sub(/^[[:space:]]*export[[:space:]]+/, "", line)
+            if (line ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
+                sub(/=.*/, "", line)
+                print line
+            }
+        }
+    ' "$env_file" | sort -u
+}
+
+build_env_file_summary() {
+    local env_file="$1"
+    local telegram_secret="$2"
+    shift 2
+    local export_bindings=("$@")
+    local rel_path managed_same managed_diff unmanaged total_keys key secret_key
+    local file_content available_keys file_keys
+
+    rel_path="${env_file#"$REPO_ROOT"/}"
+    [[ "$rel_path" == "$env_file" ]] && rel_path=$(basename "$env_file")
+    file_content=$(cat "$env_file")
+    available_keys=$(list_sensitive_keys)
+    file_keys=$(list_file_keys "$env_file")
+    managed_same=0
+    managed_diff=0
+    unmanaged=0
+    total_keys=0
+
+    while IFS= read -r key; do
+        [[ -n "$key" ]] || continue
+        total_keys=$((total_keys + 1))
+
+        if secret_key=$(bound_secret_for_env_key "$key" "$telegram_secret" "$available_keys" "${export_bindings[@]}"); then
+            if [[ "$(get_value_from_content "$file_content" "$key")" == "$(get_value_from_content "$SECRETS_CACHE" "$secret_key")" ]]; then
+                managed_same=$((managed_same + 1))
+            else
+                managed_diff=$((managed_diff + 1))
+            fi
+        else
+            unmanaged=$((unmanaged + 1))
+        fi
+    done <<< "$file_keys"
+
+    printf '%s\t[same:%d] [diff:%d] [unmanaged:%d] [vars:%d]\n' \
+        "$rel_path" "$managed_same" "$managed_diff" "$unmanaged" "$total_keys"
+}
+
+print_env_file_summary() {
+    local telegram_secret="$1"
+    shift
+    local export_bindings=("$@")
+    local found=0 env_file
+
+    while IFS= read -r env_file; do
+        [[ -n "$env_file" ]] || continue
+        [[ "$found" -eq 0 ]] && echo "" && echo "Detected .env files in this repo:"
+        build_env_file_summary "$env_file" "$telegram_secret" "${export_bindings[@]}"
+        found=1
+    done < <(find_env_files)
+
+    return "$found"
+}
+
+offer_env_cleanup() {
+    local telegram_secret="$1"
+    shift
+    local export_bindings=("$@")
+
+    [[ -t 0 ]] || return 0
+    command -v fzf >/dev/null 2>&1 || return 0
+
+    local env_file item rel_path summary default_select=() selections selected_items reply
+    local menu_items=()
+
+    while IFS= read -r env_file; do
+        [[ -n "$env_file" ]] || continue
+        summary=$(build_env_file_summary "$env_file" "$telegram_secret" "${export_bindings[@]}")
+        menu_items+=("$summary")
+        rel_path="${env_file#"$REPO_ROOT"/}"
+        if [[ "$rel_path" == ".env" ]]; then
+            default_select+=(--select "$summary")
+        fi
+    done < <(find_env_files)
+
+    [[ ${#menu_items[@]} -gt 0 ]] || return 0
+
+    selections=$(printf '%s\n' "${menu_items[@]}" | fzf --multi \
+        --prompt="Select .env files to delete> " \
+        --header="Root .env is preselected. Review unmanaged vars before deleting nested files." \
+        --with-nth=1 \
+        "${default_select[@]}" 2>/dev/null) || return 0
+
+    [[ -n "$selections" ]] || return 0
+
+    echo ""
+    echo "Selected for deletion:"
+    while IFS= read -r selected_items; do
+        [[ -n "$selected_items" ]] || continue
+        echo "  ${selected_items%%$'\t'*}"
+    done <<< "$selections"
+
+    read -r -p "Delete selected .env file(s)? [y/N] " reply
+    case "$reply" in
+        [yY]|[yY][eE][sS])
+            while IFS= read -r selected_items; do
+                [[ -n "$selected_items" ]] || continue
+                rel_path="${selected_items%%$'\t'*}"
+                safe_remove "$REPO_ROOT/$rel_path"
+                echo "Removed $rel_path"
+            done <<< "$selections"
+            ;;
+    esac
+}
+
+prompt_for_telegram_secret() {
+    local current_secret="$1"
+    local candidates=()
+    local items=("<none>")
+    local selected secret
+    local select_args=()
+
+    while IFS= read -r secret; do
+        [[ -n "$secret" ]] || continue
+        candidates+=("$secret")
+    done < <(telegram_secret_candidates)
+
+    if [[ -n "$current_secret" ]] && ! has_line "$current_secret" "$(printf '%s\n' "${candidates[@]}")"; then
+        items+=("$current_secret")
+    fi
+
+    items+=("${candidates[@]}")
+    [[ ${#items[@]} -gt 1 ]] || return 0
+
+    if [[ -n "$current_secret" ]]; then
+        select_args=(--select "$current_secret")
+    else
+        select_args=(--select "<none>")
+    fi
+
+    selected=$(printf '%s\n' "${items[@]}" | fzf \
+        --prompt="Telegram bot secret for $(basename "$REPO_ROOT")> " \
+        --header="Select a repo-specific Telegram token to materialize into .claude/channels/telegram/.env at Claude launch" \
+        "${select_args[@]}" 2>/dev/null) || {
+            printf '%s\n' "$current_secret"
+            return 0
+        }
+
+    if [[ "$selected" == "<none>" ]]; then
+        printf '\n'
+    else
+        printf '%s\n' "$selected"
+    fi
+}
+
+show_current_bindings() {
+    local export_bindings=()
+    local telegram_secret binding
+
+    if [[ ! -f "$ENVRC" ]]; then
+        echo "No .envrc in $REPO_ROOT"
+        return 0
+    fi
+
+    mapfile -t export_bindings < <(current_envrc_export_bindings)
+    mapfile -t export_bindings < <(normalize_export_bindings "${export_bindings[@]}")
+    telegram_secret=$(current_envrc_telegram_secret)
+
+    echo "Current .envrc bindings for $REPO_ROOT:"
+    if [[ ${#export_bindings[@]} -eq 0 && -z "$telegram_secret" ]]; then
+        echo "  (none)"
+        return 0
+    fi
+
+    for binding in "${export_bindings[@]}"; do
+        echo "  $(binding_display "$binding")"
+    done
+
+    if [[ -n "$telegram_secret" ]]; then
+        echo "  telegram-file TELEGRAM_BOT_TOKEN <- $telegram_secret"
+    fi
+}
+
+if [[ $# -eq 0 ]]; then
+    selected_export_bindings=()
+    include_all=false
+    telegram_secret=""
+else
+    selected_export_bindings=()
+    include_all=false
+    telegram_secret=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help|-h)
+                usage
+                exit 0
+                ;;
+            --list)
+                show_current_bindings
+                exit 0
+                ;;
+            --clean)
+                if [[ -f "$ENVRC" ]]; then
+                    safe_remove "$ENVRC"
+                    echo "Removed $ENVRC"
+                else
+                    echo "No .envrc to remove in $REPO_ROOT"
+                fi
+                exit 0
+                ;;
+            --all)
+                include_all=true
+                shift
+                ;;
+            --telegram-secret)
+                [[ $# -ge 2 ]] || die "--telegram-secret requires SECRET_NAME"
+                validate_env_name "$2"
+                telegram_secret="$2"
+                shift 2
+                ;;
+            *)
+                selected_export_bindings+=("$1")
+                shift
+                ;;
+        esac
+    done
+fi
+
+if [[ "$include_all" == true ]]; then
+    while IFS= read -r key; do
+        [[ -n "$key" ]] && selected_export_bindings+=("$key")
+    done < <(list_sensitive_keys)
+fi
+
+if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$telegram_secret" ]]; then
+    command -v fzf >/dev/null 2>&1 || die "fzf required. Use: setup-envrc KEY1 KEY2 or ENV=SECRET"
+
+    load_secrets_cache
+    mapfile -t current_export_bindings < <(current_envrc_export_bindings)
+    mapfile -t current_export_bindings < <(normalize_export_bindings "${current_export_bindings[@]}")
+    current_telegram_secret=$(current_envrc_telegram_secret)
+    select_args=()
+    menu_items=()
+
+    while IFS= read -r key; do
+        [[ -n "$key" ]] || continue
+        item="$key"
+        existing_binding=$(binding_for_secret "$key" "${current_export_bindings[@]}" || true)
+
+        if [[ -n "$existing_binding" ]]; then
+            item+=$'\t'
+            if [[ "$(binding_env_key "$existing_binding")" == "$key" ]]; then
+                item+="[envrc]"
+            else
+                item+="[envrc->$(binding_env_key "$existing_binding")]"
+            fi
+            select_args+=(--select "$item")
+        fi
+
+        menu_items+=("$item")
+    done < <(list_sensitive_keys)
+
+    selected=$(printf '%s\n' "${menu_items[@]}" | fzf --multi \
+        --prompt="Select secrets for $(basename "$REPO_ROOT")> " \
+        --header="TAB to toggle, ENTER to confirm. Use ENV=SECRET non-interactively for renamed env vars." \
+        --with-nth=1 \
+        "${select_args[@]}" 2>/dev/null) || exit 0
+
+    while IFS= read -r item; do
+        [[ -n "$item" ]] || continue
+        secret_name="${item%%$'\t'*}"
+        existing_binding=$(binding_for_secret "$secret_name" "${current_export_bindings[@]}" || true)
+        if [[ -n "$existing_binding" ]]; then
+            selected_export_bindings+=("$existing_binding")
+        else
+            selected_export_bindings+=("$secret_name")
+        fi
+    done <<< "$selected"
+
+    if repo_uses_telegram_plugin || [[ -n "$current_telegram_secret" ]]; then
+        telegram_secret=$(prompt_for_telegram_secret "$current_telegram_secret")
+    fi
+fi
+
+mapfile -t selected_export_bindings < <(normalize_export_bindings "${selected_export_bindings[@]}")
+
+if [[ -n "$telegram_secret" ]]; then
+    validate_env_name "$telegram_secret"
+fi
+
+if [[ ${#selected_export_bindings[@]} -eq 0 && -z "$telegram_secret" ]]; then
+    if [[ -f "$ENVRC" ]]; then
+        safe_remove "$ENVRC"
+        echo "No bindings selected; removed $ENVRC"
+    else
+        echo "No bindings selected; no .envrc written"
+    fi
+    exit 0
+fi
+
+write_envrc "$telegram_secret" "${selected_export_bindings[@]}"
+ensure_envrc_gitignored
+
+attempt_direnv_allow
+
+telegram_state_dir=""
+if [[ -n "$telegram_secret" || -d "$REPO_ROOT/.claude/channels/telegram" ]]; then
+    telegram_state_dir="$REPO_ROOT/.claude/channels/telegram"
+fi
+harden_repo_secret_permissions "$telegram_state_dir"
+
+load_secrets_cache
+print_env_file_summary "$telegram_secret" "${selected_export_bindings[@]}" || true
+offer_env_cleanup "$telegram_secret" "${selected_export_bindings[@]}"
+echo ""
+echo "${#selected_export_bindings[@]} export binding(s) scoped to $(basename "$REPO_ROOT")."
+if [[ -n "$telegram_secret" ]]; then
+    echo "Telegram plugin token will be materialized from $telegram_secret at Claude launch."
+fi

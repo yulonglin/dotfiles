@@ -27,6 +27,7 @@ fi
 # Load configuration and helpers
 source "$DOT_DIR/config.sh"
 source "$DOT_DIR/scripts/shared/helpers.sh"
+source "$DOT_DIR/scripts/helpers/dotfiles_secrets.sh"
 
 # ─── Help ─────────────────────────────────────────────────────────────────────
 
@@ -248,11 +249,12 @@ fi
 
 if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
     log_section "ENCRYPTED SECRETS (SOPS + age)"
-    enc="$DOT_DIR/config/secrets.env.enc"
-    out="$DOT_DIR/.secrets"
-    age_key="$HOME/.config/sops/age/keys.txt"
-    sops_yaml="$DOT_DIR/.sops.yaml"
+    secrets_dir="$(dotfiles_secrets_dir)"
+    enc="$(dotfiles_secrets_enc)"
+    age_key="$(dotfiles_secrets_age_key)"
+    sops_yaml="$(dotfiles_secrets_sops_config)"
 
+    log_info "secrets_dir=$secrets_dir"
     log_info "enc=$enc"
     log_info "age_key=$age_key"
     log_info "sops_yaml=$sops_yaml"
@@ -286,6 +288,7 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
         else
             # First machine: no key, no encrypted secrets — generate everything
             log_info "Setting up SOPS encryption (first time)..."
+            mkdir -p "$secrets_dir"
             mkdir -p "$(dirname "$age_key")"
             age-keygen -o "$age_key" 2>&1
             chmod 600 "$age_key"
@@ -312,6 +315,7 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
     # Ensure .sops.yaml has real public key (not placeholder)
     if [[ -n "$pub_key" ]]; then
         if [[ ! -f "$sops_yaml" ]] || grep -q 'age1\.\.\.' "$sops_yaml"; then
+            mkdir -p "$secrets_dir"
             cat > "$sops_yaml" <<SOPSYAML
 creation_rules:
   - path_regex: \\.enc\$
@@ -337,6 +341,7 @@ SOPSYAML
     # Create template encrypted file if missing
     if [[ ! -s "$enc" ]] && [[ -n "$pub_key" ]] && cmd_exists sops; then
         log_info "Creating template encrypted secrets..."
+        mkdir -p "$secrets_dir"
         local tmpfile="${TMPDIR:-/tmp}/secrets_template.env"
         printf '%s\n' \
             "# Encrypted API keys (edit with: secrets-edit)" \
@@ -364,23 +369,30 @@ SOPSYAML
         log_info "Encrypted secrets already exist at $enc"
     fi
 
-    # Decrypt if key and encrypted file both exist
+    # Verify decryptability without writing plaintext to disk.
     if [[ -s "$enc" ]] && cmd_exists sops && [[ -f "$age_key" ]]; then
-        log_info "Decrypting $enc → $out"
+        log_info "Verifying on-demand decryption for $enc"
         export SOPS_AGE_KEY_FILE="$age_key"
         sops_dotenv() { sops --input-type dotenv --output-type dotenv "$@"; }
         local sops_err
-        if sops_err=$( (umask 077 && sops_dotenv -d --config "$sops_yaml" "$enc" > "${out}.tmp") 2>&1); then
-            mv "${out}.tmp" "$out"
-            log_success "Decrypted secrets to $out"
-            # Symlink .env → .secrets so tools expecting .env read SOPS-managed secrets
-            ln -sf .secrets "$DOT_DIR/.env"
-            log_success "Symlinked .env → .secrets"
+        if sops_err=$( (sops_dotenv -d --config "$sops_yaml" "$enc" >/dev/null) 2>&1 ); then
+            log_success "Encrypted secrets can be decrypted on demand"
         else
-            rm -f "${out}.tmp"
             log_warning "Failed to decrypt secrets"
             log_error "sops error: $sops_err"
         fi
+    fi
+
+    dotfiles_secrets_harden_permissions
+    log_info "Hardened private secret file permissions"
+
+    if [[ -e "$DOT_DIR/.secrets" ]]; then
+        log_warning "Legacy plaintext secrets still exist at $DOT_DIR/.secrets"
+        log_warning "  Safe to delete after confirming your repos use setup-envrc/.envrc"
+    fi
+    if [[ -e "$DOT_DIR/.env" || -L "$DOT_DIR/.env" ]]; then
+        log_warning "Legacy local .env still exists at $DOT_DIR/.env"
+        log_warning "  setup-envrc can compare it against encrypted secrets and remove it"
     fi
 fi
 
