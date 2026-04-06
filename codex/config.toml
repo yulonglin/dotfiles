@@ -6,6 +6,13 @@ url = "https://mcp.linear.app/mcp"
 [mcp_servers.figma]
 url = "https://mcp.figma.com/mcp"
 
+[mcp_servers.notion]
+url = "https://mcp.notion.com/mcp"
+
+[mcp_servers.playwright]
+args = ["@playwright/mcp@latest"]
+command = "npx"
+
 [projects."/Users/yulong/code/automated-researchers"]
 trust_level = "trusted"
 
@@ -29,3 +36,15 @@ trust_level = "trusted"
 
 [notice.model_migrations]
 "gpt-5.3-codex" = "gpt-5.4"
+
+[plugins."google-calendar@openai-curated"]
+enabled = true
+
+[plugins."slack@openai-curated"]
+enabled = true
+
+[plugins."google-drive@openai-curated"]
+enabled = true
+
+[plugins."github@openai-curated"]
+enabled = true
