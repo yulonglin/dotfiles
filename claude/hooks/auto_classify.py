@@ -79,7 +79,7 @@ SAFE_SHELL_COMMANDS: set[str] = {
     # Text processing (read-only — sed/sd without -i, awk)
     "sed", "awk", "cut", "tr", "sort", "uniq", "diff", "comm", "paste",
     "column", "fmt", "fold", "rev", "tac", "nl", "expand", "unexpand",
-    "jq", "jless",
+    "jq", "jless", "sd",
     # Shell builtins / control flow
     "echo", "printf", "test", "[", "true", "false", ":", "read",
     "break", "continue", "return", "exit", "shift", "set",
@@ -97,7 +97,6 @@ SAFE_SHELL_COMMANDS: set[str] = {
 }
 # NOTE: python, python3, uv, rm, kill intentionally excluded — they are
 # handled by FAST_ALLOW_PATTERNS for specific safe invocations only.
-# sd intentionally excluded — it modifies files in-place by default.
 
 # Commands that are destructive or need review even inside compound statements.
 # Denylist checked BEFORE any allowlist — makes the denylist authoritative.
@@ -105,7 +104,6 @@ UNSAFE_SHELL_PATTERNS: list[re.Pattern[str]] = [
     # Destructive file operations
     re.compile(r"\brm\s+-r"),           # rm -rf, rm -r (recursive delete)
     re.compile(r"\bsed\s+-i\b"),        # in-place file modification
-    re.compile(r"\bsd\b"),              # sd modifies files in-place by default
     # Network access
     re.compile(r"\bcurl\b"),
     re.compile(r"\bwget\b"),
