@@ -183,9 +183,6 @@ secrets-init-bws() {
 
     mkdir -p "$token_dir"
     chmod 700 "$token_dir"
-    printf '%s\n' "$bws_token" > "$token_file"
-    chmod 600 "$token_file"
-    echo "Token saved to $token_file"
 
     echo "Testing bws connectivity..."
     if BWS_ACCESS_TOKEN="$bws_token" bws secret list &>/dev/null; then
@@ -193,8 +190,13 @@ secrets-init-bws() {
         count=$(BWS_ACCESS_TOKEN="$bws_token" bws secret list 2>/dev/null | \
             python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo "?")
         echo "Success — $count secret(s) accessible"
+        printf '%s\n' "$bws_token" > "$token_file"
+        chmod 600 "$token_file"
+        echo "Token saved to $token_file"
     else
-        echo "Warning: bws secret list failed — check your token" >&2
+        echo "Error: bws secret list failed — token NOT saved" >&2
+        echo "Check your token and try again" >&2
+        return 1
     fi
 
     dotfiles_secrets_harden_permissions
