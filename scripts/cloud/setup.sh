@@ -315,8 +315,9 @@ if [ ! -f "$BWS_TOKEN_FILE" ]; then
     fi
     if [[ -n "$BWS_TOKEN" ]]; then
         # Smoke test before saving — catch typos early
-        # run_as uses sudo -i which resets env, so pass token inside the command
-        if run_as "BWS_ACCESS_TOKEN='$BWS_TOKEN' bws secret list" &>/dev/null 2>&1; then
+        # Pass token via env to avoid leaking in process argv (visible via ps)
+        # sudo -i resets env, so use env(1) to inject it for the child process
+        if sudo -u "$USERNAME" env "BWS_ACCESS_TOKEN=$BWS_TOKEN" bws secret list &>/dev/null 2>&1; then
             run_as "mkdir -p $BWS_TOKEN_DIR && chmod 700 $BWS_TOKEN_DIR"
             printf '%s\n' "$BWS_TOKEN" | run_as "tee $BWS_TOKEN_FILE > /dev/null"
             run_as "chmod 600 $BWS_TOKEN_FILE"
@@ -324,6 +325,7 @@ if [ ! -f "$BWS_TOKEN_FILE" ]; then
         else
             warn "BWS token failed connectivity test — not saved. Run secrets-init-bws after login to retry"
         fi
+        unset BWS_TOKEN
     else
         log "Skipping — run secrets-init-bws after login"
     fi

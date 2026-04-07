@@ -226,6 +226,8 @@ secrets-init-bws() {
         return 1
     fi
 
+    unset bws_token
+
     dotfiles_secrets_harden_permissions
 
     echo ""
