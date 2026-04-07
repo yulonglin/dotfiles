@@ -72,6 +72,33 @@ secrets-edit() {
     dotfiles_secrets_harden_permissions
 }
 secrets-init() {
+    local choice
+    if [[ $# -gt 0 ]]; then
+        choice="$1"
+    elif command -v fzf >/dev/null 2>&1; then
+        choice=$(printf '%s\n' \
+            "bws	Set up Bitwarden Secrets Manager (recommended, multi-machine)" \
+            "sops	Set up SOPS + age (offline, file-based)" \
+            "project	Configure secrets for current repo (setup-envrc)" \
+            | fzf --prompt="secrets-init> " \
+                  --header="What do you want to set up?" \
+                  --with-nth=1.. \
+                  --delimiter=$'\t' \
+            | cut -f1) || return 0
+    else
+        echo "Usage: secrets-init [bws|sops|project]" >&2
+        return 1
+    fi
+
+    case "$choice" in
+        bws)     secrets-init-bws ;;
+        sops)    secrets-init-sops ;;
+        project) setup-envrc ;;
+        *)       echo "Unknown option: $choice. Use 'bws', 'sops', or 'project'." >&2; return 1 ;;
+    esac
+}
+
+secrets-init-sops() {
     local age_key
     local age_dir
     local secrets_dir
@@ -212,7 +239,7 @@ secrets-init-project() {
     local age_key="$HOME/.config/sops/age/keys.txt"
 
     if [[ ! -f "$age_key" ]]; then
-        echo "No age key found at $age_key — run secrets-init first"
+        echo "No age key found at $age_key — run secrets-init sops first"
         return 1
     fi
 
