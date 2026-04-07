@@ -314,10 +314,15 @@ if [ ! -f "$BWS_TOKEN_FILE" ]; then
         BWS_TOKEN=""
     fi
     if [[ -n "$BWS_TOKEN" ]]; then
-        run_as "mkdir -p $BWS_TOKEN_DIR && chmod 700 $BWS_TOKEN_DIR"
-        printf '%s\n' "$BWS_TOKEN" | run_as "tee $BWS_TOKEN_FILE > /dev/null"
-        run_as "chmod 600 $BWS_TOKEN_FILE"
-        ok "BWS token saved"
+        # Smoke test before saving — catch typos early
+        if BWS_ACCESS_TOKEN="$BWS_TOKEN" run_as "bws secret list" &>/dev/null 2>&1; then
+            run_as "mkdir -p $BWS_TOKEN_DIR && chmod 700 $BWS_TOKEN_DIR"
+            printf '%s\n' "$BWS_TOKEN" | run_as "tee $BWS_TOKEN_FILE > /dev/null"
+            run_as "chmod 600 $BWS_TOKEN_FILE"
+            ok "BWS token saved and verified"
+        else
+            warn "BWS token failed connectivity test — not saved. Run secrets-init-bws after login to retry"
+        fi
     else
         log "Skipping — run secrets-init-bws after login"
     fi
