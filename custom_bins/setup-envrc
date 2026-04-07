@@ -61,11 +61,14 @@ normalize_value() {
 
     if [[ "$value" =~ ^\"(.*)\"$ ]]; then
         value="${BASH_REMATCH[1]}"
+        # Process \\ first via sentinel to prevent \\n being misread as \n
+        local sentinel=$'\x01'
+        value="${value//\\\\/$sentinel}"
         value="${value//\\n/$'\n'}"
         value="${value//\\r/$'\r'}"
         value="${value//\\t/$'\t'}"
         value="${value//\\\"/\"}"
-        value="${value//\\\\/\\}"
+        value="${value//$sentinel/\\}"
     elif [[ "$value" =~ ^\'(.*)\'$ ]]; then
         value="${BASH_REMATCH[1]}"
         value="${value//\\\'/\'}"
