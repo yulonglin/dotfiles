@@ -319,8 +319,20 @@ write_envrc() {
             printf '# setup-envrc telegram-secret: %s\n' "$telegram_secret"
         fi
         printf 'watch_file %q\n' "$helper_bin"
-        printf 'watch_file %q\n' "$secrets_enc"
-        printf 'watch_file %q\n' "$sops_config"
+        # Watch backend-specific files so direnv re-evals on token/config changes
+        local _backend
+        _backend=$("$helper_bin" paths 2>/dev/null | sed -n 's/^DOTFILES_SECRETS_BACKEND=//p')
+        case "$_backend" in
+            bws)
+                local _bws_token
+                _bws_token=$("$helper_bin" paths 2>/dev/null | sed -n 's/^BWS_TOKEN_FILE=//p')
+                [[ -n "$_bws_token" ]] && printf 'watch_file %q\n' "$_bws_token"
+                ;;
+            sops|*)
+                printf 'watch_file %q\n' "$secrets_enc"
+                printf 'watch_file %q\n' "$sops_config"
+                ;;
+        esac
         printf 'DOTFILES_SECRETS_BIN=%q\n' "$helper_bin"
 
         if [[ ${#required_secrets[@]} -gt 0 ]]; then
