@@ -156,6 +156,53 @@ YAML
     echo "  2. sync-gist             # Sync SSH config + git identity"
     echo "  3. setup-envrc           # Export selected keys in the current repo"
 }
+secrets-init-bws() {
+    local token_file token_dir
+    token_file=$(dotfiles_secrets_bws_token_file)
+    token_dir=$(dirname "$token_file")
+
+    echo "BWS token file: $token_file"
+
+    if [[ -f "$token_file" ]]; then
+        echo "BWS token already exists."
+        echo -n "Overwrite? [y/N] "
+        read -r answer
+        [[ "$answer" =~ ^[Yy]$ ]] || return 0
+    fi
+
+    echo ""
+    echo "Paste your BWS access token (from Bitwarden Secrets Manager):"
+    echo "(machine account token, starts with 0., leave empty to skip)"
+    read -rs bws_token
+    echo ""
+
+    if [[ -z "$bws_token" ]]; then
+        echo "Skipped"
+        return 0
+    fi
+
+    mkdir -p "$token_dir"
+    chmod 700 "$token_dir"
+    printf '%s\n' "$bws_token" > "$token_file"
+    chmod 600 "$token_file"
+    echo "Token saved to $token_file"
+
+    echo "Testing bws connectivity..."
+    if BWS_ACCESS_TOKEN="$bws_token" bws secret list &>/dev/null; then
+        local count
+        count=$(BWS_ACCESS_TOKEN="$bws_token" bws secret list 2>/dev/null | \
+            python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo "?")
+        echo "Success — $count secret(s) accessible"
+    else
+        echo "Warning: bws secret list failed — check your token" >&2
+    fi
+
+    dotfiles_secrets_harden_permissions
+
+    echo ""
+    echo "Backend: $(dotfiles_secrets_backend)"
+    echo "Next: dotfiles-secrets keys / setup-envrc"
+}
 secrets-init-project() {
     local sops_yaml=".sops.yaml"
     local enc="secrets.env.enc"
