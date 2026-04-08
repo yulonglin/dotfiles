@@ -1,42 +1,53 @@
-# Browser Automation Tools (Tentative — Evolving)
+# Browser Automation Tools
 
-Comparison of available browser automation tools. This is a working document — update as understanding improves.
+Comparison of available browser automation tools.
 
 ## Tool Landscape
 
-| Tool | By | Protocol | Auth Strategy | Claude Code Integration | Status |
-|------|-----|----------|---------------|------------------------|--------|
-| **agent-browser** | Vercel Labs | CDP (Chrome DevTools Protocol) | `--profile Default` reuses Chrome login; `--session-name` for persistence; state save/load | CLI via Bash (needs `dangerouslyDisableSandbox`) | Installed, tested |
-| **dev-browser** | Do Browser / sawyerhood | Playwright (via sandboxed WASM) | `--auto-connect` to running Chrome; `--profile` | Plugin in `dev-browser-marketplace`, skill exists | Plugin installed, CLI not installed |
-| **claude-in-chrome** | ? | Chrome extension + MCP | Already logged in (your actual browser tabs) | MCP tools (`mcp__claude-in-chrome__*`) | Extension active |
-| **Playwright** | Microsoft | CDP + custom protocol | Manual login → `storageState` save/load; `bunx playwright` | Plugin in `claude-plugins-official` (?) | Available via bunx |
-| **chrome-devtools** | ? | CDP MCP server | Connects to specific page via CDP | MCP tools (`mcp__chrome-devtools__*`) | Active but limited |
+| Tool | Type | Protocol | Auth Strategy | How Loaded | Status |
+|------|------|----------|---------------|------------|--------|
+| **claude-in-chrome** | MCP (Chrome ext) | Chrome extension | Already logged in (your tabs) | Dynamic — extension connects | Active |
+| **chrome-devtools** | MCP (Chrome ext) | CDP | Connects to page via CDP | Dynamic — extension connects | Active |
+| **agent-browser** | CLI | CDP (Playwright) | `--profile Default` reuses Chrome login | `brew`/`npm -g` (always available) | Installed |
+| **dev-browser** | Plugin | Playwright (sandboxed) | `--auto-connect` to Chrome | Plugin (`automation` profile) | Installed |
+| **playwright** | Plugin (MCP) | CDP + custom | `storageState` save/load | Plugin (`automation` profile) | Installed |
 
-## When to Use What (Tentative)
+## Context Profiles
+
+| Profile | Includes | Use Case |
+|---------|----------|----------|
+| `frontend` | typescript-lsp | Frontend dev (no browser tools) |
+| `automation` | dev-browser, playwright | Browser automation tasks |
+| `design` | figma, frontend-design, ui-ux-pro-max, etc. | Visual design |
+
+MCP tools (claude-in-chrome, chrome-devtools) are always available when their Chrome extensions are running — not controlled by profiles.
+agent-browser is a CLI — always available, not a plugin.
+
+Skills: `agent-browser`, `chrome-devtools`, `claude-in-chrome` (in `~/.claude/skills/`).
+
+## When to Use What
 
 ```
 Need browser automation?
-├─ Already have tabs open in Chrome? Want quick interaction?
+├─ Quick interaction with open tabs?
 │   └─ claude-in-chrome (MCP) — no setup, uses your browser
-│      Pros: instant access, logged in
+│      Pros: instant, already logged in
 │      Cons: clicking unreliable on SPAs, screenshots consume context
 │
-├─ Need to read/write on authenticated sites (Telegram, WhatsApp, etc.)?
+├─ Authenticated sites (Telegram, WhatsApp, etc.)?
 │   └─ agent-browser --profile Default — reuses Chrome login state
-│      Pros: snapshot/@ref pattern great for AI, CSS selectors work, batch commands
+│      Pros: snapshot/@ref pattern great for AI, CSS selectors, batch commands
 │      Cons: needs dangerouslyDisableSandbox, SPA navigation quirks
-│      Pattern: open URL → snapshot -i → click 'css-selector' → eval JS → extract
 │
-├─ Need scripted Playwright API (locators, network interception, complex flows)?
-│   └─ dev-browser — sandboxed Playwright scripts
+├─ Scripted Playwright API (locators, network interception)?
+│   └─ dev-browser — sandboxed Playwright scripts (automation profile)
 │      Pros: full Playwright API, auto-connect to Chrome
-│      Cons: CLI not installed yet, heavier setup
 │
-├─ Need E2E testing or complex multi-step flows?
-│   └─ Playwright directly — bunx playwright test
+├─ E2E testing or complex multi-step flows?
+│   └─ Playwright directly — bunx playwright test (automation profile)
 │
-└─ Need DevTools-style inspection (performance, network, memory)?
-    └─ chrome-devtools MCP — evaluate_script, take_snapshot
+└─ DevTools-level inspection (performance, network, memory)?
+    └─ chrome-devtools MCP — evaluate_script, take_snapshot, lighthouse
 ```
 
 ## agent-browser Tips (From Testing)
