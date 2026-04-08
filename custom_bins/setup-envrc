@@ -30,13 +30,20 @@ die() {
 usage() {
     cat <<'EOF'
 Usage:
-  setup-envrc
-  setup-envrc KEY1 KEY2
-  setup-envrc ENV_VAR=SECRET_NAME
-  setup-envrc --telegram-secret SECRET_NAME
-  setup-envrc --all
-  setup-envrc --list
-  setup-envrc --clean
+  setup-envrc                         Interactive picker (fzf)
+  setup-envrc KEY1 KEY2               Export secrets with matching env names
+  setup-envrc ENV_VAR=SECRET_NAME     Map a secret to a custom env var name
+  setup-envrc --telegram-secret NAME  Materialize Telegram token at Claude launch
+  setup-envrc --all                   Export every managed key
+  setup-envrc --list                  Show current repo .envrc bindings
+  setup-envrc --clean                 Remove .envrc and nested .env files
+
+BWS key naming convention:
+  ENV_VAR_NAME - description          The part before " - " becomes the env var.
+  Examples:
+    ANTHROPIC_API_KEY - mats        → exports as ANTHROPIC_API_KEY
+    OPENAI_API_KEY - research       → exports as OPENAI_API_KEY
+    HF_TOKEN                        → exports as HF_TOKEN (no description)
 EOF
 }
 
@@ -683,17 +690,35 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
     select_args=()
     menu_items=()
 
+    # Load metadata (env_name\tbws_key\tnote) for rich display
+    declare -A meta_bws_key meta_note
+    while IFS=$'\t' read -r m_env m_bws m_note; do
+        [[ -n "$m_env" ]] || continue
+        meta_bws_key["$m_env"]="$m_bws"
+        meta_note["$m_env"]="$m_note"
+    done < <("$SECRETS_HELPER" keys-meta 2>/dev/null)
+
     while IFS= read -r key; do
         [[ -n "$key" ]] || continue
+        # Build display: "ENV_NAME  (bws: original-key)  note text  [envrc]"
         item="$key"
-        existing_binding=$(binding_for_secret "$key" "${current_export_bindings[@]}" || true)
+        bws_key="${meta_bws_key[$key]:-}"
+        note="${meta_note[$key]:-}"
 
+        # Show BWS key if it differs from env name
+        if [[ -n "$bws_key" && "$bws_key" != "$key" ]]; then
+            item+=$'\t'"(bws: $bws_key)"
+        fi
+        if [[ -n "$note" ]]; then
+            item+=$'\t'"$note"
+        fi
+
+        existing_binding=$(binding_for_secret "$key" "${current_export_bindings[@]}" || true)
         if [[ -n "$existing_binding" ]]; then
-            item+=$'\t'
             if [[ "$(binding_env_key "$existing_binding")" == "$key" ]]; then
-                item+="[envrc]"
+                item+=$'\t'"[envrc]"
             else
-                item+="[envrc->$(binding_env_key "$existing_binding")]"
+                item+=$'\t'"[envrc->$(binding_env_key "$existing_binding")]"
             fi
             select_args+=(--select "$item")
         fi
@@ -701,10 +726,14 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
         menu_items+=("$item")
     done < <(list_sensitive_keys)
 
+    if [[ ${#menu_items[@]} -eq 0 ]]; then
+        die "No secrets found in $(dotfiles_secrets_backend) backend. Add secrets first."
+    fi
+
     selected=$(printf '%s\n' "${menu_items[@]}" | fzf --multi \
         --prompt="Select secrets for $(basename "$REPO_ROOT")> " \
-        --header="TAB to toggle, ENTER to confirm. Use ENV=SECRET non-interactively for renamed env vars." \
-        --with-nth=1 \
+        --header="TAB to toggle, ENTER to confirm. Columns: ENV_NAME  (bws key)  note  [status]" \
+        --delimiter=$'\t' \
         "${select_args[@]}" 2>/dev/null) || exit 0
 
     while IFS= read -r item; do
