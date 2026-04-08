@@ -108,7 +108,7 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/safety-and-git.md` — Zero tolerance table, git safety, destructive command warnings
 - `rules/workflow-defaults.md` — Task/agent organization, file creation policy, output strategy
 - `rules/context-management.md` — PDF/large file rules, bulk edit constraints, verbose output handling
-- `rules/agents-and-delegation.md` — Subagent strategy, delegation decision tree, team escalation
+- `rules/agents-and-delegation.md` — Subagent strategy, delegation decision tree, factual verification, team escalation
 - `rules/coding-conventions.md` — Python/TypeScript/shell basics, language selection, package managers
 - `rules/refusal-alternatives.md` — Friction prevention: ambiguity resolution, non-destructive editing, tool failure pivots, over-caution fixes
 - `rules/multi-agent-coordination.md` — Multi-agent awareness, `.agent-claims` chope mechanism, conflict resolution
@@ -163,7 +163,7 @@ Rules:
 ```bash
 claude-tools context                    # Show current state / apply context.yaml
 claude-tools context code               # Software projects
-claude-tools context code web python    # Compose multiple profiles
+claude-tools context code frontend python    # Compose multiple profiles
 claude-tools context --list             # Show active plugins and available profiles
 claude-tools context --clean            # Remove project plugin config
 claude-tools context --sync [-v]        # Register + update + install wanted + prune orphans

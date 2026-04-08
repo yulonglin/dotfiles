@@ -1,6 +1,6 @@
 ---
 name: claude-in-chrome
-description: "Claude-in-Chrome MCP tools for interacting with your actual browser tabs. Use for quick browser tasks: read page content, navigate, fill forms, find text, take screenshots, create GIFs, execute JS. Available when the Claude-in-Chrome extension is running. Triggers: 'check this page', 'read the page', 'what's on this tab', browser interaction with existing tabs."
+description: "Claude-in-Chrome MCP tools for interacting with your actual browser tabs. Use for quick browser tasks: read page content, navigate, fill forms, find text, create GIFs, execute JS. Available when the Claude-in-Chrome extension is running. Triggers: 'check this page', 'read the page', 'what's on this tab', browser interaction with existing tabs. For screenshots, use chrome-devtools instead."
 ---
 
 # claude-in-chrome MCP Tools
