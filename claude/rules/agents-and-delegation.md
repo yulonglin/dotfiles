@@ -107,6 +107,22 @@ prompt: "You MUST use the Bash tool to run: gemini -p '@src/ Summarize the archi
 
 **Exception:** The `classifyHandoffIfNeeded` bug (below) — when an agent falsely reports failure, verify artifacts on disk.
 
+## Factual Verification (Never Delegate)
+
+**Problem:** Agents without web search tools answer factual questions confidently from training data, which can be wrong. Delegating "does X exist?" to a general-purpose agent that returns 0 tool_uses means it guessed — and you relayed the guess as fact.
+
+**Rule:** For factual verification ("does tool X have flag Y?", "does library Z support feature W?"), verify using the **most authoritative source** in main context. Never delegate to an agent.
+
+| Verification type | Best source | Fallback | NOT this |
+|-------------------|-------------|----------|----------|
+| Does a CLI flag/feature exist? | `tool --help` / `man tool` | WebSearch | Agent (may lack tools) |
+| Is a library/API claim accurate? | Official docs (Context7) | WebSearch | Agent answering from training data |
+| Current version/release info | `tool --version` / package registry | WebSearch | Agent (stale knowledge) |
+
+**Diagnostic:** If any agent returns with 0 tool_uses on a lookup task, its answer is unverified — do not relay it as fact.
+
+**User experience is strong signal.** If the user says "I've been using X for days," treat that as strong evidence and verify locally (`--help`, test command) rather than contradicting with unverified claims.
+
 ## Agent Teams (Escalation)
 
 For multi-agent communication, see `~/.claude/docs/agent-teams-guide.md`.

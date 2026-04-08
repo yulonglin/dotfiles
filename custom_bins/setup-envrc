@@ -18,8 +18,8 @@ SECRETS_HELPER="$DOT_DIR/custom_bins/dotfiles-secrets"
 source "$DOT_DIR/scripts/helpers/dotfiles_secrets.sh"
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 ENVRC="$REPO_ROOT/.envrc"
-KEY_PATTERN='API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL'
-TELEGRAM_SECRET_PATTERN='TELEGRAM|BOT_TOKEN'
+KEY_PATTERN='API.?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL'
+TELEGRAM_SECRET_PATTERN='TELEGRAM|BOT.?TOKEN'
 SECRETS_CACHE=""
 
 die() {
@@ -122,16 +122,21 @@ get_value_from_content() {
 
 list_sensitive_keys() {
     load_secrets_cache
-    printf '%s\n' "$SECRETS_CACHE" \
-        | sed -n 's/^[[:space:]]*\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' \
-        | grep -E "$KEY_PATTERN" \
-        | sort -u || true
+    local keys
+    keys=$(printf '%s\n' "$SECRETS_CACHE" \
+        | sed -n 's/^[[:space:]]*\([A-Za-z_][A-Za-z0-9_-]*\)=.*/\1/p')
+    # BWS entries are all secrets; only filter SOPS dotenv (which may have non-secret config)
+    if [[ "$(dotfiles_secrets_backend)" != "bws" ]]; then
+        keys=$(printf '%s\n' "$keys" | grep -iE "$KEY_PATTERN")
+    fi
+    printf '%s\n' "$keys" | sort -u || true
 }
 
 validate_env_name() {
     local name="$1"
     [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "Invalid environment variable name: $name"
 }
+
 
 binding_env_key() {
     local binding="$1"
@@ -157,6 +162,7 @@ canonicalize_binding() {
 
     env_key=$(binding_env_key "$binding")
     secret_key=$(binding_secret_key "$binding")
+
     validate_env_name "$env_key"
     validate_env_name "$secret_key"
 
@@ -285,7 +291,7 @@ repo_uses_telegram_plugin() {
 }
 
 telegram_secret_candidates() {
-    list_sensitive_keys | grep -E "$TELEGRAM_SECRET_PATTERN" || true
+    list_sensitive_keys | grep -iE "$TELEGRAM_SECRET_PATTERN" || true
 }
 
 write_envrc() {

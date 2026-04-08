@@ -603,6 +603,7 @@
         "~/.Trash",
         "~/.cache/uv",
         "/tmp/tmux-*",
+        "/var/folders",
         "/run/user/*/pueue*.socket"
       ]
     },

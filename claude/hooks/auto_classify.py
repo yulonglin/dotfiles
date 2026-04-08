@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -21,6 +22,7 @@ MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS = 100
 TIMEOUT_SECONDS = 12
 LOG_PATH = os.path.expanduser("~/.cache/claude/auto-classify.log")
+NO_KEY_FLAG = os.path.expanduser("~/.cache/claude/auto-classify-no-key-warned")
 MAX_INPUT_CHARS = 2000
 MAX_LOG_BYTES = 1_000_000  # 1MB
 MAX_USER_MSG_CHARS = 200  # Truncation limit per user message
@@ -67,7 +69,10 @@ FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # gws (Google Workspace CLI) — read and create operations are safe.
     # Deletes are caught by block_gws_delete.sh PreToolUse hook.
     # Verbs: list, get, search, export, create, insert, send (with --draft)
-    (re.compile(r"^gws\s+\S+\s+.*\b(list|get|search|export|create|insert)\b"), "gws read/create operation"),
+    # gws read-only: verb must appear as a standalone token (not inside JSON/flags),
+    # and no shell chaining operators allowed. Write verbs (create, insert, update,
+    # send) go through auto_classify for proper intent evaluation.
+    (re.compile(r"^gws\s+(?:(?!&&|[|]{2}|;)\S+\s+)*(list|get|search|export)\s"), "gws read-only operation"),
 ]
 
 
@@ -485,6 +490,27 @@ def main() -> None:
     tool_input = hook_input.get("tool_input", {})
     cwd = hook_input.get("cwd", "")
     transcript_path = hook_input.get("transcript_path", "")
+
+    # Early key check: warn loudly once per session if no API key.
+    # Flag file prevents spamming every tool call. Reset after 1 hour (new session).
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            should_warn = not os.path.exists(NO_KEY_FLAG)
+            if not should_warn:
+                age = time.time() - os.path.getmtime(NO_KEY_FLAG)
+                should_warn = age > 3600
+            if should_warn:
+                os.makedirs(os.path.dirname(NO_KEY_FLAG), exist_ok=True)
+                with open(NO_KEY_FLAG, "w") as f:
+                    f.write("")
+                emit_warning(
+                    "auto-classify has NO API key — all non-trivial commands will fall back to manual prompts.",
+                    "with-anthropic-key.sh could not inject ANTHROPIC_API_KEY.",
+                    "Run: setup-envrc ANTHROPIC_API_KEY  (in dotfiles repo), or check BWS token.",
+                )
+                return  # Single JSON payload per hook invocation
+        except OSError:
+            pass  # Can't write flag file (sandbox/permissions) — skip warning, fail open
 
     # Fast-path: bypass API for known-safe Bash patterns
     if tool_name == "Bash":

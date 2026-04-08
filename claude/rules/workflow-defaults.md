@@ -40,6 +40,31 @@ For work taking >30 minutes:
 - User can monitor progress with Ctrl+T
 - Notify user when background work completes
 
+## Config-First Responses (CRITICAL)
+
+When the user gives behavioral instructions ("allow X", "always do Y", "stop doing Z"), the **primary action** is updating durable config — not saving to memory.
+
+| Instruction type | Primary action | Memory? |
+|-----------------|---------------|---------|
+| Permission change ("allow gws reads") | Update `settings.json` permissions + `auto_classify.py` | Optional supplementary |
+| Behavioral rule ("always review before commit") | Add/update `rules/*.md` | Optional supplementary |
+| Hook/automation ("block X before Y") | Add hook in `settings.json` + script | No |
+| Tool preference ("use WebFetch not curl") | Add to relevant `rules/*.md` | Optional supplementary |
+| Project convention | Update project `CLAUDE.md` | No |
+| Global convention | Update global `CLAUDE.md` or `rules/*.md` | No |
+
+**Memory is for context that can't be encoded as config** — user identity, project history, external references. If the instruction can be a rule, setting, or hook, it should be.
+
+**Decision tree:**
+```
+User gives instruction →
+├─ Can it be a permission rule? → settings.json permissions
+├─ Can it be a hook? → settings.json hooks + script
+├─ Can it be a behavioral rule? → rules/*.md
+├─ Can it be a CLAUDE.md update? → CLAUDE.md
+└─ None of the above → Memory (last resort)
+```
+
 ## File Creation Policy (CRITICAL)
 
 - **NEVER create new files** unless absolutely necessary
