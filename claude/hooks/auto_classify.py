@@ -23,7 +23,8 @@ TIMEOUT_SECONDS = 12
 LOG_PATH = os.path.expanduser("~/.cache/claude/auto-classify.log")
 MAX_INPUT_CHARS = 2000
 MAX_LOG_BYTES = 1_000_000  # 1MB
-MAX_USER_MSG_CHARS = 200  # Truncation limit for user message context
+MAX_USER_MSG_CHARS = 200  # Truncation limit per user message
+MAX_USER_MESSAGES = 3  # Number of recent user messages to include
 
 # GitHub owners (users + orgs) whose repos are trusted for relaxed permissions.
 # Add orgs you work with regularly. Personal repos get extra relaxations.
@@ -63,6 +64,10 @@ FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(rf"^{_CMD_PREFIX}python3?\s+-m\s+inspect_ai\b"), "inspect_ai module"),
     # .agent-claims/ operations (multi-agent coordination, ephemeral files only)
     (re.compile(r"^(?:mkdir\s+-p|cat|ls|rm\s+-f|printf|for\b).*\.agent-claims"), "agent claims coordination"),
+    # gws (Google Workspace CLI) — read and create operations are safe.
+    # Deletes are caught by block_gws_delete.sh PreToolUse hook.
+    # Verbs: list, get, search, export, create, insert, send (with --draft)
+    (re.compile(r"^gws\s+\S+\s+.*\b(list|get|search|export|create|insert)\b"), "gws read/create operation"),
 ]
 
 
@@ -124,10 +129,20 @@ UNSAFE_SHELL_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\beval\b"),
     re.compile(r"\bexec\b"),
     re.compile(r"\bsource\b"),
+    # Script execution (should go through auto_classify for repo trust check)
+    re.compile(r"\bpython3?\b"),
+    re.compile(r"\buv\s+run\b"),
+    re.compile(r"\bcargo\s+run\b"),
+    re.compile(r"\bgo\s+run\b"),
+    re.compile(r"\bjust\b"),
+    re.compile(r"\bmake\b"),
     # Package installation (typosquat risk)
     re.compile(r"\bpip\s+install\b"),
     re.compile(r"\bnpm\s+install\b"),
     re.compile(r"\buv\s+pip\s+install\b"),
+    # tmux command injection (can send arbitrary input to other sessions)
+    re.compile(r"\btmux\s+send-keys?\b"),
+    re.compile(r"\btmux\s+send\b"),
 ]
 
 # Regex to extract command names from shell text (first word of each statement).
@@ -339,14 +354,21 @@ def classify_api_problem(status: int, error_type: str, message: str) -> AutoClas
     )
 
 
-def extract_last_user_message(transcript_path: str) -> str:
-    """Extract the last user message from the transcript JSONL. Fails silently."""
+def extract_recent_user_messages(transcript_path: str, count: int = MAX_USER_MESSAGES) -> str:
+    """Extract the N most recent user messages from the transcript JSONL.
+
+    Returns them oldest-first so the LLM sees conversational flow.
+    Only includes human messages (not assistant, tool_use, or tool_result).
+    Fails silently — returns empty string on any error.
+    """
     try:
         with open(transcript_path, "rb") as f:
             f.seek(0, 2)
-            f.seek(max(0, f.tell() - 20_000))
+            # Read more tail to find enough user messages (they're sparse)
+            f.seek(max(0, f.tell() - 60_000))
             tail = f.read().decode("utf-8", errors="replace")
 
+        messages: list[str] = []
         for line in reversed(tail.strip().splitlines()):
             try:
                 entry = json.loads(line)
@@ -356,7 +378,16 @@ def extract_last_user_message(transcript_path: str) -> str:
                 continue
             text = _extract_text(entry.get("message", ""))
             if text:
-                return text[:MAX_USER_MSG_CHARS] + "..." if len(text) > MAX_USER_MSG_CHARS else text
+                truncated = text[:MAX_USER_MSG_CHARS] + "..." if len(text) > MAX_USER_MSG_CHARS else text
+                messages.append(truncated)
+                if len(messages) >= count:
+                    break
+
+        # Reverse to oldest-first order
+        messages.reverse()
+        if len(messages) == 1:
+            return messages[0]
+        return "\n---\n".join(f"[{i+1}/{len(messages)}] {m}" for i, m in enumerate(messages))
     except Exception:
         pass
     return ""
@@ -392,7 +423,7 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_messag
 
     user_msg = f"Tool: {tool_name}\nInput: {input_str}\nWorking directory: {cwd}"
     if user_message:
-        user_msg += f"\nUser's request: {user_message}"
+        user_msg += f"\nUser's recent messages:\n{user_message}"
 
     body = json.dumps({
         "model": MODEL,
@@ -497,7 +528,7 @@ def main() -> None:
 
     user_message = ""
     if INCLUDE_USER_MESSAGE and transcript_path:
-        user_message = extract_last_user_message(transcript_path)
+        user_message = extract_recent_user_messages(transcript_path)
 
     try:
         result = classify(tool_name, tool_input, cwd, rules, user_message)

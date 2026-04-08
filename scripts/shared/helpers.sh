@@ -369,30 +369,30 @@ install_direnv() {
 install_bws() {
     if is_installed bws; then return 0; fi
     log_info "Installing bws (Bitwarden Secrets Manager CLI)..."
-    curl -fsSL "https://bitwarden.com/secrets/install" | sh 2>/dev/null || {
-        log_warning "bws install script failed, trying GitHub release..."
-        local bws_arch tmpd
+    local bws_version="2.0.0" tmpd url
+    tmpd=$(mktemp -d)
+    mkdir -p "$HOME/.local/bin"
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        url="https://github.com/bitwarden/sdk-sm/releases/download/bws-v${bws_version}/bws-macos-universal-${bws_version}.zip"
+    else
+        local arch
         case "$(uname -m)" in
-            x86_64)  bws_arch="x86_64" ;;
-            aarch64) bws_arch="aarch64" ;;
-            arm64)   bws_arch="aarch64" ;;  # macOS
-            *)       log_warning "Unsupported architecture for bws"; return 1 ;;
+            x86_64)  arch="x86_64" ;;
+            aarch64|arm64) arch="aarch64" ;;
+            *)       log_warning "Unsupported architecture for bws"; rm -rf "$tmpd"; return 1 ;;
         esac
-        tmpd=$(mktemp -d)
-        mkdir -p "$HOME/.local/bin"
-        local os_suffix
-        if is_macos; then
-            os_suffix="apple-darwin"
-        else
-            os_suffix="unknown-linux-gnu"
-        fi
-        curl -fsSL "https://github.com/bitwarden/sdk-internal/releases/latest/download/bws-${bws_arch}-${os_suffix}.zip" \
-            -o "$tmpd/bws.zip" && \
-            unzip -o "$tmpd/bws.zip" -d "$HOME/.local/bin/" && \
-            chmod +x "$HOME/.local/bin/bws" && \
-            log_success "bws installed" || { log_warning "bws installation failed"; rm -rf "$tmpd"; return 1; }
+        url="https://github.com/bitwarden/sdk-sm/releases/download/bws-v${bws_version}/bws-${arch}-unknown-linux-gnu-${bws_version}.zip"
+    fi
+    if curl -fsSL "$url" -o "$tmpd/bws.zip" && \
+       unzip -o "$tmpd/bws.zip" -d "$HOME/.local/bin/" && \
+       chmod +x "$HOME/.local/bin/bws"; then
+        log_success "bws installed"
+    else
+        log_warning "bws installation failed"
         rm -rf "$tmpd"
-    }
+        return 1
+    fi
+    rm -rf "$tmpd"
 }
 
 install_claude_code() {

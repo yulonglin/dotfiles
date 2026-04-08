@@ -184,6 +184,12 @@ YAML
     echo "  3. setup-envrc           # Export selected keys in the current repo"
 }
 secrets-init-bws() {
+    if ! command -v bws &>/dev/null; then
+        echo "Error: bws CLI not found — install it first:" >&2
+        echo "  ./install.sh --minimal --core     # includes bws" >&2
+        return 1
+    fi
+
     local token_file token_dir
     token_file=$(dotfiles_secrets_bws_token_file)
     token_dir=$(dirname "$token_file")
@@ -212,9 +218,10 @@ secrets-init-bws() {
     chmod 700 "$token_dir"
 
     echo "Testing bws connectivity..."
-    if BWS_ACCESS_TOKEN="$bws_token" bws secret list &>/dev/null; then
+    local bws_output
+    if bws_output=$(BWS_ACCESS_TOKEN="$bws_token" bws secret list 2>/dev/null); then
         local count
-        count=$(BWS_ACCESS_TOKEN="$bws_token" bws secret list 2>/dev/null | \
+        count=$(printf '%s' "$bws_output" | \
             python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo "?")
         echo "Success — $count secret(s) accessible"
         printf '%s\n' "$bws_token" > "$token_file"
@@ -223,6 +230,7 @@ secrets-init-bws() {
     else
         echo "Error: bws secret list failed — token NOT saved" >&2
         echo "Check your token and try again" >&2
+        unset bws_token
         return 1
     fi
 
@@ -1296,6 +1304,9 @@ if command -v socket &>/dev/null; then
     alias npm="socket npm"
     alias npx="socket npx"
 fi
+
+# Mosh: preserve scrollback by skipping alternate screen init
+alias mosh='mosh --no-init'
 
 # SSH wrapper: nudge towards et/mosh for interactive sessions
 # Neither is a drop-in replacement (different ports, tunnel syntax, no -i/-L/-D flags),
