@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # List saved agents with timestamps and IDs
 # Usage: claude-agent-list
 

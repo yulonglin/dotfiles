@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # readlink -f but copy the result to the clipboard
 set -euo pipefail
 path=$(readlink -f $@)

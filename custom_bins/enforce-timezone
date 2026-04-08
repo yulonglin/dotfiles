@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Bedtime timezone enforcement daemon
 # Detects and reverts timezone bypass attempts (manual TZ change, NTP disable, auto-TZ disable)
 # Runs as root via LaunchDaemon every 2 min + on /etc/localtime changes

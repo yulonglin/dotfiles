@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # shellcheck shell=bash
 # Configure repo-scoped secret exports via .envrc.
 # Usage:

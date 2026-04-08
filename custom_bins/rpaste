@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Paste local clipboard content to remote file via SSH
 set -euo pipefail
 
