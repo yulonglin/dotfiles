@@ -252,7 +252,7 @@ Profiles are managed via the `claude-tools context` CLI — compose multiple pro
 
 ```bash
 claude-tools context code               # Software projects
-claude-tools context code web python    # Compose multiple profiles
+claude-tools context code frontend python    # Compose multiple profiles
 claude-tools context --list             # Show active plugins and available profiles
 ```
 

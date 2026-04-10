@@ -119,6 +119,10 @@ profiles:
     comment: "Adds swift-lsp"
     enable: [swift-lsp]
 
-  web:
-    comment: "Web dev + browser automation"
-    enable: [dev-browser, playwright, typescript-lsp]
+  frontend:
+    comment: "Frontend dev"
+    enable: [typescript-lsp]
+
+  automation:
+    comment: "Browser automation (playwright, dev-browser)"
+    enable: [dev-browser, playwright]

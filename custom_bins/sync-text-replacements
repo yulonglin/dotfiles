@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Auto-generated wrapper for scheduled text replacements sync
 set -euo pipefail
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Enforce keyboard repeat settings (macOS Tahoe workaround)
 # Tahoe spontaneously resets these values after reboot/sleep
 [[ "$(uname -s)" != "Darwin" ]] && exit 0

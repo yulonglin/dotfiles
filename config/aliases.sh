@@ -72,6 +72,33 @@ secrets-edit() {
     dotfiles_secrets_harden_permissions
 }
 secrets-init() {
+    local choice
+    if [[ $# -gt 0 ]]; then
+        choice="$1"
+    elif command -v fzf >/dev/null 2>&1; then
+        choice=$(printf '%s\n' \
+            "bws	Set up Bitwarden Secrets Manager (recommended, multi-machine)" \
+            "sops	Set up SOPS + age (offline, file-based)" \
+            "project	Configure secrets for current repo (setup-envrc)" \
+            | fzf --prompt="secrets-init> " \
+                  --header="What do you want to set up?" \
+                  --with-nth=1.. \
+                  --delimiter=$'\t' \
+            | cut -f1) || return 0
+    else
+        echo "Usage: secrets-init [bws|sops|project]" >&2
+        return 1
+    fi
+
+    case "$choice" in
+        bws)     secrets-init-bws ;;
+        sops)    secrets-init-sops ;;
+        project) setup-envrc ;;
+        *)       echo "Unknown option: $choice. Use 'bws', 'sops', or 'project'." >&2; return 1 ;;
+    esac
+}
+
+secrets-init-sops() {
     local age_key
     local age_dir
     local secrets_dir
@@ -156,6 +183,65 @@ YAML
     echo "  2. sync-gist             # Sync SSH config + git identity"
     echo "  3. setup-envrc           # Export selected keys in the current repo"
 }
+secrets-init-bws() {
+    if ! command -v bws &>/dev/null; then
+        echo "Error: bws CLI not found — install it first:" >&2
+        echo "  ./install.sh --minimal --core     # includes bws" >&2
+        return 1
+    fi
+
+    local token_file token_dir
+    token_file=$(dotfiles_secrets_bws_token_file)
+    token_dir=$(dirname "$token_file")
+
+    echo "BWS token file: $token_file"
+
+    if [[ -f "$token_file" ]]; then
+        echo "BWS token already exists."
+        echo -n "Overwrite? [y/N] "
+        read -r answer
+        [[ "$answer" =~ ^[Yy]$ ]] || return 0
+    fi
+
+    echo ""
+    echo "Paste your BWS access token (from Bitwarden Secrets Manager):"
+    echo "(machine account token, starts with 0., leave empty to skip)"
+    read -rs bws_token
+    echo ""
+
+    if [[ -z "$bws_token" ]]; then
+        echo "Skipped"
+        return 0
+    fi
+
+    mkdir -p "$token_dir"
+    chmod 700 "$token_dir"
+
+    echo "Testing bws connectivity..."
+    local bws_output
+    if bws_output=$(BWS_ACCESS_TOKEN="$bws_token" bws secret list 2>/dev/null); then
+        local count
+        count=$(printf '%s' "$bws_output" | \
+            python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo "?")
+        echo "Success — $count secret(s) accessible"
+        printf '%s\n' "$bws_token" > "$token_file"
+        chmod 600 "$token_file"
+        echo "Token saved to $token_file"
+    else
+        echo "Error: bws secret list failed — token NOT saved" >&2
+        echo "Check your token and try again" >&2
+        unset bws_token
+        return 1
+    fi
+
+    unset bws_token
+
+    dotfiles_secrets_harden_permissions
+
+    echo ""
+    echo "Backend: $(dotfiles_secrets_backend)"
+    echo "Next: dotfiles-secrets keys / setup-envrc"
+}
 secrets-init-project() {
     local sops_yaml=".sops.yaml"
     local enc="secrets.env.enc"
@@ -163,7 +249,7 @@ secrets-init-project() {
     local age_key="$HOME/.config/sops/age/keys.txt"
 
     if [[ ! -f "$age_key" ]]; then
-        echo "No age key found at $age_key — run secrets-init first"
+        echo "No age key found at $age_key — run secrets-init sops first"
         return 1
     fi
 
@@ -1218,6 +1304,9 @@ if command -v socket &>/dev/null; then
     alias npm="socket npm"
     alias npx="socket npx"
 fi
+
+# Mosh: preserve scrollback by skipping alternate screen init
+alias mosh='mosh --no-init'
 
 # SSH wrapper: nudge towards et/mosh for interactive sessions
 # Neither is a drop-in replacement (different ports, tunnel syntax, no -i/-L/-D flags),

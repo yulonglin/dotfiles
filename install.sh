@@ -140,13 +140,15 @@ if is_linux; then
         "gitleaks|install_gitleaks" \
         "sops|install_sops" \
         "age|install_age" \
-        "direnv|install_direnv"
+        "direnv|install_direnv" \
+        "bws|install_bws"
 else
     # macOS: brew has a global lock, must run sequentially
     install_gitleaks
     install_sops
     install_age
     install_direnv
+    install_bws
 fi
 
 # ─── uv (Python Package Manager) ──────────────────────────────────────────────

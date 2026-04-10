@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Start tmux with a clean environment, preserving only essentials
 # This prevents pollution of tmux's global environment
 

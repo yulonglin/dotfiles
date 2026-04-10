@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Save agent ID with descriptive name and UTC timestamp
 # Usage: claude-agent-save <agent-id> <description>
 

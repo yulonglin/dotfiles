@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Resume a saved agent by name
 # Usage: claude-agent-resume [name]
 # If no name provided, resumes the last saved agent

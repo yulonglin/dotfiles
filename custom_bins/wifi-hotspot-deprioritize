@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Keep iPhone hotspot at lowest WiFi priority
 # Ensures any newly joined WiFi network is preferred over hotspot
 #

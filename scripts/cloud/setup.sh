@@ -301,6 +301,38 @@ else
     ok "Age key already exists"
 fi
 
+# ─── BWS access token ──────────────────────────────────────────────────────
+step "BWS access token (Bitwarden Secrets Manager)"
+BWS_TOKEN_DIR="$USER_HOME/.config/bws"
+BWS_TOKEN_FILE="$BWS_TOKEN_DIR/token"
+if [ ! -f "$BWS_TOKEN_FILE" ]; then
+    echo "Paste your BWS access token (from Bitwarden Secrets Manager), leave empty to skip:"
+    if [[ -e /dev/tty ]]; then
+        read -rs BWS_TOKEN </dev/tty
+    else
+        warn "Non-interactive — skipping BWS token. Run: secrets-init-bws"
+        BWS_TOKEN=""
+    fi
+    if [[ -n "$BWS_TOKEN" ]]; then
+        # Smoke test before saving — catch typos early
+        # Pass token via env to avoid leaking in process argv (visible via ps)
+        # sudo -i resets env, so use env(1) to inject it for the child process
+        if sudo -u "$USERNAME" env "BWS_ACCESS_TOKEN=$BWS_TOKEN" bws secret list &>/dev/null 2>&1; then
+            run_as "mkdir -p $BWS_TOKEN_DIR && chmod 700 $BWS_TOKEN_DIR"
+            printf '%s\n' "$BWS_TOKEN" | run_as "tee $BWS_TOKEN_FILE > /dev/null"
+            run_as "chmod 600 $BWS_TOKEN_FILE"
+            ok "BWS token saved and verified"
+        else
+            warn "BWS token failed connectivity test — not saved. Run secrets-init-bws after login to retry"
+        fi
+        unset BWS_TOKEN
+    else
+        log "Skipping — run secrets-init-bws after login"
+    fi
+else
+    ok "BWS token already exists"
+fi
+
 # ─── deploy.sh ───────────────────────────────────────────────────────────────
 step "deploy.sh"
 run_as "cd $DOTFILES && ./deploy.sh"

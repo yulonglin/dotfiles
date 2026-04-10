@@ -366,6 +366,35 @@ install_direnv() {
     fi
 }
 
+install_bws() {
+    if is_installed bws; then return 0; fi
+    log_info "Installing bws (Bitwarden Secrets Manager CLI)..."
+    local bws_version="2.0.0" tmpd url
+    tmpd=$(mktemp -d)
+    mkdir -p "$HOME/.local/bin"
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        url="https://github.com/bitwarden/sdk-sm/releases/download/bws-v${bws_version}/bws-macos-universal-${bws_version}.zip"
+    else
+        local arch
+        case "$(uname -m)" in
+            x86_64)  arch="x86_64" ;;
+            aarch64|arm64) arch="aarch64" ;;
+            *)       log_warning "Unsupported architecture for bws"; rm -rf "$tmpd"; return 1 ;;
+        esac
+        url="https://github.com/bitwarden/sdk-sm/releases/download/bws-v${bws_version}/bws-${arch}-unknown-linux-gnu-${bws_version}.zip"
+    fi
+    if curl -fsSL "$url" -o "$tmpd/bws.zip" && \
+       unzip -o "$tmpd/bws.zip" -d "$HOME/.local/bin/" && \
+       chmod +x "$HOME/.local/bin/bws"; then
+        log_success "bws installed"
+    else
+        log_warning "bws installation failed"
+        rm -rf "$tmpd"
+        return 1
+    fi
+    rm -rf "$tmpd"
+}
+
 install_claude_code() {
     if is_installed claude; then return 0; fi
     log_info "Installing Claude Code..."
