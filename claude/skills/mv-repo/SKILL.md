@@ -41,20 +41,39 @@ Path encoding: absolute path with `/` replaced by `-`, leading `-`. Example:
 - `/home/yulong/code/nudge` → `-home-yulong-code-nudge`
 - `/home/yulong/code/bots/nudge` → `-home-yulong-code-bots-nudge`
 
-Include worktree variants (dirs that start with the old prefix).
+Include worktree variants (dirs matching `${old_encoded}--*`).
 
 ```bash
 # For each repo, rename matching project dirs
-old_encoded="-$(echo "$old_abs_path" | tr '/' '-' | sed 's/^-//')"
-new_encoded="-$(echo "$new_abs_path" | tr '/' '-' | sed 's/^-//')"
-for dir in ~/.claude/projects/${old_encoded}*; do
+# Strip trailing slash to avoid encoding artifacts
+old_abs_path="${old_abs_path%/}"
+new_abs_path="${new_abs_path%/}"
+old_encoded="$(echo "$old_abs_path" | tr '/' '-')"
+new_encoded="$(echo "$new_abs_path" | tr '/' '-')"
+# Match exact dir and worktree variants (--*), not unrelated repos
+for dir in ~/.claude/projects/${old_encoded} ~/.claude/projects/${old_encoded}--*; do
   [ -d "$dir" ] || continue
   new_dir="${dir/$old_encoded/$new_encoded}"
   mv "$dir" "$new_dir"
 done
 ```
 
-### 5. Grep for stale path references
+### 5. Handle git worktrees
+
+Moving a repo breaks git worktree references. Check and handle:
+
+```bash
+git -C <new-path> worktree list
+```
+
+For each worktree:
+- **Path doesn't exist** (stale) → `git worktree prune` removes it
+- **Path exists, has changes** → warn user; they may want to update the worktree's `.git` file to point to the new main repo location
+- **Path exists, only `.claude/settings.json` changes** → safe to prune (just Claude Code runtime state)
+
+For most moves, `git worktree prune` is sufficient — worktrees under the old repo's `.claude/worktrees/` moved with the repo and their internal `.git` pointers auto-resolve. Worktrees outside the repo tree (e.g., in `/tmp/`) need manual `.git` file updates.
+
+### 6. Grep for stale path references
 
 Search for old paths across common locations:
 - `~/code/` (all repos — CLAUDE.md, specs, scripts, configs)
@@ -70,7 +89,7 @@ For each match:
 - Offer to fix (replace old path with new path)
 - Skip `tmp/`, `archive/`, `.git/`, `node_modules/` matches — these are throwaway
 
-### 6. Update tmux sessions
+### 7. Update tmux sessions
 
 Check for tmux sessions named after the repo:
 
@@ -84,7 +103,7 @@ If found, send `cd` to the new path:
 tmux send-keys -t <session> "cd <new-path>" Enter
 ```
 
-### 7. Remind about manual steps
+### 8. Remind about manual steps
 
 After completing all automated steps, remind the user about:
 - **Crontab entries**: `crontab -l | grep <old-path>` — update manually with `crontab -e`
