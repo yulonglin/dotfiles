@@ -32,14 +32,29 @@ git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
 # --- Check 1: Did a sync recently fail? ---
 # Block hard — working tree may be contaminated.
 
-if [[ -d "$git_dir/rebase-merge" ]] || [[ -d "$git_dir/rebase-apply" ]] || [[ -f "$git_dir/MERGE_HEAD" ]]; then
+if [[ -d "$git_dir/rebase-merge" ]] || [[ -d "$git_dir/rebase-apply" ]]; then
     cat <<WARN
 {
   "decision": "block",
-  "reason": "SYNC GUARD: A rebase or merge is in progress. Resolve or abort it before committing.\n\nCheck: git status\nAbort rebase: git rebase --abort\nAbort merge: git merge --abort"
+  "reason": "SYNC GUARD: A rebase is in progress. Resolve or abort it before committing.\n\nCheck: git status\nAbort rebase: git rebase --abort"
 }
 WARN
     exit 0
+fi
+
+# Allow merge completion commits — if MERGE_HEAD exists but no unmerged files,
+# the commit finishes the merge. Only block if conflicts remain.
+if [[ -f "$git_dir/MERGE_HEAD" ]]; then
+    unmerged=$(git ls-files --unmerged 2>/dev/null | head -1)
+    if [[ -n "$unmerged" ]]; then
+        cat <<WARN
+{
+  "decision": "block",
+  "reason": "SYNC GUARD: Merge has unresolved conflicts. Resolve them before committing.\n\nCheck: git status\nAbort merge: git merge --abort"
+}
+WARN
+        exit 0
+    fi
 fi
 
 marker="$git_dir/POST_SYNC_GUARD"
