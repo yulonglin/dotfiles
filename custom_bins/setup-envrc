@@ -335,6 +335,10 @@ write_envrc() {
             printf '# setup-envrc telegram-secret: %s\n' "$telegram_secret"
         fi
         printf 'watch_file %q\n' "$helper_bin"
+        # Watch the secrets cache file so direnv reloads when background refresh lands
+        local _cache_path
+        _cache_path=$("$helper_bin" cache-path 2>/dev/null)
+        [[ -n "$_cache_path" ]] && printf 'watch_file %q\n' "$_cache_path"
         # Watch ALL backend files so direnv detects backend switches (SOPS→BWS or vice versa)
         local _paths_output
         _paths_output=$("$helper_bin" paths 2>/dev/null)
