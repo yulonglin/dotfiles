@@ -112,6 +112,7 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/coding-conventions.md` — Python/TypeScript/shell basics, language selection, package managers
 - `rules/refusal-alternatives.md` — Friction prevention: ambiguity resolution, non-destructive editing, tool failure pivots, over-caution fixes
 - `rules/multi-agent-coordination.md` — Multi-agent awareness, `.agent-claims` chope mechanism, conflict resolution
+- `rules/research-integrity.md` — No circular reasoning, report all results, no shortcut hacks, label/score/analysis separation
 
 ## Knowledge Docs (On-Demand)
 

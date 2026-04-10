@@ -57,6 +57,8 @@ _CMD_PREFIX = _DIRENV_PREFIX + _UV_PREFIX
 
 FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # python -c / python3 -c with multiline code (Haiku false-positives on # comments)
+    # Only at start of command — piped python3 -c is NOT safe to fast-allow because
+    # it bypasses UNSAFE_SHELL_PATTERNS checking on the upstream command.
     (re.compile(rf"^{_CMD_PREFIX}python3?\s+-c\s"), "python -c one-liner check"),
     # inspect eval/experiment commands (AI safety research tooling)
     (re.compile(rf"^{_CMD_PREFIX}inspect\s+(eval|run|log|list|info|view|score)\b"), "inspect eval/experiment"),
@@ -162,6 +164,26 @@ def _is_compound_shell_safe(command: str) -> bool:
                    and f"{c}=" not in command]
 
     return bool(actual_cmds) and all(c in SAFE_SHELL_COMMANDS for c in actual_cmds)
+
+
+# Regex to collapse inline code arguments (-c "..." / -e '...') that confuse
+# Haiku when truncated mid-string (# becomes a "shell comment" false positive).
+# Preserves the command structure so Haiku can classify the surrounding shell.
+_INLINE_CODE_RE = re.compile(
+    r"""(python3?|ruby|perl|node)\s+(-[ce])\s+"""         # interpreter + flag
+    r"""(["'])(.*?)\3""",                                  # quoted body
+    re.DOTALL,
+)
+
+
+def _simplify_bash_for_classify(command: str) -> str:
+    """Replace inline code bodies with a placeholder to avoid false positives.
+
+    `gws ... | python3 -c "import json\\n# comment\\n..."` becomes
+    `gws ... | python3 -c "(inline code)"` — Haiku classifies the shell
+    structure without tripping on Python/Ruby/Perl comments.
+    """
+    return _INLINE_CODE_RE.sub(r'\1 \2 \3(inline code)\3', command)
 
 
 def fast_classify_bash(command: str) -> str | None:
@@ -385,8 +407,13 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_messag
             "Run `secrets-edit` / `setup-envrc`, or fix `with-anthropic-key.sh` so the hook gets a key.",
         )
 
-    # Truncate large tool inputs (e.g., Write with full file content)
+    # Simplify tool inputs to reduce false positives and token usage
     input_str = json.dumps(tool_input, indent=2)
+    if tool_name == "Bash" and "command" in tool_input:
+        input_str = json.dumps(
+            {**tool_input, "command": _simplify_bash_for_classify(tool_input["command"])},
+            indent=2,
+        )
     if len(input_str) > MAX_INPUT_CHARS:
         input_str = input_str[:MAX_INPUT_CHARS] + "\n... (truncated)"
 

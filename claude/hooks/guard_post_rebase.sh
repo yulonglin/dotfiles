@@ -67,12 +67,9 @@ upstream=$(git rev-parse --abbrev-ref '@{u}' 2>/dev/null) || exit 0
 behind=$(git rev-list --count 'HEAD..@{u}' 2>/dev/null) || exit 0
 
 if (( behind > 0 )); then
-    cat <<WARN
-{
-  "decision": "block",
-  "reason": "SYNC GUARD: Remote ($upstream) has $behind unpulled commit(s). Sync BEFORE committing to avoid post-commit rebase contamination.\n\nYour uncommitted changes are safe. Sync first:\n1. git stash  (preserves your local changes)\n2. git pull --rebase  (or --no-rebase for merge commits)\n3. git stash pop\n4. Review any conflicts, then commit.\n\nTo skip this check: git fetch origin  (if you know refs are stale)"
-}
-WARN
+    # Warn but don't block — committing first then pulling/merging is fine.
+    # Blocking creates a deadlock when sandbox prevents stash/pull with dirty files.
+    echo "SYNC GUARD: Remote ($upstream) has $behind unpulled commit(s). Remember to pull after committing." >&2
     exit 0
 fi
 

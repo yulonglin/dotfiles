@@ -34,6 +34,12 @@ trust_level = "trusted"
 [projects."/Users/yulong/code/dotfiles"]
 trust_level = "trusted"
 
+[projects."/home/yulong/code/sandbagging-detection/dev"]
+trust_level = "trusted"
+
+[projects."/home/yulong/code/dotfiles"]
+trust_level = "trusted"
+
 [notice.model_migrations]
 "gpt-5.3-codex" = "gpt-5.4"
 
