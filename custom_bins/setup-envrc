@@ -526,7 +526,7 @@ offer_env_cleanup() {
         menu_items+=("$summary")
         rel_path="${env_file#"$REPO_ROOT"/}"
         if [[ "$rel_path" == ".env" ]]; then
-            default_select+=(--select "$summary")
+            default_select+=(--query ".env")
         fi
     done < <(find_env_files)
 
@@ -534,9 +534,9 @@ offer_env_cleanup() {
 
     selections=$(printf '%s\n' "${menu_items[@]}" | fzf --multi \
         --prompt="Select .env files to delete> " \
-        --header="Root .env is preselected. Review unmanaged vars before deleting nested files." \
+        --header="Root .env files shown first. Review unmanaged vars before deleting nested files." \
         --with-nth=1 \
-        "${default_select[@]}" 2>/dev/null) || return 0
+        "${default_select[@]}") || return 0
 
     [[ -n "$selections" ]] || return 0
 
@@ -580,15 +580,15 @@ prompt_for_telegram_secret() {
     [[ ${#items[@]} -gt 1 ]] || return 0
 
     if [[ -n "$current_secret" ]]; then
-        select_args=(--select "$current_secret")
+        select_args=(--query "$current_secret")
     else
-        select_args=(--select "<none>")
+        select_args=(--query "<none>")
     fi
 
     selected=$(printf '%s\n' "${items[@]}" | fzf \
         --prompt="Telegram bot secret for $(basename "$REPO_ROOT")> " \
         --header="Select a repo-specific Telegram token to materialize into .claude/channels/telegram/.env at Claude launch" \
-        "${select_args[@]}" 2>/dev/null) || {
+        "${select_args[@]}") || {
             printf '%s\n' "$current_secret"
             return 0
         }
@@ -687,7 +687,6 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
     mapfile -t current_export_bindings < <(current_envrc_export_bindings)
     mapfile -t current_export_bindings < <(normalize_export_bindings "${current_export_bindings[@]}")
     current_telegram_secret=$(current_envrc_telegram_secret)
-    select_args=()
     menu_items=()
 
     # Load metadata (env_name\tbws_key\tnote) for rich display
@@ -720,7 +719,7 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
             else
                 item+=$'\t'"[envrc->$(binding_env_key "$existing_binding")]"
             fi
-            select_args+=(--select "$item")
+            : # Item already tagged with [envrc] for visual indicator
         fi
 
         menu_items+=("$item")
@@ -732,9 +731,8 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
 
     selected=$(printf '%s\n' "${menu_items[@]}" | fzf --multi \
         --prompt="Select secrets for $(basename "$REPO_ROOT")> " \
-        --header="TAB to toggle, ENTER to confirm. Columns: ENV_NAME  (bws key)  note  [status]" \
-        --delimiter=$'\t' \
-        "${select_args[@]}" 2>/dev/null) || exit 0
+        --header="TAB to toggle, ENTER to confirm. Items tagged [envrc] are already configured." \
+        --delimiter=$'\t') || exit 0
 
     while IFS= read -r item; do
         [[ -n "$item" ]] || continue

@@ -3,6 +3,9 @@
 
 set -euo pipefail
 
+# Reset per-session flags
+rm -f ~/.cache/claude/auto-classify-no-key-warned
+
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
 CLAUDE_MD="$REPO_ROOT/CLAUDE.md"
 DOCS_DIR="${REPO_ROOT}/docs"  # Formerly ai_docs
