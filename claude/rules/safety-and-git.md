@@ -29,6 +29,7 @@ Before running deployment scripts, file system operations, or configuration task
 | `launchd` / `cron` setup | May not have permissions to install agents | Warn user upfront; suggest manual installation |
 | Heredocs in commands | Shell creates temp file in `/tmp` → blocked | Use `git commit -F` with file in `$TMPDIR`, or `printf` piping (see Git Commands) |
 | `.claude/settings*.json` | Sandbox denies write/unlink on Claude Code's own settings files | Cannot `git stash` or `git checkout` these files. Commit everything else in `.claude/` normally (`.gitignore`, `settings.json` staging works). For pull-rebase with dirty settings, push first or use `git push` directly instead of stash-pull-push |
+| `git pull/merge/stash` failing with "Read-only file system" or "unable to unlink" | Runtime `denyWithinAllow` blocks git's unlink+rename on `config/`, `.claude/settings.json`, and `.claude/skills/` — even though `git` is in `excludedCommands`. This is injected by Claude Code, not user-configurable | Use `dangerouslyDisableSandbox: true` on `git pull`, `git merge`, `git stash` when they fail with these errors. Retry immediately — don't try workarounds (patch files, sparse checkout) first |
 
 **When planning a task involving file system operations:** List anticipated sandbox issues BEFORE executing. Don't discover them one-by-one through failures — that wastes context and user patience.
 
