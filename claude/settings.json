@@ -255,11 +255,13 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/session_rename_commit.sh",
+            "if": "Bash(git commit*)",
             "timeout": 5
           },
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/mark_failed_sync.sh",
+            "if": "Bash(git *)",
             "timeout": 5
           }
         ]
@@ -277,12 +279,14 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/block_email_send.sh",
+            "if": "Bash(*gws*gmail*)",
             "timeout": 5,
             "statusMessage": "Checking for email send commands"
           },
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/block_gws_delete.sh",
+            "if": "Bash(*gws*)",
             "timeout": 5,
             "statusMessage": "Checking for GWS deletion commands"
           },
@@ -299,16 +303,19 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/guard_post_rebase.sh",
+            "if": "Bash(git commit*)",
             "timeout": 5
           },
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/guard_settings_commit.sh",
+            "if": "Bash(git *)",
             "timeout": 5
           },
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/nudge_experiment_jobs.sh",
+            "if": "Bash(*python*)",
             "timeout": 3
           },
           {
@@ -380,6 +387,16 @@
         ]
       },
       {
+        "matcher": "mcp__claude_ai_Gmail__gmail_create_draft",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_html_email.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
         "matcher": "EnterPlanMode",
         "hooks": [
           {
@@ -426,6 +443,11 @@
             "command": "$HOME/.claude/hooks/detect_repo_trust.sh",
             "timeout": 3,
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_git_root.sh",
+            "timeout": 3
           },
           {
             "type": "command",
