@@ -82,6 +82,7 @@ COMPONENTS:
     --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
     --vpn             Install NordVPN+Tailscale split tunnel daemon (macOS only)
     --pueue           Deploy Pueue + systemd resource management (Linux only)
+    --bws             Install Bitwarden Secrets Manager CLI (bws)
     --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
@@ -1134,6 +1135,56 @@ if [[ "$DEPLOY_FILE_APPS" == "true" ]] && is_macos; then
             "$tool_bin" "$EDITOR_BUNDLE_ID" "${EXTENSIONS[@]}"
             log_success "File associations set to $EDITOR_BUNDLE_ID"
         fi
+    fi
+fi
+
+# ─── Bitwarden Secrets Manager CLI ───────────────────────────────────────────
+
+if [[ "${DEPLOY_BWS:-false}" == "true" ]]; then
+    log_section "INSTALLING BITWARDEN SECRETS MANAGER CLI"
+
+    BWS_VERSION="2.0.0"
+    BWS_INSTALL_DIR="${HOME}/.local/bin"
+    BWS_INSTALLED_VERSION="$(bws --version 2>/dev/null | awk '{print $2}')"
+
+    # ── Install/upgrade binary ──
+    if [[ "$BWS_INSTALLED_VERSION" == "$BWS_VERSION" ]]; then
+        log_success "bws already at ${BWS_VERSION}"
+    else
+        [[ -n "$BWS_INSTALLED_VERSION" ]] && log_info "Upgrading bws ${BWS_INSTALLED_VERSION} → ${BWS_VERSION}"
+        mkdir -p "$BWS_INSTALL_DIR"
+
+        case "$(uname -s)-$(uname -m)" in
+            Darwin-arm64)  BWS_TARGET="bws-macos-universal-${BWS_VERSION}" ;;
+            Darwin-x86_64) BWS_TARGET="bws-macos-universal-${BWS_VERSION}" ;;
+            Linux-x86_64)  BWS_TARGET="bws-x86_64-unknown-linux-gnu-${BWS_VERSION}" ;;
+            Linux-aarch64) BWS_TARGET="bws-aarch64-unknown-linux-gnu-${BWS_VERSION}" ;;
+            *) log_warning "Unsupported platform for bws: $(uname -s)-$(uname -m)"; BWS_TARGET="" ;;
+        esac
+
+        if [[ -n "$BWS_TARGET" ]]; then
+            BWS_URL="https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VERSION}/${BWS_TARGET}.zip"
+            BWS_TMP="$(mktemp -d)"
+            trap 'rm -rf "$BWS_TMP"' EXIT
+            log_info "Downloading bws ${BWS_VERSION} from GitHub releases..."
+            if curl -sSL "$BWS_URL" -o "${BWS_TMP}/bws.zip" && \
+               unzip -qo "${BWS_TMP}/bws.zip" -d "${BWS_TMP}" && \
+               install -m 755 "${BWS_TMP}/bws" "${BWS_INSTALL_DIR}/bws"; then
+                log_success "bws installed to ${BWS_INSTALL_DIR}/bws: $(bws --version 2>/dev/null)"
+            else
+                log_warning "bws installation failed — try: cargo install bws"
+            fi
+            rm -rf "$BWS_TMP"
+            trap - EXIT
+        fi
+    fi
+
+    # ── Token setup hint ──
+    BWS_TOKEN_FILE="${BWS_TOKEN_FILE:-$HOME/.config/bws/token}"
+    if [[ -f "$BWS_TOKEN_FILE" ]]; then
+        log_success "BWS token already configured at ${BWS_TOKEN_FILE}"
+    else
+        log_info "Run 'secrets-init bws' to store your BWS access token"
     fi
 fi
 

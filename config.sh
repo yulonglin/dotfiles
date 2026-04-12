@@ -75,6 +75,7 @@ DEPLOY_REGISTRY=(
     "mouseless|Keyboard-driven mouse control|macos|true"
     "vpn|NordVPN + Tailscale split tunnel daemon|macos|true"
     "pueue|Pueue + systemd resource slices|linux|true"
+    "bws|Bitwarden Secrets Manager CLI|all|false"
     "serena|Serena MCP server config (symlinked)|all|true"
 )
 
