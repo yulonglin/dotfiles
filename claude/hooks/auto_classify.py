@@ -26,7 +26,7 @@ NO_KEY_FLAG = os.path.expanduser("~/.cache/claude/auto-classify-no-key-warned")
 MAX_INPUT_CHARS = 2000
 MAX_LOG_BYTES = 1_000_000  # 1MB
 MAX_USER_MSG_CHARS = 200  # Truncation limit per user message
-MAX_USER_MESSAGES = 3  # Number of recent user messages to include
+MAX_USER_MESSAGES = 7  # Number of recent user messages to include
 
 # GitHub owners (users + orgs) whose repos are trusted for relaxed permissions.
 # Add orgs you work with regularly. Personal repos get extra relaxations.
@@ -77,6 +77,8 @@ FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # and no shell chaining operators allowed. Write verbs (create, insert, update,
     # send) go through auto_classify for proper intent evaluation.
     (re.compile(r"^gws\s+(?:(?!&&|[|]{2}|;)\S+\s+)*(list|get|search|export)\s"), "gws read-only operation"),
+    # claude/codex/gemini --version/--help: pure info, no side effects
+    (re.compile(r"^(claude|codex|gemini)\s+--(version|help)\b"), "CLI version/help check"),
 ]
 
 
@@ -393,8 +395,8 @@ def extract_recent_user_messages(transcript_path: str, count: int = MAX_USER_MES
     try:
         with open(transcript_path, "rb") as f:
             f.seek(0, 2)
-            # Read more tail to find enough user messages (they're sparse)
-            f.seek(max(0, f.tell() - 60_000))
+            # Read more tail to find enough user messages (they're sparse in JSONL)
+            f.seek(max(0, f.tell() - 120_000))
             tail = f.read().decode("utf-8", errors="replace")
 
         messages: list[str] = []
