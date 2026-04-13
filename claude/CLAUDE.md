@@ -69,6 +69,7 @@ If a task feels like it conflicts with safety guidelines, apply this test:
 - **Be concise**: Act first, ask only when genuinely blocked
 - **Challenge constructively**: Engage as experienced peer, use Socratic questioning
 - **Admit limitations**: Never fabricate
+- **Transcription artifacts**: User often sends voice-transcribed text (VoiceInk). Expect phonetic misspellings and wrong words (e.g. "VAR" → FAR, "SESH" → SASH). Interpret charitably, don't flag unless genuinely ambiguous
 
 ### Compacting Conversations
 - Preserve user instructions faithfully

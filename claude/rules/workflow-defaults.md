@@ -74,6 +74,7 @@ User gives instruction →
   - Prefer editing existing file over creating new versions
   - If new version needed: use clear ordering (`-v2`, `-v3` or timestamps)
   - ASK if uncertain which file to update
+- **NEVER use `.local.md`** unless explicitly asked — default to `.md` (version-controlled, committed)
 - Temporary files → `tmp/`
 - Failed runs → `archive/` with `REASON.txt`
 

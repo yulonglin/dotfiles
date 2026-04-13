@@ -429,7 +429,12 @@ claude() {
         unset TELEGRAM_STATE_DIR
         unset DOTFILES_TELEGRAM_BOT_SECRET
     fi
-    if [[ -f ".claude/channels/imessage/.env" ]] || command -v imessage-mcp &>/dev/null; then
+    if [[ -f ".claude/channels/imessage/access.json" ]]; then
+        export IMESSAGE_STATE_DIR="${IMESSAGE_STATE_DIR:-$PWD/.claude/channels/imessage}"
+        channels+=(plugin:imessage@claude-plugins-official)
+    elif command -v imessage-mcp &>/dev/null; then
+        # No project-local channel — use global default
+        unset IMESSAGE_STATE_DIR
         channels+=(plugin:imessage@claude-plugins-official)
     fi
     if [[ ${#channels[@]} -gt 0 ]]; then

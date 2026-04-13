@@ -66,6 +66,8 @@ FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # inspect eval/experiment commands (AI safety research tooling)
     (re.compile(rf"^{_CMD_PREFIX}inspect\s+(eval|run|log|list|info|view|score)\b"), "inspect eval/experiment"),
     (re.compile(rf"^{_CMD_PREFIX}python3?\s+-m\s+inspect_ai\b"), "inspect_ai module"),
+    # codex exec --full-auto (read-only review mode, output to file)
+    (re.compile(r"codex\s+exec\s+--full-auto\b"), "codex exec review (full-auto)"),
     # .agent-claims/ operations (multi-agent coordination, ephemeral files only)
     (re.compile(r"^(?:mkdir\s+-p|cat|ls|rm\s+-f|printf|for\b).*\.agent-claims"), "agent claims coordination"),
     # gws (Google Workspace CLI) — read and create operations are safe.
