@@ -28,6 +28,9 @@
 !docs-search.md
 !task-management.md
 
+# Skill aliases (symlinks to other skill dirs — extensionless, so need explicit allow)
+!migrate-repo
+
 # === DENY LIST ===
 # Re-ignore files/dirs that !**/*.* would incorrectly allow
 
