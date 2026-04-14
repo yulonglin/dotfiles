@@ -73,6 +73,15 @@ if __name__ == "__main__":
   - `$(utc_date)` → outputs `DD-MM-YYYY` (e.g., `25-01-2026`)
   - `$(utc_timestamp)` → outputs `DD-MM-YYYY_HH-MM-SS` (e.g., `25-01-2026_14-30-22`)
 
+## Interactive TUI (fzf)
+
+All fzf-based pickers in dotfiles tooling should follow these conventions:
+
+- **Space to toggle** in multi-select (`--bind 'space:toggle'`) — TAB still works but space is primary
+- **Preview pane** for any picker where the item has viewable content (file contents, secret values, descriptions)
+- **Header** should mention key bindings: `SPACE to toggle, ENTER to confirm`
+- **`--with-nth`** to control display columns; keep raw data in hidden fields for extraction
+
 ## Shell Scripts
 
 - Run `shellcheck script.sh` before committing
