@@ -597,8 +597,8 @@ collect_unmanaged_keys() {
                 value=$(get_value_from_content "$file_content" "$key")
                 local masked
                 masked=$(mask_value "$value")
-                # RS-separated: key \x1e masked \x1e value \x1e source_file
-                printf '%s\x1e%s\x1e%s\x1e%s\n' "$key" "$masked" "$value" "$rel_path"
+                # NUL-terminated records, RS-separated fields (values may contain newlines)
+                printf '%s\x1e%s\x1e%s\x1e%s\0' "$key" "$masked" "$value" "$rel_path"
             fi
         done <<< "$file_keys"
     done < <(find_env_files)
@@ -614,7 +614,7 @@ offer_env_import() {
     command -v fzf >/dev/null 2>&1 || return 0
 
     local unmanaged_entries=()
-    while IFS= read -r entry; do
+    while IFS= read -r -d '' entry; do
         [[ -n "$entry" ]] || continue
         unmanaged_entries+=("$entry")
     done < <(collect_unmanaged_keys "$telegram_secret" "${export_bindings[@]}")
@@ -625,7 +625,8 @@ offer_env_import() {
     for entry in "${unmanaged_entries[@]}"; do
         local key masked source_file
         IFS="$RS" read -r key masked _ source_file <<< "$entry"
-        menu_items+=("$(printf '%s=%s\t(%s)' "$key" "$masked" "$source_file")")
+        # Hidden field 3 carries source_file for disambiguation
+        menu_items+=("$(printf '%s=%s\t(%s)\t%s' "$key" "$masked" "$source_file" "$source_file")")
     done
 
     local selections
@@ -634,7 +635,7 @@ offer_env_import() {
         --header="SPACE to toggle, ENTER to confirm. ESC to skip." \
         --bind 'space:toggle' \
         --delimiter=$'\t' \
-        --with-nth=1) || return 0
+        --with-nth=1,2) || return 0
 
     [[ -n "$selections" ]] || return 0
 
@@ -655,11 +656,14 @@ offer_env_import() {
     while IFS= read -r selected; do
         [[ -n "$selected" ]] || continue
         local sel_key="${selected%%=*}"
+        # Extract source_file from hidden 3rd tab field for disambiguation
+        local sel_source
+        sel_source=$(printf '%s' "$selected" | cut -f3)
 
         for entry in "${unmanaged_entries[@]}"; do
-            local entry_key entry_value entry_masked
-            IFS="$RS" read -r entry_key entry_masked entry_value _ <<< "$entry"
-            if [[ "$entry_key" == "$sel_key" ]]; then
+            local entry_key entry_value entry_masked entry_source
+            IFS="$RS" read -r entry_key entry_masked entry_value entry_source <<< "$entry"
+            if [[ "$entry_key" == "$sel_key" && "$entry_source" == "$sel_source" ]]; then
                 local import_key local_key
 
                 printf '\n  ─── Importing: %s%s%s=%s%s%s ───\n' \
@@ -754,7 +758,7 @@ offer_env_cleanup() {
         --header="SPACE to toggle, ENTER to confirm. Root .env files shown first." \
         --bind 'space:toggle' \
         --with-nth=1 \
-        --preview="cat $REPO_ROOT/{1}" \
+        --preview="cat \"$REPO_ROOT/{1}\"" \
         --preview-window=right:50%:wrap \
         "${default_select[@]}") || return 0
 
@@ -967,8 +971,10 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
     # Dump secrets + metadata to temp files for fzf preview
     preview_dotenv=$(mktemp "${TMPDIR:-/tmp}/setup-envrc.XXXXXX")
     preview_meta=$(mktemp "${TMPDIR:-/tmp}/setup-envrc.XXXXXX")
+    # Append to existing EXIT trap rather than replacing it
     # shellcheck disable=SC2064
-    trap "rm -f '$preview_dotenv' '$preview_meta'" EXIT
+    _existing_trap=$(trap -p EXIT | sed "s/^trap -- '//;s/' EXIT$//")
+    trap "${_existing_trap:+$_existing_trap; }rm -f '$preview_dotenv' '$preview_meta'" EXIT
     printf '%s\n' "$SECRETS_CACHE" > "$preview_dotenv"
     "$SECRETS_HELPER" keys-meta 2>/dev/null > "$preview_meta"
 
@@ -977,7 +983,7 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
         --header="SPACE to toggle, ENTER to confirm. Items tagged [envrc] are already configured." \
         --bind 'space:toggle' \
         --delimiter=$'\t' \
-        --preview="key={1}; echo '--- Note ---'; awk -F'\t' -v k=\"\$key\" '\$1==k{print \$3}' '$preview_meta'; echo; echo '--- Value ---'; grep \"^\$key=\" '$preview_dotenv' | sed 's/^[^=]*=//'" \
+        --preview="key={1}; key=\${key//[^A-Za-z0-9_]/}; echo '--- Note ---'; awk -F'\t' -v k=\"\$key\" '\$1==k{print \$3}' '$preview_meta'; echo; echo '--- Value ---'; grep \"^\$key=\" '$preview_dotenv' | sed 's/^[^=]*=//'" \
         --preview-window=right:40%:wrap \
         "${fzf_preselect_args[@]}") || exit 0
 
