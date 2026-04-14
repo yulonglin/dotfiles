@@ -427,7 +427,7 @@ harden_repo_secret_permissions() {
 }
 
 find_env_files() {
-    find "$REPO_ROOT" \
+    find "$REPO_ROOT" -maxdepth 3 \
         \( \
             -path "$REPO_ROOT/.git" -o \
             -path "$REPO_ROOT/.direnv" -o \
