@@ -640,15 +640,14 @@ offer_env_import() {
     # All display output goes to /dev/tty; only binding lines go to stdout (captured by caller)
     local tty=/dev/tty
 
-    # Show existing BWS keys for naming context
-    local existing_keys
-    existing_keys=$(list_sensitive_keys)
+    # Show existing BWS keys (full key names) for naming context
     local dim=$'\033[2m' bold=$'\033[1m' red=$'\033[0;31m' reset=$'\033[0m'
     echo "" >"$tty"
-    printf '  %sExisting BWS keys:%s\n' "$bold" "$reset" >"$tty"
-    while IFS= read -r ek; do
-        [[ -n "$ek" ]] && printf '    %s%s%s\n' "$dim" "$ek" "$reset" >"$tty"
-    done <<< "$existing_keys"
+    printf '  %sExisting BWS keys:%s  %s(format: ENV_NAME - description)%s\n' \
+        "$bold" "$reset" "$dim" "$reset" >"$tty"
+    while IFS=$'\t' read -r _env bws_key _note; do
+        [[ -n "$_env" ]] && printf '    %s%s%s\n' "$dim" "$bws_key" "$reset" >"$tty"
+    done < <("$SECRETS_HELPER" keys-meta 2>/dev/null)
     echo "" >"$tty"
 
     local imported=0 new_bindings=()
@@ -660,16 +659,22 @@ offer_env_import() {
             local entry_key entry_value entry_masked
             IFS="$RS" read -r entry_key entry_masked entry_value _ <<< "$entry"
             if [[ "$entry_key" == "$sel_key" ]]; then
-                local import_key local_key desc=""
+                local import_key local_key
 
                 printf '\n  ─── Importing: %s%s%s=%s%s%s ───\n' \
                     "$bold" "$sel_key" "$reset" "$dim" "$entry_masked" "$reset" >"$tty"
 
-                # 1. BWS key name (how it's stored in the secret store)
+                # 1. BWS key name (accepts "NAME - description" convention)
+                local bws_desc=""
                 while true; do
                     printf '  BWS key name   [enter = %s]: ' "$sel_key" >"$tty"
                     read -r import_key <"$tty"
                     [[ -n "$import_key" ]] || import_key="$sel_key"
+                    # Parse "ENV_NAME - description" → env name + bws description
+                    if [[ "$import_key" == *" - "* ]]; then
+                        bws_desc="${import_key#* - }"
+                        import_key="${import_key%% - *}"
+                    fi
                     [[ "$import_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && break
                     printf '  Invalid name: %s (must be [A-Za-z_][A-Za-z0-9_]*)\n' "$import_key" >"$tty"
                 done
@@ -683,21 +688,18 @@ offer_env_import() {
                     printf '  Invalid name: %s (must be [A-Za-z_][A-Za-z0-9_]*)\n' "$local_key" >"$tty"
                 done
 
-                # 3. BWS note/description
-                printf '  Note           [enter = skip]: ' >"$tty"
-                read -r desc <"$tty"
-
                 # Summary before committing
-                printf '\n  %sBWS:%s      %s\n' "$bold" "$reset" "$import_key" >"$tty"
+                local bws_display="$import_key"
+                [[ -n "$bws_desc" ]] && bws_display="$import_key - $bws_desc"
+                printf '\n  %sBWS:%s      %s\n' "$bold" "$reset" "$bws_display" >"$tty"
                 printf '  %sLocal:%s    %s\n' "$bold" "$reset" "$local_key" >"$tty"
                 if [[ "$local_key" != "$import_key" ]]; then
                     printf '  %sMapping:%s  %s <- %s\n' "$bold" "$reset" "$local_key" "$import_key" >"$tty"
                 fi
-                [[ -n "$desc" ]] && printf '  %sNote:%s     %s\n' "$bold" "$reset" "$desc" >"$tty"
                 echo "" >"$tty"
 
                 local set_args=("$import_key" "$entry_value")
-                [[ -n "$desc" ]] && set_args+=(--note "$desc")
+                [[ -n "$bws_desc" ]] && set_args+=(--note "$bws_desc")
                 if "$SECRETS_HELPER" set "${set_args[@]}" >"$tty" 2>"$tty"; then
                     # Track new binding for .envrc rewrite
                     if [[ "$local_key" != "$import_key" ]]; then
