@@ -206,7 +206,7 @@ config/matplotlib/        # Matplotlib style files (.mplstyle only)
 └── petri.mplstyle        # Petri (ivory bg, editorial aesthetic)
 
 tools/
-├── claude-tools/         # Rust binary (statusline, context, ignore)
+├── claude-tools/         # Rust binary (statusline, context, ignore, setup)
 └── set-default-app/      # Swift CLI (macOS file type associations)
 ```
 

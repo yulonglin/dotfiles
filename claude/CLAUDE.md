@@ -173,6 +173,13 @@ claude-tools context --sync [-v]        # Register + update + install wanted + p
 claude-tools context --sync --no-prune  # Sync without removing orphan plugins
 ```
 
+**Unified repo setup** via `claude-tools setup`:
+```bash
+claude-tools setup                      # Auto-detect + run needed setup steps
+claude-tools setup secrets              # Interactive secret picker (delegates to setup-envrc)
+claude-tools setup context              # Plugin profile picker (delegates to context)
+```
+
 **Architecture:**
 - Plugin registry: auto-discovered from `~/.claude/plugins/installed_plugins.json` (source of truth)
 - Marketplace manifest: `~/.claude/templates/contexts/profiles.yaml` `marketplaces:` section (declarative)
