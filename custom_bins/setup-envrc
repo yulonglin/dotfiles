@@ -701,8 +701,12 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
         meta_note["$m_env"]="$m_note"
     done < <("$SECRETS_HELPER" keys-meta 2>/dev/null)
 
+    preselect_positions=()
+    item_pos=0
+
     while IFS= read -r key; do
         [[ -n "$key" ]] || continue
+        item_pos=$((item_pos + 1))
         # Build display: "ENV_NAME  (bws: original-key)  note text  [envrc]"
         item="$key"
         bws_key="${meta_bws_key[$key]:-}"
@@ -723,7 +727,7 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
             else
                 item+=$'\t'"[envrc->$(binding_env_key "$existing_binding")]"
             fi
-            : # Item already tagged with [envrc] for visual indicator
+            preselect_positions+=("$item_pos")
         fi
 
         menu_items+=("$item")
@@ -733,10 +737,22 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
         die "No secrets found in $(dotfiles_secrets_backend) backend. Add secrets first."
     fi
 
+    # Build fzf --bind load action to pre-select [envrc] items
+    fzf_preselect_args=()
+    if [[ ${#preselect_positions[@]} -gt 0 ]]; then
+        bind_actions=""
+        for pos in "${preselect_positions[@]}"; do
+            bind_actions+="pos($pos)+select+"
+        done
+        bind_actions+="pos(1)"  # return cursor to top
+        fzf_preselect_args=(--sync --bind "load:${bind_actions}")
+    fi
+
     selected=$(printf '%s\n' "${menu_items[@]}" | fzf --multi \
         --prompt="Select secrets for $(basename "$REPO_ROOT")> " \
         --header="TAB to toggle, ENTER to confirm. Items tagged [envrc] are already configured." \
-        --delimiter=$'\t') || exit 0
+        --delimiter=$'\t' \
+        "${fzf_preselect_args[@]}") || exit 0
 
     while IFS= read -r item; do
         [[ -n "$item" ]] || continue
@@ -745,7 +761,15 @@ if [[ ${#selected_export_bindings[@]} -eq 0 && "$include_all" == false && -z "$t
         if [[ -n "$existing_binding" ]]; then
             selected_export_bindings+=("$existing_binding")
         else
-            selected_export_bindings+=("$secret_name")
+            # Offer rename for newly selected secrets
+            printf 'Local name for %s? (enter to keep): ' "$secret_name" >/dev/tty
+            local_name=""
+            read -r local_name </dev/tty
+            if [[ -n "$local_name" && "$local_name" != "$secret_name" ]]; then
+                selected_export_bindings+=("$local_name=$secret_name")
+            else
+                selected_export_bindings+=("$secret_name")
+            fi
         fi
     done <<< "$selected"
 

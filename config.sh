@@ -161,6 +161,7 @@ PACKAGES_CORE=(
 # macOS-specific packages (via Homebrew)
 PACKAGES_MACOS=(
     "coreutils"  # GNU utilities on macOS (gdate, gawk, gsed)
+    "fzf"
     "bat"
     "eza"
     "zoxide"
@@ -179,6 +180,7 @@ PACKAGES_MACOS=(
 
 # Linux packages (via mise github: backend)
 PACKAGES_LINUX_MISE=(
+    "github:junegunn/fzf"
     "github:sharkdp/bat"
     "github:eza-community/eza"
     "github:sharkdp/fd"
