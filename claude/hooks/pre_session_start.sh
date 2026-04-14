@@ -6,8 +6,8 @@
 
 set -euo pipefail
 
-# Reset per-session flags (use $TMPDIR to avoid sandbox issues with ~/.cache)
-rm -f "${TMPDIR:-/tmp/claude}/auto-classify-no-key-warned" 2>/dev/null || true
+# Reset per-session flags so warnings repeat in new sessions
+rm -f "$HOME/.cache/claude/auto-classify-no-key-warned" 2>/dev/null || true
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
 CLAUDE_MD="$REPO_ROOT/CLAUDE.md"
@@ -45,9 +45,46 @@ check_commits_since() {
     git rev-list --count "${last_commit}..HEAD" 2>/dev/null || echo 0
 }
 
+# --- Check auto-classify health ---
+
+# Verify auto-classify can function (rules file + API key)
+CLASSIFY_RULES="$HOME/.claude/hooks/auto_classify_rules.md"
+# Resolve DOT_DIR: hooks/ lives inside claude/ which is symlinked to ~/.claude/
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+_DOT_DIR="${DOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+SECRETS_HELPER="$_DOT_DIR/custom_bins/dotfiles-secrets"
+
+classify_ok=true
+classify_warnings=""
+
+if [[ ! -f "$CLASSIFY_RULES" ]]; then
+    classify_ok=false
+    classify_warnings+="auto-classify rules missing: $CLASSIFY_RULES"$'\n'
+fi
+
+# Check if API key is available (same logic as with-anthropic-key.sh)
+has_key=false
+if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    has_key=true
+elif [[ -x "$SECRETS_HELPER" ]] && "$SECRETS_HELPER" shell ANTHROPIC_API_KEY >/dev/null 2>&1; then
+    has_key=true
+fi
+
+if ! $has_key; then
+    classify_ok=false
+    classify_warnings+="auto-classify has NO API key — all non-trivial commands will need manual approval. Fix: setup-envrc ANTHROPIC_API_KEY"$'\n'
+fi
+
 # --- Collect warnings ---
 
 warnings=""
+
+if ! $classify_ok; then
+    # Loud terminal warning (stderr — user sees this immediately)
+    printf '\033[1;31m🚨 AUTO-CLASSIFY DEGRADED:\033[0m\n%s\n' "$classify_warnings" >&2
+    # Also include in Claude's context
+    warnings+="🚨 AUTO-CLASSIFY DEGRADED:"$'\n'"$classify_warnings"
+fi
 
 # Check CLAUDE.md staleness
 if [[ -f "$CLAUDE_MD" ]]; then
