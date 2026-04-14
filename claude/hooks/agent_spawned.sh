@@ -1,40 +1,44 @@
-#!/bin/bash
-# Hook: Remind user to save agent IDs when spawned
-# Triggers: After agent spawn (when agentId appears in output)
+#!/usr/bin/env bash
+# PostToolUse(Task) hook: auto-save agent IDs after agent completes.
 #
-# This hook monitors Claude's output for agent spawns and reminds
-# the user to save the agent ID for later resuming.
+# Reads the PostToolUse JSON payload from stdin. Extracts the agentId and
+# description, then saves to ~/.claude/saved_agents/ automatically.
+# No user action needed — agents are saved for later resumption.
 
-set -e
+set -euo pipefail
 
-# This hook is designed to be called with agent output
-# Check if output contains agent ID
-if [ -z "$1" ]; then
-  # No argument provided, this might be called differently
-  # Try to read from stdin
-  output=$(cat)
-else
-  output="$1"
+input=$(cat)
+
+# Extract agent description from tool_input
+description=$(echo "$input" | jq -r '.tool_input.description // "unnamed"' | head -c 80)
+tool_result=$(echo "$input" | jq -r '.tool_result // ""')
+
+# Try to extract agentId from tool_result
+agent_id=""
+if [[ "$tool_result" == *"agentId:"* ]]; then
+  agent_id=$(echo "$tool_result" | grep -oE 'agentId: [a-zA-Z0-9-]+' | head -1 | sed 's/agentId: //')
 fi
 
-# Extract agent ID from output (macOS compatible)
-if echo "$output" | grep -q "agentId:"; then
-  agent_id=$(echo "$output" | grep -oE 'agentId: [a-zA-Z0-9]+' | sed 's/agentId: //')
-
-  if [ -n "$agent_id" ]; then
-    echo ""
-    echo "═══════════════════════════════════════════════════"
-    echo "🤖 Agent Spawned: $agent_id"
-    echo "═══════════════════════════════════════════════════"
-    echo ""
-    echo "💾 Save this agent for later:"
-    echo "   claude-agent-save $agent_id <description>"
-    echo ""
-    echo "📋 Example:"
-    echo "   claude-agent-save $agent_id oauth-experiments"
-    echo ""
-    echo "📊 Monitor progress: Press Ctrl+T"
-    echo "═══════════════════════════════════════════════════"
-    echo ""
-  fi
+# Also check tool_input for an explicit agent/session ID field
+if [[ -z "$agent_id" ]]; then
+  agent_id=$(echo "$input" | jq -r '.tool_input.agent_id // .tool_input.session_id // ""')
 fi
+
+# No agent ID found — nothing to save
+[[ -z "$agent_id" ]] && exit 0
+
+# Sanitize description for filename (lowercase, spaces/special -> dashes)
+safe_desc=$(echo "$description" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g; s/--*/-/g; s/^-//; s/-$//')
+[[ -z "$safe_desc" ]] && safe_desc="agent"
+
+# Auto-save (same logic as claude-agent-save)
+AGENT_DIR="$HOME/.claude/saved_agents"
+mkdir -p "$AGENT_DIR"
+
+TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
+NAME="${TIMESTAMP}_UTC_${safe_desc}"
+
+echo "$agent_id" > "$AGENT_DIR/$NAME"
+echo "$agent_id" > "$AGENT_DIR/last"
+
+exit 0

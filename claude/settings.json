@@ -265,6 +265,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/agent_spawned.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -453,6 +463,12 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/check_venv.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/pre_session_start.sh",
+            "timeout": 10,
+            "async": true
           },
           {
             "type": "command",
