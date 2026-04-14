@@ -436,6 +436,7 @@ find_env_files() {
             -path "$REPO_ROOT/venv" -o \
             -path "$REPO_ROOT/build" -o \
             -path "$REPO_ROOT/dist" -o \
+            -path "$REPO_ROOT/.claude/channels" -o \
             -path "$REPO_ROOT/claude/plugins/cache" -o \
             -path "$REPO_ROOT/claude/plugins/plugins.bak" -o \
             -path "$REPO_ROOT/codex/.tmp" \
@@ -497,20 +498,229 @@ build_env_file_summary() {
         "$rel_path" "$managed_same" "$managed_diff" "$unmanaged" "$total_keys"
 }
 
+mask_value() {
+    local value="$1"
+    local len=${#value}
+
+    if [[ $len -eq 0 ]]; then
+        printf '%s' "(empty)"
+    elif [[ $len -le 8 ]]; then
+        printf '%s' "****"
+    else
+        printf '%s...%s' "${value:0:4}" "${value: -4}"
+    fi
+}
+
+build_env_file_detail() {
+    local env_file="$1"
+    local telegram_secret="$2"
+    shift 2
+    local export_bindings=("$@")
+    local key secret_key value masked status color file_content available_keys file_keys
+    local green=$'\033[0;32m' yellow=$'\033[0;33m' red=$'\033[0;31m' dim=$'\033[2m' reset=$'\033[0m'
+    local count_same=0 count_diff=0 count_unmanaged=0
+
+    file_content=$(cat "$env_file")
+    available_keys=$(list_sensitive_keys)
+    file_keys=$(list_file_keys "$env_file")
+
+    while IFS= read -r key; do
+        [[ -n "$key" ]] || continue
+        value=$(get_value_from_content "$file_content" "$key")
+        masked=$(mask_value "$value")
+
+        if secret_key=$(bound_secret_for_env_key "$key" "$telegram_secret" "$available_keys" "${export_bindings[@]}"); then
+            if [[ "$value" == "$(get_value_from_content "$SECRETS_CACHE" "$secret_key")" ]]; then
+                status="same"; color="$green"; count_same=$((count_same + 1))
+            else
+                status="diff"; color="$yellow"; count_diff=$((count_diff + 1))
+            fi
+        else
+            status="unmanaged"; color="$red"; count_unmanaged=$((count_unmanaged + 1))
+        fi
+
+        printf '    %s%-10s%s %s=%s%s%s\n' "$color" "[$status]" "$reset" "$key" "$dim" "$masked" "$reset"
+    done <<< "$file_keys"
+
+    # Per-file safety verdict
+    if [[ $count_unmanaged -eq 0 && $count_diff -eq 0 ]]; then
+        printf '    %s✓ Safe to delete — all values match .envrc managed secrets%s\n' "$green" "$reset"
+    elif [[ $count_unmanaged -eq 0 && $count_diff -gt 0 ]]; then
+        printf '    %s⚠ Values differ from managed secrets — review before deleting%s\n' "$yellow" "$reset"
+    else
+        printf '    %s✗ Has unmanaged keys — not covered by .envrc, would be lost%s\n' "$red" "$reset"
+    fi
+}
+
 print_env_file_summary() {
     local telegram_secret="$1"
     shift
     local export_bindings=("$@")
     local found=0 env_file
 
+    local green=$'\033[0;32m' yellow=$'\033[0;33m' red=$'\033[0;31m' reset=$'\033[0m'
+
     while IFS= read -r env_file; do
         [[ -n "$env_file" ]] || continue
-        [[ "$found" -eq 0 ]] && echo "" && echo "Detected .env files in this repo:"
+        if [[ "$found" -eq 0 ]]; then
+            echo ""
+            echo "Detected .env files in this repo:"
+            printf '  %s[same]%s = matches .envrc secret  %s[diff]%s = value differs  %s[unmanaged]%s = not in .envrc\n' \
+                "$green" "$reset" "$yellow" "$reset" "$red" "$reset"
+        fi
         build_env_file_summary "$env_file" "$telegram_secret" "${export_bindings[@]}"
+        build_env_file_detail "$env_file" "$telegram_secret" "${export_bindings[@]}"
         found=1
     done < <(find_env_files)
 
     return "$found"
+}
+
+collect_unmanaged_keys() {
+    local telegram_secret="$1"
+    shift
+    local export_bindings=("$@")
+    local env_file key secret_key file_content available_keys file_keys value rel_path
+
+    available_keys=$(list_sensitive_keys)
+
+    while IFS= read -r env_file; do
+        [[ -n "$env_file" ]] || continue
+        file_content=$(cat "$env_file")
+        file_keys=$(list_file_keys "$env_file")
+        rel_path="${env_file#"$REPO_ROOT"/}"
+        [[ "$rel_path" == "$env_file" ]] && rel_path=$(basename "$env_file")
+
+        while IFS= read -r key; do
+            [[ -n "$key" ]] || continue
+            if ! bound_secret_for_env_key "$key" "$telegram_secret" "$available_keys" "${export_bindings[@]}" >/dev/null 2>&1; then
+                value=$(get_value_from_content "$file_content" "$key")
+                local masked
+                masked=$(mask_value "$value")
+                # RS-separated: key \x1e masked \x1e value \x1e source_file
+                printf '%s\x1e%s\x1e%s\x1e%s\n' "$key" "$masked" "$value" "$rel_path"
+            fi
+        done <<< "$file_keys"
+    done < <(find_env_files)
+}
+
+offer_env_import() {
+    local telegram_secret="$1"
+    shift
+    local export_bindings=("$@")
+
+    [[ -t 0 ]] || return 0
+    [[ "$(dotfiles_secrets_backend)" == "bws" ]] || return 0
+    command -v fzf >/dev/null 2>&1 || return 0
+
+    local unmanaged_entries=()
+    while IFS= read -r entry; do
+        [[ -n "$entry" ]] || continue
+        unmanaged_entries+=("$entry")
+    done < <(collect_unmanaged_keys "$telegram_secret" "${export_bindings[@]}")
+
+    [[ ${#unmanaged_entries[@]} -gt 0 ]] || return 0
+
+    local menu_items=() RS=$'\x1e'
+    for entry in "${unmanaged_entries[@]}"; do
+        local key masked source_file
+        IFS="$RS" read -r key masked _ source_file <<< "$entry"
+        menu_items+=("$(printf '%s=%s\t(%s)' "$key" "$masked" "$source_file")")
+    done
+
+    local selections
+    selections=$(printf '%s\n' "${menu_items[@]}" | fzf --multi \
+        --prompt="Import unmanaged keys into BWS> " \
+        --header="Select keys to import into managed secrets. ESC to skip." \
+        --delimiter=$'\t' \
+        --with-nth=1) || return 0
+
+    [[ -n "$selections" ]] || return 0
+
+    # All display output goes to /dev/tty; only binding lines go to stdout (captured by caller)
+    local tty=/dev/tty
+
+    # Show existing BWS keys for naming context
+    local existing_keys
+    existing_keys=$(list_sensitive_keys)
+    local dim=$'\033[2m' bold=$'\033[1m' red=$'\033[0;31m' reset=$'\033[0m'
+    echo "" >"$tty"
+    printf '  %sExisting BWS keys:%s\n' "$bold" "$reset" >"$tty"
+    while IFS= read -r ek; do
+        [[ -n "$ek" ]] && printf '    %s%s%s\n' "$dim" "$ek" "$reset" >"$tty"
+    done <<< "$existing_keys"
+    echo "" >"$tty"
+
+    local imported=0 new_bindings=()
+    while IFS= read -r selected; do
+        [[ -n "$selected" ]] || continue
+        local sel_key="${selected%%=*}"
+
+        for entry in "${unmanaged_entries[@]}"; do
+            local entry_key entry_value entry_masked
+            IFS="$RS" read -r entry_key entry_masked entry_value _ <<< "$entry"
+            if [[ "$entry_key" == "$sel_key" ]]; then
+                local import_key local_key desc=""
+
+                printf '\n  ─── Importing: %s%s%s=%s%s%s ───\n' \
+                    "$bold" "$sel_key" "$reset" "$dim" "$entry_masked" "$reset" >"$tty"
+
+                # 1. BWS key name (how it's stored in the secret store)
+                while true; do
+                    printf '  BWS key name   [enter = %s]: ' "$sel_key" >"$tty"
+                    read -r import_key <"$tty"
+                    [[ -n "$import_key" ]] || import_key="$sel_key"
+                    [[ "$import_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && break
+                    printf '  Invalid name: %s (must be [A-Za-z_][A-Za-z0-9_]*)\n' "$import_key" >"$tty"
+                done
+
+                # 2. Local env var name (how it appears in .envrc / your code)
+                while true; do
+                    printf '  Local env var  [enter = %s]: ' "$sel_key" >"$tty"
+                    read -r local_key <"$tty"
+                    [[ -n "$local_key" ]] || local_key="$sel_key"
+                    [[ "$local_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && break
+                    printf '  Invalid name: %s (must be [A-Za-z_][A-Za-z0-9_]*)\n' "$local_key" >"$tty"
+                done
+
+                # 3. BWS note/description
+                printf '  Note           [enter = skip]: ' >"$tty"
+                read -r desc <"$tty"
+
+                # Summary before committing
+                printf '\n  %sBWS:%s      %s\n' "$bold" "$reset" "$import_key" >"$tty"
+                printf '  %sLocal:%s    %s\n' "$bold" "$reset" "$local_key" >"$tty"
+                if [[ "$local_key" != "$import_key" ]]; then
+                    printf '  %sMapping:%s  %s <- %s\n' "$bold" "$reset" "$local_key" "$import_key" >"$tty"
+                fi
+                [[ -n "$desc" ]] && printf '  %sNote:%s     %s\n' "$bold" "$reset" "$desc" >"$tty"
+                echo "" >"$tty"
+
+                local set_args=("$import_key" "$entry_value")
+                [[ -n "$desc" ]] && set_args+=(--note "$desc")
+                if "$SECRETS_HELPER" set "${set_args[@]}" >"$tty" 2>"$tty"; then
+                    # Track new binding for .envrc rewrite
+                    if [[ "$local_key" != "$import_key" ]]; then
+                        new_bindings+=("$local_key=$import_key")
+                    else
+                        new_bindings+=("$import_key")
+                    fi
+                    imported=$((imported + 1))
+                else
+                    printf '  %sError: failed to import %s — skipping%s\n' "$red" "$import_key" "$reset" >"$tty"
+                fi
+                break
+            fi
+        done
+    done <<< "$selections"
+
+    if [[ $imported -gt 0 ]]; then
+        printf 'Imported %d key(s) into BWS.\n' "$imported" >"$tty"
+        # Output new bindings to stdout so caller can capture and rewrite .envrc
+        printf '%s\n' "${new_bindings[@]}"
+        # Invalidate in-memory cache so subsequent steps see the new keys
+        SECRETS_CACHE=""
+    fi
 }
 
 offer_env_cleanup() {
@@ -807,6 +1017,26 @@ harden_repo_secret_permissions "$telegram_state_dir"
 
 load_secrets_cache
 print_env_file_summary "$telegram_secret" "${selected_export_bindings[@]}" || true
+
+# Import unmanaged .env keys into BWS; capture new bindings
+new_import_bindings=()
+while IFS= read -r nb; do
+    [[ -n "$nb" ]] && new_import_bindings+=("$nb")
+done < <(offer_env_import "$telegram_secret" "${selected_export_bindings[@]}")
+
+# If imports added new bindings, rewrite .envrc
+if [[ ${#new_import_bindings[@]} -gt 0 ]]; then
+    selected_export_bindings+=("${new_import_bindings[@]}")
+    mapfile -t selected_export_bindings < <(normalize_export_bindings "${selected_export_bindings[@]}")
+    write_envrc "$telegram_secret" "${selected_export_bindings[@]}"
+    attempt_direnv_allow
+    echo "Updated .envrc with ${#new_import_bindings[@]} imported binding(s)."
+    # Reload cache and re-display
+    SECRETS_CACHE=""
+    load_secrets_cache
+    print_env_file_summary "$telegram_secret" "${selected_export_bindings[@]}" || true
+fi
+
 offer_env_cleanup "$telegram_secret" "${selected_export_bindings[@]}"
 echo ""
 echo "${#selected_export_bindings[@]} export binding(s) scoped to $(basename "$REPO_ROOT")."
