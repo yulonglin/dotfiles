@@ -10,13 +10,13 @@ set -euo pipefail
 input=$(cat)
 
 # Extract agent description from tool_input
-description=$(echo "$input" | jq -r '.tool_input.description // "unnamed"' | head -c 80)
+description=$(echo "$input" | jq -r '.tool_input.description // "unnamed"' | tr -d '\n' | head -c 80)
 tool_result=$(echo "$input" | jq -r '.tool_result // ""')
 
 # Try to extract agentId from tool_result
 agent_id=""
 if [[ "$tool_result" == *"agentId:"* ]]; then
-  agent_id=$(echo "$tool_result" | grep -oE 'agentId: [a-zA-Z0-9-]+' | head -1 | sed 's/agentId: //')
+  agent_id=$(echo "$tool_result" | grep -oE 'agentId: [a-zA-Z0-9_-]+' | head -1 | sed 's/agentId: //')
 fi
 
 # Also check tool_input for an explicit agent/session ID field

@@ -95,16 +95,11 @@ fi
 [[ -z "$warnings" ]] && exit 0
 
 # Emit structured hook output so Claude sees the warnings in context
-python3 -c "
-import json, sys
-warnings = sys.stdin.read().strip()
-output = {
-    'hookSpecificOutput': {
-        'hookEventName': 'SessionStart',
-        'additionalContext': 'Documentation staleness check:\n' + warnings
+jq -n --arg w "$warnings" '{
+    hookSpecificOutput: {
+        hookEventName: "SessionStart",
+        additionalContext: ("Documentation staleness check:\n" + $w)
     }
-}
-print(json.dumps(output))
-" <<< "$warnings"
+}'
 
 exit 0
