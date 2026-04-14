@@ -62,14 +62,111 @@ secrets-rotate-data-key() {
 }
 
 secrets-edit() {
-    if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh"; return 1; fi
-    local sops_yaml
-    local enc
-    sops_yaml=$(dotfiles_secrets_sops_config)
-    enc=$(dotfiles_secrets_enc)
-    mkdir -p "$(dotfiles_secrets_dir)"
-    sops_dotenv --config "$sops_yaml" "$enc"
-    dotfiles_secrets_harden_permissions
+    local backend
+    backend=$(dotfiles_secrets_backend)
+    case "$backend" in
+        sops)
+            if ! command -v sops &>/dev/null; then echo "sops not installed — run install.sh" >&2; return 1; fi
+            local sops_yaml enc
+            sops_yaml=$(dotfiles_secrets_sops_config)
+            enc=$(dotfiles_secrets_enc)
+            mkdir -p "$(dotfiles_secrets_dir)"
+            sops_dotenv --config "$sops_yaml" "$enc"
+            dotfiles_secrets_harden_permissions
+            ;;
+        bws)
+            if [[ $# -ge 1 ]]; then
+                # Direct mode: secrets-edit KEY [VALUE] [--note DESC]
+                dotfiles-secrets set "$@"
+                return
+            fi
+            command -v fzf >/dev/null 2>&1 || { echo "fzf required for interactive mode. Use: secrets-edit KEY [VALUE]" >&2; return 1; }
+            _secrets_edit_bws_fzf
+            ;;
+        none)
+            echo "No secrets backend. Run: secrets-init" >&2; return 1
+            ;;
+    esac
+}
+_secrets_edit_bws_fzf() {
+    local mutated=false
+    while true; do
+        local listing items=()
+        listing=$(dotfiles-secrets list-full 2>/dev/null) || { echo "Failed to list secrets" >&2; return 1; }
+
+        while IFS=$'\t' read -r _id env_name bws_key preview note; do
+            [[ -n "$_id" ]] || continue
+            local line="$env_name"
+            if [[ "$bws_key" != "$env_name" ]]; then
+                line+=$'\t'"(bws: $bws_key)"
+            else
+                line+=$'\t'
+            fi
+            line+=$'\t'"$preview"
+            [[ -n "$note" ]] && line+=$'\t'"# $note"
+            items+=("$line")
+        done <<< "$listing"
+
+        if [[ ${#items[@]} -eq 0 ]]; then
+            echo "No secrets found. Use Ctrl-A to add one."
+        fi
+
+        local selection action chosen chosen_env
+        selection=$(printf '%s\n' "${items[@]}" | fzf \
+            --prompt="secrets> " \
+            --header="Enter: edit value | Ctrl-A: add | Ctrl-X: delete | Esc: done" \
+            --expect=ctrl-a,ctrl-x \
+            --delimiter=$'\t' \
+            --no-multi \
+            --ansi) || break
+
+        action=$(head -1 <<< "$selection")
+        chosen=$(sed -n '2p' <<< "$selection")
+        chosen_env="${chosen%%$'\t'*}"
+
+        case "$action" in
+            ctrl-a)
+                printf 'Key (ENV_VAR_NAME): ' >/dev/tty
+                read -r new_key </dev/tty
+                [[ -n "$new_key" ]] || continue
+                printf 'Description (optional, appended as "KEY - desc"): ' >/dev/tty
+                read -r new_desc </dev/tty
+                printf 'Value: ' >/dev/tty
+                read -rs new_value </dev/tty
+                echo "" >/dev/tty
+                [[ -n "$new_value" ]] || { echo "Empty value, skipping."; continue; }
+                if [[ -n "$new_desc" ]]; then
+                    dotfiles-secrets set "$new_key" "$new_value" --note "$new_desc"
+                else
+                    dotfiles-secrets set "$new_key" "$new_value"
+                fi
+                mutated=true
+                ;;
+            ctrl-x)
+                [[ -n "$chosen_env" ]] || continue
+                printf 'Delete %s? (y/N) ' "$chosen_env" >/dev/tty
+                read -r confirm </dev/tty
+                if [[ "$confirm" == [yY]* ]]; then
+                    dotfiles-secrets rm --yes "$chosen_env"
+                    mutated=true
+                fi
+                ;;
+            *)  # Enter: edit value
+                [[ -n "$chosen_env" ]] || continue
+                printf 'New value for %s: ' "$chosen_env" >/dev/tty
+                read -rs new_value </dev/tty
+                echo "" >/dev/tty
+                [[ -n "$new_value" ]] || { echo "Empty value, skipping."; continue; }
+                dotfiles-secrets set "$chosen_env" "$new_value"
+                mutated=true
+                ;;
+        esac
+    done
+
+    if $mutated; then
+        dotfiles-secrets cache-clear >/dev/null 2>&1
+        echo "Cache cleared. Run 'direnv reload' in projects to pick up changes."
+    fi
 }
 secrets-init() {
     local choice
@@ -414,31 +511,76 @@ claude() {
     fi
     # else: keep existing CLAUDE_CODE_TASK_LIST_ID (set by claude-new, claude-with, etc.)
 
-    # Per-project channels: auto-detect and enable
-    local channels=()
-    if [[ -n "${DOTFILES_TELEGRAM_BOT_SECRET:-}" ]]; then
-        export TELEGRAM_STATE_DIR="${TELEGRAM_STATE_DIR:-$PWD/.claude/channels/telegram}"
-        if ! _claude_prepare_telegram_state "$TELEGRAM_STATE_DIR" "$DOTFILES_TELEGRAM_BOT_SECRET"; then
-            return 1
+    # --channels only applies to session mode, not subcommands (doctor, auth, etc.).
+    # Derive subcommand list from `claude --help`, cached per version to avoid 200ms/call.
+    local _is_session=true
+    # Find first positional arg, skipping flags and their values.
+    # Known value-consuming flags are skipped so e.g. `claude --model sonnet doctor`
+    # correctly identifies `doctor` (not `sonnet`) as the first positional.
+    local _first_positional="" _skip_next=false
+    for _a in "${args[@]}"; do
+        if [[ "$_skip_next" == true ]]; then _skip_next=false; continue; fi
+        case "$_a" in
+            --model|--agent|--agents|--resume|-r|--permission-mode|--settings| \
+            --system-prompt|--system-prompt-file|--append-system-prompt|--append-system-prompt-file| \
+            --effort|--mcp-config|--output-format|--input-format|--max-budget-usd| \
+            --json-schema|--fallback-model|--debug-file|-n|--name|-d|--debug| \
+            --add-dir|--allowedTools|--allowed-tools|--disallowedTools|--disallowed-tools| \
+            --betas|--file|--plugin-dir|--from-pr)
+                _skip_next=true; continue ;;
+            -*) continue ;;
+        esac
+        _first_positional="$_a"; break
+    done
+    if [[ -n "$_first_positional" ]]; then
+        local _cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-wrapper"
+        local _version; _version=$(claude --version 2>/dev/null | head -1)
+        if [[ -n "$_version" ]]; then
+            local _cache_file="$_cache_dir/subcommands-${_version//[^a-zA-Z0-9.]/_}"
+            local _subcmds
+            if [[ -f "$_cache_file" ]]; then
+                _subcmds=$(<"$_cache_file")
+            else
+                # Extract subcommands, handling aliases (plugin|plugins) and hyphens (setup-token)
+                _subcmds=$(claude --help 2>&1 | grep -E '^\s+[a-z][a-z|_-]*\s' | awk '{print $1}' | grep -v '^prompt$' | tr '|' '\n' | tr '\n' '|')
+                if [[ -n "$_subcmds" ]]; then
+                    mkdir -p "$_cache_dir" && printf '%s' "$_subcmds" > "$_cache_file" 2>/dev/null
+                fi
+            fi
+            # Check if first positional matches a known subcommand
+            if [[ -n "$_subcmds" && "|${_subcmds}" == *"|${_first_positional}|"* ]]; then
+                _is_session=false
+            fi
         fi
-        channels+=(plugin:telegram@claude-plugins-official)
-    elif [[ -f ".claude/channels/telegram/.env" ]]; then
-        export TELEGRAM_STATE_DIR="${TELEGRAM_STATE_DIR:-$PWD/.claude/channels/telegram}"
-        channels+=(plugin:telegram@claude-plugins-official)
-    else
-        unset TELEGRAM_STATE_DIR
-        unset DOTFILES_TELEGRAM_BOT_SECRET
     fi
-    if [[ -f ".claude/channels/imessage/access.json" ]]; then
-        export IMESSAGE_STATE_DIR="${IMESSAGE_STATE_DIR:-$PWD/.claude/channels/imessage}"
-        channels+=(plugin:imessage@claude-plugins-official)
-    elif command -v imessage-mcp &>/dev/null; then
-        # No project-local channel — use global default
-        unset IMESSAGE_STATE_DIR
-        channels+=(plugin:imessage@claude-plugins-official)
-    fi
-    if [[ ${#channels[@]} -gt 0 ]]; then
-        args+=(--channels "${channels[@]}")
+
+    # Per-project channels: auto-detect and enable (session mode only)
+    if [[ "$_is_session" == true ]]; then
+        local channels=()
+        if [[ -n "${DOTFILES_TELEGRAM_BOT_SECRET:-}" ]]; then
+            export TELEGRAM_STATE_DIR="${TELEGRAM_STATE_DIR:-$PWD/.claude/channels/telegram}"
+            if ! _claude_prepare_telegram_state "$TELEGRAM_STATE_DIR" "$DOTFILES_TELEGRAM_BOT_SECRET"; then
+                return 1
+            fi
+            channels+=(plugin:telegram@claude-plugins-official)
+        elif [[ -f ".claude/channels/telegram/.env" ]]; then
+            export TELEGRAM_STATE_DIR="${TELEGRAM_STATE_DIR:-$PWD/.claude/channels/telegram}"
+            channels+=(plugin:telegram@claude-plugins-official)
+        else
+            unset TELEGRAM_STATE_DIR
+            unset DOTFILES_TELEGRAM_BOT_SECRET
+        fi
+        if [[ -f ".claude/channels/imessage/access.json" ]]; then
+            export IMESSAGE_STATE_DIR="${IMESSAGE_STATE_DIR:-$PWD/.claude/channels/imessage}"
+            channels+=(plugin:imessage@claude-plugins-official)
+        elif command -v imessage-mcp &>/dev/null; then
+            # No project-local channel — use global default
+            unset IMESSAGE_STATE_DIR
+            channels+=(plugin:imessage@claude-plugins-official)
+        fi
+        if [[ ${#channels[@]} -gt 0 ]]; then
+            args+=(--channels "${channels[@]}")
+        fi
     fi
 
     activate_venv
