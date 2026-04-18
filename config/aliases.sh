@@ -590,9 +590,9 @@ claude() {
 alias ccy='claude --dangerously-skip-permissions'   # cc yolo
 alias ccd='claude --dangerously-skip-permissions'   # cc dangerous
 alias yolo='claude --dangerously-skip-permissions'
-alias resume='yolo --resume'
-alias cont='yolo --continue'
-alias continue='yolo --continue'
+alias resume='claude --resume'
+alias cont='claude --continue'
+alias continue='claude --continue'
 alias yn='yolo -t'  # yn <name>: yolo with task name
 
 # Artifact dirs checked across worktree commands (port, remove, clean)
