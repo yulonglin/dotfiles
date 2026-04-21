@@ -484,6 +484,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/context_auto_apply.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_things_mcp.sh",
+            "timeout": 3
           }
         ]
       }
