@@ -224,7 +224,7 @@
       "Read(**/.env.*)",
       "Read(**/.envrc)"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "auto"
   },
   "hooks": {
     "PermissionRequest": [
@@ -615,6 +615,12 @@
       }
     }
   },
+  "mcpServers": {
+    "things-cloud": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  },
   "outputStyle": "10x Mentor",
   "sandbox": {
     "enabled": true,
@@ -676,7 +682,6 @@
   "alwaysThinkingEnabled": true,
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
-  "voiceEnabled": true,
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
@@ -686,11 +691,13 @@
     ".venv",
     "target"
   ],
+  "voiceEnabled": true,
   "chrome": {
     "enabled": true
   },
   "installMethod": "native",
   "showTurnDuration": true,
   "teammateMode": "auto",
-  "terminalProgressBarEnabled": true
+  "terminalProgressBarEnabled": true,
+  "skipAutoPermissionPrompt": true
 }

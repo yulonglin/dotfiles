@@ -1,0 +1,25 @@
+[Unit]
+Description=Things Cloud MCP Server (read-only)
+Documentation=https://github.com/yulonglin/things-cloud-mcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/code/mcps/things-cloud-mcp/things-server
+WorkingDirectory=%h/code/mcps/things-cloud-mcp
+EnvironmentFile=%h/.config/things-cloud-mcp/env
+Environment=PORT=8080
+Environment=BIND_HOST=127.0.0.1
+# Read-only by default. Uncomment to enable writes:
+# Environment=ENABLE_WRITES=true
+Restart=on-failure
+RestartSec=10
+
+# SQLite data directory
+RuntimeDirectory=things-cloud-mcp
+StateDirectory=things-cloud-mcp
+Environment=DATA_DIR=%S/things-cloud-mcp
+
+[Install]
+WantedBy=default.target
