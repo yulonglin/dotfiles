@@ -1484,3 +1484,38 @@ ssh() {
 }
 
 # SSH theme switching moved to config/ssh_themes.sh (sourced by zshrc.sh)
+
+#-------------------------------------------------------------
+# Things 3 (things-cloud-mcp)
+#-------------------------------------------------------------
+
+things() {
+    local cmd="${1:-status}"
+    case "$cmd" in
+        status)
+            if [[ "$(uname)" == "Darwin" ]]; then
+                echo "macOS: using things-mcp plugin (local SQLite)"
+                pgrep -f things-mcp >/dev/null 2>&1 && echo "  running" || echo "  not running (plugin starts on demand)"
+            else
+                systemctl --user is-active things-cloud-mcp >/dev/null 2>&1 \
+                    && echo "things-cloud-mcp: active" \
+                    || echo "things-cloud-mcp: inactive"
+                curl -s -m 2 http://127.0.0.1:8080/ 2>/dev/null \
+                    | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'  {d[\"status\"]}') " 2>/dev/null \
+                    || echo "  server unreachable"
+            fi
+            ;;
+        start)   systemctl --user start things-cloud-mcp && echo "started" ;;
+        stop)    systemctl --user stop things-cloud-mcp && echo "stopped" ;;
+        restart) systemctl --user restart things-cloud-mcp && echo "restarted" ;;
+        logs)    journalctl --user -u things-cloud-mcp -f --no-pager ;;
+        today)
+            curl -s http://127.0.0.1:8080/api/tasks/today 2>/dev/null \
+                | python3 -c "import sys,json; [print(f'  - {t[\"Title\"]}') for t in json.load(sys.stdin)]" 2>/dev/null \
+                || echo "server unreachable"
+            ;;
+        *)
+            echo "Usage: things {status|start|stop|restart|logs|today}"
+            ;;
+    esac
+}
