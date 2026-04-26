@@ -83,11 +83,34 @@ annotate_values(ax, format=lambda x: f"{x:.1%}")
 ax.text(x, y, label, ha="center", va="bottom", fontweight="normal", fontsize=9)
 ```
 
-### Callouts: pick the right shape for the point
+### Plan the visual before you draw it
 
-Before placing any callout, decide *what claim* it is making, then pick the
-shape that encodes that claim directly. Don't reach for `arc3` curved arrows
-by default — they're for one specific case.
+This applies to every annotation, callout, ordering, and color choice — not
+just arrows. **Before writing any code**, write down the answers to:
+
+1. **What single point does this make?** One sentence, the way you'd say it
+   out loud. *"On MATH, C³ catches sandbagging where TM misses — 51 pp gap."*
+   If you can't say it in one sentence, you're trying to make several points
+   at once; pick the one that matters most or split into multiple visuals.
+2. **What would a reader miss without this callout?** If the answer is
+   "nothing — they'd see it from the bars alone", drop the callout. Don't
+   annotate the obvious.
+3. **What's the most direct visual encoding of that point?** The answer falls
+   out of step 1. *"The gap is 51 pp"* → an object whose **length is the gap**.
+   *"This is the headline number"* → one arrow from a label to that number.
+   *"This region is special"* → shading, not an arrow.
+4. **Reading distance and time?** Poster-from-6ft and paper-from-1ft have
+   different budgets. A poster reader scans for ~3 seconds — the callout has
+   to register at a glance. A paper reader will study the figure; subtler
+   callouts work.
+
+Only after answering 1–3 do you pick a shape. The table below is the lookup,
+not the thinking — don't skip the thinking.
+
+### Callout shape lookup
+
+Pick the shape that encodes the claim directly. Don't reach for `arc3` curved
+arrows by default — they're for one specific case.
 
 | Claim | Right shape | Wrong shape |
 |---|---|---|
