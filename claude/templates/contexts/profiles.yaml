@@ -40,6 +40,7 @@ marketplaces:
 # Always-on in every profile (declared once)
 base:
   - claude-md-management
+  - codex
   - commit-commands
   - context7
   - core
@@ -57,7 +58,6 @@ profiles:
     enable:
       - code
       - code-simplifier
-      - codex
       - security-guidance
       - workflow
 
