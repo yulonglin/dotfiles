@@ -83,38 +83,58 @@ annotate_values(ax, format=lambda x: f"{x:.1%}")
 ax.text(x, y, label, ha="center", va="bottom", fontweight="normal", fontsize=9)
 ```
 
-### Callout arrows (`ax.annotate`)
-Callout arrows must never cross unrelated bars, lines, or data marks. The arrow
-should travel through visually empty space and curve **toward** the target,
-not over neighbours.
+### Callouts: pick the right shape for the point
 
-Decision tree before placing an arrow:
-1. **Find the empty quadrant** above/beside/below the target bar — pick the
-   side with no other bar in the path.
-2. **Anchor the text in that empty area**, with `ha`/`va` chosen so the text
-   block also stays clear of bars (right-anchored on the right, etc.).
-3. **Choose `connectionstyle="arc3,rad=±N"`** so the arc bulges *away* from
-   any bar between start and end. `rad>0` bulges one way, `rad<0` the other —
-   if unsure, render both and pick the one that doesn't graze a neighbour.
-4. **Verify visually** at print scale. Curve fragility is invisible in code
-   review; a screenshot or PDF preview is mandatory before commit.
+Before placing any callout, decide *what claim* it is making, then pick the
+shape that encodes that claim directly. Don't reach for `arc3` curved arrows
+by default — they're for one specific case.
+
+| Claim | Right shape | Wrong shape |
+|---|---|---|
+| "This bar is the headline" (single value) | One arrow from text to bar top | Two arrows |
+| "The gap between these two bars is N" | **Double-headed arrow `<->` between the two bar tops** — arrow length = the gap | Curved arrow with text on top |
+| "This region matters" | Filled `axvspan` / shaded box | Arrow |
+| "These two things differ" | Bracket spanning both, label outside | Two separate annotations |
+
+For the **gap** case (most common in comparison bar charts), the double-headed
+arrow's *length* literally encodes the value. The reader sees "+51 pp" and the
+arrow length agreeing — that's the strongest possible visual:
 
 ```python
-# good: text in empty area to the right of MATH bar, arrow curves
-# leftward to TM bar without crossing the C³ bar.
+# Gap callout: arrow IS the gap.
 ax.annotate(
-    "+51 pp gap",
-    xy=(math_tm_x, tm_top + 1.5),
-    xytext=(math_idx + 0.50, 78),
-    ha="center", va="bottom",
-    fontsize=13, fontweight="bold", color=CLAY,
-    arrowprops=dict(arrowstyle="->", color=CLAY, lw=1.6,
-                    connectionstyle="arc3,rad=-0.25"),
+    "",
+    xy=(gap_x, c3_top),    # high endpoint
+    xytext=(gap_x, tm_top), # low endpoint
+    arrowprops=dict(arrowstyle="<->", color=CLAY, lw=2.2),
 )
+ax.text(gap_x, c3_top + 3, "+51 pp gap",
+        ha="center", va="bottom",
+        fontsize=13, fontweight="bold", color=CLAY)
 ```
 
-If text would clip a tall bar or whisker, **raise `ax.set_ylim` headroom** to
-~115% of (bar + whisker top) instead of squeezing the text into the bar.
+Place `gap_x` in the visually-empty band beside the bar pair (not on top of
+bars, not in another group's column). For grouped bars, that's typically just
+to the right of the second bar in the pair.
+
+### Curved callout arrows (`ax.annotate` with `connectionstyle`)
+
+Use these only when pointing *at* a single mark from a label sitting in empty
+space — not for showing a gap. Rules:
+
+1. **Never cross unrelated bars/lines/marks.** Locate the empty quadrant
+   above/beside/below the target first.
+2. **Anchor the text in that empty area**, with `ha`/`va` chosen so the text
+   block stays clear of bars.
+3. **`connectionstyle="arc3,rad=±N"`** — the rad sign chooses bulge direction;
+   pick whichever bulges *away* from any bar between start and end.
+4. **One arrow per claim.** Two arrows from the same label fan-out and read as
+   two separate annotations sharing a label — confusing.
+5. **Verify visually** at print scale. Curve fragility is invisible in code
+   review; a screenshot or PDF preview is mandatory before commit.
+
+If text would clip a tall bar or whisker, **raise `ax.set_ylim` headroom**
+instead of squeezing the text into the bar.
 
 ### Multi-series line plot
 ```python
