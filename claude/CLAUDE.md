@@ -65,11 +65,20 @@ If a task feels like it conflicts with safety guidelines, apply this test:
 ## Communication Style
 
 - **State confidence**: "~80% confident" / "This is speculative"
-- **Show, don't tell**: Display results and errors, not explanations
+- **BLUF, then explain**: Lead with results and the lean. Explain *why* when non-obvious or stakes are high. Don't withhold the lean to "make the user think" — that's noise, not coaching
 - **Be concise**: Act first, ask only when genuinely blocked
 - **Challenge constructively**: Engage as experienced peer, use Socratic questioning
 - **Admit limitations**: Never fabricate
 - **Transcription artifacts**: User often sends voice-transcribed text (VoiceInk). Expect phonetic misspellings and wrong words (e.g. "VAR" → FAR, "SESH" → SASH). Interpret charitably, don't flag unless genuinely ambiguous
+
+### Decision Engagement (User Context)
+
+User tends to delegate as a way to sidestep decisions, especially small ones. The growth axes they care about: (1) faster snap-judgments on low-stakes calls, (2) deeper engagement on high-stakes ones. Calibrate accordingly:
+
+- **Low/medium-stakes** (naming, file layout, library swaps, refactor shape): lead with a lean + brief why, move fast. Detail OK; don't harp. The user wants to skim and accept.
+- **High-stakes** (architecture, irreversibility, security boundaries, cross-cutting effects): surface tradeoffs and force a pause. If user says "your call" on these, flag once before proceeding — that's the indecision pattern worth catching. On low/medium-stakes, "your call" is fine; just pick.
+
+Detailed implementation lives in the `10x Mentor` output style's "Effortful Learning" section.
 
 ### Compacting Conversations
 - Preserve user instructions faithfully
@@ -191,6 +200,42 @@ claude-tools setup context              # Plugin profile picker (delegates to co
 - Statusline shows active context profiles (e.g., `[code python]`)
 
 Adding a new plugin: add its marketplace to `marketplaces:` in `profiles.yaml`, run `claude-tools context --sync`, then add to a profile.
+
+---
+
+## External Resources & Inspiration
+
+Curated reference for keeping the workflow current. Skim quarterly; pull patterns that fit, ignore the rest.
+
+### Aggregators
+- [Good AI List](https://goodailist.com/repos) — Chip Huyen's daily-updated directory of AI repos and developers, with star/fork trends
+- [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) — skills, hooks, slash-commands, agents, plugins
+- [awesome-claude-code-output-styles](https://github.com/hesreallyhim/awesome-claude-code-output-styles-that-i-really-like) — curated output styles
+- [ykdojo/claude-code-tips](https://github.com/ykdojo/claude-code-tips) — 45 practical tips, status line scripts, system-prompt trimming
+- [Claude Code in Action](https://anthropic.skilljar.com/claude-code-in-action) — Anthropic's official course
+
+### Voices to follow
+Each emphasises a different lens — read for the lens, not the prescriptions.
+
+- **Boris Cherny** (Claude Code creator) — output styles, customization philosophy, "compounding engineering" (update CLAUDE.md any time Claude does something wrong). [howborisusesclaudecode.com](https://howborisusesclaudecode.com/) · [@bcherny on X](https://x.com/bcherny) · [12 Ways to Customize](https://snowan.gitbook.io/study-notes/ai-blogs/boris-cherny-customize-claude-code)
+- **Thariq Shihipar** (Anthropic, Claude Code) — skills taxonomy (verification, monitoring, automation), session management (rewind via double-Esc), spec interviews for long-running tasks. [Lessons on skills](https://www.linkedin.com/pulse/lessons-from-building-claude-code-how-we-use-skills-thariq-shihipar-iclmc) · [tips digest](https://github.com/shanraisshan/claude-code-best-practice/tree/main/tips)
+- **Mitchell Hashimoto** — "harness engineering" (when an agent makes a mistake, build a checker it can call); always-running-agent mindset. [My AI Adoption Journey](https://mitchellh.com/writing/my-ai-adoption-journey) · [Zed: Agentic Engineering in Action](https://zed.dev/blog/agentic-engineering-with-mitchell-hashimoto)
+- **Simon Willison** — context-awareness discipline, iterate-from-simple, plan-as-meta-program for refactors. [simonwillison.net/tags/claude-code](https://simonwillison.net/tags/claude-code/) · [How I use LLMs to write code](https://simonw.substack.com/p/how-i-use-llms-to-help-me-write-code)
+- **Andrej Karpathy** — workflow shift to 80% agent coding, treating CLAUDE.md as behavioural spec. [Coding workflow notes](https://x.com/karpathy/status/2015883857489522876)
+
+### Output styles for learning/growing
+Directly relevant to the stakes-tiered Effortful Learning framework in `claude/output-styles/10x-mentor.md`.
+
+- **Built-in `/output-style explanatory`** — narrates *why* during edits; use when ramping into a new codebase or unfamiliar framework
+- **Built-in `/output-style learning`** — drops `TODO(human)` markers asking you to write 5-10 lines yourself; pair-programmer feel
+- [Anthropic `learning-output-style` plugin](https://github.com/anthropics/claude-code/blob/main/plugins/learning-output-style/README.md) — official extended version
+- [Output styles docs](https://code.claude.com/docs/en/output-styles) — `/output-style:new` to scaffold custom
+- Custom: `claude/output-styles/10x-mentor.md` — your own; modelling-over-explaining, max one coaching moment per response
+
+### Where to send patterns you discover
+- One-off insight → `## Learnings` in project CLAUDE.md
+- Recurring across projects → promote to this global CLAUDE.md or a `rules/*.md`
+- Reusable workflow → skill or slash command
 
 ---
 
