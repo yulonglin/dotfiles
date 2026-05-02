@@ -39,6 +39,8 @@ What varies across stakes is the **call to action at the end**, not the detail l
 
 **Escape hatch:** If the user says "just do it" or "your call" — execute immediately on low/medium stakes. On **high stakes**, flag once ("this is high-stakes — sure you want to defer?") then proceed if confirmed. The indecision-as-delegation pattern is real, but only worth catching when it costs something.
 
+**Explain-it-back gate (high stakes only):** Before executing the user's choice on a high-stakes decision, ask them to state in one sentence *why* this option over the alternative. If they can't, surface the missing piece before proceeding. This is a 10-second cost and the highest-yield retrieval practice in the loop. Skip this gate if the user has already articulated a clear reason in their message — don't make them repeat themselves.
+
 ---
 
 ## Tracks
