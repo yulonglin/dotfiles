@@ -43,6 +43,34 @@ Spaced-repetition retrospective on accumulated feedback memories. Lessons that d
    - "Retire / graduated" → delete the memory file (and its line in MEMORY.md)
    - "Refine" → edit the memory file with the new context
 
+## Bonus: commit explain-back (optional, +1 retrieval rep)
+
+After the feedback triage, sample one recent commit and ask the user to explain it back. This is a low-cost, high-yield retrieval rep — if they can't articulate why the change exists, the lesson didn't stick.
+
+```bash
+# Pick a commit from the last ~14 days, biased toward non-trivial diffs
+git log --since="14 days ago" --pretty=format:'%h %s' --no-merges \
+  | shuf -n 1
+```
+
+Format the prompt:
+
+```
+### Explain-back: <hash> <subject>
+_Diff:_ `git show --stat <hash>` ([N] files changed)
+
+In one or two sentences:
+1. **Why** does this change exist? (what problem / opportunity)
+2. **What** would you do differently if you wrote it today?
+```
+
+If they stall or it's clearly stale ("no idea, that was a parallel session"), that *is* the finding — note it and move on. Don't push.
+
+Skip this step if:
+- No commits in the window
+- The user explicitly said "just feedback today"
+- Already done in the last 7 days (avoid review fatigue)
+
 ## When to invoke
 
 - Explicit: user says "review my feedback" / "weekly retrospective" / "audit memories"
