@@ -237,6 +237,16 @@ binding_display() {
 }
 
 normalize_export_bindings() {
+    # --lenient: drop ambiguous bindings with a warning instead of dying.
+    # Used when re-reading existing .envrc state (picker, --list); a stale
+    # ambiguous binding shouldn't block the user from re-picking. Strict
+    # callers (final write path, CLI args) still die on ambiguity.
+    local lenient=false
+    if [[ "${1:-}" == "--lenient" ]]; then
+        lenient=true
+        shift
+    fi
+
     local binding canonical env_key secret_key
     local normalized=()
     local seen_envs=""
@@ -266,6 +276,10 @@ normalize_export_bindings() {
             local match_count
             match_count=$(printf '%s\n' "$keys_meta" | awk -F'\t' -v e="$secret_key" '$1 == e { n++ } END { print n+0 }')
             if [[ "$match_count" -gt 1 ]]; then
+                if [[ "$lenient" == true ]]; then
+                    echo "Warning: existing binding '$secret_key' matches $match_count BWS secrets — pick an exact 'ENV - description' in the picker." >&2
+                    continue
+                fi
                 die "Ambiguous: $match_count BWS secrets share env name '$secret_key'. Bind an exact key via ENV=ENV - description."
             fi
         fi
@@ -923,10 +937,10 @@ show_current_bindings() {
     fi
 
     mapfile -t export_bindings < <(current_envrc_export_bindings)
-    # Use command substitution so die() in normalize_export_bindings aborts
-    # rather than silently returning an empty list.
+    # Lenient: warn-and-skip ambiguous bindings so --list can still display
+    # the rest of the .envrc instead of dying on a stale ambiguous entry.
     local _normalized_current
-    _normalized_current=$(normalize_export_bindings "${export_bindings[@]}") || exit $?
+    _normalized_current=$(normalize_export_bindings --lenient "${export_bindings[@]}") || exit $?
     if [[ -n "$_normalized_current" ]]; then
         mapfile -t export_bindings <<< "$_normalized_current"
     else
@@ -1102,9 +1116,10 @@ COPY_EOF
         SECRETS_CACHE=""
         load_secrets_cache
         mapfile -t current_export_bindings < <(current_envrc_export_bindings)
-        # Command substitution so die() propagates — process substitution
-        # would swallow it and quietly drop the existing binding.
-        _normalized_current=$(normalize_export_bindings "${current_export_bindings[@]}") || exit $?
+        # Lenient: ambiguous existing bindings (e.g. plain OPENAI_API_KEY when
+        # BWS now has multiple matches) drop with a warning instead of dying,
+        # so the user can pick the exact "ENV - description" in this picker.
+        _normalized_current=$(normalize_export_bindings --lenient "${current_export_bindings[@]}") || exit $?
         if [[ -n "$_normalized_current" ]]; then
             mapfile -t current_export_bindings <<< "$_normalized_current"
         else
