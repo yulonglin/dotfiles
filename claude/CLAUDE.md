@@ -120,7 +120,8 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/context-management.md` — PDF/large file rules, bulk edit constraints, verbose output handling
 - `rules/agents-and-delegation.md` — Subagent strategy, delegation decision tree, factual verification, team escalation
 - `rules/coding-conventions.md` — Python/TypeScript/shell basics, language selection, package managers
-- `rules/refusal-alternatives.md` — Friction prevention: ambiguity resolution, non-destructive editing, tool failure pivots, over-caution fixes
+- `rules/refusal-alternatives.md` — Friction prevention: ambiguity resolution, non-destructive editing, tool failure pivots, over-caution fixes, response to pushback
+- `rules/verify-before-instructing.md` — Verify specific factual claims (flags, URLs, versions, comparisons) from authoritative sources before stating them; hedge confidence when not verified
 - `rules/multi-agent-coordination.md` — Multi-agent awareness, `.agent-claims` chope mechanism, conflict resolution
 - `rules/research-integrity.md` — No circular reasoning, report all results, no shortcut hacks, label/score/analysis separation
 
