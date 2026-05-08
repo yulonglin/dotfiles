@@ -73,6 +73,7 @@ DEPLOY_REGISTRY=(
     "bedtime|Bedtime timezone enforcement|macos|true"
     "text-replacements|Sync macOS + Alfred text replacements|macos|true"
     "mouseless|Keyboard-driven mouse control|macos|true"
+    "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true"
     "vpn|NordVPN + Tailscale split tunnel daemon|macos|true"
     "pueue|Pueue + systemd resource slices|linux|true"
     "bws|Bitwarden Secrets Manager CLI|all|false"
@@ -244,6 +245,7 @@ apply_profile() {
             DEPLOY_SECRETS=false
             DEPLOY_SECRETS_ENV=false
             DEPLOY_FINICKY=false
+            DEPLOY_BEARCLI=false
             DEPLOY_FILE_APPS=false
             DEPLOY_CLAUDE_TOOLS=false
             ;;

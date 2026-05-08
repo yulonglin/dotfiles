@@ -13,6 +13,10 @@ alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
 alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
+# Define bearcli alias only if Bear is installed (avoids cryptic runtime failures)
+# Skipped automatically when /usr/local/bin/bearcli symlink exists (deploy.sh)
+[[ -x /Applications/Bear.app/Contents/MacOS/bearcli && ! -x /usr/local/bin/bearcli ]] && \
+    alias bearcli='/Applications/Bear.app/Contents/MacOS/bearcli'
 
 # shellcheck source=/dev/null
 source "$DOT_DIR/scripts/helpers/dotfiles_secrets.sh"
@@ -998,6 +1002,7 @@ alias website='cd $WRITING_DIR/${DOTFILES_WEBSITE:-yulonglin.github.io}'
 
 # Quick open in editor (functions instead of aliases so zsh-syntax-highlighting recognizes them)
 edit-dotfiles()  { ${=EDITOR} "$DOT_DIR"; }
+edit-aliases()   { ${=EDITOR} "$DOT_DIR/config/aliases.sh"; }
 edit-ssh()       { ${=EDITOR} ~/.ssh/config; }
 edit-claude()    { ${=EDITOR} "$DOT_DIR/claude/settings.json"; }
 edit-profiles()  { ${=EDITOR} "$DOT_DIR/claude/templates/contexts/profiles.yaml"; }
@@ -1318,7 +1323,16 @@ alias ai-update='update-ai-tools'
 alias pkg-update='update-packages'
 
 # zerobrew: faster Homebrew client (use zb for interactive installs, brew for scripts)
+# `zb install` falls back to `brew install` on failure (zerobrew doesn't handle casks)
 if command -v zb &>/dev/null; then
+    zb() {
+        if [[ "$1" == "install" ]]; then
+            shift
+            command zb install "$@" || { echo "→ zb failed, falling back to brew install" >&2; brew install "$@"; }
+        else
+            command zb "$@"
+        fi
+    }
     alias zbi='zb install'
     alias zbu='zb uninstall'
 fi

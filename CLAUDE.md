@@ -91,6 +91,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
 - Mouseless - Keyboard-driven mouse control (macOS only, copied not symlinked)
+- Bear CLI symlink - `/Applications/Bear.app/Contents/MacOS/bearcli` → `/usr/local/bin/bearcli` (macOS only, so `bearcli` works in cron/scripts where shell aliases don't apply)
 - Text replacements - Bidirectional sync with macOS + Alfred snippets (daily 9 AM, requires Full Disk Access for terminal app). macOS uses raw shortcuts; Alfred applies collection prefix at runtime (e.g., `fm.hi`)
 - Encrypted secrets (SOPS+age / BWS) - Stores API keys via Bitwarden Secrets Manager (primary) or SOPS+age (fallback). Backend auto-detected: bws if token + CLI exist, else sops. Override with `DOTFILES_SECRETS_BACKEND` env var
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
@@ -98,7 +99,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - AI tools auto-update - Daily update of Claude Code, Gemini CLI, Codex CLI (6 AM, launchd/cron)
 - Developer config files - EditorConfig, curlrc, inputrc, .hushlogin (deployed with --editor flag)
 - Global gitattributes - Binary file handling + line endings (deployed with --git-config flag)
-- File associations - Set default editor for coding file types (macOS only, reads `config/macos_default_apps.conf`)
+- File associations - Set default editor for coding file types and default terminal for `.command`/`.tool` (macOS only, reads `config/macos_default_apps.conf`)
 - Pueue + resource slices - Local job queue with cgroup-enforced CPU/memory limits (Linux only, systemd user slices, `j*` aliases)
 - Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, brew/apt/dnf/pacman, launchd/cron)
 - Package manager configs - Global npmrc, bunfig.toml, pnpm rc, uv.toml with 7-day min-release-age + ignore-scripts (symlinked)
@@ -436,3 +437,4 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - Dotfiles runtime secrets now live outside the public repo in `DOTFILES_SECRETS_DIR`; `setup-envrc` writes repo-root `.envrc` files with direct exports, `ENV=SECRET` mappings, and optional Telegram plugin bindings. `claude()` materializes `.claude/channels/telegram/.env` from `DOTFILES_TELEGRAM_BOT_SECRET` at launch, `with-secrets` exports only named keys for one command, and Claude hooks inject only `ANTHROPIC_API_KEY` via a dedicated wrapper. `.secrets` / `.env` should be treated as legacy leftovers, not the normal flow (2026-04-06)
 - fzf pre-selection in `setup-envrc` requires fzf 0.54+ (`--bind "load:pos(N)+select"`). apt's fzf (0.44) is too old; mise installs 0.71 on Linux. macOS brew is fine. fzf is in both `PACKAGES_CORE` (apt baseline) and `PACKAGES_LINUX_MISE` (modern override) — mise's PATH takes precedence (2026-04-14)
 - Sandbox `denyWithinAllow` blocks git pull/merge/stash on `config/` and `claude/settings.json` even though `git` is in `excludedCommands`. `denyWithinAllow` is injected by Claude Code at runtime (not user-configurable). Workaround: use `dangerouslyDisableSandbox: true` on `git pull`, `git merge`, `git stash` commands in this repo. The sync guard hook (`guard_post_rebase.sh`) now warns (not blocks) on remote-ahead and allows merge completion commits (2026-04-10)
+- rust-skills plugin UserPromptSubmit hook was hyper-broad (matched `error`, `option`, `implement`, `how to`, `vs`, Chinese question words like `问题`/`怎么` — fired on most prompts) and injected a 100-line mandatory output format. Disabled by emptying `hooks.json` in both `~/.claude/plugins/cache/rust-skills/rust-skills/<ver>/hooks/hooks.json` and `~/.claude/plugins/marketplaces/rust-skills/hooks/hooks.json` to `{"hooks": {}}`. Skills (m01-m15, domain-*) remain invocable via Skill tool. Patch is clobbered by plugin version bumps (cache re-extracts) and `git pull` on marketplace mirror — re-empty if it returns. Decision: keep plugin for skill availability, kill the hook for noise (2026-05-08)

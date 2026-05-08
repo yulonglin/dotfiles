@@ -80,6 +80,7 @@ COMPONENTS:
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
     --file-apps       Set default editor for coding file types (macOS only)
     --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
+    --bearcli         Symlink Bear CLI → /usr/local/bin (macOS only, for cron/scripts)
     --vpn             Install NordVPN+Tailscale split tunnel daemon (macOS only)
     --pueue           Deploy Pueue + systemd resource management (Linux only)
     --bws             Install Bitwarden Secrets Manager CLI (bws)
@@ -501,6 +502,36 @@ if [[ "$DEPLOY_FINICKY" == "true" ]] && is_macos && [[ -f "$DOT_DIR/config/finic
 
     if [[ ! -d "/Applications/Finicky.app" ]]; then
         log_warning "Finicky not installed. Run './install.sh' to install."
+    fi
+fi
+
+# ─── Bear CLI (macOS) ─────────────────────────────────────────────────────────
+# Symlinks Bear's CLI to /usr/local/bin so it works in cron jobs and scripts
+# (shell aliases don't carry into non-interactive shells).
+
+if [[ "$DEPLOY_BEARCLI" == "true" ]] && is_macos; then
+    BEAR_APP="/Applications/Bear.app"
+    BEAR_SRC="$BEAR_APP/Contents/MacOS/bearcli"
+    BEAR_LINK="/usr/local/bin/bearcli"
+
+    if [[ ! -d "$BEAR_APP" ]]; then
+        log_warning "Bear not installed — install from the Mac App Store, then re-run with --bearcli."
+    elif [[ ! -x "$BEAR_SRC" ]]; then
+        log_warning "Bear is installed but bearcli is missing at $BEAR_SRC (requires Bear 2+). Skipping."
+    elif [[ -L "$BEAR_LINK" && "$(readlink "$BEAR_LINK")" == "$BEAR_SRC" ]]; then
+        log_info "Bear CLI symlink already in place at $BEAR_LINK"
+    else
+        log_info "Symlinking Bear CLI to $BEAR_LINK..."
+        # Try without sudo first; only escalate if /usr/local/bin isn't writable.
+        if mkdir -p /usr/local/bin 2>/dev/null && [[ -w /usr/local/bin ]]; then
+            ln -sf "$BEAR_SRC" "$BEAR_LINK"
+            log_success "Symlinked $BEAR_SRC → $BEAR_LINK"
+        else
+            log_info "  /usr/local/bin not writable — using sudo (you may be prompted)"
+            sudo mkdir -p /usr/local/bin
+            sudo ln -sf "$BEAR_SRC" "$BEAR_LINK"
+            log_success "Symlinked (via sudo) $BEAR_SRC → $BEAR_LINK"
+        fi
     fi
 fi
 
@@ -1133,7 +1164,12 @@ if [[ "$DEPLOY_FILE_APPS" == "true" ]] && is_macos; then
 
         if [[ "$DEPLOY_FILE_APPS" == "true" ]]; then
             "$tool_bin" "$EDITOR_BUNDLE_ID" "${EXTENSIONS[@]}"
-            log_success "File associations set to $EDITOR_BUNDLE_ID"
+            log_success "Editor associations set to $EDITOR_BUNDLE_ID"
+
+            if [[ -n "${TERMINAL_BUNDLE_ID:-}" ]] && [[ ${#TERMINAL_EXTENSIONS[@]} -gt 0 ]]; then
+                "$tool_bin" "$TERMINAL_BUNDLE_ID" "${TERMINAL_EXTENSIONS[@]}"
+                log_success "Terminal associations set to $TERMINAL_BUNDLE_ID"
+            fi
         fi
     fi
 fi
