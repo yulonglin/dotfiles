@@ -44,6 +44,119 @@ ANSI_RED = "\033[1;31m"
 ANSI_YELLOW = "\033[1;33m"
 ANSI_CYAN = "\033[1;36m"
 
+# ── Sensitive credential files: hard deny ────────────────────────────
+# Files that should NEVER be read by any tool. No masking — just block.
+# Each entry: (path pattern, reason, alternative)
+SENSITIVE_PATHS: list[tuple[str, str, str]] = [
+    ("/.config/sops/age/keys.txt", "age private key (decryption master key)", "Use `sops -d` to decrypt files, or `with-secrets KEY -- printenv KEY` for individual secrets"),
+    ("/.ssh/id_", "SSH private key", "Use `ssh-add -l` to list loaded keys, or `ssh-keygen -l -f <pubkey>` for fingerprints"),
+    ("/.config/bws/token", "Bitwarden Secrets Manager token", "Use `bws secret list` to interact with secrets via CLI"),
+    ("/.aws/credentials", "AWS credentials", "Use `aws configure list` to check config, or `aws sts get-caller-identity` to verify auth"),
+    ("/.aws/config", "AWS config (may contain SSO tokens)", "Use `aws configure list` to check config"),
+    ("/.kube/config", "Kubernetes config (cluster credentials)", "Use `kubectl config view --minify` to see non-secret config"),
+    ("/.git-credentials", "Git credential store (plaintext passwords)", "Use `git credential-cache` or check remote with `git remote -v`"),
+    ("/.claude/.credentials.json", "Claude Code auth credentials", "Already authenticated — no need to read credentials"),
+    ("/.netrc", "Network credentials (plaintext logins)", "Use tool-specific auth commands instead"),
+]
+
+
+def check_sensitive_path(file_path: str) -> tuple[str, str] | None:
+    """Check if a file path matches a sensitive credential file.
+
+    Returns (reason, alternative) if blocked, None if allowed.
+    Works for both Read tool file_path and paths extracted from Bash commands.
+    """
+    # Expand ~ to home dir for comparison
+    home = os.path.expanduser("~")
+    # Normalize: if path starts with ~, expand it
+    normalized = file_path.replace("~", home) if file_path.startswith("~") else file_path
+
+    for path_fragment, reason, alternative in SENSITIVE_PATHS:
+        # Check if the path fragment appears in the normalized path
+        # Use home + fragment for absolute paths, or just fragment for relative
+        full_pattern = home + path_fragment
+        if full_pattern in normalized or normalized.endswith(path_fragment):
+            return reason, alternative
+        # Also catch: the fragment without leading / for partial matches
+        # e.g., ".ssh/id_rsa" in "/Users/foo/.ssh/id_rsa"
+        if path_fragment.lstrip("/") in normalized:
+            return reason, alternative
+
+    return None
+
+
+def _resolve_path_pair(file_path: str) -> list[str]:
+    """Return the path itself plus its realpath (symlink target), if different.
+
+    Always check both: a symlink at ./mylink → ~/.ssh/id_rsa must trip the
+    sensitive check on the target, not just the surface path.
+    """
+    paths = [file_path]
+    try:
+        abs_path = os.path.abspath(os.path.expanduser(file_path))
+        real = os.path.realpath(abs_path)
+        if abs_path not in paths:
+            paths.append(abs_path)
+        if real not in paths:
+            paths.append(real)
+    except (OSError, ValueError):
+        pass
+    return paths
+
+
+def fast_deny_sensitive_path(tool_name: str, tool_input: dict) -> dict | None:
+    """Deny tool calls that read or write sensitive credential files.
+
+    Covers Read, Edit, Write, MultiEdit, NotebookEdit, and Bash read commands.
+    Resolves symlinks so `./link → ~/.ssh/id_rsa` is also blocked.
+    """
+    candidate_paths: list[str] = []
+
+    if tool_name in ("Read", "Edit", "Write", "MultiEdit"):
+        fp = tool_input.get("file_path", "")
+        if fp:
+            candidate_paths.append(fp)
+    elif tool_name == "NotebookEdit":
+        fp = tool_input.get("notebook_path") or tool_input.get("file_path", "")
+        if fp:
+            candidate_paths.append(fp)
+    elif tool_name == "Bash":
+        cmd = tool_input.get("command", "")
+        # Extract file paths from simple read commands
+        # Match: cat/head/tail/bat/less/more <path>
+        import shlex
+        try:
+            tokens = shlex.split(cmd)
+        except ValueError:
+            tokens = cmd.split()
+        if tokens and tokens[0] in ("cat", "head", "tail", "bat", "less", "more"):
+            for token in tokens[1:]:
+                if not token.startswith("-"):
+                    candidate_paths.append(token)
+    else:
+        return None
+
+    for raw in candidate_paths:
+        for path in _resolve_path_pair(raw):
+            result = check_sensitive_path(path)
+            if result:
+                reason, alternative = result
+                return _build_sensitive_deny(raw, reason, alternative)
+    return None
+
+
+# Backwards-compatible alias for any external callers.
+fast_deny_sensitive_read = fast_deny_sensitive_path
+
+
+def _build_sensitive_deny(path: str, reason: str, alternative: str) -> dict:
+    return {
+        "decision": "deny",
+        "reason": f"BLOCKED: {path} contains {reason}. This file must never be read by AI agents.",
+        "suggestion": alternative,
+    }
+
+
 # ── Fast-path allowlist ──────────────────────────────────────────────
 # Patterns that bypass the API call entirely. These are commands where
 # Haiku repeatedly hallucinates false positives despite explicit rules.
@@ -90,6 +203,8 @@ SAFE_SHELL_COMMANDS: set[str] = {
     "cat", "head", "tail", "less", "more", "bat", "wc", "file", "stat",
     "ls", "eza", "tree", "du", "dust", "df", "duf", "realpath", "dirname",
     "basename", "readlink",
+    # PDF inspection (read-only, poppler-utils)
+    "pdftotext", "pdfinfo", "pdfimages", "pdftohtml",
     # Search (read-only)
     "grep", "rg", "find", "fd", "ag", "ack",
     # Text processing (read-only — sed/sd without -i, awk)
@@ -99,6 +214,7 @@ SAFE_SHELL_COMMANDS: set[str] = {
     # Shell builtins / control flow
     "echo", "printf", "test", "[", "true", "false", ":", "read",
     "break", "continue", "return", "exit", "shift", "set",
+    "cd", "pwd", "pushd", "popd",
     # Variable / environment
     "export", "local", "declare", "typeset", "unset", "env", "printenv",
     # Git (read-only subcommands checked via UNSAFE_SHELL_PATTERNS denylist)
@@ -236,6 +352,141 @@ def fast_classify_bash(command: str) -> str | None:
     return None
 
 
+# ── Fast-allow for edits within trusted repos ────────────────────────
+# Tools that target a single file path. Edits inside your own dotfiles
+# (or other trusted GitHub orgs) shouldn't need an LLM round-trip.
+PATH_BASED_EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
+
+
+def _tool_target_path(tool_name: str, tool_input: dict) -> str:
+    if tool_name in ("Edit", "Write", "MultiEdit"):
+        return tool_input.get("file_path", "") or ""
+    if tool_name == "NotebookEdit":
+        return tool_input.get("notebook_path", "") or tool_input.get("file_path", "") or ""
+    return ""
+
+
+# Process-local cache: git toplevel -> trust dict. Avoids forking git for
+# every Edit when many files live in the same repo (the common case).
+_FILE_TRUST_CACHE: dict[str, dict] = {}
+
+
+def _git_toplevel_for(path: str) -> str:
+    """Return the git toplevel containing `path`, or '' if none."""
+    import subprocess
+    if os.path.isdir(path):
+        search_dir = path
+    else:
+        search_dir = os.path.dirname(path) or "."
+    try:
+        proc = subprocess.run(
+            ["git", "-C", search_dir, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if proc.returncode == 0:
+            return proc.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _classify_owner(remote_url: str) -> tuple[str, bool, bool]:
+    """Extract owner from a github URL and classify trust."""
+    owner = ""
+    if "github.com:" in remote_url:
+        owner = remote_url.split("github.com:", 1)[1].split("/")[0]
+    elif "github.com/" in remote_url:
+        owner = remote_url.split("github.com/", 1)[1].split("/")[0]
+    owner_lower = owner.lower()
+    trusted = owner_lower in {u.lower() for u in TRUSTED_GITHUB_OWNERS}
+    personal = owner_lower in {u.lower() for u in PERSONAL_GITHUB_USERS}
+    return owner, trusted, personal
+
+
+def detect_file_repo_trust(file_path: str) -> dict | None:
+    """Resolve file_path's containing git repo and classify its trust.
+
+    Walks symlinks first so `~/.claude/foo → dotfiles/...` is classified by
+    the dotfiles repo, even when Claude's CWD is somewhere unrelated.
+    Returns None if the file isn't in a git repo or detection fails.
+    """
+    if not file_path:
+        return None
+    try:
+        abs_path = os.path.abspath(os.path.expanduser(file_path))
+        real_path = os.path.realpath(abs_path)
+    except (OSError, ValueError):
+        return None
+
+    toplevel = _git_toplevel_for(real_path)
+    if not toplevel:
+        return None
+    if toplevel in _FILE_TRUST_CACHE:
+        return _FILE_TRUST_CACHE[toplevel]
+
+    import subprocess
+    trust = {"toplevel": toplevel, "remote_url": "", "owner": "",
+             "trusted": False, "personal": False}
+    try:
+        proc = subprocess.run(
+            ["git", "-C", toplevel, "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if proc.returncode == 0:
+            trust["remote_url"] = proc.stdout.strip()
+            trust["owner"], trust["trusted"], trust["personal"] = _classify_owner(trust["remote_url"])
+    except Exception:
+        pass
+
+    _FILE_TRUST_CACHE[toplevel] = trust
+    return trust
+
+
+def fast_allow_edit(tool_name: str, tool_input: dict, cwd_trust: dict) -> str | None:
+    """Allow edits to files inside any trusted/personal repo.
+
+    Two-stage check:
+    1. Cheap path: if cwd's repo is trusted AND the file (resolving symlinks)
+       lives under that repo, allow without extra git calls.
+    2. Symlink-into-another-repo path: walk up from the file's resolved path
+       to find its containing repo, classify trust there. Catches edits like
+       `~/.claude/skills/foo.md → dotfiles/...` from a non-dotfiles cwd.
+    """
+    if tool_name not in PATH_BASED_EDIT_TOOLS:
+        return None
+
+    file_path = _tool_target_path(tool_name, tool_input)
+    if not file_path:
+        return None
+
+    try:
+        abs_path = os.path.abspath(os.path.expanduser(file_path))
+        real_path = os.path.realpath(abs_path)
+    except (OSError, ValueError):
+        return None
+
+    # Stage 1: cwd-based trust (no extra git call needed).
+    if cwd_trust.get("personal") or cwd_trust.get("trusted"):
+        toplevel = cwd_trust.get("toplevel") or cwd_trust.get("cwd") or ""
+        if toplevel:
+            try:
+                real_top = os.path.realpath(toplevel)
+                if real_path == real_top or real_path.startswith(real_top + os.sep):
+                    scope = "personal" if cwd_trust.get("personal") else "trusted"
+                    return f"{tool_name} within {scope} cwd-repo {os.path.basename(real_top)}"
+            except (OSError, ValueError):
+                pass
+
+    # Stage 2: file-resolved trust (covers symlinks pointing into a different
+    # trusted repo than cwd's).
+    file_trust = detect_file_repo_trust(file_path)
+    if file_trust and (file_trust.get("personal") or file_trust.get("trusted")):
+        scope = "personal" if file_trust.get("personal") else "trusted"
+        return f"{tool_name} within {scope} file-repo {os.path.basename(file_trust['toplevel'])}"
+
+    return None
+
+
 class AutoClassifyWarning(RuntimeError):
     """Fail-open warning that should be surfaced to the user."""
 
@@ -264,7 +515,10 @@ def detect_repo_trust(cwd: str) -> dict:
     # Fallback: detect and cache
     import subprocess
 
-    result = {"trusted": False, "personal": False, "remote_url": "", "owner": "", "cwd": cwd}
+    result = {
+        "trusted": False, "personal": False,
+        "remote_url": "", "owner": "", "cwd": cwd, "toplevel": "",
+    }
     try:
         proc = subprocess.run(
             ["git", "-C", cwd, "remote", "get-url", "origin"],
@@ -286,6 +540,18 @@ def detect_repo_trust(cwd: str) -> dict:
         result["owner"] = owner
         result["trusted"] = owner.lower() in {u.lower() for u in TRUSTED_GITHUB_OWNERS}
         result["personal"] = owner.lower() in {u.lower() for u in PERSONAL_GITHUB_USERS}
+
+        # Resolve git toplevel so fast-path can match files anywhere in the repo,
+        # not just under cwd (e.g., editing dotfiles/scripts/x from dotfiles/claude/).
+        try:
+            top = subprocess.run(
+                ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if top.returncode == 0:
+                result["toplevel"] = top.stdout.strip()
+        except Exception:
+            pass
 
         # Cache for subsequent calls
         try:
@@ -328,7 +594,15 @@ def build_warning_message(headline: str, details: str = "", suggestion: str = ""
 def emit_warning(headline: str, details: str = "", suggestion: str = "") -> None:
     msg = build_warning_message(headline, details, suggestion)
     log(f"WARNING: {headline} — {details or 'no details'}")
-    json.dump({"systemMessage": msg}, sys.stdout)
+    # Stderr → user sees in terminal immediately
+    print(msg, file=sys.stderr)
+    # Stdout → Claude sees via systemMessage in PermissionRequest hook output
+    json.dump({
+        "hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+        },
+        "systemMessage": msg,
+    }, sys.stdout)
 
 
 def parse_anthropic_error(exc: urllib.error.HTTPError) -> tuple[str, str]:
@@ -525,23 +799,49 @@ def main() -> None:
     # Early key check: warn loudly once per session if no API key.
     # Flag file prevents spamming every tool call. Reset after 1 hour (new session).
     if not os.environ.get("ANTHROPIC_API_KEY"):
+        should_warn = False
         try:
-            should_warn = not os.path.exists(NO_KEY_FLAG)
-            if not should_warn:
+            if not os.path.exists(NO_KEY_FLAG):
+                should_warn = True
+            else:
                 age = time.time() - os.path.getmtime(NO_KEY_FLAG)
                 should_warn = age > 3600
-            if should_warn:
+        except OSError:
+            should_warn = True  # Can't check flag → warn to be safe
+        if should_warn:
+            try:
                 os.makedirs(os.path.dirname(NO_KEY_FLAG), exist_ok=True)
                 with open(NO_KEY_FLAG, "w") as f:
                     f.write("")
-                emit_warning(
-                    "auto-classify has NO API key — all non-trivial commands will fall back to manual prompts.",
-                    "with-anthropic-key.sh could not inject ANTHROPIC_API_KEY.",
-                    "Run: setup-envrc ANTHROPIC_API_KEY  (in dotfiles repo), or check BWS token.",
-                )
-                return  # Single JSON payload per hook invocation
-        except OSError:
-            pass  # Can't write flag file (sandbox/permissions) — skip warning, fail open
+            except OSError:
+                pass  # Flag file write failed (sandbox) — still warn below
+            emit_warning(
+                "auto-classify has NO API key — all non-trivial commands will fall back to manual prompts.",
+                "with-anthropic-key.sh could not inject ANTHROPIC_API_KEY.",
+                "Check: is bws in PATH? Run `dotfiles-secrets shell ANTHROPIC_API_KEY` to test.",
+            )
+            return  # Single JSON payload per hook invocation
+
+    # Fast-path: deny reads OR writes to sensitive credential files (before any allow)
+    sensitive_deny = fast_deny_sensitive_path(tool_name, tool_input)
+    if sensitive_deny:
+        reason = sensitive_deny.get("reason", "Blocked sensitive file access")
+        suggestion = sensitive_deny.get("suggestion", "")
+        log(f"DENY (sensitive-path): {tool_name} — {reason}")
+        msg = f"\033[1;31m🔒 BLOCKED:\033[0m {reason}"
+        if suggestion:
+            msg += f"\n\033[1;36m💡 Instead:\033[0m {suggestion}"
+        json.dump({
+            "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {"behavior": "deny"},
+            },
+            "systemMessage": msg,
+        }, sys.stdout)
+        return
+
+    # Detect repo trust once — used by both fast-allow and the LLM rules.
+    trust = detect_repo_trust(cwd)
 
     # Fast-path: bypass API for known-safe Bash patterns
     if tool_name == "Bash":
@@ -557,6 +857,18 @@ def main() -> None:
             }, sys.stdout)
             return
 
+    # Fast-path: bypass API for edits inside trusted/personal repos
+    edit_reason = fast_allow_edit(tool_name, tool_input, trust)
+    if edit_reason:
+        log(f"ALLOW (fast-path): {tool_name} — {edit_reason}")
+        json.dump({
+            "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {"behavior": "allow"},
+            }
+        }, sys.stdout)
+        return
+
     try:
         with open(RULES_PATH) as f:
             rules = f.read()
@@ -569,7 +881,6 @@ def main() -> None:
         return
 
     # Inject repo trust context into rules
-    trust = detect_repo_trust(cwd)
     trust_section = f"""
 ## Repo Trust Context (auto-detected)
 
@@ -593,9 +904,15 @@ def main() -> None:
         emit_warning(warning.headline, warning.details, warning.suggestion)
         return
 
-    decision = result.get("decision", "allow").lower()
+    # Unknown/missing decision → treat as unsure (warn, don't auto-approve)
+    raw_decision = result.get("decision", "")
+    decision = raw_decision.lower() if isinstance(raw_decision, str) else ""
     reason = result.get("reason", "")
-    log(f"{decision.upper()}: {tool_name} — {reason}")
+    if decision not in ("allow", "deny", "unsure"):
+        log(f"UNSURE (unrecognized decision={raw_decision!r}): {tool_name} — {reason}")
+        decision = "unsure"
+    else:
+        log(f"{decision.upper()}: {tool_name} — {reason}")
 
     if decision == "deny":
         # Show warning but don't block — let user decide
@@ -603,21 +920,28 @@ def main() -> None:
         msg = f"\033[1;33m⚠ auto-classify:\033[0m {reason}"
         if suggestion:
             msg += f"\n\033[1;36m💡 Suggestion:\033[0m {suggestion}"
-        output = {
-            "systemMessage": msg,
-        }
-        json.dump(output, sys.stdout)
+        json.dump({"systemMessage": msg}, sys.stdout)
         return
-    else:
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PermissionRequest",
-                "decision": {
-                    "behavior": "allow",
-                },
-            }
-        }
 
+    if decision == "unsure":
+        # Not auto-approving — surface warning and fall through to manual prompt
+        msg = (
+            f"\033[1;33m⚠ auto-classify unsure — not auto-approving.\033[0m "
+            f"Please review and approve manually."
+        )
+        if reason:
+            msg += f"\n\033[1;36m💡 Reason:\033[0m {reason}"
+        json.dump({"systemMessage": msg}, sys.stdout)
+        return
+
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": {
+                "behavior": "allow",
+            },
+        }
+    }
     json.dump(output, sys.stdout)
 
 
