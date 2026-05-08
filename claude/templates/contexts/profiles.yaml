@@ -39,6 +39,7 @@ marketplaces:
 
 # Always-on in every profile (declared once)
 base:
+  - bear-mcp
   - claude-md-management
   - codex
   - commit-commands
@@ -46,6 +47,7 @@ base:
   - core
   - hookify
   - llms-fetch-mcp
+  - notion-mcp
   - plugin-dev
   - remember
   - superpowers
@@ -86,6 +88,8 @@ profiles:
   writing:
     comment: "Papers, blog posts, documentation"
     enable:
+      - bear-mcp
+      - notion-mcp
       - viz
       - workflow
       - writing
@@ -100,8 +104,8 @@ profiles:
     enable: [huggingface-skills]
 
   productivity:
-    comment: "Task and project management — Things 3"
-    enable: [things-mcp]
+    comment: "Task and project management — Things 3, Bear, Notion"
+    enable: [bear-mcp, notion-mcp, things-mcp]
 
   python:
     comment: "Adds pyright-lsp"
