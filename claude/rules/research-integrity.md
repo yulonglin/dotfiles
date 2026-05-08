@@ -43,6 +43,32 @@ When data is messy or a mapping is unclear, the temptation is to hack around it.
 | "Close enough — the numbers look right" | Verify the pipeline end-to-end on a case you can check by hand |
 | "It probably doesn't matter" | If you're not sure it doesn't matter, check |
 
+## Causal Claims Match Evidence
+
+**Before writing a causal claim, check whether the evidence actually supports it.** This is an epistemic check, not a wordsmithing pass — fix the claim, don't just soften the verb.
+
+Ask first:
+- Was the mechanism tested, or only the correlation?
+- Is there a control / randomization / adequate N?
+- Are plausible confounds ruled out?
+- Could the effect be noise within the CI?
+
+If the answer is "no" or "not really," the claim should be downgraded — not just rephrased.
+
+| Overconfident framing (avoid) | When to use instead |
+|-------------------------------|---------------------|
+| "X causes Y" / "X drives Y" / "X leads to Y" | Only when mechanism is tested or RCT-style evidence exists |
+| "smoking gun for…" / "definitively shows" / "conclusive evidence that" | Almost never. Theatrical and rarely warranted |
+| "this proves" / "this confirms" / "clearly demonstrates" | Only for replicated, large-effect, well-controlled results |
+| "the data show that X causes Y" (correlational only) | "X is associated with Y" / "Y is higher in the X condition" |
+| "ablating X breaks the model, so X is responsible for Y" | "ablating X reduces Y by Z% (CI), consistent with X contributing — though [confound] not ruled out" |
+
+**Default register for experimental writing**: associated with, consistent with, suggests, is higher in the X condition, we observe. Save strong causal verbs for when the design earns them.
+
+When the evidence *is* strong, state the claim plainly. You don't need "smoking gun" — the result speaks.
+
+This applies to papers, blog posts, slides, internal write-ups, and Slack summaries of results.
+
 ## Separation of Concerns
 
 Keep labels, scores, and analysis in separate stages with clear data flow:

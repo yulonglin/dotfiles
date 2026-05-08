@@ -20,6 +20,28 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 
 **One editor per file.** Never spawn multiple agents to edit the same file.
 
+## Don't Defer Fixes — Delegate in Parallel
+
+**Anti-pattern:** Spot a small, well-scoped bug during a conversation. Say "real bug to file" / "want me to ship it now?" / "5 min fix" / "out of scope." Continue the original task. Fix never lands.
+
+**Rule:** If you can describe the fix in one paragraph and have the root cause, **just delegate it** — don't ask permission, don't backlog it. Spin up a parallel worktree subagent (or tmux Claude Code session for longer iteration) and continue the main task while the fix lands. The user reviews the worktree branch when ready.
+
+| Situation | Action |
+|-----------|--------|
+| Fix needs spec / architecture decisions | Stay inline, surface tradeoffs, get user input |
+| Well-scoped, root cause known | **Worktree subagent** (`isolation: "worktree"`, `run_in_background: true`) — keep working |
+| Needs more iteration than one shot | tmux Claude Code session, briefed with full context |
+| Might not actually be a bug | Confirm one signal first, then delegate or drop |
+
+**Briefing template for the worktree agent:**
+- Repo + paths + line refs
+- Bug + root cause + concrete repro
+- Fix approach (smallest correct change; no surrounding refactoring)
+- Test requirement (covering test + run existing suite)
+- Constraints: don't push, don't merge, don't bump version — user reviews the worktree
+
+**Catch-yourself signals:** "real bug to file" • "5 min fix" • "want me to ship it now?" • "out of scope but worth filing" — skip the question, spawn the worktree agent, continue.
+
 ## Task Delegation Strategy
 
 **Principle:** Skills = workflows you execute, Agents = delegation to external tools.

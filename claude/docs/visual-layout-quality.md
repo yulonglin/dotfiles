@@ -56,6 +56,84 @@ details > summary { margin: 0 -1.25rem; padding: 0 1.25rem; }
 .child { position: absolute; top: 0.5rem; left: 0.5rem; }
 ```
 
+## Chart Annotations (matplotlib, TikZ, Plotly, vega)
+
+### Hard Rule: arrows must anchor to what they reference
+
+An arrow that floats from text-in-empty-space toward a single data element is hard to parse — the reader has to guess what the arrow is *from*. **Both endpoints of an arrow should land on a meaningful chart element** (bar, point, line, region edge), not in blank space.
+
+| Annotation type | Anchoring rule |
+|----------------|----------------|
+| **Single-element callout** ("this point is interesting") | One arrow, head on the element, tail on label text. Label sits in nearby empty space. |
+| **Two-element comparison** ("gap between A and B", "improvement from X to Y") | One arrow with **both** endpoints on the elements (head on one bar/point, tail on the other). Label beside the curve. Or use a bracket spanning the two with a label. |
+| **Region annotation** ("this band is the safe zone") | Anchor to region edges via `axvspan`/`axhspan` + edge labels, not floating text + arrow into the region. |
+
+**Why:** the trajectory of the arrow itself communicates the relationship. If only one end is anchored, the reader sees "label points at X" but loses the *what it's compared to*. Anchoring both ends makes the comparison the visual subject.
+
+**matplotlib pattern (two-bar gap):**
+```python
+from matplotlib.patches import FancyArrowPatch
+
+# Anchor head at bar A top, tail at bar B top
+arrow = FancyArrowPatch(
+    (a_x, a_top_y), (b_x, b_top_y),
+    arrowstyle="-|>", mutation_scale=18,
+    color=ACCENT, linewidth=1.8,
+    connectionstyle="arc3,rad=0.40",  # bow into empty space
+    shrinkA=4, shrinkB=4,
+)
+ax.add_patch(arrow)
+# Label sits beside the curve, in the bow's empty side
+ax.text(midpoint_x, midpoint_y, "+51 pp gap",
+        color=ACCENT, fontweight="bold")
+```
+
+**Anti-pattern (DO NOT do this):**
+```python
+# BAD — text floats high in empty space, only one anchor
+ax.annotate("+51 pp gap",
+            xy=(b_x, b_top_y),         # only B anchored
+            xytext=(b_x, 78),          # tail floats in sky
+            arrowprops=dict(arrowstyle="->"))
+```
+
+**Choosing the bow direction:** `connectionstyle="arc3,rad=±N"` bows the arc perpendicular to the head→tail direction. Pick the sign that bows *into empty chart space* (away from other bars/points/labels), then place the label inside the bow. Verify visually — `rad` sign behaviour depends on endpoint order.
+
+### Hard Rule: annotations live in empty space, never on top of data
+
+**Find the largest contiguous empty region in the chart and put the label there.** Don't drop labels, arrow tails, or callouts on top of bars, points, lines, or other annotations — even if the overlap is "only a little." Visual hierarchy collapses when annotations and data fight for the same pixels.
+
+**Inventory empty space before placing:**
+1. Above the tallest bar/point (chart ylim usually leaves headroom)
+2. Between groups (gap regions in grouped bar charts)
+3. In a corner the data doesn't reach
+4. Outside the axes entirely (figure-level text, gutter labels)
+
+**For two-element gap annotations**, the cleanest pattern is usually:
+
+```python
+# Label sits HIGH in empty space above; two arrows fan out, both anchored on bars
+label_x, label_y = (a_x + b_x) / 2, ymax * 0.92  # well above tallest bar
+ax.annotate("", xy=(a_x, a_top), xytext=(label_x - dx, label_y - dy),
+            arrowprops=dict(arrowstyle="-|>", color=ACCENT,
+                            connectionstyle="arc3,rad=0.25"))   # bow outward
+ax.annotate("", xy=(b_x, b_top), xytext=(label_x + dx, label_y - dy),
+            arrowprops=dict(arrowstyle="-|>", color=ACCENT,
+                            connectionstyle="arc3,rad=-0.25"))  # bow outward
+ax.text(label_x, label_y, "+51 pp gap",
+        ha="center", va="bottom", color=ACCENT, fontweight="bold")
+```
+
+This puts both arrowheads on the data (anchored), bends the curves outward into empty space (don't overlap data), and parks the label in the largest empty zone (top of chart). The two arrows fan out from the label so it visibly *labels both sides of the comparison*.
+
+**Anti-pattern (DO NOT do this):**
+```python
+# BAD — label collides with neighbouring bar; arrow curves through bar territory
+ax.text(group_idx + 0.42, mid_y, "+51 pp gap")  # overflows into next group
+```
+
+If after one iteration the label still overlaps something, **don't nudge by 0.05** — re-pick the empty region. Nudging hides the problem; the next data update will re-create the collision.
+
 ### Pre-Ship Spacing Check (when ui-ux-pro-max not loaded)
 
 Before declaring CSS work complete, verify:
