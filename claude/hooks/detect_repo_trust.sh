@@ -15,6 +15,7 @@ mkdir -p "$CACHE_DIR"
 
 # Get remote URL
 REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
+TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 
 # Extract owner from github.com URLs
 OWNER=""
@@ -43,5 +44,5 @@ if [[ -n "$OWNER" ]]; then
 fi
 
 cat > "$CACHE_FILE" <<ENDJSON
-{"cwd": "$CWD", "remote_url": "$REMOTE_URL", "owner": "$OWNER", "trusted": $TRUSTED, "personal": $PERSONAL}
+{"cwd": "$CWD", "toplevel": "$TOPLEVEL", "remote_url": "$REMOTE_URL", "owner": "$OWNER", "trusted": $TRUSTED, "personal": $PERSONAL}
 ENDJSON

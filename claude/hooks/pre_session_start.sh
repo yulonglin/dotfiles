@@ -13,6 +13,11 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
 CLAUDE_MD="$REPO_ROOT/CLAUDE.md"
 DOCS_DIR="${REPO_ROOT}/docs"
 
+# Pre-create remember plugin's log dir so its `2>> .remember/logs/hook-errors.log`
+# redirect doesn't fail on first-session-in-new-project. The shell evaluates the
+# redirect before running session-start-hook.sh (which would otherwise mkdir it).
+mkdir -p "$REPO_ROOT/.remember/logs" 2>/dev/null || true
+
 # --- Helper functions ---
 
 check_doc_age() {
@@ -53,6 +58,12 @@ CLASSIFY_RULES="$HOME/.claude/hooks/auto_classify_rules.md"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _DOT_DIR="${DOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 SECRETS_HELPER="$_DOT_DIR/custom_bins/dotfiles-secrets"
+
+# Hooks run with minimal PATH — ensure bws/sops are discoverable
+for d in "$HOME/.local/bin" /opt/homebrew/bin /usr/local/bin "$_DOT_DIR/custom_bins"; do
+  [[ -d "$d" ]] && [[ ":$PATH:" != *":$d:"* ]] && PATH="$d:$PATH"
+done
+export PATH
 
 classify_ok=true
 classify_warnings=""

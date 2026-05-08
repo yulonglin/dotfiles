@@ -29,6 +29,13 @@ module.exports = {
       browser: "Google Chrome"
     },
     {
+      // Figma dropped support for Safari
+      match: [
+        "figma.com*",
+      ],
+      browser: "Google Chrome"
+    },
+    {
       // Local development → default browser (Safari)
       match: [
         "localhost*",

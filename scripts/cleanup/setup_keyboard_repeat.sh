@@ -43,6 +43,8 @@ cat > "$PLIST" <<EOF
     </array>
     <key>RunAtLoad</key>
     <true/>
+    <key>StartInterval</key>
+    <integer>300</integer>
     <key>StandardOutPath</key>
     <string>$HOME/Library/Logs/$LABEL.log</string>
     <key>StandardErrorPath</key>
@@ -52,4 +54,4 @@ cat > "$PLIST" <<EOF
 EOF
 
 launchctl load "$PLIST"
-echo "Keyboard repeat enforcement installed (runs at login)."
+echo "Keyboard repeat enforcement installed (runs at login + every 5 min)."

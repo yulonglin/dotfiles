@@ -48,6 +48,9 @@ install() {
 # Auto-generated wrapper for scheduled text replacements sync
 set -euo pipefail
 
+# launchd uses a minimal PATH — add locations where uv is typically installed
+export PATH="\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:\$PATH"
+
 YAML_FILE="$YAML_FILE"
 if [[ ! -f "\$YAML_FILE" ]]; then
     echo "YAML config not found, skipping sync"
