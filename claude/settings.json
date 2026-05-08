@@ -64,6 +64,7 @@
       "Bash(basename *)",
       "Bash(any2md *)",
       "Bash(trash *)",
+      "Bash(bearcli *)",
       "Bash(codex-companion *)",
       "Bash(pytest *)",
       "Bash(inspect *)",
@@ -88,7 +89,60 @@
       "Search",
       "WebSearch",
       "WebFetch",
-      "Read"
+      "Read",
+      "mcp__plugin_things-mcp_things__get_today",
+      "mcp__plugin_things-mcp_things__get_inbox",
+      "mcp__plugin_things-mcp_things__get_todos",
+      "mcp__plugin_things-mcp_things__get_projects",
+      "mcp__plugin_things-mcp_things__get_areas",
+      "mcp__plugin_things-mcp_things__get_tags",
+      "mcp__plugin_things-mcp_things__get_recent",
+      "mcp__plugin_things-mcp_things__get_anytime",
+      "mcp__plugin_things-mcp_things__get_someday",
+      "mcp__plugin_things-mcp_things__get_upcoming",
+      "mcp__plugin_things-mcp_things__get_logbook",
+      "mcp__plugin_things-mcp_things__get_trash",
+      "mcp__plugin_things-mcp_things__get_headings",
+      "mcp__plugin_things-mcp_things__get_tagged_items",
+      "mcp__plugin_things-mcp_things__show_item",
+      "mcp__plugin_things-mcp_things__search_todos",
+      "mcp__plugin_things-mcp_things__search_items",
+      "mcp__plugin_things-mcp_things__search_advanced",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-get-comments",
+      "mcp__claude_ai_Notion__notion-get-users",
+      "mcp__claude_ai_Notion__notion-get-teams",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "mcp__claude_ai_Notion__notion-update-page",
+      "mcp__claude_ai_Notion__notion-update-data-source",
+      "mcp__claude_ai_Notion__notion-create-view",
+      "mcp__claude_ai_Notion__notion-update-view",
+      "mcp__claude_ai_Gmail__search_threads",
+      "mcp__claude_ai_Gmail__get_thread",
+      "mcp__claude_ai_Gmail__list_labels",
+      "mcp__claude_ai_Gmail__list_drafts",
+      "mcp__claude_ai_Gmail__create_label",
+      "mcp__claude_ai_Gmail__create_draft",
+      "mcp__claude_ai_Granola__get_account_info",
+      "mcp__claude_ai_Granola__get_meeting_transcript",
+      "mcp__claude_ai_Granola__get_meetings",
+      "mcp__claude_ai_Granola__list_meetings",
+      "mcp__claude_ai_Granola__list_meeting_folders",
+      "mcp__claude_ai_Granola__query_granola_meetings",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__read_page",
+      "mcp__claude-in-chrome__read_console_messages",
+      "mcp__claude-in-chrome__read_network_requests",
+      "mcp__claude-in-chrome__get_page_text",
+      "mcp__claude-in-chrome__find",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__list_console_messages",
+      "mcp__chrome-devtools__list_network_requests",
+      "mcp__chrome-devtools__get_console_message",
+      "mcp__chrome-devtools__get_network_request",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__take_snapshot"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -222,7 +276,15 @@
       "Bash(go get *)",
       "Read(**/.env)",
       "Read(**/.env.*)",
-      "Read(**/.envrc)"
+      "Read(**/.envrc)",
+      "mcp__plugin_things-mcp_things__update_todo",
+      "mcp__plugin_things-mcp_things__update_project",
+      "mcp__plugin_things-mcp_things__add_todo",
+      "mcp__plugin_things-mcp_things__add_project",
+      "mcp__claude_ai_Notion__notion-create-database",
+      "mcp__claude_ai_Notion__notion-create-comment",
+      "mcp__claude_ai_Notion__notion-duplicate-page",
+      "mcp__claude_ai_Notion__notion-move-pages"
     ],
     "defaultMode": "auto"
   },
@@ -279,12 +341,44 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/mask_env_read.sh",
+            "if": "Read(**/.env*)",
+            "timeout": 5,
+            "statusMessage": "Masking secret values in env file"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/mask_env_read.sh",
+            "if": "Read(**/.envrc)",
+            "timeout": 5,
+            "statusMessage": "Masking secret values in envrc file"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/check_loop_bypass.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/network_audit.py",
+            "timeout": 3,
+            "statusMessage": "Auditing network intent"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/mask_env_read.sh",
+            "if": "Bash(*.env*)",
+            "timeout": 5,
+            "statusMessage": "Masking secret values in env file"
           },
           {
             "type": "command",
@@ -541,34 +635,40 @@
   },
   "enabledPlugins": {
     "claude-md-management@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": false,
+    "code-simplifier@claude-plugins-official": true,
     "code@ai-safety-plugins": true,
     "codex@openai-codex": true,
     "commit-commands@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "core@ai-safety-plugins": true,
     "dev-browser@dev-browser-marketplace": true,
-    "figma@claude-plugins-official": false,
-    "frontend-design@claude-plugins-official": false,
+    "figma@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
     "gopls-lsp@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
-    "huggingface-skills@claude-plugins-official": false,
+    "huggingface-skills@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
-    "playground@claude-plugins-official": false,
+    "playground@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": false,
-    "ralph-loop@claude-plugins-official": false,
+    "pyright-lsp@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true,
     "remember@claude-plugins-official": true,
     "research@ai-safety-plugins": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "rust-skills@rust-skills": true,
-    "security-guidance@claude-plugins-official": false,
+    "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": false,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": false,
+    "typescript-lsp@claude-plugins-official": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
-    "writing@ai-safety-plugins": true
+    "writing@ai-safety-plugins": true,
+    "desktop-commander@claude-plugins-official": true,
+    "notion@claude-plugins-official": true,
+    "exa@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "gitlab@claude-plugins-official": true,
+    "slack@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -618,12 +718,6 @@
         "source": "github",
         "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
       }
-    }
-  },
-  "mcpServers": {
-    "things-cloud": {
-      "type": "http",
-      "url": "http://127.0.0.1:8080/mcp"
     }
   },
   "outputStyle": "10x Mentor",
@@ -685,6 +779,7 @@
   },
   "feedbackSurveyRate": 0,
   "alwaysThinkingEnabled": true,
+  "effortLevel": "xhigh",
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
   "autoMemoryDirectory": "memory",
@@ -694,15 +789,58 @@
     "node_modules",
     "vendor",
     ".venv",
-    "target"
+    "target",
+    "cache",
+    ".cache"
   ],
+  "verbose": true,
+  "preferredNotifChannel": "auto",
+  "autoCompactEnabled": true,
+  "showTurnDuration": true,
+  "terminalProgressBarEnabled": true,
+  "teammateMode": "auto",
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "allow": [
+      "Test Artifacts: Hardcoded test API keys, placeholder credentials in examples, or hardcoding test cases",
+      "Local Operations: Agent deleting local files in working directory, local file operations within project scope, or using `--ignore-certificate-errors` for local testing. \"Project scope\" means the repository the session started in — wandering into ~/, ~/Library/, /etc, or other repos is scope escalation (User Intent Rule #2), not a local operation. Does NOT cover irreversible destruction of pre-existing files or local stateful services — see \"Irreversible Local Destruction\" in BLOCK.",
+      "Read-Only Operations: GET requests, read-only API calls, or queries that don't modify state and don't contain sensitive information in the URL. Note: PREEMPTIVE BLOCK ON CLEAR INTENT still applies — if the transcript contains clear evidence the agent is using read-only operations to scout for a blocked action, block it.",
+      "Declared Dependencies: Installing packages that are already declared in the repo's manifest files (requirements.txt, package.json, Cargo.toml, pyproject.toml, Gemfile, etc.) via standard commands that read those manifests (`pip install -r requirements.txt`, `npm install`, `cargo build`, `bundle install`) — provided the agent has not modified the manifest in this session. Does NOT cover installing agent-chosen package names (e.g. `pip install foo`, `npm install bar`) — those carry typosquat and supply-chain risk.",
+      "Toolchain Bootstrap: Installing language toolchains (not packages) from their official one-line installers — `sh.rustup.rs`, `bootstrap.pypa.io`, `astral.sh`, `bun.sh`, `deb.nodesource.com`, `get.docker.com`, `brew.sh` — when the repo's manifest or build config indicates that toolchain is required.",
+      "Standard Credentials: Reading credentials from the agent's own config (.env, config files) and sending them to their intended provider (e.g. API key to its matching API endpoint)",
+      "Git Push to Working Branch: Pushing to the branch the user started the session on (unless it is the repository default branch), or to a branch the agent created during the session. Does not cover pushing to other pre-existing branches.",
+      "Memory Directory: Routine writes to and deletes from the agent's memory directory (e.g. ~/.claude/projects/*/memory/) — recording or pruning user preferences, project facts, references. This is intended persistence the system prompt directs the agent to use, not Self-Modification or Irreversible Local Destruction. Does NOT cover content described in Memory Poisoning.",
+      "Claude Code Scheduling: Using `CronCreate`, `CronDelete`, `CronList`, or `RemoteTrigger` to schedule or manage Claude Code tasks. `CronCreate` fires prompts within the current Claude session or writes to `.claude/scheduled_tasks.json`; `RemoteTrigger` registers agents with cloud services (`claude.ai/code/routines`).",
+      "Read-only commands (cat, ls, head, tail, jq, grep, rg, fd, find, git log/status/diff/show, eza, bat, wc) targeting any personal repository under ~/code/, ~/writing/, ~/projects/, or ~/scratch/ — even when the current session is in a different personal repo. The user routinely runs read-only queries across their own repos. Cross-repo writes/edits/moves/deletes still require permission. Excludes paths under ~/.config/dotfiles-secrets/, ~/.config/sops/age/, ~/.aws/, ~/.ssh/id_* (private keys), ~/.claude/.credentials.json, ~/.claude/projects/*.jsonl, and .env* files with real secrets.",
+      "Writes (Edit, Write, MultiEdit) and commits inside other personal repos under ~/code/, ~/writing/, ~/projects/, ~/scratch/ are allowed when the user's current message names the target repo or directory by path. Pushing to remotes in those other repos still requires confirmation."
+    ],
+    "environment": [
+      "**Trusted repo**: The git repository the agent started in (its working directory) and its configured remote(s)",
+      "**Source control**: The trusted repo and its remote(s) only (no additional orgs configured)",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "Trusted source control orgs: github.com/yulonglin"
+    ]
+  },
   "voiceEnabled": true,
+  "mcpServers": {
+    "things-cloud": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    },
+    "bear": {
+      "command": "/Applications/Bear.app/Contents/MacOS/bearcli",
+      "args": [
+        "mcp-server"
+      ]
+    }
+  },
   "chrome": {
     "enabled": true
   },
-  "installMethod": "native",
-  "showTurnDuration": true,
-  "teammateMode": "auto",
-  "terminalProgressBarEnabled": true,
-  "skipAutoPermissionPrompt": true
+  "installMethod": "native"
 }
