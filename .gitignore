@@ -521,3 +521,10 @@ tools/*/.claude/
 # Plugin registry (machine-specific absolute paths, rebuilt by `claude-context --sync`)
 claude/plugins/known_marketplaces.json
 claude/plugins/installed_plugins.json
+
+# Cached JSON schemas for validators
+scripts/hooks/cache/
+
+# Runtime state written by Claude Code session/hooks
+claude/.last-cleanup
+.claude/scheduled_tasks.lock
