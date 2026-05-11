@@ -288,6 +288,7 @@
     ],
     "defaultMode": "auto"
   },
+  "model": "claude-opus-4-7",
   "hooks": {
     "PermissionRequest": [
       {
@@ -662,13 +663,7 @@
     "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
-    "writing@ai-safety-plugins": true,
-    "desktop-commander@claude-plugins-official": true,
-    "notion@claude-plugins-official": true,
-    "exa@claude-plugins-official": true,
-    "github@claude-plugins-official": true,
-    "gitlab@claude-plugins-official": true,
-    "slack@claude-plugins-official": true
+    "writing@ai-safety-plugins": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -827,20 +822,20 @@
     ]
   },
   "voiceEnabled": true,
-  "mcpServers": {
-    "things-cloud": {
-      "type": "http",
-      "url": "http://127.0.0.1:8080/mcp"
-    },
-    "bear": {
-      "command": "/Applications/Bear.app/Contents/MacOS/bearcli",
-      "args": [
-        "mcp-server"
-      ]
-    }
-  },
   "chrome": {
     "enabled": true
   },
-  "installMethod": "native"
+  "installMethod": "native",
+  "mcpServers": {
+    "bear": {
+      "args": [
+        "mcp-server"
+      ],
+      "command": "/Applications/Bear.app/Contents/MacOS/bearcli"
+    },
+    "things-cloud": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  }
 }
