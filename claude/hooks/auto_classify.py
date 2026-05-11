@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PermissionRequest hook: LLM-based permission classifier.
 
-Calls Haiku to classify tool actions as allow/deny, mimicking auto mode.
+Calls an Anthropic model to classify tool actions as allow/deny, mimicking auto mode.
 Fails open (exit 0 = normal prompt) on any error, but emits a loud warning
 instead of failing silently when the hook is misconfigured or Anthropic rejects
 the request.
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -18,7 +19,7 @@ import urllib.request
 
 RULES_PATH = os.path.join(os.path.dirname(__file__), "auto_classify_rules.md")
 API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 100
 TIMEOUT_SECONDS = 12
 LOG_PATH = os.path.expanduser("~/.cache/claude/auto-classify.log")
@@ -149,6 +150,39 @@ def fast_deny_sensitive_path(tool_name: str, tool_input: dict) -> dict | None:
 fast_deny_sensitive_read = fast_deny_sensitive_path
 
 
+# ── Always-surface "question to user" tool calls ─────────────────────
+# Some tool calls are themselves questions the agent wants the user to
+# answer. Auto-classify must never silently allow these — the user has
+# to actually see the question, not just an allow stamp. We bail out
+# before the classifier runs and fall through to the normal permission
+# prompt (no allow/deny decision emitted).
+_INTERACTIVE_BASH_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bread\s+(?:-[a-zA-Z]+\s+)*-p\b"),
+     "`read -p` prompts inside Bash; stdin isn't wired to the user in Claude Code."),
+    (re.compile(r"\bgum\s+(?:confirm|input|choose|filter|file|write|spin)\b"),
+     "`gum` interactive commands won't reach the user from a Claude Code Bash call."),
+    (re.compile(r"\bgh\s+auth\s+login\b(?!.*--with-token)"),
+     "`gh auth login` is interactive; the user should run it themselves (`!gh auth login`)."),
+    (re.compile(r"\bgcloud\s+auth\s+login\b(?!.*--no-browser)"),
+     "`gcloud auth login` is interactive; the user should run it themselves."),
+]
+
+
+def detect_question_to_user(tool_name: str, tool_input: dict) -> tuple[str, str] | None:
+    """Return (reason, suggestion) if this tool call is itself a question to the user.
+
+    The classifier must not auto-allow these — they have to surface to the user.
+    """
+    if tool_name == "AskUserQuestion":
+        return ("AskUserQuestion is a direct question to the user — never auto-allow.", "")
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", "")
+        for pattern, reason in _INTERACTIVE_BASH_PATTERNS:
+            if pattern.search(cmd):
+                return (reason, "Use the AskUserQuestion tool to ask the user instead.")
+    return None
+
+
 def _build_sensitive_deny(path: str, reason: str, alternative: str) -> dict:
     return {
         "decision": "deny",
@@ -159,8 +193,7 @@ def _build_sensitive_deny(path: str, reason: str, alternative: str) -> dict:
 
 # ── Fast-path allowlist ──────────────────────────────────────────────
 # Patterns that bypass the API call entirely. These are commands where
-# Haiku repeatedly hallucinates false positives despite explicit rules.
-import re
+# classifiers repeatedly hallucinate false positives despite explicit rules.
 
 # Commands that are always safe when run in a trusted/personal repo.
 # Checked against the Bash tool's "command" field.
@@ -172,7 +205,7 @@ _UV_PREFIX = r"(?:uv\s+run\b.*?\s+)?"
 _CMD_PREFIX = _DIRENV_PREFIX + _UV_PREFIX
 
 FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    # python -c / python3 -c with multiline code (Haiku false-positives on # comments)
+    # python -c / python3 -c with multiline code (classifiers false-positive on # comments)
     # Only at start of command — piped python3 -c is NOT safe to fast-allow because
     # it bypasses UNSAFE_SHELL_PATTERNS checking on the upstream command.
     (re.compile(rf"^{_CMD_PREFIX}python3?\s+-c\s"), "python -c one-liner check"),
@@ -307,8 +340,8 @@ def _is_compound_shell_safe(command: str) -> bool:
 
 
 # Regex to collapse inline code arguments (-c "..." / -e '...') that confuse
-# Haiku when truncated mid-string (# becomes a "shell comment" false positive).
-# Preserves the command structure so Haiku can classify the surrounding shell.
+# the classifier when truncated mid-string (# becomes a "shell comment" false positive).
+# Preserves the command structure so the classifier can evaluate the surrounding shell.
 _INLINE_CODE_RE = re.compile(
     r"""(python3?|ruby|perl|node)\s+(-[ce])\s+"""         # interpreter + flag
     r"""(["'])(.*?)\3""",                                  # quoted body
@@ -320,7 +353,7 @@ def _simplify_bash_for_classify(command: str) -> str:
     """Replace inline code bodies with a placeholder to avoid false positives.
 
     `gws ... | python3 -c "import json\\n# comment\\n..."` becomes
-    `gws ... | python3 -c "(inline code)"` — Haiku classifies the shell
+    `gws ... | python3 -c "(inline code)"` — the classifier evaluates the shell
     structure without tripping on Python/Ruby/Perl comments.
     """
     return _INLINE_CODE_RE.sub(r'\1 \2 \3(inline code)\3', command)
@@ -712,7 +745,7 @@ def _extract_text(msg: str | dict | list) -> str:
 
 
 def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_message: str = "") -> dict | None:
-    """Call Haiku to classify the action. Returns parsed response or None."""
+    """Call the classifier model to classify the action. Returns parsed response or None."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise AutoClassifyWarning(
@@ -838,6 +871,18 @@ def main() -> None:
             },
             "systemMessage": msg,
         }, sys.stdout)
+        return
+
+    # Always surface tool calls that are themselves questions to the user.
+    # Never auto-allow — the user must actually see the question.
+    question_info = detect_question_to_user(tool_name, tool_input)
+    if question_info:
+        reason, suggestion = question_info
+        log(f"SURFACE (question-to-user): {tool_name} — {reason}")
+        msg = f"\033[1;36m🛈 auto-classify:\033[0m {reason} Surfacing to you."
+        if suggestion:
+            msg += f"\n\033[1;36m💡\033[0m {suggestion}"
+        json.dump({"systemMessage": msg}, sys.stdout)
         return
 
     # Detect repo trust once — used by both fast-allow and the LLM rules.
