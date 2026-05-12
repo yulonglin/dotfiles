@@ -70,7 +70,7 @@ is_piped_only() {
 
 # Check if command word appears anywhere in the full command
 has_cmd() {
-    [[ "$command" =~ (^|[&|;[:space:]])$1([[:space:]]|$) ]]
+    [[ "$command" =~ (^|[\&\|\;()])[[:space:]]*$1([[:space:]]|$) ]]
 }
 
 # BLOCK: standalone file operations where built-in tools are strictly better.
