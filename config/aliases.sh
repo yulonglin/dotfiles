@@ -1500,6 +1500,78 @@ ssh() {
 # SSH theme switching moved to config/ssh_themes.sh (sourced by zshrc.sh)
 
 #-------------------------------------------------------------
+# Network diagnostics — video/audio call troubleshooting
+#-------------------------------------------------------------
+
+# Quick connectivity + saturation snapshot. Run when a call is choppy.
+netcheck() {
+    echo "=== Connectivity (ping 1.1.1.1) ==="
+    ping -c 5 -i 0.2 1.1.1.1 2>/dev/null | tail -3
+    echo
+    echo "=== VPN tunnels / processes ==="
+    local _vpn_tunnels
+    if [[ "$(uname)" == "Darwin" ]]; then
+        _vpn_tunnels=$(ifconfig 2>/dev/null | grep -E "^(utun|ipsec|tun)" | sed 's/:.*//' | sort -u)
+    else
+        _vpn_tunnels=$(ip -o link show 2>/dev/null | awk -F': ' '/(tun|wg|nordlynx)/ {print $2}')
+    fi
+    [[ -n "$_vpn_tunnels" ]] && echo "$_vpn_tunnels" || echo "  (no tunnels)"
+    pgrep -lf -i "nordvpn|nordlynx|wireguard|openvpn|tailscale" 2>/dev/null \
+        || echo "  (no VPN processes)"
+    echo
+    if [[ "$(uname)" == "Darwin" ]]; then
+        echo "=== Top network talkers (1s sample) ==="
+        # -P per-process; -L CSV output; -j include only these columns; -t per interface.
+        # Output: time,interface,bytes_in,bytes_out — sort by bytes_in desc.
+        nettop -P -L 1 -j bytes_in,bytes_out -t wifi -t wired 2>/dev/null \
+            | sort -t, -k3 -h -r 2>/dev/null | head -12
+        echo
+        echo "=== Wi-Fi link ==="
+        # airport -I deprecated in macOS 14.4+. Try it first (fast), fall back to system_profiler.
+        local airport=/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport
+        if [[ -x "$airport" ]] && "$airport" -I 2>/dev/null | grep -qE "agrCtlRSSI|state:"; then
+            "$airport" -I 2>/dev/null | grep -E "agrCtlRSSI|agrCtlNoise|lastTxRate|channel|state"
+        else
+            system_profiler SPAirPortDataType 2>/dev/null \
+                | grep -E "Channel|Signal / Noise|Tx Rate|PHY Mode" | head -8
+        fi
+    fi
+}
+
+# Live latency monitor — run in a side pane during a call.
+# Timeouts/spikes correlate with audio drops → confirmed network.
+# Clean ping but bad audio → mic, Bluetooth, or the other end.
+alias netwatch='ping -i 0.5 1.1.1.1'
+alias netwatch-google='ping -i 0.5 8.8.8.8'
+
+# "About to take a call" — quit bandwidth/CPU hogs before joining.
+# Best-effort; missing apps are silently skipped. Run callend afterwards.
+callprep() {
+    if [[ "$(uname)" != "Darwin" ]]; then
+        echo "callprep is macOS-only (uses osascript to quit GUI apps)"
+        return 1
+    fi
+    echo "Quitting sync clients & VPN for call..."
+    osascript -e 'quit app "NordVPN"'      2>/dev/null && echo "  NordVPN: quit"
+    osascript -e 'quit app "Dropbox"'      2>/dev/null && echo "  Dropbox: quit"
+    osascript -e 'quit app "Google Drive"' 2>/dev/null && echo "  Google Drive: quit"
+    osascript -e 'quit app "Backblaze"'    2>/dev/null && echo "  Backblaze: quit"
+    # Quiet iCloud transfers (cloudd/bird respawn but pause briefly)
+    killall bird cloudd 2>/dev/null && echo "  iCloud daemons: signalled"
+    echo "Done. Run 'callend' afterwards to restart sync."
+}
+
+callend() {
+    if [[ "$(uname)" != "Darwin" ]]; then return 1; fi
+    open -a "Dropbox"      2>/dev/null && echo "  Dropbox: opened"
+    open -a "Google Drive" 2>/dev/null && echo "  Google Drive: opened"
+    open -a "Backblaze"    2>/dev/null && echo "  Backblaze: opened"
+    # NordVPN: not auto-restarted (you may not want VPN back on for the rest of the session).
+    # iCloud daemons (cloudd/bird) respawn on their own via launchd.
+    echo "Sync clients restarted. Re-enable NordVPN manually if needed."
+}
+
+#-------------------------------------------------------------
 # Things 3 (things-cloud-mcp)
 #-------------------------------------------------------------
 
