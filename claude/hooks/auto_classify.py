@@ -183,6 +183,35 @@ def detect_question_to_user(tool_name: str, tool_input: dict) -> tuple[str, str]
     return None
 
 
+# Phrases that indicate the classifier is hedging in its `reason` field even
+# when it returned `allow`. If we see these, downgrade to `unsure` so the user
+# decides. Keep narrow — generic words like "confirm" / "verify" appear in
+# legitimate allow reasons too.
+_HEDGE_PHRASES = (
+    "should the user",
+    "ask the user",
+    "check with the user",
+    "user should confirm",
+    "user should verify",
+    "not sure",
+    "unsure",
+    "unclear",
+    "uncertain",
+    "might want to confirm",
+    "may want to confirm",
+)
+
+
+def reason_hedges(reason: str) -> bool:
+    """True if the classifier's reason text reads like an open question, not a decision."""
+    if not reason:
+        return False
+    text = reason.lower()
+    if "?" in text:
+        return True
+    return any(phrase in text for phrase in _HEDGE_PHRASES)
+
+
 def _build_sensitive_deny(path: str, reason: str, alternative: str) -> dict:
     return {
         "decision": "deny",
@@ -958,6 +987,12 @@ def main() -> None:
         decision = "unsure"
     else:
         log(f"{decision.upper()}: {tool_name} — {reason}")
+
+    # If the classifier said allow but its reason hedges or asks a question,
+    # downgrade to unsure so the user gets the final call.
+    if decision == "allow" and reason_hedges(reason):
+        log(f"DOWNGRADE allow→unsure (hedged reason): {tool_name} — {reason}")
+        decision = "unsure"
 
     if decision == "deny":
         # Show warning but don't block — let user decide
