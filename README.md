@@ -197,12 +197,13 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 **Default components:**
 
 - **Shell**: ZSH, tmux, vim, Powerlevel10k
-- **Editors**: VSCode/Cursor settings (merged, not overwritten), `.editorconfig`, `.curlrc`, `.inputrc`
-- **AI tools**: Claude Code, Codex CLI, Ghostty terminal
+- **Editors**: VSCode/Cursor/Antigravity (merged settings), Zed (symlinked config + keymap), `.editorconfig`, `.curlrc`, `.inputrc`
+- **AI tools**: Claude Code, Codex CLI, Serena MCP, Ghostty terminal
 - **Git**: gitconfig, global gitignore/gitattributes, global git hooks (secret detection)
-- **Dev tools**: htop, pdb++, matplotlib styles
-- **Secrets**: GitHub gist sync, SOPS-encrypted API keys
-- **Automation**: file cleanup (macOS), Claude Code session cleanup, AI tools auto-update, package auto-update, keyboard repeat enforcement (macOS)
+- **Dev tools**: htop, pdb++, matplotlib styles, `claude-tools` Rust binary
+- **Secrets**: GitHub gist sync, SOPS+age (or BWS) encrypted secrets
+- **Supply chain**: 7-day quarantine for npm/bun/pnpm/uv, weekly dep-audit
+- **Automation**: file cleanup (macOS), Claude Code session cleanup, AI tools auto-update, package auto-update, text replacements sync (macOS)
 
 **Flags are additive** — e.g., `./deploy.sh --mouseless` deploys defaults + mouseless. Use `--minimal` to disable all defaults, then specify only what you want.
 
@@ -218,34 +219,31 @@ This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/c
 
 **What's included:**
 
-- **`CLAUDE.md`** — Global instructions enforcing research discipline:
-  - Zero-tolerance rules (no mock data, no fabrication, no destructive git)
-  - Research methodology (interview → plan → implement, change one variable at a time)
-  - Performance patterns (async API calls, caching, 100+ concurrent requests)
-  - Context management (subagents for large files, efficient exploration)
-- **`agents/`** — Specialized subagents for different tasks:
-  - `code-reviewer`, `research-engineer`, `debugger`, `performance-optimizer`
-  - `experiment-designer`, `research-skeptic`, `data-analyst`
-  - `literature-scout`, `paper-writer`, `clarity-critic`
-- **`skills/`** — Custom slash commands:
-  - `/commit`, `/run-experiment`, `/spec-interview-research`
-  - `/read-paper`, `/review-draft`, `/reproducibility-report`
-- **`hooks/`** — Auto-logging to `~/.claude/logs/`, desktop notifications, file read warnings
-- **`templates/`** — Reproducibility reports, research specs
+- **`CLAUDE.md`** — Slim identity file (~120 lines) pointing at modular rules and docs
+- **`rules/`** — 19 auto-loaded behavioral rules (safety, git, agents, refusal alternatives, supply-chain, browser automation, etc.)
+- **`docs/`** — On-demand knowledge loaded by skills (research methodology, async patterns, tmux, agent teams)
+- **`agents/`** — Personal agents (kept lean — most specialized agents live in plugins like `ai-safety-plugins`)
+- **`skills/`** — Project-level slash commands: `/commit`, `/merge-worktree`, `/jobs`, `/modal`, `/log-gap`, `/recall-feedback`, `/mv-repo`, etc.
+- **`hooks/`** — 40+ PreToolUse/PostToolUse/SessionStart scripts: auto-classify, secret blocking, modern-tool nudges, post-rebase guards, network audit
+- **`templates/`** — Context profiles (`contexts/profiles.yaml`), research spec template
 
 **Smart merge preserves your data** - if `~/.claude` already exists, credentials, history, and cache are automatically restored after symlinking.
 
 #### Claude Code Plugin Marketplaces
 
-Claude Code supports community plugin marketplaces. These are worth exploring independently:
+Claude Code supports community plugin marketplaces. These are registered in [`claude/templates/contexts/profiles.yaml`](claude/templates/contexts/profiles.yaml) and synced via `claude-tools context --sync`:
 
 
 | Marketplace                                                                         | What's in it                                                     |
 | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **[superpowers](https://github.com/anthropics/claude-plugins-official)** (official) | TDD, brainstorming, code review, agent teams, worktree workflows |
-| **[ui-ux-pro-max](https://github.com/nicekid1/ui-ux-pro-max)**                      | 50 design styles, 21 palettes, production-grade frontend         |
-| **[ai-safety-plugins](https://github.com/yulonglin/ai-safety-plugins)**             | Research experiments, paper writing, literature review           |
-| **[productivity-tools](https://github.com/anthropics/claude-plugins-official)**     | Hookify, plugin dev tools                                        |
+| **[claude-plugins-official](https://github.com/anthropics/claude-plugins-official)** | Superpowers, hookify, plugin-dev, commit-commands, productivity, engineering |
+| **[ai-safety-plugins](https://github.com/yulonglin/ai-safety-plugins)**             | Research, writing, code, workflow, viz — for AI safety work      |
+| **[productivity-tools](https://github.com/yulonglin/productivity-tools)**           | Personal productivity utilities                                  |
+| **[ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)**  | Design styles, palettes, production-grade frontend               |
+| **[alignment-hive](https://github.com/Crazytieguy/alignment-hive)**                 | Alignment research utilities                                     |
+| **[dev-browser-marketplace](https://github.com/sawyerhood/dev-browser)**            | Browser automation for development                               |
+| **[openai-codex](https://github.com/crazytieguy/codex-plugin-cc)**                  | Codex CLI integration plugins                                    |
+| **[rust-skills](https://github.com/actionbook/rust-skills)**                        | Rust ownership, concurrency, error handling skills               |
 
 
 Profiles are managed via the `claude-tools context` CLI — compose multiple profiles to control which plugins load per-project:
@@ -267,8 +265,9 @@ claude-tools context --list             # Show active plugins and available prof
 **What's included:**
 
 - **`AGENTS.md`** — Global instructions (references CLAUDE.md as source of truth)
-- **`config.toml`** — Model settings and per-project trust levels
-- **`skills/`** — Symlinked to Claude Code's skills for consistency
+- **`config.toml`** — Model settings, status line config, and per-project trust levels
+- **`rules/`** — Behavioral rule files synced from Claude Code's `rules/`
+- **`skills/`** → symlink to `claude/skills/` so both CLIs share the same skill set
 
 The configuration follows the same research discipline as Claude Code but adapted for Codex's execution model.
 
