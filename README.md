@@ -14,6 +14,8 @@ This setup reflects workflows optimized for ML research: reproducibility, experi
 
 > Originally forked from [jplhughes/dotfiles](https://github.com/jplhughes/dotfiles) - thanks John for the solid foundation!
 
+> **AI agents working here:** start with [`CLAUDE.md`](./CLAUDE.md) — it has a Quick Reference, deploy-component table, and operational gotchas. This README is human-oriented onboarding; CLAUDE.md is the operational doc.
+
 ## Quickstart
 
 This project offers two quickstart paths: **Local** and **Cloud**.
