@@ -125,30 +125,30 @@ This repo is highly personal — it reflects one person's workflow, opinions, an
 | SOPS + age encrypted secrets workflow              | Plugin marketplace selections     |
 
 
-All personal values are centralized in `[config.sh](./config.sh)` — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIST_SYNC_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
+All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIST_SYNC_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
 
 ## Rust CLI Tools
 
 These modern alternatives are installed by default and significantly faster than their traditional counterparts:
 
 
-| Tool                                                      | Replaces      | Why it's better                                          |
-| --------------------------------------------------------- | ------------- | -------------------------------------------------------- |
-| `[bat](https://github.com/sharkdp/bat)`                   | `cat`         | Syntax highlighting, line numbers, git integration       |
-| `[eza](https://github.com/eza-community/eza)`             | `ls`          | Colors, icons, git status, tree view built-in            |
-| `[fd](https://github.com/sharkdp/fd)`                     | `find`        | Intuitive syntax, respects `.gitignore`, 5x faster       |
-| `[ripgrep](https://github.com/BurntSushi/ripgrep)` (`rg`) | `grep`        | Recursive by default, respects `.gitignore`, 10x+ faster |
-| `[delta](https://github.com/dandavison/delta)`            | `diff`        | Side-by-side, syntax highlighting, line numbers          |
-| `[zoxide](https://github.com/ajeetdsouza/zoxide)`         | `cd`          | Learns your habits, jump with `z dirname`                |
-| `[dust](https://github.com/bootandy/dust)`                | `du`          | Intuitive visualization of disk usage                    |
-| `[jless](https://github.com/PaulJuliusMartinez/jless)`    | `less` (JSON) | Interactive JSON viewer with vim keybindings             |
+| Tool                                                        | Replaces      | Why it's better                                          |
+| ----------------------------------------------------------- | ------------- | -------------------------------------------------------- |
+| [`bat`](https://github.com/sharkdp/bat)                     | `cat`         | Syntax highlighting, line numbers, git integration       |
+| [`eza`](https://github.com/eza-community/eza)               | `ls`          | Colors, icons, git status, tree view built-in            |
+| [`fd`](https://github.com/sharkdp/fd)                       | `find`        | Intuitive syntax, respects `.gitignore`, 5x faster       |
+| [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`)   | `grep`        | Recursive by default, respects `.gitignore`, 10x+ faster |
+| [`delta`](https://github.com/dandavison/delta)              | `diff`        | Side-by-side, syntax highlighting, line numbers          |
+| [`zoxide`](https://github.com/ajeetdsouza/zoxide)           | `cd`          | Learns your habits, jump with `z dirname`                |
+| [`dust`](https://github.com/bootandy/dust)                  | `du`          | Intuitive visualization of disk usage                    |
+| [`jless`](https://github.com/PaulJuliusMartinez/jless)      | `less` (JSON) | Interactive JSON viewer with vim keybindings             |
 
 
 **Extras** (`--extras` flag):
 
-- `[hyperfine](https://github.com/sharkdp/hyperfine)` — statistical benchmarking with warmup and multiple runs
-- `[gitui](https://github.com/extrawurst/gitui)` — TUI for git
-- `[code2prompt](https://github.com/mufeedvh/code2prompt)` — generate LLM prompts from codebases
+- [`hyperfine`](https://github.com/sharkdp/hyperfine) — statistical benchmarking with warmup and multiple runs
+- [`gitui`](https://github.com/extrawurst/gitui) — TUI for git
+- [`code2prompt`](https://github.com/mufeedvh/code2prompt) — generate LLM prompts from codebases
 
 ## Installation
 
@@ -177,7 +177,7 @@ Installation on macOS requires Homebrew - install from [brew.sh](https://brew.sh
 
 ### Step 2: Deploy configurations
 
-Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, etc.). All settings live in `[config.sh](./config.sh)` — edit once, deploy everywhere.
+Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, etc.). All settings live in [`config.sh`](./config.sh) — edit once, deploy everywhere.
 
 ```bash
 # Deploy with defaults (recommended)
@@ -218,20 +218,20 @@ This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/c
 
 **What's included:**
 
-- `**CLAUDE.md`** - Global instructions enforcing research discipline:
+- **`CLAUDE.md`** — Global instructions enforcing research discipline:
   - Zero-tolerance rules (no mock data, no fabrication, no destructive git)
   - Research methodology (interview → plan → implement, change one variable at a time)
   - Performance patterns (async API calls, caching, 100+ concurrent requests)
   - Context management (subagents for large files, efficient exploration)
-- `**agents/**` - Specialized subagents for different tasks:
+- **`agents/`** — Specialized subagents for different tasks:
   - `code-reviewer`, `research-engineer`, `debugger`, `performance-optimizer`
   - `experiment-designer`, `research-skeptic`, `data-analyst`
   - `literature-scout`, `paper-writer`, `clarity-critic`
-- `**skills/**` - Custom slash commands:
+- **`skills/`** — Custom slash commands:
   - `/commit`, `/run-experiment`, `/spec-interview-research`
   - `/read-paper`, `/review-draft`, `/reproducibility-report`
-- `**hooks/**` - Auto-logging to `~/.claude/logs/`, desktop notifications, file read warnings
-- `**templates/**` - Reproducibility reports, research specs
+- **`hooks/`** — Auto-logging to `~/.claude/logs/`, desktop notifications, file read warnings
+- **`templates/`** — Reproducibility reports, research specs
 
 **Smart merge preserves your data** - if `~/.claude` already exists, credentials, history, and cache are automatically restored after symlinking.
 
@@ -266,9 +266,9 @@ claude-tools context --list             # Show active plugins and available prof
 
 **What's included:**
 
-- `**AGENTS.md`** - Global instructions (references CLAUDE.md as source of truth)
-- `**config.toml**` - Model settings and per-project trust levels
-- `**skills/**` - Symlinked to Claude Code's skills for consistency
+- **`AGENTS.md`** — Global instructions (references CLAUDE.md as source of truth)
+- **`config.toml`** — Model settings and per-project trust levels
+- **`skills/`** — Symlinked to Claude Code's skills for consistency
 
 The configuration follows the same research discipline as Claude Code but adapted for Codex's execution model.
 
@@ -483,7 +483,7 @@ Automatically adds your SSH key to ssh-agent on shell startup:
 export SSH_KEY_PATH=~/.ssh/id_rsa  # Use RSA key instead
 ```
 
-Configuration: `[config/ssh_setup.sh](config/ssh_setup.sh)`
+Configuration: [`config/ssh_setup.sh`](config/ssh_setup.sh)
 
 ## Dev Tools
 
@@ -550,7 +550,7 @@ Scheduled cleanup of old files from `~/Downloads` and `~/Screenshots`:
 ./scripts/cleanup/install.sh --days 90 --schedule weekly
 ```
 
-See `[scripts/cleanup/README.md](./scripts/cleanup/README.md)` for full documentation.
+See [`scripts/cleanup/README.md`](./scripts/cleanup/README.md) for full documentation.
 
 ### Claude Code Session Cleanup (both platforms)
 
@@ -802,7 +802,7 @@ curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/clo
 curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | USER_HOME=/home bash
 ```
 
-Then SSH as `yulong@<ip>` (not root). See `[scripts/cloud/README.md](./scripts/cloud/README.md)` for details.
+Then SSH as `yulong@<ip>` (not root). See [`scripts/cloud/README.md`](./scripts/cloud/README.md) for details.
 
 **What it does:**
 
