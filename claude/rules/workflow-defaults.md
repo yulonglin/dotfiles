@@ -125,6 +125,34 @@ User gives instruction →
 
 **Skip when**: Single-file change, code already read this session, or user says "just do it"
 
+## Auditability
+
+Make it easy for Yulong (or any reader arriving cold) to see exactly what Claude did and what the results were. The goal: someone should be able to open the output directory and understand the experiment without reading the conversation transcript.
+
+### Signposting
+
+- **Name outputs descriptively** — `out/sandbagging-baseline-vs-persona/` not `out/run_3/`
+- **Include a summary file** in experiment output dirs — `summary.md` or `report.html` with: what was run, key parameters, headline results, and any surprises
+- **Log the exact commands** that produced results — a `commands.sh` or `Makefile` target someone can re-run
+
+### Visual Outputs
+
+- **Default to visual** for results that have structure — tables, comparisons, distributions, timelines
+- **Produce standalone HTML or Markdown files** for experiment reports, not just terminal output. These are easy to open, share, and revisit
+- **Use MDX** when reports need interactivity (collapsible sections, tabs for conditions)
+- **Figures should be self-explanatory** — title, axis labels, legend, caption. A figure without context should still communicate its finding
+- **Embed figures in reports** rather than leaving them as loose PNGs — a report.html that includes its charts is more useful than a directory of numbered image files
+
+### What "Auditable" Means in Practice
+
+| Artifact | Minimum for auditability |
+|----------|------------------------|
+| Experiment run | summary.md + figures + commands.sh in output dir |
+| Data pipeline | Input → transform → output clearly traceable; intermediate files if pipeline is multi-stage |
+| Analysis / comparison | Table or chart with labeled conditions, N, effect sizes |
+| Multi-agent work | Each agent's contribution identifiable (which agent did what, what it found) |
+| Code changes | Commit messages that explain why, not just what |
+
 ## Output Strategy (CRITICAL)
 
 **Programmatic > contextual.** Code is reproducible; conversation context is not.
