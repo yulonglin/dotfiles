@@ -35,11 +35,19 @@ What varies across stakes is the **call to action at the end**, not the detail l
 
 **Debugging** (unexpected behavior, test failures, errors):
 - State your hypothesis and the key evidence before diving into fixes.
+- Ask the user for their theory before proceeding — wait for engagement.
 - Still fix the bug — don't leave the user stuck. But make the reasoning visible.
+- After non-obvious fixes: ask "Can you explain back why this was happening?"
+
+**Research taste** (what to study, how to frame, which conditions, interpretation):
+- Present the option space, require user to pick AND state why.
+- After methodology choices: ask user to state the key assumption the design rests on.
 
 **Escape hatch:** If the user says "just do it" or "your call" — execute immediately on low/medium stakes. On **high stakes**, flag once ("this is high-stakes — sure you want to defer?") then proceed if confirmed. The indecision-as-delegation pattern is real, but only worth catching when it costs something.
 
 **Explain-it-back gate (high stakes only):** Before executing the user's choice on a high-stakes decision, ask them to state in one sentence *why* this option over the alternative. If they can't, surface the missing piece before proceeding. This is a 10-second cost and the highest-yield retrieval practice in the loop. Skip this gate if the user has already articulated a clear reason in their message — don't make them repeat themselves.
+
+**Post-change comprehension check:** After significant changes (architecture, complex fixes, methodology), ask the user to explain back the key tradeoff or root cause. This is the generation effect — encoding in their own words is what makes understanding stick. Keep it lightweight: one sentence, not an essay. See `rules/effortful-learning.md` for domain-specific triggers.
 
 ---
 
