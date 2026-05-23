@@ -65,6 +65,18 @@
       "Bash(any2md *)",
       "Bash(trash *)",
       "Bash(bearcli *)",
+      "Bash(spark accounts*)",
+      "Bash(spark folders*)",
+      "Bash(spark emails*)",
+      "Bash(spark search*)",
+      "Bash(spark thread*)",
+      "Bash(spark events*)",
+      "Bash(spark availability*)",
+      "Bash(spark contacts*)",
+      "Bash(spark team*)",
+      "Bash(spark meetings*)",
+      "Bash(spark meeting*)",
+      "Bash(spark --version*)",
       "Bash(codex-companion *)",
       "Bash(pytest *)",
       "Bash(inspect *)",
@@ -142,7 +154,15 @@
       "mcp__chrome-devtools__get_console_message",
       "mcp__chrome-devtools__get_network_request",
       "mcp__chrome-devtools__take_screenshot",
-      "mcp__chrome-devtools__take_snapshot"
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_channel",
+      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_thread",
+      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_canvas",
+      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_user_profile",
+      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_channels",
+      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_public",
+      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_public_and_private",
+      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_users"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -288,7 +308,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-opus-4-7",
+  "model": "claude-opus-4-6",
   "hooks": {
     "PermissionRequest": [
       {
@@ -742,7 +762,8 @@
         "~/.cache/uv",
         "/tmp/tmux-*",
         "/var/folders",
-        "/run/user/*/pueue*.socket"
+        "/run/user/*/pueue*.socket",
+        "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli"
       ]
     },
     "excludedCommands": [
@@ -769,12 +790,13 @@
       "jresume",
       "jkill",
       "jtop",
-      "jguard"
+      "jguard",
+      "spark"
     ]
   },
   "feedbackSurveyRate": 0,
   "alwaysThinkingEnabled": true,
-  "effortLevel": "medium",
+  "effortLevel": "high",
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
   "autoMemoryDirectory": "memory",
@@ -836,6 +858,13 @@
     "things-cloud": {
       "type": "http",
       "url": "http://127.0.0.1:8080/mcp"
+    },
+    "zotero": {
+      "command": "zotero-mcp",
+      "args": ["serve"],
+      "env": {
+        "ZOTERO_LOCAL": "true"
+      }
     }
   }
 }
