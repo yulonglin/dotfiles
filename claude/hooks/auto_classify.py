@@ -20,7 +20,7 @@ import urllib.request
 RULES_PATH = os.path.join(os.path.dirname(__file__), "auto_classify_rules.md")
 API_URL = "https://api.anthropic.com/v1/messages"
 MODEL = "claude-sonnet-4-6"
-MAX_TOKENS = 100
+MAX_TOKENS = 500
 TIMEOUT_SECONDS = 12
 LOG_PATH = os.path.expanduser("~/.cache/claude/auto-classify.log")
 NO_KEY_FLAG = os.path.expanduser("~/.cache/claude/auto-classify-no-key-warned")
@@ -254,6 +254,16 @@ FAST_ALLOW_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^gws\s+(?:(?!&&|[|]{2}|;)\S+\s+)*(list|get|search|export)\s"), "gws read-only operation"),
     # claude/codex/gemini --version/--help: pure info, no side effects
     (re.compile(r"^(claude|codex|gemini)\s+--(version|help)\b"), "CLI version/help check"),
+    # sqlite3 read-only queries (Bear notes DB, etc.) — SELECT only, no destructive verbs.
+    # Anchored to $ to prevent shell chaining: `sqlite3 db 'SELECT 1'; rm -rf ~`
+    # would bypass UNSAFE_SHELL_PATTERNS without the end anchor.
+    (re.compile(r"""^sqlite3\s+\S+\s+(?:'\s*SELECT\b[^']*'|"\s*SELECT\b[^"]*")\s*$""", re.IGNORECASE), "sqlite3 read-only SELECT"),
+    # bearcli — read-only subcommands only. Mutating ops (edit, overwrite, create,
+    # trash, archive, tags add/remove/rename, pin add/remove) go through classifier.
+    (re.compile(r"^bearcli\s+(show|search-in|search|list|help)\b"), "bearcli read-only operation"),
+    # Scripts in agent-owned temp dirs (TMPDIR or /tmp/claude — sandbox-writable scratch)
+    (re.compile(r"^(?:python3?|bash|sh|zsh)\s+(?:/private)?/var/folders/[^/]+/[^/]+/T/claude/"), "agent script in $TMPDIR/claude/"),
+    (re.compile(r"^(?:python3?|bash|sh|zsh)\s+/tmp/claude/"), "agent script in /tmp/claude/"),
 ]
 
 
@@ -264,7 +274,7 @@ SAFE_SHELL_COMMANDS: set[str] = {
     # File inspection (read-only)
     "cat", "head", "tail", "less", "more", "bat", "wc", "file", "stat",
     "ls", "eza", "tree", "du", "dust", "df", "duf", "realpath", "dirname",
-    "basename", "readlink",
+    "basename", "readlink", "od", "xxd", "hexdump",
     # PDF inspection (read-only, poppler-utils)
     "pdftotext", "pdfinfo", "pdfimages", "pdftohtml",
     # Search (read-only)
