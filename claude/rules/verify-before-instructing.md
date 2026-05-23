@@ -67,3 +67,4 @@ Hedging is not weakness. **Confident wrongness** is the failure mode; **verified
 
 - `refusal-alternatives.md` § Factual Verification (Never Delegate) — verification belongs in main context, not a sub-agent
 - `agents-and-delegation.md` § Factual Verification — same principle from the delegation side
+- `~/.claude/skills/check-prose-claims/SKILL.md` — bulk version of this rule. When the user asks to fact-check a document (deck, paper, PDF) with many claims, invoke that skill instead of verifying each one inline

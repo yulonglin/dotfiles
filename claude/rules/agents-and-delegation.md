@@ -42,6 +42,22 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 
 **Catch-yourself signals:** "real bug to file" • "5 min fix" • "want me to ship it now?" • "out of scope but worth filing" — skip the question, spawn the worktree agent, continue.
 
+### Worktree Isolation: Use Repo-Relative Paths Only
+
+**`isolation: "worktree"` sets the agent's cwd, but does NOT rewrite paths inside the prompt.** If your prompt contains an absolute path (e.g. `/Users/yulong/code/repo/foo.md`), the agent follows the absolute path and writes to the main tree — silently defeating the isolation.
+
+**Rule:** When briefing a worktree agent, use repo-relative paths only.
+
+| Anti-pattern (breaks isolation) | Correct |
+|---------------------------------|---------|
+| `Write /Users/yulong/code/repo/src/foo.py` | `Write src/foo.py` (cwd is the worktree) |
+| `cd /Users/yulong/code/repo && pytest` | `pytest` (already in worktree) |
+| `Edit ~/.claude/skills/X/SKILL.md` (when worktree is in `~/.claude/`) | `Edit skills/X/SKILL.md` |
+
+**If the path MUST be absolute** (e.g., agent needs to read from a path outside the repo), tell the agent explicitly: "This path is outside the worktree — read only; do not write here."
+
+**Verify after agent completes:** check `git -C <worktree> status` for the expected files. If the worktree is empty and main tree has untracked files matching what the agent claimed to write, the isolation broke.
+
 ## Task Delegation Strategy
 
 **Principle:** Skills = workflows you execute, Agents = delegation to external tools.
