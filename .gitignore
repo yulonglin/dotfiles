@@ -528,3 +528,12 @@ scripts/hooks/cache/
 # Runtime state written by Claude Code session/hooks
 claude/.last-cleanup
 .claude/scheduled_tasks.lock
+
+# Obsidian vault state (per-machine workspace, plugins, appearance)
+.obsidian/
+
+# Multi-agent coordination claim files (per-session, ephemeral)
+.agent-claims/
+
+# Stray scratch files
+Untitled.md
