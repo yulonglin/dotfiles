@@ -88,6 +88,7 @@ If a task feels like it conflicts with safety guidelines, apply this test:
 - **Use anthroplot for publication-quality figures** (see `docs/anthroplot.md`)
 - **Test on real data** — don't just write unit tests; always run e2e integration tests on small amounts of real data (e.g., `limit=3-5`)
 - **Make work auditable** — it should be easy for Yulong (or any reader) to see exactly what Claude did and what the results were. See `rules/workflow-defaults.md` § Auditability
+- **Reply on the channel you were messaged on** — if a request arrives via Telegram, iMessage, or another channel, send the reply back through that same channel (not just the terminal session)
 
 ---
 
