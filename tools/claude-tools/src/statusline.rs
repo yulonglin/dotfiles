@@ -73,7 +73,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(s) = format_duration_str(&input.cost) {
         session_parts.push(s);
     }
-    session_parts.push(format_peak_str());
     if !session_parts.is_empty() {
         output.push('\n');
         output.push_str(&session_parts.join(" \u{00b7} "));
@@ -265,68 +264,6 @@ fn format_duration_str(cost: &Option<Cost>) -> Option<String> {
         format!("{}m", total_mins)
     };
     Some(format!("\x1b[2m{}\x1b[0m", display))
-}
-
-/// Format minutes as compact countdown: "2d5h" / "3h20m" / "45m".
-fn fmt_countdown(mins: u32) -> String {
-    let h = mins / 60;
-    let m = mins % 60;
-    if h >= 24 {
-        format!("{}d{}h", h / 24, h % 24)
-    } else if h > 0 {
-        format!("{}h{}m", h, m)
-    } else {
-        format!("{}m", m)
-    }
-}
-
-/// Minutes remaining in the current day from hour:minute until midnight.
-fn mins_until_midnight(hour: u32, minute: u32) -> u32 {
-    (23 - hour) * 60 + (60 - minute)
-}
-
-/// Peak hours indicator with countdown (weekdays 5am-11am PT = peak 1x, off-peak = 2x bonus).
-/// See also: claude/statusline.sh (bash fallback).
-fn format_peak_str() -> String {
-    let output = match std::process::Command::new("date")
-        .env("TZ", "America/Los_Angeles")
-        .args(["+%u %-H %-M"])
-        .output()
-    {
-        Ok(o) if o.status.success() => o,
-        _ => return "\x1b[32m2x\x1b[0m".to_string(),
-    };
-
-    let s = String::from_utf8_lossy(&output.stdout);
-    let parts: Vec<&str> = s.trim().split(' ').collect();
-    if parts.len() != 3 {
-        return "\x1b[32m2x\x1b[0m".to_string();
-    }
-
-    let dow: u32 = parts[0].parse().unwrap_or(0);
-    let hour: u32 = parts[1].parse().unwrap_or(0);
-    let minute: u32 = parts[2].parse().unwrap_or(0);
-    let is_weekday = dow >= 1 && dow <= 5;
-
-    if is_weekday && hour >= 5 && hour < 11 {
-        // In peak — countdown to 11am PT
-        let left = (10 - hour) * 60 + (60 - minute);
-        format!("\x1b[33m1x peak \x1b[2m{}\x1b[0m", fmt_countdown(left))
-    } else {
-        // Off-peak — countdown to next peak (next weekday 5am PT)
-        let rest_of_day = mins_until_midnight(hour, minute);
-        let to_peak = if !is_weekday {
-            let days_to_mon = if dow == 6 { 2 } else { 1 };
-            (days_to_mon - 1) * 1440 + rest_of_day + 5 * 60
-        } else if hour < 5 {
-            (4 - hour) * 60 + (60 - minute)
-        } else {
-            // After peak; next is tomorrow 5am (or Monday if Friday)
-            let skip_days = if dow == 5 { 2 } else { 0 };
-            rest_of_day + skip_days * 1440 + 5 * 60
-        };
-        format!("\x1b[32m2x \x1b[2m{}\x1b[0m", fmt_countdown(to_peak))
-    }
 }
 
 /// Workday remaining (ends at midnight, bedtime nudges).

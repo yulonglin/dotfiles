@@ -117,37 +117,6 @@ if [ "$duration_ms" -gt 60000 ] 2>/dev/null; then
 fi
 
 # ============================================================================
-# PEAK HOURS with countdown (weekdays 5am-11am PT = peak 1x, off-peak = 2x bonus)
-# ============================================================================
-peak_info=""
-read -r pt_dow pt_hour pt_min <<< "$(TZ=America/Los_Angeles date '+%u %-H %-M')"
-rest_of_day=$(( (23 - pt_hour) * 60 + (60 - pt_min) ))
-
-# Helper: format minutes as compact countdown
-fmt_cd() {
-  local h=$(($1 / 60)) m=$(($1 % 60))
-  if [ "$h" -ge 24 ]; then printf '%dd%dh' $((h/24)) $((h%24))
-  elif [ "$h" -gt 0 ]; then printf '%dh%dm' "$h" "$m"
-  else printf '%dm' "$m"; fi
-}
-
-if [ "$pt_dow" -le 5 ] && [ "$pt_hour" -ge 5 ] && [ "$pt_hour" -lt 11 ]; then
-  pk_left=$(( (10 - pt_hour) * 60 + (60 - pt_min) ))
-  peak_info="$(printf '\033[33m')1x peak $(printf '\033[2m')$(fmt_cd $pk_left)$(printf '\033[0m')"
-else
-  if [ "$pt_dow" -gt 5 ]; then
-    d2m=$(( pt_dow == 6 ? 2 : 1 ))
-    pk_left=$(( (d2m - 1) * 1440 + rest_of_day + 300 ))
-  elif [ "$pt_hour" -lt 5 ]; then
-    pk_left=$(( (4 - pt_hour) * 60 + (60 - pt_min) ))
-  else
-    skip=$(( pt_dow == 5 ? 2 : 0 ))
-    pk_left=$(( rest_of_day + skip * 1440 + 300 ))
-  fi
-  peak_info="$(printf '\033[32m')2x $(printf '\033[2m')$(fmt_cd $pk_left)$(printf '\033[0m')"
-fi
-
-# ============================================================================
 # OUTPUT: Line 1 (location) + Line 2 (session)
 # ============================================================================
 # Line 1: location
@@ -158,7 +127,6 @@ session_parts=()
 [ -n "$model_info" ] && session_parts+=("$model_info")
 [ -n "$context_info" ] && session_parts+=("$context_info")
 [ -n "$duration_info" ] && session_parts+=("$duration_info")
-[ -n "$peak_info" ] && session_parts+=("$peak_info")
 if [ ${#session_parts[@]} -gt 0 ]; then
   printf "\n"
   for i in "${!session_parts[@]}"; do
