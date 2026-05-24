@@ -7,9 +7,6 @@ WRITING_DIR="${WRITING_DIR:-$HOME/writing}"  # Writing projects (papers, notes)
 SCRATCH_DIR="${SCRATCH_DIR:-$HOME/scratch}"  # Temporary experimentation
 PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"  # General projects
 
-# Disable AUTO_CD - require explicit cd commands
-unsetopt AUTO_CD
-
 # Instant prompt
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
@@ -58,6 +55,8 @@ plugins=(zsh-autosuggestions zsh-syntax-highlighting zsh-completions zsh-history
 if [ -f "$ZSH/oh-my-zsh.sh" ]; then
   source "$ZSH/oh-my-zsh.sh"
 fi
+# Disable AUTO_CD (oh-my-zsh's lib/directories.zsh enables it) — require explicit cd
+unsetopt AUTO_CD
 source $CONFIG_DIR/aliases.sh
 [ -f $CONFIG_DIR/secrets.sh ] && source $CONFIG_DIR/secrets.sh
 if [ -x "$DOT_DIR/custom_bins/dotfiles-secrets" ]; then
