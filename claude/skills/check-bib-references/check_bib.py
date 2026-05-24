@@ -35,6 +35,10 @@ ATOM_NS = {"a": "http://www.w3.org/2005/Atom"}
 TITLE_SIMILARITY_THRESHOLD = 0.85
 
 
+def base_arxiv_id(s: str) -> str:
+    return re.sub(r"v\d+$", "", s)
+
+
 @dataclass
 class BibEntry:
     key: str
@@ -173,7 +177,9 @@ def fetch_arxiv_batch(ids: list[str], client: httpx.Client) -> dict[str, dict]:
         ]
         found[aid] = {"title": title, "authors": authors}
     for aid in ids:
-        out[aid] = found.get(aid, {"error": "arXiv: no entry returned (id may be invalid)"})
+        out[aid] = found.get(
+            base_arxiv_id(aid), {"error": "arXiv: no entry returned (id may be invalid)"}
+        )
     return out
 
 
