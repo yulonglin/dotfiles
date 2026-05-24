@@ -16,3 +16,5 @@ sqlite/
 vendor_imports/
 cache/
 state_*.sqlite
+installation_id
+computer-use/
