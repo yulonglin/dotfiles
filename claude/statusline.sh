@@ -2,10 +2,11 @@
 # Claude Code Status Line Script (bash fallback)
 # Rust primary: tools/claude-tools/src/statusline.rs (recompile with cargo build --release)
 #
-# Displays on 3+ lines:
+# Displays on up to 4 lines:
 # Line 1 (location): Machine name (SSH) + profiles + directory + git branch
 # Line 2 (session): Model name + context % + duration
 # Line 3 (usage): 5h and 7d API usage bars (cached, from /api/oauth/usage)
+# Line 4 (workday): bedtime nudge near end-of-day (home timezone)
 #
 # Receives JSON via stdin from Claude Code.
 
