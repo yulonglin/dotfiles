@@ -24,7 +24,8 @@ All under `out/claim-check-<UTC-timestamp>/`:
 | File | Format | Lifecycle | Purpose |
 |------|--------|-----------|---------|
 | `claims.jsonl` | one JSON object per claim | Frozen after Pass 1 user-confirmation | Source of truth for what to verify |
-| `results.jsonl` | one JSON object per result, keyed `claim_id` | Append-only | Verification outcomes (resumable) |
+| `results-batch<N>-agent<M>.jsonl` | one JSON object per result, keyed `claim_id` | Written once by one agent | Per-agent verification outcomes — never shared between agents (avoids append race) |
+| `results.jsonl` | merged from all per-agent files | Rewritten by main after each batch | Source of truth queried for `completed_claim_ids` |
 | `sources.jsonl` | one source per line, deduped | Read-only handoff to agents | Pre-resolved arXiv/DOI metadata, shared URL→content cache |
 | `batch-state.json` | single JSON object | Rewritten after each batch | `{next_batch_idx, completed_claim_ids[], failed_claim_ids[]}` |
 | `report.md` | rendered report | Generated at end (or on demand) | Final deliverable |
@@ -52,15 +53,16 @@ All under `out/claim-check-<UTC-timestamp>/`:
 Before dispatching any agents:
 
 1. Scan `claims.jsonl` for any `arxiv_id` field
-2. Batch-resolve **in main context** using:
+2. Build a throwaway bib file with one `@misc{...}` entry per unique arXiv ID, then run:
    ```bash
-   uv run ~/.claude/skills/check-bib-references/check_bib.py --arxiv-ids <comma-separated>
+   # In main context — one call, batched API, ~60s throttle avoided
+   uv run ~/.claude/skills/check-bib-references/check_bib.py out/claim-check-<ts>/arxiv-ids.bib
    ```
-   (or call the underlying batched API directly — single request with `id_list=` avoids the ~60s sticky throttle)
+   `check_bib.py` reads bib files (no `--arxiv-id` flag); see its `--help`. Internally it uses arXiv's `id_list=` batched API in a single request
 3. Write resolved metadata to `sources.jsonl` keyed by arXiv ID
 4. Each agent's prompt includes the pre-cached source blobs for its claims — agents do **not** hit arXiv themselves
 
-Same applies for DOIs and OpenReview forum IDs (use `check-bib-references/check_bib.py` for OpenReview too).
+Same applies for DOIs and OpenReview forum IDs (use `check-bib-references/check_bib.py` for OpenReview too — pass a bib with `@misc{k, note={https://openreview.net/forum?id=...}}` entries).
 
 ## Dispatch pattern
 
@@ -73,9 +75,9 @@ Per batch:
    - Its 6 claims (with pre-cached source blobs for any arXiv/DOI claims)
    - The status decision tree (copied verbatim from `SKILL.md`)
    - The numerical precision rules
-   - Write instruction: **append results to `results.jsonl`** with the supplied path; do NOT overwrite
-5. After all 5 return, **read `results.jsonl` from disk** to verify completions — do not trust agent status (see "Failure handling" below)
-6. Update `batch-state.json`
+   - Write instruction: **write results to its own dedicated file** `results-batch<N>-agent<M>.jsonl` (the orchestrator supplies the exact path per agent). One agent = one file. Never write to the shared `results.jsonl` — concurrent appends from non-atomic editors will overwrite each other and lose results
+5. After all 5 return, **read each `results-batch<N>-agent<M>.jsonl` from disk** to verify completions — do not trust agent status (see "Failure handling" below). Then **concatenate the 5 per-agent files into `results.jsonl`** (append mode, in main context where there's only one writer)
+6. Update `batch-state.json` with the union of `claim_id`s found across the per-agent files
 7. Repeat
 
 ### Agent prompt skeleton
@@ -95,10 +97,12 @@ PROTOCOL:
   Use WebSearch + WebFetch for claims without a pre-cached source.
 
 OUTPUT:
-  Append one JSON line per claim to <results.jsonl path>.
+  Write one JSON line per claim to <YOUR-OWN-FILE>:
+    out/claim-check-<ts>/results-batch<N>-agent<M>.jsonl
+  This file is yours alone — the orchestrator merges per-agent files
+  in main context after you return. Do NOT touch `results.jsonl`.
   Schema: {claim_id, status, source_value, claimed_value, deviation,
            source_url, source_loc, confidence, notes}
-  Do NOT overwrite the file. Append only.
 
 CONSTRAINTS:
   Do not hit arXiv directly — use pre-cached blobs.
@@ -109,7 +113,7 @@ CONSTRAINTS:
 
 | Signal | Action |
 |--------|--------|
-| Agent returns with `status: failed` | **Verify on disk first.** `classifyHandoffIfNeeded` bug returns false failures (see `~/.claude/rules/agents-and-delegation.md`). Read `results.jsonl` — if the claim is there, it succeeded |
+| Agent returns with `status: failed` | **Verify on disk first.** `classifyHandoffIfNeeded` bug returns false failures (see `~/.claude/rules/agents-and-delegation.md`). Read that agent's `results-batch<N>-agent<M>.jsonl` — if the claims are there, it succeeded |
 | Agent crashes mid-batch | Re-dispatch only the missing `claim_id`s in the next batch |
 | Single agent returns 0 verifications | Inspect the prompt — likely it failed to delegate to web search. See `~/.claude/rules/agents-and-delegation.md` § CLI Agent Delegation |
 | **Batch failure rate >20%** | **Stop. Surface to user.** Don't burn the rest of the budget on a broken pipeline |

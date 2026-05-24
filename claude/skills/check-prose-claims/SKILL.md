@@ -211,11 +211,18 @@ Q3: "doi:<DOI>"            (if DOI provided)
 Q4: "arxiv:<arxiv_id>"     (if arXiv ID provided)
 ```
 
-For arXiv-ID-bearing claims, **don't WebSearch — use `check-bib-references/check_bib.py`** (batched API, no rate-limit hassle):
+For arXiv-ID-bearing claims, **don't WebSearch — use `check-bib-references/check_bib.py`** (batched API, no rate-limit hassle). The script reads a BibTeX file, so write the arXiv IDs to a tiny bib first:
 
 ```bash
-uv run ~/.claude/skills/check-bib-references/check_bib.py --arxiv-id <id>
+# Write a throwaway bib with just the IDs you need to verify
+cat > /tmp/claim-check.bib <<'EOF'
+@misc{c1, eprint = {2401.12345}, archivePrefix = {arXiv}}
+@misc{c2, eprint = {2403.99999}, archivePrefix = {arXiv}}
+EOF
+uv run ~/.claude/skills/check-bib-references/check_bib.py /tmp/claim-check.bib
 ```
+
+(The orchestrator generates this bib programmatically from `claims.jsonl` — see `orchestrator.md`.)
 
 ### Statistics (market size, usage, etc.)
 ```
