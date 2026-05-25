@@ -773,7 +773,7 @@ def _extract_text(msg: str | dict | list) -> str:
     return ""
 
 
-def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_message: str = "") -> dict | None:
+def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, trust_section: str = "", user_message: str = "") -> dict | None:
     """Call the classifier model to classify the action. Returns parsed response or None."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -797,10 +797,19 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_messag
     if user_message:
         user_msg += f"\nUser's recent messages:\n{user_message}"
 
+    # Cache the static rules block — Anthropic prompt caching charges ~10%
+    # of base input rate on cache hits. Per-repo trust context goes in a
+    # second, uncached block so it doesn't bust the cache key per cwd.
+    system_blocks: list[dict] = [
+        {"type": "text", "text": rules, "cache_control": {"type": "ephemeral"}},
+    ]
+    if trust_section:
+        system_blocks.append({"type": "text", "text": trust_section})
+
     body = json.dumps({
         "model": MODEL,
         "max_tokens": MAX_TOKENS,
-        "system": rules,
+        "system": system_blocks,
         "messages": [{"role": "user", "content": user_msg}],
     }).encode()
 
@@ -818,6 +827,17 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, user_messag
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read())
         text = data["content"][0]["text"].strip()
+        # Log token usage so we can verify the prompt cache is landing.
+        # cache_read_input_tokens > 0 on most calls → cache hit; if it's
+        # consistently 0, the rules block changed or cache TTL expired.
+        usage = data.get("usage", {}) or {}
+        log(
+            f"USAGE: model={MODEL} "
+            f"input={usage.get('input_tokens', 0)} "
+            f"output={usage.get('output_tokens', 0)} "
+            f"cache_read={usage.get('cache_read_input_tokens', 0)} "
+            f"cache_create={usage.get('cache_creation_input_tokens', 0)}"
+        )
         # Extract JSON robustly: find first { to last }
         start = text.find("{")
         end = text.rfind("}")
@@ -954,7 +974,8 @@ def main() -> None:
         )
         return
 
-    # Inject repo trust context into rules
+    # Repo trust context goes in a separate (uncached) system block so the
+    # static rules text keeps hitting the prompt cache across repos.
     trust_section = f"""
 ## Repo Trust Context (auto-detected)
 
@@ -963,17 +984,13 @@ def main() -> None:
 - **Trusted repo**: {trust['trusted']}
 - **Personal repo**: {trust['personal']}
 """
-    rules = rules.replace(
-        "## Environment",
-        f"## Environment\n{trust_section}",
-    )
 
     user_message = ""
     if INCLUDE_USER_MESSAGE and transcript_path:
         user_message = extract_recent_user_messages(transcript_path)
 
     try:
-        result = classify(tool_name, tool_input, cwd, rules, user_message)
+        result = classify(tool_name, tool_input, cwd, rules, trust_section=trust_section, user_message=user_message)
     except AutoClassifyWarning as warning:
         emit_warning(warning.headline, warning.details, warning.suggestion)
         return
