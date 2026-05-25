@@ -179,6 +179,7 @@ Reference material in `~/.claude/docs/` — loaded by skills when relevant, NOT 
 - `docs/per-project-telegram.md` — Per-repo Telegram bots: TELEGRAM_STATE_DIR, --channels flag, gotchas
 - `docs/tui-tools.md` — TUI tool taxonomy (fzf, gum, television, ratatui), fzf conventions, decision tree
 - `docs/external-resources.md` — **Consult before improving the Claude Code setup.** Aggregators (Good AI List, awesome-claude-code), voices to follow (Boris Cherny, Cat Wu, Thariq Shihipar, Mitchell Hashimoto, Simon Willison, Karpathy), cross-machine memory sync solutions, output-style switching
+- `docs/bear-cli-reference.md` — `bearcli` reference for scripting, cron, and CLI-only cases (the `bear` skill defaults to MCP and links here as the lazy-loaded fallback)
 
 ---
 

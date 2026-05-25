@@ -37,9 +37,9 @@ The sandbox protects the filesystem and network. It does NOT know whether the us
 
 ## Prefer CLI alternatives when they exist
 
-| Want to… | GUI-stealing way (ask first) | CLI-only alternative (no permission needed) |
+| Want to… | GUI-stealing way (ask first) | CLI / MCP alternative (no permission needed) |
 |---|---|---|
-| Read/edit a Bear note | `open -a Bear; bearcli ...` | `bearcli show <id>` — works while Bear is already running; if not running, ask first |
+| Read/edit a Bear note | `open -a Bear; bearcli ...` | `mcp__Bear__get_note` / `edit_note` (preferred — works while Bear is running). Fall back to `bearcli show <id>` for scripts/cron. If Bear isn't running, ask first |
 | Read a Google Doc | Open in Chrome via claude-in-chrome | `gws docs documents get --id <id>` |
 | Check a Notion page | Open in Chrome | `notion-fetch <url>` via MCP |
 | Send a Slack message draft | Open Slack desktop, navigate | `slack_send_message_draft` MCP |
