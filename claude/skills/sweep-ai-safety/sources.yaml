@@ -41,8 +41,9 @@ sources:
     kind: papers
     verified: false
     notes: |
-      Aggregated research page. No RSS — script scrapes the page index for new entries.
-      Cross-check against alignment.anthropic for duplicates.
+      Aggregated research page. No RSS — surfaced in the digest's "Manual sources"
+      section; WebFetch the URL to check for new entries. Cross-check against
+      alignment.anthropic for duplicates.
 
   # ---------------------------------------------------------------------------
   # OpenAI
@@ -66,9 +67,11 @@ sources:
     rss: https://openai.com/blog/rss.xml
     kind: blog
     verified: false
+    safety_filter: true
     notes: |
-      All-purpose OpenAI blog. Script filters for safety/alignment-relevant items
-      by title/summary keyword match against terms.md.
+      All-purpose OpenAI blog. `safety_filter: true` drops items whose title/summary
+      don't match any `term_regex_aliases` entry — only safety/alignment-tagged
+      posts make it into the digest.
 
   # ---------------------------------------------------------------------------
   # Google DeepMind
@@ -81,8 +84,9 @@ sources:
     kind: papers
     verified: false
     notes: |
-      GDM publications page. No RSS — HTML scrape. Filter by "safety" tag if visible.
-      Look for: capability tests, dangerous capability papers, Frontier Safety Framework.
+      GDM publications page. No RSS — surfaced in "Manual sources" section;
+      WebFetch and filter by "safety" tag if visible. Look for: capability tests,
+      dangerous capability papers, Frontier Safety Framework.
 
   # ---------------------------------------------------------------------------
   # Other safety orgs
@@ -232,3 +236,6 @@ term_regex_aliases:
   jailbreak: "jailbreak"
   red-team: "red[\\s-]team"
   interpretability: "interpretab|circuits|SAE|sparse[\\s-]autoencoder"
+  subversion-strategy: "subversion\\s+strateg"
+  monitoring-evasion: "monitoring\\s+evasion|evad[a-z]*\\s+monitor"
+  deliberative-alignment: "deliberative\\s+alignment"

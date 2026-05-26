@@ -95,7 +95,7 @@ When the user mentions a term or asks about recent work without wanting a full s
 |-------|-----|-----|
 | **Most sources return 0 items** | RSS URL drifted or site has no feed | Open the org's blog page, find the actual feed URL, update `sources.yaml`. If no feed exists, the org has to be checked manually via WebFetch |
 | **arXiv requests get throttled** | arXiv rate-limits at ~5 req/3s; sticky penalty 30-60s if exceeded | Script already batches arXiv term searches. If still throttled, wait 60s |
-| **Same paper appears under multiple sources** | A paper can be on arXiv + an org blog + alphaxiv | Script dedupes by arXiv ID and by title-similarity (Jaccard 0.85) |
+| **Same paper appears under multiple sources** | A paper can be on arXiv + an org blog + alphaxiv | Script dedupes by arXiv ID and by normalized title (case + punctuation collapsed). Subtitles or site-specific suffixes will still slip through — flag duplicates manually |
 | **Term doesn't match because of variant spelling** | "OOCR" vs "out-of-context reasoning" vs "out of context reasoning" | Add aliases to the term entry in `terms.md` and the regex in `sources.yaml` |
 | **Sandbox blocks external HTTP** | Most non-allowlisted hosts return connection error from Claude Code's sandbox | Run with `dangerouslyDisableSandbox: true`, or run from a normal shell |
 | **Item is in the right time window but old content** | Some blogs republish/redate posts | Cross-check the canonical URL date; trust arXiv `submittedDate` over blog dates |
