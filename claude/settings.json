@@ -1,80 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "agentPushNotifEnabled": true,
-  "alwaysThinkingEnabled": true,
-  "attribution": {
-    "commit": "",
-    "pr": ""
-  },
-  "autoCompactEnabled": true,
-  "autoMemoryDirectory": "memory",
-  "autoMode": {
-    "allow": [
-      "Test Artifacts: Hardcoded test API keys, placeholder credentials in examples, or hardcoding test cases",
-      "Local Operations: Agent deleting local files in working directory, local file operations within project scope, or using `--ignore-certificate-errors` for local testing. \"Project scope\" means the repository the session started in — wandering into ~/, ~/Library/, /etc, or other repos is scope escalation (User Intent Rule #2), not a local operation. Does NOT cover irreversible destruction of pre-existing files or local stateful services — see \"Irreversible Local Destruction\" in BLOCK.",
-      "Read-Only Operations: GET requests, read-only API calls, or queries that don't modify state and don't contain sensitive information in the URL. Note: PREEMPTIVE BLOCK ON CLEAR INTENT still applies — if the transcript contains clear evidence the agent is using read-only operations to scout for a blocked action, block it.",
-      "Declared Dependencies: Installing packages that are already declared in the repo's manifest files (requirements.txt, package.json, Cargo.toml, pyproject.toml, Gemfile, etc.) via standard commands that read those manifests (`pip install -r requirements.txt`, `npm install`, `cargo build`, `bundle install`) — provided the agent has not modified the manifest in this session. Does NOT cover installing agent-chosen package names (e.g. `pip install foo`, `npm install bar`) — those carry typosquat and supply-chain risk.",
-      "Toolchain Bootstrap: Installing language toolchains (not packages) from their official one-line installers — `sh.rustup.rs`, `bootstrap.pypa.io`, `astral.sh`, `bun.sh`, `deb.nodesource.com`, `get.docker.com`, `brew.sh` — when the repo's manifest or build config indicates that toolchain is required.",
-      "Standard Credentials: Reading credentials from the agent's own config (.env, config files) and sending them to their intended provider (e.g. API key to its matching API endpoint)",
-      "Git Push to Working Branch: Pushing to the branch the user started the session on (unless it is the repository default branch), or to a branch the agent created during the session. Does not cover pushing to other pre-existing branches.",
-      "Memory Directory: Routine writes to and deletes from the agent's memory directory (e.g. ~/.claude/projects/*/memory/) — recording or pruning user preferences, project facts, references. This is intended persistence the system prompt directs the agent to use, not Self-Modification or Irreversible Local Destruction. Does NOT cover content described in Memory Poisoning.",
-      "Claude Code Scheduling: Using `CronCreate`, `CronDelete`, `CronList`, or `RemoteTrigger` to schedule or manage Claude Code tasks. `CronCreate` fires prompts within the current Claude session or writes to `.claude/scheduled_tasks.json`; `RemoteTrigger` registers agents with cloud services (`claude.ai/code/routines`).",
-      "Read-only commands (cat, ls, head, tail, jq, grep, rg, fd, find, git log/status/diff/show, eza, bat, wc) targeting any personal repository under ~/code/, ~/writing/, ~/projects/, or ~/scratch/ — even when the current session is in a different personal repo. The user routinely runs read-only queries across their own repos. Cross-repo writes/edits/moves/deletes still require permission. Excludes paths under ~/.config/dotfiles-secrets/, ~/.config/sops/age/, ~/.aws/, ~/.ssh/id_* (private keys), ~/.claude/.credentials.json, ~/.claude/projects/*.jsonl, and .env* files with real secrets.",
-      "Writes (Edit, Write, MultiEdit) and commits inside other personal repos under ~/code/, ~/writing/, ~/projects/, ~/scratch/ are allowed when the user's current message names the target repo or directory by path. Pushing to remotes in those other repos still requires confirmation."
-    ],
-    "environment": [
-      "**Trusted repo**: The git repository the agent started in (its working directory) and its configured remote(s)",
-      "**Source control**: The trusted repo and its remote(s) only (no additional orgs configured)",
-      "**Trusted internal domains**: None configured",
-      "**Trusted cloud buckets**: None configured",
-      "**Key internal services**: None configured",
-      "Trusted source control orgs: github.com/yulonglin"
-    ]
-  },
-  "autoUpdatesChannel": "latest",
-  "chrome": {
-    "enabled": true
-  },
-  "claudeMdExcludes": [
-    "node_modules",
-    "vendor",
-    ".venv",
-    "target",
-    "cache",
-    ".cache"
-  ],
   "cleanupPeriodDays": 999999,
-  "effortLevel": "high",
-  "enabledPlugins": {
-    "claude-md-management@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true,
-    "code@ai-safety-plugins": true,
-    "codex@openai-codex": true,
-    "commit-commands@claude-plugins-official": true,
-    "context7@claude-plugins-official": true,
-    "core@ai-safety-plugins": true,
-    "dev-browser@dev-browser-marketplace": true,
-    "figma@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
-    "gopls-lsp@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true,
-    "huggingface-skills@claude-plugins-official": true,
-    "llms-fetch-mcp@alignment-hive": true,
-    "playground@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true,
-    "remember@claude-plugins-official": true,
-    "research@ai-safety-plugins": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
-    "viz@ai-safety-plugins": true,
-    "workflow@ai-safety-plugins": true,
-    "writing@ai-safety-plugins": true
-  },
   "env": {
     "BASH_MAX_OUTPUT_LENGTH": "100000",
     "CLAUDECODE": "",
@@ -85,408 +11,10 @@
     "CLAUDE_CODE_NO_FLICKER": "1",
     "ENABLE_TOOL_SEARCH": "1"
   },
-  "extraKnownMarketplaces": {
-    "ai-safety-plugins": {
-      "source": {
-        "repo": "yulonglin/ai-safety-plugins",
-        "source": "github"
-      }
-    },
-    "alignment-hive": {
-      "source": {
-        "repo": "Crazytieguy/alignment-hive",
-        "source": "github"
-      }
-    },
-    "claude-plugins-official": {
-      "source": {
-        "repo": "anthropics/claude-plugins-official",
-        "source": "github"
-      }
-    },
-    "dev-browser-marketplace": {
-      "source": {
-        "repo": "sawyerhood/dev-browser",
-        "source": "github"
-      }
-    },
-    "openai-codex": {
-      "source": {
-        "repo": "crazytieguy/codex-plugin-cc",
-        "source": "github"
-      }
-    },
-    "productivity-tools": {
-      "source": {
-        "repo": "yulonglin/productivity-tools",
-        "source": "github"
-      }
-    },
-    "ui-ux-pro-max-skill": {
-      "source": {
-        "repo": "nextlevelbuilder/ui-ux-pro-max-skill",
-        "source": "github"
-      }
-    }
+  "attribution": {
+    "commit": "",
+    "pr": ""
   },
-  "feedbackSurveyRate": 0,
-  "hooks": {
-    "PermissionRequest": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/auto_classify.py",
-            "timeout": 15,
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/retry_omitted_grep.sh",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Grep"
-      },
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/session_rename_commit.sh",
-            "if": "Bash(git commit*)",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/mark_failed_sync.sh",
-            "if": "Bash(git *)",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/agent_spawned.sh",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Task"
-      }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/mask_env_read.sh",
-            "if": "Read(**/.env*)",
-            "statusMessage": "Masking secret values in env file",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/mask_env_read.sh",
-            "if": "Read(**/.envrc)",
-            "statusMessage": "Masking secret values in envrc file",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Read"
-      },
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/check_loop_bypass.sh",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "python3 $HOME/.claude/hooks/network_audit.py",
-            "statusMessage": "Auditing network intent",
-            "timeout": 3,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/mask_env_read.sh",
-            "if": "Bash(*.env*)",
-            "statusMessage": "Masking secret values in env file",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/block_email_send.sh",
-            "if": "Bash(*gws*gmail*)",
-            "statusMessage": "Checking for email send commands",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/block_gws_delete.sh",
-            "if": "Bash(*gws*)",
-            "statusMessage": "Checking for GWS deletion commands",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/nudge_modern_tools.sh",
-            "timeout": 3,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/warn_dep_install.sh",
-            "timeout": 3,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/guard_post_rebase.sh",
-            "if": "Bash(git commit*)",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/guard_settings_commit.sh",
-            "if": "Bash(git *)",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/nudge_experiment_jobs.sh",
-            "if": "Bash(*python*)",
-            "timeout": 3,
-            "type": "command"
-          },
-          {
-            "command": "node $HOME/.claude/scripts/git-add-reminder.mjs",
-            "if": "Bash(git add *)",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "node $HOME/.claude/scripts/plan-write-reminder.mjs",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Write"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash $HOME/.claude/scripts/lib/run-with-session-env.sh $HOME/.claude/scripts/exit-plan-mode-enforce.mjs",
-            "timeout": 15,
-            "type": "command"
-          }
-        ],
-        "matcher": "ExitPlanMode"
-      },
-      {
-        "hooks": [
-          {
-            "command": "node $HOME/.claude/scripts/simplify-reminder.mjs",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Skill"
-      },
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/check_agent_depth.sh",
-            "timeout": 3,
-            "type": "command"
-          }
-        ],
-        "matcher": "Task"
-      },
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/check_webfetch_domain.sh",
-            "timeout": 3,
-            "type": "command"
-          }
-        ],
-        "matcher": "WebFetch"
-      },
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/block_tab_group_creation.sh",
-            "timeout": 3,
-            "type": "command"
-          }
-        ],
-        "matcher": "mcp__claude-in-chrome__tabs_context_mcp"
-      },
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/nudge_html_email.sh",
-            "timeout": 3,
-            "type": "command"
-          }
-        ],
-        "matcher": "mcp__claude_ai_Gmail__gmail_create_draft"
-      },
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/require_plan_approval.sh",
-            "timeout": 3,
-            "type": "command"
-          }
-        ],
-        "matcher": "EnterPlanMode"
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/watchdog_stop.sh",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/auto_commit.sh",
-            "timeout": 120,
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "async": true,
-            "command": "$HOME/.claude/hooks/watchdog_start.sh",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "async": true,
-            "command": "$HOME/.claude/hooks/fix_hook_permissions.sh",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "async": true,
-            "command": "$HOME/.claude/hooks/detect_repo_trust.sh",
-            "timeout": 3,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/check_git_root.sh",
-            "timeout": 3,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/check_venv.sh",
-            "timeout": 3,
-            "type": "command"
-          },
-          {
-            "async": true,
-            "command": "$HOME/.claude/hooks/pre_session_start.sh",
-            "timeout": 10,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/session_start_notes.sh",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/show_auth_account.sh",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/context_auto_apply.sh",
-            "timeout": 10,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/check_things_mcp.sh",
-            "timeout": 3,
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/watchdog_mark.sh idle",
-            "timeout": 3,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/nudge_remember.sh",
-            "timeout": 3,
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.claude/hooks/with-anthropic-key.sh $HOME/.claude/hooks/session_rename_auto.sh",
-            "timeout": 5,
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.claude/hooks/watchdog_mark.sh working",
-            "timeout": 3,
-            "type": "command"
-          }
-        ]
-      }
-    ]
-  },
-  "inputNeededNotifEnabled": true,
-  "installMethod": "native",
-  "mcpServers": {
-    "bear": {
-      "args": [
-        "mcp-server"
-      ],
-      "command": "/Applications/Bear.app/Contents/MacOS/bearcli"
-    },
-    "things-cloud": {
-      "type": "http",
-      "url": "http://127.0.0.1:8080/mcp"
-    },
-    "zotero": {
-      "args": [
-        "serve"
-      ],
-      "command": "zotero-mcp",
-      "env": {
-        "ZOTERO_LOCAL": "true"
-      }
-    }
-  },
-  "model": "claude-opus-4-6",
-  "outputStyle": "10x Mentor",
   "permissions": {
     "allow": [
       "Bash(git *)",
@@ -636,6 +164,57 @@
       "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_public_and_private",
       "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_users"
     ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(rm -r *)",
+      "Bash(shred *)",
+      "Bash(> *)",
+      "Bash(truncate *)",
+      "Bash(git checkout -- *)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(git push --force *)",
+      "Bash(git push --force-with-lease *)",
+      "Bash(git push -f *)",
+      "Bash(git branch -D *)",
+      "Bash(dd *)",
+      "Bash(mkfs *)",
+      "Bash(fdisk *)",
+      "Bash(chmod -R 777 *)",
+      "Bash(chown -R *)",
+      "Bash(shutdown *)",
+      "Bash(reboot *)",
+      "Bash(halt *)",
+      "Bash(wipefs *)",
+      "Bash(chmod 000 *)",
+      "Bash(mv / *)",
+      "Bash(bash -c *)",
+      "Bash(sh -c *)",
+      "Bash(zsh -c *)",
+      "Bash(eval *)",
+      "Bash(exec *)",
+      "Bash(xargs sh *)",
+      "Bash(xargs bash *)",
+      "Bash(xargs zsh *)",
+      "Bash(sudo *)",
+      "Bash(curl * | bash *)",
+      "Bash(curl * | sh *)",
+      "Bash(wget * | bash *)",
+      "Bash(wget * | sh *)",
+      "Bash(nohup *)",
+      "Bash(find * -delete *)",
+      "Bash(find * -exec *)",
+      "Bash(find * -execdir *)",
+      "Bash(fd * -x *)",
+      "Bash(fd * -X *)",
+      "Bash(fd * --exec *)",
+      "Bash(fd * --exec-batch *)",
+      "Bash(chmod +s *)",
+      "Bash(chmod u+s *)",
+      "Bash(chmod g+s *)",
+      "Bash(nc -l *)",
+      "Bash(nc -lp *)"
+    ],
     "ask": [
       "Bash(python *)",
       "Bash(python3 *)",
@@ -727,66 +306,459 @@
       "mcp__claude_ai_Notion__notion-duplicate-page",
       "mcp__claude_ai_Notion__notion-move-pages"
     ],
-    "defaultMode": "auto",
-    "deny": [
-      "Bash(rm -rf *)",
-      "Bash(rm -r *)",
-      "Bash(shred *)",
-      "Bash(> *)",
-      "Bash(truncate *)",
-      "Bash(git checkout -- *)",
-      "Bash(git reset --hard *)",
-      "Bash(git clean *)",
-      "Bash(git push --force *)",
-      "Bash(git push --force-with-lease *)",
-      "Bash(git push -f *)",
-      "Bash(git branch -D *)",
-      "Bash(dd *)",
-      "Bash(mkfs *)",
-      "Bash(fdisk *)",
-      "Bash(chmod -R 777 *)",
-      "Bash(chown -R *)",
-      "Bash(shutdown *)",
-      "Bash(reboot *)",
-      "Bash(halt *)",
-      "Bash(wipefs *)",
-      "Bash(chmod 000 *)",
-      "Bash(mv / *)",
-      "Bash(bash -c *)",
-      "Bash(sh -c *)",
-      "Bash(zsh -c *)",
-      "Bash(eval *)",
-      "Bash(exec *)",
-      "Bash(xargs sh *)",
-      "Bash(xargs bash *)",
-      "Bash(xargs zsh *)",
-      "Bash(sudo *)",
-      "Bash(curl * | bash *)",
-      "Bash(curl * | sh *)",
-      "Bash(wget * | bash *)",
-      "Bash(wget * | sh *)",
-      "Bash(nohup *)",
-      "Bash(find * -delete *)",
-      "Bash(find * -exec *)",
-      "Bash(find * -execdir *)",
-      "Bash(fd * -x *)",
-      "Bash(fd * -X *)",
-      "Bash(fd * --exec *)",
-      "Bash(fd * --exec-batch *)",
-      "Bash(chmod +s *)",
-      "Bash(chmod u+s *)",
-      "Bash(chmod g+s *)",
-      "Bash(nc -l *)",
-      "Bash(nc -lp *)"
+    "defaultMode": "auto"
+  },
+  "model": "claude-opus-4-6",
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/auto_classify.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/retry_omitted_grep.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session_rename_commit.sh",
+            "if": "Bash(git commit*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/mark_failed_sync.sh",
+            "if": "Bash(git *)",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/agent_spawned.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/mask_env_read.sh",
+            "if": "Read(**/.env*)",
+            "timeout": 5,
+            "statusMessage": "Masking secret values in env file"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/mask_env_read.sh",
+            "if": "Read(**/.envrc)",
+            "timeout": 5,
+            "statusMessage": "Masking secret values in envrc file"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_loop_bypass.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/network_audit.py",
+            "timeout": 3,
+            "statusMessage": "Auditing network intent"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/mask_env_read.sh",
+            "if": "Bash(*.env*)",
+            "timeout": 5,
+            "statusMessage": "Masking secret values in env file"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block_email_send.sh",
+            "if": "Bash(*gws*gmail*)",
+            "timeout": 5,
+            "statusMessage": "Checking for email send commands"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block_gws_delete.sh",
+            "if": "Bash(*gws*)",
+            "timeout": 5,
+            "statusMessage": "Checking for GWS deletion commands"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_modern_tools.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/warn_dep_install.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/guard_post_rebase.sh",
+            "if": "Bash(git commit*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/guard_settings_commit.sh",
+            "if": "Bash(git *)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_experiment_jobs.sh",
+            "if": "Bash(*python*)",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "node $HOME/.claude/scripts/git-add-reminder.mjs",
+            "if": "Bash(git add *)",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOME/.claude/scripts/plan-write-reminder.mjs",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/scripts/lib/run-with-session-env.sh $HOME/.claude/scripts/exit-plan-mode-enforce.mjs",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node $HOME/.claude/scripts/simplify-reminder.mjs",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_agent_depth.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_webfetch_domain.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__claude-in-chrome__tabs_context_mcp",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block_tab_group_creation.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__claude_ai_Gmail__gmail_create_draft",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_html_email.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/require_plan_approval.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/watchdog_stop.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/auto_commit.sh",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/watchdog_start.sh",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/fix_hook_permissions.sh",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/detect_repo_trust.sh",
+            "timeout": 3,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_git_root.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_venv.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/pre_session_start.sh",
+            "timeout": 10,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session_start_notes.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/show_auth_account.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/context_auto_apply.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_things_mcp.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/watchdog_mark.sh idle",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_remember.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/with-anthropic-key.sh $HOME/.claude/hooks/session_rename_auto.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/watchdog_mark.sh working",
+            "timeout": 3
+          }
+        ]
+      }
     ]
   },
-  "plansDirectory": "plans",
-  "preferredNotifChannel": "auto",
-  "remoteControlAtStartup": true,
+  "worktree": {
+    "symlinkDirectories": [
+      ".venv",
+      "node_modules",
+      "target",
+      ".git/lfs"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "claude-tools statusline || bash $HOME/.claude/statusline.sh",
+    "padding": 1
+  },
+  "enabledPlugins": {
+    "claude-md-management@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "code@ai-safety-plugins": true,
+    "codex@openai-codex": true,
+    "commit-commands@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "core@ai-safety-plugins": true,
+    "dev-browser@dev-browser-marketplace": true,
+    "figma@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "gopls-lsp@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "huggingface-skills@claude-plugins-official": true,
+    "llms-fetch-mcp@alignment-hive": true,
+    "playground@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true,
+    "remember@claude-plugins-official": true,
+    "research@ai-safety-plugins": true,
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
+    "viz@ai-safety-plugins": true,
+    "workflow@ai-safety-plugins": true,
+    "writing@ai-safety-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "ai-safety-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "yulonglin/ai-safety-plugins"
+      }
+    },
+    "alignment-hive": {
+      "source": {
+        "source": "github",
+        "repo": "Crazytieguy/alignment-hive"
+      }
+    },
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    },
+    "dev-browser-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "sawyerhood/dev-browser"
+      }
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "crazytieguy/codex-plugin-cc"
+      }
+    },
+    "productivity-tools": {
+      "source": {
+        "source": "github",
+        "repo": "yulonglin/productivity-tools"
+      }
+    },
+    "ui-ux-pro-max-skill": {
+      "source": {
+        "source": "github",
+        "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
+      }
+    }
+  },
+  "outputStyle": "10x Mentor",
   "sandbox": {
-    "allowUnsandboxedCommands": true,
-    "autoAllowBashIfSandboxed": true,
     "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": true,
+    "network": {
+      "allowedDomains": [
+        "api.anthropic.com",
+        "mcp-proxy.anthropic.com",
+        "api.githubcopilot.com",
+        "mcp.context7.com",
+        "oauth2.googleapis.com",
+        "cloudcode-pa.googleapis.com",
+        "github.com",
+        "api.github.com",
+        "mcp.linear.app",
+        "export.arxiv.org",
+        "arxiv.org"
+      ],
+      "allowLocalBinding": true
+    },
+    "filesystem": {
+      "allowWrite": [
+        "~/.Trash",
+        "~/.cache/uv",
+        "/tmp/tmux-*",
+        "/var/folders",
+        "/run/user/*/pueue*.socket",
+        "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli"
+      ]
+    },
     "excludedCommands": [
       "gh",
       "git",
@@ -813,53 +785,81 @@
       "jtop",
       "jguard",
       "spark"
-    ],
-    "filesystem": {
-      "allowWrite": [
-        "~/.Trash",
-        "~/.cache/uv",
-        "/tmp/tmux-*",
-        "/var/folders",
-        "/run/user/*/pueue*.socket",
-        "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli"
-      ]
-    },
-    "network": {
-      "allowLocalBinding": true,
-      "allowedDomains": [
-        "api.anthropic.com",
-        "mcp-proxy.anthropic.com",
-        "api.githubcopilot.com",
-        "mcp.context7.com",
-        "oauth2.googleapis.com",
-        "cloudcode-pa.googleapis.com",
-        "github.com",
-        "api.github.com",
-        "mcp.linear.app",
-        "export.arxiv.org",
-        "arxiv.org"
-      ]
-    }
-  },
-  "showThinkingSummaries": true,
-  "showTurnDuration": true,
-  "skipAutoPermissionPrompt": true,
-  "skipDangerousModePermissionPrompt": true,
-  "statusLine": {
-    "command": "claude-tools statusline || bash $HOME/.claude/statusline.sh",
-    "padding": 1,
-    "type": "command"
-  },
-  "teammateMode": "auto",
-  "terminalProgressBarEnabled": true,
-  "verbose": true,
-  "voiceEnabled": true,
-  "worktree": {
-    "symlinkDirectories": [
-      ".venv",
-      "node_modules",
-      "target",
-      ".git/lfs"
     ]
+  },
+  "feedbackSurveyRate": 0,
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "high",
+  "autoUpdatesChannel": "latest",
+  "plansDirectory": "plans",
+  "autoMemoryDirectory": "memory",
+  "showThinkingSummaries": true,
+  "skipDangerousModePermissionPrompt": true,
+  "claudeMdExcludes": [
+    "node_modules",
+    "vendor",
+    ".venv",
+    "target",
+    "cache",
+    ".cache"
+  ],
+  "verbose": true,
+  "preferredNotifChannel": "auto",
+  "autoCompactEnabled": true,
+  "showTurnDuration": true,
+  "terminalProgressBarEnabled": true,
+  "teammateMode": "auto",
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "allow": [
+      "Test Artifacts: Hardcoded test API keys, placeholder credentials in examples, or hardcoding test cases",
+      "Local Operations: Agent deleting local files in working directory, local file operations within project scope, or using `--ignore-certificate-errors` for local testing. \"Project scope\" means the repository the session started in — wandering into ~/, ~/Library/, /etc, or other repos is scope escalation (User Intent Rule #2), not a local operation. Does NOT cover irreversible destruction of pre-existing files or local stateful services — see \"Irreversible Local Destruction\" in BLOCK.",
+      "Read-Only Operations: GET requests, read-only API calls, or queries that don't modify state and don't contain sensitive information in the URL. Note: PREEMPTIVE BLOCK ON CLEAR INTENT still applies — if the transcript contains clear evidence the agent is using read-only operations to scout for a blocked action, block it.",
+      "Declared Dependencies: Installing packages that are already declared in the repo's manifest files (requirements.txt, package.json, Cargo.toml, pyproject.toml, Gemfile, etc.) via standard commands that read those manifests (`pip install -r requirements.txt`, `npm install`, `cargo build`, `bundle install`) — provided the agent has not modified the manifest in this session. Does NOT cover installing agent-chosen package names (e.g. `pip install foo`, `npm install bar`) — those carry typosquat and supply-chain risk.",
+      "Toolchain Bootstrap: Installing language toolchains (not packages) from their official one-line installers — `sh.rustup.rs`, `bootstrap.pypa.io`, `astral.sh`, `bun.sh`, `deb.nodesource.com`, `get.docker.com`, `brew.sh` — when the repo's manifest or build config indicates that toolchain is required.",
+      "Standard Credentials: Reading credentials from the agent's own config (.env, config files) and sending them to their intended provider (e.g. API key to its matching API endpoint)",
+      "Git Push to Working Branch: Pushing to the branch the user started the session on (unless it is the repository default branch), or to a branch the agent created during the session. Does not cover pushing to other pre-existing branches.",
+      "Memory Directory: Routine writes to and deletes from the agent's memory directory (e.g. ~/.claude/projects/*/memory/) — recording or pruning user preferences, project facts, references. This is intended persistence the system prompt directs the agent to use, not Self-Modification or Irreversible Local Destruction. Does NOT cover content described in Memory Poisoning.",
+      "Claude Code Scheduling: Using `CronCreate`, `CronDelete`, `CronList`, or `RemoteTrigger` to schedule or manage Claude Code tasks. `CronCreate` fires prompts within the current Claude session or writes to `.claude/scheduled_tasks.json`; `RemoteTrigger` registers agents with cloud services (`claude.ai/code/routines`).",
+      "Read-only commands (cat, ls, head, tail, jq, grep, rg, fd, find, git log/status/diff/show, eza, bat, wc) targeting any personal repository under ~/code/, ~/writing/, ~/projects/, or ~/scratch/ — even when the current session is in a different personal repo. The user routinely runs read-only queries across their own repos. Cross-repo writes/edits/moves/deletes still require permission. Excludes paths under ~/.config/dotfiles-secrets/, ~/.config/sops/age/, ~/.aws/, ~/.ssh/id_* (private keys), ~/.claude/.credentials.json, ~/.claude/projects/*.jsonl, and .env* files with real secrets.",
+      "Writes (Edit, Write, MultiEdit) and commits inside other personal repos under ~/code/, ~/writing/, ~/projects/, ~/scratch/ are allowed when the user's current message names the target repo or directory by path. Pushing to remotes in those other repos still requires confirmation."
+    ],
+    "environment": [
+      "**Trusted repo**: The git repository the agent started in (its working directory) and its configured remote(s)",
+      "**Source control**: The trusted repo and its remote(s) only (no additional orgs configured)",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "Trusted source control orgs: github.com/yulonglin"
+    ]
+  },
+  "voiceEnabled": true,
+  "chrome": {
+    "enabled": true
+  },
+  "installMethod": "native",
+  "mcpServers": {
+    "bear": {
+      "args": [
+        "mcp-server"
+      ],
+      "command": "/Applications/Bear.app/Contents/MacOS/bearcli"
+    },
+    "things-cloud": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    },
+    "zotero": {
+      "args": [
+        "serve"
+      ],
+      "command": "zotero-mcp",
+      "env": {
+        "ZOTERO_LOCAL": "true"
+      }
+    }
   }
 }
