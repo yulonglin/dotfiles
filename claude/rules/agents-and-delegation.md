@@ -48,9 +48,10 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 
 | Agent | Use Case | Strength |
 |-------|----------|----------|
+| **Task subagent** (general-purpose) | **Default for judgment, exploration, second opinions** | Subscription-billed, fresh context, MCP inherited, parallel via `run_in_background` |
 | **gemini-cli** | Large context analysis (>100KB); image generation/editing (Nano Banana / Nano Banana Pro); Google Workspace (Docs, Sheets, Drive) | 1M+ token window, PDFs, entire codebases, multimodal, native Google auth |
 | **core:codex** | Well-scoped implementation | Fast, precise, follows specs exactly |
-| **core:claude** | Judgment-heavy tasks | Taste, tool use, MCP access, nuanced reasoning |
+| **core:claude** | Detached/long-running headless work; fresh auth context | tmux-based, survives parent session — **API-billed pool post-June-15, use sparingly** |
 
 ### Google Workspace Access
 
@@ -73,10 +74,11 @@ Need delegation?
 ├─ Google Workspace (read/write)?
 │   ├─ Raw API call (get doc, list files)? → gws via Bash
 │   └─ AI reasoning over content? → gemini-cli agent
-├─ Plan needs critique? → code:plan-critic (+ core:claude in parallel)
+├─ Plan needs critique? → code:plan-critic (+ Task subagent in parallel)
 ├─ Clear implementation spec/plan? → core:codex
 ├─ Bug with clear repro? → core:codex (+ debugger for investigation)
-├─ Need judgment/taste? → core:claude
+├─ Need judgment/taste/exploration? → **Task subagent** (default — subscription)
+│   └─ Detached >5min, fresh auth, or true headless? → core:claude (claude -p, API-billed)
 ├─ Code review needed? → code:code-reviewer (+ code:codex-reviewer for significant changes)
 └─ Multi-step workflow? → Use skills
 ```
