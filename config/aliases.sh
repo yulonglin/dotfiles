@@ -1605,3 +1605,77 @@ things() {
             ;;
     esac
 }
+
+#-------------------------------------------------------------
+# srv — Hetzner server (hn) helpers: mount, sync, remote git
+#-------------------------------------------------------------
+# rclone mount for ad-hoc browsing of server files; rsync for bulk
+# data pulls (no FUSE overhead); ssh exec for git on server-side clones.
+# Requires: brew install --cask macos-fuse-t && brew install rclone
+# Setup once: rclone config  (create sftp remote named 'hn' pointing at ~/.ssh/config Host hn)
+
+srv() {
+    local cmd="${1:-help}"
+    [ $# -gt 0 ] && shift
+    case "$cmd" in
+        mount)
+            local name=${1:?Usage: srv mount <project> [remote-path]}
+            local remote=${2:-/home/yulong/projects/$name}
+            local mnt=$HOME/mnt/$name
+            if mount | grep -q " on $mnt "; then
+                echo "already mounted: $mnt"
+                return 0
+            fi
+            mkdir -p "$mnt" "$HOME/.cache"
+            rclone mount "hn:$remote" "$mnt" \
+                --vfs-cache-mode full \
+                --vfs-cache-max-age 24h \
+                --dir-cache-time 60s \
+                --log-file="$HOME/.cache/rclone-mount-$name.log" \
+                --daemon \
+                && echo "mounted: hn:$remote -> $mnt"
+            ;;
+        umount|unmount)
+            local name=${1:?Usage: srv umount <project>}
+            umount "$HOME/mnt/$name" && echo "unmounted: $HOME/mnt/$name"
+            ;;
+        pull)
+            # Bulk pull from server -> local clone (no mount needed)
+            local name=${1:?Usage: srv pull <project> [subpath]}
+            local subpath=${2:-code/out/}
+            rsync -av --progress \
+                "hn:/home/yulong/projects/$name/$subpath" \
+                "$HOME/projects/$name/$subpath"
+            ;;
+        git)
+            # Run git on server-side clone: srv git <project> pull --rebase
+            local name=${1:?Usage: srv git <project> <git-args...>}
+            shift
+            ssh hn "cd ~/projects/$name && git $*"
+            ;;
+        list|ls)
+            mount | grep rclone || echo "no rclone mounts"
+            ;;
+        log)
+            local name=${1:?Usage: srv log <project>}
+            tail -f "$HOME/.cache/rclone-mount-$name.log"
+            ;;
+        help|*)
+            cat <<'EOF'
+srv — Hetzner server (hn) helpers
+
+  srv mount   <project> [remote-path]  Mount via rclone (default remote: /home/yulong/projects/<project>)
+  srv umount  <project>                Unmount
+  srv pull    <project> [subpath]      Bulk rsync server -> local clone (default subpath: code/out/)
+  srv git     <project> <git-args...>  Run git on server-side clone (e.g. srv git foo pull --rebase)
+  srv list                             Show active rclone mounts
+  srv log     <project>                Tail rclone mount log
+
+Notes:
+  - Mount survives shell exit (--daemon) but NOT laptop sleep — if it goes stale: srv umount X && srv mount X
+  - New server-side files take up to 60s to appear in mount (--dir-cache-time)
+  - For lots of small reads (rg, grep -r), prefer pulling into local clone first
+EOF
+            ;;
+    esac
+}
