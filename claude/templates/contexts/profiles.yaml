@@ -47,7 +47,6 @@ base:
   - core
   - hookify
   - llms-fetch-mcp
-  - notion-mcp
   - plugin-dev
   - remember
   - superpowers
@@ -89,7 +88,6 @@ profiles:
     comment: "Papers, blog posts, documentation"
     enable:
       - bear-mcp
-      - notion-mcp
       - viz
       - workflow
       - writing
@@ -104,16 +102,16 @@ profiles:
     enable: [huggingface-skills]
 
   productivity:
-    comment: "Task and project management — Things 3, Bear, Notion"
-    enable: [bear-mcp, notion-mcp, things-mcp]
+    comment: "Task and project management — Things 3, Bear (Notion via claude.ai connector)"
+    enable: [bear-mcp, things-mcp]
 
   python:
     comment: "Adds pyright-lsp"
     enable: [pyright-lsp]
 
   rust:
-    comment: "Adds rust-skills (ownership, concurrency, architecture)"
-    enable: [rust-skills, rust-analyzer-lsp]
+    comment: "rust-analyzer-lsp + rust-skills (hook neutered by SessionStart; use /rust-skills:* on demand)"
+    enable: [rust-analyzer-lsp, rust-skills]
 
   go:
     comment: "Adds gopls-lsp"
