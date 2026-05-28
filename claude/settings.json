@@ -88,7 +88,38 @@
       "Search",
       "WebSearch",
       "WebFetch",
-      "Read"
+      "Read",
+      "mcp__plugin_telegram_telegram__reply",
+      "mcp__plugin_telegram_telegram__react",
+      "mcp__plugin_telegram_telegram__edit_message",
+      "mcp__plugin_telegram_telegram__download_attachment",
+      "mcp__claude_ai_Slack__slack_search_channels",
+      "mcp__claude_ai_Slack__slack_search_public",
+      "mcp__claude_ai_Slack__slack_search_public_and_private",
+      "mcp__claude_ai_Slack__slack_search_users",
+      "mcp__claude_ai_Slack__slack_read_channel",
+      "mcp__claude_ai_Slack__slack_read_thread",
+      "mcp__claude_ai_Slack__slack_read_canvas",
+      "mcp__claude_ai_Slack__slack_read_user_profile",
+      "mcp__claude_ai_Google_Calendar__list_events",
+      "mcp__claude_ai_Google_Calendar__list_calendars",
+      "mcp__claude_ai_Google_Calendar__get_event",
+      "mcp__claude_ai_Google_Calendar__suggest_time",
+      "mcp__claude_ai_Gmail__search_threads",
+      "mcp__claude_ai_Gmail__get_thread",
+      "mcp__claude_ai_Gmail__list_drafts",
+      "mcp__claude_ai_Gmail__list_labels",
+      "mcp__claude_ai_Google_Drive__list_recent_files",
+      "mcp__claude_ai_Google_Drive__search_files",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "mcp__claude_ai_Google_Drive__get_file_metadata",
+      "mcp__claude_ai_Google_Drive__get_file_permissions",
+      "mcp__claude_ai_Google_Drive__download_file_content",
+      "mcp__claude_ai_Granola__list_meetings",
+      "mcp__claude_ai_Granola__list_meeting_folders",
+      "mcp__claude_ai_Granola__get_meetings",
+      "mcp__claude_ai_Granola__get_meeting_transcript",
+      "mcp__claude_ai_Granola__query_granola_meetings"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -620,12 +651,6 @@
       }
     }
   },
-  "mcpServers": {
-    "things-cloud": {
-      "type": "http",
-      "url": "http://127.0.0.1:8080/mcp"
-    }
-  },
   "outputStyle": "10x Mentor",
   "sandbox": {
     "enabled": true,
@@ -696,13 +721,23 @@
     ".venv",
     "target"
   ],
+  "verbose": true,
+  "showTurnDuration": true,
+  "terminalProgressBarEnabled": true,
+  "teammateMode": "auto",
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
   "voiceEnabled": true,
+  "mcpServers": {
+    "things-cloud": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  },
   "chrome": {
     "enabled": true
   },
-  "installMethod": "native",
-  "showTurnDuration": true,
-  "teammateMode": "auto",
-  "terminalProgressBarEnabled": true,
-  "skipAutoPermissionPrompt": true
+  "installMethod": "native"
 }
