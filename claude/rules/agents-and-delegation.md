@@ -20,15 +20,54 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 
 **One editor per file.** Never spawn multiple agents to edit the same file.
 
+## Don't Defer Fixes — Delegate in Parallel
+
+**Anti-pattern:** Spot a small, well-scoped bug during a conversation. Say "real bug to file" / "want me to ship it now?" / "5 min fix" / "out of scope." Continue the original task. Fix never lands.
+
+**Rule:** If you can describe the fix in one paragraph and have the root cause, **just delegate it** — don't ask permission, don't backlog it. Spin up a parallel worktree subagent (or tmux Claude Code session for longer iteration) and continue the main task while the fix lands. The user reviews the worktree branch when ready.
+
+| Situation | Action |
+|-----------|--------|
+| Fix needs spec / architecture decisions | Stay inline, surface tradeoffs, get user input |
+| Well-scoped, root cause known | **Worktree subagent** (`isolation: "worktree"`, `run_in_background: true`) — keep working |
+| Needs more iteration than one shot | tmux Claude Code session, briefed with full context |
+| Might not actually be a bug | Confirm one signal first, then delegate or drop |
+
+**Briefing template for the worktree agent:**
+- Repo + paths + line refs
+- Bug + root cause + concrete repro
+- Fix approach (smallest correct change; no surrounding refactoring)
+- Test requirement (covering test + run existing suite)
+- Constraints: don't push, don't merge, don't bump version — user reviews the worktree
+
+**Catch-yourself signals:** "real bug to file" • "5 min fix" • "want me to ship it now?" • "out of scope but worth filing" — skip the question, spawn the worktree agent, continue.
+
+### Worktree Isolation: Use Repo-Relative Paths Only
+
+**`isolation: "worktree"` sets the agent's cwd, but does NOT rewrite paths inside the prompt.** If your prompt contains an absolute path (e.g. `/Users/yulong/code/repo/foo.md`), the agent follows the absolute path and writes to the main tree — silently defeating the isolation.
+
+**Rule:** When briefing a worktree agent, use repo-relative paths only.
+
+| Anti-pattern (breaks isolation) | Correct |
+|---------------------------------|---------|
+| `Write /Users/yulong/code/repo/src/foo.py` | `Write src/foo.py` (cwd is the worktree) |
+| `cd /Users/yulong/code/repo && pytest` | `pytest` (already in worktree) |
+| `Edit ~/.claude/skills/X/SKILL.md` (when worktree is in `~/.claude/`) | `Edit skills/X/SKILL.md` |
+
+**If the path MUST be absolute** (e.g., agent needs to read from a path outside the repo), tell the agent explicitly: "This path is outside the worktree — read only; do not write here."
+
+**Verify after agent completes:** check `git -C <worktree> status` for the expected files. If the worktree is empty and main tree has untracked files matching what the agent claimed to write, the isolation broke.
+
 ## Task Delegation Strategy
 
 **Principle:** Skills = workflows you execute, Agents = delegation to external tools.
 
 | Agent | Use Case | Strength |
 |-------|----------|----------|
+| **Task subagent** (general-purpose) | **Default for judgment, exploration, second opinions** | Subscription-billed, fresh context, MCP inherited, parallel via `run_in_background` |
 | **gemini-cli** | Large context analysis (>100KB); image generation/editing (Nano Banana / Nano Banana Pro); Google Workspace (Docs, Sheets, Drive) | 1M+ token window, PDFs, entire codebases, multimodal, native Google auth |
 | **core:codex** | Well-scoped implementation | Fast, precise, follows specs exactly |
-| **core:claude** | Judgment-heavy tasks | Taste, tool use, MCP access, nuanced reasoning |
+| **core:claude** | Detached/long-running headless work; fresh auth context | tmux-based, survives parent session — **API-billed pool post-June-15, use sparingly** |
 
 ### Google Workspace Access
 
@@ -51,10 +90,11 @@ Need delegation?
 ├─ Google Workspace (read/write)?
 │   ├─ Raw API call (get doc, list files)? → gws via Bash
 │   └─ AI reasoning over content? → gemini-cli agent
-├─ Plan needs critique? → code:plan-critic (+ core:claude in parallel)
+├─ Plan needs critique? → code:plan-critic (+ Task subagent in parallel)
 ├─ Clear implementation spec/plan? → core:codex
 ├─ Bug with clear repro? → core:codex (+ debugger for investigation)
-├─ Need judgment/taste? → core:claude
+├─ Need judgment/taste/exploration? → **Task subagent** (default — subscription)
+│   └─ Detached >5min, fresh auth, or true headless? → core:claude (claude -p, API-billed)
 ├─ Code review needed? → code:code-reviewer (+ code:codex-reviewer for significant changes)
 └─ Multi-step workflow? → Use skills
 ```

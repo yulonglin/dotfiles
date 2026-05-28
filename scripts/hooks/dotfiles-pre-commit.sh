@@ -18,6 +18,17 @@ if [[ -z "$REPO_ROOT" ]] || [[ ! -f "$GITIGNORE" ]]; then
     exit 0
 fi
 
+# ── Sanity-check staged Claude Code settings.json files ──
+# Catches stub regressions, conflict markers, duplicate keys, broken JSON.
+
+VALIDATOR="$REPO_ROOT/scripts/hooks/validate_claude_settings.py"
+if [[ -x "$VALIDATOR" ]]; then
+    if ! (cd "$REPO_ROOT" && "$VALIDATOR" --staged); then
+        echo "pre-commit: claude/settings.json validation failed — aborting commit" >&2
+        exit 1
+    fi
+fi
+
 # ── Find all SKILL.md symlinks (non-portable, must be ignored) ──
 
 SYMLINKS=""

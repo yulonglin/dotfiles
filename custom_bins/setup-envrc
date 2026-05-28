@@ -720,21 +720,38 @@ offer_env_import() {
 
     [[ ${#unmanaged_entries[@]} -gt 0 ]] || return 0
 
+    # Pre-load existing BWS values so the picker can flag duplicates *before*
+    # selection. Format: bws_key \t base64(value) \t note (matches bws-dump).
+    local bws_raw_dump menu_yellow=$'\033[0;33m' menu_reset=$'\033[0m'
+    bws_raw_dump=$("$SECRETS_HELPER" bws-dump 2>/dev/null || true)
+
     local menu_items=() RS=$'\x1e'
     for entry in "${unmanaged_entries[@]}"; do
-        local key masked source_file
-        IFS="$RS" read -r key masked _ source_file <<< "$entry"
-        # Hidden field 3 carries source_file for disambiguation
-        menu_items+=("$(printf '%s=%s\t(%s)\t%s' "$key" "$masked" "$source_file" "$source_file")")
+        local key masked entry_value source_file dup_marker=""
+        IFS="$RS" read -r key masked entry_value source_file <<< "$entry"
+        if [[ -n "$bws_raw_dump" && -n "$entry_value" ]]; then
+            local entry_b64 dup_keys
+            entry_b64=$(printf '%s' "$entry_value" | base64 | tr -d '\n')
+            dup_keys=$(printf '%s\n' "$bws_raw_dump" \
+                | awk -F'\t' -v b="$entry_b64" '$2 == b { print $1 }' \
+                | paste -sd, - 2>/dev/null)
+            if [[ -n "$dup_keys" ]]; then
+                dup_marker=$(printf '%s[in BWS: %s]%s' \
+                    "$menu_yellow" "$dup_keys" "$menu_reset")
+            fi
+        fi
+        # Hidden field 4 carries source_file for disambiguation
+        menu_items+=("$(printf '%s=%s\t%s\t(%s)\t%s' \
+            "$key" "$masked" "$dup_marker" "$source_file" "$source_file")")
     done
 
     local selections
-    selections=$(printf '%s\n' "${menu_items[@]}" | fzf --multi \
+    selections=$(printf '%s\n' "${menu_items[@]}" | fzf --multi --ansi \
         --prompt="Import unmanaged keys into BWS> " \
-        --header="SPACE to toggle, ENTER to confirm. ESC to skip." \
+        --header="SPACE to toggle, ENTER to confirm. ESC to skip. [in BWS: ...] = value already stored." \
         --bind 'space:toggle' \
         --delimiter=$'\t' \
-        --with-nth=1,2) || return 0
+        --with-nth=1,2,3) || return 0
 
     [[ -n "$selections" ]] || return 0
 
@@ -742,7 +759,7 @@ offer_env_import() {
     local tty=/dev/tty
 
     # Show existing BWS keys (full key names) for naming context
-    local dim=$'\033[2m' bold=$'\033[1m' red=$'\033[0;31m' reset=$'\033[0m'
+    local dim=$'\033[2m' bold=$'\033[1m' red=$'\033[0;31m' yellow=$'\033[0;33m' reset=$'\033[0m'
     echo "" >"$tty"
     printf '  %sExisting BWS keys:%s  %s(format: ENV_NAME - description)%s\n' \
         "$bold" "$reset" "$dim" "$reset" >"$tty"
@@ -755,9 +772,9 @@ offer_env_import() {
     while IFS= read -r selected; do
         [[ -n "$selected" ]] || continue
         local sel_key="${selected%%=*}"
-        # Extract source_file from hidden 3rd tab field for disambiguation
+        # Extract source_file from hidden 4th tab field for disambiguation
         local sel_source
-        sel_source=$(printf '%s' "$selected" | cut -f3)
+        sel_source=$(printf '%s' "$selected" | cut -f4)
 
         for entry in "${unmanaged_entries[@]}"; do
             local entry_key entry_value entry_masked entry_source
@@ -767,6 +784,76 @@ offer_env_import() {
 
                 printf '\n  ─── Importing: %s%s%s=%s%s%s ───\n' \
                     "$bold" "$sel_key" "$reset" "$dim" "$entry_masked" "$reset" >"$tty"
+
+                # Duplicate-value check: warn if this exact value already exists
+                # in BWS under another key. Default action = rebind local var to
+                # the existing entry; user can skip or force a new entry.
+                local rebind_to=""
+                if [[ -n "$bws_raw_dump" ]]; then
+                    local entry_b64 dup_keys dup_count
+                    entry_b64=$(printf '%s' "$entry_value" | base64 | tr -d '\n')
+                    dup_keys=$(printf '%s\n' "$bws_raw_dump" \
+                        | awk -F'\t' -v b="$entry_b64" '$2 == b { print $1 }')
+                    if [[ -n "$dup_keys" ]]; then
+                        printf '  %sValue already in BWS as:%s\n' "$yellow" "$reset" >"$tty"
+                        while IFS= read -r _dk; do
+                            [[ -n "$_dk" ]] && printf '    %s%s%s\n' "$dim" "$_dk" "$reset" >"$tty"
+                        done <<< "$dup_keys"
+                        local dup_action
+                        printf '  Action [%sr%sebind / %ss%skip / %sn%sew] (default rebind): ' \
+                            "$bold" "$reset" "$bold" "$reset" "$bold" "$reset" >"$tty"
+                        read -r dup_action <"$tty"
+                        dup_action=$(printf '%s' "$dup_action" | tr '[:upper:]' '[:lower:]')
+                        case "$dup_action" in
+                            s|skip)
+                                printf '  Skipped %s.\n' "$sel_key" >"$tty"
+                                break
+                                ;;
+                            n|new)
+                                : # fall through to normal create flow
+                                ;;
+                            *) # rebind (default / empty / r)
+                                dup_count=$(printf '%s\n' "$dup_keys" | grep -c .)
+                                if [[ "$dup_count" -gt 1 ]]; then
+                                    printf '  Multiple matches — pick which to rebind to:\n' >"$tty"
+                                    local _i=1
+                                    while IFS= read -r _dk; do
+                                        printf '    [%d] %s\n' "$_i" "$_dk" >"$tty"
+                                        _i=$((_i + 1))
+                                    done <<< "$dup_keys"
+                                    local dup_pick
+                                    printf '  Number [1]: ' >"$tty"
+                                    read -r dup_pick <"$tty"
+                                    [[ -n "$dup_pick" ]] || dup_pick=1
+                                    rebind_to=$(printf '%s\n' "$dup_keys" | awk -v n="$dup_pick" 'NR == n')
+                                    [[ -n "$rebind_to" ]] || rebind_to=$(printf '%s\n' "$dup_keys" | awk 'NR == 1')
+                                else
+                                    rebind_to="$dup_keys"
+                                fi
+                                ;;
+                        esac
+                    fi
+                fi
+
+                # Rebind path: bind local var to existing BWS key, no new entry.
+                if [[ -n "$rebind_to" ]]; then
+                    while true; do
+                        printf '  Local env var  [enter = %s]: ' "$sel_key" >"$tty"
+                        read -r local_key <"$tty"
+                        [[ -n "$local_key" ]] || local_key="$sel_key"
+                        [[ "$local_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && break
+                        printf '  Invalid name: %s (must be [A-Za-z_][A-Za-z0-9_]*)\n' "$local_key" >"$tty"
+                    done
+                    if [[ "$local_key" != "$rebind_to" ]]; then
+                        new_bindings+=("$local_key=$rebind_to")
+                    else
+                        new_bindings+=("$rebind_to")
+                    fi
+                    imported=$((imported + 1))
+                    printf '  %sRebound %s%s%s -> %s%s%s\n' \
+                        "$dim" "$reset" "$local_key" "$dim" "$reset" "$rebind_to" "$reset" >"$tty"
+                    break
+                fi
 
                 # 1. BWS key name (accepts "NAME - description" convention)
                 local bws_desc=""

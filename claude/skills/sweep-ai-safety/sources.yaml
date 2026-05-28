@@ -1,0 +1,241 @@
+# AI safety source registry for sweep-ai-safety skill.
+#
+# Each source has a stable `key` (used in --source flag), an `org`, a `name`,
+# a landing `url`, and an optional `rss` feed.
+#
+# `verified: false` means the rss/url has not been confirmed to work from this machine.
+# After running sweep.py and confirming the feed works, flip to `true`.
+# The script reports which feeds resolved and which failed.
+
+sources:
+  # ---------------------------------------------------------------------------
+  # Anthropic
+  # ---------------------------------------------------------------------------
+  - key: anthropic-alignment
+    org: Anthropic
+    name: Alignment Science blog
+    url: https://alignment.anthropic.com/
+    rss: https://alignment.anthropic.com/rss.xml
+    kind: blog
+    verified: false
+    notes: |
+      Anthropic's research-blog for alignment science. Posts mix interpretability,
+      alignment evaluations, model organisms, and threat-model writeups. High signal.
+
+  - key: anthropic-redteam
+    org: Anthropic
+    name: Red team blog
+    url: https://red.anthropic.com/
+    rss: https://red.anthropic.com/rss.xml
+    kind: blog
+    verified: false
+    notes: |
+      Anthropic's red-team / adversarial research blog. Newer than alignment.anthropic.
+      Look for jailbreak research, sabotage / sleeper agents follow-ups, capability tests.
+
+  - key: anthropic-research
+    org: Anthropic
+    name: Anthropic Research index
+    url: https://www.anthropic.com/research
+    rss: null
+    kind: papers
+    verified: false
+    notes: |
+      Aggregated research page. No RSS — surfaced in the digest's "Manual sources"
+      section; WebFetch the URL to check for new entries. Cross-check against
+      alignment.anthropic for duplicates.
+
+  # ---------------------------------------------------------------------------
+  # OpenAI
+  # ---------------------------------------------------------------------------
+  - key: openai-safety
+    org: OpenAI
+    name: OpenAI safety research
+    url: https://openai.com/safety/
+    rss: null
+    kind: blog
+    verified: false
+    notes: |
+      OpenAI doesn't publish a dedicated alignment blog feed. Their safety / research
+      posts are at openai.com/blog with safety tags. Likely needs HTML scraping or
+      manual WebFetch.
+
+  - key: openai-blog
+    org: OpenAI
+    name: OpenAI blog (filter safety/alignment)
+    url: https://openai.com/blog/
+    rss: https://openai.com/blog/rss.xml
+    kind: blog
+    verified: false
+    safety_filter: true
+    notes: |
+      All-purpose OpenAI blog. `safety_filter: true` drops items whose title/summary
+      don't match any `term_regex_aliases` entry — only safety/alignment-tagged
+      posts make it into the digest.
+
+  # ---------------------------------------------------------------------------
+  # Google DeepMind
+  # ---------------------------------------------------------------------------
+  - key: deepmind-safety
+    org: Google DeepMind
+    name: DeepMind safety research
+    url: https://deepmind.google/research/?filter=safety
+    rss: null
+    kind: papers
+    verified: false
+    notes: |
+      GDM publications page. No RSS — surfaced in "Manual sources" section;
+      WebFetch and filter by "safety" tag if visible. Look for: capability tests,
+      dangerous capability papers, Frontier Safety Framework.
+
+  # ---------------------------------------------------------------------------
+  # Other safety orgs
+  # ---------------------------------------------------------------------------
+  - key: apollo
+    org: Apollo Research
+    name: Apollo Research
+    url: https://www.apolloresearch.ai/research
+    rss: https://www.apolloresearch.ai/rss.xml
+    kind: blog
+    verified: false
+    notes: |
+      Apollo's research output. Heavy on scheming, situational awareness, corrigibility
+      assessments. See ~/.claude/docs/apollo-eval-types.md for their taxonomy.
+
+  - key: redwood
+    org: Redwood Research
+    name: Redwood Research
+    url: https://redwoodresearch.org/blog
+    rss: https://redwoodresearch.org/rss.xml
+    kind: blog
+    verified: false
+    notes: |
+      Redwood's blog. Heavy on AI control, untrusted-model protocols, capability elicitation.
+
+  - key: metr
+    org: METR
+    name: METR
+    url: https://metr.org/blog
+    rss: https://metr.org/blog/rss.xml
+    kind: blog
+    verified: false
+    notes: |
+      METR (Model Evaluation & Threat Research). Tracks frontier capability tests,
+      long-horizon agent assessment results, autonomous-replication & R&D benchmarks.
+
+  - key: far-ai
+    org: FAR AI
+    name: FAR AI
+    url: https://far.ai/research
+    rss: null
+    kind: papers
+    verified: false
+    notes: |
+      FAR AI publications. Adversarial robustness, alignment, interpretability.
+      Likely no RSS — HTML scrape.
+
+  - key: truthful-ai
+    org: Truthful AI / Owain Evans group
+    name: Truthful AI
+    url: https://truthfulai.org/
+    rss: null
+    kind: blog
+    verified: false
+    notes: |
+      Owain Evans' group. Inoculation prompting, OOCR (out-of-context reasoning),
+      emergent misalignment, truthfulness benchmarks.
+
+  - key: owain-evans
+    org: Truthful AI / Owain Evans group
+    name: Owain Evans personal page
+    url: https://owainevans.github.io/
+    rss: null
+    kind: researcher
+    verified: false
+    notes: |
+      Owain's personal site. Often lists recent papers before they appear on
+      truthfulai.org. Useful for pre-prints.
+
+  # ---------------------------------------------------------------------------
+  # Aggregators
+  # ---------------------------------------------------------------------------
+  - key: alphaxiv-safety
+    org: alphaxiv
+    name: alphaxiv (AI safety topic)
+    url: https://www.alphaxiv.org/
+    rss: null
+    kind: aggregator
+    verified: false
+    notes: |
+      alphaxiv aggregates arxiv papers with community discussion. Useful for
+      'which new papers are people talking about'. May require HTML scrape;
+      RSS path unconfirmed.
+
+  - key: arxiv-terms
+    org: arXiv
+    name: arXiv keyword search
+    url: http://export.arxiv.org/api/query
+    rss: null
+    kind: papers
+    verified: true
+    notes: |
+      arXiv export API. Script queries arxiv_search_terms (below) via the
+      search_query endpoint. Always works (rate-limited).
+
+# ---------------------------------------------------------------------------
+# arXiv keyword searches — one query per term, results filtered by date window
+# ---------------------------------------------------------------------------
+# These match the term glossary in terms.md. Add a term here to include it in
+# arXiv keyword sweeps. Use exact phrases — arXiv search is liberal.
+arxiv_search_terms:
+  - "inoculation prompting"
+  - "reward hacking"
+  - "exploration hacking"
+  - "metagaming"
+  - "evaluation gaming"
+  - "out-of-context reasoning"
+  - "alignment faking"
+  - "scheming"
+  - "sandbagging"
+  - "sleeper agents"
+  - "model organisms"
+  - "deceptive alignment"
+  - "situational awareness"
+  - "AI control"
+  - "capability elicitation"
+  - "emergent misalignment"
+  - "specification gaming"
+  - "goal misgeneralization"
+  - "subversion strategy"
+  - "monitoring evasion"
+  - "deliberative alignment"
+
+# ---------------------------------------------------------------------------
+# Term regex for cross-referencing fetched items (case-insensitive)
+# Items mentioning these in title/summary get tagged in the digest.
+# Regexes deliberately avoid `eval(` as a literal substring (security hook).
+# ---------------------------------------------------------------------------
+term_regex_aliases:
+  inoculation-prompting: "inocul[a-z]*\\s+prompt"
+  reward-hacking: "reward[\\s-]hack"
+  exploration-hacking: "exploration[\\s-]hack"
+  metagaming: "metagam"
+  evaluation-gaming: "evaluation[\\s-]gam|gaming\\s+the\\s+evaluation"
+  oocr: "(out[\\s-]of[\\s-]context\\s+reasoning|\\bOOCR\\b)"
+  alignment-faking: "alignment[\\s-]fak"
+  scheming: "scheming|deceptive[\\s-]alignment"
+  sandbagging: "sandbagg"
+  sleeper-agents: "sleeper[\\s-]agent"
+  model-organisms: "model[\\s-]organism"
+  situational-awareness: "situational[\\s-]awareness"
+  ai-control: "\\bAI[\\s-]control\\b|control\\s+protocol"
+  capability-elicitation: "capability[\\s-]elicit"
+  emergent-misalignment: "emergent[\\s-]misalignment"
+  specification-gaming: "specification[\\s-]gam"
+  goal-misgeneralization: "goal[\\s-]misgeneralization"
+  jailbreak: "jailbreak"
+  red-team: "red[\\s-]team"
+  interpretability: "interpretab|circuits|SAE|sparse[\\s-]autoencoder"
+  subversion-strategy: "subversion\\s+strateg"
+  monitoring-evasion: "monitoring\\s+evasion|evad[a-z]*\\s+monitor"
+  deliberative-alignment: "deliberative\\s+alignment"

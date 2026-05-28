@@ -13,6 +13,10 @@ alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
 alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
+# Define bearcli alias only if Bear is installed (avoids cryptic runtime failures)
+# Skipped automatically when /usr/local/bin/bearcli symlink exists (deploy.sh)
+[[ -x /Applications/Bear.app/Contents/MacOS/bearcli && ! -x /usr/local/bin/bearcli ]] && \
+    alias bearcli='/Applications/Bear.app/Contents/MacOS/bearcli'
 
 # shellcheck source=/dev/null
 source "$DOT_DIR/scripts/helpers/dotfiles_secrets.sh"
@@ -998,6 +1002,7 @@ alias website='cd $WRITING_DIR/${DOTFILES_WEBSITE:-yulonglin.github.io}'
 
 # Quick open in editor (functions instead of aliases so zsh-syntax-highlighting recognizes them)
 edit-dotfiles()  { ${=EDITOR} "$DOT_DIR"; }
+edit-aliases()   { ${=EDITOR} "$DOT_DIR/config/aliases.sh"; }
 edit-ssh()       { ${=EDITOR} ~/.ssh/config; }
 edit-claude()    { ${=EDITOR} "$DOT_DIR/claude/settings.json"; }
 edit-profiles()  { ${=EDITOR} "$DOT_DIR/claude/templates/contexts/profiles.yaml"; }
@@ -1318,7 +1323,16 @@ alias ai-update='update-ai-tools'
 alias pkg-update='update-packages'
 
 # zerobrew: faster Homebrew client (use zb for interactive installs, brew for scripts)
+# `zb install` falls back to `brew install` on failure (zerobrew doesn't handle casks)
 if command -v zb &>/dev/null; then
+    zb() {
+        if [[ "$1" == "install" ]]; then
+            shift
+            command zb install "$@" || { echo "→ zb failed, falling back to brew install" >&2; brew install "$@"; }
+        else
+            command zb "$@"
+        fi
+    }
     alias zbi='zb install'
     alias zbu='zb uninstall'
 fi
@@ -1486,6 +1500,78 @@ ssh() {
 # SSH theme switching moved to config/ssh_themes.sh (sourced by zshrc.sh)
 
 #-------------------------------------------------------------
+# Network diagnostics — video/audio call troubleshooting
+#-------------------------------------------------------------
+
+# Quick connectivity + saturation snapshot. Run when a call is choppy.
+netcheck() {
+    echo "=== Connectivity (ping 1.1.1.1) ==="
+    ping -c 5 -i 0.2 1.1.1.1 2>/dev/null | tail -3
+    echo
+    echo "=== VPN tunnels / processes ==="
+    local _vpn_tunnels
+    if [[ "$(uname)" == "Darwin" ]]; then
+        _vpn_tunnels=$(ifconfig 2>/dev/null | grep -E "^(utun|ipsec|tun)" | sed 's/:.*//' | sort -u)
+    else
+        _vpn_tunnels=$(ip -o link show 2>/dev/null | awk -F': ' '/(tun|wg|nordlynx)/ {print $2}')
+    fi
+    [[ -n "$_vpn_tunnels" ]] && echo "$_vpn_tunnels" || echo "  (no tunnels)"
+    pgrep -lf -i "nordvpn|nordlynx|wireguard|openvpn|tailscale" 2>/dev/null \
+        || echo "  (no VPN processes)"
+    echo
+    if [[ "$(uname)" == "Darwin" ]]; then
+        echo "=== Top network talkers (1s sample) ==="
+        # -P per-process; -L CSV output; -j include only these columns; -t per interface.
+        # Output: time,interface,bytes_in,bytes_out — sort by bytes_in desc.
+        nettop -P -L 1 -j bytes_in,bytes_out -t wifi -t wired 2>/dev/null \
+            | sort -t, -k3 -h -r 2>/dev/null | head -12
+        echo
+        echo "=== Wi-Fi link ==="
+        # airport -I deprecated in macOS 14.4+. Try it first (fast), fall back to system_profiler.
+        local airport=/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport
+        if [[ -x "$airport" ]] && "$airport" -I 2>/dev/null | grep -qE "agrCtlRSSI|state:"; then
+            "$airport" -I 2>/dev/null | grep -E "agrCtlRSSI|agrCtlNoise|lastTxRate|channel|state"
+        else
+            system_profiler SPAirPortDataType 2>/dev/null \
+                | grep -E "Channel|Signal / Noise|Tx Rate|PHY Mode" | head -8
+        fi
+    fi
+}
+
+# Live latency monitor — run in a side pane during a call.
+# Timeouts/spikes correlate with audio drops → confirmed network.
+# Clean ping but bad audio → mic, Bluetooth, or the other end.
+alias netwatch='ping -i 0.5 1.1.1.1'
+alias netwatch-google='ping -i 0.5 8.8.8.8'
+
+# "About to take a call" — quit bandwidth/CPU hogs before joining.
+# Best-effort; missing apps are silently skipped. Run callend afterwards.
+callprep() {
+    if [[ "$(uname)" != "Darwin" ]]; then
+        echo "callprep is macOS-only (uses osascript to quit GUI apps)"
+        return 1
+    fi
+    echo "Quitting sync clients & VPN for call..."
+    osascript -e 'quit app "NordVPN"'      2>/dev/null && echo "  NordVPN: quit"
+    osascript -e 'quit app "Dropbox"'      2>/dev/null && echo "  Dropbox: quit"
+    osascript -e 'quit app "Google Drive"' 2>/dev/null && echo "  Google Drive: quit"
+    osascript -e 'quit app "Backblaze"'    2>/dev/null && echo "  Backblaze: quit"
+    # Quiet iCloud transfers (cloudd/bird respawn but pause briefly)
+    killall bird cloudd 2>/dev/null && echo "  iCloud daemons: signalled"
+    echo "Done. Run 'callend' afterwards to restart sync."
+}
+
+callend() {
+    if [[ "$(uname)" != "Darwin" ]]; then return 1; fi
+    open -a "Dropbox"      2>/dev/null && echo "  Dropbox: opened"
+    open -a "Google Drive" 2>/dev/null && echo "  Google Drive: opened"
+    open -a "Backblaze"    2>/dev/null && echo "  Backblaze: opened"
+    # NordVPN: not auto-restarted (you may not want VPN back on for the rest of the session).
+    # iCloud daemons (cloudd/bird) respawn on their own via launchd.
+    echo "Sync clients restarted. Re-enable NordVPN manually if needed."
+}
+
+#-------------------------------------------------------------
 # Things 3 (things-cloud-mcp)
 #-------------------------------------------------------------
 
@@ -1516,6 +1602,80 @@ things() {
             ;;
         *)
             echo "Usage: things {status|start|stop|restart|logs|today}"
+            ;;
+    esac
+}
+
+#-------------------------------------------------------------
+# srv — Hetzner server (hn) helpers: mount, sync, remote git
+#-------------------------------------------------------------
+# rclone mount for ad-hoc browsing of server files; rsync for bulk
+# data pulls (no FUSE overhead); ssh exec for git on server-side clones.
+# Requires: brew install --cask macos-fuse-t && brew install rclone
+# Setup once: rclone config  (create sftp remote named 'hn' pointing at ~/.ssh/config Host hn)
+
+srv() {
+    local cmd="${1:-help}"
+    [ $# -gt 0 ] && shift
+    case "$cmd" in
+        mount)
+            local name=${1:?Usage: srv mount <project> [remote-path]}
+            local remote=${2:-/home/yulong/projects/$name}
+            local mnt=$HOME/mnt/$name
+            if mount | grep -q " on $mnt "; then
+                echo "already mounted: $mnt"
+                return 0
+            fi
+            mkdir -p "$mnt" "$HOME/.cache"
+            rclone mount "hn:$remote" "$mnt" \
+                --vfs-cache-mode full \
+                --vfs-cache-max-age 24h \
+                --dir-cache-time 60s \
+                --log-file="$HOME/.cache/rclone-mount-$name.log" \
+                --daemon \
+                && echo "mounted: hn:$remote -> $mnt"
+            ;;
+        umount|unmount)
+            local name=${1:?Usage: srv umount <project>}
+            umount "$HOME/mnt/$name" && echo "unmounted: $HOME/mnt/$name"
+            ;;
+        pull)
+            # Bulk pull from server -> local clone (no mount needed)
+            local name=${1:?Usage: srv pull <project> [subpath]}
+            local subpath=${2:-code/out/}
+            rsync -av --progress \
+                "hn:/home/yulong/projects/$name/$subpath" \
+                "$HOME/projects/$name/$subpath"
+            ;;
+        git)
+            # Run git on server-side clone: srv git <project> pull --rebase
+            local name=${1:?Usage: srv git <project> <git-args...>}
+            shift
+            ssh hn "cd ~/projects/$name && git $*"
+            ;;
+        list|ls)
+            mount | grep rclone || echo "no rclone mounts"
+            ;;
+        log)
+            local name=${1:?Usage: srv log <project>}
+            tail -f "$HOME/.cache/rclone-mount-$name.log"
+            ;;
+        help|*)
+            cat <<'EOF'
+srv — Hetzner server (hn) helpers
+
+  srv mount   <project> [remote-path]  Mount via rclone (default remote: /home/yulong/projects/<project>)
+  srv umount  <project>                Unmount
+  srv pull    <project> [subpath]      Bulk rsync server -> local clone (default subpath: code/out/)
+  srv git     <project> <git-args...>  Run git on server-side clone (e.g. srv git foo pull --rebase)
+  srv list                             Show active rclone mounts
+  srv log     <project>                Tail rclone mount log
+
+Notes:
+  - Mount survives shell exit (--daemon) but NOT laptop sleep — if it goes stale: srv umount X && srv mount X
+  - New server-side files take up to 60s to appear in mount (--dir-cache-time)
+  - For lots of small reads (rg, grep -r), prefer pulling into local clone first
+EOF
             ;;
     esac
 }

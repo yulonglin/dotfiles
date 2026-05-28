@@ -34,6 +34,7 @@ Load the relevant reference for your output type:
 | **Colors** | `references/colors.md` | Color palette lookup for any domain |
 | **HTML/CSS** | `references/web-css.md` | Web pages, HTML artifacts |
 | **TikZ** | `references/tikz.md` | LaTeX diagrams for papers |
+| **Annotations & layout** | `~/.claude/docs/visual-layout-quality.md` | Arrow anchoring, label placement in empty space, spacing minimums — read whenever adding annotations (callouts, gap markers, brackets) to any chart |
 
 ## Key Colors (quick reference)
 

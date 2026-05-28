@@ -1,5 +1,5 @@
-model = "gpt-5.4"
-model_reasoning_effort = "xhigh"
+model = "gpt-5.5"
+model_reasoning_effort = "medium"
 [mcp_servers.linear]
 url = "https://mcp.linear.app/mcp"
 
@@ -54,3 +54,43 @@ enabled = true
 
 [plugins."github@openai-curated"]
 enabled = true
+
+[plugins."gmail@openai-curated"]
+enabled = true
+
+[plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."spreadsheets@openai-primary-runtime"]
+enabled = true
+
+[plugins."presentations@openai-primary-runtime"]
+enabled = true
+
+[plugins."codex-security@openai-curated"]
+enabled = true
+
+[plugins."granola@openai-curated"]
+enabled = true
+
+[plugins."zotero@openai-curated"]
+enabled = true
+
+[plugins."latex@openai-bundled"]
+enabled = true
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[tui.model_availability_nux]
+"gpt-5.5" = 3
+
+[marketplaces.openai-bundled]
+last_updated = "2026-05-26T23:12:59Z"
+source_type = "local"
+source = "/Users/yulong/code/dotfiles/codex/.tmp/bundled-marketplaces/openai-bundled"
+
+[marketplaces.openai-primary-runtime]
+last_updated = "2026-05-26T23:49:53Z"
+source_type = "local"
+source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"

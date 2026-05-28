@@ -14,6 +14,7 @@ claude/diagnostics/
 claude/state/
 claude/flags/
 claude/logs/
+claude/security/
 
 # npm artifacts (not used - this repo uses system package managers)
 package.json
@@ -521,3 +522,19 @@ tools/*/.claude/
 # Plugin registry (machine-specific absolute paths, rebuilt by `claude-context --sync`)
 claude/plugins/known_marketplaces.json
 claude/plugins/installed_plugins.json
+
+# Cached JSON schemas for validators
+scripts/hooks/cache/
+
+# Runtime state written by Claude Code session/hooks
+claude/.last-cleanup
+.claude/scheduled_tasks.lock
+
+# Obsidian vault state (per-machine workspace, plugins, appearance)
+.obsidian/
+
+# Multi-agent coordination claim files (per-session, ephemeral)
+.agent-claims/
+
+# Stray scratch files
+Untitled.md

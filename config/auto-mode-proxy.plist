@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd template for auto-mode-proxy.
+  NOT installed by default. To activate:
+
+  1. Symlink to ~/Library/LaunchAgents/:
+     ln -s $(pwd)/config/auto-mode-proxy.plist ~/Library/LaunchAgents/com.yulonglin.auto-mode-proxy.plist
+
+  2. Load:
+     launchctl load ~/Library/LaunchAgents/com.yulonglin.auto-mode-proxy.plist
+
+  3. Export ANTHROPIC_BASE_URL=http://127.0.0.1:18080 in your shell rc (or per-project .envrc).
+
+  4. Restart Claude Code so it picks up the new base URL.
+
+  To uninstall:
+     launchctl unload ~/Library/LaunchAgents/com.yulonglin.auto-mode-proxy.plist
+     rm ~/Library/LaunchAgents/com.yulonglin.auto-mode-proxy.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.yulonglin.auto-mode-proxy</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>python3</string>
+        <string>/Users/yulong/code/dotfiles/scripts/proxy/auto-mode-proxy.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/yulong/.cache/claude/auto-mode-proxy.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/yulong/.cache/claude/auto-mode-proxy.stderr.log</string>
+</dict>
+</plist>

@@ -13,7 +13,6 @@
 | **NEVER drop a git stash** without first running `git stash show -p stash@{N}` to verify contents. If a stash/pop partially failed (sandbox), retry with `dangerouslyDisableSandbox: true` — the stash data is fine, only the restore was blocked. Use `git stash apply` (keeps stash) over `git stash pop` (deletes stash) when uncertain | Dropped stash = irreversible data loss. A "broken" stash usually just needs sandbox bypass to restore |
 | **NEVER use `sys.path.insert`** directly | Crashes Claude Code session (see `rules/coding-conventions.md` for safe pattern) |
 | **NEVER rewrite full file during race conditions** | If Edit fails with "file modified since read", pause and wait (exponential backoff), then ask user—NEVER use Write to overwrite entire file as workaround |
-| **NEVER stage `claude/settings.json` without verifying it has `statusLine`, `hooks`, and `permissions` keys** | The file is dual-written by Claude Code and manual edits; stash operations can capture a degraded stub. Verify: `python3 -c "import json; d=json.load(open('claude/settings.json')); assert all(k in d for k in ['statusLine','hooks','permissions'])"` |
 
 ## Sandbox Awareness (Proactive)
 

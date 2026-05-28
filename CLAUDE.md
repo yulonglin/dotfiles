@@ -6,6 +6,42 @@ Project-specific guidance for Claude Code when working with the dotfiles reposit
 
 Comprehensive dotfiles repository for ZSH, Tmux, Vim, SSH, and development tools. Works across macOS, Linux, and RunPod containers. Uses oh-my-zsh with powerlevel10k theme.
 
+## AI Agent Quick Reference
+
+If you're an AI agent (Claude Code, Codex, etc.) working in this repo, read this first.
+
+**What this repo is:** dotfiles deployed via `install.sh` + `deploy.sh`. `claude/` is symlinked to `~/.claude/` and `codex/` to `~/.codex/` — edits here affect your *running* environment immediately.
+
+**Top rules:**
+- **Direct pushes to main are allowed** — personal repo, no PR overhead. Use `cwmerge` from worktrees (note: `cwmerge` only recognises branches with the `worktree-` prefix; for branches like `claude/<name>` merge manually with `git -C <main-tree> merge --ff-only <branch>`).
+- **Flags are ADDITIVE** to defaults unless `--minimal` is used. See [Flag Behavior](#flag-behavior-critical).
+- **Sandbox blocks `git pull/merge/stash`** on `config/` and `claude/settings.json` even though git is in `excludedCommands` — pass `dangerouslyDisableSandbox: true`. Also in global `~/.claude/rules/safety-and-git.md`.
+- **`codex exec` crashes inside sandbox on macOS** (`SCDynamicStoreCreate NULL` panic). Same workaround. Also in global `~/.claude/rules/agents-and-delegation.md`.
+- **`claude/settings.json` is the global source of truth** (symlinked to `~/.claude/settings.json`). Before staging it, verify it has `statusLine`, `hooks`, `permissions` keys — see [`.claude/rules/dotfiles-settings.md`](.claude/rules/dotfiles-settings.md).
+- **Secrets are NOT globally exported** (supply chain defense). Use `setup-envrc` per-project via direnv. NEVER run bare `sops` on the encrypted store — use `secrets-edit`.
+- **Plot with Anthropic style by default** — `from anthro_colors import use_anthropic_defaults`. See [Plotting with Anthropic Style](#plotting-with-anthropic-style).
+
+**Common tasks:**
+
+| Want to... | Command / file |
+|---|---|
+| Add a new alias | `config/aliases.sh` (or `aliases_<name>.sh` for env-specific) |
+| Add a deploy component | Create `deploy_X()` in `deploy.sh` — see [Adding New Features](#adding-new-features) |
+| Add a custom binary | Drop it in `custom_bins/` (already on PATH); `chmod +x` |
+| Add an encrypted secret | `secrets-edit` (interactive dotenv editor) |
+| Run an experiment with resource caps | `jexp uv run python -m ...` (Linux: needs pueue + systemd user session) |
+| Commit / commit + push + PR | `/commit` skill or `/commit-push-sync` |
+| Switch active plugin context | `claude-tools context <profile>` (composable: `code python frontend`) |
+| Merge worktree → parent branch | `cwmerge` (or `git merge <branch>` from parent if branch isn't `worktree-` prefixed) |
+| Pre-deploy verification | See [Claude Code Verification Planning](#claude-code-verification-planning) |
+
+**Where to look:**
+- Operational gotchas / surprises → [Important Gotchas](#important-gotchas)
+- File layout reference → [Configuration Structure](#configuration-structure)
+- Per-deploy behavior → [Important Behaviors](#important-behaviors)
+- Global behavioral rules → `~/.claude/rules/*.md`
+- This repo's project rules → `.claude/rules/*.md`
+
 ## Key Conventions
 
 ### Flag Behavior (Critical)
@@ -91,6 +127,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
 - Mouseless - Keyboard-driven mouse control (macOS only, copied not symlinked)
+- Bear CLI symlink - `/Applications/Bear.app/Contents/MacOS/bearcli` → `/usr/local/bin/bearcli` (macOS only, so `bearcli` works in cron/scripts where shell aliases don't apply)
 - Text replacements - Bidirectional sync with macOS + Alfred snippets (daily 9 AM, requires Full Disk Access for terminal app). macOS uses raw shortcuts; Alfred applies collection prefix at runtime (e.g., `fm.hi`)
 - Encrypted secrets (SOPS+age / BWS) - Stores API keys via Bitwarden Secrets Manager (primary) or SOPS+age (fallback). Backend auto-detected: bws if token + CLI exist, else sops. Override with `DOTFILES_SECRETS_BACKEND` env var
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
@@ -98,7 +135,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - AI tools auto-update - Daily update of Claude Code, Gemini CLI, Codex CLI (6 AM, launchd/cron)
 - Developer config files - EditorConfig, curlrc, inputrc, .hushlogin (deployed with --editor flag)
 - Global gitattributes - Binary file handling + line endings (deployed with --git-config flag)
-- File associations - Set default editor for coding file types (macOS only, reads `config/macos_default_apps.conf`)
+- File associations - Set default editor for coding file types and default terminal for `.command`/`.tool` (macOS only, reads `config/macos_default_apps.conf`)
 - Pueue + resource slices - Local job queue with cgroup-enforced CPU/memory limits (Linux only, systemd user slices, `j*` aliases)
 - Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, brew/apt/dnf/pacman, launchd/cron)
 - Package manager configs - Global npmrc, bunfig.toml, pnpm rc, uv.toml with 7-day min-release-age + ignore-scripts (symlinked)
@@ -236,103 +273,19 @@ export WRITING_DIR="$HOME/Documents/writing"
 
 ### Important Behaviors
 
-**Gist Sync (`deploy_secrets()`)**:
-- Bidirectional sync with GitHub gist (ID: `3cc239f160a2fe8c9e6a14829d85a371`)
-- Syncs: `~/.ssh/config`, `~/.ssh/authorized_keys`, `config/user.conf` (git identity)
-- Auto-adds local public key to `authorized_keys` before sync (enables SSH between your machines)
-- Last-modified wins: compares local mtime vs gist updated_at
-- Requires `gh auth login` (browser OAuth, no extra keys needed)
-- Runs before git config (user.conf provides git identity)
-- Automated: Runs daily at 8:00 AM (launchd/cron), uninstall with `scripts/cleanup/setup_gist_sync.sh --uninstall`
-- Manual: `sync-gist` (alias) or `scripts/sync_gist.sh`
+Subtleties worth knowing per deploy component. Full mechanics live in the matching `deploy_*()` function in [`deploy.sh`](./deploy.sh).
 
-**Encrypted Secrets (SOPS + age)**:
-- Keeps API keys in `${DOTFILES_SECRETS_DIR:-~/.config/dotfiles-secrets}/secrets.env.enc` and decrypts them on demand using `sops -d --config $DOTFILES_SECRETS_DIR/.sops.yaml` with the age key
-- Age private key at `~/.config/sops/age/keys.txt` (stored in Bitwarden, pasted during cloud setup)
-- Shell integration: secrets are **NOT globally exported** (supply chain defense). Use `setup-envrc` per-project via direnv. It supports direct exports (`KEY`), renamed exports (`ENV_VAR=SECRET_NAME`), and Telegram plugin bindings (`--telegram-secret SECRET_NAME`) that let `claude()` materialize `.claude/channels/telegram/.env` at launch time. `with-secrets KEY... -- <cmd>` decrypts only the requested keys for one command. Claude hooks load only `ANTHROPIC_API_KEY` through a dedicated wrapper.
-- **Managed secrets** (kept in the encrypted store, exported only per-project):
-  - `OPENAI_API_KEY` — OpenAI API access
-  - `OPENROUTER_API_KEY` — OpenRouter API access
-  - `ANTHROPIC_API_KEY` — Anthropic API access
-  - `HF_TOKEN` — Hugging Face Hub access
-  - `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` — Modal CLI/SDK auth (env vars replace `~/.modal.toml`)
-- **Adding new secrets**: Use `secrets-edit` to edit the encrypted dotenv file in place. Prefer namespaced repo-specific keys when multiple repos need different credentials for the same provider (for example `AMBASSADOR_TELEGRAM_BOT_TOKEN` vs `SWORDSMITH_TELEGRAM_BOT_TOKEN`). `setup-envrc` then exposes only the selected bindings inside each repo’s `.envrc`.
-- Commands: `secrets-init` (fzf picker: bws / sops / project), `secrets-init-bws` (BWS setup — paste access token, test connectivity), `secrets-init-sops` (SOPS+age setup — generate/paste age key), `secrets-edit` (edit encrypted dotenv in place), `secrets-paths` (show resolved private secrets repo paths), `secrets-fix-perms` (manual repair for secret-bearing file modes; normal flows now harden automatically), `setup-envrc` (repo-scoped export bindings + Telegram plugin binding + `.env` drift checks)
-- All sops commands use explicit `--config` flag — sops searches from input file's directory by default, which fails when input is in `$TMPDIR`
-- Bootstrap encryption uses `--config /dev/null` to bypass creation rules (tmpfile doesn't match `.enc$` regex); on-demand decryption uses `--config "$DOTFILES_SECRETS_DIR/.sops.yaml"`
-- Graceful degradation: no errors if sops/age not installed or no encrypted file exists
-
-**Git Config (`deploy_git_config()`)**:
-- Reads `config/user.conf` for user-specific settings
-- Detects conflicts with existing git config
-- Prompts for resolution (keep/use new/merge/skip)
-- Deploys split ignore files for git vs search tools:
-  - `~/.gitignore_global` — concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research` (copy)
-  - `~/.ignore_global` — symlink to `config/ignore/gitignore_base` (universal patterns only, for ripgrep)
-  - `~/.config/fd/ignore` — symlink to `config/ignore/gitignore_base` (for fd's own ignore layer)
-  - `~/.config/ripgrep/config` — generated (`--no-ignore-global` + `--ignore-file ~/.ignore_global`)
-- Result: git ignores everything; rg/Claude Code/Cursor search can see research files (`data/`, `archive/`, etc.)
-- fd limitation: no `--no-ignore-global` flag, so fd still respects git's global ignore. Use `fd -I` for research dirs.
-
-**Editor Settings (`deploy_editor_settings()`)**:
-- Merges with existing VSCode/Cursor/Antigravity settings (doesn't overwrite)
-- Existing settings take precedence
-- Auto-installs extensions from `config/vscode_extensions.txt` (38 curated)
-- Deploys to VSCode, Cursor, and Antigravity if installed
-- Antigravity CLI: uses full path `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`
-
-**Zed Deployment**:
-- Symlinks `config/zed/settings.json` → `~/.config/zed/settings.json`
-- Symlinks `config/zed/keymap.json` → `~/.config/zed/keymap.json`
-- Backs up existing files if not already symlinks
-- SSH connections: Zed reads hosts from `~/.ssh/config` (managed by gist sync). Project paths are machine-specific, added via Zed UI
-- Search includes gitignored files by default (`search.include_ignored: true`)
-- Extensions auto-installed via `auto_install_extensions` setting (no CLI needed)
-- Cmd+K mapped to inline AI edit (overrides Zed's chord prefix — see keymap.json comments for alternatives)
-
-**Finicky Deployment**:
-- Symlinks `config/finicky.js` to `~/.finicky.js`
-- Backs up existing file with timestamp if not a symlink
-
-**Ghostty Deployment**:
-- Symlinks `config/ghostty.conf` to platform-specific config path:
-  - macOS: `~/Library/Application Support/com.mitchellh.ghostty/config`
-  - Linux: `~/.config/ghostty/config`
-- Backs up existing file with timestamp if not a symlink
-- Configures Cmd+C for shell-based copy and Shift+Enter for multiline input
-
-**Plotting Library and Matplotlib Deployment**:
-- **Copies** Python modules from `lib/plotting/` to `~/.local/lib/plotting/` (anthro_colors.py, petriplot.py)
-- **Symlinks** `*.mplstyle` files to `~/.config/matplotlib/stylelib/` (config files, auto-update)
-- Rationale: Styles are config → symlink for live updates; Python modules copied for isolation
-- Available styles:
-  - `anthropic` - Anthropic brand (white background, PRETTY_CYCLE colors) **← recommended default**
-  - `deepmind` - Google/DeepMind colors (white background)
-  - `petri` - Petri paper style (ivory background, warm editorial aesthetic)
-- Python library usage: `from anthro_colors import use_anthropic_defaults; use_anthropic_defaults()`
-- PYTHONPATH auto-configured in zshrc to include `~/.local/lib/plotting/`
-- Requires `--matplotlib` flag to deploy
-- Note: Python module updates require re-running `deploy.sh --matplotlib`
-
-**File Associations (`deploy --file-apps`)**:
-- Reads `config/macos_default_apps.conf` for editor bundle ID and extension list
-- Compiles `tools/set-default-app/main.swift` (cached, rebuilds only when source changes)
-- Calls `LSSetDefaultRoleHandlerForContentType` per extension (deprecated macOS API, no replacement, works on Sequoia)
-- Same config drives `$EDITOR` and `$VISUAL` in zshrc.sh
-- macOS only (Linux uses `xdg-mime`, not implemented)
-
-**Claude Code Deployment** (Smart Merge):
-- Symlinks `claude/` to `~/.claude`
-- If `~/.claude` exists from Claude Code installation:
-  - Backs up to `~/.claude.backup.<timestamp>`
-  - Creates symlink from `dotfiles/claude/` → `~/.claude`
-  - Restores runtime files from backup (preserves your data):
-    - `.credentials.json` - authentication
-    - `history.jsonl` - conversation history
-    - `cache/`, `projects/`, `plans/`, `todos/` - runtime data
-    - `mcp_servers.json` - MCP server configuration
-- Works seamlessly whether you run `install.sh` or `deploy.sh` first
-- Custom config deployed: `CLAUDE.md`, `settings.json`, `agents/`, `hooks/`, `skills/`, `templates/`
+| Component | Mechanism | Key gotcha |
+|-----------|-----------|------------|
+| **Gist Sync** (`deploy_secrets`) | Bidirectional sync of `~/.ssh/config`, `authorized_keys`, `config/user.conf` with gist `3cc239...371`. Last-modified wins. Daily 8 AM (launchd/cron). | Requires `gh auth login`. Manual: `sync-gist`. Runs before git config (user.conf provides identity). |
+| **Encrypted Secrets** (SOPS+age or BWS) | API keys at `$DOTFILES_SECRETS_DIR/secrets.env.enc` (default `~/.config/dotfiles-secrets/`). **NOT globally exported** — use `setup-envrc` per repo (direnv), or `with-secrets KEY... -- <cmd>` for one-shot. Managed: `OPENAI/OPENROUTER/ANTHROPIC_API_KEY`, `HF_TOKEN`, `MODAL_TOKEN_ID/SECRET`. | Age key lives at `~/.config/sops/age/keys.txt` (paste from Bitwarden on new machine). **Edit only via `secrets-edit`** — bare `sops` on the dotenv file corrupts format. All sops commands need explicit `--config` (default search fails in `$TMPDIR`). |
+| **Git Config** (`deploy_git_config`) | Reads `config/user.conf`; prompts on conflicts. Deploys split ignores: `~/.gitignore_global` (git, broad), `~/.ignore_global` (ripgrep, narrow), `~/.config/fd/ignore` (fd). Result: git ignores `data/`/`archive/`, but search tools can still see them. | `fd` has no `--no-ignore-global` flag — use `fd -I` to traverse research dirs. |
+| **Editor Settings** (`deploy_editor_settings`) | Merges into VSCode/Cursor/Antigravity settings (no overwrite, existing wins). Auto-installs 38 curated extensions from `vscode_extensions.txt`. | Antigravity CLI at `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`. |
+| **Zed** | Symlinks `config/zed/{settings,keymap}.json` → `~/.config/zed/`. Searches gitignored files by default. | SSH hosts read from `~/.ssh/config` (gist-synced). Cmd+K overrides Zed's chord prefix → inline AI edit. |
+| **Finicky, Ghostty** | Symlinked to fixed paths (Ghostty path is platform-specific). Existing files backed up with timestamp. | Ghostty needs reload (Cmd+Shift+Comma) after config change. |
+| **Plotting + matplotlib** (`--matplotlib`) | **Copies** Python modules to `~/.local/lib/plotting/` (isolation); **symlinks** `.mplstyle` files to `~/.config/matplotlib/stylelib/` (live updates). PYTHONPATH set in zshrc. | Python module updates require re-running `deploy.sh --matplotlib`. Default style: `anthropic`. |
+| **File Associations** (`--file-apps`) | Reads `config/macos_default_apps.conf`, compiles `tools/set-default-app/main.swift` (cached), calls deprecated `LSSetDefaultRoleHandlerForContentType` (still works on Sequoia). Same conf drives `$EDITOR`/`$VISUAL`. | macOS only. Linux would need `xdg-mime` (not implemented). |
+| **Claude Code** (smart merge) | Symlinks `claude/` → `~/.claude/`. If `~/.claude/` predates dotfiles, backed up to `~/.claude.backup.<ts>`, then runtime files restored: `.credentials.json`, `history.jsonl`, `cache/`, `projects/`, `plans/`, `todos/`, `mcp_servers.json`. | Works whether `install.sh` or `deploy.sh` runs first. |
 
 ## Plotting with Anthropic Style
 
@@ -425,14 +378,6 @@ import petriplot as pp  # For Petri-specific plotting helpers
 
 ## Learnings
 <!-- Claude: add project-specific discoveries below. Prune entries >2 weeks old. Keep under 20 entries. -->
-- Plugin reorganization: code-quality → code, added workflow (agent-teams, handover, compact, insights) and viz (tikz-diagrams). Context profiles via `claude-tools context` CLI. Global settings now explicitly disable all non-essential plugins. insights absorbed into workflow. humanize-draft merged into review-draft as 5th critic. Renamed *-toolkit → * for shorter agent prefixes (2026-02-17)
-- Rate limit account switching: restarting Claude Code does NOT clear cached usage — must fully logout (`claude auth logout`) then login again. `claude-switch` alias does both. SessionStart hook shows current auth account. `claude-tools` binary (Rust, `tools/claude-tools/`) can be recompiled with `cargo build --release` and copied to `custom_bins/` (2026-03-25)
-- Codex CLI `codex exec` crashes inside Claude Code sandbox on macOS with `SCDynamicStoreCreate NULL` panic (`system-configuration` crate v0.6.1). Workaround: use `dangerouslyDisableSandbox: true` on Bash calls to `codex exec`. `codex --version`/`--help` work fine (no HTTP client init). Tracked: openai/codex#15640, #15296. Remove workaround when crate is upgraded (2026-03-26)
-- Marketplace auto-update: three config layers — (1) `extraKnownMarketplaces` in settings.json declares sources (portable), (2) `autoUpdate: true` in profiles.yaml is source of truth, (3) `claude-tools context --sync` patches runtime `known_marketplaces.json`. All marketplaces use GitHub repos; local paths opt-in via `CLAUDE_CONTEXT_LOCAL=1`. SessionStart hook warns when no context profile configured (2026-03-26)
-- Selective plugin sync: `--sync` only installs plugins referenced in profiles.yaml (`base:` + `profiles:`), prunes orphans by default (`--no-prune` to skip). Prune uses direct JSON manipulation (bypasses CLI bug where `claude plugin uninstall` refuses for cross-referenced plugins, anthropics/claude-code#15791). All installs use `--scope user`; `normalize_scopes()` upgrades stale project/local → user (2026-04-02)
-- SOPS secrets format: dotfiles runtime secrets MUST stay dotenv, not JSON. NEVER run bare `sops secrets.env.enc` on the private secrets repo — always use `secrets-edit` or `sops --input-type dotenv --output-type dotenv` (2026-04-03)
 - tmux-resurrect: auto-save is on (15 min), auto-restore is OFF. Use `prefix+R` popup or `tmux-restore` CLI to selectively restore windows from any save. Resurrect file format: `pane` lines ($2=session, $3=win_index, $8=path) + `window` lines ($2=session, $3=win_index, $7=win_name) (2026-04-05)
-- Secrets backend: added bws (Bitwarden Secrets Manager) as primary backend alongside SOPS+age fallback. Token at `~/.config/bws/token` (chmod 600). Auto-detect: bws if token+CLI exist, else sops, else none. Override with `DOTFILES_SECRETS_BACKEND` env var. Free tier: 1 org, 3 machine accounts, unlimited secrets. bws has no offline cache — direnv caches in shell session. `setup-envrc` emits backend-appropriate `watch_file` directives. Cloud setup prompts for BWS token alongside age key (2026-04-07)
-- Dotfiles runtime secrets now live outside the public repo in `DOTFILES_SECRETS_DIR`; `setup-envrc` writes repo-root `.envrc` files with direct exports, `ENV=SECRET` mappings, and optional Telegram plugin bindings. `claude()` materializes `.claude/channels/telegram/.env` from `DOTFILES_TELEGRAM_BOT_SECRET` at launch, `with-secrets` exports only named keys for one command, and Claude hooks inject only `ANTHROPIC_API_KEY` via a dedicated wrapper. `.secrets` / `.env` should be treated as legacy leftovers, not the normal flow (2026-04-06)
 - fzf pre-selection in `setup-envrc` requires fzf 0.54+ (`--bind "load:pos(N)+select"`). apt's fzf (0.44) is too old; mise installs 0.71 on Linux. macOS brew is fine. fzf is in both `PACKAGES_CORE` (apt baseline) and `PACKAGES_LINUX_MISE` (modern override) — mise's PATH takes precedence (2026-04-14)
-- Sandbox `denyWithinAllow` blocks git pull/merge/stash on `config/` and `claude/settings.json` even though `git` is in `excludedCommands`. `denyWithinAllow` is injected by Claude Code at runtime (not user-configurable). Workaround: use `dangerouslyDisableSandbox: true` on `git pull`, `git merge`, `git stash` commands in this repo. The sync guard hook (`guard_post_rebase.sh`) now warns (not blocks) on remote-ahead and allows merge completion commits (2026-04-10)
+- rust-skills plugin removed (2026-05-26). UserPromptSubmit matcher was hyper-broad ("error", "async", "API", "implement", "explain", "how to" — injected ~100 lines on most prompts). Neuter-via-SessionStart-hook didn't hold (still fired same session) and mutates a tracked file in the marketplace clone, blocking future `git pull`. Re-add if Rust work picks up

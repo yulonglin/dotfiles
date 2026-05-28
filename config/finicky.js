@@ -29,10 +29,21 @@ module.exports = {
       browser: "Google Chrome"
     },
     {
-      // Local development → default browser (Safari)
       match: [
+        // Figma dropped support for Safari
+        "figma.com*",
+        // Scrolling issues on TodayTix
+        "todaytix.com*",
+      ],
+      browser: "Google Chrome"
+    },
+    {
+      match: [
+        // Local development → default browser (Safari)
         "localhost*",
-        "127.0.0.1*"
+        "127.0.0.1*",
+        // Linear MCP OAuth → default browser (Safari)
+        "mcp.linear.app*",
       ],
       browser: "Safari"
     },
@@ -51,13 +62,6 @@ module.exports = {
         "*.notion.so*"
       ],
       browser: "notion.id"
-    },
-    {
-      // Linear MCP OAuth → Safari
-      match: [
-        "mcp.linear.app*"
-      ],
-      browser: "Safari"
     },
     {
       // Linear → Linear app

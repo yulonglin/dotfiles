@@ -103,6 +103,32 @@ prefix_rule(pattern=["bash", "-lc", "any2md *"], decision="allow")
 prefix_rule(pattern=["any2md", "*"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "trash *"], decision="allow")
 prefix_rule(pattern=["trash", "*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "bearcli *"], decision="allow")
+prefix_rule(pattern=["bearcli", "*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark accounts*"], decision="allow")
+prefix_rule(pattern=["spark", "accounts*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark folders*"], decision="allow")
+prefix_rule(pattern=["spark", "folders*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark emails*"], decision="allow")
+prefix_rule(pattern=["spark", "emails*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark search*"], decision="allow")
+prefix_rule(pattern=["spark", "search*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark thread*"], decision="allow")
+prefix_rule(pattern=["spark", "thread*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark events*"], decision="allow")
+prefix_rule(pattern=["spark", "events*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark availability*"], decision="allow")
+prefix_rule(pattern=["spark", "availability*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark contacts*"], decision="allow")
+prefix_rule(pattern=["spark", "contacts*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark team*"], decision="allow")
+prefix_rule(pattern=["spark", "team*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark meetings*"], decision="allow")
+prefix_rule(pattern=["spark", "meetings*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark meeting*"], decision="allow")
+prefix_rule(pattern=["spark", "meeting*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "spark --version*"], decision="allow")
+prefix_rule(pattern=["spark", "--version*"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "codex-companion *"], decision="allow")
 prefix_rule(pattern=["codex-companion", "*"], decision="allow")
 prefix_rule(pattern=["bash", "-lc", "pytest *"], decision="allow")
@@ -147,6 +173,67 @@ prefix_rule(pattern=["systemctl", "--user", "is-system-running"], decision="allo
 # Skipped non-Bash permission (allow): WebSearch
 # Skipped non-Bash permission (allow): WebFetch
 # Skipped non-Bash permission (allow): Read
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_today
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_inbox
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_todos
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_projects
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_areas
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_tags
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_recent
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_anytime
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_someday
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_upcoming
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_logbook
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_trash
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_headings
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__get_tagged_items
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__show_item
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__search_todos
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__search_items
+# Skipped non-Bash permission (allow): mcp__plugin_things-mcp_things__search_advanced
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-fetch
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-search
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-get-comments
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-get-users
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-get-teams
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-create-pages
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-update-page
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-update-data-source
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-create-view
+# Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-update-view
+# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__search_threads
+# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__get_thread
+# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__list_labels
+# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__list_drafts
+# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__create_label
+# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__create_draft
+# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__get_account_info
+# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__get_meeting_transcript
+# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__get_meetings
+# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__list_meetings
+# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__list_meeting_folders
+# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__query_granola_meetings
+# Skipped non-Bash permission (allow): mcp__claude-in-chrome__tabs_context_mcp
+# Skipped non-Bash permission (allow): mcp__claude-in-chrome__read_page
+# Skipped non-Bash permission (allow): mcp__claude-in-chrome__read_console_messages
+# Skipped non-Bash permission (allow): mcp__claude-in-chrome__read_network_requests
+# Skipped non-Bash permission (allow): mcp__claude-in-chrome__get_page_text
+# Skipped non-Bash permission (allow): mcp__claude-in-chrome__find
+# Skipped non-Bash permission (allow): mcp__chrome-devtools__list_pages
+# Skipped non-Bash permission (allow): mcp__chrome-devtools__list_console_messages
+# Skipped non-Bash permission (allow): mcp__chrome-devtools__list_network_requests
+# Skipped non-Bash permission (allow): mcp__chrome-devtools__get_console_message
+# Skipped non-Bash permission (allow): mcp__chrome-devtools__get_network_request
+# Skipped non-Bash permission (allow): mcp__chrome-devtools__take_screenshot
+# Skipped non-Bash permission (allow): mcp__chrome-devtools__take_snapshot
+# Skipped non-Bash permission (allow): mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_channel
+# Skipped non-Bash permission (allow): mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_thread
+# Skipped non-Bash permission (allow): mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_canvas
+# Skipped non-Bash permission (allow): mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_user_profile
+# Skipped non-Bash permission (allow): mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_channels
+# Skipped non-Bash permission (allow): mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_public
+# Skipped non-Bash permission (allow): mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_public_and_private
+# Skipped non-Bash permission (allow): mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_users
 # Skipped non-Bash permission (allow): mcp__plugin_telegram_telegram__reply
 # Skipped non-Bash permission (allow): mcp__plugin_telegram_telegram__react
 # Skipped non-Bash permission (allow): mcp__plugin_telegram_telegram__edit_message
@@ -163,21 +250,12 @@ prefix_rule(pattern=["systemctl", "--user", "is-system-running"], decision="allo
 # Skipped non-Bash permission (allow): mcp__claude_ai_Google_Calendar__list_calendars
 # Skipped non-Bash permission (allow): mcp__claude_ai_Google_Calendar__get_event
 # Skipped non-Bash permission (allow): mcp__claude_ai_Google_Calendar__suggest_time
-# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__search_threads
-# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__get_thread
-# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__list_drafts
-# Skipped non-Bash permission (allow): mcp__claude_ai_Gmail__list_labels
 # Skipped non-Bash permission (allow): mcp__claude_ai_Google_Drive__list_recent_files
 # Skipped non-Bash permission (allow): mcp__claude_ai_Google_Drive__search_files
 # Skipped non-Bash permission (allow): mcp__claude_ai_Google_Drive__read_file_content
 # Skipped non-Bash permission (allow): mcp__claude_ai_Google_Drive__get_file_metadata
 # Skipped non-Bash permission (allow): mcp__claude_ai_Google_Drive__get_file_permissions
 # Skipped non-Bash permission (allow): mcp__claude_ai_Google_Drive__download_file_content
-# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__list_meetings
-# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__list_meeting_folders
-# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__get_meetings
-# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__get_meeting_transcript
-# Skipped non-Bash permission (allow): mcp__claude_ai_Granola__query_granola_meetings
 
 # deny rules
 prefix_rule(pattern=["bash", "-lc", "rm -rf *"], decision="forbidden")
@@ -439,6 +517,14 @@ prefix_rule(pattern=["go", "get", "*"], decision="prompt")
 # Skipped non-Bash permission (ask): Read(**/.env)
 # Skipped non-Bash permission (ask): Read(**/.env.*)
 # Skipped non-Bash permission (ask): Read(**/.envrc)
+# Skipped non-Bash permission (ask): mcp__plugin_things-mcp_things__update_todo
+# Skipped non-Bash permission (ask): mcp__plugin_things-mcp_things__update_project
+# Skipped non-Bash permission (ask): mcp__plugin_things-mcp_things__add_todo
+# Skipped non-Bash permission (ask): mcp__plugin_things-mcp_things__add_project
+# Skipped non-Bash permission (ask): mcp__claude_ai_Notion__notion-create-database
+# Skipped non-Bash permission (ask): mcp__claude_ai_Notion__notion-create-comment
+# Skipped non-Bash permission (ask): mcp__claude_ai_Notion__notion-duplicate-page
+# Skipped non-Bash permission (ask): mcp__claude_ai_Notion__notion-move-pages
 
 # END CLAUDE SYNC
 prefix_rule(pattern=["bash", "-lc", "git add README.md custom_bins/clear-claude-code"], decision="allow")

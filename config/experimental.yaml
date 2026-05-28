@@ -1,0 +1,38 @@
+# Experimental tools — things we're trying that might be promoted or removed.
+#
+# Each entry tracks: what it is, when it was added, when to review,
+# how it was installed, and what config keys it touches.
+#
+# Statuses:
+#   trial      — actively evaluating
+#   promoted   — earned its place, move to permanent install
+#   deprecated — removing, clean up install + config references
+#
+# Review process: check each 'trial' entry on its review_by date.
+# If it's useful, set status: promoted and move install to the
+# permanent section of install.sh. If not, set status: deprecated
+# and remove from install.sh + settings.json.
+
+- name: zotero-mcp-server
+  added: 2026-05-23
+  review_by: 2026-08-23
+  installed_via: "uv tool install 'zotero-mcp-server[all]'"
+  settings_keys: ["mcpServers.zotero"]
+  reason: "Citation library management — Zotero as source of truth for references. Semantic search, PDF extraction, DOI import, retraction alerts."
+  status: trial
+
+- name: ty
+  added: 2026-04-01
+  review_by: 2026-07-01
+  installed_via: "uv tool install ty"
+  settings_keys: []
+  reason: "Rust-based Python type checker, 10-60x faster than mypy/pyright. Alpha — fall back to pyright if gaps block."
+  status: trial
+
+- name: zerobrew
+  added: 2026-04-01
+  review_by: 2026-07-01
+  installed_via: "curl https://zerobrew.rs/install | bash"
+  settings_keys: []
+  reason: "Fast Rust-based Homebrew client. Same UX, faster."
+  status: trial

@@ -16,6 +16,24 @@ command=$(echo "$input" | jq -r '.tool_input.command // ""')
 # Quick exit if empty
 [[ -z "$command" ]] && exit 0
 
+LOG_PATH="${HOME}/.cache/claude/nudge-modern.log"
+MAX_LOG_BYTES=$((512 * 1024))
+log_decision() {
+    local decision="$1" reason="$2"
+    mkdir -p "$(dirname "$LOG_PATH")" 2>/dev/null || return 0
+    if [[ -f "$LOG_PATH" ]]; then
+        local size
+        size=$(stat -f%z "$LOG_PATH" 2>/dev/null || stat -c%s "$LOG_PATH" 2>/dev/null || echo 0)
+        if (( size > MAX_LOG_BYTES )); then
+            tail -c $((MAX_LOG_BYTES / 2)) "$LOG_PATH" > "$LOG_PATH.tmp" && mv "$LOG_PATH.tmp" "$LOG_PATH"
+        fi
+    fi
+    local ts cmd_short
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    cmd_short=$(printf '%s' "$command" | tr '\n' ' ' | cut -c1-200)
+    printf '%s %s | %s | %s\n' "$ts" "$decision" "$cmd_short" "$reason" >> "$LOG_PATH"
+}
+
 block_reason=""
 nudge=""
 
@@ -52,7 +70,7 @@ is_piped_only() {
 
 # Check if command word appears anywhere in the full command
 has_cmd() {
-    [[ "$command" =~ (^|[&|;[:space:]])$1([[:space:]]|$) ]]
+    [[ "$command" =~ (^|[\&\|\;()])[[:space:]]*$1([[:space:]]|$) ]]
 }
 
 # BLOCK: standalone file operations where built-in tools are strictly better.
@@ -126,6 +144,7 @@ fi
 
 # Block: reject the tool call and force the agent to use the built-in
 if [[ -n "$block_reason" ]]; then
+    log_decision "BLOCK" "$block_reason"
     jq -n --arg reason "$block_reason" '{
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
@@ -138,6 +157,7 @@ fi
 
 # Nudge: informational message, doesn't block
 if [[ -n "$nudge" ]]; then
+    log_decision "NUDGE" "$nudge"
     jq -n --arg msg "$nudge" '{
       hookSpecificOutput: {
         hookEventName: "PreToolUse",

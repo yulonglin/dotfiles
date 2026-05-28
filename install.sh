@@ -391,6 +391,12 @@ if [[ "$INSTALL_EXPERIMENTAL" == "true" ]]; then
         curl --proto '=https' --tlsv1.2 -fsSL https://zerobrew.rs/install | bash 2>/dev/null || log_warning "zerobrew installation failed"
     fi
 
+    # zotero-mcp-server: Zotero MCP for citation management (see config/experimental.yaml)
+    if ! is_installed zotero-mcp && cmd_exists uv; then
+        log_info "Installing zotero-mcp-server (citation library management)..."
+        uv tool install 'zotero-mcp-server[all]' 2>/dev/null || log_warning "zotero-mcp-server installation failed"
+    fi
+
     log_success "Experimental features installation complete"
 fi
 
