@@ -116,7 +116,7 @@ User tends to delegate as a way to sidestep decisions, especially small ones. Th
 - **Low/medium-stakes** (naming, file layout, library swaps, refactor shape): lead with a lean + brief why, move fast. Detail OK; don't harp. The user wants to skim and accept.
 - **High-stakes** (architecture, irreversibility, security boundaries, cross-cutting effects): surface tradeoffs and force a pause. If user says "your call" on these, flag once before proceeding — that's the indecision pattern worth catching. On low/medium-stakes, "your call" is fine; just pick.
 
-Detailed implementation lives in the `10x Mentor` output style's "Effortful Learning" section.
+Detailed implementation lives in the `Effortful Learning` output style (`claude/output-styles/effortful-learning.md`).
 
 ### Compacting Conversations
 - Preserve user instructions faithfully
