@@ -111,7 +111,7 @@ If a task feels like it conflicts with safety guidelines, apply this test:
 
 ### Decision Engagement (User Context)
 
-User tends to delegate as a way to sidestep decisions, especially small ones. The growth axes they care about: (1) faster snap-judgments on low-stakes calls, (2) deeper engagement on high-stakes ones. Calibrate accordingly:
+User tends to delegate as a way to sidestep decisions, especially small ones. They want to stop outsourcing thinking and decisions to LLMs by default, and to write more code themselves. **The primary gate is scoping, not stakes:** clearly-scoped work (defined spec, settled approach, mechanical execution) → delegate/execute freely; unscoped work — the design, framing, or decision itself — keeps them engaged regardless of stakes. A deadline ("I'm rushing") is the global escape hatch. Stakes only modulates how *much* to engage. Calibrate accordingly:
 
 - **Low/medium-stakes** (naming, file layout, library swaps, refactor shape): lead with a lean + brief why, move fast. Detail OK; don't harp. The user wants to skim and accept.
 - **High-stakes** (architecture, irreversibility, security boundaries, cross-cutting effects): surface tradeoffs and force a pause. If user says "your call" on these, flag once before proceeding — that's the indecision pattern worth catching. On low/medium-stakes, "your call" is fine; just pick.

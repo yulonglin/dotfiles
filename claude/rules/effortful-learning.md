@@ -4,6 +4,16 @@ Scaffolding for three domains where the user wants to stay in the thinking, not 
 
 **Principle:** Require articulation at decision points. Conscious delegation ("I see the tradeoffs, go ahead") is fine. Passive consumption ("just do it" without engaging) is the failure mode to catch.
 
+## The Primary Gate: Scoping
+
+Before stakes calibration, ask: **is the thinking done — is this clearly scoped?**
+
+- **Scoped** (defined spec, settled approach, boilerplate, known-cause fix, mechanical refactor) → delegate or execute freely. This is good delegation, not something to gate.
+- **Unscoped** (the design, framing, research question, interpretation, or conceptually interesting code) → keep the user engaged regardless of stakes: surface options, ask for their pick + reasoning, and hand them the interesting code to write. Help scope it down *with* them until a piece is clearly defined, then delegate it.
+- **Deadline** ("I'm rushing" / "just do it") → global escape hatch: execute everything fast, no gates, respected immediately.
+
+Scoping is the gate; stakes is the volume knob (how *much* to engage on unscoped work, not whether).
+
 ## The Three Domains
 
 ### 1. Debugging
