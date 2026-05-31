@@ -1,5 +1,7 @@
 model = "gpt-5.5"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
+notify = ["/Users/yulong/code/dotfiles/codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient", "turn-ended"]
+
 [mcp_servers.linear]
 url = "https://mcp.linear.app/mcp"
 
@@ -12,6 +14,23 @@ url = "https://mcp.notion.com/mcp"
 [mcp_servers.playwright]
 args = ["@playwright/mcp@latest"]
 command = "npx"
+
+[mcp_servers.node_repl]
+args = []
+command = "/Applications/Codex.app/Contents/Resources/node_repl"
+startup_timeout_sec = 120
+
+[mcp_servers.node_repl.env]
+BROWSER_USE_AVAILABLE_BACKENDS = "iab"
+BROWSER_USE_MARKETPLACE_NAME = "openai-bundled"
+CODEX_CLI_PATH = "/Applications/Codex.app/Contents/Resources/codex"
+CODEX_HOME = "/Users/yulong/.codex"
+NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
+NODE_REPL_NODE_MODULE_DIRS = ""
+NODE_REPL_NODE_PATH = "/Applications/Codex.app/Contents/Resources/node"
+NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "167fdf579477181fba1773c1efb067b00c5a64fe85dafb50a2001bde198dc739"
+NODE_REPL_TRUSTED_CODE_PATHS = "/Users/yulong/.codex"
+NODE_REPL_UNTRUSTED_ENV_ALLOWLIST = "BROWSER_USE_MARKETPLACE_NAME"
 
 [projects."/Users/yulong/code/automated-researchers"]
 trust_level = "trusted"
@@ -38,6 +57,9 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [projects."/home/yulong/code/dotfiles"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/writing/papers/sandbagging-detection-paper"]
 trust_level = "trusted"
 
 [notice.model_migrations]
@@ -82,11 +104,35 @@ enabled = true
 [plugins."browser@openai-bundled"]
 enabled = true
 
+[plugins."claude-md-management@claude-plugins-official"]
+enabled = true
+
+[plugins."commit-commands@claude-plugins-official"]
+enabled = true
+
+[plugins."context7@claude-plugins-official"]
+enabled = true
+
+[plugins."hookify@claude-plugins-official"]
+enabled = true
+
+[plugins."plugin-dev@claude-plugins-official"]
+enabled = true
+
+[plugins."ralph-loop@claude-plugins-official"]
+enabled = true
+
+[plugins."remember@claude-plugins-official"]
+enabled = true
+
+[plugins."superpowers@claude-plugins-official"]
+enabled = true
+
 [tui.model_availability_nux]
 "gpt-5.5" = 3
 
 [marketplaces.openai-bundled]
-last_updated = "2026-05-26T23:12:59Z"
+last_updated = "2026-05-29T00:14:30Z"
 source_type = "local"
 source = "/Users/yulong/code/dotfiles/codex/.tmp/bundled-marketplaces/openai-bundled"
 
@@ -94,3 +140,20 @@ source = "/Users/yulong/code/dotfiles/codex/.tmp/bundled-marketplaces/openai-bun
 last_updated = "2026-05-26T23:49:53Z"
 source_type = "local"
 source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
+
+[marketplaces.claude-plugins-official]
+last_updated = "2026-05-29T01:03:02Z"
+last_revision = "502de97746f8485de58ac9f02c062cab5ca2e936"
+source_type = "git"
+source = "https://github.com/anthropics/claude-plugins-official.git"
+
+[desktop]
+usePointerCursors = false
+followUpQueueMode = "steer"
+composerEnterBehavior = "cmdIfMultiline"
+preventSleepWhileRunning = true
+keepRemoteControlAwakeWhilePluggedIn = true
+git-branch-prefix = "yulong/"
+
+[features]
+js_repl = false
