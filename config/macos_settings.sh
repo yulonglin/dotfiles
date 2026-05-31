@@ -82,8 +82,9 @@ configure_dock() {
     # Don't automatically rearrange Spaces based on most recent use
     defaults write com.apple.dock mru-spaces -bool false 2>/dev/null || true
 
-    # Disable workspace auto-switch when app opens on another Space
-    defaults write com.apple.dock workspaces-auto-swoosh -bool NO 2>/dev/null || true
+    # Switch to a Space with open windows when activating an app (Mission Control swoosh)
+    defaults write com.apple.dock workspaces-auto-swoosh -bool YES 2>/dev/null || true
+    defaults write NSGlobalDomain AppleSpacesSwitchOnActivate -bool true 2>/dev/null || true
 
     # Faster auto-hide animation
     defaults write com.apple.dock autohide-time-modifier -float 0.2 2>/dev/null || true
