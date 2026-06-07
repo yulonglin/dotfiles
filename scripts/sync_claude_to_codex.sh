@@ -6,6 +6,7 @@ set -euo pipefail
 # Purpose: Sync skills and permissions from Claude Code to Codex CLI.
 #   1. Skills: user, plugin, standalone, and agent skills → ~/.codex/skills/
 #   2. Permissions: Claude Code allow/deny → Codex rules
+#   3. Shared MCP servers: config/mcp-servers.json → Claude + Codex
 # Source:  claude/ (skills, agents, settings.json)
 # Target:  codex/ (skills/, rules/)
 # ==============================================================================
@@ -22,6 +23,7 @@ if [ ! -f "$HELPER" ]; then
     echo "Error: enumerate_claude_skills.sh not found at $HELPER" >&2
     exit 1
 fi
+# shellcheck source=scripts/helpers/enumerate_claude_skills.sh
 source "$HELPER"
 
 mkdir -p "$TARGET_SKILLS"
@@ -113,6 +115,27 @@ PY
     rm -f "$OUTPUT_RULES"
 
     echo "  Updated $DEFAULT_RULES"
+fi
+
+# ---------- Shared MCP Sync ----------
+
+echo ">>> Syncing shared MCP servers..."
+
+MCP_SOURCE="$DOTFILES_DIR/config/mcp-servers.json"
+MCP_SYNC_SCRIPT="$DOTFILES_DIR/scripts/helpers/sync_mcp_servers.py"
+
+if [[ ! -f "$MCP_SOURCE" ]]; then
+    echo "  Skipping: shared MCP source not found at $MCP_SOURCE"
+elif [[ ! -f "$MCP_SYNC_SCRIPT" ]]; then
+    echo "  Skipping: MCP sync script not found at $MCP_SYNC_SCRIPT"
+elif ! command -v python3 >/dev/null 2>&1; then
+    echo "  Skipping: python3 not installed"
+else
+    python3 "$MCP_SYNC_SCRIPT" \
+        --source "$MCP_SOURCE" \
+        --claude-settings "$DOTFILES_DIR/claude/settings.json" \
+        --codex-config "$DOTFILES_DIR/codex/config.toml" \
+        --apply
 fi
 
 echo ">>> Done! Codex CLI is now synchronized with Claude Code configurations."

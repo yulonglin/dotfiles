@@ -65,6 +65,7 @@ DEPLOY_REGISTRY=(
     "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|all|true"
     "claude-cleanup|Remove idle Claude sessions after 24h|all|true"
     "ai-update|Daily auto-update: Claude, Gemini, Codex|all|true"
+    "mcp-sync|Daily shared MCP sync for Claude and Codex|all|true"
     "brew-update|Weekly package upgrade + cleanup|all|true"
     "claude-tools|Build claude-tools Rust binary|all|true"
     "finicky|Browser routing config (symlinked)|macos|true"

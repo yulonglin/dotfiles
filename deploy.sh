@@ -76,6 +76,7 @@ COMPONENTS:
     --cleanup         Install file cleanup: Downloads/Screenshots (macOS only)
     --claude-cleanup  Install Claude Code session cleanup (both platforms)
     --ai-update       Install AI tools auto-update (daily, both platforms)
+    --mcp-sync        Install daily shared MCP sync for Claude and Codex
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
     --file-apps       Set default editor for coding file types (macOS only)
@@ -1037,6 +1038,11 @@ fi
     if [[ "$DEPLOY_AI_UPDATE" == "true" ]]; then
         [[ -f "$DOT_DIR/scripts/cleanup/setup_ai_update.sh" ]] && \
             scheduled_jobs+=("ai-update|$DOT_DIR/scripts/cleanup/setup_ai_update.sh")
+    fi
+
+    if [[ "$DEPLOY_MCP_SYNC" == "true" ]]; then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_mcp_sync.sh" ]] && \
+            scheduled_jobs+=("mcp-sync|$DOT_DIR/scripts/cleanup/setup_mcp_sync.sh")
     fi
 
     if [[ "$DEPLOY_BREW_UPDATE" == "true" ]]; then

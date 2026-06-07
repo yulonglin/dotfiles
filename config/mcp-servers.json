@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "bear": {
+      "args": [
+        "mcp-server"
+      ],
+      "command": "/Applications/Bear.app/Contents/MacOS/bearcli"
+    },
+    "things-cloud": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    },
+    "zotero": {
+      "args": [
+        "serve"
+      ],
+      "command": "zotero-mcp",
+      "env": {
+        "ZOTERO_LOCAL": "true"
+      }
+    }
+  }
+}
