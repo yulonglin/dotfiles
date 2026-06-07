@@ -31,7 +31,7 @@ Load the relevant reference for your output type:
 | Domain | Reference | When |
 |--------|-----------|------|
 | **matplotlib** | `references/matplotlib.md` | Python plots, charts, figures |
-| **Colors** | `references/colors.md` | Color palette lookup for any domain |
+| **Colors** | `references/colors.md` | Color palette lookup for any domain — accent colors have AA text-tier variants; check it before coloring text (brand accents fail AA as text on Ivory) |
 | **HTML/CSS** | `references/web-css.md` | Web pages, HTML artifacts |
 | **TikZ** | `references/tikz.md` | LaTeX diagrams for papers |
 | **Annotations & layout** | `~/.claude/docs/visual-layout-quality.md` | Arrow anchoring, label placement in empty space, spacing minimums — read whenever adding annotations (callouts, gap markers, brackets) to any chart |

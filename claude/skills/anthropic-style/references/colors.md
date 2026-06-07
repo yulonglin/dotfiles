@@ -22,6 +22,20 @@ Source of truth: `lib/plotting/anthro_colors.py`
 | Heather | `HEATHER` | `#CBCADB` |
 | Cactus | `CACTUS` | `#BCD1CA` |
 
+## Accessible Text Variants (WCAG AA)
+
+The brand accents are tuned for fills, borders, and large display — **they fail WCAG AA (4.5:1) as text on Ivory `#FAF9F5`**. For any text under 24px, use the darker same-hue text-tier variant below. The brand values already pass on dark Slate `#141413`, so use them as-is there.
+
+| Accent | Brand hex (decorative) | On Ivory | Text-tier hex (AA on Ivory) | On Ivory | On Slate (brand) |
+|--------|------------------------|----------|-----------------------------|----------|------------------|
+| Clay | `#D97757` | 2.96:1 ✗ | `#BE4F2B` | 4.59:1 ✓ | 5.90:1 ✓ |
+| Sky | `#6A9BCC` | 2.78:1 ✗ | `#3C75AE` | 4.58:1 ✓ | 6.30:1 ✓ |
+| Olive | `#788C5D` | 3.49:1 ✗ | `#66774F` | 4.62:1 ✓ | 5.01:1 ✓ |
+
+**Rule:** brand accents fail AA as text on Ivory — use the text-tier hex for any text <24px. Brand values are fine on dark Slate backgrounds and for decorative use (fills, borders, large display text only if ≥3:1). **Clay fails even the 3:1 AA-Large bar on Ivory (2.96), so it's decorative-only there** — never use brand Clay for text on a light background.
+
+Text-tier variants keep each accent's hue and saturation, darkened until ≥4.5:1 on Ivory with a small safety margin.
+
 ## PRETTY_CYCLE (default plot color cycle)
 
 Used by `anthropic.mplstyle` and `use_anthropic_defaults()`:
