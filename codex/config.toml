@@ -21,16 +21,18 @@ command = "/Applications/Codex.app/Contents/Resources/node_repl"
 startup_timeout_sec = 120
 
 [mcp_servers.node_repl.env]
-BROWSER_USE_AVAILABLE_BACKENDS = "iab"
-BROWSER_USE_MARKETPLACE_NAME = "openai-bundled"
-CODEX_CLI_PATH = "/Applications/Codex.app/Contents/Resources/codex"
-CODEX_HOME = "/Users/yulong/.codex"
 NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
 NODE_REPL_NODE_MODULE_DIRS = ""
 NODE_REPL_NODE_PATH = "/Applications/Codex.app/Contents/Resources/node"
-NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "167fdf579477181fba1773c1efb067b00c5a64fe85dafb50a2001bde198dc739"
 NODE_REPL_TRUSTED_CODE_PATHS = "/Users/yulong/.codex"
-NODE_REPL_UNTRUSTED_ENV_ALLOWLIST = "BROWSER_USE_MARKETPLACE_NAME"
+CODEX_HOME = "/Users/yulong/.codex"
+NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "2de792ebdf729e85542c94275f6654821dddce546d9c7374c915f2297529e313"
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = "Control the in-app browser in conjunction with the Browser Plugin."
+NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = "Control the Chrome browser in conjunction with the Chrome Plugin. Prefer this method of controlling Chrome over alternatives (such as Computer Use) unless the user explicitly mentions an alternative."
+BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
+BROWSER_USE_CODEX_APP_VERSION = "26.602.40724"
+CODEX_CLI_PATH = "/Applications/Codex.app/Contents/Resources/codex"
 
 [projects."/Users/yulong/code/automated-researchers"]
 trust_level = "trusted"
@@ -60,6 +62,12 @@ trust_level = "trusted"
 trust_level = "trusted"
 
 [projects."/Users/yulong/writing/papers/sandbagging-detection-paper"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/code/sandbagging-detection/dev"]
+trust_level = "trusted"
+
+[projects."/Users/yulong/code/palimpsest"]
 trust_level = "trusted"
 
 [notice.model_migrations]
@@ -101,9 +109,6 @@ enabled = true
 [plugins."latex@openai-bundled"]
 enabled = true
 
-[plugins."browser@openai-bundled"]
-enabled = true
-
 [plugins."claude-md-management@claude-plugins-official"]
 enabled = true
 
@@ -128,32 +133,89 @@ enabled = true
 [plugins."superpowers@claude-plugins-official"]
 enabled = true
 
+[plugins."browser@openai-bundled"]
+enabled = true
+
 [tui.model_availability_nux]
 "gpt-5.5" = 3
 
 [marketplaces.openai-bundled]
-last_updated = "2026-05-29T00:14:30Z"
+last_updated = "2026-06-06T10:37:48Z"
 source_type = "local"
 source = "/Users/yulong/code/dotfiles/codex/.tmp/bundled-marketplaces/openai-bundled"
 
 [marketplaces.openai-primary-runtime]
-last_updated = "2026-05-26T23:49:53Z"
+last_updated = "2026-06-06T10:48:42Z"
 source_type = "local"
 source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
 [marketplaces.claude-plugins-official]
-last_updated = "2026-05-29T01:03:02Z"
-last_revision = "502de97746f8485de58ac9f02c062cab5ca2e936"
+last_updated = "2026-06-07T09:24:16Z"
+last_revision = "1fb8ee762823e12f48708cc181725df0dbd3e6d5"
 source_type = "git"
 source = "https://github.com/anthropics/claude-plugins-official.git"
 
 [desktop]
 usePointerCursors = false
 followUpQueueMode = "steer"
-composerEnterBehavior = "cmdIfMultiline"
+composerEnterBehavior = "enter"
 preventSleepWhileRunning = true
 keepRemoteControlAwakeWhilePluggedIn = true
 git-branch-prefix = "yulong/"
+mac-menu-bar-enabled = true
+show-context-window-usage = true
+hotkey-window-projectless-default-enabled = false
+notifications-turn-mode = "always"
 
 [features]
 js_repl = false
+memories = true
+chronicle = true
+
+[hooks.state]
+
+[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:post_tool_use:0:0"]
+trusted_hash = "sha256:33cab461db694142d691bc1267d6b4694a32402af2301bd1cc1becfbe5888a81"
+
+[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:pre_tool_use:0:0"]
+trusted_hash = "sha256:2763d5b04659d5af7b607ed8ae8524d45987b047509ae969db296c1163793e98"
+
+[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:stop:0:0"]
+trusted_hash = "sha256:81df2b0427162d1d2fe4b84733748a11f5bcb7b10dae9af3bced6c8b0709b6ca"
+
+[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:cbc990263a4b369738f970a9273caec2a5b55213795a57494ebb581240631a33"
+
+[hooks.state."ralph-loop@claude-plugins-official:hooks/hooks.json:stop:0:0"]
+trusted_hash = "sha256:6157c9f3776a29424b3a497707296124a3f628909fc09129dc89412d1c6b35b1"
+
+[hooks.state."remember@claude-plugins-official:hooks/hooks.json:post_tool_use:0:0"]
+trusted_hash = "sha256:ef24c8247cbf33474955f9782a22e47c3a5542b9b7c60357eef4b92d32372835"
+
+[hooks.state."remember@claude-plugins-official:hooks/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:218ec4865b8e4413c4c9fafe9d9ee0b5e787b46e50a21b29787d5463c122af6b"
+
+[hooks.state."superpowers@claude-plugins-official:hooks/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:62acbaff2b2f55f41971e21a164990aaa53c96919baa0a5eae2eb5db73b9e6e6"
+
+[memories]
+generate_memories = true
+use_memories = true
+
+# BEGIN SHARED MCP SERVERS
+# Auto-generated by scripts/helpers/sync_mcp_servers.py
+[mcp_servers.bear]
+args = ["mcp-server"]
+command = "/Applications/Bear.app/Contents/MacOS/bearcli"
+
+[mcp_servers.things-cloud]
+type = "http"
+url = "http://127.0.0.1:8080/mcp"
+
+[mcp_servers.zotero]
+args = ["serve"]
+command = "zotero-mcp"
+
+[mcp_servers.zotero.env]
+ZOTERO_LOCAL = "true"
+# END SHARED MCP SERVERS
