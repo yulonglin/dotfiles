@@ -18,3 +18,8 @@ cache/
 state_*.sqlite
 installation_id
 computer-use/
+memories/
+ambient-suggestions/
+process_manager/
+chrome-native-hosts-v2.json
+.codex-chronicle-assets-to-install.marker
