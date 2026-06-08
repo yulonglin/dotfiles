@@ -157,6 +157,7 @@ Pass `includeContent: true` on either to also pull each note's raw Markdown body
 - Timestamps: ISO 8601 UTC.
 - Mutating tools (`edit_note`, `overwrite_note`, `append_to_note`, `add_tags`, …) return **only the metadata fields that changed** — inspect the response to catch unintended drops.
 - For modification-date-preserving cleanups (e.g. tag-only bulk fixes), use the CLI's `--no-update-modified` flag — MCP doesn't expose this.
+- Math (Bear 2.5+): `$...$` inline, `$$...$$` block — rendered live in the editor via MathJax. Escape literal dollar signs as `\$` so prices/amounts don't accidentally trigger math rendering.
 
 ## Failure modes (verified empirically)
 
@@ -171,6 +172,7 @@ Pass `includeContent: true` on either to also pull each note's raw Markdown body
 | 7 | **Encrypted note** | Reads return metadata only; edit/overwrite refuse. Filter `locked` from list results before bulk ops |
 | 8 | **MCP tools missing from tool list** | Restart Claude Code; verify `~/.claude/settings.json` has the `bear` MCP server entry (`/Applications/Bear.app/Contents/MacOS/bearcli mcp-server`). As a one-off, you can boot manually via `bearcli mcp-server` |
 | 9 | **Full Disk Access** | Reads from a fresh terminal app fail opaquely. Grant Full Disk Access in System Settings → Privacy & Security |
+| 10 | **Dollar amounts render as garbled math** (e.g. `$5 ... $10` becomes math in the editor) | An unescaped `$`-pair triggered MathJax (Bear 2.5+, editor/reading view). Escape literal dollar signs as `\$` |
 
 For CLI-specific failure modes (sandbox SIGABRT, PATH issues in cron, stdin/flag escaping), see [`~/.claude/docs/bear-cli-reference.md`](~/.claude/docs/bear-cli-reference.md).
 
