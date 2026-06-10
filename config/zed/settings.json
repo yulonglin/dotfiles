@@ -5,6 +5,12 @@
 //   zed: open default settings (from command palette)
 {
   // === Privacy & Security ===
+  "project_panel": {
+    "dock": "left"
+  },
+  "git_panel": {
+    "dock": "left"
+  },
   "redact_private_values": true,
 
   // === Theme & Appearance ===
@@ -86,6 +92,7 @@
 
   // === AI / Agent ===
   "agent": {
+    "dock": "right",
     "default_model": {
       "provider": "anthropic",
       "model": "claude-sonnet-4-6-latest"
@@ -119,6 +126,7 @@
     "button": false
   },
   "collaboration_panel": {
+    "dock": "left",
     "button": false
   },
 
