@@ -26,12 +26,12 @@ NODE_REPL_NODE_MODULE_DIRS = ""
 NODE_REPL_NODE_PATH = "/Applications/Codex.app/Contents/Resources/node"
 NODE_REPL_TRUSTED_CODE_PATHS = "/Users/yulong/.codex"
 CODEX_HOME = "/Users/yulong/.codex"
-NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "2de792ebdf729e85542c94275f6654821dddce546d9c7374c915f2297529e313"
+NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "4946b004b23af02244ece97240aceb8d123475207fa6a6fc399486bd7086049f"
 BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
 NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = "Control the in-app browser in conjunction with the Browser Plugin."
 NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = "Control the Chrome browser in conjunction with the Chrome Plugin. Prefer this method of controlling Chrome over alternatives (such as Computer Use) unless the user explicitly mentions an alternative."
 BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
-BROWSER_USE_CODEX_APP_VERSION = "26.602.40724"
+BROWSER_USE_CODEX_APP_VERSION = "26.602.71036"
 CODEX_CLI_PATH = "/Applications/Codex.app/Contents/Resources/codex"
 
 [projects."/Users/yulong/code/automated-researchers"]
@@ -140,7 +140,7 @@ enabled = true
 "gpt-5.5" = 3
 
 [marketplaces.openai-bundled]
-last_updated = "2026-06-06T10:37:48Z"
+last_updated = "2026-06-09T06:32:01Z"
 source_type = "local"
 source = "/Users/yulong/code/dotfiles/codex/.tmp/bundled-marketplaces/openai-bundled"
 
@@ -150,8 +150,8 @@ source_type = "local"
 source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
 [marketplaces.claude-plugins-official]
-last_updated = "2026-06-07T09:24:16Z"
-last_revision = "1fb8ee762823e12f48708cc181725df0dbd3e6d5"
+last_updated = "2026-06-10T05:24:25Z"
+last_revision = "de573bd84695c6657b28f05ffe32c37bb54d1f55"
 source_type = "git"
 source = "https://github.com/anthropics/claude-plugins-official.git"
 
