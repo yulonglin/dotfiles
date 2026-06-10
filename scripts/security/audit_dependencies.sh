@@ -58,11 +58,24 @@ check_pypi_lockfile() {
     case "$lockfile" in
         *Pipfile.lock)
             # JSON: "<name>": { ... "version": "==<badver>" ... }
-            if grep -qE "\"$name\"[[:space:]]*:" "$lockfile" 2>/dev/null; then
-                if grep -qE "\"version\"[[:space:]]*:[[:space:]]*\"==$badver\"" "$lockfile" 2>/dev/null; then
+            # Scope the version check to the named package's object — a
+            # whole-file grep would flag a clean $name when some OTHER
+            # package happens to be pinned at $badver. Package objects
+            # contain no nested braces, so the object ends at the first
+            # line containing "}" (same line for single-line objects).
+            local block
+            block=$(awk -v name="$name" '
+                $0 ~ "\"" name "\"[[:space:]]*:" { found = 1 }
+                found { print; if ($0 ~ /}/) found = 0 }
+            ' "$lockfile" 2>/dev/null || true)
+            if [[ -n "$block" ]]; then
+                if grep -qE "\"version\"[[:space:]]*:[[:space:]]*\"==$badver\"" <<< "$block"; then
                     echo critical
-                else
+                elif grep -qE "\"version\"[[:space:]]*:" <<< "$block"; then
                     echo info
+                else
+                    # name present but version not where expected — fall back to warning
+                    echo warning
                 fi
             fi
             ;;
