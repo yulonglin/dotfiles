@@ -330,7 +330,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-opus-4-8",
+  "model": "claude-fable-5",
   "hooks": {
     "PermissionRequest": [
       {
@@ -847,5 +847,6 @@
         "ZOTERO_LOCAL": "true"
       }
     }
-  }
+  },
+  "skipWorkflowUsageWarning": true
 }
