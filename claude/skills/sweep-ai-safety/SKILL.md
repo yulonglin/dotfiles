@@ -56,12 +56,41 @@ One entry per source. Fields:
   name: Alignment Science blog
   url: https://alignment.anthropic.com/
   rss: https://alignment.anthropic.com/rss.xml   # null if no feed
+  lane: rss | scrape               # rss != null <=> lane: rss
   kind: blog | papers | aggregator | researcher
   verified: false                  # flip to true after first successful fetch
   notes: ...
 ```
 
 The script does NOT trust `rss:` blindly — on first run, it reports which feeds resolved and which need manual URL correction. Edit `sources.yaml` to fix.
+
+### Two-lane reality (RSS vs scrape)
+
+Most curated orgs do **not** expose a working RSS feed. Live-verified state:
+
+- **RSS lane** (have a real feed, fetched by the feed reader): `openai-blog`,
+  `openai-alignment`, `metr`, `redwood`. These are the only sources that produce
+  items from a plain `sweep.py` run.
+- **Scrape lane** (`rss: null`, no usable feed — fetched via WebFetch on the landing
+  url): `anthropic-alignment`, `anthropic-redteam`, `anthropic-research`, `openai-safety`,
+  `apollo`, `transluce`, `deepmind-safety`, `far-ai`, `truthful-ai`, `owain-evans`,
+  `alphaxiv-safety`. Anthropic (both blogs) and Apollo are SPAs/404 — their `/rss.xml`
+  serves HTML, not XML.
+- **arXiv** (`arxiv-terms`): scrape-lane by the rss-null convention, but fetched by the
+  script's dedicated arXiv export-API path, not the generic WebFetch scrape step.
+
+**A scrape-lane source returning 0 items is EXPECTED** from a plain `sweep.py` run —
+the script only reads RSS feeds. Those sources surface only when the scrape step runs
+(WebFetch the `url`). Treat "0 items from a scrape-lane source" as "not fetched", not
+"nothing published". The scrape-lane fetch implementation lands in a later phase; until
+then, scrape-lane sources are checked manually via WebFetch (see reference-mode workflow).
+
+### Zotero (dedup + sink)
+
+Zotero is **not** a fetch source. It's the dedup reference (what's already been
+collected) and the storage sink (where surfaced items land). It's handled by the
+downstream pipeline, not by the sweep fetch itself — `sweep.py` neither reads from
+nor writes to Zotero.
 
 ### Topic glossary (`terms.md`)
 
@@ -114,3 +143,8 @@ This skill surfaces candidates. **Always verify before acting on a finding:**
 - **Add a tracked term**: append to `terms.md` with a one-line definition; optionally add to `sources.yaml` `arxiv_search_terms:` for arXiv inclusion
 - **Different cadence**: pass `--since 14d` / `--since 30d`; or schedule via `/loop 14d /sweep-ai-safety` (or as a routine via `/schedule`)
 - **JSON output for programmatic use**: pass `--json` (emits one item per line, NDJSON)
+- **Conference papers**: the weekly sweep relies on arXiv catching venue cross-posts —
+  tag an item with its venue when the arXiv `comment` field names one (e.g. "Accepted at
+  NeurIPS 2025"). A separate episodic `--conference <venue>` roundup mode (scraping
+  accepted-paper lists plus safety workshops like SoLaR) is planned for when proceedings
+  drop — NeurIPS/ICLR/ICML land ~3x/year, not weekly, so it doesn't belong in the weekly cadence.

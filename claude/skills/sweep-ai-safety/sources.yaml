@@ -1,7 +1,13 @@
 # AI safety source registry for sweep-ai-safety skill.
 #
 # Each source has a stable `key` (used in --source flag), an `org`, a `name`,
-# a landing `url`, and an optional `rss` feed.
+# a landing `url`, an optional `rss` feed, and a `lane`.
+#
+# TWO-LANE CONVENTION:
+#   lane: rss    -> has a working RSS/Atom feed (rss: <url>). Fetched by the feed reader.
+#   lane: scrape -> no usable feed (rss: null). Fetched via WebFetch on the landing url.
+# Every source declares exactly one lane. rss != null  <=> lane: rss.
+# A scrape-lane source returning 0 items is EXPECTED unless the scrape step runs.
 #
 # `verified: false` means the rss/url has not been confirmed to work from this machine.
 # After running sweep.py and confirming the feed works, flip to `true`.
@@ -15,29 +21,34 @@ sources:
     org: Anthropic
     name: Alignment Science blog
     url: https://alignment.anthropic.com/
-    rss: https://alignment.anthropic.com/rss.xml
+    rss: null
+    lane: scrape
     kind: blog
     verified: false
     notes: |
       Anthropic's research-blog for alignment science. Posts mix interpretability,
       alignment evaluations, model organisms, and threat-model writeups. High signal.
+      SPA serves HTML at /rss.xml, not XML — no working feed. SCRAPE LANE: WebFetch the url.
 
   - key: anthropic-redteam
     org: Anthropic
     name: Red team blog
     url: https://red.anthropic.com/
-    rss: https://red.anthropic.com/rss.xml
+    rss: null
+    lane: scrape
     kind: blog
     verified: false
     notes: |
       Anthropic's red-team / adversarial research blog. Newer than alignment.anthropic.
       Look for jailbreak research, sabotage / sleeper agents follow-ups, capability tests.
+      SPA, no feed. SCRAPE LANE: WebFetch the url.
 
   - key: anthropic-research
     org: Anthropic
     name: Anthropic Research index
     url: https://www.anthropic.com/research
     rss: null
+    lane: scrape
     kind: papers
     verified: false
     notes: |
@@ -53,6 +64,7 @@ sources:
     name: OpenAI safety research
     url: https://openai.com/safety/
     rss: null
+    lane: scrape
     kind: blog
     verified: false
     notes: |
@@ -65,13 +77,25 @@ sources:
     name: OpenAI blog (filter safety/alignment)
     url: https://openai.com/blog/
     rss: https://openai.com/blog/rss.xml
+    lane: rss
     kind: blog
-    verified: false
+    verified: true
     safety_filter: true
     notes: |
       All-purpose OpenAI blog. `safety_filter: true` drops items whose title/summary
       don't match any `term_regex_aliases` entry — only safety/alignment-tagged
       posts make it into the digest.
+
+  - key: openai-alignment
+    org: OpenAI
+    name: Alignment Research blog
+    url: https://alignment.openai.com/
+    rss: https://alignment.openai.com/rss.xml
+    lane: rss
+    kind: blog
+    verified: true
+    notes: |
+      OpenAI's dedicated alignment research blog (distinct from openai.com/blog). Valid RSS 2.0.
 
   # ---------------------------------------------------------------------------
   # Google DeepMind
@@ -81,6 +105,7 @@ sources:
     name: DeepMind safety research
     url: https://deepmind.google/research/?filter=safety
     rss: null
+    lane: scrape
     kind: papers
     verified: false
     notes: |
@@ -95,39 +120,49 @@ sources:
     org: Apollo Research
     name: Apollo Research
     url: https://www.apolloresearch.ai/research
-    rss: https://www.apolloresearch.ai/rss.xml
+    rss: null
+    lane: scrape
     kind: blog
     verified: false
     notes: |
       Apollo's research output. Heavy on scheming, situational awareness, corrigibility
       assessments. See ~/.claude/docs/apollo-eval-types.md for their taxonomy.
+      No RSS at any common path (all 404, checked /rss.xml /feed.xml /index.xml /blog/rss.xml).
+      Also check https://www.apolloresearch.ai/science/. SCRAPE LANE: WebFetch.
 
   - key: redwood
     org: Redwood Research
     name: Redwood Research
-    url: https://redwoodresearch.org/blog
-    rss: https://redwoodresearch.org/rss.xml
+    url: https://www.redwoodresearch.org/research
+    rss: https://blog.redwoodresearch.org/feed
+    lane: rss
     kind: blog
-    verified: false
+    verified: true
     notes: |
       Redwood's blog. Heavy on AI control, untrusted-model protocols, capability elicitation.
+      The blog is now a Substack at blog.redwoodresearch.org (old redwoodresearch.org/rss.xml is dead).
 
   - key: metr
     org: METR
     name: METR
     url: https://metr.org/blog
     rss: https://metr.org/blog/rss.xml
+    lane: rss
     kind: blog
-    verified: false
+    verified: true
     notes: |
       METR (Model Evaluation & Threat Research). Tracks frontier capability tests,
       long-horizon agent assessment results, autonomous-replication & R&D benchmarks.
+      Site-wide feed alternative: https://metr.org/feed.xml (== /index.xml). Sections
+      /research/, /notes/, /risk-assessment/ have no separate feed — all surface in the
+      blog/site feed.
 
   - key: far-ai
     org: FAR AI
     name: FAR AI
     url: https://far.ai/research
     rss: null
+    lane: scrape
     kind: papers
     verified: false
     notes: |
@@ -139,6 +174,7 @@ sources:
     name: Truthful AI
     url: https://truthfulai.org/
     rss: null
+    lane: scrape
     kind: blog
     verified: false
     notes: |
@@ -150,11 +186,24 @@ sources:
     name: Owain Evans personal page
     url: https://owainevans.github.io/
     rss: null
+    lane: scrape
     kind: researcher
     verified: false
     notes: |
       Owain's personal site. Often lists recent papers before they appear on
       truthfulai.org. Useful for pre-prints.
+
+  - key: transluce
+    org: Transluce
+    name: Transluce research
+    url: https://transluce.org/research
+    rss: null
+    lane: scrape
+    kind: blog
+    verified: false
+    notes: |
+      No RSS (all common paths 404). SCRAPE LANE: WebFetch the url.
+      Focus: interpretability, model investigation/observability tooling.
 
   # ---------------------------------------------------------------------------
   # Aggregators
@@ -164,6 +213,7 @@ sources:
     name: alphaxiv (AI safety topic)
     url: https://www.alphaxiv.org/
     rss: null
+    lane: scrape
     kind: aggregator
     verified: false
     notes: |
@@ -176,11 +226,14 @@ sources:
     name: arXiv keyword search
     url: http://export.arxiv.org/api/query
     rss: null
+    lane: scrape
     kind: papers
     verified: true
     notes: |
       arXiv export API. Script queries arxiv_search_terms (below) via the
-      search_query endpoint. Always works (rate-limited).
+      search_query endpoint. Always works (rate-limited). NOTE: scrape-lane by the
+      rss-null convention, but fetched by the script's dedicated arXiv API path —
+      NOT by the generic WebFetch scrape step.
 
 # ---------------------------------------------------------------------------
 # arXiv keyword searches — one query per term, results filtered by date window
