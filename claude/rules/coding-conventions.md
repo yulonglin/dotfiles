@@ -10,6 +10,8 @@ Apply in order when writing or reviewing code:
 4. **Extensible** — expose hyperparams and config as named variables or `pydantic-settings`; never hardcode values that experiments might vary
 5. **Experiment logging** — log key params, step milestones, and final metrics; enough to reconstruct a run without re-running it (see `research-engineer` agent for detailed patterns)
 
+These apply to all code including experiments and prototypes — coding agents write code at scale, so scrappy shortcuts are no longer a justified tradeoff.
+
 ## Python Basics
 
 - Run from project root with `uv` and `python -m`
