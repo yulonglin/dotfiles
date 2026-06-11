@@ -15,6 +15,10 @@ claude/state/
 claude/flags/
 claude/logs/
 claude/security/
+claude/remote/
+
+# Codex runtime state (local operational artifacts)
+.codex
 
 # npm artifacts (not used - this repo uses system package managers)
 package.json

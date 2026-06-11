@@ -70,6 +70,9 @@ trust_level = "trusted"
 [projects."/Users/yulong/code/palimpsest"]
 trust_level = "trusted"
 
+[projects."/home/yulong/projects/nla-vs-cot"]
+trust_level = "trusted"
+
 [notice.model_migrations]
 "gpt-5.3-codex" = "gpt-5.4"
 
@@ -137,7 +140,7 @@ enabled = true
 enabled = true
 
 [tui.model_availability_nux]
-"gpt-5.5" = 3
+"gpt-5.5" = 4
 
 [marketplaces.openai-bundled]
 last_updated = "2026-06-09T06:32:01Z"
@@ -150,8 +153,8 @@ source_type = "local"
 source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
 [marketplaces.claude-plugins-official]
-last_updated = "2026-06-10T05:24:25Z"
-last_revision = "de573bd84695c6657b28f05ffe32c37bb54d1f55"
+last_updated = "2026-06-11T14:49:12Z"
+last_revision = "66bca6b6f62e5023673feff699d9d99451ae9919"
 source_type = "git"
 source = "https://github.com/anthropics/claude-plugins-official.git"
 
