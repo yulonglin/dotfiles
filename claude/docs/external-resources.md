@@ -40,24 +40,21 @@ Decision lens before adopting: does this sync the **durable patterns** (rules, s
 
 ## Output styles for learning/growing
 
-Directly relevant to the stakes-tiered Effortful Learning framework in `claude/output-styles/10x-mentor.md`.
+Directly relevant to the stakes-tiered Effortful Learning framework in `claude/output-styles/effortful-learning.md`.
 
 - **Built-in `/output-style explanatory`** — narrates *why* during edits; use when ramping into a new codebase or unfamiliar framework
 - **Built-in `/output-style learning`** — drops `TODO(human)` markers asking you to write 5-10 lines yourself; pair-programmer feel
 - [Anthropic `learning-output-style` plugin](https://github.com/anthropics/claude-code/blob/main/plugins/learning-output-style/README.md) — official extended version
 - [Output styles docs](https://code.claude.com/docs/en/output-styles) — `/output-style:new` to scaffold custom
-- Custom: `claude/output-styles/10x-mentor.md` — your own; modelling-over-explaining, max one coaching moment per response
 
 ### When to switch styles (learning loops)
 
-`10x-mentor` is reflection-after-action — Claude writes the code, then maybe coaches. The built-in `learning` style is the opposite — Claude leaves `TODO(human)` markers and you write 5-10 lines yourself. Different bets:
+The built-in `learning` style leaves `TODO(human)` markers asking you to write 5-10 lines yourself; pair-programmer feel. The `explanatory` style narrates *why* while still writing the code. Different bets:
 
 | Goal | Style | Why |
 |------|-------|-----|
-| Daily work, judgment + design coaching | `10x-mentor` (default) | Reflection builds judgment, doesn't slow execution |
 | Building procedural skill in a new domain (frontend, Rust ownership, a new framework) | `learning` | Production beats reflection for muscle memory |
 | Ramping into an unfamiliar codebase or protocol | `explanatory` | Narrates *why* while still writing the code |
-| Drafting communication / message critique | `10x-mentor` | COMM track is tuned for this |
 
 Switch with `/output-style <name>`. No reason to commit to one — toggle per task.
 

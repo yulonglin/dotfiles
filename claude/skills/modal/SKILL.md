@@ -36,7 +36,7 @@ modal token new        # opens browser for auth → saves to ~/.modal.toml
 
 ```python
 image = (
-    modal.Image.debian_slim(python_version="3.12")
+    modal.Image.debian_slim(python_version="3.14")
     .uv_sync()  # installs from lockfile — deps never drift
 )
 ```
@@ -45,7 +45,7 @@ image = (
 
 ```python
 image = (
-    modal.Image.debian_slim(python_version="3.12")
+    modal.Image.debian_slim(python_version="3.14")
     .uv_pip_install("torch==2.5.1", "transformers==4.46.0")  # pin tightly
 )
 ```
@@ -154,7 +154,7 @@ def download_model():
     snapshot_download("unsloth/Llama-3.2-1B-Instruct", cache_dir="/models")
 
 image = (
-    modal.Image.debian_slim(python_version="3.12")
+    modal.Image.debian_slim(python_version="3.14")
     .uv_sync()
     .uv_pip_install("huggingface_hub[hf_transfer]")  # fast Rust-based downloads
     .env({"HF_HOME": "/models", "HF_HUB_ENABLE_HF_TRANSFER": "1"})
@@ -167,16 +167,33 @@ First build downloads the model; subsequent builds reuse the cached image layer.
 
 ### Secrets
 
+Modal cloud containers do not automatically inherit your local shell environment. Choose the secret source by workflow:
+
+- Local-driver jobs where the caller may rotate keys between runs: bridge the current local env with `Secret.from_local_environ([...])`.
+- Deployed, scheduled, shared, or reproducible jobs: use a persistent named Modal Secret with `required_keys=[...]`.
+
+```python
+# Picks up the current local ANTHROPIC_API_KEY on each `modal run`.
+anthropic_secret = modal.Secret.from_local_environ(["ANTHROPIC_API_KEY"])
+
+@app.function(secrets=[anthropic_secret])
+def use_anthropic():
+    import os
+    token = os.environ["ANTHROPIC_API_KEY"]
+```
+
 ```bash
-modal secret create huggingface-secret HF_TOKEN="hf_xxx"
+modal secret create --force -e main huggingface-secret HF_TOKEN="hf_xxx"
 ```
 
 ```python
-@app.function(secrets=[modal.Secret.from_name("huggingface-secret")])
-def use_model():
-    import os
-    token = os.environ["HF_TOKEN"]
+hf_secret = modal.Secret.from_name(
+    "huggingface-secret",
+    required_keys=["HF_TOKEN"],
+)
 ```
+
+Name persistent Secrets after the service/provider; put the SDK environment variable inside them. `required_keys=[...]` makes missing or misspelled keys fail clearly when Modal resolves the Secret.
 
 Also: `Secret.from_dotenv()`, `Secret.from_dict({...})`.
 
@@ -246,7 +263,7 @@ import modal
 app = modal.App("my-experiment")
 
 image = (
-    modal.Image.debian_slim(python_version="3.12")
+    modal.Image.debian_slim(python_version="3.14")
     .uv_sync()
     .add_local_python_source("my_experiment")  # package with __init__.py
 )
