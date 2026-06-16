@@ -79,9 +79,9 @@ Legend: ✅ cask · 🛒 Mac App Store (mas) · ⌘ formula · ⚙️ already ha
 | cloud | Google Drive | ✅ | `google-drive` | 1 | optional (default OFF) |
 | search | Alfred | ✅ | `alfred` | 2 | prefs sync from Dropbox (manual: set sync folder + Powerpack license) |
 | messaging | Slack | ✅ | `slack` | 1 | |
-| messaging | Spark | ✅ | `readdle-spark` | 2 | |
-| productivity | Mouseless | ✅ | `mouseless` | 2 | config already deployed ⚙️ |
-| productivity | PopClip | ✅ | `popclip` | 2 | |
+| messaging | Spark | 🛒 or ✅ | mas (verify id) / `readdle-spark` cask | 2 | MAS build is full-featured (not crippled) → MAS preferred for sandbox; cask also fine |
+| productivity | Mouseless | ✅ | `mouseless` | 2 | config already deployed ⚙️; needs accessibility → cask |
+| productivity | PopClip | ✅ | `popclip` | 2 | **Use cask, NOT MAS** — MAS edition abandoned at v2023.9; standalone is sandbox-free + current |
 | time | Super Productivity | ✅ | `super-productivity` | 2 | |
 | time | WakaTime CLI | ⌘ | `wakatime-cli` | 2 | optional; API key via secrets |
 | voice | VoiceInk | ✅ | `voiceink` | 2 | config already deployed ⚙️; downloads model on first run |
