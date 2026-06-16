@@ -42,7 +42,7 @@ mas      | 904280696     | tasks      | 2    | true    | Things 3          | GTD
 brew     | wakatime-cli  | time       | 2    | false   | WakaTime CLI      | Coding time tracker (API key)   | apikey
 ```
 
-- **method**: `brew` (formula) / `cask` / `mas` (App Store).
+- **method**: `brew` (formula) / `cask` / `mas` (App Store). **Selection rule (per your policy: MAS > vendor download > cask):** prefer `mas` when the app is on the App Store AND its sandboxed MAS build isn't feature-crippled (gives sandbox/least-privilege + notarization + no cask supply-chain surface). Use `cask` only when the app needs unsandboxed system access (accessibility, automation, system/network extensions, SMC) or isn't on MAS. Safari extensions are always `mas`. Caveat: `mas` re-installs Apple-ID-owned apps, but first acquisition of paid apps (e.g. Things 3) is a one-time GUI step.
 - **tier**: 1 = official vendor auto-approve, 2 = mature OSS review, 3 = needs explicit approval (per your policy). Drives a color tag in the TUI; tier-3 items default OFF.
 - **default**: initial toggle state.
 - **auth**: token for the auth-setup checklist (`login`, `apikey`, `pair-phone`, `safari-ext`, `license`, `none`).
@@ -86,7 +86,7 @@ Legend: ✅ cask · 🛒 Mac App Store (mas) · ⌘ formula · ⚙️ already ha
 | time | WakaTime CLI | ⌘ | `wakatime-cli` | 2 | optional; API key via secrets |
 | voice | VoiceInk | ✅ | `voiceink` | 2 | config already deployed ⚙️; downloads model on first run |
 | vpn | NordVPN | ✅ | `nordvpn` | 2 | `vpn` deploy already configures split tunnel ⚙️ |
-| auth | Bitwarden | 🛒 | `1352778147` | 1 | MAS build needed for the Safari extension |
+| auth | Bitwarden | ✅ or 🛒 | `bitwarden` cask / mas `1352778147` | 1 | Desktop app **has a cask**. Safari extension ships **only** in the MAS build → use mas if you want the Safari ext (covers both) |
 | auth | 2FAS | 🛒 | *verify id* | 2 | mainly phone-paired; Safari ext |
 | auth | Tailscale | ✅ | `tailscale-app` | 1 | `vpn` deploy already configures ⚙️ |
 | safari-ext | uBlock Origin Lite | 🛒 | `6745342698` | 2 | enable manually in Safari |
@@ -100,8 +100,8 @@ Legend: ✅ cask · 🛒 Mac App Store (mas) · ⌘ formula · ⚙️ already ha
 | misc | Stats | ✅ | `stats` | 2 | |
 | misc | KeyboardCleanTool | ✅ | `keyboardcleantool` | 2 | |
 | misc | BeardedSpice | ✅ | `beardedspice` | 2 | |
-| antivirus | Malwarebytes | ✅ | `malwarebytes` | 2 | **optional, default OFF**; on-demand scanner. Real-time may conflict with Trellix |
-| antivirus | Trellix | ❌ | — | — | **University-managed** — NOT in Brewfile. Checklist note only (installed/updated via uni) |
+| antivirus | Malwarebytes | ✅ | `malwarebytes` | 2 | **optional, default OFF**; lightweight on-demand scanner. **Recommended** AV for personal use |
+| antivirus | Trellix | ❌ | — | 3 | Personal install, no cask → checklist manual-install note. **Don't run real-time alongside Malwarebytes.** Recommend skip (heavy enterprise EDR, low value for dev threat model) |
 
 IDs marked *verify* get a `mas search` / `brew info` check during implementation before committing (policy: `brew info` before install, verify vendor/homepage). Safari extensions can be *installed* but must be *enabled* in Safari manually — the auth checklist will list them.
 
