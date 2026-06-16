@@ -167,7 +167,8 @@ Trust tiers gate *what* we install; this section gates *integrity* (is the bytes
 3. **LuLu** (Objective-See, free OSS outbound firewall) — optional cask, **default OFF** (prompts a lot). Fills the runtime/egress gap: catches a signed-but-compromised app phoning home. Document KnockKnock (persistence enumeration) + BlockBlock (persistence alerts) as further optional Objective-See tools.
 4. **Harden `curl|bash` installers** — resolves "is official-page curl|bash ok?":
    - Official page gives **authenticity** (HTTPS cert proves the domain) but NOT **integrity-over-time** (runs whatever's live, unseen), **pinning** (no agreed sha → tamper passes), or **reproducibility**.
-   - **Rule, best→worst:** (a) use the official **brew formula** if it exists — `uv`, `rustup-init`, `bun` all do; you get the vendor's artifact + sha pin + reproducible re-run. (b) No formula → `curl -o` the script, verify vendor checksum/signature if published, inspect, then run — never blind-pipe. (c) blind `curl … | sh` only as last resort, HTTPS-to-official-domain only.
+   - **Rule, best→worst:** (a) use the official **brew formula** if it exists — `uv`, `rustup-init`, `bun` all do; you get the vendor's artifact + sha pin + reviewed PR + reproducible re-run. (b) No formula → `curl -o` the script to a versioned URL and **verify the vendor's published checksum/signature** if they offer one (this is the actual tamper-evidence). (c) blind `curl … | sh` only as last resort, HTTPS-to-official-domain only.
+   - **Note on manual inspection:** eyeballing the script ("glance at it") is a low-effort smell test for *gross* tampering (second payloads, surprise `sudo`), NOT an integrity control — a competent attacker defeats it, and you're reading the installer not the binary it fetches. Don't treat it as a safeguard; the safeguards are (a)/(b).
    - Migrate existing blind pipes in `install.sh` (uv, rust) to brew formulae / fetch-verify-run.
 
 ---
