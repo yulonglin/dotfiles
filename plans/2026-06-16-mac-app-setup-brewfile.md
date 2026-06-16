@@ -152,30 +152,51 @@ Driven by your policy ("prefer mature, boring"; "never auto-add taps"; "revisit 
 
 ---
 
-## 6. Files to change
+## 6. Malicious apps & executables — install integrity + runtime defense
+
+Trust tiers gate *what* we install; this section gates *integrity* (is the bytes what the vendor shipped?) and *runtime* (is a trusted-looking app misbehaving?). All additions are official/mature, free unless noted.
+
+### Already covered
+- **macOS**: Gatekeeper + notarization (blocks unsigned/un-notarized on launch), XProtect + XProtect Remediator (Apple malware scanner, auto-updated), App Store sandboxing (MAS apps = highest trust → "MAS-first" rule), TCC permission prompts.
+- **Brew casks**: pinned **sha256** verified on download → tampered artifact aborts.
+- **Dev deps** (existing): `min-release-age` 7-day quarantine, `ignore-scripts`, weekly `dep-audit`, Socket CLI, gitleaks, pip-audit.
+
+### Additions (all selected)
+1. **Enforce quarantine policy** — never `--no-quarantine` in any cask/Brewfile entry; document that Gatekeeper/notarization must stay enabled. Pure policy, zero cost. → `claude/rules/supply-chain-security.md`.
+2. **Signature-verify step in `auth-setup`** — after install, run `spctl --assess --type execute` + `codesign -dv --verbose=4` per app; report any unsigned/un-notarized app before you trust it. Free.
+3. **LuLu** (Objective-See, free OSS outbound firewall) — optional cask, **default OFF** (prompts a lot). Fills the runtime/egress gap: catches a signed-but-compromised app phoning home. Document KnockKnock (persistence enumeration) + BlockBlock (persistence alerts) as further optional Objective-See tools.
+4. **Harden `curl|bash` installers** — resolves "is official-page curl|bash ok?":
+   - Official page gives **authenticity** (HTTPS cert proves the domain) but NOT **integrity-over-time** (runs whatever's live, unseen), **pinning** (no agreed sha → tamper passes), or **reproducibility**.
+   - **Rule, best→worst:** (a) use the official **brew formula** if it exists — `uv`, `rustup-init`, `bun` all do; you get the vendor's artifact + sha pin + reproducible re-run. (b) No formula → `curl -o` the script, verify vendor checksum/signature if published, inspect, then run — never blind-pipe. (c) blind `curl … | sh` only as last resort, HTTPS-to-official-domain only.
+   - Migrate existing blind pipes in `install.sh` (uv, rust) to brew formulae / fetch-verify-run.
+
+---
+
+## 7. Files to change
 
 - **NEW** `config/apps.conf` — app registry (the table above).
 - **NEW** `config/Brewfile` — generated, committed.
 - **NEW** `custom_bins/app-picker` — gum toggle TUI → writes Brewfile.
-- **NEW** `scripts/setup/auth-setup` — auth checklist.
-- **EDIT** `config.sh` — add `apps` to `INSTALL_REGISTRY`; remove pruned items (pending approval).
-- **EDIT** `install.sh` — `--apps` block: bootstrap gum, run picker, `brew bundle --file=config/Brewfile`; remove inline Finicky + pruned experimental/coven blocks.
+- **NEW** `scripts/setup/auth-setup` — auth checklist + `spctl`/`codesign` signature-verify step (§6.2).
+- **EDIT** `config.sh` — add `apps` to `INSTALL_REGISTRY`; remove pruned items; add LuLu (optional, OFF) to apps.conf.
+- **EDIT** `install.sh` — `--apps` block: bootstrap gum, run picker, `brew bundle --file=config/Brewfile`; remove inline Finicky + pruned experimental/coven blocks; migrate uv/rust `curl|bash` → brew formulae / fetch-verify-run (§6.4).
 - **EDIT** `scripts/shared/helpers.sh` — small `brew bundle` + `mas` helpers if needed.
-- **EDIT** `claude/rules/supply-chain-security.md`, `CLAUDE.md` — policy + how-to.
+- **EDIT** `claude/rules/supply-chain-security.md`, `CLAUDE.md` — policy + how-to + quarantine/no-`--no-quarantine` rule + curl|bash hardening rule.
 - **EDIT** `config/macos_settings.sh` — dock/menu-bar follow-up (optional, can defer).
 
-## 7. Verification
+## 8. Verification
 
 - `mas search` / `brew info` each *verify*-flagged id before committing the Brewfile.
 - `brew bundle check --file=config/Brewfile` (dry, on a Mac) — can't run here (Linux container); will gate behind a note for you to run, or validate syntax with a parser.
 - `app-picker` run with `--dry-run` to confirm it emits a valid Brewfile without installing.
 - Shellcheck the new scripts.
 
-## 8. Resolved decisions
+## 9. Resolved decisions
 
 1. **Prune**: zerobrew + Coven/tap only (P1, P3). ty, zotero-mcp, `experimental` component all stay.
 2. **Antivirus**: Trellix = university-managed (checklist note, not Brewfile). Malwarebytes = optional cask, default OFF, conflict note.
 3. **Optional apps**: Google Drive + WakaTime default OFF (toggle on in picker).
 4. **TUI**: gum (bootstrapped after Homebrew). fzf `--preview` remains a drop-in alt.
+5. **Malicious apps/executables** (§6): enforce quarantine policy + `spctl`/`codesign` verify step + LuLu (optional, OFF) + harden `curl|bash` → prefer brew formula, else fetch-verify-run. All four selected.
 
 All open questions resolved — ready to implement on approval.
