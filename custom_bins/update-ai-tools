@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # AI CLI Tools Auto-Update
 # ═══════════════════════════════════════════════════════════════════════════════
-# Updates Claude Code, Gemini CLI, and Codex CLI using the correct method
+# Updates Claude Code, Codex CLI, and OpenCode using the correct method
 # per tool (brew on macOS, bun on Linux). Designed to run from launchd/cron.
 #
 # Usage:
@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: update-ai-tools [--dry-run]"
             echo ""
-            echo "Updates Claude Code, Gemini CLI, and Codex CLI."
+            echo "Updates Claude Code, Codex CLI, and OpenCode."
             echo "Uses brew on macOS and bun on Linux."
             echo ""
             echo "Options:"
@@ -159,8 +159,8 @@ log "PATH: $PATH"
 set +e
 
 update_claude
-update_tool "gemini" "gemini-cli" "@google/gemini-cli"
-update_tool "codex"  "codex"      "@openai/codex"
+update_tool "codex"    "codex"    "@openai/codex"
+update_tool "opencode" "opencode" "opencode-ai"
 
 set -e
 

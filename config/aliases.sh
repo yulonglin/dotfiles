@@ -1215,7 +1215,7 @@ fi
 # AI CLI Tools
 # -------------------------------------------------------------------
 # Health check for all AI CLI tools
-alias ai-check='echo "Checking AI CLI tools..." && claude --version 2>/dev/null && gemini --version 2>/dev/null && codex --version 2>/dev/null'
+alias ai-check='echo "Checking AI CLI tools..." && claude --version 2>/dev/null && codex --version 2>/dev/null && opencode --version 2>/dev/null'
 
 # Log sandbox denials for a command (macOS/Linux)
 codex-denials() {

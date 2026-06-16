@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup daily auto-update for AI CLI tools (Claude Code, Gemini CLI, Codex CLI)
+# Setup daily auto-update for AI CLI tools (Claude Code, Codex CLI, OpenCode)
 # Works on macOS (launchd) and Linux (cron)
 
 set -euo pipefail
@@ -26,7 +26,7 @@ ensure_bun_for_linux() {
         return 0
     fi
 
-    _sched_log_info "bun not found; installing bun for Gemini/Codex updates..."
+    _sched_log_info "bun not found; installing bun for Codex/OpenCode updates..."
 
     if ! command -v curl &>/dev/null; then
         _sched_log_warn "curl is required to install bun. Skipping AI tools auto-update setup."

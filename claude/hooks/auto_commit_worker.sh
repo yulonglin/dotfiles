@@ -63,7 +63,7 @@ fi
 : "${AUTO_AGENT_APPROVAL_FILE:=$HOME/.claude/flags/auto-agent-approved-until}"
 : "${AUTO_AGENT_STATE_DIR:=$HOME/.claude/state}"
 : "${AUTO_AGENT_LOG_DIR:=$HOME/.claude/logs/auto-commit}"
-: "${AUTO_COMMIT_BACKEND_ORDER:=codex,gemini}"
+: "${AUTO_COMMIT_BACKEND_ORDER:=codex,opencode}"
 : "${AUTO_COMMIT_ENABLE_CLAUDE_FALLBACK:=0}"
 : "${AUTO_COMMIT_DRY_RUN:=0}"
 : "${AUTO_AGENT_EXCLUDE_REGEX:=^\\.claude/worktrees/}"
@@ -246,10 +246,9 @@ run_backend() {
       command -v codex >/dev/null 2>&1 || return 1
       run_with_timeout 240 codex -a never -s workspace-write exec --cd "$REPO_ROOT" --skip-git-repo-check "$prompt" >> "$log_file" 2>&1
       ;;
-    gemini)
-      command -v gemini >/dev/null 2>&1 || return 1
-      run_with_timeout 240 gemini \
-        -p "$prompt" --approval-mode yolo --output-format text >> "$log_file" 2>&1
+    opencode)
+      command -v opencode >/dev/null 2>&1 || return 1
+      run_with_timeout 240 opencode run "$prompt" >> "$log_file" 2>&1
       ;;
     claude)
       [[ "${AUTO_COMMIT_ENABLE_CLAUDE_FALLBACK:-0}" == "1" ]] || return 1

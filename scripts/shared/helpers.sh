@@ -416,15 +416,31 @@ install_claude_code() {
     fi
 }
 
-install_gemini_cli() {
-    if is_installed gemini; then return 0; fi
-    log_info "Installing Gemini CLI..."
+install_opencode() {
+    if is_installed opencode; then return 0; fi
+    log_info "Installing OpenCode..."
+    # Official CORE Homebrew formula (NOT the anomalyco/tap) — see supply-chain-security.md
     if is_macos; then
-        brew_install gemini-cli
+        brew_install opencode
     elif cmd_exists bun; then
-        bun add -g @google/gemini-cli &>/dev/null || { log_warning "Gemini CLI failed"; return 1; }
+        bun add -g opencode-ai &>/dev/null || { log_warning "OpenCode failed"; return 1; }
     else
-        log_warning "bun is required to install Gemini CLI on Linux; skipping"
+        log_warning "bun is required to install OpenCode on Linux; skipping"
+        return 1
+    fi
+}
+
+# Antigravity CLI (binary: `agy`) — Google's OFFICIAL successor to Gemini CLI
+# (Gemini CLI consumer access ends 2026-06-18). Official cask, no third-party tap.
+install_antigravity_cli() {
+    if is_installed agy --version; then return 0; fi
+    log_info "Installing Antigravity CLI (agy)..."
+    if is_macos; then
+        brew_install antigravity-cli true   # official cask
+    else
+        # Linux: Google ships a curl installer, but per supply-chain-security.md we
+        # do NOT blind-pipe an unverified URL. Install manually on Linux.
+        log_warning "Antigravity CLI on Linux: install manually — https://antigravity.google/docs/cli-features (skipping)"
         return 1
     fi
 }

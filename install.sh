@@ -50,7 +50,7 @@ SELECTIVE INSTALLATION:
 COMPONENTS:
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
-    --ai-tools        Enable AI CLI tools (Claude, Gemini, Codex)
+    --ai-tools        Enable AI CLI tools (Claude, Codex, OpenCode, Antigravity)
     --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
@@ -237,7 +237,7 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Pre-set PATH for subshells
     [[ -d "$HOME/.claude/bin" ]] && export PATH="$HOME/.claude/bin:$PATH"
 
-    # Bun must install before Gemini/Codex on Linux (they need `bun add -g`)
+    # Bun must install before Codex/OpenCode on Linux (they need `bun add -g`)
     if is_linux && ! cmd_exists bun; then
         log_info "Installing bun..."
         curl -fsSL https://bun.sh/install | bash
@@ -248,13 +248,15 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     if is_macos; then
         # brew has a global lock — sequential
         install_claude_code
-        install_gemini_cli
         install_codex_cli
+        install_opencode
+        install_antigravity_cli   # official Gemini CLI successor (cask, macOS)
     else
         run_parallel "Installing AI CLI tools" \
             "claude|install_claude_code" \
-            "gemini|install_gemini_cli" \
-            "codex|install_codex_cli"
+            "codex|install_codex_cli" \
+            "opencode|install_opencode" \
+            "antigravity|install_antigravity_cli"
     fi
 
     # MCP servers (sequential — unclear if concurrent-safe)
