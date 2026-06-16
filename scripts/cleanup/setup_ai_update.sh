@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup daily auto-update for AI CLI tools (Claude Code, Codex CLI, OpenCode)
+# Setup daily auto-update for AI CLI tools (Claude Code, Antigravity CLI, Codex CLI, OpenCode)
 # Works on macOS (launchd) and Linux (cron)
 
 set -euo pipefail

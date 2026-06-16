@@ -202,11 +202,7 @@ if [[ "$INSTALL_EXTRAS" == "true" ]]; then
     log_section "INSTALLING EXTRAS"
 
     # Rust toolchain (needed for code2prompt)
-    if ! is_installed cargo; then
-        log_info "Installing Rust..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
-    fi
-    source "$HOME/.cargo/env" 2>/dev/null || true
+    install_rust_toolchain
 
     if is_macos; then
         install_packages brew "${PACKAGES_EXTRAS_MACOS[@]}"
@@ -228,11 +224,7 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     log_section "INSTALLING AI CLI TOOLS"
 
     # Rust toolchain (needed for claude-tools build in deploy.sh)
-    if ! is_installed cargo; then
-        log_info "Installing Rust toolchain (user-level, no root needed)..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
-    fi
-    source "$HOME/.cargo/env" 2>/dev/null || true
+    install_rust_toolchain
 
     # Pre-set PATH for subshells
     [[ -d "$HOME/.claude/bin" ]] && export PATH="$HOME/.claude/bin:$PATH"

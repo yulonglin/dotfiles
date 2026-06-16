@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: update-ai-tools [--dry-run]"
             echo ""
-            echo "Updates Claude Code, Codex CLI, and OpenCode."
+            echo "Updates Claude Code, Antigravity CLI, Codex CLI, and OpenCode."
             echo "Uses brew on macOS and bun on Linux."
             echo ""
             echo "Options:"
@@ -147,6 +147,34 @@ update_claude() {
     claude update 2>&1 || log_err "Claude Code update failed"
 }
 
+# ─── Update Antigravity CLI ─────────────────────────────────────────────────
+
+# Antigravity CLI (`agy`, Google's Gemini CLI successor) is a macOS cask and a
+# manual install on Linux (no bun/npm package) — so it can't use update_tool.
+update_antigravity() {
+    if ! command -v agy &>/dev/null; then
+        log_skip "agy not installed, skipping"
+        return 0
+    fi
+
+    # No brew (i.e. Linux manual install) → nothing to auto-update.
+    if ! is_macos || ! command -v brew &>/dev/null; then
+        log_skip "agy: no brew (Linux manual install) — update manually, skipping"
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "[DRY RUN] Would run: brew upgrade --cask antigravity-cli"
+        return 0
+    fi
+
+    log "Updating Antigravity CLI..."
+    # NOTE: if the cask declares `auto_updates true`, brew skips it unless --greedy.
+    # Verify on a real Mac whether --greedy is needed for `agy` to actually move.
+    NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --cask antigravity-cli 2>&1 \
+        || log_err "Antigravity CLI brew upgrade failed"
+}
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 acquire_lock
@@ -159,6 +187,7 @@ log "PATH: $PATH"
 set +e
 
 update_claude
+update_antigravity
 update_tool "codex"    "codex"    "@openai/codex"
 update_tool "opencode" "opencode" "opencode-ai"
 
