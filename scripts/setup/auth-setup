@@ -72,6 +72,8 @@ print_checklist() {
   [ ] Trellix         — UNIVERSITY-MANAGED: install/update via your uni, NOT Homebrew.
                         Do not also run Malwarebytes real-time (on-demand scan is fine).
   [ ] Alfred          — point sync folder at Dropbox so workflows/prefs follow you
+  [ ] Login items     — run `setup-login-items` to seed menu-bar apps (Stats, FineTune,
+                        Tailscale, NordVPN). Additive/bootstrap-once — won't fight you.
 EOF
 }
 
