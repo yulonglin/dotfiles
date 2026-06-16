@@ -28,11 +28,3 @@
   settings_keys: []
   reason: "Rust-based Python type checker, 10-60x faster than mypy/pyright. Alpha — fall back to pyright if gaps block."
   status: trial
-
-- name: zerobrew
-  added: 2026-04-01
-  review_by: 2026-07-01
-  installed_via: "curl https://zerobrew.rs/install | bash"
-  settings_keys: []
-  reason: "Fast Rust-based Homebrew client. Same UX, faster."
-  status: trial
