@@ -28,6 +28,7 @@ If you're an AI agent (Claude Code, Codex, etc.) working in this repo, read this
 | Add a new alias | `config/aliases.sh` (or `aliases_<name>.sh` for env-specific) |
 | Add a deploy component | Create `deploy_X()` in `deploy.sh` — see [Adding New Features](#adding-new-features) |
 | Add a custom binary | Drop it in `custom_bins/` (already on PATH); `chmod +x` |
+| Install/manage Mac apps | Add a line to `config/apps.conf` → run `app-picker` (gum TUI) → `brew bundle --file=config/Brewfile`. Official casks + `mas` only, **no third-party taps**. Then `scripts/setup/auth-setup` |
 | Add an encrypted secret | `secrets-edit` (interactive dotenv editor) |
 | Run an experiment with resource caps | `jexp uv run python -m ...` (Linux: needs pueue + systemd user session) |
 | Commit / commit + push + PR | `/commit` skill or `/commit-push-sync` |
