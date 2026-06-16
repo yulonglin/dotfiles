@@ -19,6 +19,7 @@
 #   setup-login-items --reset-state   # forget what we've bootstrapped (then re-seeds)
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
+setopt extendedglob   # for whitespace-run trimming in the conf-parse loop
 
 SCRIPT_DIR="${0:A:h}"
 DOT_DIR="${DOT_DIR:-${SCRIPT_DIR:h:h}}"
@@ -62,6 +63,8 @@ app_path_for() {
 }
 
 # Current login item names (one per line).
+# NB: assumes no login-item display name contains a comma (AppleScript joins the
+# list with ", "). True for the curated apps; revisit if that ever changes.
 current_login_items() {
     osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null \
         | tr ',' '\n' | sed 's/^ *//;s/ *$//'
@@ -89,20 +92,21 @@ hdr "Login items (curated: $CONF)"
 
 added=0 skipped=0 missing=0
 while IFS='|' read -r name hidden; do
-    name="${name## }"; name="${name%% }"
+    name="${name##[[:space:]]##}"; name="${name%%[[:space:]]##}"   # strip leading/trailing whitespace runs (incl. tabs)
     [[ -z "$name" || "${name[1]}" == "#" ]] && continue
     hidden="${hidden// }"; [[ -z "$hidden" ]] && hidden="true"
 
     apath="$(app_path_for "$name" || true)"
 
     if [[ "$MODE" == "list" ]]; then
-        local status
-        if [[ -z "$apath" ]]; then status="not installed"
-        elif in_existing "$name"; then status="login item ✓"
-        elif in_state "$name"; then status="removed by you (respected)"
-        else status="installed, NOT a login item"
+        # NB: don't name this 'status' — zsh reserves it (read-only alias for $?).
+        local st
+        if [[ -z "$apath" ]]; then st="not installed"
+        elif in_existing "$name"; then st="login item ✓"
+        elif in_state "$name"; then st="removed by you (respected)"
+        else st="installed, NOT a login item"
         fi
-        printf '  %-22s %s\n' "$name" "$status"
+        printf '  %-22s %s\n' "$name" "$st"
         continue
     fi
 
