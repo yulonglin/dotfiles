@@ -74,6 +74,7 @@ DEPLOY_REGISTRY=(
     "bedtime|Bedtime timezone enforcement|macos|true"
     "text-replacements|Sync macOS + Alfred text replacements|macos|true"
     "mouseless|Keyboard-driven mouse control|macos|true"
+    "alfred|Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey)|macos|true"
     "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true"
     "vpn|NordVPN + Tailscale split tunnel daemon|macos|true"
     "pueue|Pueue + systemd resource slices|linux|true"

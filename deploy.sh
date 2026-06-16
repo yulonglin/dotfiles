@@ -63,6 +63,7 @@ COMPONENTS:
     --codex           Deploy Codex CLI config (~/.codex symlink)
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
+    --alfred          Repair Dropbox-synced Alfred prefs: de-quarantine, +x, hotkey (macOS only)
     --ghostty         Deploy Ghostty terminal config
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
     --htop            Deploy htop configuration
@@ -906,6 +907,21 @@ if [[ "$DEPLOY_MOUSELESS" == "true" ]]; then
         fi
     else
         log_info "Mouseless is macOS-only, skipping"
+    fi
+fi
+
+# ─── Alfred prefs repair (macOS only) ─────────────────────────────────────────
+# Cloud-synced Alfred prefs (Dropbox) acquire quarantine xattrs that block
+# workflow scripts ("posix_spawn: error 1"), lose script +x bits, and reset the
+# per-machine summon hotkey. alfred-fix repairs all three; safe to re-run.
+
+if [[ "$DEPLOY_ALFRED" == "true" ]] && is_macos; then
+    if [[ -f "$HOME/Library/Application Support/Alfred/prefs.json" ]]; then
+        log_info "Repairing Alfred preferences (de-quarantine, +x, hotkey)..."
+        DOT_DIR="$DOT_DIR" "$DOT_DIR/custom_bins/alfred-fix" || \
+            log_warning "alfred-fix reported an issue (see output above)"
+    else
+        log_info "Alfred not set up (no prefs.json) — skipping alfred-fix"
     fi
 fi
 

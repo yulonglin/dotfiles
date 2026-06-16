@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# alfred-fix — repair Alfred preferences synced via Dropbox/iCloud/cloud storage.
+#
+# Cloud sync (especially Dropbox's File Provider) breaks Alfred in three ways:
+#   1. Quarantine xattrs (com.apple.quarantine / DropboxFileProvider) get stamped
+#      on every synced file. Gatekeeper then blocks workflow scripts from exec'ing
+#      → "Couldn't posix_spawn: error 1 / The external script ... doesn't have
+#      execute (+x) permissions." (Misleading message — the real cause is quarantine.)
+#   2. Execute bits on workflow scripts are not always preserved across sync.
+#   3. The Alfred summon hotkey lives in a PER-MACHINE dir
+#      (preferences/local/<localhash>/hotkey/prefs.plist) keyed by a hardware hash,
+#      so a new Mac gets a fresh localhash and resets to the ⌘Space default.
+#
+# Usage:
+#   alfred-fix            Repair this machine: de-quarantine, restore +x, seed hotkey
+#   alfred-fix --capture  Snapshot this machine's hotkey into dotfiles (the golden seed)
+#   alfred-fix --help
+#
+# Idempotent and safe to re-run (e.g. after every big Dropbox re-sync).
+set -euo pipefail
+
+PREFS_JSON="$HOME/Library/Application Support/Alfred/prefs.json"
+# Golden hotkey seed lives in the dotfiles repo. Prefer DOT_DIR; otherwise derive
+# the repo root from this script's location (custom_bins/ is one level below it).
+GOLDEN_DIR="${DOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/config/alfred/local-golden"
+
+log()  { printf '\033[0;34m[alfred-fix]\033[0m %s\n' "$*"; }
+warn() { printf '\033[0;33m[alfred-fix]\033[0m %s\n' "$*" >&2; }
+
+# --help prints the header comment block (lines after the shebang, up to the first
+# line of code), so the usage text can never drift out of sync with a hardcoded range.
+[[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
+  awk '/^#!/ {next} /^[^#]/ {exit} {print}' "$0" | sed 's/^# \{0,1\}//'; exit 0
+}
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  warn "Alfred is macOS-only; nothing to do."
+  exit 0
+fi
+
+if [[ ! -f "$PREFS_JSON" ]]; then
+  warn "Alfred prefs.json not found at $PREFS_JSON — is Alfred installed and launched once?"
+  exit 0
+fi
+
+# Authoritative prefs-bundle path + this machine's localhash, straight from Alfred.
+ALFRED_DIR="$(plutil -extract current   raw -o - "$PREFS_JSON" 2>/dev/null || true)"
+LOCALHASH="$(plutil -extract localhash raw -o - "$PREFS_JSON" 2>/dev/null || true)"
+
+if [[ -z "$ALFRED_DIR" || ! -d "$ALFRED_DIR" ]]; then
+  warn "Alfred sync folder not found (current='$ALFRED_DIR'). Set it in Alfred > Advanced first."
+  exit 0
+fi
+log "Alfred prefs: $ALFRED_DIR"
+
+# ── --capture: snapshot this machine's hotkey as the golden seed ────────────────
+if [[ "${1:-}" == "--capture" ]]; then
+  src="$ALFRED_DIR/preferences/local/$LOCALHASH/hotkey/prefs.plist"
+  if [[ ! -f "$src" ]]; then
+    warn "No hotkey prefs at $src to capture."
+    exit 1
+  fi
+  mkdir -p "$GOLDEN_DIR/hotkey"
+  cp "$src" "$GOLDEN_DIR/hotkey/prefs.plist"
+  log "Captured hotkey → $GOLDEN_DIR/hotkey/prefs.plist"
+  plutil -p "$GOLDEN_DIR/hotkey/prefs.plist"
+  exit 0
+fi
+
+# ── 1. Strip quarantine recursively (the posix_spawn error 1 root cause) ────────
+log "Stripping com.apple.quarantine across the prefs bundle…"
+xattr -dr com.apple.quarantine "$ALFRED_DIR" 2>/dev/null || true
+log "Quarantine cleared."
+
+# ── 2. Restore execute bits on workflow scripts ─────────────────────────────────
+# Precise pass: chmod +x every file referenced as a `scriptfile` in a workflow's
+# info.plist (these are the ones Alfred actually exec's).
+log "Restoring execute bits on workflow scripts…"
+fixed=0
+while IFS= read -r plist; do
+  wfdir="$(dirname "$plist")"
+  while IFS= read -r sf; do
+    [[ -z "$sf" ]] && continue
+    target="$wfdir/${sf#./}"
+    if [[ -f "$target" && ! -x "$target" ]]; then
+      chmod +x "$target" && fixed=$((fixed + 1))
+    fi
+  done < <(/usr/libexec/PlistBuddy -c "Print" "$plist" 2>/dev/null \
+             | grep -oE 'scriptfile = .*' | sed 's/scriptfile = //')
+done < <(find "$ALFRED_DIR/workflows" -name info.plist 2>/dev/null)
+
+# Fallback pass: any remaining non-exec file that starts with a shebang.
+while IFS= read -r f; do
+  if head -c2 "$f" 2>/dev/null | grep -q '#!'; then
+    chmod +x "$f" && fixed=$((fixed + 1))
+  fi
+done < <(find "$ALFRED_DIR/workflows" -type f ! -perm -u+x 2>/dev/null)
+log "Restored +x on $fixed script(s)."
+
+# ── 3. Seed the per-machine summon hotkey from the golden snapshot ──────────────
+# Only acts when the current hotkey is missing or still the macOS factory default
+# (⌘Space, mod=1048576), so a deliberate per-machine choice is never clobbered.
+golden="$GOLDEN_DIR/hotkey/prefs.plist"
+target_dir="$ALFRED_DIR/preferences/local/$LOCALHASH/hotkey"
+target="$target_dir/prefs.plist"
+
+if [[ -z "$LOCALHASH" ]]; then
+  warn "Could not read localhash; skipping hotkey seed."
+elif [[ ! -f "$golden" ]]; then
+  log "No golden hotkey yet — run 'alfred-fix --capture' on a machine with the hotkey you want."
+else
+  cur_mod="$(/usr/libexec/PlistBuddy -c 'Print :default:mod' "$target" 2>/dev/null || echo missing)"
+  gold_mod="$(/usr/libexec/PlistBuddy -c 'Print :default:mod' "$golden" 2>/dev/null || echo '')"
+  if [[ "$cur_mod" != "missing" && "$cur_mod" != "1048576" ]]; then
+    log "Hotkey already customized on this machine (mod=$cur_mod) — leaving as-is."
+  elif [[ "$cur_mod" == "$gold_mod" ]]; then
+    log "Hotkey already matches the golden seed — nothing to do."
+  else
+    # Alfred overwrites local prefs on quit, so quit → write → relaunch.
+    log "Seeding summon hotkey from golden (current mod=$cur_mod → $gold_mod)…"
+    relaunch=false
+    if pgrep -xq Alfred; then
+      osascript -e 'tell application "Alfred" to quit' 2>/dev/null || killall Alfred 2>/dev/null || true
+      relaunch=true
+      # Wait until Alfred has fully exited — it flushes in-memory prefs on quit,
+      # which would clobber our seed if we wrote before it finished (up to ~5s).
+      for _ in $(seq 1 25); do pgrep -xq Alfred || break; sleep 0.2; done
+    fi
+    mkdir -p "$target_dir"
+    cp "$golden" "$target"
+    if $relaunch; then
+      open -a Alfred 2>/dev/null || true
+      log "Hotkey seeded and Alfred relaunched."
+    else
+      log "Hotkey seeded. Launch Alfred to pick it up."
+    fi
+  fi
+fi
+
+log "Done."

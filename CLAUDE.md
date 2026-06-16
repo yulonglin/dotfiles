@@ -127,6 +127,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
 - Mouseless - Keyboard-driven mouse control (macOS only, copied not symlinked)
+- Alfred prefs repair - Fixes Dropbox-synced Alfred breakage (macOS only): strips `com.apple.quarantine` xattrs that block workflow scripts (`posix_spawn: error 1`), restores lost script `+x` bits, and seeds the per-machine summon hotkey from a golden snapshot. Runs `custom_bins/alfred-fix`; capture a new golden hotkey with `alfred-fix --capture`. Clipboard history is intentionally local-only and never syncs (Alfred design) — it starts fresh on each machine.
 - Bear CLI symlink - `/Applications/Bear.app/Contents/MacOS/bearcli` → `/usr/local/bin/bearcli` (macOS only, so `bearcli` works in cron/scripts where shell aliases don't apply)
 - Text replacements - Bidirectional sync with macOS + Alfred snippets (daily 9 AM, requires Full Disk Access for terminal app). macOS uses raw shortcuts; Alfred applies collection prefix at runtime (e.g., `fm.hi`)
 - Encrypted secrets (SOPS+age / BWS) - Stores API keys via Bitwarden Secrets Manager (primary) or SOPS+age (fallback). Backend auto-detected: bws if token + CLI exist, else sops. Override with `DOTFILES_SECRETS_BACKEND` env var
@@ -171,6 +172,7 @@ config/
 ├── htop/htoprc           # htop config (symlinked, uses dynamic CPU meters)
 ├── serena/serena_config.yml  # Serena MCP config (symlinked, dashboard auto-open disabled)
 ├── mouseless/config.yaml # Mouseless keyboard mouse config (macOS only, copied not symlinked)
+├── alfred/local-golden/  # Golden Alfred summon hotkey, seeded onto new Macs by alfred-fix
 ├── key_bindings.sh       # ZSH key bindings (sourced by zshrc.sh)
 ├── macos_default_apps.conf   # Default editor + file type associations (single source of truth)
 ├── gitconfig             # Git config template
@@ -231,7 +233,8 @@ custom_bins/              # Custom utilities (added to PATH)
 ├── any2md                # Universal content-to-markdown converter (files, URLs, arxiv, dirs)
 ├── jguard                # Memory pressure monitor for Pueue workloads (PSI-based)
 ├── dotfiles-secrets      # Private dotfiles secrets helper (paths, key listing, shell exports)
-└── setup-envrc           # Per-project secret picker + .envrc generator (fzf, drift detection, eval-based exports)
+├── setup-envrc           # Per-project secret picker + .envrc generator (fzf, drift detection, eval-based exports)
+└── alfred-fix            # Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey seed); --capture saves golden hotkey
 
 lib/plotting/             # Python plotting library (deployed to ~/.local/lib/plotting/)
 ├── anthro_colors.py      # Anthropic brand colors (ground truth)
