@@ -1,0 +1,105 @@
+#!/usr/bin/env zsh
+# ═══════════════════════════════════════════════════════════════════════════════
+# auth-setup — post-install login/setup checklist + signature verification
+# ═══════════════════════════════════════════════════════════════════════════════
+# Run AFTER `brew bundle`. macOS only. Reads config/apps.conf for per-app auth notes.
+#
+# Usage:
+#   auth-setup              # interactive checklist (auth steps) + signature verify
+#   auth-setup --verify     # ONLY run the codesign/spctl signature audit
+#   auth-setup --checklist  # ONLY print the auth/login checklist
+#
+# Nothing here stores secrets. API-key apps are pointed at the existing secrets
+# flow (setup-envrc / with-secrets) — never plaintext.
+# ═══════════════════════════════════════════════════════════════════════════════
+set -uo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+DOT_DIR="${DOT_DIR:-${SCRIPT_DIR:h:h}}"
+CONF="$DOT_DIR/config/apps.conf"
+
+DO_CHECKLIST=true
+DO_VERIFY=true
+case "${1:-}" in
+    --verify)    DO_CHECKLIST=false ;;
+    --checklist) DO_VERIFY=false ;;
+    -h|--help)   sed -n '2,16p' "$0"; exit 0 ;;
+esac
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "auth-setup: macOS only (uses spctl/codesign + open)." >&2
+    exit 1
+fi
+[[ -f "$CONF" ]] || { echo "auth-setup: registry not found: $CONF" >&2; exit 1; }
+
+hdr() { print -P "%F{cyan}── $* ──%f"; }
+
+# Human-readable instruction per auth type.
+auth_hint() {
+    case "$1" in
+        login)        echo "Open and sign in." ;;
+        apikey)       echo "API key — add via 'setup-envrc' in the relevant repo (no plaintext)." ;;
+        pair-phone)   echo "Pair with the phone app (scan QR in the desktop/extension)." ;;
+        safari-ext)   echo "Enable in Safari → Settings → Extensions, then grant site access." ;;
+        license)      echo "Enter your license key (paid app)." ;;
+        alfred)       echo "Set sync folder to Dropbox (Prefs → Advanced → Set sync folder), apply Powerpack license." ;;
+        things-cloud) echo "Sign into Things Cloud to sync across devices." ;;
+        *)            echo "" ;;
+    esac
+}
+
+# ─── Checklist ───────────────────────────────────────────────────────────────
+print_checklist() {
+    hdr "Post-install setup checklist"
+    echo "Apps that need a login or manual step. (GUI logins can't be automated.)"
+    echo ""
+    local method id cat tier def name desc auth
+    while IFS='|' read -r method id cat tier def name desc auth; do
+        [[ -z "${method// }" || "${method[1]}" == "#" ]] && continue
+        auth="${auth// }"
+        [[ -z "$auth" || "$auth" == "none" ]] && continue
+        printf '  [ ] %-32s %s\n' "$name" "$(auth_hint "$auth")"
+    done < "$CONF"
+
+    echo ""
+    hdr "Reminders"
+    cat <<'EOF'
+  [ ] App Store        — SIGN IN via the App Store GUI first: `mas` can't sign in
+                         (Apple removed the CLI API). A never-acquired free app may
+                         need a one-time "Get" click before `mas install` works.
+  [ ] git / gh        — `gh auth login` (SSH + identity also sync via gist)
+  [ ] Safari exts     — uBlock Origin Lite, Userscripts, Bitwarden, 2FAS: ENABLE in Safari
+  [ ] Trellix         — UNIVERSITY-MANAGED: install/update via your uni, NOT Homebrew.
+                        Do not also run Malwarebytes real-time (on-demand scan is fine).
+  [ ] Alfred          — point sync folder at Dropbox so workflows/prefs follow you
+EOF
+}
+
+# ─── Signature / notarization audit (§6.2) ───────────────────────────────────
+# Eyeballing installers is theatre; THIS is the real check — is each app signed
+# by a Developer ID and notarized by Apple?
+verify_signatures() {
+    hdr "Signature + notarization audit (/Applications)"
+    echo "Gatekeeper assessment per installed app. ✓ accepted = signed + notarized."
+    echo ""
+    local app appname result
+    for app in /Applications/*.app; do
+        [[ -d "$app" ]] || continue
+        appname="${app:t:r}"
+        if spctl --assess --type execute "$app" &>/dev/null; then
+            printf '  %s %s\n' "✓" "$appname"
+        else
+            # Not accepted by Gatekeeper — surface the authority so you can judge it.
+            local authority
+            authority=$(codesign -dv --verbose=2 "$app" 2>&1 | grep -m1 '^Authority=' | cut -d= -f2-)
+            printf '  %s %-30s  %s\n' "⚠️ " "$appname" "${authority:-unsigned / no Developer ID}"
+        fi
+    done
+    echo ""
+    echo "⚠️  = not Gatekeeper-accepted: unsigned, ad-hoc, or self-distributed."
+    echo "    Mac App Store + notarized casks should all show ✓. Investigate any ⚠️."
+}
+
+[[ "$DO_CHECKLIST" == "true" ]] && print_checklist
+[[ "$DO_CHECKLIST" == "true" && "$DO_VERIFY" == "true" ]] && echo ""
+[[ "$DO_VERIFY" == "true" ]] && verify_signatures
