@@ -35,7 +35,7 @@
 
 # Auto-commit policy
 # Keep Claude fallback opt-in because it is usually the most expensive backend.
-: "${AUTO_COMMIT_BACKEND_ORDER:=codex,gemini}"
+: "${AUTO_COMMIT_BACKEND_ORDER:=codex,opencode}"
 : "${AUTO_COMMIT_ENABLE_CLAUDE_FALLBACK:=0}"
 : "${AUTO_COMMIT_DRY_RUN:=0}"
 : "${AUTO_COMMIT_USE_ASYNC:=1}"
