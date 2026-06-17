@@ -86,7 +86,7 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
 - [AI Assistants](#ai-assistants)
   - [Claude Code](#claude-code-primary-ai-assistant)
   - [Codex CLI](#codex-cli-openai)
-  - [Gemini CLI](#gemini-cli-google)
+  - [Antigravity CLI + OpenCode](#antigravity-cli-google--opencode)
 - [Terminal & Shell](#terminal--shell)
   - [Ghostty](#ghostty-terminal-emulator)
   - [Powerlevel10k Prompt](#powerlevel10k-prompt)
@@ -273,22 +273,22 @@ claude-tools context --list             # Show active plugins and available prof
 
 The configuration follows the same research discipline as Claude Code but adapted for Codex's execution model.
 
-### Gemini CLI (Google)
+### Antigravity CLI (Google) + OpenCode
 
-[Gemini CLI](https://github.com/google-gemini/gemini-cli) can sync with Claude Code configurations:
+Gemini CLI was retired by Google on **2026-06-18**; [Antigravity CLI](https://antigravity.google/docs/cli-features) (`agy`) is its official successor. [OpenCode](https://opencode.ai) is installed alongside as a model-agnostic OSS option. Both are installed by the `ai-tools` component.
+
+Antigravity CLI can sync with Claude Code skills:
 
 ```bash
-./scripts/sync_claude_to_gemini.sh  # Syncs skills/agents/permissions
+./scripts/sync_claude_to_antigravity.sh  # Symlinks Claude skills into agy
 ```
 
 **What it does:**
 
-- Symlinks Claude Code skills to `~/.gemini/skills/`
-- Converts Claude agents to Gemini skill format
-- Syncs permissions from `.claude/settings.json` to Gemini policies
-- Creates `GEMINI.md` pointer to CLAUDE.md
+- Symlinks Claude Code skills to `~/.gemini/antigravity-cli/skills/`
+- Project instructions come from `AGENTS.md` (Antigravity reads it natively)
 
-**Note:** Gemini CLI uses a different skills format. The sync script adapts Claude's configuration but some features may not translate directly.
+**Note:** Antigravity CLI is closed-source and brand-new; its skills/permissions schema differs from Claude's. The skills sync is adapted but untested end-to-end — permission sync is not yet ported (see the script header).
 
 ## Terminal & Shell
 

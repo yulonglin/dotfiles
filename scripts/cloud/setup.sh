@@ -57,7 +57,7 @@ command -v nvtop &>/dev/null || apt-get install -y nvtop 2>/dev/null || true
 service cron start 2>/dev/null || true
 ok "System deps installed"
 
-# ─── Node 20 (for Gemini CLI) ─────────────────────────────────────────────────
+# ─── Node 20 (for OpenCode / Node-based AI CLIs) ──────────────────────────────
 step "Node.js"
 if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d 'v')" -lt 20 ]]; then
     log "Installing Node 20..."
