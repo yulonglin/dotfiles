@@ -55,7 +55,8 @@ COMPONENTS:
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
     --pueue           Enable Pueue job scheduler (Linux only)
-    --experimental    Enable experimental features (ty type checker, zerobrew)
+    --experimental    Enable experimental features (ty type checker, zotero MCP)
+    --apps            Install GUI + App Store apps via Brewfile picker (macOS)
     --create-user     Create non-root dev user (Linux only)
     --no-<component>  Disable a component (e.g., --no-ai-tools)
     --force-reinstall Reinstall tools even if present
@@ -155,7 +156,13 @@ fi
 
 if ! is_installed uv; then
     log_info "Installing uv..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Prefer the official Homebrew formula on macOS: sha-pinned + reviewed, unlike
+    # the upstream curl|bash installer (authentic over HTTPS but not tamper-evident).
+    if is_macos && cmd_exists brew; then
+        brew_install uv
+    else
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
 fi
 
 fi  # INSTALL_CORE
@@ -195,11 +202,7 @@ if [[ "$INSTALL_EXTRAS" == "true" ]]; then
     log_section "INSTALLING EXTRAS"
 
     # Rust toolchain (needed for code2prompt)
-    if ! is_installed cargo; then
-        log_info "Installing Rust..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
-    fi
-    source "$HOME/.cargo/env" 2>/dev/null || true
+    install_rust_toolchain
 
     if is_macos; then
         install_packages brew "${PACKAGES_EXTRAS_MACOS[@]}"
@@ -385,12 +388,6 @@ if [[ "$INSTALL_EXPERIMENTAL" == "true" ]]; then
         uv tool install ty 2>/dev/null || log_warning "ty installation failed"
     fi
 
-    # zerobrew: fast Rust-based Homebrew client (installs to /opt/zerobrew, won't touch /opt/homebrew)
-    if ! is_installed zb; then
-        log_info "Installing zerobrew (experimental Homebrew alternative)..."
-        curl --proto '=https' --tlsv1.2 -fsSL https://zerobrew.rs/install | bash 2>/dev/null || log_warning "zerobrew installation failed"
-    fi
-
     # zotero-mcp-server: Zotero MCP for citation management (see config/experimental.yaml)
     if ! is_installed zotero-mcp && cmd_exists uv; then
         log_info "Installing zotero-mcp-server (citation library management)..."
@@ -413,11 +410,36 @@ if [[ "$INSTALL_MACOS_SETTINGS" == "true" ]] && is_macos && [[ -f "$DOT_DIR/conf
     "$DOT_DIR/config/macos_settings.sh" || log_warning "macOS settings had some errors"
 fi
 
-# ─── Finicky (macOS) ──────────────────────────────────────────────────────────
+# ─── GUI + App Store Apps (macOS, via Brewfile) ───────────────────────────────
+# Pick apps in a TUI (app-picker reads config/apps.conf → generates config/Brewfile),
+# then install via `brew bundle`. Official casks + Mac App Store only; never
+# --no-quarantine (Gatekeeper/notarization must stay on). Finicky now lives here too.
 
-if [[ "$INSTALL_FINICKY" == "true" ]] && is_macos && ! is_cask_installed finicky; then
-    log_info "Installing Finicky..."
-    brew_install finicky true
+if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
+    log_section "INSTALLING APPS (Brewfile) 📦"
+
+    if ! cmd_exists brew; then
+        log_warning "Homebrew required for apps — skipping"
+    else
+        # gum drives the picker; bootstrap it (tiny formula) if missing.
+        cmd_exists gum || brew_install gum
+
+        brewfile="$DOT_DIR/config/Brewfile"
+        if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; then
+            log_info "Non-interactive: using committed Brewfile (run 'app-picker' to customise)"
+        else
+            # Interactive: let the user toggle apps, regenerating the Brewfile.
+            "$DOT_DIR/custom_bins/app-picker" || log_warning "app-picker cancelled — using existing Brewfile"
+        fi
+
+        if [[ -f "$brewfile" ]]; then
+            log_info "Installing apps from Brewfile (this can take a while)..."
+            brew bundle --file="$brewfile" || log_warning "Some Brewfile entries failed (mas needs App Store sign-in)"
+            log_info "Next: run scripts/setup/auth-setup for logins + signature audit"
+        else
+            log_warning "No Brewfile at $brewfile — run 'app-picker' first"
+        fi
+    fi
 fi
 
 # ─── Done ─────────────────────────────────────────────────────────────────────

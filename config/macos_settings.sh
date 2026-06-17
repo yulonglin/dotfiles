@@ -76,6 +76,15 @@ configure_mouse() {
 configure_dock() {
     echo "  → Configuring Dock..."
 
+    # Auto-hide the Dock
+    defaults write com.apple.dock autohide -bool true 2>/dev/null || true
+
+    # No delay before the Dock appears on hover (instant show)
+    defaults write com.apple.dock autohide-delay -float 0 2>/dev/null || true
+
+    # Conservative icon size
+    defaults write com.apple.dock tilesize -int 48 2>/dev/null || true
+
     # Hide recent apps section
     defaults write com.apple.dock show-recents -bool false 2>/dev/null || true
 

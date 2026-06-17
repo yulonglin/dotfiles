@@ -366,6 +366,30 @@ install_direnv() {
     fi
 }
 
+# Rust toolchain (cargo) via rustup. macOS: official Homebrew formula (sha-pinned,
+# reviewed) provides `rustup-init`; run it non-interactively. Linux: keep the upstream
+# rustup installer but pin TLS (--proto '=https' --tlsv1.2) — no brew dependency.
+# See claude/rules/supply-chain-security.md § curl|bash Installers.
+install_rust_toolchain() {
+    if is_installed cargo; then
+        source "$HOME/.cargo/env" 2>/dev/null || true
+        return 0
+    fi
+    log_info "Installing Rust toolchain (user-level, no root needed)..."
+    if is_macos && cmd_exists brew; then
+        # Official formula ships `rustup-init`; install the default stable toolchain.
+        brew_install rustup
+        if cmd_exists rustup-init; then
+            rustup-init -y --quiet 2>/dev/null || log_warning "rustup-init failed"
+        elif cmd_exists rustup; then
+            rustup default stable 2>/dev/null || log_warning "rustup default stable failed"
+        fi
+    else
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+    fi
+    source "$HOME/.cargo/env" 2>/dev/null || true
+}
+
 install_bws() {
     if is_installed bws; then return 0; fi
     log_info "Installing bws (Bitwarden Secrets Manager CLI)..."
