@@ -7,18 +7,6 @@ dotfiles_secrets_dir() {
     printf '%s\n' "${DOTFILES_SECRETS_DIR:-$HOME/.config/dotfiles-secrets}"
 }
 
-dotfiles_secrets_enc() {
-    printf '%s/secrets.env.enc\n' "$(dotfiles_secrets_dir)"
-}
-
-dotfiles_secrets_sops_config() {
-    printf '%s/.sops.yaml\n' "$(dotfiles_secrets_dir)"
-}
-
-dotfiles_secrets_age_key() {
-    printf '%s\n' "${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
-}
-
 dotfiles_secrets_bws_token_file() {
     printf '%s\n' "${BWS_TOKEN_FILE:-$HOME/.config/bws/token}"
 }
@@ -29,29 +17,21 @@ dotfiles_secrets_backend() {
         printf '%s\n' "$explicit"
         return
     fi
-    # Auto-detect: prefer bws if BOTH token exists AND bws CLI is installed
+    # Auto-detect: bws if BOTH token exists AND bws CLI is installed
     if { [[ -n "${BWS_ACCESS_TOKEN:-}" ]] || [[ -f "$(dotfiles_secrets_bws_token_file)" ]]; } && \
        command -v bws >/dev/null 2>&1; then
         printf 'bws\n'
-    elif command -v sops >/dev/null 2>&1 && [[ -f "$(dotfiles_secrets_enc)" ]]; then
-        printf 'sops\n'
     else
         printf 'none\n'
     fi
 }
 
 dotfiles_secrets_harden_permissions() {
-    local secrets_dir sops_yaml enc age_key
+    local secrets_dir
 
     secrets_dir=$(dotfiles_secrets_dir)
-    sops_yaml=$(dotfiles_secrets_sops_config)
-    enc=$(dotfiles_secrets_enc)
-    age_key=$(dotfiles_secrets_age_key)
 
     if [[ -d "$secrets_dir" ]]; then chmod 700 "$secrets_dir" 2>/dev/null || true; fi
-    if [[ -f "$sops_yaml" ]]; then chmod 600 "$sops_yaml" 2>/dev/null || true; fi
-    if [[ -f "$enc" ]]; then chmod 600 "$enc" 2>/dev/null || true; fi
-    if [[ -f "$age_key" ]]; then chmod 600 "$age_key" 2>/dev/null || true; fi
 
     local bws_token
     bws_token=$(dotfiles_secrets_bws_token_file)
@@ -78,8 +58,6 @@ project_secret_harden_permissions() {
     local envrc="$project_root/.envrc"
     local env_file
 
-    if [[ -f "$project_root/.sops.yaml" ]]; then chmod 600 "$project_root/.sops.yaml" 2>/dev/null || true; fi
-    if [[ -f "$project_root/secrets.env.enc" ]]; then chmod 600 "$project_root/secrets.env.enc" 2>/dev/null || true; fi
     if [[ -f "$envrc" ]]; then chmod 600 "$envrc" 2>/dev/null || true; fi
 
     while IFS= read -r env_file; do

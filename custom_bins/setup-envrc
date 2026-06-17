@@ -142,7 +142,6 @@ list_sensitive_keys() {
     local keys
     keys=$(printf '%s\n' "${SECRETS_CACHE:-}" \
         | sed -n 's/^[[:space:]]*\([A-Za-z_][A-Za-z0-9_-]*\)=.*/\1/p')
-    # BWS entries are all secrets; only filter SOPS dotenv (which may have non-secret config)
     if [[ "$(dotfiles_secrets_backend)" != "bws" ]]; then
         keys=$(printf '%s\n' "$keys" | grep -iE "$KEY_PATTERN")
     fi
@@ -391,15 +390,10 @@ write_envrc() {
     shift
     local export_bindings=("$@")
     local helper_bin="$DOT_DIR/custom_bins/dotfiles-secrets"
-    local secrets_enc
-    local sops_config
     local binding env_key secret_key
     local plain_required_secrets=()   # Valid env names — loaded via 'shell' batch
     local bws_key_bindings=()         # Secret key contains spaces — use 'get-value'
     local final_env_names=""
-
-    secrets_enc=$(dotfiles_secrets_enc)
-    sops_config=$(dotfiles_secrets_sops_config)
 
     for binding in "${export_bindings[@]}"; do
         env_key=$(binding_env_key "$binding")
@@ -428,14 +422,12 @@ write_envrc() {
         local _cache_path
         _cache_path=$("$helper_bin" cache-path 2>/dev/null)
         [[ -n "$_cache_path" ]] && printf 'watch_file %q\n' "$_cache_path"
-        # Watch ALL backend files so direnv detects backend switches (SOPS→BWS or vice versa)
+        # Watch backend token file so direnv detects when BWS becomes available
         local _paths_output
         _paths_output=$("$helper_bin" paths 2>/dev/null)
         local _bws_token
         _bws_token=$(printf '%s\n' "$_paths_output" | sed -n 's/^BWS_TOKEN_FILE=//p')
         [[ -n "$_bws_token" ]] && printf 'watch_file %q\n' "$_bws_token"
-        printf 'watch_file %q\n' "$secrets_enc"
-        printf 'watch_file %q\n' "$sops_config"
         # Pin backend override if explicitly set at generation time
         if [[ -n "${DOTFILES_SECRETS_BACKEND:-}" ]]; then
             printf 'export DOTFILES_SECRETS_BACKEND=%q\n' "$DOTFILES_SECRETS_BACKEND"
@@ -1280,7 +1272,7 @@ COPY_EOF
             if [[ "$backend" == "bws" ]]; then
                 "$SECRETS_HELPER" bws-dump 2>/dev/null > "$preview_raw"
             else
-                # SOPS fallback: synthesize a raw dump from dotenv (env_name == bws_key)
+                # Non-BWS fallback: synthesize a raw dump from dotenv
                 : > "$preview_raw"
                 while IFS= read -r line; do
                     [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue

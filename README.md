@@ -61,7 +61,7 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
    # Hetzner / standard VPS (persistent /home)
    curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | USER_HOME=/home bash
    ```
-   This creates a non-root user, installs dependencies, clones dotfiles, and runs `install.sh` + `deploy.sh` automatically. It will prompt for GitHub auth and an optional age key (for encrypted secrets).
+   This creates a non-root user, installs dependencies, clones dotfiles, and runs `install.sh` + `deploy.sh` automatically. It will prompt for GitHub auth.
 3. **Reconnect as your user:**
    ```bash
    ssh yulong@<ip>
@@ -96,7 +96,7 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
   - [htop](#htop-process-monitor)
   - [pdb++](#pdb-python-debugger)
 - [Secrets & Security](#secrets--security)
-  - [Encrypted Secrets (SOPS + age)](#encrypted-secrets-sops--age)
+  - [Encrypted Secrets (Bitwarden Secrets Manager)](#encrypted-secrets-bitwarden-secrets-manager)
   - [Gist Sync](#gist-sync-automation-both-platforms)
   - [Global Git Hooks](#global-git-hooks)
   - [Supply Chain Defense](#supply-chain-defense)
@@ -124,7 +124,7 @@ This repo is highly personal — it reflects one person's workflow, opinions, an
 | Editor settings (VSCode/Cursor merge logic)        | Ghostty theme aliases             |
 | Cleanup automation (Downloads/Screenshots)         | Specific API keys and gist IDs    |
 | Gist sync (bidirectional SSH config/identity sync) | Cloud setup scripts (RunPod user) |
-| SOPS + age encrypted secrets workflow              | Plugin marketplace selections     |
+| BWS encrypted secrets workflow                     | Plugin marketplace selections     |
 
 
 All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIST_SYNC_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
@@ -203,7 +203,7 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 - **AI tools**: Claude Code, Codex CLI, Serena MCP, Ghostty terminal
 - **Git**: gitconfig, global gitignore/gitattributes, global git hooks (secret detection)
 - **Dev tools**: htop, pdb++, matplotlib styles, `claude-tools` Rust binary
-- **Secrets**: GitHub gist sync, SOPS+age (or BWS) encrypted secrets
+- **Secrets**: GitHub gist sync, Bitwarden Secrets Manager (BWS)
 - **Supply chain**: 7-day quarantine for npm/bun/pnpm/uv, weekly dep-audit
 - **Automation**: file cleanup (macOS), Claude Code session cleanup, AI tools auto-update, package auto-update, text replacements sync (macOS)
 
@@ -607,57 +607,32 @@ macOS uses raw shortcuts; Alfred applies a collection prefix at runtime (e.g., `
 
 ## Secrets & Security
 
-### Encrypted Secrets (SOPS + age)
+### Encrypted Secrets (Bitwarden Secrets Manager)
 
-[SOPS](https://github.com/getsops/sops) (**S**ecrets **OP**eration**S**, by Mozilla) encrypts file **values** while keeping keys/structure visible — you can `git diff` and review encrypted files. [age](https://github.com/FiloSottile/age) provides the keypair (modern, simple alternative to PGP). Works offline, git-versioned, no service dependency.
-
-**How it works:**
-
-```
-age keypair (one-time setup)
-├── Private key: ~/.config/sops/age/keys.txt   ← secret, stored in Bitwarden
-└── Public key:  extracted from private key     ← stored in private secrets repo .sops.yaml
-
-Encryption:  plaintext env vars  →  sops -e  →  ~/.config/dotfiles-secrets/secrets.env.enc (private git repo)
-Decryption:  private secrets repo  →  sops -d  →  process memory / repo-scoped .envrc exports
-```
+API keys are stored in [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) (BWS) — a hosted, team-shareable secrets vault. The CLI (`bws`) fetches secrets on demand; nothing is written to disk except a machine access token.
 
 **File locations:**
 
-
-| File              | Location                            | Purpose                                                       | Git status  |
-| ----------------- | ----------------------------------- | ------------------------------------------------------------- | ----------- |
-| `DOTFILES_SECRETS_DIR` | `~/.config/dotfiles-secrets` by default | Private repo/path for the encrypted dotfiles secrets store | Private |
-| `.sops.yaml`      | `$DOTFILES_SECRETS_DIR/.sops.yaml`  | SOPS config for the private secrets repo                     | Private |
-| `secrets.env.enc` | `$DOTFILES_SECRETS_DIR/secrets.env.enc` | Encrypted API keys (values encrypted, key names visible)  | Private |
-| `keys.txt`        | `~/.config/sops/age/keys.txt`       | age private key (paste from Bitwarden on new machines)       | Not in repo |
-
-`.secrets` is now treated as a legacy migration artifact rather than the normal runtime path. The intended flow is encrypted-at-rest plus on-demand decryption.
-
+| File | Location | Purpose |
+|------|----------|---------|
+| BWS token | `~/.config/bws/token` | Machine access token (paste from Bitwarden on new machines) |
 
 **Commands:**
 
 ```bash
-secrets-init             # First-time setup: generate age keypair + initialize $DOTFILES_SECRETS_DIR
-secrets-edit             # Edit the encrypted dotenv file in place (no plaintext runtime file needed)
-secrets-paths            # Show the resolved private secrets repo paths
-secrets-init-project     # Bootstrap per-project: .sops.yaml + secrets.env.enc + .envrc
+secrets-init bws         # First-time setup: save BWS access token
+secrets-edit             # Add/update/delete secrets (fzf TUI or: secrets-edit KEY VALUE)
+secrets-paths            # Show resolved backend + token path
 ```
 
 **New machine setup:**
 
-1. Install sops + age (`./install.sh` handles this)
-2. Clone or create your private secrets repo at `$DOTFILES_SECRETS_DIR` (default `~/.config/dotfiles-secrets`)
-3. Paste age private key from Bitwarden: `secrets-init` (or manually to `~/.config/sops/age/keys.txt`)
-4. Run `./deploy.sh` — verifies the encrypted store can be decrypted on demand
+1. Run `./install.sh` (installs bws CLI)
+2. Run `secrets-init bws` and paste your BWS access token from Bitwarden
 
-Least-privilege hardening now runs automatically in `secrets-init`, `secrets-edit`, `secrets-updatekeys`, `secrets-rotate-data-key`, `setup-envrc`, and `deploy.sh`. `secrets-fix-perms` remains available as a manual repair command for the private secrets repo (`700` dir, `600` files) and repo-local secret state (`.env`, `.envrc`, `.claude/channels/telegram/`, local `.sops.yaml`, `secrets.env.enc`).
+**Per-project usage:** Run `setup-envrc` in any repo to create a `.envrc` that selectively exposes only the secrets that repo should see. It supports direct exports (`KEY`), renamed exports (`ENV_VAR=SECRET_NAME`), and a repo-specific Telegram plugin binding (`--telegram-secret SECRET_NAME`). If local `.env` files already exist, the TUI scans the repo root recursively and can offer to delete selected files.
 
-**Per-project usage:** Run `setup-envrc` in any repo to create a `.envrc` that selectively exposes only the secrets that repo should see. It supports direct exports (`KEY`), renamed exports (`ENV_VAR=SECRET_NAME`), and a repo-specific Telegram plugin binding (`--telegram-secret SECRET_NAME`) that materializes `.claude/channels/telegram/.env` only when Claude launches. If local `.env` files already exist, the TUI scans the repo root recursively, flags drift against the encrypted store, and can offer to delete selected files. Use `secrets-init-project` only when the repo needs its *own* SOPS-managed secrets file.
-
-`setup-envrc` tries `direnv allow` automatically. If that cannot update direnv's allowlist (for example in a sandboxed or read-only environment), it now prints the manual `direnv allow .` command and still completes the rest of the setup.
-
-**Further reading:** [SOPS README](https://github.com/getsops/sops#readme) · [age README](https://github.com/FiloSottile/age#readme) · [SOPS + age tutorial](https://devops.novalagung.com/en/cicd/sops-age-encryption.html)
+`setup-envrc` tries `direnv allow` automatically. If that cannot update direnv's allowlist (for example in a sandboxed environment), it prints the manual `direnv allow .` command and still completes the rest of the setup.
 
 ### Gist Sync Automation (both platforms)
 

@@ -30,70 +30,78 @@ PROFILE="${PROFILE:-personal}"
 # in install.sh/deploy.sh. TUI menu, --flag, --no-flag, --only all work automatically.
 
 INSTALL_REGISTRY=(
-    "core|Core packages, CLI tools, gh, SOPS/age, uv|all|true"
-    "zsh|ZSH + oh-my-zsh + powerlevel10k theme|all|true"
-    "tmux|Terminal multiplexer|all|true"
-    "ai-tools|Claude Code, Codex CLI, OpenCode, Antigravity CLI|all|true"
-    "extras|hyperfine, gitui, code2prompt, terminal-notifier|all|true"
-    "cleanup|Automatic cleanup (macOS only)|all|true"
-    "experimental|ty type checker, zotero MCP|all|true"
-    "macos-settings|macOS system defaults (Dock, Finder, keyboard)|macos|true"
-    "apps|GUI + App Store apps via Brewfile (picker TUI)|macos|true"
-    "docker|Docker engine + compose|linux|true"
-    "pueue|Pueue job scheduler + pueued daemon|linux|true"
-    "create-user|Create non-root dev user|linux|true"
+    "core|Core packages, CLI tools, gh, bws, uv|all|true|Base"
+    "zsh|ZSH + oh-my-zsh + powerlevel10k theme|all|true|Base"
+    "tmux|Terminal multiplexer|all|true|Base"
+    "ai-tools|Claude Code, Codex CLI, OpenCode, Antigravity CLI|all|true|AI"
+    "extras|hyperfine, gitui, code2prompt, ty, terminal-notifier|all|true|Dev Tools"
+    "cleanup|Automatic cleanup (macOS only)|all|true|Dev Tools"
+    "experimental|zotero MCP|all|true|Dev Tools"
+    "macos-settings|macOS system defaults (Dock, Finder, keyboard)|macos|true|macOS"
+    "apps|GUI + App Store apps via Brewfile (picker TUI)|macos|true|macOS"
+    "docker|Docker engine + compose|linux|true|Linux"
+    "pueue|Pueue job scheduler + pueued daemon|linux|true|Linux"
+    "create-user|Create non-root dev user|linux|true|Linux"
 )
 
 DEPLOY_REGISTRY=(
-    "shell|ZSH config, aliases, key bindings|all|true"
-    "tmux|tmux.conf + TPM plugins|all|true"
-    "git-config|gitconfig, global gitignore, ripgrep config|all|true"
-    "vim|vimrc|all|true"
-    "editor|VSCode/Cursor settings + extensions (merges)|all|true"
-    "claude|Claude Code config symlink (~/.claude)|all|true"
-    "codex|Codex CLI config symlink (~/.codex)|all|true"
-    "ghostty|Ghostty terminal config (symlinked)|all|true"
-    "zed|Zed editor config (symlinked)|all|true"
-    "htop|htop config with dynamic CPU meters|all|true"
-    "pdb|pdb++ debugger config (high-contrast)|all|true"
-    "matplotlib|Style files: anthropic, deepmind, petri|all|true"
-    "git-hooks|Global pre-commit secret detection|all|true"
-    "secrets|Sync SSH/git identity via GitHub gist|all|true"
-    "secrets-env|Decrypt SOPS-encrypted API keys (age)|all|true"
-    "pkg-configs|Package manager security configs (min-release-age)|all|true"
-    "dep-audit|Weekly dependency audit (supply chain defense)|all|true"
-    "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|all|true"
-    "claude-cleanup|Remove idle Claude sessions after 24h|all|true"
-    "ai-update|Daily auto-update: Claude, Codex, OpenCode|all|true"
-    "mcp-sync|Daily shared MCP sync for Claude and Codex|all|true"
-    "brew-update|Weekly package upgrade + cleanup|all|true"
-    "claude-tools|Build claude-tools Rust binary|all|true"
-    "finicky|Browser routing config (symlinked)|macos|true"
-    "file-apps|Default editor for coding file types|macos|true"
-    "keyboard|Keyboard repeat rate enforcement at login|macos|true"
-    "bedtime|Bedtime timezone enforcement|macos|true"
-    "text-replacements|Sync macOS + Alfred text replacements|macos|true"
-    "mouseless|Keyboard-driven mouse control|macos|true"
-    "alfred|Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey)|macos|true"
-    "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true"
-    "vpn|NordVPN + Tailscale split tunnel daemon|macos|true"
-    "pueue|Pueue + systemd resource slices|linux|true"
-    "bws|Bitwarden Secrets Manager CLI|all|false"
-    "serena|Serena MCP server config (symlinked)|all|true"
+    "shell|ZSH config, aliases, key bindings|all|true|Shell & Editors"
+    "tmux|tmux.conf + TPM plugins|all|true|Shell & Editors"
+    "vim|vimrc|all|true|Shell & Editors"
+    "editor|VSCode/Cursor settings + extensions (merges)|all|true|Shell & Editors"
+    "zed|Zed editor config (symlinked)|all|true|Shell & Editors"
+    "ghostty|Ghostty terminal config (symlinked)|all|true|Shell & Editors"
+    "htop|htop config with dynamic CPU meters|all|true|Shell & Editors"
+    "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"
+    "codex|Codex CLI config symlink (~/.codex)|all|true|AI & Apps"
+    "serena|Serena MCP server config (symlinked)|all|true|AI & Apps"
+    "git-config|gitconfig, global gitignore, ripgrep config|all|true|Git"
+    "git-hooks|Global pre-commit secret detection|all|true|Git"
+    "secrets|Sync SSH/git identity via GitHub gist|all|true|Secrets"
+    "secrets-env|Decrypt BWS secrets (Bitwarden Secrets Manager)|all|true|Secrets"
+    "bws|Bitwarden Secrets Manager CLI|all|false|Secrets"
+    "pkg-configs|Package manager security configs (min-release-age)|all|true|Security"
+    "dep-audit|Weekly dependency audit (supply chain defense)|all|true|Security"
+    "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|all|true|Automation"
+    "claude-cleanup|Remove idle Claude sessions after 24h|all|true|Automation"
+    "ai-update|Daily auto-update: Claude, Codex, OpenCode|all|true|Automation"
+    "mcp-sync|Daily shared MCP sync for Claude and Codex|all|true|Automation"
+    "brew-update|Weekly package upgrade + cleanup|all|true|Automation"
+    "finicky|Browser routing config (symlinked)|macos|true|macOS"
+    "file-apps|Default editor for coding file types|macos|true|macOS"
+    "keyboard|Keyboard repeat rate enforcement at login|macos|true|macOS"
+    "bedtime|Bedtime timezone enforcement|macos|true|macOS"
+    "text-replacements|Sync macOS + Alfred text replacements|macos|true|macOS"
+    "mouseless|Keyboard-driven mouse control|macos|true|macOS"
+    "alfred|Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey)|macos|true|macOS"
+    "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true|macOS"
+    "vpn|NordVPN + Tailscale split tunnel daemon|macos|true|macOS"
+    "pueue|Pueue + systemd resource slices|linux|true|Linux"
+    "matplotlib|Style files: anthropic, deepmind, petri|all|true|Dev Tools"
+    "pdb|pdb++ debugger config (high-contrast)|all|true|Dev Tools"
+    "claude-tools|Build claude-tools Rust binary|all|true|Build"
 )
 
 # Initialize INSTALL_*/DEPLOY_* variables from registry
 _init_component_vars() {
-    local entry name var_name default
+    local entry name var_name default rest
+    # Format: name|desc|platform|default[|group]
+    # Extract the 4th pipe-delimited field for default (strip optional 5th group field)
     for entry in "${INSTALL_REGISTRY[@]}"; do
         name="${entry%%|*}"
-        default="${entry##*|}"
+        rest="${entry#*|}"    # desc|platform|default[|group]
+        rest="${rest#*|}"     # platform|default[|group]
+        rest="${rest#*|}"     # default[|group]
+        default="${rest%%|*}" # default (stops before optional group)
         var_name="${(U)name//-/_}"
         typeset -g "INSTALL_${var_name}=${default}"
     done
     for entry in "${DEPLOY_REGISTRY[@]}"; do
         name="${entry%%|*}"
-        default="${entry##*|}"
+        rest="${entry#*|}"
+        rest="${rest#*|}"
+        rest="${rest#*|}"
+        default="${rest%%|*}"
         var_name="${(U)name//-/_}"
         typeset -g "DEPLOY_${var_name}=${default}"
     done
@@ -177,7 +185,7 @@ PACKAGES_MACOS=(
     "just"
     "sd"          # sed replacement (preferred over sed)
     "duf"         # df replacement (disk free space)
-    "gum"         # interactive shell UI (toggle menus)
+    "gum"         # interactive shell UI (app-picker TUI)
     "vivid"       # LS_COLORS theme generator (catppuccin-mocha)
 )
 

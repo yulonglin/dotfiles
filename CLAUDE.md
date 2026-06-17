@@ -18,7 +18,7 @@ If you're an AI agent (Claude Code, Codex, etc.) working in this repo, read this
 - **Sandbox blocks `git pull/merge/stash`** on `config/` and `claude/settings.json` even though git is in `excludedCommands` — pass `dangerouslyDisableSandbox: true`. Also in global `~/.claude/rules/safety-and-git.md`.
 - **`codex exec` crashes inside sandbox on macOS** (`SCDynamicStoreCreate NULL` panic). Same workaround. Also in global `~/.claude/rules/agents-and-delegation.md`.
 - **`claude/settings.json` is the global source of truth** (symlinked to `~/.claude/settings.json`). Before staging it, verify it has `statusLine`, `hooks`, `permissions` keys — see [`.claude/rules/dotfiles-settings.md`](.claude/rules/dotfiles-settings.md).
-- **Secrets are NOT globally exported** (supply chain defense). Use `setup-envrc` per-project via direnv. NEVER run bare `sops` on the encrypted store — use `secrets-edit`.
+- **Secrets are NOT globally exported** (supply chain defense). Use `setup-envrc` per-project via direnv. Edit secrets via `secrets-edit`.
 - **Plot with Anthropic style by default** — `from anthro_colors import use_anthropic_defaults`. See [Plotting with Anthropic Style](#plotting-with-anthropic-style).
 
 **Common tasks:**
@@ -131,7 +131,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Alfred prefs repair - Fixes Dropbox-synced Alfred breakage (macOS only): strips `com.apple.quarantine` xattrs that block workflow scripts (`posix_spawn: error 1`), restores lost script `+x` bits, and seeds the per-machine summon hotkey from a golden snapshot. Runs `custom_bins/alfred-fix`; capture a new golden hotkey with `alfred-fix --capture`. Clipboard history is intentionally local-only and never syncs (Alfred design) — it starts fresh on each machine.
 - Bear CLI symlink - `/Applications/Bear.app/Contents/MacOS/bearcli` → `/usr/local/bin/bearcli` (macOS only, so `bearcli` works in cron/scripts where shell aliases don't apply)
 - Text replacements - Bidirectional sync with macOS + Alfred snippets (daily 9 AM, requires Full Disk Access for terminal app). macOS uses raw shortcuts; Alfred applies collection prefix at runtime (e.g., `fm.hi`)
-- Encrypted secrets (SOPS+age / BWS) - Stores API keys via Bitwarden Secrets Manager (primary) or SOPS+age (fallback). Backend auto-detected: bws if token + CLI exist, else sops. Override with `DOTFILES_SECRETS_BACKEND` env var
+- Encrypted secrets (BWS) - Stores API keys via Bitwarden Secrets Manager. Run `secrets-init bws` to configure.
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
 - Claude Code cleanup - No-output-for-24h session cleanup (tmux preserved, launchd/cron)
 - AI tools auto-update - Daily update of Claude Code, Codex CLI, OpenCode, Antigravity CLI (6 AM, launchd/cron)
@@ -187,8 +187,6 @@ config/
 ├── inputrc               # Readline config for bash/python/node REPLs (symlinked to ~/.inputrc)
 ├── gitattributes_global  # Binary file handling + line endings (symlinked to ~/.gitattributes)
 ├── machines.conf         # Machine registry (machine-id → name + emoji, for prompt/statusline)
-├── secrets.env.enc       # SOPS-encrypted API keys (committed, requires age key to decrypt)
-├── envrc_sops_template   # Template .envrc for per-project SOPS secrets
 ├── npmrc                 # Global npm config: ignore-scripts + 7-day min-release-age (symlinked)
 ├── bunfig.toml           # Global bun config: 7-day min-release-age (symlinked)
 ├── pnpmrc                # Global pnpm config: 7-day min-release-age (symlinked)
@@ -221,9 +219,8 @@ codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 
 .secrets                  # Legacy decrypted secrets file (gitignored, no longer the primary runtime path)
 
-# Private dotfiles runtime secrets live outside this repo:
-#   $DOTFILES_SECRETS_DIR/.sops.yaml
-#   $DOTFILES_SECRETS_DIR/secrets.env.enc
+# Private dotfiles runtime secrets (BWS token) live outside this repo:
+#   $BWS_TOKEN_FILE (default: ~/.config/bws/token)
 
 custom_bins/              # Custom utilities (added to PATH)
 ├── utc_date              # Outputs DD-MM-YYYY in UTC
@@ -282,7 +279,7 @@ Subtleties worth knowing per deploy component. Full mechanics live in the matchi
 | Component | Mechanism | Key gotcha |
 |-----------|-----------|------------|
 | **Gist Sync** (`deploy_secrets`) | Bidirectional sync of `~/.ssh/config`, `authorized_keys`, `config/user.conf` with gist `3cc239...371`. Last-modified wins. Daily 8 AM (launchd/cron). | Requires `gh auth login`. Manual: `sync-gist`. Runs before git config (user.conf provides identity). |
-| **Encrypted Secrets** (SOPS+age or BWS) | API keys at `$DOTFILES_SECRETS_DIR/secrets.env.enc` (default `~/.config/dotfiles-secrets/`). **NOT globally exported** — use `setup-envrc` per repo (direnv), or `with-secrets KEY... -- <cmd>` for one-shot. Managed: `OPENAI/OPENROUTER/ANTHROPIC_API_KEY`, `HF_TOKEN`, `MODAL_TOKEN_ID/SECRET`. | Age key lives at `~/.config/sops/age/keys.txt` (paste from Bitwarden on new machine). **Edit only via `secrets-edit`** — bare `sops` on the dotenv file corrupts format. All sops commands need explicit `--config` (default search fails in `$TMPDIR`). |
+| **Encrypted Secrets** (BWS) | API keys in Bitwarden Secrets Manager. **NOT globally exported** — use `setup-envrc` per repo (direnv), or `with-secrets KEY... -- <cmd>` for one-shot. Managed: `OPENAI/OPENROUTER/ANTHROPIC_API_KEY`, `HF_TOKEN`, `MODAL_TOKEN_ID/SECRET`. | BWS token at `~/.config/bws/token`. Run `secrets-init bws` on new machines. Use `secrets-edit` to add/update secrets. |
 | **Git Config** (`deploy_git_config`) | Reads `config/user.conf`; prompts on conflicts. Deploys split ignores: `~/.gitignore_global` (git, broad), `~/.ignore_global` (ripgrep, narrow), `~/.config/fd/ignore` (fd). Result: git ignores `data/`/`archive/`, but search tools can still see them. | `fd` has no `--no-ignore-global` flag — use `fd -I` to traverse research dirs. |
 | **Editor Settings** (`deploy_editor_settings`) | Merges into VSCode/Cursor/Antigravity settings (no overwrite, existing wins). Auto-installs 38 curated extensions from `vscode_extensions.txt`. | Antigravity CLI at `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`. |
 | **Zed** | Symlinks `config/zed/{settings,keymap}.json` → `~/.config/zed/`. Searches gitignored files by default. | SSH hosts read from `~/.ssh/config` (gist-synced). Cmd+K overrides Zed's chord prefix → inline AI edit. |
@@ -366,7 +363,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - **Ghostty config**: Symlinked to platform-specific path, requires reload after changes (Cmd+Shift+Comma)
 - **Zed config**: Symlinked (like Ghostty/Claude). `ssh_connections` are machine-specific (added via Zed UI, hosts from ~/.ssh/config)
 - **Antigravity config**: VSCode fork by Google (`com.google.antigravity`). Same settings as Cursor, deployed via `--editor` flag. CLI at `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`
-- **SOPS + age**: Age private key must exist at `~/.config/sops/age/keys.txt` before decrypt works. Run `secrets-init sops` on new machines (paste age key from Bitwarden)
+- **Secrets (BWS)**: BWS token at `~/.config/bws/token`. Run `secrets-init bws` on new machines (paste token from Bitwarden). Use `secrets-edit` to add/update/delete secrets.
 - **Secrets are per-project**: API keys require `setup-envrc` in each project. Running `npm postinstall` or `pip install` in a project without `.envrc` cannot access secrets (this is intentional — supply chain defense). Legacy `.secrets` / `.env` files may still exist locally but are no longer the intended runtime path.
 - **min-release-age quarantine**: All package managers have a 7-day delay on new releases. Packages published <7 days ago will fail to install. This is intentional. See `claude/rules/supply-chain-security.md` for override syntax
 - **Pueue + systemd slices**: `j*` aliases require pueue + systemd user session. `systemd --user` doesn't work inside Claude Code sandbox (bubblewrap blocks D-Bus) — test from normal shell. Cgroup delegation may need one-time `sudo systemctl set-property user-$(id -u).slice Delegate=yes`. Config in `config/resources.conf` (edit when scaling machine).

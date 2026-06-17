@@ -51,11 +51,11 @@ COMPONENTS:
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
     --ai-tools        Enable AI CLI tools (Claude, Codex, OpenCode, Antigravity)
-    --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt)
+    --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt, ty)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
     --pueue           Enable Pueue job scheduler (Linux only)
-    --experimental    Enable experimental features (ty type checker, zotero MCP)
+    --experimental    Enable experimental features (zotero MCP)
     --apps            Install GUI + App Store apps via Brewfile picker (macOS)
     --create-user     Create non-root dev user (Linux only)
     --no-<component>  Disable a component (e.g., --no-ai-tools)
@@ -139,15 +139,11 @@ export PATH="$HOME/.local/bin:$PATH"
 if is_linux; then
     run_parallel "Installing security tools" \
         "gitleaks|install_gitleaks" \
-        "sops|install_sops" \
-        "age|install_age" \
         "direnv|install_direnv" \
         "bws|install_bws"
 else
     # macOS: brew has a global lock, must run sequentially
     install_gitleaks
-    install_sops
-    install_age
     install_direnv
     install_bws
 fi
@@ -215,6 +211,12 @@ if [[ "$INSTALL_EXTRAS" == "true" ]]; then
         for pkg in "${PACKAGES_EXTRAS_LINUX[@]}"; do
             mise_install "$pkg"
         done
+    fi
+
+    # ty — fast Python type checker (Astral/uv ecosystem)
+    if ! is_installed ty && cmd_exists uv; then
+        log_info "Installing ty..."
+        uv tool install ty 2>/dev/null || log_warning "ty installation failed"
     fi
 fi
 
@@ -377,12 +379,6 @@ fi
 
 if [[ "$INSTALL_EXPERIMENTAL" == "true" ]]; then
     log_section "INSTALLING EXPERIMENTAL FEATURES ⚗️"
-    log_warning "ty is in alpha/preview - not recommended for production"
-
-    if ! is_installed ty && cmd_exists uv; then
-        log_info "Installing ty via uv..."
-        uv tool install ty 2>/dev/null || log_warning "ty installation failed"
-    fi
 
     # zotero-mcp-server: Zotero MCP for citation management (see config/experimental.yaml)
     if ! is_installed zotero-mcp && cmd_exists uv; then
@@ -417,7 +413,8 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
     if ! cmd_exists brew; then
         log_warning "Homebrew required for apps — skipping"
     else
-        # gum drives the picker; bootstrap it (tiny formula) if missing.
+        # gum drives app-picker; bootstrap it (tiny formula) if missing.
+        # Note: the component selection menu uses claude-tools select, not gum.
         cmd_exists gum || brew_install gum
 
         brewfile="$DOT_DIR/config/Brewfile"
