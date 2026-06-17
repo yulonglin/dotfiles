@@ -1,0 +1,119 @@
+name: Build claude-tools binaries
+
+# Builds the claude-tools Rust binary for every macOS/Linux arch on native
+# runners (no cross-compilation — git2/ring/libgit2 build cleanly on-host) and
+# publishes them to a rolling "claude-tools-bin" GitHub Release. install.sh /
+# deploy.sh fetch the matching asset by `uname -sm` to power the component
+# menu on a fresh machine before the from-source build runs.
+#
+# Only first-party actions (actions/*) + preinstalled rustup + gh CLI are used,
+# matching this repo's supply-chain posture (no third-party GHA actions).
+
+on:
+  push:
+    branches: [main]
+    # Trigger only on source/manifest changes. SHA256SUMS (committed back by the
+    # release job) is deliberately NOT listed, so the checksum commit can't
+    # retrigger this workflow.
+    paths:
+      - 'tools/claude-tools/src/**'
+      - 'tools/claude-tools/Cargo.toml'
+      - 'tools/claude-tools/Cargo.lock'
+      - '.github/workflows/build-claude-tools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-claude-tools
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.asset }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest          # Apple Silicon (arm64)
+            asset: claude-tools-darwin-arm64
+          - os: macos-13              # Intel
+            asset: claude-tools-darwin-x86_64
+          - os: ubuntu-latest         # x86_64
+            asset: claude-tools-linux-x86_64
+          - os: ubuntu-24.04-arm      # arm64
+            asset: claude-tools-linux-aarch64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (release)
+        working-directory: tools/claude-tools
+        run: cargo build --release --locked
+
+      - name: Stage asset
+        run: |
+          mkdir -p dist
+          cp tools/claude-tools/target/release/claude-tools "dist/${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Publish rolling release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need history to rebase the checksum commit onto main
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Compute checksums
+        working-directory: dist
+        run: sha256sum claude-tools-* > SHA256SUMS
+
+      - name: Publish claude-tools-bin release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Recreate the rolling tag so asset URLs stay stable across builds:
+          #   .../releases/download/claude-tools-bin/claude-tools-<os>-<arch>
+          gh release delete claude-tools-bin --yes --cleanup-tag 2>/dev/null || true
+          gh release create claude-tools-bin dist/claude-tools-* dist/SHA256SUMS \
+            --title "claude-tools binaries (latest)" \
+            --notes "Prebuilt claude-tools binaries for macOS/Linux (arm64 + x86_64). Auto-built from main; fetched + checksum-verified by install.sh/deploy.sh." \
+            --latest=false
+
+      - name: Commit checksums to repo (trust anchor)
+        run: |
+          # install.sh/deploy.sh verify the downloaded binary against THIS file,
+          # not the copy in the release — so the trust anchor is the repo you
+          # cloned. GITHUB_TOKEN pushes don't trigger workflows, and SHA256SUMS
+          # isn't in the trigger paths anyway, so this can't loop.
+          cp dist/SHA256SUMS tools/claude-tools/SHA256SUMS
+          if git diff --quiet -- tools/claude-tools/SHA256SUMS; then
+            echo "Checksums unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/claude-tools/SHA256SUMS
+          git commit -m "chore(claude-tools): update binary checksums [skip ci]"
+          for attempt in 1 2 3; do
+            if git pull --rebase --autostash origin main && git push origin HEAD:main; then
+              echo "Pushed checksums."; exit 0
+            fi
+            echo "Push attempt $attempt failed; retrying…"; sleep 3
+          done
+          echo "::error::Failed to push checksum commit after 3 attempts"; exit 1

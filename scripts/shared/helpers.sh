@@ -22,19 +22,130 @@ log_section() { echo ""; echo "───────── $* ──────
 
 # ─── Interactive Component Menu ──────────────────────────────────────────────
 
-# Show interactive toggle menu for component selection
+# Resolve the prebuilt-binary asset name for this platform, or "" if unsupported.
+_claude_tools_asset() {
+    case "$(uname -s)-$(uname -m)" in
+        Darwin-arm64)  echo "claude-tools-darwin-arm64" ;;
+        Darwin-x86_64) echo "claude-tools-darwin-x86_64" ;;
+        Linux-x86_64)  echo "claude-tools-linux-x86_64" ;;
+        Linux-aarch64) echo "claude-tools-linux-aarch64" ;;
+        *) echo "" ;;
+    esac
+}
+
+# Compute the SHA-256 of a file (portable: Linux sha256sum / macOS shasum).
+_sha256_of() {
+    if cmd_exists sha256sum; then sha256sum "$1" | awk '{print $1}'
+    elif cmd_exists shasum; then shasum -a 256 "$1" | awk '{print $1}'
+    else return 1; fi
+}
+
+# Fetch a prebuilt claude-tools from the rolling "claude-tools-bin" GitHub
+# Release and verify it against the SHA-256 committed in the repo (the trust
+# anchor — NOT a checksum from the release itself). A tampered/corrupt binary,
+# or one we cannot verify, is never moved into place or executed. Returns 1 on
+# any failure so the caller can fall back to a source build.
+_fetch_claude_tools() {
+    local bin="$1"
+    cmd_exists curl || return 1
+
+    local asset; asset="$(_claude_tools_asset)"
+    [[ -z "$asset" ]] && return 1  # unsupported platform
+
+    # Trust anchor: checksum committed in the repo you cloned.
+    local sums_file="${DOT_DIR}/tools/claude-tools/SHA256SUMS"
+    local expected
+    expected="$(awk -v a="$asset" '$2 == a {print $1}' "$sums_file" 2>/dev/null)"
+    # Refuse to fetch if we have no committed checksum to verify against.
+    [[ -z "$expected" ]] && return 1
+
+    # Derive owner/repo slug from DOTFILES_REPO (config.sh), override via env.
+    local slug="${DOTFILES_GH_SLUG:-}"
+    if [[ -z "$slug" ]]; then
+        slug="${DOTFILES_REPO#https://github.com/}"
+        slug="${slug%.git}"
+    fi
+    [[ -z "$slug" ]] && return 1
+
+    local url="https://github.com/${slug}/releases/download/claude-tools-bin/${asset}"
+    log_info "Fetching prebuilt claude-tools (${asset})..."
+    mkdir -p "${DOT_DIR}/custom_bins"
+    local tmp="${bin}.tmp.$$"
+
+    # HTTPS + TLS 1.2 only; never pipe-to-shell — download to temp, then verify.
+    if ! curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmp" 2>/dev/null; then
+        rm -f "$tmp"; return 1
+    fi
+
+    local actual; actual="$(_sha256_of "$tmp")"
+    if [[ -z "$actual" || "$actual" != "$expected" ]]; then
+        log_warning "claude-tools checksum mismatch — discarding download (expected ${expected:0:12}…, got ${actual:0:12}…)"
+        rm -f "$tmp"; return 1
+    fi
+
+    chmod +x "$tmp"
+    if ! "$tmp" --version >/dev/null 2>&1; then
+        rm -f "$tmp"; return 1
+    fi
+    mv "$tmp" "$bin"
+    return 0
+}
+
+# Last-resort fallback: build claude-tools from source (needs cargo). Quiet,
+# synchronous; only attempted when the verified fetch path is unavailable.
+_build_claude_tools_from_source() {
+    cmd_exists cargo || return 1
+    [[ -f "${DOT_DIR}/tools/claude-tools/Cargo.toml" ]] || return 1
+    log_info "Building claude-tools from source (fallback)..."
+    ( cd "${DOT_DIR}/tools/claude-tools" && cargo build --release --quiet ) || return 1
+    mkdir -p "${DOT_DIR}/custom_bins"
+    cp "${DOT_DIR}/tools/claude-tools/target/release/claude-tools" "${DOT_DIR}/custom_bins/claude-tools" \
+        && chmod +x "${DOT_DIR}/custom_bins/claude-tools"
+}
+
+# Bootstrap claude-tools so the component-selection TUI works on a fresh machine
+# before deploy.sh's from-source build runs. Fallback chain:
+#   1. working native binary already present  → use it
+#   2. verified prebuilt fetch from Releases   → use it
+#   3. source build (if cargo present)         → use it
+#   4. otherwise                               → return 1 (menu uses defaults)
+# Set CLAUDE_TOOLS_NO_FETCH=1 to skip the network fetch (air-gapped / paranoid).
+bootstrap_claude_tools() {
+    local bin="${DOT_DIR}/custom_bins/claude-tools"
+
+    # 1) Already have a binary that runs on this arch? Nothing to do.
+    [[ -x "$bin" ]] && "$bin" --version >/dev/null 2>&1 && return 0
+
+    # Skip in non-interactive runs — the menu won't show anyway. deploy.sh's
+    # own (backgrounded) build still produces the runtime binary either way.
+    [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 1
+
+    # 2) Verified prebuilt fetch.
+    if [[ "${CLAUDE_TOOLS_NO_FETCH:-0}" != "1" ]]; then
+        _fetch_claude_tools "$bin" && return 0
+    fi
+
+    # 3) Source build fallback.
+    _build_claude_tools_from_source && [[ -x "$bin" ]] && "$bin" --version >/dev/null 2>&1 && return 0
+
+    # 4) Give up — caller falls back to defaults (no menu).
+    return 1
+}
+
 # Usage: show_component_menu install|deploy
-# Requires: gum (graceful fallback to defaults if unavailable)
+# Requires: claude-tools (graceful fallback to defaults if unavailable).
+# CI publishes prebuilt binaries; bootstrap_claude_tools fetches the right one.
+# Note: app-picker still uses gum directly for its own TUI.
 show_component_menu() {
     local mode="$1"
 
-    # Skip if non-interactive
-    if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]] || ! cmd_exists gum; then
+    # Skip if non-interactive, no TTY, binary missing, or binary won't run on
+    # this platform (wrong-arch leftover → --version fails cleanly, no noise).
+    if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]] \
+        || ! cmd_exists claude-tools || ! claude-tools --version >/dev/null 2>&1; then
         return 0
     fi
 
-    # Build comp_defs from registry (single source of truth in config.sh)
-    typeset -a comp_defs
     local registry_name prefix
     if [[ "$mode" == "install" ]]; then
         registry_name="INSTALL_REGISTRY"
@@ -44,58 +155,40 @@ show_component_menu() {
         prefix="DEPLOY"
     fi
 
-    local entry name rest desc platform var_name current_val
-    # Indirect array expansion: ${(P)var} expands the array named by $var
+    # Build input for claude-tools select: group|name|description|checked
+    # Format: name|desc|platform|default[|group]
+    typeset -a all_names
+    local stdin_input=""
+    local entry name rest desc platform default group var_name current_val
     for entry in "${(@P)registry_name}"; do
         name="${entry%%|*}"
         rest="${entry#*|}"
         desc="${rest%%|*}"
         rest="${rest#*|}"
         platform="${rest%%|*}"
+        rest="${rest#*|}"
+        default="${rest%%|*}"
+        rest="${rest#*|}"
+        group="${rest:-Uncategorized}"
+        # If no 5th field, rest equals default (no pipe was consumed), treat as Uncategorized
+        [[ "$group" == "$default" ]] && group="Uncategorized"
 
         # Platform filter
         if [[ "$platform" == "macos" ]] && ! is_macos; then continue; fi
         if [[ "$platform" == "linux" ]] && ! is_linux; then continue; fi
 
         var_name="${prefix}_${(U)name//-/_}"
-        current_val="${(P)var_name}"
-        comp_defs+=("${name}|${desc}|${current_val}")
+        current_val="${(P)var_name:-$default}"
+        all_names+=("$name")
+        stdin_input+="${group}|${name}|${desc}|${current_val}"$'\n'
     done
 
-    # Build display items (with descriptions) and selected list
-    typeset -a items
-    local selected_csv=""
-    for def in "${comp_defs[@]}"; do
-        local name="${def%%|*}"
-        local rest="${def#*|}"
-        local desc="${rest%%|*}"
-        local value="${rest##*|}"
-        items+=("${name} — ${desc}")
-        if [[ "$value" == "true" ]]; then
-            [[ -n "$selected_csv" ]] && selected_csv+=","
-            selected_csv+="${name} — ${desc}"
-        fi
-    done
-
-    # Calculate height: all items + 2 for header/padding, capped at terminal height - 4
-    local menu_height=$(( ${#items[@]} + 2 ))
-    local term_height
-    term_height=$(tput lines 2>/dev/null || echo 40)
-    (( menu_height > term_height - 4 )) && menu_height=$(( term_height - 4 ))
-
-    # Show gum menu
+    # Run TUI; on cancel (exit 1) keep current values
     local result
-    local gum_args=(choose --no-limit --ordered
-        --height "$menu_height"
-        --header "Select ${mode} components (space=toggle, enter=confirm):"
-        --cursor-prefix "• " --selected-prefix "✓ " --unselected-prefix "• ")
-    [[ -n "$selected_csv" ]] && gum_args+=(--selected "$selected_csv")
+    result=$(printf '%s' "$stdin_input" | claude-tools select --title "Select ${mode} components") || return 0
 
-    result=$(gum "${gum_args[@]}" -- "${items[@]}") || return 0  # user cancelled (ctrl-c)
-
-    # Disable all components in this mode, then re-enable selected
-    for def in "${comp_defs[@]}"; do
-        local name="${def%%|*}"
+    # Disable all filtered components, then re-enable selected ones
+    for name in "${all_names[@]}"; do
         local var_name="${(U)name//-/_}"
         if [[ "$mode" == "install" ]]; then
             typeset -g "INSTALL_${var_name}=false"
@@ -104,11 +197,9 @@ show_component_menu() {
         fi
     done
 
-    # Parse selected items: extract name before " — "
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
-        local name="${line%% — *}"
-        local var_name="${(U)name//-/_}"
+        local var_name="${(U)line//-/_}"
         if [[ "$mode" == "install" ]]; then
             typeset -g "INSTALL_${var_name}=true"
         else
@@ -122,6 +213,32 @@ show_component_menu() {
 # Check if command exists
 cmd_exists() {
     command -v "$1" &>/dev/null
+}
+
+# True when interactive prompts that fire AFTER the component menu should be
+# skipped in favor of safe defaults: --non-interactive, --unattended/--yes, or
+# no TTY on stdin. The component menu itself is gated separately (only on
+# NON_INTERACTIVE) so --unattended keeps it as the one interactive step.
+prompts_disabled() {
+    [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 0
+    [[ "${ASSUME_DEFAULTS:-false}" == "true" ]] && return 0
+    [[ -t 0 ]] || return 0
+    return 1
+}
+
+# Cache sudo credentials once, up front, so privileged steps later in the run
+# don't block on a password prompt mid-install. A background keepalive refreshes
+# the timestamp until the calling script exits. No-op if sudo is already cached,
+# unavailable, or we're non-interactive (nothing to prompt).
+front_load_sudo() {
+    cmd_exists sudo || return 0
+    [[ -t 0 ]] || return 0
+    sudo -n true 2>/dev/null && return 0   # already cached — no prompt needed
+    prompts_disabled && return 0            # don't prompt in unattended mode
+    log_info "Some steps need administrator access — caching sudo credentials up front."
+    sudo -v || return 0
+    # Refresh until the parent script exits (canonical installer pattern).
+    ( while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done ) &>/dev/null &
 }
 
 # Check if command is installed, print version if so
@@ -209,6 +326,17 @@ get_mtime() {
 
 # ─── Package Installation ─────────────────────────────────────────────────────
 
+# Environment that makes every `brew` call non-interactive and quiet.
+# HOMEBREW_ASK= overrides a user-exported HOMEBREW_ASK=1 (Homebrew treats any
+# non-empty value as "ask before installing dependencies" → the `[y/n]` prompt).
+# </dev/null is belt-and-suspenders so no prompt can ever block the install.
+BREW_NONINTERACTIVE_ENV=(
+    HOMEBREW_ASK=
+    HOMEBREW_NO_AUTO_UPDATE=1
+    HOMEBREW_NO_ENV_HINTS=1
+    HOMEBREW_NO_INSTALL_CLEANUP=1
+)
+
 # Install package via Homebrew (macOS)
 brew_install() {
     local pkg="$1"
@@ -221,10 +349,12 @@ brew_install() {
 
     if [[ "$cask" == "true" ]]; then
         if ! is_cask_installed "$pkg"; then
-            brew install --quiet --cask "$pkg" 2>/dev/null || log_warning "$pkg installation failed"
+            env "${BREW_NONINTERACTIVE_ENV[@]}" brew install --quiet --cask "$pkg" </dev/null 2>/dev/null \
+                || log_warning "$pkg installation failed"
         fi
     else
-        brew install --quiet "$pkg" 2>/dev/null || log_warning "$pkg installation failed"
+        env "${BREW_NONINTERACTIVE_ENV[@]}" brew install --quiet "$pkg" </dev/null 2>/dev/null \
+            || log_warning "$pkg installation failed"
     fi
 }
 
@@ -660,11 +790,15 @@ install_gh_cli() {
 
     # Authenticate if not already
     if cmd_exists gh && ! gh auth status &>/dev/null; then
-        echo ""
-        echo "GitHub CLI needs authentication for secrets sync."
-        echo "This will open a browser for OAuth login (no tokens needed)."
-        echo ""
-        gh auth login --web --git-protocol https || log_warning "gh auth failed - run 'gh auth login' manually"
+        if prompts_disabled; then
+            log_warning "gh not authenticated — run 'gh auth login' later (needed for gist/secrets sync)"
+        else
+            echo ""
+            echo "GitHub CLI needs authentication for secrets sync."
+            echo "This will open a browser for OAuth login (no tokens needed)."
+            echo ""
+            gh auth login --web --git-protocol https || log_warning "gh auth failed - run 'gh auth login' manually"
+        fi
     fi
 
     # Prefer SSH for git operations via gh
@@ -1094,6 +1228,15 @@ deploy_git_config() {
             echo ""
         done
 
+        # Unattended/non-interactive: keep existing values (safe default — your
+        # machine's settings win), apply only the non-conflicting ones.
+        if prompts_disabled; then
+            log_info "Non-interactive: keeping existing git values, applying non-conflicting..."
+            apply_nonconflicting_git_settings "${conflicts[@]}"
+            log_success "Git configuration deployed"
+            return 0
+        fi
+
         echo "Options:"
         echo "  [K]eep all existing values"
         echo "  [U]se all new values from dotfiles"
@@ -1413,7 +1556,17 @@ parse_args() {
                 continue  # skip outer shift — args already consumed
                 ;;
             --non-interactive)
+                # Skip ALL interactivity incl. the component menu; use defaults.
+                # Must be exported so child processes (e.g. app-picker) honor it.
                 NON_INTERACTIVE=true
+                export NON_INTERACTIVE
+                ;;
+            --unattended|--yes|-y)
+                # The component menu stays the ONE interactive step; everything
+                # after it runs with safe defaults (gh auth deferred, git
+                # conflicts keep existing, sudo cached once up front).
+                ASSUME_DEFAULTS=true
+                export ASSUME_DEFAULTS
                 ;;
             --no-*)
                 if [[ "$_only_mode" == true ]]; then

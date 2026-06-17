@@ -60,19 +60,36 @@ COMPONENTS:
     --create-user     Create non-root dev user (Linux only)
     --no-<component>  Disable a component (e.g., --no-ai-tools)
     --force-reinstall Reinstall tools even if present
-    --non-interactive Skip interactive component menu
+    --non-interactive Skip the component menu AND all later prompts (use defaults)
+    --unattended, -y  Show the component menu, then run everything else with safe
+                      defaults: no per-package prompts, gh auth deferred, git
+                      conflicts keep existing values, sudo cached once up front
 
 EXAMPLES:
     ./install.sh                        # Use defaults from config.sh
     ./install.sh --default              # Safe base for shared machines
     ./install.sh --only zsh tmux        # Only zsh and tmux, nothing else
     ./install.sh --extras --no-cleanup  # Add extras, skip cleanup
+    ./install.sh --unattended           # Menu is the only prompt; rest runs hands-off
 EOF
 }
 
 # Parse CLI arguments (overrides config.sh)
 parse_args "$@"
+
+# Make custom_bins (claude-tools) discoverable, then fetch a prebuilt
+# claude-tools matching this platform so the component menu works on a fresh
+# machine before the from-source build in deploy.sh has run.
+export PATH="$DOT_DIR/custom_bins:$PATH"
+bootstrap_claude_tools || true
+
 show_component_menu install
+
+# On Linux, package installs go through `sudo apt`. Cache sudo once now so the
+# rest of the run is unattended (macOS uses Homebrew, which must NOT run as root).
+if is_linux; then
+    front_load_sudo
+fi
 
 # ─── Main Installation ────────────────────────────────────────────────────────
 
@@ -427,7 +444,8 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
 
         if [[ -f "$brewfile" ]]; then
             log_info "Installing apps from Brewfile (this can take a while)..."
-            brew bundle --file="$brewfile" || log_warning "Some Brewfile entries failed (mas needs App Store sign-in)"
+            env "${BREW_NONINTERACTIVE_ENV[@]}" brew bundle --file="$brewfile" </dev/null \
+                || log_warning "Some Brewfile entries failed (mas needs App Store sign-in)"
             log_info "Next: run scripts/setup/auth-setup for logins + signature audit"
         else
             log_warning "No Brewfile at $brewfile — run 'app-picker' first"

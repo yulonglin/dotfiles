@@ -91,7 +91,9 @@ COMPONENTS:
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
     --no-<component>  Disable a component (e.g., --no-editor)
-    --non-interactive Skip interactive component menu
+    --non-interactive Skip the component menu AND all later prompts (use defaults)
+    --unattended, -y  Show the component menu, then run everything else with safe
+                      defaults (git conflicts keep existing, sudo cached up front)
 
 EXAMPLES:
     ./deploy.sh                           # Use defaults from config.sh
@@ -105,7 +107,22 @@ EOF
 
 # Parse CLI arguments (overrides config.sh)
 parse_args "$@"
+
+# Make custom_bins (claude-tools) discoverable, then fetch a prebuilt
+# claude-tools matching this platform so the component menu works before the
+# from-source build below has run.
+export PATH="$DOT_DIR/custom_bins:$PATH"
+bootstrap_claude_tools || true
+
 show_component_menu deploy
+
+# Cache sudo once up front if a privileged component is selected (VPN daemon,
+# Bear CLI symlink into /usr/local/bin, or Linux pueue systemd setup), so the
+# password is requested once here rather than blocking mid-deploy.
+if [[ "${DEPLOY_VPN:-false}" == "true" || "${DEPLOY_BEARCLI:-false}" == "true" \
+    || ( "$(uname -s)" == "Linux" && "${DEPLOY_PUEUE:-false}" == "true" ) ]]; then
+    front_load_sudo
+fi
 
 # ─── Main Deployment ──────────────────────────────────────────────────────────
 

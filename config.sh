@@ -167,6 +167,7 @@ PACKAGES_CORE=(
     "rsync"
     "shellcheck"  # Shell script linter
     "tldr"        # Simplified man pages
+    "mosh"        # resilient SSH over flaky/roaming connections
 )
 
 # macOS-specific packages (via Homebrew)

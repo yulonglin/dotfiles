@@ -2,6 +2,7 @@ mod check_git_root;
 mod context;
 mod ignore;
 mod resolve_file_path;
+mod select;
 mod setup;
 mod statusline;
 mod timezone;
@@ -11,9 +12,17 @@ mod util;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
+    // Version probe — also used by install.sh/deploy.sh as a liveness check to
+    // confirm the binary actually runs on this platform (arch match) before
+    // invoking the component-selection TUI.
+    if args.len() >= 2 && (args[1] == "--version" || args[1] == "-V") {
+        println!("claude-tools {}", env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+
     if args.len() < 2 {
         eprintln!("Usage: claude-tools <subcommand>");
-        eprintln!("Subcommands: statusline, timezone, context, ignore, check-git-root, resolve-file-path, setup");
+        eprintln!("Subcommands: statusline, timezone, context, ignore, check-git-root, resolve-file-path, setup, select");
         std::process::exit(1);
     }
 
@@ -37,6 +46,11 @@ fn main() {
             let mut setup_args = vec!["claude-tools-setup".to_string()];
             setup_args.extend_from_slice(&args[2..]);
             setup::run(setup_args)
+        }
+        "select" => {
+            let mut sel_args = vec!["claude-tools-select".to_string()];
+            sel_args.extend_from_slice(&args[2..]);
+            select::run(sel_args)
         }
         _ => {
             eprintln!("Unknown subcommand: {}", args[1]);
