@@ -183,9 +183,19 @@ show_component_menu() {
         stdin_input+="${group}|${name}|${desc}|${current_val}"$'\n'
     done
 
-    # Run TUI; on cancel (exit 1) keep current values
-    local result
-    result=$(printf '%s' "$stdin_input" | claude-tools select --title "Select ${mode} components") || return 0
+    # Run TUI; on cancel (exit 1) keep current values.
+    #
+    # Pass options via a temp file, NOT a stdin pipe: piping makes fd 0 a pipe,
+    # which forces crossterm onto a fragile /dev/tty fallback for keyboard input
+    # that fails on some terminals ("Failed to initialize input reader") and
+    # silently drops the menu. Keeping stdin on the terminal is the reliable path.
+    local items_file result
+    items_file=$(mktemp "${TMPDIR:-/tmp}/claude-tools-select.XXXXXX")
+    printf '%s' "$stdin_input" > "$items_file"
+    result=$(claude-tools select --title "Select ${mode} components" --items "$items_file")
+    local rc=$?
+    rm -f "$items_file"
+    [[ $rc -ne 0 ]] && return 0
 
     # Disable all filtered components, then re-enable selected ones
     for name in "${all_names[@]}"; do

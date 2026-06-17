@@ -12,8 +12,9 @@ use state::{AppState, ListItem};
 use crate::context::tui::theme;
 
 pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-    // Parse optional --title flag
+    // Parse optional --title / --items flags
     let mut title = "Select components".to_string();
+    let mut items_file: Option<String> = None;
     let mut i = 1; // args[0] is "claude-tools-select"
     while i < args.len() {
         if args[i] == "--title" {
@@ -23,17 +24,34 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 i += 1;
             }
+        } else if args[i] == "--items" {
+            if i + 1 < args.len() {
+                items_file = Some(args[i + 1].clone());
+                i += 2;
+            } else {
+                i += 1;
+            }
         } else {
             i += 1;
         }
     }
 
-    // Read items from stdin: group|name|description|checked
-    let stdin = io::stdin();
+    // Read items: group|name|description|checked.
+    //
+    // Prefer --items <file> so stdin stays attached to the controlling
+    // terminal. Piping the list in on stdin makes fd 0 a pipe, which forces
+    // crossterm onto its /dev/tty fallback for keyboard input — that path is
+    // fragile and fails outright on some terminals ("Failed to initialize
+    // input reader"), silently dropping the menu. Reading from a file keeps
+    // the well-trodden isatty(STDIN) path.
+    let raw: Box<dyn BufRead> = match &items_file {
+        Some(path) => Box::new(io::BufReader::new(std::fs::File::open(path)?)),
+        None => Box::new(io::stdin().lock()),
+    };
     let mut items: Vec<ListItem> = Vec::new();
     let mut last_group: Option<String> = None;
 
-    for line in stdin.lock().lines() {
+    for line in raw.lines() {
         let line = line?;
         if line.trim().is_empty() { continue; }
 
@@ -61,13 +79,16 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut state = AppState::new(items);
 
+    // Render the TUI to stderr, not stdout: callers capture stdout via
+    // `result=$(claude-tools select ...)`, so the drawing escape sequences must
+    // go to the terminal (stderr) while only the selected names land on stdout.
     enable_raw_mode()?;
-    std::io::stdout().execute(EnterAlternateScreen)?;
+    std::io::stderr().execute(EnterAlternateScreen)?;
 
     let result = run_loop(&mut state, &title);
 
     let _ = disable_raw_mode();
-    let _ = std::io::stdout().execute(LeaveAlternateScreen);
+    let _ = std::io::stderr().execute(LeaveAlternateScreen);
 
     result?;
 
@@ -75,7 +96,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     }
 
-    // Print selected names to stdout
+    // Print selected names to stdout (this is what the caller captures)
     for name in state.selected_names() {
         println!("{}", name);
     }
@@ -84,7 +105,9 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_loop(state: &mut AppState, title: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let mut terminal = ratatui::init();
+    // Backend on stderr; raw mode + alternate screen are managed by the caller.
+    let backend = CrosstermBackend::new(std::io::stderr());
+    let mut terminal = Terminal::new(backend)?;
 
     loop {
         terminal.draw(|f| render(f, state, title))?;
@@ -102,7 +125,6 @@ fn run_loop(state: &mut AppState, title: &str) -> Result<(), Box<dyn std::error:
         }
     }
 
-    ratatui::restore();
     Ok(())
 }
 
