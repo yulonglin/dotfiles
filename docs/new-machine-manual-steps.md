@@ -18,6 +18,11 @@ fresh Mac.
   "Require password after screen saver begins…" → Immediately.
   Apple removed the `askForPasswordDelay` default on Sonoma+, so this can no longer
   be set via `defaults`. Must be done in the UI.
+- **Allow accessories to connect → Automatically When Unlocked** — System Settings →
+  Privacy & Security → scroll to bottom → "Allow accessories to connect".
+  The four-state value lives in `IOAccessoryManager` (SIP-protected daemon), exposed
+  in no `defaults` domain; the only profile lever is the MDM-only boolean
+  `allowUSBRestrictedMode` (all-or-nothing, needs supervision). Set in the UI per Mac.
 
 ## Apple Shortcuts
 
