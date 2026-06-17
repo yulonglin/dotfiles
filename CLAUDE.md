@@ -65,6 +65,36 @@ See README.md for detailed usage.
 ### Git Workflow
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
+- **Two long-lived branches** (see [Branching Strategy](#branching-strategy) below):
+  `main` is the clean, public-facing branch; `yulong` is the personal superset
+  (everything on `main` **plus** personal working content).
+
+### Branching Strategy
+
+The repo is public-ish (people star it), so `main` stays clean while personal
+working artifacts live on a superset branch.
+
+| Branch | Contents | Role |
+|--------|----------|------|
+| `main` | Shareable dotfiles only | Public-facing. What people clone/star. |
+| `yulong` | `main` **+** personal content (`plans/`, `specs/`, `.remember/`, `tmp/`, personal `docs/`, `config/machines.conf`) | Where Yulong actually develops. Strict superset of `main`. |
+
+**Why it doesn't explode:** `yulong` is built as `main` **+ one "restore personal
+files" commit** (the personal files are force-added on top of an already-clean
+tree). Because the *removal* of those files lives in the shared merge-base of both
+branches, neither `git merge main` nor `git rebase main` into `yulong` will ever
+delete your personal files. The personal paths are also in `.gitignore`, so they
+can't accidentally re-enter `main` as untracked adds.
+
+**The one rule:** never merge `yulong → main` wholesale — that re-adds personal
+files. To publish shared work, do one of:
+- Develop the shared change directly on `main` (or a branch off `main`), then
+  `git checkout yulong && git rebase main` (or `git merge main`) to pull it into `yulong`.
+- Or develop on `yulong` and `git cherry-pick <sha>` the shareable commits onto `main`.
+  (Cherry-pick is clean because shared changes never touch the personal paths.)
+
+**Adding personal content on `yulong`:** the personal paths are gitignored, so use
+`git add -f <path>` to track them on `yulong`.
 
 ### Worktree Workflow
 
@@ -186,7 +216,7 @@ config/
 ├── curlrc                # curl defaults: follow redirects, show errors (symlinked to ~/.curlrc)
 ├── inputrc               # Readline config for bash/python/node REPLs (symlinked to ~/.inputrc)
 ├── gitattributes_global  # Binary file handling + line endings (symlinked to ~/.gitattributes)
-├── machines.conf         # Machine registry (machine-id → name + emoji, for prompt/statusline)
+├── machines.conf.example # Machine registry template (machine-id → name + emoji, for prompt/statusline). Real `machines.conf` is gitignored / lives on `yulong`
 ├── npmrc                 # Global npm config: ignore-scripts + 7-day min-release-age (symlinked)
 ├── bunfig.toml           # Global bun config: 7-day min-release-age (symlinked)
 ├── pnpmrc                # Global pnpm config: 7-day min-release-age (symlinked)
