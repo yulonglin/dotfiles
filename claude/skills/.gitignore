@@ -38,6 +38,10 @@
 .system/
 .system/**
 
+# Skill dev/eval artifacts (A/B output comparisons, not skill definitions)
+anthropic-style-workspace/
+anthropic-style-workspace/**
+
 # Plugin-materialized skills (owned by plugins, not personal skills)
 # Note: use both with and without trailing slash — symlinks match as files, not dirs
 transformers.js

@@ -30,6 +30,15 @@ claude/flags/
 claude/logs/
 claude/security/
 claude/remote/
+claude/custom-insights/
+claude/usage-data/
+claude/tasks/
+claude/plans/
+claude/plans.archive/
+claude/channels/
+claude/history.jsonl
+claude/history.jsonl.archive.*
+# (claude/skills/anthropic-style-workspace/ is ignored via claude/skills/.gitignore deny-list)
 
 # Codex runtime state (local operational artifacts)
 .codex
