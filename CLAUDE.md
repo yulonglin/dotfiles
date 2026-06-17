@@ -65,36 +65,27 @@ See README.md for detailed usage.
 ### Git Workflow
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
-- **Two long-lived branches** (see [Branching Strategy](#branching-strategy) below):
-  `main` is the clean, public-facing branch; `yulong` is the personal superset
-  (everything on `main` **plus** personal working content).
+- **This repo is public** — `main` is the only branch, and it holds shareable
+  dotfiles **only**. Personal working content lives in a **separate private repo**
+  (see [Personal Content](#personal-content) below), never on a branch here.
 
-### Branching Strategy
+### Personal Content
 
-The repo is public-ish (people star it), so `main` stays clean while personal
-working artifacts live on a superset branch.
+This repo is public (people star it). A branch in a public repo is **also public**,
+so personal working artifacts must not live on any branch here — they go in a
+separate **private** repo (`dotfiles-personal`).
 
-| Branch | Contents | Role |
-|--------|----------|------|
-| `main` | Shareable dotfiles only | Public-facing. What people clone/star. |
-| `yulong` | `main` **+** personal content (`plans/`, `specs/`, `.remember/`, `tmp/`, personal `docs/`, `config/machines.conf`) | Where Yulong actually develops. Strict superset of `main`. |
+| Repo | Visibility | Contents |
+|------|-----------|----------|
+| `dotfiles` (this one) | Public | Shareable dotfiles only. What people clone/star. |
+| `dotfiles-personal` | **Private** | `plans/`, `specs/`, `.remember/`, `tmp/`, personal `docs/`, `config/machines.conf` |
 
-**Why it doesn't explode:** `yulong` is built as `main` **+ one "restore personal
-files" commit** (the personal files are force-added on top of an already-clean
-tree). Because the *removal* of those files lives in the shared merge-base of both
-branches, neither `git merge main` nor `git rebase main` into `yulong` will ever
-delete your personal files. The personal paths are also in `.gitignore`, so they
-can't accidentally re-enter `main` as untracked adds.
+The personal paths are listed in `.gitignore` here so they can't accidentally be
+committed to public `main`. They are tracked in the private repo instead.
 
-**The one rule:** never merge `yulong → main` wholesale — that re-adds personal
-files. To publish shared work, do one of:
-- Develop the shared change directly on `main` (or a branch off `main`), then
-  `git checkout yulong && git rebase main` (or `git merge main`) to pull it into `yulong`.
-- Or develop on `yulong` and `git cherry-pick <sha>` the shareable commits onto `main`.
-  (Cherry-pick is clean because shared changes never touch the personal paths.)
-
-**Adding personal content on `yulong`:** the personal paths are gitignored, so use
-`git add -f <path>` to track them on `yulong`.
+**Why not a `yulong`/personal branch?** Branches in a public repo are public — a
+superset branch would have exposed everything it was meant to hide. A separate
+private repo is the only real privacy boundary.
 
 ### Worktree Workflow
 
@@ -216,7 +207,7 @@ config/
 ├── curlrc                # curl defaults: follow redirects, show errors (symlinked to ~/.curlrc)
 ├── inputrc               # Readline config for bash/python/node REPLs (symlinked to ~/.inputrc)
 ├── gitattributes_global  # Binary file handling + line endings (symlinked to ~/.gitattributes)
-├── machines.conf.example # Machine registry template (machine-id → name + emoji, for prompt/statusline). Real `machines.conf` is gitignored / lives on `yulong`
+├── machines.conf.example # Machine registry template (machine-id → name + emoji, for prompt/statusline). Real `machines.conf` is gitignored / lives in the private dotfiles-personal repo
 ├── npmrc                 # Global npm config: ignore-scripts + 7-day min-release-age (symlinked)
 ├── bunfig.toml           # Global bun config: 7-day min-release-age (symlinked)
 ├── pnpmrc                # Global pnpm config: 7-day min-release-age (symlinked)

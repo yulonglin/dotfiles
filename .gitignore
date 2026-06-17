@@ -10,9 +10,9 @@ config/machines.conf
 .secrets
 .envrc
 
-# Personal working content — kept on the `yulong` superset branch, not public `main`.
-# These are force-added (`git add -f`) on `yulong`; gitignored here so they never
-# slip back into public `main`. See "Branching Strategy" in CLAUDE.md.
+# Personal working content — lives in the separate PRIVATE repo (dotfiles-personal),
+# never on a branch here (a branch in a public repo is public). Gitignored so it
+# can't slip into public `main`. See "Personal Content" in CLAUDE.md.
 plans/
 specs/
 .remember/
