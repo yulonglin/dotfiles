@@ -36,9 +36,9 @@ INSTALL_REGISTRY=(
     "ai-tools|Claude Code, Codex CLI, OpenCode, Antigravity CLI|all|true"
     "extras|hyperfine, gitui, code2prompt, terminal-notifier|all|true"
     "cleanup|Automatic cleanup (macOS only)|all|true"
-    "experimental|ty type checker, zerobrew|all|true"
+    "experimental|ty type checker, zotero MCP|all|true"
     "macos-settings|macOS system defaults (Dock, Finder, keyboard)|macos|true"
-    "finicky|Finicky browser routing|macos|true"
+    "apps|GUI + App Store apps via Brewfile (picker TUI)|macos|true"
     "docker|Docker engine + compose|linux|true"
     "pueue|Pueue job scheduler + pueued daemon|linux|true"
     "create-user|Create non-root dev user|linux|true"
@@ -230,7 +230,7 @@ apply_profile() {
             INSTALL_DOCKER=false
             INSTALL_EXTRAS=false
             INSTALL_MACOS_SETTINGS=false
-            INSTALL_FINICKY=false
+            INSTALL_APPS=false
             DEPLOY_EDITOR=false
             DEPLOY_SERENA=false
             DEPLOY_GHOSTTY=false

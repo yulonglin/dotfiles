@@ -1,0 +1,140 @@
+#!/usr/bin/env zsh
+# ═══════════════════════════════════════════════════════════════════════════════
+# setup-login-items — seed macOS "Open at Login" items for menu-bar apps
+# ═══════════════════════════════════════════════════════════════════════════════
+# Reads config/login_items.conf and registers each listed app as a login item so
+# it's reliably present in the menu bar. macOS only.
+#
+# DESIGN — bootstrap-once + additive (it will NOT fight your manual changes):
+#   • Adds a curated app ONLY if it's missing AND we haven't added it before.
+#   • NEVER removes anything; NEVER re-adds something you removed in System Settings
+#     (what we've added is recorded in ~/.config/dotfiles/login-items.bootstrapped).
+#   • Does NOT run on every deploy — invoke it manually (or from the app-setup flow).
+# So day-to-day you manage Login Items in System Settings; this only seeds a machine.
+#
+# Usage:
+#   setup-login-items            # add missing curated apps (respecting prior removals)
+#   setup-login-items --list     # show status of each curated app, change nothing
+#   setup-login-items --force    # re-add even apps you previously removed (ignore state)
+#   setup-login-items --reset-state   # forget what we've bootstrapped (then re-seeds)
+# ═══════════════════════════════════════════════════════════════════════════════
+set -uo pipefail
+setopt extendedglob   # for whitespace-run trimming in the conf-parse loop
+
+SCRIPT_DIR="${0:A:h}"
+DOT_DIR="${DOT_DIR:-${SCRIPT_DIR:h:h}}"
+CONF="$DOT_DIR/config/login_items.conf"
+STATE="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/login-items.bootstrapped"
+
+MODE="add"
+case "${1:-}" in
+    --list)        MODE="list" ;;
+    --force)       MODE="force" ;;
+    --reset-state) MODE="reset" ;;
+    -h|--help)     sed -n '2,25p' "$0"; exit 0 ;;
+    "")            ;;
+    *)             echo "setup-login-items: unknown option: $1" >&2; exit 1 ;;
+esac
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "setup-login-items: macOS only (uses System Events login items)." >&2
+    exit 1
+fi
+[[ -f "$CONF" ]] || { echo "setup-login-items: list not found: $CONF" >&2; exit 1; }
+
+hdr() { print -P "%F{cyan}── $* ──%f"; }
+
+if [[ "$MODE" == "reset" ]]; then
+    rm -f "$STATE"
+    echo "Cleared bootstrap state ($STATE). Next run will re-seed all curated apps."
+    MODE="add"
+fi
+
+mkdir -p "${STATE:h}"
+[[ -f "$STATE" ]] || : > "$STATE"
+
+# Resolve an app name to its bundle path (/Applications or ~/Applications).
+app_path_for() {
+    local name="$1"
+    for base in "/Applications" "$HOME/Applications"; do
+        [[ -d "$base/$name.app" ]] && { echo "$base/$name.app"; return 0; }
+    done
+    return 1
+}
+
+# Current login item names (one per line).
+# NB: assumes no login-item display name contains a comma (AppleScript joins the
+# list with ", "). True for the curated apps; revisit if that ever changes.
+current_login_items() {
+    osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null \
+        | tr ',' '\n' | sed 's/^ *//;s/ *$//'
+}
+
+# Add a login item by path; hidden true|false.
+add_login_item() {
+    local path="$1" hidden="$2"
+    osascript - "$path" "$hidden" <<'EOF' >/dev/null 2>&1
+on run argv
+    set appPath to item 1 of argv
+    set isHidden to (item 2 of argv is "true")
+    tell application "System Events"
+        make login item at end with properties {path:appPath, hidden:isHidden}
+    end tell
+end run
+EOF
+}
+
+EXISTING="$(current_login_items)"
+in_existing() { print -r -- "$EXISTING" | grep -qxF "$1"; }
+in_state()    { grep -qxF "$1" "$STATE" 2>/dev/null; }
+
+hdr "Login items (curated: $CONF)"
+
+added=0 skipped=0 missing=0
+while IFS='|' read -r name hidden; do
+    name="${name##[[:space:]]##}"; name="${name%%[[:space:]]##}"   # strip leading/trailing whitespace runs (incl. tabs)
+    [[ -z "$name" || "${name[1]}" == "#" ]] && continue
+    hidden="${hidden// }"; [[ -z "$hidden" ]] && hidden="true"
+
+    apath="$(app_path_for "$name" || true)"
+
+    if [[ "$MODE" == "list" ]]; then
+        # NB: don't name this 'status' — zsh reserves it (read-only alias for $?).
+        local st
+        if [[ -z "$apath" ]]; then st="not installed"
+        elif in_existing "$name"; then st="login item ✓"
+        elif in_state "$name"; then st="removed by you (respected)"
+        else st="installed, NOT a login item"
+        fi
+        printf '  %-22s %s\n' "$name" "$st"
+        continue
+    fi
+
+    if [[ -z "$apath" ]]; then
+        printf '  %-22s %s\n' "$name" "skip — not installed"
+        ((missing++)); continue
+    fi
+    if in_existing "$name"; then
+        in_state "$name" || echo "$name" >> "$STATE"   # record so we never re-add
+        printf '  %-22s %s\n' "$name" "already a login item"
+        ((skipped++)); continue
+    fi
+    if [[ "$MODE" != "force" ]] && in_state "$name"; then
+        printf '  %-22s %s\n' "$name" "skip — you removed it (use --force to re-add)"
+        ((skipped++)); continue
+    fi
+
+    if add_login_item "$apath" "$hidden"; then
+        in_state "$name" || echo "$name" >> "$STATE"
+        printf '  %-22s %s\n' "$name" "added (hidden=$hidden)"
+        ((added++))
+    else
+        printf '  %-22s %s\n' "$name" "FAILED to add"
+    fi
+done < "$CONF"
+
+[[ "$MODE" == "list" ]] && exit 0
+
+echo ""
+echo "Added $added · skipped $skipped · not-installed $missing"
+echo "Manage these any time in System Settings → General → Login Items — changes there stick."
