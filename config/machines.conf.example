@@ -1,0 +1,12 @@
+# Machine Registry
+#
+# Maps machine IDs to friendly names for display in zsh prompt, Claude Code statusline, etc.
+# Format: machine_id|name|emoji (emoji optional — auto-assigned from name hash if empty)
+#
+# Machine ID sources:
+#   Linux: /etc/machine-id
+#   macOS: IOPlatformUUID from ioreg
+#
+# Manage with: machine-register [name]
+#              machine-register --list
+#              machine-register --remove

@@ -6,8 +6,22 @@ config/user.conf
 config/secrets.sh
 config/safari_web_apps.local
 config.local.sh
+config/machines.conf
 .secrets
 .envrc
+
+# Personal working content — lives in the separate PRIVATE repo (dotfiles-personal),
+# never on a branch here (a branch in a public repo is public). Gitignored so it
+# can't slip into public `main`. See "Personal Content" in CLAUDE.md.
+plans/
+specs/
+.remember/
+tmp/
+docs/CLAUDE_TASKS.md
+docs/interview-prep-*.md
+docs/machine-restart-handover.md
+docs/plans/
+docs/slack-channel-summaries/
 
 # Claude runtime state (local operational artifacts)
 claude/diagnostics/
@@ -16,6 +30,15 @@ claude/flags/
 claude/logs/
 claude/security/
 claude/remote/
+claude/custom-insights/
+claude/usage-data/
+claude/tasks/
+claude/plans/
+claude/plans.archive/
+claude/channels/
+claude/history.jsonl
+claude/history.jsonl.archive.*
+# (claude/skills/anthropic-style-workspace/ is ignored via claude/skills/.gitignore deny-list)
 
 # Codex runtime state (local operational artifacts)
 .codex

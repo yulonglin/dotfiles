@@ -1,9 +1,11 @@
 # Git configuration template
-# This file will be merged with your existing .gitconfig during deployment
+# This file will be merged with your existing .gitconfig during deployment.
+# Identity is set from config/user.conf at deploy time (see config/user.conf.example);
+# the placeholders below are only a fallback if user.conf is absent.
 
 [user]
-    email = 30549145+yulonglin@users.noreply.github.com
-    name = yulonglin
+    email = you@example.com
+    name = Your Name
 
 [push]
     autoSetupRemote = true

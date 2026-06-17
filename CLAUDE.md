@@ -65,6 +65,27 @@ See README.md for detailed usage.
 ### Git Workflow
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
+- **This repo is public** — `main` is the only branch, and it holds shareable
+  dotfiles **only**. Personal working content lives in a **separate private repo**
+  (see [Personal Content](#personal-content) below), never on a branch here.
+
+### Personal Content
+
+This repo is public (people star it). A branch in a public repo is **also public**,
+so personal working artifacts must not live on any branch here — they go in a
+separate **private** repo (`dotfiles-personal`).
+
+| Repo | Visibility | Contents |
+|------|-----------|----------|
+| `dotfiles` (this one) | Public | Shareable dotfiles only. What people clone/star. |
+| `dotfiles-personal` | **Private** | `plans/`, `specs/`, `.remember/`, `tmp/`, personal `docs/`, `config/machines.conf` |
+
+The personal paths are listed in `.gitignore` here so they can't accidentally be
+committed to public `main`. They are tracked in the private repo instead.
+
+**Why not a `yulong`/personal branch?** Branches in a public repo are public — a
+superset branch would have exposed everything it was meant to hide. A separate
+private repo is the only real privacy boundary.
 
 ### Worktree Workflow
 
@@ -186,7 +207,7 @@ config/
 ├── curlrc                # curl defaults: follow redirects, show errors (symlinked to ~/.curlrc)
 ├── inputrc               # Readline config for bash/python/node REPLs (symlinked to ~/.inputrc)
 ├── gitattributes_global  # Binary file handling + line endings (symlinked to ~/.gitattributes)
-├── machines.conf         # Machine registry (machine-id → name + emoji, for prompt/statusline)
+├── machines.conf.example # Machine registry template (machine-id → name + emoji, for prompt/statusline). Real `machines.conf` is gitignored / lives in the private dotfiles-personal repo
 ├── npmrc                 # Global npm config: ignore-scripts + 7-day min-release-age (symlinked)
 ├── bunfig.toml           # Global bun config: 7-day min-release-age (symlinked)
 ├── pnpmrc                # Global pnpm config: 7-day min-release-age (symlinked)
