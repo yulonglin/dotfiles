@@ -2,6 +2,12 @@
 
 How extensibility concepts map across Claude Code, Codex CLI, and Gemini CLI.
 
+> **Note:** Gemini CLI was retired by Google on 2026-06-18. Its successor is
+> Antigravity CLI (`agy`), synced via `scripts/sync_claude_to_antigravity.sh`
+> (skills + permissions; Antigravity reuses the `~/.gemini/antigravity-cli/` dir).
+> The Gemini-specific rows below are retained for historical reference; the
+> Antigravity permission schema is not yet verified end-to-end (see that script's header).
+
 ## Concept Mapping
 
 | Concept | Claude Code | Codex CLI | Gemini CLI |
@@ -76,8 +82,8 @@ Claude Code's plugin system creates symlinks in `~/.claude/skills/` pointing to 
 ### Usage
 
 ```bash
-# Sync skills + permissions to Gemini CLI
-scripts/sync_claude_to_gemini.sh
+# Sync skills + permissions to Antigravity CLI (Gemini CLI's successor)
+scripts/sync_claude_to_antigravity.sh
 
 # Sync skills + permissions to Codex CLI
 scripts/sync_claude_to_codex.sh

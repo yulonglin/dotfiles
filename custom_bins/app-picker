@@ -57,6 +57,11 @@ typeset -a rows selected
 local i
 for (( i=1; i<=n; i++ )); do
     local label="${i}	[${A_CAT[i]}·T${A_TIER[i]}] ${A_NAME[i]} — ${A_DESC[i]}"
+    # gum --selected takes a comma-separated list, so a label containing a comma
+    # (e.g. a description like "Notes, docs, and wiki") would be mis-split and fail
+    # to pre-select. Normalise commas → ';' so the CSV is unambiguous; rows and
+    # selected derive from the same label, so option↔selected matching still holds.
+    label="${label//,/;}"
     rows+=("$label")
     [[ "${A_DEFAULT[i]}" == "true" ]] && selected+=("$label")
 done

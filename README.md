@@ -6,7 +6,7 @@ This setup reflects workflows optimized for ML research: reproducibility, experi
 
 **Key highlights:**
 
-- 🤖 **AI Coding Assistants** - Extensively configured Claude Code, plus Codex CLI and Gemini CLI support
+- 🤖 **AI Coding Assistants** - Extensively configured Claude Code, plus Codex CLI, OpenCode, and Antigravity CLI support
 - 👻 **[Ghostty](https://ghostty.org/)** - Fast, GPU-accelerated terminal with sensible defaults
 - 📊 **[htop](https://htop.dev/)** - Dynamic CPU meter configuration that adapts to your core count
 - 🦀 **Rust-powered CLI tools** - Modern, blazing-fast replacements for standard Unix utilities
@@ -577,7 +577,7 @@ clear-claude-code --list
 
 ### AI Tools Auto-Update (both platforms)
 
-Daily automatic updates for Claude Code, Gemini CLI, and Codex CLI at 06:00:
+Daily automatic updates for Claude Code, Codex CLI, OpenCode, and Antigravity CLI at 06:00:
 
 ```bash
 ./deploy.sh --ai-update  # Part of defaults

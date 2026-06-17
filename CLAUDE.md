@@ -134,7 +134,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Encrypted secrets (SOPS+age / BWS) - Stores API keys via Bitwarden Secrets Manager (primary) or SOPS+age (fallback). Backend auto-detected: bws if token + CLI exist, else sops. Override with `DOTFILES_SECRETS_BACKEND` env var
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
 - Claude Code cleanup - No-output-for-24h session cleanup (tmux preserved, launchd/cron)
-- AI tools auto-update - Daily update of Claude Code, Gemini CLI, Codex CLI (6 AM, launchd/cron)
+- AI tools auto-update - Daily update of Claude Code, Codex CLI, OpenCode, Antigravity CLI (6 AM, launchd/cron)
 - Developer config files - EditorConfig, curlrc, inputrc, .hushlogin (deployed with --editor flag)
 - Global gitattributes - Binary file handling + line endings (deployed with --git-config flag)
 - File associations - Set default editor for coding file types and default terminal for `.command`/`.tool` (macOS only, reads `config/macos_default_apps.conf`)
