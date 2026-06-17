@@ -217,6 +217,15 @@ configure_activity_monitor() {
     defaults write com.apple.ActivityMonitor SortDirection -int 0 2>/dev/null || true
 }
 
+# ─── Menu Bar ─────────────────────────────────────────────────────────────────
+
+configure_menubar() {
+    echo "  → Configuring menu bar..."
+
+    # Show battery percentage in the menu bar (Control Center, Big Sur+)
+    defaults write com.apple.controlcenter BatteryShowPercentage -bool true 2>/dev/null || true
+}
+
 # ─── Misc ─────────────────────────────────────────────────────────────────────
 
 configure_misc() {
@@ -241,6 +250,7 @@ configure_preview
 configure_screenshots
 configure_appstore
 configure_activity_monitor
+configure_menubar
 configure_misc
 
 # ─── Restart Affected Services ───────────────────────────────────────────────
@@ -249,6 +259,7 @@ echo "  → Restarting affected services..."
 killall Dock 2>/dev/null || true
 killall Finder 2>/dev/null || true
 killall SystemUIServer 2>/dev/null || true
+killall ControlCenter 2>/dev/null || true
 
 echo "✅ macOS system defaults configured successfully!"
 echo ""
