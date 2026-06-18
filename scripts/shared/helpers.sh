@@ -1083,6 +1083,17 @@ print('yes' if '$1' in data['files'] else 'no')
     fi
 }
 
+# Push a local file to gist, creating or updating the named entry.
+# gh gist edit --add only creates new files; PATCH updates existing ones.
+# Usage: gist_push_file <gist_id> <local_path> <gist_filename>
+gist_push_file() {
+    local gist_id="$1" local_path="$2" gist_filename="$3"
+    local content
+    content=$(python3 -c "import sys; sys.stdout.write(open('$local_path').read())")
+    gh api --method PATCH "/gists/$gist_id" \
+        --field "files[$gist_filename][content]=$content" &>/dev/null
+}
+
 # Sync authorized_keys with union merge: keys are only ever added, never deleted.
 # A key missing from local doesn't mean it was revoked — it might just be a new machine.
 # Usage: sync_authorized_keys_union <gist_id> <gist_updated_at_epoch>
@@ -1108,7 +1119,7 @@ sync_authorized_keys_union() {
 
     # Case 2: gist missing → push local
     if [[ -z "$gist_content" ]]; then
-        gh gist edit "$gist_id" --add "$local_path" --filename "authorized_keys" &>/dev/null
+        gist_push_file "$gist_id" "$local_path" "authorized_keys"
         log_info "  ↑ Pushed authorized_keys to gist (gist was missing)"
         return 0
     fi
@@ -1208,7 +1219,7 @@ PYEOF
     if [[ "$merged" != "$gist_content" ]]; then
         local tmp_ak="$TMPDIR/authorized_keys_union_$$"
         printf '%s\n' "$merged" > "$tmp_ak"
-        gh gist edit "$gist_id" --add "$tmp_ak" --filename "authorized_keys" &>/dev/null
+        gist_push_file "$gist_id" "$tmp_ak" "authorized_keys"
         rm -f "$tmp_ak"
         log_info "  ↑ Pushed merged authorized_keys to gist (gist had $gist_count keys, merged=$merged_count)"
         changed=true
@@ -1246,7 +1257,7 @@ sync_file() {
     fi
 
     if [[ "$gist_exists" == "no" ]]; then
-        gh gist edit "$gist_id" --add "$local_path" --filename "$gist_filename" &>/dev/null
+        gist_push_file "$gist_id" "$local_path" "$gist_filename"
         log_info "  ↑ Pushed $gist_filename to gist (gist was missing)"
         return 0
     fi
@@ -1259,7 +1270,7 @@ sync_file() {
 
     if [[ "$local_content" != "$gist_content" ]]; then
         if [[ "$local_mtime" -gt "$gist_updated_at" ]]; then
-            gh gist edit "$gist_id" --add "$local_path" --filename "$gist_filename" &>/dev/null
+            gist_push_file "$gist_id" "$local_path" "$gist_filename"
             log_info "  ↑ Pushed $gist_filename to gist (local newer)"
         else
             printf '%s\n' "$gist_content" > "$local_path"
