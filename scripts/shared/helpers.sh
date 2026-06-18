@@ -1064,9 +1064,9 @@ print('yes' if '$1' in data['files'] else 'no')
     log_info "Syncing SSH config..."
     sync_file "$HOME/.ssh/config" "config" "$gist_id" "$gist_updated_at" && changes_made=true
 
-    # Sync authorized_keys
+    # Sync authorized_keys (union merge — never drop keys across machines)
     log_info "Syncing authorized_keys..."
-    sync_file "$HOME/.ssh/authorized_keys" "authorized_keys" "$gist_id" "$gist_updated_at" && changes_made=true
+    sync_authorized_keys_union "$gist_id" "$gist_updated_at" && changes_made=true
 
     # Sync user.conf (git identity)
     log_info "Syncing git identity..."
@@ -1077,6 +1077,140 @@ print('yes' if '$1' in data['files'] else 'no')
     else
         log_success "Gist already in sync"
     fi
+}
+
+# Sync authorized_keys with union merge: keys are only ever added, never deleted.
+# A key missing from local doesn't mean it was revoked — it might just be a new machine.
+# Usage: sync_authorized_keys_union <gist_id> <gist_updated_at_epoch>
+sync_authorized_keys_union() {
+    local gist_id="$1"
+    local gist_updated_at="$2"
+    local local_path="$HOME/.ssh/authorized_keys"
+
+    local gist_content
+    gist_content=$(get_gist_file "authorized_keys")
+
+    # Case 1: local missing → pull from gist
+    if [[ ! -f "$local_path" ]]; then
+        if [[ -n "$gist_content" ]]; then
+            mkdir -p "$(dirname "$local_path")"
+            printf '%s\n' "$gist_content" > "$local_path"
+            chmod 600 "$local_path"
+            log_info "  ↓ Pulled authorized_keys from gist (local was missing)"
+            return 0
+        fi
+        return 1
+    fi
+
+    # Case 2: gist missing → push local
+    if [[ -z "$gist_content" ]]; then
+        gh gist edit "$gist_id" --add "$local_path" --filename "authorized_keys" &>/dev/null
+        log_info "  ↑ Pushed authorized_keys to gist (gist was missing)"
+        return 0
+    fi
+
+    # Get local file birthtime to distinguish "fresh install" from "intentional edit"
+    local local_birthtime=0
+    if is_macos; then
+        local_birthtime=$(stat -f %SB -t %s "$local_path" 2>/dev/null || echo 0)
+    else
+        local_birthtime=$(stat --format=%W "$local_path" 2>/dev/null || echo 0)
+        # Fall back to mtime if birthtime unsupported (returns 0)
+        [[ "$local_birthtime" == "0" ]] && local_birthtime=$(stat --format=%Y "$local_path" 2>/dev/null || echo 0)
+    fi
+    local age_days=0
+    [[ "$local_birthtime" -gt 0 ]] && age_days=$(( ( $(date +%s) - local_birthtime ) / 86400 ))
+    local age_label="${age_days}d old"
+
+    local local_content
+    local_content=$(cat "$local_path")
+
+    if [[ "$local_content" == "$gist_content" ]]; then
+        log_info "  ✓ authorized_keys in sync"
+        return 1
+    fi
+
+    # Union merge via Python: deduplicate by key blob, use the older file as the base
+    # (its structure/comments are authoritative; the newer file's unique keys are appended)
+    local merged
+    merged=$(GIST_CONTENT="$gist_content" LOCAL_CONTENT="$local_content" \
+        python3 - "$local_birthtime" "$gist_updated_at" <<'PYEOF'
+import os, sys
+
+local_birth = int(sys.argv[1])
+gist_ts     = int(sys.argv[2])
+
+def parse(content):
+    """Return (entries_in_order, blob_set). Each entry is (blob_or_None, raw_line)."""
+    blobs, entries = set(), []
+    for line in content.splitlines():
+        s = line.strip()
+        if s and not s.startswith('#'):
+            parts = s.split()
+            if len(parts) >= 2:
+                blob = parts[1]
+                if blob not in blobs:
+                    blobs.add(blob)
+                    entries.append((blob, line))
+                continue
+        entries.append((None, line))  # blank / comment line
+    return entries, blobs
+
+gist_entries,  gist_blobs  = parse(os.environ['GIST_CONTENT'])
+local_entries, local_blobs = parse(os.environ['LOCAL_CONTENT'])
+
+# Older file = canonical base; newer file contributes only its unique keys
+if local_birth > 0 and local_birth < gist_ts:
+    base_entries, other_blobs = local_entries, gist_blobs
+    extra = [(b, l) for b, l in gist_entries if b and b not in local_blobs]
+else:
+    base_entries, other_blobs = gist_entries, local_blobs
+    extra = [(b, l) for b, l in local_entries if b and b not in gist_blobs]
+
+lines = [l for _, l in base_entries]
+# Strip trailing blanks before appending
+while lines and not lines[-1].strip():
+    lines.pop()
+
+if extra:
+    lines.append('')
+    for _, line in extra:
+        lines.append(line)
+
+print('\n'.join(lines))
+PYEOF
+)
+
+    if [[ -z "$merged" ]]; then
+        log_warning "  authorized_keys union merge failed, falling back to last-modified-wins"
+        sync_file "$local_path" "authorized_keys" "$gist_id" "$gist_updated_at"
+        return
+    fi
+
+    local local_count gist_count merged_count
+    local_count=$(printf '%s\n' "$local_content" | grep -cE '^(ssh-|ecdsa-|sk-)' || true)
+    gist_count=$(printf '%s\n' "$gist_content"   | grep -cE '^(ssh-|ecdsa-|sk-)' || true)
+    merged_count=$(printf '%s\n' "$merged"        | grep -cE '^(ssh-|ecdsa-|sk-)' || true)
+
+    local changed=false
+
+    if [[ "$merged" != "$local_content" ]]; then
+        printf '%s\n' "$merged" > "$local_path"
+        chmod 600 "$local_path"
+        log_info "  ↕ Updated local authorized_keys (${local_count}→${merged_count} keys; local file is $age_label)"
+        changed=true
+    fi
+
+    if [[ "$merged" != "$gist_content" ]]; then
+        local tmp_ak="$TMPDIR/authorized_keys_union_$$"
+        printf '%s\n' "$merged" > "$tmp_ak"
+        gh gist edit "$gist_id" --add "$tmp_ak" --filename "authorized_keys" &>/dev/null
+        rm -f "$tmp_ak"
+        log_info "  ↑ Pushed merged authorized_keys to gist (gist had $gist_count keys, merged=$merged_count)"
+        changed=true
+    fi
+
+    $changed && return 0 || return 1
 }
 
 # Sync a single file with gist
