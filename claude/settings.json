@@ -98,7 +98,11 @@
       "Bash(chmod 000:*)",
       "Bash(mv /:*)"
     ],
-    "ask": ["Bash(kill:*)", "Bash(killall:*)", "Bash(pkill:*)"],
+    "ask": [
+      "Bash(kill:*)",
+      "Bash(killall:*)",
+      "Bash(pkill:*)"
+    ],
     "defaultMode": "plan"
   },
   "model": "haiku",
@@ -191,8 +195,13 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": true,
-    "excludedCommands": ["git", "git stash", "docker"]
+    "excludedCommands": [
+      "git",
+      "git stash",
+      "docker"
+    ]
   },
   "alwaysThinkingEnabled": true,
-  "installMethod": "native"
+  "installMethod": "native",
+  "skipDangerousModePermissionPrompt": true
 }
