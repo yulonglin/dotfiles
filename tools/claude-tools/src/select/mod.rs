@@ -1,11 +1,13 @@
 pub mod state;
 
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::ExecutableCommand;
+use ratatui::backend::CrosstermBackend;
 use ratatui::prelude::*;
+use ratatui::Terminal;
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use state::{AppState, ListItem};
@@ -61,13 +63,19 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut state = AppState::new(items);
 
+    // Render TUI to stderr so stdout stays clean for selected-names output.
+    // This is critical: deploy.sh captures our stdout in result=$(...) and
+    // uses each line as a variable name — any escape codes there cause errors.
     enable_raw_mode()?;
-    std::io::stdout().execute(EnterAlternateScreen)?;
+    io::stderr().execute(EnterAlternateScreen)?;
 
-    let result = run_loop(&mut state, &title);
+    let backend = CrosstermBackend::new(io::stderr());
+    let mut terminal = Terminal::new(backend)?;
+
+    let result = run_loop(&mut terminal, &mut state, &title);
 
     let _ = disable_raw_mode();
-    let _ = std::io::stdout().execute(LeaveAlternateScreen);
+    let _ = io::stderr().execute(LeaveAlternateScreen);
 
     result?;
 
@@ -75,7 +83,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     }
 
-    // Print selected names to stdout
+    // Print selected names to stdout (clean, no escape codes)
     for name in state.selected_names() {
         println!("{}", name);
     }
@@ -83,9 +91,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_loop(state: &mut AppState, title: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let mut terminal = ratatui::init();
-
+fn run_loop(terminal: &mut Terminal<CrosstermBackend<io::Stderr>>, state: &mut AppState, title: &str) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         terminal.draw(|f| render(f, state, title))?;
 
@@ -102,7 +108,6 @@ fn run_loop(state: &mut AppState, title: &str) -> Result<(), Box<dyn std::error:
         }
     }
 
-    ratatui::restore();
     Ok(())
 }
 
