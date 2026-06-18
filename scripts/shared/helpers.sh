@@ -988,7 +988,6 @@ ensure_local_key_in_authorized_keys() {
     local key_data
     key_data=$(echo "$pub_key" | awk '{print $1" "$2}')
 
-    # Create authorized_keys if missing (avoid touch to preserve mtime for sync)
     mkdir -p "$HOME/.ssh"
     if [[ ! -f "$auth_keys" ]]; then
         touch "$auth_keys"
@@ -1037,6 +1036,11 @@ data = json.load(sys.stdin)
 ts = datetime.fromisoformat(data['updated_at'].replace('Z', '+00:00'))
 print(int(ts.timestamp()))
 " <<< "$gist_data" 2>/dev/null)
+
+    if [[ -z "$gist_updated_at" ]]; then
+        log_warning "Failed to parse gist timestamp - skipping sync"
+        return 1
+    fi
 
     # Helper functions
     get_gist_file() {
@@ -1210,7 +1214,7 @@ PYEOF
         changed=true
     fi
 
-    $changed && return 0 || return 1
+    [[ "$changed" == "true" ]]
 }
 
 # Sync a single file with gist
@@ -1258,7 +1262,7 @@ sync_file() {
             gh gist edit "$gist_id" --add "$local_path" --filename "$gist_filename" &>/dev/null
             log_info "  ↑ Pushed $gist_filename to gist (local newer)"
         else
-            echo "$gist_content" > "$local_path"
+            printf '%s\n' "$gist_content" > "$local_path"
             [[ "$gist_filename" == "config" || "$gist_filename" == "authorized_keys" ]] && chmod 600 "$local_path"
             # Preserve mtime to match gist's updated_at (prevents false "local newer" on next sync)
             if is_macos; then
