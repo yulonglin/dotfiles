@@ -241,6 +241,7 @@
       "Bash(nc -lp *)"
     ],
     "ask": [
+      "ExitPlanMode",
       "Bash(docker compose *)",
       "Bash(docker build *)",
       "Bash(docker exec *)",
@@ -623,7 +624,8 @@
     "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
-    "writing@ai-safety-plugins": true
+    "writing@ai-safety-plugins": true,
+    "codex@codex-plugin-cc": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -667,6 +669,12 @@
         "source": "github",
         "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
       }
+    },
+    "codex-plugin-cc": {
+      "source": {
+        "source": "github",
+        "repo": "crazytieguy/codex-plugin-cc"
+      }
     }
   },
   "outputStyle": "Effortful Learning",
@@ -686,7 +694,51 @@
         "api.github.com",
         "mcp.linear.app",
         "export.arxiv.org",
-        "arxiv.org"
+        "arxiv.org",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "bootstrap.pypa.io",
+        "modal.com",
+        "api.modal.com",
+        "runpod.io",
+        "api.runpod.ai",
+        "huggingface.co",
+        "cdn-lfs.huggingface.co",
+        "datasets-server.huggingface.co",
+        "wandb.ai",
+        "api.wandb.ai",
+        "openrouter.ai",
+        "api.openai.com",
+        "registry.npmjs.org",
+        "crates.io",
+        "static.crates.io",
+        "index.crates.io",
+        "pytorch.org",
+        "download.pytorch.org",
+        "readthedocs.io",
+        "docs.python.org",
+        "lambdalabs.com",
+        "cloud.lambdalabs.com",
+        "tinker.ai",
+        "together.ai",
+        "api.together.xyz",
+        "fireworks.ai",
+        "replicate.com",
+        "api.replicate.com",
+        "vast.ai",
+        "groq.com",
+        "api.groq.com",
+        "mistral.ai",
+        "api.mistral.ai",
+        "deepinfra.com",
+        "api.deepinfra.com",
+        "lightning.ai",
+        "beam.cloud",
+        "comet.com",
+        "comet.ml",
+        "neptune.ai",
+        "cerebras.ai",
+        "anthropic.com"
       ],
       "allowLocalBinding": true
     },
@@ -733,7 +785,29 @@
       "jkill",
       "jtop",
       "jguard",
-      "spark"
+      "spark",
+      "modal",
+      "runpodctl",
+      "uv",
+      "wandb",
+      "huggingface-cli",
+      "python",
+      "python3",
+      "pip",
+      "pip3",
+      "ssh",
+      "scp",
+      "rsync",
+      "lambda",
+      "lambdactl",
+      "together",
+      "groq",
+      "replicate",
+      "nvcc",
+      "nvidia-smi",
+      "jupyter",
+      "ipython",
+      "tensorboard"
     ]
   },
   "feedbackSurveyRate": 0,

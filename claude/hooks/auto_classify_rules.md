@@ -77,6 +77,7 @@ Use `"decision": "unsure"` when the action does not clearly match an ALLOW rule 
 
 ### Specific UNSURE patterns (use `unsure`, NOT `deny`)
 
+- **Plan Execution (ExitPlanMode)**: Any `ExitPlanMode` tool call — the agent is about to execute a drafted plan. Always return `unsure` so the user sees the plan and explicitly approves it before execution begins. Never auto-approve.
 - **Cross-Personal-Repo Writes/Edits**: Session is in personal repo A, command writes/edits/moves/renames in a different personal repo B (both owned by the user). Reads are auto-allowed (see ALLOW); this rule covers anything that mutates the target repo — `Edit`/`Write` tool calls, `mv`, `cp` into the target, `git commit`/`push` into the target, file creation, etc. Return `unsure` — surface to the user for one-click confirmation rather than denying. **Hard deny still applies** when one repo is shared/org/untrusted, when the command is destructive (force push, reset --hard, rm -rf), or when the cross-repo target is `~/.claude/` writes (still self-modification).
 
 ## DENY — block and warn. When uncertain between ALLOW and DENY, prefer UNSURE.
