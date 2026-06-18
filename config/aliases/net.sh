@@ -32,7 +32,7 @@ if command -v socket &>/dev/null; then
 fi
 
 # Mosh: preserve scrollback by skipping alternate screen init
-alias mosh='mosh --no-init'
+alias mosh='LANG=en_US.UTF-8 mosh --no-init'
 
 # SSH wrapper: nudge towards et/mosh for interactive sessions
 # Neither is a drop-in replacement (different ports, tunnel syntax, no -i/-L/-D flags),
