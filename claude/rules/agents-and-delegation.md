@@ -190,3 +190,22 @@ Task complexity?
 5. **For background agents** — read the output file; the data is there despite the failure notification
 
 **Remove this section** when the upstream fix lands (check: `claude --version` changelog).
+
+
+---
+
+## Never Run Detached Long-Jobs Inside a Subagent
+
+**Root cause of a real failure (2026-06-15):** the `core:codex` agent launched `codex exec` as a backgrounded/detached process, then its own turn ended. When a subagent exits, any child it detached is orphaned — nothing re-notifies the parent, the job dies or runs to no effect, and the agent falsely reports `completed`. Burned hours, wrote nothing.
+
+**Rule:** A subagent is NOT a durable host for background work. Launch long-running or detached jobs from a **harness-tracked** mechanism that survives the launching context and re-notifies on completion:
+
+| Need | Use (harness-tracked) | NOT |
+|------|----------------------|-----|
+| Codex review/task (GPT-5 / 5.5-pro) | **codex-companion via the Monitor tool** (`codex-companion task` / `review`) | `core:codex` agent backgrounding `codex exec` |
+| Long shell job (build, train, sweep) | Bash `run_in_background` in **main context**, `tmux`, or Monitor | `&` / `nohup` inside a subagent that then exits |
+| Cloud job to watch (Modal, CI) | Monitor poll-loop, or Bash `run_in_background` in main context | detached process inside a subagent |
+
+**Corollary — verify, don't trust the `completed` status:** when an agent claims it ran a detached job, check the artifact on disk before relaying success (file written? `pgrep` the process? `ls` the output?). A subagent's `completed` means its *turn* ended, not that its detached child did anything.
+
+**codex-companion is the standard path for Codex** once `codex login` is done: route all Codex work through it via the Monitor tool (it persists and re-notifies; a raw `codex exec` does not).
