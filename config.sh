@@ -30,7 +30,7 @@ PROFILE="${PROFILE:-personal}"
 # in install.sh/deploy.sh. TUI menu, --flag, --no-flag, --only all work automatically.
 
 INSTALL_REGISTRY=(
-    "core|Core packages, CLI tools, gh, bws, uv|all|true|Base"
+    "core|Core packages, CLI tools, gh, uv|all|true|Base"
     "zsh|ZSH + oh-my-zsh + powerlevel10k theme|all|true|Base"
     "tmux|Terminal multiplexer|all|true|Base"
     "ai-tools|Claude Code, Codex CLI, OpenCode, Antigravity CLI|all|true|AI"
@@ -54,12 +54,12 @@ DEPLOY_REGISTRY=(
     "htop|htop config with dynamic CPU meters|all|true|Shell & Editors"
     "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"
     "codex|Codex CLI config symlink (~/.codex)|all|true|AI & Apps"
-    "serena|Serena MCP server config (symlinked)|all|true|AI & Apps"
+    "serena|Serena MCP server config (symlinked)|all|false|AI & Apps"
     "git-config|gitconfig, global gitignore, ripgrep config|all|true|Git"
     "git-hooks|Global pre-commit secret detection|all|true|Git"
     "secrets|Sync SSH/git identity via GitHub gist|all|true|Secrets"
     "secrets-env|Decrypt BWS secrets (Bitwarden Secrets Manager)|all|true|Secrets"
-    "bws|Bitwarden Secrets Manager CLI|all|false|Secrets"
+    "bws|Bitwarden Secrets Manager CLI|all|true|Secrets"
     "pkg-configs|Package manager security configs (min-release-age)|all|true|Security"
     "dep-audit|Weekly dependency audit (supply chain defense)|all|true|Security"
     "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|all|true|Automation"

@@ -330,7 +330,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-fable-5",
+  "model": "opusplan",
   "hooks": {
     "PermissionRequest": [
       {
@@ -668,7 +668,13 @@
     "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
-    "writing@ai-safety-plugins": true
+    "writing@ai-safety-plugins": true,
+    "codex@codex-plugin-cc": true,
+    "things-mcp@productivity-tools": true,
+    "swift-lsp@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "imessage@claude-plugins-official": true,
+    "telegram@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -711,6 +717,12 @@
       "source": {
         "source": "github",
         "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
+      }
+    },
+    "codex-plugin-cc": {
+      "source": {
+        "source": "github",
+        "repo": "crazytieguy/codex-plugin-cc"
       }
     }
   },
@@ -789,6 +801,7 @@
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
   "claudeMdExcludes": [
     "node_modules",
     "vendor",
@@ -797,6 +810,7 @@
     "cache",
     ".cache"
   ],
+  "theme": "dark",
   "verbose": true,
   "preferredNotifChannel": "auto",
   "autoCompactEnabled": true,
@@ -855,6 +869,5 @@
         "ZOTERO_LOCAL": "true"
       }
     }
-  },
-  "skipWorkflowUsageWarning": true
+  }
 }

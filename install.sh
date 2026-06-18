@@ -156,13 +156,11 @@ export PATH="$HOME/.local/bin:$PATH"
 if is_linux; then
     run_parallel "Installing security tools" \
         "gitleaks|install_gitleaks" \
-        "direnv|install_direnv" \
-        "bws|install_bws"
+        "direnv|install_direnv"
 else
     # macOS: brew has a global lock, must run sequentially
     install_gitleaks
     install_direnv
-    install_bws
 fi
 
 # ─── uv (Python Package Manager) ──────────────────────────────────────────────
