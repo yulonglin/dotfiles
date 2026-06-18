@@ -1085,13 +1085,13 @@ print('yes' if '$1' in data['files'] else 'no')
 
 # Push a local file to gist, creating or updating the named entry.
 # gh gist edit --add only creates new files; PATCH updates existing ones.
+# Content is passed via stdin (jq --rawfile) to avoid exposing it in process args.
 # Usage: gist_push_file <gist_id> <local_path> <gist_filename>
 gist_push_file() {
     local gist_id="$1" local_path="$2" gist_filename="$3"
-    local content
-    content=$(python3 -c "import sys; sys.stdout.write(open('$local_path').read())")
-    gh api --method PATCH "/gists/$gist_id" \
-        --field "files[$gist_filename][content]=$content" &>/dev/null
+    jq -n --arg name "$gist_filename" --rawfile c "$local_path" \
+        '{files: {($name): {content: $c}}}' \
+    | gh api --method PATCH "/gists/$gist_id" --input - &>/dev/null
 }
 
 # Sync authorized_keys with union merge: keys are only ever added, never deleted.
