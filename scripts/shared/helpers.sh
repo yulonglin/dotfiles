@@ -1219,7 +1219,7 @@ PYEOF
     fi
 
     if [[ "$merged" != "$gist_content" ]]; then
-        local tmp_ak="$TMPDIR/authorized_keys_union_$$"
+        local tmp_ak="${TMPDIR:-/tmp}/authorized_keys_union_$$"
         printf '%s\n' "$merged" > "$tmp_ak"
         gist_push_file "$gist_id" "$tmp_ak" "authorized_keys"
         rm -f "$tmp_ak"
