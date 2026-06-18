@@ -25,7 +25,7 @@ If you're an AI agent (Claude Code, Codex, etc.) working in this repo, read this
 
 | Want to... | Command / file |
 |---|---|
-| Add a new alias | `config/aliases.sh` (or `aliases_<name>.sh` for env-specific) |
+| Add a new alias | `config/aliases/<theme>.sh` (or `aliases_<name>.sh` for env-specific) |
 | Add a deploy component | Create `deploy_X()` in `deploy.sh` — see [Adding New Features](#adding-new-features) |
 | Add a custom binary | Drop it in `custom_bins/` (already on PATH); `chmod +x` |
 | Install/manage Mac apps | Add a line to `config/apps.conf` → run `app-picker` (gum TUI) → `brew bundle --file=config/Brewfile`. Official casks + `mas` only, **no third-party taps**. Then `scripts/setup/auth-setup` |
@@ -188,8 +188,18 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 ```
 config/
 ├── zshrc.sh              # Main ZSH config, sources all other configs
-├── aliases.sh            # General aliases
-├── aliases_*.sh          # Environment-specific aliases (optional)
+├── aliases/              # Themed alias files (sourced alphabetically)
+│   ├── claude.sh         #   Claude launchers, worktree helpers, AI CLI tools
+│   ├── core.sh           #   Safety-wrapped rm/cp/mv, utilities
+│   ├── editors.sh        #   edit-* shortcuts
+│   ├── git.sh            #   g* git aliases
+│   ├── jobs.sh           #   Pueue j* + Slurm q* job queues
+│   ├── misc.sh           #   ghostty themes g0-g9, UV_EXCLUDE_NEWER, misc
+│   ├── nav.sh            #   cd override, .. navigation, directory shortcuts
+│   ├── net.sh            #   SSH, VPN, network aliases
+│   ├── secrets.sh        #   SOPS/BWS, secrets-*, snippet aliases
+│   └── tmux.sh           #   ta/tad/tn etc.
+├── aliases_*.sh          # Environment-specific aliases (optional, e.g. aliases_inspect.sh)
 ├── tmux.conf             # Tmux configuration
 ├── p10k.zsh              # Powerlevel10k theme
 ├── vimrc                 # Vim configuration
@@ -352,7 +362,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ### Adding New Features
 
 **New Aliases**:
-- General: Add to `config/aliases.sh`
+- General: Add to the appropriate `config/aliases/<theme>.sh` (git.sh, nav.sh, net.sh, claude.sh, etc.)
 - Environment-specific: Create `config/aliases_<name>.sh`
 - Deploy with: `./deploy.sh --aliases=<name>`
 

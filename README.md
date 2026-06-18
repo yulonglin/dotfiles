@@ -345,7 +345,7 @@ ssh myserver     # In Ghostty: colors change automatically
 sshc myserver    # Explicit color-changing SSH (works in any terminal)
 ```
 
-**Configure per-host colors** by editing `SSH_HOST_COLORS` in `config/aliases.sh`:
+**Configure per-host colors** by editing `SSH_HOST_COLORS` in `config/ssh_themes.sh`:
 
 ```bash
 # Format: "background:foreground:cursor" in hex
@@ -764,9 +764,9 @@ dep-audit                    # Scan all repos for known-bad packages now
 
 - Any software or command line tools you need, add them to the [install.sh](./install.sh) script. Try adding a new command line tool to the install script.
 - Any new plugins or environment setup, add them to the [config/zshrc.sh](./config/zshrc.sh) script.
-- Any aliases you need, add them to the [config/aliases.sh](./config/aliases.sh) script. Try adding your own alias to the bottom of the file. For example, try setting `cd1` to your most used git repo so you can just type `cd1` to get to it.
+- Any aliases you need, add them to the relevant `config/aliases/<theme>.sh` file (git.sh for git, nav.sh for navigation, net.sh for network/system, etc.). Try adding your own alias to the bottom of the matching file. For example, try setting `cd1` to your most used git repo so you can just type `cd1` to get to it.
 - **Utility functions** in `config/modern_tools.sh`: `mkd` (mkdir+cd), `cdf` (cd to Finder window, macOS), `targz` (smart compression), `dataurl`, `digga` (DNS lookup), `getcertnames` (SSL certs), `o` (cross-platform open), `server` (quick HTTP server)
-- **System aliases** in `config/aliases.sh`: `flush` (DNS cache), `afk` (lock screen, macOS), `week` (ISO week number)
+- **System aliases** in `config/aliases/net.sh`: `flush` (DNS cache), `afk` (lock screen, macOS), `week` (ISO week number)
 
 ## Cloud Setup (RunPod, Hetzner, etc.)
 
