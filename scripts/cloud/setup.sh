@@ -372,6 +372,14 @@ if [[ -z "$TS_AUTH_KEY" ]]; then
 fi
 
 if [[ -n "$TS_AUTH_KEY" ]]; then
+    # Start tailscaled — containers often lack systemd
+    if ! pgrep tailscaled &>/dev/null; then
+        mkdir -p /var/lib/tailscale /var/run/tailscale
+        # --tun=userspace-networking: avoids iptables/TUN (required in most containers)
+        tailscaled --tun=userspace-networking --state=/var/lib/tailscale/tailscaled.state &>/dev/null &
+        sleep 2
+    fi
+
     TS_HOSTNAME="${PROVIDER}-$(hostname -s)"
     # --ephemeral: auto-removes from tailnet when pod shuts down (ideal for cloud VMs)
     tailscale up --authkey "$TS_AUTH_KEY" --hostname "$TS_HOSTNAME" --ephemeral 2>/dev/null || \
