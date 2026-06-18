@@ -533,7 +533,7 @@ claude/vercel-plugin-telemetry-preference
 claude/*.local.md
 
 # Compiled binaries (built per-platform by deploy.sh)
-custom_bins/claude-tools
+# custom_bins/claude-tools is now a shell wrapper (tracked); platform binaries are tracked too
 tools/set-default-app/set-default-app
 
 # Misplaced .claude/ dirs (created when CWD != git root)

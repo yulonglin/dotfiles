@@ -46,11 +46,11 @@ _sha256_of() {
 # or one we cannot verify, is never moved into place or executed. Returns 1 on
 # any failure so the caller can fall back to a source build.
 _fetch_claude_tools() {
-    local bin="$1"
     cmd_exists curl || return 1
 
     local asset; asset="$(_claude_tools_asset)"
     [[ -z "$asset" ]] && return 1  # unsupported platform
+    local bin="${DOT_DIR}/custom_bins/${asset}"
 
     # Trust anchor: checksum committed in the repo you cloned.
     local sums_file="${DOT_DIR}/tools/claude-tools/SHA256SUMS"
@@ -98,9 +98,11 @@ _build_claude_tools_from_source() {
     [[ -f "${DOT_DIR}/tools/claude-tools/Cargo.toml" ]] || return 1
     log_info "Building claude-tools from source (fallback)..."
     ( cd "${DOT_DIR}/tools/claude-tools" && cargo build --release --quiet ) || return 1
+    local asset; asset="$(_claude_tools_asset)"
+    [[ -z "$asset" ]] && return 1
     mkdir -p "${DOT_DIR}/custom_bins"
-    cp "${DOT_DIR}/tools/claude-tools/target/release/claude-tools" "${DOT_DIR}/custom_bins/claude-tools" \
-        && chmod +x "${DOT_DIR}/custom_bins/claude-tools"
+    cp "${DOT_DIR}/tools/claude-tools/target/release/claude-tools" "${DOT_DIR}/custom_bins/${asset}" \
+        && chmod +x "${DOT_DIR}/custom_bins/${asset}"
 }
 
 # Bootstrap claude-tools so the component-selection TUI works on a fresh machine
@@ -111,22 +113,22 @@ _build_claude_tools_from_source() {
 #   4. otherwise                               → return 1 (menu uses defaults)
 # Set CLAUDE_TOOLS_NO_FETCH=1 to skip the network fetch (air-gapped / paranoid).
 bootstrap_claude_tools() {
-    local bin="${DOT_DIR}/custom_bins/claude-tools"
+    local wrapper="${DOT_DIR}/custom_bins/claude-tools"
 
-    # 1) Already have a binary that runs on this arch? Nothing to do.
-    [[ -x "$bin" ]] && "$bin" --version >/dev/null 2>&1 && return 0
+    # 1) Wrapper exists and the platform binary it delegates to runs? Nothing to do.
+    [[ -x "$wrapper" ]] && "$wrapper" --version >/dev/null 2>&1 && return 0
 
     # Skip in non-interactive runs — the menu won't show anyway. deploy.sh's
     # own (backgrounded) build still produces the runtime binary either way.
     [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 1
 
-    # 2) Verified prebuilt fetch.
+    # 2) Verified prebuilt fetch (downloads to custom_bins/claude-tools-{platform}).
     if [[ "${CLAUDE_TOOLS_NO_FETCH:-0}" != "1" ]]; then
-        _fetch_claude_tools "$bin" && return 0
+        _fetch_claude_tools && return 0
     fi
 
-    # 3) Source build fallback.
-    _build_claude_tools_from_source && [[ -x "$bin" ]] && "$bin" --version >/dev/null 2>&1 && return 0
+    # 3) Source build fallback (builds to custom_bins/claude-tools-{platform}).
+    _build_claude_tools_from_source && "$wrapper" --version >/dev/null 2>&1 && return 0
 
     # 4) Give up — caller falls back to defaults (no menu).
     return 1
