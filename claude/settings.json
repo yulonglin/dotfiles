@@ -103,6 +103,7 @@
       "WebSearch",
       "WebFetch",
       "Read",
+      "Read(**/.envrc)",
       "mcp__plugin_things-mcp_things__get_today",
       "mcp__plugin_things-mcp_things__get_inbox",
       "mcp__plugin_things-mcp_things__get_todos",
@@ -272,7 +273,6 @@
       "Bash(git config --global *)",
       "Read(**/.env)",
       "Read(**/.env.*)",
-      "Read(**/.envrc)",
       "mcp__plugin_things-mcp_things__update_todo",
       "mcp__plugin_things-mcp_things__update_project",
       "mcp__plugin_things-mcp_things__add_todo",
@@ -284,7 +284,7 @@
     ],
     "defaultMode": "acceptEdits"
   },
-  "model": "claude-fable-5",
+  "model": "opusplan",
   "hooks": {
     "PermissionRequest": [
       {
@@ -743,6 +743,7 @@
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
   "claudeMdExcludes": [
     "node_modules",
     "vendor",
@@ -751,6 +752,7 @@
     "cache",
     ".cache"
   ],
+  "theme": "dark",
   "verbose": true,
   "preferredNotifChannel": "auto",
   "autoCompactEnabled": true,
@@ -809,6 +811,5 @@
         "ZOTERO_LOCAL": "true"
       }
     }
-  },
-  "skipWorkflowUsageWarning": true
+  }
 }
