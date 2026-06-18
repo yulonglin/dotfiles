@@ -66,7 +66,7 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 |-------|----------|----------|
 | **Task subagent** (general-purpose) | **Default for judgment, exploration, second opinions** | Subscription-billed, fresh context, MCP inherited, parallel via `run_in_background` |
 | **gemini-cli** | Large context analysis (>100KB); image generation/editing (Nano Banana / Nano Banana Pro); Google Workspace (Docs, Sheets, Drive) | 1M+ token window, PDFs, entire codebases, multimodal, native Google auth |
-| **core:codex** | Well-scoped implementation | Fast, precise, follows specs exactly |
+| **codex-companion** | Codex tasks and reviews (GPT-5.5) | Harness-tracked via Monitor tool — survives subagent exit, re-notifies on completion |
 | **core:claude** | Detached/long-running headless work; fresh auth context | tmux-based, survives parent session — **API-billed pool post-June-15, use sparingly** |
 
 ### Google Workspace Access
@@ -91,8 +91,8 @@ Need delegation?
 │   ├─ Raw API call (get doc, list files)? → gws via Bash
 │   └─ AI reasoning over content? → gemini-cli agent
 ├─ Plan needs critique? → code:plan-critic (+ Task subagent in parallel)
-├─ Clear implementation spec/plan? → core:codex
-├─ Bug with clear repro? → core:codex (+ debugger for investigation)
+├─ Clear implementation spec/plan? → codex-companion task --write (via Monitor)
+├─ Bug with clear repro? → codex-companion task (+ debugger for investigation)
 ├─ Need judgment/taste/exploration? → **Task subagent** (default — subscription)
 │   └─ Detached >5min, fresh auth, or true headless? → core:claude (claude -p, API-billed)
 ├─ Code review needed? → code:code-reviewer (+ code:codex-reviewer for significant changes)
@@ -101,13 +101,12 @@ Need delegation?
 
 ## CLI Agent Delegation Enforcement
 
-**Problem:** `core:codex`, `core:gemini-cli`, and `core:claude` agents are Claude instances that can answer directly instead of calling their CLI. Without explicit CLI invocation in the prompt, they sometimes just respond with their own reasoning — defeating the purpose.
+**Problem:** `core:gemini-cli` and `core:claude` agents are Claude instances that can answer directly instead of calling their CLI. Without explicit CLI invocation in the prompt, they sometimes just respond with their own reasoning — defeating the purpose.
 
 **Rule:** When spawning CLI-backed agents, the prompt MUST include the exact Bash command to run.
 
 | Agent | Required prompt pattern |
 |-------|------------------------|
-| `core:codex` | `You MUST use the Bash tool to run: codex exec --full-auto -C <dir> -o <out> "<prompt>"` |
 | `core:gemini-cli` | `You MUST use the Bash tool to run: gemini -p "<prompt>"` |
 | `core:claude` | `You MUST use the Bash tool to run: claude -p --model <model> --permission-mode bypassPermissions "<prompt>"` |
 
@@ -124,16 +123,6 @@ prompt: "You MUST use the Bash tool to run: gemini -p '@src/ Summarize the archi
 ```
 
 **Diagnostic:** If a CLI agent returns with 0 tool_uses, it failed to delegate — the prompt was too question-like. Rephrase as an explicit CLI command.
-
-## Known Issue: Codex CLI Sandbox Crash on macOS (Temporary)
-
-**Bug:** `codex exec` panics inside Claude Code's sandbox with `SCDynamicStoreCreate NULL` (system-configuration crate v0.6.1). The sandbox blocks access to macOS's `configd` daemon unix socket, and the Rust crate panics on NULL instead of handling it gracefully. Tracked: openai/codex#15640, #15296.
-
-**Workaround:** ALL Bash tool calls that invoke `codex exec` (directly or via agents like `core:codex`, `code:plan-critic`, `code:codex-reviewer`) MUST use `dangerouslyDisableSandbox: true`. The agent definitions include this instruction, but the parent agent spawning them should also be aware.
-
-**Not affected:** `codex --version`, `codex --help`, `codex models` (no HTTP client initialization).
-
-**Remove this section** when codex upgrades the `system-configuration` crate.
 
 ## Consuming Agent Results
 
