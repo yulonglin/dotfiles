@@ -202,10 +202,10 @@ Task complexity?
 
 | Need | Use (harness-tracked) | NOT |
 |------|----------------------|-----|
-| Codex review/task (GPT-5 / 5.5-pro) | **codex-companion via the Monitor tool** (`codex-companion task` / `review`) | `core:codex` agent backgrounding `codex exec` |
+| Codex review/task (GPT-5.5) | **codex-companion via the Monitor tool** (`codex-companion task` / `review`) | `core:codex` agent backgrounding `codex exec` |
 | Long shell job (build, train, sweep) | Bash `run_in_background` in **main context**, `tmux`, or Monitor | `&` / `nohup` inside a subagent that then exits |
 | Cloud job to watch (Modal, CI) | Monitor poll-loop, or Bash `run_in_background` in main context | detached process inside a subagent |
 
 **Corollary — verify, don't trust the `completed` status:** when an agent claims it ran a detached job, check the artifact on disk before relaying success (file written? `pgrep` the process? `ls` the output?). A subagent's `completed` means its *turn* ended, not that its detached child did anything.
 
-**codex-companion is the standard path for Codex** once `codex login` is done: route all Codex work through it via the Monitor tool (it persists and re-notifies; a raw `codex exec` does not).
+**codex-companion is the standard path for detached Codex work** once `codex login` is done: route backgrounded/long-running Codex jobs through it via the Monitor tool (it persists and re-notifies; a raw `codex exec` inside a subagent does not).
