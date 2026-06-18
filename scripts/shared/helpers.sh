@@ -662,11 +662,11 @@ run_parallel() {
 
         if [[ "$rc" -eq 0 ]]; then
             echo "  ── $name ──"
-            ((passed++))
+            (( ++passed ))
         else
             echo "  ── $name (FAILED) ──"
             PARALLEL_FAILURES+=("$name")
-            ((failed++))
+            (( ++failed ))
         fi
         cat "$tmpdir/$name.log" 2>/dev/null
     done
