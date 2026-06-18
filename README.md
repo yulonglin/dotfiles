@@ -245,14 +245,13 @@ Claude Code supports community plugin marketplaces. These are registered in [`cl
 | **[alignment-hive](https://github.com/Crazytieguy/alignment-hive)**                 | Alignment research utilities                                     |
 | **[dev-browser-marketplace](https://github.com/sawyerhood/dev-browser)**            | Browser automation for development                               |
 | **[openai-codex](https://github.com/crazytieguy/codex-plugin-cc)**                  | Codex CLI integration plugins                                    |
-| **[rust-skills](https://github.com/actionbook/rust-skills)**                        | Rust ownership, concurrency, error handling skills               |
 
 
 Profiles are managed via the `claude-tools context` CLI — compose multiple profiles to control which plugins load per-project:
 
 ```bash
 claude-tools context code               # Software projects
-claude-tools context code frontend python    # Compose multiple profiles
+claude-tools context code typescript python    # Compose multiple profiles
 claude-tools context --list             # Show active plugins and available profiles
 ```
 
@@ -313,19 +312,25 @@ Config location: macOS `~/Library/Application Support/com.mitchellh.ghostty/conf
 Launch new Ghostty windows with different color themes - useful for visually distinguishing contexts:
 
 
-| Alias | Theme            | Character          |
-| ----- | ---------------- | ------------------ |
-| `g1`  | Catppuccin Mocha | Warm purple/pink   |
-| `g2`  | TokyoNight       | Cool blue          |
-| `g3`  | Gruvbox Dark     | Retro orange/brown |
-| `g4`  | Nord             | Arctic icy blue    |
-| `g5`  | Dracula          | Purple accents     |
-| `g6`  | Rose Pine        | Muted rose tones   |
+Default Ghostty config uses Catppuccin Mocha. The `g0`–`g9` aliases launch a new window with a different theme:
+
+| Alias | Theme                        | Character                          |
+| ----- | ---------------------------- | ---------------------------------- |
+| `g0`  | TokyoNight                   | Deep blue bg — neon city           |
+| `g1`  | Dracula                      | Purple-grey bg — vibrant classic   |
+| `g2`  | Nord                         | Arctic blue-grey bg — calm         |
+| `g3`  | Rose Pine                    | Deep purple bg — botanical         |
+| `g4`  | Kanagawa Dragon              | Warm near-black bg — Japanese ink  |
+| `g5`  | Gruvbox Dark                 | Neutral warm bg — retro            |
+| `g6`  | Everforest Dark Hard         | Green-grey bg — forest             |
+| `g7`  | Solarized Dark Higher Contrast | Dark teal bg — high contrast     |
+| `g8`  | Melange Dark                 | Warm brown bg — earthy             |
+| `g9`  | Material Ocean               | Near-black bg — minimal            |
 
 
 ```bash
-g1                        # Launch Ghostty with Catppuccin Mocha
-gtheme "Tomorrow Night"   # Launch with any theme
+g1                        # Launch Ghostty with Dracula theme
+gtheme "Tomorrow Night"   # Launch with any theme by name
 ghostty +list-themes      # See all available themes
 ```
 

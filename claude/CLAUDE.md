@@ -203,7 +203,7 @@ Rules:
 
 ## Plugin Organization & Context Profiles
 
-**7 always-on plugins** load in every session: superpowers, hookify, plugin-dev, commit-commands, claude-md-management, context7, core.
+**12 always-on plugins** (`base:` in `profiles.yaml`) load in every session: `bear-mcp`, `claude-md-management`, `codex`, `commit-commands`, `context7`, `core`, `hookify`, `llms-fetch-mcp`, `plugin-dev`, `remember`, `superpowers`, `workflow`.
 
 **6 ai-safety-plugins** (`github.com/yulonglin/ai-safety-plugins`):
 - `core` — foundational agents, skills, safety hooks (always-on)
@@ -217,7 +217,7 @@ Rules:
 ```bash
 claude-tools context                    # Show current state / apply context.yaml
 claude-tools context code               # Software projects
-claude-tools context code frontend python    # Compose multiple profiles
+claude-tools context code typescript python    # Compose multiple profiles
 claude-tools context --list             # Show active plugins and available profiles
 claude-tools context --clean            # Remove project plugin config
 claude-tools context --sync [-v]        # Register + update + install wanted + prune orphans
