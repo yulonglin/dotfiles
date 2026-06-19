@@ -555,6 +555,7 @@ scripts/hooks/cache/
 
 # Runtime state written by Claude Code session/hooks
 claude/.last-cleanup
+claude/.last-update-result.json
 .claude/scheduled_tasks.lock
 
 # Obsidian vault state (per-machine workspace, plugins, appearance)
