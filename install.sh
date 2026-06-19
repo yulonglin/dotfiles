@@ -441,9 +441,60 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
         fi
 
         if [[ -f "$brewfile" ]]; then
+            # mas 7.0.0 self-escalates via sudo for every install/get; brew bundle </dev/null
+            # gives its internal sudo no way to read a password. Pre-warm the credential
+            # (interactive TTY only) and keep it alive for the duration of brew bundle so
+            # mas installs don't silently fail. Headless/non-TTY runs skip this block — mas
+            # apps will be skipped cleanly as before.
+            sudo_keepalive_pid=""
+            if [[ -t 0 ]] && grep -q '^mas ' "$brewfile" 2>/dev/null; then
+                log_info "App Store installs (mas) need sudo — caching your credential…"
+                if sudo -v; then
+                    # Refresh every 60 s; exits if parent shell dies.
+                    ( while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) 2>/dev/null &
+                    sudo_keepalive_pid=$!
+                else
+                    log_warning "sudo not authorized — App Store (mas) apps may be skipped"
+                fi
+            fi
+
             log_info "Installing apps from Brewfile (this can take a while)..."
-            env "${BREW_NONINTERACTIVE_ENV[@]}" brew bundle --file="$brewfile" </dev/null \
-                || log_warning "Some Brewfile entries failed (mas needs App Store sign-in)"
+            env "${BREW_NONINTERACTIVE_ENV[@]}" brew bundle --file="$brewfile" </dev/null || true
+
+            [[ -n "$sudo_keepalive_pid" ]] && kill "$sudo_keepalive_pid" 2>/dev/null
+
+            # Detect any mas apps that didn't land and tell the user exactly what to do.
+            if grep -q '^mas ' "$brewfile" 2>/dev/null; then
+                installed_ids=$(mas list 2>/dev/null | awk '{print $1}')
+                missing_apps=()
+                while IFS= read -r line; do
+                    app_name=$(echo "$line" | sed 's/^mas "\(.*\)", id:.*/\1/')
+                    app_id=$(echo "$line" | sed 's/.*id: \([0-9]*\).*/\1/')
+                    if ! echo "$installed_ids" | grep -qx "$app_id"; then
+                        missing_apps+=("$app_name (ID: $app_id)")
+                    fi
+                done < <(grep '^mas ' "$brewfile")
+
+                if [[ ${#missing_apps[@]} -gt 0 ]]; then
+                    echo ""
+                    log_warning "The following App Store apps were NOT installed:"
+                    for app in "${missing_apps[@]}"; do
+                        echo "    ✗ $app"
+                    done
+                    echo ""
+                    echo "  To install them manually:"
+                    echo "    1. Open the App Store app"
+                    echo "    2. Click your name (bottom-left) → Purchased"
+                    echo "    3. Find each app above and click the ⊕ download button"
+                    echo ""
+                    echo "  Common causes:"
+                    echo "    • App Store account mismatch (check: App Store → your name)"
+                    echo "    • App purchased under a different Apple ID"
+                    echo "    • sudo not authorized (mas 7.0.0 requires root)"
+                    echo ""
+                fi
+            fi
+
             log_info "Next: run scripts/setup/auth-setup for logins + signature audit"
         else
             log_warning "No Brewfile at $brewfile — run 'app-picker' first"
