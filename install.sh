@@ -450,8 +450,10 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             if [[ -t 0 ]] && grep -q '^mas ' "$brewfile" 2>/dev/null; then
                 log_info "App Store installs (mas) need sudo — caching your credential…"
                 if sudo -v; then
-                    # Refresh every 60 s; exits if parent shell dies.
-                    ( while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) 2>/dev/null &
+                    # Capture parent PID before subshell so $$  resolves correctly in both
+                    # zsh (where $$ is the parent in subshells) and bash (where it is not).
+                    _mas_parent_pid=$$
+                    ( while true; do sudo -n true; sleep 60; kill -0 "$_mas_parent_pid" 2>/dev/null || exit; done ) 2>/dev/null &
                     sudo_keepalive_pid=$!
                 else
                     log_warning "sudo not authorized — App Store (mas) apps may be skipped"
@@ -466,34 +468,41 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             # Detect any mas apps that didn't land and tell the user exactly what to do.
             if grep -q '^mas ' "$brewfile" 2>/dev/null; then
                 installed_ids=$(mas list 2>/dev/null | awk '{print $1}')
-                missing_apps=()
-                while IFS= read -r line; do
-                    app_name=$(echo "$line" | sed 's/^mas "\(.*\)", id:.*/\1/')
-                    app_id=$(echo "$line" | sed 's/.*id: \([0-9]*\).*/\1/')
-                    if ! echo "$installed_ids" | grep -qx "$app_id"; then
-                        missing_apps+=("$app_name (ID: $app_id)")
-                    fi
-                done < <(grep '^mas ' "$brewfile")
+                if [[ -z "$installed_ids" ]]; then
+                    log_warning "Could not query installed App Store apps (mas list failed) — skipping post-install check"
+                else
+                    missing_apps=()
+                    while IFS= read -r line; do
+                        # Use -n .../p so sed prints nothing (not the raw line) on a non-match.
+                        app_name=$(echo "$line" | sed -n 's/^mas "\(.*\)", id:.*/\1/p')
+                        app_id=$(echo "$line"   | sed -n 's/.*id: \([0-9][0-9]*\).*/\1/p')
+                        [[ -z "$app_id" ]] && continue  # skip malformed lines
+                        # -x: full-line match so "123" doesn't accidentally match "1234"
+                        if ! echo "$installed_ids" | grep -qx "$app_id"; then
+                            missing_apps+=("$app_name (ID: $app_id)")
+                        fi
+                    done < <(grep '^mas ' "$brewfile")
 
-                if [[ ${#missing_apps[@]} -gt 0 ]]; then
-                    echo ""
-                    log_warning "The following App Store apps were NOT installed:"
-                    for app in "${missing_apps[@]}"; do
-                        echo "    ✗ $app"
-                    done
-                    echo ""
-                    echo "  To install them manually:"
-                    echo "    1. Open the App Store app"
-                    echo "    2. Click your name (bottom-left) → Purchased"
-                    echo "    3. Find each app above and click the ⊕ download button"
-                    echo ""
-                    echo "  Common causes:"
-                    echo "    • App Store account mismatch (check: App Store → your name)"
-                    echo "    • App purchased under a different Apple ID"
-                    echo "    • sudo not authorized (mas 7.0.0 requires root)"
-                    echo ""
-                fi
-            fi
+                    if [[ ${#missing_apps[@]} -gt 0 ]]; then
+                        echo ""
+                        log_warning "The following App Store apps were NOT installed:"
+                        for app in "${missing_apps[@]}"; do
+                            echo "    ✗ $app"
+                        done
+                        echo ""
+                        echo "  To install them manually:"
+                        echo "    1. Open the App Store app"
+                        echo "    2. Click your name (bottom-left) → Purchased"
+                        echo "    3. Find each app above and click the ⊕ download button"
+                        echo ""
+                        echo "  Common causes:"
+                        echo "    • App Store account mismatch (check: App Store → your name)"
+                        echo "    • App purchased under a different Apple ID"
+                        echo "    • sudo not authorized (mas 7.0.0 requires root)"
+                        echo ""
+                    fi
+                fi  # mas list succeeded
+            fi  # Brewfile has mas entries
 
             log_info "Next: run scripts/setup/auth-setup for logins + signature audit"
         else
