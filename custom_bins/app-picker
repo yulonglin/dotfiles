@@ -107,6 +107,9 @@ emit_brewfile() {
 
     if [[ "$has_mas" == "true" ]]; then
         print -r -- "# mas-cli drives Mac App Store installs (must be signed into the App Store)."
+        print -r -- "# NOTE: brew bundle uses 'mas install' (re-download only) — run custom_bins/mas-get"
+        print -r -- "#   BEFORE brew bundle so App Store apps are acquired via 'mas get' instead."
+        print -r -- "#   Ref: https://github.com/Homebrew/brew/issues/21559"
         print -r -- 'brew "mas"'
         print -r -- ""
     fi

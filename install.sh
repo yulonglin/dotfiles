@@ -441,9 +441,18 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
         fi
 
         if [[ -f "$brewfile" ]]; then
-            log_info "Installing apps from Brewfile (this can take a while)..."
+            # Install App Store apps first via `mas get` (acquire+install).
+            # `brew bundle` uses `mas install` which only re-downloads — it fails
+            # with "Redownload Unavailable" for apps not yet on this machine.
+            # mas-get handles that, then brew bundle's mas lines become no-ops.
+            # Ref: https://github.com/Homebrew/brew/issues/21559
+            if is_macos && command -v mas &>/dev/null; then
+                log_info "Installing App Store apps via mas get..."
+                "$DOT_DIR/custom_bins/mas-get" || log_warning "Some App Store apps failed (check mas-get output above)"
+            fi
+            log_info "Installing remaining apps from Brewfile (this can take a while)..."
             env "${BREW_NONINTERACTIVE_ENV[@]}" brew bundle --file="$brewfile" </dev/null \
-                || log_warning "Some Brewfile entries failed (mas needs App Store sign-in)"
+                || log_warning "Some Brewfile entries failed — casks may need a retry"
             log_info "Next: run scripts/setup/auth-setup for logins + signature audit"
         else
             log_warning "No Brewfile at $brewfile — run 'app-picker' first"

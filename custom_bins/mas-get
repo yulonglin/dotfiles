@@ -1,0 +1,133 @@
+#!/usr/bin/env zsh
+# ═══════════════════════════════════════════════════════════════════════════════
+# mas-get — install App Store apps from config/apps.conf via `mas get`
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# WHY this exists:
+#   `brew bundle` drives App Store installs via `mas install`, which only
+#   *re-downloads* apps already in a redownloadable state. It fails with
+#   "Redownload Unavailable with this Apple Account" for owned apps that haven't
+#   been downloaded on this machine yet.
+#   `mas get` (aka `mas purchase`) acquires-and-installs — it's what actually
+#   works. This script runs `mas get` for every mas app in the registry that
+#   isn't already installed, then `brew bundle` can run cleanly (its mas lines
+#   become no-ops once apps are installed).
+#
+# Ref: https://github.com/Homebrew/brew/issues/21559
+#
+# Usage:
+#   mas-get                  # install all uninstalled mas apps from apps.conf
+#   mas-get --dry-run        # show what would be installed, don't install
+#   mas-get --conf PATH      # registry path (default: <dotfiles>/config/apps.conf)
+# ═══════════════════════════════════════════════════════════════════════════════
+set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+DOT_DIR="${DOT_DIR:-${SCRIPT_DIR:h}}"
+CONF="$DOT_DIR/config/apps.conf"
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)   DRY_RUN=true; shift ;;
+        --conf)      CONF="$2"; shift 2 ;;
+        -h|--help)   sed -n '2,23p' "$0"; exit 0 ;;
+        *) echo "mas-get: unknown arg '$1'" >&2; exit 2 ;;
+    esac
+done
+
+# macOS only — mas is a macOS tool
+if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "mas-get: macOS only." >&2; exit 1
+fi
+
+# mas must be installed
+if ! command -v mas &>/dev/null; then
+    echo "mas-get: mas not found — install with: brew install mas" >&2; exit 1
+fi
+
+[[ -f "$CONF" ]] || { echo "mas-get: registry not found: $CONF" >&2; exit 1; }
+
+# ─── Build set of already-installed App Store app IDs ────────────────────────
+typeset -A installed_ids
+while IFS=$'\t' read -r app_id _rest; do
+    [[ -n "$app_id" ]] && installed_ids[$app_id]=1
+done < <(mas list 2>/dev/null)
+
+# ─── Parse mas entries from registry ─────────────────────────────────────────
+typeset -a to_install_ids to_install_names skip_names
+local method id _cat _tier _def name _desc _auth
+
+while IFS='|' read -r method id _cat _tier _def name _desc _auth; do
+    [[ -z "${method// }" || "${method[1]}" == "#" ]] && continue
+    method="${method// }"; id="${id// }"; name="${name# }"; name="${name% }"
+    [[ "$method" != "mas" ]] && continue
+    if [[ -n "${installed_ids[$id]+_}" ]]; then
+        skip_names+=("$name ($id)")
+    else
+        to_install_ids+=("$id")
+        to_install_names+=("$name")
+    fi
+done < "$CONF"
+
+# ─── Report ───────────────────────────────────────────────────────────────────
+if [[ ${#skip_names[@]} -gt 0 ]]; then
+    print -P "%F{green}✓ Already installed:%f"
+    for s in "${skip_names[@]}"; do echo "    $s"; done
+fi
+
+if [[ ${#to_install_ids[@]} -eq 0 ]]; then
+    print -P "%F{green}✓ All App Store apps already installed.%f"
+    exit 0
+fi
+
+print ""
+print -P "%F{cyan}App Store apps to install (${#to_install_ids[@]}):%f"
+for (( i=1; i<=${#to_install_ids}; i++ )); do
+    echo "    ${to_install_names[i]} (${to_install_ids[i]})"
+done
+
+if [[ "$DRY_RUN" == "true" ]]; then
+    print ""; print -P "%F{yellow}Dry run — nothing installed.%f"; exit 0
+fi
+
+# ─── Ensure signed in (mas list is empty when not signed in) ─────────────────
+# We don't block; mas get itself will fail with a clear error if not signed in.
+# Just surface a hint when mas list returned nothing at all.
+if [[ ${#installed_ids[@]} -eq 0 && ${#skip_names[@]} -eq 0 ]]; then
+    print -P "%F{yellow}⚠  Note: no installed App Store apps detected — make sure you are%f"
+    print -P "%F{yellow}   signed into the App Store (open App Store.app → sign in).%f"
+fi
+
+# ─── Install ──────────────────────────────────────────────────────────────────
+print ""
+local ok=0 fail=0
+local fail_list=()
+for (( i=1; i<=${#to_install_ids}; i++ )); do
+    local app_id="${to_install_ids[i]}"
+    local app_name="${to_install_names[i]}"
+    printf "  Installing %s (%s)... " "$app_name" "$app_id"
+    if mas get "$app_id" 2>&1; then
+        print -P "%F{green}✓%f"
+        (( ok++ ))
+    else
+        print -P "%F{red}✗%f"
+        (( fail++ ))
+        fail_list+=("$app_name ($app_id)")
+    fi
+done
+
+# ─── Summary ─────────────────────────────────────────────────────────────────
+print ""
+if [[ $fail -eq 0 ]]; then
+    print -P "%F{green}✓ Done — $ok app(s) installed.%f"
+    print "  Run 'brew bundle --file=$DOT_DIR/config/Brewfile' to install casks/formulae."
+else
+    print -P "%F{yellow}Done — $ok installed, $fail failed:%f"
+    for f in "${fail_list[@]}"; do echo "    ✗ $f"; done
+    print ""
+    print "  Failed apps may be paid + not owned on this Apple ID, or require a"
+    print "  one-time 'Get' click in the App Store GUI (for apps never previously"
+    print "  acquired on this account). Sign in and try: mas get <id>"
+    exit 1
+fi
