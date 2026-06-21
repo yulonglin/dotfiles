@@ -27,7 +27,7 @@ marketplaces:
   dev-browser-marketplace:
     github: sawyerhood/dev-browser
     autoUpdate: true
-  openai-codex:
+  codex-plugin-cc:
     github: crazytieguy/codex-plugin-cc
     autoUpdate: true
   ui-ux-pro-max-skill:
