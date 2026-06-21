@@ -25,7 +25,7 @@ If you're an AI agent (Claude Code, Codex, etc.) working in this repo, read this
 
 | Want to... | Command / file |
 |---|---|
-| Add a new alias | `config/aliases/<theme>.sh` (or `aliases_<name>.sh` for env-specific) |
+| Add a new alias | `config/aliases.sh` (or `aliases_<name>.sh` for env-specific) |
 | Add a deploy component | Create `deploy_X()` in `deploy.sh` — see [Adding New Features](#adding-new-features) |
 | Add a custom binary | Drop it in `custom_bins/` (already on PATH); `chmod +x` |
 | Install/manage Mac apps | Add a line to `config/apps.conf` → run `app-picker` (gum TUI) → `brew bundle --file=config/Brewfile`. Official casks + `mas` only, **no third-party taps**. Then `scripts/setup/auth-setup` |
@@ -65,36 +65,27 @@ See README.md for detailed usage.
 ### Git Workflow
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
-- **Two long-lived branches** (see [Branching Strategy](#branching-strategy) below):
-  `main` is the clean, public-facing branch; `yulong` is the personal superset
-  (everything on `main` **plus** personal working content).
+- **This repo is public** — `main` is the only branch, and it holds shareable
+  dotfiles **only**. Personal working content lives in a **separate private repo**
+  (see [Personal Content](#personal-content) below), never on a branch here.
 
-### Branching Strategy
+### Personal Content
 
-The repo is public-ish (people star it), so `main` stays clean while personal
-working artifacts live on a superset branch.
+This repo is public (people star it). A branch in a public repo is **also public**,
+so personal working artifacts must not live on any branch here — they go in a
+separate **private** repo (`dotfiles-personal`).
 
-| Branch | Contents | Role |
-|--------|----------|------|
-| `main` | Shareable dotfiles only | Public-facing. What people clone/star. |
-| `yulong` | `main` **+** personal content (`plans/`, `specs/`, `.remember/`, `tmp/`, personal `docs/`, `config/machines.conf`) | Where Yulong actually develops. Strict superset of `main`. |
+| Repo | Visibility | Contents |
+|------|-----------|----------|
+| `dotfiles` (this one) | Public | Shareable dotfiles only. What people clone/star. |
+| `dotfiles-personal` | **Private** | `plans/`, `specs/`, `.remember/`, `tmp/`, personal `docs/`, `config/machines.conf` |
 
-**Why it doesn't explode:** `yulong` is built as `main` **+ one "restore personal
-files" commit** (the personal files are force-added on top of an already-clean
-tree). Because the *removal* of those files lives in the shared merge-base of both
-branches, neither `git merge main` nor `git rebase main` into `yulong` will ever
-delete your personal files. The personal paths are also in `.gitignore`, so they
-can't accidentally re-enter `main` as untracked adds.
+The personal paths are listed in `.gitignore` here so they can't accidentally be
+committed to public `main`. They are tracked in the private repo instead.
 
-**The one rule:** never merge `yulong → main` wholesale — that re-adds personal
-files. To publish shared work, do one of:
-- Develop the shared change directly on `main` (or a branch off `main`), then
-  `git checkout yulong && git rebase main` (or `git merge main`) to pull it into `yulong`.
-- Or develop on `yulong` and `git cherry-pick <sha>` the shareable commits onto `main`.
-  (Cherry-pick is clean because shared changes never touch the personal paths.)
-
-**Adding personal content on `yulong`:** the personal paths are gitignored, so use
-`git add -f <path>` to track them on `yulong`.
+**Why not a `yulong`/personal branch?** Branches in a public repo are public — a
+superset branch would have exposed everything it was meant to hide. A separate
+private repo is the only real privacy boundary.
 
 ### Worktree Workflow
 
@@ -188,18 +179,8 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 ```
 config/
 ├── zshrc.sh              # Main ZSH config, sources all other configs
-├── aliases/              # Themed alias files (sourced alphabetically)
-│   ├── claude.sh         #   Claude launchers, worktree helpers, AI CLI tools
-│   ├── core.sh           #   Safety-wrapped rm/cp/mv, utilities
-│   ├── editors.sh        #   edit-* shortcuts
-│   ├── git.sh            #   g* git aliases
-│   ├── jobs.sh           #   Pueue j* + Slurm q* job queues
-│   ├── misc.sh           #   ghostty themes g0-g9, UV_EXCLUDE_NEWER, misc
-│   ├── nav.sh            #   cd override, .. navigation, directory shortcuts
-│   ├── net.sh            #   SSH, VPN, network aliases
-│   ├── secrets.sh        #   SOPS/BWS, secrets-*, snippet aliases
-│   └── tmux.sh           #   ta/tad/tn etc.
-├── aliases_*.sh          # Environment-specific aliases (optional, e.g. aliases_inspect.sh)
+├── aliases.sh            # General aliases
+├── aliases_*.sh          # Environment-specific aliases (optional)
 ├── tmux.conf             # Tmux configuration
 ├── p10k.zsh              # Powerlevel10k theme
 ├── vimrc                 # Vim configuration
@@ -226,7 +207,7 @@ config/
 ├── curlrc                # curl defaults: follow redirects, show errors (symlinked to ~/.curlrc)
 ├── inputrc               # Readline config for bash/python/node REPLs (symlinked to ~/.inputrc)
 ├── gitattributes_global  # Binary file handling + line endings (symlinked to ~/.gitattributes)
-├── machines.conf.example # Machine registry template (machine-id → name + emoji, for prompt/statusline). Real `machines.conf` is gitignored / lives on `yulong`
+├── machines.conf.example # Machine registry template (machine-id → name + emoji, for prompt/statusline). Real `machines.conf` is gitignored / lives in the private dotfiles-personal repo
 ├── npmrc                 # Global npm config: ignore-scripts + 7-day min-release-age (symlinked)
 ├── bunfig.toml           # Global bun config: 7-day min-release-age (symlinked)
 ├── pnpmrc                # Global pnpm config: 7-day min-release-age (symlinked)
@@ -362,7 +343,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ### Adding New Features
 
 **New Aliases**:
-- General: Add to the appropriate `config/aliases/<theme>.sh` (git.sh, nav.sh, net.sh, claude.sh, etc.)
+- General: Add to `config/aliases.sh`
 - Environment-specific: Create `config/aliases_<name>.sh`
 - Deploy with: `./deploy.sh --aliases=<name>`
 
@@ -409,6 +390,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - **Pueue + systemd slices**: `j*` aliases require pueue + systemd user session. `systemd --user` doesn't work inside Claude Code sandbox (bubblewrap blocks D-Bus) — test from normal shell. Cgroup delegation may need one-time `sudo systemctl set-property user-$(id -u).slice Delegate=yes`. Config in `config/resources.conf` (edit when scaling machine).
 - **CLI tool package strategy**: macOS uses Homebrew (ecosystem, GUI apps, libraries). Linux uses apt for baseline + mise `github:` backend for modern versions of fast-moving CLI tools (fzf, bat, eza, fd, ripgrep, delta, dust, zoxide, jless, just, sd, duf, gum, vivid). apt packages are often years behind upstream; mise downloads release binaries from GitHub with version tracking (`mise upgrade --all`). Homebrew on Linux was rejected (too heavy, installs own gcc/glibc). See `PACKAGES_CORE` (apt/brew), `PACKAGES_MACOS` (brew), `PACKAGES_LINUX_MISE` (mise) in `config.sh`
 - **Rust + bash dual implementations**: Some tools have a Rust version (for speed) and a bash fallback. Keep both in sync. Rust source lives in `tools/claude-tools/src/`, bash in `claude/`. Recompile with `cd tools/claude-tools && cargo build --release` then `cp target/release/claude-tools ../../custom_bins/`. Current dual-impl tools: statusline (`statusline.rs` + `claude/statusline.sh`), usage (`usage.rs` + inline in `statusline.sh`)
+- **`mas 7.0.0` requires sudo for every install** (`mas install`, `mas get`, `mas purchase`). `mas` self-escalates (calls `sudo` internally). `install.sh --apps` pre-warms sudo with `sudo -v` (interactive TTY only) and keeps it alive with a background heartbeat for the duration of `brew bundle`, so a single password entry covers all mas apps. `mas account` was removed in 7.0.0 — no CLI way to confirm the signed-in store account (App Store UI only). iCloud account and Media & Purchases (store) account can differ; `mas` only cares about the store account.
 
 ## Cross-Reference
 
@@ -422,4 +404,3 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - tmux-resurrect: auto-save is on (15 min), auto-restore is OFF. Use `prefix+R` popup or `tmux-restore` CLI to selectively restore windows from any save. Resurrect file format: `pane` lines ($2=session, $3=win_index, $8=path) + `window` lines ($2=session, $3=win_index, $7=win_name) (2026-04-05)
 - fzf pre-selection in `setup-envrc` requires fzf 0.54+ (`--bind "load:pos(N)+select"`). apt's fzf (0.44) is too old; mise installs 0.71 on Linux. macOS brew is fine. fzf is in both `PACKAGES_CORE` (apt baseline) and `PACKAGES_LINUX_MISE` (modern override) — mise's PATH takes precedence (2026-04-14)
 - rust-skills plugin removed (2026-05-26). UserPromptSubmit matcher was hyper-broad ("error", "async", "API", "implement", "explain", "how to" — injected ~100 lines on most prompts). Neuter-via-SessionStart-hook didn't hold (still fired same session) and mutates a tracked file in the marketplace clone, blocking future `git pull`. Re-add if Rust work picks up
-- Sandbox TMPDIR friction root-caused + fixed (2026-06-21). On Linux the harness set the agent's `$TMPDIR=/run/user/1000` (from XDG_RUNTIME_DIR), but the sandbox only whitelists a pueue socket under it → whole dir read-only → `git commit -F "$TMPDIR/..."` failed. Empirically: `/tmp/claude` and `./tmp` are sandbox-writable; `/run/user/1000` is NOT (and holds gnupg/dbus/cursor-token sockets — unsafe to open). Fix in `claude/settings.json`: pinned `env.TMPDIR=/tmp/claude` + added `/tmp/claude` and trusted work roots (`~/code ~/writing ~/projects ~/scratch`) to `sandbox.filesystem.allowWrite`. Takes effect on next Claude Code restart. **Unverified:** whether the harness re-overrides `env.TMPDIR` post-launch — confirm next session with `echo $TMPDIR` in a sandboxed Bash call

@@ -547,6 +547,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/check_things_mcp.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/anthropic_keycheck.py",
+            "timeout": 10
           }
         ]
       }
@@ -626,7 +631,12 @@
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
     "writing@ai-safety-plugins": true,
-    "codex@codex-plugin-cc": true
+    "codex@codex-plugin-cc": true,
+    "things-mcp@productivity-tools": true,
+    "swift-lsp@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "imessage@claude-plugins-official": true,
+    "telegram@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {

@@ -137,7 +137,11 @@ bootstrap_claude_tools() {
 # Usage: show_component_menu install|deploy
 # Requires: claude-tools (graceful fallback to defaults if unavailable).
 # CI publishes prebuilt binaries; bootstrap_claude_tools fetches the right one.
-# Note: app-picker still uses gum directly for its own TUI.
+#
+# Flat toggle list by design — j/k navigate, space toggles a whole component,
+# enter confirms. Group labels (Base/AI/...) are headers only; there is no
+# drill-in / sub-component selection. The sole exception is `apps`: leaving it
+# checked later opens app-picker (gum) to choose individual GUI/App-Store apps.
 show_component_menu() {
     local mode="$1"
 
@@ -185,9 +189,19 @@ show_component_menu() {
         stdin_input+="${group}|${name}|${desc}|${current_val}"$'\n'
     done
 
-    # Run TUI; on cancel (exit 1) keep current values
-    local result
-    result=$(printf '%s' "$stdin_input" | claude-tools select --title "Select ${mode} components") || return 0
+    # Run TUI; on cancel (exit 1) keep current values.
+    #
+    # Pass options via a temp file, NOT a stdin pipe: piping makes fd 0 a pipe,
+    # which forces crossterm onto a fragile /dev/tty fallback for keyboard input
+    # that fails on some terminals ("Failed to initialize input reader") and
+    # silently drops the menu. Keeping stdin on the terminal is the reliable path.
+    local items_file result
+    items_file=$(mktemp "${TMPDIR:-/tmp}/claude-tools-select.XXXXXX")
+    printf '%s' "$stdin_input" > "$items_file"
+    result=$(claude-tools select --title "Select ${mode} components" --items "$items_file")
+    local rc=$?
+    rm -f "$items_file"
+    [[ $rc -ne 0 ]] && return 0
 
     # Disable all filtered components, then re-enable selected ones
     for name in "${all_names[@]}"; do

@@ -6,23 +6,30 @@
 # mas-cli drives Mac App Store installs (must be signed into the App Store).
 brew "mas"
 
+# ── CLI formulae ──
+brew "switchaudio-osx"
+
 # ── Casks (official Homebrew casks) ──
 cask "aldente"
 cask "alfred"
-cask "antigravity"
 cask "antinote"
 cask "appcleaner"
-cask "beardedspice"
+cask "macmediakeyforwarder"
 cask "chatgpt"
 cask "claude"
 cask "cleanshot"
+cask "codex-app"
 cask "cold-turkey-blocker"
 cask "cursor"
 cask "dropbox"
+cask "finetune"
 cask "finicky"
 cask "ghostty"
+cask "google-drive"
 cask "granola"
 cask "keyboardcleantool"
+cask "lulu"
+cask "malwarebytes"
 cask "mouseless"
 cask "nordvpn"
 cask "notion"
@@ -41,5 +48,5 @@ mas "2FAS Auth Browser Extension", id: 6443941139
 mas "Bear", id: 1091189122
 mas "Bitwarden", id: 1352778147
 mas "Things 3", id: 904280696
-mas "Userscripts", id: 1463298887
 mas "uBlock Origin Lite", id: 6745342698
+mas "Userscripts", id: 1463298887
