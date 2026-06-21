@@ -101,23 +101,31 @@ All fzf-based pickers in dotfiles tooling should follow these conventions:
 - For zsh scripts, use `# shellcheck shell=bash` at top (closest approximation)
 - Suppress false positives with `# shellcheck disable=SCXXXX` (include reason)
 
-**`set -e` + arithmetic footgun — always use pre-increment:**
-`(( n++ ))` post-increment evaluates to the *old* value of `n`. When `n=0`, the expression
-is 0 (falsy) and `set -e` / `set -euo pipefail` exits the script silently. Use
-pre-increment instead — it evaluates to the *new* value, which is always ≥1:
+**`set -e` + arithmetic footgun:**
+`(( expr ))` exits with code 1 when the expression evaluates to 0 (falsy), which trips
+`set -e` / `set -euo pipefail` silently. The value that matters is the *expression result*,
+not the variable after the operation:
+
+| Form | Expression value | Dangerous when |
+|------|-----------------|----------------|
+| `(( n++ ))` | old `n` (before increment) | `n` starts at 0 |
+| `(( ++n ))` | new `n` (after increment) | `n` would reach 0 (impossible for pure counters) |
+| `(( n-- ))` | old `n` (before decrement) | `n` starts at 0 |
+| `(( --n ))` | new `n` (after decrement) | `n` is 1 (result is 0) |
+
+For **counters that start at 0 and only go up**, `(( ++n ))` is always safe. For anything
+else (decrement, values that can reach 0), use `n=$(( n + 1 ))` — no exit-code trap:
 
 ```bash
-# BAD — exits when n=0 under set -e
-(( n++ ))
-(( count++ ))
+# BAD — exits when ok=0 under set -e (first iteration of a loop)
+(( ok++ ))
 
-# GOOD
-(( ++n ))
-(( ++count ))
-# or: n=$(( n + 1 ))  # always safe, no arithmetic exit-code trap
+# GOOD for up-only counters starting at 0
+(( ++ok ))
+
+# ALWAYS safe — no arithmetic exit-code semantics
+ok=$(( ok + 1 ))
 ```
-
-This applies to decrement too: `(( --n ))` is safe when n≥2; `(( n-- ))` is not when n=1.
 
 ## General Programming
 
