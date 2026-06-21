@@ -747,7 +747,8 @@
         "~/.cache/uv",
         "/tmp/tmux-*",
         "/tmp/tmux-*/*",
-        "/var/folders",
+        "/var/folders/*/*/T",
+        "/var/folders/*/*/C",
         "/run/user/*/pueue*.socket",
         "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli",
         "~/Downloads"
