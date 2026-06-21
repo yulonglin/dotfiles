@@ -323,32 +323,59 @@ def cmd_provision(args: argparse.Namespace) -> None:
         pod_id: str = resp.json()["id"]
         print(f"  ✓  Pod created: {pod_id}")
 
-    # Step 3: Poll until RUNNING + publicIp
-    with _client() as client:
-        pod = _poll_pod(client, pod_id)
-
-    public_ip: str = pod["publicIp"]
-    # portMappings maps container port → assigned external port, e.g. {"22": 10341}
-    port_mappings: dict[str, Any] = pod.get("portMappings", {})
-    ssh_port: int = int(port_mappings.get("22", 22))
-
-    # Step 4: Wait for SSH TCP reachability
-    _wait_for_ssh(public_ip, ssh_port)
-
-    # Step 5: Persist state
+    # Persist a minimal recovery entry the INSTANT the pod exists — before any
+    # polling — so its id is recoverable from STATE_FILE (and tearable-down) even
+    # if the controller dies during poll/SSH-wait below. Without this, a pod that
+    # reaches RUNNING but never opens SSH would strand, billing, with its id only
+    # ever printed to stdout. (Teardown layer 1 precondition.)
     now = datetime.now(timezone.utc)
     entry: dict[str, Any] = {
         "pod_id": pod_id,
         "name": name,
-        "public_ip": public_ip,
-        "ssh_port": ssh_port,
         "volume_id": vol_id,
         "provisioned_at": now.isoformat(),
     }
     if args.max_lifetime:
-        expiry = now + timedelta(hours=args.max_lifetime)
-        entry["expires_at"] = expiry.isoformat()
+        entry["expires_at"] = (now + timedelta(hours=args.max_lifetime)).isoformat()
+    state = _load_state()
+    state[pod_id] = entry
+    _save_state(state)
 
+    # Steps 3–4 are guarded: any failure — including the SystemExit that
+    # _poll_pod/_wait_for_ssh raise on timeout — tears the pod down before
+    # re-raising, so an unreachable-but-billing pod is never left behind
+    # (teardown layer 1). setup.sh failure (Step 6) is deliberately NOT in here:
+    # a reachable pod with a botched setup is kept up for manual SSH debugging.
+    try:
+        # Step 3: Poll until RUNNING + publicIp
+        with _client() as client:
+            pod = _poll_pod(client, pod_id)
+
+        public_ip: str = pod["publicIp"]
+        # portMappings maps container port → assigned external port, e.g. {"22": 10341}
+        port_mappings: dict[str, Any] = pod.get("portMappings", {})
+        ssh_port: int = int(port_mappings.get("22", 22))
+
+        # Step 4: Wait for SSH TCP reachability
+        _wait_for_ssh(public_ip, ssh_port)
+    except BaseException as exc:
+        kind = "timeout/interrupt" if isinstance(exc, SystemExit) else type(exc).__name__
+        print(
+            f"\n  ✗  Pod {pod_id} did not become reachable ({kind}) — "
+            f"tearing down to avoid stranded billing."
+        )
+        try:
+            _teardown_pod(pod_id)
+        except Exception as te:  # teardown itself failed → pod may still bill
+            print(
+                f"  ‼  TEARDOWN ALSO FAILED ({te!r}) — pod may still be running!\n"
+                f"     Run NOW: uv run scripts/cloud/provision.py teardown {pod_id}"
+            )
+        raise
+
+    # Step 5: Enrich the persisted entry now that the pod is RUNNING + reachable
+    entry["public_ip"] = public_ip
+    entry["ssh_port"] = ssh_port
     state = _load_state()
     state[pod_id] = entry
     _save_state(state)
@@ -357,7 +384,7 @@ def cmd_provision(args: argparse.Namespace) -> None:
     # - setup.sh detects RUNPOD_POD_ID env → sets PROVIDER=runpod, symlinks /workspace
     # - Interactive prompts (BWS token, Tailscale, age key) are skipped when /dev/tty
     #   is absent — run them manually after login via: ssh -p <port> yulong@<ip>
-    print(f"\n  Running setup.sh on pod (non-interactive)...")
+    print("\n  Running setup.sh on pod (non-interactive)...")
     result = subprocess.run(
         [
             "ssh",
@@ -382,26 +409,28 @@ def cmd_provision(args: argparse.Namespace) -> None:
     print(f"  Teardown:  uv run scripts/cloud/provision.py teardown {pod_id}")
     if args.max_lifetime:
         print(f"  ⚠  Max lifetime: {args.max_lifetime}h — expires {entry['expires_at']}")
-        print(f"     Run teardown above by then (no auto-teardown scheduled)")
-    print(f"  Next: ssh in and run secrets-init, secrets-init-bws, tailscale up")
-    print(f"  ML stack: run setup_stack.sh from nla-vs-cot repo (not done here)")
+        print("     Run teardown above by then (no auto-teardown scheduled)")
+    print("  Next: ssh in and run secrets-init, secrets-init-bws, tailscale up")
+    print("  ML stack: run setup_stack.sh from nla-vs-cot repo (not done here)")
     print(f"{'='*60}")
 
 
-def cmd_teardown(args: argparse.Namespace) -> None:
-    pod_id = args.pod_id
+def _teardown_pod(pod_id: str) -> bool:
+    """DELETE a pod, confirm it is gone, and drop it from local state.
 
-    if args.dry_run:
-        print(f"[DRY RUN] Would DELETE /pods/{pod_id}")
-        return
-
+    Returns True iff the pod is confirmed gone (404 on DELETE or follow-up GET).
+    Shared by cmd_teardown and cmd_provision's failure path (teardown layer 1) so
+    the same confirm-and-cleanup logic protects both the happy and the error path.
+    """
     print(f"Tearing down pod {pod_id!r}...")
+    gone = False
     with _client() as client:
         resp = client.delete(f"/pods/{pod_id}")
         if resp.status_code == 404:
             print(f"  Pod {pod_id!r} not found — already deleted or invalid id")
+            gone = True
         elif resp.status_code == 204:
-            print(f"  ✓  Deleted (204 No Content)")
+            print("  ✓  Deleted (204 No Content)")
         else:
             resp.raise_for_status()
 
@@ -409,7 +438,8 @@ def cmd_teardown(args: argparse.Namespace) -> None:
         time.sleep(3)
         check = client.get(f"/pods/{pod_id}")
         if check.status_code == 404:
-            print(f"  ✓  Confirmed gone (404)")
+            print("  ✓  Confirmed gone (404)")
+            gone = True
         else:
             pod = check.json()
             status = pod.get("desiredStatus", "?")
@@ -421,6 +451,17 @@ def cmd_teardown(args: argparse.Namespace) -> None:
         del state[pod_id]
         _save_state(state)
         print(f"  ✓  Removed from {STATE_FILE}")
+    return gone
+
+
+def cmd_teardown(args: argparse.Namespace) -> None:
+    pod_id = args.pod_id
+
+    if args.dry_run:
+        print(f"[DRY RUN] Would DELETE /pods/{pod_id}")
+        return
+
+    _teardown_pod(pod_id)
 
 
 def cmd_list(args: argparse.Namespace) -> None:
