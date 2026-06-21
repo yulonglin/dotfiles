@@ -710,6 +710,13 @@ def classify_api_problem(status: int, error_type: str, message: str) -> AutoClas
             "Top up Anthropic credits or switch to a funded key. Claude will fall back to the normal permission prompt until this is fixed.",
         )
 
+    if any(token in combined for token in ("usage limit", "spend limit", "reached your", "regain access", "workspace api")):
+        return AutoClassifyWarning(
+            "Anthropic workspace usage limit reached — auto-classify is paused.",
+            f"HTTP {status}: {message}",
+            "Raise the workspace spend limit at console.anthropic.com, or switch to a key from a different workspace. Auto-classify will resume once the limit resets.",
+        )
+
     if status in (401, 403) or "authentication" in combined or "invalid x-api-key" in combined:
         return AutoClassifyWarning(
             "Anthropic API key was rejected.",

@@ -590,6 +590,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/check_things_mcp.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/anthropic_keycheck.py",
+            "timeout": 10
           }
         ]
       }
