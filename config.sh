@@ -184,6 +184,7 @@ PACKAGES_MACOS=(
     "ripgrep"
     "jless"
     "just"
+    "watch"
     "sd"          # sed replacement (preferred over sed)
     "duf"         # df replacement (disk free space)
     "gum"         # interactive shell UI (app-picker TUI)
