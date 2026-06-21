@@ -746,6 +746,7 @@
         "~/.Trash",
         "~/.cache/uv",
         "/tmp/tmux-*",
+        "/tmp/tmux-*/*",
         "/var/folders",
         "/run/user/*/pueue*.socket",
         "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli",
