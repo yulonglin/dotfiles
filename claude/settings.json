@@ -823,6 +823,8 @@
       "gh",
       "git",
       "docker",
+      "ssh",
+      "rsync",
       "codex",
       "gemini",
       "tmux",
