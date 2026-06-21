@@ -14,7 +14,6 @@ fi
 alias dot="cd $DOT_DIR"
 alias jp="jupyter lab"
 alias hn="hostname"
-alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 # Define bearcli alias only if Bear is installed (avoids cryptic runtime failures)
 # Skipped automatically when /usr/local/bin/bearcli symlink exists (deploy.sh)
 [[ -x /Applications/Bear.app/Contents/MacOS/bearcli && ! -x /usr/local/bin/bearcli ]] && \
