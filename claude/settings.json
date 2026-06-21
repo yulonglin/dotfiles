@@ -669,7 +669,6 @@
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
     "writing@ai-safety-plugins": true,
-    "codex@codex-plugin-cc": true,
     "things-mcp@productivity-tools": true,
     "swift-lsp@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
@@ -717,12 +716,6 @@
       "source": {
         "source": "github",
         "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
-      }
-    },
-    "codex-plugin-cc": {
-      "source": {
-        "source": "github",
-        "repo": "crazytieguy/codex-plugin-cc"
       }
     }
   },

@@ -1369,8 +1369,8 @@ deploy_editor_settings() {
     fi
 
     if ! $deployed; then
-        log_warning "Neither VSCode, Cursor, nor Antigravity found"
-        return 1
+        log_info "No editor (VSCode, Cursor, or Antigravity) found — skipping editor settings"
+        return 0
     fi
 }
 
