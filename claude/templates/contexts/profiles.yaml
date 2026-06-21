@@ -36,7 +36,6 @@ marketplaces:
 
 # Always-on in every profile (declared once)
 base:
-  - bear-mcp
   - claude-md-management
   - codex
   - commit-commands
@@ -48,6 +47,10 @@ base:
   - remember
   - superpowers
   - workflow
+
+# macOS-only plugins — loaded only when claude-tools detects OS == macos at runtime
+macos:
+  - bear-mcp
 
 # Domain profiles — primary workflow contexts.
 # Note: domain-profile names (code, research, writing, viz) intentionally mirror their primary
@@ -99,7 +102,7 @@ profiles:
     enable: [huggingface-skills]
 
   productivity:
-    comment: "Task and project management — Things 3 (Bear is already in base)"
+    comment: "Task and project management — Things 3, Bear/macOS (Notion via claude.ai connector)"
     enable: [things-mcp]
 
   automation:

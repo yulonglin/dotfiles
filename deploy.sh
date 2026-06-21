@@ -871,8 +871,23 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
             fi
         done
 
-        # Deploy service/timer units
-        for unit in pueued.service reset-failed.service reset-failed.timer; do
+        # Deploy pueued.service: template absolute pueued path + XDG_RUNTIME_DIR so the
+        # unit works regardless of the default PATH visible to systemd --user.
+        local pueued_src="$DOT_DIR/config/systemd-user/pueued.service"
+        if [[ -f "$pueued_src" ]]; then
+            local pueued_bin
+            pueued_bin=$(command -v pueued 2>/dev/null || echo "pueued")
+            sed -e "s|ExecStart=pueued|ExecStart=${pueued_bin}|" \
+                "$pueued_src" > "$systemd_user_dir/pueued.service"
+            # Ensure XDG_RUNTIME_DIR is set (needed for the unix socket path)
+            if ! grep -q "XDG_RUNTIME_DIR" "$systemd_user_dir/pueued.service"; then
+                sed -i "s|\[Service\]|[Service]\nEnvironment=XDG_RUNTIME_DIR=%t|" \
+                    "$systemd_user_dir/pueued.service"
+            fi
+        fi
+
+        # Deploy remaining service/timer units verbatim
+        for unit in reset-failed.service reset-failed.timer; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             [[ -f "$unit_src" ]] && cp "$unit_src" "$systemd_user_dir/$unit"
         done
@@ -901,10 +916,16 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
 
             # Enable and start pueued via systemd
             systemctl --user enable pueued.service 2>/dev/null
-            systemctl --user start pueued.service 2>/dev/null || {
-                log_info "systemd start failed, falling back to direct pueued..."
-                pueued --daemonize 2>/dev/null
-            }
+            local systemd_err
+            systemd_err=$(systemctl --user start pueued.service 2>&1)
+            if [[ $? -ne 0 ]]; then
+                log_info "systemd start failed (${systemd_err}), falling back to direct pueued..."
+                # Ensure XDG_RUNTIME_DIR is set for the unix socket path
+                export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+                local pueued_err
+                pueued_err=$(pueued --daemonize 2>&1)
+                [[ -n "$pueued_err" ]] && log_info "pueued: $pueued_err"
+            fi
 
             # Wait for pueued to be ready (group creation needs running daemon)
             log_info "Waiting for pueued..."
@@ -921,7 +942,14 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                 pueue parallel "$AGENTS_PARALLEL" --group agents
                 log_success "Pueue groups: experiments(${EXPERIMENTS_PARALLEL}), agents(${AGENTS_PARALLEL})"
             else
-                log_warning "pueued failed to start — groups not configured"
+                log_warning "pueued did not become reachable (pueue status still failing after 5s)"
+                # Surface recent service log to help diagnose startup failures
+                if cmd_exists journalctl; then
+                    local svc_log
+                    svc_log=$(journalctl --user -u pueued.service -n 10 --no-pager 2>/dev/null || true)
+                    [[ -n "$svc_log" ]] && log_info "pueued journal:\n$svc_log"
+                fi
+                log_info "Pueue groups not configured — re-run deploy.sh --pueue after fixing the daemon"
             fi
 
             # Enable reset-failed timer (hourly stale unit cleanup)
