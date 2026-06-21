@@ -1162,7 +1162,8 @@ sync_authorized_keys_union() {
     fi
 
     # Union merge via Python: deduplicate by key blob, use the older file as the base
-    # (its structure/comments are authoritative; the newer file's unique keys are appended)
+    # (its structure/comments are authoritative; the newer file's unique keys and
+    # comments are merged in — same-blob comments are unioned comma-separated).
     local merged
     merged=$(GIST_CONTENT="$gist_content" LOCAL_CONTENT="$local_content" \
         python3 - "$local_birthtime" "$gist_updated_at" <<'PYEOF'
@@ -1172,41 +1173,72 @@ local_birth = int(sys.argv[1])
 gist_ts     = int(sys.argv[2])
 
 def parse(content):
-    """Return (entries_in_order, blob_set). Each entry is (blob_or_None, raw_line)."""
-    blobs, entries = set(), []
+    """Return (entries_in_order, blob_set).
+    Each entry is (blob_or_None, key_type, comment, raw_line).
+    blob_or_None: key blob for key lines, None for blank/# comment lines.
+    comment: text after the blob (may be ''); None for non-key lines.
+    Intra-file duplicates (by blob) are silently dropped (first wins).
+    """
+    seen, entries = set(), []
     for line in content.splitlines():
         s = line.strip()
         if s and not s.startswith('#'):
             parts = s.split()
             if len(parts) >= 2:
                 blob = parts[1]
-                if blob not in blobs:
-                    blobs.add(blob)
-                    entries.append((blob, line))
-                continue
-        entries.append((None, line))  # blank / comment line
-    return entries, blobs
+                if blob not in seen:
+                    seen.add(blob)
+                    entries.append((blob, parts[0], ' '.join(parts[2:]), line))
+                continue  # silently drop intra-file dups
+        entries.append((None, None, None, line))
+    return entries, seen
+
+def merge_comments(a, b):
+    """Union two comment strings, comma-separated, dedup, drop empty tokens.
+    Ensures commented always beats uncommented: 'laptop' + '' → 'laptop'.
+    """
+    seen, out = set(), []
+    for token in ','.join(filter(None, [a, b])).split(','):
+        token = token.strip()
+        if token and token not in seen:
+            seen.add(token)
+            out.append(token)
+    return ', '.join(out)
 
 gist_entries,  gist_blobs  = parse(os.environ['GIST_CONTENT'])
 local_entries, local_blobs = parse(os.environ['LOCAL_CONTENT'])
 
-# Older file = canonical base; newer file contributes only its unique keys
+# Older file = canonical base; newer file's unique keys and comments are merged in
 if local_birth > 0 and local_birth < gist_ts:
-    base_entries, other_blobs = local_entries, gist_blobs
-    extra = [(b, l) for b, l in gist_entries if b and b not in local_blobs]
+    base_entries, base_blobs = local_entries, local_blobs
+    other_entries, other_blobs = gist_entries, gist_blobs
 else:
-    base_entries, other_blobs = gist_entries, local_blobs
-    extra = [(b, l) for b, l in local_entries if b and b not in gist_blobs]
+    base_entries, base_blobs = gist_entries, gist_blobs
+    other_entries, other_blobs = local_entries, local_blobs
 
-lines = [l for _, l in base_entries]
-# Strip trailing blanks before appending
+# Build comment lookup for the other file (blob -> comment string)
+other_comment = {blob: comment for blob, _, comment, _ in other_entries if blob}
+
+# Render base file; merge in comments from the other file for matching blobs
+lines = []
+for blob, key_type, comment, raw_line in base_entries:
+    if blob is None:
+        lines.append(raw_line)  # blank or # comment line — preserve as-is
+    else:
+        new_comment = merge_comments(comment, other_comment.get(blob, ''))
+        lines.append(f'{key_type} {blob} {new_comment}' if new_comment else f'{key_type} {blob}')
+
+# Strip trailing blanks before appending extra keys
 while lines and not lines[-1].strip():
     lines.pop()
 
+# Append unique keys from the other file (blobs absent from base)
+extra = [(blob, key_type, comment) for blob, key_type, comment, _ in other_entries
+         if blob and blob not in base_blobs]
 if extra:
     lines.append('')
-    for _, line in extra:
-        lines.append(line)
+    for blob, key_type, comment in extra:
+        lines.append(f'{key_type} {blob} {comment}' if comment else f'{key_type} {blob}')
 
 print('\n'.join(lines))
 PYEOF
