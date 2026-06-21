@@ -85,7 +85,15 @@ def main() -> None:
         error_type, message = parse_anthropic_error(e)
         warning = classify_api_problem(e.code, error_type, message)
         msg = build_warning_message(warning.headline, warning.details, warning.suggestion)
-        print(json.dumps({"systemMessage": msg}))
+        # SessionStart hooks inject via hookSpecificOutput.additionalContext (the field
+        # that reliably reaches the session), not the top-level systemMessage used by
+        # PreToolUse/PermissionRequest hooks. Matches the other SessionStart hooks in this repo.
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": msg,
+            }
+        }))
     except Exception:
         # Network error, timeout, or anything unexpected — fail open silently.
         return
