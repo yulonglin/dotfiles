@@ -710,7 +710,7 @@ def classify_api_problem(status: int, error_type: str, message: str) -> AutoClas
             "Top up Anthropic credits or switch to a funded key. Claude will fall back to the normal permission prompt until this is fixed.",
         )
 
-    if any(token in combined for token in ("usage limit", "spend limit", "reached your", "regain access", "workspace api")):
+    if any(token in combined for token in ("usage limit", "spend limit", "regain access", "workspace api")):
         return AutoClassifyWarning(
             "Anthropic workspace usage limit reached — auto-classify is paused.",
             f"HTTP {status}: {message}",
