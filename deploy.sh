@@ -985,6 +985,16 @@ fi
             scheduled_jobs+=("mcp-sync|$DOT_DIR/scripts/cleanup/setup_mcp_sync.sh")
     fi
 
+    if [[ "$DEPLOY_USAGE_PING" == "true" ]]; then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_usage_ping.sh" ]] && \
+            scheduled_jobs+=("usage-ping|$DOT_DIR/scripts/cleanup/setup_usage_ping.sh")
+    fi
+
+    if [[ "$DEPLOY_TMUX_RESUME" == "true" ]]; then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_tmux_resume.sh" ]] && \
+            scheduled_jobs+=("tmux-resume|$DOT_DIR/scripts/cleanup/setup_tmux_resume.sh")
+    fi
+
     if [[ "$DEPLOY_BREW_UPDATE" == "true" ]]; then
         [[ -f "$DOT_DIR/scripts/cleanup/setup_brew_update.sh" ]] && \
             scheduled_jobs+=("brew-update|$DOT_DIR/scripts/cleanup/setup_brew_update.sh")
