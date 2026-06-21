@@ -10,7 +10,8 @@
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_NO_FLICKER": "1",
     "ENABLE_TOOL_SEARCH": "1",
-    "CLAUDE_CODE_DISABLE_1M_CONTEXT": "1"
+    "CLAUDE_CODE_DISABLE_1M_CONTEXT": "1",
+    "TMPDIR": "/tmp/claude"
   },
   "attribution": {
     "commit": "",
@@ -746,9 +747,14 @@
       "allowWrite": [
         "~/.Trash",
         "~/.cache/uv",
+        "/tmp/claude",
         "/tmp/tmux-*",
         "/var/folders",
         "/run/user/*/pueue*.socket",
+        "~/code",
+        "~/writing",
+        "~/projects",
+        "~/scratch",
         "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli"
       ],
       "denyRead": [

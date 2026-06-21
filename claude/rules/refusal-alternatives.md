@@ -36,7 +36,7 @@ When a tool or sandbox blocks you, don't retry the same thing — pivot immediat
 | When this fails... | Try this alternative |
 |--------------------|---------------------|
 | `rm` / `rm -rf` blocked | `trash` (macOS) > `mv` to `.bak` or `archive/` |
-| Writing to `/tmp` | Use `$TMPDIR` (set to `/tmp/claude/`), `/run/user/$(id -u)/` (Linux XDG runtime), or project-local `./tmp/` |
+| Writing to `/tmp` | Use `$TMPDIR` (pinned to `/tmp/claude/` via `settings.json` `env.TMPDIR`), or project-local `./tmp/`. **Do NOT** use `/run/user/$(id -u)/` — it's read-only in-sandbox (only a pueue socket is whitelisted) and holds gnupg/dbus/credential sockets |
 | Heredoc in git commit | `printf > $TMPDIR/commit_msg.txt && git commit -F` |
 | `Edit` fails ("file modified since read") | Re-read file, retry with fresh `old_string` — **never** fall back to `Write` |
 | Sub-agent fails or times out | Do the work directly in main context (don't retry same agent) |
