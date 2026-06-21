@@ -9,6 +9,23 @@
 #   setup-envrc --all                           # export every managed key
 #   setup-envrc --list                          # show current repo .envrc bindings
 #   setup-envrc --clean                         # remove repo .envrc
+
+# Re-exec under a modern bash if we landed on macOS's stock 3.2 (no `mapfile`).
+# BASH_VERSINFO, [[ =~ ]], and (( … )) all exist in bash 3.2, so this guard is 3.2-safe.
+if (( ${BASH_VERSINFO[0]:-0} < 4 )); then
+    for _cand in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+        if [[ -x "$_cand" && "$_cand" != "${BASH:-}" ]]; then
+            # shellcheck disable=SC2016  # single quotes intentional: evaluated by $_cand, not current bash
+            _v=$("$_cand" -c 'echo "${BASH_VERSINFO[0]}"' 2>/dev/null)
+            if [[ "$_v" =~ ^[0-9]+$ ]] && (( _v >= 4 )); then
+                exec "$_cand" "${BASH_SOURCE[0]}" "$@"
+            fi
+        fi
+    done
+    echo "setup-envrc requires bash 4+ (macOS ships 3.2). Install with: brew install bash" >&2
+    exit 1
+fi
+
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
