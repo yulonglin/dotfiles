@@ -215,6 +215,7 @@ secrets-init-bws() {
 alias sync-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" sync'
 alias export-snippets='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" export'
 alias snippets-diff='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" diff'
+alias trsync='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" sync --prune'
 
 # Sync Mouseless UI config changes back to dotfiles (macOS only)
 if [[ "$(uname)" == "Darwin" ]]; then
