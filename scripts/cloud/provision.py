@@ -52,11 +52,19 @@ BASE_URL = "https://rest.runpod.io/v1"
 #   Other A100-80GB option: "NVIDIA A100 80GB PCIe"
 DEFAULT_GPU_TYPE = "NVIDIA A100-SXM4-80GB"
 DEFAULT_GPU_COUNT = 8
-DEFAULT_VOLUME_GB = 1024
+# 2 TB: keep-last-K=3 pruning bounds the working set to ~180 GB, so this is deep
+# headroom; chosen over 1 TB to also cover retaining all checkpoints of a long
+# (max_steps=4200) run (~2 TB) without a mid-run overrun — volumes can't be resized
+# on an active pod.  Network volume is deletable instantly if oversized.
+DEFAULT_VOLUME_GB = 2048
 
-# Data center for network volume creation.  Volume and pod must be co-located.
-# Other options: US-GA-2, EU-RO-1, CA-MTL-3, AUS-QLD-3
-DEFAULT_DATA_CENTER = "US-TX-3"
+# Data center for network volume creation.  Volume and pod must be co-located,
+# and the DC must have the GPU type schedulable.  US-KS-2 chosen: storage-capable,
+# has A100-SXM4-80GB AND an in-DC A100-80GB-PCIe fallback if SXM stock (currently
+# "Low" everywhere) can't satisfy 8×.  US-WA-1 is nearer SF but has no in-DC
+# fallback; US-MO-1 is an equivalent central-US alternative.
+# Other storage+A100-SXM DCs: US-MO-1, US-WA-1, EUR-IS-1
+DEFAULT_DATA_CENTER = "US-KS-2"
 
 # Local state file tracking provisioned pods (pod_id → metadata + expiry)
 STATE_FILE = Path.home() / ".runpod-pods.json"
