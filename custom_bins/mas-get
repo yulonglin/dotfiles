@@ -106,12 +106,19 @@ local fail_list=()
 for (( i=1; i<=${#to_install_ids}; i++ )); do
     local app_id="${to_install_ids[i]}"
     local app_name="${to_install_names[i]}"
-    printf "  Installing %s (%s)... " "$app_name" "$app_id"
-    if mas get "$app_id" 2>&1; then
-        print -P "%F{green}✓%f"
+    local mas_out
+    mas_out=$(mas get "$app_id" 2>&1)
+    local mas_exit=$?
+    if [[ $mas_exit -eq 0 ]]; then
+        if [[ "$mas_out" == *"Already got"* ]]; then
+            printf "  %-45s already installed, skipping\n" "$app_name ($app_id)"
+        else
+            printf "  %-45s " "$app_name ($app_id)"; print -P "%F{green}✓ installed%f"
+        fi
         (( ++ok ))
     else
-        print -P "%F{red}✗%f"
+        printf "  %-45s " "$app_name ($app_id)"; print -P "%F{red}✗ failed%f"
+        [[ -n "$mas_out" ]] && echo "    $mas_out"
         (( ++fail ))
         fail_list+=("$app_name ($app_id)")
     fi

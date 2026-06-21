@@ -101,6 +101,24 @@ All fzf-based pickers in dotfiles tooling should follow these conventions:
 - For zsh scripts, use `# shellcheck shell=bash` at top (closest approximation)
 - Suppress false positives with `# shellcheck disable=SCXXXX` (include reason)
 
+**`set -e` + arithmetic footgun — always use pre-increment:**
+`(( n++ ))` post-increment evaluates to the *old* value of `n`. When `n=0`, the expression
+is 0 (falsy) and `set -e` / `set -euo pipefail` exits the script silently. Use
+pre-increment instead — it evaluates to the *new* value, which is always ≥1:
+
+```bash
+# BAD — exits when n=0 under set -e
+(( n++ ))
+(( count++ ))
+
+# GOOD
+(( ++n ))
+(( ++count ))
+# or: n=$(( n + 1 ))  # always safe, no arithmetic exit-code trap
+```
+
+This applies to decrement too: `(( --n ))` is safe when n≥2; `(( n-- ))` is not when n=1.
+
 ## General Programming
 
 - Match existing code style
