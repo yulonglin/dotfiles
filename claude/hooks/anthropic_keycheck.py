@@ -85,14 +85,16 @@ def main() -> None:
         error_type, message = parse_anthropic_error(e)
         warning = classify_api_problem(e.code, error_type, message)
         msg = build_warning_message(warning.headline, warning.details, warning.suggestion)
-        # SessionStart hooks inject via hookSpecificOutput.additionalContext (the field
-        # that reliably reaches the session), not the top-level systemMessage used by
-        # PreToolUse/PermissionRequest hooks. Matches the other SessionStart hooks in this repo.
+        # Emit both: systemMessage surfaces the warning directly to the user (a top-level
+        # field shown to the user on any event, per the hooks docs), and
+        # hookSpecificOutput.additionalContext adds it to Claude's context so it can offer
+        # to help. Mirrors auto_classify.py's emit_warning, which sets both fields.
         print(json.dumps({
+            "systemMessage": msg,
             "hookSpecificOutput": {
                 "hookEventName": "SessionStart",
                 "additionalContext": msg,
-            }
+            },
         }))
     except Exception:
         # Network error, timeout, or anything unexpected — fail open silently.
