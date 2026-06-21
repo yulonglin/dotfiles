@@ -101,6 +101,33 @@ All fzf-based pickers in dotfiles tooling should follow these conventions:
 - For zsh scripts, use `# shellcheck shell=bash` at top (closest approximation)
 - Suppress false positives with `# shellcheck disable=SCXXXX` (include reason)
 
+**`local` inside a loop prints existing values (zsh):**
+In zsh, `local var` is `typeset var`. Re-declaring an already-existing typeset variable
+prints its current value. Since a `for` loop re-runs the body, `local` inside a loop
+leaks the previous iteration's value on iterations 2+. Declare loop-scoped temporaries
+*before* the loop, or use `if var=$(cmd); then` to combine capture + exit-code check:
+
+```bash
+# BAD — leaks prev value from iteration 2 onwards
+for ...; do
+    local tmp
+    tmp=$(some_cmd)
+done
+
+# GOOD — declare once before the loop
+local tmp
+for ...; do
+    tmp=$(some_cmd)   # plain assignment inside loop
+done
+
+# ALSO GOOD — combined capture + exit-code check in one expression
+local tmp
+for ...; do
+    if tmp=$(some_cmd); then ...
+    fi
+done
+```
+
 **`set -e` + arithmetic footgun:**
 `(( expr ))` exits with code 1 when the expression evaluates to 0 (falsy), which trips
 `set -e` / `set -euo pipefail` silently. The value that matters is the *expression result*,
