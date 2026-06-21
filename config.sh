@@ -188,6 +188,7 @@ PACKAGES_MACOS=(
     "duf"         # df replacement (disk free space)
     "gum"         # interactive shell UI (app-picker TUI)
     "vivid"       # LS_COLORS theme generator (catppuccin-mocha)
+    "fpart"       # parallel rsync (fpsync) for fast many-file copies
 )
 
 # Linux packages (via mise github: backend)

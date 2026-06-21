@@ -7,6 +7,8 @@ _meta:
     prefix: em.
   coding-agents:
     prefix: cc.
+  productivity:
+    prefix: pr.
 default:
 - shortcut: omw
   phrase: on my way
@@ -66,12 +68,10 @@ coding-agents:
     to focus on. Context: "
   uid: 145A5AED-D890-418C-8970-79475219F993
 - shortcut: plan
-  phrase: Come up with criteria for a good plan for this task. Then use appropriate sub-agents, including Codex and 
-    Gemini, to critique and improve on this plan.
+  phrase: Come up with criteria for a good plan for this task. Then use appropriate sub-agents, including GPT and Claude models, to critique and improve on this plan.
   uid: 03D92E43-C6F9-4B65-B44C-89CD8FED8504
 - shortcut: review
-  phrase: Come up with criteria and tests/checks. Then review the code with multiple subagents including Codex and 
-    Gemini.
+  phrase: Come up with criteria and tests/checks. Then review the code with multiple subagents including GPT and Claude models.
   uid: A1EF3E27-115A-41E8-988D-5FB693A2A779
 - shortcut: txt
   phrase: 'Critique and improve on the following for clarity, friendliness and persuasiveness. Context:  '
@@ -116,6 +116,15 @@ emojis:
 - shortcut: inprog
   phrase: ⏳
   uid: 8A8372A9-AAFB-4FEE-83B9-45E4256D88A3
+productivity:
+- shortcut: plan
+  phrase: |
+    Planning
+    1. Goal
+    2. Steps
+    3. Now
+    4. Status
+  uid: TODO
 focusmate:
 - shortcut: atb
   phrase: nice! well atb then, see you at the end :)
