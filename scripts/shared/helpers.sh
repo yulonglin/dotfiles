@@ -1140,109 +1140,55 @@ sync_authorized_keys_union() {
         return 0
     fi
 
-    # Get local file birthtime to distinguish "fresh install" from "intentional edit"
-    local local_birthtime=0
-    if is_macos; then
-        local_birthtime=$(stat -f %SB -t %s "$local_path" 2>/dev/null || echo 0)
-    else
-        local_birthtime=$(stat --format=%W "$local_path" 2>/dev/null || echo 0)
-        # Fall back to mtime if birthtime unsupported (returns 0)
-        [[ "$local_birthtime" == "0" ]] && local_birthtime=$(stat --format=%Y "$local_path" 2>/dev/null || echo 0)
-    fi
-    local age_days=0
-    [[ "$local_birthtime" -gt 0 ]] && age_days=$(( ( $(date +%s) - local_birthtime ) / 86400 ))
-    local age_label="${age_days}d old"
+    # Locate the merge script (same directory as this file, fallback to DOT_DIR)
+    local _merge_script
+    _merge_script="$(cd "$(dirname "${BASH_SOURCE[0]:-$DOT_DIR/scripts/shared}")" 2>/dev/null && pwd)/merge_authorized_keys.py"
+    [[ -f "$_merge_script" ]] || _merge_script="$DOT_DIR/scripts/shared/merge_authorized_keys.py"
 
     local local_content
     local_content=$(cat "$local_path")
+
+    # mtime-based age label (diagnostic only — not used for base selection)
+    local _local_mtime age_days age_label
+    _local_mtime=$(stat --format=%Y "$local_path" 2>/dev/null \
+                   || stat -f %m "$local_path" 2>/dev/null || echo 0)
+    age_days=0
+    [[ "$_local_mtime" -gt 0 ]] && age_days=$(( ( $(date +%s) - _local_mtime ) / 86400 ))
+    age_label="${age_days}d old"
+
+    # C2: fold authorized_keys_restored if present (RunPod/container pattern)
+    # On hetzner this branch never fires (file doesn't exist).
+    local _restored_path="$HOME/.ssh/authorized_keys_restored"
+    if [[ -f "$_restored_path" ]]; then
+        local _tmp_pre _tmp_rst _folded
+        _tmp_pre="${TMPDIR:-/tmp}/ak_pre_$$"
+        _tmp_rst="${TMPDIR:-/tmp}/ak_rst_$$"
+        printf '%s' "$local_content" > "$_tmp_pre"
+        cp "$_restored_path" "$_tmp_rst"
+        _folded=$(python3 "$_merge_script" "$_tmp_pre" "$_tmp_rst" 2>/dev/null)
+        rm -f "$_tmp_pre" "$_tmp_rst"
+        if [[ -n "$_folded" ]]; then
+            local_content="$_folded"
+            mv "$_restored_path" "${_restored_path}.bak"
+            log_info "  ↕ Folded authorized_keys_restored into local (archived to .bak)"
+        fi
+    fi
 
     if [[ "$local_content" == "$gist_content" ]]; then
         log_info "  ✓ authorized_keys in sync"
         return 1
     fi
 
-    # Union merge via Python: deduplicate by key blob, use the older file as the base
-    # (its structure/comments are authoritative; the newer file's unique keys and
-    # comments are merged in — same-blob comments are unioned comma-separated).
-    local merged
-    merged=$(GIST_CONTENT="$gist_content" LOCAL_CONTENT="$local_content" \
-        python3 - "$local_birthtime" "$gist_updated_at" <<'PYEOF'
-import os, sys
-
-local_birth = int(sys.argv[1])
-gist_ts     = int(sys.argv[2])
-
-def parse(content):
-    """Return (entries_in_order, blob_set).
-    Each entry is (blob_or_None, key_type, comment, raw_line).
-    blob_or_None: key blob for key lines, None for blank/# comment lines.
-    comment: text after the blob (may be ''); None for non-key lines.
-    Intra-file duplicates (by blob) are silently dropped (first wins).
-    """
-    seen, entries = set(), []
-    for line in content.splitlines():
-        s = line.strip()
-        if s and not s.startswith('#'):
-            parts = s.split()
-            if len(parts) >= 2:
-                blob = parts[1]
-                if blob not in seen:
-                    seen.add(blob)
-                    entries.append((blob, parts[0], ' '.join(parts[2:]), line))
-                continue  # silently drop intra-file dups
-        entries.append((None, None, None, line))
-    return entries, seen
-
-def merge_comments(a, b):
-    """Union two comment strings, comma-separated, dedup, drop empty tokens.
-    Ensures commented always beats uncommented: 'laptop' + '' → 'laptop'.
-    """
-    seen, out = set(), []
-    for token in ','.join(filter(None, [a, b])).split(','):
-        token = token.strip()
-        if token and token not in seen:
-            seen.add(token)
-            out.append(token)
-    return ', '.join(out)
-
-gist_entries,  gist_blobs  = parse(os.environ['GIST_CONTENT'])
-local_entries, local_blobs = parse(os.environ['LOCAL_CONTENT'])
-
-# Older file = canonical base; newer file's unique keys and comments are merged in
-if local_birth > 0 and local_birth < gist_ts:
-    base_entries, base_blobs = local_entries, local_blobs
-    other_entries, other_blobs = gist_entries, gist_blobs
-else:
-    base_entries, base_blobs = gist_entries, gist_blobs
-    other_entries, other_blobs = local_entries, local_blobs
-
-# Build comment lookup for the other file (blob -> comment string)
-other_comment = {blob: comment for blob, _, comment, _ in other_entries if blob}
-
-# Render base file; merge in comments from the other file for matching blobs
-lines = []
-for blob, key_type, comment, raw_line in base_entries:
-    if blob is None:
-        lines.append(raw_line)  # blank or # comment line — preserve as-is
-    else:
-        new_comment = merge_comments(comment, other_comment.get(blob, ''))
-        lines.append(f'{key_type} {blob} {new_comment}' if new_comment else f'{key_type} {blob}')
-
-# Strip trailing blanks before appending extra keys
-while lines and not lines[-1].strip():
-    lines.pop()
-
-# Append unique keys from the other file (blobs absent from base)
-extra = [(blob, key_type, comment) for blob, key_type, comment, _ in other_entries
-         if blob and blob not in base_blobs]
-if extra:
-    lines.append('')
-    for blob, key_type, comment in extra:
-        lines.append(f'{key_type} {blob} {comment}' if comment else f'{key_type} {blob}')
-
-print('\n'.join(lines))
-PYEOF
-)
+    # Union merge: local is always the canonical base.
+    # Only genuinely new keys from the gist are added; keys disabled (line-commented)
+    # in local remain suppressed even if the gist still lists them as active.
+    local merged _tmp_local _tmp_gist
+    _tmp_local="${TMPDIR:-/tmp}/ak_local_$$"
+    _tmp_gist="${TMPDIR:-/tmp}/ak_gist_$$"
+    printf '%s' "$local_content" > "$_tmp_local"
+    printf '%s' "$gist_content"  > "$_tmp_gist"
+    merged=$(python3 "$_merge_script" "$_tmp_local" "$_tmp_gist" 2>/dev/null)
+    rm -f "$_tmp_local" "$_tmp_gist"
 
     if [[ -z "$merged" ]]; then
         log_warning "  authorized_keys union merge failed, falling back to last-modified-wins"

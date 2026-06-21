@@ -52,6 +52,10 @@ ZSH=$HOME/.oh-my-zsh
 
 plugins=(zsh-autosuggestions zsh-syntax-highlighting zsh-completions zsh-history-substring-search zsh-shift-select)
 
+# oh-my-zsh's lib/grep.zsh + custom/*.zsh(N) use bare glob qualifiers; re-sourcing
+# can leave bareglobqual off (residual state from a prior load) causing "no matches found".
+# Setting it here makes `source ~/.zshrc` safe to run in an already-running shell.
+setopt bareglobqual
 if [ -f "$ZSH/oh-my-zsh.sh" ]; then
   source "$ZSH/oh-my-zsh.sh"
 fi
