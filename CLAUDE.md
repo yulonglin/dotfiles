@@ -68,6 +68,7 @@ See README.md for detailed usage.
 - **This repo is public** — `main` is the only branch, and it holds shareable
   dotfiles **only**. Personal working content lives in a **separate private repo**
   (see [Personal Content](#personal-content) below), never on a branch here.
+- **`yulong` is the active working branch** — Yulong's day-to-day branch with personal customizations (RunPod tooling, richer hooks, extra rules, etc.). Branch new worktrees off `yulong`, not `main`, for all day-to-day work. `main` is the public branch for everyone else. **This bullet lives on `yulong` only — do not port it to `main` or `README.md`.**
 
 ### Personal Content
 
