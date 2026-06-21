@@ -61,12 +61,18 @@ pub fn run(verbose: bool, prune: bool) -> Result<(), Box<dyn std::error::Error>>
     // Phase 2: Update only marketplaces that contain wanted plugins
     let marketplace_index = build_marketplace_index(None);
     let needed_marketplaces: HashSet<&str> = wanted.iter()
-        .filter_map(|p| marketplace_index.get(p.as_str()).map(|s| s.as_str()))
+        .filter_map(|p| {
+            if let Some(at) = p.find('@') {
+                Some(&p[at + 1..])  // pinned entry: marketplace from @ suffix
+            } else {
+                marketplace_index.get(p.as_str()).map(|s| s.as_str())
+            }
+        })
         .collect();
 
-    // Also include marketplaces for plugins not yet in the index (not cloned yet)
+    // Also include marketplaces for bare plugins not yet in the index (not cloned yet)
     let unmapped: Vec<&str> = wanted.iter()
-        .filter(|p| !marketplace_index.contains_key(p.as_str()))
+        .filter(|p| !p.contains('@') && !marketplace_index.contains_key(p.as_str()))
         .map(|s| s.as_str())
         .collect();
 
@@ -269,10 +275,18 @@ fn build_marketplace_index(installed_data: Option<&serde_json::Value>) -> BTreeM
     for entry in entries.flatten() {
         let marketplace_name = entry.file_name().to_string_lossy().to_string();
         let marketplace_path = entry.path();
-        let plugins_dir = marketplace_path.join("plugins");
 
+        // 1. Canonical source: .claude-plugin/marketplace.json lists all plugin names
+        if let Some(names) = plugin_names_from_manifest(&marketplace_path) {
+            for name in names {
+                index.insert(name, marketplace_name.clone());
+            }
+            continue;
+        }
+
+        // 2. Multi-plugin marketplace: each subdir under plugins/ is a plugin
+        let plugins_dir = marketplace_path.join("plugins");
         if plugins_dir.is_dir() {
-            // Multi-plugin marketplace: each subdir is a plugin
             if let Ok(plugins) = std::fs::read_dir(&plugins_dir) {
                 for plugin in plugins.flatten() {
                     if plugin.path().is_dir() {
@@ -282,7 +296,7 @@ fn build_marketplace_index(installed_data: Option<&serde_json::Value>) -> BTreeM
                 }
             }
         } else {
-            // Single-plugin marketplace: derive name from package.json or installed_plugins.json
+            // 3. Single-plugin marketplace: derive name from package.json or directory name
             let plugin_name = single_plugin_name(&marketplace_path, &marketplace_name);
             index.insert(plugin_name, marketplace_name.clone());
         }
@@ -328,6 +342,18 @@ fn single_plugin_name(marketplace_path: &Path, marketplace_name: &str) -> String
     marketplace_name.to_string()
 }
 
+/// Plugin names declared in a marketplace's .claude-plugin/marketplace.json (canonical index).
+/// Returns None if the manifest is absent or declares no plugins.
+fn plugin_names_from_manifest(marketplace_path: &Path) -> Option<Vec<String>> {
+    let manifest = marketplace_path.join(".claude-plugin").join("marketplace.json");
+    let content = std::fs::read_to_string(manifest).ok()?;
+    let data: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let names: Vec<String> = data.get("plugins")?.as_array()?.iter()
+        .filter_map(|p| p.get("name").and_then(|v| v.as_str()).map(String::from))
+        .collect();
+    (!names.is_empty()).then_some(names)
+}
+
 /// Results from selective_install for summary reporting.
 #[derive(Default)]
 struct InstallResults {
@@ -349,15 +375,27 @@ fn selective_install(
     let mut results = InstallResults::default();
 
     let to_install: Vec<(String, String)> = wanted.iter()
-        .filter(|p| !installed_short.contains(*p))
+        .filter(|p| !installed_short.contains(plugin_short_name(p)))
         .filter_map(|p| {
-            marketplace_index.get(p.as_str())
-                .map(|m| (p.clone(), format!("{}@{}", p, m)))
+            if let Some(at) = p.find('@') {
+                // Pinned entry: install verbatim as the qualified ID
+                let short = p[..at].to_string();
+                Some((short, p.clone()))
+            } else {
+                // Bare name: look up marketplace in index
+                marketplace_index.get(p.as_str())
+                    .map(|m| (p.clone(), format!("{}@{}", p, m)))
+            }
         })
         .collect();
 
     let unmapped: Vec<String> = wanted.iter()
-        .filter(|p| !installed_short.contains(p.as_str()) && !marketplace_index.contains_key(p.as_str()))
+        .filter(|p| {
+            let short = plugin_short_name(p);
+            !installed_short.contains(short)
+                && !p.contains('@')  // pinned entries are never unmapped
+                && !marketplace_index.contains_key(p.as_str())
+        })
         .cloned()
         .collect();
 
