@@ -109,10 +109,10 @@ for (( i=1; i<=${#to_install_ids}; i++ )); do
     printf "  Installing %s (%s)... " "$app_name" "$app_id"
     if mas get "$app_id" 2>&1; then
         print -P "%F{green}✓%f"
-        (( ok++ ))
+        (( ++ok ))
     else
         print -P "%F{red}✗%f"
-        (( fail++ ))
+        (( ++fail ))
         fail_list+=("$app_name ($app_id)")
     fi
 done
