@@ -223,5 +223,8 @@ args = ["serve"]
 command = "zotero-mcp"
 
 [mcp_servers.zotero.env]
+ZOTERO_API_KEY = "${ZOTERO_API_KEY}"
+ZOTERO_LIBRARY_ID = "${ZOTERO_LIBRARY_ID}"
+ZOTERO_LIBRARY_TYPE = "${ZOTERO_LIBRARY_TYPE:-user}"
 ZOTERO_LOCAL = "true"
 # END SHARED MCP SERVERS
