@@ -130,10 +130,12 @@ def merge_files(contents):
     all_active     = [p[1] for p in parsed]
     all_tombstones = [p[2] for p in parsed]
 
-    # ── 1. Collect disabled blobs (union across all files) ───────────────────
-    disabled_blobs = set()
-    for ts in all_tombstones:
-        disabled_blobs.update(ts)
+    # ── 1. Collect disabled blobs from the CANONICAL (local/base) file only ─────
+    # "Disable wins" means local's tombstone suppresses a gist active key —
+    # NOT that the gist's tombstone suppresses a local active key.
+    # If the user re-enables a key locally (moves it out of the disabled block),
+    # that intent must win even if the gist still has a stale tombstone.
+    disabled_blobs = set(all_tombstones[0])
 
     # ── 2. Collect active labels (canonical/base wins) ───────────────────────
     # For each non-disabled active blob, take the label from the first file that has it.
@@ -211,11 +213,13 @@ def merge_files(contents):
             else:
                 output.append(item[-1])   # divider, header, blank → preserve
 
-        # Append tombstones from other files not yet in base's disabled section
+        # Append tombstones from other files not yet in base's disabled section.
+        # Skip if the canonical base already has this blob ACTIVE — local re-enabled it.
+        local_active_blobs = set(all_active[0])
         extras_gap_added = False
         for ts in all_tombstones[1:]:
             for blob, (kt, note, section_header, orig_raw) in ts.items():
-                if blob not in emitted_tomb:
+                if blob not in emitted_tomb and blob not in local_active_blobs:
                     if not extras_gap_added:
                         output.append('')
                         extras_gap_added = True

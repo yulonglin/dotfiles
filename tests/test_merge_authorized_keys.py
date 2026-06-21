@@ -112,14 +112,41 @@ def test_disable_wins_keeps_tombstones_in_disabled_block():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# (b) disable-wins regardless of file order (local wins even if gist is "base")
+# (b) local is always the canonical base — arg ORDER matters
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_disable_wins_when_gist_is_first_arg():
-    # Even if we accidentally pass gist first, tombstones from local suppress keys
-    result = merge_files([GIST_OLD, LOCAL_CURATED])
+def test_disable_wins_when_local_is_first():
+    # Local (with tombstones) is canonical base: disabled keys stay suppressed
+    # even though GIST_OLD still lists them as active.
+    result = merge_files([LOCAL_CURATED, GIST_OLD])
     assert BLOB_M4PRO   not in active_blobs(result)
     assert BLOB_RUNPOD  not in active_blobs(result)
+
+
+def test_reenable_key_when_local_moves_it_to_active():
+    # Scenario: key was tombstoned in local, sync pushed tombstone to gist.
+    # User then re-enables it locally (moves it to active section).
+    # The gist still has the stale tombstone — local's active intent must win.
+    local_reenabled = textwrap.dedent(f"""\
+        # hetzner
+        ssh-ed25519 {BLOB_HETZNER}
+
+        # m4pro (re-identified, re-enabled)
+        ssh-ed25519 {BLOB_M4PRO}
+    """)
+    gist_stale_tombstone = textwrap.dedent(f"""\
+        ssh-ed25519 {BLOB_HETZNER}
+
+        # --- Disabled / pending deletion ---
+
+        # m4pro
+        # ssh-ed25519 {BLOB_M4PRO}
+    """)
+    result = merge_files([local_reenabled, gist_stale_tombstone])
+    assert BLOB_M4PRO in active_blobs(result), \
+        'Re-enabled key should be active when local has it active, even if gist still tombstones it'
+    assert BLOB_M4PRO not in disabled_blobs_in_output(result), \
+        'Re-enabled key must not appear in the disabled block'
 
 
 # ──────────────────────────────────────────────────────────────────────────────
