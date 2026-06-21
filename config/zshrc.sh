@@ -57,7 +57,12 @@ if [ -f "$ZSH/oh-my-zsh.sh" ]; then
 fi
 # Disable AUTO_CD (oh-my-zsh's lib/directories.zsh enables it) — require explicit cd
 unsetopt AUTO_CD
-source $CONFIG_DIR/aliases.sh
+# Source all themed alias files (config/aliases/*.sh)
+for _aliases_file in "$CONFIG_DIR"/aliases/*.sh; do
+  # shellcheck source=/dev/null
+  source "$_aliases_file"
+done
+unset _aliases_file
 [ -f $CONFIG_DIR/secrets.sh ] && source $CONFIG_DIR/secrets.sh
 if [ -x "$DOT_DIR/custom_bins/dotfiles-secrets" ]; then
   # Ad-hoc least-privilege helper for one-off commands.

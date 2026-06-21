@@ -52,8 +52,9 @@ log "Home:     $USER_HOME"
 
 # ─── System deps ──────────────────────────────────────────────────────────────
 step "System dependencies"
-apt-get update && apt-get install -y sudo zsh htop vim cron curl ca-certificates unzip
+apt-get update && apt-get install -y sudo zsh htop vim cron curl ca-certificates unzip locales
 command -v nvtop &>/dev/null || apt-get install -y nvtop 2>/dev/null || true
+locale-gen en_GB.UTF-8 2>/dev/null || true
 service cron start 2>/dev/null || true
 ok "System deps installed"
 
@@ -346,6 +347,48 @@ if ! run_as 'command -v claude' &>/dev/null; then
     ok "Claude Code installed"
 else
     ok "Claude Code already installed"
+fi
+
+# ─── Tailscale ───────────────────────────────────────────────────────────────
+step "Tailscale"
+if ! command -v tailscale &>/dev/null; then
+    log "Installing Tailscale..."
+    curl -fsSL https://tailscale.com/install.sh | sh
+    ok "Tailscale installed"
+else
+    ok "Tailscale already installed"
+fi
+
+TS_AUTH_KEY="${TAILSCALE_AUTH_KEY:-}"
+if [[ -z "$TS_AUTH_KEY" ]]; then
+    echo "Paste your Tailscale auth key (tailscale.com/admin/settings/keys), leave empty to skip:"
+    echo "(Tip: use an ephemeral reusable key for cloud servers)"
+    if [[ -e /dev/tty ]]; then
+        read -rs TS_AUTH_KEY </dev/tty
+        echo ""
+    else
+        warn "Non-interactive — skipping Tailscale. Run 'tailscale up' manually after login"
+    fi
+fi
+
+if [[ -n "$TS_AUTH_KEY" ]]; then
+    # Start tailscaled — containers often lack systemd
+    if ! pgrep tailscaled &>/dev/null; then
+        mkdir -p /var/lib/tailscale /var/run/tailscale
+        # --tun=userspace-networking: avoids iptables/TUN (required in most containers)
+        tailscaled --tun=userspace-networking --state=/var/lib/tailscale/tailscaled.state &>/dev/null &
+        sleep 2
+    fi
+
+    TS_HOSTNAME="${PROVIDER}-$(hostname -s)"
+    # --ephemeral: auto-removes from tailnet when pod shuts down (ideal for cloud VMs)
+    tailscale up --authkey "$TS_AUTH_KEY" --hostname "$TS_HOSTNAME" --ephemeral 2>/dev/null || \
+        tailscale up --authkey "$TS_AUTH_KEY" --hostname "$TS_HOSTNAME" 2>/dev/null || \
+        warn "tailscale up failed — run manually after login"
+    unset TS_AUTH_KEY
+    ok "Tailscale connected ($(tailscale ip -4 2>/dev/null || echo 'check tailscale ip'))"
+else
+    log "Skipping — run 'tailscale up --authkey <key>' after login to connect"
 fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────────

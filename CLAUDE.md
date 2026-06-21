@@ -68,6 +68,7 @@ See README.md for detailed usage.
 - **This repo is public** — `main` is the only branch, and it holds shareable
   dotfiles **only**. Personal working content lives in a **separate private repo**
   (see [Personal Content](#personal-content) below), never on a branch here.
+- **`yulong` is the active working branch** — Yulong's day-to-day branch with personal customizations (RunPod tooling, richer hooks, extra rules, etc.). Branch new worktrees off `yulong`, not `main`, for all day-to-day work. `main` is the public branch for everyone else. **This bullet lives on `yulong` only — do not port it to `main` or `README.md`.**
 
 ### Personal Content
 
@@ -299,7 +300,7 @@ Subtleties worth knowing per deploy component. Full mechanics live in the matchi
 
 | Component | Mechanism | Key gotcha |
 |-----------|-----------|------------|
-| **Gist Sync** (`deploy_secrets`) | Bidirectional sync of `~/.ssh/config`, `authorized_keys`, `config/user.conf` with gist `3cc239...371`. Last-modified wins. Daily 8 AM (launchd/cron). | Requires `gh auth login`. Manual: `sync-gist`. Runs before git config (user.conf provides identity). |
+| **Gist Sync** (`deploy_secrets`) | Bidirectional sync of `~/.ssh/config`, `authorized_keys`, `config/user.conf` with gist `3cc239...371`. `authorized_keys` uses **union merge** (keys never dropped; same-key comments are comma-joined); `~/.ssh/config` and `user.conf` use last-modified-wins. Daily 8 AM (launchd/cron). | Requires `gh auth login`. Manual: `sync-gist`. Runs before git config (user.conf provides identity). |
 | **Encrypted Secrets** (BWS) | API keys in Bitwarden Secrets Manager. **NOT globally exported** — use `setup-envrc` per repo (direnv), or `with-secrets KEY... -- <cmd>` for one-shot. Managed: `OPENAI/OPENROUTER/ANTHROPIC_API_KEY`, `HF_TOKEN`, `MODAL_TOKEN_ID/SECRET`. | BWS token at `~/.config/bws/token`. Run `secrets-init bws` on new machines. Use `secrets-edit` to add/update secrets. |
 | **Git Config** (`deploy_git_config`) | Reads `config/user.conf`; prompts on conflicts. Deploys split ignores: `~/.gitignore_global` (git, broad), `~/.ignore_global` (ripgrep, narrow), `~/.config/fd/ignore` (fd). Result: git ignores `data/`/`archive/`, but search tools can still see them. | `fd` has no `--no-ignore-global` flag — use `fd -I` to traverse research dirs. |
 | **Editor Settings** (`deploy_editor_settings`) | Merges into VSCode/Cursor/Antigravity settings (no overwrite, existing wins). Auto-installs 38 curated extensions from `vscode_extensions.txt`. | Antigravity CLI at `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`. |

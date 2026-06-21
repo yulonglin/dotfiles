@@ -4,8 +4,8 @@
 # base → always-on plugins (never repeated in profiles)
 # profiles → only list what they ENABLE beyond base
 
-# Plugin marketplaces — registered + synced by `claude-context --sync`
-# autoUpdate: true → claude-context --sync sets autoUpdate in known_marketplaces.json
+# Plugin marketplaces — registered + synced by `claude-tools context --sync`
+# autoUpdate: true → claude-tools context --sync sets autoUpdate in known_marketplaces.json
 marketplaces:
   # Anthropic
   claude-plugins-official:
@@ -36,7 +36,6 @@ marketplaces:
 
 # Always-on in every profile (declared once)
 base:
-  - bear-mcp
   - claude-md-management
   - codex
   - commit-commands
@@ -49,7 +48,14 @@ base:
   - superpowers
   - workflow
 
-# Domain profiles — primary workflow contexts
+# macOS-only plugins — loaded only when claude-tools detects OS == macos at runtime
+macos:
+  - bear-mcp
+
+# Domain profiles — primary workflow contexts.
+# Note: domain-profile names (code, research, writing, viz) intentionally mirror their primary
+# plugin — this is deliberate, not a mistake. The profile enables the plugin of the same name
+# plus related companions.
 profiles:
   code:
     comment: "Software projects"
@@ -57,7 +63,6 @@ profiles:
       - code
       - code-simplifier
       - security-guidance
-      - workflow
 
   design:
     comment: "Frontend, visualizations, design systems"
@@ -75,7 +80,6 @@ profiles:
       - ralph-loop
       - research
       - viz
-      - workflow
       - writing
       # optional: remote-kernels (cloud GPU via RunPod, from alignment-hive)
       # install: claude plugin install remote-kernels@alignment-hive
@@ -84,12 +88,11 @@ profiles:
   writing:
     comment: "Papers, blog posts, documentation"
     enable:
-      - bear-mcp
       - viz
-      - workflow
       - writing
 
   # Sub-profiles — compose with domain profiles above
+  # Capability sub-profiles:
   messaging:
     comment: "Messaging and communication tools"
     enable: [telegram, imessage]
@@ -99,12 +102,21 @@ profiles:
     enable: [huggingface-skills]
 
   productivity:
-    comment: "Task and project management — Things 3, Bear (Notion via claude.ai connector)"
-    enable: [bear-mcp, things-mcp]
+    comment: "Task and project management — Things 3, Bear/macOS (Notion via claude.ai connector)"
+    enable: [things-mcp]
 
+  automation:
+    comment: "Browser automation (playwright, dev-browser)"
+    enable: [dev-browser, playwright]
+
+  # Language LSP sub-profiles:
   python:
     comment: "Adds pyright-lsp"
     enable: [pyright-lsp]
+
+  typescript:
+    comment: "Adds typescript-lsp"
+    enable: [typescript-lsp]
 
   rust:
     comment: "Adds rust-analyzer-lsp"
@@ -117,11 +129,3 @@ profiles:
   swift:
     comment: "Adds swift-lsp"
     enable: [swift-lsp]
-
-  frontend:
-    comment: "Frontend dev"
-    enable: [typescript-lsp]
-
-  automation:
-    comment: "Browser automation (playwright, dev-browser)"
-    enable: [dev-browser, playwright]

@@ -1,5 +1,5 @@
 model = "gpt-5.5"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 notify = ["/Users/yulong/code/dotfiles/codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient", "turn-ended"]
 
 [mcp_servers.linear]
@@ -153,8 +153,8 @@ source_type = "local"
 source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
 [marketplaces.claude-plugins-official]
-last_updated = "2026-06-11T14:49:12Z"
-last_revision = "66bca6b6f62e5023673feff699d9d99451ae9919"
+last_updated = "2026-06-20T18:24:11Z"
+last_revision = "b3c128f664740eae0faaa6301649ffae8e25c42a"
 source_type = "git"
 source = "https://github.com/anthropics/claude-plugins-official.git"
 
@@ -201,6 +201,9 @@ trusted_hash = "sha256:218ec4865b8e4413c4c9fafe9d9ee0b5e787b46e50a21b29787d5463c
 [hooks.state."superpowers@claude-plugins-official:hooks/hooks.json:session_start:0:0"]
 trusted_hash = "sha256:62acbaff2b2f55f41971e21a164990aaa53c96919baa0a5eae2eb5db73b9e6e6"
 
+[hooks.state."superpowers@claude-plugins-official:hooks/hooks-codex.json:session_start:0:0"]
+trusted_hash = "sha256:687e7af87f0cb59b1bcc71d368e097304b45d84999c90dc97358a22811691a3f"
+
 [memories]
 generate_memories = true
 use_memories = true
@@ -220,5 +223,8 @@ args = ["serve"]
 command = "zotero-mcp"
 
 [mcp_servers.zotero.env]
+ZOTERO_API_KEY = "${ZOTERO_API_KEY}"
+ZOTERO_LIBRARY_ID = "${ZOTERO_LIBRARY_ID}"
+ZOTERO_LIBRARY_TYPE = "${ZOTERO_LIBRARY_TYPE:-user}"
 ZOTERO_LOCAL = "true"
 # END SHARED MCP SERVERS

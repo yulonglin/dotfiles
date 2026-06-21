@@ -46,11 +46,11 @@ _sha256_of() {
 # or one we cannot verify, is never moved into place or executed. Returns 1 on
 # any failure so the caller can fall back to a source build.
 _fetch_claude_tools() {
-    local bin="$1"
     cmd_exists curl || return 1
 
     local asset; asset="$(_claude_tools_asset)"
     [[ -z "$asset" ]] && return 1  # unsupported platform
+    local bin="${DOT_DIR}/custom_bins/${asset}"
 
     # Trust anchor: checksum committed in the repo you cloned.
     local sums_file="${DOT_DIR}/tools/claude-tools/SHA256SUMS"
@@ -98,9 +98,11 @@ _build_claude_tools_from_source() {
     [[ -f "${DOT_DIR}/tools/claude-tools/Cargo.toml" ]] || return 1
     log_info "Building claude-tools from source (fallback)..."
     ( cd "${DOT_DIR}/tools/claude-tools" && cargo build --release --quiet ) || return 1
+    local asset; asset="$(_claude_tools_asset)"
+    [[ -z "$asset" ]] && return 1
     mkdir -p "${DOT_DIR}/custom_bins"
-    cp "${DOT_DIR}/tools/claude-tools/target/release/claude-tools" "${DOT_DIR}/custom_bins/claude-tools" \
-        && chmod +x "${DOT_DIR}/custom_bins/claude-tools"
+    cp "${DOT_DIR}/tools/claude-tools/target/release/claude-tools" "${DOT_DIR}/custom_bins/${asset}" \
+        && chmod +x "${DOT_DIR}/custom_bins/${asset}"
 }
 
 # Bootstrap claude-tools so the component-selection TUI works on a fresh machine
@@ -111,22 +113,22 @@ _build_claude_tools_from_source() {
 #   4. otherwise                               → return 1 (menu uses defaults)
 # Set CLAUDE_TOOLS_NO_FETCH=1 to skip the network fetch (air-gapped / paranoid).
 bootstrap_claude_tools() {
-    local bin="${DOT_DIR}/custom_bins/claude-tools"
+    local wrapper="${DOT_DIR}/custom_bins/claude-tools"
 
-    # 1) Already have a binary that runs on this arch? Nothing to do.
-    [[ -x "$bin" ]] && "$bin" --version >/dev/null 2>&1 && return 0
+    # 1) Wrapper exists and the platform binary it delegates to runs? Nothing to do.
+    [[ -x "$wrapper" ]] && "$wrapper" --version >/dev/null 2>&1 && return 0
 
     # Skip in non-interactive runs — the menu won't show anyway. deploy.sh's
     # own (backgrounded) build still produces the runtime binary either way.
     [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 1
 
-    # 2) Verified prebuilt fetch.
+    # 2) Verified prebuilt fetch (downloads to custom_bins/claude-tools-{platform}).
     if [[ "${CLAUDE_TOOLS_NO_FETCH:-0}" != "1" ]]; then
-        _fetch_claude_tools "$bin" && return 0
+        _fetch_claude_tools && return 0
     fi
 
-    # 3) Source build fallback.
-    _build_claude_tools_from_source && [[ -x "$bin" ]] && "$bin" --version >/dev/null 2>&1 && return 0
+    # 3) Source build fallback (builds to custom_bins/claude-tools-{platform}).
+    _build_claude_tools_from_source && "$wrapper" --version >/dev/null 2>&1 && return 0
 
     # 4) Give up — caller falls back to defaults (no menu).
     return 1
@@ -1002,7 +1004,6 @@ ensure_local_key_in_authorized_keys() {
     local key_data
     key_data=$(echo "$pub_key" | awk '{print $1" "$2}')
 
-    # Create authorized_keys if missing (avoid touch to preserve mtime for sync)
     mkdir -p "$HOME/.ssh"
     if [[ ! -f "$auth_keys" ]]; then
         touch "$auth_keys"
@@ -1052,6 +1053,11 @@ ts = datetime.fromisoformat(data['updated_at'].replace('Z', '+00:00'))
 print(int(ts.timestamp()))
 " <<< "$gist_data" 2>/dev/null)
 
+    if [[ -z "$gist_updated_at" ]]; then
+        log_warning "Failed to parse gist timestamp - skipping sync"
+        return 1
+    fi
+
     # Helper functions
     get_gist_file() {
         python3 -c "
@@ -1078,9 +1084,9 @@ print('yes' if '$1' in data['files'] else 'no')
     log_info "Syncing SSH config..."
     sync_file "$HOME/.ssh/config" "config" "$gist_id" "$gist_updated_at" && changes_made=true
 
-    # Sync authorized_keys
+    # Sync authorized_keys (union merge — never drop keys across machines)
     log_info "Syncing authorized_keys..."
-    sync_file "$HOME/.ssh/authorized_keys" "authorized_keys" "$gist_id" "$gist_updated_at" && changes_made=true
+    sync_authorized_keys_union "$gist_id" "$gist_updated_at" && changes_made=true
 
     # Sync user.conf (git identity)
     log_info "Syncing git identity..."
@@ -1091,6 +1097,183 @@ print('yes' if '$1' in data['files'] else 'no')
     else
         log_success "Gist already in sync"
     fi
+}
+
+# Push a local file to gist, creating or updating the named entry.
+# gh gist edit --add only creates new files; PATCH updates existing ones.
+# Content is passed via stdin (jq --rawfile) to avoid exposing it in process args.
+# Usage: gist_push_file <gist_id> <local_path> <gist_filename>
+gist_push_file() {
+    local gist_id="$1" local_path="$2" gist_filename="$3"
+    jq -n --arg name "$gist_filename" --rawfile c "$local_path" \
+        '{files: {($name): {content: $c}}}' \
+    | gh api --method PATCH "/gists/$gist_id" --input - &>/dev/null
+}
+
+# Sync authorized_keys with union merge: keys are only ever added, never deleted.
+# A key missing from local doesn't mean it was revoked — it might just be a new machine.
+# Usage: sync_authorized_keys_union <gist_id> <gist_updated_at_epoch>
+sync_authorized_keys_union() {
+    local gist_id="$1"
+    local gist_updated_at="$2"
+    local local_path="$HOME/.ssh/authorized_keys"
+
+    local gist_content
+    gist_content=$(get_gist_file "authorized_keys")
+
+    # Case 1: local missing → pull from gist
+    if [[ ! -f "$local_path" ]]; then
+        if [[ -n "$gist_content" ]]; then
+            mkdir -p "$(dirname "$local_path")"
+            printf '%s\n' "$gist_content" > "$local_path"
+            chmod 600 "$local_path"
+            log_info "  ↓ Pulled authorized_keys from gist (local was missing)"
+            return 0
+        fi
+        return 1
+    fi
+
+    # Case 2: gist missing → push local
+    if [[ -z "$gist_content" ]]; then
+        gist_push_file "$gist_id" "$local_path" "authorized_keys"
+        log_info "  ↑ Pushed authorized_keys to gist (gist was missing)"
+        return 0
+    fi
+
+    # Get local file birthtime to distinguish "fresh install" from "intentional edit"
+    local local_birthtime=0
+    if is_macos; then
+        local_birthtime=$(stat -f %SB -t %s "$local_path" 2>/dev/null || echo 0)
+    else
+        local_birthtime=$(stat --format=%W "$local_path" 2>/dev/null || echo 0)
+        # Fall back to mtime if birthtime unsupported (returns 0)
+        [[ "$local_birthtime" == "0" ]] && local_birthtime=$(stat --format=%Y "$local_path" 2>/dev/null || echo 0)
+    fi
+    local age_days=0
+    [[ "$local_birthtime" -gt 0 ]] && age_days=$(( ( $(date +%s) - local_birthtime ) / 86400 ))
+    local age_label="${age_days}d old"
+
+    local local_content
+    local_content=$(cat "$local_path")
+
+    if [[ "$local_content" == "$gist_content" ]]; then
+        log_info "  ✓ authorized_keys in sync"
+        return 1
+    fi
+
+    # Union merge via Python: deduplicate by key blob, use the older file as the base
+    # (its structure/comments are authoritative; the newer file's unique keys and
+    # comments are merged in — same-blob comments are unioned comma-separated).
+    local merged
+    merged=$(GIST_CONTENT="$gist_content" LOCAL_CONTENT="$local_content" \
+        python3 - "$local_birthtime" "$gist_updated_at" <<'PYEOF'
+import os, sys
+
+local_birth = int(sys.argv[1])
+gist_ts     = int(sys.argv[2])
+
+def parse(content):
+    """Return (entries_in_order, blob_set).
+    Each entry is (blob_or_None, key_type, comment, raw_line).
+    blob_or_None: key blob for key lines, None for blank/# comment lines.
+    comment: text after the blob (may be ''); None for non-key lines.
+    Intra-file duplicates (by blob) are silently dropped (first wins).
+    """
+    seen, entries = set(), []
+    for line in content.splitlines():
+        s = line.strip()
+        if s and not s.startswith('#'):
+            parts = s.split()
+            if len(parts) >= 2:
+                blob = parts[1]
+                if blob not in seen:
+                    seen.add(blob)
+                    entries.append((blob, parts[0], ' '.join(parts[2:]), line))
+                continue  # silently drop intra-file dups
+        entries.append((None, None, None, line))
+    return entries, seen
+
+def merge_comments(a, b):
+    """Union two comment strings, comma-separated, dedup, drop empty tokens.
+    Ensures commented always beats uncommented: 'laptop' + '' → 'laptop'.
+    """
+    seen, out = set(), []
+    for token in ','.join(filter(None, [a, b])).split(','):
+        token = token.strip()
+        if token and token not in seen:
+            seen.add(token)
+            out.append(token)
+    return ', '.join(out)
+
+gist_entries,  gist_blobs  = parse(os.environ['GIST_CONTENT'])
+local_entries, local_blobs = parse(os.environ['LOCAL_CONTENT'])
+
+# Older file = canonical base; newer file's unique keys and comments are merged in
+if local_birth > 0 and local_birth < gist_ts:
+    base_entries, base_blobs = local_entries, local_blobs
+    other_entries, other_blobs = gist_entries, gist_blobs
+else:
+    base_entries, base_blobs = gist_entries, gist_blobs
+    other_entries, other_blobs = local_entries, local_blobs
+
+# Build comment lookup for the other file (blob -> comment string)
+other_comment = {blob: comment for blob, _, comment, _ in other_entries if blob}
+
+# Render base file; merge in comments from the other file for matching blobs
+lines = []
+for blob, key_type, comment, raw_line in base_entries:
+    if blob is None:
+        lines.append(raw_line)  # blank or # comment line — preserve as-is
+    else:
+        new_comment = merge_comments(comment, other_comment.get(blob, ''))
+        lines.append(f'{key_type} {blob} {new_comment}' if new_comment else f'{key_type} {blob}')
+
+# Strip trailing blanks before appending extra keys
+while lines and not lines[-1].strip():
+    lines.pop()
+
+# Append unique keys from the other file (blobs absent from base)
+extra = [(blob, key_type, comment) for blob, key_type, comment, _ in other_entries
+         if blob and blob not in base_blobs]
+if extra:
+    lines.append('')
+    for blob, key_type, comment in extra:
+        lines.append(f'{key_type} {blob} {comment}' if comment else f'{key_type} {blob}')
+
+print('\n'.join(lines))
+PYEOF
+)
+
+    if [[ -z "$merged" ]]; then
+        log_warning "  authorized_keys union merge failed, falling back to last-modified-wins"
+        sync_file "$local_path" "authorized_keys" "$gist_id" "$gist_updated_at"
+        return
+    fi
+
+    local local_count gist_count merged_count
+    local_count=$(printf '%s\n' "$local_content" | grep -cE '^(ssh-|ecdsa-|sk-)' || true)
+    gist_count=$(printf '%s\n' "$gist_content"   | grep -cE '^(ssh-|ecdsa-|sk-)' || true)
+    merged_count=$(printf '%s\n' "$merged"        | grep -cE '^(ssh-|ecdsa-|sk-)' || true)
+
+    local changed=false
+
+    if [[ "$merged" != "$local_content" ]]; then
+        printf '%s\n' "$merged" > "$local_path"
+        chmod 600 "$local_path"
+        log_info "  ↕ Updated local authorized_keys (${local_count}→${merged_count} keys; local file is $age_label)"
+        changed=true
+    fi
+
+    if [[ "$merged" != "$gist_content" ]]; then
+        local tmp_ak="${TMPDIR:-/tmp}/authorized_keys_union_$$"
+        printf '%s\n' "$merged" > "$tmp_ak"
+        gist_push_file "$gist_id" "$tmp_ak" "authorized_keys"
+        rm -f "$tmp_ak"
+        log_info "  ↑ Pushed merged authorized_keys to gist (gist had $gist_count keys, merged=$merged_count)"
+        changed=true
+    fi
+
+    [[ "$changed" == "true" ]]
 }
 
 # Sync a single file with gist
@@ -1122,7 +1305,7 @@ sync_file() {
     fi
 
     if [[ "$gist_exists" == "no" ]]; then
-        gh gist edit "$gist_id" --add "$local_path" --filename "$gist_filename" &>/dev/null
+        gist_push_file "$gist_id" "$local_path" "$gist_filename"
         log_info "  ↑ Pushed $gist_filename to gist (gist was missing)"
         return 0
     fi
@@ -1135,10 +1318,10 @@ sync_file() {
 
     if [[ "$local_content" != "$gist_content" ]]; then
         if [[ "$local_mtime" -gt "$gist_updated_at" ]]; then
-            gh gist edit "$gist_id" --add "$local_path" --filename "$gist_filename" &>/dev/null
+            gist_push_file "$gist_id" "$local_path" "$gist_filename"
             log_info "  ↑ Pushed $gist_filename to gist (local newer)"
         else
-            echo "$gist_content" > "$local_path"
+            printf '%s\n' "$gist_content" > "$local_path"
             [[ "$gist_filename" == "config" || "$gist_filename" == "authorized_keys" ]] && chmod 600 "$local_path"
             # Preserve mtime to match gist's updated_at (prevents false "local newer" on next sync)
             if is_macos; then
@@ -1369,8 +1552,8 @@ deploy_editor_settings() {
     fi
 
     if ! $deployed; then
-        log_warning "Neither VSCode, Cursor, nor Antigravity found"
-        return 1
+        log_info "No editor (VSCode, Cursor, or Antigravity) found — skipping editor settings"
+        return 0
     fi
 }
 
