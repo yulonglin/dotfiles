@@ -47,7 +47,6 @@
       "Bash(chmod *)",
       "Bash(cp *)",
       "Bash(mv *)",
-      "Bash(ssh *)",
       "Bash(scp *)",
       "Bash(sftp *)",
       "Bash(ln *)",
@@ -312,6 +311,7 @@
       "Bash(killall *)",
       "Bash(pkill *)",
       "Bash(wget *)",
+      "Bash(ssh *)",
       "Bash(nc *)",
       "Bash(kubectl exec *)",
       "Bash(kubectl delete *)",
@@ -336,6 +336,12 @@
     "PermissionRequest": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/ssh_check.py",
+            "timeout": 5,
+            "statusMessage": "Checking SSH target"
+          },
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/auto_classify.py",
