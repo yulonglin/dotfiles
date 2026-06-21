@@ -1,5 +1,6 @@
 {
   "enabledPlugins": {
+    "bear-mcp@productivity-tools": true,
     "claude-code-setup@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": true,
     "code-review@claude-plugins-official": false,
@@ -38,7 +39,7 @@
     "telegram@claude-plugins-official": false,
     "things-mcp@productivity-tools": true,
     "typescript-lsp@claude-plugins-official": false,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": false,
     "vercel@claude-plugins-official": false,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
