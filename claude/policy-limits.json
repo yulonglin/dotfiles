@@ -1,6 +1,6 @@
 {
   "restrictions": {
-    "allow_quick_web_setup": {
+    "allow_cobalt_plinth": {
       "allowed": false
     },
     "enforce_web_search_mcp_isolation": {
