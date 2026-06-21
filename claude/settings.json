@@ -42,6 +42,7 @@
       "Bash(mkdir *)",
       "Bash(touch *)",
       "Bash(chmod *)",
+      "Bash(nohup *)",
       "Bash(cp *)",
       "Bash(mv *)",
       "Bash(ln *)",
@@ -223,7 +224,6 @@
       "Bash(curl * | sh *)",
       "Bash(wget * | bash *)",
       "Bash(wget * | sh *)",
-      "Bash(nohup *)",
       "Bash(find * -delete *)",
       "Bash(find * -exec *)",
       "Bash(find * -execdir *)",
@@ -641,10 +641,11 @@
     "padding": 1
   },
   "enabledPlugins": {
+    "bear-mcp@productivity-tools": true,
     "claude-md-management@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
     "code@ai-safety-plugins": true,
-    "codex@openai-codex": true,
+    "codex@codex-plugin-cc": true,
     "commit-commands@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "core@ai-safety-plugins": true,
@@ -654,8 +655,10 @@
     "gopls-lsp@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
     "huggingface-skills@claude-plugins-official": true,
+    "imessage@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
     "playground@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "ralph-loop@claude-plugins-official": true,
@@ -664,18 +667,14 @@
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true,
+    "telegram@claude-plugins-official": true,
+    "things-mcp@productivity-tools": true,
     "typescript-lsp@claude-plugins-official": true,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
     "writing@ai-safety-plugins": true,
-    "codex@codex-plugin-cc": true,
-    "things-mcp@productivity-tools": true,
-    "swift-lsp@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
-    "imessage@claude-plugins-official": true,
-    "telegram@claude-plugins-official": true,
-    "bear-mcp@productivity-tools": true
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -696,16 +695,16 @@
         "repo": "anthropics/claude-plugins-official"
       }
     },
+    "codex-plugin-cc": {
+      "source": {
+        "source": "github",
+        "repo": "crazytieguy/codex-plugin-cc"
+      }
+    },
     "dev-browser-marketplace": {
       "source": {
         "source": "github",
         "repo": "sawyerhood/dev-browser"
-      }
-    },
-    "openai-codex": {
-      "source": {
-        "source": "github",
-        "repo": "crazytieguy/codex-plugin-cc"
       }
     },
     "productivity-tools": {
@@ -718,12 +717,6 @@
       "source": {
         "source": "github",
         "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
-      }
-    },
-    "codex-plugin-cc": {
-      "source": {
-        "source": "github",
-        "repo": "crazytieguy/codex-plugin-cc"
       }
     }
   },
@@ -755,7 +748,8 @@
         "/tmp/tmux-*",
         "/var/folders",
         "/run/user/*/pueue*.socket",
-        "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli"
+        "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli",
+        "~/Downloads"
       ],
       "denyRead": [
         "~/.ssh",
@@ -770,6 +764,7 @@
       "gh",
       "git",
       "docker",
+      "brew",
       "codex",
       "gemini",
       "tmux",
