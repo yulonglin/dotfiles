@@ -64,9 +64,11 @@ print_checklist() {
     echo ""
     hdr "Reminders"
     cat <<'EOF'
-  [ ] App Store        — SIGN IN via the App Store GUI first: `mas` can't sign in
-                         (Apple removed the CLI API). A never-acquired free app may
-                         need a one-time "Get" click before `mas install` works.
+  [ ] App Store        — SIGN IN via the App Store GUI first (Apple removed the CLI
+                         sign-in API). Then run `mas-get` (or `mas get <id>`) to
+                         install — `brew bundle` uses `mas install` which fails with
+                         "Redownload Unavailable" for apps not yet on this machine.
+                         (Ref: github.com/Homebrew/brew/issues/21559)
   [ ] git / gh        — `gh auth login` (SSH + identity also sync via gist)
   [ ] Safari exts     — uBlock Origin Lite, Userscripts, Bitwarden, 2FAS: ENABLE in Safari
   [ ] Trellix         — UNIVERSITY-MANAGED: install/update via your uni, NOT Homebrew.

@@ -441,16 +441,24 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
         fi
 
         if [[ -f "$brewfile" ]]; then
-            # mas 7.0.0 self-escalates via sudo for every install/get; brew bundle </dev/null
-            # gives its internal sudo no way to read a password. Pre-warm the credential
-            # (interactive TTY only) and keep it alive for the duration of brew bundle so
-            # mas installs don't silently fail. Headless/non-TTY runs skip this block — mas
-            # apps will be skipped cleanly as before.
+            # Step 1: Install App Store apps via `mas get` (acquire+install).
+            # `brew bundle` uses `mas install` which only re-downloads — it fails with
+            # "Redownload Unavailable" for apps not yet on this machine even when owned.
+            # `mas get` acquires+installs, making brew bundle's mas lines no-ops after.
+            # Ref: https://github.com/Homebrew/brew/issues/21559
+            if is_macos && command -v mas &>/dev/null; then
+                log_info "Installing App Store apps via mas get..."
+                "$DOT_DIR/custom_bins/mas-get" || log_warning "Some App Store apps failed (check mas-get output above)"
+            fi
+
+            # Step 2: mas 7.0.0 self-escalates via sudo; brew bundle </dev/null gives its
+            # internal sudo no way to read a password. Pre-warm the credential (interactive
+            # TTY only) for any mas lines that remain (belt-and-suspenders after mas-get).
             sudo_keepalive_pid=""
             if [[ -t 0 ]] && grep -q '^mas ' "$brewfile" 2>/dev/null; then
                 log_info "App Store installs (mas) need sudo — caching your credential…"
                 if sudo -v; then
-                    # Capture parent PID before subshell so $$  resolves correctly in both
+                    # Capture parent PID before subshell so $$ resolves correctly in both
                     # zsh (where $$ is the parent in subshells) and bash (where it is not).
                     _mas_parent_pid=$$
                     ( while true; do sudo -n true; sleep 60; kill -0 "$_mas_parent_pid" 2>/dev/null || exit; done ) 2>/dev/null &
@@ -460,12 +468,12 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
                 fi
             fi
 
-            log_info "Installing apps from Brewfile (this can take a while)..."
+            log_info "Installing remaining apps from Brewfile (this can take a while)..."
             env "${BREW_NONINTERACTIVE_ENV[@]}" brew bundle --file="$brewfile" </dev/null || true
 
             [[ -n "$sudo_keepalive_pid" ]] && kill "$sudo_keepalive_pid" 2>/dev/null
 
-            # Detect any mas apps that didn't land and tell the user exactly what to do.
+            # Step 3: Detect any mas apps that didn't land and tell the user what to do.
             if grep -q '^mas ' "$brewfile" 2>/dev/null; then
                 installed_ids=$(mas list 2>/dev/null | awk '{print $1}')
                 if [[ -z "$installed_ids" ]]; then
