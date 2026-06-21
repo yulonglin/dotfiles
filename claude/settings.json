@@ -674,7 +674,8 @@
     "swift-lsp@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "imessage@claude-plugins-official": true,
-    "telegram@claude-plugins-official": true
+    "telegram@claude-plugins-official": true,
+    "bear-mcp@productivity-tools": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -790,7 +791,8 @@
       "jkill",
       "jtop",
       "jguard",
-      "spark"
+      "spark",
+      "bearcli"
     ]
   },
   "feedbackSurveyRate": 0,
