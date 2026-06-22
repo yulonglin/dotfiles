@@ -65,10 +65,8 @@ See README.md for detailed usage.
 ### Git Workflow
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
-- **This repo is public** — `main` is the only branch, and it holds shareable
-  dotfiles **only**. Personal working content lives in a **separate private repo**
-  (see [Personal Content](#personal-content) below), never on a branch here.
-- **`yulong` is the active working branch** — Yulong's day-to-day branch with personal customizations (RunPod tooling, richer hooks, extra rules, etc.). Branch new worktrees off `yulong`, not `main`, for all day-to-day work. `main` is the public branch for everyone else. **This bullet lives on `yulong` only — do not port it to `main` or `README.md`.**
+- **Single branch: `main`.** The old `main`/`yulong` split was collapsed into `main` on 2026-06-22 (PR #10) — `yulong` is kept dormant as a safety net but receives no new work. Do day-to-day work directly on `main`; branch worktrees off `main`. (Route only large/structural merges through a tracked PR; routine commits go direct.)
+- **This repo is public, but we no longer keep `main` "clean for others"** — it's just the personal working branch. Genuinely private content (`plans/`, `specs/`, `.remember/`, secrets) still lives in the separate private repo (see [Personal Content](#personal-content)), never on a branch here.
 
 ### Personal Content
 
