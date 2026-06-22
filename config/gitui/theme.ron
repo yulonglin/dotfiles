@@ -1,0 +1,18 @@
+// gitui theme — theme-reactive. Named ANSI colors only, so gitui inherits whatever
+// Ghostty theme the current window uses (default, g0-g9, SSH themes). Overrides ONLY
+// gitui's low-contrast defaults; all other elements keep gitui's default (named/Reset),
+// which already adapts to the terminal palette.
+//
+// Bug fixed: gitui's default disabled_fg is DarkGray (ANSI bright-black), which sits
+// ~background on Catppuccin Mocha and similar dark themes -> unreadable command-bar
+// shortcuts. Gray (ANSI 7) is readable on every curated dark theme while staying
+// visibly dimmer than the bright White of active commands.
+//
+// Keys match `impl Default for Theme` in gitui's src/ui/style.rs. Color format is
+// `key: Some("Name")` per gitui's THEMES.md. Deployed via symlink to
+// ~/.config/gitui/theme.ron. Add more named overrides only if a specific element
+// stays low-contrast in some theme.
+(
+    command_fg:  Some("White"),
+    disabled_fg: Some("Gray"),
+)

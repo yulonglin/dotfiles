@@ -67,6 +67,7 @@ COMPONENTS:
     --ghostty         Deploy Ghostty terminal config
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
     --htop            Deploy htop configuration
+    --gitui           Deploy gitui theme (theme-reactive, symlinked)
     --pdb             Deploy pdb++ debugger config
     --matplotlib      Deploy matplotlib styles
     --git-hooks       Deploy global git hooks
@@ -531,6 +532,30 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
             safe_symlink "$HTOP_DOTFILES" "$HTOP_LOCAL"
             log_info "  Uses dynamic CPU meters (adapts to any CPU count)"
         fi
+    fi
+fi
+
+# ─── gitui ────────────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_GITUI" == "true" ]]; then
+    log_info "Deploying gitui theme..."
+
+    GITUI_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/gitui"
+    GITUI_THEME="$GITUI_DIR/theme.ron"
+    GITUI_DOTFILES="$DOT_DIR/config/gitui/theme.ron"
+
+    if [[ ! -f "$GITUI_DOTFILES" ]]; then
+        log_warning "gitui theme not found at $GITUI_DOTFILES"
+    else
+        mkdir -p "$GITUI_DIR"
+
+        # Back up an existing real file (gitui only reads theme.ron, never overwrites)
+        if [[ -f "$GITUI_THEME" && ! -L "$GITUI_THEME" ]]; then
+            backup_file "$GITUI_THEME"
+        fi
+
+        safe_symlink "$GITUI_DOTFILES" "$GITUI_THEME"
+        log_success "Deployed gitui theme (theme-reactive — tracks active Ghostty theme)"
     fi
 fi
 

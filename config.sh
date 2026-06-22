@@ -52,6 +52,7 @@ DEPLOY_REGISTRY=(
     "zed|Zed editor config (symlinked)|all|true|Shell & Editors"
     "ghostty|Ghostty terminal config (symlinked)|all|true|Shell & Editors"
     "htop|htop config with dynamic CPU meters|all|true|Shell & Editors"
+    "gitui|gitui theme (theme-reactive, symlinked)|all|true|Shell & Editors"
     "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"
     "codex|Codex CLI config symlink (~/.codex)|all|true|AI & Apps"
     "serena|Serena MCP server config (symlinked)|all|false|AI & Apps"
@@ -247,6 +248,7 @@ apply_profile() {
             DEPLOY_GHOSTTY=false
             DEPLOY_ZED=false
             DEPLOY_HTOP=false
+            DEPLOY_GITUI=false
             DEPLOY_PDB=false
             DEPLOY_MATPLOTLIB=false
             DEPLOY_CLEANUP=false
