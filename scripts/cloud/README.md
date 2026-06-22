@@ -87,8 +87,10 @@ curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/clo
 curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | DOTFILES_BRANCH=yulong bash
 ```
 
-When provisioning via `provision.py`, pass `--branch yulong` — it fetches the matching `setup.sh` from
-that branch's raw URL *and* clones the same branch on the pod.
+`setup.sh` itself is **always fetched from `main`** — one canonical bootstrap URL. The `--branch` flag
+only chooses which branch gets cloned on the box. (Two separate concepts: where the bootstrap script
+comes from vs. which branch it checks out.) When provisioning via `provision.py`, pass `--branch yulong`
+— it fetches `setup.sh` from main and passes `--branch yulong` through to clone that branch on the pod.
 
 ## Configuration
 

@@ -230,6 +230,7 @@ PACKAGES_EXTRAS_LINUX=(
 
 apply_profile() {
     local profile="${1:-$PROFILE}"
+    PROFILE="$profile"   # keep the banner label in sync with the flags actually applied
 
     case "$profile" in
         personal)
@@ -269,6 +270,7 @@ apply_profile() {
             # Keeps core (modern CLI tools, gh, uv), zsh, tmux, git, claude, codex.
             # mosh is installed by scripts/cloud/setup.sh's apt baseline regardless.
             apply_profile server
+            PROFILE="cloud"              # restore label (the server recursion above reset it)
             INSTALL_EXPERIMENTAL=false   # zotero MCP — slow
             INSTALL_PUEUE=false          # cargo install pueue pueued — Rust compile
             DEPLOY_PUEUE=false           # systemd resource slices
@@ -287,6 +289,7 @@ apply_profile() {
             ;;
         *)
             echo "Warning: Unknown profile '$profile', using personal" >&2
+            PROFILE="personal"   # fell back to personal defaults — label accordingly
             ;;
     esac
 }
