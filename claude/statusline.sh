@@ -6,7 +6,7 @@
 # Line 1 (location): Machine name (SSH) + profiles + directory + git branch
 # Line 2 (session): Model name + context % + duration
 # Line 3 (usage): 5h and 7d API usage bars (cached, from /api/oauth/usage)
-# Line 4 (workday): bedtime nudge near end-of-day (home timezone)
+# Line 4 (workday): bedtime nudge near midnight; wake hour from ~/.config/claude-tools/bedtime
 #
 # Receives JSON via stdin from Claude Code.
 
@@ -332,13 +332,19 @@ fi
 
 # ============================================================================
 # WORKDAY REMAINING (ends at midnight, bedtime nudges — macOS only)
+# Wake hour is configurable via ~/.config/claude-tools/bedtime (default 9).
 # ============================================================================
 if [ "$(uname)" = "Darwin" ]; then
 now_h=$(date +%-H)
 now_m=$(date +%-M)
 
-if [ "$now_h" -lt 6 ]; then
-  # Past midnight, before 6am — should be in bed
+_bedtime_wake=$(cat "$HOME/.config/claude-tools/bedtime" 2>/dev/null)
+case "$_bedtime_wake" in
+  ''|*[!0-9]*) _bedtime_wake=9 ;;
+esac
+
+if [ "$now_h" -lt "$_bedtime_wake" ]; then
+  # Past midnight, before wake hour — should be in bed
   if [ "$now_h" -eq 0 ] && [ "$now_m" -eq 0 ]; then
     over_str="midnight"
   elif [ "$now_h" -eq 0 ]; then

@@ -81,7 +81,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Line 3: API usage (5h + 7d rate limits)
     crate::usage::format_usage(&mut output);
 
-    // Line 4: Workday remaining (macOS only)
+    // Line 4: Workday remaining
     format_workday(&mut output);
 
     print!("{}", output);
@@ -266,12 +266,27 @@ fn format_duration_str(cost: &Option<Cost>) -> Option<String> {
     Some(format!("\x1b[2m{}\x1b[0m", display))
 }
 
+/// Read the configured wake hour from `~/.config/claude-tools/bedtime`.
+/// Returns 9 if the file is absent, empty, or unparseable.
+fn read_bedtime_wake_hour() -> i32 {
+    let home = match std::env::var("HOME") {
+        Ok(h) => h,
+        Err(_) => return 9,
+    };
+    let path = std::path::PathBuf::from(format!("{}/.config/claude-tools/bedtime", home));
+    let s = std::fs::read_to_string(path).unwrap_or_default();
+    s.trim().parse::<i32>().unwrap_or(9)
+}
+
 /// Workday remaining (ends at midnight, bedtime nudges).
 /// Respects the home timezone configured via `claude-tools timezone`.
 /// Falls back to server local time if no timezone is set.
+/// The past-bedtime window (midnight–wake hour) is configurable via
+/// `~/.config/claude-tools/bedtime` (integer hour, default 9).
 /// See also: claude/statusline.sh (bash fallback).
 fn format_workday(output: &mut String) {
     let home_tz = crate::timezone::read_home_timezone();
+    let wake = read_bedtime_wake_hour();
 
     let mut cmd = std::process::Command::new("date");
     if let Some(ref tz) = home_tz {
@@ -292,7 +307,7 @@ fn format_workday(output: &mut String) {
     let hour: i32 = parts[0].parse().unwrap_or(0);
     let minute: i32 = parts[1].parse().unwrap_or(0);
 
-    if hour < 6 {
+    if hour < wake {
         // Past midnight — should be in bed
         let over = if hour == 0 && minute == 0 {
             "midnight".to_string()

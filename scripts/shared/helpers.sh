@@ -46,11 +46,11 @@ _sha256_of() {
 # or one we cannot verify, is never moved into place or executed. Returns 1 on
 # any failure so the caller can fall back to a source build.
 _fetch_claude_tools() {
-    local bin="$1"
     cmd_exists curl || return 1
 
     local asset; asset="$(_claude_tools_asset)"
     [[ -z "$asset" ]] && return 1  # unsupported platform
+    local bin="${DOT_DIR}/custom_bins/${asset}"
 
     # Trust anchor: checksum committed in the repo you cloned.
     local sums_file="${DOT_DIR}/tools/claude-tools/SHA256SUMS"
@@ -98,9 +98,11 @@ _build_claude_tools_from_source() {
     [[ -f "${DOT_DIR}/tools/claude-tools/Cargo.toml" ]] || return 1
     log_info "Building claude-tools from source (fallback)..."
     ( cd "${DOT_DIR}/tools/claude-tools" && cargo build --release --quiet ) || return 1
+    local asset; asset="$(_claude_tools_asset)"
+    [[ -z "$asset" ]] && return 1
     mkdir -p "${DOT_DIR}/custom_bins"
-    cp "${DOT_DIR}/tools/claude-tools/target/release/claude-tools" "${DOT_DIR}/custom_bins/claude-tools" \
-        && chmod +x "${DOT_DIR}/custom_bins/claude-tools"
+    cp "${DOT_DIR}/tools/claude-tools/target/release/claude-tools" "${DOT_DIR}/custom_bins/${asset}" \
+        && chmod +x "${DOT_DIR}/custom_bins/${asset}"
 }
 
 # Bootstrap claude-tools so the component-selection TUI works on a fresh machine
@@ -111,22 +113,22 @@ _build_claude_tools_from_source() {
 #   4. otherwise                               → return 1 (menu uses defaults)
 # Set CLAUDE_TOOLS_NO_FETCH=1 to skip the network fetch (air-gapped / paranoid).
 bootstrap_claude_tools() {
-    local bin="${DOT_DIR}/custom_bins/claude-tools"
+    local wrapper="${DOT_DIR}/custom_bins/claude-tools"
 
-    # 1) Already have a binary that runs on this arch? Nothing to do.
-    [[ -x "$bin" ]] && "$bin" --version >/dev/null 2>&1 && return 0
+    # 1) Wrapper exists and the platform binary it delegates to runs? Nothing to do.
+    [[ -x "$wrapper" ]] && "$wrapper" --version >/dev/null 2>&1 && return 0
 
     # Skip in non-interactive runs — the menu won't show anyway. deploy.sh's
     # own (backgrounded) build still produces the runtime binary either way.
     [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 1
 
-    # 2) Verified prebuilt fetch.
+    # 2) Verified prebuilt fetch (downloads to custom_bins/claude-tools-{platform}).
     if [[ "${CLAUDE_TOOLS_NO_FETCH:-0}" != "1" ]]; then
-        _fetch_claude_tools "$bin" && return 0
+        _fetch_claude_tools && return 0
     fi
 
-    # 3) Source build fallback.
-    _build_claude_tools_from_source && [[ -x "$bin" ]] && "$bin" --version >/dev/null 2>&1 && return 0
+    # 3) Source build fallback (builds to custom_bins/claude-tools-{platform}).
+    _build_claude_tools_from_source && "$wrapper" --version >/dev/null 2>&1 && return 0
 
     # 4) Give up — caller falls back to defaults (no menu).
     return 1
@@ -808,6 +810,7 @@ install_gh_from_apt_repo() {
     $SUDO apt update 2>/dev/null && $SUDO apt install gh -y 2>/dev/null
 }
 
+# Install and authenticate GitHub CLI
 # True if installed gh is older than 2.40 (the cutoff below the flags we rely on,
 # e.g. --git-protocol on `gh auth login`). jammy's apt ships 2.4.0 → too old.
 gh_too_old() {
@@ -832,7 +835,6 @@ install_gh_linux() {
     fi
 }
 
-# Install and authenticate GitHub CLI
 install_gh_cli() {
     if is_installed gh && ! gh_too_old; then
         # Modern gh present — check authentication only
@@ -1053,7 +1055,6 @@ ensure_local_key_in_authorized_keys() {
     local key_data
     key_data=$(echo "$pub_key" | awk '{print $1" "$2}')
 
-    # Create authorized_keys if missing (avoid touch to preserve mtime for sync)
     mkdir -p "$HOME/.ssh"
     if [[ ! -f "$auth_keys" ]]; then
         touch "$auth_keys"
@@ -1103,6 +1104,11 @@ ts = datetime.fromisoformat(data['updated_at'].replace('Z', '+00:00'))
 print(int(ts.timestamp()))
 " <<< "$gist_data" 2>/dev/null)
 
+    if [[ -z "$gist_updated_at" ]]; then
+        log_warning "Failed to parse gist timestamp - skipping sync"
+        return 1
+    fi
+
     # Helper functions
     get_gist_file() {
         python3 -c "
@@ -1129,9 +1135,9 @@ print('yes' if '$1' in data['files'] else 'no')
     log_info "Syncing SSH config..."
     sync_file "$HOME/.ssh/config" "config" "$gist_id" "$gist_updated_at" && changes_made=true
 
-    # Sync authorized_keys
+    # Sync authorized_keys (union merge — never drop keys across machines)
     log_info "Syncing authorized_keys..."
-    sync_file "$HOME/.ssh/authorized_keys" "authorized_keys" "$gist_id" "$gist_updated_at" && changes_made=true
+    sync_authorized_keys_union "$gist_id" "$gist_updated_at" && changes_made=true
 
     # Sync user.conf (git identity)
     log_info "Syncing git identity..."
@@ -1142,6 +1148,129 @@ print('yes' if '$1' in data['files'] else 'no')
     else
         log_success "Gist already in sync"
     fi
+}
+
+# Push a local file to gist, creating or updating the named entry.
+# gh gist edit --add only creates new files; PATCH updates existing ones.
+# Content is passed via stdin (jq --rawfile) to avoid exposing it in process args.
+# Usage: gist_push_file <gist_id> <local_path> <gist_filename>
+gist_push_file() {
+    local gist_id="$1" local_path="$2" gist_filename="$3"
+    jq -n --arg name "$gist_filename" --rawfile c "$local_path" \
+        '{files: {($name): {content: $c}}}' \
+    | gh api --method PATCH "/gists/$gist_id" --input - &>/dev/null
+}
+
+# Sync authorized_keys with union merge: keys are only ever added, never deleted.
+# A key missing from local doesn't mean it was revoked — it might just be a new machine.
+# Usage: sync_authorized_keys_union <gist_id> <gist_updated_at_epoch>
+sync_authorized_keys_union() {
+    local gist_id="$1"
+    local gist_updated_at="$2"
+    local local_path="$HOME/.ssh/authorized_keys"
+
+    local gist_content
+    gist_content=$(get_gist_file "authorized_keys")
+
+    # Case 1: local missing → pull from gist
+    if [[ ! -f "$local_path" ]]; then
+        if [[ -n "$gist_content" ]]; then
+            mkdir -p "$(dirname "$local_path")"
+            printf '%s\n' "$gist_content" > "$local_path"
+            chmod 600 "$local_path"
+            log_info "  ↓ Pulled authorized_keys from gist (local was missing)"
+            return 0
+        fi
+        return 1
+    fi
+
+    # Case 2: gist missing → push local
+    if [[ -z "$gist_content" ]]; then
+        gist_push_file "$gist_id" "$local_path" "authorized_keys"
+        log_info "  ↑ Pushed authorized_keys to gist (gist was missing)"
+        return 0
+    fi
+
+    # Locate the merge script (same directory as this file, fallback to DOT_DIR)
+    local _merge_script
+    _merge_script="$(cd "$(dirname "${BASH_SOURCE[0]:-$DOT_DIR/scripts/shared}")" 2>/dev/null && pwd)/merge_authorized_keys.py"
+    [[ -f "$_merge_script" ]] || _merge_script="$DOT_DIR/scripts/shared/merge_authorized_keys.py"
+
+    local local_content
+    local_content=$(cat "$local_path")
+
+    # mtime-based age label (diagnostic only — not used for base selection)
+    local _local_mtime age_days age_label
+    _local_mtime=$(stat --format=%Y "$local_path" 2>/dev/null \
+                   || stat -f %m "$local_path" 2>/dev/null || echo 0)
+    age_days=0
+    [[ "$_local_mtime" -gt 0 ]] && age_days=$(( ( $(date +%s) - _local_mtime ) / 86400 ))
+    age_label="${age_days}d old"
+
+    # C2: fold authorized_keys_restored if present (RunPod/container pattern)
+    # On hetzner this branch never fires (file doesn't exist).
+    local _restored_path="$HOME/.ssh/authorized_keys_restored"
+    if [[ -f "$_restored_path" ]]; then
+        local _tmp_pre _tmp_rst _folded
+        _tmp_pre="${TMPDIR:-/tmp}/ak_pre_$$"
+        _tmp_rst="${TMPDIR:-/tmp}/ak_rst_$$"
+        printf '%s' "$local_content" > "$_tmp_pre"
+        cp "$_restored_path" "$_tmp_rst"
+        _folded=$(python3 "$_merge_script" "$_tmp_pre" "$_tmp_rst" 2>/dev/null)
+        rm -f "$_tmp_pre" "$_tmp_rst"
+        if [[ -n "$_folded" ]]; then
+            local_content="$_folded"
+            mv "$_restored_path" "${_restored_path}.bak"
+            log_info "  ↕ Folded authorized_keys_restored into local (archived to .bak)"
+        fi
+    fi
+
+    if [[ "$local_content" == "$gist_content" ]]; then
+        log_info "  ✓ authorized_keys in sync"
+        return 1
+    fi
+
+    # Union merge: local is always the canonical base.
+    # Only genuinely new keys from the gist are added; keys disabled (line-commented)
+    # in local remain suppressed even if the gist still lists them as active.
+    local merged _tmp_local _tmp_gist
+    _tmp_local="${TMPDIR:-/tmp}/ak_local_$$"
+    _tmp_gist="${TMPDIR:-/tmp}/ak_gist_$$"
+    printf '%s' "$local_content" > "$_tmp_local"
+    printf '%s' "$gist_content"  > "$_tmp_gist"
+    merged=$(python3 "$_merge_script" "$_tmp_local" "$_tmp_gist" 2>/dev/null)
+    rm -f "$_tmp_local" "$_tmp_gist"
+
+    if [[ -z "$merged" ]]; then
+        log_warning "  authorized_keys union merge failed, falling back to last-modified-wins"
+        sync_file "$local_path" "authorized_keys" "$gist_id" "$gist_updated_at"
+        return
+    fi
+
+    local local_count gist_count merged_count
+    local_count=$(printf '%s\n' "$local_content" | grep -cE '^(ssh-|ecdsa-|sk-)' || true)
+    gist_count=$(printf '%s\n' "$gist_content"   | grep -cE '^(ssh-|ecdsa-|sk-)' || true)
+    merged_count=$(printf '%s\n' "$merged"        | grep -cE '^(ssh-|ecdsa-|sk-)' || true)
+
+    local changed=false
+
+    if [[ "$merged" != "$local_content" ]]; then
+        printf '%s\n' "$merged" > "$local_path"
+        chmod 600 "$local_path"
+        log_info "  ↕ Updated local authorized_keys (${local_count}→${merged_count} keys; local file is $age_label)"
+        changed=true
+    fi
+
+    if [[ "$merged" != "$gist_content" ]]; then
+        local tmp_ak="${TMPDIR:-/tmp}/authorized_keys_union_$$"
+        printf '%s\n' "$merged" > "$tmp_ak"
+        gist_push_file "$gist_id" "$tmp_ak" "authorized_keys"
+        rm -f "$tmp_ak"
+        log_info "  ↑ Pushed merged authorized_keys to gist (gist had $gist_count keys, merged=$merged_count)"
+        changed=true
+    fi
+
+    [[ "$changed" == "true" ]]
 }
 
 # Sync a single file with gist
@@ -1173,7 +1302,7 @@ sync_file() {
     fi
 
     if [[ "$gist_exists" == "no" ]]; then
-        gh gist edit "$gist_id" --add "$local_path" --filename "$gist_filename" &>/dev/null
+        gist_push_file "$gist_id" "$local_path" "$gist_filename"
         log_info "  ↑ Pushed $gist_filename to gist (gist was missing)"
         return 0
     fi
@@ -1186,10 +1315,10 @@ sync_file() {
 
     if [[ "$local_content" != "$gist_content" ]]; then
         if [[ "$local_mtime" -gt "$gist_updated_at" ]]; then
-            gh gist edit "$gist_id" --add "$local_path" --filename "$gist_filename" &>/dev/null
+            gist_push_file "$gist_id" "$local_path" "$gist_filename"
             log_info "  ↑ Pushed $gist_filename to gist (local newer)"
         else
-            echo "$gist_content" > "$local_path"
+            printf '%s\n' "$gist_content" > "$local_path"
             [[ "$gist_filename" == "config" || "$gist_filename" == "authorized_keys" ]] && chmod 600 "$local_path"
             # Preserve mtime to match gist's updated_at (prevents false "local newer" on next sync)
             if is_macos; then
@@ -1420,8 +1549,8 @@ deploy_editor_settings() {
     fi
 
     if ! $deployed; then
-        log_warning "Neither VSCode, Cursor, nor Antigravity found"
-        return 1
+        log_info "No editor (VSCode, Cursor, or Antigravity) found — skipping editor settings"
+        return 0
     fi
 }
 
@@ -1583,6 +1712,13 @@ parse_args() {
                     exit 1
                 fi
                 apply_profile "server"
+                ;;
+            --cloud)
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
+                apply_profile "cloud"
                 ;;
             --personal)
                 if [[ "$_only_mode" == true ]]; then

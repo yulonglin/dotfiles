@@ -1,0 +1,5 @@
+# Platform-specific claude-tools binaries — treat as binary (no text diffs)
+custom_bins/claude-tools-darwin-arm64  binary
+custom_bins/claude-tools-darwin-x86_64 binary
+custom_bins/claude-tools-linux-x86_64  binary
+custom_bins/claude-tools-linux-aarch64 binary

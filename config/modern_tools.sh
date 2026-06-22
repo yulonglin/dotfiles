@@ -26,7 +26,8 @@ fi
 
 # bat: Enhanced file viewer with syntax highlighting
 if command -v bat &> /dev/null; then
-    alias view='bat'                            # Enhanced file viewer with syntax highlighting
+    # Note: 'view' intentionally NOT aliased to bat — 'view' is vim's read-only mode.
+    alias bcat='bat'                            # bat quick-view (use instead of 'view')
     alias bat-less='bat --paging=always'        # bat as pager (not overriding less — different flags)
     export MANPAGER="sh -c 'col -bx | bat -l man -p'"  # Use bat for colorized man pages
 fi
@@ -34,13 +35,13 @@ fi
 # fd: Fast file finder (available as separate command)
 if command -v fd &> /dev/null; then
     alias findfile='fd'                         # Access to fd tool without conflicting with existing fd alias
-    alias findf='fd'                            # Short alternative
+    # findf removed — use 'findfile' (or just 'fd' directly)
 fi
 
 # ripgrep: Ultra-fast text search tool
 if command -v rg &> /dev/null; then
     alias search='rg'                           # Enhanced search without overriding grep
-    alias rgrep='rg'                            # Alternative name
+    # rgrep removed — misleading name (it's rg, not recursive grep); use 'search' or 'rg'
     alias plaingrep='command grep'              # Access original grep when needed
 fi
 

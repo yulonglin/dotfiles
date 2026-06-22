@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# tmux-resume — scan tmux panes for rate-limit prompts (Claude Code / Codex) and
+# auto-resume them by sending configured keystrokes. Scheduled hourly.
+#   --dry-run : detect and log only, send nothing (use this to verify patterns).
+# Patterns: config/tmux-resume-patterns.conf (override via $TMUX_RESUME_PATTERNS).
+set -euo pipefail
+
+# cron/launchd give a minimal PATH.
+export PATH="$HOME/.local/bin:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PATTERNS_FILE="${TMUX_RESUME_PATTERNS:-$DOT_DIR/config/tmux-resume-patterns.conf}"
+CAPTURE_LINES="${TMUX_RESUME_LINES:-12}"
+
+DRY_RUN=false
+[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
+
+ts() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
+trim() { sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+
+command -v tmux &>/dev/null || { echo "[$(ts)] tmux-resume: tmux not found" >&2; exit 0; }
+[[ -f "$PATTERNS_FILE" ]] || { echo "[$(ts)] tmux-resume: patterns file missing: $PATTERNS_FILE" >&2; exit 0; }
+
+# Discover all tmux server sockets for this user. tmux uses $TMUX_TMPDIR else
+# $TMPDIR else /tmp, plus /tmux-<uid>/. launchd/cron may hand us a different
+# TMPDIR than the interactive shell, so probe every plausible base dir +
+# (macOS) the canonical per-user temp dir, and also clean-env servers in /tmp.
+discover_sockets() {
+  local uid; uid="$(id -u)"
+  local dirs=() d
+  [[ -n "${TMUX_TMPDIR:-}" ]] && dirs+=("$TMUX_TMPDIR")
+  [[ -n "${TMPDIR:-}" ]] && dirs+=("$TMPDIR")
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    dirs+=("$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)")
+  fi
+  dirs+=("/tmp")
+  for d in "${dirs[@]}"; do
+    [[ -n "$d" && -d "$d/tmux-$uid" ]] || continue
+    find "$d/tmux-$uid" -maxdepth 1 -type s 2>/dev/null || true
+  done | sort -u
+}
+
+resume_pane() {
+  local socket="$1" target="$2" captured="$3"
+  local line name after_name regex send
+  while IFS= read -r line; do
+    line="$(printf '%s' "$line" | trim)"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    # Split on " | " (space-pipe-space) so bare `|` inside ERE patterns is preserved.
+    # Format: "name | trigger_regex | send_sequence"
+    name="${line%% | *}"
+    after_name="${line#* | }"
+    # If the line has a second " | ", split into regex + send; otherwise regex==after_name and send=""
+    if [[ "$after_name" == *" | "* ]]; then
+      send="${after_name##* | }"
+      regex="${after_name% | *}"
+    else
+      regex="$after_name"
+      send=""
+    fi
+    name="$(printf '%s' "$name" | trim)"
+    regex="$(printf '%s' "$regex" | trim)"
+    send="$(printf '%s' "$send" | trim)"
+    [[ -z "$name" || -z "$regex" ]] && continue
+    if printf '%s' "$captured" | grep -iqE "$regex"; then
+      if $DRY_RUN; then
+        echo "[$(ts)] MATCH [$name] $target — would send: ${send:-<detect-only>} (dry-run)"
+      elif [[ -z "$send" ]]; then
+        echo "[$(ts)] MATCH [$name] $target — detect-only (no send configured)"
+      else
+        echo "[$(ts)] MATCH [$name] $target — sending: $send"
+        local steps step
+        IFS=';' read -ra steps <<< "$send"
+        for step in "${steps[@]}"; do
+          step="$(printf '%s' "$step" | trim)"
+          [[ -z "$step" ]] && continue
+          # shellcheck disable=SC2086  # deliberate word-split into tmux key tokens
+          tmux -S "$socket" send-keys -t "$target" $step
+          sleep 0.6
+        done
+      fi
+      return 0  # one match per pane
+    fi
+  done < "$PATTERNS_FILE"
+  return 1
+}
+
+sockets="$(discover_sockets)"
+if [[ -z "$sockets" ]]; then
+  echo "[$(ts)] tmux-resume: no tmux servers running"
+  exit 0
+fi
+
+while IFS= read -r socket; do
+  [[ -z "$socket" ]] && continue
+  while IFS= read -r target; do
+    [[ -z "$target" ]] && continue
+    captured="$(tmux -S "$socket" capture-pane -p -t "$target" -S -"$CAPTURE_LINES" 2>/dev/null || true)"
+    [[ -z "$captured" ]] && continue
+    resume_pane "$socket" "$target" "$captured" || true
+  done < <(tmux -S "$socket" list-panes -a -F '#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null || true)
+done <<< "$sockets"

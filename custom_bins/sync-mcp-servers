@@ -1,0 +1,14 @@
+#!/bin/bash
+# Wrapper for scheduled shared MCP sync.
+# Resolves the dotfiles root relative to this script so it works on any machine.
+set -euo pipefail
+
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+DOT_DIR="$(dirname "$(dirname "$(realpath "$0")")")"
+
+exec python3 "$DOT_DIR/scripts/helpers/sync_mcp_servers.py" \
+    --source "$DOT_DIR/config/mcp-servers.json" \
+    --claude-settings "$DOT_DIR/claude/settings.json" \
+    --codex-config "$DOT_DIR/codex/config.toml" \
+    --apply
