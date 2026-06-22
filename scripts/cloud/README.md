@@ -7,8 +7,8 @@ Setup scripts for cloud VMs/containers.
 **Goal:** Non-root user for safe Claude Code yolo mode.
 
 ```bash
-# 1. Fresh pod - run as root (one-time)
-curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
+# 1. Fresh pod - run as root (one-time). The dotfiles branch is REQUIRED (main = stable, yulong = working).
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- yulong
 
 # 2. Switch to user
 su - yulong
@@ -29,9 +29,9 @@ Then SSH directly as user: `ssh yulong@<ip> -p <port>`
 
 ## Hetzner / Standard VPS
 
-**Option A: User-only** (same as RunPod)
+**Option A: User-only** (same as RunPod; branch is required)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- yulong
 su - yulong
 ```
 
@@ -75,15 +75,20 @@ On container restart, `/etc/passwd` and `/home` are lost. `restart.sh` recreates
 
 ## Branch Selection
 
-`setup.sh` clones and provisions a specific dotfiles branch. **Default is `main`** (the public branch).
-Select another branch with the `--branch` flag or the `DOTFILES_BRANCH` env var (flag wins). The active
-branch is printed prominently in the setup banner so it's always clear which branch a box is running.
+`setup.sh` clones and provisions a specific dotfiles branch. The branch is a **required argument** — there
+is no default, so you can never silently provision the wrong branch. Omitting it exits with a loud error
+that shows the exact command to run. The active branch is printed prominently in the setup banner.
+
+Pass it as a positional (recommended), via `--branch`, or via the `DOTFILES_BRANCH` env var:
 
 ```bash
-# Provision the yulong branch (note `bash -s --` to pass args through curl|bash)
+# Positional (recommended; note `bash -s --` to pass args through curl|bash)
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- yulong
+
+# Flag form (equivalent)
 curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- --branch yulong
 
-# Equivalent via env var
+# Env-var form (no `-s --` needed)
 curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | DOTFILES_BRANCH=yulong bash
 ```
 

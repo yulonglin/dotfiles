@@ -730,6 +730,12 @@
         "source": "github",
         "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
       }
+    },
+    "codex-plugin-cc": {
+      "source": {
+        "source": "github",
+        "repo": "crazytieguy/codex-plugin-cc"
+      }
     }
   },
   "outputStyle": "Effortful Learning",
