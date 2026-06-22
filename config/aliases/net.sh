@@ -22,6 +22,18 @@ alias fix-term='_reset_terminal_modes'
 alias vpn-status='tailscale-route-fix status'
 alias vpn-fix='sudo tailscale-route-fix once'
 
+# ts-up — bring Tailscale up on containers/RunPod (no systemd).
+# Starts the userspace daemon only if it isn't already running, then `tailscale up --ssh`.
+# Run inside a persistent tmux session (`tn tailscale`) so the daemon survives logout.
+# Extra flags pass through: ts-up --authkey tskey-… --hostname mypod
+ts-up() {
+    if ! pgrep -x tailscaled &>/dev/null; then
+        sudo tailscaled --tun=userspace-networking &>/dev/null &
+        sleep 1
+    fi
+    sudo tailscale up --ssh "$@"
+}
+
 # Supply chain: manual dependency audit
 alias dep-audit='"$DOT_DIR/scripts/security/audit_dependencies.sh"'
 
