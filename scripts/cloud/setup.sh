@@ -515,14 +515,15 @@ if [[ -n "$TS_AUTH_KEY" ]]; then
 
     TS_HOSTNAME="${PROVIDER}-$(hostname -s)"
     # --ephemeral: auto-removes from tailnet when pod shuts down (ideal for cloud VMs)
-    tailscale up --authkey "$TS_AUTH_KEY" --hostname "$TS_HOSTNAME" --ephemeral 2>/dev/null || \
-        tailscale up --authkey "$TS_AUTH_KEY" --hostname "$TS_HOSTNAME" 2>/dev/null || \
+    # --ssh: serve SSH over Tailscale (tailscale ssh <host>), no port-forwarding needed
+    tailscale up --authkey "$TS_AUTH_KEY" --hostname "$TS_HOSTNAME" --ssh --ephemeral 2>/dev/null || \
+        tailscale up --authkey "$TS_AUTH_KEY" --hostname "$TS_HOSTNAME" --ssh 2>/dev/null || \
         warn "tailscale up failed — run manually after login"
     unset TS_AUTH_KEY
     ok "Tailscale connected ($(tailscale ip -4 2>/dev/null || echo 'check tailscale ip'))"
 else
     TS_NEEDS_SETUP=1
-    log "Skipping — run 'tailscale up --authkey <key>' after login to connect"
+    log "Skipping — run 'tailscale up --ssh --authkey <key>' after login to connect"
 fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
@@ -544,5 +545,5 @@ if [[ "$GH_NEEDS_AUTH" == "1" || "$SSH_KEY_NEEDS_UPLOAD" == "1" || "$BWS_NEEDS_S
     [[ "$GH_NEEDS_AUTH" == "1" ]]  && log "Next:     gh auth login   then   sync-gist   (enables gist + secrets sync)"
     [[ "$SSH_KEY_NEEDS_UPLOAD" == "1" ]] && log "Next:     gh ssh-key add $SSH_DIR/id_ed25519.pub --title $(hostname)-$USERNAME   (register box key on GitHub)"
     [[ "$BWS_NEEDS_SETUP" == "1" ]] && log "Next:     secrets-init-bws   (or re-run with BWS_TOKEN=… / --interactive)"
-    [[ "$TS_NEEDS_SETUP" == "1" ]]  && log "Next:     tailscale up --authkey <key>   (or set TAILSCALE_AUTH_KEY=…)"
+    [[ "$TS_NEEDS_SETUP" == "1" ]]  && log "Next:     tailscale up --ssh --authkey <key>   (or set TAILSCALE_AUTH_KEY=…)"
 fi
