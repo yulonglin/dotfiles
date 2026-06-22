@@ -546,7 +546,7 @@ def main() -> None:
     p.add_argument("--name", default=None, help="Pod name (default: nla-rl-<unix-timestamp>)")
     p.add_argument("--data-center", default=DEFAULT_DATA_CENTER, help=f"Data center ID for network volume (default: {DEFAULT_DATA_CENTER!r}). Must match pod location.")
     p.add_argument("--max-lifetime", type=float, metavar="HOURS", help="Arm lifetime guard: prints expiry time and teardown command prominently")
-    p.add_argument("--branch", default="main", help="Dotfiles branch to clone on the pod (default: 'main'; e.g. 'yulong'). setup.sh itself is always fetched from main.")
+    p.add_argument("--branch", required=True, help="Dotfiles branch to clone on the pod — REQUIRED (e.g. 'main' for public/stable, 'yulong' for working branch). setup.sh itself is always fetched from main.")
     p.set_defaults(func=cmd_provision)
 
     # teardown
