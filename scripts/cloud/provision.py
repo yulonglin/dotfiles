@@ -189,23 +189,27 @@ def _build_pod_body(
     gpu_count: int,
     image: str,
     name: str,
-    network_volume_id: str,
+    network_volume_id: str | None,
     pubkey: str | None = None,
+    container_disk_gb: int = 50,
 ) -> dict[str, Any]:
     """Build the POST /pods request body with SSH key and secret injection."""
     if pubkey is None:
         pubkey = _local_ssh_pubkey()
-    return {
+    body: dict[str, Any] = {
         "name": name,
         "imageName": image,
         "cloudType": "SECURE",
         "gpuTypeIds": [gpu_type],
         "gpuCount": gpu_count,
         # Container-local scratch disk (separate from network volume)
-        "containerDiskInGb": 50,
+        "containerDiskInGb": container_disk_gb,
         "volumeMountPath": "/workspace",
+    }
+    if network_volume_id is not None:
         # Attach the pre-created network volume (volumeInGb alone does NOT create one)
-        "networkVolumeId": network_volume_id,
+        body["networkVolumeId"] = network_volume_id
+    body.update({
         # RunPod assigns an external port for 22/tcp; retrieve from portMappings["22"]
         "ports": ["22/tcp"],
         "env": {
@@ -215,7 +219,8 @@ def _build_pod_body(
             # RUNPOD_POD_ID is also injected automatically by RunPod at runtime
             "RUNPOD_API_KEY": _api_key(),
         },
-    }
+    })
+    return body
 
 
 # ── Pod polling ───────────────────────────────────────────────────────────────
@@ -273,23 +278,32 @@ def cmd_provision(args: argparse.Namespace) -> None:
     name = args.name or f"nla-rl-{int(time.time())}"
     vol_name = f"{name}-vol"
     dry = args.dry_run
+    no_volume = getattr(args, "no_volume", False)
+    container_disk = getattr(args, "container_disk", 50)
 
     print(f"\n== Provisioning pod {name!r} ==")
     print(f"   GPU:         {args.gpu_count}× {args.gpu_type}")
     print(f"   Image:       {args.image}")
-    print(f"   Volume:      {args.volume_gb}GB  ({vol_name})")
+    if no_volume:
+        print(f"   Volume:      NONE (ephemeral container disk: {container_disk}GB)")
+    else:
+        print(f"   Volume:      {args.volume_gb}GB  ({vol_name})")
     print(f"   Data center: {args.data_center}")
 
     if dry:
         # Dry-run: print both request bodies without making any network calls
-        _ensure_network_volume(None, vol_name, args.volume_gb, args.data_center, dry_run=True)  # type: ignore[arg-type]
+        vol_id_for_dry = None
+        if not no_volume:
+            _ensure_network_volume(None, vol_name, args.volume_gb, args.data_center, dry_run=True)  # type: ignore[arg-type]
+            vol_id_for_dry = "dry-run-volume-id"
         pod_body = _build_pod_body(
             gpu_type=args.gpu_type,
             gpu_count=args.gpu_count,
             image=args.image,
             name=name,
-            network_volume_id="dry-run-volume-id",
+            network_volume_id=vol_id_for_dry,
             pubkey="ssh-ed25519 AAAA...YOUR_PUBLIC_KEY (dry-run placeholder)",
+            container_disk_gb=container_disk,
         )
         print("── [DRY RUN] POST /pods ──────────────────────────────────────────")
         display = dict(pod_body)
@@ -301,14 +315,17 @@ def cmd_provision(args: argparse.Namespace) -> None:
         return
 
     with _client() as client:
-        # Step 1: Network volume (separate API call — required before pod creation)
-        vol_id = _ensure_network_volume(
-            client,
-            name=vol_name,
-            size_gb=args.volume_gb,
-            data_center_id=args.data_center,
-            dry_run=False,
-        )
+        # Step 1: Network volume (separate API call — skipped with --no-volume)
+        if no_volume:
+            vol_id: str | None = None
+        else:
+            vol_id = _ensure_network_volume(
+                client,
+                name=vol_name,
+                size_gb=args.volume_gb,
+                data_center_id=args.data_center,
+                dry_run=False,
+            )
 
         # Step 2: Build and POST the pod
         pod_body = _build_pod_body(
@@ -317,6 +334,7 @@ def cmd_provision(args: argparse.Namespace) -> None:
             image=args.image,
             name=name,
             network_volume_id=vol_id,
+            container_disk_gb=container_disk,
         )
         resp = client.post("/pods", json=pod_body)
         resp.raise_for_status()
@@ -518,6 +536,8 @@ def main() -> None:
     )
     p.add_argument("--gpu-count", type=int, default=DEFAULT_GPU_COUNT, help=f"Number of GPUs (default: {DEFAULT_GPU_COUNT})")
     p.add_argument("--volume-gb", type=int, default=DEFAULT_VOLUME_GB, help=f"Network volume size in GB (default: {DEFAULT_VOLUME_GB})")
+    p.add_argument("--no-volume", action="store_true", help="Skip network volume creation (use ephemeral container disk only; set --container-disk appropriately)")
+    p.add_argument("--container-disk", type=int, default=50, metavar="GB", help="Container disk size in GB (default: 50; increase to 300+ when --no-volume)")
     p.add_argument("--image", required=True, help="Container image (e.g. runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)")
     p.add_argument("--name", default=None, help="Pod name (default: nla-rl-<unix-timestamp>)")
     p.add_argument("--data-center", default=DEFAULT_DATA_CENTER, help=f"Data center ID for network volume (default: {DEFAULT_DATA_CENTER!r}). Must match pod location.")
