@@ -5,7 +5,17 @@
 //   zed: open default settings (from command palette)
 {
   // === Privacy & Security ===
+  "context_servers": {
+    "mcp-server-markitdown": {
+      "enabled": true,
+      "remote": false,
+      "settings": {
+        "package_version": "latest"
+      }
+    }
+  },
   "project_panel": {
+    "hide_gitignore": false,
     "dock": "left"
   },
   "git_panel": {
@@ -16,7 +26,7 @@
   // === Theme & Appearance ===
   "theme": {
     "mode": "system",
-    "dark": "One Dark Pro",
+    "dark": "High Contrast One Dark",
     "light": "One Light"
   },
   "icon_theme": "Material Icon Theme",
@@ -197,6 +207,11 @@
       "projects": [
         {
           "paths": [
+            "/home/yulong/code/bots/swordsmith/./"
+          ]
+        },
+        {
+          "paths": [
             "/home/yulong/code/dotfiles"
           ]
         },
@@ -207,15 +222,25 @@
         },
         {
           "paths": [
-            "/home/yulong/code/bots/swordsmith/./"
+            "/home/yulong/projects/nla-vs-cot"
           ]
         },
         {
           "paths": [
             "/home/yulong/writing/papers/sandbagging-detection-paper/./"
           ]
+        },
+        {
+          "paths": [
+            "/mnt/nw/home/y.lin/.ssh"
+          ]
         }
       ]
+    },
+    {
+      "host": "mats",
+      "args": [],
+      "projects": []
     }
   ]
 }

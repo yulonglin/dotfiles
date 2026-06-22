@@ -7,7 +7,7 @@ _meta:
     prefix: em.
   coding-agents:
     prefix: cc.
-  productivity:
+  personal:
     prefix: my.
 default:
 - shortcut: omw
@@ -112,6 +112,9 @@ emojis:
 - shortcut: inprog
   phrase: ⏳
   uid: 8A8372A9-AAFB-4FEE-83B9-45E4256D88A3
+- shortcut: fire
+  phrase: 🔥
+  uid: TODO
 focusmate:
 - shortcut: atb
   phrase: nice! well atb then, see you at the end :)
@@ -135,12 +138,13 @@ links:
 - shortcut: jibed
   phrase: jibe_dualist_0b@icloud.com
   uid: 1B36E0EF-528C-42B3-8097-76263710E83F
-productivity:
+personal:
 - shortcut: plan
   phrase: |
     Planning
     1. Goal
-    2. Steps
-    3. Now
-    4. Status
+    2. What's the fastest way to get there?
+    3. Anything I'm being dumb about? What are the blockers?
+    4. Next steps?
+    5. Status
   uid: EFAB93FC-C180-47BB-B4DA-57BA751EE918
