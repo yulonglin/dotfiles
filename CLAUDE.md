@@ -146,6 +146,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Finicky - Browser routing (macOS only, symlinked)
 - Ghostty - Terminal emulator configuration (symlinked to platform-specific path)
 - Zed - Editor config (settings + keymap, symlinked to ~/.config/zed/)
+- gitui - Theme (symlinked to ~/.config/gitui/theme.ron). Theme-reactive: uses named ANSI colors so gitui inherits whichever Ghostty theme the active window uses (default, g0-g9, SSH themes). Fixes gitui's default `disabled_fg: DarkGray`, which is unreadable on Catppuccin Mocha and similar dark backgrounds.
 - Claude Code - AI assistant configuration (symlinked)
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
@@ -195,6 +196,7 @@ config/
 ├── finicky.js            # Browser routing (macOS, symlinked)
 ├── ghostty               # Ghostty terminal config (symlinked to platform-specific path)
 ├── htop/htoprc           # htop config (symlinked, uses dynamic CPU meters)
+├── gitui/theme.ron       # gitui theme (symlinked to ~/.config/gitui/, theme-reactive named ANSI)
 ├── serena/serena_config.yml  # Serena MCP config (symlinked, dashboard auto-open disabled)
 ├── mouseless/config.yaml # Mouseless keyboard mouse config (macOS only, copied not symlinked)
 ├── alfred/local-golden/  # Golden Alfred summon hotkey, seeded onto new Macs by alfred-fix
@@ -376,7 +378,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ## Important Gotchas
 
 - **macOS vs Linux paths**: VSCode settings location differs by OS
-- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git, Mouseless). `~/.gitignore_global` is composed (concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research`)
+- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, gitui, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git, Mouseless). `~/.gitignore_global` is composed (concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research`)
 - **Mouseless config**: Copied (not symlinked) because Mouseless uses atomic `rename()` on UI save which destroys symlinks. Use `sync-mouseless` to pull UI changes back to dotfiles
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env
