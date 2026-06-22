@@ -90,7 +90,7 @@ USERNAME=dev curl ... | bash
 
 ## What Gets Installed
 
-**System packages:** sudo, zsh, htop, vim, nvtop (if available), cron
+**System packages:** sudo, zsh, htop, vim, nvtop (if available), cron, mosh (roaming/resilient SSH)
 
 **User tools:**
 - uv (Python package manager)
@@ -103,4 +103,4 @@ USERNAME=dev curl ... | bash
 - ZSH with custom aliases and functions
 - Git config with user settings
 - Claude Code settings and skills
-- SOPS encrypted secrets (with age key)
+- BWS encrypted secrets (Bitwarden Secrets Manager access token)

@@ -52,17 +52,18 @@ log "Home:     $USER_HOME"
 
 # ─── System deps ──────────────────────────────────────────────────────────────
 step "System dependencies"
-apt-get update && apt-get install -y sudo zsh htop vim cron curl ca-certificates unzip locales
+apt-get update && apt-get install -y sudo zsh htop vim cron curl ca-certificates unzip locales mosh
 command -v nvtop &>/dev/null || apt-get install -y nvtop 2>/dev/null || true
 locale-gen en_GB.UTF-8 2>/dev/null || true
 service cron start 2>/dev/null || true
 ok "System deps installed"
 
-# ─── Node 20 (for OpenCode / Node-based AI CLIs) ──────────────────────────────
+# ─── Node 24 LTS (for OpenCode / Node-based AI CLIs) ──────────────────────────
+# Node 24 (Krypton) is the Active LTS; Node 20 went EOL on 2026-03-24.
 step "Node.js"
-if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d 'v')" -lt 20 ]]; then
-    log "Installing Node 20..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d 'v')" -lt 24 ]]; then
+    log "Installing Node 24..."
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
     apt-get install -y nodejs
     ok "Node $(node -v) installed"
 else
@@ -278,30 +279,6 @@ else
     ok "GitHub CLI already authenticated"
 fi
 
-# ─── SOPS age key ────────────────────────────────────────────────────────────
-step "SOPS age key"
-AGE_KEY_DIR="$USER_HOME/.config/sops/age"
-if [ ! -f "$AGE_KEY_DIR/keys.txt" ]; then
-    echo "Paste your age private key (from Bitwarden), then press Enter:"
-    echo "(starts with AGE-SECRET-KEY-, leave empty to skip)"
-    if [[ -e /dev/tty ]]; then
-        read -rs AGE_KEY </dev/tty
-    else
-        warn "Non-interactive — skipping age key prompt. Paste after login with: secrets-init"
-        AGE_KEY=""
-    fi
-    if [[ -n "$AGE_KEY" ]]; then
-        run_as "mkdir -p $AGE_KEY_DIR"
-        printf '%s\n' "$AGE_KEY" | run_as "tee $AGE_KEY_DIR/keys.txt > /dev/null"
-        chmod 600 "$AGE_KEY_DIR/keys.txt" 2>/dev/null || true
-        ok "Age key saved to $AGE_KEY_DIR/keys.txt"
-    else
-        log "Skipping — run secrets-init after login to set up SOPS"
-    fi
-else
-    ok "Age key already exists"
-fi
-
 # ─── BWS access token ──────────────────────────────────────────────────────
 step "BWS access token (Bitwarden Secrets Manager)"
 BWS_TOKEN_DIR="$USER_HOME/.config/bws"
@@ -404,3 +381,4 @@ if [[ "$PROVIDER" == "runpod" ]]; then
 else
     log "SSH:      ssh $USERNAME@<ip>"
 fi
+log "Mosh:     mosh $USERNAME@<host>  (mosh-server installed; UDP 60000-61000, or just use Tailscale)"

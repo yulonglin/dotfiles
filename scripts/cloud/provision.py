@@ -400,7 +400,7 @@ def cmd_provision(args: argparse.Namespace) -> None:
 
     # Step 6: Run setup.sh over SSH (non-interactive)
     # - setup.sh detects RUNPOD_POD_ID env → sets PROVIDER=runpod, symlinks /workspace
-    # - Interactive prompts (BWS token, Tailscale, age key) are skipped when /dev/tty
+    # - Interactive prompts (BWS token, Tailscale) are skipped when /dev/tty
     #   is absent — run them manually after login via: ssh -p <port> yulong@<ip>
     print("\n  Running setup.sh on pod (non-interactive)...")
     result = subprocess.run(
@@ -428,7 +428,7 @@ def cmd_provision(args: argparse.Namespace) -> None:
     if args.max_lifetime:
         print(f"  ⚠  Max lifetime: {args.max_lifetime}h — expires {entry['expires_at']}")
         print("     Run teardown above by then (no auto-teardown scheduled)")
-    print("  Next: ssh in and run secrets-init, secrets-init-bws, tailscale up")
+    print("  Next: ssh in and run secrets-init bws, tailscale up")
     print("  ML stack: run setup_stack.sh from nla-vs-cot repo (not done here)")
     print(f"{'='*60}")
 
