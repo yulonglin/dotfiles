@@ -73,6 +73,25 @@ Then: `ssh yulong@<ip>`
 
 On container restart, `/etc/passwd` and `/home` are lost. `restart.sh` recreates the user entry and re-establishes the symlinks.
 
+## Branch Selection
+
+`setup.sh` clones and provisions a specific dotfiles branch. **Default is `main`** (the public branch).
+Select another branch with the `--branch` flag or the `DOTFILES_BRANCH` env var (flag wins). The active
+branch is printed prominently in the setup banner so it's always clear which branch a box is running.
+
+```bash
+# Provision the yulong branch (note `bash -s --` to pass args through curl|bash)
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- --branch yulong
+
+# Equivalent via env var
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | DOTFILES_BRANCH=yulong bash
+```
+
+`setup.sh` itself is **always fetched from `main`** — one canonical bootstrap URL. The `--branch` flag
+only chooses which branch gets cloned on the box. (Two separate concepts: where the bootstrap script
+comes from vs. which branch it checks out.) When provisioning via `provision.py`, pass `--branch yulong`
+— it fetches `setup.sh` from main and passes `--branch yulong` through to clone that branch on the pod.
+
 ## Configuration
 
 Override via env vars:
@@ -87,20 +106,35 @@ USERNAME=dev curl ... | bash
 | `USER_HOME` | `/home/$USERNAME` | User home directory |
 | `GITHUB_USER` | `yulonglin` | GitHub username (for SSH key import) |
 | `DOTFILES_REPO` | `https://github.com/yulonglin/dotfiles.git` | Dotfiles repo URL |
+| `DOTFILES_BRANCH` | `main` | Dotfiles branch to clone (overridden by `--branch`) |
 
 ## What Gets Installed
 
-**System packages:** sudo, zsh, htop, vim, nvtop (if available), cron
+`setup.sh` runs `install.sh --profile=cloud` and `deploy.sh --profile=cloud` — a **lean profile** for
+remote dev boxes. It's `server` minus the heavy compiles/MCP:
+
+- **Drops** (vs `personal`/`server`): zotero MCP (`--experimental`, slow), pueue + systemd resource
+  slices (Rust `cargo install` compile), Rust toolchain + code2prompt (`--extras`), Docker, and all
+  macOS/desktop/cleanup/cron/gist components.
+- **Keeps**: zsh + oh-my-zsh + p10k, tmux, git, Claude Code, Codex, modern CLI tools (the mise
+  binaries — zsh aliases like `ls=eza`, `cat=bat` depend on them), uv, and a current `gh`.
+
+**System packages:** sudo, zsh, htop, vim, nvtop (if available), cron, mosh (roaming/resilient SSH)
 
 **User tools:**
 - uv (Python package manager)
 - bun (JS runtime + package manager)
 - oh-my-zsh with powerlevel10k
 - tmux with custom config
-- Claude Code CLI
+- Claude Code CLI + Codex CLI
+- gh (GitHub CLI — current version; Linux installs from the official `cli.github.com` apt repo with
+  sudo, else a release binary to `~/.local/bin`, so `gh auth login --git-protocol ssh` works).
+  Auth is **deferred by default** (the `--web` device flow polls ~15 min and would block bootstrap):
+  setup prints a `gh auth login` + `sync-gist` next-step, or pass `--github-auth` to authenticate
+  inline. `GH_TOKEN`/`GITHUB_TOKEN` in the env authenticate gh transparently with no prompt.
 
 **Configuration:**
 - ZSH with custom aliases and functions
 - Git config with user settings
 - Claude Code settings and skills
-- SOPS encrypted secrets (with age key)
+- BWS encrypted secrets (Bitwarden Secrets Manager access token)

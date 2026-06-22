@@ -10,8 +10,9 @@
 #   USER_HOME=/custom/path ./setup.sh    # Override home directory
 #   USERNAME=dev ./setup.sh              # Custom username
 #
-# One-liner:
-#   curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
+# One-liner (always fetch this script from main; pick the dotfiles branch with --branch):
+#   stable:  curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
+#   dev:     curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- --branch yulong
 
 set -e
 
@@ -31,6 +32,29 @@ run_as() {
 USERNAME="${USERNAME:-yulong}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yulonglin/dotfiles.git}"
 GITHUB_USER="${GITHUB_USER:-yulonglin}"
+# Dotfiles branch to clone/check out. Public repo defaults to main; pin a branch
+# with --branch <name> (wins) or DOTFILES_BRANCH=<name>.
+DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
+# GitHub CLI auth is OFF by default — its device flow polls for ~15 min and would
+# block the rest of bootstrap. Enable inline with --github-auth or GITHUB_AUTH=1.
+# (GH_TOKEN/GITHUB_TOKEN in the env auth gh transparently and skip this regardless.)
+GITHUB_AUTH="${GITHUB_AUTH:-0}"
+
+# ─── Args (override env vars) ────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --branch) DOTFILES_BRANCH="$2"; shift 2 ;;
+        --branch=*) DOTFILES_BRANCH="${1#*=}"; shift ;;
+        --github-auth) GITHUB_AUTH=1; shift ;;
+        -h|--help)
+            echo "Usage: setup.sh [--branch <name>] [--github-auth]"
+            echo "  --branch <name>   dotfiles branch to clone (default: \$DOTFILES_BRANCH or main)"
+            echo "  --github-auth     run 'gh auth login' inline (default: off; deferred to after setup)"
+            exit 0
+            ;;
+        *) echo "Unknown arg: $1 (try --help)" >&2; exit 1 ;;
+    esac
+done
 
 # Auto-detect provider and set home directory
 if [[ -n "$USER_HOME" ]]; then
@@ -49,19 +73,29 @@ echo "=== Cloud Setup ==="
 log "Provider: $PROVIDER"
 log "User:     $USERNAME"
 log "Home:     $USER_HOME"
+log "Branch:   $DOTFILES_BRANCH"
+[[ "$DOTFILES_BRANCH" != "main" ]] && warn "Using development branch: $DOTFILES_BRANCH (not main)"
 
 # ─── System deps ──────────────────────────────────────────────────────────────
 step "System dependencies"
-apt-get update && apt-get install -y sudo zsh htop vim cron curl ca-certificates unzip
+apt-get update && apt-get install -y sudo zsh htop vim cron curl ca-certificates unzip locales mosh
 command -v nvtop &>/dev/null || apt-get install -y nvtop 2>/dev/null || true
+# Generate AND activate a UTF-8 locale. mosh-server refuses to start without a
+# native UTF-8 locale; locale-gen alone isn't enough — update-locale must write
+# /etc/default/locale so login shells (and the mosh-server they spawn) inherit it.
+# en_US.UTF-8 is generated as a universally-present fallback for non-en_GB clients.
+locale-gen en_GB.UTF-8 en_US.UTF-8 2>/dev/null || true
+update-locale LANG=en_GB.UTF-8 LC_ALL=en_GB.UTF-8 2>/dev/null || true
+export LANG=en_GB.UTF-8 LC_ALL=en_GB.UTF-8
 service cron start 2>/dev/null || true
-ok "System deps installed"
+ok "System deps installed (locale: en_GB.UTF-8)"
 
-# ─── Node 20 (for OpenCode / Node-based AI CLIs) ──────────────────────────────
+# ─── Node 24 LTS (for OpenCode / Node-based AI CLIs) ──────────────────────────
+# Node 24 (Krypton) is the Active LTS; Node 20 went EOL on 2026-03-24.
 step "Node.js"
-if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d 'v')" -lt 20 ]]; then
-    log "Installing Node 20..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1 | tr -d 'v')" -lt 24 ]]; then
+    log "Installing Node 24..."
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
     apt-get install -y nodejs
     ok "Node $(node -v) installed"
 else
@@ -243,27 +277,44 @@ done
 # ─── Dotfiles ────────────────────────────────────────────────────────────────
 step "Dotfiles"
 DOTFILES="$USER_HOME/code/dotfiles"
+# Fail fast on a typo'd / missing branch (public repo → no auth needed for ls-remote).
+git ls-remote --exit-code --heads "$DOTFILES_REPO" "$DOTFILES_BRANCH" >/dev/null 2>&1 \
+    || fail "Branch '$DOTFILES_BRANCH' not found on $DOTFILES_REPO"
 if [ ! -d "$DOTFILES/.git" ]; then
-    log "Cloning $DOTFILES_REPO → $DOTFILES"
+    log "Cloning $DOTFILES_REPO ($DOTFILES_BRANCH) → $DOTFILES"
     run_as "mkdir -p $USER_HOME/code"
     # Remove empty dir if it exists (e.g., from volume mount)
     [ -d "$DOTFILES" ] && [ -z "$(ls -A "$DOTFILES" 2>/dev/null)" ] && rmdir "$DOTFILES"
-    run_as "git clone $DOTFILES_REPO $DOTFILES"
-    ok "Dotfiles cloned"
+    run_as "git clone --branch $DOTFILES_BRANCH $DOTFILES_REPO $DOTFILES"
+    ok "Dotfiles cloned ($DOTFILES_BRANCH)"
 else
-    log "Dotfiles already exist, pulling latest..."
-    run_as "cd $DOTFILES && git pull --ff-only" || true
-    ok "Dotfiles up to date"
+    log "Dotfiles already exist, checking out $DOTFILES_BRANCH and pulling latest..."
+    run_as "cd $DOTFILES && git fetch origin $DOTFILES_BRANCH && git checkout $DOTFILES_BRANCH && git pull --ff-only" || true
+    ok "Dotfiles up to date ($DOTFILES_BRANCH)"
 fi
 
 # ─── install.sh ──────────────────────────────────────────────────────────────
+# Lean cloud profile: server minus heavy compiles (extras/pueue) and zotero MCP.
 step "install.sh"
-run_as "cd $DOTFILES && ./install.sh"
+run_as "cd $DOTFILES && ./install.sh --profile=cloud"
 ok "install.sh complete"
 
 # ─── GitHub CLI auth ─────────────────────────────────────────────────────────
+# Off the critical path by default: gh's --web device flow polls for ~15 min and
+# would block deploy.sh + the rest of bootstrap. Deferred to a post-setup step
+# (gist/secrets sync degrade gracefully without it). Opt in with --github-auth.
+GH_NEEDS_AUTH=0
 step "GitHub CLI auth"
-if ! run_as 'gh auth status' &>/dev/null; then
+if run_as 'gh auth status' &>/dev/null; then
+    ok "GitHub CLI already authenticated"
+elif [[ "$GITHUB_AUTH" != "1" ]]; then
+    GH_NEEDS_AUTH=1
+    log "Skipping (not on critical path) — run 'gh auth login' after setup for gist/secrets sync"
+    log "Re-run with --github-auth to authenticate inline"
+elif [[ ! -e /dev/tty ]]; then
+    GH_NEEDS_AUTH=1
+    warn "Non-interactive — can't run gh device flow. Run 'gh auth login' manually after setup"
+else
     log "Authenticating GitHub CLI..."
     # --git-protocol requires gh >= 2.13; fall back without it
     if run_as 'gh auth login --web --git-protocol ssh </dev/tty' 2>/dev/null; then
@@ -271,34 +322,9 @@ if ! run_as 'gh auth status' &>/dev/null; then
     elif run_as 'gh auth login --web </dev/tty' 2>/dev/null; then
         ok "GitHub CLI authenticated (without git-protocol flag)"
     else
+        GH_NEEDS_AUTH=1
         warn "gh auth failed — run 'gh auth login' manually after setup"
     fi
-else
-    ok "GitHub CLI already authenticated"
-fi
-
-# ─── SOPS age key ────────────────────────────────────────────────────────────
-step "SOPS age key"
-AGE_KEY_DIR="$USER_HOME/.config/sops/age"
-if [ ! -f "$AGE_KEY_DIR/keys.txt" ]; then
-    echo "Paste your age private key (from Bitwarden), then press Enter:"
-    echo "(starts with AGE-SECRET-KEY-, leave empty to skip)"
-    if [[ -e /dev/tty ]]; then
-        read -rs AGE_KEY </dev/tty
-    else
-        warn "Non-interactive — skipping age key prompt. Paste after login with: secrets-init"
-        AGE_KEY=""
-    fi
-    if [[ -n "$AGE_KEY" ]]; then
-        run_as "mkdir -p $AGE_KEY_DIR"
-        printf '%s\n' "$AGE_KEY" | run_as "tee $AGE_KEY_DIR/keys.txt > /dev/null"
-        chmod 600 "$AGE_KEY_DIR/keys.txt" 2>/dev/null || true
-        ok "Age key saved to $AGE_KEY_DIR/keys.txt"
-    else
-        log "Skipping — run secrets-init after login to set up SOPS"
-    fi
-else
-    ok "Age key already exists"
 fi
 
 # ─── BWS access token ──────────────────────────────────────────────────────
@@ -335,7 +361,7 @@ fi
 
 # ─── deploy.sh ───────────────────────────────────────────────────────────────
 step "deploy.sh"
-run_as "cd $DOTFILES && ./deploy.sh"
+run_as "cd $DOTFILES && ./deploy.sh --profile=cloud"
 ok "deploy.sh complete"
 
 # ─── Claude Code ─────────────────────────────────────────────────────────────
@@ -346,6 +372,64 @@ if ! run_as 'command -v claude' &>/dev/null; then
     ok "Claude Code installed"
 else
     ok "Claude Code already installed"
+fi
+
+# ─── Codex CLI ───────────────────────────────────────────────────────────────
+# The lean `cloud` profile keeps INSTALL_AI_TOOLS=false (that gate also pulls in
+# the Rust toolchain + OpenCode + Antigravity), so install Codex directly here —
+# lightweight `bun add -g`, no compile. Mirrors the Claude Code block above.
+step "Codex CLI"
+if ! run_as 'command -v codex' &>/dev/null; then
+    log "Installing Codex CLI..."
+    if run_as 'bun add -g @openai/codex' &>/dev/null; then
+        ok "Codex CLI installed"
+    else
+        warn "Codex CLI install failed (bun required); skipping"
+    fi
+else
+    ok "Codex CLI already installed"
+fi
+
+# ─── Tailscale ───────────────────────────────────────────────────────────────
+step "Tailscale"
+if ! command -v tailscale &>/dev/null; then
+    log "Installing Tailscale..."
+    curl -fsSL https://tailscale.com/install.sh | sh
+    ok "Tailscale installed"
+else
+    ok "Tailscale already installed"
+fi
+
+TS_AUTH_KEY="${TAILSCALE_AUTH_KEY:-}"
+if [[ -z "$TS_AUTH_KEY" ]]; then
+    echo "Paste your Tailscale auth key (tailscale.com/admin/settings/keys), leave empty to skip:"
+    echo "(Tip: use an ephemeral reusable key for cloud servers)"
+    if [[ -e /dev/tty ]]; then
+        read -rs TS_AUTH_KEY </dev/tty
+        echo ""
+    else
+        warn "Non-interactive — skipping Tailscale. Run 'tailscale up' manually after login"
+    fi
+fi
+
+if [[ -n "$TS_AUTH_KEY" ]]; then
+    # Start tailscaled — containers often lack systemd
+    if ! pgrep tailscaled &>/dev/null; then
+        mkdir -p /var/lib/tailscale /var/run/tailscale
+        # --tun=userspace-networking: avoids iptables/TUN (required in most containers)
+        tailscaled --tun=userspace-networking --state=/var/lib/tailscale/tailscaled.state &>/dev/null &
+        sleep 2
+    fi
+
+    TS_HOSTNAME="${PROVIDER}-$(hostname -s)"
+    # --ephemeral: auto-removes from tailnet when pod shuts down (ideal for cloud VMs)
+    tailscale up --authkey "$TS_AUTH_KEY" --hostname "$TS_HOSTNAME" --ephemeral 2>/dev/null || \
+        tailscale up --authkey "$TS_AUTH_KEY" --hostname "$TS_HOSTNAME" 2>/dev/null || \
+        warn "tailscale up failed — run manually after login"
+    unset TS_AUTH_KEY
+    ok "Tailscale connected ($(tailscale ip -4 2>/dev/null || echo 'check tailscale ip'))"
+else
+    log "Skipping — run 'tailscale up --authkey <key>' after login to connect"
 fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
@@ -360,4 +444,9 @@ if [[ "$PROVIDER" == "runpod" ]]; then
     log "Restart:  curl -fsSL .../restart.sh | bash && su - $USERNAME"
 else
     log "SSH:      ssh $USERNAME@<ip>"
+fi
+log "Mosh:     mosh $USERNAME@<host>  (mosh-server installed; UDP 60000-61000, or just use Tailscale)"
+if [[ "$GH_NEEDS_AUTH" == "1" ]]; then
+    echo ""
+    log "Next:     gh auth login   then   sync-gist   (enables gist + secrets sync)"
 fi

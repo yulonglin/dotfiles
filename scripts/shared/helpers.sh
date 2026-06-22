@@ -785,20 +785,71 @@ install_tpm() {
 
 # ─── GitHub CLI ───────────────────────────────────────────────────────────────
 
+# True if we can run privileged apt/dpkg steps without an interactive prompt:
+# either we're root, or sudo is available with cached/passwordless credentials.
+can_sudo() {
+    [[ $EUID -eq 0 ]] && return 0
+    cmd_exists sudo && sudo -n true 2>/dev/null
+}
+
+# Install current gh from the official GitHub apt repo (cli.github.com), so apt
+# manages updates. Needs /etc/apt write access — gate behind can_sudo. Returns
+# nonzero on any failure so the caller can fall back to the release binary.
+install_gh_from_apt_repo() {
+    log_info "Installing gh from official GitHub apt repo..."
+    local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
+    cmd_exists wget || $SUDO apt-get install -y wget 2>/dev/null
+    $SUDO mkdir -p -m 755 /etc/apt/keyrings || return 1
+    wget -nv -O- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | $SUDO tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null || return 1
+    $SUDO chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        | $SUDO tee /etc/apt/sources.list.d/github-cli.list > /dev/null || return 1
+    $SUDO apt update 2>/dev/null && $SUDO apt install gh -y 2>/dev/null
+}
+
+# True if installed gh is older than 2.40 (the cutoff below the flags we rely on,
+# e.g. --git-protocol on `gh auth login`). jammy's apt ships 2.4.0 → too old.
+gh_too_old() {
+    cmd_exists gh || return 1
+    local ver major minor
+    ver="$(gh --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
+    [[ -z "$ver" ]] && return 0  # unparseable → treat as too old, force upgrade
+    major="${ver%%.*}"; minor="${ver#*.}"; minor="${minor%%.*}"
+    (( major > 2 )) && return 1
+    (( major == 2 && minor >= 40 )) && return 1
+    return 0
+}
+
+# Install a current gh on Linux. Prefer the official GitHub apt repo when we can
+# write to /etc/apt (root/sudo) so apt manages updates; otherwise drop to the
+# no-sudo release binary in ~/.local/bin. Never use jammy's stale apt package.
+install_gh_linux() {
+    if can_sudo; then
+        install_gh_from_apt_repo || install_gh_from_release
+    else
+        install_gh_from_release
+    fi
+}
+
 # Install and authenticate GitHub CLI
 install_gh_cli() {
-    if is_installed gh; then
-        # Check authentication
+    if is_installed gh && ! gh_too_old; then
+        # Modern gh present — check authentication only
         if gh auth status &>/dev/null; then
             log_info "gh already authenticated"
             return 0
         fi
     else
-        log_info "Installing GitHub CLI..."
+        if is_installed gh; then
+            log_info "Upgrading outdated GitHub CLI ($(gh --version 2>/dev/null | head -1))..."
+        else
+            log_info "Installing GitHub CLI..."
+        fi
         if is_macos; then
             brew_install gh
         else
-            apt_install gh || install_gh_from_release
+            install_gh_linux
         fi
     fi
 
