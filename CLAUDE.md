@@ -25,7 +25,7 @@ If you're an AI agent (Claude Code, Codex, etc.) working in this repo, read this
 
 | Want to... | Command / file |
 |---|---|
-| Add a new alias | `config/aliases.sh` (or `aliases_<name>.sh` for env-specific) |
+| Add a new alias | `config/aliases/<topic>.sh` (themed split; or `aliases_<name>.sh` for env-specific) |
 | Add a deploy component | Create `deploy_X()` in `deploy.sh` — see [Adding New Features](#adding-new-features) |
 | Add a custom binary | Drop it in `custom_bins/` (already on PATH); `chmod +x` |
 | Install/manage Mac apps | Add a line to `config/apps.conf` → run `app-picker` (gum TUI) → `brew bundle --file=config/Brewfile`. Official casks + `mas` only, **no third-party taps**. Then `scripts/setup/auth-setup` |
@@ -346,7 +346,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ### Adding New Features
 
 **New Aliases**:
-- General: Add to `config/aliases.sh`
+- General: Add to the matching themed split in `config/aliases/<topic>.sh` (sourced by `zshrc.sh`'s `aliases/*.sh` loop)
 - Environment-specific: Create `config/aliases_<name>.sh`
 - Deploy with: `./deploy.sh --aliases=<name>`
 

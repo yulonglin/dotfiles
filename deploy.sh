@@ -205,7 +205,10 @@ if [[ "$DEPLOY_SHELL" == "true" ]]; then
         cat >> "$HOME/.bashrc" <<BASHRC
 # Dotfiles configuration
 export DOT_DIR=$DOT_DIR
-source $DOT_DIR/config/aliases.sh
+for _af in "\$DOT_DIR"/config/aliases/*.sh; do
+  [ -r "\$_af" ] && source "\$_af"
+done
+unset _af
 source $DOT_DIR/config/key_bindings.sh
 source $DOT_DIR/config/modern_tools.sh
 export PATH="\$DOT_DIR/custom_bins:\$PATH"
