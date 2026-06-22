@@ -72,9 +72,15 @@ log "Branch:   $DOTFILES_BRANCH"
 step "System dependencies"
 apt-get update && apt-get install -y sudo zsh htop vim cron curl ca-certificates unzip locales mosh
 command -v nvtop &>/dev/null || apt-get install -y nvtop 2>/dev/null || true
-locale-gen en_GB.UTF-8 2>/dev/null || true
+# Generate AND activate a UTF-8 locale. mosh-server refuses to start without a
+# native UTF-8 locale; locale-gen alone isn't enough — update-locale must write
+# /etc/default/locale so login shells (and the mosh-server they spawn) inherit it.
+# en_US.UTF-8 is generated as a universally-present fallback for non-en_GB clients.
+locale-gen en_GB.UTF-8 en_US.UTF-8 2>/dev/null || true
+update-locale LANG=en_GB.UTF-8 LC_ALL=en_GB.UTF-8 2>/dev/null || true
+export LANG=en_GB.UTF-8 LC_ALL=en_GB.UTF-8
 service cron start 2>/dev/null || true
-ok "System deps installed"
+ok "System deps installed (locale: en_GB.UTF-8)"
 
 # ─── Node 24 LTS (for OpenCode / Node-based AI CLIs) ──────────────────────────
 # Node 24 (Krypton) is the Active LTS; Node 20 went EOL on 2026-03-24.
