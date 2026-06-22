@@ -95,25 +95,26 @@ jobs:
             --notes "Prebuilt claude-tools binaries for macOS/Linux (arm64 + x86_64). Auto-built from main; fetched + checksum-verified by install.sh/deploy.sh." \
             --latest=false
 
-      - name: Commit checksums to repo (trust anchor)
+      - name: Commit binaries + checksums to repo
         run: |
-          # install.sh/deploy.sh verify the downloaded binary against THIS file,
-          # not the copy in the release — so the trust anchor is the repo you
-          # cloned. GITHUB_TOKEN pushes don't trigger workflows, and SHA256SUMS
-          # isn't in the trigger paths anyway, so this can't loop.
+          # Commit the platform binaries directly to custom_bins/ so every
+          # git clone has the right binary without a network fetch or source build.
+          # Also update tools/claude-tools/SHA256SUMS as a trust anchor for the
+          # legacy _fetch_claude_tools path (air-gapped / old installs).
+          cp dist/claude-tools-* custom_bins/
           cp dist/SHA256SUMS tools/claude-tools/SHA256SUMS
-          if git diff --quiet -- tools/claude-tools/SHA256SUMS; then
-            echo "Checksums unchanged — nothing to commit."
+          if git diff --quiet -- custom_bins/claude-tools-* tools/claude-tools/SHA256SUMS; then
+            echo "Binaries and checksums unchanged — nothing to commit."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tools/claude-tools/SHA256SUMS
-          git commit -m "chore(claude-tools): update binary checksums [skip ci]"
+          git add custom_bins/claude-tools-* tools/claude-tools/SHA256SUMS
+          git commit -m "chore(claude-tools): update platform binaries + checksums [skip ci]"
           for attempt in 1 2 3; do
             if git pull --rebase --autostash origin main && git push origin HEAD:main; then
-              echo "Pushed checksums."; exit 0
+              echo "Pushed binaries."; exit 0
             fi
             echo "Push attempt $attempt failed; retrying…"; sleep 3
           done
-          echo "::error::Failed to push checksum commit after 3 attempts"; exit 1
+          echo "::error::Failed to push after 3 attempts"; exit 1

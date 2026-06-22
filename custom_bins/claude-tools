@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Platform dispatcher for claude-tools.
+# The actual binary is committed as claude-tools-{os}-{arch}.
+_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)  _bin="${_dir}/claude-tools-darwin-arm64" ;;
+    Darwin-x86_64) _bin="${_dir}/claude-tools-darwin-x86_64" ;;
+    Linux-x86_64)  _bin="${_dir}/claude-tools-linux-x86_64" ;;
+    Linux-aarch64) _bin="${_dir}/claude-tools-linux-aarch64" ;;
+    *) echo "claude-tools: unsupported platform $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+esac
+if [[ ! -x "$_bin" ]]; then
+    echo "claude-tools: platform binary not found: $_bin" >&2
+    echo "Run deploy.sh --non-interactive --claude-tools to build it" >&2
+    exit 1
+fi
+exec "$_bin" "$@"

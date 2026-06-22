@@ -31,7 +31,7 @@ install() {
 
     # Check YAML exists (skip if missing — initial export hasn't run yet)
     if [[ ! -f "$YAML_FILE" ]]; then
-        _sched_log_warn "YAML config not found at $YAML_FILE. Run 'export-snippets' first."
+        _sched_log_warn "YAML config not found at $YAML_FILE. Run 'snippets-export' first."
         return 0
     fi
 

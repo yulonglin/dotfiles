@@ -10,9 +10,9 @@
 #   USER_HOME=/custom/path ./setup.sh    # Override home directory
 #   USERNAME=dev ./setup.sh              # Custom username
 #
-# One-liner (always fetch this script from main; pick the dotfiles branch with --branch):
-#   stable:  curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
-#   dev:     curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- --branch yulong
+# One-liner (always fetch this script from main; the dotfiles branch is a REQUIRED positional):
+#   stable:  curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- main
+#   dev:     curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- yulong
 
 set -e
 
@@ -37,9 +37,13 @@ tty_usable() { { : >/dev/tty; } 2>/dev/null; }
 USERNAME="${USERNAME:-yulong}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yulonglin/dotfiles.git}"
 GITHUB_USER="${GITHUB_USER:-yulonglin}"
-# Dotfiles branch to clone/check out. Public repo defaults to main; pin a branch
-# with --branch <name> (wins) or DOTFILES_BRANCH=<name>.
-DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
+# Canonical bootstrap URL (this script always lives on main) — reused in the
+# "branch is required" error below so the fix is copy-pasteable.
+SETUP_URL="https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh"
+# Dotfiles branch to clone/check out — REQUIRED, no default. A silent default
+# (main) meant forgetting the branch quietly provisioned the wrong dotfiles.
+# Pass it as a positional (bash -s -- yulong), --branch <name>, or DOTFILES_BRANCH=.
+DOTFILES_BRANCH="${DOTFILES_BRANCH:-}"
 # GitHub CLI auth is OFF by default — its device flow polls for ~15 min and would
 # block the rest of bootstrap. Enable inline with --github-auth or GITHUB_AUTH=1.
 # (GH_TOKEN/GITHUB_TOKEN in the env auth gh transparently and skip this regardless.)
@@ -57,16 +61,37 @@ while [[ $# -gt 0 ]]; do
         --github-auth) GITHUB_AUTH=1; shift ;;
         -i|--interactive) INTERACTIVE=1; shift ;;
         -h|--help)
-            echo "Usage: setup.sh [--branch <name>] [--github-auth] [--interactive]"
-            echo "  --branch <name>   dotfiles branch to clone (default: \$DOTFILES_BRANCH or main)"
+            echo "Usage: setup.sh <branch> [--github-auth] [--interactive]"
+            echo "  <branch>          dotfiles branch to clone — REQUIRED (e.g. main, yulong)."
+            echo "                    Also accepts --branch <name> or DOTFILES_BRANCH=<name>."
             echo "  --github-auth     run 'gh auth login' inline (default: off; deferred to after setup)"
             echo "  -i, --interactive prompt for BWS token + Tailscale key (default: off — supply via"
             echo "                    BWS_TOKEN=… / TAILSCALE_AUTH_KEY=… env, or set up after setup)"
             exit 0
             ;;
-        *) echo "Unknown arg: $1 (try --help)" >&2; exit 1 ;;
+        -*) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
+        *) DOTFILES_BRANCH="$1"; shift ;;   # positional: the dotfiles branch
     esac
 done
+
+# Branch is required — fail loud with a copy-paste fix rather than silently
+# provisioning the wrong dotfiles (the whole point of dropping the default).
+if [[ -z "$DOTFILES_BRANCH" ]]; then
+    {
+        echo ""
+        echo "  ✗ No dotfiles branch specified — it is required."
+        echo ""
+        echo "  Pass it as a positional arg (recommended):"
+        echo "    curl -fsSL $SETUP_URL | bash -s -- yulong"
+        echo ""
+        echo "  …or via flag / env:"
+        echo "    curl -fsSL $SETUP_URL | bash -s -- --branch yulong"
+        echo "    curl -fsSL $SETUP_URL | DOTFILES_BRANCH=yulong bash"
+        echo ""
+        echo "  Common branches: 'main' (public/stable), 'yulong' (working branch)."
+    } >&2
+    exit 1
+fi
 
 # Auto-detect provider and set home directory
 if [[ -n "$USER_HOME" ]]; then

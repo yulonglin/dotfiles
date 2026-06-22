@@ -52,6 +52,7 @@ DEPLOY_REGISTRY=(
     "zed|Zed editor config (symlinked)|all|true|Shell & Editors"
     "ghostty|Ghostty terminal config (symlinked)|all|true|Shell & Editors"
     "htop|htop config with dynamic CPU meters|all|true|Shell & Editors"
+    "gitui|gitui theme (theme-reactive, symlinked)|all|true|Shell & Editors"
     "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"
     "codex|Codex CLI config symlink (~/.codex)|all|true|AI & Apps"
     "serena|Serena MCP server config (symlinked)|all|false|AI & Apps"
@@ -66,6 +67,8 @@ DEPLOY_REGISTRY=(
     "claude-cleanup|Remove idle Claude sessions after 24h|all|true|Automation"
     "ai-update|Daily auto-update: Claude, Codex, OpenCode|all|true|Automation"
     "mcp-sync|Daily shared MCP sync for Claude and Codex|all|true|Automation"
+    "usage-ping|Hourly Haiku ping to keep the 5-hour subscription window warm|all|true|Automation"
+    "tmux-resume|Hourly auto-resume of rate-limited tmux Claude/Codex sessions|all|true|Automation"
     "brew-update|Weekly package upgrade + cleanup|all|true|Automation"
     "finicky|Browser routing config (symlinked)|macos|true|macOS"
     "file-apps|Default editor for coding file types|macos|true|macOS"
@@ -248,6 +251,7 @@ apply_profile() {
             DEPLOY_GHOSTTY=false
             DEPLOY_ZED=false
             DEPLOY_HTOP=false
+            DEPLOY_GITUI=false
             DEPLOY_PDB=false
             DEPLOY_MATPLOTLIB=false
             DEPLOY_CLEANUP=false

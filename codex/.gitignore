@@ -22,5 +22,6 @@ memories/
 ambient-suggestions/
 process_manager/
 app-server-control/
+attachments/
 chrome-native-hosts-v2.json
 .codex-chronicle-assets-to-install.marker

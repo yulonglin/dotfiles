@@ -19,9 +19,10 @@ else
     LINE="----------------------------------------------------------------------------------------------"
 fi
 
-# Idle detection: only kill processes with no output activity for 24h.
 IDLE_THRESHOLD_HOURS=24
 IDLE_THRESHOLD_SECONDS=$((IDLE_THRESHOLD_HOURS * 3600))
+# Sessions with no new messages for 24h are eligible for pruning.
+# Transcript mtime is the primary activity signal; CPU/uptime are fallbacks.
 
 # Stale UNKNOWN process detection: kill if >N days old with no parent activity
 STALE_UNKNOWN_DAYS=3
@@ -157,6 +158,72 @@ get_tty_mtime() {
     fi
 }
 
+# Seconds since the process's Claude session last received a message.
+# Each session writes a transcript to ~/.claude/projects/<slug>/<uuid>.jsonl whose
+# mtime updates on every new message, making it a far better activity signal than
+# instantaneous CPU% (an idle-waiting session sits at ~0% but is not abandoned).
+# Outputs the age in seconds, or nothing if no transcript can be located.
+last_activity_age() {
+    local pid="$1"
+    local now newest=0 mtime path cwd slug project_dir fd
+    local is_darwin=false
+    [[ "$(uname -s)" == "Darwin" ]] && is_darwin=true
+    now=$(date +%s)
+
+    # Strategy 1 (exact): inspect open file descriptors for a transcript .jsonl
+    if [[ "$is_darwin" == "true" ]]; then
+        while IFS= read -r path; do
+            [[ "$path" == *.jsonl ]] || continue
+            [[ "$path" == "$HOME/.claude/projects/"* ]] || continue
+            [[ "$path" == *"/subagents/"* ]] && continue
+            mtime=$(stat -f %m "$path" 2>/dev/null) || continue
+            [[ -n "$mtime" ]] && (( mtime > newest )) && newest="$mtime"
+        done < <(lsof -p "$pid" -F n 2>/dev/null | sed -n 's/^n//p')
+    else
+        while IFS= read -r fd; do
+            [[ -n "$fd" ]] || continue
+            path=$(readlink "$fd" 2>/dev/null) || continue
+            [[ "$path" == *.jsonl ]] || continue
+            [[ "$path" == "$HOME/.claude/projects/"* ]] || continue
+            [[ "$path" == *"/subagents/"* ]] && continue
+            mtime=$(stat -c %Y "$path" 2>/dev/null) || continue
+            [[ -n "$mtime" ]] && (( mtime > newest )) && newest="$mtime"
+        done < <(ls /proc/"$pid"/fd/* 2>/dev/null)
+    fi
+
+    if (( newest > 0 )); then
+        echo $(( now - newest ))
+        return
+    fi
+
+    # Strategy 2 (fallback): resolve cwd -> project dir -> newest top-level transcript
+    if [[ "$is_darwin" == "true" ]]; then
+        cwd=$(lsof -a -p "$pid" -d cwd -F n 2>/dev/null | sed -n 's/^n//p' | head -1)
+    else
+        cwd=$(readlink /proc/"$pid"/cwd 2>/dev/null)
+    fi
+    [[ -n "$cwd" ]] || return
+
+    # Slugify cwd into the project dir name: replace each '/' and '.' with '-'.
+    # The path is absolute (leading '/'), so the slug keeps a leading '-' — that
+    # matches how Claude Code names these dirs, e.g. /home/u/code -> -home-u-code.
+    slug=$(printf '%s' "$cwd" | tr '/.' '-')
+    project_dir="$HOME/.claude/projects/$slug"
+    [[ -d "$project_dir" ]] || return
+
+    while IFS= read -r path; do
+        [[ -n "$path" ]] || continue
+        if [[ "$is_darwin" == "true" ]]; then
+            mtime=$(stat -f %m "$path" 2>/dev/null) || continue
+        else
+            mtime=$(stat -c %Y "$path" 2>/dev/null) || continue
+        fi
+        [[ -n "$mtime" ]] && (( mtime > newest )) && newest="$mtime"
+    done < <(find "$project_dir" -maxdepth 1 -name "*.jsonl" -newer /dev/null 2>/dev/null)
+
+    (( newest > 0 )) && echo $(( now - newest ))
+}
+
 # Check if process is orphaned (parent is dead, zombie, or reparented to init)
 # Returns 0 (true) if orphaned, 1 (false) if not
 is_orphaned() {
@@ -287,6 +354,16 @@ get_process_status() {
             echo "ACTIVE"
             return
         fi
+    fi
+
+    # Rule 1.5: Recent transcript activity = not idle, regardless of CPU/uptime.
+    # A session waiting for input sits at ~0% CPU but is not abandoned; the session
+    # transcript mtime reflects the last message and is the authoritative signal.
+    local activity_age
+    activity_age=$(last_activity_age "$pid")
+    if [[ -n "$activity_age" ]] && (( activity_age < IDLE_THRESHOLD_SECONDS )); then
+        echo "ACTIVE"
+        return
     fi
 
     # Rule 2: Very old (>24h) with very low CPU (<1%) = definitely abandoned

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# usage-ping — fire a minimal Haiku message to start / keep the Claude
+# subscription 5-hour usage window "warm". Subscription (OAuth) auth ONLY —
+# never the metered API. Scheduled hourly via scripts/cleanup/setup_usage_ping.sh.
+set -euo pipefail
+
+# Scheduled environments (cron/launchd) have a minimal PATH — self-provision.
+export PATH="$HOME/.local/bin:$HOME/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+ts() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
+
+if ! command -v claude &>/dev/null; then
+  echo "[$(ts)] usage-ping: claude CLI not found on PATH; skipping" >&2
+  exit 0
+fi
+
+# Empty MCP config → no external server connections (matches watchdog idiom).
+mcp_config="/tmp/claude/usage-ping-mcp.json"
+mkdir -p /tmp/claude
+printf '{"mcpServers":{}}\n' > "$mcp_config"
+
+# Run from a neutral dir so no *project* CLAUDE.md is auto-discovered.
+# (The global ~/.claude/CLAUDE.md may still load; cost is negligible for a
+#  tools-disabled one-word turn and there is no CLI flag to suppress it.)
+cd /tmp/claude
+
+# Subscription-only: strip API-key env so auth falls back to the OAuth login.
+# CLAUDECODE unset + watchdog off + internal flag prevent hooks/recursion.
+response=$(
+  printf 'hi' | \
+  env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDECODE \
+      CLAUDE_WATCHDOG_ENABLED=0 AUTO_AGENT_INTERNAL=1 \
+  timeout 60 claude -p \
+    --model claude-haiku-4-5-20251001 \
+    --output-format text \
+    --no-session-persistence \
+    --tools "" \
+    --disable-slash-commands \
+    --mcp-config "$mcp_config" \
+    --strict-mcp-config \
+    2>&1
+) || true
+
+if [[ -n "$response" ]]; then
+  echo "[$(ts)] usage-ping ok: ${response:0:100}"
+else
+  echo "[$(ts)] usage-ping: empty/failed response (check OAuth login + network)" >&2
+fi

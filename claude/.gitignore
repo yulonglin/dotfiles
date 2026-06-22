@@ -41,6 +41,9 @@ backups/
 bash-commands.log
 logs/
 sessions/
+daemon/
+jobs/
+.last-update-result.json
 
 chrome/
 mcp-needs-auth-cache.json
