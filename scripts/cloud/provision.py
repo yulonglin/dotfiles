@@ -69,8 +69,11 @@ DEFAULT_DATA_CENTER = "US-KS-2"
 # Local state file tracking provisioned pods (pod_id → metadata + expiry)
 STATE_FILE = Path.home() / ".runpod-pods.json"
 
-SETUP_SH_URL = (
-    "https://raw.githubusercontent.com/yulonglin/dotfiles/main"
+# Raw setup.sh URL, parameterised on the dotfiles branch (see --branch). The
+# fetched script and the branch it clones are kept in sync by passing --branch
+# through to setup.sh.
+SETUP_SH_URL_TEMPLATE = (
+    "https://raw.githubusercontent.com/yulonglin/dotfiles/{branch}"
     "/scripts/cloud/setup.sh"
 )
 
@@ -284,6 +287,7 @@ def cmd_provision(args: argparse.Namespace) -> None:
     print(f"\n== Provisioning pod {name!r} ==")
     print(f"   GPU:         {args.gpu_count}× {args.gpu_type}")
     print(f"   Image:       {args.image}")
+    print(f"   Branch:      {args.branch}")
     if no_volume:
         print(f"   Volume:      NONE (ephemeral container disk: {container_disk}GB)")
     else:
@@ -402,7 +406,8 @@ def cmd_provision(args: argparse.Namespace) -> None:
     # - setup.sh detects RUNPOD_POD_ID env → sets PROVIDER=runpod, symlinks /workspace
     # - Interactive prompts (BWS token, Tailscale) are skipped when /dev/tty
     #   is absent — run them manually after login via: ssh -p <port> yulong@<ip>
-    print("\n  Running setup.sh on pod (non-interactive)...")
+    print(f"\n  Running setup.sh on pod (non-interactive, branch={args.branch})...")
+    setup_url = SETUP_SH_URL_TEMPLATE.format(branch=args.branch)
     result = subprocess.run(
         [
             "ssh",
@@ -410,7 +415,7 @@ def cmd_provision(args: argparse.Namespace) -> None:
             "-o", "ConnectTimeout=10",
             "-p", str(ssh_port),
             f"root@{public_ip}",
-            f"curl -fsSL {SETUP_SH_URL} | bash",
+            f"curl -fsSL {setup_url} | bash -s -- --branch {args.branch}",
         ]
     )
     if result.returncode != 0:
@@ -542,6 +547,7 @@ def main() -> None:
     p.add_argument("--name", default=None, help="Pod name (default: nla-rl-<unix-timestamp>)")
     p.add_argument("--data-center", default=DEFAULT_DATA_CENTER, help=f"Data center ID for network volume (default: {DEFAULT_DATA_CENTER!r}). Must match pod location.")
     p.add_argument("--max-lifetime", type=float, metavar="HOURS", help="Arm lifetime guard: prints expiry time and teardown command prominently")
+    p.add_argument("--branch", default="main", help="Dotfiles branch to fetch setup.sh from and clone on the pod (default: 'main'; e.g. 'yulong')")
     p.set_defaults(func=cmd_provision)
 
     # teardown

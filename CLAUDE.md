@@ -294,7 +294,7 @@ export CODE_DIR="$HOME/work/projects"
 export WRITING_DIR="$HOME/Documents/writing"
 ```
 
-**Cloud environments:** The standard directory structure works transparently on RunPod/cloud via symlinks created by `scripts/cloud/setup.sh`.
+**Cloud environments:** The standard directory structure works transparently on RunPod/cloud via symlinks created by `scripts/cloud/setup.sh`. `setup.sh` runs the lean **`cloud` profile** (`install.sh --profile=cloud` / `deploy.sh --profile=cloud`) — `server` minus pueue, zotero MCP, Rust extras, and Docker; keeps modern CLI tools, uv, gh, claude, codex. It provisions the **`main` branch by default**; pin another with `--branch <name>` (env `DOTFILES_BRANCH`), e.g. `curl … | bash -s -- --branch yulong`. `provision.py --branch yulong` fetches `setup.sh` from that branch's raw URL *and* clones it on the pod. The active branch is printed in the setup banner. gh is installed current (Linux: official `cli.github.com` apt repo with sudo, else release binary), not jammy's 2.4.0, so `gh auth login --git-protocol ssh` works.
 
 **Related aliases:** `code`, `writing`, `scratch`, `projects`, `dotfiles`
 

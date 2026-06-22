@@ -61,7 +61,12 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
    # Hetzner / standard VPS (persistent /home)
    curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | USER_HOME=/home bash
    ```
-   This creates a non-root user, installs dependencies, clones dotfiles, and runs `install.sh` + `deploy.sh` automatically. It will prompt for GitHub auth.
+   This creates a non-root user, installs dependencies, clones dotfiles, and runs `install.sh --profile=cloud` + `deploy.sh --profile=cloud` (a lean remote-dev set — no pueue/zotero/Rust toolchain). It will prompt for GitHub auth.
+
+   Provisions the **`main`** branch by default. To pin another branch, pass `--branch` (use `bash -s --` to forward args through `curl | bash`) or set `DOTFILES_BRANCH`:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- --branch yulong
+   ```
 3. **Reconnect as your user:**
    ```bash
    ssh yulong@<ip>
@@ -783,7 +788,7 @@ curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/clo
 curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | USER_HOME=/home bash
 ```
 
-Then SSH as `yulong@<ip>` (not root). See [`scripts/cloud/README.md`](./scripts/cloud/README.md) for details.
+Then SSH as `yulong@<ip>` (not root). Runs the lean `cloud` profile and provisions the `main` branch by default — pin another with `| bash -s -- --branch <name>` or `DOTFILES_BRANCH=<name>`. See [`scripts/cloud/README.md`](./scripts/cloud/README.md) for details.
 
 **What it does:**
 

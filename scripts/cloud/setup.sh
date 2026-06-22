@@ -31,6 +31,23 @@ run_as() {
 USERNAME="${USERNAME:-yulong}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yulonglin/dotfiles.git}"
 GITHUB_USER="${GITHUB_USER:-yulonglin}"
+# Dotfiles branch to clone/check out. Public repo defaults to main; pin a branch
+# with --branch <name> (wins) or DOTFILES_BRANCH=<name>.
+DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
+
+# ─── Args (override env vars) ────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --branch) DOTFILES_BRANCH="$2"; shift 2 ;;
+        --branch=*) DOTFILES_BRANCH="${1#*=}"; shift ;;
+        -h|--help)
+            echo "Usage: setup.sh [--branch <name>]"
+            echo "  --branch <name>   dotfiles branch to clone (default: \$DOTFILES_BRANCH or main)"
+            exit 0
+            ;;
+        *) echo "Unknown arg: $1 (try --help)" >&2; exit 1 ;;
+    esac
+done
 
 # Auto-detect provider and set home directory
 if [[ -n "$USER_HOME" ]]; then
@@ -49,6 +66,7 @@ echo "=== Cloud Setup ==="
 log "Provider: $PROVIDER"
 log "User:     $USERNAME"
 log "Home:     $USER_HOME"
+log "Branch:   $DOTFILES_BRANCH"
 
 # ─── System deps ──────────────────────────────────────────────────────────────
 step "System dependencies"
@@ -246,21 +264,22 @@ done
 step "Dotfiles"
 DOTFILES="$USER_HOME/code/dotfiles"
 if [ ! -d "$DOTFILES/.git" ]; then
-    log "Cloning $DOTFILES_REPO → $DOTFILES"
+    log "Cloning $DOTFILES_REPO ($DOTFILES_BRANCH) → $DOTFILES"
     run_as "mkdir -p $USER_HOME/code"
     # Remove empty dir if it exists (e.g., from volume mount)
     [ -d "$DOTFILES" ] && [ -z "$(ls -A "$DOTFILES" 2>/dev/null)" ] && rmdir "$DOTFILES"
-    run_as "git clone $DOTFILES_REPO $DOTFILES"
-    ok "Dotfiles cloned"
+    run_as "git clone --branch $DOTFILES_BRANCH $DOTFILES_REPO $DOTFILES"
+    ok "Dotfiles cloned ($DOTFILES_BRANCH)"
 else
-    log "Dotfiles already exist, pulling latest..."
-    run_as "cd $DOTFILES && git pull --ff-only" || true
-    ok "Dotfiles up to date"
+    log "Dotfiles already exist, checking out $DOTFILES_BRANCH and pulling latest..."
+    run_as "cd $DOTFILES && git fetch origin $DOTFILES_BRANCH && git checkout $DOTFILES_BRANCH && git pull --ff-only" || true
+    ok "Dotfiles up to date ($DOTFILES_BRANCH)"
 fi
 
 # ─── install.sh ──────────────────────────────────────────────────────────────
+# Lean cloud profile: server minus heavy compiles (extras/pueue) and zotero MCP.
 step "install.sh"
-run_as "cd $DOTFILES && ./install.sh"
+run_as "cd $DOTFILES && ./install.sh --profile=cloud"
 ok "install.sh complete"
 
 # ─── GitHub CLI auth ─────────────────────────────────────────────────────────
@@ -313,7 +332,7 @@ fi
 
 # ─── deploy.sh ───────────────────────────────────────────────────────────────
 step "deploy.sh"
-run_as "cd $DOTFILES && ./deploy.sh"
+run_as "cd $DOTFILES && ./deploy.sh --profile=cloud"
 ok "deploy.sh complete"
 
 # ─── Claude Code ─────────────────────────────────────────────────────────────
@@ -324,6 +343,22 @@ if ! run_as 'command -v claude' &>/dev/null; then
     ok "Claude Code installed"
 else
     ok "Claude Code already installed"
+fi
+
+# ─── Codex CLI ───────────────────────────────────────────────────────────────
+# The lean `cloud` profile keeps INSTALL_AI_TOOLS=false (that gate also pulls in
+# the Rust toolchain + OpenCode + Antigravity), so install Codex directly here —
+# lightweight `bun add -g`, no compile. Mirrors the Claude Code block above.
+step "Codex CLI"
+if ! run_as 'command -v codex' &>/dev/null; then
+    log "Installing Codex CLI..."
+    if run_as 'bun add -g @openai/codex' &>/dev/null; then
+        ok "Codex CLI installed"
+    else
+        warn "Codex CLI install failed (bun required); skipping"
+    fi
+else
+    ok "Codex CLI already installed"
 fi
 
 # ─── Tailscale ───────────────────────────────────────────────────────────────

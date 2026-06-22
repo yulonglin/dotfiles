@@ -264,6 +264,15 @@ apply_profile() {
             DEPLOY_FILE_APPS=false
             DEPLOY_CLAUDE_TOOLS=false
             ;;
+        cloud)
+            # Lean remote dev box (RunPod): server minus the heavy compiles/MCP.
+            # Keeps core (modern CLI tools, gh, uv), zsh, tmux, git, claude, codex.
+            # mosh is installed by scripts/cloud/setup.sh's apt baseline regardless.
+            apply_profile server
+            INSTALL_EXPERIMENTAL=false   # zotero MCP — slow
+            INSTALL_PUEUE=false          # cargo install pueue pueued — Rust compile
+            DEPLOY_PUEUE=false           # systemd resource slices
+            ;;
         minimal)
             # Nothing enabled — derived from registry (no manual list to drift)
             local _entry _name _var

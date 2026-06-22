@@ -73,6 +73,23 @@ Then: `ssh yulong@<ip>`
 
 On container restart, `/etc/passwd` and `/home` are lost. `restart.sh` recreates the user entry and re-establishes the symlinks.
 
+## Branch Selection
+
+`setup.sh` clones and provisions a specific dotfiles branch. **Default is `main`** (the public branch).
+Select another branch with the `--branch` flag or the `DOTFILES_BRANCH` env var (flag wins). The active
+branch is printed prominently in the setup banner so it's always clear which branch a box is running.
+
+```bash
+# Provision the yulong branch (note `bash -s --` to pass args through curl|bash)
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- --branch yulong
+
+# Equivalent via env var
+curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | DOTFILES_BRANCH=yulong bash
+```
+
+When provisioning via `provision.py`, pass `--branch yulong` — it fetches the matching `setup.sh` from
+that branch's raw URL *and* clones the same branch on the pod.
+
 ## Configuration
 
 Override via env vars:
@@ -87,8 +104,18 @@ USERNAME=dev curl ... | bash
 | `USER_HOME` | `/home/$USERNAME` | User home directory |
 | `GITHUB_USER` | `yulonglin` | GitHub username (for SSH key import) |
 | `DOTFILES_REPO` | `https://github.com/yulonglin/dotfiles.git` | Dotfiles repo URL |
+| `DOTFILES_BRANCH` | `main` | Dotfiles branch to clone (overridden by `--branch`) |
 
 ## What Gets Installed
+
+`setup.sh` runs `install.sh --profile=cloud` and `deploy.sh --profile=cloud` — a **lean profile** for
+remote dev boxes. It's `server` minus the heavy compiles/MCP:
+
+- **Drops** (vs `personal`/`server`): zotero MCP (`--experimental`, slow), pueue + systemd resource
+  slices (Rust `cargo install` compile), Rust toolchain + code2prompt (`--extras`), Docker, and all
+  macOS/desktop/cleanup/cron/gist components.
+- **Keeps**: zsh + oh-my-zsh + p10k, tmux, git, Claude Code, Codex, modern CLI tools (the mise
+  binaries — zsh aliases like `ls=eza`, `cat=bat` depend on them), uv, and a current `gh`.
 
 **System packages:** sudo, zsh, htop, vim, nvtop (if available), cron, mosh (roaming/resilient SSH)
 
@@ -97,7 +124,9 @@ USERNAME=dev curl ... | bash
 - bun (JS runtime + package manager)
 - oh-my-zsh with powerlevel10k
 - tmux with custom config
-- Claude Code CLI
+- Claude Code CLI + Codex CLI
+- gh (GitHub CLI — current version; Linux installs from the official `cli.github.com` apt repo with
+  sudo, else a release binary to `~/.local/bin`, so `gh auth login --git-protocol ssh` works)
 
 **Configuration:**
 - ZSH with custom aliases and functions

@@ -898,7 +898,7 @@
   "autoCompactEnabled": true,
   "showTurnDuration": true,
   "terminalProgressBarEnabled": true,
-  "teammateMode": "auto",
+  "teammateMode": "in-process",
   "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
