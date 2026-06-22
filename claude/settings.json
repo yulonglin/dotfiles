@@ -11,7 +11,8 @@
     "CLAUDE_CODE_NO_FLICKER": "1",
     "ENABLE_TOOL_SEARCH": "1",
     "CLAUDE_CODE_DISABLE_1M_CONTEXT": "1",
-    "TMPDIR": "/tmp/claude"
+    "TMPDIR": "/tmp/claude",
+    "CLAUDE_CODE_STOP_HOOK_BLOCK_CAP": "5"
   },
   "attribution": {
     "commit": "",
@@ -233,7 +234,27 @@
       "mcp__claude_ai_Google_Drive__read_file_content",
       "mcp__claude_ai_Google_Drive__get_file_metadata",
       "mcp__claude_ai_Google_Drive__get_file_permissions",
-      "mcp__claude_ai_Google_Drive__download_file_content"
+      "mcp__claude_ai_Google_Drive__download_file_content",
+      "Bash(ssh *)",
+      "Bash(gws *)",
+      "Bash(pueue add *)",
+      "Bash(pueue restart *)",
+      "Bash(pueue switch *)",
+      "Bash(pueue pause *)",
+      "Bash(pueue pause)",
+      "Bash(pueue start *)",
+      "Bash(pueue start)",
+      "Bash(pueued *)",
+      "Bash(pueue kill *)",
+      "Bash(pueue remove *)",
+      "Bash(pueue reset *)",
+      "Bash(pueue send *)",
+      "Bash(pueue edit *)",
+      "mcp__plugin_things-mcp_things__add_todo",
+      "mcp__plugin_things-mcp_things__add_project",
+      "mcp__claude_ai_Notion__notion-create-database",
+      "mcp__claude_ai_Notion__notion-create-comment",
+      "mcp__claude_ai_Notion__notion-duplicate-page"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -288,30 +309,15 @@
     ],
     "ask": [
       "ExitPlanMode",
+      "Bash(kill *)",
+      "Bash(killall *)",
+      "Bash(pkill *)",
+      "Bash(wget *)",
       "Bash(docker compose *)",
       "Bash(docker build *)",
       "Bash(docker exec *)",
       "Bash(docker run *)",
       "Bash(docker container exec *)",
-      "Bash(gws *)",
-      "Bash(pueue add *)",
-      "Bash(pueue restart *)",
-      "Bash(pueue switch *)",
-      "Bash(pueue pause *)",
-      "Bash(pueue pause)",
-      "Bash(pueue start *)",
-      "Bash(pueue start)",
-      "Bash(pueued *)",
-      "Bash(pueue kill *)",
-      "Bash(pueue remove *)",
-      "Bash(pueue reset *)",
-      "Bash(pueue send *)",
-      "Bash(pueue edit *)",
-      "Bash(kill *)",
-      "Bash(killall *)",
-      "Bash(pkill *)",
-      "Bash(wget *)",
-      "Bash(ssh *)",
       "Bash(nc *)",
       "Bash(kubectl exec *)",
       "Bash(kubectl delete *)",
@@ -322,16 +328,11 @@
       "Read(**/.env.*)",
       "mcp__plugin_things-mcp_things__update_todo",
       "mcp__plugin_things-mcp_things__update_project",
-      "mcp__plugin_things-mcp_things__add_todo",
-      "mcp__plugin_things-mcp_things__add_project",
-      "mcp__claude_ai_Notion__notion-create-database",
-      "mcp__claude_ai_Notion__notion-create-comment",
-      "mcp__claude_ai_Notion__notion-duplicate-page",
       "mcp__claude_ai_Notion__notion-move-pages"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "auto"
   },
-  "model": "opusplan",
+  "model": "opus",
   "hooks": {
     "PermissionRequest": [
       {
@@ -793,7 +794,8 @@
         "comet.ml",
         "neptune.ai",
         "cerebras.ai",
-        "anthropic.com"
+        "anthropic.com",
+        "hub.docker.com"
       ],
       "allowLocalBinding": true
     },
@@ -814,7 +816,7 @@
         "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli"
       ],
       "denyRead": [
-        "~/.ssh",
+        "~/.ssh/id_*",
         "~/.aws",
         "~/.config/gcloud",
         "~/.gnupg",

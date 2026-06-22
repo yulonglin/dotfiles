@@ -23,6 +23,7 @@
     "remember@claude-plugins-official": true,
     "research@ai-safety-plugins": false,
     "rust-analyzer-lsp@claude-plugins-official": true,
+    "rust-skills@rust-skills": false,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "swift-lsp@claude-plugins-official": false,
