@@ -126,7 +126,10 @@ remote dev boxes. It's `server` minus the heavy compiles/MCP:
 - tmux with custom config
 - Claude Code CLI + Codex CLI
 - gh (GitHub CLI — current version; Linux installs from the official `cli.github.com` apt repo with
-  sudo, else a release binary to `~/.local/bin`, so `gh auth login --git-protocol ssh` works)
+  sudo, else a release binary to `~/.local/bin`, so `gh auth login --git-protocol ssh` works).
+  Auth is **deferred by default** (the `--web` device flow polls ~15 min and would block bootstrap):
+  setup prints a `gh auth login` + `sync-gist` next-step, or pass `--github-auth` to authenticate
+  inline. `GH_TOKEN`/`GITHUB_TOKEN` in the env authenticate gh transparently with no prompt.
 
 **Configuration:**
 - ZSH with custom aliases and functions

@@ -10,8 +10,9 @@
 #   USER_HOME=/custom/path ./setup.sh    # Override home directory
 #   USERNAME=dev ./setup.sh              # Custom username
 #
-# One-liner:
-#   curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
+# One-liner (always fetch this script from main; pick the dotfiles branch with --branch):
+#   stable:  curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
+#   dev:     curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- --branch yulong
 
 set -e
 
@@ -34,15 +35,21 @@ GITHUB_USER="${GITHUB_USER:-yulonglin}"
 # Dotfiles branch to clone/check out. Public repo defaults to main; pin a branch
 # with --branch <name> (wins) or DOTFILES_BRANCH=<name>.
 DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
+# GitHub CLI auth is OFF by default — its device flow polls for ~15 min and would
+# block the rest of bootstrap. Enable inline with --github-auth or GITHUB_AUTH=1.
+# (GH_TOKEN/GITHUB_TOKEN in the env auth gh transparently and skip this regardless.)
+GITHUB_AUTH="${GITHUB_AUTH:-0}"
 
 # ─── Args (override env vars) ────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --branch) DOTFILES_BRANCH="$2"; shift 2 ;;
         --branch=*) DOTFILES_BRANCH="${1#*=}"; shift ;;
+        --github-auth) GITHUB_AUTH=1; shift ;;
         -h|--help)
-            echo "Usage: setup.sh [--branch <name>]"
+            echo "Usage: setup.sh [--branch <name>] [--github-auth]"
             echo "  --branch <name>   dotfiles branch to clone (default: \$DOTFILES_BRANCH or main)"
+            echo "  --github-auth     run 'gh auth login' inline (default: off; deferred to after setup)"
             exit 0
             ;;
         *) echo "Unknown arg: $1 (try --help)" >&2; exit 1 ;;
@@ -67,6 +74,7 @@ log "Provider: $PROVIDER"
 log "User:     $USERNAME"
 log "Home:     $USER_HOME"
 log "Branch:   $DOTFILES_BRANCH"
+[[ "$DOTFILES_BRANCH" != "main" ]] && warn "Using development branch: $DOTFILES_BRANCH (not main)"
 
 # ─── System deps ──────────────────────────────────────────────────────────────
 step "System dependencies"
@@ -269,6 +277,9 @@ done
 # ─── Dotfiles ────────────────────────────────────────────────────────────────
 step "Dotfiles"
 DOTFILES="$USER_HOME/code/dotfiles"
+# Fail fast on a typo'd / missing branch (public repo → no auth needed for ls-remote).
+git ls-remote --exit-code --heads "$DOTFILES_REPO" "$DOTFILES_BRANCH" >/dev/null 2>&1 \
+    || fail "Branch '$DOTFILES_BRANCH' not found on $DOTFILES_REPO"
 if [ ! -d "$DOTFILES/.git" ]; then
     log "Cloning $DOTFILES_REPO ($DOTFILES_BRANCH) → $DOTFILES"
     run_as "mkdir -p $USER_HOME/code"
@@ -289,8 +300,21 @@ run_as "cd $DOTFILES && ./install.sh --profile=cloud"
 ok "install.sh complete"
 
 # ─── GitHub CLI auth ─────────────────────────────────────────────────────────
+# Off the critical path by default: gh's --web device flow polls for ~15 min and
+# would block deploy.sh + the rest of bootstrap. Deferred to a post-setup step
+# (gist/secrets sync degrade gracefully without it). Opt in with --github-auth.
+GH_NEEDS_AUTH=0
 step "GitHub CLI auth"
-if ! run_as 'gh auth status' &>/dev/null; then
+if run_as 'gh auth status' &>/dev/null; then
+    ok "GitHub CLI already authenticated"
+elif [[ "$GITHUB_AUTH" != "1" ]]; then
+    GH_NEEDS_AUTH=1
+    log "Skipping (not on critical path) — run 'gh auth login' after setup for gist/secrets sync"
+    log "Re-run with --github-auth to authenticate inline"
+elif [[ ! -e /dev/tty ]]; then
+    GH_NEEDS_AUTH=1
+    warn "Non-interactive — can't run gh device flow. Run 'gh auth login' manually after setup"
+else
     log "Authenticating GitHub CLI..."
     # --git-protocol requires gh >= 2.13; fall back without it
     if run_as 'gh auth login --web --git-protocol ssh </dev/tty' 2>/dev/null; then
@@ -298,10 +322,9 @@ if ! run_as 'gh auth status' &>/dev/null; then
     elif run_as 'gh auth login --web </dev/tty' 2>/dev/null; then
         ok "GitHub CLI authenticated (without git-protocol flag)"
     else
+        GH_NEEDS_AUTH=1
         warn "gh auth failed — run 'gh auth login' manually after setup"
     fi
-else
-    ok "GitHub CLI already authenticated"
 fi
 
 # ─── BWS access token ──────────────────────────────────────────────────────
@@ -423,3 +446,7 @@ else
     log "SSH:      ssh $USERNAME@<ip>"
 fi
 log "Mosh:     mosh $USERNAME@<host>  (mosh-server installed; UDP 60000-61000, or just use Tailscale)"
+if [[ "$GH_NEEDS_AUTH" == "1" ]]; then
+    echo ""
+    log "Next:     gh auth login   then   sync-gist   (enables gist + secrets sync)"
+fi
