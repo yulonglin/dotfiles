@@ -28,6 +28,11 @@ run_as() {
     sudo -u "$USERNAME" -i bash -c "$*"
 }
 
+# True only if /dev/tty can actually be opened (a usable controlling terminal).
+# `[[ -e /dev/tty ]]` is NOT enough — the device node exists in containers without
+# a real terminal, so a `read </dev/tty` there blocks forever and ignores keystrokes.
+tty_usable() { { : >/dev/tty; } 2>/dev/null; }
+
 # ─── Configuration (override via env vars) ───────────────────────────────────
 USERNAME="${USERNAME:-yulong}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yulonglin/dotfiles.git}"
@@ -39,6 +44,10 @@ DOTFILES_BRANCH="${DOTFILES_BRANCH:-main}"
 # block the rest of bootstrap. Enable inline with --github-auth or GITHUB_AUTH=1.
 # (GH_TOKEN/GITHUB_TOKEN in the env auth gh transparently and skip this regardless.)
 GITHUB_AUTH="${GITHUB_AUTH:-0}"
+# Prompts (BWS token, Tailscale key) are OFF by default so curl|bash never blocks.
+# Supply secrets inline via env (BWS_TOKEN=…, TAILSCALE_AUTH_KEY=…), or pass --interactive.
+INTERACTIVE="${INTERACTIVE:-0}"
+BWS_TOKEN="${BWS_TOKEN:-}"   # if set, used directly — no prompt, works non-interactively
 
 # ─── Args (override env vars) ────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -46,10 +55,13 @@ while [[ $# -gt 0 ]]; do
         --branch) DOTFILES_BRANCH="$2"; shift 2 ;;
         --branch=*) DOTFILES_BRANCH="${1#*=}"; shift ;;
         --github-auth) GITHUB_AUTH=1; shift ;;
+        -i|--interactive) INTERACTIVE=1; shift ;;
         -h|--help)
-            echo "Usage: setup.sh [--branch <name>] [--github-auth]"
+            echo "Usage: setup.sh [--branch <name>] [--github-auth] [--interactive]"
             echo "  --branch <name>   dotfiles branch to clone (default: \$DOTFILES_BRANCH or main)"
             echo "  --github-auth     run 'gh auth login' inline (default: off; deferred to after setup)"
+            echo "  -i, --interactive prompt for BWS token + Tailscale key (default: off — supply via"
+            echo "                    BWS_TOKEN=… / TAILSCALE_AUTH_KEY=… env, or set up after setup)"
             exit 0
             ;;
         *) echo "Unknown arg: $1 (try --help)" >&2; exit 1 ;;
@@ -289,8 +301,17 @@ if [ ! -d "$DOTFILES/.git" ]; then
     ok "Dotfiles cloned ($DOTFILES_BRANCH)"
 else
     log "Dotfiles already exist, checking out $DOTFILES_BRANCH and pulling latest..."
-    run_as "cd $DOTFILES && git fetch origin $DOTFILES_BRANCH && git checkout $DOTFILES_BRANCH && git pull --ff-only" || true
-    ok "Dotfiles up to date ($DOTFILES_BRANCH)"
+    # install.sh regenerates committed binaries (e.g. custom_bins/claude-tools-linux-x86_64)
+    # with different bytes, so the worktree is reliably dirty here. Stash before switching
+    # (reversible — the fresh binary is rebuilt by install.sh) so checkout can't abort.
+    # Report honestly instead of masking failure with `|| true` (was printing a false "✓").
+    if run_as "cd $DOTFILES && git fetch origin $DOTFILES_BRANCH \
+        && { git diff --quiet && git diff --cached --quiet || git stash push -u -m 'setup.sh auto-stash'; } \
+        && git checkout $DOTFILES_BRANCH && git pull --ff-only"; then
+        ok "Dotfiles up to date ($DOTFILES_BRANCH)"
+    else
+        warn "Dotfiles update failed — pod may run stale dotfiles. Check: cd $DOTFILES && git status"
+    fi
 fi
 
 # ─── install.sh ──────────────────────────────────────────────────────────────
@@ -311,7 +332,7 @@ elif [[ "$GITHUB_AUTH" != "1" ]]; then
     GH_NEEDS_AUTH=1
     log "Skipping (not on critical path) — run 'gh auth login' after setup for gist/secrets sync"
     log "Re-run with --github-auth to authenticate inline"
-elif [[ ! -e /dev/tty ]]; then
+elif ! tty_usable; then
     GH_NEEDS_AUTH=1
     warn "Non-interactive — can't run gh device flow. Run 'gh auth login' manually after setup"
 else
@@ -331,12 +352,16 @@ fi
 step "BWS access token (Bitwarden Secrets Manager)"
 BWS_TOKEN_DIR="$USER_HOME/.config/bws"
 BWS_TOKEN_FILE="$BWS_TOKEN_DIR/token"
+BWS_NEEDS_SETUP=0
 if [ ! -f "$BWS_TOKEN_FILE" ]; then
-    echo "Paste your BWS access token (from Bitwarden Secrets Manager), leave empty to skip:"
-    if [[ -e /dev/tty ]]; then
+    # Priority: env-supplied token (non-interactive) > --interactive prompt > skip.
+    if [[ -n "$BWS_TOKEN" ]]; then
+        log "Using BWS_TOKEN from environment"
+    elif [[ "$INTERACTIVE" == "1" ]] && tty_usable; then
+        echo "Paste your BWS access token (from Bitwarden Secrets Manager), leave empty to skip:"
         read -rs BWS_TOKEN </dev/tty
     else
-        warn "Non-interactive — skipping BWS token. Run: secrets-init-bws"
+        log "Skipping BWS token (non-interactive) — supply via BWS_TOKEN=… or run secrets-init-bws after login"
         BWS_TOKEN=""
     fi
     if [[ -n "$BWS_TOKEN" ]]; then
@@ -349,10 +374,12 @@ if [ ! -f "$BWS_TOKEN_FILE" ]; then
             run_as "chmod 600 $BWS_TOKEN_FILE"
             ok "BWS token saved and verified"
         else
+            BWS_NEEDS_SETUP=1
             warn "BWS token failed connectivity test — not saved. Run secrets-init-bws after login to retry"
         fi
         unset BWS_TOKEN
     else
+        BWS_NEEDS_SETUP=1
         log "Skipping — run secrets-init-bws after login"
     fi
 else
@@ -400,15 +427,17 @@ else
     ok "Tailscale already installed"
 fi
 
+TS_NEEDS_SETUP=0
 TS_AUTH_KEY="${TAILSCALE_AUTH_KEY:-}"
 if [[ -z "$TS_AUTH_KEY" ]]; then
-    echo "Paste your Tailscale auth key (tailscale.com/admin/settings/keys), leave empty to skip:"
-    echo "(Tip: use an ephemeral reusable key for cloud servers)"
-    if [[ -e /dev/tty ]]; then
+    # Priority: TAILSCALE_AUTH_KEY env (above, non-interactive) > --interactive prompt > skip.
+    if [[ "$INTERACTIVE" == "1" ]] && tty_usable; then
+        echo "Paste your Tailscale auth key (tailscale.com/admin/settings/keys), leave empty to skip:"
+        echo "(Tip: use an ephemeral reusable key for cloud servers)"
         read -rs TS_AUTH_KEY </dev/tty
         echo ""
     else
-        warn "Non-interactive — skipping Tailscale. Run 'tailscale up' manually after login"
+        log "Skipping Tailscale (non-interactive) — supply via TAILSCALE_AUTH_KEY=… or run 'tailscale up' after login"
     fi
 fi
 
@@ -429,6 +458,7 @@ if [[ -n "$TS_AUTH_KEY" ]]; then
     unset TS_AUTH_KEY
     ok "Tailscale connected ($(tailscale ip -4 2>/dev/null || echo 'check tailscale ip'))"
 else
+    TS_NEEDS_SETUP=1
     log "Skipping — run 'tailscale up --authkey <key>' after login to connect"
 fi
 
@@ -446,7 +476,9 @@ else
     log "SSH:      ssh $USERNAME@<ip>"
 fi
 log "Mosh:     mosh $USERNAME@<host>  (mosh-server installed; UDP 60000-61000, or just use Tailscale)"
-if [[ "$GH_NEEDS_AUTH" == "1" ]]; then
+if [[ "$GH_NEEDS_AUTH" == "1" || "$BWS_NEEDS_SETUP" == "1" || "$TS_NEEDS_SETUP" == "1" ]]; then
     echo ""
-    log "Next:     gh auth login   then   sync-gist   (enables gist + secrets sync)"
+    [[ "$GH_NEEDS_AUTH" == "1" ]]  && log "Next:     gh auth login   then   sync-gist   (enables gist + secrets sync)"
+    [[ "$BWS_NEEDS_SETUP" == "1" ]] && log "Next:     secrets-init-bws   (or re-run with BWS_TOKEN=… / --interactive)"
+    [[ "$TS_NEEDS_SETUP" == "1" ]]  && log "Next:     tailscale up --authkey <key>   (or set TAILSCALE_AUTH_KEY=…)"
 fi

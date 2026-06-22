@@ -107,6 +107,18 @@ USERNAME=dev curl ... | bash
 | `GITHUB_USER` | `yulonglin` | GitHub username (for SSH key import) |
 | `DOTFILES_REPO` | `https://github.com/yulonglin/dotfiles.git` | Dotfiles repo URL |
 | `DOTFILES_BRANCH` | `main` | Dotfiles branch to clone (overridden by `--branch`) |
+| `BWS_TOKEN` | (unset) | BWS access token — supplied non-interactively (no prompt) |
+| `TAILSCALE_AUTH_KEY` | (unset) | Tailscale auth key — supplied non-interactively (no prompt) |
+| `INTERACTIVE` | `0` | Set `1` (or pass `--interactive`) to prompt for BWS/Tailscale |
+
+### Non-interactive by default
+
+`setup.sh` runs **unattended** — a bare `curl … | bash` never blocks on a prompt, so it works
+on RunPod pods that lack a usable controlling terminal (where a `read` would hang and ignore
+the keyboard). Supply secrets inline via the `BWS_TOKEN` / `TAILSCALE_AUTH_KEY` env vars, or set
+them up after setup (`secrets-init-bws`, `tailscale up --authkey …`) — the summary prints the
+exact next-steps for anything skipped. Pass `--interactive` / `-i` to re-enable the BWS +
+Tailscale prompts for a guided setup on a box with a real terminal.
 
 ## What Gets Installed
 
