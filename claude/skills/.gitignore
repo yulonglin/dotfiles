@@ -55,14 +55,5 @@ transformers.js/
 
 # AUTO-GENERATED: SKILL.md symlinks with non-portable absolute paths (do not edit manually)
 # Updated by scripts/hooks/dotfiles-pre-commit.sh
-agent-browser/SKILL.md
-bear/SKILL.md
-browser-session/SKILL.md
-chrome-devtools/SKILL.md
-claude-in-chrome/SKILL.md
-context-fetcher/SKILL.md
-decide/SKILL.md
 llm-billing/SKILL.md
-reply/SKILL.md
-things3/SKILL.md
 # END AUTO-GENERATED
