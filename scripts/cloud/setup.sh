@@ -245,6 +245,19 @@ ok "$KEY_COUNT key(s) installed"
 log "Owner: $(stat -c '%U:%G' "$SSH_DIR/authorized_keys" 2>/dev/null || stat -f '%Su:%Sg' "$SSH_DIR/authorized_keys")"
 log "Mode:  .ssh=$(stat -c '%a' "$SSH_DIR" 2>/dev/null || stat -f '%Lp' "$SSH_DIR") authorized_keys=$(stat -c '%a' "$SSH_DIR/authorized_keys" 2>/dev/null || stat -f '%Lp' "$SSH_DIR/authorized_keys")"
 
+# Outbound identity key: authorized_keys above lets you log IN; this is the key
+# the box uses to talk OUT to GitHub (git push, gh over SSH). Generate it
+# non-interactively if absent so gh never drops into its own interactive keygen
+# prompt (the original bootstrap-hang cause) and git-over-SSH works immediately.
+# ed25519, no passphrase — the sensible default for an unattended ephemeral box.
+if [[ ! -f "$SSH_DIR/id_ed25519" ]]; then
+    log "Generating outbound SSH key (ed25519, no passphrase)..."
+    run_as "ssh-keygen -t ed25519 -N '' -C '$USERNAME@$(hostname)' -f '$SSH_DIR/id_ed25519' -q"
+    ok "SSH key generated: $SSH_DIR/id_ed25519.pub"
+else
+    log "Outbound SSH key already present: $SSH_DIR/id_ed25519"
+fi
+
 # Always restart sshd — keys or config may have changed
 step "Restart sshd"
 service ssh restart 2>/dev/null || systemctl restart sshd 2>/dev/null || warn "Could not restart sshd"
@@ -346,6 +359,31 @@ else
         GH_NEEDS_AUTH=1
         warn "gh auth failed — run 'gh auth login' manually after setup"
     fi
+fi
+
+# ─── Register SSH key with GitHub ────────────────────────────────────────────
+# Upload the outbound key generated above so git push / gh over SSH work
+# immediately. gh reads GH_TOKEN/GITHUB_TOKEN from the env transparently, so this
+# also auto-uploads in the non-interactive path when a token is supplied.
+# Idempotent: skips if the key is already registered (restart-safe).
+step "Register SSH key with GitHub"
+SSH_KEY_NEEDS_UPLOAD=0
+PUBKEY_FILE="$SSH_DIR/id_ed25519.pub"
+if [[ ! -f "$PUBKEY_FILE" ]]; then
+    log "No SSH public key — skipping"
+elif run_as 'gh auth status' &>/dev/null; then
+    pubkey_body=$(awk '{print $2}' "$PUBKEY_FILE")
+    if run_as 'gh ssh-key list' 2>/dev/null | grep -qF "$pubkey_body"; then
+        ok "SSH key already registered with GitHub"
+    elif run_as "gh ssh-key add '$PUBKEY_FILE' --title '$(hostname)-$USERNAME'" &>/dev/null; then
+        ok "SSH key uploaded to GitHub"
+    else
+        SSH_KEY_NEEDS_UPLOAD=1
+        warn "Could not upload SSH key to GitHub"
+    fi
+else
+    SSH_KEY_NEEDS_UPLOAD=1
+    log "Skipping upload (gh not authenticated) — add the key after 'gh auth login'"
 fi
 
 # ─── BWS access token ──────────────────────────────────────────────────────
@@ -476,9 +514,10 @@ else
     log "SSH:      ssh $USERNAME@<ip>"
 fi
 log "Mosh:     mosh $USERNAME@<host>  (mosh-server installed; UDP 60000-61000, or just use Tailscale)"
-if [[ "$GH_NEEDS_AUTH" == "1" || "$BWS_NEEDS_SETUP" == "1" || "$TS_NEEDS_SETUP" == "1" ]]; then
+if [[ "$GH_NEEDS_AUTH" == "1" || "$SSH_KEY_NEEDS_UPLOAD" == "1" || "$BWS_NEEDS_SETUP" == "1" || "$TS_NEEDS_SETUP" == "1" ]]; then
     echo ""
     [[ "$GH_NEEDS_AUTH" == "1" ]]  && log "Next:     gh auth login   then   sync-gist   (enables gist + secrets sync)"
+    [[ "$SSH_KEY_NEEDS_UPLOAD" == "1" ]] && log "Next:     gh ssh-key add $SSH_DIR/id_ed25519.pub --title $(hostname)-$USERNAME   (register box key on GitHub)"
     [[ "$BWS_NEEDS_SETUP" == "1" ]] && log "Next:     secrets-init-bws   (or re-run with BWS_TOKEN=… / --interactive)"
     [[ "$TS_NEEDS_SETUP" == "1" ]]  && log "Next:     tailscale up --authkey <key>   (or set TAILSCALE_AUTH_KEY=…)"
 fi
