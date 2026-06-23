@@ -808,6 +808,7 @@
         "/tmp/tmux-*",
         "/tmp/tmux-*/*",
         "/var/folders/*/*/T",
+        "/var/folders/*/*/T/claude",
         "/var/folders/*/*/C",
         "/run/user/*/pueue*.socket",
         "~/code",
