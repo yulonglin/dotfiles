@@ -255,7 +255,8 @@
       "mcp__plugin_things-mcp_things__add_project",
       "mcp__claude_ai_Notion__notion-create-database",
       "mcp__claude_ai_Notion__notion-create-comment",
-      "mcp__claude_ai_Notion__notion-duplicate-page"
+      "mcp__claude_ai_Notion__notion-duplicate-page",
+      "Agent"
     ],
     "deny": [
       "Bash(rm -rf *)",

@@ -20,6 +20,19 @@ the tool call is safe to auto-approve.
 The hook runs on every permission request and checks whether the tool call is safe to auto-approve.
 ```
 
+## Rich markdown highlighting (Bear syntax)
+
+Yulong prefers **Bear markdown**. Bear's syntax isn't fully documented (its FAQ omits the colour encoding below), so treat Yulong's copied-from-Bear examples as the source of truth, not the FAQ.
+
+- **Highlight:** `==text==` — default highlight colour.
+- **Per-colour highlight (real Bear syntax):** Bear encodes a coloured highlight as a coloured-dot emoji at the **start of the highlighted span** — `==🔴text==`. This is literally what Bear writes to markdown when you apply a colour (Yulong copied it directly from Bear), which is why it round-trips. 🔴 is confirmed = red ("flag this / verify before shipping"); other highlight colours follow the same pattern with their matching coloured dot. Example Yulong gave:
+  ```
+  ==🔴Could the work be net-negative? … not a green light.==
+  ```
+- **Other Bear marks:** strikethrough `~~text~~`, underline `~text~`.
+
+Don't use `==` / `~text~` in files meant to render as plain GitHub markdown (READMEs, CLAUDE.md, rules) — they show as literal characters there.
+
 ## Prioritise clarity and rigour/honesty over volume
 
 Write what is true and verifiable; keep it short.
