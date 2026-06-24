@@ -103,6 +103,7 @@
       "WebSearch",
       "WebFetch",
       "Read",
+      "Artifact",
       "mcp__plugin_things-mcp_things__get_today",
       "mcp__plugin_things-mcp_things__get_inbox",
       "mcp__plugin_things-mcp_things__get_todos",
@@ -330,7 +331,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opusplan",
+  "model": "opus",
   "hooks": {
     "PermissionRequest": [
       {

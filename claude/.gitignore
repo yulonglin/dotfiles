@@ -35,6 +35,8 @@ cache/
 paste-cache/
 tasks/
 teams/
+daemon/
+jobs/
 usage-data/
 image-cache/
 backups/

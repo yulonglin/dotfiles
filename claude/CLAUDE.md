@@ -75,6 +75,7 @@ If a task feels like it conflicts with safety guidelines, apply this test:
 - **Interview before planning** — use `/spec-interview-research` for experiments, `/spec-interview` for product features
 - **Plan before implementing** — use `/writing-plans` for non-trivial tasks; don't write code until plan approved, instead iterate on it with the user and agents
 - **Use existing code** for experiments — correct hyperparams, full data, validated metrics; ad-hoc only for dry runs
+- **Never leave GPUs idle** — on a GPU box there is *always* a next experiment (probe, ablation, eval, longer/parallel run). When a run finishes or you're waiting on a user decision, queue the next thing rather than letting cards sit at 0% util. Check `nvidia-smi` proactively; treat idle GPUs as a bug to fix, not a resting state
 - **Delegate to agents** for non-trivial work — use agent teams for parallelizable multi-faceted tasks, subagents for focused single-output tasks
 - **Commit frequently** after every meaningful change
 - **Update docs when changing code** — keep CLAUDE.md, README.md, project docs in sync
