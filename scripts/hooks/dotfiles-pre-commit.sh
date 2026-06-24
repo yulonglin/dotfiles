@@ -75,6 +75,11 @@ NEW_BLOCK="$NEW_BLOCK"$'\n'"$END_MARKER"
 # Uses index() instead of regex to avoid metacharacter issues in paths.
 
 TMPDIR_HOOK="${TMPDIR:-/tmp/claude}"
+# Squeeze repeated slashes (the Claude Code sandbox exports TMPDIR as
+# ".../T//claude"; the sandbox allowlist glob "/var/folders/*/*/T/claude" treats
+# the empty segment as non-matching, so writes here are denied. Normalising the
+# path to ".../T/claude" lets it match the allowlist without a sandbox bypass).
+TMPDIR_HOOK=$(printf '%s' "$TMPDIR_HOOK" | tr -s '/')
 mkdir -p "$TMPDIR_HOOK"
 BLOCK_FILE="$TMPDIR_HOOK/gitignore-block.$$.tmp"
 TMPFILE="$TMPDIR_HOOK/gitignore-hook.$$.tmp"
