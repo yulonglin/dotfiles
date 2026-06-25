@@ -61,7 +61,12 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
    # Hetzner / standard VPS (persistent /home)
    curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | USER_HOME=/home bash
    ```
-   This creates a non-root user, installs dependencies, clones dotfiles, and runs `install.sh` + `deploy.sh` automatically. It will prompt for GitHub auth.
+   This creates a non-root user, installs dependencies, clones dotfiles, and runs `install.sh --profile=cloud` + `deploy.sh --profile=cloud` (a lean remote-dev set — no pueue/zotero/Rust toolchain). It will prompt for GitHub auth.
+
+   Provisions the **`main`** branch by default. To pin another branch, pass `--branch` (use `bash -s --` to forward args through `curl | bash`) or set `DOTFILES_BRANCH`:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash -s -- --branch yulong
+   ```
 3. **Reconnect as your user:**
    ```bash
    ssh yulong@<ip>
@@ -245,14 +250,13 @@ Claude Code supports community plugin marketplaces. These are registered in [`cl
 | **[alignment-hive](https://github.com/Crazytieguy/alignment-hive)**                 | Alignment research utilities                                     |
 | **[dev-browser-marketplace](https://github.com/sawyerhood/dev-browser)**            | Browser automation for development                               |
 | **[openai-codex](https://github.com/crazytieguy/codex-plugin-cc)**                  | Codex CLI integration plugins                                    |
-| **[rust-skills](https://github.com/actionbook/rust-skills)**                        | Rust ownership, concurrency, error handling skills               |
 
 
 Profiles are managed via the `claude-tools context` CLI — compose multiple profiles to control which plugins load per-project:
 
 ```bash
 claude-tools context code               # Software projects
-claude-tools context code frontend python    # Compose multiple profiles
+claude-tools context code typescript python    # Compose multiple profiles
 claude-tools context --list             # Show active plugins and available profiles
 ```
 
@@ -313,19 +317,25 @@ Config location: macOS `~/Library/Application Support/com.mitchellh.ghostty/conf
 Launch new Ghostty windows with different color themes - useful for visually distinguishing contexts:
 
 
-| Alias | Theme            | Character          |
-| ----- | ---------------- | ------------------ |
-| `g1`  | Catppuccin Mocha | Warm purple/pink   |
-| `g2`  | TokyoNight       | Cool blue          |
-| `g3`  | Gruvbox Dark     | Retro orange/brown |
-| `g4`  | Nord             | Arctic icy blue    |
-| `g5`  | Dracula          | Purple accents     |
-| `g6`  | Rose Pine        | Muted rose tones   |
+Default Ghostty config uses Catppuccin Mocha. The `g0`–`g9` aliases launch a new window with a different theme:
+
+| Alias | Theme                        | Character                          |
+| ----- | ---------------------------- | ---------------------------------- |
+| `g0`  | TokyoNight                   | Deep blue bg — neon city           |
+| `g1`  | Dracula                      | Purple-grey bg — vibrant classic   |
+| `g2`  | Nord                         | Arctic blue-grey bg — calm         |
+| `g3`  | Rose Pine                    | Deep purple bg — botanical         |
+| `g4`  | Kanagawa Dragon              | Warm near-black bg — Japanese ink  |
+| `g5`  | Gruvbox Dark                 | Neutral warm bg — retro            |
+| `g6`  | Everforest Dark Hard         | Green-grey bg — forest             |
+| `g7`  | Solarized Dark Higher Contrast | Dark teal bg — high contrast     |
+| `g8`  | Melange Dark                 | Warm brown bg — earthy             |
+| `g9`  | Material Ocean               | Near-black bg — minimal            |
 
 
 ```bash
-g1                        # Launch Ghostty with Catppuccin Mocha
-gtheme "Tomorrow Night"   # Launch with any theme
+g1                        # Launch Ghostty with Dracula theme
+gtheme "Tomorrow Night"   # Launch with any theme by name
 ghostty +list-themes      # See all available themes
 ```
 
@@ -340,7 +350,7 @@ ssh myserver     # In Ghostty: colors change automatically
 sshc myserver    # Explicit color-changing SSH (works in any terminal)
 ```
 
-**Configure per-host colors** by editing `SSH_HOST_COLORS` in `config/aliases.sh`:
+**Configure per-host colors** by editing `SSH_HOST_COLORS` in `config/ssh_themes.sh`:
 
 ```bash
 # Format: "background:foreground:cursor" in hex
@@ -759,9 +769,9 @@ dep-audit                    # Scan all repos for known-bad packages now
 
 - Any software or command line tools you need, add them to the [install.sh](./install.sh) script. Try adding a new command line tool to the install script.
 - Any new plugins or environment setup, add them to the [config/zshrc.sh](./config/zshrc.sh) script.
-- Any aliases you need, add them to the [config/aliases.sh](./config/aliases.sh) script. Try adding your own alias to the bottom of the file. For example, try setting `cd1` to your most used git repo so you can just type `cd1` to get to it.
+- Any aliases you need, add them to the relevant `config/aliases/<theme>.sh` file (git.sh for git, nav.sh for navigation, net.sh for network/system, etc.). Try adding your own alias to the bottom of the matching file. For example, try setting `cd1` to your most used git repo so you can just type `cd1` to get to it.
 - **Utility functions** in `config/modern_tools.sh`: `mkd` (mkdir+cd), `cdf` (cd to Finder window, macOS), `targz` (smart compression), `dataurl`, `digga` (DNS lookup), `getcertnames` (SSL certs), `o` (cross-platform open), `server` (quick HTTP server)
-- **System aliases** in `config/aliases.sh`: `flush` (DNS cache), `afk` (lock screen, macOS), `week` (ISO week number)
+- **System aliases** in `config/aliases/net.sh`: `flush` (DNS cache), `afk` (lock screen, macOS), `week` (ISO week number)
 
 ## Cloud Setup (RunPod, Hetzner, etc.)
 
@@ -778,7 +788,7 @@ curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/clo
 curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | USER_HOME=/home bash
 ```
 
-Then SSH as `yulong@<ip>` (not root). See [`scripts/cloud/README.md`](./scripts/cloud/README.md) for details.
+Then SSH as `yulong@<ip>` (not root). Runs the lean `cloud` profile and provisions the `main` branch by default — pin another with `| bash -s -- --branch <name>` or `DOTFILES_BRANCH=<name>`. See [`scripts/cloud/README.md`](./scripts/cloud/README.md) for details.
 
 **What it does:**
 

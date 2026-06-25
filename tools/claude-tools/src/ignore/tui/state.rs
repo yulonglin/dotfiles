@@ -17,6 +17,7 @@ pub struct AppState {
     pub cursor: usize,
     pub quit: bool,
     pub apply: bool,
+    #[allow(dead_code)]
     pub warnings: Vec<String>,
 }
 

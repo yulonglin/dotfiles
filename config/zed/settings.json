@@ -234,11 +234,21 @@
           "paths": [
             "/mnt/nw/home/y.lin/.ssh"
           ]
+        },
+        {
+          "paths": [
+            "/workspace/projects/nla-vs-cot/./"
+          ]
         }
       ]
     },
     {
       "host": "mats",
+      "args": [],
+      "projects": []
+    },
+    {
+      "host": "rp/nla-1.5b-rl",
       "args": [],
       "projects": []
     }

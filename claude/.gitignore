@@ -43,9 +43,14 @@ backups/
 bash-commands.log
 logs/
 sessions/
+.last-update-result.json
 
 chrome/
 mcp-needs-auth-cache.json
 vercel-plugin-telemetry-preference
+
+# Server-pushed runtime state (re-syncs on its own; managed by Claude Code server)
+policy-limits.json
+remote-settings.json
 
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh

@@ -25,7 +25,7 @@ If you're an AI agent (Claude Code, Codex, etc.) working in this repo, read this
 
 | Want to... | Command / file |
 |---|---|
-| Add a new alias | `config/aliases.sh` (or `aliases_<name>.sh` for env-specific) |
+| Add a new alias | `config/aliases/<topic>.sh` (themed split; or `aliases_<name>.sh` for env-specific) |
 | Add a deploy component | Create `deploy_X()` in `deploy.sh` — see [Adding New Features](#adding-new-features) |
 | Add a custom binary | Drop it in `custom_bins/` (already on PATH); `chmod +x` |
 | Install/manage Mac apps | Add a line to `config/apps.conf` → run `app-picker` (gum TUI) → `brew bundle --file=config/Brewfile`. Official casks + `mas` only, **no third-party taps**. Then `scripts/setup/auth-setup` |
@@ -65,9 +65,8 @@ See README.md for detailed usage.
 ### Git Workflow
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
-- **This repo is public** — `main` is the only branch, and it holds shareable
-  dotfiles **only**. Personal working content lives in a **separate private repo**
-  (see [Personal Content](#personal-content) below), never on a branch here.
+- **Single branch: `main`.** The old `main`/`yulong` split was collapsed into `main` on 2026-06-22 (PR #10) — `yulong` is kept dormant as a safety net but receives no new work. Do day-to-day work directly on `main`; branch worktrees off `main`. (Route only large/structural merges through a tracked PR; routine commits go direct.)
+- **This repo is public, but we no longer keep `main` "clean for others"** — it's just the personal working branch. Genuinely private content (`plans/`, `specs/`, `.remember/`, secrets) still lives in the separate private repo (see [Personal Content](#personal-content)), never on a branch here.
 
 ### Personal Content
 
@@ -145,6 +144,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Finicky - Browser routing (macOS only, symlinked)
 - Ghostty - Terminal emulator configuration (symlinked to platform-specific path)
 - Zed - Editor config (settings + keymap, symlinked to ~/.config/zed/)
+- gitui - Theme (symlinked to ~/.config/gitui/theme.ron). Theme-reactive: uses named ANSI colors so gitui inherits whichever Ghostty theme the active window uses (default, g0-g9, SSH themes). Fixes gitui's default `disabled_fg: DarkGray`, which is unreadable on Catppuccin Mocha and similar dark backgrounds.
 - Claude Code - AI assistant configuration (symlinked)
 - Codex - CLI tool configuration (symlinked)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
@@ -156,6 +156,8 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - File cleanup - Downloads/Screenshots cleanup (macOS only, launchd)
 - Claude Code cleanup - No-output-for-24h session cleanup (tmux preserved, launchd/cron)
 - AI tools auto-update - Daily update of Claude Code, Codex CLI, OpenCode, Antigravity CLI (6 AM, launchd/cron)
+- Usage ping - Hourly minimal Haiku message (subscription/OAuth only, API key unset) to keep the Claude 5-hour usage window warm so capacity isn't wasted. `custom_bins/usage-ping`, scheduled at :00 (launchd/cron). Toggle with `--no-usage-ping`.
+- Tmux resume - Hourly scan of all tmux panes; on a rate-limit prompt (Claude Code / Codex) sends configured keystrokes to resume. Detection anchors on durable rate-limit-state strings; the action (default `1 Enter ; continue`) is the fragile part — re-verify with `tmux-resume --dry-run` after CLI upgrades. Patterns in `config/tmux-resume-patterns.conf`. Scheduled at :05. Toggle with `--no-tmux-resume`.
 - Developer config files - EditorConfig, curlrc, inputrc, .hushlogin (deployed with --editor flag)
 - Global gitattributes - Binary file handling + line endings (deployed with --git-config flag)
 - File associations - Set default editor for coding file types and default terminal for `.command`/`.tool` (macOS only, reads `config/macos_default_apps.conf`)
@@ -192,6 +194,7 @@ config/
 ├── finicky.js            # Browser routing (macOS, symlinked)
 ├── ghostty               # Ghostty terminal config (symlinked to platform-specific path)
 ├── htop/htoprc           # htop config (symlinked, uses dynamic CPU meters)
+├── gitui/theme.ron       # gitui theme (symlinked to ~/.config/gitui/, theme-reactive named ANSI)
 ├── serena/serena_config.yml  # Serena MCP config (symlinked, dashboard auto-open disabled)
 ├── mouseless/config.yaml # Mouseless keyboard mouse config (macOS only, copied not symlinked)
 ├── alfred/local-golden/  # Golden Alfred summon hotkey, seeded onto new Macs by alfred-fix
@@ -289,7 +292,7 @@ export CODE_DIR="$HOME/work/projects"
 export WRITING_DIR="$HOME/Documents/writing"
 ```
 
-**Cloud environments:** The standard directory structure works transparently on RunPod/cloud via symlinks created by `scripts/cloud/setup.sh`.
+**Cloud environments:** The standard directory structure works transparently on RunPod/cloud via symlinks created by `scripts/cloud/setup.sh`. `setup.sh` runs the lean **`cloud` profile** (`install.sh --profile=cloud` / `deploy.sh --profile=cloud`) — `server` minus pueue, zotero MCP, Rust extras, and Docker; keeps modern CLI tools, uv, gh, claude, codex. It provisions the **`main` branch by default**; pin another with `--branch <name>` (env `DOTFILES_BRANCH`), e.g. `curl … | bash -s -- --branch yulong`. `setup.sh` is **always fetched from `main`** (one canonical bootstrap URL); `--branch` only chooses which branch is cloned on the box. `provision.py --branch yulong` likewise fetches `setup.sh` from main and passes `--branch yulong` through to the clone. The active branch is printed in the setup banner. gh is installed current (Linux: official `cli.github.com` apt repo with sudo, else release binary), not jammy's 2.4.0, so `gh auth login --git-protocol ssh` works.
 
 **Related aliases:** `code`, `writing`, `scratch`, `projects`, `dotfiles`
 
@@ -299,7 +302,7 @@ Subtleties worth knowing per deploy component. Full mechanics live in the matchi
 
 | Component | Mechanism | Key gotcha |
 |-----------|-----------|------------|
-| **Gist Sync** (`deploy_secrets`) | Bidirectional sync of `~/.ssh/config`, `authorized_keys`, `config/user.conf` with gist `3cc239...371`. Last-modified wins. Daily 8 AM (launchd/cron). | Requires `gh auth login`. Manual: `sync-gist`. Runs before git config (user.conf provides identity). |
+| **Gist Sync** (`deploy_secrets`) | Bidirectional sync of `~/.ssh/config`, `authorized_keys`, `config/user.conf` with gist `3cc239...371`. `authorized_keys` uses **disable-wins union merge** (local is always canonical base; whole-line-commented keys are tombstones that suppress that key everywhere even if gist still lists it active); `~/.ssh/config` and `user.conf` use last-modified-wins. Daily 8 AM (launchd/cron). | Requires `gh auth login`. Manual: `sync-gist`. Runs before git config (user.conf provides identity). Merge logic in `scripts/shared/merge_authorized_keys.py`; active convention: `<type> <blob> [## note]`; disable convention: `# <type> <blob>` under `# --- Disabled / pending deletion ---`. |
 | **Encrypted Secrets** (BWS) | API keys in Bitwarden Secrets Manager. **NOT globally exported** — use `setup-envrc` per repo (direnv), or `with-secrets KEY... -- <cmd>` for one-shot. Managed: `OPENAI/OPENROUTER/ANTHROPIC_API_KEY`, `HF_TOKEN`, `MODAL_TOKEN_ID/SECRET`. | BWS token at `~/.config/bws/token`. Run `secrets-init bws` on new machines. Use `secrets-edit` to add/update secrets. |
 | **Git Config** (`deploy_git_config`) | Reads `config/user.conf`; prompts on conflicts. Deploys split ignores: `~/.gitignore_global` (git, broad), `~/.ignore_global` (ripgrep, narrow), `~/.config/fd/ignore` (fd). Result: git ignores `data/`/`archive/`, but search tools can still see them. | `fd` has no `--no-ignore-global` flag — use `fd -I` to traverse research dirs. |
 | **Editor Settings** (`deploy_editor_settings`) | Merges into VSCode/Cursor/Antigravity settings (no overwrite, existing wins). Auto-installs 38 curated extensions from `vscode_extensions.txt`. | Antigravity CLI at `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`. |
@@ -343,7 +346,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ### Adding New Features
 
 **New Aliases**:
-- General: Add to `config/aliases.sh`
+- General: Add to the matching themed split in `config/aliases/<topic>.sh` (sourced by `zshrc.sh`'s `aliases/*.sh` loop)
 - Environment-specific: Create `config/aliases_<name>.sh`
 - Deploy with: `./deploy.sh --aliases=<name>`
 
@@ -373,7 +376,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ## Important Gotchas
 
 - **macOS vs Linux paths**: VSCode settings location differs by OS
-- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git, Mouseless). `~/.gitignore_global` is composed (concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research`)
+- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, gitui, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git, Mouseless). `~/.gitignore_global` is composed (concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research`)
 - **Mouseless config**: Copied (not symlinked) because Mouseless uses atomic `rename()` on UI save which destroys symlinks. Use `sync-mouseless` to pull UI changes back to dotfiles
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env
@@ -405,3 +408,4 @@ import petriplot as pp  # For Petri-specific plotting helpers
 - fzf pre-selection in `setup-envrc` requires fzf 0.54+ (`--bind "load:pos(N)+select"`). apt's fzf (0.44) is too old; mise installs 0.71 on Linux. macOS brew is fine. fzf is in both `PACKAGES_CORE` (apt baseline) and `PACKAGES_LINUX_MISE` (modern override) — mise's PATH takes precedence (2026-04-14)
 - rust-skills plugin removed (2026-05-26). UserPromptSubmit matcher was hyper-broad ("error", "async", "API", "implement", "explain", "how to" — injected ~100 lines on most prompts). Neuter-via-SessionStart-hook didn't hold (still fired same session) and mutates a tracked file in the marketplace clone, blocking future `git pull`. Re-add if Rust work picks up
 - mas `install` vs `get`: `brew bundle` drives App Store installs via `mas install` (re-download only — fails "Redownload Unavailable" on a new machine even for owned apps). `mas get` (= `mas purchase`) is acquire+install and actually works. Fixed by `custom_bins/mas-get`, called before `brew bundle` in install.sh. Ref: github.com/Homebrew/brew/issues/21559 (2026-06-20)
+- Hourly checks: `usage-ping` warms the subscription 5-hour window (must run with `ANTHROPIC_API_KEY` unset so it uses OAuth, not the metered API — tested and confirmed working 2026-06-21); `tmux-resume` auto-resumes rate-limited tmux Claude/Codex panes. Parser bug caught: `IFS='|' read` splits on `|` inside ERE patterns, garbling the send sequence — fixed to use ` | ` (space-pipe-space) as field delimiter. Also: deploy `--only=usage-ping,tmux-resume` may race on Linux crontab since both run in parallel; install each setup script sequentially for guaranteed cron entries. (2026-06-21)

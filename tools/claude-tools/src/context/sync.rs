@@ -295,8 +295,24 @@ fn build_marketplace_index(installed_data: Option<&serde_json::Value>) -> BTreeM
                     }
                 }
             }
-        } else {
-            // 3. Single-plugin marketplace: derive name from package.json or directory name
+        }
+
+        // Also scan external_plugins/ (same structure as plugins/ but used by some marketplaces
+        // for plugins that live outside the main subdirectory — e.g. remember, superpowers).
+        let external_dir = marketplace_path.join("external_plugins");
+        if external_dir.is_dir() {
+            if let Ok(plugins) = std::fs::read_dir(&external_dir) {
+                for plugin in plugins.flatten() {
+                    if plugin.path().is_dir() {
+                        let plugin_name = plugin.file_name().to_string_lossy().to_string();
+                        index.entry(plugin_name).or_insert_with(|| marketplace_name.clone());
+                    }
+                }
+            }
+        }
+
+        if !plugins_dir.is_dir() && !external_dir.is_dir() {
+            // Single-plugin marketplace: derive name from package.json or installed_plugins.json
             let plugin_name = single_plugin_name(&marketplace_path, &marketplace_name);
             index.insert(plugin_name, marketplace_name.clone());
         }

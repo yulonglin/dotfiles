@@ -1,9 +1,13 @@
 pub mod state;
 
+use std::io;
+
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::ExecutableCommand;
+use ratatui::backend::CrosstermBackend;
 use ratatui::prelude::*;
+use ratatui::Terminal;
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use state::{AppState, ListItem};
@@ -22,12 +26,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = AppState::new(&categories, &gitignore_path, &ignore_path);
 
     enable_raw_mode()?;
-    std::io::stdout().execute(EnterAlternateScreen)?;
+    io::stderr().execute(EnterAlternateScreen)?;
 
     let result = run_loop(&mut state);
 
     let _ = disable_raw_mode();
-    let _ = std::io::stdout().execute(LeaveAlternateScreen);
+    let _ = io::stderr().execute(LeaveAlternateScreen);
 
     result?;
 
@@ -46,7 +50,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_loop(state: &mut AppState) -> Result<(), Box<dyn std::error::Error>> {
-    let mut terminal = ratatui::init();
+    let backend = CrosstermBackend::new(io::stderr());
+    let mut terminal = Terminal::new(backend)?;
 
     loop {
         terminal.draw(|f| render(f, state))?;
@@ -64,7 +69,6 @@ fn run_loop(state: &mut AppState) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    ratatui::restore();
     Ok(())
 }
 

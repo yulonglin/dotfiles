@@ -52,12 +52,21 @@ ZSH=$HOME/.oh-my-zsh
 
 plugins=(zsh-autosuggestions zsh-syntax-highlighting zsh-completions zsh-history-substring-search zsh-shift-select)
 
+# oh-my-zsh's lib/grep.zsh + custom/*.zsh(N) use bare glob qualifiers; re-sourcing
+# can leave bareglobqual off (residual state from a prior load) causing "no matches found".
+# Setting it here makes `source ~/.zshrc` safe to run in an already-running shell.
+setopt bareglobqual
 if [ -f "$ZSH/oh-my-zsh.sh" ]; then
   source "$ZSH/oh-my-zsh.sh"
 fi
 # Disable AUTO_CD (oh-my-zsh's lib/directories.zsh enables it) — require explicit cd
 unsetopt AUTO_CD
-source $CONFIG_DIR/aliases.sh
+# Source all themed alias files (config/aliases/*.sh)
+for _aliases_file in "$CONFIG_DIR"/aliases/*.sh; do
+  # shellcheck source=/dev/null
+  source "$_aliases_file"
+done
+unset _aliases_file
 [ -f $CONFIG_DIR/secrets.sh ] && source $CONFIG_DIR/secrets.sh
 if [ -x "$DOT_DIR/custom_bins/dotfiles-secrets" ]; then
   # Ad-hoc least-privilege helper for one-off commands.

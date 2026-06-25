@@ -52,6 +52,7 @@ DEPLOY_REGISTRY=(
     "zed|Zed editor config (symlinked)|all|true|Shell & Editors"
     "ghostty|Ghostty terminal config (symlinked)|all|true|Shell & Editors"
     "htop|htop config with dynamic CPU meters|all|true|Shell & Editors"
+    "gitui|gitui theme (theme-reactive, symlinked)|all|true|Shell & Editors"
     "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"
     "codex|Codex CLI config symlink (~/.codex)|all|true|AI & Apps"
     "serena|Serena MCP server config (symlinked)|all|false|AI & Apps"
@@ -66,6 +67,8 @@ DEPLOY_REGISTRY=(
     "claude-cleanup|Remove idle Claude sessions after 24h|all|true|Automation"
     "ai-update|Daily auto-update: Claude, Codex, OpenCode|all|true|Automation"
     "mcp-sync|Daily shared MCP sync for Claude and Codex|all|true|Automation"
+    "usage-ping|Hourly Haiku ping to keep the 5-hour subscription window warm|all|true|Automation"
+    "tmux-resume|Hourly auto-resume of rate-limited tmux Claude/Codex sessions|all|true|Automation"
     "brew-update|Weekly package upgrade + cleanup|all|true|Automation"
     "finicky|Browser routing config (symlinked)|macos|true|macOS"
     "file-apps|Default editor for coding file types|macos|true|macOS"
@@ -229,6 +232,7 @@ PACKAGES_EXTRAS_LINUX=(
 
 apply_profile() {
     local profile="${1:-$PROFILE}"
+    PROFILE="$profile"   # keep the banner label in sync with the flags actually applied
 
     case "$profile" in
         personal)
@@ -247,6 +251,7 @@ apply_profile() {
             DEPLOY_GHOSTTY=false
             DEPLOY_ZED=false
             DEPLOY_HTOP=false
+            DEPLOY_GITUI=false
             DEPLOY_PDB=false
             DEPLOY_MATPLOTLIB=false
             DEPLOY_CLEANUP=false
@@ -262,6 +267,16 @@ apply_profile() {
             DEPLOY_FILE_APPS=false
             DEPLOY_CLAUDE_TOOLS=false
             ;;
+        cloud)
+            # Lean remote dev box (RunPod): server minus the heavy compiles/MCP.
+            # Keeps core (modern CLI tools, gh, uv), zsh, tmux, git, claude, codex.
+            # mosh is installed by scripts/cloud/setup.sh's apt baseline regardless.
+            apply_profile server
+            PROFILE="cloud"              # restore label (the server recursion above reset it)
+            INSTALL_EXPERIMENTAL=false   # zotero MCP — slow
+            INSTALL_PUEUE=false          # cargo install pueue pueued — Rust compile
+            DEPLOY_PUEUE=false           # systemd resource slices
+            ;;
         minimal)
             # Nothing enabled — derived from registry (no manual list to drift)
             local _entry _name _var
@@ -276,6 +291,7 @@ apply_profile() {
             ;;
         *)
             echo "Warning: Unknown profile '$profile', using personal" >&2
+            PROFILE="personal"   # fell back to personal defaults — label accordingly
             ;;
     esac
 }

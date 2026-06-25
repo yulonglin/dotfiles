@@ -1,0 +1,22 @@
+// gitui theme — theme-reactive. Named ANSI colors only, so gitui inherits whatever
+// Ghostty theme the current window uses (default, g0-g9, SSH themes). Overrides ONLY
+// the defaults that are low-contrast on dark/pastel themes; everything else keeps
+// gitui's default (named/Reset), which already adapts to the terminal palette.
+//
+// Root cause of the unreadable command bar: gitui's default command/help bar is
+// command_fg=White on cmdbar_bg=Blue. In Catppuccin Mocha (and other pastel themes)
+// ANSI "Blue" is a LIGHT pastel (#89b4fa), so white text on it washes out. Using
+// Reset for the bar background falls back to the terminal's (dark) background, so
+// light command text is readable on every theme. Same washout hits the default
+// selection (Blue bg) — DarkGray keeps the highlight visible with readable text.
+//
+// ratatui color names: Gray = ANSI 7 (white), DarkGray = ANSI 8 (bright black),
+// White = ANSI 15 (bright white). Format `key: Some("Name")` per gitui THEMES.md;
+// keys match `impl Default for Theme` in gitui's src/ui/style.rs (v0.28.1).
+(
+    cmdbar_bg:    Some("Reset"),
+    command_fg:   Some("White"),
+    disabled_fg:  Some("Gray"),
+    selection_bg: Some("DarkGray"),
+    selection_fg: Some("White"),
+)

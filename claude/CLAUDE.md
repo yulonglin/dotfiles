@@ -164,6 +164,7 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/multi-agent-coordination.md` — Multi-agent awareness, `.agent-claims` chope mechanism, conflict resolution
 - `rules/research-integrity.md` — No circular reasoning, report all results, no shortcut hacks, label/score/analysis separation
 - `rules/desktop-control.md` — Ask before launching apps, computer-use clicks/typing, claude-in-chrome navigation, or anything that moves focus on the user's machine
+- `rules/markdown-style.md` — Markdown authoring: no mid-sentence line breaks; clarity + rigour/honesty over volume
 
 ## Knowledge Docs (On-Demand)
 
@@ -204,7 +205,7 @@ Rules:
 
 ## Plugin Organization & Context Profiles
 
-**7 always-on plugins** load in every session: superpowers, hookify, plugin-dev, commit-commands, claude-md-management, context7, core.
+**12 always-on plugins** (`base:` in `profiles.yaml`) load in every session: `bear-mcp`, `claude-md-management`, `codex`, `commit-commands`, `context7`, `core`, `hookify`, `llms-fetch-mcp`, `plugin-dev`, `remember`, `superpowers`, `workflow`.
 
 **6 ai-safety-plugins** (`github.com/yulonglin/ai-safety-plugins`):
 - `core` — foundational agents, skills, safety hooks (always-on)
@@ -218,7 +219,7 @@ Rules:
 ```bash
 claude-tools context                    # Show current state / apply context.yaml
 claude-tools context code               # Software projects
-claude-tools context code frontend python    # Compose multiple profiles
+claude-tools context code typescript python    # Compose multiple profiles
 claude-tools context --list             # Show active plugins and available profiles
 claude-tools context --clean            # Remove project plugin config
 claude-tools context --sync [-v]        # Register + update + install wanted + prune orphans

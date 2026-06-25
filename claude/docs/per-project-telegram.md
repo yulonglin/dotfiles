@@ -61,7 +61,7 @@ After pairing, lock down: set `"dmPolicy": "allowlist"`.
 
 ### 5. Automate in shell wrapper
 
-The `claude()` function in `config/aliases.sh` auto-detects and configures:
+The `claude()` function in `config/aliases/claude.sh` auto-detects and configures:
 
 ```bash
 # Per-project channels: auto-detect and enable
@@ -112,6 +112,6 @@ Choosing "install for this repo only" still writes config to `~/.claude/channels
 | Runtime plugin token file | `.claude/channels/telegram/.env` |
 | Project access | `.claude/channels/telegram/access.json` |
 | Global token (fallback) | `~/.claude/channels/telegram/.env` |
-| Shell wrapper | `dotfiles/config/aliases.sh` → `claude()` |
+| Shell wrapper | `dotfiles/config/aliases/claude.sh` → `claude()` |
 | Launch flag | `--channels plugin:telegram@claude-plugins-official` |
 | Env var | `TELEGRAM_STATE_DIR=$PWD/.claude/channels/telegram` |

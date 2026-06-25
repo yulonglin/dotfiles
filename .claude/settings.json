@@ -1,6 +1,6 @@
 {
   "enabledPlugins": {
-    "bear-mcp@productivity-tools": true,
+    "bear-mcp@productivity-tools": false,
     "claude-md-management@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
     "code@ai-safety-plugins": true,
@@ -34,10 +34,5 @@
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
     "writing@ai-safety-plugins": false
-  },
-  "permissions": {
-    "allow": [
-      "Bash(shortcuts list:*)"
-    ]
   }
 }

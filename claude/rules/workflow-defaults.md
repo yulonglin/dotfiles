@@ -14,7 +14,7 @@ Plans are **per-project** (via `plansDirectory`). Tasks are **global** (no per-p
 **What works today:**
 - `"plansDirectory": "plans"` in global `settings.json` → per-project plans
   - ⚠️ Resolves relative to CWD, not git root. The `claude()` wrapper auto-cds to git root to prevent misplacement. A `SessionStart` hook (`check_git_root.sh`) warns if CWD ≠ git root for non-wrapper invocations.
-- `CLAUDE_CODE_TASK_LIST_ID` → auto-set by `claude()` shell wrapper (`config/aliases.sh`)
+- `CLAUDE_CODE_TASK_LIST_ID` → auto-set by `claude()` shell wrapper (`config/aliases/claude.sh`)
 
 **Not yet available (revisit later):**
 - `"tasksDirectory"` setting for per-project tasks → [#20425](https://github.com/anthropics/claude-code/issues/20425)
