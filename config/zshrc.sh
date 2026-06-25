@@ -12,7 +12,33 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 export TERM="xterm-256color"
-export COLORTERM="truecolor"
+# Truecolor: claim it everywhere EXCEPT a *direct* mosh session (no tmux). Mosh's
+# terminal layer silently drops 24-bit color, so Claude Code's orange renders as
+# white. Inside tmux this is a non-issue — tmux down-converts truecolor to its
+# 256-color palette, which survives the mosh link — so we only gate the no-tmux
+# case, where walking the parent chain to mosh-server is reliable (nothing
+# detached in between). Dropping the claim lets apps fall back to 256-color,
+# where mosh renders orange correctly.
+_dot_in_direct_mosh() {
+  emulate -L zsh
+  [[ -n $TMUX ]] && return 1
+  local pid=$PPID line ppid comm
+  local -i depth=0
+  while [[ -n $pid && $pid != 0 && $pid != 1 ]] && (( depth < 12 )); do
+    line=$(ps -o ppid=,comm= -p "$pid" 2>/dev/null) || break
+    read -r ppid comm <<< "$line"
+    [[ $comm == *mosh-server* ]] && return 0
+    pid=$ppid
+    (( depth += 1 ))
+  done
+  return 1
+}
+if _dot_in_direct_mosh; then
+  unset COLORTERM
+else
+  export COLORTERM="truecolor"
+fi
+unset -f _dot_in_direct_mosh
 
 # Editor — reads from macos_default_apps.conf (single source of truth)
 _fa_conf="$DOT_DIR/config/macos_default_apps.conf"
