@@ -91,6 +91,25 @@ If uncommitted changes exist, follow the commit skill workflow:
    git log -10 --oneline   # Recent commits for style reference
    ```
 
+   **Triage new untracked files/dirs for `.gitignore` before staging.** Coding agents
+   (Claude Code, Codex, agent scaffolds) accrete new files over time — runtime state,
+   session caches, job queues, control keys, scratch dirs. Don't reflexively commit them.
+   For each *newly appeared* untracked path, ask: **is this relevant to version and share
+   across machines?**
+
+   | Signal | Action |
+   |--------|--------|
+   | Machine-local runtime state, regenerated on the fly (caches, session dirs, queues, daemon/job state) | Add to `.gitignore` — don't commit |
+   | Contains a credential/secret (tokens, `*.key`, control keys) | Add to `.gitignore` **and** verify it never entered history |
+   | Server-pushed state that re-syncs itself (e.g. policy/remote-settings files) | Add to `.gitignore` — versioning it just creates churn + conflicts |
+   | Genuine config/source meant to be shared (settings, rules, agents, scripts) | Stage and commit normally |
+
+   When unsure whether a path is durable config or agent scaffold, **ask the user** rather
+   than committing it. Place new ignore patterns in the nearest relevant `.gitignore`
+   (e.g. a tool's nested `.gitignore` for its own runtime dir), and confirm with
+   `git check-ignore <path>`. If a scaffold file is *already tracked*, untrack it with
+   `git rm --cached <path>` (keeps the working copy) before adding the ignore rule.
+
 2. **Draft commit message**:
    - Summarize nature of changes (feature/fix/refactor/docs/etc.)
    - Focus on "why" rather than "what"
