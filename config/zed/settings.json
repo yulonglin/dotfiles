@@ -251,6 +251,11 @@
       "host": "rp/nla-1.5b-rl",
       "args": [],
       "projects": []
+    },
+    {
+      "host": "rp-nla-1.5b-rl",
+      "args": [],
+      "projects": []
     }
   ]
 }
