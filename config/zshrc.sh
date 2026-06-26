@@ -12,7 +12,32 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 export TERM="xterm-256color"
-export COLORTERM="truecolor"
+# mosh (through 1.4.0) garbles 24-bit truecolor SGR escapes — background colors
+# smear and foreground text becomes invisible (mobile-shell/mosh#649, #1333).
+# Advertise truecolor only off-mosh; under mosh leave COLORTERM unset so apps
+# fall back to 256-color, which mosh renders correctly.
+_under_mosh() {
+  local p=$PPID comm
+  while (( p > 1 )); do
+    if [[ -r /proc/$p/comm ]]; then          # Linux: no fork
+      comm=$(</proc/$p/comm)
+      [[ $comm == mosh-server ]] && return 0
+      p=${$(grep -m1 '^PPid:' /proc/$p/status 2>/dev/null)//[^0-9]/}
+    else                                      # macOS/BSD fallback
+      comm=$(ps -o comm= -p $p 2>/dev/null) || return 1
+      [[ $comm == *mosh-server* ]] && return 0
+      p=${$(ps -o ppid= -p $p 2>/dev/null)//[^0-9]/}
+    fi
+    [[ -z $p || $p == 0 ]] && return 1
+  done
+  return 1
+}
+if _under_mosh; then
+  unset COLORTERM
+else
+  export COLORTERM="truecolor"
+fi
+unfunction _under_mosh
 
 # Editor — reads from macos_default_apps.conf (single source of truth)
 _fa_conf="$DOT_DIR/config/macos_default_apps.conf"
