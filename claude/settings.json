@@ -275,6 +275,16 @@
       "mcp__claude_ai_Notion__notion-create-database",
       "mcp__claude_ai_Notion__notion-create-comment",
       "mcp__claude_ai_Notion__notion-duplicate-page",
+      "Bash(python -c *)",
+      "Bash(python3 -c *)",
+      "Bash(uv *)",
+      "Bash(mise *)",
+      "Bash(nvidia-smi*)",
+      "Bash(nvcc --version)",
+      "Bash(lscpu)",
+      "Bash(lsblk)",
+      "Bash(tmux *)",
+      "Bash(pgrep *)",
       "Agent"
     ],
     "deny": [
@@ -326,7 +336,14 @@
       "Bash(chmod u+s *)",
       "Bash(chmod g+s *)",
       "Bash(nc -l *)",
-      "Bash(nc -lp *)"
+      "Bash(nc -lp *)",
+      "Bash(parted *)",
+      "Bash(poweroff)",
+      "Bash(chmod -R *)",
+      "Bash(* | bash*)",
+      "Bash(* | zsh*)",
+      "Bash(curl * | *)",
+      "Bash(wget * | *)"
     ],
     "ask": [
       "ExitPlanMode",
