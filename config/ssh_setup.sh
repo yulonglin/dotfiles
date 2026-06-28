@@ -41,22 +41,22 @@ key_fp="$(ssh-keygen -lf "${SSH_KEY}.pub" 2>/dev/null | awk '{print $2}')"
 key_loaded() { [ -n "${key_fp}" ] && ssh-add -l 2>/dev/null | grep -q "${key_fp}"; }
 key_loaded && return 0 2>/dev/null || true
 
-# Add the key (OS-specific behavior).
-# `</dev/null` is critical: a startup script must never block an interactive
-# shell on a passphrase prompt. If the passphrase isn't already in the Keychain,
-# ssh-add fails silently instead of prompting on every new terminal.
+# Load the key (OS-specific). This script only ever *loads* an already-known
+# passphrase — it must never run a *storing* add, because ssh-add reads
+# passphrases from /dev/tty directly (bypassing stdin/stderr redirection), so an
+# un-enrolled passphrase-protected key would prompt on EVERY new shell.
 case "$(uname -s)" in
   Darwin)
-    # macOS: first load any passphrase already saved in the login Keychain
-    # (silent). Only if that didn't load the key do we attempt a storing add.
+    # macOS: load any passphrase already saved in the login Keychain (silent).
+    # Enrolling a new key is a deliberate one-time step you run by hand:
+    #   ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+    # After that, this load picks it up on every shell with no prompt.
     ssh-add --apple-load-keychain >/dev/null 2>&1 </dev/null
-    if ! key_loaded; then
-      ssh-add --apple-use-keychain "${SSH_KEY}" >/dev/null 2>&1 </dev/null
-    fi
     ;;
   Linux)
-    # Linux: add to ssh-agent. Encrypted keys without an agent-cached passphrase
-    # are skipped silently rather than prompting on every shell.
+    # Linux: add to ssh-agent. </dev/null avoids hanging a non-interactive
+    # shell; passphrase-protected keys without an agent-cached passphrase are
+    # left unloaded (ssh will prompt on first use) rather than prompting here.
     ssh-add "${SSH_KEY}" >/dev/null 2>&1 </dev/null
     ;;
 esac
