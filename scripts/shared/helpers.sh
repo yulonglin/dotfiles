@@ -231,26 +231,16 @@ cmd_exists() {
     command -v "$1" &>/dev/null
 }
 
-# True when interactive prompts that fire AFTER the component menu should be
-# skipped in favor of safe defaults: --non-interactive, --unattended/--yes, or
-# no TTY on stdin. The component menu itself is gated separately (only on
-# NON_INTERACTIVE) so --unattended keeps it as the one interactive step.
-prompts_disabled() {
-    [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 0
-    [[ "${ASSUME_DEFAULTS:-false}" == "true" ]] && return 0
-    [[ -t 0 ]] || return 0
-    return 1
-}
-
 # Cache sudo credentials once, up front, so privileged steps later in the run
 # don't block on a password prompt mid-install. A background keepalive refreshes
 # the timestamp until the calling script exits. No-op if sudo is already cached,
-# unavailable, or we're non-interactive (nothing to prompt).
+# unavailable, or there's no TTY to prompt on. (sudo's password is the one prompt
+# with no software default, so it's the only interaction we cache rather than
+# skip — the component menu aside.)
 front_load_sudo() {
     cmd_exists sudo || return 0
     [[ -t 0 ]] || return 0
     sudo -n true 2>/dev/null && return 0   # already cached — no prompt needed
-    prompts_disabled && return 0            # don't prompt in unattended mode
     log_info "Some steps need administrator access — caching sudo credentials up front."
     sudo -v || return 0
     # Refresh until the parent script exits (canonical installer pattern).
@@ -855,17 +845,11 @@ install_gh_cli() {
         fi
     fi
 
-    # Authenticate if not already
+    # GitHub auth is deferred, never blocking the install on browser OAuth. The
+    # component menu is the only interactive step; finish auth afterwards via
+    # auth-setup (or `gh auth login`), which gist/secrets sync needs.
     if cmd_exists gh && ! gh auth status &>/dev/null; then
-        if prompts_disabled; then
-            log_warning "gh not authenticated — run 'gh auth login' later (needed for gist/secrets sync)"
-        else
-            echo ""
-            echo "GitHub CLI needs authentication for secrets sync."
-            echo "This will open a browser for OAuth login (no tokens needed)."
-            echo ""
-            gh auth login --web --git-protocol https || log_warning "gh auth failed - run 'gh auth login' manually"
-        fi
+        log_warning "gh not authenticated — run 'auth-setup' (or 'gh auth login') for gist/secrets sync"
     fi
 
     # Prefer SSH for git operations via gh
@@ -1450,50 +1434,20 @@ deploy_git_config() {
         fi
     done
 
-    # Handle conflicts
+    # Handle conflicts without prompting: keep existing values (your machine's
+    # settings win) and apply only the non-conflicting ones. The component menu
+    # is the script's only interactive step; override conflicting keys by hand
+    # afterwards if you want the dotfiles values instead.
     if [[ ${#conflicts[@]} -gt 0 ]]; then
         echo ""
-        log_warning "Git config conflicts detected:"
-        echo ""
+        log_warning "Git config conflicts — keeping your existing values:"
         for conflict in "${conflicts[@]}"; do
             IFS='|' read -r key existing new <<< "$conflict"
-            echo "  [$key]"
-            echo "    Current:  $existing"
-            echo "    New:      $new"
-            echo ""
+            echo "  [$key] keeping: $existing   (dotfiles: $new)"
         done
-
-        # Unattended/non-interactive: keep existing values (safe default — your
-        # machine's settings win), apply only the non-conflicting ones.
-        if prompts_disabled; then
-            log_info "Non-interactive: keeping existing git values, applying non-conflicting..."
-            apply_nonconflicting_git_settings "${conflicts[@]}"
-            log_success "Git configuration deployed"
-            return 0
-        fi
-
-        echo "Options:"
-        echo "  [K]eep all existing values"
-        echo "  [U]se all new values from dotfiles"
-        echo "  [S]kip git config deployment"
-        echo ""
-        read -p "Choose [K/U/S]: " -n 1 -r choice
-        echo ""
-
-        case "$choice" in
-            [Kk])
-                log_info "Keeping existing values, applying non-conflicting..."
-                apply_nonconflicting_git_settings "${conflicts[@]}"
-                ;;
-            [Uu])
-                log_info "Using all new values..."
-                apply_all_git_settings
-                ;;
-            *)
-                log_info "Skipping git config deployment"
-                return 0
-                ;;
-        esac
+        apply_nonconflicting_git_settings "${conflicts[@]}"
+        log_success "Git configuration deployed (conflicting keys left unchanged)"
+        return 0
     else
         log_info "No conflicts, applying all settings..."
         apply_all_git_settings
@@ -1798,17 +1752,12 @@ parse_args() {
                 continue  # skip outer shift — args already consumed
                 ;;
             --non-interactive)
-                # Skip ALL interactivity incl. the component menu; use defaults.
-                # Must be exported so child processes (e.g. app-picker) honor it.
+                # Skip the component menu and install the default component set.
+                # The menu is the script's only prompt — everything after it
+                # already runs with safe defaults — so this is the sole knob.
+                # Exported so child processes (e.g. app-picker) honor it.
                 NON_INTERACTIVE=true
                 export NON_INTERACTIVE
-                ;;
-            --unattended|--yes|-y)
-                # The component menu stays the ONE interactive step; everything
-                # after it runs with safe defaults (gh auth deferred, git
-                # conflicts keep existing, sudo cached once up front).
-                ASSUME_DEFAULTS=true
-                export ASSUME_DEFAULTS
                 ;;
             --no-*)
                 if [[ "$_only_mode" == true ]]; then

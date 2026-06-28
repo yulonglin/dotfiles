@@ -92,9 +92,10 @@ COMPONENTS:
     --append          Append to existing configs instead of overwrite
     --ascii=FILE      ASCII art file for shell startup
     --no-<component>  Disable a component (e.g., --no-editor)
-    --non-interactive Skip the component menu AND all later prompts (use defaults)
-    --unattended, -y  Show the component menu, then run everything else with safe
-                      defaults (git conflicts keep existing, sudo cached up front)
+    --non-interactive Skip the component menu and deploy the default set. The
+                      menu is the script's only prompt; everything after it
+                      already runs with safe defaults (git conflicts keep
+                      existing values).
 
 EXAMPLES:
     ./deploy.sh                           # Use defaults from config.sh

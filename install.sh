@@ -60,17 +60,17 @@ COMPONENTS:
     --create-user     Create non-root dev user (Linux only)
     --no-<component>  Disable a component (e.g., --no-ai-tools)
     --force-reinstall Reinstall tools even if present
-    --non-interactive Skip the component menu AND all later prompts (use defaults)
-    --unattended, -y  Show the component menu, then run everything else with safe
-                      defaults: no per-package prompts, gh auth deferred, git
-                      conflicts keep existing values, sudo cached once up front
+    --non-interactive Skip the component menu and install the default set. The
+                      menu is the script's only prompt; everything after it
+                      already runs with safe defaults (gh auth deferred, git
+                      conflicts keep existing values, sudo cached once up front).
 
 EXAMPLES:
-    ./install.sh                        # Use defaults from config.sh
+    ./install.sh                        # Menu picks components; rest is hands-off
     ./install.sh --default              # Safe base for shared machines
     ./install.sh --only zsh tmux        # Only zsh and tmux, nothing else
     ./install.sh --extras --no-cleanup  # Add extras, skip cleanup
-    ./install.sh --unattended           # Menu is the only prompt; rest runs hands-off
+    ./install.sh --non-interactive      # No menu either — default set, fully hands-off
 EOF
 }
 
@@ -85,11 +85,11 @@ bootstrap_claude_tools || true
 
 show_component_menu install
 
-# On Linux, package installs go through `sudo apt`. Cache sudo once now so the
-# rest of the run is unattended (macOS uses Homebrew, which must NOT run as root).
-if is_linux; then
-    front_load_sudo
-fi
+# Cache sudo once, now, so no later step blocks mid-run on a password prompt —
+# the one OS interaction with no software default. Linux package installs use
+# `sudo apt`; macOS needs it for Homebrew's chown and `mas` App Store installs.
+# (Homebrew itself must NOT run as root — only its privileged sub-steps use sudo.)
+front_load_sudo
 
 # ─── Main Installation ────────────────────────────────────────────────────────
 
@@ -106,12 +106,11 @@ if is_macos; then
     # Ensure Homebrew is installed
     if ! cmd_exists brew; then
         log_info "Installing Homebrew..."
-        # NONINTERACTIVE=1 skips the installer's "Press RETURN to continue" prompt.
-        # Without it the installer blocks waiting for Enter — a silent-looking stall
-        # on a fresh Mac, since this script keeps stdin on the TTY (for the component
-        # menu) so Homebrew never auto-detects non-interactive mode. Pre-warm sudo so
-        # the installer's privileged steps don't stall on a mid-run password prompt.
-        front_load_sudo
+        # NONINTERACTIVE=1 skips the installer's "Press RETURN to continue"
+        # prompt. This script keeps stdin on the TTY (for the component menu), so
+        # Homebrew never auto-detects non-interactive mode and would otherwise
+        # block there — a silent-looking stall on a fresh Mac. sudo is already
+        # cached above, so brew's privileged steps don't re-prompt either.
         NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         [[ $(uname -m) == "arm64" ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
