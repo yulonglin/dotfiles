@@ -376,7 +376,7 @@ import petriplot as pp  # For Petri-specific plotting helpers
 ## Important Gotchas
 
 - **macOS vs Linux paths**: VSCode settings location differs by OS
-- **Symlinks vs copies**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, gitui, `~/.ignore_global`, `~/.config/fd/ignore`), others copied (ZSH, git, Mouseless). `~/.gitignore_global` is composed (concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research`)
+- **Symlinks vs copies vs sourced**: Some configs are symlinked (Finicky, Ghostty, Claude, Codex, Serena, gitui, `~/.ignore_global`, `~/.config/fd/ignore`), some copied (git, Mouseless). **ZSH is sourced-by-reference**: `~/.zshrc` is a plain file containing only `source $DOT_DIR/config/zshrc.sh`, so edits to `config/zshrc.sh` in the main checkout are live in any new shell with no `deploy.sh` step. `~/.gitignore_global` is composed (concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research`)
 - **Mouseless config**: Copied (not symlinked) because Mouseless uses atomic `rename()` on UI save which destroys symlinks. Use `sync-mouseless` to pull UI changes back to dotfiles
 - **Conditional loading**: ZSH config only sources tools if they exist (pyenv, micromamba, etc.)
 - **Tmux environment pollution**: Use `tmux-clean` script to start with minimal env

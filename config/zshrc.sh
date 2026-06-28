@@ -7,6 +7,13 @@ WRITING_DIR="${WRITING_DIR:-$HOME/writing}"  # Writing projects (papers, notes)
 SCRATCH_DIR="${SCRATCH_DIR:-$HOME/scratch}"  # Temporary experimentation
 PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"  # General projects
 
+# Homebrew (Apple Silicon): prepend so /opt/homebrew/bin beats /usr/bin.
+# Uses brew shellenv (not add_to_path) because /opt/homebrew/bin is already
+# appended late by macOS path_helper, which would make add_to_path a no-op.
+if [[ -x /opt/homebrew/bin/brew ]]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+
 # Instant prompt
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
