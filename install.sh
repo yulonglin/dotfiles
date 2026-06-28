@@ -106,7 +106,13 @@ if is_macos; then
     # Ensure Homebrew is installed
     if ! cmd_exists brew; then
         log_info "Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        # NONINTERACTIVE=1 skips the installer's "Press RETURN to continue" prompt.
+        # Without it the installer blocks waiting for Enter — a silent-looking stall
+        # on a fresh Mac, since this script keeps stdin on the TTY (for the component
+        # menu) so Homebrew never auto-detects non-interactive mode. Pre-warm sudo so
+        # the installer's privileged steps don't stall on a mid-run password prompt.
+        front_load_sudo
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         [[ $(uname -m) == "arm64" ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
 
@@ -151,6 +157,7 @@ install_gh_cli
 
 # Pre-set PATH so subshells and subsequent commands can find installed binaries
 mkdir -p "$HOME/.local/bin"
+mkdir -p "$HOME/.ssh/controlmasters"  # required by ControlPath in ~/.ssh/config
 export PATH="$HOME/.local/bin:$PATH"
 
 if is_linux; then

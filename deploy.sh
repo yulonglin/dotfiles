@@ -263,6 +263,8 @@ fi
 
 if [[ "$DEPLOY_SECRETS" == "true" ]]; then
     log_section "SYNCING GIST"
+    # SSH config (synced from gist) uses ControlPath ~/.ssh/controlmasters/
+    mkdir -p "$HOME/.ssh/controlmasters"
     sync_gist || log_warning "Gist sync failed (continuing anyway)"
 
     # Install automated daily sync

@@ -207,11 +207,11 @@ binding_secret_key() {
 }
 
 is_bws_key() {
-    # BWS keys use the "ENV_NAME - description" convention, which embeds a space.
-    # Any secret identifier containing whitespace is treated as a BWS key lookup,
-    # not a shell variable name.
+    # BWS keys use the "ENV_NAME - description" convention (embeds a space), or
+    # a stable UUID reference ("bws-id:<uuid>"). Either form is a BWS lookup, not
+    # a plain shell variable name.
     local val="$1"
-    [[ "$val" == *" - "* || "$val" == *[[:space:]]* ]]
+    [[ "$val" == bws-id:* || "$val" == *" - "* || "$val" == *[[:space:]]* ]]
 }
 
 canonicalize_binding() {
@@ -223,8 +223,9 @@ canonicalize_binding() {
 
     validate_env_name "$env_key"
     if is_bws_key "$secret_key"; then
-        # BWS key: skip shell-ident validation; must have "ENV - desc" prefix
-        if [[ ! "${secret_key%% - *}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        if [[ "$secret_key" == bws-id:* ]]; then
+            : # UUID binding — no name validation needed
+        elif [[ ! "${secret_key%% - *}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
             die "Invalid BWS key: $secret_key (must start with a valid env var name before ' - ')"
         fi
     else
@@ -247,6 +248,10 @@ binding_display() {
 
     if [[ "$env_key" == "$secret_key" ]]; then
         printf 'export %s\n' "$env_key"
+    elif [[ "$secret_key" == bws-id:* ]]; then
+        # Show shortened UUID for readability
+        local uuid="${secret_key#bws-id:}"
+        printf 'export %s  [bws-id:%s]\n' "$env_key" "${uuid:0:8}"
     else
         printf 'export %s <- %s\n' "$env_key" "$secret_key"
     fi
@@ -1230,7 +1235,8 @@ COPY_EOF
         # (e.g. "OPENAI_API_KEY - mats" and "OPENAI_API_KEY - personal") show as
         # distinct rows so the user picks exactly one for that env name.
         # Sort by env_name so duplicates cluster together.
-        while IFS=$'\t' read -r m_env m_bws m_note; do
+        # keys-meta format: env_name\tbws_key\tnote\tuuid (4 fields)
+        while IFS=$'\t' read -r m_env m_bws m_note m_uuid; do
             [[ -n "$m_env" ]] || continue
             item_pos=$((item_pos + 1))
 
@@ -1244,7 +1250,11 @@ COPY_EOF
             fi
 
             status=""
+            # Check for existing binding by bws_key name OR by UUID (bws-id: form)
             existing_binding=$(binding_for_secret "$m_bws" "${current_export_bindings[@]}" || true)
+            if [[ -z "$existing_binding" && -n "$m_uuid" ]]; then
+                existing_binding=$(binding_for_secret "bws-id:$m_uuid" "${current_export_bindings[@]}" || true)
+            fi
             if [[ -n "$existing_binding" ]]; then
                 existing_env=$(binding_env_key "$existing_binding")
                 if [[ "$existing_env" == "$m_env" ]]; then
@@ -1255,8 +1265,8 @@ COPY_EOF
                 preselect_positions+=("$item_pos")
             fi
 
-            # Tab-separated: bws_key (lookup, hidden) | display | note | status
-            menu_items+=("$m_bws"$'\t'"$display"$'\t'"$m_note"$'\t'"$status")
+            # Tab-separated: bws_key | display | note | status | uuid (uuid hidden, used for stable binding)
+            menu_items+=("$m_bws"$'\t'"$display"$'\t'"$m_note"$'\t'"$status"$'\t'"$m_uuid")
         done < <("$SECRETS_HELPER" keys-meta 2>/dev/null | sort -t$'\t' -k1,1)
 
         action=""
@@ -1377,9 +1387,14 @@ COPY_EOF
 
     while IFS= read -r item; do
         [[ -n "$item" ]] || continue
-        # Field 1 is the full bws_key (may contain spaces like "OPENAI_API_KEY - mats")
-        bws_name="${item%%$'\t'*}"
-        existing_binding=$(binding_for_secret "$bws_name" "${current_export_bindings[@]}" || true)
+        # Field 1: bws_key (may contain spaces), field 5: uuid (stable pin)
+        bws_name=$(cut -f1 <<< "$item")
+        item_uuid=$(cut -f5 <<< "$item")
+        # Prefer UUID-based existing binding, then bws_key-based
+        existing_binding=$(binding_for_secret "bws-id:$item_uuid" "${current_export_bindings[@]}" || true)
+        if [[ -z "$existing_binding" ]]; then
+            existing_binding=$(binding_for_secret "$bws_name" "${current_export_bindings[@]}" || true)
+        fi
         if [[ -n "$existing_binding" ]]; then
             selected_export_bindings+=("$existing_binding")
         else
@@ -1389,7 +1404,11 @@ COPY_EOF
             local_name=""
             read -r local_name </dev/tty
             [[ -n "$local_name" ]] || local_name="$default_env"
-            if [[ "$local_name" == "$bws_name" ]]; then
+            # Bind by UUID when available — stable even if the BWS key name changes
+            # or a sibling key with the same env_name is added later.
+            if [[ -n "$item_uuid" ]]; then
+                selected_export_bindings+=("$local_name=bws-id:$item_uuid")
+            elif [[ "$local_name" == "$bws_name" ]]; then
                 selected_export_bindings+=("$bws_name")
             else
                 selected_export_bindings+=("$local_name=$bws_name")

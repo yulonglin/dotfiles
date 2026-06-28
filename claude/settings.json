@@ -5,14 +5,14 @@
     "BASH_MAX_OUTPUT_LENGTH": "100000",
     "CLAUDECODE": "",
     "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
-    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "250000",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000",
     "CLAUDE_CODE_COORDINATOR_MODE": "1",
+    "CLAUDE_CODE_DISABLE_1M_CONTEXT": "1",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_NO_FLICKER": "1",
+    "CLAUDE_CODE_STOP_HOOK_BLOCK_CAP": "5",
     "ENABLE_TOOL_SEARCH": "1",
-    "CLAUDE_CODE_DISABLE_1M_CONTEXT": "1",
-    "TMPDIR": "/tmp/claude",
-    "CLAUDE_CODE_STOP_HOOK_BLOCK_CAP": "5"
+    "TMPDIR": "/tmp/claude"
   },
   "attribution": {
     "commit": "",
@@ -21,6 +21,8 @@
   "permissions": {
     "allow": [
       "Bash",
+      "Bash(cd *)",
+      "Bash(MODAL_PROFILE *)",
       "Bash(git *)",
       "Bash(gh *)",
       "Bash(ruff *)",
@@ -284,6 +286,16 @@
       "mcp__claude_ai_Notion__notion-create-database",
       "mcp__claude_ai_Notion__notion-create-comment",
       "mcp__claude_ai_Notion__notion-duplicate-page",
+      "Bash(python -c *)",
+      "Bash(python3 -c *)",
+      "Bash(uv *)",
+      "Bash(mise *)",
+      "Bash(nvidia-smi*)",
+      "Bash(nvcc --version)",
+      "Bash(lscpu)",
+      "Bash(lsblk)",
+      "Bash(tmux *)",
+      "Bash(pgrep *)",
       "Agent"
     ],
     "deny": [
@@ -318,10 +330,11 @@
       "Bash(xargs sh *)",
       "Bash(xargs bash *)",
       "Bash(xargs zsh *)",
-      "Bash(sudo *)",
       "Bash(curl * | bash *)",
+      "Bash(curl * | zsh *)",
       "Bash(curl * | sh *)",
       "Bash(wget * | bash *)",
+      "Bash(wget * | zsh *)",
       "Bash(wget * | sh *)",
       "Bash(find * -delete *)",
       "Bash(find * -exec *)",
@@ -334,10 +347,18 @@
       "Bash(chmod u+s *)",
       "Bash(chmod g+s *)",
       "Bash(nc -l *)",
-      "Bash(nc -lp *)"
+      "Bash(nc -lp *)",
+      "Bash(parted *)",
+      "Bash(poweroff)",
+      "Bash(chmod -R *)",
+      "Bash(* | bash*)",
+      "Bash(* | zsh*)",
+      "Bash(curl * | *)",
+      "Bash(wget * | *)"
     ],
     "ask": [
       "ExitPlanMode",
+      "Bash(sudo *)",
       "Bash(kill *)",
       "Bash(killall *)",
       "Bash(pkill *)",
@@ -361,7 +382,8 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "opusplan",
+  "fallbackModel": ["sonnet"],
   "hooks": {
     "PermissionRequest": [
       {
@@ -683,7 +705,6 @@
     "padding": 1
   },
   "enabledPlugins": {
-    "bear-mcp@productivity-tools": true,
     "claude-md-management@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
     "code@ai-safety-plugins": true,
@@ -713,10 +734,10 @@
     "telegram@claude-plugins-official": true,
     "things-mcp@productivity-tools": true,
     "typescript-lsp@claude-plugins-official": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
-    "writing@ai-safety-plugins": true,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": true
+    "writing@ai-safety-plugins": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -749,6 +770,12 @@
         "repo": "sawyerhood/dev-browser"
       }
     },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "crazytieguy/codex-plugin-cc"
+      }
+    },
     "productivity-tools": {
       "source": {
         "source": "github",
@@ -777,6 +804,7 @@
         "cloudcode-pa.googleapis.com",
         "github.com",
         "api.github.com",
+        "raw.githubusercontent.com",
         "mcp.linear.app",
         "export.arxiv.org",
         "arxiv.org",
@@ -825,7 +853,8 @@
         "neptune.ai",
         "cerebras.ai",
         "anthropic.com",
-        "hub.docker.com"
+        "hub.docker.com",
+        "api.zotero.org"
       ],
       "allowLocalBinding": true
     },
@@ -839,6 +868,7 @@
         "/var/folders/*/*/T",
         "/var/folders/*/*/T/claude",
         "/var/folders/*/*/T/claude/*",
+        "/var/folders/*/*/T/claude/**",
         "/var/folders/*/*/C",
         "/run/user/*/pueue*.socket",
         "~/code",
@@ -846,7 +876,8 @@
         "~/projects",
         "~/scratch",
         "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli",
-        "~/Downloads"
+        "~/Downloads",
+        "/workspace"
       ],
       "denyRead": [
         "~/.ssh/id_*",
@@ -913,6 +944,7 @@
   "feedbackSurveyRate": 0,
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
+  "showClearContextOnPlanAccept": true,
   "autoUpdatesChannel": "latest",
   "plansDirectory": "plans",
   "autoMemoryDirectory": "memory",
@@ -928,7 +960,7 @@
     ".cache"
   ],
   "theme": "dark",
-  "verbose": true,
+  "verbose": false,
   "preferredNotifChannel": "auto",
   "autoCompactEnabled": true,
   "showTurnDuration": true,

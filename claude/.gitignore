@@ -36,6 +36,8 @@ paste-cache/
 tasks/
 teams/
 daemon/
+daemon.lock
+daemon.status.json
 jobs/
 usage-data/
 image-cache/
