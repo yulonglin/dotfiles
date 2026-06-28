@@ -247,8 +247,8 @@ codex/                    # Codex CLI configuration (symlinked to ~/.codex/)
 #   $BWS_TOKEN_FILE (default: ~/.config/bws/token)
 
 custom_bins/              # Custom utilities (added to PATH)
-├── utc_date              # Outputs DD-MM-YYYY in UTC
-├── utc_timestamp         # Outputs DD-MM-YYYY_HH-MM-SS in UTC
+├── utc_date              # Outputs YYYY-MM-DD in UTC
+├── utc_timestamp         # Outputs YYYY-MM-DD_HH-MM-SS in UTC
 ├── machine-name          # Machine name for prompt/statusline (registry → SSH config → hostname)
 ├── machine-register      # Register/list/remove machines in config/machines.conf
 ├── claude-cache-clean    # Remove stale plugin cache versions
