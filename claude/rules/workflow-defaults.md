@@ -162,7 +162,7 @@ Make it easy for Yulong (or any reader arriving cold) to see exactly what Claude
   - If results need verification: produce checkable artifacts
   - If values come from earlier in conversation: re-derive them programmatically
 - **Non-destructive outputs**: NEVER overwrite previous results
-  - Experiment outputs → timestamped dirs (`out/DD-MM-YYYY_HH-MM-SS_name/`)
+  - Experiment outputs → timestamped dirs (`out/YYYY-MM-DD_HH-MM-SS_name/`)
   - Data files → append mode (`>>`) or versioned naming (`-v2`, `-v3`)
   - Figures/tables → new timestamped files, symlink "latest" if needed
   - Analysis results → JSONL append, not JSON overwrite

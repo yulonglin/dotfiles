@@ -297,7 +297,7 @@ is_cask_installed() {
 backup_file() {
     local filepath="$1"
     if [[ -e "$filepath" && ! -L "$filepath" ]]; then
-        local backup="${filepath}.backup.$(date -u +%d-%m-%Y_%H-%M-%S)"
+        local backup="${filepath}.backup.$(date -u +%Y-%m-%d_%H-%M-%S)"
         mv "$filepath" "$backup"
         log_info "Backed up to $backup"
         echo "$backup"  # Return backup path

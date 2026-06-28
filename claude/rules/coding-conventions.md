@@ -80,10 +80,10 @@ if __name__ == "__main__":
 ## Date & Timestamp Formatting
 
 - **Always use UTC timezone** for all timestamps
-- **Standard format**: `DD-MM-YYYY` for dates, `DD-MM-YYYY_HH-MM-SS` for timestamps
+- **Standard format**: `YYYY-MM-DD` (ISO 8601) for dates, `YYYY-MM-DD_HH-MM-SS` for timestamps
 - **Helper commands** (in PATH):
-  - `$(utc_date)` → outputs `DD-MM-YYYY` (e.g., `25-01-2026`)
-  - `$(utc_timestamp)` → outputs `DD-MM-YYYY_HH-MM-SS` (e.g., `25-01-2026_14-30-22`)
+  - `$(utc_date)` → outputs `YYYY-MM-DD` (e.g., `2026-01-25`)
+  - `$(utc_timestamp)` → outputs `YYYY-MM-DD_HH-MM-SS` (e.g., `2026-01-25_14-30-22`)
 
 ## Interactive TUI (fzf)
 

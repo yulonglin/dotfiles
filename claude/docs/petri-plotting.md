@@ -73,7 +73,7 @@ Import color palette:
 ## File Naming
 Always use timestamps for plot files to prevent overwrites:
 ```python
-plt.savefig(f'figure_{utc_timestamp()}.png')  # e.g., figure_25-01-2026_14-30-22.png
+plt.savefig(f'figure_{utc_timestamp()}.png')  # e.g., figure_2026-01-25_14-30-22.png
 ```
 
 Never overwrite existing plots. Each experiment run produces uniquely timestamped outputs.

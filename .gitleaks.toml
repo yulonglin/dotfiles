@@ -1,18 +1,39 @@
 # Gitleaks configuration
 # https://github.com/gitleaks/gitleaks
 
-title = "Dotfiles Gitleaks Config"
+title = "Dotfiles Gitleaks Config (global)"
 
-[allowlist]
-  description = "Allowlist for dotfiles repo"
+# Inherit gitleaks' ~150 built-in provider-specific rules (AWS, GitHub, OpenAI,
+# Anthropic, Slack, Stripe, Google, private keys, JWTs, ...) PLUS the generic
+# catch-all. Without this line a config with no [[rules]] disables detection.
+[extend]
+  useDefault = true
 
-  # GitHub Gist IDs are not secrets - they're public identifiers
+# --- Allowlists (kept narrow per best practice: regex/path/rule-scoped) --------
+
+[[allowlists]]
+  description = "GitHub Gist IDs are public identifiers, not secrets"
   regexes = [
     '''GIST_SYNC_ID="[a-f0-9]{32}"''',
     '''gist_id="[a-f0-9]{32}"''',
   ]
 
-  # These paths contain example/template configs, not real secrets
+[[allowlists]]
+  description = "Example/template configs, not real secrets"
   paths = [
     '''config/user\.conf\.example''',
+  ]
+
+[[allowlists]]
+  # ML prose false positive: the keyword 'token' inside 'tokenizer' /
+  # 'token positions' trips the generic-api-key rule. Scoped to that one rule and
+  # matched against the whole LINE (the captured "secret" is the text AFTER
+  # 'token', so a secret-target match for 'tokeniz' would never fire).
+  # Provider rules (sk-ant-..., AKIA..., ghp_..., ...) are unaffected.
+  description = "Allow ML prose ('tokenizer', 'token positions') for generic-api-key only"
+  targetRules = ["generic-api-key"]
+  regexTarget = "line"
+  regexes = [
+    '''(?i)tokeniz(er|ation)''',
+    '''(?i)token[ _-]?(position|id|count|level|index)''',
   ]
