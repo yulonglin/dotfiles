@@ -157,6 +157,7 @@ install_gh_cli
 
 # Pre-set PATH so subshells and subsequent commands can find installed binaries
 mkdir -p "$HOME/.local/bin"
+mkdir -p "$HOME/.ssh/controlmasters"  # required by ControlPath in ~/.ssh/config
 export PATH="$HOME/.local/bin:$PATH"
 
 if is_linux; then
