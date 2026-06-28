@@ -841,7 +841,8 @@
         "neptune.ai",
         "cerebras.ai",
         "anthropic.com",
-        "hub.docker.com"
+        "hub.docker.com",
+        "api.zotero.org"
       ],
       "allowLocalBinding": true
     },
