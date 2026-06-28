@@ -16,6 +16,9 @@ plugins/marketplaces/
 plugins/installed_plugins.json
 plugins/install-counts-cache.json
 plugins/known_marketplaces.json
+plugins/blocklist.json
+plugins/.last_inuse_sweep
+plugins/known_marketplaces.json
 projects/
 session-env/
 stats-cache.json
@@ -24,6 +27,17 @@ telemetry/
 cache/
 paste-cache/
 # /tasks/
+backups/
+daemon/
+daemon.lock
+daemon.status.json
+jobs/
+mcp-needs-auth-cache.json
+policy-limits.json
+remote-settings.json
+sessions/
+.last-update-result.json
+settings.local.json
 
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh, archive/
 

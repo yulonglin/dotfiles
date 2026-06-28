@@ -105,7 +105,7 @@
     ],
     "defaultMode": "plan"
   },
-  "model": "haiku",
+  "model": "opusplan",
   "hooks": {
     "PreToolUse": [
       {
@@ -202,6 +202,6 @@
     ]
   },
   "alwaysThinkingEnabled": true,
-  "installMethod": "native",
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "installMethod": "native"
 }
