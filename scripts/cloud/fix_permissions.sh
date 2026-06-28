@@ -26,12 +26,6 @@ if [[ -d "$USER_HOME" ]]; then
     chmod 755 "$USER_HOME"
 fi
 
-# Fix global npm if exists and has issues
-if [[ -d /usr/local/lib/node_modules ]]; then
-    echo "Fixing /usr/local/lib/node_modules..."
-    chmod -R a+r /usr/local/lib/node_modules
-fi
-
 echo ""
 echo "=== Done ==="
 echo "Now login as: su - $USERNAME"
