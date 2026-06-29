@@ -894,6 +894,32 @@ install_gh_from_release() {
     rm -rf /tmp/gh.tar.gz "/tmp/gh_${version}_linux_${arch}"
 }
 
+# ─── Node.js 24 LTS (global runtime, NOT a mise tool) ─────────────────────────
+
+# Node is a RUNTIME that other tools shebang against (e.g. obsidian-headless's
+# `ob` → #!/usr/bin/env node), so it must resolve on a global PATH that
+# systemd/cron contexts see — which mise's shell-activated shims do not. Install
+# it globally: NodeSource apt on Linux (pins the 24 line), brew on macOS (current
+# stable, >=24); never via mise, which here manages interactive leaf-CLIs only
+# (fzf, bat, …). Node 24 (Krypton) is the Active LTS; Node 20 went EOL 2026-03-24.
+# The >=24 guard is a floor: it accepts a newer major on macOS but reinstalls
+# anything older (e.g. an ad-hoc mise-pinned Node 20).
+install_node() {
+    if is_installed node && (( $(node -v | cut -d. -f1 | tr -d 'v') >= 24 )); then
+        return 0
+    fi
+    log_info "Installing Node 24 LTS..."
+    if is_macos; then
+        brew_install node
+        return 0
+    fi
+    # Linux: official NodeSource apt repo → global /usr/bin/node
+    local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
+    curl -fsSL https://deb.nodesource.com/setup_24.x | $SUDO -E bash - \
+        || { log_warning "NodeSource setup failed — install Node 24 manually"; return 1; }
+    $SUDO apt-get install -y nodejs || log_warning "Node install via apt failed"
+}
+
 # ─── Mise (Universal Version Manager) ─────────────────────────────────────────
 
 install_mise() {

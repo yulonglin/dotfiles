@@ -183,6 +183,10 @@ if ! is_installed uv; then
     fi
 fi
 
+# ─── Node.js 24 LTS (global runtime — see install_node in helpers.sh) ─────────
+
+install_node
+
 fi  # INSTALL_CORE
 
 # ─── ZSH ──────────────────────────────────────────────────────────────────────
