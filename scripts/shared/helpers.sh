@@ -894,30 +894,45 @@ install_gh_from_release() {
     rm -rf /tmp/gh.tar.gz "/tmp/gh_${version}_linux_${arch}"
 }
 
-# ─── Node.js 24 LTS (global runtime, NOT a mise tool) ─────────────────────────
+# ─── Node.js LTS (global runtime, NOT a mise tool) ────────────────────────────
 
 # Node is a RUNTIME that other tools shebang against (e.g. obsidian-headless's
 # `ob` → #!/usr/bin/env node), so it must resolve on a global PATH that
 # systemd/cron contexts see — which mise's shell-activated shims do not. Install
-# it globally: NodeSource apt on Linux (pins the 24 line), brew on macOS (current
-# stable, >=24); never via mise, which here manages interactive leaf-CLIs only
-# (fzf, bat, …). Node 24 (Krypton) is the Active LTS; Node 20 went EOL 2026-03-24.
-# The >=24 guard is a floor: it accepts a newer major on macOS but reinstalls
-# anything older (e.g. an ad-hoc mise-pinned Node 20).
+# it globally: NodeSource's setup_lts.x on Linux (the *current LTS* line — only
+# even/LTS majors, never an odd "Current" release), brew on macOS; never via
+# mise, which here manages interactive leaf-CLIs only (fzf, bat, …).
+#
+# The skip-guard floor is the *live* latest-LTS major fetched from nodejs.org
+# (fallback 24 = Krypton if offline), NOT a hardcoded number. That keeps two
+# promises: never Current (setup_lts.x) and never EOL (an older node always
+# fails the guard and gets converged up to current LTS). Consequence: after an
+# LTS rollover, re-running install.sh force-upgrades the major (e.g. 24→26) — so
+# native modules (better-sqlite3) must be rebuilt against the new ABI afterward.
 install_node() {
-    if is_installed node && (( $(node -v | cut -d. -f1 | tr -d 'v') >= 24 )); then
+    # Current LTS major from nodejs.org; dist index is newest-first and r['lts']
+    # is the codename (truthy) for LTS releases, false otherwise.
+    local want
+    want=$(curl -fsSL https://nodejs.org/dist/index.json 2>/dev/null \
+        | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null)
+    [[ "$want" =~ ^[0-9]+$ ]] || want=24
+    if is_installed node && (( $(node -v | cut -d. -f1 | tr -d 'v') >= want )); then
         return 0
     fi
-    log_info "Installing Node 24 LTS..."
+    log_info "Installing Node ${want} LTS..."
     if is_macos; then
         brew_install node
         return 0
     fi
-    # Linux: official NodeSource apt repo → global /usr/bin/node
+    # Linux: NodeSource setup_lts.x adds the repo + runs apt update. Its script
+    # can exit non-zero *after* configuring the repo, so we do NOT gate the
+    # install on its exit code — doing so once left a box on stock Ubuntu node.
+    # Install unconditionally; apt resolves the NodeSource candidate (a higher
+    # version than Ubuntu's, so an already-installed nodejs is upgraded in place).
     local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
-    curl -fsSL https://deb.nodesource.com/setup_24.x | $SUDO -E bash - \
-        || { log_warning "NodeSource setup failed — install Node 24 manually"; return 1; }
-    $SUDO apt-get install -y nodejs || log_warning "Node install via apt failed"
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash - \
+        || log_warning "NodeSource setup script exited non-zero (repo may still be configured) — continuing"
+    $SUDO apt-get install -y nodejs || log_warning "Node install via apt failed — install Node LTS manually"
 }
 
 # ─── Mise (Universal Version Manager) ─────────────────────────────────────────
