@@ -81,9 +81,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Line 3: API usage (5h + 7d rate limits)
     crate::usage::format_usage(&mut output);
 
-    // Line 4: Workday remaining
-    format_workday(&mut output);
-
     print!("{}", output);
     Ok(())
 }
@@ -264,75 +261,5 @@ fn format_duration_str(cost: &Option<Cost>) -> Option<String> {
         format!("{}m", total_mins)
     };
     Some(format!("\x1b[2m{}\x1b[0m", display))
-}
-
-/// Read the configured wake hour from `~/.config/claude-tools/bedtime`.
-/// Returns 9 if the file is absent, empty, or unparseable.
-fn read_bedtime_wake_hour() -> i32 {
-    let home = match std::env::var("HOME") {
-        Ok(h) => h,
-        Err(_) => return 9,
-    };
-    let path = std::path::PathBuf::from(format!("{}/.config/claude-tools/bedtime", home));
-    let s = std::fs::read_to_string(path).unwrap_or_default();
-    s.trim().parse::<i32>().unwrap_or(9)
-}
-
-/// Workday remaining (ends at midnight, bedtime nudges).
-/// Respects the home timezone configured via `claude-tools timezone`.
-/// Falls back to server local time if no timezone is set.
-/// The past-bedtime window (midnight–wake hour) is configurable via
-/// `~/.config/claude-tools/bedtime` (integer hour, default 9).
-/// See also: claude/statusline.sh (bash fallback).
-fn format_workday(output: &mut String) {
-    let home_tz = crate::timezone::read_home_timezone();
-    let wake = read_bedtime_wake_hour();
-
-    let mut cmd = std::process::Command::new("date");
-    if let Some(ref tz) = home_tz {
-        cmd.env("TZ", tz);
-    }
-    // %H %M: 24h, zero-padded — parses cleanly on macOS and Linux
-    let date_output = match cmd.args(["+%H %M"]).output() {
-        Ok(o) if o.status.success() => o,
-        _ => return,
-    };
-
-    let s = String::from_utf8_lossy(&date_output.stdout);
-    let parts: Vec<&str> = s.trim().split(' ').collect();
-    if parts.len() != 2 {
-        return;
-    }
-
-    let hour: i32 = parts[0].parse().unwrap_or(0);
-    let minute: i32 = parts[1].parse().unwrap_or(0);
-
-    if hour < wake {
-        // Past midnight — should be in bed
-        let over = if hour == 0 && minute == 0 {
-            "midnight".to_string()
-        } else if hour == 0 {
-            format!("{}m", minute)
-        } else {
-            format!("{}h {}m", hour, minute)
-        };
-        let _ = write!(
-            output,
-            "\n\x1b[31;1m\u{1f6cf}\u{fe0f}  {} past bedtime — stop and go to sleep!\x1b[0m",
-            over
-        );
-    } else {
-        let left = (23 - hour) * 60 + (60 - minute);
-        let (icon, color, msg) = if left <= 30 {
-            ("\u{1f6cf}\u{fe0f} ", "\x1b[31;1m", format!("{}m — wrap up and get to bed!", left % 60))
-        } else if left <= 60 {
-            ("\u{1f319}", "\x1b[31m", format!(" {}m left — start wrapping up", left))
-        } else if left <= 120 {
-            ("\u{1f319}", "\x1b[33m", format!(" {}h {}m left", left / 60, left % 60))
-        } else {
-            ("\u{1f319}", "\x1b[2m", format!(" {}h {}m left", left / 60, left % 60))
-        };
-        let _ = write!(output, "\n{}{}{}\x1b[0m", color, icon, msg);
-    }
 }
 

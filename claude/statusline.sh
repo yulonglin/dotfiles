@@ -2,11 +2,10 @@
 # Claude Code Status Line Script (bash fallback)
 # Rust primary: tools/claude-tools/src/statusline.rs (recompile with cargo build --release)
 #
-# Displays on up to 4 lines:
+# Displays on up to 3 lines:
 # Line 1 (location): Machine name (SSH) + profiles + directory + git branch
 # Line 2 (session): Model name + context % + duration
 # Line 3 (usage): 5h and 7d API usage bars (cached, from /api/oauth/usage)
-# Line 4 (workday): bedtime nudge near midnight; wake hour from ~/.config/claude-tools/bedtime
 #
 # Receives JSON via stdin from Claude Code.
 
@@ -328,46 +327,4 @@ else
   else
     printf "\n\033[2m\033[31mapi request failed\033[0m"
   fi
-fi
-
-# ============================================================================
-# WORKDAY REMAINING (ends at midnight, bedtime nudges — macOS only)
-# Wake hour is configurable via ~/.config/claude-tools/bedtime (default 9).
-# ============================================================================
-if [ "$(uname)" = "Darwin" ]; then
-now_h=$(date +%-H)
-now_m=$(date +%-M)
-
-_bedtime_wake=$(cat "$HOME/.config/claude-tools/bedtime" 2>/dev/null)
-case "$_bedtime_wake" in
-  ''|*[!0-9]*) _bedtime_wake=9 ;;
-esac
-
-if [ "$now_h" -lt "$_bedtime_wake" ]; then
-  # Past midnight, before wake hour — should be in bed
-  if [ "$now_h" -eq 0 ] && [ "$now_m" -eq 0 ]; then
-    over_str="midnight"
-  elif [ "$now_h" -eq 0 ]; then
-    over_str="${now_m}m"
-  else
-    over_str="${now_h}h ${now_m}m"
-  fi
-  printf "\n\033[31;1m🛏️  %s past bedtime — stop and go to sleep!\033[0m" "$over_str"
-else
-  # Minutes until midnight
-  mins_left=$(( (23 - now_h) * 60 + (60 - now_m) ))
-  [ "$mins_left" -ge 1440 ] && mins_left=0
-  h_left=$((mins_left / 60))
-  m_left=$((mins_left % 60))
-
-  if [ "$mins_left" -le 30 ]; then
-    printf "\n\033[31;1m🛏️  %dm — wrap up and get to bed!\033[0m" "$m_left"
-  elif [ "$mins_left" -le 60 ]; then
-    printf "\n\033[31m🌙 %dm left — start wrapping up\033[0m" "$mins_left"
-  elif [ "$mins_left" -le 120 ]; then
-    printf "\n\033[33m🌙 %dh %dm left\033[0m" "$h_left" "$m_left"
-  else
-    printf "\n\033[2m🌙 %dh %dm left\033[0m" "$h_left" "$m_left"
-  fi
-fi
 fi
