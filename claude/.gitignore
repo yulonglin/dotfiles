@@ -38,6 +38,7 @@ teams/
 daemon/
 daemon.lock
 daemon.status.json
+daemon-auth-*
 jobs/
 usage-data/
 image-cache/

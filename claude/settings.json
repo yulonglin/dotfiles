@@ -383,7 +383,9 @@
     "defaultMode": "auto"
   },
   "model": "opusplan",
-  "fallbackModel": ["sonnet"],
+  "fallbackModel": [
+    "sonnet"
+  ],
   "hooks": {
     "PermissionRequest": [
       {

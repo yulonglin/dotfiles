@@ -237,6 +237,16 @@
         },
         {
           "paths": [
+            "/root/code/dotfiles"
+          ]
+        },
+        {
+          "paths": [
+            "/workspace/code/dotfiles"
+          ]
+        },
+        {
+          "paths": [
             "/workspace/projects/nla-vs-cot/./"
           ]
         }
@@ -254,6 +264,16 @@
     },
     {
       "host": "rp-nla-1.5b-rl",
+      "args": [],
+      "projects": []
+    },
+    {
+      "host": "hn-root",
+      "args": [],
+      "projects": []
+    },
+    {
+      "host": "rp-nla-1.5b-rl-v2",
       "args": [],
       "projects": []
     }
