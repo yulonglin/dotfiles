@@ -60,8 +60,7 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
 
     if let Some(pct) = five {
         let pct = pct.round().clamp(0.0, 100.0) as u8;
-        format_bar(output, "5h", pct);
-        format_pace(output, pct, usage.five_hour.as_ref(), 5.0 * 3600.0);
+        render_bucket(output, "5h", pct, usage.five_hour.as_ref(), 5.0 * 3600.0);
     }
 
     if let Some(pct) = seven {
@@ -69,20 +68,33 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
         if five.is_some() {
             output.push_str("  \u{00b7}  ");
         }
-        format_bar(output, "7d", pct);
-        format_pace(output, pct, usage.seven_day.as_ref(), SEVEN_DAY_SECS);
+        render_bucket(output, "7d", pct, usage.seven_day.as_ref(), SEVEN_DAY_SECS);
     }
 
 }
 
+/// Render one rate-limit bucket: bar + pace indicator, colored by pace (not
+/// absolute usage). Pace = how far ahead/behind the linear burn rate you are;
+/// the bar goes warm only when you're burning *faster* than the window allows.
+/// Falls back to absolute-usage color when the reset time is unavailable.
+fn render_bucket(output: &mut String, label: &str, pct: u8, bucket: Option<&UsageBucket>, window_secs: f64) {
+    let pace = compute_pace(pct, bucket, window_secs);
+    let color = match pace {
+        Some((delta, _)) => color_for_pace(delta),
+        None => color_for_pct(pct),
+    };
+    format_bar(output, label, pct, color);
+    if let Some((delta, remaining_secs)) = pace {
+        format_pace(output, delta, remaining_secs, color);
+    }
+}
+
 // --- Bar rendering ---
 
-fn format_bar(output: &mut String, label: &str, pct: u8) {
+fn format_bar(output: &mut String, label: &str, pct: u8, color: &str) {
     const BAR_WIDTH: u8 = 10;
     let filled = (pct as u16 * BAR_WIDTH as u16 / 100).min(BAR_WIDTH as u16) as u8;
     let empty = BAR_WIDTH - filled;
-
-    let color = color_for_pct(pct);
 
     let _ = write!(output, "{}{}\x1b[0m ", color, label);
     let _ = write!(output, "{}", color);
@@ -96,46 +108,42 @@ fn format_bar(output: &mut String, label: &str, pct: u8) {
     let _ = write!(output, "\x1b[0m {}{}%\x1b[0m", color, pct);
 }
 
-/// Show pace indicator (+/- vs linear burn rate) and countdown for any rate-limit bucket.
+/// Compute pace delta and time-to-reset for a rate-limit bucket.
 ///
 /// `window_secs` is the full window duration (e.g., 5*3600 for 5h, 7*86400 for 7d).
-/// Pace = how far ahead or behind the linear burn rate you are.
-/// If 4/7 of the window has elapsed and you've used 61%, expected is ~57% → +4% ahead.
-fn format_pace(output: &mut String, pct: u8, bucket: Option<&UsageBucket>, window_secs: f64) {
-    let resets_at = match bucket.and_then(|b| b.resets_at.as_deref()) {
-        Some(s) => s,
-        None => return,
-    };
+/// Pace delta = how far ahead/behind the linear burn rate you are, in percentage
+/// points. If 4/7 of the window has elapsed and you've used 61%, expected is ~57%
+/// → delta +4 (ahead). Returns `(delta, remaining_secs)`, or `None` when the reset
+/// time is missing or unparseable.
+fn compute_pace(pct: u8, bucket: Option<&UsageBucket>, window_secs: f64) -> Option<(i16, f64)> {
+    let resets_at = bucket.and_then(|b| b.resets_at.as_deref())?;
+    let reset_epoch = parse_iso_epoch(resets_at)?;
 
-    if let Some(reset_epoch) = parse_iso_epoch(resets_at) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
 
-        let remaining_secs = (reset_epoch - now).max(0) as f64;
-        let elapsed_secs = window_secs - remaining_secs;
-        let elapsed_frac = (elapsed_secs / window_secs).clamp(0.0, 1.0);
+    let remaining_secs = (reset_epoch - now).max(0) as f64;
+    let elapsed_secs = window_secs - remaining_secs;
+    let elapsed_frac = (elapsed_secs / window_secs).clamp(0.0, 1.0);
 
-        let expected_pct = (elapsed_frac * 100.0).round() as i16;
-        let delta = pct as i16 - expected_pct;
+    let expected_pct = (elapsed_frac * 100.0).round() as i16;
+    let delta = pct as i16 - expected_pct;
 
-        // Pace indicator: green if under, red if over
-        let (sign, pace_color) = if delta > 0 {
-            ("+", "\x1b[31m") // Red — ahead of pace (using more)
-        } else if delta < 0 {
-            ("", "\x1b[32m") // Green — behind pace (have headroom)
-        } else {
-            ("", "\x1b[2m") // Dim — on pace
-        };
+    Some((delta, remaining_secs))
+}
 
-        let _ = write!(output, " {}{}{}%\x1b[0m", pace_color, sign, delta);
+/// Render the pace indicator (signed delta vs linear burn rate) and reset countdown.
+/// `color` is the pace-based color shared with the bar.
+fn format_pace(output: &mut String, delta: i16, remaining_secs: f64, color: &str) {
+    let sign = if delta > 0 { "+" } else { "" };
+    let _ = write!(output, " {}{}{}%\x1b[0m", color, sign, delta);
 
-        // Time remaining until reset
-        let reset_display = fmt_time_remaining(remaining_secs);
-        if !reset_display.is_empty() {
-            let _ = write!(output, " \x1b[2m\u{27f3} {}\x1b[0m", reset_display);
-        }
+    // Time remaining until reset
+    let reset_display = fmt_time_remaining(remaining_secs);
+    if !reset_display.is_empty() {
+        let _ = write!(output, " \x1b[2m\u{27f3} {}\x1b[0m", reset_display);
     }
 }
 
@@ -192,6 +200,20 @@ fn parse_iso_epoch(iso: &str) -> Option<i64> {
     }
 
     None
+}
+
+/// Color by pace: how far ahead of the linear burn rate (in percentage points).
+/// Warm only when burning *faster* than the window allows; behind/on pace is green.
+fn color_for_pace(delta: i16) -> &'static str {
+    if delta >= 30 {
+        "\x1b[31m" // Red — well ahead, will hit the cap early
+    } else if delta >= 15 {
+        "\x1b[33m" // Yellow — notably ahead
+    } else if delta >= 5 {
+        "\x1b[38;2;255;176;85m" // Orange — mildly ahead
+    } else {
+        "\x1b[32m" // Green — on pace, behind, or barely ahead
+    }
 }
 
 fn color_for_pct(pct: u8) -> &'static str {
