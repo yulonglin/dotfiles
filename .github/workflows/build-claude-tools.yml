@@ -1,10 +1,15 @@
 name: Build claude-tools binaries
 
-# Builds the claude-tools Rust binary for every macOS/Linux arch on native
-# runners (no cross-compilation — git2/ring/libgit2 build cleanly on-host) and
-# publishes them to a rolling "claude-tools-bin" GitHub Release. install.sh /
-# deploy.sh fetch the matching asset by `uname -sm` to power the component
-# menu on a fresh machine before the from-source build runs.
+# Builds the claude-tools Rust binary on native runners (no cross-compilation —
+# git2/ring/libgit2 build cleanly on-host) and publishes them to a rolling
+# "claude-tools-bin" GitHub Release. install.sh / deploy.sh fetch the matching
+# asset by `uname -sm` to power the component menu on a fresh machine before the
+# from-source build runs.
+#
+# Covers darwin-arm64 (Apple Silicon) + linux-{x86_64,aarch64}. Intel macOS
+# (darwin-x86_64) is intentionally NOT built: GitHub's macos-13 Intel runners
+# queue indefinitely and timed out at the 24h ceiling on every run, blocking the
+# release job. Intel Macs fall back to the from-source build in deploy.sh.
 #
 # Only first-party actions (actions/*) + preinstalled rustup + gh CLI are used,
 # matching this repo's supply-chain posture (no third-party GHA actions).
@@ -33,14 +38,15 @@ jobs:
   build:
     name: build (${{ matrix.asset }})
     runs-on: ${{ matrix.os }}
+    # Safety net: a starved/unavailable runner fails in minutes instead of
+    # hanging to GitHub's 24h ceiling and blocking the release job.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest          # Apple Silicon (arm64)
             asset: claude-tools-darwin-arm64
-          - os: macos-13              # Intel
-            asset: claude-tools-darwin-x86_64
           - os: ubuntu-latest         # x86_64
             asset: claude-tools-linux-x86_64
           - os: ubuntu-24.04-arm      # arm64
