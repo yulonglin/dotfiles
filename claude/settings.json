@@ -381,7 +381,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opusplan",
+  "model": "sonnet",
   "fallbackModel": [
     "sonnet"
   ],
