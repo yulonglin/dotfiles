@@ -5,6 +5,7 @@
 //   zed: open default settings (from command palette)
 {
   // === Privacy & Security ===
+  "cli_default_open_behavior": "existing_window",
   "context_servers": {
     "mcp-server-markitdown": {
       "enabled": true,
@@ -276,6 +277,17 @@
       "host": "rp-nla-1.5b-rl-v2",
       "args": [],
       "projects": []
+    },
+    {
+      "host": "rp-raw-nla-1.5b-rl",
+      "args": [],
+      "projects": [
+        {
+          "paths": [
+            "/workspace/projects/nla-vs-cot/./"
+          ]
+        }
+      ]
     }
   ]
 }
