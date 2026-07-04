@@ -148,7 +148,6 @@
       "Bash(od *)",
       "Bash(strings *)",
       "Bash(hexdump *)",
-      "Bash(cd *)",
       "Glob",
       "Grep",
       "ToolSearch",
