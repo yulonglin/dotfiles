@@ -75,13 +75,18 @@ quit_app() {
 
 # Close all windows of an app without quitting
 # Usage: close_app_windows "AppName" [patience]
-#   patience: number of no-progress attempts before giving up (default: 3)
+#   patience: number of no-progress attempts before escalating/giving up (default: 3)
 close_app_windows() {
     local app="$1"
     local patience="${2:-3}"
     # Use Cmd+W via System Events - works for Electron apps and others
-    # that don't respond to standard AppleScript window commands
-    # Includes timeout protection: max 20 attempts, exits if no progress
+    # that don't respond to standard AppleScript window commands.
+    #
+    # Tabbed apps (Obsidian, Bear) keep all tabs in a single window, so Cmd+W
+    # only closes a tab and the window count never drops. When Cmd+W stalls
+    # (no progress after `patience` attempts), escalate to Cmd+Shift+W, which
+    # closes the whole window at once. If that also stalls, give up.
+    # Overall bound: max 20 attempts.
     osascript -e "
         tell application \"System Events\"
             tell process \"$app\"
@@ -91,15 +96,21 @@ close_app_windows() {
                 set lastCount to count of windows
                 set stuckCount to 0
                 set maxStuck to $patience
+                set giveUp to $patience * 2
                 repeat while (count of windows) > 0 and attempts < maxAttempts
-                    keystroke \"w\" using command down
+                    if stuckCount >= maxStuck then
+                        -- Cmd+W stalled (tabbed app): escalate to close-window
+                        keystroke \"w\" using {command down, shift down}
+                    else
+                        keystroke \"w\" using command down
+                    end if
                     delay 0.2
                     set attempts to attempts + 1
                     set currentCount to count of windows
                     if currentCount >= lastCount then
                         set stuckCount to stuckCount + 1
-                        if stuckCount >= maxStuck then
-                            -- No progress after maxStuck attempts, app is stuck
+                        if stuckCount >= giveUp then
+                            -- No progress even after escalating, app is stuck
                             exit repeat
                         end if
                     else
