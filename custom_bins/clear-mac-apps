@@ -112,6 +112,12 @@ close_app_windows() {
     " 2>/dev/null || true
 }
 
+# Get the title of a (non-Chrome) app's frontmost window, best-effort
+get_app_frontmost_window_title() {
+    local app="$1"
+    osascript -e "tell application \"System Events\" to tell process \"$app\" to get name of window 1" 2>/dev/null
+}
+
 # Get all Chrome window IDs and tab titles as "window_id|tab_title" per line
 get_chrome_window_tabs() {
     osascript <<'APPLESCRIPT'
@@ -134,8 +140,11 @@ close_app_selectively() {
     local -a protected_patterns=("$@")
 
     if [[ "$app" != "Google Chrome" ]]; then
-        # Non-Chrome fallback: close all windows (best-effort)
-        close_app_windows "$app" 3
+        # Non-Chrome: we can't selectively close individual windows, only
+        # detect whether ANY window matches a protected pattern (see caller).
+        # Being routed here means a match was found, so leave the app alone
+        # entirely rather than closing everything and defeating the protection.
+        echo "  $app has a protected window — leaving it alone"
         return
     fi
 
@@ -276,6 +285,18 @@ main() {
                         fi
                     done
                 done <<< "$_chrome_tabs_cache"
+            else
+                # Other apps: active window title only (best-effort)
+                local _title
+                _title=$(get_app_frontmost_window_title "$app")
+                if [[ -n "$_title" ]]; then
+                    for pattern in "${protected_patterns[@]}"; do
+                        if [[ "${(L)_title}" == *"${(L)pattern}"* ]]; then
+                            has_protected=true
+                            break
+                        fi
+                    done
+                fi
             fi
             if $has_protected; then
                 apps_selective_close+=("$app")
