@@ -57,3 +57,5 @@ policy-limits.json
 remote-settings.json
 
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh
+.config.json
+gh-pr-status-cache.json

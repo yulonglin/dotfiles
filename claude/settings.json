@@ -381,7 +381,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "sonnet",
+  "model": "fable",
   "fallbackModel": [
     "sonnet"
   ],
