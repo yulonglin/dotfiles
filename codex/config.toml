@@ -169,8 +169,8 @@ source_type = "local"
 source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
 [marketplaces.claude-plugins-official]
-last_updated = "2026-06-22T15:39:46Z"
-last_revision = "5fc2987a44918a455ef7dc583b51f8faf875c3ed"
+last_updated = "2026-07-03T10:05:33Z"
+last_revision = "358ee646f45b39424320d47abbb15554d4eb31e3"
 source_type = "git"
 source = "https://github.com/anthropics/claude-plugins-official.git"
 

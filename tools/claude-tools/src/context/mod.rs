@@ -70,7 +70,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     } else if !ctx_args.profiles.is_empty() {
         // Non-interactive apply with specified profiles
         let reg = registry::load_registry()?;
-        let (base, profiles) = profiles::load_profiles()?;
+        let (base, profiles) = profiles::load_profiles_os_aware()?;
         let enabled = builder::build_plugins(&reg, &base, &profiles, &ctx_args.profiles, &[], &[])?;
         settings::apply_to_settings(&enabled)?;
         settings::write_context_yaml(&ctx_args.profiles, &[], &[])?;

@@ -110,7 +110,7 @@ pub fn apply_from_context_yaml() -> Result<Option<(Vec<String>, BTreeMap<String,
         Ok(r) => r,
         Err(_) => return Ok(None),
     };
-    let (base, profiles) = match super::profiles::load_profiles() {
+    let (base, profiles) = match super::profiles::load_profiles_os_aware() {
         Ok(p) => p,
         Err(_) => return Ok(None),
     };
