@@ -32,14 +32,29 @@ fn load_profiles_yaml() -> Result<ProfilesYaml, Box<dyn std::error::Error>> {
 }
 
 /// Load base plugins and profile definitions from profiles.yaml.
-/// Note: does NOT include the `macos:` list; use `collect_wanted_plugins` for the full
-/// OS-aware set. This function is used by callers that only need base + profile defs.
+/// Note: does NOT include the `macos:` list; use `load_profiles_os_aware` for any
+/// caller feeding into `build_plugins`/`enabledPlugins` (build_plugins itself has no
+/// OS awareness — it just enables whatever `base` contains).
 pub fn load_profiles() -> Result<(Vec<String>, BTreeMap<String, ProfileDef>), Box<dyn std::error::Error>> {
     let data = load_profiles_yaml()?;
     Ok((
         data.base.unwrap_or_default(),
         data.profiles.unwrap_or_default(),
     ))
+}
+
+/// Like `load_profiles`, but extends `base` with the `macos:` list when running on
+/// macOS. This is what makes OS-gated plugins (e.g. bear-mcp) resolve to enabled on
+/// macOS and disabled elsewhere when passed into `build_plugins`.
+pub fn load_profiles_os_aware() -> Result<(Vec<String>, BTreeMap<String, ProfileDef>), Box<dyn std::error::Error>> {
+    let data = load_profiles_yaml()?;
+    let mut base = data.base.unwrap_or_default();
+    if std::env::consts::OS == "macos" {
+        if let Some(macos_plugins) = data.macos {
+            base.extend(macos_plugins);
+        }
+    }
+    Ok((base, data.profiles.unwrap_or_default()))
 }
 
 /// Load marketplace configurations from profiles.yaml.
