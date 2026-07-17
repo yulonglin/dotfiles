@@ -598,21 +598,6 @@ alias ai-update='update-ai-tools'
 # Detects: brew (macOS), apt/dnf/pacman (Linux)
 alias pkg-update='update-packages'
 
-# zerobrew: faster Homebrew client (use zb for interactive installs, brew for scripts)
-# `zb install` falls back to `brew install` on failure (zerobrew doesn't handle casks)
-if command -v zb &>/dev/null; then
-    zb() {
-        if [[ "$1" == "install" ]]; then
-            shift
-            command zb install "$@" || { echo "→ zb failed, falling back to brew install" >&2; brew install "$@"; }
-        else
-            command zb "$@"
-        fi
-    }
-    alias zbi='zb install'
-    alias zbu='zb uninstall'
-fi
-
 # Auto-agent guard controls
 alias auto-guard='auto-agent-guardctl status'
 alias auto-approve='auto-agent-guardctl approve'

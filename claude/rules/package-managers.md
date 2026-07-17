@@ -6,15 +6,14 @@ Primary languages: Python, shell, TypeScript, Rust. Rarely uses Go or Node direc
 
 ## macOS (in order of preference)
 
-1. **Zerobrew** — same Homebrew UX, faster; use if available
-2. **Homebrew** — dominant default
-3. **DMG** — fine for GUI apps
-4. **App Store** — sandboxed, slower updates, but handles auto-updates
-5. **Ecosystem-specific:**
+1. **Homebrew** — dominant default
+2. **DMG** — fine for GUI apps
+3. **App Store** — sandboxed, slower updates, but handles auto-updates
+4. **Ecosystem-specific:**
    - `uv tool install` — Python CLI tools. `uv python install` for Python versions.
    - `cargo install` — Rust tools
    - `bun` / `bunx` — TS/JS tools
-6. **Source** — last resort
+5. **Source** — last resort
 
 ## Linux (in order of preference)
 
