@@ -873,6 +873,8 @@
         "/var/folders/*/*/T/claude/**",
         "/var/folders/*/*/C",
         "/run/user/*/pueue*.socket",
+        "~/.claude/jobs/*/tmp",
+        "~/.claude/jobs/*/tmp/**",
         "~/code",
         "~/writing",
         "~/projects",
