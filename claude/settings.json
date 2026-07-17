@@ -167,6 +167,7 @@
       "WebSearch",
       "WebFetch",
       "Read",
+      "EnterWorktree",
       "Artifact",
       "Read(**/.envrc)",
       "Bash(CUDA_VISIBLE_DEVICES=* python *)",
@@ -379,7 +380,7 @@
       "mcp__plugin_things-mcp_things__update_project",
       "mcp__claude_ai_Notion__notion-move-pages"
     ],
-    "defaultMode": "auto"
+    "defaultMode": "acceptEdits"
   },
   "model": "fable",
   "fallbackModel": [
