@@ -60,10 +60,19 @@ if [ -n "$LOCKFILE_CHANGED" ]; then
 
     # Socket CLI (JS ecosystem lockfiles)
     if command -v socket &>/dev/null && echo "$LOCKFILE_CHANGED" | grep -qE '^(package-lock|bun\.lock|pnpm-lock|yarn\.lock)'; then
-        if ! socket report --json 2>/dev/null | jq -e '.issues | length == 0' >/dev/null 2>&1; then
-            echo "Pre-commit: socket found potential issues in $LOCKFILE_CHANGED. Review with: socket report"
-            echo "  To bypass: git commit --no-verify"
-            exit 1
+        SOCKET_OUT=$(socket report --json 2>/dev/null || true)
+        if echo "$SOCKET_OUT" | jq -e . >/dev/null 2>&1; then
+            if ! echo "$SOCKET_OUT" | jq -e '.issues | length == 0' >/dev/null 2>&1; then
+                echo "Pre-commit: socket found potential issues in $LOCKFILE_CHANGED. Review with: socket report"
+                echo "  To bypass: git commit --no-verify"
+                exit 1
+            fi
+        else
+            # `socket report` doesn't exist in current socket CLI versions (renamed to
+            # `socket scan create`), and/or socket isn't authenticated — either way the
+            # output isn't valid JSON, so there's no real finding to act on. Don't treat
+            # a broken/unauthenticated tool invocation as "issues found".
+            echo "Pre-commit: socket CLI did not return valid JSON for $LOCKFILE_CHANGED (unauthenticated, or 'socket report' no longer exists in this CLI version) — skipping supply-chain check. Run 'socket login', or update this hook to use 'socket scan create'."
         fi
     fi
 
