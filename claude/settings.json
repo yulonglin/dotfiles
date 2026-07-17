@@ -855,7 +855,9 @@
         "cerebras.ai",
         "anthropic.com",
         "hub.docker.com",
-        "api.zotero.org"
+        "api.zotero.org",
+        "osv.dev",
+        "api.osv.dev"
       ],
       "allowLocalBinding": true
     },
