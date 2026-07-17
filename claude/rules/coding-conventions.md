@@ -54,7 +54,7 @@ if __name__ == "__main__":
 |------|------|------|-----|
 | Package mgmt | `uv` | pip/poetry | 10-100x faster, single binary, replaces pip+venv+poetry |
 | Lint + format | `ruff` | flake8/black/isort | Single Rust binary replaces 3 tools, near-instant |
-| Type check | `ty` | mypy/pyright | Rust-based, 10-60x faster; beta — fall back to pyright if ty gaps block you |
+| Type check | `ty` | mypy/pyright | Rust-based, 10-60x faster |
 | Task runner | `just` | Makefile / shell scripts | Simpler syntax, no tab sensitivity, cross-platform |
 | CLI | `cyclopts` | argparse/typer | Pydantic-native, `Annotated` types, 38% less code; niche — LLM codegen may need corrections |
 | Config/env | `pydantic-settings` | python-dotenv / manual `os.getenv` | Typed config with `SecretStr`, env/file/vault sources |

@@ -51,7 +51,7 @@ COMPONENTS:
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
     --ai-tools        Enable AI CLI tools (Claude, Codex, OpenCode, Antigravity)
-    --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt, ty)
+    --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
     --pueue           Enable Pueue job scheduler (Linux only)
@@ -182,6 +182,16 @@ if ! is_installed uv; then
     fi
 fi
 
+# ─── Python Dev Tools (uv ecosystem) ────────────────────────────────────────
+
+if cmd_exists uv; then
+    # ty — Rust-based Python type checker (Astral/uv ecosystem)
+    if ! is_installed ty; then
+        log_info "Installing ty..."
+        uv tool install ty 2>/dev/null || log_warning "ty installation failed"
+    fi
+fi
+
 # ─── Node.js LTS (global runtime — see install_node in helpers.sh) ────────────
 
 install_node
@@ -236,12 +246,6 @@ if [[ "$INSTALL_EXTRAS" == "true" ]]; then
         for pkg in "${PACKAGES_EXTRAS_LINUX[@]}"; do
             mise_install "$pkg"
         done
-    fi
-
-    # ty — fast Python type checker (Astral/uv ecosystem)
-    if ! is_installed ty && cmd_exists uv; then
-        log_info "Installing ty..."
-        uv tool install ty 2>/dev/null || log_warning "ty installation failed"
     fi
 fi
 

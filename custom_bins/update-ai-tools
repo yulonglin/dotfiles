@@ -191,6 +191,16 @@ update_antigravity
 update_tool "codex"    "codex"    "@openai/codex"
 update_tool "opencode" "opencode" "opencode-ai"
 
+# ty is a uv tool — upgrade via uv directly
+if command -v ty &>/dev/null && command -v uv &>/dev/null; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "[DRY RUN] Would run: uv tool upgrade ty"
+    else
+        log "Updating ty..."
+        uv tool upgrade ty 2>&1 || log_err "ty upgrade failed"
+    fi
+fi
+
 set -e
 
 log "═══ AI Tools Update Complete ═══"

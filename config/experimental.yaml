@@ -23,8 +23,8 @@
 
 - name: ty
   added: 2026-04-01
-  review_by: 2026-07-01
+  promoted: 2026-07-17
   installed_via: "uv tool install ty"
   settings_keys: []
-  reason: "Rust-based Python type checker, 10-60x faster than mypy/pyright. Alpha — fall back to pyright if gaps block."
-  status: trial
+  reason: "Rust-based Python type checker, 10-60x faster than mypy/pyright. Moved to core install (uv ecosystem section)."
+  status: promoted
