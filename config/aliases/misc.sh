@@ -23,7 +23,8 @@ alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 
 # Supply chain defense: 7-day quarantine for uv (exclude-newer needs absolute date)
 export UV_EXCLUDE_NEWER="$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
-# Supply chain defense: block install of packages with OSV MAL advisories (uv >=0.11.16; preview feature, older uv ignores it)
+# Supply chain defense: block lockfile syncs (uv add/sync) of packages with OSV MAL advisories
+# (uv >=0.11.16, floor enforced in install.sh; preview feature; does NOT cover uv pip/tool install)
 export UV_MALWARE_CHECK=1
 
 #-------------------------------------------------------------

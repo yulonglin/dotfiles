@@ -182,6 +182,17 @@ if ! is_installed uv; then
     fi
 fi
 
+# UV_MALWARE_CHECK (aliases/misc.sh) needs uv >=0.11.16 — older uv silently ignores it,
+# so enforce the floor on existing installations that the block above skips.
+if cmd_exists uv; then
+    uv_version=$(uv --version 2>/dev/null | awk '{print $2}')
+    if [ -n "$uv_version" ] && [ "$(printf '%s\n' "0.11.16" "$uv_version" | sort -V | head -1)" != "0.11.16" ]; then
+        log_info "Upgrading uv $uv_version (>=0.11.16 required for UV_MALWARE_CHECK)..."
+        uv self update 2>/dev/null || { is_macos && cmd_exists brew && brew upgrade uv; } || \
+            log_warning "uv upgrade failed — UV_MALWARE_CHECK inactive on uv $uv_version"
+    fi
+fi
+
 # ─── Python Dev Tools (uv ecosystem) ────────────────────────────────────────
 
 if cmd_exists uv; then

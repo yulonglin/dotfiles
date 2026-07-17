@@ -31,9 +31,10 @@ All package managers are configured with a **7-day quarantine** (`min-release-ag
 
 ## uv OSV Malware Check
 
-`UV_MALWARE_CHECK=1` is exported globally (`config/aliases/misc.sh`). uv cross-references the OSV database (OpenSSF malicious-packages MAL advisories) on every install/sync and aborts before any malicious code runs.
+`UV_MALWARE_CHECK=1` is exported globally (`config/aliases/misc.sh`). uv cross-references the OSV database (OpenSSF malicious-packages MAL advisories) against the project lockfile and aborts the sync before any malicious code runs.
 
-- Requires uv >=0.11.16; older uv silently ignores the variable. Preview feature (announced 2026-06-08) — behavior may change.
+- **Coverage: lockfile syncs only** — `uv add`, `uv sync`, and other lock-driven flows. `uv pip install` and `uv tool install` do NOT run the check; for those paths the 7-day `UV_EXCLUDE_NEWER` quarantine and hash-pinning below are the guards. Prefer project (lockfile) flows when installing anything untrusted.
+- Requires uv >=0.11.16; older uv silently ignores the variable (`install.sh` enforces this floor by upgrading older uv). Preview feature (announced 2026-06-08) — behavior may change.
 - **When an install is blocked as malware:** this is NOT a bug. Tell the user which package/version was flagged and link the OSV advisory. Never bypass by unsetting `UV_MALWARE_CHECK` without explicit user approval.
 
 ## Python Dependencies
