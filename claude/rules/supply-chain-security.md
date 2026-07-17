@@ -29,6 +29,13 @@ All package managers are configured with a **7-day quarantine** (`min-release-ag
 - pnpm: `pnpm add --minimum-release-age=0 <pkg>` (or set to 0 in global rc temporarily)
 - uv: `UV_EXCLUDE_NEWER= uv pip install <pkg>` (unset the env var for this command)
 
+## uv OSV Malware Check
+
+`UV_MALWARE_CHECK=1` is exported globally (`config/aliases/misc.sh`). uv cross-references the OSV database (OpenSSF malicious-packages MAL advisories) on every install/sync and aborts before any malicious code runs.
+
+- Requires uv >=0.11.16; older uv silently ignores the variable. Preview feature (announced 2026-06-08) — behavior may change.
+- **When an install is blocked as malware:** this is NOT a bug. Tell the user which package/version was flagged and link the OSV advisory. Never bypass by unsetting `UV_MALWARE_CHECK` without explicit user approval.
+
 ## Python Dependencies
 
 - Use `uv pip compile --generate-hashes` to produce hash-pinned requirements
