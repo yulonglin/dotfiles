@@ -21,8 +21,11 @@ alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 [[ -x /Applications/Bear.app/Contents/MacOS/bearcli && ! -x /usr/local/bin/bearcli ]] && \
     alias bearcli='/Applications/Bear.app/Contents/MacOS/bearcli'
 
-# Supply chain defense: 7-day quarantine for uv (exclude-newer needs absolute date)
-export UV_EXCLUDE_NEWER="$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
+# Supply chain defense: rolling 7-day quarantine for uv.
+# P7D (ISO-8601 duration) is resolved by uv at invocation time, so it never goes stale —
+# unlike the previous $(date ...) form, whose absolute date froze in Claude Code shell
+# snapshots and drifted weeks out of date. Duration syntax verified on uv 0.11.x.
+export UV_EXCLUDE_NEWER="P7D"
 # Supply chain defense: block lockfile syncs (uv add/sync) of packages with OSV MAL advisories
 # (uv >=0.11.16, floor enforced in install.sh; preview feature; does NOT cover uv pip/tool install)
 export UV_MALWARE_CHECK=1
