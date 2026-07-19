@@ -73,6 +73,27 @@ quit_app() {
     osascript -e "tell application \"$app\" to quit" 2>/dev/null || true
 }
 
+# Quit an app and poll until it exits (max 30s), for apps that ignore keystrokes.
+# No focus dependency (System Events polling is name-based), safe to run in parallel.
+# Usage: slow_quit_and_wait "AppName"
+slow_quit_and_wait() {
+    local app="$1"
+    echo "Quitting (slow): $app"
+    quit_app "$app"
+    local elapsed=0
+    while (( elapsed < 30 )); do
+        sleep 2
+        elapsed=$((elapsed + 2))
+        local still_running
+        still_running=$(osascript -e "tell application \"System Events\" to return (name of every process whose name is \"$app\")" 2>/dev/null || echo "")
+        if [[ -z "$still_running" ]]; then
+            echo "  $app exited after ${elapsed}s"
+            return 0
+        fi
+    done
+    echo "  Warning: $app still running after 30s, moving on"
+}
+
 # Close all windows of an app without quitting
 # Usage: close_app_windows "AppName" [patience]
 #   patience: number of no-progress attempts before escalating/giving up (default: 3)
@@ -184,14 +205,15 @@ close_app_selectively() {
         script+="    close (every window whose id is ${wid})"$'\n'
     done
     script+='end tell'
-    osascript -e "$script"
+    osascript -e "$script" 2>/dev/null || true
 
     # Zombie check: if 0 windows remain after close, quit the app
     local remaining
-    remaining=$(osascript -e 'tell application "Google Chrome" to return count of windows')
+    remaining=$(osascript -e 'tell application "Google Chrome" to return count of windows' 2>/dev/null || echo "")
     if [[ "$remaining" == "0" ]]; then
         quit_app "$app"
     fi
+    return 0
 }
 
 main() {
@@ -347,26 +369,15 @@ main() {
         close_app_windows "$app" 3
     done
 
-    # Slow-quit apps: send quit, then poll until process exits (max 30s)
-    for app in "${apps_slow_quit[@]}"; do
-        echo "Quitting (slow): $app"
-        quit_app "$app"
-        local elapsed=0
-        while (( elapsed < 30 )); do
-            sleep 2
-            elapsed=$((elapsed + 2))
-            # Check if process is still running via System Events
-            local still_running
-            still_running=$(osascript -e "tell application \"System Events\" to return (name of every process whose name is \"$app\")" 2>/dev/null || echo "")
-            if [[ -z "$still_running" ]]; then
-                echo "  $app exited after ${elapsed}s"
-                break
-            fi
+    # Slow-quit apps in parallel: send quit, then poll each until exit (max 30s each).
+    # No focus needed (System Events polling is name-based), so safe to background.
+    if (( ${#apps_slow_quit} > 0 )); then
+        echo "Quitting (slow) ${#apps_slow_quit} apps in parallel..."
+        for app in "${apps_slow_quit[@]}"; do
+            slow_quit_and_wait "$app" &
         done
-        if (( elapsed >= 30 )); then
-            echo "  Warning: $app still running after 30s, moving on"
-        fi
-    done
+        wait
+    fi
 
     # Selective-close: close non-protected windows, keep app alive
     for app in "${apps_selective_close[@]}"; do
