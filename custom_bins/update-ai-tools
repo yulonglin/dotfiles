@@ -80,6 +80,31 @@ trap release_lock EXIT
 
 # ─── Core Update Logic ──────────────────────────────────────────────────────
 
+# A bun-managed CLI can be shadowed by an npm -g copy: ~/.npm-global/bin
+# precedes ~/.bun/bin on the interactive PATH, so `bun add -g` updates a binary
+# the shell never resolves and the daily update silently has no effect (found
+# 2026-07-19: codex 0.144.5 in npm-global shadowing the bun copy the updater
+# maintained). One home per JS CLI: bun global. Remove user-owned npm
+# duplicates; root-owned ones only get flagged (need sudo).
+dedupe_bun_shadows() {
+    local tool_name="$1" package_name="$2"
+    local npm_copy="$HOME/.npm-global/bin/$tool_name"
+    if [[ -e "$npm_copy" ]]; then
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log "[DRY RUN] Would remove npm-global duplicate: $npm_copy"
+        elif command -v npm &>/dev/null; then
+            log "Removing npm-global duplicate of $tool_name (it shadows the bun-managed copy)"
+            NPM_CONFIG_PREFIX="$HOME/.npm-global" npm uninstall -g "$package_name" 2>&1 \
+                || log_err "failed to remove npm-global duplicate at $npm_copy"
+        else
+            log_err "npm-global duplicate at $npm_copy shadows the bun copy — remove it manually"
+        fi
+    fi
+    if [[ -e "/usr/local/bin/$tool_name" ]]; then
+        log_err "root-owned duplicate at /usr/local/bin/$tool_name — remove manually: sudo rm /usr/local/bin/$tool_name"
+    fi
+}
+
 # Update a tool using platform-appropriate manager (brew on macOS, bun on Linux)
 # Usage: update_tool <command_name> <brew_package> <package_name>
 update_tool() {
@@ -106,7 +131,10 @@ update_tool() {
     if [[ "$DRY_RUN" == "true" ]]; then
         case "$method" in
             brew) log "[DRY RUN] Would run: brew upgrade $brew_name" ;;
-            bun)  log "[DRY RUN] Would run: bun add -g ${package_name}@latest" ;;
+            bun)
+                log "[DRY RUN] Would run: bun add -g ${package_name}@latest"
+                dedupe_bun_shadows "$tool_name" "$package_name"
+                ;;
             *)    log "[DRY RUN] $tool_name: no known update method" ;;
         esac
         return 0
@@ -122,6 +150,7 @@ update_tool() {
         bun)
             bun add -g "${package_name}@latest" 2>&1 \
                 || log_err "$tool_name bun update failed"
+            dedupe_bun_shadows "$tool_name" "$package_name"
             ;;
         *)
             log_err "$tool_name installed but no known update method (expected brew or bun)"
