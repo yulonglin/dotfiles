@@ -66,25 +66,32 @@ See README.md for detailed usage.
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
 - **Single branch: `main`.** The old `main`/`yulong` split was collapsed into `main` on 2026-06-22 (PR #10) — `yulong` is kept dormant as a safety net but receives no new work. Do day-to-day work directly on `main`; branch worktrees off `main`. (Route only large/structural merges through a tracked PR; routine commits go direct.)
-- **This repo is public, but we no longer keep `main` "clean for others"** — it's just the personal working branch. Genuinely private content (`plans/`, `specs/`, `.remember/`, secrets) still lives in the separate private repo (see [Personal Content](#personal-content)), never on a branch here.
+- **This repo is public, but we no longer keep `main` "clean for others"** — it's just the personal working branch. Genuinely private content (`plans/`, `specs/`, `.remember/`, secrets) lives outside the repo in the Obsidian vault (see [Personal Content](#personal-content)), never on a branch here.
 
 ### Personal Content
 
 This repo is public (people star it). A branch in a public repo is **also public**,
-so personal working artifacts must not live on any branch here — they go in a
-separate **private** repo (`dotfiles-personal`).
+so personal working artifacts must not live on any branch here — they live in the
+**Obsidian vault** (`~/vault`), with symlinks at the original repo paths so tooling
+keeps working unchanged.
 
-| Repo | Visibility | Contents |
-|------|-----------|----------|
-| `dotfiles` (this one) | Public | Shareable dotfiles only. What people clone/star. |
-| `dotfiles-personal` | **Private** | `plans/`, `specs/`, `.remember/`, `tmp/`, personal `docs/`, `config/machines.conf` |
+| Repo path | Real location (vault) | Notes |
+|-----------|----------------------|-------|
+| `plans/` | `~/vault/dotfiles/plans/` | `plansDirectory: "plans"` resolves through the symlink |
+| `specs/` | `~/vault/dotfiles/specs/` | |
+| `.remember/` | `~/vault/dotfiles/remember/` | Visible name (no dot) — Obsidian doesn't index dot-folders |
+| `claude/plans/` (= `~/.claude/plans/`) | `~/vault/plans/` | Global plans |
 
-The personal paths are listed in `.gitignore` here so they can't accidentally be
-committed to public `main`. They are tracked in the private repo instead.
+All these paths remain in `.gitignore` so they can't accidentally be committed to
+public `main`. `~/vault` is in the Claude Code sandbox `allowWrite` list
+(`claude/settings.json`) so sessions can write through the symlinks. Vault backup
+relies on Obsidian sync — the vault is not a git repo.
 
-**Why not a `yulong`/personal branch?** Branches in a public repo are public — a
-superset branch would have exposed everything it was meant to hide. A separate
-private repo is the only real privacy boundary.
+**Why not a `yulong`/personal branch or a private `dotfiles-personal` repo?**
+Branches in a public repo are public — a superset branch would have exposed
+everything it was meant to hide. A separate private repo was planned but never
+created; the vault already syncs across machines and holds the same prose-like
+content, so it's the privacy boundary instead.
 
 ### Worktree Workflow
 
