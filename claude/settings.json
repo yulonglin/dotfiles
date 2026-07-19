@@ -772,12 +772,6 @@
         "repo": "sawyerhood/dev-browser"
       }
     },
-    "openai-codex": {
-      "source": {
-        "source": "github",
-        "repo": "crazytieguy/codex-plugin-cc"
-      }
-    },
     "productivity-tools": {
       "source": {
         "source": "github",
@@ -876,7 +870,9 @@
         "/var/folders/*/*/T/claude/**",
         "/var/folders/*/*/C",
         "/run/user/*/pueue*.socket",
-        "~/.claude/plugins/data/*/state", "~/.claude/plugins/data/*/state/**", "~/.claude/jobs/*/tmp",
+        "~/.claude/plugins/data/*/state",
+        "~/.claude/plugins/data/*/state/**",
+        "~/.claude/jobs/*/tmp",
         "~/.claude/jobs/*/tmp/**",
         "~/code",
         "~/writing",

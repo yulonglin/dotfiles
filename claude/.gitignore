@@ -59,3 +59,15 @@ remote-settings.json
 # We DO track: CLAUDE.md, settings.json, agents/, notify.sh
 .config.json
 gh-pr-status-cache.json
+
+# Harness-managed runtime paths (sandbox deny-listed; appear as 0-byte stubs)
+.cc-writes
+.claude.json
+.claude-*oauth.json
+commands
+daemon.json
+launch.json
+local
+routines
+scheduled_tasks.json
+workflows
