@@ -148,7 +148,8 @@ build_bar() {
   local pct=$1 color=$2 width=10
   [ "$pct" -lt 0 ] 2>/dev/null && pct=0
   [ "$pct" -gt 100 ] 2>/dev/null && pct=100
-  local filled=$((pct * width / 100)) empty=$((width - filled))
+  local filled=$((pct * width / 100))
+  local empty=$((width - filled))
 
   local filled_str="" empty_str=""
   for ((i=0; i<filled; i++)); do filled_str+="●"; done
@@ -353,6 +354,33 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
       seven_datetime=$(format_epoch_datetime "$seven_epoch")
       [ -n "$seven_datetime" ] && printf " \033[2m⟳ %s\033[0m" "$seven_datetime"
     fi
+
+    # Model-scoped weekly limits (e.g. Fable) — separate quota from the
+    # aggregate 7d bucket above, surfaced by the API as `weekly_scoped`.
+    while IFS=$'\t' read -r limit_name limit_pct_raw limit_resets; do
+      [ -z "$limit_name" ] && continue
+      limit_pct=$(printf '%.0f' "$limit_pct_raw")
+      printf "  ·  "
+      if compute_pace "$limit_pct" "$limit_resets" 604800; then
+        limit_color=$(color_for_pace "$PACE_DELTA")
+        limit_delta=$PACE_DELTA
+        limit_epoch=$PACE_EPOCH
+      else
+        limit_color=$(color_for_pct "$limit_pct")
+        limit_delta=""
+        limit_epoch=""
+      fi
+      printf "${limit_color}%s\033[0m " "$limit_name"
+      build_bar "$limit_pct" "$limit_color"
+      if [ -n "$limit_delta" ]; then
+        if [ "$limit_delta" -gt 0 ]; then printf " ${limit_color}+%d%%\033[0m" "$limit_delta"
+        else printf " ${limit_color}%d%%\033[0m" "$limit_delta"; fi
+      fi
+      if [ -n "$limit_epoch" ]; then
+        limit_datetime=$(format_epoch_datetime "$limit_epoch")
+        [ -n "$limit_datetime" ] && printf " \033[2m⟳ %s\033[0m" "$limit_datetime"
+      fi
+    done < <(echo "$usage_data" | jq -r '.limits[]? | select(.kind == "weekly_scoped") | select(.scope.model.display_name != null) | [.scope.model.display_name, (.percent // 0), (.resets_at // "")] | @tsv')
 
   fi
 else

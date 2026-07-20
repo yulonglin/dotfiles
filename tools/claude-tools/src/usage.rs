@@ -1,7 +1,8 @@
 //! API usage tracking for Claude Code statusline.
 //!
-//! Fetches 5-hour and 7-day rate limit utilization from the Anthropic OAuth
-//! usage endpoint, with file-based caching (60s TTL) and graceful degradation.
+//! Fetches 5-hour and 7-day rate limit utilization, plus any model-scoped
+//! weekly limits (e.g. Fable), from the Anthropic OAuth usage endpoint, with
+//! file-based caching (60s TTL) and graceful degradation.
 //!
 //! Fetch strategy: ureq (native Rust) → curl fallback → stale cache → error.
 
@@ -25,12 +26,34 @@ const SEVEN_DAY_SECS: f64 = 7.0 * 86400.0;
 pub struct UsageResponse {
     pub five_hour: Option<UsageBucket>,
     pub seven_day: Option<UsageBucket>,
+    #[serde(default)]
+    pub limits: Vec<Limit>,
 }
 
 #[derive(Deserialize, Clone)]
 pub struct UsageBucket {
     pub utilization: Option<f64>,
     pub resets_at: Option<String>,
+}
+
+/// A single named rate-limit entry from the `limits` array, e.g. the
+/// model-scoped weekly limit for a specific model (Fable, Opus, ...).
+#[derive(Deserialize, Clone)]
+pub struct Limit {
+    pub kind: Option<String>,
+    pub percent: Option<f64>,
+    pub resets_at: Option<String>,
+    pub scope: Option<LimitScope>,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct LimitScope {
+    pub model: Option<LimitModel>,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct LimitModel {
+    pub display_name: Option<String>,
 }
 
 // --- Public entry point ---
@@ -60,7 +83,8 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
 
     if let Some(pct) = five {
         let pct = pct.round().clamp(0.0, 100.0) as u8;
-        render_bucket(output, "5h", pct, usage.five_hour.as_ref(), 5.0 * 3600.0);
+        let resets_at = usage.five_hour.as_ref().and_then(|b| b.resets_at.as_deref());
+        render_bucket(output, "5h", pct, resets_at, 5.0 * 3600.0);
     }
 
     if let Some(pct) = seven {
@@ -68,17 +92,34 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
         if five.is_some() {
             output.push_str("  \u{00b7}  ");
         }
-        render_bucket(output, "7d", pct, usage.seven_day.as_ref(), SEVEN_DAY_SECS);
+        let resets_at = usage.seven_day.as_ref().and_then(|b| b.resets_at.as_deref());
+        render_bucket(output, "7d", pct, resets_at, SEVEN_DAY_SECS);
     }
 
+    // Model-scoped weekly limits (e.g. Fable) — separate quota from the
+    // aggregate 7d bucket above, surfaced by the API as `weekly_scoped`.
+    for limit in usage.limits.iter().filter(|l| l.kind.as_deref() == Some("weekly_scoped")) {
+        let Some(pct) = limit.percent else { continue };
+        let Some(name) = limit
+            .scope
+            .as_ref()
+            .and_then(|s| s.model.as_ref())
+            .and_then(|m| m.display_name.as_deref())
+        else {
+            continue;
+        };
+        let pct = pct.round().clamp(0.0, 100.0) as u8;
+        output.push_str("  \u{00b7}  ");
+        render_bucket(output, name, pct, limit.resets_at.as_deref(), SEVEN_DAY_SECS);
+    }
 }
 
 /// Render one rate-limit bucket: bar + pace indicator, colored by pace (not
 /// absolute usage). Pace = how far ahead/behind the linear burn rate you are;
 /// the bar goes warm only when you're burning *faster* than the window allows.
 /// Falls back to absolute-usage color when the reset time is unavailable.
-fn render_bucket(output: &mut String, label: &str, pct: u8, bucket: Option<&UsageBucket>, window_secs: f64) {
-    let pace = compute_pace(pct, bucket, window_secs);
+fn render_bucket(output: &mut String, label: &str, pct: u8, resets_at: Option<&str>, window_secs: f64) {
+    let pace = compute_pace(pct, resets_at, window_secs);
     let color = match pace {
         Some((delta, _)) => color_for_pace(delta),
         None => color_for_pct(pct),
@@ -115,8 +156,8 @@ fn format_bar(output: &mut String, label: &str, pct: u8, color: &str) {
 /// points. If 4/7 of the window has elapsed and you've used 61%, expected is ~57%
 /// → delta +4 (ahead). Returns `(delta, remaining_secs)`, or `None` when the reset
 /// time is missing or unparseable.
-fn compute_pace(pct: u8, bucket: Option<&UsageBucket>, window_secs: f64) -> Option<(i16, f64)> {
-    let resets_at = bucket.and_then(|b| b.resets_at.as_deref())?;
+fn compute_pace(pct: u8, resets_at: Option<&str>, window_secs: f64) -> Option<(i16, f64)> {
+    let resets_at = resets_at?;
     let reset_epoch = parse_iso_epoch(resets_at)?;
 
     let now = std::time::SystemTime::now()
