@@ -165,7 +165,7 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/multi-agent-coordination.md` — Multi-agent awareness, `.agent-claims` chope mechanism, conflict resolution
 - `rules/research-integrity.md` — No circular reasoning, report all results, no shortcut hacks, label/score/analysis separation
 - `rules/desktop-control.md` — Ask before launching apps, computer-use clicks/typing, claude-in-chrome navigation, or anything that moves focus on the user's machine
-- `rules/markdown-style.md` — Markdown authoring: no mid-sentence line breaks; clarity + rigour/honesty over volume
+- `rules/markdown-style.md` — Markdown authoring: no hard line breaks within paragraphs (one paragraph = one line); clarity + rigour/honesty over volume
 
 ## Knowledge Docs (On-Demand)
 
