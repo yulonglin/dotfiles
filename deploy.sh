@@ -81,6 +81,7 @@ COMPONENTS:
     --mcp-sync        Install daily shared MCP sync for Claude and Codex
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
+    --hide-idle-apps  Hide [hide-idle] apps (Cmd+H) after N min not frontmost (macOS only)
     --file-apps       Set default editor for coding file types (macOS only)
     --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
     --bearcli         Symlink Bear CLI → /usr/local/bin (macOS only, for cron/scripts)
@@ -1045,6 +1046,11 @@ fi
     if [[ "$DEPLOY_KEYBOARD" == "true" ]] && is_macos; then
         [[ -f "$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh" ]] && \
             scheduled_jobs+=("keyboard-repeat|$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh")
+    fi
+
+    if [[ "$DEPLOY_HIDE_IDLE_APPS" == "true" ]] && is_macos; then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_hide_idle_apps.sh" ]] && \
+            scheduled_jobs+=("hide-idle-apps|$DOT_DIR/scripts/cleanup/setup_hide_idle_apps.sh")
     fi
 
     if (( ${#scheduled_jobs[@]} > 0 )); then

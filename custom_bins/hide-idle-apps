@@ -1,0 +1,149 @@
+#!/usr/bin/env zsh
+# hide-idle-apps - Hide (Cmd+H equivalent) apps in config's [hide-idle] section
+# after they've spent N minutes not frontmost. Scheduled as a polling job
+# (see scripts/cleanup/setup_hide_idle_apps.sh).
+#
+# State: ~/.cache/hide-idle-apps/state - tab-separated "app<TAB>last_frontmost_epoch",
+# rewritten atomically each run. On first sight of an app, its timer starts now
+# (not "already idle") so nothing hides immediately after enabling the feature.
+
+set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+CONFIG_FILE="${SCRIPT_DIR}/../config/clear_mac_apps.conf"
+CACHE_DIR="${HOME}/.cache/hide-idle-apps"
+STATE_FILE="${CACHE_DIR}/state"
+IDLE_MINUTES="${HIDE_IDLE_MINUTES:-5}"
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run|-n)
+            DRY_RUN=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: hide-idle-apps [--dry-run|-n]"
+            echo "  --dry-run, -n  Show what would happen without hiding anything"
+            echo "  HIDE_IDLE_MINUTES env var overrides the idle threshold (default: 5)"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Parse apps from the [hide-idle] section in config (same format as clear-mac-apps)
+get_hide_idle_apps() {
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        echo "Error: Config file not found: $CONFIG_FILE" >&2
+        exit 1
+    fi
+    awk -v section="[hide-idle]" '
+        /^\[.*\]$/ { in_section = ($0 == section); next }
+        in_section && !/^#/ && !/^[[:space:]]*$/ {
+            sub(/#.*/, "")
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+            if (length > 0) print
+        }
+    ' "$CONFIG_FILE"
+}
+
+# Snapshot frontmost app name + all running process names in one osascript call
+get_snapshot() {
+    osascript -e 'tell application "System Events"
+        set frontApp to name of first process whose frontmost is true
+        set procNames to name of every process whose background only is false
+        set output to "FRONT:" & frontApp & linefeed
+        repeat with n in procNames
+            set output to output & "RUN:" & n & linefeed
+        end repeat
+        return output
+    end tell'
+}
+
+hide_app() {
+    local app="$1"
+    osascript -e "tell application \"System Events\" to set visible of process \"$app\" to false" 2>/dev/null || true
+}
+
+main() {
+    typeset -A hide_idle_set
+    while IFS= read -r app; do
+        [[ -n "$app" ]] && hide_idle_set[${(L)app}]="$app"
+    done < <(get_hide_idle_apps)
+
+    if (( ${#hide_idle_set} == 0 )); then
+        echo "No apps configured in [hide-idle] section."
+        return 0
+    fi
+
+    local snapshot front_app
+    snapshot=$(get_snapshot)
+    front_app=$(echo "$snapshot" | awk -F: '/^FRONT:/ { sub(/^FRONT:/, ""); print; exit }')
+
+    typeset -A running_set
+    while IFS= read -r line; do
+        [[ "$line" == RUN:* ]] || continue
+        local name="${line#RUN:}"
+        running_set[${(L)name}]="$name"
+    done <<< "$snapshot"
+
+    # Load previous state: app_lower -> last_frontmost_epoch
+    typeset -A last_active
+    mkdir -p "$CACHE_DIR"
+    if [[ -f "$STATE_FILE" ]]; then
+        while IFS=$'\t' read -r app_lower epoch; do
+            [[ -n "$app_lower" ]] && last_active[$app_lower]="$epoch"
+        done < "$STATE_FILE"
+    fi
+
+    local now front_app_lower
+    now=$(date +%s)
+    front_app_lower="${(L)front_app}"
+
+    local -a would_hide=()
+    local new_state=""
+    for app_lower in "${(k)hide_idle_set[@]}"; do
+        local app="${hide_idle_set[$app_lower]}"
+        (( ${+running_set[$app_lower]} )) || continue  # not running, skip (nothing to track/hide)
+
+        if [[ "$app_lower" == "$front_app_lower" ]]; then
+            last_active[$app_lower]="$now"
+        else
+            local since="${last_active[$app_lower]:-$now}"  # first sight: start timer now
+            local idle_seconds=$(( now - since ))
+            if (( idle_seconds >= IDLE_MINUTES * 60 )); then
+                would_hide+=("$app")
+                if ! $DRY_RUN; then
+                    hide_app "$app"
+                fi
+            fi
+            last_active[$app_lower]="$since"
+        fi
+        new_state+="${app_lower}"$'\t'"${last_active[$app_lower]}"$'\n'
+    done
+
+    # Atomic rewrite of state file
+    local tmp_state="${STATE_FILE}.tmp.$$"
+    print -rn -- "$new_state" > "$tmp_state"
+    mv "$tmp_state" "$STATE_FILE"
+
+    if $DRY_RUN; then
+        echo "=== DRY RUN (threshold: ${IDLE_MINUTES}m, frontmost: ${front_app:-none}) ==="
+        if (( ${#would_hide} > 0 )); then
+            echo "Would HIDE:"
+            for app in "${would_hide[@]}"; do
+                echo "  - $app"
+            done
+        else
+            echo "Nothing to hide."
+        fi
+    elif (( ${#would_hide} > 0 )); then
+        echo "Hid: ${would_hide[*]}"
+    fi
+}
+
+main "$@"

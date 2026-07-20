@@ -220,6 +220,71 @@ schedule_hourly() {
     fi
 }
 
+# Create a launchd plist for interval (sub-hourly polling) jobs (macOS only)
+# Usage: create_launchd_plist_interval "label" "command" "interval_seconds" "log_file"
+# Uses StartInterval instead of StartCalendarInterval - fires every N seconds
+# regardless of wall-clock alignment.
+create_launchd_plist_interval() {
+    local label="$1"
+    local command="$2"
+    local interval_seconds="${3:-60}"
+    local log_file="${4:-$HOME/Library/Logs/$label.log}"
+    local plist_file="$HOME/Library/LaunchAgents/$label.plist"
+
+    [[ "$(uname -s)" != "Darwin" ]] && return 0
+
+    mkdir -p "$(dirname "$plist_file")"
+    cat > "$plist_file" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$label</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$command</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>$interval_seconds</integer>
+    <key>StandardOutPath</key>
+    <string>$log_file</string>
+    <key>StandardErrorPath</key>
+    <string>$log_file</string>
+</dict>
+</plist>
+EOF
+    echo "$plist_file"
+}
+
+# Schedule an interval (sub-hourly polling) job (cross-platform)
+# Usage: schedule_interval "job_id" "command" "interval_seconds" [log_file]
+# macOS: launchd StartInterval (second-granularity). Linux: cron only supports
+# minute granularity, so interval_seconds is rounded up to whole minutes (min 1).
+schedule_interval() {
+    local job_id="$1"
+    local command="$2"
+    local interval_seconds="${3:-60}"
+    local log_file="${4:-}"
+
+    _validate_job_id "$job_id" || return 1
+
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        local label="com.user.$job_id"
+        log_file="${log_file:-$HOME/Library/Logs/$label.log}"
+        local plist
+        plist=$(create_launchd_plist_interval "$label" "$command" "$interval_seconds" "$log_file")
+        load_launchd "$plist"
+        _sched_log_info "✅ Installed launchd agent (runs every ${interval_seconds}s)"
+    else
+        local interval_minutes=$(( (interval_seconds + 59) / 60 ))
+        (( interval_minutes < 1 )) && interval_minutes=1
+        log_file="${log_file:-$HOME/.$job_id.log}"
+        add_cron_job "$job_id" "*/$interval_minutes * * * *" "$command" "$log_file"
+        _sched_log_info "✅ Installed cron job (runs every ${interval_minutes}m — cron minute granularity)"
+    fi
+}
+
 # Create a launchd plist for weekly jobs (macOS only)
 # Usage: create_launchd_plist_weekly "label" "command" "weekday" "hour" "minute" "log_file"
 create_launchd_plist_weekly() {
