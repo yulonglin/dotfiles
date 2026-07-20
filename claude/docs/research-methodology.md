@@ -185,7 +185,8 @@ Every `runs/<run-slug>/` directory MUST contain:
   commit/branch/Modal-or-similar-profile/model in header comments, so someone can reproduce
   the run without archaeology.
 - **`figures/`** — self-explanatory figures (title, axis labels, legend, caption), PNG+SVG
-  pairs where practical.
+  pairs where practical. **Prefer plots over tables** for anything with a distribution or
+  trend; tables only for small, discrete comparisons.
 - **Raw outputs** — `.jsonl` and/or `.eval` (whichever the eval framework produces), never
   discarded even once aggregated.
 - **`report.html`** (mandatory, not optional) — a single self-contained HTML file (inline
@@ -194,12 +195,23 @@ Every `runs/<run-slug>/` directory MUST contain:
   - Gives **every column, factor, and metric in any table a hover tooltip** explaining what
     it means in plain language — no unexplained shorthand, acronyms, or special syntax the
     reader has to already know.
-  - Includes a **full-transcript viewer** — every sampled transcript is viewable in full
-    (not just excerpts), within the same self-contained file.
+  - Includes a **full-transcript viewer** with every sampled rollout viewable in full, not
+    excerpts. Concretely, this means:
+    - **Every message is present** — system, user, assistant, and tool — nothing filtered out.
+    - **Every tool call and its result is shown**, whether it succeeded or failed. A swallowed
+      tool error silently changes what the headline metric means.
+    - **Model rollout and monitor rollout are both shown, separately, each with all their own
+      messages.** These answer different questions (what did the model do vs. what did the
+      monitor see and conclude) — don't conflate them into one view or drop either.
   - Uses **prose with clear headings** wherever it aids interpretation. This is a document
     for future-you and collaborators to read cold, not a chat reply — unlike Claude's default
     chat-response convention (tables/bullets over prose for data), `report.html` should
     explain, not just tabulate.
+
+**Three formats, three jobs** — don't merge them: `.jsonl`/`.eval` (raw, machine-readable,
+reproducible), `report.html` (mandatory, human-readable with tooltips/plots/transcripts),
+optionally a narrative `.md` write-up (prose, when the HTML's headings aren't enough context
+for a cold read).
 
 **Delivery**: always send `report.html` and other generated deliverables (figures, `.jsonl`,
 `.eval`, `.md`) via `SendUserFile`, not just a stated path — see
