@@ -33,6 +33,14 @@ Yulong prefers **Bear markdown**. Bear's syntax isn't fully documented (its FAQ 
 
 Don't use `==` / `~text~` in files meant to render as plain GitHub markdown (READMEs, CLAUDE.md, rules) — they show as literal characters there.
 
+## Links never end with a full stop
+
+When a link (bare URL or `[text](url)`) ends a sentence, drop the trailing period — end the sentence without one.
+This avoids copy-paste errors where the period gets included as part of the URL.
+
+❌ Wrong: `See https://example.com/docs.`
+✅ Right: `See https://example.com/docs`
+
 ## Prioritise clarity and rigour/honesty over volume
 
 Write what is true and verifiable; keep it short.
