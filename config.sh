@@ -69,6 +69,7 @@ DEPLOY_REGISTRY=(
     "mcp-sync|Daily shared MCP sync for Claude and Codex|all|true|Automation"
     "usage-ping|Hourly Haiku ping to keep the 5-hour subscription window warm|all|true|Automation"
     "tmux-resume|Hourly auto-resume of rate-limited tmux Claude/Codex sessions|all|true|Automation"
+    "hide-idle-apps|Hide [hide-idle] apps (Cmd+H) after N min not frontmost|macos|true|Automation"
     "brew-update|Weekly package upgrade + cleanup|all|true|Automation"
     "finicky|Browser routing config (symlinked)|macos|true|macOS"
     "file-apps|Default editor for coding file types|macos|true|macOS"
