@@ -160,6 +160,7 @@ ok=$(( ok + 1 ))
 - Run linting and type checking after Python changes (see Python Tooling table)
 - **Use `uv run`** for `ruff`, `ty`, `pytest` — avoids stale `VIRTUAL_ENV` issues (see `docs/environment-setup.md`)
 - Refactor when unwieldy (>50 lines/function, >500 lines/file)
+- **Parallelize embarrassingly parallel work by default** — if a loop does N independent per-item operations (no shared mutable state, no ordering dependency), background each iteration and wait for all, rather than looping sequentially. Applies across languages: shell (`cmd & pids+=($!); done; wait`), Python (`asyncio.gather`/`concurrent.futures`), TypeScript (`Promise.all`). Only keep a loop sequential when there's a real reason — a genuine ordering dependency, a shared resource that isn't safe under concurrent writes (e.g. don't let backgrounded jobs write shared state directly; compute state synchronously in the parent, parallelize only the side-effecting dispatch), or the operation requires real OS-level focus/exclusivity (e.g. a `Cmd+W` keystroke needs the target app to actually be frontmost — parallelizing keystroke-based UI automation across apps races). When capping concurrency (e.g. many subprocess spawns), a small fixed cap (~4-8) is usually enough — diminishing returns past that for most local I/O-bound work.
 
 ## Package Managers (preference order)
 
