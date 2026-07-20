@@ -622,13 +622,19 @@ fi
 
 CLAUDE_TOOLS_PID=""
 CLAUDE_TOOLS_LOG=""
-if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/Cargo.toml" ]] && cmd_exists cargo; then
+CLAUDE_TOOLS_ASSET="$(_claude_tools_asset)"
+if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/Cargo.toml" ]] && cmd_exists cargo && [[ -n "$CLAUDE_TOOLS_ASSET" ]]; then
     log_info "Building claude-tools (background)..."
     CLAUDE_TOOLS_LOG=$(mktemp)
     (
+        # Build to the platform-specific asset (e.g. claude-tools-darwin-arm64),
+        # never to custom_bins/claude-tools itself — that path is the
+        # cross-platform dispatch wrapper (see custom_bins/claude-tools) and
+        # overwriting it with a native binary breaks it on every other platform
+        # once committed.
         cd "$DOT_DIR/tools/claude-tools" && cargo build --release --quiet 2>&1 && \
-        cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/claude-tools" && \
-        chmod +x "$DOT_DIR/custom_bins/claude-tools"
+        cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET" && \
+        chmod +x "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET"
     ) &>"$CLAUDE_TOOLS_LOG" &
     CLAUDE_TOOLS_PID=$!
 fi

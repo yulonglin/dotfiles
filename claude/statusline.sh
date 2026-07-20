@@ -142,23 +142,59 @@ cache_dir="${TMPDIR:-/tmp/claude}"
 cache_file="$cache_dir/claude-statusline-usage.json"
 cache_max_age=300
 
-# Helper: build a progress bar
+# Helper: build a progress bar with an explicit color (color decision lives
+# in color_for_pace/color_for_pct so bar color and label color always agree)
 build_bar() {
-  local pct=$1 width=10 color
+  local pct=$1 color=$2 width=10
   [ "$pct" -lt 0 ] 2>/dev/null && pct=0
   [ "$pct" -gt 100 ] 2>/dev/null && pct=100
   local filled=$((pct * width / 100)) empty=$((width - filled))
-
-  if [ "$pct" -ge 90 ]; then color='\033[31m'
-  elif [ "$pct" -ge 70 ]; then color='\033[33m'
-  elif [ "$pct" -ge 50 ]; then color='\033[38;2;255;176;85m'
-  else color='\033[32m'; fi
 
   local filled_str="" empty_str=""
   for ((i=0; i<filled; i++)); do filled_str+="●"; done
   for ((i=0; i<empty; i++)); do empty_str+="○"; done
 
   printf "${color}${filled_str}\033[2m${empty_str}\033[0m ${color}%d%%\033[0m" "$pct"
+}
+
+# Helper: color by absolute usage — fallback when reset time is unavailable
+color_for_pct() {
+  local pct=$1
+  if [ "$pct" -ge 90 ] 2>/dev/null; then printf '\033[31m'
+  elif [ "$pct" -ge 70 ] 2>/dev/null; then printf '\033[33m'
+  elif [ "$pct" -ge 50 ] 2>/dev/null; then printf '\033[38;2;255;176;85m'
+  else printf '\033[32m'; fi
+}
+
+# Helper: color by pace — how far ahead of the linear burn rate (percentage
+# points). Warm only when burning faster than the window allows; on pace,
+# behind, or barely ahead stays green.
+color_for_pace() {
+  local delta=$1
+  if [ "$delta" -ge 30 ] 2>/dev/null; then printf '\033[31m'
+  elif [ "$delta" -ge 15 ] 2>/dev/null; then printf '\033[33m'
+  elif [ "$delta" -ge 5 ] 2>/dev/null; then printf '\033[38;2;255;176;85m'
+  else printf '\033[32m'; fi
+}
+
+# Helper: compute pace delta for a rate-limit bucket. Sets PACE_DELTA and
+# PACE_EPOCH; returns 1 (leaving both empty) if the reset time is missing or
+# unparseable, so callers can fall back to color_for_pct.
+compute_pace() {
+  local pct=$1 resets_iso=$2 window_secs=$3
+  PACE_DELTA=""
+  PACE_EPOCH=""
+  [ -z "$resets_iso" ] && return 1
+  local epoch; epoch=$(parse_iso_epoch "$resets_iso")
+  [ -z "$epoch" ] && return 1
+  local now remaining elapsed expected
+  now=$(date +%s)
+  remaining=$(( epoch - now )); [ "$remaining" -lt 0 ] && remaining=0
+  elapsed=$(( window_secs - remaining ))
+  expected=$(( elapsed * 100 / window_secs ))
+  PACE_DELTA=$(( pct - expected ))
+  PACE_EPOCH=$epoch
+  return 0
 }
 
 # Helper: resolve OAuth token
@@ -269,55 +305,53 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
   if [ "$five_pct" = "0" ] && [ "$seven_pct" = "0" ]; then
     printf "\033[2m—\033[0m"
   else
-    if [ "$five_pct" -ge 90 ] 2>/dev/null; then five_color='\033[31m'
-    elif [ "$five_pct" -ge 70 ] 2>/dev/null; then five_color='\033[33m'
-    elif [ "$five_pct" -ge 50 ] 2>/dev/null; then five_color='\033[38;2;255;176;85m'
-    else five_color='\033[32m'; fi
-    printf "${five_color}5h\033[0m "
-    build_bar "$five_pct"
-
-    # 5h reset time
+    # 5h bucket: color + delta by pace vs linear burn rate, falls back to
+    # absolute-usage color if reset time is unavailable
     five_resets=$(echo "$usage_data" | jq -r '.five_hour.resets_at // empty')
-    if [ -n "$five_resets" ]; then
-      five_epoch=$(parse_iso_epoch "$five_resets")
-      if [ -n "$five_epoch" ]; then
-        five_time=$(format_epoch_time "$five_epoch")
-        [ -n "$five_time" ] && printf " \033[2m⟳ %s\033[0m" "$five_time"
-      fi
+    if compute_pace "$five_pct" "$five_resets" 18000; then
+      five_color=$(color_for_pace "$PACE_DELTA")
+      five_delta=$PACE_DELTA
+      five_epoch=$PACE_EPOCH
+    else
+      five_color=$(color_for_pct "$five_pct")
+      five_delta=""
+      five_epoch=""
+    fi
+
+    printf "${five_color}5h\033[0m "
+    build_bar "$five_pct" "$five_color"
+    if [ -n "$five_delta" ]; then
+      if [ "$five_delta" -gt 0 ]; then printf " ${five_color}+%d%%\033[0m" "$five_delta"
+      else printf " ${five_color}%d%%\033[0m" "$five_delta"; fi
+    fi
+    if [ -n "$five_epoch" ]; then
+      five_time=$(format_epoch_time "$five_epoch")
+      [ -n "$five_time" ] && printf " \033[2m⟳ %s\033[0m" "$five_time"
     fi
 
     printf "  ·  "
 
-    if [ "$seven_pct" -ge 90 ] 2>/dev/null; then seven_color='\033[31m'
-    elif [ "$seven_pct" -ge 70 ] 2>/dev/null; then seven_color='\033[33m'
-    elif [ "$seven_pct" -ge 50 ] 2>/dev/null; then seven_color='\033[38;2;255;176;85m'
-    else seven_color='\033[32m'; fi
-    printf "${seven_color}7d\033[0m "
-    build_bar "$seven_pct"
-
-    # 7d pace + reset datetime
+    # 7d bucket: same pace-based treatment
     seven_resets=$(echo "$usage_data" | jq -r '.seven_day.resets_at // empty')
-    if [ -n "$seven_resets" ]; then
-      seven_epoch=$(parse_iso_epoch "$seven_resets")
-      if [ -n "$seven_epoch" ]; then
-        now=$(date +%s)
-        remaining=$(( seven_epoch - now ))
-        [ "$remaining" -lt 0 ] && remaining=0
-        seven_day_secs=604800
-        elapsed=$(( seven_day_secs - remaining ))
-        # Pace calculation: expected % based on elapsed fraction
-        expected=$(( elapsed * 100 / seven_day_secs ))
-        delta=$(( seven_pct - expected ))
-        if [ "$delta" -gt 0 ]; then
-          printf " \033[31m+%d%%\033[0m" "$delta"
-        elif [ "$delta" -lt 0 ]; then
-          printf " \033[32m%d%%\033[0m" "$delta"
-        else
-          printf " \033[2m0%%\033[0m"
-        fi
-        seven_datetime=$(format_epoch_datetime "$seven_epoch")
-        [ -n "$seven_datetime" ] && printf " \033[2m⟳ %s\033[0m" "$seven_datetime"
-      fi
+    if compute_pace "$seven_pct" "$seven_resets" 604800; then
+      seven_color=$(color_for_pace "$PACE_DELTA")
+      seven_delta=$PACE_DELTA
+      seven_epoch=$PACE_EPOCH
+    else
+      seven_color=$(color_for_pct "$seven_pct")
+      seven_delta=""
+      seven_epoch=""
+    fi
+
+    printf "${seven_color}7d\033[0m "
+    build_bar "$seven_pct" "$seven_color"
+    if [ -n "$seven_delta" ]; then
+      if [ "$seven_delta" -gt 0 ]; then printf " ${seven_color}+%d%%\033[0m" "$seven_delta"
+      else printf " ${seven_color}%d%%\033[0m" "$seven_delta"; fi
+    fi
+    if [ -n "$seven_epoch" ]; then
+      seven_datetime=$(format_epoch_datetime "$seven_epoch")
+      [ -n "$seven_datetime" ] && printf " \033[2m⟳ %s\033[0m" "$seven_datetime"
     fi
 
   fi
