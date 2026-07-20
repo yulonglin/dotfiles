@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explains the 25 high-confidence LLM-ism patterns used by the humanizer agent. Each pattern is documented with:
+This document explains the 31 high-confidence LLM-ism patterns used by the humanizer agent. Each pattern is documented with:
 - **Why it's problematic** - with citations
 - **False positive scenarios** - when NOT to flag
 - **Fix suggestions** - concrete rewrites
@@ -10,11 +10,13 @@ This document explains the 25 high-confidence LLM-ism patterns used by the human
 
 **Goal**: Precision >90% (very few false positives) and recall >70% (catch most obvious patterns).
 
-**Categories**: 7 categories — Blatant Hedging (5), Chatbot Artifacts (3), AI Vocabulary (3), Em-Dash and Dash Misuse (2), False Enthusiasm (2), Filler Phrases (2), Structural/Rhetorical Tropes (8).
+**Categories**: 8 categories — Blatant Hedging (5), Chatbot Artifacts (4), AI Vocabulary (4), Em-Dash and Dash Misuse (2), False Enthusiasm (2), Filler Phrases (2), Structural/Rhetorical Tropes (9), Formatting Tells (3).
+
+**Philosophy — detector, not rewriter**: This set flags and scores; it never rewrites. Upstream rewriter tools (e.g. blader/humanizer) mandate eliminating all em-dashes; we deliberately do not. Em-dashes are flagged on *frequency*, not presence — see Category 4.
 
 ---
 
-## v0.1 Patterns (Current Release)
+## Pattern Catalogue
 
 ### Category 1: Blatant Hedging (5 patterns)
 
@@ -67,7 +69,7 @@ Excessive qualification that adds no information and signals AI-generated conten
 
 ---
 
-### Category 2: Chatbot Artifacts (3 patterns)
+### Category 2: Chatbot Artifacts (4 patterns)
 
 Explicit AI self-references that only appear in LLM-generated text.
 
@@ -98,9 +100,18 @@ Explicit AI self-references that only appear in LLM-generated text.
   - ❌ "I don't have personal opinions, but X is important..."
   - ✅ "X is important..."
 
+#### Knowledge-cutoff disclaimers
+- **Why problematic**: "As of my last knowledge update" / "As of my training data" / "I may not have information about events after" are pure model-provenance artifacts. A human author has no knowledge cutoff to disclaim.
+- **Confidence**: 97% (near-zero legitimate uses outside writing *about* LLMs)
+- **Sources**: blader/humanizer (v0.4 addition)
+- **False positives**: Writing that discusses LLM limitations and quotes such a disclaimer as an example. Check whether the phrase is quoted or attributed.
+- **Fix**: Remove the disclaimer and date the claim explicitly if recency matters
+  - ❌ "As of my last knowledge update, the model was state of the art."
+  - ✅ "As of March 2026, the model was state of the art."
+
 ---
 
-### Category 3: AI Vocabulary (3 patterns)
+### Category 3: AI Vocabulary (4 patterns)
 
 Business/technical jargon heavily overused by LLMs. Humans prefer simpler alternatives.
 
@@ -132,6 +143,16 @@ Business/technical jargon heavily overused by LLMs. Humans prefer simpler altern
   - ❌ "This framework facilitates better design decisions."
   - ✅ "This framework enables better design decisions."
   - ✅ "This framework helps teams make better decisions."
+
+#### Promotional language (puffery)
+- **Why problematic**: "rich cultural heritage", "stands as a testament to", "plays a vital role in", "a game-changer", "breathtaking". LLMs default to brochure register when they lack specifics — evaluative adjectives substitute for facts. Wikipedia's "Signs of AI writing" lists puffery as a primary tell.
+- **Confidence**: 84% (register-dependent — legitimate in marketing copy, near-zero in technical or research writing)
+- **Sources**: Wikipedia AI writing signs, blader/humanizer (v0.4 addition)
+- **False positives**: Genuine marketing/advertising copy, travel writing, arts criticism where evaluative language is the point. Do not flag in those registers.
+- **Fix**: Replace the evaluation with the evidence that would justify it
+  - ❌ "The library plays a vital role in the modern Python ecosystem."
+  - ✅ "The library is a dependency of pandas, scikit-learn, and PyTorch."
+- **Note**: This partially subsumes the "generic positive descriptions" item previously deferred to the v0.4 roadmap.
 
 ---
 
@@ -209,7 +230,7 @@ Unnecessarily wordy substitutes for simpler words. Pure wordiness indicator.
 
 ---
 
-### Category 7: Structural/Rhetorical Tropes (8 patterns)
+### Category 7: Structural/Rhetorical Tropes (9 patterns)
 
 Higher-level structural patterns that go beyond individual phrases. These are rhetorical moves that LLMs overuse to create false drama, breadth, or authority.
 
@@ -287,23 +308,73 @@ Higher-level structural patterns that go beyond individual phrases. These are rh
   - ❌ "The reality is simpler and less flattering."
   - ✅ "The model memorized the training data."
 
+#### Superficial "-ing" significance clauses
+- **Why problematic**: A trailing participial clause that asserts importance without adding information: "…, highlighting the importance of collaboration." / "…, underscoring the need for caution." / "…, reflecting a broader trend in the industry." The clause restates the sentence at a higher altitude instead of extending it. LLMs use it to close paragraphs on a note of significance.
+- **Confidence**: 86% (the trailing-comma-plus-participle-of-significance form is distinctive; bare participial clauses are normal English)
+- **Sources**: blader/humanizer (v0.4 addition), Wikipedia AI writing signs
+- **False positives**: Participial clauses that carry real content ("…, cutting latency from 400ms to 90ms"). The tell is a vacuous abstract object (importance, need, trend, shift, evolution), not the grammar itself.
+- **Fix**: Delete the clause, or replace it with the concrete consequence
+  - ❌ "Adoption doubled last quarter, highlighting the importance of developer experience."
+  - ✅ "Adoption doubled last quarter, and support tickets fell 40%."
+
 ---
 
-## Patterns NOT Included (v0.1 MVP)
+### Category 8: Formatting Tells (3 patterns)
 
-These high-value patterns are saved for v0.2+ because they require statistical analysis:
+Presentation-layer habits rather than word choice. These survive paraphrasing, which makes them useful signals even when the prose itself has been edited.
 
-### Statistical Patterns (v0.4)
+#### Decorative emoji in headings and bullets
+- **Why problematic**: 🚀 ✨ 🎯 🔑 prefixed to headings or list items. Chat-tuned models add these as visual garnish; the emoji carries no information the heading doesn't already have.
+- **Confidence**: 88% (high in professional prose, much lower in chat/social contexts)
+- **Sources**: blader/humanizer (v0.4 addition)
+- **False positives**: Chat messages, social posts, READMEs with an established emoji convention, status legends where the emoji is load-bearing (✅/❌ in a results table).
+- **Fix**: Remove the emoji; keep the heading
+  - ❌ "## 🚀 Getting Started"
+  - ✅ "## Getting Started"
+
+#### Excessive boldface
+- **Why problematic**: Bold scattered across many mid-paragraph phrases. When everything is emphasised nothing is, and LLMs bold far more aggressively than human writers. Flag on density, not presence.
+- **Confidence**: 78% (frequency-dependent — 1-2 bolded terms per section is normal; several per paragraph is the signal)
+- **Sources**: blader/humanizer (v0.4 addition)
+- **False positives**: Reference docs and glossaries where bold marks defined terms; tables and checklists where bold marks labels. This document's own pattern entries are a legitimate case.
+- **Fix**: Keep bold for genuinely scannable labels; unbold in-sentence emphasis
+  - ❌ "This is **critical** because the **latency budget** is **tight**."
+  - ✅ "This matters because the latency budget is tight."
+
+#### Title Case headings
+- **Why problematic**: "How To Configure The Server" — LLMs default to Title Case for headings; most house styles (Google, Microsoft, AP-for-web) prescribe sentence case. Consistent Title Case across every heading is a stylistic fingerprint.
+- **Confidence**: 72% (lowest-confidence pattern in the set — many legitimate house styles *do* use Title Case; flag only when it conflicts with the document's own prevailing style)
+- **Sources**: Google Developer Documentation Style Guide, blader/humanizer (v0.4 addition)
+- **False positives**: Publications whose style guide mandates Title Case; book and article titles; proper nouns. Never flag in isolation — flag only on inconsistency with surrounding headings.
+- **Fix**: Match the document's prevailing heading case
+  - ❌ "## Configuring The Retry Policy" (in a sentence-case document)
+  - ✅ "## Configuring the retry policy"
+
+---
+
+## Patterns NOT Included
+
+These high-value patterns still require statistical analysis the agent can't do by reading alone:
+
+### Statistical Patterns (v0.5)
 - **Em-dash frequency analysis**: Per-instance detection added in v0.3; statistical frequency threshold (>2 per 100 words) still pending
+- **Boldface density threshold**: Per-instance detection added in v0.4; a real density metric is still pending
 - **Sentence length uniformity**: Low variance (40-50 words consistently)
 - **List overuse**: >3 lists per 500 words
 - **Paragraph length uniformity**: Similar length throughout
 
-### Detection Heuristics (v0.3)
-- **Generic positive descriptions**: "rich cultural heritage", "comprehensive approach", "significant implications"
+### Detection Heuristics (v0.5)
 - **Vague metrics**: "notably", "significantly", "substantially" without numbers
 - **Sanding down specific facts**: Loss of precision in paraphrasing
 - **Regression to mean**: Arguments becoming more generic over text
+
+### Deliberately Rejected
+
+| Pattern | Source | Why rejected |
+|---------|--------|--------------|
+| Zero-tolerance em-dash elimination | blader/humanizer | Conflicts with our frequency-based stance (Category 4). Em-dashes are legitimate punctuation; 1-2 per page is normal human writing. Adopting this would tank precision |
+| Diff-anchored writing | blader/humanizer | Coding-agent artifact (prose that describes a change rather than the resulting state). Out of scope for draft review |
+| Copula avoidance | blader/humanizer | Deferred, not rejected. We lack a characterisation precise enough to hit the >90% precision bar — needs a worked definition and test cases before adoption |
 
 ---
 
@@ -337,13 +408,18 @@ These high-value patterns are saved for v0.2+ because they require statistical a
 - **New patterns**: Em-dash parenthetical overuse, hyphens/double-hyphens used as em-dashes
 - **Key shift**: Em-dash overuse moved from "statistical v0.3" to phrase-level detection (per-instance flagging with frequency context)
 
-### v0.4 (Coming Soon)
-- Add remaining statistical analysis (sentence length variance, list overuse)
+### v0.4 (2026-07-19)
+- **Status**: Upstream reconciliation against blader/humanizer (33-pattern set) + three-way drift fix
+- **Patterns**: 31 total (15 phrase-level + 2 dash misuse + 9 structural + 3 formatting + 2 vocabulary/artifact additions)
+- **New patterns**: Knowledge-cutoff disclaimers, promotional language (puffery), superficial "-ing" significance clauses, decorative emoji, excessive boldface, Title Case headings
+- **New category**: Formatting Tells (Category 8) — presentation-layer signals that survive paraphrasing
+- **Key decision**: Adopted upstream's *patterns* but not its *philosophy*. blader/humanizer is a rewriter that mandates removing all em-dashes; we remain a detector with frequency-based em-dash scoring. See "Deliberately Rejected" above
+- **Drift fix**: `llm-isms.json` had gone stale at 15 patterns / 5 categories while the doc and agent carried 25 / 7; the agent additionally claimed both "25" and "23" in different sections. All three now regenerate from this document
+- **Canonical source**: This file. The agent prompt and patterns JSON in `ai-safety-plugins/plugins/writing/` are derived from it
 
-### v0.4 (Coming Later)
-- Add generic description detection
-- Requires custom heuristics (complex)
-- Might be separate `generic-detector` agent
+### v0.5 (Planned)
+- Statistical analysis: sentence length variance, list overuse, em-dash and boldface density thresholds
+- Requires custom heuristics beyond phrase matching; might be a separate `generic-detector` agent
 
 ### v1.0 (Future)
 - Full integration with `/review-draft`
@@ -381,7 +457,7 @@ Don't flag if:
 
 ## False Positive Prevention
 
-The 15 patterns were selected specifically to minimize false positives:
+All 31 patterns were selected specifically to minimize false positives:
 
 | Pattern | False Positive Risk | Mitigation |
 |---------|-------------------|------------|
@@ -403,6 +479,12 @@ The 15 patterns were selected specifically to minimize false positives:
 | False ranges | Low | Concrete ranges OK |
 | Historical dash-enum | Medium | Real historical analysis |
 | Asserting obviousness | Medium | Opinion journalism |
+| Knowledge-cutoff disclaimer | 0% | Only quoted-as-example |
+| Promotional language | Medium | Marketing/travel/arts registers exempt |
+| Superficial "-ing" clauses | Medium | Contentful participles OK |
+| Decorative emoji | Low | Chat, README conventions, status legends |
+| Excessive boldface | Medium | Glossaries, defined terms, table labels |
+| Title Case headings | **High** | Only flag on inconsistency with document's own style |
 
 **Conservative approach**: If uncertain, don't flag. False negatives are better than false positives.
 
@@ -414,7 +496,11 @@ The 15 patterns were selected specifically to minimize false positives:
 
 **clarity-critic agent** (separate plugin): Checks for vague pronouns, hedging, run-ons, passive voice. Overlaps with humanizer's hedging patterns.
 
-**Future alignment**: Once humanizer validated, integrate with `/review-draft` as optional `--humanize` flag.
+**Current integration**: Shipped as a critic on `/review-draft --critics=humanizer`. The former standalone `humanize-draft` skill is deprecated and now only points at that command.
+
+**Consumers of this document** (regenerate when patterns change):
+- `ai-safety-plugins/plugins/writing/agents/humanizer.md` — agent prompt
+- `ai-safety-plugins/plugins/writing/patterns/llm-isms.json` — machine-readable pattern set
 
 ---
 
@@ -422,9 +508,11 @@ The 15 patterns were selected specifically to minimize false positives:
 
 ### Sources
 
-1. **blader/humanizer** - GitHub repo with 24 LLM-ism patterns
+1. **blader/humanizer** — GitHub repo, 33 LLM-ism patterns in 5 groups as of the 2026-07-19 review (grown from 24 at first analysis)
    - Analyzed category system and pattern reasoning
-   - Selected 5 patterns with highest confidence
+   - Selected 5 patterns with highest confidence at v0.1; re-reviewed at v0.4 and adopted 6 more
+   - **Philosophy differs**: blader is a rewriter that transforms text and mandates zero em-dashes. We are a detector. Patterns are portable across that boundary; the em-dash policy is not
+   - Source: https://github.com/blader/humanizer
 
 2. **clear-writing skill** (local)
    - 13 word-level anti-patterns
