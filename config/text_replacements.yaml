@@ -134,10 +134,6 @@ focusmate:
 - shortcut: sorry
   phrase: ohno I'm sorry to hear that. is there anything that can make next session better?
   uid: C29EB68B-AF4E-4B55-88ED-B1C7A6C7D598
-links:
-- shortcut: jibed
-  phrase: jibe_dualist_0b@icloud.com
-  uid: 1B36E0EF-528C-42B3-8097-76263710E83F
 personal:
 - shortcut: plan
   phrase: |

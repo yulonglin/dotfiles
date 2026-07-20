@@ -24,6 +24,14 @@ docs/interview-prep-*.md
 docs/machine-restart-handover.md
 docs/plans/
 docs/slack-channel-summaries/
+# Personal text-replacement overlay (real emails/addresses) — synced to macOS/Alfred
+# by scripts/sync_text_replacements.py but never committed
+config/text_replacements.local.yaml
+# Transcription identity files — real name, affiliation, personal network.
+# Live in the vault (~/vault/dotfiles/transcription/), symlinked here.
+config/transcription/voiceink/macOS/vocab/people-and-orgs.md
+config/transcription/voiceink/macOS/vocab/personal.md
+config/transcription/granola/company-description.md
 
 # Claude runtime state (local operational artifacts)
 claude/diagnostics/

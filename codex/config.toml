@@ -41,66 +41,6 @@ NODE_REPL_TRUSTED_CODE_PATHS = "/Users/yulong/.codex"
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
 
-[projects."/Users/yulong/code/automated-researchers"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/writing/interviews/mats-10-metr-kinniment/work-test/submission"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/code/oss/popclip-extensions"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/code/oss/cmux"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/writing/interviews/mats-10-metr-kinniment"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/writing/interviews/mats-10-metr-kinniment/hard-task"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/code/dotfiles"]
-trust_level = "trusted"
-
-[projects."/home/yulong/code/sandbagging-detection/dev"]
-trust_level = "trusted"
-
-[projects."/home/yulong/code/dotfiles"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/writing/papers/sandbagging-detection-paper"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/code/sandbagging-detection/dev"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/code/palimpsest"]
-trust_level = "trusted"
-
-[projects."/home/yulong/projects/nla-vs-cot"]
-trust_level = "trusted"
-
-[projects."/workspace/projects/nla-vs-cot"]
-trust_level = "trusted"
-
-[projects."/workspace/code/dotfiles"]
-trust_level = "trusted"
-
-[projects."/Users/yulong"]
-trust_level = "trusted"
-
-[projects."/Users/yulong/projects/nla-vs-cot"]
-trust_level = "trusted"
-
-[projects."/tmp"]
-trust_level = "trusted"
-
-[projects."/home/yulong/code/wen-fork-tmp"]
-trust_level = "trusted"
-
-[projects."/home/yulong/projects/nla-vs-cot/monitorability-evals"]
-trust_level = "trusted"
-
 [notice.model_migrations]
 "gpt-5.3-codex" = "gpt-5.4"
 

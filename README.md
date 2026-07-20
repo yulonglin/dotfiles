@@ -132,7 +132,7 @@ This repo is highly personal — it reflects one person's workflow, opinions, an
 | BWS encrypted secrets workflow                     | Plugin marketplace selections     |
 
 
-All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIST_SYNC_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
+All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours. Per-machine values (`GIST_SYNC_ID` for gist sync, git identity overrides) go in gitignored `config/user.conf` (see [`config/user.conf.example`](./config/user.conf.example)).
 
 ## Rust CLI Tools
 

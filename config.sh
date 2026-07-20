@@ -124,7 +124,9 @@ DOTFILES_USERNAME="${DOTFILES_USERNAME:-yulong}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yulonglin/dotfiles.git}"
 GIT_USER_NAME="yulonglin"
 GIT_USER_EMAIL="30549145+yulonglin@users.noreply.github.com"
-GIST_SYNC_ID="${GIST_SYNC_ID:-3cc239f160a2fe8c9e6a14829d85a371}"  # Gist used for config sync (SSH, git identity)
+# Gist used for config sync (SSH config, git identity). Personal — no default here:
+# set GIST_SYNC_ID in config/user.conf (gitignored, itself gist-synced) or the environment.
+GIST_SYNC_ID="${GIST_SYNC_ID:-}"
 
 # ─── AI Tools Configuration ───────────────────────────────────────────────────
 # MCP servers to configure for Claude Code

@@ -9,5 +9,11 @@ GIT_USER_NAME="yulonglin"
 # Username for non-root development user (used by install.sh --create-user)
 DEV_USERNAME="yulong"
 
+# Gist for bidirectional config sync (SSH config, authorized_keys, git identity).
+# Create your own with: gh gist create ~/.ssh/config --desc "dotfiles sync"
+# Unlisted, NOT encrypted — never put secrets (API keys, private keys) in it.
+# Leave empty to disable gist sync.
+GIST_SYNC_ID=""
+
 # Note: If config/user.conf exists, deploy.sh will use these values.
 # Otherwise, it will use the defaults specified above.

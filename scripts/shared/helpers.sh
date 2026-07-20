@@ -1105,7 +1105,15 @@ ensure_local_key_in_authorized_keys() {
 # WARNING: Secret gists are unlisted, not encrypted — anyone with the URL can read them.
 # Do NOT add secrets (API keys, private keys, tokens) to this sync.
 sync_gist() {
-    local gist_id="${GIST_SYNC_ID:-3cc239f160a2fe8c9e6a14829d85a371}"
+    # Gist ID is personal — comes from env or config/user.conf, never hardcoded here
+    local gist_id="${GIST_SYNC_ID:-}"
+    if [[ -z "$gist_id" && -f "$DOT_DIR/config/user.conf" ]]; then
+        gist_id=$(grep '^GIST_SYNC_ID=' "$DOT_DIR/config/user.conf" | tail -1 | cut -d'"' -f2)
+    fi
+    if [[ -z "$gist_id" ]]; then
+        log_warning "GIST_SYNC_ID not set - add GIST_SYNC_ID=\"<gist-id>\" to config/user.conf (see user.conf.example) to enable gist sync"
+        return 1
+    fi
 
     if ! gh auth status &>/dev/null 2>&1; then
         log_warning "gh not authenticated - run 'gh auth login' to sync gist"
