@@ -1632,7 +1632,7 @@ install_editor_extensions() {
     typeset -a to_remove
     for ext in "${installed[@]}"; do
         [[ -z "$ext" ]] && continue
-        if [[ -z "${wanted_map[${ext:l}]}" ]]; then
+        if [[ -z "${wanted_map[${ext:l}]-}" ]]; then
             to_remove+=("$ext")
         fi
     done
