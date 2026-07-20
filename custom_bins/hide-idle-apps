@@ -64,6 +64,8 @@ get_snapshot() {
     end tell'
 }
 
+# Hide an app (Cmd+H equivalent). No focus dependency (visibility toggle is
+# name-based, not a keystroke), safe to run in parallel.
 hide_app() {
     local app="$1"
     osascript -e "tell application \"System Events\" to set visible of process \"$app\" to false" 2>/dev/null || true
@@ -115,12 +117,7 @@ main() {
         else
             local since="${last_active[$app_lower]:-$now}"  # first sight: start timer now
             local idle_seconds=$(( now - since ))
-            if (( idle_seconds >= IDLE_MINUTES * 60 )); then
-                would_hide+=("$app")
-                if ! $DRY_RUN; then
-                    hide_app "$app"
-                fi
-            fi
+            (( idle_seconds >= IDLE_MINUTES * 60 )) && would_hide+=("$app")
             last_active[$app_lower]="$since"
         fi
         new_state+="${app_lower}"$'\t'"${last_active[$app_lower]}"$'\n'
@@ -130,6 +127,19 @@ main() {
     local tmp_state="${STATE_FILE}.tmp.$$"
     print -rn -- "$new_state" > "$tmp_state"
     mv "$tmp_state" "$STATE_FILE"
+
+    # Dispatch the actual hide calls in parallel, only after state is fully
+    # computed and written above - hide_app() just spawns an osascript
+    # process with no shared state, so backgrounding it is safe. State
+    # tracking (last_active, new_state) stays entirely synchronous in the
+    # parent; these subshells never touch it. Matches clear-mac-apps'
+    # slow-quit parallelization pattern.
+    if ! $DRY_RUN && (( ${#would_hide} > 0 )); then
+        for app in "${would_hide[@]}"; do
+            hide_app "$app" &
+        done
+        wait
+    fi
 
     if $DRY_RUN; then
         echo "=== DRY RUN (threshold: ${IDLE_MINUTES}m, frontmost: ${front_app:-none}) ==="
