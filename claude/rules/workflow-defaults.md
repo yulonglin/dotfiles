@@ -142,6 +142,7 @@ Make it easy for Yulong (or any reader arriving cold) to see exactly what Claude
 - **Use MDX** when reports need interactivity (collapsible sections, tabs for conditions)
 - **Figures should be self-explanatory** — title, axis labels, legend, caption. A figure without context should still communicate its finding
 - **Embed figures in reports** rather than leaving them as loose PNGs — a report.html that includes its charts is more useful than a directory of numbered image files
+- **Send deliverable files, don't just state the path** — when a report.html, figure, or raw output (jsonl, .eval, .md) is ready, give the path AND use `SendUserFile` to ship it. A bare path is often meaningless on its own — work happens across worktrees and machines the user isn't currently looking at — so send the actual bytes too. Use `display: 'render'` for HTML/images meant to be viewed inline, `display: 'attach'` for raw data meant to be downloaded. No context cost: `SendUserFile` transfers from disk, it doesn't load content into the model
 
 ### What "Auditable" Means in Practice
 
