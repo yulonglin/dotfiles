@@ -2,22 +2,25 @@
 
 Rules for how Claude writes `.md` files (CLAUDE.md, rules, docs, plans, READMEs).
 
-## No mid-sentence line breaks
+## No hard line breaks within paragraphs
 
-Never insert a hard newline in the middle of a sentence or paragraph.
-Each sentence or continuous thought goes on its own line — editors and viewers soft-wrap.
-Long lines are fine.
-This applies to prose, bullet-point bodies, and table cells.
+A paragraph is one line. Never insert a hard newline inside a paragraph — not mid-sentence, and not between sentences. Blank lines separate paragraphs; the reading software soft-wraps long lines, so long lines are fine. This applies to prose, bullet-point bodies, and table cells.
 
-❌ Wrong — wrapping mid-sentence:
+❌ Wrong — hard-wrapped mid-sentence:
 ```
 The hook runs on every permission request and checks whether
 the tool call is safe to auto-approve.
 ```
 
-✅ Right — one thought per line:
+❌ Also wrong — sentence-per-line within one paragraph:
 ```
-The hook runs on every permission request and checks whether the tool call is safe to auto-approve.
+The hook runs on every permission request.
+It checks whether the tool call is safe to auto-approve.
+```
+
+✅ Right — the whole paragraph on one line:
+```
+The hook runs on every permission request. It checks whether the tool call is safe to auto-approve.
 ```
 
 ## Rich markdown highlighting (Bear syntax)
