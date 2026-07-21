@@ -6,7 +6,7 @@
 //!
 //! Fetch strategy: ureq (native Rust) → curl fallback → stale cache → error.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -56,6 +56,14 @@ pub struct LimitModel {
     pub display_name: Option<String>,
 }
 
+/// One account's last-known 5h usage, persisted across logout in the
+/// multi-account cache (`~/.claude/usage-data/accounts.json`).
+#[derive(Serialize, Deserialize, Clone)]
+struct AccountEntry {
+    five_hour_resets_at: Option<String>,
+    five_hour_pct: Option<u8>,
+}
+
 // --- Public entry point ---
 
 /// Append usage bars (or error) to output as a second statusline line.
@@ -73,9 +81,22 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
     let five = usage.five_hour.as_ref().and_then(|b| b.utilization);
     let seven = usage.seven_day.as_ref().and_then(|b| b.utilization);
 
+    // Snapshot this account into the persistent multi-account cache, keyed
+    // by email, so the *other* (logged-out) account's last-known 5h reset
+    // can still be surfaced after switching away from it.
+    let current_email = resolve_account_identity();
+    if let (Some(email), Some(pct)) = (current_email.as_deref(), five) {
+        if let Some(resets_at) = usage.five_hour.as_ref().and_then(|b| b.resets_at.as_deref()) {
+            upsert_account_usage(email, resets_at, pct.round().clamp(0.0, 100.0) as u8);
+        }
+    }
+
     if five.is_none() && seven.is_none() {
         output.push('\n');
         let _ = write!(output, "\x1b[2m\u{2014}\x1b[0m"); // dim em-dash placeholder
+        if let Some(email) = current_email.as_deref() {
+            render_other_account(output, email);
+        }
         return;
     }
 
@@ -111,6 +132,10 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
         let pct = pct.round().clamp(0.0, 100.0) as u8;
         output.push_str("  \u{00b7}  ");
         render_bucket(output, name, pct, limit.resets_at.as_deref(), SEVEN_DAY_SECS);
+    }
+
+    if let Some(email) = current_email.as_deref() {
+        render_other_account(output, email);
     }
 }
 
@@ -266,6 +291,85 @@ fn color_for_pct(pct: u8) -> &'static str {
         "\x1b[38;2;255;176;85m" // Orange
     } else {
         "\x1b[32m" // Green
+    }
+}
+
+// --- Multi-account tracking ---
+//
+// Account switching here means log-out/log-in on the same ~/.claude — not
+// separate CLAUDE_CONFIG_DIR instances — so only one account's credentials
+// are ever live at a time. We snapshot the *active* account's 5h reset into
+// a persistent, email-keyed cache on every tick, and surface whichever
+// *other* entry exists as a last-known countdown. This persists across
+// logout (unlike the volatile TMPDIR usage cache above, which reflects only
+// the currently active account).
+
+/// Current account's identity (email), the multi-account cache key.
+fn resolve_account_identity() -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let path = PathBuf::from(home).join(".claude.json");
+    let data = std::fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&data).ok()?;
+    json.get("oauthAccount")?
+        .get("emailAddress")?
+        .as_str()
+        .map(|s| s.to_string())
+}
+
+fn accounts_cache_path() -> Option<PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    let dir = PathBuf::from(home).join(".claude").join("usage-data");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("accounts.json"))
+}
+
+fn read_accounts_cache() -> std::collections::HashMap<String, AccountEntry> {
+    accounts_cache_path()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn upsert_account_usage(email: &str, resets_at: &str, pct: u8) {
+    let Some(path) = accounts_cache_path() else { return };
+    let mut accounts = read_accounts_cache();
+    accounts.insert(
+        email.to_string(),
+        AccountEntry {
+            five_hour_resets_at: Some(resets_at.to_string()),
+            five_hour_pct: Some(pct),
+        },
+    );
+    if let Ok(serialized) = serde_json::to_string_pretty(&accounts) {
+        let _ = std::fs::write(&path, serialized);
+    }
+}
+
+/// Surface the other (logged-out) account's last-known 5h reset as an
+/// always-on compact indicator: a countdown while waiting, "ready" once the
+/// cached reset time has passed. No-op if no other account has ever synced.
+fn render_other_account(output: &mut String, current_email: &str) {
+    let accounts = read_accounts_cache();
+    let other_reset_epoch = accounts
+        .iter()
+        .filter(|(email, _)| email.as_str() != current_email)
+        .filter_map(|(_, entry)| entry.five_hour_resets_at.as_deref())
+        .filter_map(parse_iso_epoch)
+        .max();
+
+    let Some(reset_epoch) = other_reset_epoch else { return };
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    output.push_str("  |  ");
+    if reset_epoch > now {
+        let remaining = (reset_epoch - now) as f64;
+        let _ = write!(output, "\x1b[2m\u{21c4} {}\x1b[0m", fmt_time_remaining(remaining));
+    } else {
+        let _ = write!(output, "\x1b[32m\u{21c4} ready\x1b[0m");
     }
 }
 
