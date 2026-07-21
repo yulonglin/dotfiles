@@ -23,7 +23,7 @@ API keys live in `${DOT_DIR:-$HOME/code/dotfiles}/.env`:
 |----------|----------|---------------------------|
 | OpenRouter | `OPENROUTER_API_KEY` | any key (balance endpoint is key-scoped) |
 | OpenAI | `OPENAI_API_KEY` | **org-level** key — a project-scoped `sk-proj-...` key works for inference but 403s on `/v1/organization/costs` |
-| Anthropic | `ANTHROPIC_ADMIN_API_KEY` | **admin** key (`sk-ant-admin-...`) — a regular `sk-ant-api03-...` key can't read cost/usage reports |
+| Anthropic | `ANTHROPIC_ADMIN_API_KEY`, falls back to `ANTHROPIC_API_KEY` | **admin** key (`sk-ant-admin-...`) needed for cost/usage reports — the script tries `ANTHROPIC_ADMIN_API_KEY` first, then falls back to the regular `ANTHROPIC_API_KEY` most users have set (which will 403 and trigger the manual-check fallback message rather than being skipped as "missing") |
 
 ## Troubleshooting
 

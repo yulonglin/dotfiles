@@ -298,22 +298,27 @@ def main() -> None:
     else:
         missing.append("OPENROUTER_API_KEY")
 
-    # Providers with usage history (daily + hourly breakdowns)
+    # Providers with usage history (daily + hourly breakdowns).
+    # Anthropic tries ANTHROPIC_ADMIN_API_KEY first, falling back to the regular
+    # ANTHROPIC_API_KEY most users actually have set — the regular key will 403
+    # on the cost endpoint, which is exactly what triggers the fallback_msg below
+    # instead of silently reporting a key the user will never set as "missing".
     usage_providers = [
-        ("OPENAI_API_KEY", "OpenAI", query_openai,
+        (["OPENAI_API_KEY"], "OpenAI", query_openai,
          "No data — needs an org-level key (not a project-scoped sk-proj-... key). "
          "This is expected if you're not an org admin — check manually: "
-         "https://platform.openai.com/settings/organization/billing/overview"),
-        ("ANTHROPIC_ADMIN_API_KEY (sk-ant-admin-...)", "Anthropic", query_anthropic,
-         "No data — needs an admin key (sk-ant-admin-...), not a regular sk-ant-api03-... key. "
+         "https://platform.openai.com/settings/organization/billing/overview",
+         "OPENAI_API_KEY"),
+        (["ANTHROPIC_ADMIN_API_KEY", "ANTHROPIC_API_KEY"], "Anthropic", query_anthropic,
+         "No data — this key isn't admin-scoped (needs sk-ant-admin-..., not sk-ant-api03-...). "
          "This is expected if you're not an org admin — check manually: "
-         "https://console.anthropic.com/settings/billing"),
+         "https://console.anthropic.com/settings/billing",
+         "ANTHROPIC_ADMIN_API_KEY or ANTHROPIC_API_KEY"),
     ]
-    for env_var, name, query_fn, fallback_msg in usage_providers:
-        env_key = env_var.split(" ")[0]  # strip parenthetical hint
-        key = os.getenv(env_key)
+    for env_keys, name, query_fn, fallback_msg, missing_label in usage_providers:
+        key = next((os.getenv(k) for k in env_keys if os.getenv(k)), None)
         if not key:
-            missing.append(env_var)
+            missing.append(missing_label)
             continue
         console.print(f"[dim]Querying {name}...[/]")
         bal, d, h = query_fn(key)
