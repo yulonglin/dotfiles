@@ -301,8 +301,13 @@ def main() -> None:
     # Providers with usage history (daily + hourly breakdowns)
     usage_providers = [
         ("OPENAI_API_KEY", "OpenAI", query_openai,
-         "No data — needs org-level key (not project-scoped sk-proj-...)"),
-        ("ANTHROPIC_ADMIN_API_KEY (sk-ant-admin-...)", "Anthropic", query_anthropic, None),
+         "No data — needs an org-level key (not a project-scoped sk-proj-... key). "
+         "This is expected if you're not an org admin — check manually: "
+         "https://platform.openai.com/settings/organization/billing/overview"),
+        ("ANTHROPIC_ADMIN_API_KEY (sk-ant-admin-...)", "Anthropic", query_anthropic,
+         "No data — needs an admin key (sk-ant-admin-...), not a regular sk-ant-api03-... key. "
+         "This is expected if you're not an org admin — check manually: "
+         "https://console.anthropic.com/settings/billing"),
     ]
     for env_var, name, query_fn, fallback_msg in usage_providers:
         env_key = env_var.split(" ")[0]  # strip parenthetical hint
