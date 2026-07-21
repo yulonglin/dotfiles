@@ -1,6 +1,6 @@
 ---
 name: setup-channel
-description: Set up project-local messaging channels (Telegram, iMessage, Things Cloud). Platform-aware — Telegram works everywhere, iMessage requires macOS. Extensible dispatch table — adding a new channel means adding one row.
+description: Set up project-local messaging channels (Telegram, iMessage, Things Cloud) so Claude can send/receive messages and read tasks for this project. Use when the user asks to "set up Telegram", "connect iMessage", or "enable Things Cloud sync" for this repo.
 ---
 
 # Set up messaging channels
