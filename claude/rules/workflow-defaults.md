@@ -135,6 +135,32 @@ Make it easy for Yulong (or any reader arriving cold) to see exactly what Claude
 - **Include a summary file** in experiment output dirs — `summary.md` or `report.html` with: what was run, key parameters, headline results, and any surprises
 - **Log the exact commands** that produced results — a `commands.sh` or `Makefile` target someone can re-run
 
+### Vault vs. Codebase (Symlink Convention)
+
+Non-code research artifacts (specs, plans, docs, research logs, run outputs) belong in the
+personal vault (`~/vault/research/<project>/` or `~/vault/tooling/<area>/`), not the project
+git repo — they're not collaboration surface, and mixing them into the repo adds code-review
+noise for no benefit. Exception: content meant to travel with the repo for external
+collaborators (e.g. a `paper/` dir bound for Overleaf/co-authors) stays in the repo.
+
+**Mechanism: per-directory symlinks, uniformly** — every vault-adjacent directory
+(`specs/`, `plans/`, `docs/`, `runs/`) gets its own symlink into the vault; no carve-outs for
+"just this one directory." Never a single root-level symlink (`repo/vault ->
+~/vault/research/<project>`) — that changes every existing relative-path reference in git
+history, logs, and cross-links, whereas per-directory symlinks preserve paths
+character-for-character (`specs/2026-07-13-foo.md` still resolves after the move).
+
+Symlinks are git-tracked (normal git symlink handling) — for a collaborator's clone they'll
+be dangling (personal `~/vault` path), which is fine since these directories are working
+notes, not collaboration surface.
+
+**Reporting rule**: once artifacts live outside the visible repo tree, referencing an output
+(plot, doc, spec) in chat must state its full path or at least parent directory, not just a
+bare filename.
+
+See `~/vault/research/<topic>/` layout: `docs/research-methodology.md` § Vault-Style
+Multi-Project Research Directories.
+
 ### Visual Outputs
 
 - **Default to visual** for results that have structure — tables, comparisons, distributions, timelines
@@ -142,7 +168,8 @@ Make it easy for Yulong (or any reader arriving cold) to see exactly what Claude
 - **Use MDX** when reports need interactivity (collapsible sections, tabs for conditions)
 - **Figures should be self-explanatory** — title, axis labels, legend, caption. A figure without context should still communicate its finding
 - **Embed figures in reports** rather than leaving them as loose PNGs — a report.html that includes its charts is more useful than a directory of numbered image files
-- **Send deliverable files, don't just state the path** — when a report.html, figure, or raw output (jsonl, .eval, .md) is ready, give the path AND use `SendUserFile` to ship it. A bare path is often meaningless on its own — work happens across worktrees and machines the user isn't currently looking at — so send the actual bytes too. Use `display: 'render'` for HTML/images meant to be viewed inline, `display: 'attach'` for raw data meant to be downloaded. No context cost: `SendUserFile` transfers from disk, it doesn't load content into the model
+- **Send deliverable files, don't just state the path — MANDATORY for any file <5MB.** When a file Claude created or finished editing is something the user would want to look at or open (report.html, figure, spec, plan, script, doc, jsonl, .eval, .md — not just experiment reports), and it's under 5MB, call `SendUserFile` in the same turn. This is not optional or case-by-case: a stated path forces the user to go hunt for it across worktrees and machines they aren't currently looking at, which is the exact friction this rule exists to kill. Only skip it for files >=5MB (state the path instead) or files the user explicitly said not to send. Use `display: 'render'` for HTML/images meant to be viewed inline, `display: 'attach'` for raw data meant to be downloaded. No context cost: `SendUserFile` transfers from disk, it doesn't load content into the model
+- **Automated via hook, not memory** — `claude/hooks/nudge_send_user_file.sh` (PostToolUse, matcher `Write`) fires this reminder automatically for deliverable-like extensions under the size cap, so the behavior doesn't depend on remembering this rule turn to turn. The hook only nudges (prints a `systemMessage`); it never calls `SendUserFile` itself — hooks can't invoke tools, only inject context back into the transcript
 
 ### What "Auditable" Means in Practice
 

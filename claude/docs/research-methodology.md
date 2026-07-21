@@ -160,20 +160,37 @@ author to keep the human/machine distinction inside the single file instead of v
 file). Prefer this minimal, flat structure over accumulating more top-level files —
 Karpathy-style: fewer files, each with one clear job, no ceremony.
 
+**LOG.md in-flight entry format**: each in-flight entry carries an owning session identifier
+so a joining session can tell whether it's still live — `owner: claude-session/<id>` (same ID
+as the `Claude-Session:` commit trailer) or `owner: codex-job/<id>` (codex-companion job id),
+plus `since: <ISO-8601 UTC>`. Unlike `.agent-claims/` (PID + `kill -0` liveness check, dead
+entries reaped by deletion), vault sessions aren't same-machine live processes and `LOG.md` is
+a permanent audit trail, not an ephemeral claim file — so staleness is judged by elapsed time,
+not process liveness, and a stale entry is *closed* with an appended line, never deleted.
+Convention: an in-flight entry with no closing update after 24h is treated as abandoned; the
+next session appends `closed: stale, no update since <date>` to it rather than removing the
+original entry.
+
 **Workflow** (session start → during work → session end):
 
 1. **Session start**: read `README.md`, then `LOG.md` — if another session's live entry
-   covers the same run/files, join it or pick something else. Optionally skim the tail of
+   (has an `owner:` line, no closing line, `since:` <24h old) covers the same run/files, join
+   it or pick something else. If it's stale (>24h, no closing update), treat as abandoned:
+   append a `closed: stale` line to it and proceed. Optionally skim the tail of
    `RESEARCH_LOG.md` for recent narrative context.
 2. **During work**: new work gets its own `runs/<YYYY-MM-DD-HHMM>-<slug>/`, collision-free by
-   construction — no locking needed, the dir is yours. Append a one-line entry to `LOG.md`.
-3. **Session end**: append a dated entry to `LOG.md`. Rewrite (don't append to) `README.md` if
-   the current focus genuinely changed. Prune your own stale `LOG.md` entry once the work is
-   done, or leave it — not required.
+   construction — no locking needed, the dir is yours. Append an in-flight entry to `LOG.md`
+   with `owner:`/`since:` per the format above.
+3. **Session end**: append a closing line to your own in-flight entry (or a fresh dated entry
+   if none was opened) noting completion. Rewrite (don't append to) `README.md` if the current
+   focus genuinely changed.
 
-No `.agent-claims/`-style claim file needed for a vault topic dir: collision-free run naming
+No `.agent-claims/`-style claim *file* needed for a vault topic dir: collision-free run naming
 plus git (each topic dir should be its own git-backed repo with a remote) already cover the
-failure modes such a file would exist to catch.
+failure modes such a file would exist to catch. The `owner:`/`since:` fields above borrow
+`.agent-claims/`'s ownership idea for the one gap that scheme doesn't cover — knowing whether
+an *in-flight, not-yet-run* thread of work is still being worked on — without needing a
+separate claims file.
 
 ## Run Report Standard
 

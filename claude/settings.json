@@ -441,6 +441,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_send_user_file.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -963,7 +973,7 @@
     "cache",
     ".cache"
   ],
-  "theme": "dark",
+  "theme": "auto",
   "verbose": false,
   "preferredNotifChannel": "auto",
   "autoCompactEnabled": true,
