@@ -166,6 +166,7 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/research-integrity.md` — No circular reasoning, report all results, no shortcut hacks, label/score/analysis separation
 - `rules/desktop-control.md` — Ask before launching apps, computer-use clicks/typing, claude-in-chrome navigation, or anything that moves focus on the user's machine
 - `rules/markdown-style.md` — Markdown authoring: no hard line breaks within paragraphs (one paragraph = one line); clarity + rigour/honesty over volume
+- `rules/spec-conventions.md` — Specs are built around three mandatory sections (Overview, Requirements, Acceptance Criteria); everything else is opt-in and must be deleted, not filled with "N/A", if unused
 
 ## Knowledge Docs (On-Demand)
 
