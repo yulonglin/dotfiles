@@ -33,6 +33,8 @@ TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
 [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]] && exit 0
 [[ -z "${ANTHROPIC_API_KEY:-}" ]] && exit 0
 
+CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+
 # Skip if user already named this session
 grep -q '"custom-title"' "$TRANSCRIPT_PATH" 2>/dev/null && exit 0
 
@@ -65,6 +67,10 @@ grep -q '"custom-title"' "$TRANSCRIPT_PATH" 2>/dev/null && exit 0
   NAME=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null \
     | tr -d '"\000-\037' | head -c 60)
   [[ -z "$NAME" ]] && exit 0
+
+  REPO_NAME=$(basename "$(git -C "${CWD:-.}" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || true)
+  [[ -n "$REPO_NAME" ]] && NAME="${REPO_NAME}/${NAME}"
+
   echo "-1" > "$STATE_FILE"
 
   # Claude Code session name
