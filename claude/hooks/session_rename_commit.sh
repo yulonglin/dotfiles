@@ -47,8 +47,10 @@ if [[ -z "$SUBJECT" ]]; then
   SUBJECT="git commit"
 fi
 
-# Truncate and prefix with ✅
-TITLE="✅ ${SUBJECT:0:60}"
+# Truncate and prefix with repo name + ✅
+CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+REPO_NAME=$(basename "$(git -C "${CWD:-.}" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || true)
+TITLE="${REPO_NAME:+$REPO_NAME/}✅ ${SUBJECT:0:60}"
 
 # Set terminal title via OSC escape (works in most terminals)
 printf '\033]0;%s\007' "$TITLE" > /dev/tty 2>/dev/null || true
