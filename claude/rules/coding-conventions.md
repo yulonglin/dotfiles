@@ -101,58 +101,7 @@ All fzf-based pickers in dotfiles tooling should follow these conventions:
 - For zsh scripts, use `# shellcheck shell=bash` at top (closest approximation)
 - Suppress false positives with `# shellcheck disable=SCXXXX` (include reason)
 
-**`local` inside a loop prints existing values (zsh):**
-In zsh, `local var` is `typeset var`. Re-declaring an already-existing typeset variable
-prints its current value. Since a `for` loop re-runs the body, `local` inside a loop
-leaks the previous iteration's value on iterations 2+. Declare loop-scoped temporaries
-*before* the loop, or use `if var=$(cmd); then` to combine capture + exit-code check:
-
-```bash
-# BAD — leaks prev value from iteration 2 onwards
-for ...; do
-    local tmp
-    tmp=$(some_cmd)
-done
-
-# GOOD — declare once before the loop
-local tmp
-for ...; do
-    tmp=$(some_cmd)   # plain assignment inside loop
-done
-
-# ALSO GOOD — combined capture + exit-code check in one expression
-local tmp
-for ...; do
-    if tmp=$(some_cmd); then ...
-    fi
-done
-```
-
-**`set -e` + arithmetic footgun:**
-`(( expr ))` exits with code 1 when the expression evaluates to 0 (falsy), which trips
-`set -e` / `set -euo pipefail` silently. The value that matters is the *expression result*,
-not the variable after the operation:
-
-| Form | Expression value | Dangerous when |
-|------|-----------------|----------------|
-| `(( n++ ))` | old `n` (before increment) | `n` starts at 0 |
-| `(( ++n ))` | new `n` (after increment) | `n` would reach 0 (impossible for pure counters) |
-| `(( n-- ))` | old `n` (before decrement) | `n` starts at 0 |
-| `(( --n ))` | new `n` (after decrement) | `n` is 1 (result is 0) |
-
-For **counters that start at 0 and only go up**, `(( ++n ))` is always safe. For anything
-else (decrement, values that can reach 0), use `n=$(( n + 1 ))` — no exit-code trap:
-
-```bash
-# BAD — exits when ok=0 under set -e (first iteration of a loop)
-(( ok++ ))
-
-# GOOD for up-only counters starting at 0
-(( ++ok ))
-
-# ALWAYS safe — no arithmetic exit-code semantics
-ok=$(( ok + 1 ))
-```
+See `docs/shell-scripting-gotchas.md` for zsh-specific footguns (`local` in loops, `set -e` + arithmetic).
 
 ## General Programming
 
@@ -188,18 +137,4 @@ ripgrep (`rg`), fd, fzf, bat, eza, zoxide (`z`), delta, jq, jless, htop, dust, d
 
 ## Visual Output Quality
 
-When generating any visual output (TikZ, HTML/CSS, Slidev, matplotlib):
-
-- **Verify visually** — CSS/TikZ/layout changes MUST be checked against rendered output (Playwright screenshot, compiled PDF, browser preview). Accessibility snapshots do NOT reveal spacing issues
-- **Act on reviewer layout feedback immediately** — visual bugs from CSS fragility are invisible in code review; when a reviewer flags it, fix it
-- **Use layout systems, not manual coordinates** — flexbox/grid (CSS), `positioning` library (TikZ), CSS Grid (Slidev). Manual pixel/pt values drift and overlap
-- **Container padding > per-child padding** — pad the container itself, not each child with `> :not(x)` selectors. Markdown renderers produce varying DOM structures
-- **Test with variable content** — would this layout still work if text were 20% longer or a list had 2x items?
-
-### Minimum Spacing (hard floor — never go below)
-
-| Domain | Container padding | Content-to-edge gap | Between sibling elements |
-|--------|------------------|--------------------|-----------------------|
-| **HTML/CSS** | `p-3` / `0.75rem` / `12px` | `p-2` / `0.5rem` / `8px` | `gap-2` / `0.5rem` |
-| **TikZ** | `inner sep>=10pt` | `inner sep>=8pt` | `node distance>=1.5cm` |
-| **Slidev** | `p-4` / `1rem` on slide content | `p-2` on nested elements | `gap-3` / `0.75rem` |
+For any visual output (TikZ, HTML/CSS, Slidev, matplotlib): verify against rendered output, use layout systems not manual coordinates, pad containers not per-child elements. Full principles + minimum spacing floors: `docs/visual-layout-quality.md`.

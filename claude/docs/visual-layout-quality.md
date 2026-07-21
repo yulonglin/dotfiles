@@ -29,6 +29,14 @@ These rules apply ALWAYS, even when frontend-design encourages "overlap" and "as
 3. **Siblings need gap** — use `gap-2`/`0.5rem` minimum between adjacent elements (flex/grid gap, not margin hacks)
 4. **Full-bleed elements get negative margin, not zero-padding parents** — if a child needs to touch edges, use negative margin on that child, not remove padding from parent
 
+### Minimum Spacing (hard floor — never go below)
+
+| Domain | Container padding | Content-to-edge gap | Between sibling elements |
+|--------|------------------|--------------------|-----------------------|
+| **HTML/CSS** | `p-3` / `0.75rem` / `12px` | `p-2` / `0.5rem` / `8px` | `gap-2` / `0.5rem` |
+| **TikZ** | `inner sep>=10pt` | `inner sep>=8pt` | `node distance>=1.5cm` |
+| **Slidev** | `p-4` / `1rem` on slide content | `p-2` on nested elements | `gap-3` / `0.75rem` |
+
 ### Anti-Patterns (with fixes)
 
 ```css
