@@ -56,12 +56,26 @@ pub struct LimitModel {
     pub display_name: Option<String>,
 }
 
-/// One account's last-known 5h usage, persisted across logout in the
-/// multi-account cache (`~/.claude/usage-data/accounts.json`).
-#[derive(Serialize, Deserialize, Clone)]
+/// One account's last-known usage windows (5h, 7d, and any model-scoped
+/// weekly limits), persisted across logout in the multi-account cache
+/// (`~/.claude/usage-data/accounts.json`).
+#[derive(Serialize, Deserialize, Clone, Default)]
 struct AccountEntry {
     five_hour_resets_at: Option<String>,
     five_hour_pct: Option<u8>,
+    #[serde(default)]
+    seven_day_resets_at: Option<String>,
+    #[serde(default)]
+    seven_day_pct: Option<u8>,
+    #[serde(default)]
+    weekly_scoped: std::collections::HashMap<String, WeeklyScopedEntry>,
+}
+
+/// One model-scoped weekly limit (e.g. Fable) within an account's snapshot.
+#[derive(Serialize, Deserialize, Clone)]
+struct WeeklyScopedEntry {
+    resets_at: Option<String>,
+    pct: Option<u8>,
 }
 
 // --- Public entry point ---
@@ -82,13 +96,11 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
     let seven = usage.seven_day.as_ref().and_then(|b| b.utilization);
 
     // Snapshot this account into the persistent multi-account cache, keyed
-    // by email, so the *other* (logged-out) account's last-known 5h reset
-    // can still be surfaced after switching away from it.
+    // by email, so the *other* (logged-out) account's last-known usage
+    // windows can still be surfaced after switching away from it.
     let current_email = resolve_account_identity();
-    if let (Some(email), Some(pct)) = (current_email.as_deref(), five) {
-        if let Some(resets_at) = usage.five_hour.as_ref().and_then(|b| b.resets_at.as_deref()) {
-            upsert_account_usage(email, resets_at, pct.round().clamp(0.0, 100.0) as u8);
-        }
+    if let Some(email) = current_email.as_deref() {
+        upsert_account_snapshot(email, usage);
     }
 
     if five.is_none() && seven.is_none() {
@@ -298,11 +310,12 @@ fn color_for_pct(pct: u8) -> &'static str {
 //
 // Account switching here means log-out/log-in on the same ~/.claude — not
 // separate CLAUDE_CONFIG_DIR instances — so only one account's credentials
-// are ever live at a time. We snapshot the *active* account's 5h reset into
-// a persistent, email-keyed cache on every tick, and surface whichever
-// *other* entry exists as a last-known countdown. This persists across
-// logout (unlike the volatile TMPDIR usage cache above, which reflects only
-// the currently active account).
+// are ever live at a time. We snapshot the *active* account's usage windows
+// (5h, 7d, weekly-scoped) into a persistent, email-keyed cache on every
+// tick, and surface whichever *other* entry exists as a last-known
+// countdown per window. This persists across logout (unlike the volatile
+// TMPDIR usage cache above, which reflects only the currently active
+// account).
 
 /// Current account's identity (email), the multi-account cache key.
 fn resolve_account_identity() -> Option<String> {
@@ -330,47 +343,106 @@ fn read_accounts_cache() -> std::collections::HashMap<String, AccountEntry> {
         .unwrap_or_default()
 }
 
-fn upsert_account_usage(email: &str, resets_at: &str, pct: u8) {
+/// Merge this tick's usage into the account's persisted snapshot. Only
+/// windows present in `usage` are updated; windows with no data this tick
+/// (e.g. a weekly-scoped limit that dropped out of the API response) keep
+/// their last-known value.
+fn upsert_account_snapshot(email: &str, usage: &UsageResponse) {
     let Some(path) = accounts_cache_path() else { return };
     let mut accounts = read_accounts_cache();
-    accounts.insert(
-        email.to_string(),
-        AccountEntry {
-            five_hour_resets_at: Some(resets_at.to_string()),
-            five_hour_pct: Some(pct),
-        },
-    );
+    let mut entry = accounts.remove(email).unwrap_or_default();
+
+    if let Some(bucket) = usage.five_hour.as_ref() {
+        if let (Some(resets_at), Some(pct)) = (bucket.resets_at.as_deref(), bucket.utilization) {
+            entry.five_hour_resets_at = Some(resets_at.to_string());
+            entry.five_hour_pct = Some(pct.round().clamp(0.0, 100.0) as u8);
+        }
+    }
+    if let Some(bucket) = usage.seven_day.as_ref() {
+        if let (Some(resets_at), Some(pct)) = (bucket.resets_at.as_deref(), bucket.utilization) {
+            entry.seven_day_resets_at = Some(resets_at.to_string());
+            entry.seven_day_pct = Some(pct.round().clamp(0.0, 100.0) as u8);
+        }
+    }
+    for limit in usage.limits.iter().filter(|l| l.kind.as_deref() == Some("weekly_scoped")) {
+        let Some(name) = limit
+            .scope
+            .as_ref()
+            .and_then(|s| s.model.as_ref())
+            .and_then(|m| m.display_name.as_deref())
+        else {
+            continue;
+        };
+        let Some(pct) = limit.percent else { continue };
+        entry.weekly_scoped.insert(
+            name.to_string(),
+            WeeklyScopedEntry {
+                resets_at: limit.resets_at.clone(),
+                pct: Some(pct.round().clamp(0.0, 100.0) as u8),
+            },
+        );
+    }
+
+    accounts.insert(email.to_string(), entry);
     if let Ok(serialized) = serde_json::to_string_pretty(&accounts) {
         let _ = std::fs::write(&path, serialized);
     }
 }
 
-/// Surface the other (logged-out) account's last-known 5h reset as an
-/// always-on compact indicator: a countdown while waiting, "ready" once the
-/// cached reset time has passed. No-op if no other account has ever synced.
+/// Surface the other (logged-out) account's last-known usage windows (5h,
+/// 7d, weekly-scoped) as an always-on compact indicator: one "label
+/// countdown"/"label ready" segment per window with cached data, joined by
+/// "·". No-op if no other account has ever synced. Picks the other account
+/// whose 5h window synced most recently, in case more than one exists.
 fn render_other_account(output: &mut String, current_email: &str) {
     let accounts = read_accounts_cache();
-    let other_reset_epoch = accounts
+    let other = accounts
         .iter()
         .filter(|(email, _)| email.as_str() != current_email)
-        .filter_map(|(_, entry)| entry.five_hour_resets_at.as_deref())
-        .filter_map(parse_iso_epoch)
-        .max();
+        .filter_map(|(_, entry)| {
+            let epoch = entry.five_hour_resets_at.as_deref().and_then(parse_iso_epoch)?;
+            Some((epoch, entry))
+        })
+        .max_by_key(|(epoch, _)| *epoch)
+        .map(|(_, entry)| entry);
 
-    let Some(reset_epoch) = other_reset_epoch else { return };
+    let Some(entry) = other else { return };
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
 
-    output.push_str("  |  ");
-    if reset_epoch > now {
-        let remaining = (reset_epoch - now) as f64;
-        let _ = write!(output, "\x1b[2m\u{21c4} {}\x1b[0m", fmt_time_remaining(remaining));
-    } else {
-        let _ = write!(output, "\x1b[32m\u{21c4} ready\x1b[0m");
+    let mut windows: Vec<(String, Option<String>)> = vec![
+        ("5h".to_string(), entry.five_hour_resets_at.clone()),
+        ("7d".to_string(), entry.seven_day_resets_at.clone()),
+    ];
+    let mut weekly: Vec<(&String, &WeeklyScopedEntry)> = entry.weekly_scoped.iter().collect();
+    weekly.sort_by_key(|(name, _)| name.as_str());
+    for (name, w) in weekly {
+        windows.push((name.clone(), w.resets_at.clone()));
     }
+
+    let mut rendered = String::new();
+    for (label, resets_at) in &windows {
+        let Some(epoch) = resets_at.as_deref().and_then(parse_iso_epoch) else { continue };
+        if !rendered.is_empty() {
+            rendered.push_str("  \u{00b7}  ");
+        }
+        if epoch > now {
+            let remaining = (epoch - now) as f64;
+            let _ = write!(rendered, "\x1b[2m{} {}\x1b[0m", label, fmt_time_remaining(remaining));
+        } else {
+            let _ = write!(rendered, "\x1b[32m{} ready\x1b[0m", label);
+        }
+    }
+
+    if rendered.is_empty() {
+        return;
+    }
+
+    output.push_str("  |  \x1b[2m\u{21c4}\x1b[0m ");
+    output.push_str(&rendered);
 }
 
 // --- Caching ---
