@@ -1,6 +1,6 @@
 ---
 name: merge-worktree
-description: Merge current worktree branch into the original branch, resolve conflicts with AI, then mark worktree for cleanup
+description: Merge current worktree branch into the original branch, resolve conflicts with AI, then mark worktree for cleanup. Use when the user says "merge this worktree", "merge my branch back", or "finish this worktree."
 ---
 
 # Merge Worktree

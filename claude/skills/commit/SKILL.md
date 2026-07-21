@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Commit current work with optional message. Handles git status/diff checking and message formatting.
+description: Commit currently staged/unstaged changes with a formatted message. Use when the user says "commit this", "commit these changes", or "save my work" — for combined commit+push+sync, use commit-push-sync instead.
 ---
 
 # Commit current work
