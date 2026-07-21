@@ -296,10 +296,67 @@ format_epoch_datetime() {
   if [ -n "$t" ]; then echo "$t" | sed 's/  / /g'; return; fi
 }
 
+# Helper: format remaining seconds as a compact countdown "2h30m" / "45m" / "5d3h"
+format_countdown() {
+  local remaining_secs="$1"
+  local mins=$(( (remaining_secs + 30) / 60 ))
+  local h=$(( mins / 60 ))
+  local m=$(( mins % 60 ))
+  if [ "$h" -ge 24 ]; then
+    printf '%dd%dh' "$((h / 24))" "$((h % 24))"
+  elif [ "$h" -gt 0 ]; then
+    printf '%dh%dm' "$h" "$m"
+  else
+    printf '%dm' "$m"
+  fi
+}
+
+# ============================================================================
+# MULTI-ACCOUNT TRACKING (other logged-out account's last-known 5h reset)
+# ============================================================================
+# Account switching here means log-out/log-in on this same ~/.claude — not
+# separate CLAUDE_CONFIG_DIR instances — so only one account's credentials
+# are ever live at a time. We snapshot the *active* account's 5h reset into a
+# persistent, email-keyed cache on every tick, and surface whichever *other*
+# entry exists as a last-known countdown. Persists across logout (unlike the
+# volatile TMPDIR usage cache above, which is overwritten per active account).
+accounts_cache_dir="$HOME/.claude/usage-data"
+accounts_cache_file="$accounts_cache_dir/accounts.json"
+
+# Helper: current account's identity (email), the cache key
+get_account_email() {
+  local claude_json="$HOME/.claude.json"
+  [ -f "$claude_json" ] || return 1
+  local email
+  email=$(jq -r '.oauthAccount.emailAddress // empty' "$claude_json" 2>/dev/null)
+  [ -n "$email" ] && [ "$email" != "null" ] && { echo "$email"; return 0; }
+  return 1
+}
+
 # Render usage bars
 if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
   five_pct=$(echo "$usage_data" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
   seven_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
+
+  # Snapshot this account into the persistent multi-account cache, keyed by
+  # email, so the *other* (logged-out) account's last-known 5h reset can
+  # still be surfaced after switching away from it.
+  current_account_email=$(get_account_email)
+  if [ -n "$current_account_email" ]; then
+    mkdir -p "$accounts_cache_dir" 2>/dev/null
+    five_resets_for_cache=$(echo "$usage_data" | jq -r '.five_hour.resets_at // empty')
+    if [ -n "$five_resets_for_cache" ]; then
+      existing_accounts="{}"
+      [ -f "$accounts_cache_file" ] && existing_accounts=$(cat "$accounts_cache_file" 2>/dev/null)
+      [ -n "$existing_accounts" ] || existing_accounts="{}"
+      echo "$existing_accounts" | jq \
+        --arg email "$current_account_email" \
+        --arg resets "$five_resets_for_cache" \
+        --argjson pct "$five_pct" \
+        '.[$email] = {five_hour_resets_at: $resets, five_hour_pct: $pct}' \
+        > "$accounts_cache_file.tmp" 2>/dev/null && mv "$accounts_cache_file.tmp" "$accounts_cache_file"
+    fi
+  fi
 
   printf "\n"
 
@@ -382,6 +439,25 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
       fi
     done < <(echo "$usage_data" | jq -r '.limits[]? | select(.kind == "weekly_scoped") | select(.scope.model.display_name != null) | [.scope.model.display_name, (.percent // 0), (.resets_at // "")] | @tsv')
 
+  fi
+
+  # Other account's last-known 5h reset — always-on compact indicator,
+  # visually separated with "|" since it's a different account's data.
+  if [ -n "$current_account_email" ] && [ -f "$accounts_cache_file" ]; then
+    other_resets=$(jq -r --arg email "$current_account_email" \
+      'to_entries | map(select(.key != $email)) | sort_by(.value.five_hour_resets_at) | last.value.five_hour_resets_at // empty' \
+      "$accounts_cache_file" 2>/dev/null)
+    if [ -n "$other_resets" ] && [ "$other_resets" != "null" ]; then
+      other_epoch=$(parse_iso_epoch "$other_resets")
+      if [ -n "$other_epoch" ]; then
+        now_epoch=$(date +%s)
+        if [ "$other_epoch" -gt "$now_epoch" ]; then
+          printf "  |  \033[2m⇄ %s\033[0m" "$(format_countdown "$((other_epoch - now_epoch))")"
+        else
+          printf "  |  \033[32m⇄ ready\033[0m"
+        fi
+      fi
+    fi
   fi
 else
   if [ -n "$token" ] || [ -z "$(get_oauth_token)" ]; then
