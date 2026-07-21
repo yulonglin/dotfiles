@@ -13,11 +13,17 @@ struct Input {
     model: Option<Model>,
     cost: Option<Cost>,
     context_window: Option<ContextWindow>,
+    effort: Option<Effort>,
 }
 
 #[derive(Deserialize)]
 struct Model {
     display_name: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Effort {
+    level: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -64,7 +70,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Line 2: session state (collect parts, join with " · ")
     let mut session_parts: Vec<String> = Vec::new();
-    if let Some(s) = format_model_str(input.model.as_ref()) {
+    if let Some(s) = format_model_str(input.model.as_ref(), input.effort.as_ref()) {
         session_parts.push(s);
     }
     if let Some(s) = format_context_usage_str(input.context_window.as_ref()) {
@@ -223,10 +229,16 @@ fn format_git_info(output: &mut String, cwd: &str) {
     }
 }
 
-/// Model display name in brackets.
-fn format_model_str(model: Option<&Model>) -> Option<String> {
+/// Model display name in brackets, with reasoning effort level appended when present
+/// (e.g. `[Sonnet 5 · high]`). `effort` is only sent by Claude Code for models that
+/// support configurable effort levels.
+fn format_model_str(model: Option<&Model>, effort: Option<&Effort>) -> Option<String> {
     let name = model.and_then(|m| m.display_name.as_deref()).filter(|n| !n.is_empty())?;
-    Some(format!("\x1b[34m[{}]\x1b[0m", name))
+    let level = effort.and_then(|e| e.level.as_deref()).filter(|l| !l.is_empty());
+    match level {
+        Some(level) => Some(format!("\x1b[34m[{} \u{00b7} {}]\x1b[0m", name, level)),
+        None => Some(format!("\x1b[34m[{}]\x1b[0m", name)),
+    }
 }
 
 /// Context usage percentage from `context_window.used_percentage` (pre-computed by Claude Code).

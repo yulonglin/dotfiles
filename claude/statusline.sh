@@ -78,12 +78,17 @@ if git -C "$cwd" rev-parse --git-dir > /dev/null 2>&1; then
 fi
 
 # ============================================================================
-# MODEL NAME
+# MODEL NAME (+ reasoning effort level, when the model supports it)
 # ============================================================================
 model_info=""
 model_name=$(echo "$input" | jq -r '.model.display_name // empty')
+effort_level=$(echo "$input" | jq -r '.effort.level // empty')
 if [ -n "$model_name" ]; then
-  model_info="$(printf '\033[34m')[${model_name}]$(printf '\033[0m')"
+  if [ -n "$effort_level" ]; then
+    model_info="$(printf '\033[34m')[${model_name} · ${effort_level}]$(printf '\033[0m')"
+  else
+    model_info="$(printf '\033[34m')[${model_name}]$(printf '\033[0m')"
+  fi
 fi
 
 # ============================================================================
