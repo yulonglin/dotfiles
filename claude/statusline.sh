@@ -339,21 +339,35 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
   seven_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
 
   # Snapshot this account into the persistent multi-account cache, keyed by
-  # email, so the *other* (logged-out) account's last-known 5h reset can
-  # still be surfaced after switching away from it.
+  # email, so the *other* (logged-out) account's last-known usage windows
+  # (5h, 7d, weekly-scoped) can still be surfaced after switching away from
+  # it. Only windows with data this tick are updated; others keep their
+  # last-known value (jq's `+` merges the new snapshot over the old entry).
   current_account_email=$(get_account_email)
   if [ -n "$current_account_email" ]; then
     mkdir -p "$accounts_cache_dir" 2>/dev/null
-    five_resets_for_cache=$(echo "$usage_data" | jq -r '.five_hour.resets_at // empty')
-    if [ -n "$five_resets_for_cache" ]; then
+    snapshot=$(echo "$usage_data" | jq -c \
+      --argjson five_pct "$five_pct" \
+      --argjson seven_pct "$seven_pct" \
+      '{
+        five_hour_resets_at: (.five_hour.resets_at // null),
+        five_hour_pct: (if .five_hour.resets_at then $five_pct else null end),
+        seven_day_resets_at: (.seven_day.resets_at // null),
+        seven_day_pct: (if .seven_day.resets_at then $seven_pct else null end),
+        weekly_scoped: (
+          [.limits[]? | select(.kind == "weekly_scoped") | select(.scope.model.display_name != null) |
+            {key: .scope.model.display_name, value: {resets_at: (.resets_at // null), pct: ((.percent // 0) | round)}}]
+          | from_entries
+        )
+      } | with_entries(select(.value != null and .value != {}))')
+    if [ -n "$snapshot" ] && [ "$snapshot" != "{}" ]; then
       existing_accounts="{}"
       [ -f "$accounts_cache_file" ] && existing_accounts=$(cat "$accounts_cache_file" 2>/dev/null)
       [ -n "$existing_accounts" ] || existing_accounts="{}"
       echo "$existing_accounts" | jq \
         --arg email "$current_account_email" \
-        --arg resets "$five_resets_for_cache" \
-        --argjson pct "$five_pct" \
-        '.[$email] = {five_hour_resets_at: $resets, five_hour_pct: $pct}' \
+        --argjson snapshot "$snapshot" \
+        '.[$email] = ((.[$email] // {}) + $snapshot | .weekly_scoped = ((.[$email].weekly_scoped // {}) * ($snapshot.weekly_scoped // {})))' \
         > "$accounts_cache_file.tmp" 2>/dev/null && mv "$accounts_cache_file.tmp" "$accounts_cache_file"
     fi
   fi
@@ -441,22 +455,33 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
 
   fi
 
-  # Other account's last-known 5h reset — always-on compact indicator,
-  # visually separated with "|" since it's a different account's data.
+  # Other account's last-known usage windows (5h, 7d, weekly-scoped) —
+  # always-on compact indicator, visually separated with "|" since it's a
+  # different account's data. Selects the entry with the most recently
+  # synced 5h window, then renders every window it has data for.
   if [ -n "$current_account_email" ] && [ -f "$accounts_cache_file" ]; then
-    other_resets=$(jq -r --arg email "$current_account_email" \
-      'to_entries | map(select(.key != $email)) | sort_by(.value.five_hour_resets_at) | last.value.five_hour_resets_at // empty' \
+    other_entry=$(jq -c --arg email "$current_account_email" \
+      'to_entries | map(select(.key != $email)) | sort_by(.value.five_hour_resets_at) | last.value // empty' \
       "$accounts_cache_file" 2>/dev/null)
-    if [ -n "$other_resets" ] && [ "$other_resets" != "null" ]; then
-      other_epoch=$(parse_iso_epoch "$other_resets")
-      if [ -n "$other_epoch" ]; then
-        now_epoch=$(date +%s)
+    if [ -n "$other_entry" ] && [ "$other_entry" != "null" ]; then
+      other_windows=$(echo "$other_entry" | jq -r '
+        [{label: "5h", resets_at: .five_hour_resets_at}, {label: "7d", resets_at: .seven_day_resets_at}]
+        + [(.weekly_scoped // {}) | to_entries[] | {label: .key, resets_at: .value.resets_at}]
+        | .[] | select(.resets_at != null) | [.label, .resets_at] | @tsv')
+      other_rendered=""
+      now_epoch=$(date +%s)
+      while IFS=$'\t' read -r other_label other_resets; do
+        [ -z "$other_label" ] && continue
+        other_epoch=$(parse_iso_epoch "$other_resets")
+        [ -z "$other_epoch" ] && continue
+        [ -n "$other_rendered" ] && other_rendered="${other_rendered}  ·  "
         if [ "$other_epoch" -gt "$now_epoch" ]; then
-          printf "  |  \033[2m⇄ %s\033[0m" "$(format_countdown "$((other_epoch - now_epoch))")"
+          other_rendered="${other_rendered}\033[2m${other_label} $(format_countdown "$((other_epoch - now_epoch))")\033[0m"
         else
-          printf "  |  \033[32m⇄ ready\033[0m"
+          other_rendered="${other_rendered}\033[32m${other_label} ready\033[0m"
         fi
-      fi
+      done <<< "$other_windows"
+      [ -n "$other_rendered" ] && printf "  |  \033[2m⇄\033[0m %b" "$other_rendered"
     fi
   fi
 else
