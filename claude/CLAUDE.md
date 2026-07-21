@@ -135,13 +135,14 @@ Detailed implementation lives in the `Effortful Learning` output style (`claude/
 | Instructions | CLAUDE.md                                      | CLAUDE.md                       |
 | Rules        | rules/*.md (auto-loaded)                       | rules/*.md (auto-loaded)        |
 | Knowledge    | docs/ (on-demand, custom)                      | docs/ (on-demand, custom)       |
-| Plans        | `~/.claude/plans/` (global)                    | `plans/` (via `plansDirectory`) |
+| Plans        | `~/.claude/plans/` → `~/vault/plans/` (global) | `plans/` (via `plansDirectory`) |
 | Tasks        | `~/.claude/tasks/` (no per-project option yet) | —                               |
 | Agents       | agents/*.md                                    | agents/*.md                     |
 | Skills       | skills/                                        | skills/                         |
 
 Global = applies to ALL projects. Per-project = repo-specific, version-controlled.
 Plans default to global but are configured per-project via `plansDirectory` in settings.json.
+`~/.claude/plans/` is a symlink into the Obsidian vault (`~/vault/plans/`); per-repo plans dirs may likewise be vault symlinks (e.g. dotfiles → `~/vault/dotfiles/plans/`).
 Tasks are global only (`~/.claude/tasks/`) — per-project not yet available ([#20425](https://github.com/anthropics/claude-code/issues/20425)).
 `docs/` is a custom convention (not auto-loaded by Claude Code) — skills read from it on demand.
 

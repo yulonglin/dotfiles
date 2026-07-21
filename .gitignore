@@ -10,18 +10,28 @@ config/machines.conf
 .secrets
 .envrc
 
-# Personal working content — lives in the separate PRIVATE repo (dotfiles-personal),
-# never on a branch here (a branch in a public repo is public). Gitignored so it
-# can't slip into public `main`. See "Personal Content" in CLAUDE.md.
-plans/
-specs/
-.remember/
+# Personal working content — lives in the Obsidian vault (~/vault/dotfiles/*),
+# symlinked at these paths, never on a branch here (a branch in a public repo is
+# public). No trailing slash: these are now symlinks, and `plans/` (dir-only
+# pattern) would NOT match a symlink — a careless `git add .` would stage it.
+# See "Personal Content" in CLAUDE.md.
+plans
+specs
+.remember
 tmp/
 docs/CLAUDE_TASKS.md
 docs/interview-prep-*.md
 docs/machine-restart-handover.md
 docs/plans/
 docs/slack-channel-summaries/
+# Personal text-replacement overlay (real emails/addresses) — synced to macOS/Alfred
+# by scripts/sync_text_replacements.py but never committed
+config/text_replacements.local.yaml
+# Transcription identity files — real name, affiliation, personal network.
+# Live in the vault (~/vault/dotfiles/transcription/), symlinked here.
+config/transcription/voiceink/macOS/vocab/people-and-orgs.md
+config/transcription/voiceink/macOS/vocab/personal.md
+config/transcription/granola/company-description.md
 
 # Claude runtime state (local operational artifacts)
 claude/diagnostics/
@@ -33,7 +43,7 @@ claude/remote/
 claude/custom-insights/
 claude/usage-data/
 claude/tasks/
-claude/plans/
+claude/plans
 claude/plans.archive/
 claude/channels/
 claude/history.jsonl

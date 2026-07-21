@@ -38,6 +38,10 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 DOT_DIR = SCRIPT_DIR.parent
 YAML_PATH = DOT_DIR / "config" / "text_replacements.yaml"
+# Gitignored overlay for personal entries (hide-my-email aliases etc.) that should
+# sync to macOS/Alfred but never appear in the tracked YAML of this public repo.
+# Same format as the tracked file; entries here always round-trip back here.
+LOCAL_YAML_PATH = DOT_DIR / "config" / "text_replacements.local.yaml"
 
 TEXT_REPLACEMENTS_DB = Path.home() / "Library" / "KeyboardServices" / "TextReplacements.db"
 
@@ -62,6 +66,7 @@ class Snippet:
     collection: str = DEFAULT_COLLECTION
     alfred_only: bool = False
     enabled: bool = True
+    local: bool = False  # lives in the gitignored local overlay, not the tracked YAML
 
 
 @dataclass
@@ -618,6 +623,36 @@ def write_yaml(
     print(f"  Wrote {total} entries ({len(collections)} collections) to {path}")
 
 
+def read_yaml_layered() -> tuple[dict[str, list[Snippet]], dict[str, CollectionMeta]]:
+    """Read the tracked YAML plus the gitignored local overlay.
+
+    Overlay entries are flagged local=True so write_yaml_layered routes them
+    back to the overlay instead of leaking them into the tracked file.
+    """
+    collections, meta = read_yaml(YAML_PATH)
+    local_collections, local_meta = read_yaml(LOCAL_YAML_PATH)
+    for col_name, snippets in local_collections.items():
+        for s in snippets:
+            s.local = True
+        collections.setdefault(col_name, []).extend(snippets)
+    # Tracked meta wins on conflicts; the overlay may add meta for local-only collections
+    return collections, {**local_meta, **meta}
+
+
+def write_yaml_layered(
+    collections: dict[str, list[Snippet]],
+    collection_meta: dict[str, CollectionMeta],
+    dry_run: bool = False,
+) -> None:
+    """Split collections back into tracked YAML + local overlay on the local flag."""
+    tracked = {c: [s for s in snips if not s.local] for c, snips in collections.items()}
+    local = {c: [s for s in snips if s.local] for c, snips in collections.items()}
+    local = {c: v for c, v in local.items() if v}
+    write_yaml(YAML_PATH, {c: v for c, v in tracked.items() if v}, collection_meta, dry_run)
+    if local or LOCAL_YAML_PATH.exists():
+        write_yaml(LOCAL_YAML_PATH, local, collection_meta, dry_run)
+
+
 # ── Backup ───────────────────────────────────────────────────────────────────
 
 
@@ -640,6 +675,8 @@ def backup_current_state(snippets_dir: Path | None) -> str:
 
     if YAML_PATH.exists():
         shutil.copy2(YAML_PATH, backup_path / "text_replacements.yaml")
+    if LOCAL_YAML_PATH.exists():
+        shutil.copy2(LOCAL_YAML_PATH, backup_path / "text_replacements.local.yaml")
 
     if BACKUP_DIR.exists():
         backups = sorted(
@@ -709,8 +746,8 @@ def cmd_export(args: argparse.Namespace) -> None:
         read_alfred_entries(snippets_dir) if snippets_dir else ([], {})
     )
 
-    # Read existing YAML to preserve manual edits
-    existing_collections, existing_meta = read_yaml(YAML_PATH)
+    # Read existing YAML (tracked + local overlay) to preserve manual edits
+    existing_collections, existing_meta = read_yaml_layered()
     merged_meta = {**existing_meta, **alfred_meta}
 
     # All maps keyed by PREFIXED shortcut (globally unique across collections).
@@ -780,7 +817,7 @@ def cmd_export(args: argparse.Namespace) -> None:
         entry.collection = DEFAULT_COLLECTION
         collections.setdefault(DEFAULT_COLLECTION, []).append(entry)
 
-    write_yaml(YAML_PATH, collections, merged_meta, dry_run=args.dry_run)
+    write_yaml_layered(collections, merged_meta, dry_run=args.dry_run)
 
 
 def cmd_import(args: argparse.Namespace) -> None:
@@ -796,7 +833,7 @@ def cmd_import(args: argparse.Namespace) -> None:
     if not args.dry_run:
         backup_current_state(snippets_dir)
 
-    collections, collection_meta = read_yaml(YAML_PATH)
+    collections, collection_meta = read_yaml_layered()
     all_entries = all_snippets(collections)
 
     # macOS: all enabled, non-alfred-only entries (with collection prefix applied)
@@ -825,7 +862,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
     if not args.dry_run:
         backup_current_state(snippets_dir)
 
-    yaml_collections, yaml_meta = read_yaml(YAML_PATH)
+    yaml_collections, yaml_meta = read_yaml_layered()
     macos_entries = read_macos_entries()
     alfred_entries, alfred_meta = (
         read_alfred_entries(snippets_dir) if snippets_dir else ([], {})
@@ -909,8 +946,8 @@ def cmd_sync(args: argparse.Namespace) -> None:
         entry.collection = DEFAULT_COLLECTION
         collections.setdefault(DEFAULT_COLLECTION, []).append(entry)
 
-    # Write YAML
-    write_yaml(YAML_PATH, collections, merged_meta, dry_run=args.dry_run)
+    # Write YAML (tracked + local overlay)
+    write_yaml_layered(collections, merged_meta, dry_run=args.dry_run)
 
     # Write back to systems
     all_entries = all_snippets(collections)
@@ -935,7 +972,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
 def cmd_diff(args: argparse.Namespace) -> None:
     """Show differences between YAML, macOS, and Alfred."""
     snippets_dir = get_alfred_snippets_dir()
-    yaml_collections, yaml_meta = read_yaml(YAML_PATH)
+    yaml_collections, yaml_meta = read_yaml_layered()
     macos_entries = read_macos_entries()
     alfred_entries, alfred_meta = read_alfred_entries(snippets_dir) if snippets_dir else ([], {})
 
@@ -1020,6 +1057,11 @@ def cmd_restore(args: argparse.Namespace) -> None:
     if yaml_backup.exists():
         shutil.copy2(yaml_backup, YAML_PATH)
         print("  Restored YAML from backup")
+
+    local_backup = backup_path / "text_replacements.local.yaml"
+    if local_backup.exists():
+        shutil.copy2(local_backup, LOCAL_YAML_PATH)
+        print("  Restored local overlay YAML from backup")
 
     snippets_dir = get_alfred_snippets_dir()
     alfred_backup = backup_path / "alfred"

@@ -66,25 +66,40 @@ See README.md for detailed usage.
 
 - **Direct pushes to main are allowed** - no PR required for this personal repo
 - **Single branch: `main`.** The old `main`/`yulong` split was collapsed into `main` on 2026-06-22 (PR #10) — `yulong` is kept dormant as a safety net but receives no new work. Do day-to-day work directly on `main`; branch worktrees off `main`. (Route only large/structural merges through a tracked PR; routine commits go direct.)
-- **This repo is public, but we no longer keep `main` "clean for others"** — it's just the personal working branch. Genuinely private content (`plans/`, `specs/`, `.remember/`, secrets) still lives in the separate private repo (see [Personal Content](#personal-content)), never on a branch here.
+- **This repo is public, but we no longer keep `main` "clean for others"** — it's just the personal working branch. Genuinely private content (`plans/`, `specs/`, `.remember/`, secrets) lives outside the repo in the Obsidian vault (see [Personal Content](#personal-content)), never on a branch here.
 
 ### Personal Content
 
 This repo is public (people star it). A branch in a public repo is **also public**,
-so personal working artifacts must not live on any branch here — they go in a
-separate **private** repo (`dotfiles-personal`).
+so personal working artifacts must not live on any branch here — they live in the
+**Obsidian vault** (`~/vault`), with symlinks at the original repo paths so tooling
+keeps working unchanged.
 
-| Repo | Visibility | Contents |
-|------|-----------|----------|
-| `dotfiles` (this one) | Public | Shareable dotfiles only. What people clone/star. |
-| `dotfiles-personal` | **Private** | `plans/`, `specs/`, `.remember/`, `tmp/`, personal `docs/`, `config/machines.conf` |
+| Repo path | Real location (vault) | Notes |
+|-----------|----------------------|-------|
+| `plans/` | `~/vault/dotfiles/plans/` | `plansDirectory: "plans"` resolves through the symlink |
+| `specs/` | `~/vault/dotfiles/specs/` | |
+| `.remember/` | `~/vault/dotfiles/remember/` | Visible name (no dot) — Obsidian doesn't index dot-folders |
+| `claude/plans/` (= `~/.claude/plans/`) | `~/vault/plans/` | Global plans |
+| `config/transcription/voiceink/macOS/vocab/{people-and-orgs,personal}.md` | `~/vault/dotfiles/transcription/voiceink/vocab/` | Identity files (real name, affiliation, personal network) |
+| `config/transcription/granola/company-description.md` | `~/vault/dotfiles/transcription/granola/` | |
 
-The personal paths are listed in `.gitignore` here so they can't accidentally be
-committed to public `main`. They are tracked in the private repo instead.
+All these paths remain in `.gitignore` so they can't accidentally be committed to
+public `main`. `~/vault` is in the Claude Code sandbox `allowWrite` list
+(`claude/settings.json`) so sessions can write through the symlinks. Vault backup
+relies on Obsidian sync — the vault is not a git repo.
 
-**Why not a `yulong`/personal branch?** Branches in a public repo are public — a
-superset branch would have exposed everything it was meant to hide. A separate
-private repo is the only real privacy boundary.
+Beyond vault-relocated files, three more personal-content mechanisms keep machine or identity data out of tracked files:
+
+- **`GIST_SYNC_ID`** — the config-sync gist ID lives in gitignored `config/user.conf` (see `user.conf.example`), never hardcoded. `sync_gist` warns and bails if unset.
+- **`config/text_replacements.local.yaml`** — gitignored overlay for text-replacement entries containing real emails/addresses. `scripts/sync_text_replacements.py` merges it on read and routes local entries back to it on write, so they sync to macOS/Alfred but never touch the tracked YAML.
+- **Git clean filters** (`codex-projects`, `zed-ssh`) — codex and Zed write machine-local inventories (project trust paths, SSH connections with project paths) into their symlinked configs. `.gitattributes` maps those files to filters in `scripts/git-filters/strip_personal.py`, registered by `deploy.sh --git-config`, so staged content is always stripped. `config/git-hooks/pre-commit` blocks the commit as a backstop if the filter isn't registered. Note: because git sees the stripped content, a pull that updates these files overwrites the live machine-local entries — codex re-asks for trust and Zed re-learns connections; that's accepted.
+
+**Why not a `yulong`/personal branch or a private `dotfiles-personal` repo?**
+Branches in a public repo are public — a superset branch would have exposed
+everything it was meant to hide. A separate private repo was planned but never
+created; the vault already syncs across machines and holds the same prose-like
+content, so it's the privacy boundary instead.
 
 ### Worktree Workflow
 
@@ -303,7 +318,7 @@ Subtleties worth knowing per deploy component. Full mechanics live in the matchi
 
 | Component | Mechanism | Key gotcha |
 |-----------|-----------|------------|
-| **Gist Sync** (`deploy_secrets`) | Bidirectional sync of `~/.ssh/config`, `authorized_keys`, `config/user.conf` with gist `3cc239...371`. `authorized_keys` uses **disable-wins union merge** (local is always canonical base; whole-line-commented keys are tombstones that suppress that key everywhere even if gist still lists it active); `~/.ssh/config` and `user.conf` use last-modified-wins. Daily 8 AM (launchd/cron). | Requires `gh auth login`. Manual: `sync-gist`. Runs before git config (user.conf provides identity). Merge logic in `scripts/shared/merge_authorized_keys.py`; active convention: `<type> <blob> [## note]`; disable convention: `# <type> <blob>` under `# --- Disabled / pending deletion ---`. |
+| **Gist Sync** (`deploy_secrets`) | Bidirectional sync of `~/.ssh/config`, `authorized_keys`, `config/user.conf` with the gist named by `GIST_SYNC_ID` (set in gitignored `config/user.conf`; sync bails with a warning if unset). `authorized_keys` uses **disable-wins union merge** (local is always canonical base; whole-line-commented keys are tombstones that suppress that key everywhere even if gist still lists it active); `~/.ssh/config` and `user.conf` use last-modified-wins. Daily 8 AM (launchd/cron). | Requires `gh auth login`. Manual: `sync-gist`. Runs before git config (user.conf provides identity). Merge logic in `scripts/shared/merge_authorized_keys.py`; active convention: `<type> <blob> [## note]`; disable convention: `# <type> <blob>` under `# --- Disabled / pending deletion ---`. |
 | **Encrypted Secrets** (BWS) | API keys in Bitwarden Secrets Manager. **NOT globally exported** — use `setup-envrc` per repo (direnv), or `with-secrets KEY... -- <cmd>` for one-shot. Managed: `OPENAI/OPENROUTER/ANTHROPIC_API_KEY`, `HF_TOKEN`, `MODAL_TOKEN_ID/SECRET`. | BWS token at `~/.config/bws/token`. Run `secrets-init bws` on new machines. Use `secrets-edit` to add/update secrets. |
 | **Git Config** (`deploy_git_config`) | Reads `config/user.conf`; prompts on conflicts. Deploys split ignores: `~/.gitignore_global` (git, broad), `~/.ignore_global` (ripgrep, narrow), `~/.config/fd/ignore` (fd). Result: git ignores `data/`/`archive/`, but search tools can still see them. | `fd` has no `--no-ignore-global` flag — use `fd -I` to traverse research dirs. |
 | **Editor Settings** (`deploy_editor_settings`) | Merges into VSCode/Cursor/Antigravity settings (no overwrite, existing wins). Auto-installs 38 curated extensions from `vscode_extensions.txt`. | Antigravity CLI at `/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity`. |

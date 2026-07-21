@@ -172,6 +172,40 @@ while IFS= read -r _staged_file; do
     esac
 done < <(git diff --cached --name-only 2>/dev/null)
 
+# === PERSONAL CONTENT GUARD (dotfiles repo) ===
+# Backstop for the codex-projects / zed-ssh clean filters (registered by
+# deploy.sh, mapped in .gitattributes). If the filters aren't registered on
+# this machine, machine-local inventories (project trust paths, SSH
+# connections) would stage verbatim — catch that here. Also blocks force-adds
+# of gitignored personal files.
+
+_personal_guard_fail() {
+    echo "❌ COMMIT BLOCKED: personal content staged in ${1}"
+    echo "    ${2}"
+    echo "    Fix: git restore --staged ${1}"
+    echo "    If the clean filter is missing, re-run: ./deploy.sh --git-config"
+    echo "    To bypass intentionally: git commit --no-verify"
+    return 1
+}
+
+while IFS= read -r _staged_file; do
+    case "${_staged_file}" in
+        codex/config.toml)
+            if git show ":${_staged_file}" 2>/dev/null | grep -q '^\[projects\.'; then
+                _personal_guard_fail "${_staged_file}" "staged content contains [projects.*] trust entries (machine-local paths)" || exit 1
+            fi
+            ;;
+        config/zed/settings.json)
+            if git show ":${_staged_file}" 2>/dev/null | tr -d ' \t\n' | grep -q '"ssh_connections":\[[^]]'; then
+                _personal_guard_fail "${_staged_file}" "staged ssh_connections is non-empty (machine-local hosts/paths)" || exit 1
+            fi
+            ;;
+        config/text_replacements.local.yaml|config/transcription/voiceink/macOS/vocab/people-and-orgs.md|config/transcription/voiceink/macOS/vocab/personal.md|config/transcription/granola/company-description.md)
+            _personal_guard_fail "${_staged_file}" "this file is gitignored personal content (identity / real addresses) — it must never be committed" || exit 1
+            ;;
+    esac
+done < <(git diff --cached --name-only 2>/dev/null)
+
 # === REPO-SPECIFIC HOOKS (Additive) ===
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")

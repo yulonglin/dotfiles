@@ -1,3 +1,10 @@
+# Machine-local personal inventories (codex project trust paths, zed SSH
+# connections) are stripped on stage by git clean filters. Filters are
+# registered by deploy.sh (git config filter.*); scripts/git-filters/ has the
+# implementation and config/git-hooks/pre-commit backstops unregistered repos.
+codex/config.toml filter=codex-projects
+config/zed/settings.json filter=zed-ssh
+
 # Platform-specific claude-tools binaries — treat as binary (no text diffs)
 custom_bins/claude-tools-darwin-arm64  binary
 custom_bins/claude-tools-darwin-x86_64 binary

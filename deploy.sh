@@ -313,6 +313,13 @@ if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     # Global gitattributes
     safe_symlink "$DOT_DIR/config/gitattributes_global" "$HOME/.gitattributes"
     git config --global core.attributesFile "$HOME/.gitattributes"
+
+    # Clean filters that strip machine-local personal inventories (codex
+    # project trust paths, zed SSH connections) from this repo's staged
+    # content. Repo-local config; .gitattributes maps the files to filters.
+    git -C "$DOT_DIR" config filter.codex-projects.clean "python3 scripts/git-filters/strip_personal.py codex-projects"
+    git -C "$DOT_DIR" config filter.zed-ssh.clean "python3 scripts/git-filters/strip_personal.py zed-ssh"
+    log_success "Registered personal-content clean filters (codex-projects, zed-ssh)"
 fi
 
 # ─── Git Hooks ────────────────────────────────────────────────────────────────
