@@ -166,6 +166,14 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/research-integrity.md` — No circular reasoning, report all results, no shortcut hacks, label/score/analysis separation
 - `rules/desktop-control.md` — Ask before launching apps, computer-use clicks/typing, claude-in-chrome navigation, or anything that moves focus on the user's machine
 - `rules/markdown-style.md` — Markdown authoring: no hard line breaks within paragraphs (one paragraph = one line); clarity + rigour/honesty over volume
+- `rules/gws-safety.md` — Trash-not-delete and draft-not-send for Google Workspace/Gmail; hooks enforce, this is proactive guidance
+- `rules/supply-chain-security.md` — Dependency vetting, min-release-age quarantine, tool-selection security floor
+- `rules/browser-automation.md` — Tool selection for browser automation (claude-in-chrome, Playwright, agent-browser)
+- `rules/package-managers.md` — OS-specific package manager preference order (Homebrew/apt/uv/cargo/bun)
+- `rules/sendmessage-api.md` — Required `summary` param when messaging another agent
+- `rules/any2md.md` — `any2md` for converting files/URLs/arxiv/dirs to Markdown
+- `rules/communication-style.md` — Drafting messages on the user's behalf: friendliness, clarity, persuasiveness
+- `rules/effortful-learning.md` — Scoping gate for debugging/design/research decisions (mirrors the output style)
 
 ## Knowledge Docs (On-Demand)
 
@@ -183,6 +191,9 @@ Reference material in `~/.claude/docs/` — loaded by skills when relevant, NOT 
 - `docs/tui-tools.md` — TUI tool taxonomy (fzf, gum, television, ratatui), fzf conventions, decision tree
 - `docs/external-resources.md` — **Consult before improving the Claude Code setup.** Aggregators (Good AI List, awesome-claude-code), voices to follow (Boris Cherny, Cat Wu, Thariq Shihipar, Mitchell Hashimoto, Simon Willison, Karpathy), cross-machine memory sync solutions, output-style switching
 - `docs/bear-cli-reference.md` — `bearcli` reference for scripting, cron, and CLI-only cases (the `bear` skill defaults to MCP and links here as the lazy-loaded fallback)
+- `docs/plugin-management.md` — Plugin registry, context profiles, `claude-tools context`/`setup` commands
+- `docs/sandbox-troubleshooting.md` — Niche sandbox failure patterns (chmod, symlinks, launchd/cron, modal, codex-companion)
+- `docs/shell-scripting-gotchas.md` — zsh footguns: `local` in loops, `set -e` + arithmetic
 
 ---
 
@@ -206,45 +217,7 @@ Rules:
 
 ## Plugin Organization & Context Profiles
 
-**12 always-on plugins** (`base:` in `profiles.yaml`) load in every session: `bear-mcp`, `claude-md-management`, `codex`, `commit-commands`, `context7`, `core`, `hookify`, `llms-fetch-mcp`, `plugin-dev`, `remember`, `superpowers`, `workflow`.
-
-**6 ai-safety-plugins** (`github.com/yulonglin/ai-safety-plugins`):
-- `core` — foundational agents, skills, safety hooks (always-on)
-- `research` — experiments, evals, analysis, literature
-- `writing` — papers, drafts, presentations, multi-critic review
-- `code` — dev workflow, debugging, delegation, code review
-- `workflow` — agent teams, handover, conversation management, analytics
-- `viz` — TikZ diagrams, Anthropic-style visualization
-
-**Context profiles** control which plugins load per-project via `claude-tools context`:
-```bash
-claude-tools context                    # Show current state / apply context.yaml
-claude-tools context code               # Software projects
-claude-tools context code typescript python    # Compose multiple profiles
-claude-tools context --list             # Show active plugins and available profiles
-claude-tools context --clean            # Remove project plugin config
-claude-tools context --sync [-v]        # Register + update + install wanted + prune orphans
-claude-tools context --sync --no-prune  # Sync without removing orphan plugins
-```
-
-**Unified repo setup** via `claude-tools setup`:
-```bash
-claude-tools setup                      # Auto-detect + run needed setup steps
-claude-tools setup secrets              # Interactive secret picker (delegates to setup-envrc)
-claude-tools setup context              # Plugin profile picker (delegates to context)
-```
-
-**Architecture:**
-- Plugin registry: auto-discovered from `~/.claude/plugins/installed_plugins.json` (source of truth)
-- Marketplace manifest: `~/.claude/templates/contexts/profiles.yaml` `marketplaces:` section (declarative)
-- Profile definitions: same file, `base:` + `profiles:` sections (per-profile enables)
-- Per-project config: `.claude/context.yaml` (profiles + optional enable/disable overrides, committed)
-- Output: `.claude/settings.json` `enabledPlugins` section (deterministic rebuild from profiles)
-- CLI args persist to `context.yaml` automatically; no-arg invocation re-applies it
-- SessionStart hook auto-applies `context.yaml` on every session start
-- Statusline shows active context profiles (e.g., `[code python]`)
-
-Adding a new plugin: add its marketplace to `marketplaces:` in `profiles.yaml`, run `claude-tools context --sync`, then add to a profile.
+18 plugins (12 always-on base + 6 `ai-safety-plugins`) load per-project via composable `claude-tools context <profile>` profiles. Full architecture, commands, and how to add a plugin: `docs/plugin-management.md`.
 
 ---
 
