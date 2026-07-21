@@ -1133,7 +1133,7 @@ fi
 
 # ─── Safari Web App Registry (macOS only) ────────────────────────────────────
 
-if [[ "$DEPLOY_EDITOR" == "true" ]] && is_macos && [[ -f "$DOT_DIR/custom_bins/safari-web-apps-scan" ]]; then
+if is_macos && [[ -f "$DOT_DIR/custom_bins/safari-web-apps-scan" ]]; then
     "$DOT_DIR/custom_bins/safari-web-apps-scan" || log_warning "Safari web app scan failed (non-critical)"
 fi
 
