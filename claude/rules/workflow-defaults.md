@@ -119,6 +119,7 @@ Any run with a real cost in money or significant compute time — experiments, e
 - **Estimated total < $100 → run immediately**, no approval wait. Still report the estimate alongside the result — don't gate on it, just surface it.
 - **Estimated total >= $100 → propose the run** (cost estimate + what it buys) and wait for explicit go-ahead before launching.
 - If actual spend looks set to materially exceed the estimate mid-run, pause and flag — the estimate is the basis for the $100 gate, not a one-time check-the-box.
+- **SLURM cluster jobs are exempt** — allocations are already paid for (institutional/program grant), so there's no marginal cost to estimate or gate on. Currently: Silico, MATS. Treat jobs on these as free at the margin (still subject to `jexp`-style queueing and resource courtesy, just not the cost gate); if a new cluster shows up, ask whether it's a similarly pre-paid allocation before assuming it's free.
 
 **Why:** replaces a blanket "never spend without asking" default (too conservative — forces a round-trip for trivial-cost runs) with a threshold model: real money still needs a human decision, small spend shouldn't block momentum.
 
