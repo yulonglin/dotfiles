@@ -113,15 +113,9 @@ User gives instruction →
 
 ## Spend Authorization for Runs
 
-Any run with a real cost in money or significant compute time — experiments, evals (e.g. `ai-safety-plugins`), cloud/GPU jobs (Modal, RunPod, Lambda), batches of API-billed LLM calls, or a hook/automation that triggers one of these — needs a cost estimate before launching, not a blanket "ask permission every time" gate.
+Before a billed run (experiments, evals, cloud/GPU jobs, API-billed LLM batches): estimate cost in time + money from actual rates, not a guess (`llm-billing` agent for current pricing). Under $100 → run now, report the estimate with the result. $100+ → propose the estimate and wait for go-ahead.
 
-- **Estimate first**: state the expected cost in both time and money (compute-hours × rate, API tokens × pricing, cloud instance-hours). Calculate from known rates — don't guess vaguely (see `rules/refusal-alternatives.md` § Agent Throughput Awareness: no cost estimate unless it's actually calculated). Use the `llm-billing` agent to check current provider rates/balance if unsure.
-- **Estimated total < $100 → run immediately**, no approval wait. Still report the estimate alongside the result — don't gate on it, just surface it.
-- **Estimated total >= $100 → propose the run** (cost estimate + what it buys) and wait for explicit go-ahead before launching.
-- If actual spend looks set to materially exceed the estimate mid-run, pause and flag — the estimate is the basis for the $100 gate, not a one-time check-the-box.
-- **SLURM cluster jobs are exempt** — allocations are already paid for (institutional/program grant), so there's no marginal cost to estimate or gate on. Currently: Silico, MATS. Treat jobs on these as free at the margin (still subject to `jexp`-style queueing and resource courtesy, just not the cost gate); if a new cluster shows up, ask whether it's a similarly pre-paid allocation before assuming it's free.
-
-**Why:** replaces a blanket "never spend without asking" default (too conservative — forces a round-trip for trivial-cost runs) with a threshold model: real money still needs a human decision, small spend shouldn't block momentum.
+SLURM jobs (currently Silico, MATS) run on pre-paid allocations — no marginal cost, skip the gate. Confirm before assuming a new cluster is similarly free.
 
 ## Mid-Implementation Checkpoints
 
