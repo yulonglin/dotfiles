@@ -158,7 +158,7 @@ Standard paths:
 Behavioral rules that apply to every session are in `~/.claude/rules/`:
 
 - `rules/safety-and-git.md` — Zero tolerance table, git safety, destructive command warnings
-- `rules/workflow-defaults.md` — Task/agent organization, file creation policy, output strategy
+- `rules/workflow-defaults.md` — Task/agent organization, file creation policy, output strategy, spend authorization for billed runs
 - `rules/context-management.md` — PDF/large file rules, bulk edit constraints, verbose output handling
 - `rules/agents-and-delegation.md` — Subagent strategy, delegation decision tree, factual verification, team escalation
 - `rules/coding-conventions.md` — Python/TypeScript/shell basics, language selection, package managers

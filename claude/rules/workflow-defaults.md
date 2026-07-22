@@ -111,6 +111,17 @@ User gives instruction →
 
 **Sandbox note:** `pueue` and `systemctl` are in `excludedCommands` — they bypass the sandbox so `jexp` works from Claude Code sessions.
 
+## Spend Authorization for Runs
+
+Any run with a real cost in money or significant compute time — experiments, evals (e.g. `ai-safety-plugins`), cloud/GPU jobs (Modal, RunPod, Lambda), batches of API-billed LLM calls, or a hook/automation that triggers one of these — needs a cost estimate before launching, not a blanket "ask permission every time" gate.
+
+- **Estimate first**: state the expected cost in both time and money (compute-hours × rate, API tokens × pricing, cloud instance-hours). Calculate from known rates — don't guess vaguely (see `rules/refusal-alternatives.md` § Agent Throughput Awareness: no cost estimate unless it's actually calculated). Use the `llm-billing` agent to check current provider rates/balance if unsure.
+- **Estimated total < $100 → run immediately**, no approval wait. Still report the estimate alongside the result — don't gate on it, just surface it.
+- **Estimated total >= $100 → propose the run** (cost estimate + what it buys) and wait for explicit go-ahead before launching.
+- If actual spend looks set to materially exceed the estimate mid-run, pause and flag — the estimate is the basis for the $100 gate, not a one-time check-the-box.
+
+**Why:** replaces a blanket "never spend without asking" default (too conservative — forces a round-trip for trivial-cost runs) with a threshold model: real money still needs a human decision, small spend shouldn't block momentum.
+
 ## Mid-Implementation Checkpoints
 
 **Problem:** Claude reads code, makes assumptions, and starts implementing against a wrong mental model. This causes misunderstandings that waste context and require rework.
