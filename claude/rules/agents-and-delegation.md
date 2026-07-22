@@ -66,7 +66,7 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 |-------|----------|----------|
 | **Task subagent** (general-purpose) | **Default for judgment, exploration, second opinions** | Subscription-billed, fresh context, MCP inherited, parallel via `run_in_background` |
 | **gemini-cli** | Large context analysis (>100KB); image generation/editing (Nano Banana / Nano Banana Pro); Google Workspace (Docs, Sheets, Drive) | 1M+ token window, PDFs, entire codebases, multimodal, native Google auth |
-| **codex-companion** | Codex tasks and reviews (GPT-5.5) | Harness-tracked via Monitor tool — survives subagent exit, re-notifies on completion |
+| **codex-companion** | Codex tasks and reviews (gpt-5.6-sol, ultra reasoning) | Harness-tracked via Monitor tool — survives subagent exit, re-notifies on completion |
 | **core:claude** | Detached/long-running headless work; fresh auth context | tmux-based, survives parent session — **API-billed pool post-June-15, use sparingly** |
 
 ### Google Workspace Access
@@ -170,7 +170,7 @@ Task complexity?
 
 | Need | Use (harness-tracked) | NOT |
 |------|----------------------|-----|
-| Codex review/task (GPT-5.5) | **codex-companion via the Monitor tool** (`codex-companion task` / `review`) | `core:codex` agent backgrounding `codex exec` |
+| Codex review/task (gpt-5.6-sol, ultra reasoning) | **codex-companion via the Monitor tool** (`codex-companion task` / `review`) | `core:codex` agent backgrounding `codex exec` |
 | Long shell job (build, train, sweep) | Bash `run_in_background` in **main context**, `tmux`, or Monitor | `&` / `nohup` inside a subagent that then exits |
 | Cloud job to watch (Modal, CI) | Monitor poll-loop, or Bash `run_in_background` in main context | detached process inside a subagent |
 

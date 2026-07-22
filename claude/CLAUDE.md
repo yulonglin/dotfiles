@@ -175,6 +175,7 @@ Behavioral rules that apply to every session are in `~/.claude/rules/`:
 - `rules/any2md.md` — `any2md` for converting files/URLs/arxiv/dirs to Markdown
 - `rules/communication-style.md` — Drafting messages on the user's behalf: friendliness, clarity, persuasiveness
 - `rules/effortful-learning.md` — Scoping gate for debugging/design/research decisions (mirrors the output style)
+- `rules/fable-second-opinion.md` — When to spawn a Fable subagent (`model: "fable"`) for a second opinion: stuck loops, hard/ambiguous problems, high-stakes conclusions
 
 ## Knowledge Docs (On-Demand)
 
