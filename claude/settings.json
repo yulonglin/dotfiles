@@ -451,6 +451,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/simplify_mark_dirty.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -686,6 +696,11 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/with-anthropic-key.sh $HOME/.claude/hooks/session_rename_auto.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/simplify_nudge.sh",
             "timeout": 5
           }
         ]
