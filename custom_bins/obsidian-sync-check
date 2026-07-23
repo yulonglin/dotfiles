@@ -27,51 +27,41 @@ Exit codes:
 EOF
 }
 
-# check_one_vault CONFIG_JSON
-# Prints a recommendation line for the vault; sets RESULT to safe|not-safe|na.
+# check_one_vault VAULT_PATH CONFIG_JSON
+# Prints a recommendation line for the vault. Returns 0=safe, 1=not-safe, 2=na.
 check_one_vault() {
-    local vault_conf="$1"
-    local vault_dir vault_path vault_log mode last_line
+    local vault_path="$1" vault_conf="$2"
+    local vault_dir vault_log mode last_line
 
     vault_dir="$(dirname "$vault_conf")"
-    vault_path="$(jq -r '.vaultPath // empty' "$vault_conf" 2>/dev/null)"
     vault_log="$vault_dir/sync.log"
-
-    if [[ -z "$vault_path" ]]; then
-        echo "SKIP      $vault_conf: no vaultPath in config"
-        RESULT=na
-        return
-    fi
 
     mode="$(ob sync-status --path "$vault_path" 2>/dev/null | awk -F': ' '/Sync mode:/ {print $2}')"
     if [[ "$mode" != "pull-only" ]]; then
         echo "N/A       $vault_path: mode is '${mode:-unknown}' — check only applies to pull-only vaults"
-        RESULT=na
-        return
+        return 2
     fi
 
     if [[ ! -s "$vault_log" ]]; then
         echo "NOT SAFE  $vault_path: no completed sync yet (sync.log missing or empty)"
-        RESULT=not-safe
-        return
+        return 1
     fi
 
-    last_line="$(grep -v '^[[:space:]]*$' "$vault_log" 2>/dev/null | tail -1)"
+    # Bounded tail — sync.log grows unboundedly, no need to scan the whole file for the last line.
+    last_line="$(tail -n 20 "$vault_log" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1)"
 
     if [[ "$last_line" == *"Disconnected from server"* ]]; then
         echo "NOT SAFE  $vault_path: last event was a disconnect — $last_line"
-        RESULT=not-safe
-        return
+        return 1
     fi
 
     if [[ "$last_line" == *"Fully synced"* ]]; then
         echo "SAFE      $vault_path: last event was 'Fully synced' — no pending transfers detected"
-        RESULT=safe
-        return
+        return 0
     fi
 
     echo "NOT SAFE  $vault_path: sync pass appears in progress — last event: $last_line"
-    RESULT=not-safe
+    return 1
 }
 
 target_path=""
@@ -97,17 +87,22 @@ any=false
 for vault_conf in "$SYNC_DIR"/*/config.json; do
     [[ -f "$vault_conf" ]] || continue
 
-    if [[ -n "$target_path" ]]; then
-        this_path="$(jq -r '.vaultPath // empty' "$vault_conf" 2>/dev/null)"
-        [[ "$this_path" == "$target_path" ]] || continue
+    this_path="$(jq -r '.vaultPath // empty' "$vault_conf" 2>/dev/null)"
+    if [[ -n "$target_path" ]] && [[ "$this_path" != "$target_path" ]]; then
+        continue
     fi
 
     any=true
-    RESULT=na
-    check_one_vault "$vault_conf"
-    case "$RESULT" in
-        not-safe) worst=not-safe ;;
-        safe) [[ "$worst" == not-safe ]] || worst=safe ;;
+
+    if [[ -z "$this_path" ]]; then
+        echo "SKIP      $vault_conf: no vaultPath in config"
+        continue
+    fi
+
+    check_one_vault "$this_path" "$vault_conf"
+    case "$?" in
+        1) worst=not-safe ;;
+        0) [[ "$worst" == not-safe ]] || worst=safe ;;
     esac
 done
 
