@@ -1263,10 +1263,23 @@ if [[ "${DEPLOY_OBSIDIAN_SYNC:-false}" == "true" ]]; then
         fi
 
         # ── Per-vault: inject encryption key/salt, enforce pull-only for never-synced vaults ──
+        # NOTE: "never-synced" is detected by grepping sync.log for "Fully synced" — there's no
+        # structured state API from `ob`. custom_bins/obsidian-sync-check independently greps the
+        # same log for a different, current-state question ("safe to promote right now"), which is
+        # deliberately NOT the same check (this one is a one-way ratchet: once synced, stay hands-off
+        # forever; that one reflects transient in-progress/disconnected state). If `ob` ever changes
+        # its log wording, both places need updating together.
         OB_SYNC_DIR="$OB_CONFIG_DIR/sync"
         if [[ -d "$OB_SYNC_DIR" ]] && ! cmd_exists jq; then
             log_warning "jq not found — skipping vault config injection/pull-only enforcement"
         elif [[ -d "$OB_SYNC_DIR" ]]; then
+            # Encryption key/salt are account-level secrets shared by every vault — fetch once.
+            OB_HAVE_ENC_SECRETS=false
+            if OB_ENC_KEY="$(dotfiles-secrets get-value OBSIDIAN_ENCRYPTION_KEY 2>/dev/null)" \
+                && OB_ENC_SALT="$(dotfiles-secrets get-value OBSIDIAN_ENCRYPTION_SALT 2>/dev/null)"; then
+                OB_HAVE_ENC_SECRETS=true
+            fi
+
             for OB_VAULT_CONF in "$OB_SYNC_DIR"/*/config.json; do
                 [[ -f "$OB_VAULT_CONF" ]] || continue
                 OB_VAULT_DIR="$(dirname "$OB_VAULT_CONF")"
@@ -1278,8 +1291,7 @@ if [[ "${DEPLOY_OBSIDIAN_SYNC:-false}" == "true" ]]; then
                     continue
                 fi
 
-                if OB_ENC_KEY="$(dotfiles-secrets get-value OBSIDIAN_ENCRYPTION_KEY 2>/dev/null)" \
-                    && OB_ENC_SALT="$(dotfiles-secrets get-value OBSIDIAN_ENCRYPTION_SALT 2>/dev/null)"; then
+                if [[ "$OB_HAVE_ENC_SECRETS" == "true" ]]; then
                     OB_CURRENT_KEY="$(jq -r '.encryptionKey // empty' "$OB_VAULT_CONF")"
                     if [[ "$OB_CURRENT_KEY" != "$OB_ENC_KEY" ]]; then
                         OB_CONF_TMP="${OB_VAULT_CONF}.tmp.$$"
@@ -1289,6 +1301,8 @@ if [[ "${DEPLOY_OBSIDIAN_SYNC:-false}" == "true" ]]; then
                         chmod 600 "$OB_CONF_TMP"
                         mv "$OB_CONF_TMP" "$OB_VAULT_CONF"
                         log_success "Injected encryption key/salt for vault at $OB_VAULT_PATH"
+                    else
+                        chmod 600 "$OB_VAULT_CONF"
                     fi
                 fi
 
