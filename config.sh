@@ -61,6 +61,7 @@ DEPLOY_REGISTRY=(
     "secrets|Sync SSH/git identity via GitHub gist|all|true|Secrets"
     "secrets-env|Decrypt BWS secrets (Bitwarden Secrets Manager)|all|true|Secrets"
     "bws|Bitwarden Secrets Manager CLI|all|true|Secrets"
+    "obsidian-sync|Obsidian-headless vault secrets + pull-only-first enforcement|all|true|Secrets"
     "pkg-configs|Package manager security configs (min-release-age)|all|true|Security"
     "dep-audit|Weekly dependency audit (supply chain defense)|all|true|Security"
     "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|all|true|Automation"

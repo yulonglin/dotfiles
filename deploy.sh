@@ -1223,6 +1223,89 @@ if [[ "${DEPLOY_BWS:-false}" == "true" ]]; then
     fi
 fi
 
+# ─── Obsidian-Headless Vault Sync ────────────────────────────────────────────
+# Secrets (auth_token, encryptionKey/Salt) come from BWS, never from the repo.
+# Pull-only is force-enforced ONLY for vaults with no completed sync pass yet
+# (no "Fully synced" in sync.log) — this is the exact incident precondition
+# (2026-06/07: bidirectional sync against an incomplete local copy misread
+# "never downloaded" as "deleted" and propagated deletions upstream). Vaults
+# that have already synced at least once are left alone, so a later manual
+# promotion to bidirectional (ob sync-config --mode bidirectional) is never
+# reverted by a subsequent deploy.sh run.
+
+if [[ "${DEPLOY_OBSIDIAN_SYNC:-false}" == "true" ]]; then
+    log_section "OBSIDIAN SYNC (obsidian-headless)"
+
+    if ! cmd_exists ob; then
+        log_info "obsidian-headless (ob) not installed — skipping"
+    else
+        OB_CONFIG_DIR="$HOME/.config/obsidian-headless"
+        mkdir -p "$OB_CONFIG_DIR"
+        chmod 700 "$OB_CONFIG_DIR"
+
+        # ── auth_token (account-level secret, no trailing newline) ──
+        OB_AUTH_TOKEN_FILE="$OB_CONFIG_DIR/auth_token"
+        if OB_AUTH_TOKEN="$(dotfiles-secrets get-value OBSIDIAN_AUTH_TOKEN 2>/dev/null)"; then
+            if [[ ! -f "$OB_AUTH_TOKEN_FILE" ]] || [[ "$(cat "$OB_AUTH_TOKEN_FILE" 2>/dev/null)" != "$OB_AUTH_TOKEN" ]]; then
+                OB_AUTH_TMP="${OB_AUTH_TOKEN_FILE}.tmp.$$"
+                printf '%s' "$OB_AUTH_TOKEN" > "$OB_AUTH_TMP"
+                chmod 600 "$OB_AUTH_TMP"
+                mv "$OB_AUTH_TMP" "$OB_AUTH_TOKEN_FILE"
+                log_success "Wrote auth_token from BWS"
+            else
+                chmod 600 "$OB_AUTH_TOKEN_FILE"
+                log_success "auth_token already up to date"
+            fi
+        elif [[ -f "$OB_AUTH_TOKEN_FILE" ]]; then
+            log_info "auth_token present locally but not in BWS — back it up: dotfiles-secrets set OBSIDIAN_AUTH_TOKEN"
+        else
+            log_info "No auth_token (local or BWS) — run 'ob login', then 'dotfiles-secrets set OBSIDIAN_AUTH_TOKEN' to seed other machines"
+        fi
+
+        # ── Per-vault: inject encryption key/salt, enforce pull-only for never-synced vaults ──
+        OB_SYNC_DIR="$OB_CONFIG_DIR/sync"
+        if [[ -d "$OB_SYNC_DIR" ]] && ! cmd_exists jq; then
+            log_warning "jq not found — skipping vault config injection/pull-only enforcement"
+        elif [[ -d "$OB_SYNC_DIR" ]]; then
+            for OB_VAULT_CONF in "$OB_SYNC_DIR"/*/config.json; do
+                [[ -f "$OB_VAULT_CONF" ]] || continue
+                OB_VAULT_DIR="$(dirname "$OB_VAULT_CONF")"
+                OB_VAULT_PATH="$(jq -r '.vaultPath // empty' "$OB_VAULT_CONF")"
+                OB_VAULT_LOG="$OB_VAULT_DIR/sync.log"
+
+                if [[ -z "$OB_VAULT_PATH" ]]; then
+                    log_warning "Vault config at $OB_VAULT_CONF has no vaultPath — skipping"
+                    continue
+                fi
+
+                if OB_ENC_KEY="$(dotfiles-secrets get-value OBSIDIAN_ENCRYPTION_KEY 2>/dev/null)" \
+                    && OB_ENC_SALT="$(dotfiles-secrets get-value OBSIDIAN_ENCRYPTION_SALT 2>/dev/null)"; then
+                    OB_CURRENT_KEY="$(jq -r '.encryptionKey // empty' "$OB_VAULT_CONF")"
+                    if [[ "$OB_CURRENT_KEY" != "$OB_ENC_KEY" ]]; then
+                        OB_CONF_TMP="${OB_VAULT_CONF}.tmp.$$"
+                        jq --arg k "$OB_ENC_KEY" --arg s "$OB_ENC_SALT" \
+                            '.encryptionKey = $k | .encryptionSalt = $s' \
+                            "$OB_VAULT_CONF" > "$OB_CONF_TMP"
+                        chmod 600 "$OB_CONF_TMP"
+                        mv "$OB_CONF_TMP" "$OB_VAULT_CONF"
+                        log_success "Injected encryption key/salt for vault at $OB_VAULT_PATH"
+                    fi
+                fi
+
+                if ! grep -q "Fully synced" "$OB_VAULT_LOG" 2>/dev/null; then
+                    if ob sync-config --path "$OB_VAULT_PATH" --mode pull-only >/dev/null 2>&1; then
+                        log_success "Never-synced vault at $OB_VAULT_PATH forced to pull-only (promote manually once fully synced: ob sync-config --path \"$OB_VAULT_PATH\" --mode bidirectional)"
+                    else
+                        log_warning "Failed to enforce pull-only for never-synced vault at $OB_VAULT_PATH — check: ob sync-status --path \"$OB_VAULT_PATH\""
+                    fi
+                fi
+            done
+        fi
+
+        cmd_exists obsidian-sync-check && log_info "Check promotion readiness anytime with: obsidian-sync-check"
+    fi
+fi
+
 # ─── Wait for background builds ─────────────────────────────────────────────
 
 if [[ -n "${CLAUDE_TOOLS_PID:-}" ]]; then
