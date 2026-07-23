@@ -65,31 +65,21 @@ Available agents are listed in Task tool description. Use **PROACTIVELY**:
 | Agent | Use Case | Strength |
 |-------|----------|----------|
 | **Task subagent** (general-purpose) | **Default for judgment, exploration, second opinions** | Subscription-billed, fresh context, MCP inherited, parallel via `run_in_background` |
-| **gemini-cli** | Large context analysis (>100KB); image generation/editing (Nano Banana / Nano Banana Pro); Google Workspace (Docs, Sheets, Drive) | 1M+ token window, PDFs, entire codebases, multimodal, native Google auth |
 | **codex-companion** | Codex tasks and reviews (gpt-5.6-sol, ultra reasoning) | Harness-tracked via Monitor tool — survives subagent exit, re-notifies on completion |
 | **core:claude** | Detached/long-running headless work; fresh auth context | tmux-based, survives parent session — **API-billed pool post-June-15, use sparingly** |
 
 ### Google Workspace Access
 
-Two options for Google Docs/Sheets/Drive/Gmail/Calendar:
+Google Docs/Sheets/Drive/Gmail/Calendar:
 
 | Tool | Use Case | How |
 |------|----------|-----|
 | **gws** (Google Workspace CLI) | Direct API calls — read/write Docs, Sheets, Drive, Gmail, Calendar | `gws docs documents get --id <docId>`, `gws drive files list` — structured JSON output, works from Bash |
-| **gemini-cli** (via agent) | AI-mediated Google Workspace tasks — summarize, analyze, compose | Delegate via `core:gemini-cli` agent — native Google auth, can reason over content |
-
-**Decision tree:**
-- Need raw content (read a doc, list files, export)? → `gws` via Bash (faster, no agent overhead)
-- Need AI reasoning over Google content (summarize, draft, analyze)? → `gemini-cli` agent
-- Both fail? → Ask user to export/copy-paste
 
 ```
 Need delegation?
-├─ Large context (PDF, codebase)? → gemini-cli
-├─ Generate or edit images? → gemini-cli (Nano/Flash/Pro)
 ├─ Google Workspace (read/write)?
 │   ├─ Raw API call (get doc, list files)? → gws via Bash
-│   └─ AI reasoning over content? → gemini-cli agent
 ├─ Plan needs critique? → code:plan-critic (+ Task subagent in parallel)
 ├─ Clear implementation spec/plan? → codex-companion task --write (via Monitor)
 ├─ Bug with clear repro? → codex-companion task (+ debugger for investigation)
@@ -101,7 +91,7 @@ Need delegation?
 
 ## CLI Agent Delegation Enforcement
 
-**Problem:** `core:gemini-cli` and `core:claude` agents are Claude instances that can answer directly instead of calling their CLI. Without explicit CLI invocation in the prompt, they sometimes just respond with their own reasoning — defeating the purpose.
+**Problem:** `core:claude` agents are Claude instances that can answer directly instead of calling their CLI. Without explicit CLI invocation in the prompt, they sometimes just respond with their own reasoning — defeating the purpose.
 
 **Rule:** When spawning CLI-backed agents, the prompt MUST include the exact Bash command to run.
 

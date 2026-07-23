@@ -172,7 +172,7 @@ enabled = true
 
 [tui.model_availability_nux]
 "gpt-5.5" = 4
-"gpt-5.6-sol" = 1
+"gpt-5.6-sol" = 2
 
 [marketplaces.openai-bundled]
 last_updated = "2026-06-13T10:54:56Z"
