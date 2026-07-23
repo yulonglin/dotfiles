@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# Advisory promotion-readiness check for an obsidian-headless vault currently
+# running pull-only sync. Prints a recommendation only — it never changes the
+# sync mode. Promote manually with:
+#   ob sync-config --path <vault-path> --mode bidirectional
+set -uo pipefail
+
+OB_CONFIG_DIR="${OB_CONFIG_DIR:-$HOME/.config/obsidian-headless}"
+SYNC_DIR="$OB_CONFIG_DIR/sync"
+
+usage() {
+    cat <<'EOF'
+Usage: obsidian-sync-check [--path <vault-path>]
+
+Advisory only: reports whether a pull-only obsidian-headless vault looks safe
+to promote to bidirectional sync. Never changes the sync mode itself.
+
+Without --path, checks every vault configured under
+~/.config/obsidian-headless/sync/.
+
+Exit codes:
+  0  safe to promote
+  1  not yet safe to promote
+  2  usage or missing-tool error
+  3  not applicable (no matching vault, or already bidirectional/mirror-remote)
+EOF
+}
+
+# check_one_vault CONFIG_JSON
+# Prints a recommendation line for the vault; sets RESULT to safe|not-safe|na.
+check_one_vault() {
+    local vault_conf="$1"
+    local vault_dir vault_path vault_log mode last_line
+
+    vault_dir="$(dirname "$vault_conf")"
+    vault_path="$(jq -r '.vaultPath // empty' "$vault_conf" 2>/dev/null)"
+    vault_log="$vault_dir/sync.log"
+
+    if [[ -z "$vault_path" ]]; then
+        echo "SKIP      $vault_conf: no vaultPath in config"
+        RESULT=na
+        return
+    fi
+
+    mode="$(ob sync-status --path "$vault_path" 2>/dev/null | awk -F': ' '/Sync mode:/ {print $2}')"
+    if [[ "$mode" != "pull-only" ]]; then
+        echo "N/A       $vault_path: mode is '${mode:-unknown}' — check only applies to pull-only vaults"
+        RESULT=na
+        return
+    fi
+
+    if [[ ! -s "$vault_log" ]]; then
+        echo "NOT SAFE  $vault_path: no completed sync yet (sync.log missing or empty)"
+        RESULT=not-safe
+        return
+    fi
+
+    last_line="$(grep -v '^[[:space:]]*$' "$vault_log" 2>/dev/null | tail -1)"
+
+    if [[ "$last_line" == *"Disconnected from server"* ]]; then
+        echo "NOT SAFE  $vault_path: last event was a disconnect — $last_line"
+        RESULT=not-safe
+        return
+    fi
+
+    if [[ "$last_line" == *"Fully synced"* ]]; then
+        echo "SAFE      $vault_path: last event was 'Fully synced' — no pending transfers detected"
+        RESULT=safe
+        return
+    fi
+
+    echo "NOT SAFE  $vault_path: sync pass appears in progress — last event: $last_line"
+    RESULT=not-safe
+}
+
+target_path=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --path) target_path="$2"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+command -v ob >/dev/null 2>&1 || { echo "obsidian-headless (ob) not installed" >&2; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "jq not installed" >&2; exit 2; }
+
+if [[ ! -d "$SYNC_DIR" ]]; then
+    echo "No vaults configured under $SYNC_DIR" >&2
+    exit 3
+fi
+
+worst=na
+any=false
+
+for vault_conf in "$SYNC_DIR"/*/config.json; do
+    [[ -f "$vault_conf" ]] || continue
+
+    if [[ -n "$target_path" ]]; then
+        this_path="$(jq -r '.vaultPath // empty' "$vault_conf" 2>/dev/null)"
+        [[ "$this_path" == "$target_path" ]] || continue
+    fi
+
+    any=true
+    RESULT=na
+    check_one_vault "$vault_conf"
+    case "$RESULT" in
+        not-safe) worst=not-safe ;;
+        safe) [[ "$worst" == not-safe ]] || worst=safe ;;
+    esac
+done
+
+if [[ "$any" != "true" ]]; then
+    if [[ -n "$target_path" ]]; then
+        echo "No configured vault found at path: $target_path" >&2
+    else
+        echo "No vaults configured under $SYNC_DIR" >&2
+    fi
+    exit 3
+fi
+
+case "$worst" in
+    not-safe) exit 1 ;;
+    safe) exit 0 ;;
+    *) exit 3 ;;
+esac
