@@ -111,6 +111,12 @@ User gives instruction →
 
 **Sandbox note:** `pueue` and `systemctl` are in `excludedCommands` — they bypass the sandbox so `jexp` works from Claude Code sessions.
 
+## Spend Authorization for Runs
+
+Before a billed run (experiments, evals, cloud/GPU jobs, API-billed LLM batches): estimate cost in time + money from actual rates, not a guess (`llm-billing` agent for current pricing). Under $100 → run now, report the estimate with the result. $100+ → propose the estimate and wait for go-ahead.
+
+SLURM jobs (currently Silico, MATS) run on pre-paid allocations — no marginal cost, skip the gate. Confirm before assuming a new cluster is similarly free.
+
 ## Mid-Implementation Checkpoints
 
 **Problem:** Claude reads code, makes assumptions, and starts implementing against a wrong mental model. This causes misunderstandings that waste context and require rework.

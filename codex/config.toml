@@ -1,5 +1,5 @@
 model = "gpt-5.6-sol"
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "ultra"
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 sandbox_mode = "workspace-write"
@@ -101,6 +101,9 @@ trust_level = "trusted"
 [projects."/home/yulong/projects/nla-vs-cot/monitorability-evals"]
 trust_level = "trusted"
 
+[projects."/home/yulong/projects/nla-vs-cot/natural_language_autoencoders"]
+trust_level = "trusted"
+
 [notice.model_migrations]
 "gpt-5.3-codex" = "gpt-5.4"
 
@@ -182,8 +185,8 @@ source_type = "local"
 source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
 [marketplaces.claude-plugins-official]
-last_updated = "2026-07-19T02:58:25Z"
-last_revision = "e09c3b1e5f6e8edbe2cdaf55b5dc38cf87824389"
+last_updated = "2026-07-21T19:20:54Z"
+last_revision = "594175d30347cd5f3ea7bf416b5da99f3bddfd1d"
 source_type = "git"
 source = "https://github.com/anthropics/claude-plugins-official.git"
 
