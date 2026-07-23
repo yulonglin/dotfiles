@@ -192,7 +192,28 @@ close_app_selectively() {
     fi
 }
 
+# Self-heal the Safari web app registry: regenerate if missing or >24h stale.
+# Keeps bundle-ID matching correct on fresh machines and after new web apps
+# are added, without depending on deploy.sh timing.
+refresh_registry_if_stale() {
+    local scanner="${SCRIPT_DIR}/safari-web-apps-scan"
+    [[ -x "$scanner" ]] || return 0
+
+    local stale=false
+    if [[ ! -f "$REGISTRY_FILE" ]]; then
+        stale=true
+    else
+        local age=$(( $(date +%s) - $(stat -f %m "$REGISTRY_FILE" 2>/dev/null || echo 0) ))
+        (( age > 86400 )) && stale=true
+    fi
+
+    [[ "$stale" == true ]] && "$scanner" >/dev/null 2>&1
+    return 0
+}
+
 main() {
+    refresh_registry_if_stale
+
     # Load Safari web app registry for bundle ID fallback matching
     typeset -A registry  # registry[lowercase_name] = bundle_id
     if [[ -f "$REGISTRY_FILE" ]]; then
