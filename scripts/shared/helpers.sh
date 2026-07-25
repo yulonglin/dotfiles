@@ -1632,7 +1632,9 @@ install_editor_extensions() {
     typeset -a to_remove
     for ext in "${installed[@]}"; do
         [[ -z "$ext" ]] && continue
-        if [[ -z "${wanted_map[${ext:l}]}" ]]; then
+        # `:-` is required: under `set -u`, reading a missing associative-array key
+        # is a fatal zsh error (kills the whole script, not catchable with `||`).
+        if [[ -z "${wanted_map[${ext:l}]:-}" ]]; then
             to_remove+=("$ext")
         fi
     done
