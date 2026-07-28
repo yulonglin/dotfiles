@@ -893,6 +893,36 @@ install_gh_from_release() {
 # fails the guard and gets converged up to current LTS). Consequence: after an
 # LTS rollover, re-running install.sh force-upgrades the major (e.g. 24→26) — so
 # native modules (better-sqlite3) must be rebuilt against the new ABI afterward.
+# Path of the SYSTEM node — the one cron/systemd/shebang contexts resolve.
+# Deliberately ignores PATH: a mise-installed node shadows a stale apt node in
+# interactive shells and would make version guards pass forever (found
+# 2026-07-19: mise node 24 masking Ubuntu's stock node 18, with the NodeSource
+# repo configured but its candidate never installed).
+system_node_path() {
+    local cand
+    for cand in /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node; do
+        [[ -x "$cand" ]] && { echo "$cand"; return 0; }
+    done
+    return 1
+}
+
+# Node must never be mise-managed: mise's shims are invisible to cron/systemd,
+# and its node shadows the system node (see system_node_path). Evict only once
+# a healthy system node exists so we never delete the box's only modern node.
+evict_mise_node() {
+    local want="$1"
+    cmd_exists mise || return 0
+    mise ls node 2>/dev/null | grep -q . || return 0
+    local sys_node
+    if ! sys_node=$(system_node_path) || (( $("$sys_node" -v | cut -d. -f1 | tr -d 'v') < want )); then
+        log_warning "mise-managed node present but system node is missing/stale — keeping mise node for now; re-run install.sh after the system node is fixed"
+        return 0
+    fi
+    log_warning "Evicting node from mise (node is a global runtime: NodeSource/brew, never mise)"
+    mise unuse -g node 2>/dev/null || true
+    mise uninstall --all node 2>/dev/null || true
+}
+
 install_node() {
     # Current LTS major from nodejs.org; dist index is newest-first and r['lts']
     # is the codename (truthy) for LTS releases, false otherwise.
@@ -900,12 +930,15 @@ install_node() {
     want=$(curl -fsSL https://nodejs.org/dist/index.json 2>/dev/null \
         | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null)
     [[ "$want" =~ ^[0-9]+$ ]] || want=24
-    if is_installed node && (( $(node -v | cut -d. -f1 | tr -d 'v') >= want )); then
+    local sys_node
+    if sys_node=$(system_node_path) && (( $("$sys_node" -v | cut -d. -f1 | tr -d 'v') >= want )); then
+        evict_mise_node "$want"
         return 0
     fi
     log_info "Installing Node ${want} LTS..."
     if is_macos; then
         brew_install node
+        evict_mise_node "$want"
         return 0
     fi
     # Linux: NodeSource setup_lts.x adds the repo + runs apt update. Its script
@@ -917,6 +950,7 @@ install_node() {
     curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash - \
         || log_warning "NodeSource setup script exited non-zero (repo may still be configured) — continuing"
     $SUDO apt-get install -y nodejs || log_warning "Node install via apt failed — install Node LTS manually"
+    evict_mise_node "$want"
 }
 
 # ─── Mise (Universal Version Manager) ─────────────────────────────────────────
