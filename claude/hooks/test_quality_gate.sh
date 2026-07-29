@@ -170,6 +170,12 @@ run_gate "git -c commit before -> deny"  "$CODE_REPO" \
 run_gate "git pull before create -> deny" "$CODE_REPO" "git pull --rebase && gh pr create" deny
 run_gate "pushd before create -> deny"   "$CODE_REPO" "pushd /elsewhere && gh pr create" deny
 run_gate "subshell around create -> deny" "$CODE_REPO" "(gh pr create)" deny
+# ...but an absolute path to gh is an ordinary invocation, not a prefix: it
+# changes nothing about the state being inspected. It must still be DETECTED
+# (an earlier word boundary excluded '/', so every absolute path slipped the
+# gate entirely) and then evaluated normally rather than refused.
+run_gate "absolute path to gh -> deny"  "$CODE_REPO" "/opt/homebrew/bin/gh pr create" deny
+run_gate "absolute path, docs branch -> allow" "$DOCS_REPO" "/opt/homebrew/bin/gh pr create" allow
 # Even a harmless-looking push is refused: distinguishing it means classifying
 # arbitrary shell, which is the unsound step this design removes.
 run_gate "push before create -> deny"    "$DOCS_REPO" "git push && gh pr create" deny

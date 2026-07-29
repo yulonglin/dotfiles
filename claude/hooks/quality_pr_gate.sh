@@ -73,10 +73,12 @@ CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) |
 # creating subcommand; `create` has no alias — verified against `gh pr --help`.)
 #
 # The boundaries are any non-word character rather than whitespace, so that
-# `(gh pr create)` and `$(gh pr create)` are detected too. Widening detection is
-# always safe here: reaching this line only makes a deny possible, never an
-# allow, and the "is it ordinary?" test below decides what actually happens.
-[[ "$CMD" =~ (^|[^[:alnum:]_./-])gh[[:space:]]+pr[[:space:]]+create([^[:alnum:]_-]|$) ]] || exit 0
+# `(gh pr create)`, `$(gh pr create)` and `/opt/homebrew/bin/gh pr create` are
+# all detected. Widening detection is always safe here: reaching this line only
+# makes a deny possible, never an allow, and the "is it ordinary?" test below
+# decides what actually happens. Narrowing it is how a bypass gets in — an
+# earlier boundary of `[^[:alnum:]_./-]` silently missed every absolute path.
+[[ "$CMD" =~ (^|[^[:alnum:]_])gh[[:space:]]+pr[[:space:]]+create([^[:alnum:]_-]|$) ]] || exit 0
 
 # Whitespace-normalised form, used ONLY for whole-string comparisons below.
 NORM=$(printf '%s' "$CMD" | tr -s '[:space:]' ' ')
@@ -102,7 +104,10 @@ NORM="${NORM% }"
 # `git -c … commit` and `pushd` bypasses walked through — nothing may precede
 # the creation. Suffixes are unrestricted: they run after the PR exists, from
 # the state that was inspected, so they cannot invalidate the answer.
-if ! [[ "$NORM" =~ ^gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$) ]]; then
+# An absolute or relative path to the gh binary is an ordinary invocation, not
+# a prefix — `/opt/homebrew/bin/gh pr create` changes nothing about the state
+# being inspected, so it must not be refused as though it were a `cd`.
+if ! [[ "$NORM" =~ ^([^[:space:]]*/)?gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$) ]]; then
     deny "\`gh pr create\` must be its own command — the code-review gate runs before the command does, so anything preceding the create (a \`cd\`, a commit, a subshell) would have it inspect a different repository or a different commit than the PR is made from. Run the preceding steps first, then \`gh pr create\` on its own line."
 fi
 
