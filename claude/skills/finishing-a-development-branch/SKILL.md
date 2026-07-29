@@ -139,6 +139,8 @@ EOF
 )"
 ```
 
+If `gh pr create` is denied, that is `quality_pr_gate.sh`: the branch changes code files and `superpowers:requesting-code-review` has not run on it yet. Run that skill over the branch diff and re-run the command. The deny message also names a `touch <marker>` bypass for branches a review genuinely does not apply to.
+
 Then: Cleanup worktree (Step 6)
 
 #### Option 3: Keep As-Is

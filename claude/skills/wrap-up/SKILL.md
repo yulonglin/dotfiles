@@ -78,6 +78,8 @@ What you may do about it depends on which checkout you are in, because a branch 
 5. **If the branch is ahead of `main`, push and open a draft PR — a dirty tree does not excuse skipping this.** the staging rule above deliberately leaves unattributable edits unstaged, so a dirty tree is the *expected* end state, not an error; gating the push on cleanliness would mean the common case commits locally, exits "done", and leaves the work invisible on a machine nobody looks at. Push the commit; mention the leftover unstaged paths in the PR body. Never push to `main`, never force-push, never merge.
 6. **The PR command must be non-interactive.** `gh pr create --draft` alone prompts for title and body, and an unattended job has no way to answer — it hangs or dies before it can terminate, which is the exact failure this skill exists to prevent. Always supply both: `gh pr create --draft --title "<subject>" --body-file /tmp/claude/<job>-pr.md`. Do **not** use `--fill`: it derives the body from commit messages, which cannot carry the three sections below.
 
+   **If `gh pr create` is denied, that is the code-review gate, not a bug.** `quality_pr_gate.sh` blocks the command when the branch changes code files and `superpowers:requesting-code-review` has not run on it. Run that skill over the branch diff and re-run the command — the review is the point, so do it rather than reaching for the bypass. The deny message names a `touch <marker>` escape for branches a review genuinely does not apply to; using it is a judgement call you should state in the PR body.
+
    **The body is the state of the work, in three headed sections, under ~250 words total.** Write it to that file before calling `gh`:
 
    | Section | Contents |

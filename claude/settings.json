@@ -454,7 +454,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/simplify_mark_dirty.sh",
+            "command": "$HOME/.claude/hooks/quality_mark_dirty.sh",
             "timeout": 5
           }
         ]
@@ -498,6 +498,11 @@
             "type": "command",
             "command": "node \"$HOME/.claude/hooks/codex_code_review_reminder.mjs\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/quality_mark_skill_ran.sh",
+            "timeout": 5
           }
         ]
       },
@@ -508,6 +513,12 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/check_loop_bypass.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/quality_pr_gate.sh",
+            "timeout": 10,
+            "statusMessage": "Checking branch was reviewed before PR"
           },
           {
             "type": "command",
@@ -730,7 +741,7 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/simplify_nudge.sh",
+            "command": "$HOME/.claude/hooks/quality_stop_nudge.sh",
             "timeout": 5
           }
         ]
