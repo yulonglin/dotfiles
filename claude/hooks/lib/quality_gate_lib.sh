@@ -25,7 +25,7 @@ quality_gate_dir() {
 # review pass commits anything, re-arming the gate and looping.
 quality_gate_marker() {
     local skill="$1"
-    local common_dir repo_id branch slug
+    local common_dir repo_id branch slug digest
 
     common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || return 0
     [ -n "$common_dir" ] || return 0
@@ -39,9 +39,15 @@ quality_gate_marker() {
 
     # Branch names carry '/' and skills carry ':' — both would create stray
     # subdirectories, so fold everything outside the safe set to '-'.
+    #
+    # Folding is lossy: 'feature/foo' and 'feature-foo' collapse to the same
+    # slug, which would let a review of one branch clear the gate on the other.
+    # The slug is kept for human readability and a digest of the UNFOLDED name
+    # is appended to make the key injective again.
     slug=$(printf '%s-%s' "$branch" "$skill" | tr -c 'A-Za-z0-9._-' '-')
+    digest=$(quality_gate_hash "$branch/$skill")
 
-    printf '%s/%s-%s' "$(quality_gate_dir)" "$repo_id" "$slug"
+    printf '%s/%s-%s-%s' "$(quality_gate_dir)" "$repo_id" "$slug" "$digest"
 }
 
 # quality_gate_hash <string> — short stable digest. shasum ships with macOS and

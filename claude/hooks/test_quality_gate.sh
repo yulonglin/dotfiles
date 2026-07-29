@@ -142,7 +142,51 @@ run_gate "unrelated bash -> allow"           "$CODE_REPO" "ls -la"              
 run_gate "gh pr list is not create -> allow" "$CODE_REPO" "gh pr list"           allow
 run_gate "gh pr view is not create -> allow" "$CODE_REPO" "gh pr view 3"         allow
 run_gate "gh pr create --help -> allow"      "$CODE_REPO" "gh pr create --help"  allow
-run_gate "gh pr create -h -> allow"          "$CODE_REPO" "gh pr create -h"      allow
+
+# --help must be read from the create invocation itself, not from anywhere in
+# the line: a title that merely CONTAINS the word must not open a bypass.
+run_gate "--help inside a title -> deny" "$CODE_REPO" \
+    'gh pr create --title "fix --help output"' deny
+run_gate "--help then a real create -> deny" "$CODE_REPO" \
+    "gh pr create --help && gh pr create --draft" deny
+
+# Compound prefixes that invalidate the check are refused rather than guessed.
+run_gate "cd before create -> deny"     "$CODE_REPO" "cd /elsewhere && gh pr create" deny
+run_gate "commit before create -> deny" "$CODE_REPO" "git commit -m x && gh pr create" deny
+# ...but a non-mutating prefix still evaluates normally rather than blanket-denying.
+run_gate "push before create still evaluates" "$DOCS_REPO" "git push && gh pr create" allow
+
+# Extensionless executables are code too. This repo tracks dozens of them under
+# custom_bins/, so a suffix-only check would wave through exactly the files most
+# worth reviewing.
+BIN_REPO="$TMP/bin-branch"
+mkdir -p "$BIN_REPO"
+(
+    cd "$BIN_REPO" || exit 1
+    git init -q . || exit 1
+    export GIT_DIR="$BIN_REPO/.git" GIT_WORK_TREE="$BIN_REPO"
+    git symbolic-ref HEAD refs/heads/main
+    printf 'base\n' > README.md
+    $GIT add README.md
+    $GIT commit -qm base
+    $GIT checkout -q -b feature
+    mkdir -p custom_bins
+    printf '#!/usr/bin/env bash\necho hi\n' > custom_bins/tool
+    chmod +x custom_bins/tool
+    $GIT add custom_bins/tool
+    $GIT commit -qm tool
+) >/dev/null 2>&1
+assert_fixture "$BIN_REPO"
+run_gate "extensionless executable counts as code" "$BIN_REPO" "gh pr create" deny
+
+# gh spells the base flag -B as well as --base; missing the short form would
+# mean inspecting a different diff than the PR actually targets.
+run_gate "short -B flag honored" "$CODE_REPO" "gh pr create -B main" deny
+
+# `--base develop` where develop exists only as origin/develop must resolve, not
+# be treated as unresolvable — that would silently skip the gate entirely.
+(cd "$CODE_REPO" && $GIT update-ref refs/remotes/origin/develop refs/heads/main) >/dev/null 2>&1
+run_gate "explicit base via remote-tracking ref" "$CODE_REPO" "gh pr create --base develop" deny
 
 # Marker present -> allow. Written via the real marker hook so the test also
 # proves the two hooks agree on the key (the failure mode that would wedge the
@@ -215,6 +259,15 @@ rm -rf "$XDG_CACHE_HOME/claude/quality-gate" 2>/dev/null || true
     | bash "$DIR/quality_mark_skill_ran.sh") >/dev/null 2>&1 || true
 (cd "$CODE_REPO" && $GIT checkout -q -b second-feature) >/dev/null 2>&1
 run_gate "marker does not leak across branches" "$CODE_REPO" "gh pr create" deny
+
+# Branch names that fold to the same filesystem-safe slug must still get
+# separate markers, or reviewing one silently clears the gate on the other.
+rm -rf "$XDG_CACHE_HOME/claude/quality-gate" 2>/dev/null || true
+(cd "$CODE_REPO" && $GIT checkout -q -b topic/foo) >/dev/null 2>&1
+(cd "$CODE_REPO" && skill_json "requesting-code-review" \
+    | bash "$DIR/quality_mark_skill_ran.sh") >/dev/null 2>&1 || true
+(cd "$CODE_REPO" && $GIT checkout -q -b topic-foo) >/dev/null 2>&1
+run_gate "slug-colliding branches keep separate markers" "$CODE_REPO" "gh pr create" deny
 
 echo
 TOTAL=$((PASS + FAIL))
