@@ -8,18 +8,38 @@
 # published, it can only ask for a follow-up commit. This is the one hard gate;
 # the paired Stop hook (quality_stop_nudge.sh) stays a soft nudge.
 #
-# FAIL OPEN, deliberately. Every unresolvable condition — no jq, not a git repo,
-# no base ref, unreadable diff — exits 0 and allows the PR. A quality gate that
-# blocks PR creation because it could not compute a merge-base is strictly worse
-# than one that occasionally misses. Do not "harden" this into a fail-closed
-# check; that is a regression, not a fix.
+# ── The design rule, learned the hard way ────────────────────────────────────
 #
-# The ONE exception to fail-open is a command whose prefix invalidates the
-# check itself (see "Compound commands" below). There, allowing would not be
-# "occasionally missing" — it would be answering a question about the wrong
-# repository or the wrong commit.
+# A PATTERN MATCH IN THIS FILE MAY ONLY EVER PRODUCE A DENY, NEVER AN ALLOW.
 #
-# Bypass: touch the marker file named in the deny message.
+# Two adversarial review rounds found eight bypasses between them. Every single
+# one was a regex whose match produced an allow: a `--help` token borrowed from
+# a quoted title, a `--base "main"` whose value became `--draft` once quotes
+# were stripped, a mutator prefix that `git -c x=y commit` slipped past. The
+# common cause is not any individual regex — it is that regex-parsing an
+# arbitrary shell command line to GRANT permission is unsound, and every round
+# of "parse harder" plugs holes while opening new ones.
+#
+# So the parsing is gone. This file asks only questions whose wrong answer is a
+# deny: does the command contain something we cannot safely reason about? Then
+# refuse and say why. Everything the gate actually needs — branch, base, diff —
+# is read from the repository, which cannot be spoofed by a command string.
+#
+# If you are here to fix a bypass: the fix is another deny, or a stricter shape
+# for what counts as an ordinary invocation. It is never a new capture group.
+#
+# ── Fail open, deliberately ──────────────────────────────────────────────────
+#
+# Every unresolvable *repository* condition — no jq, not a git repo, no base
+# ref, unreadable diff — exits 0 and allows the PR. A quality gate that blocks
+# PR creation because it could not compute a merge-base is strictly worse than
+# one that occasionally misses. Do not "harden" this into a fail-closed check.
+#
+# That is not in tension with the rule above: unreadable *repository* state
+# allows, unparseable *command* state denies. The command is the part an
+# attacker (or an unlucky quoting accident) controls.
+#
+# Bypass: run the mkdir+touch line printed in the deny message.
 set -euo pipefail
 
 GATE_SKILL="requesting-code-review"
@@ -49,73 +69,77 @@ INPUT=$(cat)
 CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
 [ -n "$CMD" ] || exit 0
 
-# Split into shell segments so flags are read from the `gh pr create` invocation
-# itself rather than from anywhere in the line. Order matters: the two-character
-# operators must be replaced before their single-character prefixes.
-SEG_ALL="$CMD"
-SEG_ALL="${SEG_ALL//&&/$'\n'}"
-SEG_ALL="${SEG_ALL//||/$'\n'}"
-SEG_ALL="${SEG_ALL//;/$'\n'}"
-SEG_ALL="${SEG_ALL//|/$'\n'}"
-SEG_ALL="${SEG_ALL//&/$'\n'}"
-
-TARGET_NQ=""
-PREFIX=""
-FOUND=0
-while IFS= read -r seg; do
-    if [ "$FOUND" -eq 0 ] \
-       && [[ "$seg" =~ (^|[[:space:]])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$) ]]; then
-        # Strip quoted text before reading flags, so a title such as
-        # --title "fix --help output" cannot be mistaken for a real option.
-        seg_nq=$(printf '%s' "$seg" | sed -e 's/"[^"]*"/ /g' -e "s/'[^']*'/ /g")
-        # `gh pr create --help` prints usage and creates nothing, so it is not
-        # the invocation to gate — but keep scanning, because a real create may
-        # still follow it on the same line. (`gh pr create` has no -h
-        # shorthand, so only the long form is honoured here.)
-        if [[ "$seg_nq" =~ (^|[[:space:]])--help([[:space:]]|$) ]]; then
-            PREFIX="$PREFIX $seg"
-            continue
-        fi
-        TARGET_NQ="$seg_nq"
-        FOUND=1
-    elif [ "$FOUND" -eq 0 ]; then
-        PREFIX="$PREFIX $seg"
-    fi
-done < <(printf '%s\n' "$SEG_ALL")
-[ "$FOUND" -eq 1 ] || exit 0
-
-# Compound commands. The hook runs BEFORE the command does, so anything in the
-# prefix that changes the repository or the working directory means the state we
-# are about to inspect is not the state the PR will be created from:
+# Not a PR creation at all → not our business. (`gh pr` has exactly one
+# creating subcommand; `create` has no alias — verified against `gh pr --help`.)
 #
-#   cd other-repo && gh pr create      -> we read THIS repo's branch and marker
-#   git commit -m x && gh pr create    -> we read the pre-commit diff
+# The boundaries are any non-word character rather than whitespace, so that
+# `(gh pr create)` and `$(gh pr create)` are detected too. Widening detection is
+# always safe here: reaching this line only makes a deny possible, never an
+# allow, and the "is it ordinary?" test below decides what actually happens.
+[[ "$CMD" =~ (^|[^[:alnum:]_./-])gh[[:space:]]+pr[[:space:]]+create([^[:alnum:]_-]|$) ]] || exit 0
+
+# Whitespace-normalised form, used ONLY for whole-string comparisons below.
+NORM=$(printf '%s' "$CMD" | tr -s '[:space:]' ' ')
+NORM="${NORM# }"
+NORM="${NORM% }"
+
+# `gh pr create --help` prints usage and creates nothing. This is the one
+# allow-producing match left in the file, so it is whole-string equality rather
+# than a search for a `--help` token: with no other tokens present, `--help`
+# cannot be the value of a preceding flag or the contents of a quoted title,
+# which is exactly how the previous two versions of this check were bypassed.
+[ "$NORM" = "gh pr create --help" ] && exit 0
+
+# The command must BE a PR creation, not merely contain one. The hook runs
+# before the command does, so any prefix that changes the working directory or
+# the branch means the state inspected here is not the state the PR is created
+# from:
 #
-# Both would silently answer the wrong question, so they are refused rather than
-# guessed at. The remedy is trivial and stated in the message: run `gh pr create`
-# on its own, at which point the normal evaluation applies.
-if [[ "$PREFIX" =~ (^|[[:space:]])cd([[:space:]]|$) ]]; then
-    deny "This command changes directory before \`gh pr create\`, so the code-review gate would evaluate the wrong repository. Run \`gh pr create\` as its own command from the target repo."
+#   cd other-repo && gh pr create     -> reads THIS repo's branch and marker
+#   git commit -m x && gh pr create   -> reads the pre-commit diff
+#
+# Rather than enumerate which prefixes mutate — the enumeration is what the
+# `git -c … commit` and `pushd` bypasses walked through — nothing may precede
+# the creation. Suffixes are unrestricted: they run after the PR exists, from
+# the state that was inspected, so they cannot invalidate the answer.
+if ! [[ "$NORM" =~ ^gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$) ]]; then
+    deny "\`gh pr create\` must be its own command — the code-review gate runs before the command does, so anything preceding the create (a \`cd\`, a commit, a subshell) would have it inspect a different repository or a different commit than the PR is made from. Run the preceding steps first, then \`gh pr create\` on its own line."
 fi
-if [[ "$PREFIX" =~ (^|[[:space:]])git[[:space:]]+(commit|merge|rebase|cherry-pick|revert|reset|checkout|switch|am)([[:space:]]|$) ]]; then
-    deny "This command rewrites the branch before \`gh pr create\`, so the code-review gate would evaluate the pre-commit state rather than what the PR would contain. Run \`gh pr create\` as its own command afterwards."
+
+# --head names a branch other than the checked-out one, so a marker for the
+# current branch would prove nothing about the branch being published. Refused
+# rather than resolved: resolving means parsing the value, which is the class
+# of bug this rewrite exists to remove. Checked before the marker for that
+# reason — a marker cannot vouch for a branch we are not standing on.
+if [[ "$NORM" =~ (^|[[:space:]])(--head|-H) ]]; then
+    deny "\`gh pr create --head\` publishes a branch other than the checked-out one, and the code-review gate can only vouch for the branch it is standing on. Check out the head branch and run \`gh pr create\` from there."
 fi
 
 MARKER=$(quality_gate_marker "$GATE_SKILL")
 [ -n "$MARKER" ] || exit 0   # not a git repo, or key unavailable → allow
 [ -f "$MARKER" ] && exit 0   # already reviewed on this branch → allow
 
-# Base ref, in the order gh itself resolves it: an explicit --base/-B, then the
-# branch's configured gh-merge-base, then origin/HEAD, then the usual names.
-BASE=""
-if [[ "$TARGET_NQ" =~ (--base|-B)[[:space:]=]+([^[:space:]]+) ]]; then
-    BASE="${BASH_REMATCH[2]}"
+BYPASS="mkdir -p '$(quality_gate_dir)' && touch '${MARKER}'"
+
+# An explicit base changes which diff the PR contains, and reading its value
+# means parsing the command line. `--base "main" --draft` is the exact form
+# that used to capture `--draft` as the base, fail to resolve it, and allow.
+# So the flag is refused unreviewed rather than interpreted. Deliberately AFTER
+# the marker check: a reviewed branch may target any base it likes, because the
+# marker is about the branch, not about the base.
+#
+# Known false positive: an inline --body whose text quotes `--base` or `--head`
+# is denied too. It errs toward review, the marker clears it, and detecting the
+# difference would mean parsing quoting — the thing that keeps breaking.
+if [[ "$NORM" =~ (^|[[:space:]])(--base|-B) ]]; then
+    deny "This branch changes code and the ${GATE_SKILL} skill has not run on it, and an explicit \`--base\` means the gate cannot determine the PR's diff without parsing the command line. Run the Skill tool with skill: \"superpowers:${GATE_SKILL}\" over the branch diff, then re-run this command — the base is unrestricted once the branch has been reviewed. To skip the review: ${BYPASS}"
 fi
-if [ -z "$BASE" ]; then
-    CUR=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || CUR=""
-    if [ -n "$CUR" ]; then
-        BASE=$(git config --get "branch.${CUR}.gh-merge-base" 2>/dev/null) || BASE=""
-    fi
+
+# Base ref, from repository state only — never from the command line.
+BASE=""
+CUR=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || CUR=""
+if [ -n "$CUR" ]; then
+    BASE=$(git config --get "branch.${CUR}.gh-merge-base" 2>/dev/null) || BASE=""
 fi
 if [ -z "$BASE" ]; then
     BASE=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null) || BASE=""
@@ -129,16 +153,7 @@ if [ -z "$BASE" ]; then
     done
 fi
 [ -n "$BASE" ] || exit 0
-
-# An explicit base names a GitHub branch, which may exist locally only as a
-# remote-tracking ref (`--base develop` with just origin/develop on disk).
-if ! git rev-parse --verify --quiet "$BASE" >/dev/null 2>&1; then
-    if git rev-parse --verify --quiet "origin/$BASE" >/dev/null 2>&1; then
-        BASE="origin/$BASE"
-    else
-        exit 0
-    fi
-fi
+git rev-parse --verify --quiet "$BASE" >/dev/null 2>&1 || exit 0
 
 CHANGED=$(git diff --name-only "$BASE...HEAD" 2>/dev/null) || exit 0
 [ -n "$CHANGED" ] || exit 0
@@ -146,8 +161,12 @@ CHANGED=$(git diff --name-only "$BASE...HEAD" 2>/dev/null) || exit 0
 # is_code_file <path> — suffix match, or an extensionless executable/shebang
 # file. The suffix list alone misses the dozens of extensionless scripts this
 # repo tracks under custom_bins/, which are exactly the files worth reviewing.
+#
+# Both endpoints are probed. A file DELETED on this branch has no blob at HEAD,
+# so a HEAD-only probe classified every removed script as non-code — deleting
+# custom_bins/foo could ship unreviewed.
 is_code_file() {
-    local f="$1" mode first
+    local f="$1" rev mode first
     if [[ "$f" =~ $CODE_EXT_RE ]]; then
         return 0
     fi
@@ -155,14 +174,16 @@ is_code_file() {
     case "${f##*/}" in
         *.*) return 1 ;;
     esac
-    mode=$(git ls-tree HEAD -- "$f" 2>/dev/null | awk '{print $1}') || mode=""
-    if [ "$mode" = "100755" ]; then
-        return 0
-    fi
-    first=$(git show "HEAD:$f" 2>/dev/null | head -1) || first=""
-    case "$first" in
-        '#!'*) return 0 ;;
-    esac
+    for rev in HEAD "$BASE"; do
+        mode=$(git ls-tree "$rev" -- "$f" 2>/dev/null | awk '{print $1}') || mode=""
+        if [ "$mode" = "100755" ]; then
+            return 0
+        fi
+        first=$(git show "${rev}:${f}" 2>/dev/null | head -1) || first=""
+        case "$first" in
+            '#!'*) return 0 ;;
+        esac
+    done
     return 1
 }
 
@@ -179,4 +200,4 @@ done < <(printf '%s\n' "$CHANGED")
 COUNT=$(printf '%s' "$CODE_FILES" | grep -c . || true)
 SAMPLE=$(printf '%s' "$CODE_FILES" | head -5 | tr '\n' ' ')
 
-deny "This branch changes ${COUNT} code file(s) against ${BASE} (${SAMPLE}) and the ${GATE_SKILL} skill has not run on it yet. Run the Skill tool with skill: \"superpowers:${GATE_SKILL}\" over the branch diff, then re-run this command. If a review genuinely does not apply to this branch, bypass with: touch '${MARKER}'"
+deny "This branch changes ${COUNT} code file(s) against ${BASE} (${SAMPLE}) and the ${GATE_SKILL} skill has not run on it yet. Run the Skill tool with skill: \"superpowers:${GATE_SKILL}\" over the branch diff, then re-run this command. If a review genuinely does not apply to this branch, bypass with: ${BYPASS}"

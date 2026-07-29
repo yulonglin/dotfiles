@@ -9,6 +9,12 @@
 # The gate reads a real branch diff, so fixtures are real git repos. Every case
 # runs with XDG_CACHE_HOME pointed at the temp dir, so markers never touch the
 # user's real cache.
+#
+# SC2030/SC2031: each fixture exports GIT_DIR/GIT_WORK_TREE inside a ( ) group
+# precisely SO THAT the change is subshell-local. Leaking them into the parent
+# would repoint every later git command in this file — the exact failure the
+# temp-root probe below exists to prevent.
+# shellcheck disable=SC2030,SC2031
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -135,26 +141,55 @@ DOCS_REPO=$(make_repo docs-branch feature docs/notes.md)
 
 run_gate "code branch, unreviewed -> deny"   "$CODE_REPO" "gh pr create --draft" deny
 run_gate "code branch, plain create -> deny" "$CODE_REPO" "gh pr create"         deny
-run_gate "gh pr create after && -> deny"     "$CODE_REPO" "git push && gh pr create --fill" deny
-run_gate "explicit --base main -> deny"      "$CODE_REPO" "gh pr create --base main"  deny
 run_gate "docs-only branch -> allow"         "$DOCS_REPO" "gh pr create --draft" allow
 run_gate "unrelated bash -> allow"           "$CODE_REPO" "ls -la"               allow
 run_gate "gh pr list is not create -> allow" "$CODE_REPO" "gh pr list"           allow
 run_gate "gh pr view is not create -> allow" "$CODE_REPO" "gh pr view 3"         allow
-run_gate "gh pr create --help -> allow"      "$CODE_REPO" "gh pr create --help"  allow
 
-# --help must be read from the create invocation itself, not from anywhere in
-# the line: a title that merely CONTAINS the word must not open a bypass.
+# --help is recognised by whole-string equality, never by searching for the
+# token. Each of the three cases below was a real bypass in an earlier version:
+# the token appeared inside a title, as the value of another flag, or ahead of a
+# second create on the same line.
+run_gate "bare --help -> allow"          "$CODE_REPO" "gh pr create --help"   allow
+run_gate "--help with odd spacing -> allow" "$CODE_REPO" "  gh  pr   create   --help  " allow
 run_gate "--help inside a title -> deny" "$CODE_REPO" \
     'gh pr create --title "fix --help output"' deny
+run_gate "--help as a flag value -> deny" "$CODE_REPO" \
+    "gh pr create --title x --body --help" deny
 run_gate "--help then a real create -> deny" "$CODE_REPO" \
     "gh pr create --help && gh pr create --draft" deny
 
-# Compound prefixes that invalidate the check are refused rather than guessed.
-run_gate "cd before create -> deny"     "$CODE_REPO" "cd /elsewhere && gh pr create" deny
-run_gate "commit before create -> deny" "$CODE_REPO" "git commit -m x && gh pr create" deny
-# ...but a non-mutating prefix still evaluates normally rather than blanket-denying.
-run_gate "push before create still evaluates" "$DOCS_REPO" "git push && gh pr create" allow
+# Nothing may PRECEDE the create: the hook runs first, so a prefix that moves
+# or mutates the repo makes it inspect a different commit than the PR contains.
+# One rule, rather than a list of known mutators — the list is what `git -c`,
+# `git pull` and `pushd` each walked straight through.
+run_gate "cd before create -> deny"      "$CODE_REPO" "cd /elsewhere && gh pr create" deny
+run_gate "commit before create -> deny"  "$CODE_REPO" "git commit -m x && gh pr create" deny
+run_gate "git -c commit before -> deny"  "$CODE_REPO" \
+    "git -c commit.gpgsign=false commit -am fix && gh pr create" deny
+run_gate "git pull before create -> deny" "$CODE_REPO" "git pull --rebase && gh pr create" deny
+run_gate "pushd before create -> deny"   "$CODE_REPO" "pushd /elsewhere && gh pr create" deny
+run_gate "subshell around create -> deny" "$CODE_REPO" "(gh pr create)" deny
+# Even a harmless-looking push is refused: distinguishing it means classifying
+# arbitrary shell, which is the unsound step this design removes.
+run_gate "push before create -> deny"    "$DOCS_REPO" "git push && gh pr create" deny
+# Suffixes are fine — they run after the PR exists, from the inspected state.
+run_gate "suffix after create -> allow"  "$DOCS_REPO" "gh pr create --draft && echo done" allow
+
+# --head publishes a branch other than the checked-out one, which the marker
+# cannot vouch for. Refused without reading the value.
+run_gate "--head -> deny"          "$CODE_REPO" "gh pr create --head other"  deny
+run_gate "-H short form -> deny"   "$CODE_REPO" "gh pr create -H other"      deny
+run_gate "attached -Hvalue -> deny" "$CODE_REPO" "gh pr create -Hother"      deny
+
+# An explicit base is refused rather than parsed. `--base "main" --draft` is the
+# exact form that used to strip the quotes, capture `--draft` as the base, fail
+# to resolve it, and ALLOW.
+run_gate "--base main -> deny"      "$CODE_REPO" "gh pr create --base main"   deny
+run_gate "quoted base -> deny"      "$CODE_REPO" 'gh pr create --base "main" --draft' deny
+run_gate "--base=value -> deny"     "$CODE_REPO" "gh pr create --base=main"   deny
+run_gate "-B short form -> deny"    "$CODE_REPO" "gh pr create -B main"       deny
+run_gate "attached -Bvalue -> deny" "$CODE_REPO" "gh pr create -Bmain"        deny
 
 # Extensionless executables are code too. This repo tracks dozens of them under
 # custom_bins/, so a suffix-only check would wave through exactly the files most
@@ -179,14 +214,27 @@ mkdir -p "$BIN_REPO"
 assert_fixture "$BIN_REPO"
 run_gate "extensionless executable counts as code" "$BIN_REPO" "gh pr create" deny
 
-# gh spells the base flag -B as well as --base; missing the short form would
-# mean inspecting a different diff than the PR actually targets.
-run_gate "short -B flag honored" "$CODE_REPO" "gh pr create -B main" deny
-
-# `--base develop` where develop exists only as origin/develop must resolve, not
-# be treated as unresolvable — that would silently skip the gate entirely.
-(cd "$CODE_REPO" && $GIT update-ref refs/remotes/origin/develop refs/heads/main) >/dev/null 2>&1
-run_gate "explicit base via remote-tracking ref" "$CODE_REPO" "gh pr create --base develop" deny
+# A DELETED extensionless executable is still a code change. Probing only HEAD
+# classified every removal as non-code, because a deleted path has no blob
+# there — so `git rm custom_bins/foo` could ship unreviewed.
+DEL_REPO="$TMP/del-branch"
+mkdir -p "$DEL_REPO"
+(
+    cd "$DEL_REPO" || exit 1
+    git init -q . || exit 1
+    export GIT_DIR="$DEL_REPO/.git" GIT_WORK_TREE="$DEL_REPO"
+    git symbolic-ref HEAD refs/heads/main
+    mkdir -p custom_bins
+    printf '#!/usr/bin/env bash\necho hi\n' > custom_bins/tool
+    chmod +x custom_bins/tool
+    $GIT add custom_bins/tool
+    $GIT commit -qm base
+    $GIT checkout -q -b feature
+    $GIT rm -q custom_bins/tool
+    $GIT commit -qm drop
+) >/dev/null 2>&1
+assert_fixture "$DEL_REPO"
+run_gate "deleted extensionless executable counts as code" "$DEL_REPO" "gh pr create" deny
 
 # Marker present -> allow. Written via the real marker hook so the test also
 # proves the two hooks agree on the key (the failure mode that would wedge the
@@ -194,6 +242,13 @@ run_gate "explicit base via remote-tracking ref" "$CODE_REPO" "gh pr create --ba
 (cd "$CODE_REPO" && skill_json "superpowers:requesting-code-review" \
     | bash "$DIR/quality_mark_skill_ran.sh") >/dev/null 2>&1 || true
 run_gate "after review skill ran -> allow" "$CODE_REPO" "gh pr create --draft" allow
+
+# Ordering of the two flag refusals against the marker, which is the whole
+# reason they sit on opposite sides of it:
+#   --base is about the DIFF, and a reviewed branch may target any base.
+#   --head is about WHICH BRANCH, and the marker vouches only for this one.
+run_gate "reviewed branch may set --base" "$CODE_REPO" "gh pr create --base develop" allow
+run_gate "reviewed branch still refuses --head" "$CODE_REPO" "gh pr create --head other" deny
 
 # Base unresolvable: no origin, no main/master anywhere -> fail open.
 NOBASE="$TMP/nobase"

@@ -124,11 +124,15 @@ Then: Cleanup worktree (Step 6)
 
 #### Option 2: Push and Create PR
 
-```bash
-# Push branch
-git push -u origin <feature-branch>
+Push first, as its own command:
 
-# Create PR
+```bash
+git push -u origin <feature-branch>
+```
+
+Then create the PR — **as a separate command, not chained onto the push.** `quality_pr_gate.sh` runs before the command does, so anything preceding `gh pr create` on the same line would have it inspect a different commit than the PR contains; it refuses rather than guess.
+
+```bash
 gh pr create --title "<title>" --body "$(cat <<'EOF'
 ## Summary
 <2-3 bullets of what changed>
@@ -139,7 +143,7 @@ EOF
 )"
 ```
 
-If `gh pr create` is denied, that is `quality_pr_gate.sh`: the branch changes code files and `superpowers:requesting-code-review` has not run on it yet. Run that skill over the branch diff and re-run the command. The deny message also names a `touch <marker>` bypass for branches a review genuinely does not apply to.
+If `gh pr create` is denied, that is `quality_pr_gate.sh`: the branch changes code files and `superpowers:requesting-code-review` has not run on it yet. Run that skill over the branch diff and re-run the command. The deny message prints a ready-to-run `mkdir -p … && touch …` bypass for branches a review genuinely does not apply to.
 
 Then: Cleanup worktree (Step 6)
 
