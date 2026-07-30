@@ -678,11 +678,6 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/check_git_root.sh",
-            "timeout": 3
-          },
-          {
-            "type": "command",
             "command": "$HOME/.claude/hooks/check_venv.sh",
             "timeout": 3
           },
@@ -699,22 +694,33 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/show_auth_account.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/context_auto_apply.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "$HOME/.claude/hooks/check_things_mcp.sh",
             "timeout": 3
           },
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/anthropic_keycheck.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "//": "Status-display hooks whose output cannot change during a compaction: CWD, auth account and the applied context profile are all fixed for the life of the session. Without this matcher they re-inject on every compact, which measured at ~292K chars across 60 transcripts (compact fires outnumber startup ~12:1). Gated to startup|clear|resume — the sources where the model genuinely has no prior context.",
+        "matcher": "startup|clear|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_git_root.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/show_auth_account.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/context_auto_apply.sh",
             "timeout": 10
           }
         ]
