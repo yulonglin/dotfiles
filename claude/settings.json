@@ -705,8 +705,8 @@
         ]
       },
       {
-        "//": "Status-display hooks whose output cannot change during a compaction: CWD, auth account and the applied context profile are all fixed for the life of the session. Without this matcher they re-inject on every compact, which measured at ~292K chars across 60 transcripts (compact fires outnumber startup ~12:1). Gated to startup|clear|resume — the sources where the model genuinely has no prior context.",
-        "matcher": "startup|clear|resume",
+        "//": "Status-display hooks whose output cannot change during a compaction: CWD, auth account and the applied context profile are all fixed for the life of the session. Without this matcher they re-inject on every compact, which measured at ~292K chars across 60 transcripts (compact fires outnumber startup ~12:1). The matcher lists every SessionStart source EXCEPT compact — per the docs those are startup, resume, clear, compact and fork — so this is an exclusion of compact alone, not an allowlist that silently drops sources added later.",
+        "matcher": "startup|clear|resume|fork",
         "hooks": [
           {
             "type": "command",
