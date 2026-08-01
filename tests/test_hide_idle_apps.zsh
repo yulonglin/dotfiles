@@ -560,10 +560,22 @@ check     "the refusal is explained once"   "$ERR" "close/quit not enabled"
 # wired into only the close path would pass every check above while still letting
 # an inherited job quit apps outright - the single worst outcome the token exists
 # to prevent. Both rungs go through escalate(), so this pins that they stay there.
-rm -rf "$FAKEHOME/.cache"; seed_state 60 "107=closed=1000"
+#
+# 5000 seconds, not 1000: quit_after defaults to 30 MINUTES, so a 1000s clock
+# never crosses the threshold and escalate() is never reached - the assertions
+# would then pass with no gate at all. The close half above is non-vacuous only
+# because 1000s already exceeds its 15-minute threshold; the same number does not
+# transfer to a rung with a longer clock.
+#
+# Note also which assertion does the work. A SUCCESSFUL quit leaves the stored
+# phase at `closed` too (hide-idle-apps:644 pre-advances the phase for the close
+# rung only), so a phase check here cannot distinguish refusal from success. The
+# empty escalation log is what kills the mutant; the stderr line confirms the
+# refusal was the reason, rather than the app never having become eligible.
+rm -rf "$FAKEHOME/.cache"; seed_state 60 "107=closed=5000"
 run 0
 check_not "the quit is refused too"         "$ESC" "--only Notion"
-check     "and that rung is given back"     "$(state_line 107)" "closed"
+check     "and the refusal is the reason"   "$ERR" "close/quit not enabled"
 # Hiding is implemented locally and never routes through escalate(), so it is
 # unaffected. A gate that silently disabled the whole job would be a regression.
 # This half does not exercise escalate() at all - every app starts at `visible`,

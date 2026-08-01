@@ -1136,8 +1136,17 @@ queue_scheduled_job() {
         # which is exactly the silent hide->quit upgrade the token exists to stop.
         # The setup script still re-writes an already-present token, so ordinary
         # redeploys of a consenting machine are unaffected.
+        # Assigned on BOTH branches, never merely set on one. A sentinel that is
+        # only ever written to true is not a gate: run_parallel passes our
+        # environment down, so an inherited HIDE_IDLE_APPS_EXPLICIT_CONSENT=true -
+        # left by an earlier opt-in deploy in the same shell, or exported by a
+        # wrapper - would sail through an if-without-else and be read as fresh
+        # consent. Deriving it unconditionally makes this invocation the only
+        # thing that can decide.
         if (( ${EXPLICIT_OPT_INS[(Ie)HIDE_IDLE_APPS]} )); then
             export HIDE_IDLE_APPS_EXPLICIT_CONSENT=true
+        else
+            export HIDE_IDLE_APPS_EXPLICIT_CONSENT=false
         fi
         queue_scheduled_job hide-idle-apps "$DOT_DIR/scripts/cleanup/setup_hide_idle_apps.sh"
     elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)HIDE_IDLE_APPS]} )); then

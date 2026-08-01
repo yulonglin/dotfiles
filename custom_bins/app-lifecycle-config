@@ -57,11 +57,36 @@ DEFAULT_KEYS = {
     # no-op instead of to a massacre, so there is nothing to reject.
     "manual": ("action", "skip", None),
     "auto": ("action", "skip", None),
+    # See MIGRATION_DEFAULTS below before changing either of the two above:
+    # migrate() writes these same fallbacks into the YAML it generates, where
+    # they carry the opposite meaning.
     "hide_after": ("minutes", 15, "HIDE_AFTER_MINUTES"),
     "close_after": ("minutes", 15, "CLOSE_AFTER_MINUTES"),
     "quit_after": ("minutes", 30, "QUIT_AFTER_MINUTES"),
     "user_idle": ("minutes", 5, "USER_IDLE_MINUTES"),
     "min_visible_percent": ("percent", 40, "HIDE_IDLE_MIN_VISIBLE_PERCENT"),
+}
+
+# What migrate() writes for keys whose runtime fallback is deliberately not what
+# the legacy config meant. The two mappings answer different questions and must
+# not be collapsed back together:
+#
+#   DEFAULT_KEYS  - "the policy does not say; what should we do?" Answer: as
+#                   little as possible, because not-saying is usually a
+#                   truncated or half-written file.
+#   MIGRATION_DEFAULTS - "the old clear-mac-apps.conf did not list this app;
+#                   what did that MEAN?" Answer: quit. Absence there was an
+#                   affirmative policy, and the migration's whole claim is that
+#                   it changes no behaviour - there is a golden-file test in
+#                   tests/test_clear_mac_apps.zsh asserting the migrated config
+#                   reproduces the pre-migration dry run byte for byte.
+#
+# So migrate() emits these EXPLICITLY. That is also why the runtime fallback can
+# be safely inert: every migrated file states its own manual/auto rather than
+# relying on the built-in.
+MIGRATION_DEFAULTS = {
+    "manual": "quit",
+    "auto": "quit",
 }
 
 # Per-app keys. `slow` has no defaults: counterpart - it is a property of the
@@ -400,7 +425,7 @@ def migrate(path, out):
     out.write("# alone. Scale: skip < hide < close < quit.\n\n")
     out.write("defaults:\n")
     for key, (_kind, fallback, _env) in DEFAULT_KEYS.items():
-        out.write("  %s: %s\n" % (key, fallback))
+        out.write("  %s: %s\n" % (key, MIGRATION_DEFAULTS.get(key, fallback)))
     out.write("\napps:\n")
     width = max((len(name) for name in order), default=0) + 2
     for name in order:
