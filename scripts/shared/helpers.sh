@@ -1772,6 +1772,18 @@ parse_args() {
     typeset -ga EXPLICIT_OPT_OUTS
     EXPLICIT_OPT_OUTS=()
 
+    # The mirror image, and it answers a question DEPLOY_<X>=true cannot: "did the
+    # user ask for this on THIS invocation?" The resolved boolean conflates a CLI
+    # flag with a profile default and with a persistent config.local.sh override,
+    # which is sourced before parse_args runs. A component that grants standing
+    # permission to do something destructive must key off provenance, not off the
+    # resolved value - otherwise a one-time `DEPLOY_X=true` written into
+    # config.local.sh years ago silently re-consents on every later plain deploy.
+    # Populated by the `--<x>` branch and by --only, which names components just
+    # as explicitly. Currently read only by the hide-idle-apps escalation token.
+    typeset -ga EXPLICIT_OPT_INS
+    EXPLICIT_OPT_INS=()
+
     while (( $# )); do
         case "$1" in
             -h|--help)
@@ -1897,6 +1909,7 @@ parse_args() {
                 component="${component//-/_}"
                 typeset -g "INSTALL_${component}=true"
                 typeset -g "DEPLOY_${component}=true"
+                EXPLICIT_OPT_INS+=("$component")
                 ;;
             *)
                 log_warning "Unknown argument: $1"
@@ -1936,6 +1949,10 @@ parse_args() {
             local _comp_upper="${(U)_comp//-/_}"
             typeset -g "INSTALL_${_comp_upper}=true"
             typeset -g "DEPLOY_${_comp_upper}=true"
+            # Naming a component in --only is as explicit as `--<x>`, so it counts
+            # as fresh opt-in. Note apply_profile("minimal") above set everything
+            # false first, so only the named components land here.
+            EXPLICIT_OPT_INS+=("$_comp_upper")
         done
     fi
 }

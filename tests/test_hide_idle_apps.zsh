@@ -13,11 +13,19 @@ set -uo pipefail
 REPO="${0:A:h:h}"
 # Under the repo's gitignored tmp/, not $TMPDIR: agent sandboxes commonly allow
 # only one level below their temp root, and this tree is several deep.
-mkdir -p "$REPO/tmp"
-WORK="$(mktemp -d "$REPO/tmp/hide-idle-test.XXXXXX")"
+mkdir -p "$REPO/tmp" || { print -ru2 -- "FATAL: cannot create $REPO/tmp"; exit 1 }
+WORK="$(mktemp -d "$REPO/tmp/hide-idle-test.XXXXXX")" \
+    || { print -ru2 -- "FATAL: mktemp -d under $REPO/tmp failed"; exit 1 }
+# set -u does NOT catch a failed mktemp: WORK ends up set-but-EMPTY, and every
+# path below is derived from it - ROOT would become /root and FAKEHOME /home,
+# so the stub writes and the cleanup rm would land outside the repo entirely.
+# Validate before deriving anything and before arming the trap: an `rm -rf`
+# trap must never be installed on a variable we have not checked.
+[[ -n "$WORK" && -d "$WORK" && "$WORK" == "$REPO/tmp/"* ]] \
+    || { print -ru2 -- "FATAL: work dir not under $REPO/tmp: ${WORK:-<empty>}"; exit 1 }
 ROOT="$WORK/root"
 FAKEHOME="$WORK/home"
-trap 'rm -rf "$WORK"' EXIT   # only the temp tree this script just created
+trap 'rm -rf "${WORK:?}"' EXIT   # only the temp tree this script just created
 PASS=0 FAIL=0
 
 check() {  # check <label> <haystack> <needle>
@@ -155,6 +163,16 @@ export STUB_HELPER_OUT=$'101\t1\t1.000\n102\t0\t0.352\n103\t0\t0.000\n104\t1\t0.
 export STUB_HELPER_ARGS_LOG="$WORK/helper-args.log"
 export STUB_HIDE_LOG="$WORK/hide-attempts.log"
 export STUB_ESCALATE_LOG="$WORK/escalations.log"
+
+# The escalation consent token. Every scenario below that expects a close or a
+# quit needs it present, so it is part of the baseline fixture rather than
+# per-test setup. Note it is NOT under .cache: the scenarios rm -rf that
+# directory to reset state, which is exactly why the real token does not live
+# there either. Scenario 24 deletes this one deliberately, then restores it.
+ESCALATION_TOKEN="$FAKEHOME/.local/state/hide-idle-apps/escalation-enabled"
+mkdir -p "${ESCALATION_TOKEN:h}"
+print -r -- "test fixture" > "$ESCALATION_TOKEN"
+
 NOW=$(date +%s)
 export STUB_NOW="$NOW"
 
@@ -521,6 +539,43 @@ check_not "the unlisted app is not hidden"  "$(cat "$STUB_HIDE_LOG")" "unix id i
 # should be hidden, which is both the stronger claim and the order-free one.
 check_not "and nothing is reported hidden"  "$OUT" "Hid:"
 cp "$WORK/alc.bak" "$ROOT/config/app-lifecycle.yaml"
+
+# --- 24. without the consent token, the destructive rungs are refused -------
+# Scenario 8 with one thing changed: the token is gone. That is the machine that
+# inherited a loaded launchd job from the era when this component defaulted to on
+# and only ever hid windows. It must keep hiding - that is what was consented to
+# - and must not climb to close or quit, however long the app has sat idle.
+print -r -- "24. no escalation token -> hides, but never closes or quits"
+rm -f "$ESCALATION_TOKEN"
+rm -rf "$FAKEHOME/.cache"; seed_state 60 "107=hidden=1000"
+run 0
+check_not "the close is refused"            "$ESC" "--only Notion"
+# The phase check is the one that matters: escalate() returns nonzero, so the
+# pre-advanced rung is given back. Left at `closed`, the quit clock would start
+# running on a close that never happened - and a later quit needs no second
+# escalation to be wrong, it just needs this state to lie.
+check     "and the rung is given back"      "$(state_line 107)" "hidden"
+check     "the refusal is explained once"   "$ERR" "close/quit not enabled"
+# The quit rung, reached from `closed` rather than `hidden`. Without this a gate
+# wired into only the close path would pass every check above while still letting
+# an inherited job quit apps outright - the single worst outcome the token exists
+# to prevent. Both rungs go through escalate(), so this pins that they stay there.
+rm -rf "$FAKEHOME/.cache"; seed_state 60 "107=closed=1000"
+run 0
+check_not "the quit is refused too"         "$ESC" "--only Notion"
+check     "and that rung is given back"     "$(state_line 107)" "closed"
+# Hiding is implemented locally and never routes through escalate(), so it is
+# unaffected. A gate that silently disabled the whole job would be a regression.
+# This half does not exercise escalate() at all - every app starts at `visible`,
+# so the only way it can fail is if the gate were implemented as an early exit in
+# main() rather than at the two destructive rungs. That is precisely the wrong
+# implementation worth pinning, so the pair of checks is deliberate: the run hid
+# something, and reached the escalation path for nothing.
+rm -rf "$FAKEHOME/.cache"; seed_state 60
+run 0
+check     "hiding still works ungated"      "$OUT" "Hid:"
+check_not "and nothing was escalated"       "$ESC" "--only"
+print -r -- "test fixture" > "$ESCALATION_TOKEN"
 
 print -r -- ""
 print -r -- "PASS=$PASS FAIL=$FAIL"

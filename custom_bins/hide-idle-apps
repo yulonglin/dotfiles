@@ -55,6 +55,36 @@ HELPER_BIN="${DOT_DIR}/tools/window-exposure/window-exposure"
 CACHE_DIR="${HOME}/.cache/hide-idle-apps"
 STATE_FILE="${CACHE_DIR}/state"
 STATE_VERSION="#v3"
+# Consent to the destructive rungs is not inheritable. This job used to default
+# to ON and only hid apps; the ladder that closes windows and quits apps came
+# later, and the launchd label and binary path never changed. So a machine set
+# up under the old default already has a loaded job that would silently start
+# quitting applications with unsaved work - consent to HIDING read as consent to
+# QUITTING. The component default is now off, but that only governs fresh
+# installs: an existing schedule keeps firing whether or not deploy.sh is re-run.
+#
+# From config.sh's history: 66feba6 added the component as `true`, hide-only;
+# 10a5f11 flipped it to `false`, still hide-only; 31e8d58 added close and quit
+# with the default already off. Note the order - the flip was NOT a response to
+# the ladder, so nobody running it in the `true` era was ever re-prompted, and
+# because the default is now false a plain ./deploy.sh takes neither branch.
+#
+# The gate is a token rather than a versioned label because the legacy plist
+# points at THIS binary, so a new label would not stop the old job - it would
+# also have to be unloaded, and unloading is exactly what deploy.sh cannot do
+# unconditionally (--only and --minimal set every other component false, so
+# `--only vim` would tear down a job it promised not to touch). A token needs no
+# unload at all: the inherited job keeps hiding, which is what was consented to,
+# and simply cannot climb higher. Written only by an explicit --hide-idle-apps,
+# via scripts/cleanup/setup_hide_idle_apps.sh.
+#
+# Deliberately NOT under CACHE_DIR, which holds STATE_FILE and is therefore
+# disposable by design - the test suite rm -rf's it between scenarios, and a
+# cache cleaner would do the same on a real machine. A record of consent that a
+# cache sweep can revoke is the wrong shape: it fails safe, but it fails
+# silently, and the user would only learn from a launchd log they never read.
+# ~/.local/state is where data that must outlive a cache purge belongs.
+ESCALATION_TOKEN="${HOME}/.local/state/hide-idle-apps/escalation-enabled"
 # The escalation rungs are not reimplemented here: they are one call into the
 # manual trigger, so config vetoes apply to both triggers through one code path.
 CLEAR_APPS="${SCRIPT_DIR}/clear-mac-apps"
@@ -222,6 +252,19 @@ is_busy() {
 # rung would QUIT anything whose manual: is quit, collapsing the ladder to one step.
 escalate() {
     local name="$1" rung="$2"
+    # Both destructive rungs come through here; hiding is implemented locally and
+    # never does, so an ungated install still hides exactly as it always did.
+    # Non-zero deliberately: that is the give-back status, so the app keeps its
+    # current rung and is simply never advanced. Reporting success would mark a
+    # rung done that was refused, and quit_after would later act on that lie.
+    if [[ ! -f "$ESCALATION_TOKEN" ]]; then
+        if [[ "${_escalation_warned:-}" != true ]]; then
+            print -ru2 -- "hide-idle-apps: close/quit not enabled on this machine; hiding only."
+            print -ru2 -- "  Run ./deploy.sh --hide-idle-apps to consent to the destructive rungs."
+            _escalation_warned=true
+        fi
+        return 1
+    fi
     local -a cmd=("$CLEAR_APPS" --only "$name")
     [[ "$rung" == close ]] && cmd+=(--max-action close)
     "${cmd[@]}" >/dev/null 2>&1

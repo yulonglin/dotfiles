@@ -44,8 +44,19 @@ ACTIONS = ("skip", "hide", "close", "quit")
 # fix the pattern: minute-valued keys take a _MINUTES suffix, and the visibility
 # threshold keeps the name it already shipped under.
 DEFAULT_KEYS = {
-    "manual": ("action", "quit", None),
-    "auto": ("action", "quit", None),
+    # Fallbacks are `skip`, not `quit`. These two fields authorise closing and
+    # quitting, so whatever they resolve to when ABSENT is what an incomplete
+    # policy means. Defaulting them to quit made every way of losing the section -
+    # a zero-byte file, a comments-only file, a redirect interrupted right after
+    # `defaults:` - resolve to "quit every app, protect nothing", at exactly the
+    # moment the safety policy went missing. Absence must mean do nothing.
+    #
+    # This costs no behaviour on a complete policy: config/app-lifecycle.yaml sets
+    # both explicitly. It is also why a sparse `apps:`-only document is still
+    # accepted rather than rejected as corrupt - it now resolves to a harmless
+    # no-op instead of to a massacre, so there is nothing to reject.
+    "manual": ("action", "skip", None),
+    "auto": ("action", "skip", None),
     "hide_after": ("minutes", 15, "HIDE_AFTER_MINUTES"),
     "close_after": ("minutes", 15, "CLOSE_AFTER_MINUTES"),
     "quit_after": ("minutes", 30, "QUIT_AFTER_MINUTES"),
@@ -250,6 +261,34 @@ def check(kind, key, value, where):
 
 
 def resolve(doc, env):
+    # An unreadable policy must never resolve to something MORE destructive than
+    # a readable one. The primary defence is in DEFAULT_KEYS, where manual and
+    # auto fall back to `skip`: any way of losing part of the document now
+    # resolves toward doing nothing rather than toward quitting everything.
+    #
+    # A wholly empty document is still rejected outright rather than left to
+    # resolve to a silent no-op. Both are safe; this one is also honest. A
+    # zero-byte config is a broken install, not a policy of inaction, and the
+    # difference matters when someone is trying to work out why the automation
+    # stopped. This is the parser's existing rule ("reject unknown shape, don't
+    # guess", see the module docstring) applied to the empty document, which
+    # slipped through because every field had a fallback. A missing file is
+    # already rejected in main(); a present-but-empty one must be too.
+    #
+    # Note what is deliberately NOT rejected: a document with no `defaults:` at
+    # all, or a truncated one carrying only `defaults:`. Requiring the section
+    # would break sparse-but-valid policies that only set `apps:` and lean on the
+    # built-ins - and with the built-ins now `skip`, leaning on them is harmless.
+    # Truncation partway THROUGH a written-out defaults block (`manual: quit`
+    # saved, `protect_windows:` lost) still resolves to something destructive, and
+    # no presence check can catch that; only a trailing completeness marker or
+    # atomic emission would. That is a config-format change, flagged rather than
+    # taken unilaterally.
+    if not doc:
+        fail("config is empty - refusing to guess a policy. A zero-byte or"
+             " comments-only file is a broken install, not an instruction to do"
+             " nothing; restore it rather than letting the idle job run against a"
+             " policy that is not there")
     defaults = {}
     raw_defaults = doc.get("defaults", {})
     for key, value in raw_defaults.items():

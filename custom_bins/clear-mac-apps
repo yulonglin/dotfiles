@@ -392,6 +392,18 @@ close_app_selectively() {
     fi
 
     # Pass 1: fetch window/tab data, filter in zsh
+    #
+    # Captured, not piped from a process substitution, for the same reason the
+    # rescan further down is: `done < <(...)` discards the producer's exit
+    # status, so a query that FAILED arrives as an empty list. Empty here reads
+    # as "Chrome has no protected window", which falls through to the branch
+    # below that quits the whole app - so an unreadable window list would
+    # authorise precisely the quit the protected patterns exist to prevent.
+    # A genuinely empty list is still a harmless no-op: it leaves nothing to
+    # close, and the ids_to_close guard below returns 0 before that branch.
+    local tabs=""
+    tabs=$(get_chrome_window_tabs) || return 1
+
     local -A protected_windows all_windows
     while IFS='|' read -r wid title; do
         [[ -z "$wid" ]] && continue
@@ -402,7 +414,7 @@ close_app_selectively() {
                 break
             fi
         done
-    done < <(get_chrome_window_tabs)
+    done <<< "$tabs"
 
     # Collect IDs to close
     local -a ids_to_close=()
@@ -554,7 +566,28 @@ main() {
 
     # Get running apps with bundle IDs (tab-separated: "name<TAB>bid")
     # Tab-separated to handle multiple processes with the same name (e.g. Safari web apps)
+    #
+    # Captured, not piped from `< <(...)`, whose exit status is discarded: a
+    # System Events enumeration that FAILED - one GUI process exiting mid-scan
+    # is enough - would then arrive as an empty list, and an empty candidate
+    # list is indistinguishable from "no apps are running", which is reported
+    # as a clean run. The idle caller pre-writes the phase it asked for and
+    # hands the rung back only on a non-zero exit, so a silent failure here
+    # advances an app whose windows were never touched, and quit_after later
+    # quits it. An unreadable inventory is not evidence that there is nothing
+    # to do. A genuinely empty one still succeeds as a no-op.
     local SEP=$'\t'
+    local running=""
+    if ! running=$(get_running_apps); then
+        echo "Error: could not enumerate running applications — doing nothing" >&2
+        # Recorded, not just returned. The bare invocation is the Shortcut, whose
+        # branch at the bottom of this file swallows the status and posts
+        # notify_failures instead - and that notification is built from this
+        # array, so returning alone would surface an "action did not complete"
+        # dialog with an empty body. The --only caller reads the status.
+        FAILED_ACTIONS+=("inventory: could not enumerate running applications")
+        return 1
+    fi
     local -a running_entries=()
     while IFS='|' read -r name bid; do
         [[ -n "$name" ]] || continue
@@ -568,7 +601,7 @@ main() {
             $matched || continue
         fi
         running_entries+=("${name}${SEP}${bid}")
-    done < <(get_running_apps)
+    done <<< "$running"
 
     # Classify: check name match first, bundle ID as fallback
     # Declared once, out here: `local x` with no value re-run on a later loop
@@ -632,8 +665,37 @@ main() {
             if [[ "$app" == "Google Chrome" ]]; then
                 # Chrome: check all tab titles (only fetch once, cache result)
                 if [[ -z "${_chrome_tabs_fetched:-}" ]]; then
-                    _chrome_tabs_cache=$(get_chrome_window_tabs)
-                    _chrome_tabs_fetched=1
+                    # Status checked, not just captured. This is the same defect
+                    # as the two above but at the step that decides Chrome's
+                    # FATE: on a failed query the cache is empty, the loop below
+                    # finds no protected title, has_protected stays false, and
+                    # Chrome falls through to the quit branch - while
+                    # _chrome_tabs_fetched=1 guarantees it is never re-asked.
+                    # An unreadable tab list is not evidence there is no Meet
+                    # call in progress.
+                    #
+                    # A failure is therefore treated as PROTECTED rather than
+                    # aborting the run: it routes Chrome to selective close,
+                    # which re-queries and fails closed at the top of
+                    # close_app_selectively, so the problem surfaces as a
+                    # recorded failed action instead of a quit. One app's
+                    # unreadable windows should not veto every other app.
+                    # Note _chrome_tabs_fetched is set only on success, so a
+                    # failure leaves the query open to be retried rather than
+                    # cached as an empty answer. The failure flag is cleared on
+                    # that retry: a stale one would keep Chrome marked protected
+                    # after a query that later succeeded - fail-safe, but still a
+                    # lie about what was observed.
+                    if _chrome_tabs_cache=$(get_chrome_window_tabs); then
+                        _chrome_tabs_fetched=1
+                        _chrome_tabs_failed=""
+                    else
+                        _chrome_tabs_cache=""
+                        _chrome_tabs_failed=1
+                    fi
+                fi
+                if [[ -n "${_chrome_tabs_failed:-}" ]]; then
+                    has_protected=true
                 fi
                 while IFS='|' read -r _wid _title; do
                     [[ -z "$_wid" ]] && continue
@@ -646,6 +708,15 @@ main() {
                 done <<< "$_chrome_tabs_cache"
             else
                 # Other apps: active window title only (best-effort)
+                #
+                # Deliberately NOT status-checked, unlike the Chrome branch
+                # above. `get name of window 1` raises an AppleScript error when
+                # the process simply HAS no window, so nonzero here is the
+                # ordinary case rather than a failure signal - gating on it would
+                # mark every windowless app protected and the feature would never
+                # act. Chrome's query differs: it iterates `every window` and
+                # returns empty with status 0, so there a nonzero really does
+                # mean the query broke.
                 _title=$(get_app_frontmost_window_title "$app")
                 if [[ -n "$_title" ]]; then
                     for pattern in "${protected_patterns[@]}"; do

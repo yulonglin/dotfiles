@@ -12,10 +12,18 @@ set -uo pipefail
 REPO="${0:A:h:h}"
 # Under the repo's gitignored tmp/, not $TMPDIR: agent sandboxes commonly allow
 # only one level below their temp root, and this tree is several deep.
-mkdir -p "$REPO/tmp"
-WORK="$(mktemp -d "$REPO/tmp/clear-mac-test.XXXXXX")"
+mkdir -p "$REPO/tmp" || { print -ru2 -- "FATAL: cannot create $REPO/tmp"; exit 1 }
+WORK="$(mktemp -d "$REPO/tmp/clear-mac-test.XXXXXX")" \
+    || { print -ru2 -- "FATAL: mktemp -d under $REPO/tmp failed"; exit 1 }
+# set -u does NOT catch a failed mktemp: WORK ends up set-but-EMPTY, and ROOT
+# below is derived from it, so ROOT would become /root - the stub writes and
+# the cleanup rm would land outside the repo entirely. Validate before
+# deriving anything and before arming the trap: an `rm -rf` trap must never be
+# installed on a variable we have not checked.
+[[ -n "$WORK" && -d "$WORK" && "$WORK" == "$REPO/tmp/"* ]] \
+    || { print -ru2 -- "FATAL: work dir not under $REPO/tmp: ${WORK:-<empty>}"; exit 1 }
 ROOT="$WORK/root"
-trap 'rm -rf "$WORK"' EXIT   # only the temp tree this script just created
+trap 'rm -rf "${WORK:?}"' EXIT   # only the temp tree this script just created
 PASS=0 FAIL=0
 
 check() {  # check <label> <haystack> <needle>
