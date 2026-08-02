@@ -24,7 +24,6 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 | Add an encrypted secret | `secrets-edit` (interactive dotenv editor) |
 | Run an experiment with resource caps | `jexp uv run python -m ...` (Linux: needs pueue + systemd user session) |
 | Commit / commit + push + PR | `/commit` skill or `/commit-push-sync` |
-| Switch active plugin context | `claude-tools context <profile>` (composable: `code python rust`; `--list` for the current set) |
 | Merge worktree → parent branch | `cwmerge` (or `git merge <branch>` from the parent if the branch isn't `worktree-` prefixed) |
 
 ## Where To Look

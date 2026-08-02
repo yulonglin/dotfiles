@@ -242,20 +242,23 @@ check_fzf_version() {
 }
 
 # --- CLAUDE.md: the context profiles named as examples actually exist
-check_context_profiles() {
-    local loc="CLAUDE.md: context profile examples" yaml missing=()
-    yaml="$DOT_DIR/claude/templates/contexts/profiles.yaml"
-    if [[ ! -f "$yaml" ]]; then
-        skip "$loc" "profiles.yaml not found"
+# --- plugin manifest: every enabledPlugins entry is `true` (no gates left behind)
+check_plugin_manifest() {
+    local loc="claude/settings.json: enabledPlugins all-true manifest" json falses
+    json="$DOT_DIR/claude/settings.json"
+    if [[ ! -f "$json" ]]; then
+        skip "$loc" "settings.json not found"
         return
     fi
-    for profile in code python rust; do
-        rg -q "^  $profile:" "$yaml" || missing+=("$profile")
-    done
-    if [[ ${#missing[@]} -eq 0 ]]; then
-        ok "$loc" "code, python, rust all defined"
+    falses=$(python3 -c "
+import json,sys
+d=json.load(open('$json'))
+print(' '.join(k for k,v in d.get('enabledPlugins',{}).items() if v is not True))
+" 2>/dev/null) || { skip "$loc" "could not parse settings.json"; return; }
+    if [[ -z "$falses" ]]; then
+        ok "$loc" "every entry is true"
     else
-        drift "$loc" "profiles named in CLAUDE.md no longer exist: ${missing[*]}"
+        drift "$loc" "non-true entries present: $falses"
     fi
 }
 
@@ -303,7 +306,7 @@ check_uv_malware
 check_ty_beta
 check_issue_21342
 check_fzf_version
-check_context_profiles
+check_plugin_manifest
 check_clean_skill_dupes
 check_no_counts
 
