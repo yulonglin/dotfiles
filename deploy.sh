@@ -755,7 +755,7 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
 
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
-        log_info "  Plugins: 24 declared in settings.json enabledPlugins; all enabled by default"
+        log_info "  Plugins: declared in settings.json enabledPlugins; all enabled"
     else
         log_warning "Claude directory not found at $DOT_DIR/claude"
     fi

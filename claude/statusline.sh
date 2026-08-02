@@ -24,9 +24,6 @@ if [ -n "$machine_name_output" ]; then
   machine_prefix="$icon $(printf '\033[35m')${name}$(printf '\033[0m') "
 fi
 
-# Context profiles were removed — every installed plugin is enabled everywhere.
-profiles_info=""
-
 # ============================================================================
 # DIRECTORY PATH (~ for HOME)
 # ============================================================================
@@ -103,7 +100,7 @@ fi
 # OUTPUT: Line 1 (location) + Line 2 (session)
 # ============================================================================
 # Line 1: location
-printf "%s%s\033[2m\033[36m%s\033[0m%s" "$machine_prefix" "$profiles_info" "$dir" "$git_info"
+printf "%s\033[2m\033[36m%s\033[0m%s" "$machine_prefix" "$dir" "$git_info"
 
 # Line 2: session state (model · ctx · duration)
 session_parts=()
