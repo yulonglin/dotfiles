@@ -1,9 +1,28 @@
 #!/usr/bin/env bash
 # Shows current Claude auth account and usage warning at session start.
+#
+# The account line is fixed for the life of a session, so it is dropped after a
+# compaction. The near-limit warning is NOT fixed - it is recomputed from a
+# mutable usage cache and can newly become true mid-session - so it still fires
+# on compact. That split is why this hook runs on every source rather than
+# being excluded in settings.json: one of its two outputs is live.
+#
+# An unreadable source, or a missing jq, leaves QUIET false and yields exactly
+# the previous behaviour - the fallback is the status quo, never a silent skip.
+if [ -t 0 ]; then
+    hook_input=""
+else
+    hook_input=$(cat)
+fi
+session_source=$(printf '%s' "$hook_input" | jq -r '.source // ""' 2>/dev/null || echo "")
+QUIET=false
+[ "$session_source" = "compact" ] && QUIET=true
 
-auth_json=$(claude auth status 2>&1) || true
+msg=""
+if [[ "$QUIET" == false ]]; then
+  auth_json=$(claude auth status 2>&1) || true
 
-account=$(echo "$auth_json" | python3 -c "
+  account=$(echo "$auth_json" | python3 -c "
 import json, sys
 try:
     d = json.load(sys.stdin)
@@ -16,7 +35,8 @@ try:
 except: print('unknown')
 " 2>/dev/null)
 
-msg="Auth: ${account}"
+  msg="Auth: ${account}"
+fi
 
 # Check cached usage for near-limit warning
 cache_file="${TMPDIR:-/tmp/claude}/claude-statusline-usage.json"
@@ -31,6 +51,12 @@ print(round(d.get('five_hour',{}).get('utilization',0)), round(d.get('seven_day'
 Near limit (5h:${five_pct}% 7d:${seven_pct}%)! \`claude-switch\` to logout+login — restart alone won't clear cached usage"
   fi
 fi
+
+# On compact with no near-limit warning there is nothing live to report, so emit
+# no JSON at all rather than an empty additionalContext - that is the whole point
+# of the split. The .strip() below also absorbs the leading newline the warning
+# carries when it is the only content.
+[[ -z "${msg//[[:space:]]/}" ]] && exit 0
 
 python3 -c "
 import json, sys

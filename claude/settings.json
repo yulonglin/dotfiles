@@ -701,17 +701,6 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/anthropic_keycheck.py",
             "timeout": 10
-          }
-        ]
-      },
-      {
-        "//": "Status-display hooks whose output cannot change during a compaction: CWD, auth account and the applied context profile are all fixed for the life of the session. Without this matcher they re-inject on every compact, which measured at ~292K chars across 60 transcripts (compact fires outnumber startup ~12:1). The matcher lists every SessionStart source EXCEPT compact — per the docs those are startup, resume, clear, compact and fork — so this is an exclusion of compact alone, not an allowlist that silently drops sources added later.",
-        "matcher": "startup|clear|resume|fork",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/check_git_root.sh",
-            "timeout": 3
           },
           {
             "type": "command",
@@ -722,6 +711,17 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/context_auto_apply.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "//": "Gating a hook off compact is only safe when EVERYTHING it does is redundant after a compaction, and that is a property of the hook body, not of the source. show_auth_account.sh and context_auto_apply.sh were tried here and moved back above: the former recomputes a near-limit warning from a mutable usage cache, and the latter runs the 6h marketplace sync and the stale-plugin-symlink cleanup — side effects, not display. Both now suppress only their static output when source=compact, which recovers the noise without dropping live work. check_git_root.sh is left because it is purely a warning; the accepted cost is that a mid-session CWD change stops being re-warned after a compact. WARNING, this matcher IS a four-value allowlist despite reading like an exclusion of compact: SessionStart currently emits exactly startup, resume, clear, compact and fork, so today it excludes compact and nothing else, but a source added in a future release would be silently skipped here with no error and must be added by hand. Said explicitly because a comment asserting a safety property the code does not have is what hid the consent bug in issue #55.",
+        "matcher": "startup|clear|resume|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/check_git_root.sh",
+            "timeout": 3
           }
         ]
       }
