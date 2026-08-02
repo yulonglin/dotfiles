@@ -24,25 +24,8 @@ if [ -n "$machine_name_output" ]; then
   machine_prefix="$icon $(printf '\033[35m')${name}$(printf '\033[0m') "
 fi
 
-# ============================================================================
-# CONTEXT PROFILES from .claude/context.yaml
-# ============================================================================
+# Context profiles were removed — every installed plugin is enabled everywhere.
 profiles_info=""
-context_yaml="$cwd/.claude/context.yaml"
-if [ -f "$context_yaml" ]; then
-  # Extract profiles from YAML (handles both flow [a, b] and block - a style)
-  profiles=$(python3 -c "
-import yaml, sys
-try:
-    d = yaml.safe_load(open('$context_yaml'))
-    p = d.get('profiles', [])
-    if p: print(' '.join(p))
-except: pass
-" 2>/dev/null)
-  if [ -n "$profiles" ]; then
-    profiles_info="[$(printf '\033[36m')${profiles}$(printf '\033[0m')] "
-  fi
-fi
 
 # ============================================================================
 # DIRECTORY PATH (~ for HOME)

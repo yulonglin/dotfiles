@@ -740,14 +740,8 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
         fi
 
-        # Sync plugin marketplaces (declarative, from profiles.yaml)
-        if command -v claude-tools &>/dev/null; then
-            log_info "Syncing plugin marketplaces..."
-            claude-tools context --sync -v || \
-                log_warning "Marketplace sync had issues — run manually: claude-tools context --sync"
-        else
-            log_warning "claude-tools not found — skipping marketplace sync"
-        fi
+        # Plugin marketplaces are declared natively in claude/settings.json
+        # (extraKnownMarketplaces), which is symlinked into place above — no sync step needed.
 
         # Clean plugin-created symlinks from skills/ (they cause duplicate entries)
         if [[ -f "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh" ]]; then
@@ -759,26 +753,9 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             claude-cache-clean --apply
         fi
 
-        # Deploy context templates (skip if ~/.claude already points here)
-        local ctx_src="$DOT_DIR/claude/templates/contexts"
-        local ctx_dst="$HOME/.claude/templates/contexts"
-        if [[ -d "$ctx_src" ]]; then
-            mkdir -p "$ctx_dst"
-            local tmpl_count=0
-            for tmpl in "$ctx_src"/*.json(N) "$ctx_src"/*.yaml(N); do
-                [[ -f "$tmpl" ]] || continue
-                local dst="$ctx_dst/$(basename "$tmpl")"
-                # Skip if source and destination resolve to the same file (symlinked ~/.claude)
-                [[ "$(realpath "$tmpl")" == "$(realpath "$dst" 2>/dev/null)" ]] && { tmpl_count=$((tmpl_count + 1)); continue; }
-                ln -sf "$tmpl" "$dst"
-                tmpl_count=$((tmpl_count + 1))
-            done
-            log_success "Context templates deployed ($tmpl_count files)"
-        fi
-
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
-        log_info "  Plugins: claude-plugins-official (27), ai-safety-plugins (core, research, writing, code, workflow, viz)"
+        log_info "  Plugins: 24 declared in settings.json enabledPlugins; all enabled by default"
     else
         log_warning "Claude directory not found at $DOT_DIR/claude"
     fi

@@ -30,7 +30,7 @@ When uncertain, **ask rather than refuse silently**. Escalate anything that woul
 
 ## Where Things Live
 
-Instructions are `~/.claude/CLAUDE.md` and `<repo>/CLAUDE.md`; rules auto-load from `~/.claude/rules/*.md` and `<repo>/.claude/rules/*.md`. Specs go in `<repo>/specs/`, plans in `<repo>/plans/` (via `plansDirectory`). `docs/` is not auto-loaded; skills read it on demand. Plugins and context profiles: `docs/plugin-management.md`.
+Instructions are `~/.claude/CLAUDE.md` and `<repo>/CLAUDE.md`; rules auto-load from `~/.claude/rules/*.md` and `<repo>/.claude/rules/*.md`. Specs go in `<repo>/specs/`, plans in `<repo>/plans/` (via `plansDirectory`). `docs/` is not auto-loaded; skills read it on demand. Plugins: `~/.claude/docs/plugin-management.md`.
 
 ## Defaults Worth Stating
 

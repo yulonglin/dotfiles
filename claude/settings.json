@@ -709,16 +709,6 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/context_auto_apply.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/check_things_mcp.sh",
-            "timeout": 3
-          },
-          {
-            "type": "command",
             "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/anthropic_keycheck.py",
             "timeout": 10
           }
@@ -782,39 +772,30 @@
     "padding": 1
   },
   "enabledPlugins": {
-    "claude-md-management@claude-plugins-official": false,
-    "code-simplifier@claude-plugins-official": false,
+    "claude-md-management@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
     "code@ai-safety-plugins": true,
     "codex@codex-plugin-cc": true,
-    "commit-commands@claude-plugins-official": false,
-    "context7@claude-plugins-official": false,
+    "commit-commands@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
     "core@ai-safety-plugins": true,
-    "dev-browser@dev-browser-marketplace": false,
-    "figma@claude-plugins-official": false,
-    "frontend-design@claude-plugins-official": false,
-    "gopls-lsp@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
-    "huggingface-skills@claude-plugins-official": false,
-    "imessage@claude-plugins-official": false,
-    "llms-fetch-mcp@alignment-hive": false,
-    "playground@claude-plugins-official": false,
+    "llms-fetch-mcp@alignment-hive": true,
+    "playground@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": false,
     "pyright-lsp@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true,
     "remember@claude-plugins-official": true,
     "research@ai-safety-plugins": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true,
-    "telegram@claude-plugins-official": false,
-    "things-mcp@productivity-tools": false,
+    "telegram@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": false,
-    "viz@ai-safety-plugins": false,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
+    "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
-    "writing@ai-safety-plugins": false
+    "writing@ai-safety-plugins": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -839,12 +820,6 @@
       "source": {
         "source": "github",
         "repo": "crazytieguy/codex-plugin-cc"
-      }
-    },
-    "dev-browser-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "sawyerhood/dev-browser"
       }
     },
     "productivity-tools": {
