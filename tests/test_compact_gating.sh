@@ -5,9 +5,21 @@
 # claude-tools so no sync is launched.
 set -uo pipefail
 
-HOOKS="$(cd "$(dirname "$0")/../claude/hooks" && pwd)"
-WORK=$(mktemp -d) || { echo "mktemp failed"; exit 1; }
-[[ -n "$WORK" && "$WORK" == /tmp/* ]] || { echo "bad WORK=$WORK"; exit 1; }
+# HOOKS_DIR override exists so the suite can be pointed at mutated copies to
+# confirm the assertions below actually fail when the quieting logic is broken.
+HOOKS="${HOOKS_DIR:-$(cd "$(dirname "$0")/../claude/hooks" && pwd)}"
+
+# Pick a writable scratch base. Under the Claude Code sandbox $TMPDIR is
+# /run/user/1000, which is mounted read-only, so an unqualified `mktemp -d`
+# fails there; /tmp/claude is the sandbox-writable path. Probe rather than
+# assume, so the test also runs unsandboxed and on macOS.
+TMPBASE=""
+for cand in "${TMPDIR:-}" /tmp/claude /tmp; do
+    [[ -n "$cand" && -d "$cand" && -w "$cand" ]] && { TMPBASE="$cand"; break; }
+done
+[[ -n "$TMPBASE" ]] || { echo "no writable temp base"; exit 1; }
+WORK=$(mktemp -d "${TMPBASE%/}/compact-gating.XXXXXX") || { echo "mktemp failed"; exit 1; }
+[[ -n "$WORK" && "$WORK" == "$TMPBASE"/* ]] || { echo "bad WORK=$WORK"; exit 1; }
 trap 'rm -rf "$WORK"' EXIT
 
 PASS=0; FAIL=0
@@ -57,6 +69,27 @@ check "compact suppresses the advisory" "<EMPTY>" "$out"
 out=$(cd "$WORK/repo" && printf 'not json' | \
       DOT_DIR="$WORK/nodot" PATH="/usr/bin:/bin" bash "$HOOKS/context_auto_apply.sh" 2>/dev/null)
 check "malformed hook input falls back to loud" "No context profiles configured" "$out"
+
+# --- stdin safety ---------------------------------------------------------
+# Both hooks now read stdin where they previously did not. `[ -t 0 ]` catches a
+# terminal but NOT a pipe with no writer, so a `cat` that blocks would stall
+# every session start - a worse regression than the noise this change removes.
+# Timeout-guarded so a hang fails the suite instead of hanging it.
+echo "stdin safety"
+
+out=$(cd "$WORK/repo" && DOT_DIR="$WORK/nodot" PATH="/usr/bin:/bin" \
+      timeout 5 bash "$HOOKS/context_auto_apply.sh" </dev/null 2>/dev/null); rc=$?
+check "context_auto_apply: closed stdin does not hang" "No context profiles configured" "$out"
+if [[ $rc -eq 124 ]]; then FAIL=$((FAIL+1)); echo "  FAIL context_auto_apply timed out on closed stdin"
+else PASS=$((PASS+1)); echo "  ok   context_auto_apply exits on closed stdin (rc=$rc)"; fi
+
+# PATH stubbed because closed stdin leaves QUIET false, which reaches the
+# `claude auth status` call - the suite must not query the real auth state.
+out=$(TMPDIR="$WORK/tmpdir_hot" PATH="/usr/bin:/bin" \
+      timeout 5 bash "$HOOKS/show_auth_account.sh" </dev/null 2>/dev/null); rc=$?
+check "show_auth_account: closed stdin still warns" "Near limit" "$out"
+if [[ $rc -eq 124 ]]; then FAIL=$((FAIL+1)); echo "  FAIL show_auth_account timed out on closed stdin"
+else PASS=$((PASS+1)); echo "  ok   show_auth_account exits on closed stdin (rc=$rc)"; fi
 
 echo
 echo "PASS=$PASS FAIL=$FAIL"
