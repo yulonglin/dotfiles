@@ -2,10 +2,13 @@
 # claude-plugin-reset — Reinstall plugin defaults for Claude Code.
 #
 # Bundles the full plugin reset workflow:
-#   1. Update all plugins from registered marketplaces
-#   2. Install official marketplace plugins
+#   1. Update all marketplaces declared in settings.json extraKnownMarketplaces
+#   2. Install every plugin in the settings.json enabledPlugins manifest
 #   3. Clean stale plugin cache versions
 #   4. Clean duplicate skill symlinks
+#
+# The manifest in claude/settings.json is the single source of truth — this
+# script derives its marketplace and plugin lists from it at runtime.
 #
 # Usage:
 #   claude-plugin-reset            # Full reset
@@ -45,16 +48,20 @@ run_step() {
   echo -e "\n${BOLD}[$step]${NC} $1"
 }
 
+SETTINGS_JSON="$DOT_DIR/claude/settings.json"
+if [[ ! -f "$SETTINGS_JSON" ]]; then
+  echo -e "${RED}Manifest not found: $SETTINGS_JSON${NC}"
+  exit 1
+fi
+
 # --- Step 1: Update plugin marketplaces ---
-source "$DOT_DIR/config.sh"
 run_step "Updating plugin marketplaces..."
 
 if ! command -v claude &>/dev/null; then
   echo -e "  ${RED}claude CLI not found — skipping marketplace update${NC}"
 else
-  for entry in "${PLUGIN_MARKETPLACES[@]}"; do
-    name="${entry%%:*}"
-    src="${entry#*:}"
+  while IFS=$'\t' read -r name src; do
+    [[ -n "$name" ]] || continue
 
     if $DRY_RUN; then
       echo -e "  ${YELLOW}Would ensure marketplace: $name ($src)${NC}"
@@ -73,18 +80,25 @@ else
     # Update
     claude plugin marketplace update "$name" 2>&1 || \
       echo -e "  ${YELLOW}$name update had warnings (may be OK)${NC}"
-  done
+  done < <(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+for name, m in d.get("extraKnownMarketplaces", {}).items():
+    src = m.get("source", {})
+    if src.get("source") == "github" and src.get("repo"):
+        print(name + "\t" + src["repo"])
+' "$SETTINGS_JSON")
 fi
 
-# --- Step 2: Install official marketplace plugins ---
-run_step "Installing official marketplace plugins..."
+# --- Step 2: Install manifest plugins ---
+run_step "Installing manifest plugins (settings.json enabledPlugins)..."
 
 if ! command -v claude &>/dev/null; then
   echo -e "  ${RED}claude CLI not found — skipping${NC}"
 else
   installed=0 skipped=0 failed=0
-  for plugin in "${OFFICIAL_PLUGINS[@]}"; do
-    qualified="${plugin}@claude-plugins-official"
+  while IFS= read -r qualified; do
+    [[ -n "$qualified" ]] || continue
     if $DRY_RUN; then
       echo -e "  ${YELLOW}Would ensure: $qualified${NC}"
       continue
@@ -100,7 +114,13 @@ else
       echo -e "  ${YELLOW}Failed: $qualified${NC}"
       failed=$((failed + 1))
     fi
-  done
+  done < <(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+for k, v in sorted(d.get("enabledPlugins", {}).items()):
+    if v is True:
+        print(k)
+' "$SETTINGS_JSON")
   if ! $DRY_RUN; then
     echo -e "  ${GREEN}Installed: $installed${NC}, Skipped: $skipped, Failed: $failed"
   fi

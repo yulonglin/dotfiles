@@ -709,6 +709,11 @@
           },
           {
             "type": "command",
+            "command": "$HOME/.claude/hooks/clean_plugin_symlinks_session.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/anthropic_keycheck.py",
             "timeout": 10
           }

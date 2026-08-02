@@ -250,11 +250,11 @@ check_plugin_manifest() {
         skip "$loc" "settings.json not found"
         return
     fi
-    falses=$(python3 -c "
+    falses=$(python3 -c '
 import json,sys
-d=json.load(open('$json'))
-print(' '.join(k for k,v in d.get('enabledPlugins',{}).items() if v is not True))
-" 2>/dev/null) || { skip "$loc" "could not parse settings.json"; return; }
+d=json.load(open(sys.argv[1]))
+print(" ".join(k for k,v in d.get("enabledPlugins",{}).items() if v is not True))
+' "$json" 2>/dev/null) || { skip "$loc" "could not parse settings.json"; return; }
     if [[ -z "$falses" ]]; then
         ok "$loc" "every entry is true"
     else
