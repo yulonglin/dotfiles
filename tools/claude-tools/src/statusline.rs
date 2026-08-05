@@ -59,6 +59,17 @@ struct ClassifierHealth {
 /// degraded marker left over from this morning is noise, not news.
 const CLASSIFIER_HEALTH_MAX_AGE_SECS: u64 = 6 * 3600;
 
+/// Past this age the recorded backend is reported as unknown rather than as
+/// fact. write_health() runs ONLY on the classify() path — fast-path allows,
+/// denies and question-to-user surfaces never touch it — so a session whose
+/// tool calls all hit a fast path leaves the file frozen at whatever the last
+/// backend attempt saw. On 2026-08-05 that pinned `dead` for over two hours on
+/// the strength of one transient API read timeout, with the statusline
+/// insisting the classifier was down long after the outage had passed.
+/// A stale entry is not evidence of the current state, and rendering it as if
+/// it were is the bug; `auto?` says what is actually known.
+const CLASSIFIER_HEALTH_STALE_AFTER_SECS: u64 = 15 * 60;
+
 // --- Main entry point ---
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -380,13 +391,26 @@ fn format_classifier_str() -> Option<String> {
         .join(".cache/claude/approval-classifier-health.json");
     let health: ClassifierHealth = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
     let backend = health.backend.as_deref()?;
+    // Validate the backend BEFORE the age tiers, so a corrupt or future-versioned
+    // file renders nothing at either age rather than an authoritative-looking
+    // "stale" marker for a value we cannot interpret.
+    if !matches!(backend, "api" | "subscription" | "dead") {
+        return None;
+    }
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?
         .as_secs();
-    if now.saturating_sub(health.ts.unwrap_or(0)) > CLASSIFIER_HEALTH_MAX_AGE_SECS {
+    let age = now.saturating_sub(health.ts.unwrap_or(0));
+    if age > CLASSIFIER_HEALTH_MAX_AGE_SECS {
         return None;
+    }
+    // Applies to every backend, healthy included: past the window we don't know
+    // that the API path still works either, and claiming otherwise is the same
+    // error as the sticky `dead` in the opposite direction.
+    if age > CLASSIFIER_HEALTH_STALE_AFTER_SECS {
+        return Some("\x1b[2mauto?\x1b[0m".to_string());
     }
 
     let label = active_anthropic_key_label().unwrap_or_default();

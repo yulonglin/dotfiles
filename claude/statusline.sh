@@ -195,12 +195,31 @@ fi
 classifier_info=""
 classifier_health="$HOME/.cache/claude/approval-classifier-health.json"
 if [ -f "$classifier_health" ]; then
-  # The hook rewrites this on every classification; past 6h treat it as absent
-  # so a stale degraded marker doesn't linger.
+  # Two age tiers. write_health() runs ONLY on the classify() path — fast-path
+  # allows, denies and question-to-user surfaces never touch it — so a session
+  # whose tool calls all hit a fast path leaves this file frozen at whatever the
+  # last backend attempt saw. On 2026-08-05 that pinned `dead` for over two hours
+  # on one transient API read timeout. Past 15m the entry is no longer evidence
+  # of the current state, so report it as unknown; past 6h treat it as absent.
   health_ts=$(jq -r '.ts // 0' "$classifier_health" 2>/dev/null || echo 0)
   now_ts=$(date +%s)
-  if [ $((now_ts - health_ts)) -le 21600 ]; then
-    backend=$(jq -r '.backend // ""' "$classifier_health" 2>/dev/null)
+  health_age=$((now_ts - health_ts))
+
+  # Validate the backend BEFORE the age tiers, so a corrupt or future-versioned
+  # file renders nothing at either age rather than an authoritative-looking
+  # "stale" marker for a value we cannot interpret.
+  backend=$(jq -r '.backend // ""' "$classifier_health" 2>/dev/null)
+  case "$backend" in
+    api | subscription | dead) ;;
+    *) backend="" ;;
+  esac
+
+  if [ -n "$backend" ] && [ "$health_age" -gt 900 ] && [ "$health_age" -le 21600 ]; then
+    # Applies to every backend, healthy included: past the window we don't know
+    # that the API path still works either, and claiming otherwise is the same
+    # error as the sticky `dead` in the opposite direction.
+    classifier_info="$(printf '\033[2m')auto?$(printf '\033[0m')"
+  elif [ -n "$backend" ] && [ "$health_age" -le 900 ]; then
 
     # Short label of the active ANTHROPIC_API_KEY, mirroring the resolver in
     # custom_bins/dotfiles-secrets: first line whose value is not `!`-blocked.

@@ -132,6 +132,53 @@ write_health subscription 25000   # ~7h, past the 6h cutoff
 check "rust: stale renders nothing" "$(render_rust | classifier_segment)" ""
 check "bash: stale renders nothing" "$(render_bash | classifier_segment)" ""
 
+echo "=== past 15m the recorded backend is reported as unknown, not as fact ==="
+# The regression this guards: write_health() runs only on the classify() path, so
+# a session of fast-path-only tool calls freezes this file. On 2026-08-05 one
+# transient API read timeout left `dead` rendering red for over two hours.
+for backend in api subscription dead; do
+    write_health "$backend" 7200   # 2h — the actual incident duration
+    check "rust: $backend at 2h is unknown" "$(render_rust | classifier_segment)" "auto?"
+    check "bash: $backend at 2h is unknown" "$(render_bash | classifier_segment)" "auto?"
+done
+
+echo "=== the 15m cutoff separates the two states, from both sides ==="
+# Deliberately NOT 900/901. write_health stamps `now - age`, but the renderer
+# reads the clock again a moment later, so an exact-boundary fixture flips to
+# the wrong side whenever the two land in different wall-clock seconds — the
+# assertion would fail a few times an hour for no reason. Neither implementation
+# exposes a clock to inject, so the honest fix is margin, not precision: 60s
+# either side is unambiguous while still pinning the cutoff between them.
+write_health dead 840             # 14m — comfortably fresh
+check "rust: 840s is fresh" "$(render_rust | classifier_segment)" "auto"
+check "bash: 840s is fresh" "$(render_bash | classifier_segment)" "auto"
+write_health dead 960             # 16m — comfortably stale
+check "rust: 960s is stale" "$(render_rust | classifier_segment)" "auto?"
+check "bash: 960s is stale" "$(render_bash | classifier_segment)" "auto?"
+
+echo "=== stale renders dim, so it recedes rather than shouting like dead ==="
+write_health dead 7200
+stale_raw=$(render_rust | classifier_segment_raw)
+check "rust: stale is dim"     "$(printf '%s' "$stale_raw" | grep -c $'\033\[2m')"  "1"
+check "rust: stale is not red" "$(printf '%s' "$stale_raw" | grep -c $'\033\[31m')" "0"
+
+echo "=== an unrecognised backend renders nothing at EITHER age ==="
+# Without this the staleness tier would happily print an authoritative-looking
+# `auto?` for a value neither implementation can interpret.
+write_health someday-backend 60
+check "rust: unknown fresh" "$(render_rust | classifier_segment)" ""
+check "bash: unknown fresh" "$(render_bash | classifier_segment)" ""
+write_health someday-backend 7200
+check "rust: unknown stale" "$(render_rust | classifier_segment)" ""
+check "bash: unknown stale" "$(render_bash | classifier_segment)" ""
+
+echo "=== PARITY: the stale marker matches byte for byte, ANSI included ==="
+for backend in api subscription dead; do
+    write_health "$backend" 7200
+    check "parity (stale $backend)" \
+        "$(render_bash | classifier_segment_raw)" "$(render_rust | classifier_segment_raw)"
+done
+
 echo "=== no health file at all renders nothing ==="
 rm -f "$HEALTH"
 check "rust: absent renders nothing" "$(render_rust | classifier_segment)" ""
