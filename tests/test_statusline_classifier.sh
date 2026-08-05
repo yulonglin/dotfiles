@@ -326,6 +326,22 @@ high_raw=$(render_rust_with "$(session_input '"context_window":{"used_percentage
 check "rust: xhigh is yellow" "$(printf '%s' "$xhigh_raw" | grep -c $'\033\[33m')" "1"
 check "rust: high is dim"    "$(printf '%s' "$high_raw"  | grep -c $'\033\[2m')"  "1"
 
+echo "=== the model bracket matches an absolute byte golden, not just the other impl ==="
+# Every other assertion here is either ANSI-stripped or a rust-vs-bash
+# comparison, so both implementations can be identically wrong and stay green.
+# These pin the exact escape sequence. The closing "22;34" is load-bearing: SGR
+# 34 alone sets the foreground without clearing the faint attribute, which left
+# the closing bracket dim blue against a normal-blue opening one.
+golden_bracket() {  # effort_json, expected_raw
+    got_r=$(render_rust_with "$(session_input "\"context_window\":{\"used_percentage\":0}$1")" | segment_raw "$MODEL")
+    got_b=$(render_bash_with "$(session_input "\"context_window\":{\"used_percentage\":0}$1")" | segment_raw "$MODEL")
+    check "rust: raw bracket golden ${1:-<no effort>}" "$got_r" "$2"
+    check "bash: raw bracket golden ${1:-<no effort>}" "$got_b" "$2"
+}
+golden_bracket ',"effort":{"level":"high"}'  "$(printf '\033[34m[Opus \033[2m(high)\033[22;34m]\033[0m')"
+golden_bracket ',"effort":{"level":"xhigh"}' "$(printf '\033[34m[Opus \033[33m(xhigh)\033[22;34m]\033[0m')"
+golden_bracket ''                            "$(printf '\033[34m[Opus]\033[0m')"
+
 echo "=== a model without reasoning effort keeps a bare bracket and no stray space ==="
 no_effort=$(session_input '"context_window":{"used_percentage":0}')
 check_segment "effort absent" '"context_window":{"used_percentage":0}' "$MODEL" '[Opus]'
