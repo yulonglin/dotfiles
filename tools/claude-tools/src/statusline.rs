@@ -266,10 +266,15 @@ fn format_git_info(output: &mut String, cwd: &str) {
 /// blue bracket, so the bracket colour is re-opened after the suffix.
 /// Effort has no segment of its own — a payload with an effort but no model
 /// display name renders neither, which Claude Code never sends.
+///
+/// The re-open is `22;34`, not a bare `34`: SGR 34 sets the foreground colour
+/// but leaves the faint attribute alone, so after a dim effort suffix a bare
+/// `34` would render the closing bracket dim blue while the opening one is
+/// normal blue. SGR 22 (normal intensity) is what actually clears `\x1b[2m`.
 fn format_model_str(model: Option<&Model>, effort: Option<&Effort>) -> Option<String> {
     let name = model.and_then(|m| m.display_name.as_deref()).filter(|n| !n.is_empty())?;
     match format_effort_suffix(effort) {
-        Some(suffix) => Some(format!("\x1b[34m[{} {}\x1b[34m]\x1b[0m", name, suffix)),
+        Some(suffix) => Some(format!("\x1b[34m[{} {}\x1b[22;34m]\x1b[0m", name, suffix)),
         None => Some(format!("\x1b[34m[{}]\x1b[0m", name)),
     }
 }
