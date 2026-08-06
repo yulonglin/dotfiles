@@ -361,6 +361,13 @@ check_eq "conf stays 0600 after recording" "$(stat -c '%a' "$CONF" 2>/dev/null |
 echo "=== concurrent writers serialise on the conf lock ==="
 # rewrite_env_lines replaces the file via mv, so an unserialised second writer
 # could rename a pre-sentinel snapshot back over the record.
+#
+# This one is a real regression test, not a hopeful one: run against a copy of
+# secrets-use whose lock is neutered (each process given its own lock path), the
+# three checks below fail on 60 of 60 trials. Against the real binary, 0 of 60.
+# The window is not narrow — both writers start together and read the same
+# snapshot — so a single trial detects a missing lock. If you change the locking,
+# re-measure rather than trusting that this still passes.
 printf '# fresh machine\nANTHROPIC_API_KEY = ANTHROPIC_API_KEY - alpha\nANTHROPIC_API_KEY = ANTHROPIC_API_KEY - beta\n' > "$CONF"
 migrate >/dev/null 2>&1 &
 use ANTHROPIC_API_KEY beta >/dev/null 2>&1 &

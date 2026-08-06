@@ -366,7 +366,7 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
         log_success "ANTHROPIC_API_KEY global-scope migration applied (hooks have no TTY)"
     else
         log_warning "Could not mark ANTHROPIC_API_KEY as [global]"
-        log_warning "  Hooks may lose their key — fix by hand: secrets-use ANTHROPIC_API_KEY --global"
+        log_warning "  Hooks may lose their key — fix by hand: secrets-use ANTHROPIC_API_KEY --global-once"
     fi
 
     if [[ -e "$DOT_DIR/.secrets" ]]; then
