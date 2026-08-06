@@ -349,6 +349,26 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
     dotfiles_secrets_harden_permissions
     log_info "Hardened private secret file permissions"
 
+    # The approval classifier (claude/hooks/with-anthropic-key.sh) and the
+    # SessionStart health probe (claude/hooks/pre_session_start.sh) both resolve
+    # ANTHROPIC_API_KEY by bare name from a hook, where there is no TTY — the one
+    # access class the "[global]" name marker authorizes. Marking it is
+    # inventory-independent (it writes the conf line without consulting BWS), so
+    # this completes on a fresh machine before bws is installed, and it is
+    # idempotent: an already-marked name is left byte-identical.
+    #
+    # --global-once, not --global: this runs on every deployment, and an
+    # unconditional mark would undo a deliberate `secrets-use ANTHROPIC_API_KEY
+    # --no-global` at the next deploy. The once-only form stands down as soon as
+    # the conf carries a "# global-scope-decided:" line, so revocation sticks.
+    if PATH="$DOT_DIR/custom_bins:$PATH" \
+        "$DOT_DIR/custom_bins/secrets-use" ANTHROPIC_API_KEY --global-once >/dev/null 2>&1; then
+        log_success "ANTHROPIC_API_KEY global-scope migration applied (hooks have no TTY)"
+    else
+        log_warning "Could not mark ANTHROPIC_API_KEY as [global]"
+        log_warning "  Hooks may lose their key — fix by hand: secrets-use ANTHROPIC_API_KEY --global"
+    fi
+
     if [[ -e "$DOT_DIR/.secrets" ]]; then
         log_warning "Legacy plaintext secrets still exist at $DOT_DIR/.secrets"
         log_warning "  Safe to delete after confirming your repos use setup-envrc/.envrc"

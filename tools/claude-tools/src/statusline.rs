@@ -363,10 +363,17 @@ fn active_anthropic_key_label() -> Option<String> {
         let Some((name, value)) = line.split_once('=') else {
             continue;
         };
-        if name.trim() != "ANTHROPIC_API_KEY" {
+        // " [global]" marks the name resolvable outside a repo; it is part of
+        // the NAME field, so it must come off before matching.
+        let name = name.trim();
+        let name = name.strip_suffix("[global]").map_or(name, str::trim_end);
+        if name != "ANTHROPIC_API_KEY" {
             continue;
         }
         let value = value.trim();
+        if value.is_empty() {
+            continue; // marker-only line ("NAME [global] =") declares no key
+        }
         if value.starts_with('!') {
             continue; // blocked key — keep looking down the preference list
         }

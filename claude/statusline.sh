@@ -228,9 +228,14 @@ if [ -f "$classifier_health" ]; then
         /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
         {
           name = $1; sub(/^[[:space:]]+/, "", name); sub(/[[:space:]]+$/, "", name)
+          # " [global]" marks the name resolvable outside a repo; it is part of
+          # the NAME field, so it must come off before matching.
+          sub(/[[:space:]]*\[global\]$/, "", name)
           if (name != "ANTHROPIC_API_KEY") next
           value = substr($0, index($0, "=") + 1)
           sub(/^[[:space:]]+/, "", value); sub(/[[:space:]]+$/, "", value)
+          # A marker-only line ("NAME [global] =") declares no key.
+          if (value == "") next
           if (value ~ /^!/) next
           idx = index(value, " - ")
           print (idx ? substr(value, idx + 3) : "")

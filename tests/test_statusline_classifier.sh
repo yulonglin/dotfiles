@@ -190,6 +190,61 @@ write_health api
 check "rust: bare marker" "$(render_rust | classifier_segment)" "auto-ant"
 check "bash: bare marker" "$(render_bash | classifier_segment)" "auto-ant"
 
+# --- the "[global]" name marker ---------------------------------------------
+# Both statuslines match the env name exactly, so a " [global]"-suffixed line
+# would silently drop the account label — the failure would be a missing suffix
+# on the statusline, which nobody would read as a bug. Assert every conf shape
+# the marker can produce, in both implementations.
+
+echo "=== tagged: a marked line still renders its label ==="
+write_health api
+printf 'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - mats\n' \
+    > "$FAKE/dot/config/secrets-global.conf"
+check "rust: tagged" "$(render_rust | classifier_segment)" "auto-ant:mats"
+check "bash: tagged" "$(render_bash | classifier_segment)" "auto-ant:mats"
+
+echo "=== blocked + tagged: the marker does not resurrect a blocked key ==="
+printf '%s\n' \
+    'ANTHROPIC_API_KEY [global] = !ANTHROPIC_API_KEY - blockedone' \
+    'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - mats' \
+    > "$FAKE/dot/config/secrets-global.conf"
+check "rust: blocked+tagged" "$(render_rust | classifier_segment)" "auto-ant:mats"
+check "bash: blocked+tagged" "$(render_bash | classifier_segment)" "auto-ant:mats"
+
+echo "=== repeated: a partially-tagged name resolves by preference order ==="
+printf '%s\n' \
+    'ANTHROPIC_API_KEY = !ANTHROPIC_API_KEY - blockedone' \
+    'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - mats' \
+    > "$FAKE/dot/config/secrets-global.conf"
+check "rust: repeated" "$(render_rust | classifier_segment)" "auto-ant:mats"
+check "bash: repeated" "$(render_bash | classifier_segment)" "auto-ant:mats"
+
+echo "=== a value-less marker line is skipped, not read as an empty label ==="
+printf '%s\n' \
+    'ANTHROPIC_API_KEY [global] =' \
+    'ANTHROPIC_API_KEY = ANTHROPIC_API_KEY - mats' \
+    > "$FAKE/dot/config/secrets-global.conf"
+check "rust: value-less marker skipped" "$(render_rust | classifier_segment)" "auto-ant:mats"
+check "bash: value-less marker skipped" "$(render_bash | classifier_segment)" "auto-ant:mats"
+
+echo "=== untagged: unchanged behaviour ==="
+printf 'ANTHROPIC_API_KEY = ANTHROPIC_API_KEY - mats\n' \
+    > "$FAKE/dot/config/secrets-global.conf"
+check "rust: untagged" "$(render_rust | classifier_segment)" "auto-ant:mats"
+check "bash: untagged" "$(render_bash | classifier_segment)" "auto-ant:mats"
+
+echo "=== PARITY: marker shapes agree byte for byte ==="
+for conf in \
+    'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - mats' \
+    'ANTHROPIC_API_KEY [global] =' \
+    'OPENAI_API_KEY [global] = OPENAI_API_KEY - tomek'
+do
+    printf '%s\n' "$conf" > "$FAKE/dot/config/secrets-global.conf"
+    r=$(render_rust | classifier_segment_raw)
+    b=$(render_bash | classifier_segment_raw)
+    check "marker parity ($conf)" "$b" "$r"
+done
+
 echo "=== PARITY: both implementations agree byte for byte ==="
 printf '%s\n' \
     'ANTHROPIC_API_KEY = !ANTHROPIC_API_KEY - blockedone' \
