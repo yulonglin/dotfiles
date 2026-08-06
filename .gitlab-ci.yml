@@ -1,6 +1,22 @@
-bash_lint:
+# Was `bash -n install.sh && bash -n deploy.sh`. Both files are
+# `#!/usr/bin/env zsh`, so that checked them with the wrong parser: `bash -n
+# deploy.sh` fails on line 768's zsh glob qualifiers (`"$ctx_src"/*.json(N)`),
+# reporting valid zsh as a syntax error. tests/test_shell_syntax.sh dispatches
+# on each file's shebang and covers all ~190 tracked shell scripts instead of
+# two, degrading to the bash-shebang subset when zsh is unavailable.
+shell_syntax:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
   script:
-    - bash -n install.sh
-    - bash -n deploy.sh
+    - bash tests/test_shell_syntax.sh
+
+# The full suite lives in GitHub Actions (.github/workflows/tests.yml), which is
+# where this repo's CI runs. Kept here as an opt-in for GitLab mirrors: it needs
+# zsh, jq and pytest on the runner image, so it is manual rather than automatic.
+tests:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: manual
+      allow_failure: true
+  script:
+    - bash tests/run-all.sh

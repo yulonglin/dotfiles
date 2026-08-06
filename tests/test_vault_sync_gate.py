@@ -136,6 +136,24 @@ def filters(vs, **over) -> int:
     return vs.cmd_filters(args)
 
 
+def stub_ob(vs, monkeypatch) -> str:
+    """Make resolve_ob() answer without obsidian-headless installed.
+
+    Only the tests that get *past* the gate need this: cmd_filters composes the
+    `ob sync-config` argv for logging before it checks --dry-run, so resolve_ob()
+    is reached on every unlocked path. Left un-stubbed, those tests die on
+    "`ob` not found on PATH" from a machine-shaped dependency rather than from
+    anything about the gate -- which is exactly how they came to be red on main.
+
+    Deliberately NOT an autouse fixture: test_filters_never_invokes_ob_when_blocked
+    proves the stop *precedes* the irreversible call by making resolve_ob() throw,
+    and a blanket stub would quietly defeat it.
+    """
+    path = "/stub/bin/ob"
+    monkeypatch.setattr(vs, "resolve_ob", lambda: path)
+    return path
+
+
 # --------------------------------------------------------------------------
 # The three historical defects. Each must stop the gate.
 # --------------------------------------------------------------------------
@@ -321,6 +339,7 @@ def test_existing_exclusions_are_re_listed_not_dropped(vs, monkeypatch, tmp_path
         rows_for(vs, tombstones=24041, tombstone_dirs=2943),
         excluded=["some/other/folder", "a/third/one"],
     )
+    stub_ob(vs, monkeypatch)
     assert filters(vs) == 0
     printed = capsys.readouterr().out
     sent = [ln for ln in printed.splitlines() if "--excluded-folders" in ln]
@@ -333,6 +352,7 @@ def test_existing_exclusions_are_re_listed_not_dropped(vs, monkeypatch, tmp_path
 def test_fully_synced_deletions_unlock_the_gate(vs, monkeypatch, tmp_path):
     make_sync_root(vs, monkeypatch, tmp_path, rows_for(vs, tombstones=24041, tombstone_dirs=2943))
     assert verify(vs) == 0
+    stub_ob(vs, monkeypatch)
     assert filters(vs) == 0
 
 

@@ -23,6 +23,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 | Install/manage Mac apps | Add a line to `config/apps.conf` → run `app-picker` (gum TUI) → `brew bundle --file=config/Brewfile`. Official casks + `mas` only, **no third-party taps**. Then `scripts/setup/auth-setup` |
 | Add an encrypted secret | `secrets-edit` (interactive dotenv editor) |
 | Run an experiment with resource caps | `jexp uv run python -m ...` (Linux: needs pueue + systemd user session) |
+| Run the tests | `tests/run-all.sh` (`-k <substr>` filters; CI runs it `--strict`) |
 | Commit / commit + push + PR | `/commit` skill or `/commit-push-sync` |
 | Switch active plugin context | `claude-tools context <profile>` (composable: `code python rust`; `--list` for the current set) |
 | Merge worktree → parent branch | `cwmerge` (or `git merge <branch>` from the parent if the branch isn't `worktree-` prefixed) |

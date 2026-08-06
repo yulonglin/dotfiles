@@ -241,16 +241,21 @@ expect "second stop stays quiet" "$(nudge "$S")" silent
 track "$S" "$TMP" "python3 $TMP/scratch/probe.py"
 expect "already-promoted script stays quiet" "$(nudge "$S")" silent
 
+# The needle is the dirty-signal sentence, not the word "quality": the two
+# PARTS in simplify_nudge.sh both mention /simplify, so only the leading phrase
+# distinguishes "code changed this turn" from "a scratch script earned a home".
+DIRTY_NEEDLE="Code changed this turn"
+
 S=dirty
 touch "$TMP/claude-simplify-dirty-${S}"
-expect "dirty marker alone still nudges" "$(nudge "$S")" fire "quality pass"
+expect "dirty marker alone still nudges" "$(nudge "$S")" fire "$DIRTY_NEEDLE"
 
 S=both
 touch "$TMP/claude-simplify-dirty-${S}"
 runs 3 "$S" "$TMP" "python3 $TMP/scratch/probe.py"
 OUT=$(nudge "$S")
-expect "both signals: quality pass" "$OUT" fire "quality pass"
-expect "both signals: promotion"    "$OUT" fire "probe.py"
+expect "both signals: dirty"     "$OUT" fire "$DIRTY_NEEDLE"
+expect "both signals: promotion" "$OUT" fire "probe.py"
 
 expect "clean session silent" "$(nudge no-such-session)" silent
 

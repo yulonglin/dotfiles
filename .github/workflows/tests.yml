@@ -1,0 +1,84 @@
+name: tests
+
+# The suites in tests/, claude/hooks/ and scripts/tests/ predate any CI that
+# ran them, which is how eight of them came to be failing on main at once
+# unnoticed. This workflow is the gate: tests/run-all.sh discovers every suite
+# by naming convention, so a new suite needs no change here.
+#
+# --strict makes a skipped suite a failure. Without it a missing zsh would turn
+# the three zsh suites into silent non-coverage, which is the failure mode this
+# workflow exists to end.
+#
+# Only first-party actions (actions/*) are used, matching this repo's
+# supply-chain posture — same rule as build-claude-tools.yml.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # tests/test_memory_tier_budget.py resolves the pretrim-memory tag to
+          # diff protected passages against their pre-trim bytes. A default
+          # shallow checkout has no tags and the test would skip — which
+          # --strict does not catch, because the skip is inside pytest.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install suite dependencies
+        run: |
+          # zsh: deploy.sh/install.sh/config.sh are zsh, and three suites are
+          #      written in it. jq: every hook parses its payload with it.
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zsh jq
+          python -m pip install --quiet pytest
+
+      - name: Run all suites
+        run: tests/run-all.sh --strict
+
+  # claude-tools is 4.4k lines of Rust that ships as a committed binary and owns
+  # the statusline, context switching, gitignore management and check_git_root.
+  # build-claude-tools.yml compiles and releases it on every push to main, but
+  # only on main and with no test step — so nothing gated it on a PR. This job
+  # is that gate. It is green-on-zero-tests today by design: `cargo test` with
+  # no #[test] fns passes, and the point is that the gate exists before the
+  # tests do, not after.
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: tools/claude-tools
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cargo's registry and this crate's build artifacts. Keyed on the
+      # lockfile so a dependency bump invalidates it and nothing else does.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/claude-tools/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('tools/claude-tools/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: cargo test
+        run: cargo test --locked

@@ -124,7 +124,25 @@ Potential hooks to implement:
 
 ## Testing Hooks
 
-Test the agent_spawned hook manually:
+Every suite in the repo, including the ones in this directory:
+
+```bash
+tests/run-all.sh              # all suites
+tests/run-all.sh -k hooks     # just this directory
+tests/run-all.sh -v -k mask   # one suite, streaming its output
+```
+
+Suites here are discovered by name — a new `test_<hook>.sh` is picked up with no
+registration. CI runs `tests/run-all.sh --strict` on every push and PR
+(`.github/workflows/tests.yml`).
+
+Only 11 of the 49 hooks wired into `claude/settings.json` have a suite. The
+untested ones that return `deny` are the ones worth writing next:
+`check_webfetch_domain.sh`, `guard_settings_commit.sh`, `check_loop_bypass.sh`,
+`check_agent_depth.sh`, `block_tab_group_creation.sh`. Copy the shape of
+`test_block_email_send.sh` — payload on stdin, assert on the decision.
+
+Ad-hoc single-hook runs still work:
 
 ```bash
 # Simulate agent output
