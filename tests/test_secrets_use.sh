@@ -431,6 +431,76 @@ esac
 check_eq "outcome matches one of the two serial orderings" "$outcome" "serial"
 check_eq "no lock left behind" "$([[ -d "$CONF.lock" ]] && echo stale || echo clean)" "clean"
 
+echo "=== an unwritable conf dir is a permissions error, not a busy lock ==="
+# mkdir fails identically for contention and for an unwritable parent. Inferring
+# the difference from whether the lock dir exists is itself racy — the holder can
+# release in between — so the cause is tested directly. Without this the sandbox
+# case spins 10s and blames a nonexistent second writer.
+if [[ "$EUID" -eq 0 ]]; then
+    echo "  (skipped: root ignores the mode bits)"
+else
+    RO="$FIXTURE/ro"
+    mkdir -p "$RO" "$FIXTURE/robin"
+    printf 'ANTHROPIC_API_KEY = ANTHROPIC_API_KEY - alpha\n' > "$RO/conf"
+    # secrets-use learns the conf path from `dotfiles-secrets scope-conf-path`,
+    # so pointing it elsewhere needs its own shim — an inherited env var is
+    # overridden by the main shim's `env ...` line.
+    cat > "$FIXTURE/robin/dotfiles-secrets" <<EOF
+#!/usr/bin/env bash
+exec env DOTFILES_SECRETS_BACKEND=fixture \\
+         DOTFILES_SECRETS_FIXTURE_DIR="$FIXTURE" \\
+         DOTFILES_SECRETS_GLOBAL_CONF="$RO/conf" \\
+         "$REPO/custom_bins/dotfiles-secrets" "\$@"
+EOF
+    chmod +x "$FIXTURE/robin/dotfiles-secrets"
+    chmod a-w "$RO"
+    out=$(PATH="$FIXTURE/robin:$PATH" "$USE_BIN" ANTHROPIC_API_KEY --no-global 2>&1)
+    chmod u+w "$RO"
+    check "names the permissions problem" "$out" "not writable"
+    check_eq "does not blame a second writer" \
+        "$(printf '%s' "$out" | grep -c 'Another secrets-use')" "0"
+fi
+
+echo "=== a lock released mid-wait is acquired, not misreported ==="
+# HONEST SCOPE: smoke coverage. It confirms the ordinary contention path -- wait,
+# then proceed when the holder releases -- but it does NOT detect the
+# misclassification it was written for. Measured 0/8 against a copy with the old
+# post-failure `[[ -d "$CONF_LOCK" ]]` inference restored, because that window is
+# only microseconds wide: by the time the releaser runs, mkdir simply succeeds
+# and the diagnosis is never reached. The structural check below is the detector.
+printf 'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - alpha\n' > "$CONF"
+mkdir "$CONF.lock"
+( sleep 0.5; rmdir "$CONF.lock" ) &
+out=$(use ANTHROPIC_API_KEY --no-global 2>&1)
+wait
+check_eq "the mutation lands after the holder releases" "$(is_global ANTHROPIC_API_KEY)" "no"
+check_eq "no permissions error was reported" \
+    "$(printf '%s' "$out" | grep -c 'not writable')" "0"
+check_eq "no lock left behind" \
+    "$([[ -d "$CONF.lock" ]] && echo stale || echo clean)" "clean"
+
+echo "=== a non-directory at the lock path is not read as a permissions error ==="
+# The real regression test for the misclassification, with no race in it. The
+# old code inferred "unwritable parent" whenever mkdir failed and the lock path
+# was not a directory -- normally reachable only in the microseconds between a
+# failed mkdir and the holder's release, which is why forcing it via a release
+# race detects nothing (0/8). A REGULAR FILE at the lock path puts the process in
+# exactly that state deterministically: mkdir fails EEXIST, `-d` is false. The
+# old build dies at once blaming a writable directory; this one checks the cause
+# directly, finds it fine, and waits like any other contention.
+if command -v timeout >/dev/null 2>&1; then
+    printf 'ANTHROPIC_API_KEY = ANTHROPIC_API_KEY - alpha\n' > "$CONF"
+    rm -rf "$CONF.lock"
+    : > "$CONF.lock"          # a FILE, not a directory
+    out=$(timeout 2 "$USE_BIN" ANTHROPIC_API_KEY --no-global 2>&1); rc=$?
+    rm -f "$CONF.lock"        # never acquired, so no trap cleans it up
+    check_eq "does not blame the parent directory" \
+        "$(printf '%s' "$out" | grep -c 'not writable')" "0"
+    check_eq "treats it as contention and keeps waiting" "$rc" "124"
+else
+    echo "  (skipped: no timeout(1) — GNU coreutils, absent on stock macOS)"
+fi
+
 echo "=== the migration preserves an already-pinned account ==="
 printf 'ANTHROPIC_API_KEY = ANTHROPIC_API_KEY - alpha\n' > "$CONF"
 use ANTHROPIC_API_KEY --global-once >/dev/null
