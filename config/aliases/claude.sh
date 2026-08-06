@@ -47,7 +47,26 @@ claude() {
     local args=() task_name=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --)
+                # Everything after `--` is the caller's, not ours. Without this
+                # a seed prompt of exactly `-t` was parsed as OUR task flag; no
+                # value followed, the `shift 2` below failed without consuming
+                # anything, and the loop spun forever instead of launching.
+                args+=("$@")
+                break
+                ;;
             -t|--task)
+                # Refuse rather than continue with an empty task name. `yn` is
+                # `yolo -t`, i.e. `claude --dangerously-skip-permissions -t`, so
+                # a bare `yn` reaches here with no value — and carrying on would
+                # launch a skip-permissions session that the user never
+                # completed the command for. (Before this guard existed the same
+                # input hung instead: `shift 2` with one argument left shifts
+                # nothing and returns non-zero, spinning the loop forever.)
+                if [[ $# -lt 2 ]]; then
+                    echo "claude: $1 requires a task name" >&2
+                    return 2
+                fi
                 task_name="$2"
                 shift 2
                 ;;
@@ -93,6 +112,15 @@ claude() {
     local _first_positional="" _skip_next=false
     for _a in "${args[@]}"; do
         if [[ "$_skip_next" == true ]]; then _skip_next=false; continue; fi
+        # Everything after `--` is prompt text, never a subcommand name. Without
+        # this the scan skipped the terminator as just another dash-argument and
+        # then read the seed itself: a spawned session seeded with exactly
+        # "doctor" was classified as `claude doctor`, so --channels was dropped
+        # and the session came up unable to receive messages.
+        if [[ "$_a" == "--" ]]; then
+            _first_positional=""
+            break
+        fi
         case "$_a" in
             --model|--agent|--agents|--resume|-r|--permission-mode|--settings| \
             --system-prompt|--system-prompt-file|--append-system-prompt|--append-system-prompt-file| \
@@ -152,7 +180,26 @@ claude() {
             channels+=(plugin:imessage@claude-plugins-official)
         fi
         if [[ ${#channels[@]} -gt 0 ]]; then
-            args+=(--channels "${channels[@]}")
+            # Insert BEFORE a `--` terminator when the caller supplied one.
+            # Appending unconditionally put these flags AFTER `--`, where they
+            # stop being options and become prompt text — silently: the session
+            # came up with no channel and the extra words glued onto the prompt.
+            # claude-spawn passes `--` so that a dash-leading seed prompt cannot
+            # turn into a flag, and any other caller doing the same is entitled
+            # to the same handling.
+            local -a _pre _post
+            local _seen_term=false _a
+            for _a in "${args[@]}"; do
+                if [[ "$_seen_term" == false && "$_a" == "--" ]]; then
+                    _seen_term=true
+                fi
+                if [[ "$_seen_term" == true ]]; then
+                    _post+=("$_a")
+                else
+                    _pre+=("$_a")
+                fi
+            done
+            args=("${_pre[@]}" --channels "${channels[@]}" "${_post[@]}")
         fi
     fi
 

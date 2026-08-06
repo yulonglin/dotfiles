@@ -52,6 +52,7 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 | `jobs` | Submitting experiments/agent jobs with resource caps, queue status |
 | `server-storage-tiering` | Root disk near full on a server/cloud box with an attached volume |
 | `sweep-ai-safety` | Sweeping recent AI safety research from curated sources |
+| `spawn-session` (user-invoked only) | Starting a detached Claude session in another directory with a seed prompt, optionally reachable by Remote Control |
 
 ## Productivity / personal
 

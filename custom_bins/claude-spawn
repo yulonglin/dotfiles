@@ -1,0 +1,577 @@
+#!/usr/bin/env bash
+# claude-spawn — create a detached tmux session, cd into a directory, launch
+# Claude Code there, seed it with an initial prompt, and enable Remote Control.
+#
+# WHY A COMMAND STRING AND NOT `tmux send-keys`:
+#   Keys sent to a freshly created pane race the shell's startup — p10k and the
+#   zsh line editor can swallow or mangle them. Passing the command to
+#   new-session has no race at all.
+#
+# WHY `zsh -ic` AND NOT A BARE COMMAND:
+#   tmux runs a command string under a NON-interactive shell, which sources
+#   .zshenv only. The claude() wrapper (venv activation, git-root cd,
+#   CLAUDE_CODE_TASK_LIST_ID, channel auto-detect) is defined in config/aliases/
+#   claude.sh, sourced from .zshrc. Without -i you silently get the raw binary.
+#   Verified: `zsh -ic 'whence -w claude'` -> function; .zshenv defines nothing.
+#
+# WHY THE PROMPT TRAVELS AS AN ENV VAR:
+#   It sidesteps two levels of quoting (bash -> sh -> zsh). tmux `-e` sets it in
+#   the session environment, so it never lingers in shell history.
+#   Clearing it takes TWO steps, and only doing the obvious one is a trap:
+#     * `tmux set-environment -u` edits the SESSION environment, which affects
+#       only panes forked later — the running pane keeps its inherited copy
+#     * the pane therefore unsets its own copy, in the command string, before
+#       the agent starts; otherwise the seed stays in /proc/<pid>/environ for
+#       the life of the agent and every child inherits it
+#   It is NOT hidden, though, and the exposure is not brief. The seed is passed
+#   to the agent as a positional argument, so it sits in the LONG-LIVED Claude
+#   process's argv and is readable via `ps` or /proc/<pid>/cmdline by any local
+#   user for as long as that session runs — not merely while `tmux new-session`
+#   executes. Claude Code takes its prompt positionally, so this is inherent to
+#   seeding rather than something the transport choice can avoid.
+#   The audit log hashes the prompt; `ps` does not. Treat the seed as visible to
+#   every local user for the lifetime of the session, and never seed with a
+#   secret.
+#
+# SECURITY — read before widening any default:
+#   A spawned session outlives the session that created it, the human never
+#   watched it start, and with Remote Control it is drivable from off-machine.
+#   That combination, not skip-permissions on its own, is what makes this
+#   sharper than typing `claude` yourself. Hence the gates:
+#     * Remote Control is OPT-IN — a spawned session is local-only by default
+#     * recursion depth cap    — a spawned agent does not spawn again by
+#                                default. This is an inherited env var, so it
+#                                stops accidental fan-out, not a determined
+#                                agent that unsets or overrides it.
+#     * --yolo + --remote-control refused unless explicitly acknowledged
+#     * every spawn is appended to an audit log (the LOG stores only a hash;
+#       the seed still reaches the Claude transcript as the first user message,
+#       so this is not a claim that the prompt stays off disk)
+#     * auto-detected channels are suppressed for an unacknowledged --yolo,
+#       because a channel is off-machine reach just as Remote Control is
+#   Never pass untrusted text (file contents, web pages, issue bodies) as the
+#   seed prompt: a fresh agent has no conversation context to contradict an
+#   injected instruction, which makes it an easier mark than a warm session.
+
+set -euo pipefail
+
+PROG=${0##*/}
+AUDIT_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/claude-spawn/spawn.log"
+
+die() {
+  printf '%s: %s\n' "$PROG" "$1" >&2
+  exit "${2:-1}"
+}
+
+usage() {
+  cat <<'EOF'
+claude-spawn — spawn a tmux session running Claude Code with a seeded prompt.
+
+Usage:
+  claude-spawn [options] <prompt...>
+  claude-spawn [options] --prompt-file <path>
+  claude-spawn [options] -            # read the prompt from stdin
+
+Options:
+  -d, --dir <path>       Working directory for the agent (default: cwd)
+  -s, --session <name>   tmux session name (default: <dir>-MMDD-HHMM)
+  -w, --window <name>    tmux window name (default: session name)
+  -r, --remote-control   Enable Remote Control (OFF by default — a spawned
+                         session is local-only unless you ask for this)
+  -n, --rc-name <name>   Remote Control name; implies -r (default: session name)
+      --prompt-file <p>  Read the seed prompt from a file
+      --auto             Name the window with the tmux-resume opt-in prefix so
+                         a rate-limited session resumes itself unattended
+  -y, --yolo             Pass --dangerously-skip-permissions to the agent
+  -a, --attach           Attach (or switch-client) after creating the session
+      --allow-nested     Permit spawning from inside a spawned session
+      --allow-remote-yolo  Acknowledge --yolo together with Remote Control
+      --dry-run          Print what would run, change nothing
+      --print-tmux-command  Print only the tmux invocation, shell-quoted and
+                         directly eval-able. Implies --dry-run. Lets a test
+                         exercise what this script actually emits rather than a
+                         hand-transcribed copy of it
+  -h, --help             This text
+
+Exit codes:
+  0 ok   1 usage/runtime   3 session name already in use   4 refused by a gate
+EOF
+}
+
+# ---------------------------------------------------------------- arg parsing
+
+dir=""
+session=""
+window=""
+rc_name=""
+prompt=""
+prompt_file=""
+prompt_from_stdin=false
+have_prompt=false
+auto_resume=false
+yolo=false
+# Remote Control is opt-in: it widens a spawned session from local-tty-only to
+# account-reachable code execution, so it is never turned on by inference.
+remote_control=false
+attach=false
+allow_nested=false
+allow_remote_yolo=false
+dry_run=false
+print_tmux_command=false
+positional=()
+
+# A value-taking flag given as the last argument would otherwise leave the value
+# empty and then fail `shift 2`, which under `set -e` exits with no message at
+# all. Fail loudly instead: "claude-spawn --dir" should say what is wrong.
+need_val() {
+  [[ $# -ge 2 && -n "$2" ]] || die "option $1 needs a value"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -d|--dir)      need_val "$@"; dir="$2";        shift 2 ;;
+    -s|--session)  need_val "$@"; session="$2";    shift 2 ;;
+    -w|--window)   need_val "$@"; window="$2";     shift 2 ;;
+    -r|--remote-control) remote_control=true; shift ;;
+    -n|--rc-name)  need_val "$@"; rc_name="$2"; remote_control=true; shift 2 ;;
+    --prompt-file) need_val "$@"; prompt_file="$2"; shift 2 ;;
+    --auto)        auto_resume=true;    shift ;;
+    -y|--yolo)     yolo=true;           shift ;;
+    -a|--attach)   attach=true;         shift ;;
+    --allow-nested) allow_nested=true;  shift ;;
+    --allow-remote-yolo) allow_remote_yolo=true; shift ;;
+    --dry-run)     dry_run=true;        shift ;;
+    --print-tmux-command) print_tmux_command=true; dry_run=true; shift ;;
+    -h|--help)     usage; exit 0 ;;
+    -)             prompt_from_stdin=true; shift ;;
+    --)            shift; positional+=("$@"); break ;;
+    -*)            die "unknown option: $1" ;;
+    *)             positional+=("$1");   shift ;;
+  esac
+done
+
+# ------------------------------------------------------------------- prompt
+
+if [[ -n "$prompt_file" ]]; then
+  [[ -r "$prompt_file" ]] || die "prompt file not readable: $prompt_file"
+  prompt=$(<"$prompt_file")
+  have_prompt=true
+elif [[ "$prompt_from_stdin" == true ]]; then
+  prompt=$(cat)
+  have_prompt=true
+elif [[ ${#positional[@]} -gt 0 ]]; then
+  prompt="${positional[*]}"
+  have_prompt=true
+fi
+
+# An empty seed is legitimate (open an agent in a directory and type yourself),
+# but it must be asked for explicitly rather than arrived at by a dropped quote.
+if [[ "$have_prompt" == false ]]; then
+  usage >&2
+  die "no seed prompt given (pass one, or --prompt-file, or -)"
+fi
+
+# --------------------------------------------------------------------- gates
+
+# Gate 1 — recursion cap. The spawned session carries CLAUDE_SPAWN_DEPTH, so an
+# agent that was itself spawned cannot fan out another generation. This is the
+# cheapest and most effective limit on uncontrolled spread.
+depth="${CLAUDE_SPAWN_DEPTH:-0}"
+if [[ "$depth" -ge 1 && "$allow_nested" != true ]]; then
+  die "refusing to spawn from inside a spawned session (depth=$depth). Pass --allow-nested if you meant it." 4
+fi
+
+# Gate 2 — the genuinely dangerous shape is an unrestricted agent that is also
+# drivable from off-machine. Either alone is ordinary; together they need a
+# deliberate acknowledgement.
+if [[ "$yolo" == true && "$remote_control" == true && "$allow_remote_yolo" != true ]]; then
+  die "refusing --yolo together with --remote-control: that is an unrestricted agent drivable from off-machine. Drop one, or pass --allow-remote-yolo if you mean it." 4
+fi
+
+# That is the whole of the gating, on purpose. A spawned session is meant to be
+# the session you would have started by hand, so anything your configuration
+# grants a hand-started session — Remote Control at startup, an auto-enabled
+# Telegram or iMessage channel, auto-resume on a window-name prefix — it grants
+# this one too. Earlier versions tried to neutralise each of those routes and
+# the list only ever grew: every new way to reach a session was a silent hole
+# until someone reviewed for it, and suppressing them quietly countermanded
+# settings that were chosen deliberately. SKILL.md states the consequence
+# instead of the tool pretending to prevent it.
+
+# ----------------------------------------------------------------- directory
+
+dir="${dir:-$PWD}"
+[[ -d "$dir" ]] || die "not a directory: $dir"
+dir=$(cd "$dir" && pwd -P)
+
+# The pane starts in $dir, but the claude() wrapper we deliberately invoke via
+# `zsh -ic` cds to the git root first (config/aliases/claude.sh) so that
+# plansDirectory resolves. For a subdirectory of a repo that means the agent
+# does NOT begin where you pointed it — a task scoped to one package starts with
+# the whole repository in view. That is the wrapper's documented behaviour, not
+# a bug to fix here, but it is surprising enough to say out loud rather than let
+# someone infer scope from the -d they passed.
+#
+# effective_dir is INFORMATIONAL ONLY. tmux is still told `-c "$dir"` and the
+# pane really does start there; it is the wrapper that cds afterwards. Nothing
+# below should switch to effective_dir — doing so would move the pane and change
+# behaviour rather than describe it. It exists so the message and the dry-run
+# can tell the truth about where the agent ends up.
+effective_dir="$dir"
+if ! git_root=$(cd "$dir" && git rev-parse --show-toplevel 2>/dev/null); then
+  git_root=""
+fi
+if [[ -n "$git_root" && "$git_root" != "$dir" ]]; then
+  effective_dir="$git_root"
+  printf '%s: note: %s is inside a git repo; the agent will start at the repo root %s\n' \
+    "$PROG" "$dir" "$git_root" >&2
+fi
+
+# ------------------------------------------------------------------- naming
+
+sanitize() {
+  # tmux treats "." and ":" as target separators; keep names free of both.
+  printf '%s' "$1" | tr -c 'A-Za-z0-9_-' '-' | sed 's/-\{2,\}/-/g; s/^-//; s/-$//'
+}
+
+session_explicit=true
+if [[ -z "$session" ]]; then
+  session_explicit=false
+  session="$(sanitize "${dir##*/}")-$(date -u +%m%d-%H%M)"
+fi
+session=$(sanitize "$session")
+[[ -n "$session" ]] || die "session name is empty after sanitising"
+
+tmux_has() { tmux has-session -t "=$1" 2>/dev/null; }
+
+if tmux_has "$session"; then
+  if [[ "$session_explicit" == true ]]; then
+    die "tmux session already exists: $session (pick another with -s)" 3
+  fi
+  # A derived name collides only when spawning twice in the same minute.
+  base="$session"
+  session=""
+  for n in 2 3 4 5 6 7 8 9; do
+    if ! tmux_has "${base}-${n}"; then
+      session="${base}-${n}"
+      break
+    fi
+  done
+  [[ -n "$session" ]] || die "too many sessions named like $base" 3
+fi
+
+window="${window:-$session}"
+# Sanitised for the same reason as the session name, plus one more: an
+# option-shaped rc_name is how gate 2 was bypassed. sanitize() strips leading
+# dashes, so `-n --dangerously-skip-permissions` can no longer reach Claude as
+# a flag even if the `--remote-control=` spelling below were ever loosened.
+rc_name=$(sanitize "${rc_name:-$session}")
+[[ -n "$rc_name" ]] || die "remote control name is empty after sanitising"
+
+# Resolve the prefix at runtime rather than hard-coding "auto-": tmux-resume
+# treats an empty prefix as "sending disabled", and hard-coding would rename
+# windows to a prefix the gate rejects while reporting success.
+optin_prefix="$(tmux-resume --print-optin-prefix 2>/dev/null || true)"
+
+if [[ "$auto_resume" == true ]]; then
+  if [[ -z "$optin_prefix" ]]; then
+    printf '%s: warning: tmux-resume opt-in prefix is empty; auto-resume is disabled, window not renamed\n' "$PROG" >&2
+  elif [[ "$window" != "$optin_prefix"* ]]; then
+    window="${optin_prefix}${window}"
+  fi
+elif [[ -n "$optin_prefix" && "$window" == "$optin_prefix"* ]]; then
+  # The one deliberate exception to "behaves exactly like a hand-started
+  # session". tmux-resume gates purely on the window-name prefix and never sees
+  # our flags, so a name that merely happens to start with it — `-s auto-review`,
+  # or a directory called `auto-something`, which becomes the default name —
+  # would enrol the session in unattended rate-limit resumption nobody asked
+  # for. Unattended resumption is the one capability worth not acquiring by
+  # accident of naming, so the prefix is neutralised and the change reported.
+  window="not-${window}"
+  printf '%s: note: window name began with the auto-resume prefix %s but --auto was not passed; renamed to %s\n' \
+    "$PROG" "$optin_prefix" "$window" >&2
+fi
+
+# ----------------------------------------------------- build the inner command
+
+# Single quotes below are deliberate: $CLAUDE_SPAWN_PROMPT must survive bash and
+# sh unexpanded so that zsh expands it from the session environment.
+# Every conditional append below uses `if` rather than `[[ ]] && ...`. The `&&`
+# form is only safe while an unconditional statement follows it: move one to the
+# end of a block and `set -e` turns a false condition into a silent exit. For a
+# script whose failure mode is "launched an agent with the wrong flags", safe by
+# accident of ordering is not safe enough.
+# The seed is copied to a plain shell variable and the EXPORTED one is removed
+# before the agent starts. `tmux set-environment -u` after new-session does not
+# help here: it edits the tmux session environment, which only affects panes
+# forked later. This pane already has CLAUDE_SPAWN_PROMPT in its environment, so
+# without this the seed stays readable in /proc/<pid>/environ for the life of the
+# agent AND of the `exec zsh` that follows it, and every child process inherits
+# a copy. Unsetting inside the pane is the only thing that actually removes it.
+#
+# CLAUDE_SPAWN_DEPTH is deliberately NOT unset — the recursion gate depends on
+# the spawned agent inheriting it.
+# shellcheck disable=SC2016  # deferred expansion is the point
+inner='_seed="$CLAUDE_SPAWN_PROMPT"; unset CLAUDE_SPAWN_PROMPT'
+
+# CLAUDECODE marks "already inside Claude Code". Running claude-spawn from a
+# Claude session exports it, tmux hands it to the pane, and the child CLI then
+# treats itself as a nested invocation and refuses to start — leaving exactly
+# the advertised-session-that-is-only-a-shell this script now detects. The repo
+# already strips it for the same reason in custom_bins/usage-ping and
+# claude/hooks/watchdog.sh.
+inner+='; unset CLAUDECODE'
+
+# Load the TARGET directory's direnv environment. `new-session -c "$dir"` sets
+# the working directory and nothing else: the pane inherits the tmux server's
+# global environment, which was fixed whenever that server first started. So a
+# spawn into project B, from a server started under project A, ran with A's
+# API keys — this repo scopes secrets per project precisely so that cannot
+# happen, and inheriting them silently defeats it. direnv's own diff mechanism
+# unsets what the previous .envrc set as well as exporting the new one, which is
+# why this is `direnv export` rather than a hand-written scrub.
+#
+# Best-effort, deliberately. A hand-started session on a machine without direnv
+# still starts, so a missing or failing direnv must not block the spawn —
+# refusing would itself be a behaviour a normal session does not have. This
+# restores the environment tmux failed to refresh; it does not add guarantees.
+# shellcheck disable=SC2016  # runs in the pane, not here
+inner+='; if command -v direnv >/dev/null 2>&1; then eval "$(direnv export zsh 2>/dev/null)"; fi'
+
+inner+='; claude'
+if [[ "$yolo" == true ]]; then
+  inner+=' --dangerously-skip-permissions'
+fi
+# `--remote-control [name]` takes an OPTIONAL argument, which makes the obvious
+# spelling unsafe in two different ways.
+#
+# Passing it bare lets it swallow the following positional as the session name,
+# so the agent starts with no seed prompt and a session named after the task.
+#
+# Passing the name as a SEPARATE word is worse, and was a live gate bypass here.
+# An optional-argument option does not consume a dash-prefixed token, so
+# `--remote-control "$RC_NAME"` with a name of `--dangerously-skip-permissions`
+# reaches Claude as two options: Remote Control *and* skip-permissions. Gate 2
+# never fires, because from this script's point of view yolo is still false —
+# the exact combination it exists to refuse, assembled after the check.
+# Verified against the installed CLI: `claude --remote-control --bogus` reports
+# `unknown option '--bogus'`, i.e. the flag was parsed, not consumed as a name.
+#
+# `--remote-control=<name>` is a single token, so no value of the name can
+# become an option. rc_name is also sanitised at assignment; both, because
+# either alone would silently become load-bearing.
+if [[ "$remote_control" == true ]]; then
+  # shellcheck disable=SC2016
+  inner+=' --remote-control="$CLAUDE_SPAWN_RC_NAME"'
+fi
+# Positional, with no `--` terminator, because a hand-typed session has none.
+# The terminator used to be here to stop a dash-leading seed being read as an
+# option — but `claude "--foo"` behaves exactly that way when you type it, so
+# the terminator was making a spawned session behave DIFFERENTLY from a normal
+# one, which is the one thing this tool must not do. It also pushed the
+# wrapper's auto-detected --channels past the terminator and silently disabled
+# them. A seed matching a subcommand name (`doctor`) therefore runs that
+# subcommand, exactly as it would by hand; SKILL.md says so.
+# shellcheck disable=SC2016
+inner+=' "$_seed"'
+
+# Record the agent's exit status if it exits. `tmux new-session -d` only proves
+# a pane was created: the `;` chain runs `exec zsh` regardless, so an agent that
+# died on startup — a channel's state materialisation returning 1, a bad
+# settings file — left a perfectly healthy shell behind and this script happily
+# reported a spawned session. The caller could not tell an agent from a leftover
+# prompt. The pane now says so, and the launch path below waits briefly for it.
+#
+# The `-e` test is the disarm: the launcher creates this file empty before the
+# launch and deletes it once its startup window closes, so the pane can only
+# report during that window. Without it, an agent exited hours later — Ctrl-C —
+# recreated a status file nobody would ever clean up, and once the PID was
+# reused a later healthy spawn read that stale file and declared failure.
+# Existing-and-empty means armed; non-empty means the agent failed; absent means
+# nobody is listening any more.
+# shellcheck disable=SC2016
+inner+='; _rc=$?; if [[ $_rc -ne 0 && -e "$CLAUDE_SPAWN_STATUS_FILE" ]]; then printf %s "$_rc" >"$CLAUDE_SPAWN_STATUS_FILE" 2>/dev/null; fi'
+
+# Where the pane reports an agent that failed to start. Under the state dir
+# rather than a world-writable temp root, so another local user cannot plant a
+# status file and make a healthy spawn look broken.
+status_file="$(dirname "$AUDIT_LOG")/status.$$"
+
+# No `exec zsh` afterwards: the pane exits when the agent does, which ends the
+# session. A retained shell kept the session alive indefinitely and it went on
+# appearing as a running agent long after the agent had finished — the tmux
+# session outliving its reason to exist is worse than losing the scrollback,
+# because it is indistinguishable from work still in progress.
+cmd="zsh -ic '${inner}'"
+
+# Build the tmux invocation once, as an array. The launch below runs this same
+# array and --print-tmux-command prints it, so there is no second spelling to
+# keep in sync — which is what lets the argv-probe test eval the printed form
+# and have that mean something about what actually runs.
+tmux_args=(
+  new-session -d
+  -s "$session"
+  -n "$window"
+  -c "$dir"
+  -e "CLAUDE_SPAWN_PROMPT=$prompt"
+  -e "CLAUDE_SPAWN_RC_NAME=$rc_name"
+  -e "CLAUDE_SPAWN_DEPTH=$((depth + 1))"
+  # Blanked, not inherited. The claude() wrapper exports CLAUDE_CODE_TASK_LIST_ID
+  # after starting any session, so without this the detached agent would join the
+  # task list of whichever session spawned it and the two would read and mutate
+  # it concurrently. Empty makes the wrapper generate a fresh one.
+  -e "CLAUDE_CODE_TASK_LIST_ID="
+  -e "CLAUDE_SPAWN_STATUS_FILE=$status_file"
+  "$cmd"
+)
+
+# Re-quoted with %q so the output is directly eval-able.
+quoted_tmux_command() {
+  printf 'tmux'
+  printf ' %q' "${tmux_args[@]}"
+  printf '\n'
+}
+
+if [[ "$print_tmux_command" == true ]]; then
+  quoted_tmux_command
+  exit 0
+fi
+
+if [[ "$dry_run" == true ]]; then
+  printf 'dir:            %s\n' "$dir"
+  if [[ "$effective_dir" != "$dir" ]]; then
+    printf 'agent starts in: %s (git root)\n' "$effective_dir"
+  fi
+  printf 'tmux session:   %s\n' "$session"
+  printf 'tmux window:    %s\n' "$window"
+  printf 'remote control: %s\n' "$([[ "$remote_control" == true ]] && echo "$rc_name" || echo disabled)"
+  printf 'skip perms:     %s\n' "$yolo"
+  printf 'prompt bytes:   %s\n' "${#prompt}"
+  printf 'command:        %s\n' "$cmd"
+  printf 'tmux argv:      %s' "$(quoted_tmux_command)"
+  printf '\n'
+  exit 0
+fi
+
+# ------------------------------------------------------------------- audit log
+
+prompt_sha() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$1" | sha256sum | cut -c1-16
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$1" | shasum -a 256 | cut -c1-16
+  else
+    printf 'nohash'
+  fi
+}
+
+# This log holds only a hash of the prompt, never its text, so a surprise
+# session can be traced back to a known spawn without the log itself carrying
+# the contents. (The seed still reaches the Claude transcript by the ordinary
+# route — that is a separate exposure, documented in the header.)
+#
+# Created explicitly private rather than at the ambient umask. A common 002 or
+# 022 umask would otherwise leave a record of every directory, session name,
+# yolo and Remote Control flag readable by other local accounts — and under a
+# shared group with 002, editable by them, which is a poor property for the
+# thing whose job is to be the trustworthy account of what was spawned.
+audit_dir="$(dirname "$AUDIT_LOG")"
+mkdir -p "$audit_dir"
+chmod 700 "$audit_dir" 2>/dev/null || true
+if [[ ! -e "$AUDIT_LOG" ]]; then
+  : >"$AUDIT_LOG"
+fi
+chmod 600 "$AUDIT_LOG" 2>/dev/null || true
+
+# ---------------------------------------------------------------- launch
+
+# Arm the startup-status channel: empty means "listening". Created fresh, which
+# also clears any file a previous run with this PID left behind.
+rm -f "$status_file"
+: >"$status_file"
+chmod 600 "$status_file" 2>/dev/null || true
+# A failing tmux exits under `set -e` before the cleanup further down, which
+# would leave the armed file behind on every failed attempt. The trap covers
+# every exit path, and the explicit removals later are harmless repeats.
+trap 'rm -f "$status_file"' EXIT
+
+tmux "${tmux_args[@]}"
+
+# FIRST, before anything that can fail. Keeps these out of `show-environment`
+# and out of any pane forked into this session later. Neither cleans the pane
+# just created — that one unsets its own copies in the command string, which is
+# the half that actually matters.
+#
+#
+# Ordering is the point. With the audit append above this, a failed append — a
+# full or read-only state filesystem — exited under `set -e` with the session
+# alive and the seed still sitting in its environment for later panes to pick
+# up. The security-relevant cleanup must not be downstream of a fallible write.
+tmux set-environment -t "=$session" -u CLAUDE_SPAWN_PROMPT 2>/dev/null || true
+
+# Appended only now that tmux has actually created the session. Writing it
+# before the launch recorded sessions that never came into being — if tmux was
+# missing or its socket unreachable, the script exited nonzero having already
+# claimed the spawn, and nothing in the file distinguished that entry from a
+# real one. A log whose job is to be the trustworthy account of what was
+# spawned cannot carry silent false positives. `set -e` means a failed launch
+# never reaches this line.
+#
+# A failure to append is reported, not fatal: the session exists either way, and
+# exiting here would strand it with no message about where it went. An
+# unrecorded session the user was told about beats a silent one.
+if ! printf '%s\tsession=%s\tdir=%s\trc=%s\tyolo=%s\tdepth=%s\tprompt_sha=%s\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$session" "$dir" \
+  "$([[ "$remote_control" == true ]] && echo "$rc_name" || echo -)" \
+  "$yolo" "$depth" "$(prompt_sha "$prompt")" >>"$AUDIT_LOG" 2>/dev/null; then
+  printf '%s: warning: session %s started but could NOT be written to the audit log at %s\n' \
+    "$PROG" "$session" "$AUDIT_LOG" >&2
+fi
+
+# Give a failing agent a moment to say so. Bounded and short: an agent that
+# starts normally never writes this file, so the cost is a brief pause, while an
+# agent that dies on startup does it almost immediately. This cannot prove the
+# agent is healthy — only that it did not fail fast — and the message below says
+# no more than that.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if [[ -s "$status_file" ]]; then
+    break
+  fi
+  sleep 0.2
+done
+
+if [[ -s "$status_file" ]]; then
+  agent_rc=$(cat "$status_file" 2>/dev/null || echo "?")
+  rm -f "$status_file"
+  printf '%s: the agent exited immediately (status %s); the tmux session %s exists but is only a shell\n' \
+    "$PROG" "$agent_rc" "$session" >&2
+  printf '%s: attach to see why: tmux attach -t %s\n' "$PROG" "$session" >&2
+  exit 5
+fi
+rm -f "$status_file"
+
+# An empty status file is not proof of life. If the pane died before reaching
+# the in-pane handler at all — zsh missing, an interactive startup file exiting,
+# the window closing — nothing was ever written, and reporting success would
+# hand the user a session name they cannot attach to. Ask tmux instead of
+# inferring it from the absence of bad news.
+if ! tmux has-session -t "=$session" 2>/dev/null; then
+  printf '%s: the tmux session %s did not survive startup; nothing to attach to\n' \
+    "$PROG" "$session" >&2
+  exit 5
+fi
+
+printf '%s: session %s in %s\n' "$PROG" "$session" "$dir"
+if [[ "$remote_control" == true ]]; then
+  printf '%s: remote control as %s\n' "$PROG" "$rc_name"
+fi
+
+if [[ "$attach" == true ]]; then
+  if [[ -n "${TMUX:-}" ]]; then
+    tmux switch-client -t "=$session"
+  else
+    tmux attach-session -t "=$session"
+  fi
+else
+  printf '%s: attach with: tmux attach -t %s\n' "$PROG" "$session"
+fi

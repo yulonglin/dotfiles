@@ -20,8 +20,16 @@ import urllib.request
 
 RULES_PATH = os.path.join(os.path.dirname(__file__), "approval_classifier_rules.md")
 API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-5"
 MAX_TOKENS = 500
+# Sonnet 5 runs ADAPTIVE thinking when `thinking` is omitted; Sonnet 4.6 ran
+# thinking-off by omission. That difference is load-bearing here for two reasons:
+# `max_tokens` caps thinking + response text together, so an adaptive reply would
+# spend MAX_TOKENS reasoning and truncate before emitting the JSON verdict; and
+# thinking costs latency this hook does not have (see the budget below). Disabled
+# keeps the 4.6 behaviour exactly. Legal because no `effort` is set — it defaults
+# to `high`, and disabled thinking is rejected only at `xhigh`/`max`.
+THINKING = {"type": "disabled"}
 LOG_PATH = os.path.expanduser("~/.cache/claude/approval-classifier.log")
 
 # --- End-to-end time budget ---
@@ -90,11 +98,36 @@ def remaining_budget() -> float:
 # Verified 2026-08-03 — `claude -p --bare` returns "Not logged in".
 # Recursion is prevented by NESTED_ENV instead (checked at the top of main()),
 # which the child inherits through the environment.
-SUBSCRIPTION_MODEL = "haiku"
+SUBSCRIPTION_MODEL = "sonnet"
+# The CLI counterpart of the API path's `thinking: {"type": "disabled"}`. Sonnet 5
+# runs ADAPTIVE thinking when nothing says otherwise, and on this backend that is
+# a latency problem rather than a truncation one: there is no max_tokens here, so
+# the child simply thinks for as long as it likes while the hook's deadline runs
+# down. Claude Code 2.1.223 exposes no `--thinking` flag (checked `claude --help`);
+# `--effort` is the only lever, taking low|medium|high|xhigh|max.
+#
+# Measured 2026-08-06, 6 interleaved pairs, same flags as below, wall seconds:
+#   default    6.4  7.3 10.0  7.1 39.4 12.6   (max 39.4)
+#   --effort low  4.7  4.5  4.8  4.7  8.6  5.9   (max 8.6)
+# Faster in 6/6 pairs (exact Wilcoxon signed-rank p=0.031); the point of it is the
+# tail, not the median — the default arm's 39.4s draw would have blown the whole
+# budget. Verdicts stayed well-formed and agreed on the same decision. Caveat for
+# whoever revisits this: 0/6 over the ~18s production window has a Wilson upper
+# bound of 39%, so this shows the mechanism is real, NOT that the tail is gone.
+SUBSCRIPTION_EFFORT = "low"
 # Ceiling only. The value actually passed is min(this, remaining_budget()), and
 # the attempt is skipped entirely below SUBSCRIPTION_MIN_SECONDS — starting a
 # ~9s call with 2s left just guarantees a kill mid-flight.
 SUBSCRIPTION_TIMEOUT_SECONDS = 60
+# Re-examined when SUBSCRIPTION_EFFORT landed, and deliberately left at 6. The
+# "~9s call" above predates effort-low and reads like an argument for raising
+# this to ~9 to cover the measured 8.6s tail; it is not. A timed-out call and a
+# skipped one end in exactly the same manual prompt (see the TimeoutExpired
+# handler in classify_via_subscription), and the 4s epilogue reserve means even
+# a kill still has time to write health. So the gate is only avoiding *wasted*
+# budget, never a worse outcome — and at effort-low's spread (5 of 6 samples
+# under 6s) admitting at 6 buys a verdict most of the time for a bounded cost.
+# Raising it to 9 would forfeit those to save ~6s in the tail case.
 SUBSCRIPTION_MIN_SECONDS = 6
 NESTED_ENV = "APPROVAL_CLASSIFIER_NESTED"
 
@@ -950,9 +983,18 @@ def classify_via_subscription(
 ) -> dict:
     """Second backend: classify through the Claude CLI's OAuth subscription.
 
-    Used only after the API-key path has already failed. Slower than the API
-    (measured ~9s vs well under 1s on 2026-08-03), so it is a fallback, never
-    the default.
+    Used only after the API-key path has already failed. Substantially slower
+    than the API (which answers in ~2.5s), so it is a fallback, never the
+    default. Re-measured 2026-08-06 against Sonnet at SUBSCRIPTION_EFFORT: six
+    interleaved samples spanned 4.5-8.6s wall, versus 4.5-39.4s with effort left
+    at its default — see the constant for the paired comparison. Plan around the
+    upper end, not the median; six samples cannot bound a tail.
+
+    The attempt is budget-gated regardless (see remaining_budget and
+    SUBSCRIPTION_MIN_SECONDS), so an underestimate costs a skipped fallback and a
+    manual prompt, never a mid-flight kill. Note the gate compares against the
+    budget, not against this range — if the observed spread ever creeps above
+    SUBSCRIPTION_MIN_SECONDS' assumptions, raise the floor rather than hoping.
 
     Three deliberate choices here:
       * ANTHROPIC_API_KEY is stripped from the child's environment. Without
@@ -1025,6 +1067,12 @@ def classify_via_subscription(
             [
                 "claude", "-p",
                 "--model", SUBSCRIPTION_MODEL,
+                # Best-effort latency reduction, NOT the API path's
+                # thinking:disabled -- effort is a behavioural signal rather
+                # than a token budget, so a hard enough prompt can still think.
+                # The CLI cannot express thinking-disabled at all; the timeout
+                # clamp is what actually bounds this path.
+                "--effort", SUBSCRIPTION_EFFORT,
                 "--output-format", "json",
                 "--tools", "",              # no tools: the child only emits JSON
                 "--safe-mode",              # no CLAUDE.md, skills, plugins, hooks, MCP, agents
@@ -1109,6 +1157,7 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, trust_secti
     body = json.dumps({
         "model": MODEL,
         "max_tokens": MAX_TOKENS,
+        "thinking": THINKING,
         "system": system_blocks,
         "messages": [{"role": "user", "content": user_msg}],
     }).encode()
