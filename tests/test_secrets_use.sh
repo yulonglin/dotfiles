@@ -362,12 +362,14 @@ echo "=== concurrent writers serialise on the conf lock ==="
 # rewrite_env_lines replaces the file via mv, so an unserialised second writer
 # could rename a pre-sentinel snapshot back over the record.
 #
-# This one is a real regression test, not a hopeful one: run against a copy of
-# secrets-use whose lock is neutered (each process given its own lock path), the
-# three checks below fail on 60 of 60 trials. Against the real binary, 0 of 60.
-# The window is not narrow — both writers start together and read the same
-# snapshot — so a single trial detects a missing lock. If you change the locking,
-# re-measure rather than trusting that this still passes.
+# HONEST SCOPE: this is smoke coverage, not a regression test. It asserts the
+# concurrent path completes, preserves the sentinel and marker, and leaves no
+# stale lock — but it does NOT reliably detect a missing lock. Measured against
+# a copy whose lock is neutered: 0 detections in 40 trials, because the two
+# forked writers desynchronise on process startup and never overlap. An earlier
+# comment here claimed 60/60; that measurement was an artifact of a neutering
+# that made every invocation die on the lock timeout rather than race.
+# The real detector is the forced-interleaving test further down (8/8).
 printf '# fresh machine\nANTHROPIC_API_KEY = ANTHROPIC_API_KEY - alpha\nANTHROPIC_API_KEY = ANTHROPIC_API_KEY - beta\n' > "$CONF"
 migrate >/dev/null 2>&1 &
 use ANTHROPIC_API_KEY beta >/dev/null 2>&1 &
@@ -375,6 +377,58 @@ wait
 check "sentinel survived the race" "$(cat "$CONF")" \
     "# global-scope-decided: ANTHROPIC_API_KEY"
 check_eq "marker survived the race" "$(is_global ANTHROPIC_API_KEY)" "yes"
+check_eq "no lock left behind" "$([[ -d "$CONF.lock" ]] && echo stale || echo clean)" "clean"
+
+echo "=== a conf with no final newline still records the revocation ==="
+# The sentinel is only findable as a whole line, so it has to start one. A
+# hand-edited conf whose last line is unterminated would otherwise swallow it
+# and the next deploy would re-mark a name the user had explicitly closed —
+# the third variant of that same hole found in review.
+printf '# hand-edited, no trailing newline' > "$CONF"
+use ANTHROPIC_API_KEY --no-global >/dev/null
+check_eq "sentinel is its own line" \
+    "$(grep -cxF '# global-scope-decided: ANTHROPIC_API_KEY' "$CONF")" "1"
+check_eq "the unterminated line is left intact" \
+    "$(grep -cxF '# hand-edited, no trailing newline' "$CONF")" "1"
+check "deploy stands down afterwards" "$(migrate)" "already decided"
+check_eq "and the name stays revoked" "$(is_global ANTHROPIC_API_KEY)" "no"
+
+echo "=== concurrent account writers produce a valid serial outcome ==="
+# Every mutation is read-decide-rewrite. Locking only the write lets two
+# processes snapshot the same order and land a result equal to neither serial
+# ordering — silently discarding an account choice, which is a billing change.
+#
+# Forking two writers and hoping they collide is NOT a regression test: measured
+# against a copy of secrets-use with the lock neutered, that catches the bug 1
+# time in 40. So the interleaving is forced instead, via the test-only
+# SECRETS_USE_TEST_PRE_MV_DELAY seam — --next takes its snapshot, stalls before
+# the rename, and `set gamma` runs inside that window.
+#
+# Starting from alpha active, the two serial orderings are:
+#   set-then-next: gamma promoted, then blocked  -> alpha active
+#   next-then-set: alpha blocked, gamma promoted -> gamma active
+# beta is reachable ONLY by --next writing a snapshot taken before `set` ran.
+# It is the corruption signature, not a valid result.
+active_key() { awk -F' = ' '!/^#/ && NF>1 {v=$2; if (substr(v,1,1)!="!") {print v; exit}}' "$CONF"; }
+printf 'ANTHROPIC_API_KEY = ANTHROPIC_API_KEY - alpha\nANTHROPIC_API_KEY = ANTHROPIC_API_KEY - beta\nANTHROPIC_API_KEY = ANTHROPIC_API_KEY - gamma\n' > "$CONF"
+SECRETS_USE_TEST_PRE_MV_DELAY=3 use ANTHROPIC_API_KEY --next >/dev/null 2>&1 &
+# Barrier, not a guessed sleep: rewrite_env_lines stages "$CONF.tmp.<pid>"
+# BEFORE the stall, so the file appearing proves --next has already taken its
+# snapshot. A fixed sleep raced the fixture backend's startup and let `set` win
+# the read — measured 0/8 detection that way, so this matters.
+staged=no
+for _ in $(seq 1 200); do
+    if compgen -G "$CONF.tmp.*" >/dev/null; then staged=yes; break; fi
+    sleep 0.05
+done
+check_eq "--next reached its stall (test barrier held)" "$staged" "yes"
+use ANTHROPIC_API_KEY gamma >/dev/null 2>&1 &
+wait
+case "$(active_key)" in
+    "ANTHROPIC_API_KEY - alpha"|"ANTHROPIC_API_KEY - gamma") outcome=serial ;;
+    *) outcome="$(active_key)" ;;
+esac
+check_eq "outcome matches one of the two serial orderings" "$outcome" "serial"
 check_eq "no lock left behind" "$([[ -d "$CONF.lock" ]] && echo stale || echo clean)" "clean"
 
 echo "=== the migration preserves an already-pinned account ==="
