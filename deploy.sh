@@ -352,7 +352,11 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
     # The approval classifier (claude/hooks/with-anthropic-key.sh) and the
     # SessionStart health probe (claude/hooks/pre_session_start.sh) both resolve
     # ANTHROPIC_API_KEY by bare name from a hook, where there is no TTY — the one
-    # access class the "[global]" name marker authorizes. Marking it is
+    # access class the "[global]" name marker declares. The marker is not yet
+    # enforced — nothing gates bare-name resolution today — so this migration
+    # changes no behavior. It exists so the declaration is already correct on
+    # every machine when the gate does land, instead of hooks breaking that day.
+    # Marking is
     # inventory-independent (it writes the conf line without consulting BWS), so
     # this completes on a fresh machine before bws is installed, and it is
     # idempotent: an already-marked name is left byte-identical.
@@ -363,10 +367,11 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
     # the conf carries a "# global-scope-decided:" line, so revocation sticks.
     if PATH="$DOT_DIR/custom_bins:$PATH" \
         "$DOT_DIR/custom_bins/secrets-use" ANTHROPIC_API_KEY --global-once >/dev/null 2>&1; then
-        log_success "ANTHROPIC_API_KEY global-scope migration applied (hooks have no TTY)"
+        log_success "ANTHROPIC_API_KEY [global] declaration recorded (not yet enforced)"
     else
         log_warning "Could not mark ANTHROPIC_API_KEY as [global]"
-        log_warning "  Hooks may lose their key — fix by hand: secrets-use ANTHROPIC_API_KEY --global-once"
+        log_warning "  Harmless today — the marker is inert until the scoping gate lands."
+        log_warning "  Record it by hand: secrets-use ANTHROPIC_API_KEY --global-once"
     fi
 
     if [[ -e "$DOT_DIR/.secrets" ]]; then

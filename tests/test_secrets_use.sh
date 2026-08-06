@@ -223,7 +223,7 @@ check_eq "mode 600" "$mode" "600"
 echo "=== --global marks every line of the name ==="
 seed_conf
 out=$(use ANTHROPIC_API_KEY --global)
-check "reports the change" "$out" "now [global]"
+check "reports the change" "$out" "marked [global]"
 check "alpha line marked" "$(cat "$CONF")" "ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - alpha"
 check "beta line marked"  "$(cat "$CONF")" "ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - beta"
 check "unrelated name untouched" "$(cat "$CONF")" $'\nHF_TOKEN = HF_TOKEN'
@@ -256,10 +256,39 @@ check_eq "name still global" "$(is_global ANTHROPIC_API_KEY)" "yes"
 
 echo "=== --no-global strips it from every line, blocked ones included ==="
 out=$(use ANTHROPIC_API_KEY --no-global)
-check "reports the change" "$out" "no longer [global]"
+check "reports the change" "$out" "unmarked [global]"
 check_eq "name no longer global" "$(is_global ANTHROPIC_API_KEY)" "no"
 check_not_contains "no marker anywhere" "$(cat "$CONF")" "[global]"
 check "blocked state survives" "$(cat "$CONF")" "ANTHROPIC_API_KEY = !ANTHROPIC_API_KEY - beta"
+
+echo "=== the toggle never claims to grant or revoke access while inert ==="
+# The marker is a declaration; the gate that enforces it does not exist yet. The
+# dangerous failure is a confident success message: revoke a name, believe it is
+# closed to non-interactive callers, then run an untrusted hook that still reads
+# it by bare name. So every path must disclaim, and none may promise enforcement.
+# Guard the promise words too -- rewording the note is fine, reinstating the
+# claim is not. Drop these checks only in the commit that lands the gate.
+seed_conf
+for flag in --global --no-global; do
+    out=$(use ANTHROPIC_API_KEY "$flag")
+    check "$flag discloses that it is inert" "$out" "does NOT grant or revoke access"
+    check_not_contains "$flag does not promise a TTY requirement" "$out" "needs a TTY"
+    check_not_contains "$flag does not promise it takes effect" "$out" "Takes effect"
+done
+# The no-op paths return early and must disclaim too -- that is where a user who
+# already revoked a name goes back to confirm it is closed.
+out=$(use ANTHROPIC_API_KEY --no-global)
+check "the already-in-that-state path discloses it too" "$out" "does NOT grant or revoke access"
+# And the disclaimer must be TRUE, not merely printed. `shell` is the surface an
+# untrusted non-interactive hook would use, and it still hands over the value for
+# a name just revoked. If this ever fails, the gate has landed -- delete this
+# whole group and assert the refusal instead.
+# HF_TOKEN, not ANTHROPIC_API_KEY: the seeded conf pins the bws key
+# "ANTHROPIC_API_KEY - alpha", which the fixture store has no value for, so that
+# name fails to resolve for a reason that has nothing to do with scoping. Using
+# it here would have produced a green test asserting the wrong thing.
+check "an unmarked name still yields its value to a bare-name caller" \
+    "$(dotfiles-secrets shell HF_TOKEN 2>/dev/null)" "fake-hf"
 
 echo "=== a hand-edited, partially-tagged name normalises on the next write ==="
 cat > "$CONF" <<'EOF'
@@ -279,7 +308,7 @@ echo "=== --global works with NO BWS inventory and writes a value-less line ==="
 # does reach for it fails — which is the control assertion below.
 printf '# nothing declared\n' > "$CONF"
 out=$(PATH="$FIXTURE/nometa:$FIXTURE/bin:$PATH" "$USE_BIN" HF_TOKEN --global 2>&1)
-check "reports the change" "$out" "now [global]"
+check "reports the change" "$out" "marked [global]"
 check_eq "value-less marker line written" "$(grep HF_TOKEN "$CONF")" "HF_TOKEN [global] ="
 check_eq "name is global"  "$(is_global HF_TOKEN)" "yes"
 check_eq "but declares no key" "$(dotfiles-secrets scope-entries HF_TOKEN)" ""
@@ -312,7 +341,7 @@ check "deploy.sh still performs the migration" "$(cat "$DEPLOY_SH")" \
 migrate() { PATH="$FIXTURE/nometa:$FIXTURE/bin:$PATH" "$USE_BIN" ANTHROPIC_API_KEY --global-once; }
 printf '# fresh machine\n' > "$CONF"
 out=$(migrate 2>&1)
-check "marks it without BWS" "$out" "now [global]"
+check "marks it without BWS" "$out" "marked [global]"
 check_eq "hook name is global" "$(is_global ANTHROPIC_API_KEY)" "yes"
 before=$(cat "$CONF")
 migrate >/dev/null 2>&1
