@@ -506,6 +506,17 @@
         ]
       },
       {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/block_vault_structure.sh",
+            "timeout": 5,
+            "statusMessage": "Checking vault structure"
+          }
+        ]
+      },
+      {
         "matcher": "Skill",
         "hooks": [
           {
@@ -726,6 +737,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/context_auto_apply.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/inject_vault_layout.sh",
+            "timeout": 3
           }
         ]
       },
@@ -767,6 +783,11 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/nudge_bg_prose_question.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/nudge_vault_lint.sh",
+            "timeout": 3
           }
         ]
       }
@@ -936,7 +957,8 @@
         "hub.docker.com",
         "api.zotero.org",
         "osv.dev",
-        "api.osv.dev"
+        "api.osv.dev",
+        "openreview.net"
       ],
       "allowLocalBinding": true
     },

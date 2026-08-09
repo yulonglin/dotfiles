@@ -144,12 +144,19 @@ remote.
 │                  # tagged by author, newest last, one entry per significant state change
 ├── RESEARCH_LOG.md # Yulong's own manual narrative log — diagrams, meeting notes,
 │                  # loosely prepend-style; not machine-written
+├── CLAUDE.md      # optional per-topic session instructions (auto-loaded by Claude Code)
 ├── specs/         # requirement specs
 ├── plans/         # implementation plans
 ├── runs/          # experiment outputs — one dir per run, see Run Report Standard below
+├── docs/          # durable reference material that isn't a spec, plan, or run output —
+│                  # runbooks, comms, proposals, program materials
 ├── archive/       # non-destructively moved-aside content; each batch has REASON.txt
 └── assets/        # loose files (e.g. screenshots) with no other clear home
 ```
+
+**This layout is enforced at write time**: `claude/hooks/block_vault_structure.sh` (PreToolUse) denies writes that would create a `research/<topic>/` top-level entry outside this set, `nudge_vault_lint.sh` (Stop) nudges on drift and bloat, and `inject_vault_layout.sh` (SessionStart) injects the layout for sessions inside the vault. The machine-readable allowlists are `claude/hooks/conf/vault-topic-allowlist.conf` and `vault-root-allowlist.conf` — this listing and those files must stay in sync; change both together.
+
+**Repo-linked artifacts — `~/vault/tooling/<repo>/`**: non-code artifacts that belong to a code repo (its specs and plans) live at `~/vault/tooling/<repo>/{specs,plans,...}` — the vault copy is canonical — and the repo's own `specs/`/`plans/` directories are symlinks into that vault home (e.g. `~/code/dotfiles/specs → ~/vault/tooling/dotfiles/specs`). `claude/hooks/conf/vault-symlink-repos.conf` lists the guarded repos; the blocker denies writes under a listed dir whenever the symlink has been lost and it is a real directory again.
 
 **Why three top-level files, not four+**: `README.md`/`LOG.md`/`RESEARCH_LOG.md` are
 categorically different and stay separate; a machine-written terse audit trail and a
