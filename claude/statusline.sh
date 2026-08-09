@@ -102,13 +102,16 @@ fi
 # MODEL NAME (+ reasoning effort, when the model reports one): "[Opus 5 (high)]"
 # Effort has no segment of its own, so a payload with an effort but no display
 # name renders neither — which Claude Code never sends.
+# The bracket colour is re-opened as 22;34, not a bare 34: SGR 34 sets the
+# foreground but leaves the faint attribute set, so after a dim effort suffix a
+# bare 34 renders the closing bracket dim blue. SGR 22 clears the dim.
 # Parity: tools/claude-tools/src/statusline.rs::format_model_str
 # ============================================================================
 model_info=""
 model_name=$(echo "$input" | jq -r '.model.display_name // empty')
 if [ -n "$model_name" ]; then
   if [ -n "$effort_suffix" ]; then
-    model_info="$(printf '\033[34m')[${model_name} ${effort_suffix}$(printf '\033[34m')]$(printf '\033[0m')"
+    model_info="$(printf '\033[34m')[${model_name} ${effort_suffix}$(printf '\033[22;34m')]$(printf '\033[0m')"
   else
     model_info="$(printf '\033[34m')[${model_name}]$(printf '\033[0m')"
   fi
