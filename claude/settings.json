@@ -502,6 +502,12 @@
             "command": "node \"$HOME/.claude/hooks/codex_plan_write_reminder.mjs\"",
             "if": "Write(*/plans/*.md)",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/warn_spec_outside_vault.sh",
+            "timeout": 5,
+            "statusMessage": "Checking spec location"
           }
         ]
       },
