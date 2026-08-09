@@ -30,6 +30,9 @@ marketplaces:
   codex-plugin-cc:
     github: crazytieguy/codex-plugin-cc
     autoUpdate: true
+  precis:
+    github: Crazytieguy/precis
+    autoUpdate: true
   ui-ux-pro-max-skill:
     github: nextlevelbuilder/ui-ux-pro-max-skill
     autoUpdate: true
@@ -62,6 +65,8 @@ profiles:
     enable:
       - code
       - code-simplifier
+      - model-router
+      - precis
       - security-guidance
 
   design:
@@ -81,9 +86,7 @@ profiles:
       - research
       - viz
       - writing
-      # optional: remote-kernels (cloud GPU via RunPod, from alignment-hive)
-      # install: claude plugin install remote-kernels@alignment-hive
-      # https://github.com/Crazytieguy/alignment-hive
+      - remote-kernels
 
   writing:
     comment: "Papers, blog posts, documentation"
