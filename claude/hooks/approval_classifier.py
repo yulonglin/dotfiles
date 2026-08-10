@@ -920,9 +920,13 @@ _GIT_PUSH_RE = _git_unsafe(r"push\b")
 # Options that consume the following token, so the argument parser doesn't
 # mistake their value for the remote or a refspec (`git push -o ci.skip origin main`).
 _GIT_GLOBAL_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
-_PUSH_VALUE_OPTS = {"-o", "--push-option", "--receive-pack", "--exec", "--repo"}
+_PUSH_VALUE_OPTS = {"-o", "--push-option", "--receive-pack", "--exec"}
 _PUSH_FORCE_OPTS = {"-f", "--force", "--force-with-lease", "--force-if-includes"}
 _PUSH_DELETE_OPTS = {"-d", "--delete"}
+# Modes that update refs beyond any single destination the parser could name.
+_PUSH_MULTI_FLAGS = {"--all", "--branches", "--mirror", "--tags", "--prune"}
+# Repository redirection the git probes below won't follow — fail closed.
+_REPO_REDIRECT_OPTS = {"--git-dir", "--work-tree"}
 
 
 def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str] | None:
@@ -935,6 +939,11 @@ def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str]
     map an absent block to `unsure` for pushes: parse failure degrades to the
     manual prompt, never to a guessed destination.
     """
+    # A `cd`/`pushd` anywhere in the command means the push may run in a
+    # directory the probes below won't see — no block, which the rules map
+    # to `unsure` for pushes.
+    if re.search(r"\b(cd|pushd)\b", command):
+        return None
     for stmt in re.split(r"[;&|\n]", command):
         try:
             tokens = shlex.split(stmt)
@@ -942,9 +951,15 @@ def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str]
             continue  # unbalanced quotes in this statement — don't guess
         if "git" not in tokens:
             continue
-        i = tokens.index("git") + 1
+        git_idx = tokens.index("git")
+        # GIT_DIR=x git push redirects the repo just like --git-dir
+        if any(t.partition("=")[0] in ("GIT_DIR", "GIT_WORK_TREE") for t in tokens[:git_idx]):
+            return None
+        i = git_idx + 1
         chdir = ""
         while i < len(tokens) and tokens[i].startswith("-"):
+            if tokens[i].partition("=")[0] in _REPO_REDIRECT_OPTS:
+                return None
             if tokens[i] in _GIT_GLOBAL_VALUE_OPTS:
                 if tokens[i] == "-C" and i + 1 < len(tokens):
                     chdir = os.path.join(chdir, tokens[i + 1]) if chdir else tokens[i + 1]
@@ -956,18 +971,27 @@ def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str]
         i += 1
         positionals: list[str] = []
         flags: list[str] = []
+        repo_opt = ""  # --repo <remote>: the remote when no positional names one
         while i < len(tokens):
             t = tokens[i]
             if t == "--":
                 positionals.extend(tokens[i + 1:])
                 break
+            if t.startswith("--repo="):
+                repo_opt = t.partition("=")[2]
+                i += 1
+                continue
+            if t == "--repo":
+                repo_opt = tokens[i + 1] if i + 1 < len(tokens) else ""
+                i += 2
+                continue
             if t.startswith("-"):
                 flags.append(t)
                 i += 2 if t in _PUSH_VALUE_OPTS else 1
                 continue
             positionals.append(t)
             i += 1
-        remote = positionals[0] if positionals else ""
+        remote = positionals[0] if positionals else repo_opt
         return remote, positionals[1:], flags, chdir
     return None
 
@@ -995,10 +1019,10 @@ def _git_push_context(command: str, cwd: str) -> str:
     # or the block would confidently report the wrong repository.
     git_dir = os.path.join(cwd, chdir) if chdir else cwd
 
-    def run(*args: str) -> str:
+    def run(*args: str, in_dir: str = git_dir) -> str:
         try:
             proc = subprocess.run(
-                ["git", "-C", git_dir, *args],
+                ["git", "-C", in_dir, *args],
                 capture_output=True, text=True, timeout=2,
             )
             return proc.stdout.strip() if proc.returncode == 0 else ""
@@ -1013,10 +1037,18 @@ def _git_push_context(command: str, cwd: str) -> str:
     # Resolve where the push lands and which ref supplies the commits.
     src = "HEAD"
     dest = ""
+    unknown_reason = "could not determine the target branch"
     deleting = any(f in _PUSH_DELETE_OPTS for f in flags)
     forcing = [f for f in flags if f.partition("=")[0] in _PUSH_FORCE_OPTS]
-    if refspecs:
-        spec = refspecs[0].lstrip("+")
+    multi = [f for f in flags if f.partition("=")[0] in _PUSH_MULTI_FLAGS]
+    if multi:
+        src = ""  # no single source ref — the commits section would mislead
+        unknown_reason = f"{' '.join(multi)} updates multiple refs, not one branch"
+    elif refspecs:
+        spec = refspecs[0]
+        if spec.startswith("+"):
+            forcing.append(spec)  # + is git's force-update marker on a refspec
+            spec = spec.lstrip("+")
         if deleting:
             src, dest = "", spec
         elif ":" in spec:
@@ -1030,6 +1062,10 @@ def _git_push_context(command: str, cwd: str) -> str:
             dest = branch if branch != "(unknown or detached)" else ""
         if len(refspecs) > 1:
             dest = ""  # several targets — don't pretend to know the one that matters
+            unknown_reason = "multiple refspecs given"
+    elif run("config", "--get-all", f"remote.{remote or 'origin'}.push"):
+        src = ""
+        unknown_reason = "the remote has configured push refspecs (remote.<name>.push)"
     elif upstream:
         remote = remote or upstream.partition("/")[0]
         dest = upstream.partition("/")[2]
@@ -1048,9 +1084,23 @@ def _git_push_context(command: str, cwd: str) -> str:
             + (" (ref DELETION)" if deleting else "")
         )
     else:
-        lines.append("- push destination: unknown (could not determine the target branch)")
+        lines.append(f"- push destination: unknown ({unknown_reason})")
+    remote_url = run("remote", "get-url", remote)
+    lines.append(f"- remote URL ({remote}): {remote_url or 'unknown'}")
     if forcing:
         lines.append(f"- force flags present: {' '.join(forcing)}")
+    if chdir:
+        # Repo trust elsewhere in this prompt is assessed from the session
+        # cwd; a -C push may target a different repository entirely.
+        session_top = run("rev-parse", "--show-toplevel", in_dir=cwd)
+        target_top = run("rev-parse", "--show-toplevel")
+        if not session_top or session_top != target_top:
+            lines.append(
+                "- note: this push targets a DIFFERENT repository than the session "
+                "working directory — judge repo ownership from the remote URL line "
+                "above, not from any trust assessment of the working directory; "
+                "if ownership is unclear, classify `unsure`"
+            )
 
     if not deleting and src:
         if src != "HEAD" and not run("rev-parse", "--verify", "--quiet", src):

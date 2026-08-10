@@ -168,6 +168,65 @@ def test_unresolvable_forms_degrade_not_guess(ac, repo):
     assert "push destination: unknown" in ctx
 
 
+def test_multi_ref_modes_report_unknown_destination(ac, repo):
+    """`git push --all origin` updates every branch, including main from a
+    feature branch — a single destination line would be a lie (Codex P1 r6)."""
+    for form in ("git push --all origin", "git push --mirror origin",
+                 "git push origin --tags", "git push --prune origin"):
+        ctx = ac._git_push_context(form, str(repo))
+        assert "push destination: unknown" in ctx, form
+        assert "commits being pushed" not in ctx, form
+
+
+def test_configured_push_refspecs_report_unknown_destination(ac, repo):
+    _git(repo, "config", "remote.origin.push", "refs/heads/*:refs/heads/*")
+    ctx = ac._git_push_context("git push", str(repo))
+    assert "push destination: unknown" in ctx
+    assert "configured push refspecs" in ctx
+
+
+def test_plus_refspec_marker_counts_as_force(ac, repo):
+    """`+refspec` is git's force-update marker (Codex P1 r6)."""
+    ctx = ac._git_push_context("git push origin +main:main", str(repo))
+    assert "force flags present: +main:main" in ctx
+
+
+def test_directory_and_repo_redirection_yield_no_block(ac, repo):
+    """`cd x && git push`, `--git-dir`, and `GIT_DIR=` run the push against a
+    repo the probes can't see — no block, which the rules map to `unsure`."""
+    assert ac._git_push_context("cd ../elsewhere && git push", str(repo)) == ""
+    assert ac._git_push_context("git --git-dir=../x/.git push", str(repo)) == ""
+    assert ac._git_push_context("git --git-dir ../x/.git push", str(repo)) == ""
+    assert ac._git_push_context("GIT_DIR=../x/.git git push", str(repo)) == ""
+
+
+def test_repo_option_selects_the_remote(ac, repo):
+    """`--repo upstream` is a remote selector (used when no positional names
+    the repository); defaulting to origin would advertise a push to a shared
+    remote as origin/<branch> (Codex P1 r6)."""
+    for form in ("git push --repo upstream", "git push --repo=upstream"):
+        ctx = ac._git_push_context(form, str(repo))
+        assert "push destination: upstream/main" in ctx, form
+        # `upstream` isn't configured in this repo — the URL must say so
+        assert "remote URL (upstream): unknown" in ctx, form
+
+
+def test_remote_url_reported_for_trust_judgement(ac, repo, tmp_path):
+    """The personal-repo rule judges ownership from the remote URL; the block
+    reports the URL of the repo the push actually targets, and flags when
+    that repo differs from the session working directory (Codex P1 r6)."""
+    ctx = ac._git_push_context("git push", str(repo))
+    assert f"remote URL (origin): {tmp_path / 'origin.git'}" in ctx
+    assert "DIFFERENT repository" not in ctx
+
+    other = tmp_path / "other"
+    subprocess.run(["git", "init", "-b", "main", str(other)],
+                   check=True, capture_output=True, text=True)
+    ctx = ac._git_push_context(f"git -C {repo} push", str(other))
+    assert f"remote URL (origin): {tmp_path / 'origin.git'}" in ctx
+    assert "DIFFERENT repository" in ctx
+
+
 def test_fast_path_cannot_allow_option_prefixed_git_writes(ac):
     """`git` is in the compound-safe allowlist gated by the unsafe denylist;
     global options between `git` and the subcommand must not defeat it
