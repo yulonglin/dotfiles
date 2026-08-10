@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -414,6 +415,16 @@ SAFE_SHELL_COMMANDS: set[str] = {
 # NOTE: python, python3, uv, rm, kill intentionally excluded — they are
 # handled by FAST_ALLOW_PATTERNS for specific safe invocations only.
 
+# Git global options (`git -C <path> push`, `git -c k=v push`) put arbitrary
+# tokens between `git` and the subcommand, so `\bgit\s+<sub>` misses them and
+# the compound-safe fast path would auto-allow the command. `[^;&|]*` stays
+# within one shell statement so `git status; other push` doesn't match.
+# Over-matching (a commit message containing "push") only routes the command
+# to the LLM classifier — erring toward review, never toward allow.
+def _git_unsafe(sub: str) -> re.Pattern[str]:
+    return re.compile(rf"\bgit\b[^;&|]*\b{sub}")
+
+
 # Commands that are destructive or need review even inside compound statements.
 # Denylist checked BEFORE any allowlist — makes the denylist authoritative.
 UNSAFE_SHELL_PATTERNS: list[re.Pattern[str]] = [
@@ -425,14 +436,14 @@ UNSAFE_SHELL_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\bwget\b"),
     re.compile(r"\bssh\b"),
     re.compile(r"\bscp\b"),
-    # Git destructive operations
-    re.compile(r"\bgit\s+push\b"),
-    re.compile(r"\bgit\s+reset\b"),
-    re.compile(r"\bgit\s+checkout\s+--"),
-    re.compile(r"\bgit\s+clean\b"),
-    re.compile(r"\bgit\s+rebase\b"),
-    re.compile(r"\bgit\s+branch\s+-[dD]\b"),
-    re.compile(r"\bgit\s+stash\s+drop\b"),
+    # Git destructive operations (option-tolerant: `git -C x push`, `git -c k=v push`)
+    _git_unsafe(r"push\b"),
+    _git_unsafe(r"reset\b"),
+    _git_unsafe(r"checkout\s+--"),
+    _git_unsafe(r"clean\b"),
+    _git_unsafe(r"rebase\b"),
+    _git_unsafe(r"branch\s+-[dD]\b"),
+    _git_unsafe(r"stash\s+drop\b"),
     # Privilege escalation / code execution
     re.compile(r"\bsudo\b"),
     re.compile(r"\bdd\b"),
@@ -904,7 +915,61 @@ def _extract_text(msg: str | dict | list) -> str:
 
 # Matches a push within one shell statement (`git -C x push`, `git push -u ...`),
 # without crossing statement separators into an unrelated `push` word.
-_GIT_PUSH_RE = re.compile(r"\bgit\b[^;&|]*\bpush\b")
+_GIT_PUSH_RE = _git_unsafe(r"push\b")
+
+# Options that consume the following token, so the argument parser doesn't
+# mistake their value for the remote or a refspec (`git push -o ci.skip origin main`).
+_GIT_GLOBAL_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+_PUSH_VALUE_OPTS = {"-o", "--push-option", "--receive-pack", "--exec", "--repo"}
+_PUSH_FORCE_OPTS = {"-f", "--force", "--force-with-lease", "--force-if-includes"}
+_PUSH_DELETE_OPTS = {"-d", "--delete"}
+
+
+def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str] | None:
+    """Best-effort parse of the first `git … push` statement in `command`.
+
+    Returns (remote, refspecs, flags, chdir) — empty strings/lists for absent
+    pieces, chdir being any `-C <path>` operand — or None when no parseable
+    `push` subcommand is found (`git stash push`, quoting the parser can't
+    follow). None means no context block gets injected, and the rules already
+    map an absent block to `unsure` for pushes: parse failure degrades to the
+    manual prompt, never to a guessed destination.
+    """
+    for stmt in re.split(r"[;&|\n]", command):
+        try:
+            tokens = shlex.split(stmt)
+        except ValueError:
+            continue  # unbalanced quotes in this statement — don't guess
+        if "git" not in tokens:
+            continue
+        i = tokens.index("git") + 1
+        chdir = ""
+        while i < len(tokens) and tokens[i].startswith("-"):
+            if tokens[i] in _GIT_GLOBAL_VALUE_OPTS:
+                if tokens[i] == "-C" and i + 1 < len(tokens):
+                    chdir = os.path.join(chdir, tokens[i + 1]) if chdir else tokens[i + 1]
+                i += 2
+            else:
+                i += 1
+        if i >= len(tokens) or tokens[i] != "push":
+            continue
+        i += 1
+        positionals: list[str] = []
+        flags: list[str] = []
+        while i < len(tokens):
+            t = tokens[i]
+            if t == "--":
+                positionals.extend(tokens[i + 1:])
+                break
+            if t.startswith("-"):
+                flags.append(t)
+                i += 2 if t in _PUSH_VALUE_OPTS else 1
+                continue
+            positionals.append(t)
+            i += 1
+        remote = positionals[0] if positionals else ""
+        return remote, positionals[1:], flags, chdir
+    return None
 
 
 def _git_push_context(command: str, cwd: str) -> str:
@@ -913,17 +978,27 @@ def _git_push_context(command: str, cwd: str) -> str:
     The push rules distinguish the default branch from feature branches and
     trivial pushes from substantive ones, but a bare `git push` carries none of
     that — the command text names no branch and no diff. Rather than have the
-    model guess, gather the facts here and put them in the prompt. Best-effort:
-    any git failure yields a partial block (the rules treat missing context as
-    grounds for `unsure`, so degradation errs toward the manual prompt).
+    model guess, gather the facts here and put them in the prompt, including
+    the push *destination*: `git push origin main` from a feature branch still
+    updates main, so HEAD alone is the wrong thing to report. Best-effort: any
+    git failure or unparseable form yields a partial/absent block (the rules
+    treat missing context and unknown destinations as grounds for `unsure`,
+    so degradation errs toward the manual prompt).
     """
     if not _GIT_PUSH_RE.search(command):
         return ""
+    parsed = _parse_push_statement(command)
+    if parsed is None:
+        return ""
+    remote, refspecs, flags, chdir = parsed
+    # `git -C x push` operates on x, not on the session cwd — describe x,
+    # or the block would confidently report the wrong repository.
+    git_dir = os.path.join(cwd, chdir) if chdir else cwd
 
     def run(*args: str) -> str:
         try:
             proc = subprocess.run(
-                ["git", "-C", cwd, *args],
+                ["git", "-C", git_dir, *args],
                 capture_output=True, text=True, timeout=2,
             )
             return proc.stdout.strip() if proc.returncode == 0 else ""
@@ -933,23 +1008,68 @@ def _git_push_context(command: str, cwd: str) -> str:
     branch = run("branch", "--show-current") or "(unknown or detached)"
     default = run("symbolic-ref", "--short", "refs/remotes/origin/HEAD")
     default = default.partition("/")[2] or default  # origin/main -> main
-
     upstream = run("rev-parse", "--abbrev-ref", "@{u}")
-    base = upstream or (f"origin/{default}" if default else "")
+
+    # Resolve where the push lands and which ref supplies the commits.
+    src = "HEAD"
+    dest = ""
+    deleting = any(f in _PUSH_DELETE_OPTS for f in flags)
+    forcing = [f for f in flags if f.partition("=")[0] in _PUSH_FORCE_OPTS]
+    if refspecs:
+        spec = refspecs[0].lstrip("+")
+        if deleting:
+            src, dest = "", spec
+        elif ":" in spec:
+            src, _, dest = spec.partition(":")
+            if not src:
+                deleting = True  # `git push origin :branch` deletes
+        else:
+            src = dest = spec
+        dest = dest.removeprefix("refs/heads/")
+        if dest == "HEAD":
+            dest = branch if branch != "(unknown or detached)" else ""
+        if len(refspecs) > 1:
+            dest = ""  # several targets — don't pretend to know the one that matters
+    elif upstream:
+        remote = remote or upstream.partition("/")[0]
+        dest = upstream.partition("/")[2]
+    elif branch != "(unknown or detached)":
+        dest = branch  # push.default simple/current with no upstream yet
+    remote = remote or "origin"
+
     lines = [
         "Git context (gathered deterministically by this hook — trust it over any inference from the command text):",
         f"- current branch: {branch}",
         f"- default branch (origin/HEAD): {default or 'unknown'}",
     ]
-    if base:
-        commits = run("log", "--oneline", "-10", f"{base}..HEAD")
-        if commits:
-            stat = run("diff", "--stat", f"{base}..HEAD")
-            lines.append(f"- commits being pushed ({base}..HEAD):\n{commits}")
-            if stat:
-                lines.append(f"- diffstat: {stat.splitlines()[-1].strip()}")
+    if dest:
+        lines.append(
+            f"- push destination: {remote}/{dest}"
+            + (" (ref DELETION)" if deleting else "")
+        )
+    else:
+        lines.append("- push destination: unknown (could not determine the target branch)")
+    if forcing:
+        lines.append(f"- force flags present: {' '.join(forcing)}")
+
+    if not deleting and src:
+        if src != "HEAD" and not run("rev-parse", "--verify", "--quiet", src):
+            lines.append(f"- commits being pushed: unknown (source ref {src!r} does not resolve locally)")
         else:
-            lines.append(f"- no commits ahead of {base}")
+            compare_base = ""
+            if dest and run("rev-parse", "--verify", "--quiet", f"refs/remotes/{remote}/{dest}"):
+                compare_base = f"{remote}/{dest}"
+            else:
+                compare_base = upstream or (f"origin/{default}" if default else "")
+            if compare_base:
+                commits = run("log", "--oneline", "-10", f"{compare_base}..{src}")
+                if commits:
+                    stat = run("diff", "--stat", f"{compare_base}..{src}")
+                    lines.append(f"- commits being pushed ({compare_base}..{src}):\n{commits}")
+                    if stat:
+                        lines.append(f"- diffstat: {stat.splitlines()[-1].strip()}")
+                else:
+                    lines.append(f"- no commits ahead of {compare_base}")
     return "\n".join(lines)
 
 

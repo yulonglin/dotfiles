@@ -98,14 +98,86 @@ def test_push_on_feature_branch_without_upstream_uses_origin_default(ac, repo):
     ctx = ac._git_push_context("git push -u origin feature-x", str(repo))
     assert "current branch: feature-x" in ctx
     assert "default branch (origin/HEAD): main" in ctx
+    assert "push destination: origin/feature-x" in ctx
     # No upstream yet -> compared against origin/<default>
-    assert "origin/main..HEAD" in ctx
+    assert "origin/main..feature-x" in ctx
     assert "feature work" in ctx
 
 
 def test_push_with_nothing_ahead_says_so(ac, repo):
     ctx = ac._git_push_context("git push", str(repo))
+    assert "push destination: origin/main" in ctx
     assert "no commits ahead of origin/main" in ctx
+
+
+def test_refspec_to_default_branch_reported_as_destination(ac, repo):
+    """`git push origin HEAD:main` from a feature branch updates main —
+    the destination line, not the current branch, must say so (Codex P1 r5)."""
+    _git(repo, "switch", "-c", "feature-y")
+    (repo / "f.txt").write_text("sneaky\n")
+    _git(repo, "commit", "-am", "change aimed at main")
+
+    ctx = ac._git_push_context("git push origin HEAD:main", str(repo))
+    assert "current branch: feature-y" in ctx
+    assert "push destination: origin/main" in ctx
+    assert "change aimed at main" in ctx
+
+
+def test_pushing_another_local_branch_uses_that_branch_for_commits(ac, repo):
+    """`git push origin main` from a feature worktree pushes local main."""
+    (repo / "f.txt").write_text("on main\n")
+    _git(repo, "commit", "-am", "commit landed on main")
+    _git(repo, "switch", "-c", "feature-z")
+
+    ctx = ac._git_push_context("git push origin main", str(repo))
+    assert "current branch: feature-z" in ctx
+    assert "push destination: origin/main" in ctx
+    assert "origin/main..main" in ctx
+    assert "commit landed on main" in ctx
+
+
+def test_dash_c_push_describes_the_target_repo(ac, repo, tmp_path):
+    """`git -C <path> push` operates on <path>; the block must describe it,
+    not the session cwd (which here is not a repo at all)."""
+    outside = tmp_path / "not-a-repo"
+    outside.mkdir()
+    ctx = ac._git_push_context(f"git -C {repo} push", str(outside))
+    assert "current branch: main" in ctx
+    assert "push destination: origin/main" in ctx
+
+
+def test_value_taking_option_not_mistaken_for_remote(ac, repo):
+    ctx = ac._git_push_context("git push -o ci.skip origin main", str(repo))
+    assert "push destination: origin/main" in ctx
+
+
+def test_force_and_delete_forms_are_surfaced(ac, repo):
+    forced = ac._git_push_context("git push --force-with-lease origin main", str(repo))
+    assert "force flags present: --force-with-lease" in forced
+
+    deleted = ac._git_push_context("git push origin --delete feature-x", str(repo))
+    assert "push destination: origin/feature-x (ref DELETION)" in deleted
+
+
+def test_unresolvable_forms_degrade_not_guess(ac, repo):
+    # Quoted through another shell: the parser can't see inside — no block,
+    # and the rules map an absent block to `unsure` for pushes.
+    assert ac._git_push_context('bash -c "git push"', str(repo)) == ""
+    # Several refspecs: don't pretend to know the destination that matters.
+    ctx = ac._git_push_context("git push origin main feature-x", str(repo))
+    assert "push destination: unknown" in ctx
+
+
+def test_fast_path_cannot_allow_option_prefixed_git_writes(ac):
+    """`git` is in the compound-safe allowlist gated by the unsafe denylist;
+    global options between `git` and the subcommand must not defeat it
+    (Codex P1 r5: `git -C x push` was auto-allowed as a safe compound)."""
+    assert not ac._is_compound_shell_safe("git -C ../dotfiles push origin main")
+    assert not ac._is_compound_shell_safe("git -c push.default=current push")
+    assert not ac._is_compound_shell_safe("git -C /tmp/x reset --hard")
+    assert not ac._is_compound_shell_safe("git push && echo done")
+    # Read-only git compounds must stay on the fast path
+    assert ac._is_compound_shell_safe("git status && git log --oneline")
 
 
 def test_degrades_to_unknown_when_git_fails(ac, tmp_path):
