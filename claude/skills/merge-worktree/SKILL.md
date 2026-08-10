@@ -80,10 +80,10 @@ The PR path only pushes the isolated worktree branch and never touches the main 
 
 ```bash
 git push -u origin <WORKTREE_BRANCH>
-gh pr create --draft --title "<title>" --body-file <file>
+gh pr create --draft --base <PARENT_BRANCH> --title "<title>" --body-file <file>
 ```
 
-Pass BOTH `--title` and `--body-file` explicitly — without a title, gh prompts interactively and hangs a non-interactive run; the body carries what AGENTS.md requires (commands run, host, risk assessment). Then report the PR URL and stop — the worktree stays for review follow-ups; skip steps 6-8.
+Pass `--base <PARENT_BRANCH>` explicitly — without it, gh targets the repository's default branch, so a worktree stacked on another feature branch would open a PR that includes the parent branch's commits (for a stack, `gh stack` also works). Pass BOTH `--title` and `--body-file` explicitly — without a title, gh prompts interactively and hangs a non-interactive run; the body carries what AGENTS.md requires (commands run, host, risk assessment). Then report the PR URL and stop — the worktree stays for review follow-ups; skip steps 6-8.
 
 ### 6. Attempt Merge (local path only)
 

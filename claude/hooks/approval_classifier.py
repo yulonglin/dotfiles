@@ -929,6 +929,15 @@ _PUSH_MULTI_FLAGS = {"--all", "--branches", "--mirror", "--tags", "--prune"}
 _REPO_REDIRECT_OPTS = {"--git-dir", "--work-tree"}
 
 
+def _redact_url(url: str) -> str:
+    """Strip userinfo (user:token@) from a URL before it enters the prompt.
+
+    Remote URLs can carry embedded HTTPS credentials; the context block is
+    sent to the classifier backends, so the secret must never leave the host.
+    """
+    return re.sub(r"^([a-z][a-z0-9+.-]*://)[^/@]*@", r"\1", url.strip(), flags=re.IGNORECASE)
+
+
 def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str] | None:
     """Best-effort parse of the first `git … push` statement in `command`.
 
@@ -958,7 +967,12 @@ def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str]
         i = git_idx + 1
         chdir = ""
         while i < len(tokens) and tokens[i].startswith("-"):
-            if tokens[i].partition("=")[0] in _REPO_REDIRECT_OPTS:
+            base = tokens[i].partition("=")[0]
+            if base in _REPO_REDIRECT_OPTS:
+                return None
+            if base in ("-c", "--config-env"):
+                # Command-local config (`-c remote.origin.push=HEAD:main`) can
+                # redefine what the push does; the probes below won't see it.
                 return None
             if tokens[i] in _GIT_GLOBAL_VALUE_OPTS:
                 if tokens[i] == "-C" and i + 1 < len(tokens):
@@ -1030,8 +1044,6 @@ def _git_push_context(command: str, cwd: str) -> str:
             return ""
 
     branch = run("branch", "--show-current") or "(unknown or detached)"
-    default = run("symbolic-ref", "--short", "refs/remotes/origin/HEAD")
-    default = default.partition("/")[2] or default  # origin/main -> main
     upstream = run("rev-parse", "--abbrev-ref", "@{u}")
 
     # Resolve where the push lands and which ref supplies the commits.
@@ -1063,20 +1075,55 @@ def _git_push_context(command: str, cwd: str) -> str:
         if len(refspecs) > 1:
             dest = ""  # several targets — don't pretend to know the one that matters
             unknown_reason = "multiple refspecs given"
-    elif run("config", "--get-all", f"remote.{remote or 'origin'}.push"):
-        src = ""
-        unknown_reason = "the remote has configured push refspecs (remote.<name>.push)"
-    elif upstream:
-        remote = remote or upstream.partition("/")[0]
-        dest = upstream.partition("/")[2]
-    elif branch != "(unknown or detached)":
-        dest = branch  # push.default simple/current with no upstream yet
+    elif remote:
+        if run("config", "--get-all", f"remote.{remote}.push"):
+            src = ""
+            unknown_reason = "the remote has configured push refspecs (remote.<name>.push)"
+        else:
+            # Explicit remote, no refspec: push.default picks the ref. simple
+            # and current (and upstream, which requires a same-named upstream
+            # to push at all) land on the current branch; matching updates
+            # every matching branch — don't name one.
+            push_default = run("config", "push.default") or "simple"
+            if push_default in ("simple", "current", "upstream") and branch != "(unknown or detached)":
+                dest = branch
+            else:
+                src = ""
+                unknown_reason = f"push.default={push_default} decides the refs, not a single named branch"
+    else:
+        # Bare `git push`: resolve the destination the way git documents it.
+        # (`@{push}` is NOT usable here: it resolves to a single ref under
+        # push.default=matching — where the push updates every matching
+        # branch — and errors on triangular remote.pushDefault setups where
+        # the destination is perfectly well-defined.)
+        remote = (
+            (run("config", f"branch.{branch}.pushRemote") if branch != "(unknown or detached)" else "")
+            or run("config", "remote.pushDefault")
+            or (upstream.partition("/")[0] if upstream else "origin")
+        )
+        push_default = run("config", "push.default") or "simple"
+        if run("config", "--get-all", f"remote.{remote}.push"):
+            src = ""
+            unknown_reason = "the remote has configured push refspecs (remote.<name>.push)"
+        elif push_default in ("simple", "current") and branch != "(unknown or detached)":
+            # simple refuses to push when the upstream name differs on the
+            # same remote, so naming the current branch is correct-or-no-push.
+            dest = branch
+        elif push_default == "upstream" and upstream and upstream.partition("/")[0] == remote:
+            dest = upstream.partition("/")[2]
+        else:
+            src = ""
+            unknown_reason = f"push.default={push_default} does not name a single destination here"
     remote = remote or "origin"
+    # The default branch of the remote the push actually targets — origin's
+    # HEAD says nothing about where `git push upstream trunk` lands.
+    default = run("symbolic-ref", "--short", f"refs/remotes/{remote}/HEAD")
+    default = default.partition("/")[2] or default  # <remote>/main -> main
 
     lines = [
         "Git context (gathered deterministically by this hook — trust it over any inference from the command text):",
         f"- current branch: {branch}",
-        f"- default branch (origin/HEAD): {default or 'unknown'}",
+        f"- default branch ({remote}/HEAD): {default or 'unknown'}",
     ]
     if dest:
         lines.append(
@@ -1085,8 +1132,23 @@ def _git_push_context(command: str, cwd: str) -> str:
         )
     else:
         lines.append(f"- push destination: unknown ({unknown_reason})")
-    remote_url = run("remote", "get-url", remote)
-    lines.append(f"- remote URL ({remote}): {remote_url or 'unknown'}")
+    # The push URL, not the fetch URL: remote.<name>.pushurl can point the
+    # push at a different repository than fetches come from. Redacted — this
+    # text is sent to the classifier backends, and HTTPS remotes can embed
+    # credentials in the URL userinfo.
+    push_urls = [
+        _redact_url(u)
+        for u in run("remote", "get-url", "--push", "--all", remote).splitlines()
+        if u.strip()
+    ]
+    if len(push_urls) > 1:
+        lines.append(
+            f"- remote push URLs ({remote}): {', '.join(push_urls)} — MULTIPLE "
+            "push URLs configured; the push updates ALL of them, so ownership "
+            "must hold for every URL"
+        )
+    else:
+        lines.append(f"- remote push URL ({remote}): {push_urls[0] if push_urls else 'unknown'}")
     if forcing:
         lines.append(f"- force flags present: {' '.join(forcing)}")
     if chdir:
@@ -1097,7 +1159,7 @@ def _git_push_context(command: str, cwd: str) -> str:
         if not session_top or session_top != target_top:
             lines.append(
                 "- note: this push targets a DIFFERENT repository than the session "
-                "working directory — judge repo ownership from the remote URL line "
+                "working directory — judge repo ownership from the push URL line "
                 "above, not from any trust assessment of the working directory; "
                 "if ownership is unclear, classify `unsure`"
             )

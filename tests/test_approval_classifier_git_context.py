@@ -208,7 +208,7 @@ def test_repo_option_selects_the_remote(ac, repo):
         ctx = ac._git_push_context(form, str(repo))
         assert "push destination: upstream/main" in ctx, form
         # `upstream` isn't configured in this repo — the URL must say so
-        assert "remote URL (upstream): unknown" in ctx, form
+        assert "remote push URL (upstream): unknown" in ctx, form
 
 
 def test_remote_url_reported_for_trust_judgement(ac, repo, tmp_path):
@@ -216,15 +216,86 @@ def test_remote_url_reported_for_trust_judgement(ac, repo, tmp_path):
     reports the URL of the repo the push actually targets, and flags when
     that repo differs from the session working directory (Codex P1 r6)."""
     ctx = ac._git_push_context("git push", str(repo))
-    assert f"remote URL (origin): {tmp_path / 'origin.git'}" in ctx
+    assert f"remote push URL (origin): {tmp_path / 'origin.git'}" in ctx
     assert "DIFFERENT repository" not in ctx
 
     other = tmp_path / "other"
     subprocess.run(["git", "init", "-b", "main", str(other)],
                    check=True, capture_output=True, text=True)
     ctx = ac._git_push_context(f"git -C {repo} push", str(other))
-    assert f"remote URL (origin): {tmp_path / 'origin.git'}" in ctx
+    assert f"remote push URL (origin): {tmp_path / 'origin.git'}" in ctx
     assert "DIFFERENT repository" in ctx
+
+
+def test_command_local_config_overrides_yield_no_block(ac, repo):
+    """`git -c remote.origin.push=HEAD:main push` redefines the push in config
+    the probes can't see — no block, which the rules map to `unsure` (Codex P1 r7)."""
+    assert ac._git_push_context(
+        "git -c remote.origin.push=HEAD:main push", str(repo)) == ""
+    assert ac._git_push_context(
+        "git --config-env=remote.origin.push=VAR push", str(repo)) == ""
+
+
+def test_push_default_matching_degrades_to_unknown(ac, repo):
+    """push.default=matching makes a bare push update every matching branch —
+    naming only the current branch's upstream would mislead (Codex P1 r7)."""
+    _git(repo, "config", "push.default", "matching")
+    ctx = ac._git_push_context("git push", str(repo))
+    assert "push destination: unknown" in ctx
+    assert "commits being pushed" not in ctx
+
+
+def test_configured_push_remote_is_honored(ac, repo, tmp_path):
+    """remote.pushDefault (and branch.<name>.pushRemote) reroute a bare push
+    away from the fetch upstream; the destination must follow git's own
+    resolution, not default to origin (Codex P1 r7)."""
+    shared = tmp_path / "shared.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(shared)],
+                   check=True, capture_output=True, text=True)
+    _git(repo, "remote", "add", "shared", str(shared))
+    _git(repo, "fetch", "shared")
+    _git(repo, "config", "remote.pushDefault", "shared")
+    ctx = ac._git_push_context("git push", str(repo))
+    assert "push destination: shared/main" in ctx
+    assert f"remote push URL (shared): {shared}" in ctx
+
+
+def test_default_branch_read_from_destination_remote(ac, repo, tmp_path):
+    """`git push upstream trunk` must be judged against upstream's default
+    branch, not origin's (Codex P1 r7)."""
+    upstream = tmp_path / "upstream.git"
+    subprocess.run(["git", "init", "--bare", "-b", "trunk", str(upstream)],
+                   check=True, capture_output=True, text=True)
+    _git(repo, "remote", "add", "upstream", str(upstream))
+    _git(repo, "push", "upstream", "main:trunk")
+    _git(repo, "remote", "set-head", "upstream", "trunk")
+    ctx = ac._git_push_context("git push upstream main:trunk", str(repo))
+    assert "default branch (upstream/HEAD): trunk" in ctx
+    assert "push destination: upstream/trunk" in ctx
+
+
+def test_pushurl_reported_instead_of_fetch_url(ac, repo, tmp_path):
+    """remote.<name>.pushurl is where the push actually writes; reporting the
+    fetch URL would misstate ownership (Codex P1 r7). Multiple push URLs are
+    all updated by one push, so all must be shown and flagged."""
+    _git(repo, "remote", "set-url", "--push", "origin", "/elsewhere/repo.git")
+    ctx = ac._git_push_context("git push", str(repo))
+    assert "remote push URL (origin): /elsewhere/repo.git" in ctx
+    assert str(tmp_path / "origin.git") not in ctx
+
+    _git(repo, "remote", "set-url", "--push", "--add", "origin", "/second/repo.git")
+    ctx = ac._git_push_context("git push", str(repo))
+    assert "MULTIPLE" in ctx
+    assert "/elsewhere/repo.git" in ctx and "/second/repo.git" in ctx
+
+
+def test_credentials_redacted_from_push_urls(ac, repo):
+    """Remote URLs can embed HTTPS credentials; the block is sent to the
+    classifier backends, so userinfo must never enter the prompt (Codex P1 r7)."""
+    _git(repo, "remote", "add", "cred", "https://user:sekret-token@example.com/x.git")
+    ctx = ac._git_push_context("git push cred main", str(repo))
+    assert "sekret-token" not in ctx
+    assert "remote push URL (cred): https://example.com/x.git" in ctx
 
 
 def test_fast_path_cannot_allow_option_prefixed_git_writes(ac):
