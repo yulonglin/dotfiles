@@ -930,6 +930,9 @@
     "command": "claude-tools statusline || bash $HOME/.claude/statusline.sh",
     "padding": 1
   },
+  "skillOverrides": {
+    "claude-api": "off"
+  },
   "enabledPlugins": {
     "claude-md-management@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": false,
