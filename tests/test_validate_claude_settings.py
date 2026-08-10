@@ -162,3 +162,11 @@ def test_permission_hook_timeout_matches_classifier_budget():
 
     # The API backend must leave usable room for the fallback behind it.
     assert const("TIMEOUT_SECONDS") + const("SUBSCRIPTION_MIN_SECONDS") <= const("TOTAL_BUDGET_SECONDS")
+
+
+def test_bundled_skills_remain_disabled():
+    repo = Path(__file__).resolve().parent.parent
+    settings = json.loads((repo / "claude" / "settings.json").read_text())
+
+    assert settings["disableBundledSkills"] is True
+    assert settings["skillOverrides"]["claude-api"] == "off"

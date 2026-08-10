@@ -930,6 +930,7 @@
     "command": "claude-tools statusline || bash $HOME/.claude/statusline.sh",
     "padding": 1
   },
+  "disableBundledSkills": true,
   "skillOverrides": {
     "claude-api": "off"
   },
