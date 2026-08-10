@@ -84,6 +84,8 @@ If the main tree has uncommitted changes, warn the user and ask them to commit o
 
 ### 6. Attempt Merge
 
+**PR-convention check first.** A direct local merge is the trivial/mechanical path only (typo, version bump, doc touch-up). For a reviewable change, the convention is to push the worktree branch and open a PR instead (`git push -u origin <WORKTREE_BRANCH>` + `gh pr create --draft`) — offer that as the default and merge locally only if the user picks it or the diff is genuinely trivial. See the repo's CLAUDE.md Top Rules.
+
 Run the merge from the main tree:
 
 ```bash

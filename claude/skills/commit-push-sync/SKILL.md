@@ -81,6 +81,8 @@ After git fetch origin:
 
 ### Step 2: Commit Changes (if needed)
 
+**PR-convention gate — BEFORE committing.** Reviewable changes go through a PR; the default branch takes direct commits only for trivial/mechanical changes (typo, version bump, doc touch-up) — see the repo's CLAUDE.md Top Rules. If the session is on the default branch with substantive uncommitted changes, create the topic branch FIRST (`git switch -c <topic>` carries the uncommitted changes with it and the default branch never advances). In the user's root checkout, switching branches changes the shared HEAD other panes and jobs may be using — ask before switching there; in a worktree it's safe.
+
 If uncommitted changes exist, follow the commit skill workflow:
 
 1. **Gather context** (run in parallel):
@@ -228,11 +230,7 @@ git checkout HEAD -- profiles.yaml   # Restore YOUR version
 
 ### Step 4: Push to Remote
 
-**PR-convention gate (before pushing).** Reviewable changes go through a PR; direct pushes to the default branch (main/master) are for trivial/mechanical changes only (typo, version bump, doc touch-up) — see the repo's CLAUDE.md Top Rules.
-
-- On the default branch with a substantive change → don't push it there. Move the commits to a branch (`git switch -c <topic>` keeps them; the default branch is then reset by the user or left for them), or ask the user which they want.
-- On a feature/worktree branch → push, then open a PR if none exists: `gh pr create --draft --fill` (adjust title/body as needed). A push that leaves a reviewable branch with no PR is an incomplete sync.
-- Trivial change on the default branch → push directly, no ceremony.
+**PR-convention gate (re-check before pushing).** The Step 2 gate should have caught this, but if substantive commits are already sitting on the default branch, don't push them — `git switch -c <topic>` creates a branch at the same commit (local default branch stays ahead; tell the user so they can reset it), or ask. On a feature/worktree branch, push and then open a PR if none exists: `gh pr create --draft` with an explicit body covering what AGENTS.md requires of every PR — the commands you ran, the host (macOS/Ubuntu/RunPod), and a brief risk assessment (don't use `--fill`; commit messages don't carry those fields). A push that leaves a reviewable branch with no PR is an incomplete sync. Trivial change on the default branch → push directly, no ceremony.
 
 Push commits to remote:
 
