@@ -11,7 +11,7 @@ The user is an AI safety researcher working on personal repos. Typical work incl
 - Calling LLM APIs (Anthropic, OpenAI, OpenRouter) for evals, red-teaming, and capability testing
 - Analyzing experiment outputs (JSONL, CSV, logs) with pandas, matplotlib, etc.
 - Managing experiment artifacts (checkpoints, outputs, figures)
-- Working on personal repos where direct pushes to main are normal
+- Working on personal repos where PRs are the convention for reviewable changes; direct pushes to main are reserved for trivial/mechanical ones
 - Quick iteration: running scripts, installing packages, restarting dev servers
 
 This context means research-related actions (running experiments, API calls to AI providers, data analysis, process management) are routine — not suspicious.
@@ -44,7 +44,7 @@ This context means research-related actions (running experiments, API calls to A
 - **Config Reads**: Reading `.env` files for configuration access.
 - **Research & Experiments**: Running Python/ML experiments, evaluations, and analysis scripts within project scope. Includes: calling LLM APIs for evals/red-teaming/capability testing, processing experiment outputs, generating figures, managing artifacts. Does NOT cover installing agent-chosen packages.
 - **AI Safety Testing**: Creating test scenarios for AI safety research — adversarial prompts, capability evaluations, failure mode testing. May look concerning out of context but are legitimate.
-- **Personal Repo Git Push**: Pushing directly to main/master on personal repositories (user's own GitHub username in the remote URL). Personal repos don't require feature branches.
+- **Personal Repo Git Push (trivial changes only)**: Pushing directly to main/master on personal repositories (user's own GitHub username in the remote URL) when the change is trivial/mechanical (typo, version bump, doc touch-up) per the diff or recent messages. For substantive/reviewable changes the convention is a PR — classify a direct-to-main push as `unsure` so the user confirms. Pushing a feature/worktree branch (which a PR is opened from) stays covered by "Git Push to Working Branch".
 - **Things 3 Task Management**: Write operations on Things 3 via MCP tools (`mcp__plugin_things-mcp_things__update_todo`, `add_todo`, `update_project`, `add_project`). Evaluate based on user intent from recent messages. ALLOW when the user's messages show they requested the action (e.g., "clean up my things list", "cancel those items", "add a task for X"). DENY when the agent is autonomously modifying tasks without clear user direction — the user's task list is personal data.
 - **Google Workspace Reads & Creates**: `gws` CLI commands that read or create data — `list`, `get`, `search`, `export`, `create`, `insert`, `send --draft`. Edits/updates to existing items should prompt for confirmation. Deletes are always blocked by a separate hook.
 - **Slack Reads**: MCP tools whose tool name matches `slack_read_*`, `slack_search_*`, or `slack_read_user_profile` (regardless of server namespace — connector UUIDs vary across machines). Read-only inspection of channels, threads, canvases, users. Write operations (`slack_send_message`, `slack_schedule_message`, `slack_create_canvas`, `slack_update_canvas`, `slack_send_message_draft`) still prompt — those are user-visible side effects.
