@@ -89,7 +89,7 @@ const findCalls = (calls, label) => calls.filter(c => c.opts.label === label)
     ({ ...doerOk(prompt, opts), amendments: ['AMEND-1: tighten the spec wording'] })
   const { result, calls } = await runTemplate({ 'Plan:do': [planWithAmend] })
   check(result.status === 'ok', 'T1: completes with status ok', JSON.stringify(result.status))
-  check(calls.length === 11, 'T1: 11 agent calls (5 doers + 5 reviews + finalize)', String(calls.length))
+  check(calls.length === 13, 'T1: 13 agent calls (6 doers + 6 reviews + finalize)', String(calls.length))
   const impl = findCalls(calls, 'Implement:do')[0]
   check(impl.prompt.includes('Previous phase Plan finished with status "ok"'),
     'T1: Implement receives the Plan handoff')
@@ -114,22 +114,22 @@ const findCalls = (calls, label) => calls.filter(c => c.opts.label === label)
   }
   const aOut = parsePayload(analyze.prompt, 'phaseOutcomes')
   const aLed = parsePayload(analyze.prompt, 'findings ledger')
-  check(aOut && aOut.map(p => p.phase).join() === 'Plan,Implement,Test,Run',
+  check(aOut && aOut.map(p => p.phase).join() === 'Plan,Implement,Test,Simplify,Run',
     'T1: Analyze payload has exactly Plan..Run in order', JSON.stringify(aOut))
-  check(aLed && aLed.map(f => f.id).join() === 'Plan-R1,Implement-R1,Test-R1,Run-R1',
+  check(aLed && aLed.map(f => f.id).join() === 'Plan-R1,Implement-R1,Test-R1,Simplify-R1,Run-R1',
     'T1: Analyze ledger has exactly Plan-R1..Run-R1 in order', JSON.stringify(aLed))
-  check(aLed && aLed.slice(0, 3).every(f => f.disposition?.disposition === 'addressed')
-    && !aLed[3].disposition,
+  check(aLed && aLed.slice(0, 4).every(f => f.disposition?.disposition === 'addressed')
+    && !aLed[4].disposition,
     'T1: Analyze ledger disposition states correct (Run-R1 still open)')
   const finalize = findCalls(calls, 'finalize')[0]
   const fOut = parsePayload(finalize.prompt, 'phaseOutcomes')
   const fLed = parsePayload(finalize.prompt, 'findings ledger')
-  check(fOut && fOut.map(p => p.phase).join() === 'Plan,Implement,Test,Run,Analyze',
-    'T1: Finalize payload has exactly all five phases in order', JSON.stringify(fOut))
-  check(fLed && fLed.map(f => f.id).join() === 'Plan-R1,Implement-R1,Test-R1,Run-R1,Analyze-R1',
-    'T1: Finalize ledger has exactly all five findings in order', JSON.stringify(fLed))
-  check(fLed && fLed.slice(0, 4).every(f => f.disposition?.disposition === 'addressed')
-    && !fLed[4].disposition,
+  check(fOut && fOut.map(p => p.phase).join() === 'Plan,Implement,Test,Simplify,Run,Analyze',
+    'T1: Finalize payload has exactly all six phases in order', JSON.stringify(fOut))
+  check(fLed && fLed.map(f => f.id).join() === 'Plan-R1,Implement-R1,Test-R1,Simplify-R1,Run-R1,Analyze-R1',
+    'T1: Finalize ledger has exactly all six findings in order', JSON.stringify(fLed))
+  check(fLed && fLed.slice(0, 5).every(f => f.disposition?.disposition === 'addressed')
+    && !fLed[5].disposition,
     'T1: Finalize ledger disposition states correct (Analyze-R1 still open)')
   check(finalize.prompt.includes('"id":"Run-R1"')
     && finalize.prompt.includes('"artifacts":["analyze.out"]'),
@@ -141,7 +141,7 @@ const findCalls = (calls, label) => calls.filter(c => c.opts.label === label)
     'T1: Finalize prompt pins the report-must-reflect instruction')
   check(result.amendments.includes('AMEND-1: tighten the spec wording'),
     'T1: amendment survives into the returned result')
-  check(result.ledger.length === 5, 'T1: one ledger entry per reviewer finding', String(result.ledger.length))
+  check(result.ledger.length === 6, 'T1: one ledger entry per reviewer finding', String(result.ledger.length))
   check(result.ledger.every(f => f.disposition && f.disposition.disposition),
     'T1: every ledger finding ends disposed (Analyze findings via Finalize)')
   const ids = result.ledger.map(f => f.id)
@@ -175,7 +175,7 @@ const findCalls = (calls, label) => calls.filter(c => c.opts.label === label)
   check(result.status === 'aborted' && result.failedPhase === 'Run',
     'T3b: explicit status "failed" aborts the phase', JSON.stringify(result))
   check(String(result.reason).includes('status "failed"'), 'T3b: reason names status "failed"')
-  check(result.phaseOutcomes.length === 3, 'T3b: abort preserves completed phase outcomes',
+  check(result.phaseOutcomes.length === 4, 'T3b: abort preserves completed phase outcomes',
     String(result.phaseOutcomes.length))
 }
 
@@ -278,6 +278,21 @@ const findCalls = (calls, label) => calls.filter(c => c.opts.label === label)
   const finalize = findCalls(calls, 'finalize')[0]
   check(finalize.prompt.includes('run started 2026-08-09T00:00:00Z'),
     'T8: finalize prompt carries the parsed timestamp')
+}
+
+// T9 — the working principles are injected into every doer brief (and the
+// finalize prompt is exempt: it writes a report, not code).
+{
+  const { calls } = await runTemplate()
+  const doers = calls.filter(c => c.opts.label.endsWith(':do'))
+  check(doers.length === 6 && doers.every(c =>
+    c.prompt.includes('Working principles:')
+    && c.prompt.includes('Protect the trusted core')
+    && c.prompt.includes('NEVER modify the eval while also trying to make it pass')),
+    'T9: every doer brief carries the working principles')
+  const simplify = calls.find(c => c.opts.label === 'Simplify:do')
+  check(!!simplify && calls.find(c => c.opts.label === 'Run:do').prompt.includes('simplify.out'),
+    'T9: Simplify runs before Run and Run receives its artifacts')
 }
 
 console.log(`\n${pass} passed, ${fail} failed`)

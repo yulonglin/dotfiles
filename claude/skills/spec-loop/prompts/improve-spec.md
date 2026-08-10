@@ -1,5 +1,5 @@
-<!-- Verbatim body from ~/vault/specs/2026-08-09-workflow-specs-interview-round1.md §Q5 "Improving spec". Do not edit between the verbatim markers — the body is sha256-guarded in tests/test_spec_loop_prompts.sh. -->
-<!-- verbatim-begin -->
+<!-- Adapted from the 2026-08-09 workflow-specs interview (§Q5 "Improving spec"). Edit freely — tests/test_spec_loop_prompts.sh pins structure, not wording. -->
+
 Review the specification and improve it for clarity, concision, coherence, and implementation readiness.
 
 ## Evaluate
@@ -60,10 +60,5 @@ Provide:
 3. A revised specification.
 4. A short summary of substantive changes.
 5. Any remaining risks or implementation uncertainties.
-
-/grill-me if helpful!
-<!-- verbatim-end -->
-
-<!-- addendum: dotfiles spec-loop v1 — not part of the verbatim §Q5 body above -->
 
 The revised specification MUST use the five-section template: `# Goal`, `# Context`, `# Requirements`, `# Acceptance criteria`, `# Out of scope` (see `~/.claude/rules/spec-conventions.md`). Restructure into these headings if the input uses others. Delete any section with nothing real to say — never fill it with N/A or TBD.

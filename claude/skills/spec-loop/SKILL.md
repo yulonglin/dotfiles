@@ -1,22 +1,22 @@
 ---
 name: spec-loop
-description: Run a spec through the plan → implement → test → run → analyze loop with cross-model review between phases
+description: Run a spec through the plan → implement → test → simplify → run → analyze loop with cross-model review between phases
 disable-model-invocation: true
 ---
 
 # spec-loop
 
-Drive one spec through five phases — plan, implement, test, run, analyze — with an independent doer agent per phase and a cross-model review after each phase. Reviewer findings are injected into the next phase's prompt and must each receive a disposition; findings never hard-block the loop. Spec defects surfaced along the way become proposed spec amendments in the final report, never silent divergence.
+Drive one spec through six phases — plan, implement, test, simplify, run, analyze — with an independent doer agent per phase and a cross-model review after each phase. Reviewer findings are injected into the next phase's prompt and must each receive a disposition; findings never hard-block the loop. Spec defects surfaced along the way become proposed spec amendments in the final report, never silent divergence.
 
 **Argument: the spec path.** If no spec path was given, refuse politely and ask for one — spec-first is the point of this skill; do not improvise a spec from conversation.
 
 ## Before the loop: refinement
 
-If the input spec is a rough draft rather than a settled spec, run the refinement pipeline first, in order, using the prompts in `prompts/` verbatim (each file is a sha256-guarded verbatim import plus a delimited addendum): `write-spec.md` (produce a spec, plan-only), `clean-spec.md` (cut noise), `improve-spec.md` (six-dimension review and revision). The result must use the five-section template from `~/.claude/rules/spec-conventions.md`: Goal / Context / Requirements / Acceptance criteria / Out of scope. Interviews follow `~/.claude/rules/interview-conventions.md`.
+If the input spec is a rough draft rather than a settled spec, run the refinement pipeline first, in order, using the prompts in `prompts/` (plain editable prompts — `tests/test_spec_loop_prompts.sh` pins their structure, not their wording): `write-spec.md` (produce a spec, plan-only), `clean-spec.md` (cut noise), `improve-spec.md` (six-dimension review and revision). The result must use the five-section template from `~/.claude/rules/spec-conventions.md`: Goal / Context / Requirements / Acceptance criteria / Out of scope; interviews follow the interview conventions in that same file.
 
 ## Launching the loop
 
-Launch the Workflow tool with the template below, adapted to the spec: fill in the per-phase briefs from the spec's Requirements — each brief MUST name which predecessor artifacts the phase consumes — and pass configuration via `args`, never hardcoded into the script. The harness may deliver `args` to the script as a JSON-encoded string rather than an object (observed live 2026-08-09: `args.reviewer` read as `undefined` and string interpolation silently produced `"Spec: undefined"`), so the template's first line parses defensively into `cfg` — keep that line, and reference `cfg.*`, never `args.*`:
+Launch the Workflow tool with the template below, adapted to the spec: fill in the per-phase briefs from the spec's Requirements — each brief MUST name which predecessor artifacts the phase consumes — and pass configuration via `args`, never hardcoded into the script. The harness may deliver `args` as a JSON-encoded string rather than an object (observed live 2026-08-09), so the template parses defensively into `cfg` — keep that line and reference `cfg.*`, never `args.*`:
 
 - `args.specPath` — the spec file.
 - `args.timestamp` — an ISO timestamp from the session (`Date.now()` is unavailable inside Workflow scripts).
@@ -25,15 +25,23 @@ Launch the Workflow tool with the template below, adapted to the spec: fill in t
 ```js
 export const meta = {
   name: 'spec-loop',
-  description: 'Drive a spec through plan/implement/test/run/analyze with cross-model review after each phase',
+  description: 'Drive a spec through plan/implement/test/simplify/run/analyze with cross-model review after each phase',
   phases: [
     { title: 'Plan' }, { title: 'Implement' }, { title: 'Test' },
-    { title: 'Run' }, { title: 'Analyze' }, { title: 'Finalize' },
+    { title: 'Simplify' }, { title: 'Run' }, { title: 'Analyze' }, { title: 'Finalize' },
   ],
 }
 
 // The harness can deliver `args` as a JSON-encoded string — parse defensively.
 const cfg = typeof args === 'string' ? JSON.parse(args) : (args ?? {})
+
+// Injected into every doer brief — discipline for agent-written research code.
+const PRINCIPLES = 'Working principles: ' +
+  'Legibility over cleverness — boring, explicit, flat code beats clever abstraction; the scarce resource is the reviewer\'s ability to check what the code does. ' +
+  'Fast cheap feedback loops — small units that run in seconds, smoke tests on tiny models/datasets, a --debug mode that runs the full pipeline fast. ' +
+  'Defend against silent wrongness — assert shapes and value ranges, bake sanity checks into the pipeline (random baseline hits chance; metric hits 1.0 on a known-perfect input), plot intermediates, not just final numbers. ' +
+  'Protect the trusted core — metric definitions, eval harness, data splits, and analysis stay small, hand-reviewed, and rarely touched; NEVER modify the eval while also trying to make it pass. ' +
+  'Provenance — config files over edited constants, seeds logged, every result stamped with the commit hash and config that produced it.'
 
 // findingDispositions[].finding is the stable finding id assigned by this
 // script (e.g. "Plan-R2") — dispositions merge into the ledger by that id.
@@ -142,20 +150,28 @@ const mergeDispositions = (r) => {
 const abort = (phase) => ({ status: 'aborted', failedPhase: phase, reason: lastFailure, phaseOutcomes, amendments, ledger })
 
 // Fill each brief from the spec at launch time, naming the predecessor
-// artifacts the phase consumes. The Analyze brief must include: verify every
-// acceptance criterion one by one; compile the draft report (per-phase
+// artifacts the phase consumes. The Simplify brief must include: a
+// /simplify-style pass over EVERYTHING produced so far — implementation,
+// tests, and analysis scripts alike — prune repetition and extraneous tests
+// (tests that exist for their own sake), fewer lines while staying
+// readable, full test suite green afterwards, behavior unchanged. Simplify
+// runs BEFORE Run so the run's numbers come from the final code state
+// (provenance). The Analyze brief must include: verify every acceptance
+// criterion one by one; apply the same simplify treatment to any analysis
+// scripts written during this phase; compile the draft report (per-phase
 // outcomes, every ledger finding with its disposition, proposed amendments).
 const PHASES = [
   { name: 'Plan',      brief: '<plan-phase brief>',      review: 'plan' },
   { name: 'Implement', brief: '<implement-phase brief>', review: 'diff' },
   { name: 'Test',      brief: '<test-phase brief>',      review: 'diff' },
+  { name: 'Simplify',  brief: '<simplify-phase brief>',  review: 'diff' },
   { name: 'Run',       brief: '<run-phase brief>',       review: 'task' },
   { name: 'Analyze',   brief: '<analyze-phase brief>',   review: 'task', audit: true },
 ]
 
 for (const ph of PHASES) {
   const doer = await runOnce(
-    `Spec: ${cfg.specPath}. Phase: ${ph.name}. ${ph.brief}\n\n` +
+    `Spec: ${cfg.specPath}. Phase: ${ph.name}. ${ph.brief}\n\n${PRINCIPLES}\n\n` +
     `Handoff from the previous phase:\n${handoffBlock()}\n\n` +
     (ph.audit ? `Full audit trail for the report:\nphaseOutcomes: ${JSON.stringify(phaseOutcomes)}\nfindings ledger: ${JSON.stringify(ledger)}\n\n` : '') +
     `Reviewer findings you must address or explicitly rebut — findingDispositions MUST cover every id below:\n${findingsBlock()}\n\n` +

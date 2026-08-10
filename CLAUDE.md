@@ -26,7 +26,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 | Commit / commit + push + PR | `/commit` skill or `/commit-push-sync` |
 | Switch active plugin context | `claude-tools context <profile>` (composable: `code python rust`; `--list` for the current set) |
 | Merge worktree → parent branch | `cwmerge` (or `git merge <branch>` from the parent if the branch isn't `worktree-` prefixed) |
-| Run a spec through the five-phase loop | `/spec-loop <spec-path>` |
+| Run a spec through the six-phase spec loop | `/spec-loop <spec-path>` |
 
 ## Where To Look
 

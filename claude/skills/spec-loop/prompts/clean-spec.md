@@ -1,8 +1,9 @@
-<!-- Verbatim body from ~/vault/specs/2026-08-09-workflow-specs-interview-round1.md §Q5 "Cleaning spec". Do not edit between the verbatim markers — the body is sha256-guarded in tests/test_spec_loop_prompts.sh. -->
-<!-- verbatim-begin -->
-clean this up for clarity and concision. remove unnecessary details
-<!-- verbatim-end -->
+<!-- Adapted from the 2026-08-09 workflow-specs interview (§Q5 "Cleaning spec"). Edit freely — tests/test_spec_loop_prompts.sh pins structure, not wording. -->
 
-<!-- addendum: dotfiles spec-loop v1 — not part of the verbatim §Q5 body above -->
+Clean this spec up for clarity and concision:
+
+- Remove unnecessary detail. Process artifacts — audit trails, change logs, interview transcripts — are included only when the spec genuinely needs them, never by default.
+- Prefer signposting and bullet points over walls of text: a reader should find any requirement by scanning headings and bullets, not by re-reading paragraphs.
+- Cut repetition and vague prose; keep rationale, constraints, and stated uncertainty.
 
 Keep the five-section template intact while cleaning: `# Goal`, `# Context`, `# Requirements`, `# Acceptance criteria`, `# Out of scope`. A section left with nothing real after cleaning is deleted, never filled with N/A or TBD.
