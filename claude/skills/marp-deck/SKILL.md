@@ -1,6 +1,6 @@
 ---
 name: marp-deck
-description: Build research slide decks from Markdown with Marp (marp-cli). Use when the user wants to "build slides", "make a marp deck", "create a presentation", export Markdown to HTML/PDF/PPTX slides, or embed matplotlib/anthroplot figures into a deck. Verified cheatsheet for marp-cli v4.4.0 with copy-pasteable frontmatter, two-column + image patterns, custom theme starter, and exact build commands.
+description: Build research slide decks from Markdown with Marp (marp-cli). Use when the user wants to "build slides", "make a marp deck", "create a presentation", export Markdown to HTML/PDF/PPTX slides, or embed matplotlib/pastelplot figures into a deck. Verified cheatsheet for marp-cli v4.4.0 with copy-pasteable frontmatter, two-column + image patterns, custom theme starter, and exact build commands.
 ---
 
 # marp-deck
@@ -73,7 +73,7 @@ Slides are split by a horizontal rule `---` on its own line (blank line before/a
 
 Built-in theme class variants: `lead` (centered), `invert` (dark). gaia/uncover also support these. Apply per-slide with `<!-- _class: invert -->`.
 
-## Embedding images / graphs (matplotlib, anthroplot)
+## Embedding images / graphs (matplotlib, pastelplot)
 
 Save figures as PNG or SVG and reference by **relative path** (run marp from the deck's directory). `--allow-local-files` is required when exporting local images to PDF/PPTX.
 
@@ -198,7 +198,7 @@ With `--theme-set`, set `theme: research` in frontmatter (the name from `/* @the
 ## Quick recipe for a research deck with figures
 
 ```bash
-# 1. Put deck.md + figures/ in one dir; generate figures with matplotlib/anthroplot as PNG/SVG.
+# 1. Put deck.md + figures/ in one dir; generate figures with matplotlib/pastelplot as PNG/SVG.
 # 2. Iterate with live preview:
 cd deck-dir && marp --no-stdin -w -s .
 # 3. Final HTML (always works):
