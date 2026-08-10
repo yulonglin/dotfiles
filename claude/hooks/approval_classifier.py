@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 RULES_PATH = os.path.join(os.path.dirname(__file__), "approval_classifier_rules.md")
@@ -47,6 +48,7 @@ HOOK_TIMEOUT_SECONDS = 30
 EPILOGUE_RESERVE_SECONDS = 4  # write_health + emit_warning + stdout flush
 TOTAL_BUDGET_SECONDS = HOOK_TIMEOUT_SECONDS - EPILOGUE_RESERVE_SECONDS
 TIMEOUT_SECONDS = 8  # API backend — fail fast so the fallback gets real room
+GIT_CONTEXT_BUDGET_SECONDS = 3  # aggregate across every local/remote Git probe
 
 # Monotonic, set at import so interpreter startup and module import count against
 # the budget too; the hook's clock started before any of this ran.
@@ -521,26 +523,44 @@ def _simplify_bash_for_classify(command: str) -> str:
     return _INLINE_CODE_RE.sub(r'\1 \2 \3(inline code)\3', command)
 
 
+def _has_shell_composition(command: str) -> bool:
+    """Whether a specific fast-allow could hide another shell command.
+
+    FAST_ALLOW_PATTERNS describe one invocation, not a shell program. Quoted
+    separators stay inside their token; unquoted separators, newlines and
+    command/process substitution route the whole request through classification.
+    """
+    if "\n" in command or any(marker in command for marker in ("$(", "`", "<(", ">(")):
+        return True
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except ValueError:
+        return True
+    return any(token and set(token) <= set(";&|") for token in tokens)
+
+
 def fast_classify_bash(command: str) -> str | None:
     """Return an allow reason if the command matches a known-safe pattern, else None.
 
     Architecture:
-    1. FAST_ALLOW_PATTERNS — high-confidence, specific patterns (e.g., python -c,
-       inspect eval). Checked first because they match exact command structures where
-       substring-based denylists produce false positives (e.g., "eval" in "inspect eval").
-    2. _is_compound_shell_safe — fallback for compound commands (for/while/&&) that
-       Claude Code's parser can't handle. This has its own denylist (UNSAFE_SHELL_PATTERNS)
-       checked before the allowlist, so compound commands with dangerous subcommands
-       are still caught.
+    1. Reject shell composition before specific allows. A pattern describes one
+       invocation; it must never cover `allowed-command; git push`.
+    2. FAST_ALLOW_PATTERNS — high-confidence, specific single invocations.
+    3. _is_compound_shell_safe — fallback for compound commands (for/while/&&)
+       with an authoritative unsafe-pattern denylist.
     """
     cmd = command.strip()
 
-    # Step 1: Specific allowlist patterns (high-confidence, bypass denylist)
-    for pattern, reason in FAST_ALLOW_PATTERNS:
-        if pattern.search(cmd):
-            return reason
+    # A specific allow pattern covers one invocation only. Shell composition is
+    # evaluated by the compound-safe path below, where the denylist runs first.
+    if not _has_shell_composition(cmd):
+        for pattern, reason in FAST_ALLOW_PATTERNS:
+            if pattern.search(cmd):
+                return reason
 
-    # Step 2: Compound shell safety check (has its own denylist internally)
     if _is_compound_shell_safe(cmd):
         return "compound shell with safe commands only"
 
@@ -920,13 +940,13 @@ _GIT_PUSH_RE = _git_unsafe(r"push\b")
 # Options that consume the following token, so the argument parser doesn't
 # mistake their value for the remote or a refspec (`git push -o ci.skip origin main`).
 _GIT_GLOBAL_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
-_PUSH_VALUE_OPTS = {
-    "-o", "--push-option", "--receive-pack", "--exec", "--recurse-submodules",
+_PUSH_LONG_VALUE_OPTS = {
+    "--repo", "--push-option", "--receive-pack", "--exec", "--recurse-submodules",
 }
 # Modes that update refs beyond any single destination the parser could name.
 _PUSH_MULTI_FLAGS = {"--all", "--branches", "--mirror", "--tags", "--prune"}
-# Repository redirection the git probes below won't follow — fail closed.
-_REPO_REDIRECT_OPTS = {"--git-dir", "--work-tree"}
+# Repository/ref namespace redirection the git probes below won't follow — fail closed.
+_REPO_REDIRECT_OPTS = {"--git-dir", "--work-tree", "--namespace", "--bare"}
 
 
 def _redact_url(url: str) -> str:
@@ -936,6 +956,79 @@ def _redact_url(url: str) -> str:
     sent to the classifier backends, so the secret must never leave the host.
     """
     return re.sub(r"^([a-z][a-z0-9+.-]*://)[^/@]*@", r"\1", url.strip(), flags=re.IGNORECASE)
+
+
+def _valid_branch_name(value: str) -> str:
+    """Return a prompt-safe branch name, or '' for malformed endpoint data."""
+    return value if (
+        re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", value)
+        and ".." not in value
+        and not value.endswith(("/", "."))
+    ) else ""
+
+
+def _remote_default_branch(push_url: str, git_dir: str, timeout: float) -> str:
+    """Resolve an endpoint's current default branch without running Git transport.
+
+    `git ls-remote` is forbidden here: repository config can point SSH commands,
+    credential helpers, or remote helpers at executable programs, which would run
+    before the push is approved. Local remotes are read as data; public GitHub
+    remotes use the fixed api.github.com HTTPS endpoint. Everything else fails
+    closed to an unknown default branch.
+    """
+    if timeout <= 0:
+        return ""
+    redacted = _redact_url(push_url)
+    parsed = urllib.parse.urlparse(redacted)
+
+    local_path = ""
+    if parsed.scheme == "file":
+        local_path = urllib.parse.unquote(parsed.path)
+    elif not parsed.scheme and not re.match(r"^[^/]+@?[^:]*:", redacted):
+        local_path = os.path.expanduser(redacted)
+        if not os.path.isabs(local_path):
+            local_path = os.path.join(git_dir, local_path)
+    if local_path:
+        for head_path in (
+            os.path.join(local_path, "HEAD"),
+            os.path.join(local_path, ".git", "HEAD"),
+        ):
+            try:
+                with open(head_path) as f:
+                    head = f.read(512).strip()
+            except (OSError, UnicodeError):
+                continue
+            prefix = "ref: refs/heads/"
+            if head.startswith(prefix):
+                return _valid_branch_name(head.removeprefix(prefix))
+        return ""
+
+    owner_repo = ""
+    if (
+        parsed.scheme.lower() in {"http", "https", "ssh", "git"}
+        and parsed.hostname
+        and parsed.hostname.lower() == "github.com"
+    ):
+        owner_repo = parsed.path.strip("/")
+    else:
+        scp = re.match(r"^(?:[^@]+@)?github\.com:(.+)$", redacted, re.IGNORECASE)
+        if scp:
+            owner_repo = scp.group(1).strip("/")
+    owner_repo = owner_repo.removesuffix(".git")
+    parts = owner_repo.split("/")
+    if len(parts) != 2 or not all(re.fullmatch(r"[A-Za-z0-9_.-]+", p) for p in parts):
+        return ""
+
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{parts[0]}/{parts[1]}",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "approval-classifier"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            value = str(json.loads(resp.read()).get("default_branch", ""))
+        return _valid_branch_name(value)
+    except Exception:
+        return ""
 
 
 def _has_shell_expansion(token: str) -> bool:
@@ -964,6 +1057,13 @@ def _matches_long_option_or_abbrev(flag: str, options: set[str]) -> bool:
     """
     base = flag.partition("=")[0]
     return base.startswith("--") and any(option.startswith(base) for option in options)
+
+
+def _canonical_long_option(flag: str, options: set[str]) -> str | None:
+    """Resolve a Git long option abbreviation; None means no unique match."""
+    base = flag.partition("=")[0]
+    matches = [option for option in options if option.startswith(base)]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _short_push_flags(flag: str) -> set[str]:
@@ -1053,17 +1153,35 @@ def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str]
             if t == "--":
                 positionals.extend(tokens[i + 1:])
                 break
-            if t.startswith("--repo="):
-                repo_opt = t.partition("=")[2]
-                i += 1
-                continue
-            if t == "--repo":
-                repo_opt = tokens[i + 1] if i + 1 < len(tokens) else ""
-                i += 2
-                continue
+            if t.startswith("--"):
+                matches = [opt for opt in _PUSH_LONG_VALUE_OPTS
+                           if opt.startswith(t.partition("=")[0])]
+                if matches:
+                    canonical = _canonical_long_option(t, _PUSH_LONG_VALUE_OPTS)
+                    if canonical is None:
+                        return None  # ambiguous abbreviation — don't guess
+                    if "=" in t:
+                        value = t.partition("=")[2]
+                        consumed = 1
+                    elif i + 1 < len(tokens):
+                        value = tokens[i + 1]
+                        consumed = 2
+                    else:
+                        return None
+                    if canonical == "--repo":
+                        repo_opt = value
+                    else:
+                        flags.append(t)
+                    i += consumed
+                    continue
             if t.startswith("-"):
                 flags.append(t)
-                i += 2 if t in _PUSH_VALUE_OPTS else 1
+                # -o consumes the next token; in a bundle (`-qo`) it does so
+                # only when no attached value follows the `o`.
+                short_o_needs_value = (
+                    not t.startswith("--") and "o" in t[1:] and t.endswith("o")
+                )
+                i += 2 if short_o_needs_value else 1
                 continue
             positionals.append(t)
             i += 1
@@ -1095,11 +1213,31 @@ def _git_push_context(command: str, cwd: str) -> str:
     # or the block would confidently report the wrong repository.
     git_dir = os.path.join(cwd, chdir) if chdir else cwd
 
+    probe_deadline = time.monotonic() + min(
+        GIT_CONTEXT_BUDGET_SECONDS, max(0.0, remaining_budget())
+    )
+
     def run(*args: str, in_dir: str = git_dir) -> str:
+        # One aggregate deadline, not N independent 2s waits. When it expires,
+        # remaining fields become unknown and the rules route to manual review.
+        timeout = min(2.0, probe_deadline - time.monotonic(), remaining_budget())
+        if timeout <= 0:
+            return ""
         try:
+            blocked_env = {
+                "GIT_DIR", "GIT_WORK_TREE", "GIT_NAMESPACE", "GIT_EXTERNAL_DIFF",
+                "GIT_SSH", "GIT_SSH_COMMAND", "GIT_ASKPASS", "SSH_ASKPASS",
+            }
+            env = {
+                k: v for k, v in os.environ.items()
+                if k not in blocked_env
+                and not k.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"))
+                and k != "GIT_CONFIG_COUNT"
+            }
+            env.update({"GIT_TERMINAL_PROMPT": "0", "GIT_PAGER": "cat"})
             proc = subprocess.run(
                 ["git", "-C", in_dir, *args],
-                capture_output=True, text=True, timeout=2,
+                capture_output=True, text=True, timeout=timeout, env=env,
             )
             return proc.stdout.strip() if proc.returncode == 0 else ""
         except Exception:
@@ -1115,7 +1253,11 @@ def _git_push_context(command: str, cwd: str) -> str:
     deleting = any(_is_delete_push_flag(f) for f in flags)
     forcing = [f for f in flags if _is_force_push_flag(f)]
     multi = [f for f in flags if _matches_long_option_or_abbrev(f, _PUSH_MULTI_FLAGS)]
-    if multi:
+    explicit_mirror = bool(remote and run("config", "--bool", f"remote.{remote}.mirror") == "true")
+    if explicit_mirror:
+        src = ""
+        unknown_reason = "remote.<name>.mirror=true updates and may delete multiple refs"
+    elif multi:
         src = ""  # no single source ref — the commits section would mislead
         unknown_reason = f"{' '.join(multi)} updates multiple refs, not one branch"
     elif refspecs:
@@ -1168,7 +1310,10 @@ def _git_push_context(command: str, cwd: str) -> str:
             or (upstream.partition("/")[0] if upstream else "origin")
         )
         push_default = run("config", "push.default") or "simple"
-        if run("config", "--get-all", f"remote.{remote}.push"):
+        if run("config", "--bool", f"remote.{remote}.mirror") == "true":
+            src = ""
+            unknown_reason = "remote.<name>.mirror=true updates and may delete multiple refs"
+        elif run("config", "--get-all", f"remote.{remote}.push"):
             src = ""
             unknown_reason = "the remote has configured push refspecs (remote.<name>.push)"
         elif push_default in ("simple", "current") and branch != "(unknown or detached)":
@@ -1181,15 +1326,33 @@ def _git_push_context(command: str, cwd: str) -> str:
             src = ""
             unknown_reason = f"push.default={push_default} does not name a single destination here"
     remote = remote or "origin"
-    # The default branch of the remote the push actually targets — origin's
-    # HEAD says nothing about where `git push upstream trunk` lands.
-    default = run("symbolic-ref", "--short", f"refs/remotes/{remote}/HEAD")
-    default = default.partition("/")[2] or default  # <remote>/main -> main
+
+    # Resolve both ownership and default-branch identity from the endpoint the
+    # push actually writes to. refs/remotes/<remote>/HEAD is only a local cache
+    # and stays stale across remote default-branch renames. A live lookup that
+    # fails simply leaves the default unknown, forcing manual review.
+    raw_push_urls = [
+        u for u in run("remote", "get-url", "--push", "--all", remote).splitlines()
+        if u.strip()
+    ]
+    live_defaults: list[str] = []
+    for push_url in raw_push_urls:
+        timeout = min(probe_deadline - time.monotonic(), remaining_budget())
+        live_default = _remote_default_branch(push_url, git_dir, timeout)
+        if live_default:
+            live_defaults.append(live_default)
+    default = (
+        live_defaults[0]
+        if raw_push_urls and len(live_defaults) == len(raw_push_urls)
+        and len(set(live_defaults)) == 1
+        else ""
+    )
+    push_urls = [_redact_url(u) for u in raw_push_urls]
 
     lines = [
         "Git context (gathered deterministically by this hook — trust it over any inference from the command text):",
         f"- current branch: {branch}",
-        f"- default branch ({remote}/HEAD): {default or 'unknown'}",
+        f"- default branch (live {remote}/HEAD): {default or 'unknown'}",
     ]
     if dest:
         lines.append(
@@ -1202,11 +1365,6 @@ def _git_push_context(command: str, cwd: str) -> str:
     # push at a different repository than fetches come from. Redacted — this
     # text is sent to the classifier backends, and HTTPS remotes can embed
     # credentials in the URL userinfo.
-    push_urls = [
-        _redact_url(u)
-        for u in run("remote", "get-url", "--push", "--all", remote).splitlines()
-        if u.strip()
-    ]
     if len(push_urls) > 1:
         lines.append(
             f"- remote push URLs ({remote}): {', '.join(push_urls)} — MULTIPLE "
@@ -1238,11 +1396,14 @@ def _git_push_context(command: str, cwd: str) -> str:
             if dest and run("rev-parse", "--verify", "--quiet", f"refs/remotes/{remote}/{dest}"):
                 compare_base = f"{remote}/{dest}"
             else:
-                compare_base = upstream or (f"origin/{default}" if default else "")
+                compare_base = upstream or (f"{remote}/{default}" if default else "")
             if compare_base:
                 commits = run("log", "--oneline", "-10", f"{compare_base}..{src}")
                 if commits:
-                    stat = run("diff", "--stat", f"{compare_base}..{src}")
+                    stat = run(
+                        "diff", "--no-ext-diff", "--no-textconv", "--stat",
+                        f"{compare_base}..{src}",
+                    )
                     lines.append(f"- commits being pushed ({compare_base}..{src}):\n{commits}")
                     if stat:
                         lines.append(f"- diffstat: {stat.splitlines()[-1].strip()}")
@@ -1538,8 +1699,16 @@ def classify(
         },
     )
 
+    api_timeout = min(TIMEOUT_SECONDS, remaining_budget())
+    if api_timeout <= 0:
+        raise ApprovalClassifierWarning(
+            "The approval classifier exhausted its hook budget before the API call.",
+            "Git context probes or wrapper startup consumed the available time.",
+            "Claude will use the normal permission prompt.",
+        )
+
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+        with urllib.request.urlopen(req, timeout=api_timeout) as resp:
             data = json.loads(resp.read())
         text = data["content"][0]["text"].strip()
         # Log token usage so we can verify the prompt cache is landing.

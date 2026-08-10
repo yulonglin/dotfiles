@@ -83,7 +83,7 @@ def test_push_on_default_branch_reports_branch_and_pending_commit(ac, repo):
 
     ctx = ac._git_push_context("git push", str(repo))
     assert "current branch: main" in ctx
-    assert "default branch (origin/HEAD): main" in ctx
+    assert "default branch (live origin/HEAD): main" in ctx
     # The commit subject is what lets the model judge trivial vs substantive
     assert "substantive change to f" in ctx
     assert "diffstat:" in ctx
@@ -97,7 +97,7 @@ def test_push_on_feature_branch_without_upstream_uses_origin_default(ac, repo):
 
     ctx = ac._git_push_context("git push -u origin feature-x", str(repo))
     assert "current branch: feature-x" in ctx
-    assert "default branch (origin/HEAD): main" in ctx
+    assert "default branch (live origin/HEAD): main" in ctx
     assert "push destination: origin/feature-x" in ctx
     # No upstream yet -> compared against origin/<default>
     assert "origin/main..feature-x" in ctx
@@ -270,7 +270,7 @@ def test_default_branch_read_from_destination_remote(ac, repo, tmp_path):
     _git(repo, "push", "upstream", "main:trunk")
     _git(repo, "remote", "set-head", "upstream", "trunk")
     ctx = ac._git_push_context("git push upstream main:trunk", str(repo))
-    assert "default branch (upstream/HEAD): trunk" in ctx
+    assert "default branch (live upstream/HEAD): trunk" in ctx
     assert "push destination: upstream/trunk" in ctx
 
 
@@ -342,6 +342,114 @@ def test_abbreviated_multi_ref_modes_report_unknown(ac, repo):
         assert "commits being pushed" not in ctx, form
 
 
+def test_abbreviated_value_options_consume_their_operands(ac, repo):
+    """Git accepts unique long-option prefixes. Their separate operands must
+    not become the apparent remote/refspec (final Codex P1)."""
+    forms = (
+        "git push --recurse-s on-demand origin main",
+        "git push --push-o ci.skip origin main",
+        "git push --receive-p git-receive-pack origin main",
+        "git push --ex git-receive-pack origin main",
+    )
+    for form in forms:
+        assert "push destination: origin/main" in ac._git_push_context(form, str(repo)), form
+    # With no positional repository, abbreviated --repo supplies the remote.
+    # A positional would override it, matching Git's documented precedence.
+    assert "push destination: upstream/main" in ac._git_push_context(
+        "git push --rep upstream", str(repo))
+    # --re is ambiguous among repo/receive/recurse and Git rejects it; don't guess.
+    assert ac._git_push_context("git push --re value origin main", str(repo)) == ""
+
+
+def test_mirror_remote_configuration_is_multi_ref(ac, repo):
+    _git(repo, "config", "remote.origin.mirror", "true")
+    ctx = ac._git_push_context("git push origin", str(repo))
+    assert "push destination: unknown" in ctx
+    assert "remote.<name>.mirror=true" in ctx
+    assert "commits being pushed" not in ctx
+
+
+def test_live_remote_head_overrides_stale_tracking_symref(ac, repo, tmp_path):
+    """Ordinary fetches do not refresh refs/remotes/origin/HEAD. The hook asks
+    the push endpoint live, so a remote default-branch rename cannot turn the
+    new default into an apparently safe feature branch."""
+    _git(repo, "branch", "trunk", "main")
+    _git(repo, "push", "origin", "trunk")
+    _git(tmp_path / "origin.git", "symbolic-ref", "HEAD", "refs/heads/trunk")
+    # Deliberately leave the clone's origin/HEAD stale at main.
+    stale = subprocess.run(
+        ["git", "-C", str(repo), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert stale == "origin/main"
+    ctx = ac._git_push_context("git push origin trunk", str(repo))
+    assert "default branch (live origin/HEAD): trunk" in ctx
+    assert "push destination: origin/trunk" in ctx
+
+
+def test_remote_name_with_slash_preserves_default_branch(ac, repo, tmp_path):
+    _git(repo, "remote", "add", "shared/team", str(tmp_path / "origin.git"))
+    ctx = ac._git_push_context("git push shared/team main", str(repo))
+    assert "default branch (live shared/team/HEAD): main" in ctx
+    assert "push destination: shared/team/main" in ctx
+
+
+def test_namespace_and_bare_global_options_yield_no_block(ac, repo):
+    for form in (
+        "git --namespace=tenant push origin main",
+        "git --namespace tenant push origin main",
+        "git --bare push origin main",
+    ):
+        assert ac._git_push_context(form, str(repo)) == "", form
+
+
+def test_git_probe_budget_stops_before_subprocesses(ac, repo, monkeypatch):
+    calls = []
+    monkeypatch.setattr(ac, "remaining_budget", lambda: 0.0)
+    monkeypatch.setattr(ac.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+    ctx = ac._git_push_context("git push", str(repo))
+    assert calls == []
+    assert "default branch (live origin/HEAD): unknown" in ctx
+    assert "push destination: unknown" in ctx
+
+
+def test_remote_default_lookup_never_runs_git_transport(ac, monkeypatch, tmp_path):
+    """The permission hook must not run repo-controlled sshCommand, credential
+    helpers, or remote helpers merely to decide whether to approve the push."""
+    captured = {}
+
+    class Resp:
+        def read(self):
+            return b'{"default_branch":"trunk"}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(req, timeout):
+        captured["url"] = req.full_url
+        captured["timeout"] = timeout
+        return Resp()
+
+    def forbidden_subprocess(*args, **kwargs):
+        raise AssertionError("default lookup invoked Git transport")
+
+    monkeypatch.setattr(ac.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(ac.subprocess, "run", forbidden_subprocess)
+    assert ac._remote_default_branch(
+        "git@github.com:owner/repo.git", str(tmp_path), 1.0) == "trunk"
+    assert captured["url"] == "https://api.github.com/repos/owner/repo"
+
+    # Unknown/custom protocols could invoke arbitrary remote helpers under Git;
+    # they receive no probe and fail closed to an unknown default.
+    captured.clear()
+    assert ac._remote_default_branch(
+        "ext::sh -c 'touch /tmp/should-not-run'", str(tmp_path), 1.0) == ""
+    assert captured == {}
+
+
 def test_prior_shell_state_and_wrappers_yield_no_block(ac, repo):
     """The probes run before the shell. Earlier statements, env assignments,
     and wrappers can alter Git state/config before the push executes, so only a
@@ -396,6 +504,11 @@ def test_fast_path_cannot_allow_option_prefixed_git_writes(ac):
     assert not ac._is_compound_shell_safe("git -c push.default=current push")
     assert not ac._is_compound_shell_safe("git -C /tmp/x reset --hard")
     assert not ac._is_compound_shell_safe("git push && echo done")
+    # Specific fast allows cover one invocation, never a shell chain.
+    assert ac.fast_classify_bash("codex exec review")
+    assert not ac.fast_classify_bash("codex exec review; git push origin main")
+    # Quoted punctuation is an argument, not shell composition.
+    assert ac.fast_classify_bash("codex exec 'review this; mention git push'")
     # Read-only git compounds must stay on the fast path
     assert ac._is_compound_shell_safe("git status && git log --oneline")
 
@@ -409,7 +522,7 @@ def test_degrades_to_unknown_when_git_fails(ac, tmp_path):
     """
     ctx = ac._git_push_context("git push", str(tmp_path / "does-not-exist"))
     assert "current branch: (unknown or detached)" in ctx
-    assert "default branch (origin/HEAD): unknown" in ctx
+    assert "default branch (live origin/HEAD): unknown" in ctx
 
 
 def test_user_msg_carries_block_only_for_push_commands(ac, repo):
