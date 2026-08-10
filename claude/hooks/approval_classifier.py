@@ -920,9 +920,9 @@ _GIT_PUSH_RE = _git_unsafe(r"push\b")
 # Options that consume the following token, so the argument parser doesn't
 # mistake their value for the remote or a refspec (`git push -o ci.skip origin main`).
 _GIT_GLOBAL_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
-_PUSH_VALUE_OPTS = {"-o", "--push-option", "--receive-pack", "--exec"}
-_PUSH_FORCE_OPTS = {"-f", "--force", "--force-with-lease", "--force-if-includes"}
-_PUSH_DELETE_OPTS = {"-d", "--delete"}
+_PUSH_VALUE_OPTS = {
+    "-o", "--push-option", "--receive-pack", "--exec", "--recurse-submodules",
+}
 # Modes that update refs beyond any single destination the parser could name.
 _PUSH_MULTI_FLAGS = {"--all", "--branches", "--mirror", "--tags", "--prune"}
 # Repository redirection the git probes below won't follow — fail closed.
@@ -936,6 +936,61 @@ def _redact_url(url: str) -> str:
     sent to the classifier backends, so the secret must never leave the host.
     """
     return re.sub(r"^([a-z][a-z0-9+.-]*://)[^/@]*@", r"\1", url.strip(), flags=re.IGNORECASE)
+
+
+def _has_shell_expansion(token: str) -> bool:
+    """Whether the shell can rewrite a token after this hook has inspected it.
+
+    shlex removes quoting, so `$DEST` and `"$DEST"` are indistinguishable here;
+    both must fail closed. The same applies to globs, brace/tilde expansion, and
+    command/process substitution. A literal containing one of these characters
+    is conservatively sent to the manual prompt because its quoting cannot be
+    proven from the parsed token.
+    """
+    return (
+        any(marker in token for marker in ("$", "`", "*", "?", "[", "{", "}"))
+        or token.startswith("~")
+        or "<(" in token
+        or ">(" in token
+    )
+
+
+def _matches_long_option_or_abbrev(flag: str, options: set[str]) -> bool:
+    """Match a full long option or any prefix Git may parse as its abbreviation.
+
+    Ambiguous/invalid prefixes are treated conservatively as matches too: the
+    command will fail rather than push, and an unnecessary manual prompt is
+    safer than missing a unique destructive abbreviation such as `--mir`.
+    """
+    base = flag.partition("=")[0]
+    return base.startswith("--") and any(option.startswith(base) for option in options)
+
+
+def _short_push_flags(flag: str) -> set[str]:
+    """Expand bundled no-value short flags without reading an attached -o value.
+
+    Git accepts `-fq` / `-dq`; exact string membership misses the destructive
+    flag. `-oVALUE` consumes the rest as data, so stop expansion at `o` rather
+    than mistaking letters inside a push-option value for flags.
+    """
+    if not flag.startswith("-") or flag.startswith("--"):
+        return set()
+    expanded: set[str] = set()
+    for char in flag[1:]:
+        if char == "o":
+            break
+        expanded.add(char)
+    return expanded
+
+
+def _is_force_push_flag(flag: str) -> bool:
+    base = flag.partition("=")[0]
+    return "f" in _short_push_flags(flag) or base.startswith("--for")
+
+
+def _is_delete_push_flag(flag: str) -> bool:
+    base = flag.partition("=")[0]
+    return "d" in _short_push_flags(flag) or base.startswith("--del")
 
 
 def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str] | None:
@@ -953,7 +1008,8 @@ def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str]
     # to `unsure` for pushes.
     if re.search(r"\b(cd|pushd)\b", command):
         return None
-    for stmt in re.split(r"[;&|\n]", command):
+    statements = re.split(r"[;&|\n]", command)
+    for stmt_idx, stmt in enumerate(statements):
         try:
             tokens = shlex.split(stmt)
         except ValueError:
@@ -961,8 +1017,14 @@ def _parse_push_statement(command: str) -> tuple[str, list[str], list[str], str]
         if "git" not in tokens:
             continue
         git_idx = tokens.index("git")
-        # GIT_DIR=x git push redirects the repo just like --git-dir
-        if any(t.partition("=")[0] in ("GIT_DIR", "GIT_WORK_TREE") for t in tokens[:git_idx]):
+        # The probes run before the shell command. A preceding statement can
+        # change Git config/state (`git config ... && git push`), and a wrapper
+        # or environment assignment before `git` can alter its config or repo.
+        # Require a direct git invocation in the first shell statement; any
+        # richer shell program fails closed to the manual prompt.
+        if any(s.strip() for s in statements[:stmt_idx]) or git_idx != 0:
+            return None
+        if any(_has_shell_expansion(token) for token in tokens):
             return None
         i = git_idx + 1
         chdir = ""
@@ -1050,9 +1112,9 @@ def _git_push_context(command: str, cwd: str) -> str:
     src = "HEAD"
     dest = ""
     unknown_reason = "could not determine the target branch"
-    deleting = any(f in _PUSH_DELETE_OPTS for f in flags)
-    forcing = [f for f in flags if f.partition("=")[0] in _PUSH_FORCE_OPTS]
-    multi = [f for f in flags if f.partition("=")[0] in _PUSH_MULTI_FLAGS]
+    deleting = any(_is_delete_push_flag(f) for f in flags)
+    forcing = [f for f in flags if _is_force_push_flag(f)]
+    multi = [f for f in flags if _matches_long_option_or_abbrev(f, _PUSH_MULTI_FLAGS)]
     if multi:
         src = ""  # no single source ref — the commits section would mislead
         unknown_reason = f"{' '.join(multi)} updates multiple refs, not one branch"
@@ -1085,20 +1147,24 @@ def _git_push_context(command: str, cwd: str) -> str:
             # to push at all) land on the current branch; matching updates
             # every matching branch — don't name one.
             push_default = run("config", "push.default") or "simple"
-            if push_default in ("simple", "current", "upstream") and branch != "(unknown or detached)":
+            if push_default in ("simple", "current") and branch != "(unknown or detached)":
                 dest = branch
+            elif push_default == "upstream" and upstream and upstream.partition("/")[0] == remote:
+                dest = upstream.partition("/")[2]
             else:
                 src = ""
-                unknown_reason = f"push.default={push_default} decides the refs, not a single named branch"
+                unknown_reason = f"push.default={push_default} does not name a single destination here"
     else:
         # Bare `git push`: resolve the destination the way git documents it.
-        # (`@{push}` is NOT usable here: it resolves to a single ref under
+        # Remote precedence is branch.<name>.pushRemote, remote.pushDefault,
+        # branch.<name>.remote, then origin. (`@{push}` is NOT usable here: it resolves to a single ref under
         # push.default=matching — where the push updates every matching
         # branch — and errors on triangular remote.pushDefault setups where
         # the destination is perfectly well-defined.)
         remote = (
             (run("config", f"branch.{branch}.pushRemote") if branch != "(unknown or detached)" else "")
             or run("config", "remote.pushDefault")
+            or (run("config", f"branch.{branch}.remote") if branch != "(unknown or detached)" else "")
             or (upstream.partition("/")[0] if upstream else "origin")
         )
         push_default = run("config", "push.default") or "simple"
@@ -1267,6 +1333,7 @@ def classify_via_subscription(
     trust_section: str = "",
     user_message: str = "",
     timeout: float = SUBSCRIPTION_TIMEOUT_SECONDS,
+    rendered_user_msg: str = "",
 ) -> dict:
     """Second backend: classify through the Claude CLI's OAuth subscription.
 
@@ -1322,7 +1389,9 @@ def classify_via_subscription(
     and NESTED_ENV is what stops the recursion if `--safe-mode` ever stops
     disabling hooks.
     """
-    user_msg = build_classify_user_msg(tool_name, tool_input, cwd, user_message)
+    user_msg = rendered_user_msg or build_classify_user_msg(
+        tool_name, tool_input, cwd, user_message
+    )
     system_prompt = (
         f"{rules}\n{trust_section}\n\n"
         "Respond with ONLY the JSON object described above. No prose, no code fences."
@@ -1420,7 +1489,15 @@ def classify_via_subscription(
     return extract_json_object(result_text)
 
 
-def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, trust_section: str = "", user_message: str = "") -> dict | None:
+def classify(
+    tool_name: str,
+    tool_input: dict,
+    cwd: str,
+    rules: str,
+    trust_section: str = "",
+    user_message: str = "",
+    rendered_user_msg: str = "",
+) -> dict | None:
     """Call the classifier model to classify the action. Returns parsed response or None."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -1430,7 +1507,9 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, trust_secti
             "Run `secrets-edit` / `setup-envrc`, or fix `with-anthropic-key.sh` so the hook gets a key.",
         )
 
-    user_msg = build_classify_user_msg(tool_name, tool_input, cwd, user_message)
+    user_msg = rendered_user_msg or build_classify_user_msg(
+        tool_name, tool_input, cwd, user_message
+    )
 
     # Cache the static rules block — Anthropic prompt caching charges ~10%
     # of base input rate on cache hits. Per-repo trust context goes in a
@@ -1624,11 +1703,22 @@ def main() -> None:
     if INCLUDE_USER_MESSAGE and transcript_path:
         user_message = extract_recent_user_messages(transcript_path)
 
+    # Render once: push context can require several bounded Git probes. Reusing
+    # the exact text across API and subscription backends prevents both prompt
+    # drift and a second probe pass from consuming the fallback's timeout budget.
+    rendered_user_msg = build_classify_user_msg(
+        tool_name, tool_input, cwd, user_message
+    )
+
     # Backend order: API key first (fast), subscription second (slower but
     # independent of the key). Only if BOTH fail does the user get the manual
     # prompt plus the loud warning.
     try:
-        result = classify(tool_name, tool_input, cwd, rules, trust_section=trust_section, user_message=user_message)
+        result = classify(
+            tool_name, tool_input, cwd, rules,
+            trust_section=trust_section, user_message=user_message,
+            rendered_user_msg=rendered_user_msg,
+        )
         write_health(HEALTH_BACKEND_API)
     except ApprovalClassifierWarning as api_warning:
         log(f"API BACKEND FAILED: {api_warning.headline} — {api_warning.details}")
@@ -1651,6 +1741,7 @@ def main() -> None:
                 tool_name, tool_input, cwd, rules,
                 trust_section=trust_section, user_message=user_message,
                 timeout=min(SUBSCRIPTION_TIMEOUT_SECONDS, budget),
+                rendered_user_msg=rendered_user_msg,
             )
             write_health(HEALTH_BACKEND_SUBSCRIPTION, api_warning.headline)
             log("SUBSCRIPTION BACKEND: classified after the API backend failed")

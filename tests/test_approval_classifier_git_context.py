@@ -298,6 +298,96 @@ def test_credentials_redacted_from_push_urls(ac, repo):
     assert "remote push URL (cred): https://example.com/x.git" in ctx
 
 
+def test_branch_remote_without_upstream_is_honored(ac, repo, tmp_path):
+    """For a bare push, branch.<name>.remote follows pushRemote and
+    remote.pushDefault in Git's precedence even without branch.<name>.merge
+    (focused review after Codex r8)."""
+    shared = tmp_path / "shared.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(shared)],
+                   check=True, capture_output=True, text=True)
+    _git(repo, "remote", "add", "shared", str(shared))
+    _git(repo, "switch", "-c", "topic")
+    _git(repo, "config", "branch.topic.remote", "shared")
+    _git(repo, "config", "push.default", "current")
+    ctx = ac._git_push_context("git push", str(repo))
+    assert "push destination: shared/topic" in ctx
+    assert f"remote push URL (shared): {shared}" in ctx
+
+
+def test_shell_expanded_destination_yields_no_block(ac, repo):
+    """shlex cannot prove whether expansion syntax was quoted literally. Any
+    token the shell can rewrite after the hook runs must fail closed rather than
+    advertise a literal feature destination while executing a main push."""
+    for form in (
+        'git push origin "${DEST:-main}"',
+        "git push origin $(printf main)",
+        "git push origin 'release-*'",
+        "git push ~/other main",
+        "git push origin feature-{a,b}",
+    ):
+        assert ac._git_push_context(form, str(repo)) == "", form
+
+
+def test_abbreviated_multi_ref_modes_report_unknown(ac, repo):
+    """Git accepts unique long-option prefixes (`git push -h`, git 2.43).
+    Abbreviated mirror/all/tags/prune must not look like a single-ref push."""
+    for form in (
+        "git push --mir origin",
+        "git push --al origin",
+        "git push --ta origin",
+        "git push --pru origin",
+    ):
+        ctx = ac._git_push_context(form, str(repo))
+        assert "push destination: unknown" in ctx, form
+        assert "commits being pushed" not in ctx, form
+
+
+def test_prior_shell_state_and_wrappers_yield_no_block(ac, repo):
+    """The probes run before the shell. Earlier statements, env assignments,
+    and wrappers can alter Git state/config before the push executes, so only a
+    direct git invocation in the first statement is modelled (Codex P1 r8)."""
+    assert ac._git_push_context(
+        "git config remote.origin.push HEAD:main && git push", str(repo)) == ""
+    assert ac._git_push_context(
+        "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default "
+        "GIT_CONFIG_VALUE_0=matching git push", str(repo)) == ""
+    assert ac._git_push_context("env GIT_DIR=../x/.git git push", str(repo)) == ""
+
+
+def test_explicit_remote_upstream_mode_uses_tracked_branch(ac, repo):
+    """With push.default=upstream, `git push origin` updates the tracked remote
+    branch, whose name need not match the local branch (Codex P1 r8)."""
+    _git(repo, "switch", "-c", "topic", "--track", "origin/main")
+    _git(repo, "config", "push.default", "upstream")
+    ctx = ac._git_push_context("git push origin", str(repo))
+    assert "current branch: topic" in ctx
+    assert "push destination: origin/main" in ctx
+
+
+def test_bundled_destructive_flags_are_surfaced(ac, repo):
+    """Git accepts bundled short flags; `-fq` and `-dq` must retain their
+    destructive force/delete semantics in the context block (Codex P1 r8)."""
+    forced = ac._git_push_context("git push -fq origin main", str(repo))
+    assert "force flags present: -fq" in forced
+
+    deleted = ac._git_push_context("git push -dq origin topic", str(repo))
+    assert "push destination: origin/topic (ref DELETION)" in deleted
+
+    # Unambiguous long-option abbreviations accepted by git must also fail
+    # toward safety (`git push -h`, git 2.43: --force-w / --dele accepted;
+    # --forc is ambiguous and rejected, so it is deliberately not the test).
+    assert "force flags present: --force-w" in ac._git_push_context(
+        "git push --force-w origin main", str(repo))
+    assert "(ref DELETION)" in ac._git_push_context(
+        "git push --dele origin topic", str(repo))
+
+
+def test_recurse_submodules_operand_not_mistaken_for_remote(ac, repo):
+    ctx = ac._git_push_context(
+        "git push --recurse-submodules on-demand origin main", str(repo))
+    assert "push destination: origin/main" in ctx
+
+
 def test_fast_path_cannot_allow_option_prefixed_git_writes(ac):
     """`git` is in the compound-safe allowlist gated by the unsafe denylist;
     global options between `git` and the subcommand must not defeat it
