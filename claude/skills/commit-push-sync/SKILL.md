@@ -228,6 +228,12 @@ git checkout HEAD -- profiles.yaml   # Restore YOUR version
 
 ### Step 4: Push to Remote
 
+**PR-convention gate (before pushing).** Reviewable changes go through a PR; direct pushes to the default branch (main/master) are for trivial/mechanical changes only (typo, version bump, doc touch-up) — see the repo's CLAUDE.md Top Rules.
+
+- On the default branch with a substantive change → don't push it there. Move the commits to a branch (`git switch -c <topic>` keeps them; the default branch is then reset by the user or left for them), or ask the user which they want.
+- On a feature/worktree branch → push, then open a PR if none exists: `gh pr create --draft --fill` (adjust title/body as needed). A push that leaves a reviewable branch with no PR is an incomplete sync.
+- Trivial change on the default branch → push directly, no ceremony.
+
 Push commits to remote:
 
 ```bash
