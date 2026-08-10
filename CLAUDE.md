@@ -4,7 +4,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 
 ## Top Rules
 
-- **Direct pushes to main are allowed** — personal repo, no PR overhead. Single branch: `main`; branch worktrees off it. Route only large or structural merges through a tracked PR.
+- **PRs are the convention** — open a PR for any reviewable change; direct pushes to main only for trivial/mechanical ones (typo, version bump, doc touch-up). When a large change reviews better as a chain, stack PRs via `gh stack` (the official `github/gh-stack` extension) or Graphite. Single branch: `main`; branch worktrees off it.
 - **Flags are ADDITIVE to defaults unless `--minimal` is used.** `install.sh` and `deploy.sh` enable every component by default; `--no-<component>` disables one; `--minimal` disables all defaults; modifiers (`--append`, `--ascii`, `--force`) don't affect defaults. Detail in README.md.
 - **Sandbox blocks `git pull`/`merge`/`stash`** here, and `codex exec` crashes on macOS inside it — both need `dangerouslyDisableSandbox: true`.
 - **`claude/settings.json` is the global source of truth** (symlinked to `~/.claude/settings.json`). Before staging it, verify it has `statusLine`, `hooks` and `permissions` keys — [`.claude/rules/dotfiles-settings.md`](.claude/rules/dotfiles-settings.md).
