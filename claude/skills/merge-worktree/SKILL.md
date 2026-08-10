@@ -72,19 +72,28 @@ git rev-list --count <PARENT_BRANCH>..<WORKTREE_BRANCH>
 
 If 0 commits ahead, report "Already up to date" and exit.
 
-### 5. Check Main Tree State
+### 5. Choose Integration Path (PR by default)
 
-Before merging, verify the main tree has no uncommitted changes:
+**PR-convention check — decide this BEFORE any main-tree checks.** A direct local merge is the trivial/mechanical path only (typo, version bump, doc touch-up). For a reviewable change, the convention is to push the worktree branch and open a PR instead — offer that as the default and merge locally only if the user picks it or the diff is genuinely trivial. See the repo's CLAUDE.md Top Rules.
+
+The PR path only pushes the isolated worktree branch and never touches the main tree, so an unrelated dirty main checkout must NOT block it:
+
+```bash
+git push -u origin <WORKTREE_BRANCH>
+gh pr create --draft --title "<title>" --body-file <file>
+```
+
+Pass BOTH `--title` and `--body-file` explicitly — without a title, gh prompts interactively and hangs a non-interactive run; the body carries what AGENTS.md requires (commands run, host, risk assessment). Then report the PR URL and stop — the worktree stays for review follow-ups; skip steps 6-8.
+
+### 6. Attempt Merge (local path only)
+
+Before merging, verify the main tree has no uncommitted changes — this check gates only this local-merge path, not the PR path above:
 
 ```bash
 git -C <MAIN_TREE_PATH> status --porcelain
 ```
 
 If the main tree has uncommitted changes, warn the user and ask them to commit or stash first. Do NOT proceed with the merge — it will mix their uncommitted work with the merge result.
-
-### 6. Attempt Merge
-
-**PR-convention check first.** A direct local merge is the trivial/mechanical path only (typo, version bump, doc touch-up). For a reviewable change, the convention is to push the worktree branch and open a PR instead (`git push -u origin <WORKTREE_BRANCH>` + `gh pr create --draft`) — offer that as the default and merge locally only if the user picks it or the diff is genuinely trivial. See the repo's CLAUDE.md Top Rules.
 
 Run the merge from the main tree:
 
@@ -139,4 +148,4 @@ Or continue working — run /merge-worktree again later to sync new commits.
 - **Never force-push or rebase** the parent branch
 - **Never delete the worktree branch** — `cwrm` handles that
 - **Prefer the worktree's version** when both sides changed the same thing and intent is unclear (the worktree has the newer work)
-- **Main tree uncommitted changes** are checked in step 5 — do not skip this check
+- **Main tree uncommitted changes** are checked in step 6 before a local merge — do not skip this check (the PR path in step 5 doesn't need it)

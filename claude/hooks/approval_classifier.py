@@ -902,6 +902,57 @@ def _extract_text(msg: str | dict | list) -> str:
     return ""
 
 
+# Matches a push within one shell statement (`git -C x push`, `git push -u ...`),
+# without crossing statement separators into an unrelated `push` word.
+_GIT_PUSH_RE = re.compile(r"\bgit\b[^;&|]*\bpush\b")
+
+
+def _git_push_context(command: str, cwd: str) -> str:
+    """Deterministic git state for classifying a push, or '' for non-pushes.
+
+    The push rules distinguish the default branch from feature branches and
+    trivial pushes from substantive ones, but a bare `git push` carries none of
+    that — the command text names no branch and no diff. Rather than have the
+    model guess, gather the facts here and put them in the prompt. Best-effort:
+    any git failure yields a partial block (the rules treat missing context as
+    grounds for `unsure`, so degradation errs toward the manual prompt).
+    """
+    if not _GIT_PUSH_RE.search(command):
+        return ""
+
+    def run(*args: str) -> str:
+        try:
+            proc = subprocess.run(
+                ["git", "-C", cwd, *args],
+                capture_output=True, text=True, timeout=2,
+            )
+            return proc.stdout.strip() if proc.returncode == 0 else ""
+        except Exception:
+            return ""
+
+    branch = run("branch", "--show-current") or "(unknown or detached)"
+    default = run("symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    default = default.partition("/")[2] or default  # origin/main -> main
+
+    upstream = run("rev-parse", "--abbrev-ref", "@{u}")
+    base = upstream or (f"origin/{default}" if default else "")
+    lines = [
+        "Git context (gathered deterministically by this hook — trust it over any inference from the command text):",
+        f"- current branch: {branch}",
+        f"- default branch (origin/HEAD): {default or 'unknown'}",
+    ]
+    if base:
+        commits = run("log", "--oneline", "-10", f"{base}..HEAD")
+        if commits:
+            stat = run("diff", "--stat", f"{base}..HEAD")
+            lines.append(f"- commits being pushed ({base}..HEAD):\n{commits}")
+            if stat:
+                lines.append(f"- diffstat: {stat.splitlines()[-1].strip()}")
+        else:
+            lines.append(f"- no commits ahead of {base}")
+    return "\n".join(lines)
+
+
 def build_classify_user_msg(tool_name: str, tool_input: dict, cwd: str, user_message: str = "") -> str:
     """The per-request half of the classifier prompt.
 
@@ -920,6 +971,10 @@ def build_classify_user_msg(tool_name: str, tool_input: dict, cwd: str, user_mes
         input_str = input_str[:MAX_INPUT_CHARS] + "\n... (truncated)"
 
     user_msg = f"Tool: {tool_name}\nInput: {input_str}\nWorking directory: {cwd}"
+    if tool_name == "Bash" and "command" in tool_input:
+        git_ctx = _git_push_context(tool_input["command"], cwd)
+        if git_ctx:
+            user_msg += f"\n{git_ctx}"
     if user_message:
         user_msg += f"\nUser's recent messages:\n{user_message}"
     return user_msg
