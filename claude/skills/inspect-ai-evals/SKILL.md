@@ -7,6 +7,18 @@ description: "Silent failure modes and operational gotchas when running evals wi
 
 Each of these produced a run that *completed* with numbers that looked fine. Ordered by how much they cost when missed. Verified against `inspect_ai` 0.3.241; re-check defaults against the installed version before quoting one.
 
+## 0. Preflight before every launch, and use the harness's dry-run
+
+The most expensive habit is discovering a launch-blocking fault *after* committing to a run. If the harness has a `--dry-run` — attest, probe, bind data, publish identity, stop before any generation — use it every single time. On 2026-08-12 it would have surfaced a 303-redirect defect in about 90 seconds; not using it turned four diagnostic cycles into roughly two hours, and every one of those failures was reachable in a minute.
+
+A standing preflight, cheapest check first, each of which has failed in practice:
+
+1. **the serving engine is idle** — a killed run's generation continues server-side, and on a single-replica endpoint your attestation queues behind it;
+2. **the endpoint answers a trivial request** (`/v1/models`);
+3. **`--dry-run` completes.**
+
+If the harness has no dry-run mode, that is the first thing to build. Fail-*closed* validation is not the same as fail-*fast*: refusing to certify a bad run protects the numbers, but it does nothing for the loop time, and loop time is what turns a day into three.
+
 ## The governing principle
 
 **Inspect's config surface and the bytes that reach the server are different things.** Every claim about how a run sampled should be read out of the persisted `ModelEvent.call.request`, never out of the config object you passed. The strongest form is a post-run validator comparing every recorded event field-by-field against a `Literal`-pinned fingerprint model, so an unplanned value fails at construction rather than producing a run that silently differs.
@@ -49,12 +61,29 @@ Modal answers a request on a cold or scaling container with a **303** pointing a
 
 If one code path in your harness handles it and another does not, the asymmetry surfaces only under contention — attestation succeeds, the probe fails, the run aborts. Follow them **bounded and same-origin**: a request carrying a bearer token must not be redirectable to another host.
 
-## 6. Code extraction from model output
+## 6. A shared serving endpoint makes your wall-clock unforecastable
+
+Before estimating any cost or duration, check **who owns the endpoint and how many replicas it has**. `modal profile current` (or the equivalent) tells you whose workspace you are in; the deployment source tells you `max_containers`.
+
+A single-container deployment shared with a collaborator means every one of your requests can queue behind theirs, and no amount of client-side concurrency helps. Diagnostic: watch the engine log during a window when *you* are running nothing. Traffic there is someone else's, and it is competing with you.
+
+Raising `max_containers` on shared infrastructure raises somebody else's bill — get agreement rather than assuming, or deploy your own.
+
+## 7. Digest-bearing source files cannot be edited mid-run
+
+If a manifest records a `source_digest` of some module and the validator **recomputes it at validation time**, then editing that file while a run is in flight makes the run fail validation retroactively — even if the evaluation itself completed perfectly. Redeploying a serving wrapper is the common case.
+
+Finish or abandon the run before touching anything it fingerprinted. This is the cost of strong provenance and it is worth paying, but it has to be scheduled around.
+
+## 8. Code extraction from model output
 
 Not Inspect-specific, but it fails the same way. If your harness extracts code with regexes, check whether a bare-fence pattern can open on a *closing* delimiter and capture the prose between two blocks — it manufactures a block the model never wrote. Prefer a single pass pairing each opening delimiter with its own closing one; select by parsing (`ast.parse`) plus binding the expected entry point at module top level; and record an explicit `extraction_failed` outcome rather than executing text that was never code.
 
 ## Checklist before a billed run
 
+- **preflight passed**: engine idle, endpoint answering, `--dry-run` clean
+- endpoint ownership and `max_containers` known; contention ruled out or accepted
+- nothing in flight that fingerprinted a file you are about to change
 - `max_samples` set explicitly, verified from server logs at the intended concurrency
 - sampling values read back out of a persisted request, not asserted from config
 - probe and attestation timeouts sized for a contended endpoint
