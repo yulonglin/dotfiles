@@ -79,6 +79,12 @@ Finish or abandon the run before touching anything it fingerprinted. This is the
 
 Not Inspect-specific, but it fails the same way. If your harness extracts code with regexes, check whether a bare-fence pattern can open on a *closing* delimiter and capture the prose between two blocks — it manufactures a block the model never wrote. Prefer a single pass pairing each opening delimiter with its own closing one; select by parsing (`ast.parse`) plus binding the expected entry point at module top level; and record an explicit `extraction_failed` outcome rather than executing text that was never code.
 
+## Sizing a run: breadth before depth
+
+When a benchmark has N problems and you can afford K episodes, one draw of every problem beats five draws of a fifth of them. Breadth estimates the quantity you actually care about across the whole benchmark; repeat draws estimate within-task variance, which is only worth measuring once you know the quantity is non-zero. Repeat seeds are a second phase, gated on the first showing signal.
+
+State the cost as a function of the concurrency you have **measured**, not the one you configured, and give the single-stream figure alongside it — the gap between them is usually the whole decision. Per-episode token counts taken from one or two pilot episodes carry unknown spread; say so where the estimate is displayed.
+
 ## Checklist before a billed run
 
 - **preflight passed**: engine idle, endpoint answering, `--dry-run` clean
