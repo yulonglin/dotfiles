@@ -158,6 +158,15 @@ mark.note{{background:var(--mark);border-bottom:2px solid var(--accent);cursor:p
  border-radius:0 7px 7px 0;padding:.6rem .8rem;margin:.5rem 0;font-size:.88rem}}
 .cmt .q{{color:var(--soft);font-style:italic;margin-bottom:.3rem}}
 .cmt .where{{font-size:.75rem;color:var(--soft);text-transform:uppercase;letter-spacing:.04em}}
+#exportpanel{{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;
+ background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:.9rem;
+ width:min(46rem,92vw);box-shadow:0 12px 40px rgba(0,0,0,.28)}}
+#exportpanel .exphead{{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;font-size:.9rem}}
+#exportpanel .exphint{{color:var(--soft);font-size:.8rem}}
+#exportpanel .btn{{margin-left:auto}}
+#exporttext{{width:100%;height:min(24rem,55vh);border:1px solid var(--rule);border-radius:6px;
+ background:var(--bg);color:var(--ink);padding:.6rem;font-family:ui-monospace,Menlo,monospace;
+ font-size:.82rem;resize:vertical}}
 .ok{{background:var(--good-bg);color:var(--good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}}
 @media (max-width:56rem){{
   .shell.has-toc{{display:block}}
@@ -185,10 +194,19 @@ mark.note{{background:var(--mark);border-bottom:2px solid var(--accent);cursor:p
   </div>
 </div>
 
+<div id="exportpanel">
+  <div class="exphead">
+    <strong>Your comments as Markdown</strong>
+    <span class="exphint">already selected &mdash; copy with your usual shortcut</span>
+    <button class="btn ghost tiny" id="exportclose">Close</button>
+  </div>
+  <textarea id="exporttext" readonly></textarea>
+</div>
+
 <div id="bar">
   <span class="count" id="count">No comments yet</span>
   <button class="btn" id="copy">Copy all</button>
-  <button class="btn ghost" id="download">Download .md</button>
+  <button class="btn ghost" id="download">Export text</button>
   <button class="btn ghost" id="clear">Clear all</button>
   <span id="toast"></span>
 </div>
@@ -342,13 +360,28 @@ document.getElementById("copy").onclick = async () => {{
   setTimeout(() => toast.innerHTML = "", 1800);
 }};
 
+// Artifacts render inside a sandboxed iframe, where a blob download is silently
+// dropped unless the frame carries allow-downloads. So the export that always
+// works is a selectable textarea: try the download, and show the text either way.
 document.getElementById("download").onclick = () => {{
   if (!comments.length) return;
-  const url = URL.createObjectURL(new Blob([exportText()], {{ type: "text/markdown" }}));
-  const a = document.createElement("a");
-  a.href = url; a.download = "comments.md";
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url); markClean(); render();
+  const text = exportText();
+  try {{
+    const url = URL.createObjectURL(new Blob([text], {{ type: "text/markdown" }}));
+    const a = document.createElement("a");
+    a.href = url; a.download = "comments.md";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }} catch (e) {{ }}
+  const panel = document.getElementById("exportpanel");
+  const ta = document.getElementById("exporttext");
+  ta.value = text;
+  panel.style.display = "block";
+  ta.focus(); ta.select();
+  markClean(); render();
+}};
+document.getElementById("exportclose").onclick = () => {{
+  document.getElementById("exportpanel").style.display = "none";
 }};
 
 document.getElementById("clear").onclick = () => {{
