@@ -1,0 +1,416 @@
+#!/usr/bin/env python3
+"""md2review - wrap a Markdown document in a reviewable HTML artifact.
+
+Renders Markdown to a self-contained page carrying the review affordances that
+`rules/artifact-first-replies.md` requires: a sticky table of contents built
+from the headings, select-to-comment annotation, per-comment edit and delete,
+an unexported-comments guard on tab close, and clipboard plus file export.
+
+Markdown artifacts cannot carry JavaScript, so a spec or report published as
+raw `.md` silently loses all of that. Run it through here first.
+
+    md2review spec.md                  # -> spec.review.html
+    md2review spec.md -o /tmp/out.html
+    md2review spec.md --title "P1 spec" --no-toc
+
+The output is a fragment (no <html>/<head>/<body>), which is what the Artifact
+tool expects; it is also viewable directly in a browser.
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import re
+import sys
+from pathlib import Path
+
+try:
+    from markdown_it import MarkdownIt
+except ImportError:  # pragma: no cover - depends on the host environment
+    sys.exit("md2review needs markdown-it-py (uv pip install markdown-it-py)")
+
+SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def slugify(text: str) -> str:
+    return SLUG_RE.sub("-", text.strip().lower()).strip("-") or "section"
+
+
+def render(md_text: str) -> tuple[str, list[tuple[int, str, str]]]:
+    """Return (html, headings) where headings are (level, slug, text)."""
+    md = MarkdownIt("commonmark", {"html": False, "linkify": True}).enable("table")
+    tokens = md.parse(md_text)
+
+    headings: list[tuple[int, str, str]] = []
+    seen: dict[str, int] = {}
+    for i, tok in enumerate(tokens):
+        if tok.type != "heading_open":
+            continue
+        level = int(tok.tag[1])
+        if level > 3:
+            continue
+        text = tokens[i + 1].content
+        slug = slugify(text)
+        if slug in seen:
+            seen[slug] += 1
+            slug = f"{slug}-{seen[slug]}"
+        else:
+            seen[slug] = 0
+        tok.attrSet("id", slug)
+        headings.append((level, slug, text))
+
+    return md.renderer.render(tokens, md.options, {}), headings
+
+
+def toc_html(headings: list[tuple[int, str, str]]) -> str:
+    if not headings:
+        return ""
+    rows = [
+        f'<a href="#{slug}" class="lvl{level}">{html.escape(text)}</a>'
+        for level, slug, text in headings
+        if level >= 2
+    ]
+    if not rows:
+        return ""
+    return '<nav class="toc" aria-label="Contents"><h4>Contents</h4>' + "".join(rows) + "</nav>"
+
+
+def build(md_text: str, *, title: str, with_toc: bool, key: str) -> str:
+    body, headings = render(md_text)
+    toc = toc_html(headings) if with_toc else ""
+    shell_open = '<div class="shell has-toc">' if toc else '<div class="shell">'
+    return TEMPLATE.format(
+        title=html.escape(title),
+        toc=toc,
+        shell_open=shell_open,
+        body=body,
+        key=json.dumps(key),
+    )
+
+
+TEMPLATE = """<title>{title}</title>
+<style>
+:root {{
+  --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
+  --accent:#bd5d3a; --accent-bg:#f7e9e2; --good:#2f6b4f; --good-bg:#e4f0e9;
+  --bad:#a33f2a; --bad-bg:#f9e4de; --code:#f4f2ee; --mark:#fbe6a2;
+}}
+@media (prefers-color-scheme: dark) {{ :root:not([data-theme="light"]) {{
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+}} }}
+:root[data-theme="dark"] {{
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+}}
+*{{box-sizing:border-box}}
+body{{background:var(--bg);color:var(--ink);margin:0;padding:2.5rem 1rem 6rem;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;line-height:1.65}}
+.shell{{max-width:48rem;margin:0 auto}}
+.shell.has-toc{{display:grid;grid-template-columns:15rem minmax(0,1fr);gap:2.4rem;max-width:72rem}}
+.toc{{position:sticky;top:1.5rem;align-self:start;max-height:calc(100vh - 3rem);overflow:auto;
+ font-size:.84rem;border-right:1px solid var(--rule);padding-right:.9rem}}
+.toc h4{{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+ margin:0 0 .45rem;font-weight:700}}
+.toc a{{display:block;color:var(--soft);text-decoration:none;padding:.22rem .45rem;
+ border-radius:5px;border-left:2px solid transparent}}
+.toc a.lvl3{{padding-left:1.2rem;font-size:.8rem}}
+.toc a:hover{{background:var(--code);color:var(--ink)}}
+.toc a.on{{color:var(--ink);background:var(--code);border-left-color:var(--accent);font-weight:600}}
+.doc{{min-width:0}}
+h1{{font-size:1.75rem;line-height:1.25;margin:0 0 .8rem;letter-spacing:-.015em}}
+h2{{font-size:1.2rem;margin:2.4rem 0 .7rem;padding-bottom:.32rem;border-bottom:1px solid var(--rule)}}
+h3{{font-size:1.02rem;margin:1.7rem 0 .45rem}}
+p,li{{margin:0 0 .85rem}}
+ul,ol{{padding-left:1.35rem}}
+blockquote{{margin:1rem 0;padding:.1rem 1rem;border-left:3px solid var(--accent);
+ background:var(--accent-bg);border-radius:0 6px 6px 0}}
+pre{{background:var(--code);border:1px solid var(--rule);border-radius:7px;padding:.75rem .9rem;
+ overflow-x:auto;font-size:.83rem;line-height:1.5}}
+code{{font-family:ui-monospace,"SF Mono",Menlo,monospace}}
+p code,li code,td code,h2 code,h3 code{{background:var(--code);padding:.06rem .32rem;border-radius:4px;font-size:.9em}}
+table{{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0;display:block;overflow-x:auto}}
+th,td{{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}}
+th{{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}}
+hr{{border:0;border-top:1px solid var(--rule);margin:2rem 0}}
+a{{color:var(--accent)}}
+mark.note{{background:var(--mark);border-bottom:2px solid var(--accent);cursor:pointer;border-radius:2px}}
+#pop{{position:absolute;z-index:50;display:none;background:var(--panel);border:1px solid var(--rule);
+ border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.16);padding:.6rem;width:20rem}}
+#pop textarea{{width:100%;min-height:4.5rem;border:1px solid var(--rule);border-radius:5px;
+ background:var(--bg);color:var(--ink);padding:.4rem;font:inherit;font-size:.86rem;resize:vertical}}
+.btn{{background:var(--accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
+ font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}}
+.btn.ghost{{background:transparent;color:var(--soft);border:1px solid var(--rule)}}
+.btn.ghost.danger{{color:var(--bad);border-color:var(--bad)}}
+.btn.tiny{{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}}
+#pop:not(.editing) #delete{{display:none}}
+.row{{display:flex;gap:.4rem;justify-content:flex-end;margin-top:.45rem}}
+#bar{{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--rule);
+ padding:.6rem 1rem;display:flex;gap:.6rem;align-items:center;justify-content:center;flex-wrap:wrap;z-index:40}}
+#bar .count{{color:var(--soft);font-size:.87rem}}
+#bar .count.warn{{color:var(--bad);font-weight:650}}
+.cmt{{background:var(--panel);border:1px solid var(--rule);border-left:3px solid var(--accent);
+ border-radius:0 7px 7px 0;padding:.6rem .8rem;margin:.5rem 0;font-size:.88rem}}
+.cmt .q{{color:var(--soft);font-style:italic;margin-bottom:.3rem}}
+.cmt .where{{font-size:.75rem;color:var(--soft);text-transform:uppercase;letter-spacing:.04em}}
+.ok{{background:var(--good-bg);color:var(--good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}}
+@media (max-width:56rem){{
+  .shell.has-toc{{display:block}}
+  .toc{{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--rule);
+   padding:0 0 .8rem;margin-bottom:1.4rem}}
+  .toc a{{display:inline-block;margin:.15rem .3rem .15rem 0;border-left:0}}
+  .toc a.lvl3{{padding-left:.45rem}}
+}}
+</style>
+{shell_open}
+{toc}
+<div class="doc">
+{body}
+<h2 id="your-comments">Your comments</h2>
+<div id="list"></div>
+</div>
+</div>
+
+<div id="pop">
+  <textarea id="txt" placeholder="What do you think?"></textarea>
+  <div class="row">
+    <button class="btn ghost danger" id="delete">Delete</button>
+    <button class="btn ghost" id="cancel">Cancel</button>
+    <button class="btn" id="save">Save</button>
+  </div>
+</div>
+
+<div id="bar">
+  <span class="count" id="count">No comments yet</span>
+  <button class="btn" id="copy">Copy all</button>
+  <button class="btn ghost" id="download">Download .md</button>
+  <button class="btn ghost" id="clear">Clear all</button>
+  <span id="toast"></span>
+</div>
+
+<script>
+const KEY = {key};
+const DIRTY = KEY + "-dirty";
+let comments = [];
+try {{ comments = JSON.parse(localStorage.getItem(KEY) || "[]"); }} catch (e) {{ comments = []; }}
+let dirty = false;
+try {{ dirty = localStorage.getItem(DIRTY) === "1"; }} catch (e) {{}}
+let nextId = comments.reduce((m, c) => Math.max(m, c.id || 0), 0) + 1;
+comments.forEach((c) => {{ if (!c.id) c.id = nextId++; }});
+
+const pop = document.getElementById("pop");
+const txt = document.getElementById("txt");
+let pending = null, editingId = null;
+
+window.addEventListener("beforeunload", (e) => {{
+  if (!dirty || !comments.length) return;
+  e.preventDefault(); e.returnValue = ""; return "";
+}});
+
+function sectionOf(node) {{
+  while (node && node.nodeType === 3) node = node.parentNode;
+  while (node && node !== document.body) {{
+    let p = node.previousElementSibling;
+    while (p) {{
+      if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim();
+      p = p.previousElementSibling;
+    }}
+    node = node.parentNode;
+  }}
+  return "document";
+}}
+
+document.addEventListener("click", (ev) => {{
+  const m = ev.target.closest && ev.target.closest("mark.note");
+  if (!m || pop.contains(ev.target)) return;
+  const c = comments.find((x) => x.id === Number(m.dataset.cid));
+  if (!c) return;
+  ev.preventDefault();
+  editingId = c.id; pending = null; txt.value = c.note;
+  const r = m.getBoundingClientRect();
+  pop.classList.add("editing"); pop.style.display = "block";
+  pop.style.top = (window.scrollY + r.bottom + 8) + "px";
+  pop.style.left = Math.max(8, Math.min(window.scrollX + r.left,
+    window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 12)) + "px";
+  txt.focus();
+}});
+
+document.addEventListener("mouseup", (ev) => {{
+  if (pop.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest("mark.note")) return;
+  const sel = window.getSelection();
+  const text = sel ? sel.toString().trim() : "";
+  if (!text) {{ pop.style.display = "none"; return; }}
+  const rect = sel.getRangeAt(0).getBoundingClientRect();
+  editingId = null; pop.classList.remove("editing");
+  pending = {{ quote: text, where: sectionOf(sel.anchorNode), range: sel.getRangeAt(0).cloneRange() }};
+  pop.style.display = "block";
+  pop.style.top = (window.scrollY + rect.bottom + 8) + "px";
+  pop.style.left = Math.max(8, Math.min(window.scrollX + rect.left,
+    window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 12)) + "px";
+  txt.value = ""; txt.focus();
+}});
+
+function closePop() {{ pop.style.display = "none"; pending = null; editingId = null; pop.classList.remove("editing"); }}
+function markDirty() {{ dirty = true; try {{ localStorage.setItem(DIRTY, "1"); }} catch (e) {{}} }}
+function markClean() {{ dirty = false; try {{ localStorage.setItem(DIRTY, "0"); }} catch (e) {{}} }}
+function persist() {{ try {{ localStorage.setItem(KEY, JSON.stringify(comments)); }} catch (e) {{}} }}
+
+document.getElementById("cancel").onclick = closePop;
+document.getElementById("delete").onclick = () => {{
+  if (editingId === null) {{ closePop(); return; }}
+  comments = comments.filter((c) => c.id !== editingId);
+  const m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
+  if (m) m.replaceWith(document.createTextNode(m.textContent));
+  markDirty(); persist(); render(); closePop();
+}};
+document.getElementById("save").onclick = () => {{
+  const note = txt.value.trim();
+  if (!note) {{ closePop(); return; }}
+  if (editingId !== null) {{
+    const c = comments.find((x) => x.id === editingId);
+    if (c) c.note = note;
+    const m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
+    if (m) m.title = note;
+  }} else if (pending) {{
+    const id = nextId++;
+    try {{
+      const m = document.createElement("mark");
+      m.className = "note"; m.title = note; m.dataset.cid = String(id);
+      pending.range.surroundContents(m);
+    }} catch (e) {{ }}
+    comments.push({{ id: id, where: pending.where, quote: pending.quote, note: note }});
+  }}
+  markDirty(); persist(); render(); closePop();
+  window.getSelection().removeAllRanges();
+}};
+
+function render() {{
+  const list = document.getElementById("list");
+  const count = document.getElementById("count");
+  list.innerHTML = "";
+  if (!comments.length) {{
+    count.textContent = "No comments yet"; count.className = "count";
+    list.innerHTML = '<p style="color:var(--soft)">Select any text above to comment.</p>';
+    return;
+  }}
+  count.textContent = comments.length + (comments.length === 1 ? " comment" : " comments")
+    + (dirty ? " — not yet exported" : " — exported");
+  count.className = "count" + (dirty ? " warn" : "");
+  comments.forEach((c) => {{
+    const d = document.createElement("div"); d.className = "cmt";
+    const w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
+    const q = document.createElement("div"); q.className = "q"; q.textContent = '"' + c.quote + '"';
+    const n = document.createElement("div"); n.textContent = c.note;
+    const a = document.createElement("button"); a.className = "btn ghost tiny"; a.textContent = "edit";
+    a.onclick = () => {{
+      const m = document.querySelector('mark.note[data-cid="' + c.id + '"]');
+      if (m) {{ m.scrollIntoView({{ block: "center" }}); m.click(); }}
+      else {{ editingId = c.id; txt.value = c.note; pop.classList.add("editing");
+              pop.style.display = "block"; pop.style.top = (window.scrollY + 120) + "px";
+              pop.style.left = "1rem"; txt.focus(); }}
+    }};
+    d.append(w, q, n, a); list.appendChild(d);
+  }});
+}}
+
+function markdown() {{
+  return comments.map((c) =>
+    "- **" + c.where + "** — " + c.note + "\\n  > " + c.quote.replace(/\\n/g, "\\n  > ")
+  ).join("\\n");
+}}
+function exportText() {{ return "# Comments — " + document.title + "\\n\\n" + markdown() + "\\n"; }}
+
+document.getElementById("copy").onclick = async () => {{
+  const toast = document.getElementById("toast");
+  if (!comments.length) {{ toast.innerHTML = '<span class="ok">nothing to copy</span>';
+    setTimeout(() => toast.innerHTML = "", 1600); return; }}
+  try {{ await navigator.clipboard.writeText(exportText()); }}
+  catch (e) {{
+    const ta = document.createElement("textarea");
+    ta.value = exportText(); document.body.appendChild(ta); ta.select();
+    try {{ document.execCommand("copy"); }} catch (e2) {{}}
+    ta.remove();
+  }}
+  markClean(); render();
+  toast.innerHTML = '<span class="ok">copied ' + comments.length + '</span>';
+  setTimeout(() => toast.innerHTML = "", 1800);
+}};
+
+document.getElementById("download").onclick = () => {{
+  if (!comments.length) return;
+  const url = URL.createObjectURL(new Blob([exportText()], {{ type: "text/markdown" }}));
+  const a = document.createElement("a");
+  a.href = url; a.download = "comments.md";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url); markClean(); render();
+}};
+
+document.getElementById("clear").onclick = () => {{
+  if (!comments.length) return;
+  if (dirty && !window.confirm("These " + comments.length +
+      " comments have not been copied or downloaded yet. Delete anyway?")) return;
+  comments = []; markClean(); persist(); render();
+  document.querySelectorAll("mark.note").forEach((m) => m.replaceWith(document.createTextNode(m.textContent)));
+}};
+
+const tocLinks = Array.from(document.querySelectorAll(".toc a"));
+const targets = tocLinks
+  .map((a) => ({{ a, el: document.getElementById(a.getAttribute("href").slice(1)) }}))
+  .filter((t) => t.el);
+if ("IntersectionObserver" in window && targets.length) {{
+  const io = new IntersectionObserver((entries) => {{
+    entries.forEach((e) => {{
+      if (!e.isIntersecting) return;
+      const hit = targets.find((t) => t.el === e.target);
+      if (!hit) return;
+      tocLinks.forEach((a) => a.classList.remove("on"));
+      hit.a.classList.add("on");
+    }});
+  }}, {{ rootMargin: "-12% 0px -75% 0px" }});
+  targets.forEach((t) => io.observe(t.el));
+}}
+
+render();
+</script>
+"""
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("source", type=Path, help="Markdown file to wrap")
+    ap.add_argument("-o", "--output", type=Path, help="output HTML (default: <source>.review.html)")
+    ap.add_argument("--title", help="page title (default: first H1, else the filename stem)")
+    ap.add_argument("--no-toc", action="store_true", help="omit the table of contents")
+    ap.add_argument(
+        "--key",
+        help="localStorage key for comments (default: derived from the filename, so "
+        "republishing the same document keeps its comments)",
+    )
+    args = ap.parse_args(argv)
+
+    if not args.source.is_file():
+        ap.error(f"no such file: {args.source}")
+    text = args.source.read_text(encoding="utf-8")
+
+    title = args.title
+    if not title:
+        m = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
+        title = m.group(1).strip() if m else args.source.stem
+
+    out = args.output or args.source.with_suffix(".review.html")
+    key = args.key or f"review-{slugify(args.source.stem)}"
+    out.write_text(
+        build(text, title=title, with_toc=not args.no_toc, key=key), encoding="utf-8"
+    )
+    print(out)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
