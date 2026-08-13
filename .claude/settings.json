@@ -1,5 +1,6 @@
 {
   "enabledPlugins": {
+    "bear-mcp@productivity-tools": true,
     "claude-md-management@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
     "code@ai-safety-plugins": true,
@@ -11,7 +12,6 @@
     "figma@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
     "gopls-lsp@claude-plugins-official": false,
-    "hive@alignment-hive": false,
     "hookify@claude-plugins-official": true,
     "huggingface-skills@claude-plugins-official": false,
     "imessage@claude-plugins-official": false,

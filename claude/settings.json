@@ -379,11 +379,27 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "fable",
+  "model": "opus",
   "fallbackModel": [
     "fable"
   ],
+  "skillOverrides": {
+    "claude-api": "off"
+  },
+  "disableBundledSkills": true,
   "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/tmux-status.sh",
+            "timeout": 5,
+            "async": false
+          }
+        ]
+      }
+    ],
     "PermissionRequest": [
       {
         "hooks": [
@@ -397,6 +413,18 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
             "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/tmux-status.sh",
+            "timeout": 5,
+            "async": false
           }
         ]
       }
@@ -474,6 +502,18 @@
           }
         ]
       },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/tmux-status.sh",
+            "timeout": 5,
+            "async": false
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
       {
         "hooks": [
           {
@@ -879,42 +919,6 @@
           }
         ]
       }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
-          }
-        ]
-      }
-    ],
-    "PostCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
-          }
-        ]
-      }
     ]
   },
   "worktree": {
@@ -930,10 +934,6 @@
     "command": "claude-tools statusline || bash $HOME/.claude/statusline.sh",
     "padding": 1
   },
-  "disableBundledSkills": true,
-  "skillOverrides": {
-    "claude-api": "off"
-  },
   "enabledPlugins": {
     "claude-md-management@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": false,
@@ -942,13 +942,17 @@
     "commit-commands@claude-plugins-official": false,
     "context7@claude-plugins-official": false,
     "core@ai-safety-plugins": true,
+    "dev-browser@dev-browser-marketplace": true,
     "frontend-design@claude-plugins-official": false,
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
+    "model-router@alignment-hive": true,
     "playground@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
+    "precis@precis": true,
     "pyright-lsp@claude-plugins-official": true,
     "remember@claude-plugins-official": true,
+    "remote-kernels@alignment-hive": true,
     "research@ai-safety-plugins": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
@@ -958,12 +962,7 @@
     "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
-    "writing@ai-safety-plugins": true,
-    "dev-browser@dev-browser-marketplace": true,
-    "hive@alignment-hive": true,
-    "precis@precis": true,
-    "remote-kernels@alignment-hive": true,
-    "model-router@alignment-hive": true
+    "writing@ai-safety-plugins": true
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {
@@ -990,18 +989,6 @@
         "repo": "crazytieguy/codex-plugin-cc"
       }
     },
-    "productivity-tools": {
-      "source": {
-        "source": "github",
-        "repo": "yulonglin/productivity-tools"
-      }
-    },
-    "ui-ux-pro-max-skill": {
-      "source": {
-        "source": "github",
-        "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
-      }
-    },
     "dev-browser-marketplace": {
       "source": {
         "source": "github",
@@ -1014,6 +1001,18 @@
         "repo": "Crazytieguy/precis"
       },
       "autoUpdate": true
+    },
+    "productivity-tools": {
+      "source": {
+        "source": "github",
+        "repo": "yulonglin/productivity-tools"
+      }
+    },
+    "ui-ux-pro-max-skill": {
+      "source": {
+        "source": "github",
+        "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
+      }
     }
   },
   "outputStyle": "Effortful Learning",
@@ -1246,21 +1245,21 @@
       ],
       "command": "/Applications/Bear.app/Contents/MacOS/bearcli"
     },
+    "things-cloud": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    },
     "zotero": {
       "args": [
         "serve"
       ],
       "command": "zotero-mcp",
       "env": {
-        "ZOTERO_LOCAL": "true",
         "ZOTERO_API_KEY": "${ZOTERO_API_KEY}",
         "ZOTERO_LIBRARY_ID": "${ZOTERO_LIBRARY_ID}",
-        "ZOTERO_LIBRARY_TYPE": "${ZOTERO_LIBRARY_TYPE:-user}"
+        "ZOTERO_LIBRARY_TYPE": "${ZOTERO_LIBRARY_TYPE:-user}",
+        "ZOTERO_LOCAL": "true"
       }
-    },
-    "things-cloud": {
-      "type": "http",
-      "url": "http://127.0.0.1:8080/mcp"
     }
   }
 }
