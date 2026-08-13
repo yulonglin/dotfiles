@@ -27,7 +27,11 @@ If the harness has no dry-run mode, that is the first thing to build. Fail-*clos
 
 `max_connections` bounds concurrent *requests*, but a solver issues one request per sample, so it bounds nothing unless something runs samples in parallel. `max_samples` defaults to `None` and does **not** inherit `max_connections`.
 
-Symptom: the serving engine reports `Running: 1 reqs, Waiting: 0 reqs` at single-stream throughput while you believe you configured N-way concurrency. On an endpoint billed by wall-clock this is a straight multiple on cost — observed once as ~48 GPU-hours where ~7 were expected, roughly $190 against $30.
+Symptom: the serving engine reports `Running: 1 reqs, Waiting: 0 reqs` at single-stream throughput while you believe you configured N-way concurrency.
+
+**But check the server before blaming the client.** On Modal, a `@app.function` with no `@modal.concurrent(max_inputs=N)` forwards **one request per container**, whatever the client sends. The queue then sits at the platform proxy and is invisible to the inference engine — which is why `Waiting: 0` is not evidence of an idle queue. Diagnostic: compare a request's wall duration against its execution time in the platform's request log. An attestation showing `duration: 121.0 s, execution: 88.3 ms` is a proxy queue, not a slow model. The cheap fix is `@modal.concurrent`, which multiplies throughput on the *same* GPU; raising `max_containers` adds GPUs and cost for the same effect.
+
+Beware also of *when* you sample: with several samples in flight, the short ones finish first, so a late reading shows one straggler and looks like no concurrency at all. Read concurrency from the eval log's per-sample event timestamps — identical start times prove parallel dispatch — not from a spot check of the engine. On an endpoint billed by wall-clock this is a straight multiple on cost — observed once as ~48 GPU-hours where ~7 were expected, roughly $190 against $30.
 
 Set it explicitly, and **confirm from the server's own logs**, not from the config you passed.
 
@@ -48,6 +52,21 @@ The same shape applies to any Inspect property that indexes into a list.
 ## 3. `GenerateConfig` silently drops provider-specific fields
 
 `top_k` and similar non-standard sampling fields do not survive to the request. They must ride `extra_body`. Verify from a persisted request body.
+
+## 3b. `pueue kill` does not stop a job launched through `systemd-run`
+
+The most expensive failure of the night it was written. If pueue's command is `systemd-run --user ... -- <payload>`, then `systemd-run` hands the work to a **transient systemd unit that systemd owns**. pueue signals only its own child — the `systemd-run` *client* — and reports the task "Killed". The unit and the payload survive, reparented to the user systemd manager, outside pueue's process tree entirely.
+
+Observed consequence: a run believed killed at 22:32 was still running at 23:54, had completed two full evaluation splits in the meantime, and monopolised a single-replica endpoint so that every subsequent attempt lost its capability probe to the queue. Roughly ninety minutes of diagnosis went into "why is the endpoint mysteriously busy". The endpoint was busy with us.
+
+```bash
+pueue status                                  # says Killed. It is not.
+systemctl --user list-units 'run-u*'          # the truth
+ps -eo pid,etime,cmd | grep <your entrypoint> # elapsed time gives it away
+systemctl --user stop run-uNNNN.service       # what actually stops it
+```
+
+After any kill of a `systemd-run`-wrapped job, verify with `list-units` and by elapsed process time before concluding anything about the endpoint. A stale run also holds its TLS connections open, so `ss -tp` attributes it to a PID.
 
 ## 4. Killing a run does not stop the server
 
