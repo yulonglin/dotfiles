@@ -17,6 +17,7 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 |---|---|
 | `commit` | "commit this", "commit these changes", "save my work" |
 | `commit-push-sync` | "commit and push", "sync changes", "update remote" |
+| `ship` | "ship this" or review, finish, merge, and push an authorized completed change |
 | `merge-worktree` | "merge this worktree", "merge my branch back", "finish this worktree" |
 | `finishing-a-development-branch` | Implementation is done, tests pass, deciding merge/PR/cleanup |
 | `wrap-up` | A session needs to reach a terminal state — land it as a draft PR, state the blocker, or say it's done (dotfiles trial) |

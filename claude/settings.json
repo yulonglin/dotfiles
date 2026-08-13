@@ -435,7 +435,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/retry_omitted_grep.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.retry-omitted-grep -- $HOME/.claude/hooks/retry_omitted_grep.sh",
             "timeout": 5
           }
         ]
@@ -477,7 +477,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/nudge_send_user_file.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.send-user-file -- $HOME/.claude/hooks/nudge_send_user_file.sh",
             "timeout": 5
           }
         ]
@@ -492,12 +492,12 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/nudge_syspath.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.syspath -- $HOME/.claude/hooks/nudge_syspath.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/nudge_statusline_parity.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.statusline-parity -- $HOME/.claude/hooks/nudge_statusline_parity.sh",
             "timeout": 5
           }
         ]
@@ -550,7 +550,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$HOME/.claude/hooks/codex_plan_write_reminder.mjs\"",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.codex-plan-review -- node $HOME/.claude/hooks/codex_plan_write_reminder.mjs",
             "if": "Write(*/plans/*.md)",
             "timeout": 5
           }
@@ -572,7 +572,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$HOME/.claude/hooks/codex_code_review_reminder.mjs\"",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.codex-code-review -- node $HOME/.claude/hooks/codex_code_review_reminder.mjs",
             "timeout": 5
           }
         ]
@@ -620,12 +620,12 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/nudge_modern_tools.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.modern-tools -- $HOME/.claude/hooks/nudge_modern_tools.sh",
             "timeout": 3
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/warn_dep_install.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.dependency-install -- $HOME/.claude/hooks/warn_dep_install.sh",
             "timeout": 3
           },
           {
@@ -642,13 +642,13 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/nudge_experiment_jobs.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.experiment-jobs -- $HOME/.claude/hooks/nudge_experiment_jobs.sh",
             "if": "Bash(*python*)",
             "timeout": 3
           },
           {
             "type": "command",
-            "command": "node \"$HOME/.claude/hooks/codex_git_add_reminder.mjs\"",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.codex-git-review -- node $HOME/.claude/hooks/codex_git_add_reminder.mjs",
             "if": "Bash(git add *)",
             "timeout": 5
           },
@@ -694,7 +694,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/nudge_html_email.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.html-email -- $HOME/.claude/hooks/nudge_html_email.sh",
             "timeout": 3
           }
         ]
@@ -755,7 +755,7 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/check_venv.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.venv-warning -- $HOME/.claude/hooks/check_venv.sh",
             "timeout": 3
           },
           {
@@ -771,12 +771,12 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/check_things_mcp.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.things-mcp-warning -- $HOME/.claude/hooks/check_things_mcp.sh",
             "timeout": 3
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/anthropic_keycheck.py",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.auth-key-warning -- $HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/anthropic_keycheck.py",
             "timeout": 10
           },
           {
@@ -825,7 +825,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/check_git_root.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.git-root-warning -- $HOME/.claude/hooks/check_git_root.sh",
             "timeout": 3
           }
         ]
@@ -841,7 +841,7 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/nudge_remember.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.remember -- $HOME/.claude/hooks/nudge_remember.sh",
             "timeout": 3
           },
           {
@@ -851,7 +851,7 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/simplify_nudge.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.simplify -- $HOME/.claude/hooks/simplify_nudge.sh",
             "timeout": 5
           },
           {
@@ -861,7 +861,7 @@
           },
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hooks/nudge_vault_lint.sh",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.vault-lint -- bash $HOME/.claude/hooks/nudge_vault_lint.sh",
             "timeout": 3
           },
           {

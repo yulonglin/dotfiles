@@ -60,8 +60,13 @@ if [[ -n "${TMUX:-}" ]]; then
   tmux rename-window "$TITLE" 2>/dev/null || true
 fi
 
-# Output systemMessage nudging Claude to run /rename
-jq -n --arg subject "$SUBJECT" '{
-  systemMessage: ("✅ First commit made: \"" + $subject + "\". The terminal title has been updated. Consider suggesting /rename to the user with a descriptive session name.")
-}'
+# Output the rename suggestion only when advisory nudges are enabled. The terminal
+# and tmux title updates above remain active because they do not pollute context.
+feature_rc=0
+python3 "$HOME/.claude/hooks/hook_feature.py" enabled nudges.session-rename >/dev/null 2>&1 || feature_rc=$?
+if [[ "$feature_rc" -ne 1 ]]; then
+  jq -n --arg subject "$SUBJECT" '{
+    systemMessage: ("✅ First commit made: \"" + $subject + "\". The terminal title has been updated. Consider suggesting /rename to the user with a descriptive session name.")
+  }'
+fi
 exit 0

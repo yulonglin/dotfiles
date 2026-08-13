@@ -127,11 +127,15 @@ fi
 # --- Collect warnings ---
 
 warnings=""
+feature_rc=0
+python3 "$HOME/.claude/hooks/hook_feature.py" enabled nudges.session-start-warnings >/dev/null 2>&1 || feature_rc=$?
+advisory_enabled=true
+[[ "$feature_rc" -eq 1 ]] && advisory_enabled=false
 
 if ! $classify_ok; then
-    # Loud terminal warning (stderr — user sees this immediately)
+    # Loud terminal warning stays active; it adds no model context.
     printf '\033[1;31m🚨 APPROVAL CLASSIFIER DEGRADED:\033[0m\n%s\n' "$classify_warnings" >&2
-    # Also include in Claude's context
+    # Keep collecting so the same result can enter context when enabled.
     warnings+="🚨 APPROVAL CLASSIFIER DEGRADED:"$'\n'"$classify_warnings"
 fi
 
@@ -177,8 +181,10 @@ fi
 
 # --- Output ---
 
-# Exit silently if nothing to report
+# Exit silently if nothing should enter the session context. The setup and health
+# checks above still run when advisory nudges are disabled.
 [[ -z "$warnings" ]] && exit 0
+$advisory_enabled || exit 0
 
 # Emit structured hook output so Claude sees the warnings in context
 jq -n --arg w "$warnings" '{

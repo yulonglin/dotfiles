@@ -8,7 +8,7 @@
 - **Edit races**: `Edit` failing with "file modified since read" means re-read and retry, never `Write` over the file.
 - **`git add -A`**: never in-sandbox — it stages the mask artifacts below. Use explicit pathspecs.
 
-Enforced by hook, not by this file: `block_destructive_git.sh` (`reset --hard`, `checkout -- <path>`, `clean -f`, bare `stash`, `stash pop`), `nudge_syspath.sh` (`sys.path.insert` crashes the session).
+Enforced by hook, not by this file: `block_destructive_git.sh` (`reset --hard`, `checkout -- <path>`, `clean -f`, bare `stash`, `stash pop`). `nudge_syspath.sh` is advisory PostToolUse feedback, controlled by `hooks/features.conf`; it does not prevent a write.
 
 ## Sandbox failure modes
 

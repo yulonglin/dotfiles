@@ -243,13 +243,13 @@ expect "already-promoted script stays quiet" "$(nudge "$S")" silent
 
 S=dirty
 touch "$TMP/claude-simplify-dirty-${S}"
-expect "dirty marker alone still nudges" "$(nudge "$S")" fire "quality pass"
+expect "dirty marker alone still nudges" "$(nudge "$S")" fire "/simplify"
 
 S=both
 touch "$TMP/claude-simplify-dirty-${S}"
 runs 3 "$S" "$TMP" "python3 $TMP/scratch/probe.py"
 OUT=$(nudge "$S")
-expect "both signals: quality pass" "$OUT" fire "quality pass"
+expect "both signals: simplify" "$OUT" fire "/simplify"
 expect "both signals: promotion"    "$OUT" fire "probe.py"
 
 expect "clean session silent" "$(nudge no-such-session)" silent
