@@ -720,6 +720,11 @@
           },
           {
             "type": "command",
+            "command": "bash $HOME/.claude/hooks/worktree_direnv_allow.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/pre_session_start.sh",
             "timeout": 10,
             "async": true
@@ -922,7 +927,17 @@
       ".venv",
       "node_modules",
       "target",
-      ".git/lfs"
+      ".git/lfs",
+      "data",
+      "out",
+      "outputs",
+      "output",
+      "results",
+      "logs",
+      "figures",
+      "figs",
+      "fig",
+      "plots"
     ]
   },
   "statusLine": {

@@ -1,0 +1,31 @@
+# Gitignored files copied into every new worktree by Claude Code
+# (`copyWorktreeIncludeFiles`, verified in claude 2.1.229).
+#
+# Semantics: gitignore syntax, matched against this repo's ignored files.
+# Copies FILES, one `copyFile` at a time — a directory pattern means "every
+# file under it", so a large directory is duplicated byte for byte. Symlinks
+# are skipped, and so is any entry whose destination escapes the worktree.
+# Big artifact directories belong in `worktree.symlinkDirectories`
+# (claude/settings.json) instead, which links rather than copies.
+#
+# NEVER add a bare `.claude/` here. `.claude/worktrees/` is where every worktree
+# lives, and it IS in the ignored set — excluded via .git/info/exclude rather
+# than .gitignore, so `git check-ignore` against .gitignore alone will not warn
+# you. A broad pattern would copy every existing worktree into each new one.
+#
+# `.claude/settings.local.json` is copied by Claude Code unconditionally and
+# does not need an entry. The rest of `.claude/` in this repo (rules/, skills/,
+# settings.json) is tracked, so it arrives with the checkout.
+
+# Per-repo secrets, via direnv. `setup-envrc` bakes the MAIN checkout's
+# absolute helper path into .envrc (custom_bins/setup-envrc, main_checkout_dir),
+# so the copy still resolves after the worktree is removed. direnv trusts by
+# path+content hash, so the copy needs `direnv allow` — claude/hooks/worktree_direnv_allow.sh
+# does that on SessionStart.
+.envrc
+
+# User and machine config that deploy.sh, the statusline and the tests read.
+config/user.conf
+config/machines.conf
+config/secrets.sh
+config/secrets-global.conf

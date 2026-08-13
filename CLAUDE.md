@@ -47,7 +47,23 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 | `cwrm [--no-merge] <name>` | Merge branch → remove worktree → delete branch |
 | `cwclean [--dry-run]` | Remove clean worktrees (no changes, no artifacts) |
 
-`cwrm` **merges by default**; `--no-merge` skips it, `--force` skips artifact warnings. `cwmerge` only recognises `worktree-`-prefixed branches — merge others manually with `git -C <main-tree> merge --ff-only <branch>`. Gitignored files (`.env`, `out/`, `logs/`) do **not** exist in a new worktree. Lifecycle: `cw auth-fix` → work → `cwport auth-fix` → `cwrm auth-fix`.
+`cwrm` **merges by default**; `--no-merge` skips it, `--force` skips artifact warnings. `cwmerge` only recognises `worktree-`-prefixed branches — merge others manually with `git -C <main-tree> merge --ff-only <branch>`. Lifecycle: `cw auth-fix` → work → `cwport auth-fix` → `cwrm auth-fix`.
+
+### What a new worktree inherits
+
+`git worktree add` checks out tracked files only, so gitignored state has to be brought across deliberately. Three mechanisms, in order of preference:
+
+| Mechanism | Where | Semantics |
+|---|---|---|
+| `worktree.symlinkDirectories` | `claude/settings.json` — **global, every repo** | Symlinks the directory from the main checkout. Missing sources are skipped silently, so listing a name no repo has costs nothing. Covers `.venv`, `node_modules`, `target`, `.git/lfs` and the artifact dirs (`data`, `out`, `outputs`, `output`, `results`, `logs`, `figures`, `figs`, `fig`, `plots`) |
+| `.worktreeinclude` | repo root — **per-repo, no global equivalent** | Gitignore syntax over the repo's ignored files. **Copies** them one file at a time, so a directory pattern duplicates every byte under it. Symlinks are skipped, as is anything whose destination escapes the worktree |
+| automatic | — | `.claude/settings.local.json` is copied with no configuration |
+
+Because artifact dirs are now **symlinked, not copied, worktree writes to `out/`/`results/` land in the main tree**. That is what makes results consolidate automatically, and it means `cwport` is only needed for directories outside that list.
+
+**Never put a bare `.claude/` in `.worktreeinclude`** — `.claude/worktrees/` is where every worktree lives, so a broad pattern copies every existing worktree into each new one.
+
+`.envrc` is copied rather than symlinked (a symlink would be skipped), and direnv trusts by path + content hash, so the copy arrives blocked. `claude/hooks/worktree_direnv_allow.sh` allows it on SessionStart, but **only when it is byte-identical to the main checkout's `.envrc`** — an edited one stays blocked so that auto-allow can never grant new trust. `setup-envrc` seeds `.envrc` into a repo's `.worktreeinclude` whenever it writes one, which is what makes the per-repo file behave globally in practice.
 
 ## Personal Content
 

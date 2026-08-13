@@ -570,6 +570,29 @@ ensure_envrc_gitignored() {
     fi
 }
 
+# Claude Code copies gitignored files listed in a repo's .worktreeinclude into
+# each new worktree. .worktreeinclude is per-repo with no global equivalent, so
+# a repo that has secrets but no entry gives its worktrees no API keys at all.
+# Seed the entry here, where we already know the repo just gained a .envrc.
+ensure_envrc_worktree_included() {
+    local wt_include="$REPO_ROOT/.worktreeinclude"
+
+    if [[ -f "$wt_include" ]] && grep -qx '\.envrc' "$wt_include"; then
+        return 0
+    fi
+
+    if [[ ! -e "$wt_include" ]]; then
+        {
+            echo "# Gitignored files Claude Code copies into each new worktree."
+            echo "# Gitignore syntax; files are copied, so keep large directories out"
+            echo "# and use settings.json worktree.symlinkDirectories for those instead."
+        } > "$wt_include"
+    fi
+
+    echo ".envrc" >> "$wt_include"
+    echo "Added .envrc to $wt_include (so worktrees inherit this repo's secrets)"
+}
+
 attempt_direnv_allow() {
     local allow_err=""
 
@@ -1531,6 +1554,7 @@ fi
 
 write_envrc "$telegram_secret" "${selected_export_bindings[@]}"
 ensure_envrc_gitignored
+ensure_envrc_worktree_included
 
 attempt_direnv_allow
 
