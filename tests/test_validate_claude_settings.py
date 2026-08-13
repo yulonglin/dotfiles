@@ -164,9 +164,13 @@ def test_permission_hook_timeout_matches_classifier_budget():
     assert const("TIMEOUT_SECONDS") + const("SUBSCRIPTION_MIN_SECONDS") <= const("TOTAL_BUDGET_SECONDS")
 
 
-def test_bundled_skills_remain_disabled():
+def test_bundled_skills_enabled_but_claude_api_off():
     repo = Path(__file__).resolve().parent.parent
     settings = json.loads((repo / "claude" / "settings.json").read_text())
 
-    assert settings["disableBundledSkills"] is True
+    # Bundled skills stay enabled globally: disabling them all hid the
+    # artifact-design/artifact-capabilities skills the Artifact tool requires
+    # and the /simplify pass. Only claude-api (the 922KB injector) stays off,
+    # via the per-skill override, which the resolver honors pre-injection.
+    assert settings["disableBundledSkills"] is False
     assert settings["skillOverrides"]["claude-api"] == "off"

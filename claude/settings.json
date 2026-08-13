@@ -386,7 +386,7 @@
   "skillOverrides": {
     "claude-api": "off"
   },
-  "disableBundledSkills": true,
+  "disableBundledSkills": false,
   "hooks": {
     "Notification": [
       {
