@@ -366,5 +366,70 @@ check     "all-declared still lists names" "$FAKE_OUT" "HF_TOKEN"
 check_not "no ANTHROPIC warning" "$FAKE_ERR" "duplicate env name 'ANTHROPIC_API_KEY'"
 check_not "no RUNPOD warning"    "$FAKE_ERR" "duplicate env name 'RUNPOD_API_KEY'"
 
+# --- the "[global]" name marker ---------------------------------------------
+# The marker is a literal " [global]" suffix on the NAME field. It declares the
+# name resolvable by bare name outside a repo and without a TTY. Nothing in
+# THIS suite gates on it yet — these tests pin the grammar and prove the marker
+# is inert for resolution, which is what lets the gate land separately without
+# a flag day.
+
+echo "=== a marked name resolves to exactly the same key as an unmarked one ==="
+R=$(run_with_conf 'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - beta gamma' shell ANTHROPIC_API_KEY)
+check "exit 0"                  "$R" $'0\n'
+check "marker does not change the resolved value" "$R" "fake-anthropic-beta"
+check_not "marker never reaches stdout"           "$R" "[global]"
+
+echo "=== scope-entries strips the marker ==="
+R=$(run_with_conf "$(printf '%s\n' \
+        'ANTHROPIC_API_KEY [global] = !ANTHROPIC_API_KEY - alpha' \
+        'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - beta gamma')" \
+    scope-entries ANTHROPIC_API_KEY)
+check "exit 0"                "$R" $'0\n'
+check "blocked entry listed"  "$R" $'blocked\tANTHROPIC_API_KEY - alpha'
+check "active entry listed"   "$R" $'active\tANTHROPIC_API_KEY - beta gamma'
+
+echo "=== scope-is-global reports the marker ==="
+R=$(run_with_conf 'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - alpha' scope-is-global ANTHROPIC_API_KEY)
+check "marked name exits 0" "$R" $'0\n'
+R=$(run_with_conf 'ANTHROPIC_API_KEY = ANTHROPIC_API_KEY - alpha' scope-is-global ANTHROPIC_API_KEY)
+check "unmarked name exits 1" "$R" $'1\n'
+R=$(run_with_conf 'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - alpha' scope-is-global RUNPOD_API_KEY)
+check "marker does not leak to another name" "$R" $'1\n'
+
+echo "=== marker counts per NAME: one marked line is enough, even a blocked one ==="
+R=$(run_with_conf "$(printf '%s\n' \
+        'ANTHROPIC_API_KEY [global] = !ANTHROPIC_API_KEY - alpha' \
+        'ANTHROPIC_API_KEY = ANTHROPIC_API_KEY - beta gamma')" \
+    scope-is-global ANTHROPIC_API_KEY)
+check "partially-tagged name is global" "$R" $'0\n'
+
+echo "=== a value-less marker line grants exposure without pinning a key ==="
+# This is what the migration writes on a machine where the name is unambiguous
+# (or where BWS is not installed yet), so it must not disturb resolution.
+R=$(run_with_conf 'HF_TOKEN [global] =' scope-is-global HF_TOKEN)
+check "value-less marker is global" "$R" $'0\n'
+R=$(run_with_conf 'HF_TOKEN [global] =' scope-entries HF_TOKEN)
+check "value-less marker declares no entry" "$R" $'0\n\n---STDERR---'
+R=$(run_with_conf 'HF_TOKEN [global] =' shell HF_TOKEN)
+check "unambiguous name still resolves" "$R" $'0\n'
+check "and exports its value"           "$R" "fake-hf"
+
+echo "=== a value-less marker does not satisfy an ambiguous name ==="
+R=$(run_with_conf 'ANTHROPIC_API_KEY [global] =' shell ANTHROPIC_API_KEY)
+check "still dies as undeclared" "$R" $'1\n'
+check "still says ambiguous"     "$R" "Ambiguous env name 'ANTHROPIC_API_KEY'"
+
+echo "=== duplicate-warning suppression survives the marker ==="
+run_fake_bws "$(printf '%s\n' \
+        'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - alpha' \
+        'RUNPOD_API_KEY = RUNPOD_API_KEY - three')"
+check     "exits 0"                 "$FAKE_RC" "0"
+check_not "marked name stays quiet" "$FAKE_ERR" "duplicate env name 'ANTHROPIC_API_KEY'"
+check_not "unmarked name too"       "$FAKE_ERR" "duplicate env name 'RUNPOD_API_KEY'"
+
+echo "=== a marked but STALE declaration still warns ==="
+run_fake_bws 'ANTHROPIC_API_KEY [global] = ANTHROPIC_API_KEY - deleted'
+check "stale marked mapping still warns" "$FAKE_ERR" "duplicate env name 'ANTHROPIC_API_KEY'"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

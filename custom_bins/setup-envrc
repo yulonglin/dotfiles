@@ -452,21 +452,16 @@ write_envrc() {
     # A worktree path would break that .envrc when the worktree is removed.
     local helper_bin
     helper_bin="$(main_checkout_dir)/custom_bins/dotfiles-secrets"
-    local binding env_key secret_key
-    local plain_required_secrets=()   # Valid env names — loaded via 'shell' batch
-    local bws_key_bindings=()         # Secret key contains spaces — use 'get-value'
-    local final_env_names=""
+    local binding env_key secret_key scrub_names=""
 
     for binding in "${export_bindings[@]}"; do
         env_key=$(binding_env_key "$binding")
         secret_key=$(binding_secret_key "$binding")
-        final_env_names+="$env_key"$'\n'
-        if is_bws_key "$secret_key"; then
-            bws_key_bindings+=("$binding")
-        else
-            if ! has_line "$secret_key" "$(printf '%s\n' "${plain_required_secrets[@]}")"; then
-                plain_required_secrets+=("$secret_key")
-            fi
+        if ! has_line "$env_key" "$scrub_names"; then
+            scrub_names+="$env_key"$'\n'
+        fi
+        if ! is_bws_key "$secret_key" && ! has_line "$secret_key" "$scrub_names"; then
+            scrub_names+="$secret_key"$'\n'
         fi
     done
 
@@ -505,49 +500,34 @@ write_envrc() {
         fi
         printf 'DOTFILES_SECRETS_BIN=%q\n' "$helper_bin"
 
-        # Batch path: plain env-name secrets (no spaces) via `shell` eval
-        if [[ ${#plain_required_secrets[@]} -gt 0 ]]; then
-            # Capture-then-eval, never eval "$(...)": a command substitution
-            # inside eval throws away the helper's exit status, so if a newly
-            # added BWS secret makes one of these env names ambiguous after this
-            # .envrc was generated, the eval would silently expand to nothing and
-            # leave the variable unset with no indication why.
+        # Clear managed names before the backend call. A failed refresh must not
+        # leave an inherited or previously exported credential in the project.
+        # Plain renamed sources are scrubbed too; exact BWS keys and UUIDs are
+        # selectors, not shell variable names.
+        if [[ -n "$scrub_names" ]]; then
+            while IFS= read -r env_key; do
+                [[ -n "$env_key" ]] && printf 'unset %s\n' "$env_key"
+            done <<< "$scrub_names"
+        fi
+
+        # Resolve every binding through one helper process so one direnv load
+        # performs one backend read. This also gives the repo one consistent
+        # snapshot when it mixes follow-mode names and pinned UUIDs.
+        if [[ ${#export_bindings[@]} -gt 0 ]]; then
             # shellcheck disable=SC2016
-            printf 'if _dfs_exports=$("$DOTFILES_SECRETS_BIN" shell'
-            for secret_key in "${plain_required_secrets[@]}"; do
-                printf ' %q' "$secret_key"
+            printf 'if _dfs_exports=$("$DOTFILES_SECRETS_BIN" shell-bindings'
+            local binding
+            for binding in "${export_bindings[@]}"; do
+                printf ' %q' "$binding"
             done
             echo '); then'
             # shellcheck disable=SC2016
             printf '%s\n' '  eval "$_dfs_exports"'
             printf '%s\n' 'else'
-            printf '%s\n' '  echo "direnv: dotfiles-secrets could not resolve this repo'"'"'s secrets (reason above). If a new BWS key made an env name ambiguous, re-run: setup-envrc" >&2'
+            printf '%s\n' '  echo "direnv: dotfiles-secrets could not resolve this repo'"'"'s secrets (reason above). Re-run: setup-envrc" >&2'
             printf '%s\n' 'fi'
             printf '%s\n' 'unset _dfs_exports'
-
-            for binding in "${export_bindings[@]}"; do
-                env_key=$(binding_env_key "$binding")
-                secret_key=$(binding_secret_key "$binding")
-                is_bws_key "$secret_key" && continue
-                if [[ "$env_key" != "$secret_key" ]]; then
-                    printf 'export %s="$%s"\n' "$env_key" "$secret_key"
-                fi
-            done
-
-            for secret_key in "${plain_required_secrets[@]}"; do
-                if ! has_line "$secret_key" "$final_env_names"; then
-                    printf 'unset %s\n' "$secret_key"
-                fi
-            done
         fi
-
-        # Per-binding path: BWS keys with spaces (e.g. "OPENAI_API_KEY - mats")
-        for binding in "${bws_key_bindings[@]}"; do
-            env_key=$(binding_env_key "$binding")
-            secret_key=$(binding_secret_key "$binding")
-            # shellcheck disable=SC2016
-            printf 'export %s="$("$DOTFILES_SECRETS_BIN" get-value %q)"\n' "$env_key" "$secret_key"
-        done
 
         echo 'unset DOTFILES_SECRETS_BIN'
 
