@@ -121,11 +121,26 @@ else
     wt="$tmp/wt"
     git -C "$main" worktree add -q -b wt-test "$wt" >/dev/null 2>&1
 
-    # Stand in for direnv so the test asserts the decision, not direnv's state.
+    # Stand in for direnv so the test asserts the hook's decision rather than the
+    # real allowlist. `status` is emulated too: whether the MAIN .envrc is
+    # allowed is now part of the decision, so it has to be controllable.
     shim="$tmp/bin"
     mkdir -p "$shim"
+    printf 'yes\n' > "$tmp/main-allowed"
+    touch "$tmp/allowfile"
     cat > "$shim/direnv" <<SHIM
 #!/usr/bin/env bash
+if [[ "\$1" == "status" ]]; then
+    echo "Found RC path $main/.envrc"
+    if [[ "\$(cat "$tmp/main-allowed")" == "yes" ]]; then
+        echo "Found RC allowed 0"
+        echo "Found RC allowPath $tmp/allowfile"
+    else
+        echo "Found RC allowed 1"
+        echo "Found RC allowPath $tmp/allowfile"
+    fi
+    exit 0
+fi
 echo "\$@" >> "$tmp/direnv-calls"
 SHIM
     chmod +x "$shim/direnv"
@@ -156,6 +171,35 @@ SHIM
     : > "$tmp/direnv-calls"
     (cd "$main" && run_hook) >/dev/null
     check "main checkout -> direnv not invoked" test ! -s "$tmp/direnv-calls"
+
+    # 5. Identity is provenance, not authorization. An identical copy of a main
+    #    .envrc that was never allowed must NOT be approved — otherwise the
+    #    worktree gains trust the original never had.
+    cp "$main/.envrc" "$wt/.envrc"
+    printf 'no\n' > "$tmp/main-allowed"
+    : > "$tmp/direnv-calls"
+    out=$(cd "$wt" && run_hook)
+    check "identical but main NOT allowed -> direnv allow NOT called" \
+        test ! -s "$tmp/direnv-calls"
+    check "identical but main NOT allowed -> user is told" \
+        grep -q "not itself allowed" <<< "$out"
+
+    # 6. And the same copy IS approved once the main checkout is trusted, so the
+    #    assertion above is about authorization and not some unrelated blocker.
+    printf 'yes\n' > "$tmp/main-allowed"
+    : > "$tmp/direnv-calls"
+    (cd "$wt" && run_hook) >/dev/null
+    check "identical and main allowed -> direnv allow called" \
+        grep -q "allow" "$tmp/direnv-calls"
+
+    # 7. Fail closed if direnv's allowlist file is gone even though status says 0.
+    printf 'yes\n' > "$tmp/main-allowed"
+    rm -f "$tmp/allowfile"
+    : > "$tmp/direnv-calls"
+    (cd "$wt" && run_hook) >/dev/null
+    check "missing allowlist file -> direnv allow NOT called" \
+        test ! -s "$tmp/direnv-calls"
+    touch "$tmp/allowfile"
 
     git -C "$main" worktree remove --force "$wt" >/dev/null 2>&1
 fi

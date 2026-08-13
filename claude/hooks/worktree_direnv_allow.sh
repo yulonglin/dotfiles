@@ -7,11 +7,20 @@
 # keys its allowlist on path + content hash, so the copy lands blocked and the
 # session silently has no API keys.
 #
-# This only ever PROPAGATES an existing trust decision: it allows the copy solely
-# when the copy is byte-identical to the main checkout's .envrc. A worktree .envrc
-# that has been edited — by a task, a merge, or anything else — is left blocked for
-# the user to allow by hand. Auto-allowing an arbitrary .envrc would let any writer
-# of that file execute shell at the next prompt.
+# This only ever PROPAGATES an existing trust decision. Two conditions, and both
+# are needed:
+#
+#   1. The copy is byte-identical to the main checkout's .envrc.
+#   2. The main checkout's .envrc is ITSELF already allowed in direnv.
+#
+# Identity alone establishes provenance, not authorization. A main .envrc can be
+# byte-identical and still unapproved — `setup-envrc` prints "Run manually:
+# direnv allow" and continues when its own allow fails, so an unapproved main
+# .envrc is a state that actually occurs. Approving the copy on identity alone
+# would grant the worktree trust the original never had, which is an escalation
+# rather than a propagation.
+#
+# Everything else is left blocked for the user to allow by hand.
 
 set -euo pipefail
 
@@ -47,6 +56,29 @@ main_envrc="$main_checkout/.envrc"
 
 if ! cmp -s "$main_envrc" "$worktree_envrc"; then
     echo "worktree .envrc differs from $main_envrc — left blocked. Allow it yourself: cd $cwd && direnv allow ." >&2
+    exit 0
+fi
+
+# Is the main checkout's .envrc itself trusted? `direnv status` must be run FROM
+# the main checkout: run from the worktree it would report the worktree's own
+# copy. Verified against direnv 2.37.1, which prints:
+#   Found RC path     <path to the .envrc for that directory>
+#   Found RC allowed  <0 allowed | 1 not allowed | 2 denied>
+#   Found RC allowPath <the allowlist file backing that decision>
+main_state=$(cd "$main_checkout" && direnv status 2>/dev/null) || exit 0
+found_path=$(printf '%s\n' "$main_state" | sed -n 's/^Found RC path //p' | head -n 1)
+found_allowed=$(printf '%s\n' "$main_state" | sed -n 's/^Found RC allowed //p' | head -n 1)
+allow_path=$(printf '%s\n' "$main_state" | sed -n 's/^Found RC allowPath //p' | head -n 1)
+
+# Confirm we are reading the state of the file we actually compared against.
+[[ "$found_path" == "$main_envrc" ]] || exit 0
+
+# Require both the status code and the on-disk allowlist entry, so that a future
+# change to direnv's enum fails closed (no auto-allow, user allows by hand)
+# rather than open.
+if [[ "$found_allowed" != "0" || -z "$allow_path" || ! -f "$allow_path" ]]; then
+    echo "$main_envrc is not itself allowed in direnv — not propagating trust to $cwd." >&2
+    echo "Allow the main checkout first: cd $main_checkout && direnv allow ." >&2
     exit 0
 fi
 

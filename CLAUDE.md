@@ -65,7 +65,9 @@ Because artifact dirs are now **symlinked, not copied, worktree writes to `out/`
 
 **Never put a bare `.claude/` in `.worktreeinclude`** — `.claude/worktrees/` is where every worktree lives, so a broad pattern copies every existing worktree into each new one.
 
-`.envrc` is copied rather than symlinked (a symlink would be skipped), and direnv trusts by path + content hash, so the copy arrives blocked. `claude/hooks/worktree_direnv_allow.sh` allows it on SessionStart, but **only when it is byte-identical to the main checkout's `.envrc`** — an edited one stays blocked so that auto-allow can never grant new trust. `setup-envrc` seeds `.envrc` into a repo's `.worktreeinclude` whenever it writes one, which is what makes the per-repo file behave globally in practice.
+`.envrc` is copied rather than symlinked (a symlink would be skipped), and direnv trusts by path + content hash, so the copy arrives blocked. `claude/hooks/worktree_direnv_allow.sh` allows it on SessionStart, but only when **both** hold: the copy is byte-identical to the main checkout's `.envrc`, **and that main `.envrc` is itself already allowed in direnv**. Identity alone is provenance, not authorization — `setup-envrc` prints "Run manually: direnv allow" and continues when its own allow fails, so an unapproved-but-identical main `.envrc` is a state that really occurs, and approving the copy off identity alone would grant trust the original never had. Authorization is read with `direnv status` run *from the main checkout* (`Found RC allowed 0` plus an existing `Found RC allowPath` file; verified against direnv 2.37.1), and anything unexpected fails closed.
+
+`setup-envrc` seeds `.envrc` into a repo's `.worktreeinclude` whenever it writes one, which is what makes the per-repo file behave globally in practice.
 
 ## Personal Content
 
