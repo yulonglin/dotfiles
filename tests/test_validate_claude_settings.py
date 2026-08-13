@@ -172,5 +172,7 @@ def test_bundled_skills_enabled_but_claude_api_off():
     # artifact-design/artifact-capabilities skills the Artifact tool requires
     # and the /simplify pass. Only claude-api (the 922KB injector) stays off,
     # via the per-skill override, which the resolver honors pre-injection.
+    # Exact-match on the whole map: a later "artifact-design": "off" entry
+    # would recreate the same silent breakage while a key-wise check passes.
     assert settings["disableBundledSkills"] is False
-    assert settings["skillOverrides"]["claude-api"] == "off"
+    assert settings["skillOverrides"] == {"claude-api": "off"}
