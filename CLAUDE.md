@@ -61,6 +61,8 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 
 Because artifact dirs are now **symlinked, not copied, worktree writes to `out/`/`results/` land in the main tree**. That is what makes results consolidate automatically, and it means `cwport` is only needed for directories outside that list.
 
+`cwport`, `cwrm` and `cwclean` therefore test artifact dirs with `_cw_local_artifact_dir` (`config/aliases/claude.sh`) rather than a bare `[[ -d ]]`, which is **true for a symlink to a directory**. Without that guard `cwport` would `cp -r` the main tree's `out/` into a timestamped subdirectory of that same `out/`, and `cwrm`/`cwclean` would see artifacts in every worktree forever and never remove one.
+
 **Never put a bare `.claude/` in `.worktreeinclude`** — `.claude/worktrees/` is where every worktree lives, so a broad pattern copies every existing worktree into each new one.
 
 `.envrc` is copied rather than symlinked (a symlink would be skipped), and direnv trusts by path + content hash, so the copy arrives blocked. `claude/hooks/worktree_direnv_allow.sh` allows it on SessionStart, but **only when it is byte-identical to the main checkout's `.envrc`** — an edited one stays blocked so that auto-allow can never grant new trust. `setup-envrc` seeds `.envrc` into a repo's `.worktreeinclude` whenever it writes one, which is what makes the per-repo file behave globally in practice.

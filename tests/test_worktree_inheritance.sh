@@ -14,6 +14,20 @@ HOOK="$REPO_ROOT/claude/hooks/worktree_direnv_allow.sh"
 pass=0
 fail=0
 
+# TMPDIR is read-only under some sandboxes. Print the first base we can actually
+# create a directory in, or nothing. Callers MUST treat "nothing" as a failure —
+# a scratch dir that silently stayed empty turns assertions into vacuous passes.
+scratch_dir() {
+    local base d
+    for base in "${TMPDIR:-}" /tmp/claude /tmp; do
+        [[ -n "$base" && -d "$base" && -w "$base" ]] || continue
+        d=$(mktemp -d "$base/${1:-wt-test}.XXXXXX" 2>/dev/null) || continue
+        printf '%s\n' "$d"
+        return 0
+    done
+    return 1
+}
+
 ok() { echo "  PASS  $1"; pass=$((pass + 1)); }
 no() { echo "  FAIL  $1"; fail=$((fail + 1)); }
 
@@ -85,15 +99,7 @@ echo "worktree_direnv_allow.sh — propagates trust, never creates it"
 if ! command -v git >/dev/null 2>&1; then
     echo "  SKIP  git unavailable"
 else
-    # TMPDIR is read-only under some sandboxes. Find a writable base, and treat
-    # failure as fatal — a scratch dir that silently stayed empty would turn
-    # every assertion below into a vacuous pass rooted at /.
-    tmp=""
-    for base in "${TMPDIR:-}" /tmp/claude /tmp; do
-        [[ -n "$base" && -d "$base" && -w "$base" ]] || continue
-        tmp=$(mktemp -d "$base/wt-inherit.XXXXXX" 2>/dev/null) && break
-        tmp=""
-    done
+    tmp=$(scratch_dir wt-inherit) || tmp=""
     if [[ -z "$tmp" || ! -d "$tmp" ]]; then
         echo "  FAIL  could not create a writable scratch dir (tried TMPDIR, /tmp/claude, /tmp)"
         echo ""
@@ -153,6 +159,50 @@ SHIM
 
     git -C "$main" worktree remove --force "$wt" >/dev/null 2>&1
 fi
+
+echo ""
+echo "cw helpers — a symlinked artifact dir is not worktree-local state"
+
+ALIASES="$REPO_ROOT/config/aliases/claude.sh"
+
+check "_cw_local_artifact_dir is defined" grep -q '_cw_local_artifact_dir()' "$ALIASES"
+
+# The whole point of the helper is that the three call sites stopped using a
+# bare -d test, which is true for a symlink to a directory.
+if grep -nE "\\[\\[ -d \"\\\$(wt_path|wt)/\\\$dir\" \\]\\]" "$ALIASES" >/dev/null; then
+    no "no call site still uses a bare -d test on an artifact dir"
+else
+    ok "no call site still uses a bare -d test on an artifact dir"
+fi
+
+callers=$(grep -c '_cw_local_artifact_dir "' "$ALIASES")
+if [[ "$callers" -eq 3 ]]; then
+    ok "all three call sites (cwport, cwrm, cwclean) use the helper"
+else
+    no "all three call sites use the helper (found $callers, expected 3)"
+fi
+
+# Behavioural check. The definition is EXTRACTED from claude.sh and eval'd, not
+# retyped here — a locally redefined copy would pass no matter what the shipped
+# function does, which is exactly the assertion shape that cannot fail.
+helper_probe() {
+    local def d
+    def=$(sed -n '/^_cw_local_artifact_dir() {/,/^}/p' "$ALIASES")
+    [[ -n "$def" ]] || return 2
+    eval "$def" || return 2
+
+    d=$(scratch_dir cw-helper) || return 2
+    mkdir -p "$d/real"
+    ln -s "$d/real" "$d/linked"
+
+    local rc_real=1 rc_link=1
+    _cw_local_artifact_dir "$d/real" && rc_real=0
+    _cw_local_artifact_dir "$d/linked" && rc_link=0
+    rm -rf "$d"
+
+    [[ $rc_real -eq 0 && $rc_link -ne 0 ]]
+}
+check "shipped helper accepts a real dir and rejects a symlinked one" helper_probe
 
 echo ""
 echo "passed: $pass  failed: $fail"

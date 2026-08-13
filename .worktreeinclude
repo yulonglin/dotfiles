@@ -25,6 +25,10 @@
 .envrc
 
 # User and machine config that deploy.sh, the statusline and the tests read.
+# A pattern matching nothing is a silent no-op, so note what is actually here:
+# as of 2026-08-13 on this machine, user.conf and secrets-global.conf exist;
+# machines.conf (private dotfiles-personal repo) and secrets.sh (legacy) do
+# not, and their entries only take effect on machines that have them.
 config/user.conf
 config/machines.conf
 config/secrets.sh

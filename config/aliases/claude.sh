@@ -218,6 +218,17 @@ alias yn='yolo -t'  # yn <name>: yolo with task name
 # Artifact dirs checked across worktree commands (port, remove, clean)
 _CW_ARTIFACT_DIRS=(out logs data results experiments)
 
+# True only for artifacts that actually live IN the worktree.
+#
+# `worktree.symlinkDirectories` (claude/settings.json) symlinks out/, logs/,
+# data/ and results/ back to the main checkout, and `[[ -d ]]` is true for a
+# symlink to a directory. Without the -L guard: cwport would `cp -r` the main
+# tree's out/ into a timestamped subdirectory of that same out/, and cwrm and
+# cwclean would see artifacts in every worktree forever and never remove one.
+_cw_local_artifact_dir() {
+  [[ -d "$1" && ! -L "$1" ]]
+}
+
 # worktree commands
 _cw_launch() {
   # Shared implementation for cw/cwy — idempotent worktree launcher
@@ -320,7 +331,7 @@ cwport() {
   local ported=0
 
   for dir in "${dirs[@]}"; do
-    if [[ -d "$wt_path/$dir" ]]; then
+    if _cw_local_artifact_dir "$wt_path/$dir"; then
       mkdir -p "$dest"
       echo "Porting $dir/ → $dest/$dir/"
       cp -r "$wt_path/$dir" "$dest/$dir"
@@ -443,7 +454,7 @@ cwrm() {
   if ! $force; then
     local artifacts=()
     for dir in "${_CW_ARTIFACT_DIRS[@]}"; do
-      [[ -d "$wt_path/$dir" ]] && artifacts+=("$dir/")
+      _cw_local_artifact_dir "$wt_path/$dir" && artifacts+=("$dir/")
     done
     if [[ ${#artifacts[@]} -gt 0 ]]; then
       echo "Warning: worktree has artifacts: ${artifacts[*]}"
@@ -511,7 +522,7 @@ cwclean() {
 
     has_artifacts=""
     for dir in "${_CW_ARTIFACT_DIRS[@]}"; do
-      [[ -d "$wt/$dir" ]] && has_artifacts=" +artifacts"
+      _cw_local_artifact_dir "$wt/$dir" && has_artifacts=" +artifacts"
     done
 
     if [[ "$wt_status" == "clean" ]] && [[ -z "$has_artifacts" ]]; then
