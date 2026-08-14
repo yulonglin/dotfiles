@@ -334,7 +334,20 @@ else
       'OPENAI_API_KEY = !OPENAI_API_KEY - mats' > "$E2E_CONF"
   e2e_err=$( ( cd "$E2E_REPO" && DOTFILES_SECRETS_GLOBAL_CONF="$E2E_CONF" bash -c \
       'watch_file() { :; }; source ./.envrc' ) 2>&1 >/dev/null || true )
-  check "all-blocked resolves to nothing" "" "$(load_envrc)"
+  all_blocked_state=$( ( cd "$E2E_REPO" && \
+      OPENAI_API_KEY=synthetic-inherited-value \
+      DOTFILES_SECRETS_GLOBAL_CONF="$E2E_CONF" bash -c '
+        watch_file() { :; }
+        source ./.envrc >/dev/null 2>&1
+        if [[ ${OPENAI_API_KEY+x} != x ]]; then
+          printf unset
+        elif [[ -n $OPENAI_API_KEY ]]; then
+          printf set-nonempty
+        else
+          printf set-empty
+        fi
+      ' ) )
+  check "all-blocked clears inherited destination" "unset" "$all_blocked_state"
   if [[ -n "$e2e_err" ]]; then
     echo "  ok  all-blocked fails loudly on stderr"; pass=$((pass+1))
   else
