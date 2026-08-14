@@ -830,6 +830,7 @@ install_gh_cli() {
         # Modern gh present — check authentication only
         if gh auth status &>/dev/null; then
             log_info "gh already authenticated"
+            install_gh_stack_extension
             return 0
         fi
     else
@@ -856,6 +857,25 @@ install_gh_cli() {
     if cmd_exists gh; then
         gh config set git_protocol ssh
     fi
+
+    install_gh_stack_extension
+}
+
+# gh-stack — official stacked-PR extension (github/gh-stack). PRs are the repo
+# convention, stacked via `gh stack` when a chain reviews better (CLAUDE.md Top
+# Rules). Extension installs need gh auth, which this installer defers — so on
+# a fresh machine this warns and auth-setup's flow picks it up on the next run.
+install_gh_stack_extension() {
+    cmd_exists gh || return 0
+    if gh extension list 2>/dev/null | grep -q 'github/gh-stack'; then
+        return 0
+    fi
+    if ! gh auth status &>/dev/null; then
+        log_warning "gh-stack deferred (needs auth) — after auth-setup: gh extension install github/gh-stack"
+        return 0
+    fi
+    log_info "Installing gh-stack extension (stacked PRs)..."
+    gh extension install github/gh-stack 2>/dev/null || log_warning "gh-stack extension install failed"
 }
 
 # Fallback: Install gh from GitHub releases

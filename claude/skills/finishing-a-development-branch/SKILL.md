@@ -99,6 +99,8 @@ Which option?
 
 **Don't add explanation** - keep options concise.
 
+**Recommend by convention:** for a reviewable change, mark option 2 (PR) as the recommended default; option 1 (local merge) is for trivial/mechanical changes — see the repo's CLAUDE.md Top Rules.
+
 ### Step 5: Execute Choice
 
 #### Option 1: Merge Locally
