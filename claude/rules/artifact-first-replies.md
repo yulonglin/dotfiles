@@ -33,7 +33,13 @@ Any page that scrolls past a couple of screens gets a **table of contents fixed 
 
 ## Reviewable pages
 
-**Markdown artifacts cannot carry JavaScript**, so publishing a spec, report or plan as raw `.md` silently drops the table of contents, the annotation layer and the export guard. Anything meant to be *reviewed* — which is nearly every spec — goes through `md2review <file.md>` first and gets published as the resulting HTML. Raw `.md` is for pages nobody needs to comment on.
+**Every spec, plan and report is published as an Artifact — a spec that exists only as a file in `specs/` is not delivered.** The Markdown stays in `specs/` as the version-controlled source; the Artifact is the copy Yulong reads and annotates. Specs are written to be argued with, and a file in a folder cannot be argued with — you cannot select a paragraph and say "no, not this". So the closing reply to any spec work carries the link, not just the path. One spec keeps one link: update the same Artifact in place (pass `url` from a later session) rather than minting a new one per revision.
+
+**Markdown artifacts cannot carry JavaScript**, so publishing a spec, report or plan as raw `.md` silently drops the table of contents, the annotation layer and the export guard. Anything meant to be *reviewed* goes through `md2review <file.md>` first and gets published as the resulting HTML. Raw `.md` is for pages nobody needs to comment on.
+
+Give the page a real name — `md2review` takes the document's H1 as the `<title>`, so the H1 is the artifact's name in the gallery, not a caption. A short noun phrase; put the explaining sentence in the line below it.
+
+**Known gap: the download button in `md2review` output is dead inside the Artifact viewer**, which blocks any page-initiated save. Clipboard copy is the working export path. Say so when handing over a page whose comments matter, until `md2review` is fixed to route through the `downloads` capability.
 
 When the page exists for Yulong to react to — findings, transcripts, drafts, specs, anything he will have opinions about — make it **annotatable**: select text, attach a comment, and a single button that copies every comment to the clipboard as Markdown he can paste back. Persist comments in `localStorage` so closing the tab does not lose them, and show the collected comments at the end of the page.
 
