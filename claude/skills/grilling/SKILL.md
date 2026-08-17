@@ -3,9 +3,9 @@ name: grilling
 description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or says "grill me", "grill this plan", "poke holes in this", or "play devil's advocate."
 ---
 
-Interview me relentlessly about every aspect of this until we reach a shared understanding. Walk down each branch of the decision tree, resolving dependencies between decisions one-by-one.
+Interview me relentlessly about every aspect of this until we reach a shared understanding. Before asking anything, think for longer: map the decision tree and assemble a good list of questions.
 
-Put each question to me with the **AskUserQuestion** tool, **one question per call** — asking several at once is bewildering. Your recommended answer is the first option, labelled `(Recommended)`; the rest are the live alternatives, and the automatic `Other` catches whatever you missed.
+Put them to me with the **AskUserQuestion** tool in **batched calls** (the tool caps a call at four questions) — a drip of one-question calls is annoying. Hold a question back for a later call only when it genuinely depends on an earlier answer. Your recommended answer is the first option, labelled `(Recommended)`; the rest are the live alternatives, and the automatic `Other` catches whatever you missed.
 
 I have asked you to make these calls, so override AskUserQuestion's usual "only when genuinely blocked" instinct: never skip a question because a sensible default exists. The default is your first option, not a reason to stay quiet.
 
