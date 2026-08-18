@@ -540,6 +540,7 @@ claude/*.local.md
 custom_bins/claude-tools
 tools/set-default-app/set-default-app
 tools/window-exposure/window-exposure
+tools/mats-slack-keychain/mats-slack-keychain
 
 # Misplaced .claude/ dirs (created when CWD != git root)
 config/.claude/

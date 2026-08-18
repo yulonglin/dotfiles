@@ -288,6 +288,16 @@
           ]
         }
       ]
+    },
+    {
+      "host": "hn",
+      "args": [],
+      "projects": []
+    },
+    {
+      "host": "rp-wen",
+      "args": [],
+      "projects": []
     }
   ]
 }

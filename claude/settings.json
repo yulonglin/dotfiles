@@ -379,7 +379,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "fable",
   "fallbackModel": [
     "fable"
   ],
@@ -388,18 +388,6 @@
   },
   "disableBundledSkills": false,
   "hooks": {
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
-          }
-        ]
-      }
-    ],
     "PermissionRequest": [
       {
         "hooks": [
@@ -413,18 +401,6 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
             "timeout": 30
-          }
-        ]
-      }
-    ],
-    "PostCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
           }
         ]
       }
@@ -499,28 +475,6 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.statusline-parity -- $HOME/.claude/hooks/nudge_statusline_parity.sh",
             "timeout": 5
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
           }
         ]
       }
@@ -793,30 +747,6 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/inject_vault_layout.sh",
             "timeout": 3
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/romp-postal-ensure.sh",
-            "timeout": 5,
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/romp-postal-revive.sh",
-            "timeout": 8,
-            "async": false
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/romp-postal-context.sh",
-            "timeout": 5,
-            "async": false
           }
         ]
       },
@@ -863,30 +793,6 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.vault-lint -- bash $HOME/.claude/hooks/nudge_vault_lint.sh",
             "timeout": 3
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/romp-summarize.sh",
-            "timeout": 10,
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/romp-postal-drain.sh",
-            "timeout": 10,
-            "async": false
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/romp-wake.sh",
-            "timeout": 5,
-            "async": true
           }
         ]
       }
@@ -898,24 +804,6 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_mark.sh working",
             "timeout": 3
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/tmux-status.sh",
-            "timeout": 5,
-            "async": false
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/romp-summarize.sh",
-            "timeout": 10,
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/romp-wake.sh",
-            "timeout": 5,
-            "async": true
           }
         ]
       }
