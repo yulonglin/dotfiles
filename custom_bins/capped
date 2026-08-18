@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# capped - run a command under a systemd memory and CPU cap, one at a time.
+#
+# Heavy analysis readers are the single largest cause of lost experiment hours
+# in monitorability-evals: a full-log read costs order-30x the file size in RSS,
+# so one uncapped reader takes the host down and every run on it. The cap has to
+# be typed by hand today, which means it gets skipped. This makes the safe path
+# the easy path.
+#
+#   capped -- uv run python -m pkg.analysis          # 8G cap, exclusive
+#   capped --mem 16G -- python heavy.py
+#   capped --lock none -- python light.py           # allow beside another
+#
+# Fails closed: if the cap cannot be applied, it stops rather than running
+# uncapped. Pass --no-caps to accept an unbounded run deliberately.
+set -euo pipefail
+
+mem="${CAPPED_MEM:-8G}"
+cpu="${CAPPED_CPU:-200%}"
+lock="${CAPPED_LOCK:-heavy-reader}"
+caps=1
+
+die() { printf 'capped: %s\n' "$1" >&2; exit "${2:-2}"; }
+
+usage() {
+  awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
+  cat <<'EOF'
+
+Options:
+  --mem SIZE    MemoryMax, MemoryHigh is 80% of it (default 8G, $CAPPED_MEM)
+  --cpu PCT     CPUQuota, 100% is one core (default 200%, $CAPPED_CPU)
+  --lock NAME   exclusive-run lock name, "none" to disable (default heavy-reader)
+  --no-caps     run uncapped, for when you have decided that is right
+  -h, --help    this text
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --mem) mem="${2:?--mem needs a size}"; shift 2 ;;
+    --cpu) cpu="${2:?--cpu needs a percentage}"; shift 2 ;;
+    --lock) lock="${2:?--lock needs a name}"; shift 2 ;;
+    --no-caps) caps=0; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+
+[[ $# -gt 0 ]] || { usage >&2; die "no command given"; }
+
+if [[ "$caps" -eq 1 ]]; then
+  command -v systemd-run >/dev/null 2>&1 ||
+    die "systemd-run not found; use --no-caps to accept an uncapped run"
+  systemd-run --user --scope --quiet --unit="capped-probe-$$" true >/dev/null 2>&1 ||
+    die "systemd-run cannot start a scope (no user bus, or a sandboxed shell); use --no-caps"
+  # MemoryMax only, deliberately. MemoryHigh does not kill: at that threshold
+  # the kernel throttles the allocator with escalating delays, and with swap
+  # off a runaway sits there indefinitely instead of dying. Measured on this
+  # host 2026-08-18: MemoryMax=256M with MemoryHigh at 80% and at 95% both left
+  # a 2GB allocation alive past 90s; without MemoryHigh it is killed at once.
+  # A cap that hangs is worse than no cap, because nothing reports the stall.
+  set -- systemd-run --user --scope --quiet \
+    --property=MemoryAccounting=yes --property=CPUAccounting=yes \
+    --property=MemoryMax="$mem" \
+    --property=MemorySwapMax=0 --property=CPUQuota="$cpu" \
+    "$@"
+fi
+
+# One heavy reader at a time per box: two 14G readers on a 30GB host is how the
+# run died, and each one alone was survivable.
+if [[ "$lock" != "none" ]]; then
+  lockdir="${XDG_RUNTIME_DIR:-/tmp}/capped"
+  mkdir -p "$lockdir"
+  exec flock --timeout "${CAPPED_LOCK_WAIT:-1800}" "$lockdir/$lock.lock" "$@"
+fi
+
+exec "$@"
