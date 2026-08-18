@@ -39,7 +39,9 @@ Any page that scrolls past a couple of screens gets a **table of contents fixed 
 
 Give the page a real name — `md2review` takes the document's H1 as the `<title>`, so the H1 is the artifact's name in the gallery, not a caption. A short noun phrase; put the explaining sentence in the line below it.
 
-**Known gap: the download button in `md2review` output is dead inside the Artifact viewer**, which blocks any page-initiated save. Clipboard copy is the working export path. Say so when handing over a page whose comments matter, until `md2review` is fixed to route through the `downloads` capability.
+**The Artifact viewer blocks any page-initiated file save**, so `md2review`'s "Export text" cannot hand over a `.md` file. It already falls back to a selectable textarea, so the export still works — only the file save is dropped. "Copy all" and "Export text" are both fine; say which, rather than claiming the button is dead.
+
+**Touch selection needs `selectionchange`, not `mouseup`.** iOS Safari fires no `mouseup` for a touch selection drag, so a `mouseup`-only annotation layer leaves every iPhone and iPad reader unable to comment at all — and it looks fine on the desktop where it was built. Any select-to-comment page must open its note box from a debounced `selectionchange` too, must not steal focus on touch (focusing a field while iOS shows its selection handles drops the selection), and must re-attach highlights on load from the stored quotes, because a reload rebuilds the page and Safari discards background tabs freely. `md2review` does all three as of 2026-08-18; `tests/test_md2review_ios.py` guards them.
 
 When the page exists for Yulong to react to — findings, transcripts, drafts, specs, anything he will have opinions about — make it **annotatable**: select text, attach a comment, and a single button that copies every comment to the clipboard as Markdown he can paste back. Persist comments in `localStorage` so closing the tab does not lose them, and show the collected comments at the end of the page.
 
