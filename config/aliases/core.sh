@@ -4,19 +4,13 @@
 # general
 # -------------------------------------------------------------------
 
-alias cl="clear"
-
 # file and directories
 alias rm='rm -i'
-alias rmd='rm -rf'
 alias cp='cp -i'
 alias mv='mv -i'
 alias mkdir='mkdir -p'
 
 # find/read files
-alias h='head'
-alias t='tail'
-# alias rl="readlink -f"
 # Note: NOT aliasing find="fd" - they have different syntax
 # Use fd directly, or findfile/findf aliases from modern_tools.sh
 alias ff='fd --type f'
@@ -26,11 +20,7 @@ if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
 fi
 alias which='type -a'
 
-# storage
-alias du='du -kh' # file space
-alias df='df -kTh' # disk space
-alias usage='du -sh * 2>/dev/null | sort -rh'
-alias dus='du -sckx * | sort -nr'
+# storage: use dust (du) and duf (df) directly — modern_tools.sh
 
 # add to path
 function add_to_path() {
@@ -45,7 +35,5 @@ function add_to_path() {
 #-------------------------------------------------------------
 alias sv="source .venv/bin/activate"
 alias de="deactivate"
-alias ma="micromamba activate"
-alias md="micromamba deactivate"
 
 alias fda='fd -HI'  # fd all (include hidden + gitignored)

@@ -11,9 +11,8 @@ fi
 # personal
 # -------------------------------------------------------------------
 
-alias dot="cd $DOT_DIR"
-alias jp="jupyter lab"
-alias hn="hostname"
+# `dot`/`jp`/`hn` removed 2026-08-18: dot duplicated `dotfiles` (nav.sh), jp was
+# jupyter-lab-era, and hn=hostname collided with the `hn` Hetzner SSH host (srv).
 # Manual gist sync (SSH config + authorized_keys + git identity); daily 8AM via launchd/cron
 alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 # Define bearcli alias only if Bear is installed (avoids cryptic runtime failures)
