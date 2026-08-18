@@ -54,7 +54,7 @@ mkdir -p "$d/bin"
   printf '  --version) echo "9.9.9 (test stub)"; exit 0 ;;\n'
   # A realistic subcommand list, so the "subcommand gets no override" assertion
   # below can actually fail — an empty cache would classify nothing.
-  printf '  --help)    printf "  doctor Check health\\n  daemon Run daemon\\n  remote-control|rc Control sessions\\n  update Update\\n  mcp Manage\\n"; exit 0 ;;\n'
+  printf '  --help)    printf "  doctor Check health\\n  daemon Run daemon\\n  agents Manage agents\\n  remote-control|rc Control sessions\\n  update Update\\n  mcp Manage\\n"; exit 0 ;;\n'
   printf 'esac\n'
   printf 'printf "ARG:%%s\\n" "$@" >"%s/argv.txt"\n' "$d"
 } >"$d/bin/claude"
@@ -202,6 +202,31 @@ run_case --help
 case "$got" in
   *"ARG:--settings="*) bad "bare --help gets no override" "argv was: $got" ;;
   *) ok "bare --help gets no override" ;;
+esac
+
+# --- and agents: its --settings propagates to dispatched sessions -------------
+#
+# `claude agents --help`: "--settings <file-or-json>  Settings file or JSON
+# string to apply to the agent view and dispatched sessions". Dispatch runs via
+# the daemon, outside this wrapper, so the agent-view launch is the only place
+# the override can reach those sessions.
+
+run_case agents
+case "$got" in
+  *"ARG:--settings=$RC_SETTINGS"*) ok "agents gets the override" ;;
+  *) bad "agents gets the override" "argv was: ${got:-<empty>}" ;;
+esac
+
+# `agents` legitimately takes its own --settings; the wrapper must not stack a
+# second one on top of it.
+run_case agents --settings=/tmp/user-settings.json
+case "$got" in
+  *"ARG:--settings=$RC_SETTINGS"*) bad "agents with own --settings gets no second one" "argv was: $got" ;;
+  *) ok "agents with own --settings gets no second one" ;;
+esac
+case "$got" in
+  *"ARG:--settings=/tmp/user-settings.json"*) ok "agents keeps the caller's settings" ;;
+  *) bad "agents keeps the caller's settings" "argv was: ${got:-<empty>}" ;;
 esac
 
 # --- documented opt-out -------------------------------------------------------

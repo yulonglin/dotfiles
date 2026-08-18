@@ -214,16 +214,21 @@ claude() {
     # `claude -p --model gpt-5.6-sol` for those), for --version/--help (the
     # subcommand probe above calls `claude --version` recursively, and a
     # prepended flag must not shift what that probe's stub or binary sees
-    # first), and under CLAUDE_RC_OVERRIDE=0 (documented opt-out). The one
-    # subcommand that DOES get it is `remote-control`/`rc` itself — that
-    # launcher cannot work on a redirected base URL, so the override applies
-    # regardless of flags there: `remote-control --help` keeps it (only a
-    # caller-supplied --settings, the opt-out, or a missing file skip it).
+    # first), and under CLAUDE_RC_OVERRIDE=0 (documented opt-out). Three
+    # subcommands DO get it: `remote-control`/`rc` (that launcher cannot work
+    # on a redirected base URL) and `agents` (its --settings applies to the
+    # agent view AND to the sessions it dispatches — per `claude agents
+    # --help` — so this is what gives dispatched sessions RC; dispatch runs
+    # via the daemon, outside this wrapper, and can't be fixed there). For
+    # these the override applies regardless of flags — `remote-control
+    # --help` keeps it; only a caller-supplied --settings (which `agents`
+    # legitimately takes), the opt-out, or a missing file skip it.
     # PREPENDED, never appended: a caller-supplied `--` terminator would
     # strand an appended option as prompt text — the same trap --channels
     # fell into.
     local _rc_subcmd=false
-    if [[ "$_first_positional" == "remote-control" || "$_first_positional" == "rc" ]]; then
+    if [[ "$_first_positional" == "remote-control" || "$_first_positional" == "rc" \
+          || "$_first_positional" == "agents" ]]; then
         _rc_subcmd=true
     fi
     if [[ ( "$_is_session" == true || "$_rc_subcmd" == true ) \
