@@ -63,7 +63,9 @@ This repo is **public** — and a branch in a public repo is public too, so pers
 
 ## Learnings
 
-Project-specific bugs, quirks, decisions and current state. Timestamp `- description (YYYY-MM-DD)`, keep under 20, prune past two weeks — retired entries move to [`docs/tooling-and-packages.md`](docs/tooling-and-packages.md) § Past Learnings.
+Project-specific bugs, quirks, decisions and current state.
+
+- **Alias files fight over names by source order** (`config/aliases/*.sh` glob = alphabetical): jobs.sh's pueue block silently lost `jexp`/`jagent`/`jpause`/`jresume` to pueue.sh's simpler versions — dropping the systemd-run cgroup caps CLAUDE.md promises — while jobs.sh's `jls`/`jfollow` *aliases* beat pueue.sh's functions. Consolidated: pueue.sh is the single j* home (cgroup enforcement restored, plain-`pueue add` fallback off-systemd), jobs.sh is SLURM-only. Same pass pruned aliases 161→~110 against 2 months of history (git.sh 41→14; dropped `rmd`, the `continue` keyword shadow, dirs-stack `1`-`9`, back-compat synonyms) (2026-08-18) Timestamp `- description (YYYY-MM-DD)`, keep under 20, prune past two weeks — retired entries move to [`docs/tooling-and-packages.md`](docs/tooling-and-packages.md) § Past Learnings.
 
 - **model-router's global `ANTHROPIC_BASE_URL` disables Remote Control** — Claude Code hard-gates RC to api.anthropic.com and explicitly exempts `_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL` from that gate. Fix: `claude/rc-direct-settings.json` blanks the redirect via `--settings` (a CLI settings file outranks the user-settings env block), prepended automatically by the `claude()` wrapper for interactive sessions and emitted by claude-spawn's RC path; opt out with `CLAUDE_RC_OVERRIDE=0`. GPT-5.6 subagents are unavailable in override sessions — use `claude -p --model gpt-5.6-sol` instead (2026-08-17)
 

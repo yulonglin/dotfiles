@@ -201,10 +201,6 @@ alias snippets-sync='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_repla
 alias snippets-export='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" export'
 alias snippets-diff='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" diff'
 alias snippets-prune='uv run --with ruamel.yaml "$DOT_DIR/scripts/sync_text_replacements.py" sync --prune'
-# back-compat shims for renamed aliases
-alias sync-snippets='snippets-sync'
-alias export-snippets='snippets-export'
-alias trsync='snippets-prune'
 
 # Sync Mouseless UI config changes back to dotfiles (macOS only)
 if [[ "$(uname)" == "Darwin" ]]; then
