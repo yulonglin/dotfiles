@@ -71,8 +71,22 @@ fi
 # run died, and each one alone was survivable.
 if [[ "$lock" != "none" ]]; then
   lockdir="${XDG_RUNTIME_DIR:-/tmp}/capped"
-  mkdir -p "$lockdir"
-  exec flock --timeout "${CAPPED_LOCK_WAIT:-1800}" "$lockdir/$lock.lock" "$@"
+  mkdir -p "$lockdir" 2>/dev/null || lockdir="/tmp/capped-$UID"
+  mkdir -p "$lockdir" || die "cannot create the lock directory $lockdir"
+  wait_s="${CAPPED_LOCK_WAIT:-1800}"
+  # Take the lock on a file descriptor rather than wrapping the command, so a
+  # timeout is distinguishable from the command itself exiting 1. Wrapping made
+  # a timeout silently skip the command and look like an ordinary failure.
+  exec {lockfd}>"$lockdir/$lock.lock" ||
+    die "cannot open the lock file $lockdir/$lock.lock"
+  if ! flock --timeout "$wait_s" "$lockfd"; then
+    printf 'capped: gave up after %ss waiting for the "%s" lock; another heavy run holds it.\n' \
+      "$wait_s" "$lock" >&2
+    printf 'capped: wait longer with CAPPED_LOCK_WAIT, or run alongside it with --lock none.\n' >&2
+    exit 75  # EX_TEMPFAIL: retryable, and never mistakable for the command succeeding
+  fi
 fi
+
+# The lock fd stays open across exec, so it is held for the command's lifetime.
 
 exec "$@"
