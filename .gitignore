@@ -575,3 +575,12 @@ Untitled.md
 
 # pytest falls back to a repo-local basetemp because $TMPDIR is read-only here
 pytest-of-*/
+
+# romp scaffold — symlinks into ~/romp/ (machine-local; dangling on any other host)
+claude/hooks/romp-*.sh
+claude/hooks/tmux-status.sh
+claude/romp-postal.mcp.json
+claude/romp-session-prompt.md
+
+# Codex sandbox-migration marker (machine-local runtime state)
+codex/.sandbox_migration
