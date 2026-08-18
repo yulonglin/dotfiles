@@ -38,19 +38,15 @@ except: print('unknown')
   msg="Auth: ${account}"
 fi
 
-# Check cached usage for near-limit warning
-cache_file="${TMPDIR:-/tmp/claude}/claude-statusline-usage.json"
-if [[ -f "$cache_file" ]]; then
-  read -r five_pct seven_pct < <(python3 -c "
-import json, sys
-with open(sys.argv[1]) as f: d = json.load(f)
-print(round(d.get('five_hour',{}).get('utilization',0)), round(d.get('seven_day',{}).get('utilization',0)))
-" "$cache_file" 2>/dev/null) || true
-  if [[ "${five_pct:-0}" -ge 95 ]] 2>/dev/null || [[ "${seven_pct:-0}" -ge 95 ]] 2>/dev/null; then
-    msg="${msg}
-Near limit (5h:${five_pct}% 7d:${seven_pct}%)! \`claude-switch\` to logout+login — restart alone won't clear cached usage"
-  fi
-fi
+# The near-limit usage warning used to be appended here. It has been removed
+# deliberately: usage quota is Yulong's to manage, not the assistant's, and
+# putting it in the model's context made it act on the number. Observed
+# 2026-08-13 -- it read "7d:96%" as its own context filling up, then spent a
+# session rushing, delegating work it could have done inline, and repeatedly
+# announcing it was about to run out. None of that was true or useful.
+#
+# The signal is not lost. `claude-tools statusline` still renders it in the
+# terminal, where the person who can act on it will see it.
 
 # On compact with no near-limit warning there is nothing live to report, so emit
 # no JSON at all rather than an empty additionalContext - that is the whole point
