@@ -164,10 +164,71 @@ if missing:
     return 0
 }
 
+# === MACHINE-LOCAL GATEWAY CHECK ===
+#
+# Blocks committing a per-machine gateway endpoint into a versioned settings.json.
+# model-router writes ANTHROPIC_BASE_URL=http://127.0.0.1:<port>/t/<token> into the
+# user-level file, which is the ONLY place Claude Code reads the base URL from
+# (ambient env, project settings.local.json and CLAUDE_CONFIG_DIR are all ignored),
+# so the value cannot move elsewhere — it just must never be committed. gitleaks
+# does not catch it: a bare hex token in a URL path has no adjacent key/secret
+# keyword for the generic rules to latch onto.
+
+_validate_no_local_gateway() {
+    local file="$1"
+
+    local staged_content
+    staged_content=$(git show ":${file}" 2>/dev/null) || return 0
+
+    local finding
+    finding=$(echo "${staged_content}" | python3 -c "
+import json, re, sys
+try:
+    d = json.load(sys.stdin)
+except json.JSONDecodeError:
+    sys.exit(0)  # the integrity check above already reports malformed JSON
+
+# A loopback URL carrying a long opaque path segment is a per-machine credential.
+tokened_loopback = re.compile(
+    r'https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::[0-9]+)?/\S*[0-9a-fA-F]{16,}'
+)
+found = []
+for key, value in (d.get('env') or {}).items():
+    if not isinstance(value, str):
+        continue
+    if key == 'ANTHROPIC_BASE_URL' or tokened_loopback.search(value):
+        found.append(key)
+if found:
+    print(' '.join(sorted(found)))
+") || return 0
+
+    [ -z "${finding}" ] && return 0
+
+    echo ""
+    echo "⛔  Pre-commit: ${file} carries a machine-local gateway endpoint"
+    echo "    Offending env key(s): ${finding}"
+    echo ""
+    echo "    This value is specific to this machine's model-router install and"
+    echo "    must not reach a public repo. Keep it in the working tree only:"
+    echo ""
+    echo "      git restore --staged ${file}"
+    echo ""
+    echo "    To commit the file's other changes, stage a stripped copy instead:"
+    echo "      # write a copy without the env key, then:"
+    echo "      SHA=\$(git hash-object -w /path/to/stripped.json)"
+    echo "      git update-index --cacheinfo 100644,\$SHA,${file}"
+    echo ""
+    echo "    To bypass (only if this endpoint is genuinely shareable):"
+    echo "      git commit --no-verify"
+    echo ""
+    return 1
+}
+
 while IFS= read -r _staged_file; do
     case "${_staged_file}" in
         claude/settings.json|.claude/settings.json)
             _validate_claude_settings "${_staged_file}" || exit 1
+            _validate_no_local_gateway "${_staged_file}" || exit 1
             ;;
     esac
 done < <(git diff --cached --name-only 2>/dev/null)
