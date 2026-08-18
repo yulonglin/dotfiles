@@ -45,9 +45,11 @@ git add claude/settings.json
 git commit -qm baseline --no-verify
 baseline_count="$(git rev-list --count HEAD)"
 
-# --- Case 1: the real model-router value must be rejected -------------------
+# --- Case 1: a model-router shaped value must be rejected -------------------
+# The token here is synthetic. Never paste a live gateway token into a fixture:
+# the fixture is committed, so it would leak the very value this guard protects.
 write_settings claude/settings.json \
-    '"ANTHROPIC_BASE_URL":"http://127.0.0.1:8787/t/ae604a59f840594b53c3d52eba3ba739"'
+    '"ANTHROPIC_BASE_URL":"http://127.0.0.1:8787/t/0123456789abcdef0123456789abcdef"'
 git add claude/settings.json
 if git commit -qm with-token >/dev/null 2>&1; then
     fail "tokened ANTHROPIC_BASE_URL was committed; guard did not fire"
