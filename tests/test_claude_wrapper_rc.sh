@@ -188,6 +188,22 @@ case "$got" in
   *) bad "rc alias gets the override" "argv was: ${got:-<empty>}" ;;
 esac
 
+# The help/version suppress (which protects the wrapper's recursive --version
+# probe) must not reach the RC subcommand: `claude remote-control --help` on a
+# redirected base URL printed the base-URL error instead of RC usage.
+run_case remote-control --help
+case "$got" in
+  *"ARG:--settings=$RC_SETTINGS"*) ok "remote-control --help keeps the override" ;;
+  *) bad "remote-control --help keeps the override" "argv was: ${got:-<empty>}" ;;
+esac
+
+# Bare `claude --help` has no subcommand, so the suppress still applies there.
+run_case --help
+case "$got" in
+  *"ARG:--settings="*) bad "bare --help gets no override" "argv was: $got" ;;
+  *) ok "bare --help gets no override" ;;
+esac
+
 # --- documented opt-out -------------------------------------------------------
 
 : >"$d/argv.txt"

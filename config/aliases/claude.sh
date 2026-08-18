@@ -216,11 +216,17 @@ claude() {
     # prepended flag must not shift what that probe's stub or binary sees
     # first), and under CLAUDE_RC_OVERRIDE=0 (documented opt-out). The one
     # subcommand that DOES get it is `remote-control`/`rc` itself — that
-    # launcher cannot work on a redirected base URL, so the override is
-    # unconditionally correct there. PREPENDED, never appended: a
-    # caller-supplied `--` terminator would strand an appended option as
-    # prompt text — the same trap --channels fell into.
-    if [[ ( "$_is_session" == true || "$_first_positional" == "remote-control" || "$_first_positional" == "rc" ) \
+    # launcher cannot work on a redirected base URL, so the override applies
+    # regardless of flags there: `remote-control --help` keeps it (only a
+    # caller-supplied --settings, the opt-out, or a missing file skip it).
+    # PREPENDED, never appended: a caller-supplied `--` terminator would
+    # strand an appended option as prompt text — the same trap --channels
+    # fell into.
+    local _rc_subcmd=false
+    if [[ "$_first_positional" == "remote-control" || "$_first_positional" == "rc" ]]; then
+        _rc_subcmd=true
+    fi
+    if [[ ( "$_is_session" == true || "$_rc_subcmd" == true ) \
           && "${CLAUDE_RC_OVERRIDE:-1}" != "0" ]]; then
         local _rc_settings="$HOME/.claude/rc-direct-settings.json"
         # Missing file → skip silently: non-deployed machines must not break.
@@ -235,7 +241,8 @@ claude() {
                 case "$_b" in
                     --) break ;;
                     -p|--print) _add_rc=false; break ;;
-                    -v|--version|-h|--help) _add_rc=false; break ;;
+                    -v|--version|-h|--help)
+                        if [[ "$_rc_subcmd" == false ]]; then _add_rc=false; break; fi ;;
                     --settings|--settings=*) _add_rc=false; break ;;
                     --model=gpt-5.6*) _add_rc=false; break ;;
                     --model) _rc_prev="--model" ;;
