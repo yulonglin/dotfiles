@@ -1,0 +1,9 @@
+{
+  "_comment": "Blanks the model-router base-URL redirect for sessions that need Remote Control (RC requires api.anthropic.com). Added by the claude() wrapper and claude-spawn RC path. GPT-5.6 subagents are unavailable in sessions using this override.",
+  "env": {
+    "ANTHROPIC_BASE_URL": "",
+    "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "",
+    "ANTHROPIC_CUSTOM_MODEL_OPTION": "",
+    "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": ""
+  }
+}

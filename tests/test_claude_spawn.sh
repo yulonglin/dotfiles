@@ -91,6 +91,52 @@ out=$("$SPAWN" --dry-run -n my-rc-name "x" 2>&1)
 assert_contains "-n implies remote control" "--remote-control" "$out"
 assert_contains "-n sets the name"          "remote control: my-rc-name" "$out"
 
+# --- remote control adds the direct-API settings override ---------------------
+#
+# The model-router's global ANTHROPIC_BASE_URL redirect disables Remote Control
+# (Claude Code exempts _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL from RC), so an
+# RC spawn must also pass the CLI settings file that blanks the redirect. Driven
+# through a fake HOME so the guard on the deployed file is under test control
+# rather than depending on what this machine has at ~/.claude.
+
+rc_home=""
+for rc_root in "${TMPDIR:-}" /tmp/claude /tmp "$SCRIPT_DIR/../tmp"; do
+  [[ -n "$rc_root" ]] || continue
+  mkdir -p "$rc_root" 2>/dev/null || continue
+  rc_home=$(mktemp -d "$rc_root/claude-spawn-rc-home.XXXXXX" 2>/dev/null || echo "")
+  [[ -n "$rc_home" && -d "$rc_home" ]] && break
+  rc_home=""
+done
+if [[ -z "$rc_home" ]]; then
+  printf '  SKIP rc settings-override tests (no writable temp directory)\n'
+else
+  mkdir -p "$rc_home/.claude"
+  printf '{"env":{}}' >"$rc_home/.claude/rc-direct-settings.json"
+
+  # Ordered pair, literal on both sides: the settings flag rides directly after
+  # the remote-control flag, one `--opt=value` token each, pointing at the RC
+  # override file — not merely "some --settings appears somewhere".
+  out=$(HOME="$rc_home" "$SPAWN" --dry-run -r "x" 2>&1)
+  # shellcheck disable=SC2016  # asserting the literal, unexpanded text
+  assert_contains "rc spawn adds the settings override" \
+    '--remote-control="$CLAUDE_SPAWN_RC_NAME" --settings="$HOME/.claude/rc-direct-settings.json"' "$out"
+
+  out=$(HOME="$rc_home" "$SPAWN" --dry-run "x" 2>&1)
+  assert_not_contains "non-rc spawn has no settings override" "--settings=" "$out"
+
+  out=$(HOME="$rc_home" CLAUDE_RC_OVERRIDE=0 "$SPAWN" --dry-run -r "x" 2>&1)
+  assert_not_contains "CLAUDE_RC_OVERRIDE=0 opts out of the override" "--settings=" "$out"
+  assert_contains     "opt-out keeps remote control itself" "--remote-control=" "$out"
+
+  # A machine without the deployed file must spawn exactly as before.
+  rm -f "$rc_home/.claude/rc-direct-settings.json"
+  out=$(HOME="$rc_home" "$SPAWN" --dry-run -r "x" 2>&1)
+  assert_not_contains "missing settings file is skipped silently" "--settings=" "$out"
+  assert_contains     "missing settings file keeps remote control" "--remote-control=" "$out"
+
+  rm -rf "$rc_home"
+fi
+
 # --- gate: --yolo + --remote-control ----------------------------------------
 
 out=$("$SPAWN" --dry-run -y -r "x" 2>&1); code=$?

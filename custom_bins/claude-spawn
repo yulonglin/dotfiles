@@ -363,6 +363,19 @@ fi
 if [[ "$remote_control" == true ]]; then
   # shellcheck disable=SC2016
   inner+=' --remote-control="$CLAUDE_SPAWN_RC_NAME"'
+  # Remote Control requires api.anthropic.com: the model-router's global
+  # ANTHROPIC_BASE_URL redirect disables it, and Claude Code exempts
+  # _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL from Remote Control. This CLI
+  # settings file blanks the redirect — a --settings file outranks the
+  # user-settings env block. Emitted as ONE `--opt=value` token for the same
+  # reason as --remote-control= above, with $HOME expanded by the pane's zsh
+  # so the path never passes through this script's quoting. Guarded so a
+  # machine without the deployed file spawns exactly as before, and
+  # CLAUDE_RC_OVERRIDE=0 is the documented opt-out.
+  if [[ -f "$HOME/.claude/rc-direct-settings.json" && "${CLAUDE_RC_OVERRIDE:-1}" != "0" ]]; then
+    # shellcheck disable=SC2016
+    inner+=' --settings="$HOME/.claude/rc-direct-settings.json"'
+  fi
 fi
 # Positional, with no `--` terminator, because a hand-typed session has none.
 # The terminator used to be here to stop a dash-leading seed being read as an

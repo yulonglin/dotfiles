@@ -203,6 +203,50 @@ claude() {
         fi
     fi
 
+    # Remote Control requires api.anthropic.com: the model-router's global
+    # ANTHROPIC_BASE_URL redirect disables it, and Claude Code exempts
+    # _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL from Remote Control. A CLI
+    # --settings file outranks the user-settings env block, so interactive
+    # sessions get rc-direct-settings.json, which blanks the redirect. Skipped
+    # for print mode and subcommands (no RC there), when the caller brought
+    # their own --settings, when GPT is the MAIN model (that needs the router;
+    # GPT subagents are likewise unavailable under the override — use
+    # `claude -p --model gpt-5.6-sol` for those), for --version/--help (the
+    # subcommand probe above calls `claude --version` recursively, and a
+    # prepended flag must not shift what that probe's stub or binary sees
+    # first), and under CLAUDE_RC_OVERRIDE=0 (documented opt-out). The one
+    # subcommand that DOES get it is `remote-control`/`rc` itself — that
+    # launcher cannot work on a redirected base URL, so the override is
+    # unconditionally correct there. PREPENDED, never appended: a
+    # caller-supplied `--` terminator would strand an appended option as
+    # prompt text — the same trap --channels fell into.
+    if [[ ( "$_is_session" == true || "$_first_positional" == "remote-control" || "$_first_positional" == "rc" ) \
+          && "${CLAUDE_RC_OVERRIDE:-1}" != "0" ]]; then
+        local _rc_settings="$HOME/.claude/rc-direct-settings.json"
+        # Missing file → skip silently: non-deployed machines must not break.
+        if [[ -f "$_rc_settings" ]]; then
+            local _add_rc=true _rc_prev="" _b
+            for _b in "${args[@]}"; do
+                if [[ "$_rc_prev" == "--model" ]]; then
+                    _rc_prev=""
+                    if [[ "$_b" == gpt-5.6* ]]; then _add_rc=false; break; fi
+                    continue
+                fi
+                case "$_b" in
+                    --) break ;;
+                    -p|--print) _add_rc=false; break ;;
+                    -v|--version|-h|--help) _add_rc=false; break ;;
+                    --settings|--settings=*) _add_rc=false; break ;;
+                    --model=gpt-5.6*) _add_rc=false; break ;;
+                    --model) _rc_prev="--model" ;;
+                esac
+            done
+            if [[ "$_add_rc" == true ]]; then
+                args=(--settings="$_rc_settings" "${args[@]}")
+            fi
+        fi
+    fi
+
     activate_venv
     command claude "${args[@]}"
 }
