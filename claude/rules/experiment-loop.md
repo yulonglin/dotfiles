@@ -6,7 +6,7 @@ For every empirical run — eval, rollout batch, sweep, replay. Born from monito
 
 2. **Fail within 5 minutes.** Everything knowable before generation must be checked before generation: endpoint health (with a cold-boot-sized timeout, not a 20s probe), `df` for ≥3× projected output, `free -g` against the planned readers' budgets, auth. A run that dies at hour 3 for a minute-2-knowable reason is a process failure.
 
-3. **Budget memory per process, enforced.** Any reader/analysis process expected to exceed ~2GB RSS runs under `systemd-run --user --scope -p MemoryMax=<N>G` so overruns kill the process, never the host or the experiment beside it. One heavy reader at a time per box. Full-file log parsers cost order-30× file size in RSS — stream per-sample where the API allows.
+3. **Budget memory per process, enforced.** Any reader/analysis process expected to exceed ~2GB RSS runs under `capped -- <cmd>` (`custom_bins/capped`), which applies `MemoryMax`, takes an exclusive lock so only one heavy reader runs per box, and fails closed rather than running uncapped. Full-file log parsers cost order-30× file size in RSS — stream per-sample where the API allows. **Never set `MemoryHigh` as the safety limit**: it throttles rather than kills, and with `MemorySwapMax=0` a runaway sits between High and Max indefinitely instead of dying (measured 2026-08-18: a 2GB allocation under `MemoryMax=256M` survived past 90s with High at 80% and 95%; without High it was killed in ~1s). A cap that hangs is worse than no cap, because nothing reports the stall.
 
 4. **Disk is shared across sessions.** Bulk pulls (Modal volumes, HF snapshots) target a data volume or checked path, never the root fs. A free-space watchdog runs whenever a long job is in flight.
 
