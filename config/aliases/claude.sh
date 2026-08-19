@@ -264,11 +264,10 @@ claude() {
 }
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
 alias yolo='claude --dangerously-skip-permissions'
-alias ccy='yolo'   # back-compat → yolo (synonym, prefer yolo)
-alias ccd='yolo'   # back-compat → yolo (synonym, prefer yolo)
 alias resume='claude --resume'
+# NOT aliasing `continue` — it's a shell keyword; zsh expands aliases in command
+# position even inside interactively-typed loops, so the alias would hijack them.
 alias cont='claude --continue'
-alias continue='claude --continue'
 alias yn='yolo -t'  # yn <name>: yolo with task name
 
 # Artifact dirs checked across worktree commands (port, remove, clean)
