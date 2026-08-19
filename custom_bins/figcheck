@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Run a matplotlib script and fail if any figure it saves has overlapping text.
+
+    figcheck make_figs.py [args...]     # non-zero exit on any collision
+    figcheck --warn make_figs.py        # report but do not fail
+
+Checking happens at savefig time on the live Figure, because a rasterised PNG
+no longer knows where its text boxes were.
+"""
+
+from __future__ import annotations
+
+import runpy
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path.home() / ".local/lib/plotting"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                      / "claude/skills/pastelplot/references"))
+
+import figcheck  # noqa: E402
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+    strict = True
+    if argv and argv[0] in ("--warn", "-w"):
+        strict = False
+        argv = argv[1:]
+    if not argv:
+        print(__doc__.strip())
+        return 2
+    script = argv[0]
+    figcheck.install(strict=strict)
+    sys.argv = argv
+    try:
+        runpy.run_path(script, run_name="__main__")
+    except SystemExit as exc:
+        code = exc.code
+        if isinstance(code, str):
+            print(code, file=sys.stderr)
+            return 1
+        return int(code or 0)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

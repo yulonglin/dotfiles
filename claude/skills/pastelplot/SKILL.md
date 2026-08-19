@@ -18,6 +18,28 @@ pastelplot.set_defaults()  # call before plotting
 
 **Alternative** (no module, no helpers): `plt.style.use('/path/to/dotfiles/config/matplotlib/pastel.mplstyle')` — or `plt.style.use('pastel')` if symlinked into `~/.config/matplotlib/stylelib/`.
 
+## Check for overlapping text before shipping a figure
+
+Eyeballing catches the collisions you happen to look at; a caption lying across a legend or a label sitting on a bar survives review and then gets noticed by the reader. `references/figcheck.py` walks every rendered Text, Legend and bar artist, takes its true window extent after a draw, and fails on real intersections.
+
+Copy it in beside `pastelplot.py`, then either check one figure:
+
+```python
+from figcheck import assert_no_overlaps
+fig.savefig(path, dpi=150, bbox_inches="tight")
+assert_no_overlaps(fig, "fig_name")
+```
+
+or cover every figure the script writes with one line at the top:
+
+```python
+import figcheck; figcheck.install()      # strict=False to warn instead of raise
+```
+
+For a script you did not write, `figcheck make_figs.py` (on PATH) runs it with the hook installed and exits non-zero on any collision; `figcheck --warn` reports without failing. Checking must happen on the live `Figure` — a saved PNG no longer knows where its text boxes were.
+
+Two gotchas it was built around: `axvspan`/`axhspan` shading is decoration, not a bar, so full-height patches are excluded (otherwise every value label reads as a collision), and a legend's own entries sitting inside its frame are not collisions.
+
 ## Palette
 
 | Pastel (cycle order) | Hex | Accent (saturated brand) | Hex |
