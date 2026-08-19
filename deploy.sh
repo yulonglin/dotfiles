@@ -1006,7 +1006,8 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
 
         # Deploy remaining service/timer units verbatim
         for unit in reset-failed.service reset-failed.timer \
-                    vault-sync-tripwire.service vault-sync-tripwire.timer; do
+                    vault-sync-tripwire.service vault-sync-tripwire.timer \
+                    romp-tailnet-proxy.service; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             # -f: installed units are copies, not symlinks into the repo, so a
             # redeploy must overwrite the stale one rather than silently keep it.
@@ -1025,6 +1026,17 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                 log_success "vault-sync tripwire timer enabled"
             else
                 log_warning "could not enable vault-sync-tripwire.timer"
+            fi
+        fi
+
+        # Romp tailnet proxy: only where romp is actually installed. Enabling it
+        # elsewhere leaves a service retrying a bind forever against a romp kernel
+        # that will never answer -- a permanently-failing unit nobody asked for.
+        if [[ -d "$HOME/romp" && -f "$systemd_user_dir/romp-tailnet-proxy.service" ]]; then
+            if systemctl --user enable --now romp-tailnet-proxy.service 2>/dev/null; then
+                log_success "romp tailnet proxy enabled"
+            else
+                log_warning "could not enable romp-tailnet-proxy.service"
             fi
         fi
 

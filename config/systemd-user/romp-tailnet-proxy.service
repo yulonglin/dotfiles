@@ -1,0 +1,21 @@
+[Unit]
+Description=Romp dashboard over the tailnet by raw IP (DNS-free fallback)
+Documentation=file://%h/.claude/skills/romp/SKILL.md
+# Why this exists: tailscale serve routes by Host header, so a raw tailnet IP
+# gets a 404 from it. A device with "Use Tailscale DNS" off cannot resolve the
+# MagicDNS name at all, and routing is independent of naming -- the 100.x
+# address stays reachable. This forwarder is the DNS-free way in.
+# TCP-level, not an HTTP proxy: the dashboard needs WebSocket/SSE passthrough.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The IP is resolved at start, not hardcoded, so this unit is portable across
+# machines. If tailscaled is not up yet the bind fails and Restart retries.
+ExecStart=/bin/sh -c 'exec socat TCP-LISTEN:8080,bind=$(tailscale ip -4 | head -n1),fork,reuseaddr TCP:127.0.0.1:29855'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

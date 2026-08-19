@@ -65,7 +65,7 @@ profiles:
     enable:
       - code
       - code-simplifier
-      - model-router
+      # - model-router  # disabled 2026-08-18: gateway unwired to restore Remote Control; GPT via codex-companion for now
       - precis
       - security-guidance
 
