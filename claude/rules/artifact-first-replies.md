@@ -53,4 +53,12 @@ When the page exists for Yulong to react to — findings, transcripts, drafts, s
 
 Update the existing artifact for the topic in place (same URL — pass `url` when the artifact came from an earlier session) rather than minting a new artifact per session; one topic = one living page. New URL only on a hard topic pivot.
 
+## When the in-place update is refused
+
+A republish can fail for reasons that are not about the content — most often `org_mismatch` ("caller org does not match owner org"), which appears when the session's auth org changed after the page was first published, e.g. after `/model` switches between differently-billed models mid-session. Retry once. If it fails again, **do not** pass `contract: 'latest'` to force it — that silently changes the published page's runtime semantics to buy a cosmetic update, and the artifact's stored pin exists precisely to stop that.
+
+The fallback is a **new artifact that supersedes the old one, never a silent fork**. Build it at a new file path, and put a supersedes note at the top of the new page: what changed, a link to the superseded URL, and why the URL moved. Say in the reply that the old link is now stale, since anyone holding it keeps seeing the outdated numbers. Keep the old page rather than deleting it — its comment threads are the user's work — but treat it as an archived version, not a live one.
+
+Deliverables live on disk first. A page that only exists as a successful `Artifact` call is lost when publishing breaks, so write the Markdown source and the built HTML to the vault before publishing, and let the publish be the last step.
+
 Possible future enforcement (not yet wired): a hook on Artifact publish / session Stop that nudges when substantive work ends without an artifact update. Wiring hooks requires an interactive session with access to hook config; do it via hookify when asked.
