@@ -602,6 +602,12 @@
           },
           {
             "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.uncapped-reader -- $HOME/.claude/hooks/nudge_uncapped_reader.sh",
+            "if": "Bash(*python*)",
+            "timeout": 3
+          },
+          {
+            "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.codex-git-review -- node $HOME/.claude/hooks/codex_git_add_reminder.mjs",
             "if": "Bash(git add *)",
             "timeout": 5

@@ -140,7 +140,10 @@ hr{{border:0;border-top:1px solid var(--rule);margin:2rem 0}}
 a{{color:var(--accent)}}
 mark.note{{background:var(--mark);border-bottom:2px solid var(--accent);cursor:pointer;border-radius:2px}}
 #pop{{position:absolute;z-index:50;display:none;background:var(--panel);border:1px solid var(--rule);
- border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.16);padding:.6rem;width:20rem}}
+ border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.16);padding:.6rem;
+ width:min(20rem,calc(100vw - 1.5rem))}}
+/* iOS zooms the whole page when a focused field is under 16px. */
+@media (pointer:coarse){{#pop textarea,#exporttext{{font-size:16px}}}}
 #pop textarea{{width:100%;min-height:4.5rem;border:1px solid var(--rule);border-radius:5px;
  background:var(--bg);color:var(--ink);padding:.4rem;font:inherit;font-size:.86rem;resize:vertical}}
 .btn{{background:var(--accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
@@ -258,20 +261,151 @@ document.addEventListener("click", (ev) => {{
   txt.focus();
 }});
 
-document.addEventListener("mouseup", (ev) => {{
-  if (pop.contains(ev.target)) return;
-  if (ev.target.closest && ev.target.closest("mark.note")) return;
+// Wraps a range in a highlight. surroundContents refuses a range that crosses
+// element boundaries, so fall back to lifting the contents out and wrapping.
+function wrapRange(range, id, note) {{
+  const m = document.createElement("mark");
+  m.className = "note"; m.title = note; m.dataset.cid = String(id);
+  try {{
+    range.surroundContents(m);
+  }} catch (e) {{
+    m.appendChild(range.extractContents());
+    range.insertNode(m);
+  }}
+  return m;
+}}
+
+// Every text node of the document body, skipping text already highlighted.
+function docTextNodes() {{
+  const root = document.querySelector(".doc") || document.body;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {{
+    acceptNode: (n) => (n.parentNode && n.parentNode.closest
+      && n.parentNode.closest("mark.note"))
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+  }});
+  const out = [];
+  let n;
+  while ((n = walker.nextNode())) out.push(n);
+  return out;
+}}
+
+// Collapses runs of whitespace to one space, and records where each kept
+// character sits in the raw text, so a match can be mapped back to real nodes.
+function collapsedIndex(nodes) {{
+  let norm = "";
+  const rawAt = [];
+  let raw = 0, lastWasSpace = false;
+  for (const n of nodes) {{
+    const v = n.nodeValue;
+    for (let i = 0; i < v.length; i++, raw++) {{
+      const isSpace = /\\s/.test(v[i]);
+      if (isSpace && lastWasSpace) continue;
+      norm += isSpace ? " " : v[i];
+      rawAt.push(raw);
+      lastWasSpace = isSpace;
+    }}
+  }}
+  return {{ norm: norm, rawAt: rawAt }};
+}}
+
+// Finds a stored quote again after a reload and returns a range over it.
+// Selection.toString() gives rendered text, where a newline inside a paragraph
+// reads as a single space, so the comparison has to collapse whitespace.
+function rangeForQuote(quote) {{
+  if (!quote) return null;
+  const nodes = docTextNodes();
+  if (!nodes.length) return null;
+  const starts = [];
+  let raw = 0;
+  for (const n of nodes) {{ starts.push(raw); raw += n.nodeValue.length; }}
+
+  const idx = collapsedIndex(nodes);
+  const needle = quote.replace(/\\s+/g, " ").trim();
+  if (!needle) return null;
+  const at = idx.norm.indexOf(needle);
+  if (at < 0) return null;
+
+  const rawFrom = idx.rawAt[at];
+  const rawTo = idx.rawAt[at + needle.length - 1] + 1;
+
+  function locate(offset, isEnd) {{
+    for (let k = 0; k < nodes.length; k++) {{
+      const base = starts[k];
+      const end = base + nodes[k].nodeValue.length;
+      if (isEnd ? (offset > base && offset <= end) : (offset >= base && offset < end)) {{
+        return [nodes[k], offset - base];
+      }}
+    }}
+    return null;
+  }}
+
+  const start = locate(rawFrom, false);
+  const finish = locate(rawTo, true);
+  if (!start || !finish) return null;
+  const r = document.createRange();
+  r.setStart(start[0], start[1]);
+  r.setEnd(finish[0], finish[1]);
+  return r;
+}}
+
+// A reload rebuilds the page from Markdown, so saved highlights are gone while
+// the comments themselves survive in localStorage. Put the marks back, or the
+// comments cannot be clicked open to edit or delete.
+function restoreHighlights() {{
+  let missed = 0;
+  for (const c of comments) {{
+    if (document.querySelector('mark.note[data-cid="' + c.id + '"]')) continue;
+    const r = rangeForQuote(c.quote);
+    if (!r) {{ missed++; continue; }}
+    try {{ wrapRange(r, c.id, c.note); }} catch (e) {{ missed++; }}
+  }}
+  return missed;
+}}
+
+// Opens the note box for the current selection. autofocus is false on touch:
+// focusing a textarea while iOS is showing its selection handles collapses the
+// selection before the user has typed anything.
+function openForSelection(autofocus) {{
   const sel = window.getSelection();
-  const text = sel ? sel.toString().trim() : "";
-  if (!text) {{ pop.style.display = "none"; return; }}
-  const rect = sel.getRangeAt(0).getBoundingClientRect();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  const text = sel.toString().trim();
+  if (!text) return false;
+  if (pop.contains(sel.anchorNode) || pop.contains(sel.focusNode)) return false;
+  // Already open on this exact selection: do not wipe a half-typed note.
+  if (pending && pending.quote === text && pop.style.display === "block") return true;
+  const range = sel.getRangeAt(0);
+  const rect = range.getBoundingClientRect();
   editingId = null; pop.classList.remove("editing");
-  pending = {{ quote: text, where: sectionOf(sel.anchorNode), range: sel.getRangeAt(0).cloneRange() }};
+  pending = {{ quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() }};
   pop.style.display = "block";
   pop.style.top = (window.scrollY + rect.bottom + 8) + "px";
   pop.style.left = Math.max(8, Math.min(window.scrollX + rect.left,
     window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 12)) + "px";
-  txt.value = ""; txt.focus();
+  txt.value = "";
+  if (autofocus) txt.focus();
+  return true;
+}}
+
+document.addEventListener("mouseup", (ev) => {{
+  if (pop.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest("mark.note")) return;
+  if (openForSelection(true)) return;
+  const sel = window.getSelection();
+  if (!sel || !sel.toString().trim()) pop.style.display = "none";
+}});
+
+// iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
+// handler makes the page uncommentable on iPhone and iPad. selectionchange
+// fires on every platform; debounce it so it runs once the selection settles.
+let selTimer = null;
+document.addEventListener("selectionchange", () => {{
+  if (document.activeElement === txt) return;
+  if (editingId !== null) return;
+  clearTimeout(selTimer);
+  selTimer = setTimeout(() => {{
+    if (openForSelection(false)) return;
+    if (editingId === null && !txt.value.trim()) closePop();
+  }}, 350);
 }});
 
 function closePop() {{ pop.style.display = "none"; pending = null; editingId = null; pop.classList.remove("editing"); }}
@@ -297,11 +431,7 @@ document.getElementById("save").onclick = () => {{
     if (m) m.title = note;
   }} else if (pending) {{
     const id = nextId++;
-    try {{
-      const m = document.createElement("mark");
-      m.className = "note"; m.title = note; m.dataset.cid = String(id);
-      pending.range.surroundContents(m);
-    }} catch (e) {{ }}
+    try {{ wrapRange(pending.range, id, note); }} catch (e) {{ }}
     comments.push({{ id: id, where: pending.where, quote: pending.quote, note: note }});
   }}
   markDirty(); persist(); render(); closePop();
@@ -409,6 +539,7 @@ if ("IntersectionObserver" in window && targets.length) {{
   targets.forEach((t) => io.observe(t.el));
 }}
 
+restoreHighlights();
 render();
 </script>
 """
