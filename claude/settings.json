@@ -797,6 +797,11 @@
           },
           {
             "type": "command",
+            "command": "$HOME/.claude/hooks/nudge_silent_turn.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.vault-lint -- bash $HOME/.claude/hooks/nudge_vault_lint.sh",
             "timeout": 3
           }
