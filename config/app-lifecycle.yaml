@@ -10,6 +10,13 @@
 #     plus Shield.systemextension 205 MB), so the connection survives.
 #   Claude, Granola - the one change that will actually be felt, and the point
 #     of the exercise: closing their windows left the processes resident.
+#
+# Tailscale was later moved BACK to `skip`, and Cloudflare WARP put there with
+# it. The extension-survives finding above still holds - the tunnel does not
+# drop - but the menu-bar item is the only way to see or change tunnel state,
+# and a sweep that removes it costs a relaunch every time. NordVPN keeps the
+# `quit` default: it was not part of that request, so the group above is no
+# longer uniform and this comment is the record of why.
 
 defaults:
   manual: quit
@@ -22,6 +29,8 @@ defaults:
 
 apps:
   Ghostty:               {manual: skip, auto: skip}
+  Tailscale:             {manual: skip}   # menu-bar item is the only tunnel UI
+  Cloudflare WARP:       {manual: skip}   # ditto; daemon is separate either way
   cmux:                  {manual: skip}
   Lettera:               {manual: skip}
   Super Productivity:    {manual: skip}

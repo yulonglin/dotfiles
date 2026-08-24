@@ -213,6 +213,7 @@ cp "$REPO/config/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
 export STUB_APP_LIST="Claude|com.anthropic.claudefordesktop
 Granola|so.granola.app
 Tailscale|io.tailscale.ipn.macsys
+Cloudflare WARP|com.cloudflare.1dot1dot1dot1.macos
 NordVPN|com.nordvpn.macos
 Bear|net.shinyfrog.bear
 Spotify|com.spotify.client
@@ -220,9 +221,20 @@ Spotify|com.spotify.client
 run --dry-run
 check     "Claude is quit"                 "$OUT" "- Claude"
 check     "Granola is quit"                "$OUT" "- Granola"
-check     "five apps quit, none closed"    "$OUT" "Would QUIT (4):"
+check     "two apps quit, none closed"     "$OUT" "Would QUIT (3):"
 check     "Bear still only closes"         "$OUT" "Would CLOSE WINDOWS (2):"
 check     "Spotify still only closes"      "$OUT" "- Spotify"
+# The VPN GUIs are `manual: skip`, so they must land under SKIP - and the
+# assertion has to be anchored to that heading. A bare `check "- Tailscale"` is
+# a substring match on the whole report and passes just as happily with
+# Tailscale sitting in the QUIT list, which is the decision this pins.
+check     "the VPN GUIs are left alone"    "$OUT" "Would SKIP (no-touch):
+  - Tailscale
+  - Cloudflare WARP"
+# NordVPN was NOT part of that change, and shares the identical
+# "the GUI is not the daemon" rationale. Asserted so the partial sweep is a
+# recorded boundary rather than something nobody noticed.
+check     "NordVPN is still quit"          "$OUT" "- NordVPN"
 
 # --- the close path itself, not dry-run ------------------------------------
 # Everything above stops at --dry-run, so none of it ever reaches the code that
