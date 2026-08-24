@@ -33,12 +33,15 @@ for a in "$@"; do
   esac
 done
 [[ ${#args[@]} -eq 2 ]] || { usage >&2; exit 2; }
-amount=${args[0]//,/}  # strip thousands separators: 2,199,855 -> 2199855
+raw=${args[0]}
 cur=$(printf '%s' "${args[1]}" | tr '[:lower:]' '[:upper:]')
 
-[[ $amount =~ ^[0-9]+([.][0-9]+)?$ ]] || {
-  printf "fx: amount must be a number, got '%s'\n" "$amount" >&2; exit 2
+# plain or correctly comma-grouped only — rejects decimal-comma inputs like
+# 2,50, which stripping first would silently misparse 100x as 250
+[[ $raw =~ ^[0-9]+([.][0-9]+)?$ || $raw =~ ^[0-9]{1,3}(,[0-9]{3})+([.][0-9]+)?$ ]] || {
+  printf "fx: amount must be a number, got '%s'\n" "$raw" >&2; exit 2
 }
+amount=${raw//,/}  # strip thousands separators: 2,199,855 -> 2199855
 # ISO 4217 only — also keeps $cur safe in the URL, cache path, and find pattern
 [[ $cur =~ ^[A-Z]{3}$ ]] || {
   printf "fx: invalid currency '%s'\n" "$cur" >&2; exit 2
