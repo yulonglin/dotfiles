@@ -39,9 +39,13 @@ cur=$(printf '%s' "${args[1]}" | tr '[:lower:]' '[:upper:]')
 [[ $amount =~ ^[0-9]+([.][0-9]+)?$ ]] || {
   printf "fx: amount must be a number, got '%s'\n" "$amount" >&2; exit 2
 }
+# ISO 4217 only — also keeps $cur safe in the URL, cache path, and find pattern
+[[ $cur =~ ^[A-Z]{3}$ ]] || {
+  printf "fx: invalid currency '%s'\n" "$cur" >&2; exit 2
+}
 
 if [[ $cur == USD ]]; then
-  if (( quiet )); then printf '%s\n' "$amount"; else printf '%s USD is already USD\n' "$amount"; fi
+  if (( quiet )); then printf '%.2f\n' "$amount"; else printf '%s USD is already USD\n' "$amount"; fi
   exit 0
 fi
 
@@ -69,8 +73,12 @@ if (( fresh )) || [[ ! -s $cache ]]; then
     old=("$cache_dir/$cur-"*.json)
     shopt -u nullglob
     if (( ${#old[@]} )); then
-      cache=${old[-1]}
-      printf 'fx: fetch failed; using cached rates (%s)\n' "${cache##*/}" >&2
+      # bash 3.2 (macOS) has no negative subscripts; glob order is lexicographic
+      # = chronological for ISO dates, so last element is newest. A concurrent
+      # succeeding fx can prune this file before we read it — narrow, benign race.
+      cache=${old[${#old[@]}-1]}
+      cached_day=${cache##*/}; cached_day=${cached_day#"$cur-"}; cached_day=${cached_day%.json}
+      printf 'fx: fetch failed; using cached rates from %s\n' "$cached_day" >&2
     else
       printf 'fx: could not fetch rates for %s (unknown currency, or network down)\n' "$cur" >&2
       exit 1
@@ -81,7 +89,8 @@ fi
 jq -r --arg amt "$amount" --argjson quiet "$quiet" '
   def money: (. * 100 | round) as $c
     | "\($c / 100 | floor).\($c % 100 | tostring | if length == 1 then "0" + . else . end)";
-  (.rates | to_entries | map({date: .key, rate: .value.USD})) as $r
+  ((.rates // {}) | to_entries | map(select(.value.USD != null) | {date: .key, rate: .value.USD})) as $r
+  | if ($r | length) == 0 then ("fx: no usable rates in response\n" | halt_error(1)) else . end
   | ($r | max_by(.rate)) as $hi
   | ($r | min_by(.rate)) as $lo
   | ($r | max_by(.date)) as $now
