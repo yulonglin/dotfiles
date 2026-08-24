@@ -1,8 +1,31 @@
 # Agents & Delegation
 
-## Spawn Fewer Than You Want To
+## The Main Agent Is An Orchestrator
 
-Current models reach for delegation more readily than the work justifies, so the default is a cap, not an invitation. Delegate for large, genuinely independent, parallelisable tracks — a wide multi-file investigation, several unrelated subsystems. Don't delegate what you can finish in a handful of tool calls yourself, and when one agent can do the job, send one rather than a fleet.
+Main context is for decomposition, dispatch, decisions, and synthesis — not for holding file dumps, search output, logs, or diffs. The default is to delegate: any work whose tool output you need only the *conclusion* of goes to a subagent, and the finding comes back instead of the raw bytes. Reach for delegation before the first bulk read, not after context is already polluted.
+
+Delegate by default:
+
+- **Exploration and search** — locating code, sweeping many files, tracing a naming convention → `Explore` / `core:efficient-explorer`.
+- **Bulk reads** — multi-file reads, logs, transcripts, large PDFs, long diffs → a reader agent that returns a summary sized to the question.
+- **Scoped implementation** — a settled spec touching several files → an implementation agent (worktree-isolated when parallel writers are possible).
+- **Verbose runs** — test suites, builds, experiment output → an agent that reports pass/fail plus the failing lines only.
+- **Web research** — multi-page reading → `general-purpose` / `research:literature-scout`.
+
+Keep inline (delegating these wastes a round-trip and loses nothing):
+
+- A single targeted edit, or a read of one file whose path you already know — a fresh agent would just re-read it.
+- Short situational awareness — `git status`, `git log -5`, `git diff --stat`.
+- Factual verification of claims you're about to state — `rules/verify-before-instructing.md`; an agent lookup is exactly the hallucination vector that rule exists to close.
+- The decision itself. Judgment, trade-offs, and anything needing conversation context stay in main context.
+
+## Big Or Long Work Engages Full Orchestrator Mode
+
+For multi-step projects, long sessions, or anything expected to spawn several agents, invoke `core:orchestrate` at the start — it activates the guard hook and delegates *all* implementation, keeping main context purely coordinative. The graduated default above is for ordinary tasks; orchestrator mode is the ceiling, not a different philosophy.
+
+## Briefs Cap What Comes Back
+
+Context is preserved only if the agent's return is compact. Every dispatch states TASK / CONTEXT (explicit file paths — agents don't share your context) / CONSTRAINTS / OUTPUT, and the OUTPUT line caps the return ("3-bullet summary", "pass/fail + failing test names"). Launch independent agents in one message so they run in parallel; never give two agents the same file to edit.
 
 **Never spawn an agent to verify or double-check your own work.** Self-correction already happens without being asked; a verifier agent on top of it burns tokens and latency without buying accuracy. A second opinion is a different thing — that means a different model family and it has its own rule (`rules/second-opinions.md`).
 
