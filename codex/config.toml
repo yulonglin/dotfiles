@@ -3,7 +3,6 @@ model_reasoning_effort = "ultra"
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 sandbox_mode = "workspace-write"
-notify = ["/bin/sh", "-c", "CLIENT=\"$HOME/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient\"; [ -x \"$CLIENT\" ] && exec \"$CLIENT\" turn-ended \"$1\"; exit 0", "codex-notify"]
 service_tier = "default"
 
 [mcp_servers.linear]
