@@ -1,0 +1,47 @@
+# Models reachable through the `openrouter` CLI (custom_bins/openrouter).
+#
+# Why a config file and not agent frontmatter: Claude Code resolves a `model:`
+# name against api.anthropic.com, so a non-Anthropic name in an agent's
+# frontmatter cannot resolve without an ANTHROPIC_BASE_URL gateway -- and that
+# gateway hard-disables Remote Control. These models are therefore reached by
+# shelling out to this CLI, and this file is the single source of truth for
+# which ones. Do NOT reintroduce them as agent files: an agent that names an
+# unreachable model either hard-fails, or (worse) answers from Claude while
+# wearing another family's label, which silently fakes multi-family results.
+#
+# Slugs below were taken from the live catalog (`openrouter models --check`),
+# not guessed. Re-check after any model rename.
+#
+# Ranking data comes from `openrouter refresh`:
+#   - Artificial Analysis intelligence index -- needs AA_API_KEY, free tier is
+#     1000 req/day. Their licence REQUIRES attribution to artificialanalysis.ai
+#     wherever these numbers are shown.
+#   - Epoch Capabilities Index -- CC-BY, no key, credit Epoch AI.
+# Enrichment is optional: every command works with this hand-curated list alone.
+
+# Outer model that synthesises a fusion panel's answers.
+judge: anthropic/claude-opus-4-8
+
+# Default panel for `openrouter fusion`. Deliberately one model per lab family:
+# the point of a panel is independent priors, and two checkpoints of the same
+# base model do not give that.
+panel:
+  - z-ai/glm-5.3
+  - moonshotai/kimi-k3
+  - qwen/qwen3.8-max
+  - deepseek/deepseek-v4-pro
+
+models:
+  - slug: z-ai/glm-5.3
+    alias: glm
+    # eci_name / aa_name are only needed where the index spells the model
+    # differently from the OpenRouter slug; refresh reports what it could not
+    # match rather than guessing.
+  - slug: moonshotai/kimi-k3
+    alias: kimi
+  - slug: qwen/qwen3.8-max
+    alias: qwen
+  - slug: meta/muse-spark-1.2
+    alias: muse
+  - slug: deepseek/deepseek-v4-pro
+    alias: deepseek

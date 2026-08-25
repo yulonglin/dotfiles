@@ -1,0 +1,283 @@
+#!/usr/bin/env python3
+"""openrouter - reach non-Anthropic models from a Claude Code session.
+
+Claude Code resolves a `model:` name against api.anthropic.com, so there is no
+frontmatter route to another vendor. model-router used to supply one by
+redirecting ANTHROPIC_BASE_URL, but that redirect hard-disables Remote Control.
+This CLI is the shell-out alternative: Remote Control keeps working, and the
+OpenRouter families stay reachable.
+
+    openrouter models                    # configured models
+    openrouter models --check            # ...cross-checked against the catalogue
+    openrouter refresh                   # rank via Epoch ECI (+ AA if keyed)
+    openrouter ask glm "question"        # one model
+    openrouter fusion "question"         # panel in parallel + judge synthesis
+
+`fusion` is the primitive for multi-family work: OpenRouter dispatches the
+panel server-side and the response names consensus, contradictions and
+unique_insights per member, so a collapsed panel is visible rather than silent.
+
+Attribution, required by the data licences: intelligence scores come from
+Artificial Analysis (artificialanalysis.ai) and the Epoch Capabilities Index
+(Epoch AI, CC-BY).
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import io
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.request
+import zipfile
+from pathlib import Path
+
+import yaml
+
+OR_BASE = "https://openrouter.ai/api/v1"
+AA_URL = "https://artificialanalysis.ai/api/v2/data/llms/models"
+EPOCH_ZIP = "https://epoch.ai/data/benchmark_data.zip"
+ECI_CSV = "epoch_capabilities_index.csv"
+
+# Resolved relative to this script so the tool works from any cwd.
+CONFIG = Path(__file__).resolve().parent.parent / "config" / "openrouter-models.yaml"
+
+
+def die(msg: str, code: int = 1) -> None:
+    print(f"openrouter: {msg}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def load_config() -> dict:
+    if not CONFIG.exists():
+        die(f"no config at {CONFIG}")
+    return yaml.safe_load(CONFIG.read_text())
+
+
+def api_key() -> str:
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if not key:
+        die(
+            "OPENROUTER_API_KEY not set. Secrets are per-project here, not global:\n"
+            "  setup-envrc            (direnv, persistent for this repo)\n"
+            "  with-secrets OPENROUTER_API_KEY -- openrouter ...   (one shot)"
+        )
+    return key
+
+
+def get_json(url: str, headers: dict | None = None, timeout: int = 60) -> dict:
+    req = urllib.request.Request(url, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        die(f"{url} returned HTTP {e.code}: {e.read()[:200].decode('utf-8', 'replace')}")
+    except urllib.error.URLError as e:
+        die(f"cannot reach {url}: {e.reason}")
+
+
+def post_json(url: str, payload: dict, key: str, timeout: int = 600) -> dict:
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            # Identifies the caller on OpenRouter's usage leaderboard.
+            "X-OpenRouter-Title": "dotfiles-openrouter-cli",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        die(f"HTTP {e.code}: {e.read()[:500].decode('utf-8', 'replace')}")
+    except urllib.error.URLError as e:
+        die(f"cannot reach {url}: {e.reason}")
+
+
+def resolve(cfg: dict, name: str) -> str:
+    """Accept an alias, a bare slug, or a slug suffix."""
+    for m in cfg["models"]:
+        if name in (m.get("alias"), m["slug"]):
+            return m["slug"]
+    if "/" in name:  # an unlisted slug is allowed, just not abbreviated
+        return name
+    known = ", ".join(sorted(str(m.get("alias") or m["slug"]) for m in cfg["models"]))
+    die(f"unknown model {name!r}. Configured: {known}")
+
+
+def norm(s: str) -> str:
+    """Collapse a model name for cross-source matching.
+
+    Index sources spell models differently from OpenRouter slugs ("Grok 4.6"
+    vs "x-ai/grok-4.6"). Normalising to alphanumerics catches the easy cases;
+    anything left unmatched is REPORTED rather than fuzzy-guessed, because a
+    wrong match silently produces a wrong ranking.
+    """
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def cmd_models(args, cfg) -> None:
+    live = {}
+    if args.check:
+        live = {m["id"]: m for m in get_json(f"{OR_BASE}/models").get("data", [])}
+    for m in cfg["models"]:
+        slug, alias = m["slug"], m.get("alias") or ""
+        row = f"{alias:<10} {slug}"
+        if args.check:
+            hit = live.get(slug)
+            if hit:
+                ctx = hit.get("context_length") or "?"
+                row += f"   [available, ctx {ctx}]"
+            else:
+                row += "   [NOT IN CATALOGUE - renamed or retired]"
+        print(row)
+    if args.check:
+        print(f"\ncatalogue size: {len(live)}")
+
+
+def fetch_eci() -> dict[str, float]:
+    """Epoch Capabilities Index, keyed by normalised model name."""
+    req = urllib.request.Request(EPOCH_ZIP)
+    with urllib.request.urlopen(req, timeout=120) as r:
+        blob = r.read()
+    z = zipfile.ZipFile(io.BytesIO(blob))
+    rows = csv.DictReader(io.StringIO(z.read(ECI_CSV).decode("utf-8", "replace")))
+    out: dict[str, float] = {}
+    for row in rows:
+        score = (row.get("ECI Score") or "").strip()
+        name = (row.get("Model name") or "").strip()
+        if not score or not name:
+            continue  # unscored entries exist (Confidence == Unverified)
+        try:
+            val = float(score)
+        except ValueError:
+            continue
+        # Several reasoning-effort variants share one Model name; keep the best.
+        out[norm(name)] = max(out.get(norm(name), val), val)
+    return out
+
+
+def fetch_aa() -> dict[str, float]:
+    """Artificial Analysis intelligence index, or {} when unkeyed."""
+    key = os.environ.get("AA_API_KEY")
+    if not key:
+        print(
+            "note: AA_API_KEY unset - skipping Artificial Analysis, using Epoch only.\n"
+            "      Get a free key (1000 req/day) at artificialanalysis.ai, then\n"
+            "      add it with `secrets-edit`.",
+            file=sys.stderr,
+        )
+        return {}
+    data = get_json(AA_URL, headers={"x-api-key": key}).get("data", [])
+    out: dict[str, float] = {}
+    for m in data:
+        score = m.get("artificial_analysis_intelligence_index")
+        name = m.get("name") or m.get("slug") or ""
+        if score is None or not name:
+            continue
+        out[norm(name)] = float(score)
+    return out
+
+
+def cmd_refresh(args, cfg) -> None:
+    eci, aa = fetch_eci(), fetch_aa()
+    print(f"Epoch ECI: {len(eci)} scored models | AA index: {len(aa)} scored models\n")
+    unmatched = []
+    rows = []
+    for m in cfg["models"]:
+        slug = m["slug"]
+        # Match on the part after the provider prefix unless the config overrides.
+        tail = slug.split("/", 1)[-1]
+        e = eci.get(norm(m.get("eci_name", tail)))
+        a = aa.get(norm(m.get("aa_name", tail)))
+        if e is None and a is None:
+            unmatched.append(slug)
+        rows.append((slug, e, a))
+    rows.sort(key=lambda r: (r[1] is None, -(r[1] or 0)))
+    print(f"{'model':<28} {'ECI':>7} {'AA':>7}")
+    for slug, e, a in rows:
+        print(f"{slug:<28} {('-' if e is None else f'{e:.1f}'):>7} "
+              f"{('-' if a is None else f'{a:.1f}'):>7}")
+    if unmatched:
+        print(
+            "\nunmatched (no index entry under the slug's own name) - add an\n"
+            "`eci_name:` or `aa_name:` to the config entry to pin the spelling:",
+            file=sys.stderr,
+        )
+        for s in unmatched:
+            print(f"  {s}", file=sys.stderr)
+    print("\nScores: Epoch AI (CC-BY) and artificialanalysis.ai. Attribution required.")
+
+
+def cmd_ask(args, cfg) -> None:
+    slug = resolve(cfg, args.model)
+    payload = {"model": slug, "messages": [{"role": "user", "content": args.prompt}]}
+    if args.dry_run:
+        print(json.dumps(payload, indent=2))
+        return
+    resp = post_json(f"{OR_BASE}/chat/completions", payload, api_key())
+    print(resp["choices"][0]["message"]["content"])
+
+
+def cmd_fusion(args, cfg) -> None:
+    panel = args.panel.split(",") if args.panel else cfg["panel"]
+    panel = [resolve(cfg, p.strip()) for p in panel]
+    if not 1 <= len(panel) <= 8:
+        die(f"fusion takes 1-8 panel models, got {len(panel)}")
+    payload = {
+        "model": cfg["judge"],
+        "messages": [{"role": "user", "content": args.prompt}],
+        "tools": [{
+            "type": "openrouter:fusion",
+            "parameters": {"analysis_models": panel, "model": cfg["judge"]},
+        }],
+        "tool_choice": "required",
+    }
+    if args.dry_run:
+        print(json.dumps(payload, indent=2))
+        print(f"\npanel of {len(panel)}, judge {cfg['judge']}", file=sys.stderr)
+        return
+    resp = post_json(f"{OR_BASE}/chat/completions", payload, api_key())
+    print(resp["choices"][0]["message"]["content"])
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="openrouter", description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    m = sub.add_parser("models", help="list configured models")
+    m.add_argument("--check", action="store_true",
+                   help="cross-check each slug against the live catalogue")
+    m.set_defaults(fn=cmd_models)
+
+    r = sub.add_parser("refresh", help="rank configured models by index scores")
+    r.set_defaults(fn=cmd_refresh)
+
+    a = sub.add_parser("ask", help="single-model completion")
+    a.add_argument("model")
+    a.add_argument("prompt")
+    a.add_argument("--dry-run", action="store_true",
+                   help="print the request body instead of spending")
+    a.set_defaults(fn=cmd_ask)
+
+    f = sub.add_parser("fusion", help="parallel panel plus judge synthesis")
+    f.add_argument("prompt")
+    f.add_argument("--panel", help="comma-separated aliases/slugs (default: config)")
+    f.add_argument("--dry-run", action="store_true",
+                   help="print the request body instead of spending")
+    f.set_defaults(fn=cmd_fusion)
+
+    args = p.parse_args()
+    args.fn(args, load_config())
+
+
+if __name__ == "__main__":
+    main()
