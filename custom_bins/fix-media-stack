@@ -1,0 +1,97 @@
+#!/bin/bash
+# fix-media-stack — detect and recover a wedged macOS audio/camera XPC layer.
+#
+# Born from the 2026-08-24 incident: avconferenced crash-looped on an XPC
+# watchdog during a bad FaceTime call, audiomxd aborted, and every app whose
+# main thread touched audio/camera froze at ~0% CPU. The GUI locked up but the
+# CLI stayed alive — so this also works over SSH when windows are frozen.
+# Postmortem: memory/media-stack-wedge-2026-08-24.md (Claude project memory).
+set -euo pipefail
+
+PROBE_TIMEOUT=10
+MODE=auto
+
+usage() {
+  cat <<'USAGE'
+Usage: fix-media-stack [--check | --force] [--timeout SECONDS]
+
+Probes the media stack with a timed `system_profiler SPAudioDataType`; a hang
+means the audio/camera XPC layer is wedged. Recovery force-quits avconferenced
+(user daemon) and audiomxd (system daemon, needs sudo); launchd respawns both
+on demand.
+
+  --check            Probe only; never kill anything.
+  --force            Skip the probe and restart the daemons unconditionally.
+  --timeout SECONDS  Probe timeout before declaring the stack wedged (default 10).
+  -h, --help         Show this help.
+
+Exit codes: 0 healthy (or recovered), 1 wedged (or recovery failed), 2 usage.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check) MODE=check ;;
+    --force) MODE=force ;;
+    --timeout)
+      shift
+      [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]] || { echo "error: --timeout needs an integer" >&2; exit 2; }
+      PROBE_TIMEOUT=$1
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# Portable timeout: background the probe, kill it if the deadline passes.
+# Returns 0 if the probe finished in time, 1 if it had to be killed.
+probe_media_stack() {
+  local pid elapsed=0
+  system_profiler SPAudioDataType >/dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( elapsed >= PROBE_TIMEOUT )); then
+      kill -9 "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      return 1
+    fi
+    sleep 1
+    (( elapsed++ ))
+  done
+  wait "$pid" 2>/dev/null || true
+  return 0
+}
+
+check() {
+  if probe_media_stack; then
+    echo "media stack healthy (audio query answered within ${PROBE_TIMEOUT}s)"
+    return 0
+  fi
+  echo "media stack WEDGED (audio query hung past ${PROBE_TIMEOUT}s)"
+  return 1
+}
+
+restart_daemons() {
+  echo "force-quitting avconferenced (user) ..."
+  killall -9 avconferenced 2>/dev/null || echo "  avconferenced not running (fine)"
+  echo "force-quitting audiomxd (system, needs sudo) ..."
+  sudo killall -9 audiomxd 2>/dev/null || echo "  audiomxd not running (fine)"
+  echo "launchd respawns both on demand; re-probing ..."
+  sleep 2
+  if check; then
+    echo "recovered."
+    return 0
+  fi
+  echo "still wedged — try also: sudo killall coreaudiod; last resort is a reboot." >&2
+  return 1
+}
+
+case "$MODE" in
+  check) check ;;
+  force) restart_daemons ;;
+  auto)
+    if check; then exit 0; fi
+    restart_daemons
+    ;;
+esac
