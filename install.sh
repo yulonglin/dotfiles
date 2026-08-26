@@ -22,6 +22,12 @@ export DOT_DIR
 source "$DOT_DIR/config.sh"
 source "$DOT_DIR/scripts/shared/helpers.sh"
 
+# Supply chain defense: fresh bootstraps run before config/aliases/misc.sh
+# exports the rolling 7-day uv quarantine, so every `uv tool install` below
+# would otherwise resolve unrestricted latest (UV_MALWARE_CHECK does not cover
+# `uv tool install`). Default it here; an explicitly supplied value wins.
+export UV_EXCLUDE_NEWER="${UV_EXCLUDE_NEWER:-P7D}"
+
 # Abort if DOT_DIR is a worktree rather than the main checkout (--allow-worktree
 # overrides). install.sh reaches scripts/cleanup/install.sh, which bakes DOT_DIR
 # into launchd/cron jobs.
@@ -205,9 +211,15 @@ fi
 
 if cmd_exists uv; then
     # ty — Rust-based Python type checker (Astral/uv ecosystem)
-    if ! is_installed ty; then
+    if ! is_installed_global ty; then
         log_info "Installing ty..."
         uv tool install ty 2>/dev/null || log_warning "ty installation failed"
+    fi
+
+    # ruff — Rust-based Python linter/formatter (Astral)
+    if ! is_installed_global ruff; then
+        log_info "Installing ruff..."
+        uv tool install ruff 2>/dev/null || log_warning "ruff installation failed"
     fi
 fi
 
@@ -370,13 +382,13 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     fi
 
     # pip-audit — vulnerability scanner for Python dependencies
-    if ! cmd_exists pip-audit; then
+    if ! is_installed_global pip-audit; then
         log_info "Installing pip-audit..."
         uv tool install pip-audit 2>/dev/null || log_warning "pip-audit install failed"
     fi
 
     # markitdown
-    if ! is_installed markitdown; then
+    if ! is_installed_global markitdown; then
         log_info "Installing markitdown..."
         if cmd_exists uv; then
             uv tool install 'markitdown[pdf,docx,pptx,xlsx,youtube-transcription]' 2>/dev/null
@@ -429,7 +441,7 @@ if [[ "$INSTALL_EXPERIMENTAL" == "true" ]]; then
     log_section "INSTALLING EXPERIMENTAL FEATURES ⚗️"
 
     # zotero-mcp-server: Zotero MCP for citation management (see config/experimental.yaml)
-    if ! is_installed zotero-mcp && cmd_exists uv; then
+    if ! is_installed_global zotero-mcp && cmd_exists uv; then
         log_info "Installing zotero-mcp-server (citation library management)..."
         uv tool install 'zotero-mcp-server[all]' 2>/dev/null || log_warning "zotero-mcp-server installation failed"
     fi
