@@ -271,6 +271,20 @@ is_installed() {
     return 1
 }
 
+# Like is_installed, but an executable inside an active Python virtualenv does
+# not count — used for persistent global tools (uv tool install), where a
+# venv-local binary vanishes once the venv is deactivated.
+is_installed_global() {
+    # NB: not named "path" — in zsh that variable is tied to $PATH and
+    # assigning it clobbers command lookup for the rest of the function.
+    local resolved
+    resolved=$(command -v "$1" 2>/dev/null) || return 1
+    if [[ -n "${VIRTUAL_ENV:-}" && "$resolved" == "${VIRTUAL_ENV}"/* ]]; then
+        return 1
+    fi
+    is_installed "$@"
+}
+
 # Check if brew cask is installed (macOS)
 is_cask_installed() {
     local cask="$1"
