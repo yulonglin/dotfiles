@@ -209,6 +209,12 @@ if cmd_exists uv; then
         log_info "Installing ty..."
         uv tool install ty 2>/dev/null || log_warning "ty installation failed"
     fi
+
+    # ruff — Rust-based Python linter/formatter (Astral)
+    if ! is_installed ruff; then
+        log_info "Installing ruff..."
+        uv tool install ruff 2>/dev/null || log_warning "ruff installation failed"
+    fi
 fi
 
 # ─── Node.js LTS (global runtime — see install_node in helpers.sh) ────────────
