@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""openrouter - reach non-Anthropic models from a Claude Code session.
+"""openrouter-cli - reach non-Anthropic models from a Claude Code session.
 
 Claude Code resolves a `model:` name against api.anthropic.com, so there is no
 frontmatter route to another vendor. model-router used to supply one by
@@ -7,11 +7,11 @@ redirecting ANTHROPIC_BASE_URL, but that redirect hard-disables Remote Control.
 This CLI is the shell-out alternative: Remote Control keeps working, and the
 OpenRouter families stay reachable.
 
-    openrouter models                    # configured models
-    openrouter models --check            # ...cross-checked against the catalogue
-    openrouter refresh                   # rank via Epoch ECI (+ AA if keyed)
-    openrouter ask glm "question"        # one model
-    openrouter fusion "question"         # panel in parallel + judge synthesis
+    openrouter-cli models                 # configured models
+    openrouter-cli models --check         # ...cross-checked against the catalogue
+    openrouter-cli refresh                # rank via Epoch ECI (+ AA if keyed)
+    openrouter-cli ask glm "question"     # one model
+    openrouter-cli fusion "question"      # panel in parallel + judge synthesis
 
 `fusion` is the primitive for multi-family work: OpenRouter dispatches the
 panel server-side and the response names consensus, contradictions and
@@ -36,7 +36,13 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-import yaml
+# Stdlib-only on purpose: a new machine gets a working tool from deploy.sh
+# alone. tomllib landed in Python 3.11.
+try:
+    import tomllib
+except ImportError:  # Python < 3.11
+    print("openrouter-cli: needs Python 3.11+ (tomllib)", file=sys.stderr)
+    raise SystemExit(1)
 
 OR_BASE = "https://openrouter.ai/api/v1"
 AA_URL = "https://artificialanalysis.ai/api/v2/data/llms/models"
@@ -44,18 +50,18 @@ EPOCH_ZIP = "https://epoch.ai/data/benchmark_data.zip"
 ECI_CSV = "epoch_capabilities_index.csv"
 
 # Resolved relative to this script so the tool works from any cwd.
-CONFIG = Path(__file__).resolve().parent.parent / "config" / "openrouter-models.yaml"
+CONFIG = Path(__file__).resolve().parent.parent / "config" / "openrouter-models.toml"
 
 
 def die(msg: str, code: int = 1) -> None:
-    print(f"openrouter: {msg}", file=sys.stderr)
+    print(f"openrouter-cli: {msg}", file=sys.stderr)
     raise SystemExit(code)
 
 
 def load_config() -> dict:
     if not CONFIG.exists():
         die(f"no config at {CONFIG}")
-    return yaml.safe_load(CONFIG.read_text())
+    return tomllib.loads(CONFIG.read_text())
 
 
 def api_key() -> str:
@@ -89,7 +95,7 @@ def post_json(url: str, payload: dict, key: str, timeout: int = 600) -> dict:
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
             # Identifies the caller on OpenRouter's usage leaderboard.
-            "X-OpenRouter-Title": "dotfiles-openrouter-cli",
+            "X-OpenRouter-Title": "openrouter-cli (dotfiles)",
         },
     )
     try:
@@ -249,7 +255,7 @@ def cmd_fusion(args, cfg) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="openrouter", description=__doc__,
+    p = argparse.ArgumentParser(prog="openrouter-cli", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
 
