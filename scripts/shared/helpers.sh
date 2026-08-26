@@ -271,17 +271,20 @@ is_installed() {
     return 1
 }
 
-# Like is_installed, but an executable inside an active Python virtualenv does
-# not count — used for persistent global tools (uv tool install), where a
-# venv-local binary vanishes once the venv is deactivated.
+# Like is_installed, but an executable inside an active Python environment
+# (virtualenv or conda/micromamba) does not count — used for persistent global
+# tools (uv tool install), where an env-local binary vanishes once the
+# environment is deactivated.
 is_installed_global() {
     # NB: not named "path" — in zsh that variable is tied to $PATH and
     # assigning it clobbers command lookup for the rest of the function.
-    local resolved
+    local resolved envroot
     resolved=$(command -v "$1" 2>/dev/null) || return 1
-    if [[ -n "${VIRTUAL_ENV:-}" && "$resolved" == "${VIRTUAL_ENV}"/* ]]; then
-        return 1
-    fi
+    for envroot in "${VIRTUAL_ENV:-}" "${CONDA_PREFIX:-}"; do
+        if [[ -n "$envroot" && "$resolved" == "${envroot}"/* ]]; then
+            return 1
+        fi
+    done
     is_installed "$@"
 }
 

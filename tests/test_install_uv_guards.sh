@@ -46,20 +46,22 @@ for d in venv global; do
     chmod +x "$workdir/$d/bin/faketool"
 done
 
-run_guard() { # $1=VIRTUAL_ENV value ("" for unset), $2=PATH prefix
-    VENV_VAL="$1" PATH_PREFIX="$2" zsh -c '
+run_guard() { # $1=env var name ("" for none), $2=env root, $3=PATH prefix
+    ENV_NAME="$1" ENV_ROOT="$2" PATH_PREFIX="$3" zsh -c '
         export DOT_DIR="'"$REPO_ROOT"'"
         source "$DOT_DIR/config.sh"
         source "$DOT_DIR/scripts/shared/helpers.sh"
-        [[ -n "$VENV_VAL" ]] && export VIRTUAL_ENV="$VENV_VAL"
+        [[ -n "$ENV_NAME" ]] && export "$ENV_NAME"="$ENV_ROOT"
         export PATH="$PATH_PREFIX:$PATH"
         if is_installed_global faketool >/dev/null 2>&1; then echo counted; else echo ignored; fi
     '
 }
 
-got=$(run_guard "$workdir/venv" "$workdir/venv/bin")
+got=$(run_guard VIRTUAL_ENV "$workdir/venv" "$workdir/venv/bin")
 [[ "$got" == "ignored" ]] || fail "venv-local faketool was counted as installed"
-got=$(run_guard "" "$workdir/global/bin")
+got=$(run_guard CONDA_PREFIX "$workdir/venv" "$workdir/venv/bin")
+[[ "$got" == "ignored" ]] || fail "conda-local faketool was counted as installed"
+got=$(run_guard "" "" "$workdir/global/bin")
 [[ "$got" == "counted" ]] || fail "global faketool was not counted (tied-\$path regression?)"
 
 echo "PASS: all uv guard assertions hold"
