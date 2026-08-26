@@ -10,8 +10,9 @@
 # wearing another family's label, which silently fakes multi-family results.
 #
 # TOML rather than YAML so the CLI needs only the standard library (tomllib,
-# Python >= 3.11) -- a new machine gets a working tool from deploy.sh alone,
-# with no PyYAML to install first.
+# Python >= 3.11) -- no PyYAML to install first. deploy.sh's shell component
+# puts custom_bins on PATH; a Python 3.11+ interpreter is assumed, not
+# provisioned.
 #
 # Slugs below were taken from the live catalog (`openrouter-cli models --check`),
 # not guessed. Re-check after any model rename.
@@ -23,7 +24,8 @@
 #   - Epoch Capabilities Index -- CC-BY, no key, credit Epoch AI.
 # Enrichment is optional: every command works with this hand-curated list alone.
 
-# Outer model that synthesises a fusion panel's answers.
+# Fills both fusion roles: the analyst that structures the panel's answers
+# and the outer model that writes the final prose.
 judge = "anthropic/claude-opus-4-8"
 
 # Default panel for `openrouter-cli fusion`. Deliberately one model per lab
@@ -35,6 +37,12 @@ panel = [
   "qwen/qwen3.8-max",
   "deepseek/deepseek-v4-pro",
 ]
+
+# Caps forwarded to each inner panel/analyst call, pinned so an upstream
+# beta-default change cannot silently raise spend.
+[fusion]
+max_tool_calls = 4
+max_completion_tokens = 16000
 
 [[models]]
 slug = "z-ai/glm-5.3"

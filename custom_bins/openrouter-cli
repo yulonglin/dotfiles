@@ -36,8 +36,9 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-# Stdlib-only on purpose: a new machine gets a working tool from deploy.sh
-# alone. tomllib landed in Python 3.11.
+# Stdlib-only on purpose: no packages to install beyond a Python 3.11+
+# interpreter (tomllib landed in 3.11). deploy.sh's shell component puts
+# custom_bins on PATH; Python itself is assumed, not provisioned.
 try:
     import tomllib
 except ImportError:  # Python < 3.11
@@ -116,6 +117,98 @@ def resolve(cfg: dict, name: str) -> str:
         return name
     known = ", ".join(sorted(str(m.get("alias") or m["slug"]) for m in cfg["models"]))
     die(f"unknown model {name!r}. Configured: {known}")
+
+
+def extract_content(resp: dict) -> str:
+    """The completion text, or die: OpenRouter embeds provider failures in
+    HTTP-200 bodies (top-level `error`, or a choice-level `error` with
+    finish_reason "error" beside partial content), and printing those as
+    answers turns a failed call into a plausible-looking result."""
+    if resp.get("error"):
+        die(f"API error: {json.dumps(resp['error'])[:300]}")
+    choices = resp.get("choices") or []
+    if not choices:
+        die(f"no choices in response: {json.dumps(resp)[:300]}")
+    ch = choices[0]
+    if ch.get("error") or ch.get("finish_reason") == "error":
+        die(
+            f"provider failed mid-generation (finish_reason="
+            f"{ch.get('finish_reason')!r}): {json.dumps(ch.get('error'))[:300]}"
+        )
+    content = (ch.get("message") or {}).get("content")
+    if not isinstance(content, str) or not content.strip():
+        die("empty completion content")
+    return content
+
+
+def parse_panel(spec: str | None, cfg: dict) -> list[str]:
+    """Panel slugs from --panel, or the config default when no flag was given.
+
+    An explicitly empty --panel is an error, not the default: `--panel "$X"`
+    with an unset X must not silently widen to the full billed panel. Duplicate
+    slugs are rejected because two entries of one model pass the size check
+    while providing no independent second opinion.
+    """
+    if spec is None:
+        panel = [resolve(cfg, p) for p in cfg["panel"]]
+    else:
+        names = [s.strip() for s in spec.split(",")]
+        if not names or not all(names):
+            die("--panel must be a non-empty comma-separated list of models")
+        panel = [resolve(cfg, n) for n in names]
+    dupes = sorted({s for s in panel if panel.count(s) > 1})
+    if dupes:
+        die(f"duplicate panel models: {', '.join(dupes)}")
+    if not 1 <= len(panel) <= 8:
+        die(f"fusion takes 1-8 panel models, got {len(panel)}")
+    return panel
+
+
+def fusion_result(resp: dict) -> dict:
+    """The structured fusion outcome, recorded as a server tool call in
+    reasoning_details. Without it the panel cannot be verified, so its
+    absence is an error rather than a shrug."""
+    msg = (resp.get("choices") or [{}])[0].get("message") or {}
+    for d in msg.get("reasoning_details") or []:
+        if d.get("tool_name") == "openrouter:fusion" and d.get("result"):
+            try:
+                return json.loads(d["result"])
+            except ValueError:
+                die("fusion tool result is not valid JSON")
+    die("response carries no openrouter:fusion tool result - cannot verify the panel ran")
+
+
+def check_fusion_integrity(result: dict, panel: list[str]) -> list[str]:
+    """Problems that make the output not a full-panel answer.
+
+    Fusion degrades silently by contract: partial panel failures keep
+    status "ok" and add failed_models; an analyst failure omits analysis;
+    the outer model happily answers over whatever survived. A collapsed
+    panel presented as corroboration is exactly the failure this tool
+    exists to avoid, so every degradation fails closed.
+    """
+    problems = []
+    if result.get("status") != "ok":
+        problems.append(
+            f"fusion status {result.get('status')!r}"
+            f" ({result.get('failure_reason', 'no failure_reason')})"
+        )
+    failed = result.get("failed_models") or []
+    if failed:
+        problems.append(f"failed panel models: {json.dumps(failed)[:300]}")
+    # Participants: live responses carry a flat `models` list of slugs; the
+    # docs describe `responses[].model`. Accept either, require one.
+    ran = set(result.get("models") or [])
+    ran |= {r.get("model") for r in result.get("responses") or []}
+    if not ran:
+        problems.append("result names no participating models - cannot verify the panel")
+    else:
+        missing = [m for m in panel if m not in ran]
+        if missing:
+            problems.append(f"no response from: {', '.join(missing)}")
+    if "analysis" not in result:
+        problems.append("analyst produced no structured analysis")
+    return problems
 
 
 def norm(s: str) -> str:
@@ -229,20 +322,28 @@ def cmd_ask(args, cfg) -> None:
         print(json.dumps(payload, indent=2))
         return
     resp = post_json(f"{OR_BASE}/chat/completions", payload, api_key())
-    print(resp["choices"][0]["message"]["content"])
+    print(extract_content(resp))
 
 
 def cmd_fusion(args, cfg) -> None:
-    panel = args.panel.split(",") if args.panel else cfg["panel"]
-    panel = [resolve(cfg, p.strip()) for p in panel]
-    if not 1 <= len(panel) <= 8:
-        die(f"fusion takes 1-8 panel models, got {len(panel)}")
+    panel = parse_panel(args.panel, cfg)
+    caps = cfg.get("fusion", {})
     payload = {
+        # The outer voice that writes the final prose.
         "model": cfg["judge"],
         "messages": [{"role": "user", "content": args.prompt}],
         "tools": [{
             "type": "openrouter:fusion",
-            "parameters": {"analysis_models": panel, "model": cfg["judge"]},
+            "parameters": {
+                "analysis_models": panel,
+                # The analyst that structures the panel's answers. Distinct
+                # role from the outer model above; one judge fills both here.
+                "model": cfg["judge"],
+                # Pinned so an upstream beta-default change cannot silently
+                # raise spend per inner call.
+                "max_tool_calls": caps.get("max_tool_calls", 4),
+                "max_completion_tokens": caps.get("max_completion_tokens", 16000),
+            },
         }],
         "tool_choice": "required",
     }
@@ -251,7 +352,19 @@ def cmd_fusion(args, cfg) -> None:
         print(f"\npanel of {len(panel)}, judge {cfg['judge']}", file=sys.stderr)
         return
     resp = post_json(f"{OR_BASE}/chat/completions", payload, api_key())
-    print(resp["choices"][0]["message"]["content"])
+    content = extract_content(resp)
+    problems = check_fusion_integrity(fusion_result(resp), panel)
+    if problems:
+        for p in problems:
+            print(f"openrouter-cli: {p}", file=sys.stderr)
+        die("panel integrity check failed - refusing to present degraded output as a full panel")
+    print(content)
+    usage = resp.get("usage") or {}
+    print(
+        f"[fusion ok: {len(panel)} panel models, cost ${usage.get('cost', '?')}, "
+        f"response {resp.get('id', '?')}]",
+        file=sys.stderr,
+    )
 
 
 def main() -> None:
