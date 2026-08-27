@@ -18,7 +18,7 @@ Agents run at machine speed across parallel worktrees, so human duration intuiti
 
 ## Personal repos: action over ceremony
 
-Don't propose `.gitignore`, branching, or PRs unprompted on dotfiles and personal repos. Direct pushes to main are normal there.
+Don't propose `.gitignore` or branching-strategy ceremony unprompted on dotfiles and personal repos. PRs are the exception to this: reviewable changes go through a PR by convention (stacked via `gh stack` or Graphite when a chain reviews better); direct pushes to main are for trivial/mechanical changes only.
 
 ## After pushback, don't defend
 
