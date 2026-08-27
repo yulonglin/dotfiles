@@ -32,3 +32,5 @@ Yulong's standard for every research artifact (2026-08-27). Build against it bef
 - Metric: what is the ground truth (pre-labelled? LLM judge/scorer?); for classification, which is the positive and which the negative class; the data distribution / skew; known issues with the data.
 - Model inputs and outputs verbatim in a collapsible block, for every model in the loop (agent, monitor, judge, …).
 - Every estimate with its interval and what the interval covers; every rate beside its null (see `research-integrity.md`).
+
+- **Enumerations are lists, never prose.** Anything listing ≥3 items (models, settings, arms, what is held constant vs varied) is a bulleted/numbered list or one comma/semicolon-separated line (Yulong, 2026-08-27).
