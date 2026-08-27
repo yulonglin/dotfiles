@@ -100,6 +100,7 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
 - [Dev Tools](#dev-tools)
   - [htop](#htop-process-monitor)
   - [pdb++](#pdb-python-debugger)
+  - [macOS Media Recovery](#macos-media-recovery)
 - [Secrets & Security](#secrets--security)
   - [Encrypted Secrets (Bitwarden Secrets Manager)](#encrypted-secrets-bitwarden-secrets-manager)
   - [Gist Sync](#gist-sync-automation-both-platforms)
@@ -536,6 +537,30 @@ python -c "import pdb; pdb.set_trace()" <<< "c"
 ```
 
 **Per-project override** (advanced): Create `.pdbrc.py` in project root. It takes precedence over the global config. See [pdb++ docs](https://github.com/pdbpp/pdbpp#configuration) for details.
+
+### macOS Media Recovery
+
+If Spotify, FaceTime, FineTune, or other audio apps hang together, use the
+manual `reset-mac-media` helper. It saves a private diagnostic bundle before
+restarting only CoreAudio and FaceTime's supporting services; it does not quit
+the affected GUI apps or restart Bluetooth or WindowServer.
+
+```bash
+# Preview the bounded action
+reset-mac-media --dry-run
+
+# Capture diagnostics, restart the media services, and verify recovery
+reset-mac-media
+```
+
+The real run requires administrator authentication and briefly interrupts all
+audio, video, and active calls. Reports go to
+`~/Library/Logs/reset-mac-media/`. A bundle can contain device metadata, local
+paths, and call or app context, so review it before sharing. If the helper
+cannot verify that the old service PIDs disappeared while their launchd jobs
+remain loaded, it exits nonzero and keeps the report; rebooting remains the
+fallback. To reduce recurrence, add FaceTime to FineTune's ignore list and use
+the MacBook microphone when Bluetooth call routing is unstable.
 
 ## Automation
 
