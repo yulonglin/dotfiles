@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# jwait — block until the given pueue task ids are all finished (promoted
+# 2026-08-27 from sandbagging-detection scripts/jobs/wait_pueue.sh).
+#
+# Polls `pueue status --json`; exits 0 when every id is Done with Success,
+# exits 1 if any id finished otherwise (Failed, Killed, missing), and prints
+# the final per-id status JSON either way.
+set -uo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: jwait [--interval SECONDS] ID [ID...]
+
+  --interval N    Poll interval in seconds (default 60).
+  -h, --help      Show this help.
+
+Exit codes: 0 all Done+Success; 1 any Failed/Killed/missing; 2 bad usage.
+USAGE
+}
+
+interval=60
+ids=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --interval) interval="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "jwait: unknown flag: $1" >&2; usage >&2; exit 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+[ ${#ids[@]} -gt 0 ] || { echo "jwait: no task ids given" >&2; usage >&2; exit 2; }
+for c in pueue jq; do
+  command -v "$c" >/dev/null || { echo "jwait: $c not on PATH" >&2; exit 2; }
+done
+
+ids_json="$(printf '%s\n' "${ids[@]}" | jq -R . | jq -sc .)"
+# A task is finished when its status is an object with a "Done" key
+# (Queued/Running are bare strings in pueue's JSON). A missing id also
+# counts as finished so we do not wait forever on a typo.
+# shellcheck disable=SC2016  # jq filter, $t/$ids are jq variables
+finished_q='. as $t | $ids | map(($t.tasks[.] == null) or ($t.tasks[.].status | type=="object" and has("Done"))) | all'
+until pueue status --json 2>/dev/null | jq -e --argjson ids "$ids_json" "$finished_q" >/dev/null 2>&1; do
+  sleep "$interval"
+done
+
+status_json="$(pueue status --json | jq -c --argjson ids "$ids_json" \
+  '. as $t | $ids | map({id: ., status: ($t.tasks[.].status // "missing")})')"
+echo "$(date -u +%FT%TZ) $status_json"
+
+# Success iff every Done result is exactly "Success"; anything else fails.
+if echo "$status_json" | jq -e 'map(.status | type=="object" and .Done.result=="Success") | all' >/dev/null; then
+  exit 0
+fi
+exit 1

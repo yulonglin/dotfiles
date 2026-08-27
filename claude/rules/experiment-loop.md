@@ -20,4 +20,6 @@ For every empirical run — eval, rollout batch, sweep, replay. Born from monito
 
 9. **Provenance is cheap; guard machinery must earn its keep.** Keep pinned revisions, seeds, prompt hashes, manifests, append-only rows with rendered inputs. But when a validator or cache has caused more failures than it caught, delete it — prefer deleting complexity to optimizing it.
 
-10. **Record wall-clock time.** `date` at start and end of substantial tasks; log elapsed beside the result (user is in Berkeley, PT). Unknown cost can't be prioritized.
+10. **Check the queue's parallelism before submitting a fan-out.** A serial group turns N independent jobs into N× wall-clock, and this is invisible in `pueue status` unless you read the group header — run `pueue group` first (measured 2026-08-27: ~10 independent API-bound jobs sat an hour behind `experiments` at `parallel=1`; the group is 3 now). Which runner a fan-out belongs in at all: `workflow-defaults.md` § Experiments.
+
+11. **Record wall-clock time.** `date` at start and end of substantial tasks; log elapsed beside the result (user is in Berkeley, PT). Unknown cost can't be prioritized.
