@@ -1,36 +1,34 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: outputs current local time for Claude context.
-# Reads timezone from data/GOALS.md (timezone: line) and validates it against
-# /usr/share/zoneinfo. Emits a loud warning if anything is wrong so the fallback
-# to UTC doesn't silently mislead.
+# shellcheck disable=SC2034,SC1091  # state vars are shared with the sourced lib
+# UserPromptSubmit hook: prints the current local date/time + UTC, and the gap
+# since the previous prompt when it is large enough to matter. Plain stdout on
+# this event is added to Claude's context. Rationale, format and off switches:
+# lib_time_stamp.sh.
+set -uo pipefail
 
-GOALS_FILE="$(git rev-parse --show-toplevel 2>/dev/null)/data/GOALS.md"
-TZ_NAME=""
+HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 0
+# shellcheck source=lib_time_stamp.sh
+source "$HOOK_DIR/lib_time_stamp.sh" || exit 0
+
+INPUT=$(cat)
+_ts_disabled && exit 0
+
+GAP_MIN="${CLAUDE_TIME_GAP_MIN:-10}"
+now=$(_ts_now)
+sid=$(_ts_session_id "$INPUT")
+state=$(_ts_state_path "$sid")
+_ts_load_state "$state"
+
+gap=""
+if [ "$TS_LAST_PROMPT" -gt 0 ] && [ $((now - TS_LAST_PROMPT)) -ge $((GAP_MIN * 60)) ]; then
+    gap=" · $(_ts_fmt_dur $((now - TS_LAST_PROMPT))) since your last message"
+fi
+
+TS_LAST_PROMPT=$now; TS_TURN_START=$now; TS_LAST_STAMP=$now
+_ts_save_state "$state" 2>/dev/null || true
+
+_ts_resolve_tz
 warn=""
-
-if [ -z "$GOALS_FILE" ] || [ "$GOALS_FILE" = "/data/GOALS.md" ]; then
-    warn="not in a git repo — cannot locate data/GOALS.md"
-elif [ ! -f "$GOALS_FILE" ]; then
-    warn="$GOALS_FILE not found"
-else
-    TZ_NAME=$(grep -m1 '^- timezone:' "$GOALS_FILE" 2>/dev/null | sed "s/.*timezone: *//;s/^['\"]//;s/['\"]$//")
-    if [ -z "$TZ_NAME" ]; then
-        warn="no '- timezone:' line in $GOALS_FILE"
-    elif [ ! -f "/usr/share/zoneinfo/$TZ_NAME" ]; then
-        warn="invalid timezone '$TZ_NAME' — not in /usr/share/zoneinfo. fix $GOALS_FILE"
-        TZ_NAME=""
-    fi
-fi
-
-TZ_NAME="${TZ_NAME:-UTC}"
-# %z gives "-0300"; reformat to "-03:00" for readability
-OFFSET_RAW=$(TZ="$TZ_NAME" date '+%z' 2>/dev/null)
-OFFSET="${OFFSET_RAW:0:3}:${OFFSET_RAW:3:2}"
-
-if [ -n "$warn" ]; then
-    printf '[Current time: %s %s (UTC%s) — WARNING (falling back to UTC): %s]\n' \
-        "$(TZ="$TZ_NAME" date '+%Y-%m-%d %H:%M')" "$TZ_NAME" "$OFFSET" "$warn"
-else
-    printf '[Current time: %s %s (UTC%s)]\n' \
-        "$(TZ="$TZ_NAME" date '+%Y-%m-%d %H:%M')" "$TZ_NAME" "$OFFSET"
-fi
+[ -n "$TS_TZ_WARN" ] && warn=" — WARNING: $TS_TZ_WARN, using $TS_TZ"
+printf '[Now: %s%s%s]\n' "$(_ts_fmt_now "$now")" "$gap" "$warn"
+exit 0

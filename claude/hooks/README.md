@@ -4,6 +4,16 @@ Hooks for automating task and agent management workflows.
 
 ## Available Hooks
 
+### inject_timestamp.sh + elapsed_stamp.sh (time awareness)
+
+**Purpose:** Keep the model clock-aware. `inject_timestamp.sh` (UserPromptSubmit) prints `[Now: Thu 2026-08-27 02:40 PDT (UTC-07:00) · 09:40 UTC · 2h13m since your last message]` — the gap clause only past `CLAUDE_TIME_GAP_MIN` (10). `elapsed_stamp.sh` (PostToolUse, all tools) emits `[Time check: 25m elapsed in this turn · now …]` as `additionalContext`, at most once per `CLAUDE_TIME_STAMP_INTERVAL_MIN` (5) — the piece Ofengenden & Andriushchenko (2026) show agents need most: scrubbing timestamps roughly doubles their elapsed-time error. Shared code and rationale: `lib_time_stamp.sh`.
+
+**Zone:** `CLAUDE_LOCAL_TZ` (exported from `config/zshrc.sh`, default `America/Los_Angeles`) → `TZ` → `/etc/timezone` → `/etc/localtime` → UTC; an invalid zone warns loudly in the stamp.
+
+**Off switches:** `time = off` in `features.conf` (global); `touch .claude/no-time-stamps` (per repo — model-organism repos, since a stated date is a backdoor-trigger surface); `CLAUDE_TIME_STAMPS=off` (per shell). The remember plugin's own `[HH:MM UTC — user]` stamp is retired via `"prompt_stamp": "off"` in `~/.remember/config.json` so time has one owner.
+
+**Test:** `tests/test_time_stamps.sh`.
+
 ### agent_spawned.sh
 
 **Purpose:** Reminds user to save agent IDs when agents are spawned

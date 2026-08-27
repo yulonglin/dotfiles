@@ -396,6 +396,15 @@
     ],
     "PostToolUse": [
       {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run time.elapsed-stamp -- $HOME/.claude/hooks/elapsed_stamp.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
         "matcher": "Grep",
         "hooks": [
           {
@@ -806,6 +815,11 @@
     "UserPromptSubmit": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run time.prompt-stamp -- $HOME/.claude/hooks/inject_timestamp.sh",
+            "timeout": 3
+          },
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_mark.sh working",
