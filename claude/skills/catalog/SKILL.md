@@ -61,7 +61,6 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 |---|---|
 | `bear` | Reading/editing Bear notes (macOS) |
 | `things3` | Reading/managing Things 3 tasks, projects, areas, tags |
-| `use-spark` | Searching/reading Spark email, calendar, contacts |
 | `setup-channel` | Setting up Telegram/iMessage/Things Cloud for a project |
 | `reply` | Stuck on replying to someone — scaffolds while you write |
 | `context-fetcher` (skill) | Gathering Gmail/Slack/Granola/Calendar context before drafting a reply |
