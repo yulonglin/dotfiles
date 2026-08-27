@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""annotate-html - add the md2review annotation layer to an existing HTML page.
+
+Every reviewable Artifact carries select-to-comment annotation
+(`rules/artifact-first-replies.md`). md2review builds that in when the source
+is Markdown; this adds the same layer to a page built any other way, so the
+`block_unannotated_artifact.sh` hook lets it publish.
+
+    annotate-html page.html            # inject; no-op if already present
+    annotate-html page.html --check    # exit 0 if present, 2 if absent
+    annotate-html page.html --force    # replace a layer this tool injected
+    annotate-html page.html --key K    # fix the localStorage key (default: <title>)
+
+The layer is inlined (CSS + HTML + JS, no external assets) before `</body>`,
+or at the end of the file when there is no body tag, which is how Artifact
+files are written. It is wrapped in `<!-- annotation-layer v1 -->` ...
+`<!-- /annotation-layer -->` and rooted at `<div data-annotation-layer="v1">`.
+
+Exit codes: 0 done or already present; 1 usage or file error; 2 (--check)
+layer absent.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _annotation_layer as layer  # noqa: E402
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(
+        prog="annotate-html", description=__doc__.splitlines()[0]
+    )
+    ap.add_argument("file", type=Path, help="HTML page to annotate, edited in place")
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="do not modify; exit 0 if the layer is present, 2 if absent",
+    )
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="re-inject even if present (replaces a layer this tool added)",
+    )
+    ap.add_argument(
+        "--key",
+        help="localStorage key for comments (default: the page <title> at runtime)",
+    )
+    args = ap.parse_args(argv)
+
+    if not args.file.is_file():
+        print(f"annotate-html: no such file: {args.file}", file=sys.stderr)
+        return 1
+    try:
+        page = args.file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"annotate-html: cannot read {args.file}: {exc}", file=sys.stderr)
+        return 1
+
+    present = layer.has_layer(page)
+    if args.check:
+        if present:
+            print(f"annotation layer present: {args.file}")
+            return 0
+        print(
+            f"annotation layer absent: {args.file} — run: annotate-html {args.file}",
+            file=sys.stderr,
+        )
+        return 2
+
+    if present and not args.force:
+        print(f"annotation layer already present, unchanged: {args.file}")
+        return 0
+
+    if present:
+        page = layer.strip_layer(page)
+    args.file.write_text(layer.inject(page, key=args.key), encoding="utf-8")
+    print(f"annotation layer {'replaced' if present else 'added'}: {args.file}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

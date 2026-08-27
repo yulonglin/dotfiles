@@ -169,14 +169,20 @@ enabled = true
 [plugins."browser@openai-bundled"]
 enabled = true
 
+[plugins."sites@openai-bundled"]
+enabled = true
+
+[plugins."visualize@openai-bundled"]
+enabled = true
+
 [tui.model_availability_nux]
 "gpt-5.5" = 4
 "gpt-5.6-sol" = 2
 
 [marketplaces.openai-bundled]
-last_updated = "2026-06-13T10:54:56Z"
+last_updated = "2026-08-27T05:01:55Z"
 source_type = "local"
-source = "/Users/yulong/code/dotfiles/codex/.tmp/bundled-marketplaces/openai-bundled"
+source = "/home/yulong/code/dotfiles/codex/.tmp/bundled-marketplaces/openai-bundled"
 
 [marketplaces.openai-primary-runtime]
 last_updated = "2026-06-06T10:48:42Z"
@@ -184,8 +190,8 @@ source_type = "local"
 source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
 [marketplaces.claude-plugins-official]
-last_updated = "2026-07-25T12:43:53Z"
-last_revision = "f6a8253850e4db2ab62c8fb2c53ad73c6843e32c"
+last_updated = "2026-08-26T00:39:13Z"
+last_revision = "b819188d2eea14e0400556ca29dbd1179a7c595b"
 source_type = "git"
 source = "https://github.com/anthropics/claude-plugins-official.git"
 

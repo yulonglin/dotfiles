@@ -668,6 +668,17 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Artifact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/block_unannotated_artifact.sh",
+            "timeout": 10,
+            "statusMessage": "Checking the page carries the annotation layer"
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -840,7 +851,6 @@
     "frontend-design@claude-plugins-official": false,
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
-    "model-router@alignment-hive": true,
     "playground@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
     "precis@precis": true,
@@ -986,6 +996,7 @@
     "filesystem": {
       "allowWrite": [
         "~/.Trash",
+        "~/.cache",
         "~/.cache/uv",
         "~/.cache/model-router",
         "~/.config/model-router",
@@ -1094,7 +1105,7 @@
     "**/.cache/**"
   ],
   "theme": "auto",
-  "verbose": false,
+  "verbose": true,
   "preferredNotifChannel": "auto",
   "autoCompactEnabled": true,
   "showTurnDuration": true,
@@ -1149,10 +1160,10 @@
       ],
       "command": "zotero-mcp",
       "env": {
+        "ZOTERO_LOCAL": "true",
         "ZOTERO_API_KEY": "${ZOTERO_API_KEY}",
         "ZOTERO_LIBRARY_ID": "${ZOTERO_LIBRARY_ID}",
-        "ZOTERO_LIBRARY_TYPE": "${ZOTERO_LIBRARY_TYPE:-user}",
-        "ZOTERO_LOCAL": "true"
+        "ZOTERO_LIBRARY_TYPE": "${ZOTERO_LIBRARY_TYPE:-user}"
       }
     }
   }

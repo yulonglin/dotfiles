@@ -21,27 +21,102 @@ from __future__ import annotations
 
 import argparse
 import html
-import json
 import re
 import sys
 from pathlib import Path
 
 try:
     from markdown_it import MarkdownIt
+    from markdown_it.token import Token
 except ImportError:  # pragma: no cover - depends on the host environment
     sys.exit("md2review needs markdown-it-py (uv pip install markdown-it-py)")
 
+# The annotation layer (select-to-comment, export, unload guard) is shared with
+# `annotate-html` so there is exactly one copy of it.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _annotation_layer  # noqa: E402
+
 SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+MERMAID_OPEN = '<pre class="mermaid">'
+MERMAID_CLOSE = "</pre>"
 
 
 def slugify(text: str) -> str:
     return SLUG_RE.sub("-", text.strip().lower()).strip("-") or "section"
 
 
+def _mermaid_token(source: str) -> Token:
+    """A raw-HTML token carrying one mermaid diagram.
+
+    The parser runs with html disabled so that raw HTML in a reviewed document
+    cannot inject script into the published page. Mermaid diagrams are the one
+    deliberate exception: the Artifact viewer renders <pre class="mermaid">
+    natively, and entity-escaping the diagram source breaks it (labels
+    legitimately contain quotes and <br/>). So rather than enabling raw HTML
+    globally, only mermaid blocks are rebuilt as real elements — and only ever
+    as the text content of a <pre class="mermaid">, never arbitrary markup.
+    """
+    return Token(
+        "html_block",
+        "",
+        0,
+        content=f"{MERMAID_OPEN}\n{source.strip()}\n{MERMAID_CLOSE}\n",
+        block=True,
+    )
+
+
+def mermaid_passthrough(tokens: list[Token]) -> list[Token]:
+    """Rewrite both mermaid spellings into real <pre class="mermaid"> blocks.
+
+    Handles a ```mermaid fence, and a raw <pre class="mermaid">...</pre> block
+    (which, with html off, parses as one or more plain paragraphs). A mermaid
+    example nested inside an ordinary code fence stays escaped, as it should.
+    """
+    out: list[Token] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.type == "fence" and tok.info.strip().split() == ["mermaid"]:
+            out.append(_mermaid_token(tok.content))
+            i += 1
+            continue
+        if (
+            tok.type == "paragraph_open"
+            and i + 1 < len(tokens)
+            and tokens[i + 1].type == "inline"
+            and tokens[i + 1].content.startswith(MERMAID_OPEN)
+        ):
+            # A blank line inside the diagram splits it across paragraphs, so
+            # collect consecutive paragraph triples until one ends </pre>.
+            parts: list[str] = []
+            j = i
+            closed = False
+            while (
+                not closed
+                and j + 2 < len(tokens)
+                and tokens[j].type == "paragraph_open"
+                and tokens[j + 1].type == "inline"
+                and tokens[j + 2].type == "paragraph_close"
+            ):
+                parts.append(tokens[j + 1].content)
+                closed = tokens[j + 1].content.rstrip().endswith(MERMAID_CLOSE)
+                j += 3
+            if closed:
+                source = "\n\n".join(parts).strip()
+                source = source[len(MERMAID_OPEN) : -len(MERMAID_CLOSE)]
+                out.append(_mermaid_token(source))
+                i = j
+                continue
+        out.append(tok)
+        i += 1
+    return out
+
+
 def render(md_text: str) -> tuple[str, list[tuple[int, str, str]]]:
     """Return (html, headings) where headings are (level, slug, text)."""
     md = MarkdownIt("commonmark", {"html": False, "linkify": True}).enable("table")
-    tokens = md.parse(md_text)
+    tokens = mermaid_passthrough(md.parse(md_text))
 
     headings: list[tuple[int, str, str]] = []
     seen: dict[str, int] = {}
@@ -81,13 +156,13 @@ def build(md_text: str, *, title: str, with_toc: bool, key: str) -> str:
     body, headings = render(md_text)
     toc = toc_html(headings) if with_toc else ""
     shell_open = '<div class="shell has-toc">' if toc else '<div class="shell">'
-    return TEMPLATE.format(
+    page = TEMPLATE.format(
         title=html.escape(title),
         toc=toc,
         shell_open=shell_open,
         body=body,
-        key=json.dumps(key),
     )
+    return page + _annotation_layer.layer_html(key)
 
 
 TEMPLATE = """<title>{title}</title>
@@ -138,39 +213,6 @@ th,td{{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}
 th{{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}}
 hr{{border:0;border-top:1px solid var(--rule);margin:2rem 0}}
 a{{color:var(--accent)}}
-mark.note{{background:var(--mark);border-bottom:2px solid var(--accent);cursor:pointer;border-radius:2px}}
-#pop{{position:absolute;z-index:50;display:none;background:var(--panel);border:1px solid var(--rule);
- border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.16);padding:.6rem;
- width:min(20rem,calc(100vw - 1.5rem))}}
-/* iOS zooms the whole page when a focused field is under 16px. */
-@media (pointer:coarse){{#pop textarea,#exporttext{{font-size:16px}}}}
-#pop textarea{{width:100%;min-height:4.5rem;border:1px solid var(--rule);border-radius:5px;
- background:var(--bg);color:var(--ink);padding:.4rem;font:inherit;font-size:.86rem;resize:vertical}}
-.btn{{background:var(--accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
- font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}}
-.btn.ghost{{background:transparent;color:var(--soft);border:1px solid var(--rule)}}
-.btn.ghost.danger{{color:var(--bad);border-color:var(--bad)}}
-.btn.tiny{{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}}
-#pop:not(.editing) #delete{{display:none}}
-.row{{display:flex;gap:.4rem;justify-content:flex-end;margin-top:.45rem}}
-#bar{{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--rule);
- padding:.6rem 1rem;display:flex;gap:.6rem;align-items:center;justify-content:center;flex-wrap:wrap;z-index:40}}
-#bar .count{{color:var(--soft);font-size:.87rem}}
-#bar .count.warn{{color:var(--bad);font-weight:650}}
-.cmt{{background:var(--panel);border:1px solid var(--rule);border-left:3px solid var(--accent);
- border-radius:0 7px 7px 0;padding:.6rem .8rem;margin:.5rem 0;font-size:.88rem}}
-.cmt .q{{color:var(--soft);font-style:italic;margin-bottom:.3rem}}
-.cmt .where{{font-size:.75rem;color:var(--soft);text-transform:uppercase;letter-spacing:.04em}}
-#exportpanel{{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;
- background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:.9rem;
- width:min(46rem,92vw);box-shadow:0 12px 40px rgba(0,0,0,.28)}}
-#exportpanel .exphead{{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;font-size:.9rem}}
-#exportpanel .exphint{{color:var(--soft);font-size:.8rem}}
-#exportpanel .btn{{margin-left:auto}}
-#exporttext{{width:100%;height:min(24rem,55vh);border:1px solid var(--rule);border-radius:6px;
- background:var(--bg);color:var(--ink);padding:.6rem;font-family:ui-monospace,Menlo,monospace;
- font-size:.82rem;resize:vertical}}
-.ok{{background:var(--good-bg);color:var(--good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}}
 @media (max-width:56rem){{
   .shell.has-toc{{display:block}}
   .toc{{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--rule);
@@ -183,345 +225,10 @@ mark.note{{background:var(--mark);border-bottom:2px solid var(--accent);cursor:p
 {toc}
 <div class="doc">
 {body}
-<h2 id="your-comments">Your comments</h2>
-<div id="list"></div>
 </div>
-</div>
-
-<div id="pop">
-  <textarea id="txt" placeholder="What do you think?"></textarea>
-  <div class="row">
-    <button class="btn ghost danger" id="delete">Delete</button>
-    <button class="btn ghost" id="cancel">Cancel</button>
-    <button class="btn" id="save">Save</button>
-  </div>
-</div>
-
-<div id="exportpanel">
-  <div class="exphead">
-    <strong>Your comments as Markdown</strong>
-    <span class="exphint">already selected &mdash; copy with your usual shortcut</span>
-    <button class="btn ghost tiny" id="exportclose">Close</button>
-  </div>
-  <textarea id="exporttext" readonly></textarea>
-</div>
-
-<div id="bar">
-  <span class="count" id="count">No comments yet</span>
-  <button class="btn" id="copy">Copy all</button>
-  <button class="btn ghost" id="download">Export text</button>
-  <button class="btn ghost" id="clear">Clear all</button>
-  <span id="toast"></span>
 </div>
 
 <script>
-const KEY = {key};
-const DIRTY = KEY + "-dirty";
-let comments = [];
-try {{ comments = JSON.parse(localStorage.getItem(KEY) || "[]"); }} catch (e) {{ comments = []; }}
-let dirty = false;
-try {{ dirty = localStorage.getItem(DIRTY) === "1"; }} catch (e) {{}}
-let nextId = comments.reduce((m, c) => Math.max(m, c.id || 0), 0) + 1;
-comments.forEach((c) => {{ if (!c.id) c.id = nextId++; }});
-
-const pop = document.getElementById("pop");
-const txt = document.getElementById("txt");
-let pending = null, editingId = null;
-
-window.addEventListener("beforeunload", (e) => {{
-  if (!dirty || !comments.length) return;
-  e.preventDefault(); e.returnValue = ""; return "";
-}});
-
-function sectionOf(node) {{
-  while (node && node.nodeType === 3) node = node.parentNode;
-  while (node && node !== document.body) {{
-    let p = node.previousElementSibling;
-    while (p) {{
-      if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim();
-      p = p.previousElementSibling;
-    }}
-    node = node.parentNode;
-  }}
-  return "document";
-}}
-
-document.addEventListener("click", (ev) => {{
-  const m = ev.target.closest && ev.target.closest("mark.note");
-  if (!m || pop.contains(ev.target)) return;
-  const c = comments.find((x) => x.id === Number(m.dataset.cid));
-  if (!c) return;
-  ev.preventDefault();
-  editingId = c.id; pending = null; txt.value = c.note;
-  const r = m.getBoundingClientRect();
-  pop.classList.add("editing"); pop.style.display = "block";
-  pop.style.top = (window.scrollY + r.bottom + 8) + "px";
-  pop.style.left = Math.max(8, Math.min(window.scrollX + r.left,
-    window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 12)) + "px";
-  txt.focus();
-}});
-
-// Wraps a range in a highlight. surroundContents refuses a range that crosses
-// element boundaries, so fall back to lifting the contents out and wrapping.
-function wrapRange(range, id, note) {{
-  const m = document.createElement("mark");
-  m.className = "note"; m.title = note; m.dataset.cid = String(id);
-  try {{
-    range.surroundContents(m);
-  }} catch (e) {{
-    m.appendChild(range.extractContents());
-    range.insertNode(m);
-  }}
-  return m;
-}}
-
-// Every text node of the document body, skipping text already highlighted.
-function docTextNodes() {{
-  const root = document.querySelector(".doc") || document.body;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {{
-    acceptNode: (n) => (n.parentNode && n.parentNode.closest
-      && n.parentNode.closest("mark.note"))
-      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
-  }});
-  const out = [];
-  let n;
-  while ((n = walker.nextNode())) out.push(n);
-  return out;
-}}
-
-// Collapses runs of whitespace to one space, and records where each kept
-// character sits in the raw text, so a match can be mapped back to real nodes.
-function collapsedIndex(nodes) {{
-  let norm = "";
-  const rawAt = [];
-  let raw = 0, lastWasSpace = false;
-  for (const n of nodes) {{
-    const v = n.nodeValue;
-    for (let i = 0; i < v.length; i++, raw++) {{
-      const isSpace = /\\s/.test(v[i]);
-      if (isSpace && lastWasSpace) continue;
-      norm += isSpace ? " " : v[i];
-      rawAt.push(raw);
-      lastWasSpace = isSpace;
-    }}
-  }}
-  return {{ norm: norm, rawAt: rawAt }};
-}}
-
-// Finds a stored quote again after a reload and returns a range over it.
-// Selection.toString() gives rendered text, where a newline inside a paragraph
-// reads as a single space, so the comparison has to collapse whitespace.
-function rangeForQuote(quote) {{
-  if (!quote) return null;
-  const nodes = docTextNodes();
-  if (!nodes.length) return null;
-  const starts = [];
-  let raw = 0;
-  for (const n of nodes) {{ starts.push(raw); raw += n.nodeValue.length; }}
-
-  const idx = collapsedIndex(nodes);
-  const needle = quote.replace(/\\s+/g, " ").trim();
-  if (!needle) return null;
-  const at = idx.norm.indexOf(needle);
-  if (at < 0) return null;
-
-  const rawFrom = idx.rawAt[at];
-  const rawTo = idx.rawAt[at + needle.length - 1] + 1;
-
-  function locate(offset, isEnd) {{
-    for (let k = 0; k < nodes.length; k++) {{
-      const base = starts[k];
-      const end = base + nodes[k].nodeValue.length;
-      if (isEnd ? (offset > base && offset <= end) : (offset >= base && offset < end)) {{
-        return [nodes[k], offset - base];
-      }}
-    }}
-    return null;
-  }}
-
-  const start = locate(rawFrom, false);
-  const finish = locate(rawTo, true);
-  if (!start || !finish) return null;
-  const r = document.createRange();
-  r.setStart(start[0], start[1]);
-  r.setEnd(finish[0], finish[1]);
-  return r;
-}}
-
-// A reload rebuilds the page from Markdown, so saved highlights are gone while
-// the comments themselves survive in localStorage. Put the marks back, or the
-// comments cannot be clicked open to edit or delete.
-function restoreHighlights() {{
-  let missed = 0;
-  for (const c of comments) {{
-    if (document.querySelector('mark.note[data-cid="' + c.id + '"]')) continue;
-    const r = rangeForQuote(c.quote);
-    if (!r) {{ missed++; continue; }}
-    try {{ wrapRange(r, c.id, c.note); }} catch (e) {{ missed++; }}
-  }}
-  return missed;
-}}
-
-// Opens the note box for the current selection. autofocus is false on touch:
-// focusing a textarea while iOS is showing its selection handles collapses the
-// selection before the user has typed anything.
-function openForSelection(autofocus) {{
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
-  const text = sel.toString().trim();
-  if (!text) return false;
-  if (pop.contains(sel.anchorNode) || pop.contains(sel.focusNode)) return false;
-  // Already open on this exact selection: do not wipe a half-typed note.
-  if (pending && pending.quote === text && pop.style.display === "block") return true;
-  const range = sel.getRangeAt(0);
-  const rect = range.getBoundingClientRect();
-  editingId = null; pop.classList.remove("editing");
-  pending = {{ quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() }};
-  pop.style.display = "block";
-  pop.style.top = (window.scrollY + rect.bottom + 8) + "px";
-  pop.style.left = Math.max(8, Math.min(window.scrollX + rect.left,
-    window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 12)) + "px";
-  txt.value = "";
-  if (autofocus) txt.focus();
-  return true;
-}}
-
-document.addEventListener("mouseup", (ev) => {{
-  if (pop.contains(ev.target)) return;
-  if (ev.target.closest && ev.target.closest("mark.note")) return;
-  if (openForSelection(true)) return;
-  const sel = window.getSelection();
-  if (!sel || !sel.toString().trim()) pop.style.display = "none";
-}});
-
-// iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
-// handler makes the page uncommentable on iPhone and iPad. selectionchange
-// fires on every platform; debounce it so it runs once the selection settles.
-let selTimer = null;
-document.addEventListener("selectionchange", () => {{
-  if (document.activeElement === txt) return;
-  if (editingId !== null) return;
-  clearTimeout(selTimer);
-  selTimer = setTimeout(() => {{
-    if (openForSelection(false)) return;
-    if (editingId === null && !txt.value.trim()) closePop();
-  }}, 350);
-}});
-
-function closePop() {{ pop.style.display = "none"; pending = null; editingId = null; pop.classList.remove("editing"); }}
-function markDirty() {{ dirty = true; try {{ localStorage.setItem(DIRTY, "1"); }} catch (e) {{}} }}
-function markClean() {{ dirty = false; try {{ localStorage.setItem(DIRTY, "0"); }} catch (e) {{}} }}
-function persist() {{ try {{ localStorage.setItem(KEY, JSON.stringify(comments)); }} catch (e) {{}} }}
-
-document.getElementById("cancel").onclick = closePop;
-document.getElementById("delete").onclick = () => {{
-  if (editingId === null) {{ closePop(); return; }}
-  comments = comments.filter((c) => c.id !== editingId);
-  const m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
-  if (m) m.replaceWith(document.createTextNode(m.textContent));
-  markDirty(); persist(); render(); closePop();
-}};
-document.getElementById("save").onclick = () => {{
-  const note = txt.value.trim();
-  if (!note) {{ closePop(); return; }}
-  if (editingId !== null) {{
-    const c = comments.find((x) => x.id === editingId);
-    if (c) c.note = note;
-    const m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
-    if (m) m.title = note;
-  }} else if (pending) {{
-    const id = nextId++;
-    try {{ wrapRange(pending.range, id, note); }} catch (e) {{ }}
-    comments.push({{ id: id, where: pending.where, quote: pending.quote, note: note }});
-  }}
-  markDirty(); persist(); render(); closePop();
-  window.getSelection().removeAllRanges();
-}};
-
-function render() {{
-  const list = document.getElementById("list");
-  const count = document.getElementById("count");
-  list.innerHTML = "";
-  if (!comments.length) {{
-    count.textContent = "No comments yet"; count.className = "count";
-    list.innerHTML = '<p style="color:var(--soft)">Select any text above to comment.</p>';
-    return;
-  }}
-  count.textContent = comments.length + (comments.length === 1 ? " comment" : " comments")
-    + (dirty ? " — not yet exported" : " — exported");
-  count.className = "count" + (dirty ? " warn" : "");
-  comments.forEach((c) => {{
-    const d = document.createElement("div"); d.className = "cmt";
-    const w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
-    const q = document.createElement("div"); q.className = "q"; q.textContent = '"' + c.quote + '"';
-    const n = document.createElement("div"); n.textContent = c.note;
-    const a = document.createElement("button"); a.className = "btn ghost tiny"; a.textContent = "edit";
-    a.onclick = () => {{
-      const m = document.querySelector('mark.note[data-cid="' + c.id + '"]');
-      if (m) {{ m.scrollIntoView({{ block: "center" }}); m.click(); }}
-      else {{ editingId = c.id; txt.value = c.note; pop.classList.add("editing");
-              pop.style.display = "block"; pop.style.top = (window.scrollY + 120) + "px";
-              pop.style.left = "1rem"; txt.focus(); }}
-    }};
-    d.append(w, q, n, a); list.appendChild(d);
-  }});
-}}
-
-function markdown() {{
-  return comments.map((c) =>
-    "- **" + c.where + "** — " + c.note + "\\n  > " + c.quote.replace(/\\n/g, "\\n  > ")
-  ).join("\\n");
-}}
-function exportText() {{ return "# Comments — " + document.title + "\\n\\n" + markdown() + "\\n"; }}
-
-document.getElementById("copy").onclick = async () => {{
-  const toast = document.getElementById("toast");
-  if (!comments.length) {{ toast.innerHTML = '<span class="ok">nothing to copy</span>';
-    setTimeout(() => toast.innerHTML = "", 1600); return; }}
-  try {{ await navigator.clipboard.writeText(exportText()); }}
-  catch (e) {{
-    const ta = document.createElement("textarea");
-    ta.value = exportText(); document.body.appendChild(ta); ta.select();
-    try {{ document.execCommand("copy"); }} catch (e2) {{}}
-    ta.remove();
-  }}
-  markClean(); render();
-  toast.innerHTML = '<span class="ok">copied ' + comments.length + '</span>';
-  setTimeout(() => toast.innerHTML = "", 1800);
-}};
-
-// Artifacts render inside a sandboxed iframe, where a blob download is silently
-// dropped unless the frame carries allow-downloads. So the export that always
-// works is a selectable textarea: try the download, and show the text either way.
-document.getElementById("download").onclick = () => {{
-  if (!comments.length) return;
-  const text = exportText();
-  try {{
-    const url = URL.createObjectURL(new Blob([text], {{ type: "text/markdown" }}));
-    const a = document.createElement("a");
-    a.href = url; a.download = "comments.md";
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }} catch (e) {{ }}
-  const panel = document.getElementById("exportpanel");
-  const ta = document.getElementById("exporttext");
-  ta.value = text;
-  panel.style.display = "block";
-  ta.focus(); ta.select();
-  markClean(); render();
-}};
-document.getElementById("exportclose").onclick = () => {{
-  document.getElementById("exportpanel").style.display = "none";
-}};
-
-document.getElementById("clear").onclick = () => {{
-  if (!comments.length) return;
-  if (dirty && !window.confirm("These " + comments.length +
-      " comments have not been copied or downloaded yet. Delete anyway?")) return;
-  comments = []; markClean(); persist(); render();
-  document.querySelectorAll("mark.note").forEach((m) => m.replaceWith(document.createTextNode(m.textContent)));
-}};
-
 const tocLinks = Array.from(document.querySelectorAll(".toc a"));
 const targets = tocLinks
   .map((a) => ({{ a, el: document.getElementById(a.getAttribute("href").slice(1)) }}))
@@ -538,11 +245,9 @@ if ("IntersectionObserver" in window && targets.length) {{
   }}, {{ rootMargin: "-12% 0px -75% 0px" }});
   targets.forEach((t) => io.observe(t.el));
 }}
-
-restoreHighlights();
-render();
 </script>
 """
+
 
 
 def main(argv: list[str] | None = None) -> int:

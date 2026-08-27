@@ -2,6 +2,8 @@
 
 **One paragraph = ONE line** in `.md` files. Never a hard newline inside a paragraph — not mid-sentence, not between sentences; blank lines separate paragraphs and readers soft-wrap. Applies to prose, bullet bodies, and table cells.
 
+**Every header asserts a point, not a topic** — in every document, not only artifacts: section headers in specs, plans, reports, findings docs and READMEs, slide titles in decks (marp, slidev, pptx), and every heading inside an HTML page. `## Results` becomes `## Assertion Sentences Survive Long Traces`; `## Limitations` becomes `## Fixed k Confounds Density With Length`. Someone who reads only the headers should come away knowing what the document found. `artifact-first-replies.md` states the standard in full — the length, the punctuation, where the qualifying detail goes instead, and the narrow exceptions — and it governs headers everywhere, not only the pages it happens to be written about.
+
 **Links never end with a full stop** — a trailing period gets copied into the URL.
 
 **No checkbox checklists in specs/docs** — never `[ ]` markers, neither inline in prose nor as `- [ ]` sub-bullets; use plain itemised `-` bullets. Checkbox syntax belongs only in actual working todo lists.

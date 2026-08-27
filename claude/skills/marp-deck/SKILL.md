@@ -58,6 +58,10 @@ Slides are split by a horizontal rule `---` on its own line (blank line before/a
 # Slide 2
 ```
 
+## Slide titles assert the finding
+
+Every slide title states the point of that slide, not its topic — `markdown-style.md` carries the standard, and a deck is one of the places it applies. Titles reading "Setup", "Results", "Limitations" make the audience wait for the speaker to say what happened, and the deck stops meaning anything the moment it is a PDF in someone's inbox. Titles reading "Density Is The Inverse Of Length", "Assertion Sentences Survive Long Traces", "Fixed k Confounds Density With Length" carry the argument on their own. Keep the qualifying detail in the bullets under the title, never appended to the title after a dash or colon.
+
 ## Directives
 
 - **Global** (whole deck, set in frontmatter or `<!-- key: value -->`): `theme`, `style`, `headingDivider`, `lang`, plus `marp: true`, `size`.
@@ -99,9 +103,9 @@ Filters via alt text (inline images only): `![blur:4px brightness:1.2](fig.png)`
 ```markdown
 ![bg left](figures/plot.png)
 
-## Findings
-- point one
-- point two
+## Longer Traces Dilute The Signal
+- density falls as 1/length at fixed k
+- the drop is monotone across all five bins
 ```
 
 `![bg right]` puts the image on the right. Custom width: `![bg left:40%](plot.png)`. Multiple bg images stack horizontally; add `vertical` to stack vertically: `![bg vertical](a.png) ![bg](b.png)`.
@@ -140,7 +144,7 @@ Blank lines around the inner `<div>`s matter — they let Markdown render inside
 Any HTML comment that is **not** a recognized directive becomes a presenter note for that slide. Multiple per slide allowed; multiline supported.
 
 ```markdown
-# Results
+# The Reranker Beats Baseline By 12%
 
 <!-- Walk through the table; emphasize the 12% gain over baseline. -->
 <!--

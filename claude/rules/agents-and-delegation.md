@@ -4,6 +4,8 @@
 
 Main context is for decomposition, dispatch, decisions, and synthesis — not for holding file dumps, search output, logs, or diffs. The default is to delegate: any work whose tool output you need only the *conclusion* of goes to a subagent, and the finding comes back instead of the raw bytes. Reach for delegation before the first bulk read, not after context is already polluted.
 
+**Delegate aggressively — Yulong's standing instruction (2026-08-26).** When in doubt, spawn: data parsing and tallies over a file, Granola/Slack/Gmail context pulls, cross-referencing two sources, building and publishing an artifact from a written brief, any multi-step Bash investigation. Main context should read like a log of decisions and findings, not of tool calls. Launch independent agents in one message so they run in parallel.
+
 Delegate by default:
 
 - **Wide sweeps** — many files, unknown location, several naming conventions → `Explore` / `core:efficient-explorer`. A single-pattern Grep whose target you can name stays inline (`rules/context-management.md`).

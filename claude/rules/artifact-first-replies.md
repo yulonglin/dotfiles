@@ -37,7 +37,11 @@ Any page that scrolls past a couple of screens gets a **table of contents fixed 
 
 **Markdown artifacts cannot carry JavaScript**, so publishing a spec, report or plan as raw `.md` silently drops the table of contents, the annotation layer and the export guard. Anything meant to be *reviewed* goes through `md2review <file.md>` first and gets published as the resulting HTML. Raw `.md` is for pages nobody needs to comment on.
 
-Give the page a real name — `md2review` takes the document's H1 as the `<title>`, so the H1 is the artifact's name in the gallery, not a caption. A short noun phrase; put the explaining sentence in the line below it.
+**The title must assert the finding, not name the topic.** `md2review` takes the document's H1 as the `<title>`, so the H1 *is* the artifact's name in the gallery. A gallery of pages called "Length, Density, Position", "Where the Evidence Lives", "Hard Positives Track" is unreadable — those are topics, and a topic tells the reader nothing they did not already know when they opened the tab. Name the page with the **claim it establishes**, so the gallery reads as a list of results: "J-Lens Decays With Length", "Anchors Lose The Incriminating Sentence", "Positives Cannot Be Widened". Keep it short — roughly four to seven words, still a phrase and not a sentence with final punctuation — and put the qualifying detail in the `description` parameter and the line below the H1, never in the title.
+
+The same rule governs every heading and every link *inside* the page, and every row of any index of other pages: a link whose text is a bare title forces the reader to open it to learn whether it matters. Cite the page **by what it concluded**, with the finding in the row and the URL on it. An index of links without conclusions is a filing cabinet, not a document.
+
+Exceptions are narrow: a living dashboard or status page that has no single finding ("n=300 Regen Live Status") may name its function, and a spec may name the thing being specified. Everything that reports a result is named by its result.
 
 **The Artifact viewer blocks any page-initiated file save**, so `md2review`'s "Export text" cannot hand over a `.md` file. It already falls back to a selectable textarea, so the export still works — only the file save is dropped. "Copy all" and "Export text" are both fine; say which, rather than claiming the button is dead.
 
