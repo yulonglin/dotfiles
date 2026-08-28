@@ -98,4 +98,4 @@ Verify with `git status` ("up to date with 'origin/<branch>'") and `git log -3 -
 
 Never suggest force-pushing `main`/`master` — warn if asked. On other branches, only after an explicit user request, and always `--force-with-lease` over `--force` so the push fails if someone else updated the remote since your fetch. Warn that history will be overwritten. Detail in `references/force-push-guidelines.md`.
 
-The pull strategy here implements `rules/safety-and-git.md`; never update git config, and never run destructive git commands unasked.
+The pull strategy here implements `rules/safety.md`; never update git config, and never run destructive git commands unasked.

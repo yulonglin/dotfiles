@@ -126,9 +126,9 @@ check_tasks_directory() {
     fi
 }
 
-# --- claude/rules/context-management.md: the 500-line bar is ours, not the harness's
+# --- claude/rules/delegation.md: the 500-line bar is ours, not the harness's
 check_read_threshold() {
-    local loc="claude/rules/context-management.md: 500-line bar is convention" bin n
+    local loc="claude/rules/delegation.md: 500-line bar is convention" bin n
     if ! bin="$(claude_binary)"; then
         skip "$loc" "Claude Code binary not found"
         return
@@ -144,9 +144,9 @@ check_read_threshold() {
     fi
 }
 
-# --- claude/rules/second-opinions.md: the Fable channel's model family exists
+# --- claude/rules/delegation.md: the Fable channel's model family exists
 check_fable_model() {
-    local loc="claude/rules/second-opinions.md: Fable family available" bin n
+    local loc="claude/rules/delegation.md: Fable family available" bin n
     if ! bin="$(claude_binary)"; then
         skip "$loc" "Claude Code binary not found"
         return
@@ -162,9 +162,9 @@ check_fable_model() {
     fi
 }
 
-# --- claude/rules/supply-chain-security.md: UV_MALWARE_CHECK, lockfile-only, undocumented
+# --- claude/rules/safety.md: UV_MALWARE_CHECK, lockfile-only, undocumented
 check_uv_malware() {
-    local loc="claude/rules/supply-chain-security.md: UV_MALWARE_CHECK" uv n
+    local loc="claude/rules/safety.md: UV_MALWARE_CHECK" uv n
     if ! uv="$(command -v uv)"; then
         skip "$loc" "uv not installed"
         return
@@ -204,9 +204,9 @@ check_ty_beta() {
     esac
 }
 
-# --- claude/rules/workflow-defaults.md: plan filenames not configurable (#21342 open)
+# --- claude/rules/experiments.md: plan filenames not configurable (#21342 open)
 check_issue_21342() {
-    local loc="claude/rules/workflow-defaults.md: claude-code #21342" state
+    local loc="claude/rules/experiments.md: claude-code #21342" state
     if ! command -v gh >/dev/null 2>&1; then
         skip "$loc" "gh not installed"
         return
@@ -262,9 +262,9 @@ print(" ".join(k for k,v in d.get("enabledPlugins",{}).items() if v is not True)
     fi
 }
 
-# --- claude/rules/workflow-defaults.md: `clean-skill-dupes` still resolves
+# --- claude/rules/experiments.md: `clean-skill-dupes` still resolves
 check_clean_skill_dupes() {
-    local loc="claude/rules/workflow-defaults.md: clean-skill-dupes" target
+    local loc="claude/rules/experiments.md: clean-skill-dupes" target
     target="$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"
     if [[ -x "$target" ]]; then
         ok "$loc" "alias target present"

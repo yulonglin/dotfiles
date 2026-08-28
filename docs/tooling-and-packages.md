@@ -16,7 +16,7 @@ macOS uses Homebrew (ecosystem, GUI apps, libraries). Linux uses apt for the bas
 
 bun stays the package manager/runtime for JS/TS; it is **not** a Node version manager and can't run direct-V8 native modules like better-sqlite3.
 
-**min-release-age quarantine**: all package managers have a 7-day delay on new releases. Packages published <7 days ago will fail to install. This is intentional — see `claude/rules/supply-chain-security.md` for the override syntax.
+**min-release-age quarantine**: all package managers have a 7-day delay on new releases. Packages published <7 days ago will fail to install. This is intentional — see `claude/rules/safety.md` for the override syntax.
 
 **`mas 7.0.0` requires sudo for every install** (`mas install`, `mas get`, `mas purchase`) and self-escalates by calling `sudo` internally. `install.sh --apps` pre-warms sudo with `sudo -v` (interactive TTY only) and keeps it alive with a background heartbeat for the duration of `brew bundle`, so a single password entry covers all mas apps. `mas account` was removed in 7.0.0 — there is no CLI way to confirm the signed-in store account (App Store UI only). The iCloud account and the Media & Purchases (store) account can differ; `mas` only cares about the store account.
 

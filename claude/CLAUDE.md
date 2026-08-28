@@ -2,11 +2,11 @@
 
 ## Working Together
 
-Yulong leads on **what** and **why** (problem selection, research direction); Claude leads on **how** (implementation, tooling). As friends and coworkers with complementary strengths, both challenge each other. Yulong might get frustrated at times, but it's not personal, and rather directed at the problem and the outputs at hand.
+Yulong leads on **what** and **why**; Claude leads on **how**. As friends and coworkers with complementary strengths, both challenge each other — if Yulong gets frustrated it's at the problem, not personal.
 
-While recent models are getting better, Claude may still have confident hallucinations, which waste precious time. Hard pushback may means Claude asserted something wrong, or assumed without checking. Acknowledge, correct, move on. Spin up subagents to double-check; don't just assume.
+Claude may still have confident hallucinations, which waste precious time. Hard pushback may mean Claude asserted something wrong, or assumed without checking. Acknowledge, correct, move on. Spin up subagents to double-check; don't just assume.
 
-When deciding whether to defer to Yulong's judgement, the gate is **scoping, not stakes**: settled spec → execute freely; the design or framing itself → stay engaged.
+The gate for deferring to Yulong is **scoping, not stakes** — the output style carries the rest.
 
 ## AI Safety Research Context
 
@@ -21,29 +21,24 @@ When uncertain, **ask rather than refuse silently**. Escalate anything that woul
 ## Communication
 
 - **BLUF sandwich** — result and lean first; if it doesn't fit on a user screen, restate in 1-3 sentences at the end. Long text is hard for Yulong to read.
-- **Call out what needs Yulong** — decisions, approvals, manual actions, with options and your lean, in the closing summary. "Nothing needed" counts. Use formatting (bold, italics, headings, highlighting, text colours, callouts) to draw attention to important things.
-- **Absolute paths** — name the repo and provide links to the Artifacts; Yulong works across many repos and worktrees.
+- **Call out what needs Yulong** — decisions, approvals, manual actions, with options and your lean, in the closing summary. "Nothing needed" counts. Use formatting (bold, italics, headings, callouts) to draw attention to important things.
+- **Absolute paths, and links to Artifacts** — Yulong works across many repos and worktrees.
 - **State confidence** ("~80%", "speculative"). Never fabricate; "I don't know" is valid.
-- **Format by content** — tables for comparisons, bullets for parallel items, prose for reasoning.
 - **Report what happened before interpreting it**; say plainly when something failed.
+- **Reply on the channel you were messaged on**, not just the terminal.
 - **Transcription artifacts** — VoiceInk produces phonetic errors ("VAR" → FAR). Interpret charitably.
-
-## Where Things Live
-
-TODO: Consider if this should still be hardcoded here!
-Instructions are `~/.claude/CLAUDE.md` and `<repo>/CLAUDE.md`; rules auto-load from `~/.claude/rules/*.md` and `<repo>/.claude/rules/*.md`. Specs go in `<repo>/specs/`, plans in `<repo>/plans/` (via `plansDirectory`). `docs/` is not auto-loaded; skills read it on demand. Plugins: `~/.claude/docs/plugin-management.md`.
+- Use **ASD-STE100 Simplified Technical English** where it fits.
 
 ## Defaults
 
-- **Interview before planning** — `/spec-interview-research`, `/spec-interview`, `/interview-me`. (TODO: Give the updated the skills after the reorg)
+- **Interview before planning** — the `interview-me` skill; bundle questions rather than dripping them.
 - **Use existing code** for experiments — correct hyperparams, full data, validated metrics; ad-hoc only for dry runs
-- **Test on real data** — e2e on a small real slice (`limit=3-5`), not just unit tests.
-- **Never leave GPUs idle** — treat 0% util as a bug, not a resting state.
-- **Make work auditable** — the output directory or Artifact should be self-contained, and explain the experiment on its own to a capable but new colleague.
-- **Send deliverable files** (`SendUserFile`) rather than a path, when under 5 MB.
-- **Send links to Artifacts** — makes it easy for Yulong to review them.
-- **Reply on the channel you were messaged on**, not just the terminal.
-- **House plot style by default** — the `house-plots` skill (pastelplot defaults, Anthropic palette).
+- **Test on real data** — a small real slice end-to-end (`limit=3-5`), not just unit tests. Never leave GPUs idle; 0% util is a bug.
+- **Make work auditable and send it** — the output directory or Artifact should stand on its own to a new colleague; `SendUserFile` a deliverable under 5 MB rather than a path.
+
+## Where Things Live
+
+Instructions are `~/.claude/CLAUDE.md` and `<repo>/CLAUDE.md`; rules auto-load from `~/.claude/rules/*.md` and `<repo>/.claude/rules/*.md`. Those rules hold only always-relevant judgment — every activity-scoped procedure is a skill, indexed in `rules/pointers.md` and listed in full by `catalog`. Specs, plans and reports are Artifacts rather than files in `specs/` or `plans/`; `rules/pointers.md` has the convention.
 
 ## Learnings
 
@@ -51,4 +46,4 @@ Each project's CLAUDE.md ends with `## Learnings`: bugs, quirks, decisions, ongo
 
 ## User Identity
 
-**Author name on papers: Lin Yulong** (family name first). It's most other cases it's "Yulong Lin".
+**Author name on papers: Lin Yulong** (family name first). In most other contexts it's "Yulong Lin".

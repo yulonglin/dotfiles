@@ -1,6 +1,6 @@
 # Sandbox Troubleshooting Reference
 
-On-demand reference for less-common sandbox failure patterns. The six most-hit patterns (writing to `/tmp`, `rm -rf`/`rm`, heredocs in commit commands, `$CLAUDE_JOB_DIR/tmp`, `git pull/merge/stash` read-only errors, stray dotfiles as char-devices) stay inline in `rules/safety-and-git.md` § Sandbox Awareness. This doc covers the rest.
+On-demand reference for less-common sandbox failure patterns. The six most-hit patterns (writing to `/tmp`, `rm -rf`/`rm`, heredocs in commit commands, `$CLAUDE_JOB_DIR/tmp`, `git pull/merge/stash` read-only errors, stray dotfiles as char-devices) are in the `jobs` skill § Sandbox failure modes. This doc covers the rest.
 
 | Pattern | Problem | Workaround |
 |---------|---------|------------|

@@ -9,6 +9,7 @@ OpenRouter families stay reachable.
 
     openrouter-cli models                 # configured models
     openrouter-cli models --check         # ...cross-checked against the catalogue
+    openrouter-cli drift                  # every configured slug vs the catalogue
     openrouter-cli refresh                # rank via Epoch ECI (+ AA if keyed)
     openrouter-cli ask glm "question"     # one model
     openrouter-cli fusion "question"      # panel in parallel + judge synthesis
@@ -26,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime
 import io
 import json
 import os
@@ -315,6 +317,226 @@ def cmd_refresh(args, cfg) -> None:
     print("\nScores: Epoch AI (CC-BY) and artificialanalysis.ai. Attribution required.")
 
 
+def stem(slug: str) -> str:
+    """A slug's product family, with version numbers collapsed.
+
+    Sibling checkpoints must group together while genuinely different products
+    stay apart, and neither a plain prefix nor a version parse does that. So
+    every run of digits becomes '#', and a trailing '-#' (a date-stamped
+    checkpoint) is dropped:
+
+        x-ai/grok-4.6, x-ai/grok-4.20        -> x-ai/grok          (siblings)
+        x-ai/grok-build-0.1                  -> x-ai/grok-build    (not a sibling)
+        deepseek/deepseek-v4-pro-0813        -> deepseek/deepseek-v#-pro
+        deepseek/deepseek-v4-pro             -> deepseek/deepseek-v#-pro
+        deepseek/deepseek-v4-flash           -> deepseek/deepseek-v#-flash
+        google/gemini-3.7-flash              -> google/gemini-#-flash
+
+    Note what this deliberately does NOT do: rank by version number. grok-4.20
+    is an OLDER line than grok-4.6, so "biggest number wins" picks wrong here.
+    Recency is decided by the catalog's `created` timestamp instead.
+    """
+    provider, _, tail = slug.partition("/")
+    tail = re.sub(r"\d+(?:\.\d+)*", "#", tail.lower())
+    # Strip EVERY trailing version/checkpoint group, not just one. A slug that
+    # dashes where the catalog dots ("claude-opus-4-8" vs "claude-opus-4.8")
+    # collapses to "claude-opus-#-#", and stripping a single group would leave
+    # it unable to match live "claude-opus" -- so the one misspelling most
+    # worth catching would get no suggested fix.
+    tail = re.sub(r"(?:[-_]#)+$", "", tail)
+    return f"{provider}/{tail}"
+
+
+def configured(cfg: dict) -> list[tuple[str, str]]:
+    """Every slug this config can spend money on, as (role, slug).
+
+    All three roles, not just [[models]]: `models --check` validated only the
+    models table, which is how the `judge` slug rotted unnoticed into a value
+    the catalog does not have -- breaking every `fusion` call silently.
+    """
+    out = [("judge", cfg["judge"])]
+    out += [("panel", resolve(cfg, p)) for p in cfg.get("panel", [])]
+    out += [("models", m["slug"]) for m in cfg.get("models", [])]
+    seen, uniq = set(), []
+    for role, slug in out:
+        if slug not in seen:
+            seen.add(slug)
+            uniq.append((role, slug))
+    return uniq
+
+
+# Horizon for treating `expiration_date` as a real retirement. The catalog uses
+# a far-future sentinel ("2098-12-31", on 5 models as of 2026-08-28) to mean "no
+# expiry", alongside genuine near-term dates ("2026-08-31"). Reporting the
+# sentinel would flag a healthy model forever, and a report that always warns
+# gets ignored -- which costs more than the warning was worth.
+EXPIRY_HORIZON_DAYS = 365
+
+
+def expiring_soon(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        when = datetime.date.fromisoformat(value)
+    except ValueError:
+        return False  # unparseable: not evidence of retirement
+    delta = (when - datetime.date.today()).days
+    return delta <= EXPIRY_HORIZON_DAYS
+
+
+def find_drift(cfg: dict, live: dict) -> list[dict]:
+    """One record per configured slug whose catalog entry has moved."""
+    # Rolling pointers ("~vendor/model-latest") and pricing variants (":batch")
+    # are not distinct models; suggesting them as successors is noise.
+    real = {
+        i: m for i, m in live.items()
+        if not i.startswith("~") and ":" not in i
+    }
+    by_stem: dict[str, list[str]] = {}
+    for i in real:
+        by_stem.setdefault(stem(i), []).append(i)
+
+    findings = []
+    for role, slug in configured(cfg):
+        entry = live.get(slug)
+        sibs = sorted(
+            by_stem.get(stem(slug), []),
+            key=lambda i: real[i].get("created") or 0,
+            reverse=True,
+        )
+        if entry is None:
+            findings.append({
+                "severity": "gone",
+                "role": role,
+                "slug": slug,
+                "detail": "not in the catalog - renamed, retired, or misspelled",
+                # Same family, newest first. A near-miss spelling shows up here.
+                "candidates": sibs[:5],
+            })
+            continue
+
+        created = entry.get("created") or 0
+        newer = [i for i in sibs if (real[i].get("created") or 0) > created]
+        if expiring_soon(entry.get("expiration_date")):
+            findings.append({
+                "severity": "expiring",
+                "role": role,
+                "slug": slug,
+                "detail": f"catalog lists expiration_date {entry['expiration_date']}",
+                "candidates": newer[:5],
+            })
+        elif newer:
+            findings.append({
+                "severity": "superseded",
+                "role": role,
+                "slug": slug,
+                "detail": f"{len(newer)} newer checkpoint(s) in the same family",
+                "candidates": newer[:5],
+            })
+    return findings
+
+
+def render_drift(findings: list[dict], total: int, checked: int) -> str:
+    when = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = [
+        "# OpenRouter model drift",
+        "",
+        f"Checked {checked} configured slugs against {total} catalog entries at {when}.",
+        "",
+        "This report is advisory. Nothing edits `config/openrouter-models.toml`;",
+        "changing a model is a spend-and-quality decision and stays a human one.",
+        "",
+    ]
+    if not findings:
+        lines += ["No drift. Every configured slug is live and is the newest",
+                  "checkpoint in its family.", ""]
+        return "\n".join(lines)
+
+    gone = [f for f in findings if f["severity"] == "gone"]
+    if gone:
+        lines += [
+            "## Broken now: these slugs are not in the catalog",
+            "",
+            "A call naming one of these fails outright. Fix these first.",
+            "",
+        ]
+        for f in gone:
+            lines.append(f"- `{f['slug']}` (role: {f['role']}) - {f['detail']}")
+            for c in f["candidates"]:
+                lines.append(f"    - same family, live: `{c}`")
+        lines.append("")
+
+    rest = [f for f in findings if f["severity"] != "gone"]
+    if rest:
+        lines += [
+            "## Still working, but a newer model exists",
+            "",
+            "Ordered by the catalog's `created` timestamp, not by version number:",
+            "a larger version number can belong to an older line.",
+            "",
+        ]
+        for f in rest:
+            lines.append(f"- `{f['slug']}` (role: {f['role']}) - {f['detail']}")
+            for c in f["candidates"]:
+                lines.append(f"    - newer: `{c}`")
+        lines.append("")
+
+    lines += [
+        "## To act on this",
+        "",
+        "Edit `config/openrouter-models.toml` by hand, then confirm with",
+        "`openrouter-cli drift`. Panel members are aliases, so repointing a",
+        "`[[models]]` entry updates the panel too.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def cmd_drift(args, cfg) -> None:
+    live = {m["id"]: m for m in get_json(f"{OR_BASE}/models").get("data", [])}
+    if not live:
+        die("catalog came back empty - treating as a fetch failure, not as drift")
+    findings = find_drift(cfg, live)
+    checked = len(configured(cfg))
+
+    md = render_drift(findings, len(live), checked)
+    js = json.dumps(
+        {"checked": checked, "catalog": len(live), "findings": findings}, indent=2
+    )
+
+    def write(target: str, text: str) -> None:
+        path = Path(target).expanduser()
+        # A traceback in a monthly unit's journal is the least readable place
+        # this could fail, so say plainly what could not be written and where.
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+        except OSError as e:
+            die(f"cannot write report to {path}: {e}")
+        print(f"wrote {path}", file=sys.stderr)
+
+    # Both forms come out of ONE catalog fetch. The scheduled unit wants the
+    # readable report and the machine-readable one to describe the same moment;
+    # two invocations would fetch twice and could leave a stale .md beside a
+    # fresh .json if the second run hit a transient failure.
+    wrote = False
+    if args.report:
+        write(args.report, md)
+        wrote = True
+    if args.json_report:
+        write(args.json_report, js)
+        wrote = True
+    if not wrote:
+        print(js if args.json else md)
+
+    # Exit 3, not 1, and not a raised exception: the scheduled unit must be able
+    # to tell "drift found" from "the fetch broke". It also must not rely on
+    # systemd's failed-unit state as the signal, because reset-failed.timer
+    # clears that hourly -- the report file on disk is the durable signal.
+    if findings:
+        raise SystemExit(3)
+
+
 def cmd_ask(args, cfg) -> None:
     slug = resolve(cfg, args.model)
     payload = {"model": slug, "messages": [{"role": "user", "content": args.prompt}]}
@@ -376,6 +598,19 @@ def main() -> None:
     m.add_argument("--check", action="store_true",
                    help="cross-check each slug against the live catalogue")
     m.set_defaults(fn=cmd_models)
+
+    d = sub.add_parser(
+        "drift",
+        help="check every configured slug (judge, panel, models) against the catalogue",
+    )
+    d.add_argument("--report", metavar="FILE",
+                   help="write the readable report to FILE instead of stdout")
+    d.add_argument("--json-report", metavar="FILE",
+                   help="write the machine-readable report to FILE; combine with "
+                        "--report to emit both from a single catalogue fetch")
+    d.add_argument("--json", action="store_true",
+                   help="machine-readable output on stdout")
+    d.set_defaults(fn=cmd_drift)
 
     r = sub.add_parser("refresh", help="rank configured models by index scores")
     r.set_defaults(fn=cmd_refresh)

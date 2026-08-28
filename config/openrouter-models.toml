@@ -17,6 +17,15 @@
 # Slugs below were taken from the live catalog (`openrouter-cli models --check`),
 # not guessed. Re-check after any model rename.
 #
+# Drift is checked on a schedule, not by memory: `openrouter-cli drift` compares
+# EVERY slug in this file -- judge, panel and models alike -- against the live
+# catalog, and the openrouter-drift.timer systemd user unit runs it monthly and
+# leaves a report under ~/.local/state/openrouter-drift/. It never edits this
+# file; the edit stays a human decision. Why the wider scope: on 2026-08-28 the
+# judge was found pointing at `anthropic/claude-opus-4-8`, which the catalog
+# spells `claude-opus-4.8`, so every `fusion` call had been failing -- invisibly,
+# because `models --check` only ever validated the [[models]] table.
+#
 # Ranking data comes from `openrouter-cli refresh`:
 #   - Artificial Analysis intelligence index -- needs AA_API_KEY, free tier is
 #     1000 req/day. Their licence REQUIRES attribution to artificialanalysis.ai
@@ -26,16 +35,38 @@
 
 # Fills both fusion roles: the analyst that structures the panel's answers
 # and the outer model that writes the final prose.
-judge = "anthropic/claude-opus-4-8"
+#
+# The catalog spells this with a DOT, not a dash. It read `claude-opus-4-8`
+# until 2026-08-28, which is not a catalog entry, so every `fusion` call was
+# failing; `openrouter-cli drift` now validates this line on a schedule.
+judge = "anthropic/claude-opus-4.8"
 
 # Default panel for `openrouter-cli fusion`. Deliberately one model per lab
 # family: the point of a panel is independent priors, and two checkpoints of
 # the same base model do not give that.
+#
+# Written as ALIASES, not raw slugs, on purpose. `resolve()` passes any
+# unlisted string containing "/" straight through, so a raw slug here silently
+# ignores a repoint in [[models]] below -- when `deepseek` moved to the 0813
+# checkpoint, a raw-slug panel would have kept billing the stale one. An alias
+# cannot drift away from its [[models]] entry.
+#
+# Seven members, one per company: z-ai, moonshotai, qwen, deepseek, meta,
+# google, x-ai. `fusion` caps the panel at 8. This is wider than the previous
+# four, so a default fusion call now costs proportionally more.
+#
+# OpenAI is deliberately absent: `gpt55pro` is the only OpenAI alias configured
+# and it is ~6x the price of its non-pro sibling, so putting it here would make
+# every default fusion call expensive. GPT second opinions go through
+# `codex-companion` instead, which is the sanctioned GPT route on this machine.
 panel = [
-  "z-ai/glm-5.3",
-  "moonshotai/kimi-k3",
-  "qwen/qwen3.8-max",
-  "deepseek/deepseek-v4-pro",
+  "glm",
+  "kimi",
+  "qwen",
+  "deepseek",
+  "muse",
+  "gemini",
+  "grok",
 ]
 
 # Caps forwarded to each inner panel/analyst call, pinned so an upstream
@@ -63,6 +94,31 @@ alias = "qwen"
 slug = "meta/muse-spark-1.2"
 alias = "muse"
 
+# Repointed 2026-08-28 from the bare `deepseek/deepseek-v4-pro` rolling name to
+# the pinned 0813 checkpoint, so the panel cannot silently change model under a
+# rolling alias between two runs of the same comparison.
 [[models]]
-slug = "deepseek/deepseek-v4-pro"
+slug = "deepseek/deepseek-v4-pro-0813"
 alias = "deepseek"
+
+[[models]]
+slug = "google/gemini-3.7-flash"
+alias = "gemini"
+
+# x-ai's version numbers are NOT chronological: grok-4.20 belongs to an OLDER
+# line than grok-4.6, so "pick the biggest number" selects the wrong model here.
+# This is also why `openrouter-cli drift` ranks sibling checkpoints by the
+# catalog's `created` timestamp rather than by parsing the version out of a slug.
+[[models]]
+slug = "x-ai/grok-4.6"
+alias = "grok"
+
+# EXPENSIVE: $30/M input, $180/M output -- roughly 6x openai/gpt-5.5 non-pro.
+# Deliberately NOT in the default `panel` above, so it cannot land in a fan-out
+# by accident; reach it explicitly with `openrouter-cli ask gpt55pro "..."` or
+# `--panel gpt55pro,...`. There is no opt-in flag in this schema and none was
+# invented: keeping the alias out of `panel` is the whole mechanism, because a
+# field the CLI does not read would look like a guard without being one.
+[[models]]
+slug = "openai/gpt-5.5-pro"
+alias = "gpt55pro"

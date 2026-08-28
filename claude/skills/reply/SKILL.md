@@ -46,4 +46,4 @@ Walk him through these as he drafts:
 ## Reference
 
 `~/code/bots/nudge/data/SPEC.md` — Communication principles (NVC, Radical Candor)
-`~/code/dotfiles/claude/rules/markdown-style.md` — friendliness, clarity, persuasiveness (drafting guidance folded in when communication-style.md was consolidated)
+`~/code/dotfiles/claude/rules/communication.md` — friendliness, clarity, persuasiveness (drafting guidance folded in when communication-style.md was consolidated)

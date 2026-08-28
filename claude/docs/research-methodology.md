@@ -240,7 +240,7 @@ for a cold read).
 
 **Delivery**: always send `report.html` and other generated deliverables (figures, `.jsonl`,
 `.eval`, `.md`) via `SendUserFile`, not just a stated path — see
-`~/code/dotfiles/claude/rules/workflow-defaults.md` § Auditability § Visual Outputs.
+`~/code/dotfiles/claude/CLAUDE.md` § Defaults (auditability) and the `house-plots` skill.
 
 **Scope note**: this doesn't require a shared report-generator library from day one — a
 per-run script producing the HTML is fine; extract a shared template only once the pattern

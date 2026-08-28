@@ -71,7 +71,7 @@ This is the branch that matters most. Produce, in this order: **the decision** i
 
 **Order matters: rename first, ask second.** Do the Step 5 rename (`blocked: <one-line decision>`) and write those four items into your narration *before* calling `AskUserQuestion`, which is synchronous and never returns if the owner does not answer — everything after it would be unreachable, leaving the blocker recorded nowhere.
 
-Then surface the decision via **`AskUserQuestion`**, not prose: this session is a background job, and prose questions do not notify the owner (see `rules/background-job-questions.md`). Write `needs input:` on its own line. If the call returns, act on the answer; if it never returns, the session is already named and the blocker already stated — that is the correct terminal state, not a failure.
+Then surface the decision via **`AskUserQuestion`**, not prose: this session is a background job, and prose questions do not notify the owner (see `rules/background-jobs.md`). Write `needs input:` on its own line. If the call returns, act on the answer; if it never returns, the session is already named and the blocker already stated — that is the correct terminal state, not a failure.
 
 > **Never choose on the owner's behalf in order to look finished.** A stalled session is visibly stalled and costs an hour; a silently-wrong autonomous choice is invisible and lands in `main`. If you are unsure whether a call is yours, it is not yours.
 

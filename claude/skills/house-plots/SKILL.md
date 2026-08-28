@@ -93,14 +93,14 @@ pastelplot.make_axes_transparent(ax)                          # clean overlay pl
 | **Colors** | `references/colors.md` | Full palette — all 9 hue ramps (orange through red, 100-900 each). Accent colors have AA text-tier variants; check it before coloring text, because brand accents fail AA as text on Ivory |
 | **HTML/CSS** | `references/web-css.md` | Web pages, HTML artifacts |
 | **TikZ** | `references/tikz.md` | LaTeX diagrams for papers |
-| **Annotations & layout** | `~/.claude/docs/visual-layout-quality.md` | Arrow anchoring, label placement in empty space, spacing minimums — read whenever adding annotations (callouts, gap markers, brackets) to any chart |
+| **Annotations & layout** | `references/visual-layout-quality.md` | Arrow anchoring, label placement in empty space, spacing minimums — read whenever adding annotations (callouts, gap markers, brackets) to any chart |
 
 ## Conventions
 
 - Matplotlib (not Plotly) for paper figures — conferences require PDF with embedded fonts.
 - Figures self-explanatory: title, axis labels, legend; embed in report.html rather than loose PNGs (see workflow-defaults § Visual Outputs).
 - Fonts fall back sanely (Styrene B LC → Helvetica → DejaVu Sans); there is no S3 font install step.
-- Legacy: `docs/anthroplot.md` documents the old module (its `.py` reference file no longer exists); brand tertiary gradients (ORANGE/…/GRAY 100–900) are documented there if a sequential ramp is needed.
+- Legacy: `references/anthroplot.md` documents the old module (its `.py` reference file no longer exists); brand tertiary gradients (ORANGE/…/GRAY 100–900) are documented there if a sequential ramp is needed.
 
 ## Ground Truth For Brand Hexes
 

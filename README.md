@@ -252,7 +252,7 @@ Claude Code supports community plugin marketplaces. These are declared natively 
 | **[codex-plugin-cc](https://github.com/crazytieguy/codex-plugin-cc)**               | Codex CLI integration plugins                                    |
 
 
-**Every installed plugin is enabled everywhere** — no profiles, no per-project setup step. Which plugins a machine should have is the `enabledPlugins` map in the same `settings.json`, where every entry is `true`. Full detail: [`claude/docs/plugin-management.md`](claude/docs/plugin-management.md).
+**Every installed plugin is enabled everywhere** — no profiles, no per-project setup step. Which plugins a machine should have is the `enabledPlugins` map in the same `settings.json`, where every entry is `true`. Full detail: [`docs/plugin-management.md`](./docs/plugin-management.md).
 
 ```bash
 claude plugin install <plugin>@<marketplace>    # then add the same key to enabledPlugins

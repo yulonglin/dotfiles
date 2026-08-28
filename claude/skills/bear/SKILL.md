@@ -27,7 +27,7 @@ Reach for `bearcli` only when:
 - You're composing with `jq` / pipes
 - The user explicitly asks for CLI
 
-When that happens, load [`~/.claude/docs/bear-cli-reference.md`](~/.claude/docs/bear-cli-reference.md) — full playbooks (surgical edit, full rewrite, create, tags/pins, search, attachments) + CLI-only gotchas (sandbox SIGABRT, PATH in cron, stdin/escape). The MCP tool surface maps 1:1 to CLI subcommands, so the playbooks transfer directly.
+When that happens, load [`references/cli.md`](references/cli.md) — full playbooks (surgical edit, full rewrite, create, tags/pins, search, attachments) + CLI-only gotchas (sandbox SIGABRT, PATH in cron, stdin/escape). The MCP tool surface maps 1:1 to CLI subcommands, so the playbooks transfer directly.
 
 ## Surgical-edit playbook (the default workflow)
 
@@ -174,11 +174,15 @@ Pass `includeContent: true` on either to also pull each note's raw Markdown body
 | 9 | **Full Disk Access** | Reads from a fresh terminal app fail opaquely. Grant Full Disk Access in System Settings → Privacy & Security |
 | 10 | **Dollar amounts render as garbled math** (e.g. `$5 ... $10` becomes math in the editor) | An unescaped `$`-pair triggered MathJax (Bear 2.5+, editor/reading view). Escape literal dollar signs as `\$` |
 
-For CLI-specific failure modes (sandbox SIGABRT, PATH issues in cron, stdin/flag escaping), see [`~/.claude/docs/bear-cli-reference.md`](~/.claude/docs/bear-cli-reference.md).
+For CLI-specific failure modes (sandbox SIGABRT, PATH issues in cron, stdin/flag escaping), see [`references/cli.md`](references/cli.md).
 
 ## References
 
 - Official CLI/MCP docs: <https://bear.app/faq/command-line-interface/>
 - Bear 2.8 release (CLI + Claude connector + MCP): <https://blog.bear.app/2026/04/bear-2-8-bearcli-claude-connector-and-mcp-server/>
 - Search syntax: <https://bear.app/faq/how-to-search-notes-in-bear/>
-- CLI reference (for scripting/cron): [`~/.claude/docs/bear-cli-reference.md`](~/.claude/docs/bear-cli-reference.md)
+- CLI reference (for scripting/cron): [`references/cli.md`](references/cli.md)
+
+## Bear-flavoured Markdown
+
+Bear's own FAQ omits the colour encoding, so Yulong's copied-from-Bear examples are the source of truth: highlight is `==text==`, a coloured highlight is a coloured-dot emoji at the START of the span (`==🔴text==`, where 🔴 means flag this / verify before shipping), strikethrough is `~~text~~`, and underline is `~text~`. Don't use `==` or `~text~` in files that render as plain GitHub Markdown.

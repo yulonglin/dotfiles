@@ -36,6 +36,9 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 
 | Skill | Use when |
 |---|---|
+| `artifact-writing` | Publishing any report, plan or findings page as an Artifact — titles, collapsible units, transcripts, annotation layer, republishing |
+| `results-artifact` | A research results page — the review checklist, intervals, nulls, chance correction, slicing |
+| `spec-artifact` | Writing a spec or plan — the three mandatory sections, per-requirement variables |
 | `house-plots` | Any figure, chart, diagram or styled page — pastel matplotlib defaults, Anthropic palette, TikZ, web CSS |
 | `check-bib-references` | Verifying BibTeX citations aren't LLM-fabricated |
 | `check-prose-claims` | Fact-checking stats/comparatives/quotes in slides, reports, papers |
@@ -46,7 +49,8 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 | Skill | Use when |
 |---|---|
 | `modal` | Cloud GPU/serverless compute — training, batch jobs, serving |
-| `jobs` | Submitting experiments/agent jobs with resource caps, queue status |
+| `jobs` | Submitting experiments/agent jobs with resource caps, queue status, sandbox failure modes |
+| `llm-judge` | Building an LLM judge that scores text by meaning — prompt design, blinding, fan-out, JSONL persistence |
 | `server-storage-tiering` | Root disk near full on a server/cloud box with an attached volume |
 | `sweep-ai-safety` | Sweeping recent AI safety research from curated sources |
 | `spawn-session` (user-invoked only) | Starting a detached Claude session in another directory with a seed prompt, optionally reachable by Remote Control |
