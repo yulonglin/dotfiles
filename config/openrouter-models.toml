@@ -36,10 +36,19 @@
 # Fills both fusion roles: the analyst that structures the panel's answers
 # and the outer model that writes the final prose.
 #
-# The catalog spells this with a DOT, not a dash. It read `claude-opus-4-8`
-# until 2026-08-28, which is not a catalog entry, so every `fusion` call was
-# failing; `openrouter-cli drift` now validates this line on a schedule.
-judge = "anthropic/claude-opus-4.8"
+# Two separate changes landed here on 2026-08-28, and they are worth keeping
+# distinct because only the first was a bug fix:
+#
+#   1. The slug was `anthropic/claude-opus-4-8`, which is not a catalog entry --
+#      the catalog spells it with a DOT. Since `cmd_fusion` sends the judge as
+#      both the outer model and the fusion analyst, EVERY `fusion` call had been
+#      failing, invisibly, for as long as the typo existed.
+#   2. Yulong then chose to move off 4.8 entirely: opus-5 supersedes it. That is
+#      a deliberate model choice, not a side effect of fixing the typo.
+#
+# `openrouter-cli drift` now validates this line on a schedule, so neither a
+# typo nor a supersession can sit here unnoticed again.
+judge = "anthropic/claude-opus-5"
 
 # Default panel for `openrouter-cli fusion`. Deliberately one model per lab
 # family: the point of a panel is independent priors, and two checkpoints of

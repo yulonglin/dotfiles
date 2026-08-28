@@ -3,7 +3,7 @@
 ## Priority Order
 
 1. Check `docs/` for project-specific context
-2. Check `~/.claude/docs/` for global specs (CI standards, reproducibility checklist)
+2. Check the repo root `docs/` for global specs (CI standards, reproducibility checklist)
 3. **Context7 MCP** for popular library/framework documentation (fastest, most reliable)
 4. **GitHub CLI** (`gh api`) for specific file access to verified repositories
 5. **Explore locally** with Glob/Grep/Read for installed libraries/packages

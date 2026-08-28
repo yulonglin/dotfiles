@@ -70,6 +70,8 @@ Two things to hold onto:
 - **`gpt55pro` is deliberately not in the default fusion panel.** It is roughly six times the price of its non-pro sibling, so it must be asked for explicitly: `openrouter-cli ask gpt55pro "..."`, or `--panel gpt55pro,...`. There is no opt-in flag in the schema; keeping it out of `panel` *is* the mechanism.
 - **x-ai version numbers are not chronological.** `grok-4.20` belongs to an OLDER line than `grok-4.6`. "Pick the biggest number" selects the wrong model here, which is why the drift checker ranks by the catalog's `created` timestamp instead of parsing versions.
 
+The judge that synthesises a `fusion` panel is `anthropic/claude-opus-5`.
+
 The default `fusion` panel is seven models, one per company: `glm`, `kimi`, `qwen`, `deepseek`, `muse`, `gemini`, `grok`. Panel members are written as aliases so repointing a `[[models]]` entry updates the panel too. OpenAI is absent on cost grounds; GPT opinions come from `codex-companion`.
 
 `fusion` fails closed on a degraded panel: OpenRouter keeps `status: "ok"` on partial panel failures, so the CLI verifies the tool-call record before presenting anything as a full panel. If it refuses, believe it — a collapsed panel presented as corroboration is the exact failure this tooling exists to prevent.
@@ -83,6 +85,7 @@ Model slugs are renamed and retired continuously, and a stale slug fails in a wa
 - **gone** — the slug is not in the catalog, so any call naming it fails outright. Suggests live models from the same family, newest first, which catches a misspelling.
 - **superseded** — still working, but a newer checkpoint exists in the same family.
 - **expiring** — the catalog gives it a retirement date inside a year. (Far-future sentinel dates like `2098-12-31` mean "no expiry" and are ignored.)
+- **floating** — a `~family-latest` alias, reported with its last observed target rather than as drift. See below.
 
 It needs **no API key**: the OpenRouter catalog endpoint is public. Exit code is `0` when clean and `3` when drift is found.
 
@@ -99,7 +102,28 @@ Run it by hand at any time with `openrouter-cli drift`, or force the scheduled j
 
 **The timer never edits the TOML.** It reports; the edit stays a human decision, because swapping a model changes both spend and results. Apply a finding by editing `config/openrouter-models.toml` by hand and re-running `openrouter-cli drift` to confirm it is clean.
 
+For an on-demand check without waiting for the timer, `openrouter-cli models --check` validates the same three roles and exits 3 if any slug is missing from the catalog.
+
 Ranking configured models by capability index is a separate, manual command: `openrouter-cli refresh` (Epoch ECI needs no key; the Artificial Analysis index needs `AA_API_KEY`). Attribution to Epoch AI and artificialanalysis.ai is required by their licences wherever those numbers appear.
+
+## Every billed call records which model actually served it
+
+The slug you request is not always the model that answers. `openrouter-cli` therefore logs, for **every** `ask` and `fusion` call, the concrete model id from the response — for the judge and for each panel member separately.
+
+- One line per model to stderr as it happens, tagged `(REDIRECTED)` when served differs from requested.
+- One append-only JSON row per call in `~/.local/state/openrouter-cli/calls.jsonl`, carrying the timestamp, response id, token usage and cost, and the requested/resolved pair for each model.
+
+Prompts are **not** stored — only a `prompt_sha256` — so the log ties a result to its input without keeping the text. A log write that fails prints a warning and never discards an answer you already paid for.
+
+### Floating aliases need this log to be safe
+
+OpenRouter publishes floating slugs like `~anthropic/claude-opus-latest`, which "always redirects to the latest model in the family". They give zero-maintenance freshness and destroy provenance: two runs a month apart can silently be different models.
+
+The catalog does not publish what a floating alias points at — its `canonical_slug` is just the tilde name again — so **the only way to learn the target is to make a call and read the response**. Measured 2026-08-28: `~deepseek/deepseek-v4-flash-latest` was served by `deepseek/deepseek-v4-flash-0731`.
+
+That is why the call log is the precondition for adopting floating slugs, not an optional extra. It is also why `drift` treats them differently: a floating alias is never reported as "stale" — moving is its job — and is instead reported as **what it was last observed serving, and when**. An alias that has never been called is reported as having an unknown target, which is the honest answer.
+
+Pinned versus floating is a live decision; the config currently pins everything.
 
 ## Keys are per-project, never global
 

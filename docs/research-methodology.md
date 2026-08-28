@@ -6,7 +6,7 @@
 - **Predict results** before running (catches bugs)
 - **Change one variable** at a time
 - **De-risk first** on smallest model/dataset
-- **Report N and SE** with all metrics — see `~/.claude/docs/ci-standards.md`
+- **Report N and SE** with all metrics — see `docs/ci-standards.md`
 
 ## Correctness & Truth-Seeking (CRITICAL)
 
