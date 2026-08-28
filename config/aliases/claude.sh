@@ -136,6 +136,16 @@ claude() {
                     mkdir -p "$_cache_dir" && printf '%s' "$_subcmds" > "$_cache_file" 2>/dev/null
                 fi
             fi
+            # HIDDEN subcommands: real, but absent from `claude --help`, so the
+            # scrape above cannot find them and they get misclassified as
+            # session prompts — which prepends --settings and makes the
+            # top-level parser reject their own flags. Measured 2026-08-28:
+            # `claude daemon stop --any` died with "unknown option '--any'"
+            # purely because --settings was injected ahead of `daemon`.
+            # Appended AFTER the cache read, not inside it: the cache is keyed
+            # on CLI version and may predate this list, so folding these in at
+            # write time would leave warm caches broken.
+            _subcmds="${_subcmds}daemon|"
             # Check if first positional matches a known subcommand
             if [[ -n "$_subcmds" && "|${_subcmds}" == *"|${_first_positional}|"* ]]; then
                 _is_session=false
