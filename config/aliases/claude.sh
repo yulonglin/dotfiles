@@ -259,8 +259,28 @@ claude() {
         fi
     fi
 
+    # Coordinator mode is set here, per-invocation, rather than in the global
+    # settings env block: there it was inherited by every `claude -p` child,
+    # which then came up with no Read/Bash/Write at all. Prefixed rather than
+    # exported so it does not leak into the calling shell's later processes.
+    local _coord=1 _c
+    if [[ "$_is_session" != true ]]; then
+        _coord=0
+    else
+        for _c in "${args[@]}"; do
+            case "$_c" in
+                --) break ;;
+                -p|--print) _coord=0; break ;;
+            esac
+        done
+    fi
+
     activate_venv
-    command claude "${args[@]}"
+    if [[ "$_coord" == 1 ]]; then
+        CLAUDE_CODE_COORDINATOR_MODE=1 command claude "${args[@]}"
+    else
+        command claude "${args[@]}"
+    fi
 }
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
 alias yolo='claude --dangerously-skip-permissions'
