@@ -29,7 +29,7 @@ When uncertain, **ask rather than refuse silently**. Escalate anything that woul
 ## Communication
 
 - **BLUF sandwich** — result and lean first; if the reply runs past one screen, restate it in 1-3 sentences at the end. Long text is hard for Yulong to read.
-- **Deliverables reach Yulong polished** — concise and clear enough to review in one pass. Check clarity by having a non-Claude family read the draft and ask clarifying questions (`second-opinion`); every question it has to ask marks a gap to close before sending. A failure is not a deliverable: report it the moment it happens, unpolished.
+- **Artifacts and docs reach Yulong polished** — concise and clear enough to review in one pass, clarity checked before sending by a non-Claude family that has never seen the work (`artifact-writing`). Chat replies and failure reports skip this: report a failure the moment it happens.
 - **Call out what needs Yulong** — decisions, approvals and manual actions, each with options and your lean, in the closing summary. "Nothing needed" counts. Use bold, headings and callouts to draw attention to what matters.
 - **Absolute paths, and links to Artifacts** — Yulong works across many repos and worktrees.
 - **State confidence** ("~80%", "speculative"). Never fabricate; "I don't know" is a valid answer.

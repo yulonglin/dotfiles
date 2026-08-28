@@ -49,6 +49,12 @@ When the page exists for Yulong to react to, make it annotatable: select text, a
 
 **The Artifact viewer blocks any page-initiated file save**, so `md2review`'s "Export text" cannot hand over a `.md` file. It falls back to a selectable textarea, so the export still works — only the file save is dropped. Say which, rather than claiming the button is dead.
 
+## Clarity is checked by a reader who has never seen the work
+
+Before an artifact or doc goes to Yulong, hand the draft to a **non-Claude family** and ask for two things: what it understood the page to claim, and what it would still need to ask before it could act on the page (`second-opinion`). A same-family reader shares the priors that wrote the page and reads your intent into the gaps, so it cannot find them.
+
+A misread in its summary is an ambiguity in the page; a question it has to ask is a hole in the page. Close both, then send. This runs once per deliverable, not per reply, and it is a check on the writing rather than on the findings.
+
 ## One topic, one living page
 
 Update the existing artifact for the topic in place — same URL, passing `url` when the artifact came from an earlier session — rather than minting a new artifact per session. New URL only on a hard topic pivot.
