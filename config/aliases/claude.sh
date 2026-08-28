@@ -88,20 +88,8 @@ claude() {
         cd "$git_root" || true
     fi
 
-    # Generate task list ID: -t flag always overrides, otherwise keep existing or auto-generate
-    if [[ -n "$task_name" ]]; then
-        # Explicit -t flag: always generate fresh with custom name
-        local timestamp
-        timestamp=$(date -u +%Y%m%d_%H%M%S)
-        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${task_name}"
-    elif [[ -z "$CLAUDE_CODE_TASK_LIST_ID" ]]; then
-        # No existing ID: auto-generate from directory name
-        local suffix timestamp
-        suffix=$(basename "$PWD" | tr ' ' '_')
-        timestamp=$(date -u +%Y%m%d_%H%M%S)
-        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${suffix}"
-    fi
-    # else: keep existing CLAUDE_CODE_TASK_LIST_ID (set by claude-new, claude-with, etc.)
+    # Task list ID generation moved to just before the launch (see below), so
+    # no early return can leave a half-configured export behind.
 
     # --channels only applies to session mode, not subcommands (doctor, auth, etc.).
     # Derive subcommand list from `claude --help`, cached per version to avoid 200ms/call.
@@ -259,8 +247,39 @@ claude() {
         fi
     fi
 
+    # Task list ID, scoped to this launch and restored afterwards. An export
+    # that outlives the launch follows the shell across `cd`s and into the
+    # tmux server env, so sessions in unrelated repos silently join one task
+    # list (claude-spawn blanks the var for the same reason). Inherited values
+    # are honored only with CLAUDE_CODE_TASK_LIST_PIN=1 (claude-new,
+    # claude-with, claude-last): an unpinned inherited ID is a stale leak
+    # from a pre-fix shell or the tmux server environment.
+    local _prev_tlid_set=0 _prev_tlid=""
+    if [[ -n "${CLAUDE_CODE_TASK_LIST_ID+x}" ]]; then
+        _prev_tlid_set=1
+        _prev_tlid="$CLAUDE_CODE_TASK_LIST_ID"
+    fi
+    local _tl_timestamp _tl_suffix
+    _tl_timestamp=$(date -u +%Y%m%d_%H%M%S)
+    if [[ -n "$task_name" ]]; then
+        # Explicit -t flag: always generate fresh with custom name
+        export CLAUDE_CODE_TASK_LIST_ID="${_tl_timestamp}_UTC_${task_name}"
+    elif [[ "${CLAUDE_CODE_TASK_LIST_PIN:-}" != 1 || -z "$CLAUDE_CODE_TASK_LIST_ID" ]]; then
+        # Auto-generate from directory name (basename of git root — distinct
+        # per worktree; share deliberately with -t/claude-with when needed)
+        _tl_suffix=$(basename "$PWD" | tr ' ' '_')
+        export CLAUDE_CODE_TASK_LIST_ID="${_tl_timestamp}_UTC_${_tl_suffix}"
+    fi
+
     activate_venv
     command claude "${args[@]}"
+    local _claude_rc=$?
+    if (( _prev_tlid_set )); then
+        export CLAUDE_CODE_TASK_LIST_ID="$_prev_tlid"
+    else
+        unset CLAUDE_CODE_TASK_LIST_ID
+    fi
+    return $_claude_rc
 }
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
 alias yolo='claude --dangerously-skip-permissions'
@@ -633,17 +652,22 @@ claude-new() {
   echo "Starting Claude with task list: $task_list_id"
   echo "export CLAUDE_CODE_TASK_LIST_ID=$task_list_id" > .claude_task_list_id
 
-  export CLAUDE_CODE_TASK_LIST_ID="$task_list_id"
-  claude
+  # Prefix-env, not export: zsh restores it after the function returns, so
+  # nothing lingers in the shell to leak into later launches in other repos.
+  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" CLAUDE_CODE_TASK_LIST_PIN=1 claude
 }
 
 # Resume last task list in current directory
 claude-last() {
   if [ -f .claude_task_list_id ]; then
-    # shellcheck disable=SC1091
-    source .claude_task_list_id
-    echo "Resuming task list: $CLAUDE_CODE_TASK_LIST_ID"
-    claude
+    local task_list_id
+    task_list_id=$(sed -n 's/^export CLAUDE_CODE_TASK_LIST_ID=//p' .claude_task_list_id | head -n1)
+    if [ -z "$task_list_id" ]; then
+      echo "Could not parse .claude_task_list_id"
+      return 1
+    fi
+    echo "Resuming task list: $task_list_id"
+    CLAUDE_CODE_TASK_LIST_ID="$task_list_id" CLAUDE_CODE_TASK_LIST_PIN=1 claude
   else
     echo "No previous task list found in this directory"
     echo "Start a new one with: claude-new <description>"
@@ -673,9 +697,8 @@ claude-with() {
     return 1
   fi
 
-  export CLAUDE_CODE_TASK_LIST_ID="$task_list_id"
   echo "Using task list: $task_list_id"
-  claude
+  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" CLAUDE_CODE_TASK_LIST_PIN=1 claude
 }
 
 # Switch Claude Code account (full logout + login, not just restart)
