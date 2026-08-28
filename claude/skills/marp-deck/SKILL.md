@@ -60,7 +60,7 @@ Slides are split by a horizontal rule `---` on its own line (blank line before/a
 
 ## Slide titles assert the finding
 
-Every slide title states the point of that slide, not its topic — `markdown-style.md` carries the standard, and a deck is one of the places it applies. Titles reading "Setup", "Results", "Limitations" make the audience wait for the speaker to say what happened, and the deck stops meaning anything the moment it is a PDF in someone's inbox. Titles reading "Density Is The Inverse Of Length", "Assertion Sentences Survive Long Traces", "Fixed k Confounds Density With Length" carry the argument on their own. Keep the qualifying detail in the bullets under the title, never appended to the title after a dash or colon.
+Every slide title states the point of that slide, not its topic — `rules/communication.md` carries the standard, and a deck is one of the places it applies. Titles reading "Setup", "Results", "Limitations" make the audience wait for the speaker to say what happened, and the deck stops meaning anything the moment it is a PDF in someone's inbox. Titles reading "Density Is The Inverse Of Length", "Assertion Sentences Survive Long Traces", "Fixed k Confounds Density With Length" carry the argument on their own. Keep the qualifying detail in the bullets under the title, never appended to the title after a dash or colon.
 
 ## Directives
 

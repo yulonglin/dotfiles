@@ -1,7 +1,7 @@
 """The md2review annotation layer, as one shared block of CSS + HTML + JS.
 
 This is the single copy of the select-to-comment layer that
-`rules/artifact-first-replies.md` requires on every reviewable page. Two
+the `artifact-writing` skill requires on every reviewable page. Two
 callers use it:
 
 - `md2review` renders Markdown into a page and appends the layer.

@@ -23,13 +23,13 @@ check() { # desc expected_rc actual_rc
     else printf '  FAIL  %s (want rc=%s, got rc=%s)\n' "$1" "$2" "$3"; fi
 }
 
-echo "== deleted from safety-and-git.md: 'never git reset --hard / checkout -- / clean -fd' =="
+echo "== deleted from safety.md: 'never git reset --hard / checkout -- / clean -fd' =="
 for cmd in 'git reset --hard' 'git checkout -- src/a.py' 'git clean -fd'; do
     rc=0; bash_json "$cmd" | bash "$H/block_destructive_git.sh" >/dev/null 2>&1 || rc=$?
     check "blocks: $cmd" 2 "$rc"
 done
 
-echo "== deleted from safety-and-git.md: 'never bare git stash / stash pop' =="
+echo "== deleted from safety.md: 'never bare git stash / stash pop' =="
 for cmd in 'git stash' 'git stash pop'; do
     rc=0; bash_json "$cmd" | bash "$H/block_destructive_git.sh" >/dev/null 2>&1 || rc=$?
     check "blocks: $cmd" 2 "$rc"

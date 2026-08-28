@@ -54,23 +54,25 @@ The `kimi-k3`, `glm-5.3`, `qwen3.8-max` and `muse-spark-1.2` agent files were de
 
 Aliases live in `config/openrouter-models.toml`, which is the single source of truth. Use the alias, not the raw slug.
 
+**Most of these are floating**, marked with a leading `~`: they redirect to whatever is newest in that family, so the slug does not tell you which model answered. Read the call log for that — see below.
+
 | Alias | Slug | Notes |
 |---|---|---|
-| `glm` | `z-ai/glm-5.3` | |
-| `kimi` | `moonshotai/kimi-k3` | |
-| `qwen` | `qwen/qwen3.8-max` | |
-| `deepseek` | `deepseek/deepseek-v4-pro-0813` | pinned checkpoint, not the rolling name |
-| `muse` | `meta/muse-spark-1.2` | |
-| `gemini` | `google/gemini-3.7-flash` | |
-| `grok` | `x-ai/grok-4.6` | newest x-ai line — see the version trap below |
-| `gpt55pro` | `openai/gpt-5.5-pro` | **$30/M in, $180/M out** — ~6x the non-pro model |
+| `glm` | `~z-ai/glm-latest` | floating |
+| `kimi` | `~moonshotai/kimi-latest` | floating |
+| `qwen` | `qwen/qwen3.8-max` | pinned — no floating alias exists for any qwen family |
+| `deepseek` | `deepseek/deepseek-v4-pro-0813` | pinned — the only deepseek floating alias is the v4-**flash** family, and this seat is v4-**pro** |
+| `muse` | `meta/muse-spark-1.2` | pinned — no floating alias exists for any meta family |
+| `gemini` | `~google/gemini-flash-latest` | floating; **flash**, not pro — a `~google/gemini-pro-latest` also exists and would be a tier upgrade |
+| `grok` | `~x-ai/grok-latest` | floating — see the version trap below |
+| `gpt55pro` | `openai/gpt-5.5-pro` | pinned; **$30/M in, $180/M out** — ~6x the non-pro model |
 
 Two things to hold onto:
 
 - **`gpt55pro` is deliberately not in the default fusion panel.** It is roughly six times the price of its non-pro sibling, so it must be asked for explicitly: `openrouter-cli ask gpt55pro "..."`, or `--panel gpt55pro,...`. There is no opt-in flag in the schema; keeping it out of `panel` *is* the mechanism.
-- **x-ai version numbers are not chronological.** `grok-4.20` belongs to an OLDER line than `grok-4.6`. "Pick the biggest number" selects the wrong model here, which is why the drift checker ranks by the catalog's `created` timestamp instead of parsing versions.
+- **x-ai version numbers are not chronological.** `grok-4.20` belongs to an OLDER line than `grok-4.6`. "Pick the biggest number" selects the wrong model here — which is a good argument for the floating `~x-ai/grok-latest`, and why the drift checker ranks by the catalog's `created` timestamp instead of parsing versions.
 
-The judge that synthesises a `fusion` panel is `anthropic/claude-opus-5`.
+The judge that synthesises a `fusion` panel is `~anthropic/claude-opus-latest`, which served `anthropic/claude-opus-5` when last exercised on 2026-08-28.
 
 The default `fusion` panel is seven models, one per company: `glm`, `kimi`, `qwen`, `deepseek`, `muse`, `gemini`, `grok`. Panel members are written as aliases so repointing a `[[models]]` entry updates the panel too. OpenAI is absent on cost grounds; GPT opinions come from `codex-companion`.
 
@@ -123,7 +125,17 @@ The catalog does not publish what a floating alias points at — its `canonical_
 
 That is why the call log is the precondition for adopting floating slugs, not an optional extra. It is also why `drift` treats them differently: a floating alias is never reported as "stale" — moving is its job — and is instead reported as **what it was last observed serving, and when**. An alias that has never been called is reported as having an unknown target, which is the honest answer.
 
-Pinned versus floating is a live decision; the config currently pins everything.
+### Finding out which model gave a given answer
+
+Because most slugs float, **the config no longer tells you which model produced any particular answer — the call log is the only record.** To trace one:
+
+```
+tail -5 ~/.local/state/openrouter-cli/calls.jsonl | jq '{ts, command, models}'
+```
+
+Each row carries the timestamp, response id, cost, and a `requested` → `resolved` pair per model. Match on `response_id`, or on `prompt_sha256` if you still have the prompt (`printf %s "<prompt>" | sha256sum`). If a result matters — it goes in a write-up, or someone will ask "which model said that" — **capture the resolved id at the time**, because the log is local, unsynced, and the alias will have moved on.
+
+The config currently floats the judge and four of seven panel members; `qwen`, `muse` and `deepseek` stay pinned because no floating alias exists at the right tier for them.
 
 ## Keys are per-project, never global
 

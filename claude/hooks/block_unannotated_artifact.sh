@@ -2,7 +2,7 @@
 # Global PreToolUse hook for the Artifact tool: BLOCKS publishing an HTML page
 # that lacks the annotation layer.
 #
-# `rules/artifact-first-replies.md`: a page Yulong reviews must be annotatable
+# the `artifact-writing` skill: a page Yulong reviews must be annotatable
 # (select text, attach a note, export as Markdown). md2review builds the layer
 # in; a hand-built page gets it from `annotate-html <file>`. A page published
 # without it cannot be argued with, so the publish is refused until it has one.
@@ -88,5 +88,5 @@ if [ -z "$CHECKER" ]; then
 fi
 
 printf 'BLOCKED: Artifact page lacks the annotation layer — run: annotate-html %s\n' "$FILE" >&2
-printf 'Reviewable pages must be annotatable (rules/artifact-first-replies.md). Markdown sources go through md2review instead.\n' >&2
+printf 'Reviewable pages must be annotatable (the artifact-writing skill). Markdown sources go through md2review instead.\n' >&2
 exit 2
