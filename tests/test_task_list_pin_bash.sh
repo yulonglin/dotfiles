@@ -69,11 +69,12 @@ check "bash: unpinned global ID dropped for the child" "LAUNCHED_WITH=[unset]" "
 refute "bash: residue never reaches the child" "GLOBAL_RESIDUE" "$got"
 check "bash: shell's ID survives the call" "GLOBAL_RESIDUE" "${CLAUDE_CODE_TASK_LIST_ID}"
 
-# 2b. Pinned is deliberate and honored, under bash too.
+# 2b. The pin mechanism is gone: an inherited ID is dropped under bash even if
+#     something still sets the old marker. Nothing legitimate passes an ID in.
 export CLAUDE_CODE_TASK_LIST_PIN=1
 claude >"$outfile" 2>&1
 got=$(cat "$outfile")
-check "bash: pinned global ID honored" "LAUNCHED_WITH=[GLOBAL_RESIDUE]" "$got"
+check "bash: inherited ID dropped despite the legacy pin" "LAUNCHED_WITH=[unset]" "$got"
 unset CLAUDE_CODE_TASK_LIST_PIN
 
 # 3. -t overrides a globally exported ID for the launch, then restores it.
