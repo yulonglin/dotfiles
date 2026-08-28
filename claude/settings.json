@@ -602,6 +602,7 @@
     "dev-browser@dev-browser-marketplace": true,
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
+    "playground@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "remember@claude-plugins-official": true,
@@ -857,5 +858,6 @@
   "chrome": {
     "enabled": true
   },
-  "installMethod": "native"
+  "installMethod": "native",
+  "mcpServers": {}
 }
