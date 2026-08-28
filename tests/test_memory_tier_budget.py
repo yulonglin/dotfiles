@@ -36,6 +36,9 @@ PRE_RESTRUCTURE_BYTES = 76512
 # the guard, loose enough that an ordinary edit does not.
 ALWAYS_ON = [
     ("claude/rules/background-jobs.md", 950),
+    # Raised from the old 1300: this file legitimately grew when it absorbed the
+    # scratch-script promotion rules from the deleted
+    # reusable-component-promotion.md. The content moved here, it was not added.
     ("claude/rules/coding-conventions.md", 2200),
     ("claude/rules/communication.md", 3100),
     ("claude/rules/delegation.md", 2600),
