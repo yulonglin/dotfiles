@@ -240,6 +240,24 @@ cmd_exists() {
 # unavailable, or there's no TTY to prompt on. (sudo's password is the one prompt
 # with no software default, so it's the only interaction we cache rather than
 # skip — the component menu aside.)
+# Every privileged step in these scripts goes through sudo, and there are ~57 of
+# them. In a hands-off run — no TTY, or --non-interactive — a sudo that needs a
+# password prints its prompt and then blocks forever reading the script's stdin.
+# That is a stall, not a failure: nothing errors, nothing is logged, the run just
+# stops. Rather than audit every call site, shadow the command: `-n` makes sudo
+# fail fast instead of prompting, and each call site's existing `|| log_warning`
+# then does what it was written to do.
+#
+# An interactive TTY run is unaffected — `front_load_sudo` still caches the
+# credential once up front, which is the one prompt this repo accepts.
+sudo() {
+    if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; then
+        command sudo -n "$@"
+    else
+        command sudo "$@"
+    fi
+}
+
 front_load_sudo() {
     cmd_exists sudo || return 0
     # --non-interactive promises a hands-off run, and a TTY check alone does not

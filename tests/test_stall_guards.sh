@@ -209,6 +209,22 @@ else
     fail "install_node uses a scalar \$SUDO with -E — running as root this becomes the command '-E'"
 fi
 
+# ── No sudo call anywhere may prompt in a hands-off run ──────────────────────
+# There are ~57 sudo call sites across these three files. Auditing each one is
+# not maintainable, so helpers.sh shadows the command with a function that adds
+# -n when nobody can answer. Losing it re-opens every one of those sites.
+echo "sudo cannot prompt in a hands-off run:"
+wrapper_body="$(awk '/^sudo\(\) \{/,/^\}/' "$HELPERS_SH")"
+if [[ -z "$wrapper_body" ]]; then
+    fail "helpers.sh no longer defines the sudo() wrapper — every privileged step can again stop at a password prompt and hang"
+elif grep -q 'command sudo -n' <<<"$wrapper_body" \
+     && grep -q 'NON_INTERACTIVE' <<<"$wrapper_body" \
+     && grep -q -- '-t 0' <<<"$wrapper_body"; then
+    pass "sudo() forces -n when there is no TTY or --non-interactive is set"
+else
+    fail "the sudo() wrapper no longer forces -n for hands-off runs"
+fi
+
 # ── Credential prompts that are not sudo's own ───────────────────────────────
 # chsh authenticates through PAM on stdin, so a bare call blocks in an
 # unattended run even where sudo is already cached.
