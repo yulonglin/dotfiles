@@ -1113,8 +1113,11 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
             # Enable reset-failed timer (hourly stale unit cleanup)
             systemctl --user enable --now reset-failed.timer 2>/dev/null
 
-            # Enable linger (services persist after logout)
-            loginctl enable-linger "$(whoami)" 2>/dev/null
+            # Enable linger (services persist after logout). `|| true`: a box
+            # without a working logind (containers, RunPod) fails here, and
+            # under `set -e` that would abort the deploy before scheduled
+            # tasks, SSH and secrets — silently, since stderr is discarded.
+            loginctl enable-linger "$(whoami)" 2>/dev/null || true
         else
             log_warning "pueue not installed — run: ./install.sh --pueue"
         fi
@@ -1353,7 +1356,10 @@ if [[ "${DEPLOY_BWS:-false}" == "true" ]]; then
 
     BWS_VERSION="2.0.0"
     BWS_INSTALL_DIR="${HOME}/.local/bin"
-    BWS_INSTALLED_VERSION="$(bws --version 2>/dev/null | awk '{print $2}')"
+    # `|| true`: bws is absent on a fresh machine, and `set -o pipefail` would
+    # otherwise propagate its 127 out of the substitution and abort the deploy
+    # here — before SSH, secrets and everything below.
+    BWS_INSTALLED_VERSION="$(bws --version 2>/dev/null | awk '{print $2}')" || true
 
     # ── Install/upgrade binary ──
     if [[ "$BWS_INSTALLED_VERSION" == "$BWS_VERSION" ]]; then

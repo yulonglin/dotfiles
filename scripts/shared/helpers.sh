@@ -929,7 +929,7 @@ install_node() {
     # is the codename (truthy) for LTS releases, false otherwise.
     local want
     want=$(curl -fsSL https://nodejs.org/dist/index.json 2>/dev/null \
-        | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null)
+        | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null) || true
     [[ "$want" =~ ^[0-9]+$ ]] || want=24
     if is_installed node && (( $(node -v | cut -d. -f1 | tr -d 'v') >= want )); then
         return 0
@@ -944,10 +944,14 @@ install_node() {
     # install on its exit code — doing so once left a box on stock Ubuntu node.
     # Install unconditionally; apt resolves the NodeSource candidate (a higher
     # version than Ubuntu's, so an already-installed nodejs is upgraded in place).
-    local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash - \
+    # An array, not a string: as root SUDO is empty, and an unquoted empty scalar
+    # would leave `-E bash -` as the command — zsh does not word-split scalars, so
+    # `SUDO="sudo -E"` would not work either. Running as root (containers, RunPod)
+    # used to hit exactly that and skip the NodeSource repo entirely.
+    local -a SUDO=(); [[ $EUID -ne 0 ]] && SUDO=(sudo -E)
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | "${SUDO[@]}" bash - \
         || log_warning "NodeSource setup script exited non-zero (repo may still be configured) — continuing"
-    $SUDO apt-get install -y nodejs || log_warning "Node install via apt failed — install Node LTS manually"
+    "${SUDO[@]}" apt-get install -y nodejs || log_warning "Node install via apt failed — install Node LTS manually"
 }
 
 # ─── Mise (Universal Version Manager) ─────────────────────────────────────────
@@ -1065,7 +1069,9 @@ install_docker() {
 
     # Add current user to docker group (avoids needing sudo)
     # This runs even if Docker was already installed, in case user wasn't added to group
-    local current_user="${SUDO_USER:-$USER}"
+    # $USER is unset in containers and some CI shells; `set -u` would abort the
+    # whole install here, so fall back to id(1) rather than trusting the env.
+    local current_user="${SUDO_USER:-${USER:-$(id -un)}}"
     if [[ -n "$current_user" ]] && [[ "$current_user" != "root" ]]; then
         if ! groups "$current_user" 2>/dev/null | grep -q '\bdocker\b'; then
             usermod -aG docker "$current_user" 2>/dev/null || true
