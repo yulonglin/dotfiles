@@ -153,14 +153,54 @@ def test_save_is_the_first_button_in_the_note_box() -> None:
     assert ids == ["anSave", "anCancel", "anDelete"], ids
 
 
-def test_storage_is_mirrored_and_recoverable() -> None:
+def test_storage_stays_readable_by_older_deployed_layers() -> None:
+    """Comments are a bare JSON array at the primary key.
+
+    An older layer does `JSON.parse(localStorage.getItem(KEY)).reduce(...)`.
+    Hand it an object and that throws at module scope, killing the whole
+    script: no handlers, no saving, a page that looks fine and does nothing.
+    Two generations of this layer can share an origin, so the primary key's
+    shape is a compatibility contract.
+    """
     js = _layer_module().JS
-    assert "indexedDB" in js  # a second store, evicted under different rules
-    assert "function recover()" in js
+    assert "JSON.stringify(comments)" in js, "the array must be stored as-is"
+    assert "savedAt" not in js and "STORE_V" not in js, "envelope reintroduced"
     assert "function saveDraft()" in js and "function restoreDraft()" in js
-    assert "quotesMatchPage" in js  # never adopt another document's comments
     assert 'addEventListener("pagehide"' in js
     assert "tryDownload" in js
+
+
+def test_no_cross_document_or_mirrored_storage() -> None:
+    """Three removed mechanisms that each lost or leaked data.
+
+    A neighbouring-key scan adopted a different document's comments whenever
+    one quote appeared on both pages; an IndexedDB mirror let a save racing
+    its own async recovery destroy what it was recovering; a rolling backup
+    key resurrected comments the user had deliberately cleared.
+    """
+    js = _layer_module().JS
+    for banned in ("indexedDB", "siblingComments", "quotesMatchPage", "localStorage.key("):
+        assert banned not in js, f"{banned} is back"
+
+
+def test_storage_keys_are_prefixed_not_suffixed() -> None:
+    """`KEY + "-draft"` collides with a page genuinely titled "…-draft".
+
+    That page's primary key and this page's draft key are then the same
+    string, so Escape here deletes that page's comments outright.
+    """
+    js = _layer_module().JS
+    assert 'var DIRTY = "an-dirty:" + KEY;' in js
+    assert 'var DRAFT = "an-draft:" + KEY;' in js
+
+
+def test_a_failed_write_and_a_failed_copy_are_both_surfaced() -> None:
+    """Silence here means the panel counts comments that are already gone."""
+    js = _layer_module().JS
+    assert "unsaved = !lsSet(" in js
+    assert "refused to store them" in js
+    # markClean() must be reachable only once a copy has actually happened.
+    assert "if (!ok) {" in js and "ok = true;" in js
 
 
 def test_layer_emits_no_raw_non_ascii() -> None:
@@ -168,13 +208,16 @@ def test_layer_emits_no_raw_non_ascii() -> None:
 
     A page served without `charset=utf-8` is decoded as latin-1, and a raw 💬
     or “curly quote” in a JavaScript string then reaches the reader as
-    mojibake. Escapes render the same under either decoding. Comments are
-    exempt: nothing renders them, and readable prose is worth more there.
+    mojibake. Escapes render the same under either decoding. Comments — `//`
+    in JS and `/* */` in CSS — are exempt: nothing renders them, and readable
+    prose is worth more there. A `—` survives a latin-1 decode as three bytes
+    that contain no newline, so it cannot break out of the comment it sits in.
     """
     mod = _layer_module()
     for name in ("JS", "HTML", "CSS"):
         for lineno, line in enumerate(getattr(mod, name).splitlines(), 1):
-            code = re.sub(r"(^|\s)//.*$", "", line)
+            code = re.sub(r"/\*.*?\*/", "", line)
+            code = re.sub(r"(^|\s)//.*$", "", code)
             bad = [c for c in code if ord(c) > 127]
             assert not bad, f"{name}:{lineno} has raw {bad!r}: {line.strip()}"
 

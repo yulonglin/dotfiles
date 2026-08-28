@@ -128,7 +128,9 @@ def test_debounced_reopen_does_not_wipe_a_half_typed_note(page_js: str) -> None:
     assert "pending.quote === text" in page_js
     assert "document.activeElement === txt" in page_js
     # Typed words survive a selection landing somewhere else entirely.
-    assert "if (isOpen() && txt.value.trim()) return true;" in page_js
+    # Behaviourally guarded by test_md2review_browser.py; this catches the
+    # guard being deleted without a browser present.
+    assert "if (isOpen() && hasText()) return true;" in page_js
 
 
 def test_highlight_survives_a_selection_crossing_elements(page_js: str) -> None:
