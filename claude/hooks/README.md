@@ -117,7 +117,6 @@ To add a new hook:
 
 Potential hooks to implement:
 
-- **task_list_created.sh** - Reminds to set up .claude_task_list_id
 - **task_completed.sh** - Celebrates milestone completions
 - **session_start.sh** - Shows task list summary on startup
 - **agent_completed.sh** - Summarizes agent work and suggests cleanup
@@ -137,7 +136,7 @@ echo "agentId: a5b5164" | ./agent_spawned.sh
 ## Integration with Task Management
 
 These hooks complement the task management system:
-- Shell functions: `claude-new`, `claude-agent-save`, etc.
+- Task lists are scoped per session by Claude Code itself; the shell wrapper deliberately sets no task-list ID (`claude/rules/workflow-defaults.md`). The old `claude-new` / `claude-with` / `claude-last` helpers were removed 2026-08-28.
 - CLAUDE.md: Conventions for naming and behavior
 - Skills: `task-management.md` for agent usage
 - Hooks: Automatic reminders and triggers

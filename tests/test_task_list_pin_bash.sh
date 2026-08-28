@@ -57,20 +57,32 @@ check "bash: bare launch leaves the ID unset for the child" "LAUNCHED_WITH=[unse
 refute "bash: bare launch mints no dir-named ID" "_UTC_" "$got"
 check "bash: nothing persists after launch" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
 
-# 2. A GLOBALLY EXPORTED ID is passed through and left intact. This is the
-#    shape where bash and zsh diverged before; assert both directions.
-export CLAUDE_CODE_TASK_LIST_ID="GLOBAL_LIST"
+# 2. A GLOBALLY EXPORTED, UNPINNED ID is residue and must be dropped. This is
+#    the exact shape that reappeared after a `source ~/.zshrc` — sourcing
+#    cannot unset what an older wrapper exported. It is also the shape where
+#    bash and zsh diverged before (`local +x` does not shadow a global export
+#    under bash), which is why the wrapper uses `env -u` here.
+export CLAUDE_CODE_TASK_LIST_ID="GLOBAL_RESIDUE"
 claude >"$outfile" 2>&1
 got=$(cat "$outfile")
-check "bash: globally-exported ID passed through" "LAUNCHED_WITH=[GLOBAL_LIST]" "$got"
-check "bash: shell's ID survives the call" "GLOBAL_LIST" "${CLAUDE_CODE_TASK_LIST_ID}"
+check "bash: unpinned global ID dropped for the child" "LAUNCHED_WITH=[unset]" "$got"
+refute "bash: residue never reaches the child" "GLOBAL_RESIDUE" "$got"
+check "bash: shell's ID survives the call" "GLOBAL_RESIDUE" "${CLAUDE_CODE_TASK_LIST_ID}"
+
+# 2b. The pin mechanism is gone: an inherited ID is dropped under bash even if
+#     something still sets the old marker. Nothing legitimate passes an ID in.
+export CLAUDE_CODE_TASK_LIST_PIN=1
+claude >"$outfile" 2>&1
+got=$(cat "$outfile")
+check "bash: inherited ID dropped despite the legacy pin" "LAUNCHED_WITH=[unset]" "$got"
+unset CLAUDE_CODE_TASK_LIST_PIN
 
 # 3. -t overrides a globally exported ID for the launch, then restores it.
 claude -t bashtask >"$outfile" 2>&1
 got=$(cat "$outfile")
 check "bash: -t names the list" "_UTC_bashtask" "$got"
-refute "bash: -t does not pass the global ID" "GLOBAL_LIST" "$got"
-check "bash: -t restores the global ID after" "GLOBAL_LIST" "${CLAUDE_CODE_TASK_LIST_ID}"
+refute "bash: -t does not pass the global ID" "GLOBAL_RESIDUE" "$got"
+check "bash: -t restores the global ID after" "GLOBAL_RESIDUE" "${CLAUDE_CODE_TASK_LIST_ID}"
 unset CLAUDE_CODE_TASK_LIST_ID
 
 echo "---"

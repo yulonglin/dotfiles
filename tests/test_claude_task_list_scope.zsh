@@ -12,7 +12,7 @@
 # So the contract is now narrow:
 #   - bare `claude` leaves the variable exactly as it found it, including unset
 #   - `-t <name>` sets one for that launch only
-#   - an inherited ID is passed through untouched (claude-with/-new/-last)
+#   - every inherited ID is dropped; nothing legitimate arrives that way
 #   - nothing persists in the shell afterwards, on any path
 #
 # CRITICAL TEST-DESIGN NOTE — do not "tidy" this into command substitution.
@@ -36,6 +36,7 @@ trap 'rm -rf "$scratch"' EXIT
 {
   echo '#!/bin/sh'
   echo 'echo "LAUNCHED_WITH=[${CLAUDE_CODE_TASK_LIST_ID-unset}]"'
+  echo 'echo "CHILD_PIN=[${CLAUDE_CODE_TASK_LIST_PIN-unset}]"'
   echo 'exit ${FAKE_CLAUDE_RC:-0}'
 } > "$fakebin/claude"
 chmod +x "$fakebin/claude"
@@ -62,14 +63,24 @@ check "bare launch leaves the ID unset for the child" "LAUNCHED_WITH=[unset]" "$
 refute "bare launch mints no dir-named ID" "_UTC_" "$(launched)"
 check "bare launch leaves the shell unset" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
 
-# 2. An inherited ID is passed through untouched — this is how claude-with,
-#    claude-new and claude-last work, and the wrapper no longer second-guesses
-#    it (there is no auto-generated value left to confuse it with).
-export CLAUDE_CODE_TASK_LIST_ID="SOME_LIST"
+# 2. An UNPINNED inherited ID is residue and must be dropped, not honored.
+#    `source ~/.zshrc` cannot unset what an older wrapper exported, so a shell
+#    that ran the pre-fix version still carries its ID indefinitely. Honoring
+#    it is how the original cross-repo leak survived a re-source.
+export CLAUDE_CODE_TASK_LIST_ID="STALE_RESIDUE"
 run_claude
-check "inherited ID passed through" "LAUNCHED_WITH=[SOME_LIST]" "$(launched)"
-check "inherited ID left in the shell as found" "SOME_LIST" "${CLAUDE_CODE_TASK_LIST_ID-unset}"
+check "unpinned inherited ID dropped for the child" "LAUNCHED_WITH=[unset]" "$(launched)"
+refute "stale residue never reaches the child" "STALE_RESIDUE" "$(launched)"
+check "shell's own value left untouched" "STALE_RESIDUE" "${CLAUDE_CODE_TASK_LIST_ID-unset}"
 unset CLAUDE_CODE_TASK_LIST_ID
+
+# 2b. There is no pin any more: an inherited ID is dropped even if something
+#     still sets the old marker, because nothing legitimate passes an ID in.
+export CLAUDE_CODE_TASK_LIST_ID="SHARED_ON_PURPOSE"
+export CLAUDE_CODE_TASK_LIST_PIN=1
+run_claude
+check "inherited ID dropped even with the legacy pin set" "LAUNCHED_WITH=[unset]" "$(launched)"
+unset CLAUDE_CODE_TASK_LIST_ID CLAUDE_CODE_TASK_LIST_PIN
 
 # 3. -t names a list for this launch only, and leaves nothing behind.
 run_claude -t mytask
@@ -91,20 +102,16 @@ rc=$?
 if [[ "$rc" == 7 ]]; then echo "PASS: exit status propagated"; ((pass++))
 else echo "FAIL: exit status propagated — expected 7, got $rc"; ((fail++)); fi
 
-# 6. claude-with end-to-end: names the list, leaves no state behind.
-claude-with "MY_SHARED_LIST" >"$outfile" 2>&1
-check "claude-with uses named list" "LAUNCHED_WITH=[MY_SHARED_LIST]" "$(launched)"
-check "claude-with leaves no state" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
-
-# 7. claude-last reads its pointer file and uses it for the launch only.
-tmpdir="$scratch/lastdir"
-mkdir -p "$tmpdir"
-pushd "$tmpdir" >/dev/null || exit 1
-echo "export CLAUDE_CODE_TASK_LIST_ID=SAVED_LIST" > .claude_task_list_id
-claude-last >"$outfile" 2>&1
-popd >/dev/null || exit 1
-check "claude-last resumes saved list" "LAUNCHED_WITH=[SAVED_LIST]" "$(launched)"
-check "claude-last leaves no state" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
+# 6. The removed helpers must stay removed: each was a way to set the ID, and
+#    together they were the last surface from which the shared-list bug could
+#    be reintroduced. Failing here means someone restored one.
+for fn in claude-new claude-last claude-with claude-tasks-list; do
+  if typeset -f "$fn" >/dev/null 2>&1; then
+    echo "FAIL: $fn is defined again — it was deliberately removed"; ((fail++))
+  else
+    echo "PASS: $fn stays removed"; ((pass++))
+  fi
+done
 
 echo "---"
 echo "pass=$pass fail=$fail"

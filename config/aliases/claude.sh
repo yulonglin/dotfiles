@@ -260,18 +260,33 @@ claude() {
     # inherits its environment. That is a different path from the shell leak
     # fixed in 3359daf/57145e5, and it is not reachable from here.
     #
-    # An explicit `-t <name>` still sets one for this launch, because sharing a
-    # list between two sessions on purpose is the variable's only real use.
-    # claude-new / claude-with / claude-last do the same via prefix-env.
-    # Anything inherited and unnamed is left alone: it is either a deliberate
-    # pin from those helpers, or residue we no longer add to.
+    # `-t <name>` is the ONE way to set a list deliberately. Anything else
+    # inherited is removed from the child's environment, unconditionally.
+    #
+    # There is no "is this deliberate?" marker any more, because there is no
+    # longer anything that could legitimately pass an ID in: `-t` sets its own,
+    # and the claude-new/with/last helpers are gone. Every other inherited
+    # value is residue — `source ~/.zshrc` cannot unset what an older wrapper
+    # exported, so contaminated shells keep theirs until they die, and honoring
+    # it is how the original cross-repo leak survived a re-source (2026-08-28).
+    #
+    # `env -u`, not `local +x` or `unset`: the value must be absent from the
+    # CHILD's environment, and `local +x` does not shadow a globally exported
+    # variable under bash (measured; deploy.sh sources these aliases into
+    # ~/.bashrc, so bash is a real target). `env -u` removes it from the child
+    # in both shells and leaves the calling shell untouched.
+    #
+    # NOTE this cannot reach sessions spawned by `claude daemon run` — those
+    # inherit the daemon's environment, captured once when it started. See
+    # claude/skills/spawn-session/SKILL.md for the diagnostic and the restart.
+    local -a _tl_launch=(env -u CLAUDE_CODE_TASK_LIST_ID)
     if [[ -n "$task_name" ]]; then
         local _tl_timestamp
         _tl_timestamp=$(date -u +%Y%m%d_%H%M%S)
-        # Exported for this launch only; zsh and bash unwind a function-local
-        # binding on every exit, including a Ctrl-C mid-launch, so nothing is
-        # left in the shell for the next launch to inherit.
+        # Function-local, so zsh and bash both unwind it on every exit
+        # including a Ctrl-C mid-launch; nothing is left for the next launch.
         local -x CLAUDE_CODE_TASK_LIST_ID="${_tl_timestamp}_UTC_${task_name}"
+        _tl_launch=(command)
     fi
 
     # Coordinator mode is set here, per-invocation, rather than in the global
@@ -291,11 +306,13 @@ claude() {
     fi
 
     activate_venv
-    # Last command in each branch, so its exit status is the function's.
+    # Last command in each branch, so its exit status is the function's —
+    # nothing to restore. `env` execs the binary from PATH, so this does not
+    # re-enter this function.
     if [[ "$_coord" == 1 ]]; then
-        CLAUDE_CODE_COORDINATOR_MODE=1 command claude "${args[@]}"
+        CLAUDE_CODE_COORDINATOR_MODE=1 "${_tl_launch[@]}" claude "${args[@]}"
     else
-        command claude "${args[@]}"
+        "${_tl_launch[@]}" claude "${args[@]}"
     fi
 }
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
@@ -681,73 +698,15 @@ codex-denials() {
   fi
 }
 
-# Claude Code Task List Management
-# Start new work with custom description (overrides auto-generated name)
-claude-new() {
-  local description="$1"
-  if [ -z "$description" ]; then
-    echo "Usage: claude-new <description>"
-    echo "Example: claude-new oauth-refactor"
-    return 1
-  fi
-
-  local timestamp
-  timestamp=$(date -u +%Y%m%d_%H%M%S)
-  local task_list_id="${timestamp}_UTC_${description}"
-
-  echo "Starting Claude with task list: $task_list_id"
-  echo "export CLAUDE_CODE_TASK_LIST_ID=$task_list_id" > .claude_task_list_id
-
-  # Prefix-env, not export: the shell restores it after the function returns,
-  # so nothing lingers to leak into later launches in other repos. The wrapper
-  # passes an inherited ID straight through — no pin marker needed, since it
-  # no longer generates one of its own to distinguish this from residue.
-  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" claude
-}
-
-# Resume last task list in current directory
-claude-last() {
-  if [ -f .claude_task_list_id ]; then
-    local task_list_id
-    task_list_id=$(sed -n 's/^export CLAUDE_CODE_TASK_LIST_ID=//p' .claude_task_list_id | head -n1)
-    if [ -z "$task_list_id" ]; then
-      echo "Could not parse .claude_task_list_id"
-      return 1
-    fi
-    echo "Resuming task list: $task_list_id"
-    CLAUDE_CODE_TASK_LIST_ID="$task_list_id" claude
-  else
-    echo "No previous task list found in this directory"
-    echo "Start a new one with: claude-new <description>"
-  fi
-}
-
-# List all task lists
-claude-tasks-list() {
-  echo "Available task lists:"
-  echo ""
-  if [ -d ~/.claude/tasks/ ]; then
-    ls -1t ~/.claude/tasks/ | head -20
-  else
-    echo "(none yet)"
-  fi
-  echo ""
-  echo "Start a new task list: claude-new <description>"
-}
-
-# Start Claude with a specific task list (by name)
-claude-with() {
-  local task_list_id="$1"
-  if [ -z "$task_list_id" ]; then
-    echo "Usage: claude-with <task-list-name>"
-    echo ""
-    claude-tasks-list
-    return 1
-  fi
-
-  echo "Using task list: $task_list_id"
-  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" claude
-}
+# claude-new / claude-last / claude-with / claude-tasks-list were removed on
+# 2026-08-28. Claude Code gives every session its own task list already, so the
+# helpers only existed to make two sessions share one — which zsh history says
+# never actually happened (0 uses of claude-new/claude-last/`-t`, and the single
+# claude-with was a bare invocation that just printed its usage). Meanwhile they
+# were the last code able to set CLAUDE_CODE_TASK_LIST_ID, i.e. the only
+# remaining way to reintroduce the cross-repo shared-list bug. `claude -t <name>`
+# survives as the one deliberate spelling; it sets its own ID, which is why the
+# CLAUDE_CODE_TASK_LIST_PIN marker could go too.
 
 # Switch Claude Code account (full logout + login, not just restart)
 alias claude-switch='claude auth logout && claude auth login'
