@@ -1,6 +1,6 @@
 ---
 name: check-prose-claims
-description: Fact-check prose claims in slides, reports, PDFs, and papers — statistics, comparatives, attributions, causal claims, quotes. Two-pass extract-then-verify protocol with strict numerical precision and a doc-only mode. Use when the user asks to "check the claims in this deck", "fact-check this report", "audit this PDF", "verify the numbers in these slides", or before publishing/shipping any externally-facing document with quantitative claims. Complements `check-bib-references` (which handles BibTeX entries) — this skill handles the prose around them.
+description: "Fact-check prose claims — stats, comparatives, quotes — in slides, reports and PDFs. Use on 'fact-check this deck', 'audit this PDF'."
 ---
 
 # Check prose claims against authoritative sources
@@ -35,7 +35,7 @@ Prose drift between source and claim. The bib entry can be correct and the cited
 | **Wrong comparator** — paper compares against baseline, slide compares against SOTA | Same effect size, different (and bigger) claim |
 | **Missing context** — paper finding holds for subset A, slide drops the qualifier | "Best performance" when paper says "best on the easy subset" |
 | **Confidently attributed to nobody** — "Studies show X" / "According to research..." with no actual source | Padding that sounds authoritative but verifies to nothing |
-| **Causal inflation** — paper shows correlation, slide says "X causes Y" | See `~/.claude/rules/research-integrity.md` § Causal Claims |
+| **Causal inflation** — paper shows correlation, slide says "X causes Y" | See `~/.claude/rules/research-core.md` § Causal Claims |
 | **Visual distortion** — bar chart with truncated y-axis exaggerates a 2% gap to look like 40% | Chart looks compelling, source data is mundane |
 | **Cherry-picked timeframe** — chart shows 2022-2024 spike, full series is flat with one anomaly | Misleading by omission |
 
@@ -49,7 +49,7 @@ Pass 1 (extract) → freeze list → user confirms → Pass 2 (verify in paralle
 
 ### Pass 1: extraction
 
-1. Read the entire document (slides, PDF, report). For PDFs >10 pages, delegate to a subagent — see `~/.claude/rules/context-management.md`
+1. Read the entire document (slides, PDF, report). For PDFs >10 pages, delegate to a subagent — see `~/.claude/rules/delegation.md`
 2. Extract every claim matching the IN taxonomy below. **No verification yet.**
 3. Output a numbered list and **present to user for confirmation** before moving on. The user often spots extraction errors (missed claims, mis-typed claims) at this gate
 4. Freeze the list to `out/claim-check-<UTC-timestamp>/claims.jsonl`
@@ -275,12 +275,12 @@ Q3: "<claim> <agency name> report"
 | Citation to a paper that has no ID in the bib | WebSearch → WebFetch the abstract — same as Pass 2 |
 | Pure prose stat ("70% of users…") with no cite | WebSearch templates above |
 | Visual chart | Vision pass first (extract values), then verify per template |
-| Long PDF (>10 pages) | Delegate Pass 1 extraction to a subagent (`~/.claude/rules/context-management.md`) |
+| Long PDF (>10 pages) | Delegate Pass 1 extraction to a subagent (`~/.claude/rules/delegation.md`) |
 
 **Cross-references:**
-- `~/.claude/rules/agents-and-delegation.md` § Factual Verification — never delegate factual lookup to an agent without tools
+- `~/.claude/rules/delegation.md` § Factual Verification — never delegate factual lookup to an agent without tools
 - `~/.claude/rules/verify-before-instructing.md` — verify before stating; same epistemic standard
-- `~/.claude/rules/research-integrity.md` § Causal Claims Match Evidence — for causal/correlational distinctions
+- `~/.claude/rules/research-core.md` § Causal Claims Match Evidence — for causal/correlational distinctions
 
 ## Orchestration
 

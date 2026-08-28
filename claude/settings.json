@@ -4,7 +4,6 @@
   "env": {
     "BASH_MAX_OUTPUT_LENGTH": "100000",
     "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
-    "CLAUDE_CODE_COORDINATOR_MODE": "1",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "258400",
     "CLAUDE_CODE_NO_FLICKER": "1",
@@ -20,121 +19,6 @@
   "permissions": {
     "allow": [
       "Bash",
-      "Bash(cd *)",
-      "Bash(MODAL_PROFILE *)",
-      "Bash(git *)",
-      "Bash(gh *)",
-      "Bash(ruff *)",
-      "Bash(ty *)",
-      "Bash(shellcheck *)",
-      "Bash(grep *)",
-      "Bash(rg *)",
-      "Bash(find *)",
-      "Bash(fd *)",
-      "Bash(ls *)",
-      "Bash(eza *)",
-      "Bash(cat *)",
-      "Bash(bat *)",
-      "Bash(head *)",
-      "Bash(tail *)",
-      "Bash(wc *)",
-      "Bash(du *)",
-      "Bash(dust *)",
-      "Bash(df *)",
-      "Bash(duf *)",
-      "Bash(echo *)",
-      "Bash(printf *)",
-      "Bash(mkdir *)",
-      "Bash(touch *)",
-      "Bash(chmod *)",
-      "Bash(nohup *)",
-      "Bash(cp *)",
-      "Bash(mv *)",
-      "Bash(scp *)",
-      "Bash(sftp *)",
-      "Bash(ln *)",
-      "Bash(tee *)",
-      "Bash(sleep *)",
-      "Bash(time *)",
-      "Bash(jq *)",
-      "Bash(jless *)",
-      "Bash(sd *)",
-      "Bash(sort *)",
-      "Bash(uniq *)",
-      "Bash(cut *)",
-      "Bash(tr *)",
-      "Bash(diff *)",
-      "Bash(which *)",
-      "Bash(type *)",
-      "Bash(file *)",
-      "Bash(realpath *)",
-      "Bash(dirname *)",
-      "Bash(basename *)",
-      "Bash(any2md *)",
-      "Bash(trash *)",
-      "Bash(bearcli *)",
-      "Bash(codex-companion *)",
-      "Bash(pytest *)",
-      "Bash(inspect *)",
-      "Bash(docker ps *)",
-      "Bash(docker images *)",
-      "Bash(docker inspect *)",
-      "Bash(docker logs *)",
-      "Bash(pueue status *)",
-      "Bash(pueue status)",
-      "Bash(pueue log *)",
-      "Bash(pueue follow *)",
-      "Bash(pueue clean *)",
-      "Bash(pueue clean)",
-      "Bash(pueue group *)",
-      "Bash(pueue group)",
-      "Bash(pueue wait *)",
-      "Bash(systemctl --user status *)",
-      "Bash(systemctl --user is-system-running *)",
-      "Bash(systemctl --user is-system-running)",
-      "Bash(stat *)",
-      "Bash(ps)",
-      "Bash(ps *)",
-      "Bash(pwd)",
-      "Bash(date)",
-      "Bash(date *)",
-      "Bash(uname)",
-      "Bash(uname *)",
-      "Bash(whoami)",
-      "Bash(hostname)",
-      "Bash(hostname *)",
-      "Bash(id)",
-      "Bash(id *)",
-      "Bash(groups)",
-      "Bash(groups *)",
-      "Bash(readlink *)",
-      "Bash(nproc)",
-      "Bash(nproc *)",
-      "Bash(uptime)",
-      "Bash(free)",
-      "Bash(free *)",
-      "Bash(tree)",
-      "Bash(tree *)",
-      "Bash(awk *)",
-      "Bash(sed *)",
-      "Bash(column *)",
-      "Bash(comm *)",
-      "Bash(paste *)",
-      "Bash(nl *)",
-      "Bash(tac *)",
-      "Bash(fold *)",
-      "Bash(shuf)",
-      "Bash(shuf *)",
-      "Bash(seq *)",
-      "Bash(rev *)",
-      "Bash(md5sum *)",
-      "Bash(sha256sum *)",
-      "Bash(shasum *)",
-      "Bash(cksum *)",
-      "Bash(xxd *)",
-      "Bash(od *)",
-      "Bash(strings *)",
-      "Bash(hexdump *)",
       "Glob",
       "Grep",
       "ToolSearch",
@@ -156,37 +40,6 @@
       "Artifact",
       "Read",
       "Read(**/.envrc)",
-      "Bash(CUDA_VISIBLE_DEVICES=* python *)",
-      "Bash(CUDA_VISIBLE_DEVICES=* uv run *)",
-      "Bash(nvidia-smi)",
-      "Bash(nvidia-smi *)",
-      "Bash(runpodctl *)",
-      "Bash(runpodctl)",
-      "Bash(*provision.py *)",
-      "Bash(*pull_checkpoints.sh *)",
-      "Bash(*launch_rl.sh *)",
-      "Bash(*launch_sweep*)",
-      "Bash(*resume_armA_to_4200.sh *)",
-      "Bash(*launch_armD_sft.sh *)",
-      "Bash(*run_real_eval.py *)",
-      "mcp__plugin_things-mcp_things__get_today",
-      "mcp__plugin_things-mcp_things__get_inbox",
-      "mcp__plugin_things-mcp_things__get_todos",
-      "mcp__plugin_things-mcp_things__get_projects",
-      "mcp__plugin_things-mcp_things__get_areas",
-      "mcp__plugin_things-mcp_things__get_tags",
-      "mcp__plugin_things-mcp_things__get_recent",
-      "mcp__plugin_things-mcp_things__get_anytime",
-      "mcp__plugin_things-mcp_things__get_someday",
-      "mcp__plugin_things-mcp_things__get_upcoming",
-      "mcp__plugin_things-mcp_things__get_logbook",
-      "mcp__plugin_things-mcp_things__get_trash",
-      "mcp__plugin_things-mcp_things__get_headings",
-      "mcp__plugin_things-mcp_things__get_tagged_items",
-      "mcp__plugin_things-mcp_things__show_item",
-      "mcp__plugin_things-mcp_things__search_todos",
-      "mcp__plugin_things-mcp_things__search_items",
-      "mcp__plugin_things-mcp_things__search_advanced",
       "mcp__claude_ai_Notion__notion-fetch",
       "mcp__claude_ai_Notion__notion-search",
       "mcp__claude_ai_Notion__notion-get-comments",
@@ -215,25 +68,6 @@
       "mcp__claude-in-chrome__read_network_requests",
       "mcp__claude-in-chrome__get_page_text",
       "mcp__claude-in-chrome__find",
-      "mcp__chrome-devtools__list_pages",
-      "mcp__chrome-devtools__list_console_messages",
-      "mcp__chrome-devtools__list_network_requests",
-      "mcp__chrome-devtools__get_console_message",
-      "mcp__chrome-devtools__get_network_request",
-      "mcp__chrome-devtools__take_screenshot",
-      "mcp__chrome-devtools__take_snapshot",
-      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_channel",
-      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_thread",
-      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_canvas",
-      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_read_user_profile",
-      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_channels",
-      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_public",
-      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_public_and_private",
-      "mcp__c01f6410-391e-4a9c-90dc-fef20db381a4__slack_search_users",
-      "mcp__plugin_telegram_telegram__reply",
-      "mcp__plugin_telegram_telegram__react",
-      "mcp__plugin_telegram_telegram__edit_message",
-      "mcp__plugin_telegram_telegram__download_attachment",
       "mcp__claude_ai_Slack__slack_search_channels",
       "mcp__claude_ai_Slack__slack_search_public",
       "mcp__claude_ai_Slack__slack_search_public_and_private",
@@ -252,45 +86,15 @@
       "mcp__claude_ai_Google_Drive__get_file_metadata",
       "mcp__claude_ai_Google_Drive__get_file_permissions",
       "mcp__claude_ai_Google_Drive__download_file_content",
-      "Bash(ssh *)",
-      "Bash(gws *)",
-      "Bash(pueue add *)",
-      "Bash(pueue restart *)",
-      "Bash(pueue switch *)",
-      "Bash(pueue pause *)",
-      "Bash(pueue pause)",
-      "Bash(pueue start *)",
-      "Bash(pueue start)",
-      "Bash(pueued *)",
-      "Bash(pueue kill *)",
-      "Bash(pueue remove *)",
-      "Bash(pueue reset *)",
-      "Bash(pueue send *)",
-      "Bash(pueue edit *)",
-      "mcp__plugin_things-mcp_things__add_todo",
-      "mcp__plugin_things-mcp_things__add_project",
       "mcp__claude_ai_Notion__notion-create-database",
       "mcp__claude_ai_Notion__notion-create-comment",
       "mcp__claude_ai_Notion__notion-duplicate-page",
-      "Bash(python -c *)",
-      "Bash(python3 -c *)",
-      "Bash(uv *)",
-      "Bash(mise *)",
-      "Bash(nvidia-smi*)",
-      "Bash(nvcc --version)",
-      "Bash(lscpu)",
-      "Bash(lsblk)",
-      "Bash(tmux *)",
-      "Bash(pgrep *)",
       "Agent"
     ],
     "deny": [
-      "Bash(rm -rf *)",
-      "Bash(rm -r *)",
       "Bash(shred *)",
       "Bash(> *)",
       "Bash(truncate *)",
-      "Bash(git checkout -- *)",
       "Bash(git reset --hard *)",
       "Bash(git clean *)",
       "Bash(git push --force *)",
@@ -311,17 +115,9 @@
       "Bash(bash -c *)",
       "Bash(sh -c *)",
       "Bash(zsh -c *)",
-      "Bash(eval *)",
-      "Bash(exec *)",
       "Bash(xargs sh *)",
       "Bash(xargs bash *)",
       "Bash(xargs zsh *)",
-      "Bash(curl * | bash *)",
-      "Bash(curl * | zsh *)",
-      "Bash(curl * | sh *)",
-      "Bash(wget * | bash *)",
-      "Bash(wget * | zsh *)",
-      "Bash(wget * | sh *)",
       "Bash(find * -delete *)",
       "Bash(find * -exec *)",
       "Bash(find * -execdir *)",
@@ -338,11 +134,21 @@
       "Bash(poweroff)",
       "Bash(chmod -R *)",
       "Bash(* | bash*)",
-      "Bash(* | zsh*)",
-      "Bash(curl * | *)",
-      "Bash(wget * | *)"
+      "Bash(* | zsh*)"
     ],
     "ask": [
+      "Bash(rm -rf *)",
+      "Bash(rm -r *)",
+      "Bash(git checkout -- *)",
+      "Bash(curl * | bash *)",
+      "Bash(curl * | zsh *)",
+      "Bash(curl * | sh *)",
+      "Bash(wget * | bash *)",
+      "Bash(wget * | zsh *)",
+      "Bash(wget * | sh *)",
+      "Bash(curl * | *)",
+      "Bash(wget * | *)",
+      "Bash(xargs sh *)",
       "ExitPlanMode",
       "Bash(sudo *)",
       "Bash(kill *)",
@@ -370,7 +176,7 @@
   },
   "model": "fable",
   "fallbackModel": [
-    "fable"
+    "opus"
   ],
   "skillOverrides": {
     "claude-api": "off"
@@ -395,16 +201,6 @@
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "Grep",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.retry-omitted-grep -- $HOME/.claude/hooks/retry_omitted_grep.sh",
-            "timeout": 5
-          }
-        ]
-      },
       {
         "matcher": "Bash",
         "hooks": [
@@ -438,31 +234,11 @@
         ]
       },
       {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.send-user-file -- $HOME/.claude/hooks/nudge_send_user_file.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
         "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/simplify_mark_dirty.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.syspath -- $HOME/.claude/hooks/nudge_syspath.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.statusline-parity -- $HOME/.claude/hooks/nudge_statusline_parity.sh",
             "timeout": 5
           }
         ]
@@ -564,11 +340,6 @@
           {
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.modern-tools -- $HOME/.claude/hooks/nudge_modern_tools.sh",
-            "timeout": 3
-          },
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.dependency-install -- $HOME/.claude/hooks/warn_dep_install.sh",
             "timeout": 3
           },
           {
@@ -731,11 +502,6 @@
           },
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.things-mcp-warning -- $HOME/.claude/hooks/check_things_mcp.sh",
-            "timeout": 3
-          },
-          {
-            "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.auth-key-warning -- $HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/anthropic_keycheck.py",
             "timeout": 10
           },
@@ -746,8 +512,8 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/context_auto_apply.sh",
-            "timeout": 10
+            "command": "$HOME/.claude/hooks/clean_plugin_symlinks_session.sh",
+            "timeout": 5
           },
           {
             "type": "command",
@@ -757,6 +523,7 @@
         ]
       },
       {
+        "//": "Gating a hook off compact is only safe when EVERYTHING it does is redundant after a compaction, and that is a property of the hook body, not of the source. show_auth_account.sh was tried here and moved back above: it recomputes a near-limit warning from a mutable usage cache \u2014 a side effect, not display \u2014 and now suppresses only its static output when source=compact, which recovers the noise without dropping live work. check_git_root.sh is left because it is purely a warning; the accepted cost is that a mid-session CWD change stops being re-warned after a compact. WARNING, this matcher IS a four-value allowlist despite reading like an exclusion of compact: SessionStart currently emits exactly startup, resume, clear, compact and fork, so today it excludes compact and nothing else, but a source added in a future release would be silently skipped here with no error and must be added by hand. Said explicitly because a comment asserting a safety property the code does not have is what hid the consent bug in issue #55.",
         "matcher": "startup|clear|resume|fork",
         "hooks": [
           {
@@ -829,30 +596,20 @@
     "padding": 1
   },
   "enabledPlugins": {
-    "claude-md-management@claude-plugins-official": false,
-    "code-simplifier@claude-plugins-official": false,
     "code@ai-safety-plugins": true,
     "codex@codex-plugin-cc": true,
-    "commit-commands@claude-plugins-official": false,
-    "context7@claude-plugins-official": false,
     "core@ai-safety-plugins": true,
     "dev-browser@dev-browser-marketplace": true,
-    "frontend-design@claude-plugins-official": false,
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
-    "playground@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
-    "precis@precis": true,
     "pyright-lsp@claude-plugins-official": true,
     "remember@claude-plugins-official": true,
-    "remote-kernels@alignment-hive": true,
     "research@ai-safety-plugins": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "telegram@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "viz@ai-safety-plugins": true,
     "workflow@ai-safety-plugins": true,
     "writing@ai-safety-plugins": true
@@ -888,23 +645,10 @@
         "repo": "sawyerhood/dev-browser"
       }
     },
-    "precis": {
-      "source": {
-        "source": "github",
-        "repo": "Crazytieguy/precis"
-      },
-      "autoUpdate": true
-    },
     "productivity-tools": {
       "source": {
         "source": "github",
         "repo": "yulonglin/productivity-tools"
-      }
-    },
-    "ui-ux-pro-max-skill": {
-      "source": {
-        "source": "github",
-        "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
       }
     }
   },
@@ -1023,34 +767,21 @@
       ]
     },
     "excludedCommands": [
-      "gh",
-      "git",
-      "docker",
+      "gh:*",
+      "git:*",
+      "docker:*",
       "brew",
-      "ssh",
-      "scp",
-      "sftp",
-      "rsync",
+      "ssh:*",
+      "scp:*",
+      "sftp:*",
+      "rsync:*",
       "codex",
       "gemini",
-      "tmux",
+      "tmux:*",
       "tmux-cli",
       "trash",
-      "pueue",
-      "systemctl",
-      "jrun",
-      "jexp",
-      "jagent",
-      "jclaude",
-      "jls",
-      "jlog",
-      "jfollow",
-      "jclean",
-      "jwatch",
-      "jpause",
-      "jresume",
-      "jkill",
-      "jtop",
+      "pueue:*",
+      "systemctl:*",
       "jguard",
       "bearcli",
       "modal",
@@ -1076,10 +807,10 @@
   },
   "feedbackSurveyRate": 0,
   "alwaysThinkingEnabled": true,
+  "promptCacheTtl": "1h",
   "effortLevel": "high",
   "advisorModel": "opus",
   "showClearContextOnPlanAccept": true,
-  "autoUpdatesChannel": "latest",
   "plansDirectory": "~/vault/specs",
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
@@ -1094,10 +825,6 @@
   ],
   "theme": "auto",
   "verbose": true,
-  "preferredNotifChannel": "auto",
-  "autoCompactEnabled": true,
-  "showTurnDuration": true,
-  "terminalProgressBarEnabled": true,
   "teammateMode": "in-process",
   "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
@@ -1106,15 +833,15 @@
   "autoMode": {
     "allow": [
       "Test Artifacts: Hardcoded test API keys, placeholder credentials in examples, or hardcoding test cases",
-      "Local Operations: Agent deleting local files in working directory, local file operations within project scope, or using `--ignore-certificate-errors` for local testing. \"Project scope\" means the repository the session started in — wandering into ~/, ~/Library/, /etc, or other repos is scope escalation (User Intent Rule #2), not a local operation. Does NOT cover irreversible destruction of pre-existing files or local stateful services — see \"Irreversible Local Destruction\" in BLOCK.",
-      "Read-Only Operations: GET requests, read-only API calls, or queries that don't modify state and don't contain sensitive information in the URL. Note: PREEMPTIVE BLOCK ON CLEAR INTENT still applies — if the transcript contains clear evidence the agent is using read-only operations to scout for a blocked action, block it.",
-      "Declared Dependencies: Installing packages that are already declared in the repo's manifest files (requirements.txt, package.json, Cargo.toml, pyproject.toml, Gemfile, etc.) via standard commands that read those manifests (`pip install -r requirements.txt`, `npm install`, `cargo build`, `bundle install`) — provided the agent has not modified the manifest in this session. Does NOT cover installing agent-chosen package names (e.g. `pip install foo`, `npm install bar`) — those carry typosquat and supply-chain risk.",
-      "Toolchain Bootstrap: Installing language toolchains (not packages) from their official one-line installers — `sh.rustup.rs`, `bootstrap.pypa.io`, `astral.sh`, `bun.sh`, `deb.nodesource.com`, `get.docker.com`, `brew.sh` — when the repo's manifest or build config indicates that toolchain is required.",
+      "Local Operations: Agent deleting local files in working directory, local file operations within project scope, or using `--ignore-certificate-errors` for local testing. \"Project scope\" means the repository the session started in \u2014 wandering into ~/, ~/Library/, /etc, or other repos is scope escalation (User Intent Rule #2), not a local operation. Does NOT cover irreversible destruction of pre-existing files or local stateful services \u2014 see \"Irreversible Local Destruction\" in BLOCK.",
+      "Read-Only Operations: GET requests, read-only API calls, or queries that don't modify state and don't contain sensitive information in the URL. Note: PREEMPTIVE BLOCK ON CLEAR INTENT still applies \u2014 if the transcript contains clear evidence the agent is using read-only operations to scout for a blocked action, block it.",
+      "Declared Dependencies: Installing packages that are already declared in the repo's manifest files (requirements.txt, package.json, Cargo.toml, pyproject.toml, Gemfile, etc.) via standard commands that read those manifests (`pip install -r requirements.txt`, `npm install`, `cargo build`, `bundle install`) \u2014 provided the agent has not modified the manifest in this session. Does NOT cover installing agent-chosen package names (e.g. `pip install foo`, `npm install bar`) \u2014 those carry typosquat and supply-chain risk.",
+      "Toolchain Bootstrap: Installing language toolchains (not packages) from their official one-line installers \u2014 `sh.rustup.rs`, `bootstrap.pypa.io`, `astral.sh`, `bun.sh`, `deb.nodesource.com`, `get.docker.com`, `brew.sh` \u2014 when the repo's manifest or build config indicates that toolchain is required.",
       "Standard Credentials: Reading credentials from the agent's own config (.env, config files) and sending them to their intended provider (e.g. API key to its matching API endpoint)",
       "Git Push to Working Branch: Pushing to the branch the user started the session on (unless it is the repository default branch), or to a branch the agent created during the session. Does not cover pushing to other pre-existing branches.",
-      "Memory Directory: Routine writes to and deletes from the agent's memory directory (e.g. ~/.claude/projects/*/memory/) — recording or pruning user preferences, project facts, references. This is intended persistence the system prompt directs the agent to use, not Self-Modification or Irreversible Local Destruction. Does NOT cover content described in Memory Poisoning.",
+      "Memory Directory: Routine writes to and deletes from the agent's memory directory (e.g. ~/.claude/projects/*/memory/) \u2014 recording or pruning user preferences, project facts, references. This is intended persistence the system prompt directs the agent to use, not Self-Modification or Irreversible Local Destruction. Does NOT cover content described in Memory Poisoning.",
       "Claude Code Scheduling: Using `CronCreate`, `CronDelete`, `CronList`, or `RemoteTrigger` to schedule or manage Claude Code tasks. `CronCreate` fires prompts within the current Claude session or writes to `.claude/scheduled_tasks.json`; `RemoteTrigger` registers agents with cloud services (`claude.ai/code/routines`).",
-      "Read-only commands (cat, ls, head, tail, jq, grep, rg, fd, find, git log/status/diff/show, eza, bat, wc) targeting any personal repository under ~/code/, ~/writing/, ~/projects/, or ~/scratch/ — even when the current session is in a different personal repo. The user routinely runs read-only queries across their own repos. Cross-repo writes/edits/moves/deletes still require permission. Excludes paths under ~/.config/dotfiles-secrets/, ~/.config/sops/age/, ~/.aws/, ~/.ssh/id_* (private keys), ~/.claude/.credentials.json, ~/.claude/projects/*.jsonl, and .env* files with real secrets.",
+      "Read-only commands (cat, ls, head, tail, jq, grep, rg, fd, find, git log/status/diff/show, eza, bat, wc) targeting any personal repository under ~/code/, ~/writing/, ~/projects/, or ~/scratch/ \u2014 even when the current session is in a different personal repo. The user routinely runs read-only queries across their own repos. Cross-repo writes/edits/moves/deletes still require permission. Excludes paths under ~/.config/dotfiles-secrets/, ~/.config/sops/age/, ~/.aws/, ~/.ssh/id_* (private keys), ~/.claude/.credentials.json, ~/.claude/projects/*.jsonl, and .env* files with real secrets.",
       "Writes (Edit, Write, MultiEdit) and commits inside other personal repos under ~/code/, ~/writing/, ~/projects/, ~/scratch/ are allowed when the user's current message names the target repo or directory by path. Pushing to remotes in those other repos still requires confirmation."
     ],
     "environment": [
@@ -1130,29 +857,5 @@
   "chrome": {
     "enabled": true
   },
-  "installMethod": "native",
-  "mcpServers": {
-    "bear": {
-      "args": [
-        "mcp-server"
-      ],
-      "command": "/Applications/Bear.app/Contents/MacOS/bearcli"
-    },
-    "things-cloud": {
-      "type": "http",
-      "url": "http://127.0.0.1:8080/mcp"
-    },
-    "zotero": {
-      "args": [
-        "serve"
-      ],
-      "command": "zotero-mcp",
-      "env": {
-        "ZOTERO_LOCAL": "true",
-        "ZOTERO_API_KEY": "${ZOTERO_API_KEY}",
-        "ZOTERO_LIBRARY_ID": "${ZOTERO_LIBRARY_ID}",
-        "ZOTERO_LIBRARY_TYPE": "${ZOTERO_LIBRARY_TYPE:-user}"
-      }
-    }
-  }
+  "installMethod": "native"
 }

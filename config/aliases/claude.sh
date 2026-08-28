@@ -278,7 +278,7 @@ claude() {
     #
     # NOTE this cannot reach sessions spawned by `claude daemon run` — those
     # inherit the daemon's environment, captured once when it started. See
-    # claude/rules/workflow-defaults.md for the diagnostic and the restart.
+    # claude/skills/spawn-session/SKILL.md for the diagnostic and the restart.
     local -a _tl_launch=(env -u CLAUDE_CODE_TASK_LIST_ID)
     if [[ -n "$task_name" ]]; then
         local _tl_timestamp
@@ -289,10 +289,31 @@ claude() {
         _tl_launch=(command)
     fi
 
+    # Coordinator mode is set here, per-invocation, rather than in the global
+    # settings env block: there it was inherited by every `claude -p` child,
+    # which then came up with no Read/Bash/Write at all. Prefixed rather than
+    # exported so it does not leak into the calling shell's later processes.
+    local _coord=1 _c
+    if [[ "$_is_session" != true ]]; then
+        _coord=0
+    else
+        for _c in "${args[@]}"; do
+            case "$_c" in
+                --) break ;;
+                -p|--print) _coord=0; break ;;
+            esac
+        done
+    fi
+
     activate_venv
-    # Last command, so its exit status is the function's — nothing to restore.
-    # `env` execs the binary from PATH, so this does not re-enter this function.
-    "${_tl_launch[@]}" claude "${args[@]}"
+    # Last command in each branch, so its exit status is the function's —
+    # nothing to restore. `env` execs the binary from PATH, so this does not
+    # re-enter this function.
+    if [[ "$_coord" == 1 ]]; then
+        CLAUDE_CODE_COORDINATOR_MODE=1 "${_tl_launch[@]}" claude "${args[@]}"
+    else
+        "${_tl_launch[@]}" claude "${args[@]}"
+    fi
 }
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
 alias yolo='claude --dangerously-skip-permissions'

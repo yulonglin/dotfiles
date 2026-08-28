@@ -2,7 +2,7 @@
 """annotate-html - add the md2review annotation layer to an existing HTML page.
 
 Every reviewable Artifact carries select-to-comment annotation
-(`rules/artifact-first-replies.md`). md2review builds that in when the source
+(the `artifact-writing` skill). md2review builds that in when the source
 is Markdown; this adds the same layer to a page built any other way, so the
 `block_unannotated_artifact.sh` hook lets it publish.
 

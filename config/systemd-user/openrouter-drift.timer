@@ -1,0 +1,14 @@
+[Unit]
+Description=Monthly OpenRouter model drift check
+
+[Timer]
+OnCalendar=monthly
+# The box is a laptop/workstation, not a server: without this a missed window
+# is simply skipped, and a monthly check that silently never runs is worse
+# than no check.
+Persistent=true
+# Monthly means every box fires at 00:00 on the 1st; spread the load.
+RandomizedDelaySec=6h
+
+[Install]
+WantedBy=timers.target

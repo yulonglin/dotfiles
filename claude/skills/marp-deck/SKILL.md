@@ -1,6 +1,6 @@
 ---
 name: marp-deck
-description: Build research slide decks from Markdown with Marp (marp-cli). Use when the user wants to "build slides", "make a marp deck", "create a presentation", export Markdown to HTML/PDF/PPTX slides, or embed matplotlib/pastelplot figures into a deck. Verified cheatsheet for marp-cli v4.4.0 with copy-pasteable frontmatter, two-column + image patterns, custom theme starter, and exact build commands.
+description: "Build slide decks from Markdown with Marp. Use on 'build slides', 'make a marp deck', 'create a presentation', or Markdown to PDF/PPTX export."
 ---
 
 # marp-deck
@@ -60,7 +60,7 @@ Slides are split by a horizontal rule `---` on its own line (blank line before/a
 
 ## Slide titles assert the finding
 
-Every slide title states the point of that slide, not its topic — `markdown-style.md` carries the standard, and a deck is one of the places it applies. Titles reading "Setup", "Results", "Limitations" make the audience wait for the speaker to say what happened, and the deck stops meaning anything the moment it is a PDF in someone's inbox. Titles reading "Density Is The Inverse Of Length", "Assertion Sentences Survive Long Traces", "Fixed k Confounds Density With Length" carry the argument on their own. Keep the qualifying detail in the bullets under the title, never appended to the title after a dash or colon.
+Every slide title states the point of that slide, not its topic — `rules/communication.md` carries the standard, and a deck is one of the places it applies. Titles reading "Setup", "Results", "Limitations" make the audience wait for the speaker to say what happened, and the deck stops meaning anything the moment it is a PDF in someone's inbox. Titles reading "Density Is The Inverse Of Length", "Assertion Sentences Survive Long Traces", "Fixed k Confounds Density With Length" carry the argument on their own. Keep the qualifying detail in the bullets under the title, never appended to the title after a dash or colon.
 
 ## Directives
 
@@ -77,7 +77,7 @@ Every slide title states the point of that slide, not its topic — `markdown-st
 
 Built-in theme class variants: `lead` (centered), `invert` (dark). gaia/uncover also support these. Apply per-slide with `<!-- _class: invert -->`.
 
-## Embedding images / graphs (matplotlib, pastelplot)
+## Embedding images / graphs (matplotlib, house-plots)
 
 Save figures as PNG or SVG and reference by **relative path** (run marp from the deck's directory). `--allow-local-files` is required when exporting local images to PDF/PPTX.
 
@@ -202,7 +202,7 @@ With `--theme-set`, set `theme: research` in frontmatter (the name from `/* @the
 ## Quick recipe for a research deck with figures
 
 ```bash
-# 1. Put deck.md + figures/ in one dir; generate figures with matplotlib/pastelplot as PNG/SVG.
+# 1. Put deck.md + figures/ in one dir; generate figures with matplotlib/house-plots as PNG/SVG.
 # 2. Iterate with live preview:
 cd deck-dir && marp --no-stdin -w -s .
 # 3. Final HTML (always works):

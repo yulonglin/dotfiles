@@ -1,0 +1,17 @@
+# Delegation
+
+Main context is for decomposition, dispatch, decisions and synthesis — not file dumps, search output, logs or diffs. Delegate anything whose tool output you need only the conclusion of, and reach for it before the first bulk read rather than after context is polluted. When in doubt, spawn.
+
+**Delegate**: wide sweeps over many files or unknown locations; bulk reads of logs, transcripts, long diffs, unbounded PDFs; scoped implementation chunks; verbose runs where you need only pass/fail plus failing lines; multi-page web research.
+
+**Keep inline**: targeted edits and reads of paths you already know; short situational awareness (`git status`, `git log -5`); factual verification of anything you are about to state (a delegated lookup is exactly the hallucination vector `verify-before-instructing.md` closes); and the decision itself.
+
+Every dispatch states TASK, CONTEXT with explicit paths (agents don't share your context), CONSTRAINTS, and an OUTPUT line capping what comes back. Launch independent agents in one message, one agent per job — never two at the same file. Use the returned result rather than grepping the `.output` file.
+
+**Never spawn an agent to verify your own work**; self-correction happens anyway. A real second opinion means a different model family, briefed fresh and self-contained — see the `second-opinion` skill. Non-Anthropic names in agent frontmatter resolve against api.anthropic.com only, so they hard-fail or answer from Claude wearing another family's label.
+
+**Never launch detached long-running work inside a subagent.** Its children are orphaned when the turn ends, and the agent reports `completed` regardless — that status means the turn ended, not that the child did anything, so check the artifact on disk before relaying success. Launch such work from main context via `run_in_background`, Monitor, or tmux.
+
+**`isolation: "worktree"` sets cwd but does not rewrite paths in your prompt**, so an absolute path in the brief silently sends writes to the main tree. Brief worktree agents with repo-relative paths and check `git -C <worktree> status` afterwards.
+
+For multi-step projects or long sessions, invoke `core:orchestrate` at the start — the same philosophy at its ceiling, with the keep-inline list intact.

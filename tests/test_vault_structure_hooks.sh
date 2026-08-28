@@ -48,6 +48,12 @@ check "denies write into new root-level dir"        denied  "$VAULT/newdir/foo.m
 check "denies loose file at vault root"             denied  "$VAULT/loose.md"
 check "allows dot-entry at vault root"              allowed "$VAULT/.obsidian/config.json"
 check "allows deep write inside allowed root dir"   allowed "$VAULT/writing/drafts/deep/post.md"
+# claude-config-sync mirrors the config markdown to tooling/claude-config/. That
+# needs no conf entry — tooling/ is already allowlisted and the hook only guards
+# the vault's top level — but assert it, so tightening the allowlist trips here
+# rather than silently wedging the mirror.
+check "allows the claude-config mirror"             allowed "$VAULT/tooling/claude-config/rules/foo.md"
+check "allows a mirrored SKILL.md"                  allowed "$VAULT/tooling/claude-config/skills/demo/SKILL.md"
 run_block "$VAULT/newdir/foo.md" | grep -q 'research' \
   && ok "root deny message names allowed dirs" || fail "root deny message names allowed dirs"
 

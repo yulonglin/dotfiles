@@ -124,28 +124,28 @@ check_segment() {
     # Block: gws gmail users drafts send (sends an existing draft)
     if printf '%s' "$seg" | grep -qE 'gws.*gmail.*users.*drafts.*send'; then
         printf 'BLOCKED: Cannot send Gmail drafts programmatically.\n' >&2
-        printf 'Emails are irreversible. Review and send manually from Spark/Gmail.\n' >&2
+        printf 'Emails are irreversible. Review and send manually from Gmail.\n' >&2
         exit 2
     fi
 
     # Block: gws gmail users messages send (raw API send)
     if printf '%s' "$seg" | grep -qE 'gws.*gmail.*users.*messages.*send'; then
         printf 'BLOCKED: Cannot send emails via raw Gmail API.\n' >&2
-        printf 'Emails are irreversible. Review and send manually from Spark/Gmail.\n' >&2
+        printf 'Emails are irreversible. Review and send manually from Gmail.\n' >&2
         exit 2
     fi
 
     # Block: gws gmail +send WITHOUT a real --draft flag
     if [ "$has_draft" -ne 0 ] && printf '%s' "$seg" | grep -qE 'gws.*gmail.*\+send'; then
         printf 'BLOCKED: Cannot send emails directly.\n' >&2
-        printf 'Use --draft flag to create a draft instead. Send manually from Spark/Gmail.\n' >&2
+        printf 'Use --draft flag to create a draft instead. Send manually from Gmail.\n' >&2
         exit 2
     fi
 
     # Block: gws gmail +reply, +reply-all, +forward (also sends)
     if [ "$has_draft" -ne 0 ] && printf '%s' "$seg" | grep -qE 'gws.*gmail.*\+(reply|reply-all|forward)'; then
         printf 'BLOCKED: Cannot send email replies/forwards programmatically.\n' >&2
-        printf 'Use --draft flag to create a draft instead. Send manually from Spark/Gmail.\n' >&2
+        printf 'Use --draft flag to create a draft instead. Send manually from Gmail.\n' >&2
         exit 2
     fi
 

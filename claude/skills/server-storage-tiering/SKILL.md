@@ -1,12 +1,6 @@
 ---
 name: server-storage-tiering
-description: >
-  Relieve a full root disk and organize storage on a server/cloud box (Hetzner, RunPod,
-  bare-metal GPU) that has an attached volume. Use when `/` is near 100%, when you need to
-  expose a volume at `/workspace`, or when deciding what lives on fast local NVMe vs. a slower
-  attached/network volume. Covers the conventions (volume at `/workspace`, standard layout,
-  relocate-with-symlink-back, env vars, fstab) AND latency-aware placement (tier by access
-  pattern: cold/sequential → volume, hot random-access → local). Move data, never `rm`.
+description: "Relieve a full root disk on a server or cloud box with an attached volume: expose it at /workspace, tier data by access pattern, move never rm."
 ---
 
 # Server Storage Tiering
