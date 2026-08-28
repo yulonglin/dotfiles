@@ -260,23 +260,41 @@ claude() {
     # inherits its environment. That is a different path from the shell leak
     # fixed in 3359daf/57145e5, and it is not reachable from here.
     #
-    # An explicit `-t <name>` still sets one for this launch, because sharing a
-    # list between two sessions on purpose is the variable's only real use.
-    # claude-new / claude-with / claude-last do the same via prefix-env.
-    # Anything inherited and unnamed is left alone: it is either a deliberate
-    # pin from those helpers, or residue we no longer add to.
+    # An explicit `-t <name>` sets one for this launch, and the helpers
+    # (claude-new / claude-with / claude-last) pass one via prefix-env with
+    # CLAUDE_CODE_TASK_LIST_PIN=1 alongside it. EVERYTHING ELSE INHERITED IS
+    # REMOVED from the child's environment.
+    #
+    # The pin is not ceremony. `source ~/.zshrc` does NOT unset an already
+    # exported variable, so any shell that ran the pre-fix wrapper still
+    # carries its ID — and without a marker distinguishing "deliberate" from
+    # "residue" the two are identical to this function. Passing residue
+    # through is how the original cross-repo leak survived a re-source
+    # (observed 2026-08-28, after the auto-generation was removed but before
+    # this guard was restored).
+    #
+    # `env -u`, not `local +x` or `unset`: the value must be absent from the
+    # CHILD's environment, and `local +x` does not shadow a globally exported
+    # variable under bash (measured; deploy.sh sources these aliases into
+    # ~/.bashrc, so bash is a real target). `env -u` removes it from the child
+    # in both shells and leaves the calling shell untouched.
+    local -a _tl_launch=(env -u CLAUDE_CODE_TASK_LIST_PIN)
     if [[ -n "$task_name" ]]; then
         local _tl_timestamp
         _tl_timestamp=$(date -u +%Y%m%d_%H%M%S)
-        # Exported for this launch only; zsh and bash unwind a function-local
-        # binding on every exit, including a Ctrl-C mid-launch, so nothing is
-        # left in the shell for the next launch to inherit.
+        # Function-local, so the shell and bash both unwind it on every exit
+        # including a Ctrl-C mid-launch; nothing is left for the next launch.
         local -x CLAUDE_CODE_TASK_LIST_ID="${_tl_timestamp}_UTC_${task_name}"
+    elif [[ "${CLAUDE_CODE_TASK_LIST_PIN:-}" != 1 || -z "${CLAUDE_CODE_TASK_LIST_ID:-}" ]]; then
+        # Unpinned, or pinned-but-empty (claude-spawn's force-fresh contract):
+        # drop it, and let Claude Code assign the session its own list.
+        _tl_launch+=(-u CLAUDE_CODE_TASK_LIST_ID)
     fi
 
     activate_venv
     # Last command, so its exit status is the function's — nothing to restore.
-    command claude "${args[@]}"
+    # `env` execs the binary from PATH, so this does not re-enter this function.
+    "${_tl_launch[@]}" claude "${args[@]}"
 }
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
 alias yolo='claude --dangerously-skip-permissions'
@@ -678,11 +696,12 @@ claude-new() {
   echo "Starting Claude with task list: $task_list_id"
   echo "export CLAUDE_CODE_TASK_LIST_ID=$task_list_id" > .claude_task_list_id
 
-  # Prefix-env, not export: the shell restores it after the function returns,
-  # so nothing lingers to leak into later launches in other repos. The wrapper
-  # passes an inherited ID straight through — no pin marker needed, since it
-  # no longer generates one of its own to distinguish this from residue.
-  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" claude
+  # Prefix-env, not export: the shell restores both after the function returns,
+  # so nothing lingers to leak into later launches in other repos. The PIN is
+  # what tells the wrapper this ID is deliberate — an inherited ID without it
+  # is treated as residue and dropped, because `source ~/.zshrc` cannot unset
+  # what an older wrapper already exported.
+  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" CLAUDE_CODE_TASK_LIST_PIN=1 claude
 }
 
 # Resume last task list in current directory
@@ -695,7 +714,7 @@ claude-last() {
       return 1
     fi
     echo "Resuming task list: $task_list_id"
-    CLAUDE_CODE_TASK_LIST_ID="$task_list_id" claude
+    CLAUDE_CODE_TASK_LIST_ID="$task_list_id" CLAUDE_CODE_TASK_LIST_PIN=1 claude
   else
     echo "No previous task list found in this directory"
     echo "Start a new one with: claude-new <description>"
@@ -726,7 +745,7 @@ claude-with() {
   fi
 
   echo "Using task list: $task_list_id"
-  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" claude
+  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" CLAUDE_CODE_TASK_LIST_PIN=1 claude
 }
 
 # Switch Claude Code account (full logout + login, not just restart)
