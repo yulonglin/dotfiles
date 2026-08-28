@@ -83,9 +83,22 @@ check "pinned ID honored" "LAUNCHED_WITH=[PINNED_LIST]" "$(launched)"
 check "nothing persists after pinned launch" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
 
 # 4. The pin is consumed, not propagated: the child must not inherit permission
-#    to reuse this ID for its own nested launches, forever.
+#    to reuse this ID for its own nested launches, forever. Blanked rather than
+#    unset, so accept either — what matters is that it is not "1".
 CLAUDE_CODE_TASK_LIST_ID="PINNED_LIST" CLAUDE_CODE_TASK_LIST_PIN=1 run_claude
-check "pin not propagated to child" "CHILD_PIN=[unset]" "$(launched)"
+refute "pin not propagated to child" "CHILD_PIN=[1]" "$(launched)"
+
+# 4b. Same, with the pin GLOBALLY EXPORTED rather than passed as prefix-env.
+#     This is the shape `local +x` failed to contain under bash — see the
+#     comment on the launch line in claude.sh. Covered here in whichever shell
+#     runs the suite; tests/test_task_list_pin_bash.sh runs it under bash too.
+export CLAUDE_CODE_TASK_LIST_PIN=1
+export CLAUDE_CODE_TASK_LIST_ID="GLOBAL_PINNED"
+run_claude
+refute "globally-exported pin not propagated" "CHILD_PIN=[1]" "$(launched)"
+check "globally-exported pin still honored for this launch" "LAUNCHED_WITH=[GLOBAL_PINNED]" "$(launched)"
+unset CLAUDE_CODE_TASK_LIST_PIN
+unset CLAUDE_CODE_TASK_LIST_ID
 
 # 5. -t overrides even a pin, and names the list.
 CLAUDE_CODE_TASK_LIST_ID="PINNED_LIST" CLAUDE_CODE_TASK_LIST_PIN=1 run_claude -t mytask
