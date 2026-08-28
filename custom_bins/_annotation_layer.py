@@ -20,13 +20,26 @@ Behaviour, all of which the tests guard:
   `mouseup` for a touch drag) as well as from `mouseup`;
 - does not steal focus on the touch path (focusing while iOS shows selection
   handles collapses the selection);
+- once open, the note box is never closed by a selection event — only by
+  Enter/Save, Escape/Cancel, or a click outside it. Nothing the browser does
+  to the selection (including the focus that opening the box itself causes)
+  can make the box flicker away;
+- Enter saves, Shift+Enter is a newline, Escape discards; Save is the first
+  and primary button, Delete is pushed away from it;
 - stores comments in localStorage keyed by the page `<title>` (or an explicit
   `data-key` on the layer root), restores highlights on reload, and reopens a
   comment for edit/delete when its highlight is clicked;
+- survives a forced refresh or a republish of the Artifact: every mutation is
+  written through to localStorage *and* mirrored to IndexedDB, the half-typed
+  note is autosaved as a draft and reopened, a rolling backup keeps the last
+  non-empty state, and if the primary key comes back empty (which is what a
+  retitled republish looks like) the layer recovers from the backup, from
+  IndexedDB, or from a sibling key whose quotes still match this page;
 - an end-of-page "Your comments" panel with Copy all (Markdown, `> quote`),
-  Export text (selectable textarea, since the Artifact viewer blocks
-  page-initiated downloads), and Clear all with a confirm;
-- a `beforeunload` guard while comments exist that have not been exported;
+  Download .md, Export text (selectable textarea, since the Artifact viewer
+  blocks page-initiated downloads), and Clear all with a confirm;
+- a `beforeunload` guard while comments exist that have not been exported,
+  which also snapshots and attempts the download on the way out;
 - a fixed count badge that jumps to the panel.
 """
 
@@ -118,7 +131,13 @@ mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--
 .anbtn.ghost.danger{color:var(--an-bad);border-color:var(--an-bad)}
 .anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
 #anPop:not(.editing) #anDelete{display:none}
-.anrow{display:flex;gap:.4rem;justify-content:flex-end;margin-top:.45rem;flex-wrap:wrap}
+/* Save leads: it is the first button in the DOM, so it is also first in tab
+   order. Delete is pushed to the far end so it is never the near miss. */
+.anrow{display:flex;gap:.4rem;align-items:center;margin-top:.45rem;flex-wrap:wrap}
+#anDelete{margin-left:auto}
+.anhint{color:var(--an-soft);font-size:.72rem;margin-top:.35rem}
+.anhint kbd{font:inherit;font-size:.95em;border:1px solid var(--an-rule);border-bottom-width:2px;
+ border-radius:4px;padding:0 .25rem;background:var(--an-field)}
 #anComments{max-width:48rem;margin:3rem auto 5rem;padding:0 1rem}
 #anComments h2{font-size:1.2rem;margin:0 0 .5rem;padding-bottom:.32rem;border-bottom:1px solid var(--an-rule)}
 #anComments .anscope{color:var(--an-soft);font-size:.86rem;margin:0 0 .6rem}
@@ -150,10 +169,11 @@ mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--
 HTML = r"""
 <section id="anComments">
 <h2 id="your-comments">Your comments</h2>
-<p class="anscope">Select any text on this page to attach a note. Notes live in this browser's localStorage until you copy or export them.</p>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Notes are saved in this browser and survive a refresh or a republish of this page &mdash; copy or download them to keep them anywhere else.</p>
 <div class="anbar">
   <span class="ancount" id="anCount">No comments yet</span>
   <button class="anbtn" id="anCopy">Copy all</button>
+  <button class="anbtn ghost" id="anDownload">Download .md</button>
   <button class="anbtn ghost" id="anExportBtn">Export text</button>
   <button class="anbtn ghost danger" id="anClear">Clear all</button>
   <span id="anToast"></span>
@@ -163,10 +183,11 @@ HTML = r"""
 <div id="anPop" role="dialog" aria-label="Comment">
   <textarea id="anTxt" placeholder="What do you think?"></textarea>
   <div class="anrow">
-    <button class="anbtn ghost danger" id="anDelete">Delete</button>
-    <button class="anbtn ghost" id="anCancel">Cancel</button>
     <button class="anbtn" id="anSave">Save</button>
+    <button class="anbtn ghost" id="anCancel">Cancel</button>
+    <button class="anbtn ghost danger" id="anDelete">Delete</button>
   </div>
+  <div class="anhint"><kbd>Enter</kbd> saves &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> newline &middot; <kbd>Esc</kbd> discards</div>
 </div>
 <div id="anExport" role="dialog" aria-label="Export comments">
   <div class="exphead">
@@ -186,16 +207,84 @@ var $ = function(id){ return document.getElementById(id); };
 var root = document.querySelector("[data-annotation-layer]");
 var KEY = (root && root.dataset.key) || ("annot:" + document.title);
 var DIRTY = KEY + "-dirty";
-var comments = [], dirty = false;
-try { comments = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { comments = []; }
+var DRAFT = KEY + "-draft";
+var BAK = KEY + "-bak";
+var STORE_V = 2;
+
+// ---- storage -------------------------------------------------------------
+// localStorage is the primary store; IndexedDB mirrors it because the two are
+// evicted under different conditions, and either alone can come back empty
+// after a browser clears site data or the page is republished under a new
+// title. Both are wrapped: any of them can throw (private windows, embedded
+// previews, browsers set to block site data) and the page must still work.
+function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
+
+// Envelope {v, key, title, savedAt, comments}. A bare array is the older
+// format and is still read, so existing pages keep their comments.
+function pack(list){
+  return JSON.stringify({ v: STORE_V, key: KEY, title: document.title, savedAt: Date.now(), comments: list });
+}
+function unpack(raw){
+  if (!raw) return null;
+  var d; try { d = JSON.parse(raw); } catch (e) { return null; }
+  if (Array.isArray(d)) return { comments: d, savedAt: 0 };
+  if (d && Array.isArray(d.comments)) return d;
+  return null;
+}
+function idbOpen(cb){
+  try {
+    if (!window.indexedDB) return cb(null);
+    var rq = indexedDB.open("anAnnotations", 1);
+    rq.onupgradeneeded = function(){ try { rq.result.createObjectStore("kv"); } catch (e) {} };
+    rq.onsuccess = function(){ cb(rq.result); };
+    rq.onerror = function(){ cb(null); };
+  } catch (e) { cb(null); }
+}
+function idbPut(k, v){
+  idbOpen(function(db){
+    if (!db) return;
+    try { db.transaction("kv", "readwrite").objectStore("kv").put(v, k); } catch (e) {}
+  });
+}
+function idbGet(k, cb){
+  idbOpen(function(db){
+    if (!db) return cb(null);
+    try {
+      var r = db.transaction("kv", "readonly").objectStore("kv").get(k);
+      r.onsuccess = function(){ cb(r.result || null); };
+      r.onerror = function(){ cb(null); };
+    } catch (e) { cb(null); }
+  });
+}
+
+var loaded = unpack(lsGet(KEY));
+var comments = (loaded && loaded.comments) || [], dirty = false;
 try { dirty = localStorage.getItem(DIRTY) === "1"; } catch (e) {}
 var nextId = comments.reduce(function(m, c){ return Math.max(m, c.id || 0); }, 0) + 1;
 comments.forEach(function(c){ if (!c.id) c.id = nextId++; });
 var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
 var pending = null, editingId = null;
 
+// Written on the way out so a forced refresh cannot lose anything: the last
+// non-empty state goes to the backup key, and the half-typed note to the draft.
+function snapshot(){
+  saveDraft();
+  if (!comments.length) return;
+  var blob = pack(comments);
+  lsSet(BAK, blob); idbPut(BAK, blob);
+}
+window.addEventListener("pagehide", snapshot);
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden") snapshot();
+});
 window.addEventListener("beforeunload", function(e){
+  snapshot();
   if (!dirty || !comments.length) return;
+  // Works in an ordinary tab; the Artifact viewer blocks page-initiated
+  // downloads, which is why the confirm below and the stored copy both stay.
+  tryDownload();
   e.preventDefault(); e.returnValue = ""; return "";
 });
 
@@ -214,16 +303,25 @@ function sectionOf(node){
   }
   return "document";
 }
-function placePop(top, left){
+function isOpen(){ return pop.style.display === "block"; }
+// `rect` is viewport-relative. Measure the box while it is laid out but not
+// yet painted, so it never appears at the wrong place for one frame — that
+// single-frame jump is itself a flicker.
+function placePop(rect){
+  pop.style.visibility = "hidden";
   pop.style.display = "block";
-  pop.style.top = top + "px";
-  pop.style.left = Math.max(8, Math.min(left, window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 12)) + "px";
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  var top = rect.bottom + 8;
+  if (top + h > vh - 8) top = Math.max(8, rect.top - h - 8);
+  pop.style.left = (Math.max(8, Math.min(rect.left, vw - w - 12)) + window.scrollX) + "px";
+  pop.style.top = (top + window.scrollY) + "px";
+  pop.style.visibility = "";
 }
 function openEdit(c, anchor){
   editingId = c.id; pending = null; txt.value = c.note;
   pop.classList.add("editing");
-  if (anchor) { var r = anchor.getBoundingClientRect(); placePop(window.scrollY + r.bottom + 8, window.scrollX + r.left); }
-  else placePop(window.scrollY + 120, 16);
+  placePop(anchor ? anchor.getBoundingClientRect() : { left: 16, top: 100, bottom: 100 });
   txt.focus();
 }
 document.addEventListener("click", function(ev){
@@ -317,18 +415,28 @@ function hasMark(c){ return !!document.querySelector('mark.note[data-cid="' + c.
 // Opens the note box for the current selection. autofocus is false on touch:
 // focusing a textarea while iOS is showing its selection handles collapses the
 // selection before the user has typed anything.
+//
+// This function only ever OPENS. Nothing about the selection closes the box —
+// that asymmetry is the whole flicker fix. Opening the box focuses the
+// textarea, focusing collapses the document selection, and the old code read
+// that collapse back as "the user deselected" and closed the box it had just
+// opened. The box now closes only on Save, Cancel/Escape, or a click outside.
 function openForSelection(autofocus){
+  if (editingId !== null) return false;
   var sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
   var text = sel.toString().trim();
   if (!text) return false;
   if (inLayer(sel.anchorNode) || inLayer(sel.focusNode)) return false;
   // Already open on this exact selection: do not wipe a half-typed note.
-  if (pending && pending.quote === text && pop.style.display === "block") return true;
+  if (pending && pending.quote === text && isOpen()) return true;
+  // Open on some other selection with a note already typed: leave it be
+  // rather than throwing away words the user has not saved.
+  if (isOpen() && txt.value.trim()) return true;
   var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
   editingId = null; pop.classList.remove("editing");
   pending = { quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() };
-  placePop(window.scrollY + rect.bottom + 8, window.scrollX + rect.left);
+  placePop(rect);
   txt.value = "";
   if (autofocus) txt.focus();
   return true;
@@ -336,9 +444,16 @@ function openForSelection(autofocus){
 document.addEventListener("mouseup", function(ev){
   if (pop.contains(ev.target)) return;
   if (ev.target.closest && ev.target.closest("mark.note")) return;
-  if (openForSelection(true)) return;
-  var sel = window.getSelection();
-  if (!sel || !sel.toString().trim()) pop.style.display = "none";
+  clearTimeout(selTimer);
+  // A tick later, so the selection the browser reports is the settled one.
+  setTimeout(function(){ openForSelection(true); }, 0);
+});
+// A press outside the box dismisses it — the one gesture that may close it.
+// A note already typed is kept rather than dropped on the floor.
+document.addEventListener("mousedown", function(ev){
+  if (!isOpen() || pop.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest("mark.note")) return;
+  if (txt.value.trim()) save(); else closePop();
 });
 // iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
 // handler makes the page uncommentable on iPhone and iPad. selectionchange
@@ -347,30 +462,72 @@ var selTimer = null;
 document.addEventListener("selectionchange", function(){
   if (document.activeElement === txt) return;
   if (editingId !== null) return;
+  if (isOpen() && txt.value.trim()) return;
   clearTimeout(selTimer);
-  selTimer = setTimeout(function(){
-    if (openForSelection(false)) return;
-    if (editingId === null && !txt.value.trim()) closePop();
-  }, 350);
+  selTimer = setTimeout(function(){ openForSelection(false); }, 250);
 });
 
-function closePop(){ pop.style.display = "none"; pending = null; editingId = null; pop.classList.remove("editing"); }
-function markDirty(){ dirty = true; try { localStorage.setItem(DIRTY, "1"); } catch (e) {} }
-function markClean(){ dirty = false; try { localStorage.setItem(DIRTY, "0"); } catch (e) {} }
-function persist(){ try { localStorage.setItem(KEY, JSON.stringify(comments)); } catch (e) {} }
+txt.addEventListener("keydown", function(ev){
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.altKey && !ev.isComposing) { ev.preventDefault(); save(); }
+  else if (ev.key === "Escape") { ev.preventDefault(); discard(); }
+});
+txt.addEventListener("input", saveDraft);
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape" && isOpen() && document.activeElement !== txt) discard();
+});
+
+function closePop(){
+  pop.style.display = "none"; pending = null; editingId = null;
+  pop.classList.remove("editing"); txt.value = ""; lsDel(DRAFT);
+}
+function discard(){ closePop(); }
+// The in-progress note, saved on every keystroke, so a forced refresh reopens
+// the box where it was instead of losing what was typed into it.
+function saveDraft(){
+  if (!isOpen() || !txt.value.trim()) { lsDel(DRAFT); return; }
+  lsSet(DRAFT, JSON.stringify({
+    note: txt.value, editingId: editingId,
+    quote: pending ? pending.quote : null, where: pending ? pending.where : null
+  }));
+}
+function restoreDraft(){
+  var d = unpackDraft();
+  if (!d) return;
+  if (d.editingId != null) {
+    var c = comments.find(function(x){ return x.id === d.editingId; });
+    if (!c) return;
+    openEdit(c, document.querySelector('mark.note[data-cid="' + c.id + '"]'));
+    txt.value = d.note;
+    return;
+  }
+  var r = rangeForQuote(d.quote);
+  if (!r) return;
+  var sel = window.getSelection();
+  if (sel) { try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {} }
+  editingId = null; pop.classList.remove("editing");
+  pending = { quote: d.quote, where: d.where || sectionOf(r.startContainer), range: r.cloneRange() };
+  placePop(r.getBoundingClientRect());
+  txt.value = d.note;
+}
+function unpackDraft(){
+  var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
+  return d && typeof d.note === "string" && d.note.trim() ? d : null;
+}
+function markDirty(){ dirty = true; lsSet(DIRTY, "1"); }
+function markClean(){ dirty = false; lsSet(DIRTY, "0"); }
+// Write-through to both stores on every mutation. The backup key keeps the
+// last non-empty state, so an accidental Clear all is still recoverable.
+function persist(){
+  var blob = pack(comments);
+  lsSet(KEY, blob); idbPut(KEY, blob);
+  if (comments.length) { lsSet(BAK, blob); idbPut(BAK, blob); }
+}
 function unwrap(id){
   var m = document.querySelector('mark.note[data-cid="' + id + '"]');
   if (m) { while (m.firstChild) m.parentNode.insertBefore(m.firstChild, m); m.remove(); }
 }
 
-$("anCancel").onclick = closePop;
-$("anDelete").onclick = function(){
-  if (editingId === null) { closePop(); return; }
-  comments = comments.filter(function(c){ return c.id !== editingId; });
-  unwrap(editingId);
-  markDirty(); persist(); render(); closePop();
-};
-$("anSave").onclick = function(){
+function save(){
   var note = txt.value.trim();
   if (!note) { closePop(); return; }
   if (editingId !== null) {
@@ -384,25 +541,38 @@ $("anSave").onclick = function(){
     comments.push({ id: id, where: pending.where, quote: pending.quote, note: note });
   }
   markDirty(); persist(); render(); closePop();
-  window.getSelection().removeAllRanges();
-};
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
 
+$("anCancel").onclick = discard;
+$("anDelete").onclick = function(){
+  if (editingId === null) { closePop(); return; }
+  comments = comments.filter(function(c){ return c.id !== editingId; });
+  unwrap(editingId);
+  markDirty(); persist(); render(); closePop();
+};
+$("anSave").onclick = save;
+
+// Builds into a fragment and swaps once, so the list never blanks between
+// clearing and refilling.
 function render(){
   var list = $("anList"), count = $("anCount");
-  list.innerHTML = "";
-  badge.textContent = "💬 " + comments.length;
+  badge.textContent = "\uD83D\uDCAC " + comments.length;
   badge.className = dirty && comments.length ? "warn" : "";
   if (!comments.length) {
     count.textContent = "No comments yet"; count.className = "ancount";
-    list.innerHTML = '<p class="anscope">Select any text above to comment.</p>';
+    var empty = document.createElement("p");
+    empty.className = "anscope"; empty.textContent = "Select any text above to comment.";
+    list.replaceChildren(empty);
     return;
   }
-  count.textContent = comments.length + (comments.length === 1 ? " comment" : " comments") + (dirty ? " — not yet exported" : " — exported");
+  count.textContent = comments.length + (comments.length === 1 ? " comment" : " comments") + (dirty ? " \u2014 not yet exported" : " \u2014 exported");
   count.className = "ancount" + (dirty ? " warn" : "");
+  var frag = document.createDocumentFragment();
   comments.forEach(function(c){
     var d = document.createElement("div"); d.className = "cmt";
     var w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
-    var q = document.createElement("div"); q.className = "q"; q.textContent = "“" + c.quote + "”";
+    var q = document.createElement("div"); q.className = "q"; q.textContent = "\u201C" + c.quote + "\u201D";
     var n = document.createElement("div"); n.textContent = c.note;
     var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
     a.onclick = function(){
@@ -412,17 +582,33 @@ function render(){
     };
     d.append(w, q, n);
     if (!hasMark(c)) { var o = document.createElement("div"); o.className = "orphan"; o.textContent = "quoted text not found on this version of the page"; d.append(o); }
-    d.append(a); list.appendChild(d);
+    d.append(a); frag.appendChild(d);
   });
+  list.replaceChildren(frag);
 }
 
 function markdown(){
   return comments.map(function(c){
-    return "- **" + c.where + "** — " + c.note + "\n  > " + c.quote.replace(/\n/g, "\n  > ");
+    return "- **" + c.where + "** \u2014 " + c.note + "\n  > " + c.quote.replace(/\n/g, "\n  > ");
   }).join("\n");
 }
-function exportText(){ return "# Comments — " + document.title + "\n\n" + markdown() + "\n"; }
+function exportText(){ return "# Comments \u2014 " + document.title + "\n\n" + markdown() + "\n"; }
 function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
+// Saves the comments as a .md file. Works in an ordinary browser tab; the
+// Artifact viewer sandboxes the page without download permission and swallows
+// the click, which is why Copy all and Export text stay the reliable paths.
+function tryDownload(){
+  if (!comments.length) return false;
+  try {
+    var url = URL.createObjectURL(new Blob([exportText()], { type: "text/markdown" }));
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = (document.title || "comments").replace(/[^\w.-]+/g, "-").replace(/^-|-$/g, "") + "-comments.md";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+    return true;
+  } catch (e) { return false; }
+}
 
 $("anCopy").onclick = async function(){
   if (!comments.length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
@@ -445,6 +631,11 @@ $("anExportBtn").onclick = function(){
   ta.focus(); ta.select();
   markClean(); render();
 };
+$("anDownload").onclick = function(){
+  if (!comments.length) { toast('<span class="anok">nothing to download</span>', 1600); return; }
+  if (tryDownload()) { markClean(); render(); toast('<span class="anok">saved ' + comments.length + ' as .md</span>'); }
+  else $("anExportBtn").click();
+};
 $("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
 $("anClear").onclick = function(){
   if (!comments.length) return;
@@ -455,7 +646,61 @@ $("anClear").onclick = function(){
 };
 badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
 
+// ---- recovery ------------------------------------------------------------
+// A republish under a new title, or a browser that dropped localStorage,
+// leaves the primary key empty while the comments still exist somewhere.
+// Look, in order: this page's backup key, other keys on this origin whose
+// quotes still match this page, then the IndexedDB mirror of both.
+function adopt(list, why){
+  if (!list || !list.length || comments.length) return false;
+  comments = list;
+  nextId = comments.reduce(function(m, c){ return Math.max(m, c.id || 0); }, 0) + 1;
+  comments.forEach(function(c){ if (!c.id) c.id = nextId++; });
+  markDirty(); persist(); restoreHighlights(); render();
+  toast('<span class="anok">' + why + '</span>', 5000);
+  return true;
+}
+// A sibling key is only this document's if some quote of it is still on the
+// page — otherwise it belongs to another document sharing the origin, which
+// is what several review pages opened from file:// look like.
+function quotesMatchPage(list){
+  for (var i = 0; i < list.length; i++) if (rangeForQuote(list[i].quote)) return true;
+  return false;
+}
+function siblingComments(){
+  var found = [];
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k || k === KEY || k === BAK) continue;
+      if (!/^(annot:|review-)/.test(k) || /-(dirty|draft|bak)$/.test(k)) continue;
+      var d = unpack(localStorage.getItem(k));
+      if (d && d.comments.length) found.push(d);
+    }
+  } catch (e) {}
+  found.sort(function(a, b){ return (b.savedAt || 0) - (a.savedAt || 0); });
+  for (var j = 0; j < found.length; j++) if (quotesMatchPage(found[j].comments)) return found[j].comments;
+  return null;
+}
+function recover(){
+  if (comments.length) return;
+  var own = unpack(lsGet(BAK));
+  if (own && adopt(own.comments, "restored " + own.comments.length + " comments from backup")) return;
+  var sib = siblingComments();
+  if (sib && adopt(sib, "recovered " + sib.length + " comments from an earlier version of this page")) return;
+  idbGet(KEY, function(v){
+    var d = unpack(v);
+    if (d && adopt(d.comments, "restored " + d.comments.length + " comments from backup storage")) return;
+    idbGet(BAK, function(v2){
+      var d2 = unpack(v2);
+      if (d2) adopt(d2.comments, "restored " + d2.comments.length + " comments from backup storage");
+    });
+  });
+}
+
 restoreHighlights();
 render();
+recover();
+restoreDraft();
 })();
 """

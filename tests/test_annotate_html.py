@@ -121,6 +121,64 @@ def test_layer_js_has_the_touch_and_focus_safeguards() -> None:
     assert "window.confirm(" in js  # Clear all asks first
 
 
+def test_no_selection_event_can_close_the_note_box() -> None:
+    """The flicker: the box used to close itself from a selectionchange.
+
+    Opening focuses the textarea, focusing collapses the document selection,
+    and the debounced handler read that back as a deselect. So the selection
+    handlers must contain no close call at all — only Save, Cancel/Escape and
+    a click outside may close the box.
+    """
+    js = _layer_module().JS
+    for name in ("selectionchange", "mouseup"):
+        body = re.search(
+            r'addEventListener\("%s", function\(.*?\n\}\);' % name, js, re.S
+        )
+        assert body, f"no {name} handler found"
+        assert "closePop" not in body.group(0), f"{name} handler still closes the box"
+        assert 'display = "none"' not in body.group(0)
+
+
+def test_enter_saves_and_escape_discards() -> None:
+    js = _layer_module().JS
+    assert 'ev.key === "Enter" && !ev.shiftKey' in js
+    assert "ev.isComposing" in js  # an IME commit is not a save
+    assert 'ev.key === "Escape"' in js
+
+
+def test_save_is_the_first_button_in_the_note_box() -> None:
+    """DOM order is tab order, and the user reads left to right."""
+    html = _layer_module().HTML
+    ids = re.findall(r'id="(anSave|anCancel|anDelete)"', html)
+    assert ids == ["anSave", "anCancel", "anDelete"], ids
+
+
+def test_storage_is_mirrored_and_recoverable() -> None:
+    js = _layer_module().JS
+    assert "indexedDB" in js  # a second store, evicted under different rules
+    assert "function recover()" in js
+    assert "function saveDraft()" in js and "function restoreDraft()" in js
+    assert "quotesMatchPage" in js  # never adopt another document's comments
+    assert 'addEventListener("pagehide"' in js
+    assert "tryDownload" in js
+
+
+def test_layer_emits_no_raw_non_ascii() -> None:
+    """The layer is injected into host pages whose charset it does not control.
+
+    A page served without `charset=utf-8` is decoded as latin-1, and a raw 💬
+    or “curly quote” in a JavaScript string then reaches the reader as
+    mojibake. Escapes render the same under either decoding. Comments are
+    exempt: nothing renders them, and readable prose is worth more there.
+    """
+    mod = _layer_module()
+    for name in ("JS", "HTML", "CSS"):
+        for lineno, line in enumerate(getattr(mod, name).splitlines(), 1):
+            code = re.sub(r"(^|\s)//.*$", "", line)
+            bad = [c for c in code if ord(c) > 127]
+            assert not bad, f"{name}:{lineno} has raw {bad!r}: {line.strip()}"
+
+
 def test_layer_has_no_external_assets() -> None:
     block = _layer_module().layer_html()
     assert not re.search(r"https?://", block)
