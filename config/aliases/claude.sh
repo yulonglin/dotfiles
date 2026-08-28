@@ -88,20 +88,8 @@ claude() {
         cd "$git_root" || true
     fi
 
-    # Generate task list ID: -t flag always overrides, otherwise keep existing or auto-generate
-    if [[ -n "$task_name" ]]; then
-        # Explicit -t flag: always generate fresh with custom name
-        local timestamp
-        timestamp=$(date -u +%Y%m%d_%H%M%S)
-        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${task_name}"
-    elif [[ -z "$CLAUDE_CODE_TASK_LIST_ID" ]]; then
-        # No existing ID: auto-generate from directory name
-        local suffix timestamp
-        suffix=$(basename "$PWD" | tr ' ' '_')
-        timestamp=$(date -u +%Y%m%d_%H%M%S)
-        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${suffix}"
-    fi
-    # else: keep existing CLAUDE_CODE_TASK_LIST_ID (set by claude-new, claude-with, etc.)
+    # Task list ID generation moved to just before the launch (see below), so
+    # no early return can leave a half-configured export behind.
 
     # --channels only applies to session mode, not subcommands (doctor, auth, etc.).
     # Derive subcommand list from `claude --help`, cached per version to avoid 200ms/call.
@@ -259,7 +247,56 @@ claude() {
         fi
     fi
 
+    # Task list ID, scoped to this launch and restored afterwards. An export
+    # that outlives the launch follows the shell across `cd`s and into the
+    # tmux server env, so sessions in unrelated repos silently join one task
+    # list (claude-spawn blanks the var for the same reason). Inherited values
+    # are honored only with CLAUDE_CODE_TASK_LIST_PIN=1 (claude-new,
+    # claude-with, claude-last): an unpinned inherited ID is a stale leak
+    # from a pre-fix shell or the tmux server environment.
+    #
+    # The binding is made with `local -x`, NOT a manual save/restore pair. zsh
+    # unwinds a function-local binding on EVERY exit from the function —
+    # return, error, or a Ctrl-C that aborts it mid-launch — so there is no
+    # restore code that a signal can skip. A manual restore after
+    # `command claude` is measurably skipped by SIGINT (verified: status 130
+    # with the minted ID still exported), which is exactly the leak this
+    # function exists to prevent.
+    local _tl_timestamp _tl_suffix _tl_chosen
+    _tl_timestamp=$(date -u +%Y%m%d_%H%M%S)
+    # The `-z` disjunct below is LOAD-BEARING for claude-spawn, which passes
+    # `CLAUDE_CODE_TASK_LIST_ID=` (empty) to force a fresh list per detached
+    # agent. Simplifying this to the PIN test alone would make every spawned
+    # agent silently join its parent's list — the bug this whole block exists
+    # to prevent. `:-` on both reads so a `setopt nounset` shell doesn't abort.
+    if [[ -n "$task_name" ]]; then
+        # Explicit -t flag: always generate fresh with custom name (beats a pin)
+        _tl_chosen="${_tl_timestamp}_UTC_${task_name}"
+    elif [[ "${CLAUDE_CODE_TASK_LIST_PIN:-}" != 1 || -z "${CLAUDE_CODE_TASK_LIST_ID:-}" ]]; then
+        # Auto-generate from directory name (basename of git root — distinct
+        # per worktree; share deliberately with -t/claude-with when needed).
+        # $$-$RANDOM disambiguates launches within the same second: claude-spawn
+        # fans out parallel agents into one repo, and a bare timestamp would hand
+        # them all one shared list. $$ alone is not enough — two launches from
+        # the SAME shell in one second share a PID (the test catches this), and
+        # sub-second `date` formats aren't portable to macOS/BSD date.
+        _tl_suffix=$(basename "$PWD" | tr ' ' '_')
+        _tl_chosen="${_tl_timestamp}_UTC_${_tl_suffix}_$$-${RANDOM}"
+    else
+        # Pinned and non-empty: honor it for this launch only.
+        _tl_chosen="$CLAUDE_CODE_TASK_LIST_ID"
+    fi
+    # Exported to the child, function-scoped in this shell. Read the pin BEFORE
+    # this line — the declarations below shadow both names for the rest of the
+    # function.
+    local -x CLAUDE_CODE_TASK_LIST_ID="$_tl_chosen"
+    # The pin is CONSUMED, not inherited: `+x` keeps it out of the child's
+    # environment, so nested `claude` calls, tmux panes and background jobs
+    # inside this session mint fresh instead of honoring this ID forever.
+    local +x CLAUDE_CODE_TASK_LIST_PIN
+
     activate_venv
+    # Last command, so its exit status is the function's — nothing to restore.
     command claude "${args[@]}"
 }
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
@@ -319,11 +356,26 @@ _cw_launch() {
       for arg in "${extra[@]}"; do
         cmd+=" $(printf '%q' "$arg")"
       done
+      # `zsh -ic`, not a bare command string: tmux runs command strings under a
+      # NON-interactive shell, which sources no aliases, so a bare `claude`
+      # resolves to the raw binary and skips the claude() wrapper entirely —
+      # no venv, no git-root cd, no channels, and no task-list scoping. Same
+      # trap documented in claude/skills/spawn-session/SKILL.md.
+      local inner="$cmd; exec \$SHELL"
+      local shell_cmd
+      shell_cmd="zsh -ic $(printf '%q' "$inner")"
+      # Blank both task-list vars in the session's environment, exactly as
+      # custom_bins/claude-spawn does. A tmux server started from a
+      # pre-fix (contaminated) shell carries a stale ID in its environment,
+      # and every session it spawns would otherwise inherit it. Empty makes
+      # the wrapper mint a fresh list; blanking the pin stops an inherited
+      # ID being honored.
+      local -a tl_env=(-e "CLAUDE_CODE_TASK_LIST_ID=" -e "CLAUDE_CODE_TASK_LIST_PIN=")
       if [[ -n "$TMUX" ]]; then
-        tmux new-session -d -s "$session" -c "$wt_path" "$cmd; exec \$SHELL"
+        tmux new-session -d -s "$session" -c "$wt_path" "${tl_env[@]}" "$shell_cmd"
         tmux switch-client -t "=$session"
       else
-        tmux new-session -s "$session" -c "$wt_path" "$cmd; exec \$SHELL"
+        tmux new-session -s "$session" -c "$wt_path" "${tl_env[@]}" "$shell_cmd"
       fi
       return
     fi
@@ -633,17 +685,22 @@ claude-new() {
   echo "Starting Claude with task list: $task_list_id"
   echo "export CLAUDE_CODE_TASK_LIST_ID=$task_list_id" > .claude_task_list_id
 
-  export CLAUDE_CODE_TASK_LIST_ID="$task_list_id"
-  claude
+  # Prefix-env, not export: zsh restores it after the function returns, so
+  # nothing lingers in the shell to leak into later launches in other repos.
+  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" CLAUDE_CODE_TASK_LIST_PIN=1 claude
 }
 
 # Resume last task list in current directory
 claude-last() {
   if [ -f .claude_task_list_id ]; then
-    # shellcheck disable=SC1091
-    source .claude_task_list_id
-    echo "Resuming task list: $CLAUDE_CODE_TASK_LIST_ID"
-    claude
+    local task_list_id
+    task_list_id=$(sed -n 's/^export CLAUDE_CODE_TASK_LIST_ID=//p' .claude_task_list_id | head -n1)
+    if [ -z "$task_list_id" ]; then
+      echo "Could not parse .claude_task_list_id"
+      return 1
+    fi
+    echo "Resuming task list: $task_list_id"
+    CLAUDE_CODE_TASK_LIST_ID="$task_list_id" CLAUDE_CODE_TASK_LIST_PIN=1 claude
   else
     echo "No previous task list found in this directory"
     echo "Start a new one with: claude-new <description>"
@@ -673,9 +730,8 @@ claude-with() {
     return 1
   fi
 
-  export CLAUDE_CODE_TASK_LIST_ID="$task_list_id"
   echo "Using task list: $task_list_id"
-  claude
+  CLAUDE_CODE_TASK_LIST_ID="$task_list_id" CLAUDE_CODE_TASK_LIST_PIN=1 claude
 }
 
 # Switch Claude Code account (full logout + login, not just restart)
