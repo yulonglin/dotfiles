@@ -745,8 +745,8 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/context_auto_apply.sh",
-            "timeout": 10
+            "command": "$HOME/.claude/hooks/clean_plugin_symlinks_session.sh",
+            "timeout": 5
           },
           {
             "type": "command",
@@ -828,18 +828,18 @@
     "padding": 1
   },
   "enabledPlugins": {
-    "claude-md-management@claude-plugins-official": false,
-    "code-simplifier@claude-plugins-official": false,
+    "claude-md-management@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
     "code@ai-safety-plugins": true,
     "codex@codex-plugin-cc": true,
-    "commit-commands@claude-plugins-official": false,
-    "context7@claude-plugins-official": false,
+    "commit-commands@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
     "core@ai-safety-plugins": true,
     "dev-browser@dev-browser-marketplace": true,
-    "frontend-design@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
-    "playground@claude-plugins-official": false,
+    "playground@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "precis@precis": true,
     "pyright-lsp@claude-plugins-official": true,
@@ -849,7 +849,7 @@
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "telegram@claude-plugins-official": false,
+    "telegram@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "viz@ai-safety-plugins": true,
