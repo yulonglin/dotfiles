@@ -36,6 +36,7 @@ trap 'rm -rf "$scratch"' EXIT
 {
   echo '#!/bin/sh'
   echo 'echo "LAUNCHED_WITH=[${CLAUDE_CODE_TASK_LIST_ID-unset}]"'
+  echo 'echo "CHILD_PIN=[${CLAUDE_CODE_TASK_LIST_PIN-unset}]"'
   echo 'exit ${FAKE_CLAUDE_RC:-0}'
 } > "$fakebin/claude"
 chmod +x "$fakebin/claude"
@@ -62,14 +63,33 @@ check "bare launch leaves the ID unset for the child" "LAUNCHED_WITH=[unset]" "$
 refute "bare launch mints no dir-named ID" "_UTC_" "$(launched)"
 check "bare launch leaves the shell unset" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
 
-# 2. An inherited ID is passed through untouched — this is how claude-with,
-#    claude-new and claude-last work, and the wrapper no longer second-guesses
-#    it (there is no auto-generated value left to confuse it with).
-export CLAUDE_CODE_TASK_LIST_ID="SOME_LIST"
+# 2. An UNPINNED inherited ID is residue and must be dropped, not honored.
+#    `source ~/.zshrc` cannot unset what an older wrapper exported, so a shell
+#    that ran the pre-fix version still carries its ID indefinitely. Honoring
+#    it is how the original cross-repo leak survived a re-source.
+export CLAUDE_CODE_TASK_LIST_ID="STALE_RESIDUE"
 run_claude
-check "inherited ID passed through" "LAUNCHED_WITH=[SOME_LIST]" "$(launched)"
-check "inherited ID left in the shell as found" "SOME_LIST" "${CLAUDE_CODE_TASK_LIST_ID-unset}"
+check "unpinned inherited ID dropped for the child" "LAUNCHED_WITH=[unset]" "$(launched)"
+refute "stale residue never reaches the child" "STALE_RESIDUE" "$(launched)"
+check "shell's own value left untouched" "STALE_RESIDUE" "${CLAUDE_CODE_TASK_LIST_ID-unset}"
 unset CLAUDE_CODE_TASK_LIST_ID
+
+# 2b. A PINNED inherited ID is deliberate (claude-new/with/last) and is honored,
+#     but the pin itself must not reach the child or it would authorise every
+#     nested launch to reuse this list forever.
+export CLAUDE_CODE_TASK_LIST_ID="SHARED_ON_PURPOSE"
+export CLAUDE_CODE_TASK_LIST_PIN=1
+run_claude
+check "pinned inherited ID honored" "LAUNCHED_WITH=[SHARED_ON_PURPOSE]" "$(launched)"
+check "pin itself not propagated to child" "CHILD_PIN=[unset]" "$(launched)"
+unset CLAUDE_CODE_TASK_LIST_ID CLAUDE_CODE_TASK_LIST_PIN
+
+# 2c. Pinned but EMPTY is claude-spawn's force-fresh contract: still dropped.
+export CLAUDE_CODE_TASK_LIST_ID=""
+export CLAUDE_CODE_TASK_LIST_PIN=1
+run_claude
+check "pinned-but-empty ID still dropped" "LAUNCHED_WITH=[unset]" "$(launched)"
+unset CLAUDE_CODE_TASK_LIST_ID CLAUDE_CODE_TASK_LIST_PIN
 
 # 3. -t names a list for this launch only, and leaves nothing behind.
 run_claude -t mytask
