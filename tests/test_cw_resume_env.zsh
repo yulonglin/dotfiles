@@ -62,18 +62,17 @@ tmux -S "$sock" set-environment -g CLAUDE_CODE_TASK_LIST_ID STALE_SERVER_ID 2>/d
 tmux -S "$sock" set-environment -g ZDOTDIR "$zdot" 2>/dev/null
 
 # Build the same invocation _cw_launch does, against the isolated server.
-inner='claude; exec $SHELL'
 if [[ "${CW_TEST_MUTATE:-}" == 1 ]]; then
-  # Mutation mode: the pre-fix shape — bare command string, no env blanking.
-  # Proves this test can actually fail. Must NOT be the default.
-  tmux -S "$sock" new-session -d -s worktree-__cwtest__ -c "$wt" \
-    -e "ZDOTDIR=$zdot" "$inner"
+  # Mutation mode: the pre-fix shape — no `unset`, so the stale server ID
+  # reaches the child. Proves this test can fail. Must NOT be the default.
+  inner='claude; exec $SHELL'
 else
-  shell_cmd="zsh -ic $(printf '%q' "$inner")"
-  tmux -S "$sock" new-session -d -s worktree-__cwtest__ -c "$wt" \
-    -e "CLAUDE_CODE_TASK_LIST_ID=" -e "CLAUDE_CODE_TASK_LIST_PIN=" \
-    -e "ZDOTDIR=$zdot" "$shell_cmd"
+  inner='unset CLAUDE_CODE_TASK_LIST_ID CLAUDE_CODE_TASK_LIST_PIN; claude; exec $SHELL'
 fi
+sq_rep="'\\''"
+shell_cmd="zsh -ic '${inner//\'/$sq_rep}'"
+tmux -S "$sock" new-session -d -s worktree-__cwtest__ -c "$wt" \
+  -e "ZDOTDIR=$zdot" "$shell_cmd"
 
 # Wait for the fake claude to record what it saw.
 for _ in {1..40}; do [[ -s "$result" ]] && break; sleep 0.25; done
@@ -92,15 +91,13 @@ else
   echo "PASS: cw resume did not inherit the stale server ID"; ((pass++))
 fi
 
-# It must still have gone through the wrapper, which mints
-# <timestamp>_UTC_<dir>_<pid>-<random>. The raw binary would have received
-# whatever the tmux env held (here: empty), never a minted ID. The directory
-# component is not asserted: the wrapper auto-cds to the git root first, so a
-# scratch directory under an existing repo reports that repo's basename.
-if printf '%s\n' "$got" | grep -Eq '^ID=\[[0-9]{8}_[0-9]{6}_UTC_.+_[0-9]+-[0-9]+\]$'; then
-  echo "PASS: cw resume ran through the claude() wrapper"; ((pass++))
+# The child must see NO task-list ID at all, so Claude Code assigns its own
+# per-session list. Not "empty" — unset: the wrapper no longer regenerates from
+# an empty value, so a blank would be passed through as a literal list name.
+if [[ "$got" == *"ID=[unset]"* ]]; then
+  echo "PASS: cw resume leaves the child with no task-list ID"; ((pass++))
 else
-  echo "FAIL: cw resume bypassed the wrapper (no minted ID) — $got"; ((fail++))
+  echo "FAIL: cw resume gave the child an ID — $got"; ((fail++))
 fi
 
 echo "---"

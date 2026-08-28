@@ -1,134 +1,102 @@
 # shellcheck shell=bash
-# Regression test: CLAUDE_CODE_TASK_LIST_ID is scoped to the launch.
+# The claude() wrapper must NOT invent a task-list ID.
 #
-# The claude() wrapper must (a) mint a fresh dir-named ID per launch, (b) ignore
-# an inherited unpinned ID (a stale leak from an old shell or the tmux server
-# env), (c) honor a pinned ID (claude-new/claude-with/claude-last), and
-# (d) leave the shell's variable state exactly as it found it. Regression for
-# the 2026-08 cross-repo task-list leak, where one exported ID followed the
-# shell across `cd`s for days and unrelated repos shared a task list.
+# Claude Code already gives every session its own list when
+# CLAUDE_CODE_TASK_LIST_ID is unset — measured 2026-08-28 in ~/.claude/tasks/:
+# 683 `session-<id>` lists it created itself vs 11 `<ts>_UTC_<dir>` from ~2
+# months of this wrapper auto-generating. The auto-generated ID duplicated that
+# isolation and cost a leak no wrapper can close: the ID must be exported into
+# the claude process for Claude Code to read it, and every session that process
+# spawns (the `claude agents` view included) inherits its environment.
 #
-# CRITICAL TEST-DESIGN NOTE — do not "tidy" this back into command substitution.
-# Every assertion about SHELL STATE must call claude() in the CURRENT shell and
-# redirect output to a file. Writing `out=$(claude)` puts the wrapper in a
-# subshell, where its `export` cannot reach the test shell at all — so the
-# state assertions pass whether or not the restore logic exists. An earlier
-# revision of this file did exactly that and scored 10/10 with the entire
-# restore block deleted. Mutation-check any change here: delete the restore
-# block in claude() and confirm this test FAILS.
+# So the contract is now narrow:
+#   - bare `claude` leaves the variable exactly as it found it, including unset
+#   - `-t <name>` sets one for that launch only
+#   - an inherited ID is passed through untouched (claude-with/-new/-last)
+#   - nothing persists in the shell afterwards, on any path
+#
+# CRITICAL TEST-DESIGN NOTE — do not "tidy" this into command substitution.
+# Assertions about SHELL STATE must call claude() in the CURRENT shell and
+# redirect output to a file. `out=$(claude)` runs the wrapper in a subshell
+# where its export cannot reach the test shell, so those assertions pass
+# whether or not the code is correct. An earlier revision did exactly that and
+# scored 10/10 with the entire mechanism deleted.
 #
 # Run from the repo root: zsh tests/test_claude_task_list_scope.zsh
 set -u
 root=${0:a:h:h}
 cd "$root" || exit 1
 
-# Repo-local scratch (not mktemp): sandboxed sessions can't write $TMPDIR.
 scratch="$root/tmp/.tlid-test-$$"
 fakebin="$scratch/bin"
 outfile="$scratch/out"
 mkdir -p "$fakebin"
 trap 'rm -rf "$scratch"' EXIT
 
-# Fake `claude` on PATH: reports the task-list vars it received, and exits with
-# the code named by FAKE_CLAUDE_RC so exit-status passthrough is testable.
 {
   echo '#!/bin/sh'
   echo 'echo "LAUNCHED_WITH=[${CLAUDE_CODE_TASK_LIST_ID-unset}]"'
-  echo 'echo "CHILD_PIN=[${CLAUDE_CODE_TASK_LIST_PIN-unset}]"'
   echo 'exit ${FAKE_CLAUDE_RC:-0}'
 } > "$fakebin/claude"
 chmod +x "$fakebin/claude"
 export PATH="$fakebin:$PATH"
 
-# Stubs for functions other alias files define; neutralise channel detection.
 activate_venv() { :; }
 unset DOTFILES_TELEGRAM_BOT_SECRET 2>/dev/null || true
 unset CLAUDE_CODE_TASK_LIST_ID 2>/dev/null || true
-unset CLAUDE_CODE_TASK_LIST_PIN 2>/dev/null || true
 
 source config/aliases/claude.sh || { echo "FAIL: could not source claude.sh"; exit 1; }
-activate_venv() { :; }  # re-assert in case the sourced file redefined it
-
-expected_suffix="_UTC_$(basename "$root" | tr ' ' '_')"
+activate_venv() { :; }
 
 pass=0; fail=0
-check() {  # check <name> <expected-substring> <actual>
-  if [[ "$3" == *"$2"* ]]; then echo "PASS: $1"; ((pass++))
-  else echo "FAIL: $1 — expected [$2] in [$3]"; ((fail++)); fi
-}
-refute() {  # refute <name> <forbidden-substring> <actual>
-  if [[ "$3" == *"$2"* ]]; then echo "FAIL: $1 — [$2] should be absent from [$3]"; ((fail++))
-  else echo "PASS: $1"; ((pass++)); fi
-}
-# Run claude() IN THIS SHELL (never a subshell) so the state assertions are real.
+check() { if [[ "$3" == *"$2"* ]]; then echo "PASS: $1"; ((pass++))
+  else echo "FAIL: $1 — expected [$2] in [$3]"; ((fail++)); fi }
+refute() { if [[ "$3" == *"$2"* ]]; then echo "FAIL: $1 — [$2] should be absent from [$3]"; ((fail++))
+  else echo "PASS: $1"; ((pass++)); fi }
 run_claude() { claude "$@" >"$outfile" 2>&1; }
 launched() { cat "$outfile"; }
 
-# 1. Fresh launch: mints a dir-named ID for the child, restores to unset after.
+# 1. Bare launch invents nothing — Claude Code assigns its own per-session list.
 run_claude
-check "fresh launch mints dir-named ID" "$expected_suffix" "$(launched)"
-check "fresh launch restores unset" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
+check "bare launch leaves the ID unset for the child" "LAUNCHED_WITH=[unset]" "$(launched)"
+refute "bare launch mints no dir-named ID" "_UTC_" "$(launched)"
+check "bare launch leaves the shell unset" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
 
-# 2. Stale inherited (unpinned) ID: ignored for the launch, shell value restored.
-export CLAUDE_CODE_TASK_LIST_ID="STALE_FROM_OTHER_REPO"
+# 2. An inherited ID is passed through untouched — this is how claude-with,
+#    claude-new and claude-last work, and the wrapper no longer second-guesses
+#    it (there is no auto-generated value left to confuse it with).
+export CLAUDE_CODE_TASK_LIST_ID="SOME_LIST"
 run_claude
-check "stale unpinned ID not used for launch" "$expected_suffix" "$(launched)"
-refute "stale ID absent from launch" "STALE_FROM_OTHER_REPO" "$(launched)"
-check "pre-existing shell value restored" "STALE_FROM_OTHER_REPO" "${CLAUDE_CODE_TASK_LIST_ID-unset}"
+check "inherited ID passed through" "LAUNCHED_WITH=[SOME_LIST]" "$(launched)"
+check "inherited ID left in the shell as found" "SOME_LIST" "${CLAUDE_CODE_TASK_LIST_ID-unset}"
 unset CLAUDE_CODE_TASK_LIST_ID
 
-# 3. Pinned ID: honored for the launch, nothing persists in the shell.
-CLAUDE_CODE_TASK_LIST_ID="PINNED_LIST" CLAUDE_CODE_TASK_LIST_PIN=1 run_claude
-check "pinned ID honored" "LAUNCHED_WITH=[PINNED_LIST]" "$(launched)"
-check "nothing persists after pinned launch" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
-
-# 4. The pin is consumed, not propagated: the child must not inherit permission
-#    to reuse this ID for its own nested launches, forever. Blanked rather than
-#    unset, so accept either — what matters is that it is not "1".
-CLAUDE_CODE_TASK_LIST_ID="PINNED_LIST" CLAUDE_CODE_TASK_LIST_PIN=1 run_claude
-refute "pin not propagated to child" "CHILD_PIN=[1]" "$(launched)"
-
-# 4b. Same, with the pin GLOBALLY EXPORTED rather than passed as prefix-env.
-#     This is the shape `local +x` failed to contain under bash — see the
-#     comment on the launch line in claude.sh. Covered here in whichever shell
-#     runs the suite; tests/test_task_list_pin_bash.sh runs it under bash too.
-export CLAUDE_CODE_TASK_LIST_PIN=1
-export CLAUDE_CODE_TASK_LIST_ID="GLOBAL_PINNED"
-run_claude
-refute "globally-exported pin not propagated" "CHILD_PIN=[1]" "$(launched)"
-check "globally-exported pin still honored for this launch" "LAUNCHED_WITH=[GLOBAL_PINNED]" "$(launched)"
-unset CLAUDE_CODE_TASK_LIST_PIN
-unset CLAUDE_CODE_TASK_LIST_ID
-
-# 5. -t overrides even a pin, and names the list.
-CLAUDE_CODE_TASK_LIST_ID="PINNED_LIST" CLAUDE_CODE_TASK_LIST_PIN=1 run_claude -t mytask
+# 3. -t names a list for this launch only, and leaves nothing behind.
+run_claude -t mytask
 check "-t names the list" "_UTC_mytask" "$(launched)"
-refute "-t beats an active pin" "PINNED_LIST" "$(launched)"
+check "-t leaves the shell unset" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
 
-# 6. claude-spawn's contract: ID set-but-EMPTY forces a fresh list even with a
-#    pin present (custom_bins/claude-spawn passes CLAUDE_CODE_TASK_LIST_ID=).
-CLAUDE_CODE_TASK_LIST_ID="" CLAUDE_CODE_TASK_LIST_PIN=1 run_claude
-check "empty pinned ID still mints fresh" "$expected_suffix" "$(launched)"
+# 4. -t overrides an inherited ID, and restores it afterwards rather than
+#    clobbering it — the binding is function-local.
+export CLAUDE_CODE_TASK_LIST_ID="SOME_LIST"
+run_claude -t override
+check "-t beats an inherited ID" "_UTC_override" "$(launched)"
+refute "-t does not pass the inherited ID" "SOME_LIST" "$(launched)"
+check "-t restores the inherited ID after" "SOME_LIST" "${CLAUDE_CODE_TASK_LIST_ID-unset}"
+unset CLAUDE_CODE_TASK_LIST_ID
 
-# 7. Two launches in the same second must not collide (parallel spawned agents).
-run_claude; first=$(grep LAUNCHED_WITH "$outfile")
-run_claude; second=$(grep LAUNCHED_WITH "$outfile")
-if [[ "$first" == "$second" ]]; then
-  echo "FAIL: consecutive launches share an ID — $first"; ((fail++))
-else echo "PASS: consecutive launches get distinct IDs"; ((pass++)); fi
-
-# 8. claude's exit status is propagated, not swallowed by the restore logic.
+# 5. Exit status is propagated, not swallowed.
 FAKE_CLAUDE_RC=7 claude >"$outfile" 2>&1
 rc=$?
 if [[ "$rc" == 7 ]]; then echo "PASS: exit status propagated"; ((pass++))
 else echo "FAIL: exit status propagated — expected 7, got $rc"; ((fail++)); fi
 
-# 9. claude-with end-to-end: uses the named list, leaves no state behind.
+# 6. claude-with end-to-end: names the list, leaves no state behind.
 claude-with "MY_SHARED_LIST" >"$outfile" 2>&1
 check "claude-with uses named list" "LAUNCHED_WITH=[MY_SHARED_LIST]" "$(launched)"
 check "claude-with leaves no state" "unset" "[${CLAUDE_CODE_TASK_LIST_ID-unset}]"
 
-# 10. claude-last parses its pointer file and pins it for the launch.
+# 7. claude-last reads its pointer file and uses it for the launch only.
 tmpdir="$scratch/lastdir"
 mkdir -p "$tmpdir"
 pushd "$tmpdir" >/dev/null || exit 1

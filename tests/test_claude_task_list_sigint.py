@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Ctrl-C during a claude session must not leave a task-list ID in the shell.
+"""Ctrl-C during a `claude -t <name>` session must not leave its ID in the shell.
+
+The launch is `-t`, not bare: the wrapper no longer auto-generates an ID, so a
+bare launch sets nothing and this test would pass without exercising anything.
+`-t` is the one path that still binds the variable, and therefore the one that
+could still leak.
 
 This needs a real PTY with job control: a manual save/restore after
 `command claude` is silently SKIPPED when SIGINT aborts the zsh function, so
@@ -97,7 +102,9 @@ def main() -> int:
 
         try:
             read_until(fd, "READY>")
-            os.write(fd, b"claude\n")
+            # `-t` so there IS an ID to leak: a bare launch sets nothing now,
+            # which would make this test pass for the wrong reason.
+            os.write(fd, b"claude -t sigintprobe\n")
             if "FAKE_CLAUDE_RUNNING" not in read_until(fd, "FAKE_CLAUDE_RUNNING"):
                 print("FAIL: fake claude never started; harness is broken")
                 return 1
