@@ -308,11 +308,14 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     fi
 
     if is_macos; then
-        # brew has a global lock — sequential
-        install_claude_code
-        install_codex_cli
-        install_opencode
-        install_antigravity_cli   # official Gemini CLI successor (cask, macOS)
+        # brew has a global lock — sequential. `|| true` on each: these return
+        # non-zero when an install fails (having already logged a warning), and
+        # bare call sites made that end install.sh. The Linux branch below gets
+        # the same containment for free from run_parallel's `set +e` subshell.
+        install_claude_code || true
+        install_codex_cli || true
+        install_opencode || true
+        install_antigravity_cli || true   # official Gemini CLI successor (cask, macOS)
     else
         run_parallel "Installing AI CLI tools" \
             "claude|install_claude_code" \

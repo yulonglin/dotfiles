@@ -742,7 +742,10 @@ run_parallel() {
     fi
 
     # Cleanup
-    rm -rf "$tmpdir"
+    # `|| true`: a job's own background grandchild can still be writing here
+    # when wait() returns, and rm -rf then loses the race with ENOTEMPTY. A
+    # leaked temp dir is harmless; ending the run over one is not.
+    rm -rf "$tmpdir" 2>/dev/null || true
     return 0
 }
 
