@@ -42,6 +42,7 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 | `house-plots` | Any chart or figure — pastel matplotlib defaults, the palette, overlap checking. Code lives in `lib/plotting/` |
 | `check-bib-references` | Verifying BibTeX citations aren't LLM-fabricated |
 | `check-prose-claims` | Fact-checking stats/comparatives/quotes in slides, reports, papers |
+| `check-misreads` | Red-teaming a draft for misreads before sending — artifacts, results, specs, handoff briefs |
 | `marp-deck` | Building slide decks from Markdown with Marp |
 
 ## Research / infra ops

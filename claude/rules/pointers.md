@@ -5,6 +5,7 @@ These rules carry only always-relevant judgment. Activity-scoped procedure is a 
 - Building or updating an Artifact — transcripts, collapsible units, annotation layer, `md2review`, republishing → `artifact-writing`
 - A results or findings page — review checklist, intervals, nulls, chance correction, slicing → `results-artifact`
 - Writing a spec → `spec-artifact`
+- Red-teaming a draft for how it could be misread, before sending it → `check-misreads`
 - Classifying text by meaning with a model → `llm-judge`
 - Jobs, pueue, resource caps, sandbox failure modes → `jobs`
 - Second opinion from another model family → `second-opinion`
