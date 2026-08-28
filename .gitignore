@@ -25,6 +25,9 @@ docs/plans/
 docs/slack-channel-summaries/
 
 # Claude runtime state (local operational artifacts)
+# claude-new writes .claude_task_list_id into whatever directory it runs in,
+# in every repo — per-machine pointer state, never version-controlled.
+.claude_task_list_id
 claude/diagnostics/
 claude/state/
 claude/flags/

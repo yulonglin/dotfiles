@@ -415,7 +415,14 @@ status_file="$(dirname "$AUDIT_LOG")/status.$$"
 # appearing as a running agent long after the agent had finished — the tmux
 # session outliving its reason to exist is worse than losing the scrollback,
 # because it is indistinguishable from work still in progress.
-cmd="zsh -ic '${inner}'"
+# UNSET the task-list vars rather than blanking them via tmux `-e`. A detached
+# agent must not join the task list of whichever session spawned it — the two
+# would read and mutate it concurrently. Blanking to empty no longer works:
+# the claude() wrapper stopped auto-generating (Claude Code assigns a
+# per-session list itself), so an empty value would be passed through as a
+# literal empty list name instead of being replaced. tmux's `-e` can set a
+# variable but not remove one, so the unset has to happen inside the command.
+cmd="zsh -ic 'unset CLAUDE_CODE_TASK_LIST_ID CLAUDE_CODE_TASK_LIST_PIN; ${inner}'"
 
 # Build the tmux invocation once, as an array. The launch below runs this same
 # array and --print-tmux-command prints it, so there is no second spelling to
@@ -429,11 +436,6 @@ tmux_args=(
   -e "CLAUDE_SPAWN_PROMPT=$prompt"
   -e "CLAUDE_SPAWN_RC_NAME=$rc_name"
   -e "CLAUDE_SPAWN_DEPTH=$((depth + 1))"
-  # Blanked, not inherited. The claude() wrapper exports CLAUDE_CODE_TASK_LIST_ID
-  # after starting any session, so without this the detached agent would join the
-  # task list of whichever session spawned it and the two would read and mutate
-  # it concurrently. Empty makes the wrapper generate a fresh one.
-  -e "CLAUDE_CODE_TASK_LIST_ID="
   -e "CLAUDE_SPAWN_STATUS_FILE=$status_file"
   "$cmd"
 )
