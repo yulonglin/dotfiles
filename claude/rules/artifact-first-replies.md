@@ -5,7 +5,7 @@ Yulong's primary reading surface is the Artifact, not terminal scrollback. For a
 What belongs in the artifact, whenever the content has the corresponding shape:
 
 - **Mermaid diagrams** for mechanisms and flows (mind `markdown-style.md`: one source line per label, explicit spaces around `<br/>`).
-- **Plots** for results (house style: pastelplot/anthroplot).
+- **Plots** for results (house style: the `house-plots` skill).
 - **Code snippets** for anything code-mechanical, with the load-bearing lines visually highlighted (e.g. `<mark>` or a colored span), not whole-file dumps.
 - **Representative transcripts** for eval/monitor work, again with the relevant spans highlighted.
 

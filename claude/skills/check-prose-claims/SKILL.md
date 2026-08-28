@@ -1,6 +1,6 @@
 ---
 name: check-prose-claims
-description: Fact-check prose claims in slides, reports, PDFs, and papers — statistics, comparatives, attributions, causal claims, quotes. Two-pass extract-then-verify protocol with strict numerical precision and a doc-only mode. Use when the user asks to "check the claims in this deck", "fact-check this report", "audit this PDF", "verify the numbers in these slides", or before publishing/shipping any externally-facing document with quantitative claims. Complements `check-bib-references` (which handles BibTeX entries) — this skill handles the prose around them.
+description: "Fact-check prose claims — stats, comparatives, quotes — in slides, reports and PDFs. Use on 'fact-check this deck', 'audit this PDF'."
 ---
 
 # Check prose claims against authoritative sources

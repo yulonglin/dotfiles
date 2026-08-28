@@ -35,7 +35,7 @@ Instructions are `~/.claude/CLAUDE.md` and `<repo>/CLAUDE.md`; rules auto-load f
 
 ## Defaults
 
-- **Interview before planning** — `/spec-interview-research`, `/spec-interview`, `/grill-me`. (TODO: Give the updated the skills after the reorg)
+- **Interview before planning** — `/spec-interview-research`, `/spec-interview`, `/interview-me`. (TODO: Give the updated the skills after the reorg)
 - **Use existing code** for experiments — correct hyperparams, full data, validated metrics; ad-hoc only for dry runs
 - **Test on real data** — e2e on a small real slice (`limit=3-5`), not just unit tests.
 - **Never leave GPUs idle** — treat 0% util as a bug, not a resting state.
@@ -43,7 +43,7 @@ Instructions are `~/.claude/CLAUDE.md` and `<repo>/CLAUDE.md`; rules auto-load f
 - **Send deliverable files** (`SendUserFile`) rather than a path, when under 5 MB.
 - **Send links to Artifacts** — makes it easy for Yulong to review them.
 - **Reply on the channel you were messaged on**, not just the terminal.
-- **Anthropic plot style by default** — `from anthro_colors import use_anthropic_defaults`.
+- **House plot style by default** — the `house-plots` skill (pastelplot defaults, Anthropic palette).
 
 ## Learnings
 

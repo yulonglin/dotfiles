@@ -19,19 +19,16 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 | `commit-push-sync` | "commit and push", "sync changes", "update remote" |
 | `ship` | "ship this" or review, finish, merge, and push an authorized completed change |
 | `merge-worktree` | "merge this worktree", "merge my branch back", "finish this worktree" |
-| `finishing-a-development-branch` | Implementation is done, tests pass, deciding merge/PR/cleanup |
+| `superpowers:finishing-a-development-branch` | Implementation is done, tests pass, deciding merge/PR/cleanup |
 | `wrap-up` | A session needs to reach a terminal state — land it as a draft PR, state the blocker, or say it's done (dotfiles trial) |
 | `diagnosing-bugs` | "diagnose"/"debug this", something broken/throwing/failing/slow |
 | `mv-repo` | Moving a repo to a new directory (venv, project state, tmux sessions) |
-| `migrate-to-codex` | Migrating instructions/skills/agents/MCP config into Codex |
 
 ## Browser automation
 
 | Skill | Use when |
 |---|---|
-| `agent-browser` | CLI-driven browser automation — navigate, fill forms, screenshot, scrape |
-| `browser-session` | **Before** any agent-browser task — sets up the right Chrome profile |
-| `playwright` | Automating a real browser from the terminal for dev/testing |
+| `agent-browser` | CLI-driven browser automation — navigate, fill forms, screenshot, scrape; opens with the Chrome-profile preflight |
 | `chrome-devtools` | DevTools-level access — evaluate JS, profiling, network inspection |
 | `claude-in-chrome` | Quick tasks in your actual live Chrome tabs |
 
@@ -39,11 +36,10 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 
 | Skill | Use when |
 |---|---|
-| `anthropic-style` | Any visual output that should match Anthropic's look (plots, TikZ, slides, web) |
+| `house-plots` | Any figure, chart, diagram or styled page — pastel matplotlib defaults, Anthropic palette, TikZ, web CSS |
 | `check-bib-references` | Verifying BibTeX citations aren't LLM-fabricated |
 | `check-prose-claims` | Fact-checking stats/comparatives/quotes in slides, reports, papers |
 | `marp-deck` | Building slide decks from Markdown with Marp |
-| `pdf` | Reading, creating, or reviewing PDFs where layout matters |
 
 ## Research / infra ops
 
@@ -63,7 +59,6 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 | `things3` | Reading/managing Things 3 tasks, projects, areas, tags |
 | `setup-channel` | Setting up Telegram/iMessage/Things Cloud for a project |
 | `reply` | Stuck on replying to someone — scaffolds while you write |
-| `context-fetcher` (skill) | Gathering Gmail/Slack/Granola/Calendar context before drafting a reply |
 | `log-gap` | Recording a knowledge gap you just noticed ("wait, I didn't know that") |
 | `recall-feedback` | Spaced-repetition review of past feedback memories |
 | `decide` | Stuck overthinking/oscillating on a decision |
@@ -72,16 +67,15 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 
 | Skill | Use when |
 |---|---|
-| `grilling` | Stress-testing a plan or decision — "grill me", "poke holes in this" |
-| `grill-me` (user-invoked only) | Same as `grilling`, invoked directly by name |
+| `interview-me` | Stress-testing a plan or decision — "interview me", "grill me", "poke holes in this" |
 | `chronicle` | Resolving ambiguity via screen/recent-history context ("what was I just doing") |
-| `writing-great-skills` (user-invoked only) | Reference for writing/editing skills well — read before authoring a new one |
+| `superpowers:writing-skills` (user-invoked only) | Reference for writing/editing skills well — read before authoring a new one |
 
 ## Agents (Task tool, not slash-invoked)
 
 | Agent | Use when |
 |---|---|
-| `context-fetcher` | Same as the skill above — gathers cross-source context for a named person |
+| `context-fetcher` | Gathers cross-source Gmail/Slack/Granola/Calendar context for a named person |
 | `llm-billing` | "how much have I spent on OpenRouter/OpenAI/Anthropic", checking API credits |
 
 ## Maintaining this file

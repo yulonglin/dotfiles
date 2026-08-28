@@ -1,6 +1,6 @@
 # bearcli — Reference for Scripting, Cron, and CLI-Only Cases
 
-`bearcli` is the CLI surface for Bear (ships in the Bear 2.8+ binary). For agent-driven note editing, **prefer the Bear MCP** (`mcp__Bear__*`) — see [`~/.claude/skills/bear.md`](~/.claude/skills/bear.md). Use this doc when:
+`bearcli` is the CLI surface for Bear (ships in the Bear 2.8+ binary). For agent-driven note editing, **prefer the Bear MCP** (`mcp__Bear__*`) — see [`~/.claude/skills/bear/SKILL.md`](~/.claude/skills/bear/SKILL.md). Use this doc when:
 
 - You're writing a shell script or cron job (MCP not available)
 - You need flags MCP doesn't expose (`--no-update-modified`, `--if-not-exists`, batch `--find/--replace` pairs in one transaction, `--all --word`)

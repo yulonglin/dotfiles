@@ -1,6 +1,6 @@
-# Anthropic Plot Styling (legacy — superseded by the `pastelplot` skill)
+# Anthropic Plot Styling (legacy — superseded by the `house-plots` skill)
 
-> **Use the `pastelplot` skill instead** (`claude/skills/pastelplot/`): same copy-in-module approach, pastel palette, no S3 font dependency. This doc remains as the reference for the original brand hexes and tertiary gradients. The `anthroplot.py` reference file this doc used to point at (`~/.claude/skills/research-presentation/references/anthroplot.py`) no longer exists.
+> **Use the `house-plots` skill instead** (`claude/skills/house-plots/`): same copy-in-module approach, pastel palette, no S3 font dependency. This doc remains as the reference for the original brand hexes and tertiary gradients. The `anthroplot.py` reference file this doc used to point at (`~/.claude/skills/research-presentation/references/anthroplot.py`) no longer exists.
 
 **What this was**: An internal Anthropic styling module (a `.py` file you copy into projects). NOT a pip package.
 

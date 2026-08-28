@@ -4,7 +4,7 @@ Yulong's standard for every research artifact (2026-08-27). Build against it bef
 
 ## Presentation
 
-- **Numbers in prose can be a table; numbers in a table can be a plot.** Escalate to the richest form the data supports (house style: pastelplot/anthroplot, embedded as data URIs).
+- **Numbers in prose can be a table; numbers in a table can be a plot.** Escalate to the richest form the data supports (house style: the `house-plots` skill, embedded as data URIs).
 - Mermaid diagrams for mechanisms and pipelines.
 - Commenting layer (see `artifact-first-replies.md`): save / delete / update a comment; copy all comments; highlights are stable — no flicker while selecting text.
 

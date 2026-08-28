@@ -9,7 +9,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 - **Sandbox blocks `git pull`/`merge`/`stash`** here, and `codex exec` crashes on macOS inside it — both need `dangerouslyDisableSandbox: true`.
 - **`claude/settings.json` is the global source of truth** (symlinked to `~/.claude/settings.json`). Before staging it, verify it has `statusLine`, `hooks` and `permissions` keys — [`.claude/rules/dotfiles-settings.md`](.claude/rules/dotfiles-settings.md).
 - **Secrets are NOT globally exported** (supply-chain defense). Use `setup-envrc` per project via direnv; `secrets-edit` to add or update.
-- **Plot with Anthropic style by default** — `from anthro_colors import use_anthropic_defaults`. Colours, the `petri`/`deepmind` alternatives and the full API are in the `anthropic-style` skill.
+- **Plot with Anthropic style by default** — `from anthro_colors import use_anthropic_defaults`. Colours, the `petri`/`deepmind` alternatives and the full API are in the `house-plots` skill.
 - **Specs go in `specs/`** (overriding the brainstorming skill's default), plans in `plans/` via `plansDirectory`.
 - **Verification is a design problem** — plan *how* you'll verify before starting. If you catch yourself thinking "let me figure out how to verify this", that's EnterPlanMode. Triggers and checklist: [`.claude/skills/verification-planning/SKILL.md`](.claude/skills/verification-planning/SKILL.md).
 
