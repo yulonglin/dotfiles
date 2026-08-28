@@ -9,7 +9,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 - **Sandbox blocks `git pull`/`merge`/`stash`** here, and `codex exec` crashes on macOS inside it — both need `dangerouslyDisableSandbox: true`.
 - **`claude/settings.json` is the global source of truth** (symlinked to `~/.claude/settings.json`). Before staging it, verify it has `statusLine`, `hooks` and `permissions` keys — [`.claude/rules/dotfiles-settings.md`](.claude/rules/dotfiles-settings.md).
 - **Secrets are NOT globally exported** (supply-chain defense). Use `setup-envrc` per project via direnv; `secrets-edit` to add or update.
-- **Plot with Anthropic style by default** — `from anthro_colors import use_anthropic_defaults`. Colours, the `petri`/`deepmind` alternatives and the full API are in the `house-plots` skill.
+- **Plot with the house style by default** — `import style as house; house.set_defaults()` from `lib/plotting/` (pastel + soft grid). Charts on an artifact page are drawn as native SVG from `lib/plotting/tokens.json` instead; matplotlib is for papers and decks. Full API in the `house-plots` skill.
 - **Specs, plans and reports are Artifacts**, not files in `specs/` or `plans/`. Publish them and record the URL with its finding in this file; write Markdown source only when it must be version-controlled with the code. See `~/.claude/rules/pointers.md`.
 - **Verification is a design problem** — plan *how* you'll verify before starting. If you catch yourself thinking "let me figure out how to verify this", that's EnterPlanMode. Triggers and checklist: [`.claude/skills/verification-planning/SKILL.md`](.claude/skills/verification-planning/SKILL.md).
 

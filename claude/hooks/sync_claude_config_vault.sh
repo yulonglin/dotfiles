@@ -7,7 +7,7 @@
 #
 # Synchronous by design: it copies a few dozen small markdown files and finishes
 # in well under a second. Backgrounding it from a hook would risk the
-# process-group death documented in rules/agents-and-delegation.md and buy
+# process-group death documented in rules/delegation.md and buy
 # nothing.
 #
 # Always exits 0. A refusal (vault missing, or a vault that has never completed

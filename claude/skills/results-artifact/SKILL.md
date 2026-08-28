@@ -9,7 +9,7 @@ The checklist Yulong applies to every research artifact (2026-08-27). Build agai
 
 ## Presentation
 
-- **Numbers in prose can be a table; numbers in a table can be a plot.** Escalate to the richest form the data supports (house style: pastelplot/anthroplot, embedded as data URIs).
+- **Numbers in prose can be a table; numbers in a table can be a plot.** Escalate to the richest form the data supports. On a page, draw charts as **native SVG** using the built-in `dataviz` skill and the hexes in `lib/plotting/tokens.json` — a matplotlib PNG bakes its light ground into the pixels and glares in dark mode. Reserve embedded images for figures whose point is what matplotlib itself produces.
 - Mermaid diagrams for mechanisms and pipelines.
 - Commenting layer that can save, delete and update a comment, copy all comments, and keep highlights stable with no flicker while selecting text.
 
