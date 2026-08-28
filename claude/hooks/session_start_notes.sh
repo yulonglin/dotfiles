@@ -5,12 +5,12 @@
 PROJECT_NOTES="$(pwd)/NOTES.md"
 [ -f "$PROJECT_NOTES" ] || exit 0
 
-RECENT=$(tail -120 "$PROJECT_NOTES")
+RECENT=$(tail -30 "$PROJECT_NOTES")
 
 python3 -c "
 import json, sys
 
-content = '''=== RECENT EXPERIMENT LOG (NOTES.md last ~120 lines) ===
+content = '''=== RECENT EXPERIMENT LOG (NOTES.md last ~30 lines) ===
 $RECENT
 === END LOG ==='''
 

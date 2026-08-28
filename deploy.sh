@@ -778,6 +778,42 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             claude-cache-clean --apply
         fi
 
+        # Re-apply the remember-plugin handoff patch. Upstream puts the
+        # `cat "$REMEMBER_HANDOFF"` OUTSIDE the fingerprint if/else, so a handoff
+        # that was already delivered is re-injected in full every session instead
+        # of collapsing to its one-line staleness notice (measured: a 14KB file
+        # re-delivered 495 times since 2026-08-13). A version bump lands in a NEW
+        # cache directory and silently reverts the fix, so it is re-applied on
+        # every deploy rather than patched once by hand. Fails soft: a changed
+        # upstream shape warns and is left alone, and never aborts the deploy.
+        remember_cache="$HOME/.claude/plugins/cache/claude-plugins-official/remember"
+        if [[ -d "$remember_cache" ]]; then
+            remember_hook=$(find "$remember_cache" -mindepth 3 -maxdepth 3 \
+                -path '*/scripts/session-start-hook.sh' 2>/dev/null | sort -V | tail -1)
+            if [[ -n "$remember_hook" ]]; then
+                remember_result=$(python3 -c '
+import io, sys
+UNPATCHED = "    fi\n    cat \"$REMEMBER_HANDOFF\"\n"
+PATCHED = "        cat \"$REMEMBER_HANDOFF\"\n    fi\n"
+path = sys.argv[1]
+src = io.open(path, encoding="utf-8").read()
+if PATCHED in src:
+    print("already-patched")
+elif UNPATCHED not in src:
+    print("no-match")
+    raise SystemExit(3)
+else:
+    io.open(path, "w", encoding="utf-8").write(src.replace(UNPATCHED, PATCHED, 1))
+    print("patched")
+' "$remember_hook" 2>/dev/null) || remember_result="error"
+                case "$remember_result" in
+                    patched)         log_success "Patched remember handoff re-delivery ($remember_hook)" ;;
+                    already-patched) log_info "Remember handoff patch already applied" ;;
+                    *)               log_warning "Remember handoff patch skipped ($remember_result) — upstream shape changed, re-check $remember_hook" ;;
+                esac
+            fi
+        fi
+
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
         log_info "  Plugins: declared in settings.json enabledPlugins; all enabled"

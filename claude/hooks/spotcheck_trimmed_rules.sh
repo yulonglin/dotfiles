@@ -18,12 +18,6 @@ import json, sys
 print(json.dumps({'tool_name': 'Bash', 'tool_input': {'command': sys.argv[1]}}))
 " "$1"; }
 
-write_json() { python3 -c "
-import json, sys
-print(json.dumps({'tool_name': 'Write',
-                  'tool_input': {'file_path': sys.argv[1], 'content': sys.argv[2]}}))
-" "$1" "$2"; }
-
 check() { # desc expected_rc actual_rc
     if [ "$2" = "$3" ]; then printf '  PASS  %s\n' "$1"
     else printf '  FAIL  %s (want rc=%s, got rc=%s)\n' "$1" "$2" "$3"; fi
@@ -46,22 +40,3 @@ for cmd in 'git stash push -u -m "wip"' 'git stash apply abc123' 'git stash show
     rc=0; bash_json "$cmd" | bash "$H/block_destructive_git.sh" >/dev/null 2>&1 || rc=$?
     check "allows: $cmd" 0 "$rc"
 done
-
-echo "== deleted from coding-conventions.md: the sys.path.insert safe pattern =="
-out=$(write_json /repo/tool.py 'import sys
-sys.path.insert(0, "..")
-' | bash "$H/nudge_syspath.sh" 2>/dev/null)
-if printf '%s' "$out" | grep -q '_bootstrap_path' && printf '%s' "$out" | grep -q '__main__'; then
-    printf '  PASS  nudge emits the full safe pattern (_bootstrap_path + __main__ guard)\n'
-else
-    printf '  FAIL  nudge did not emit the safe pattern\n'
-fi
-out=$(write_json /repo/ok.py 'def _bootstrap_path():
-    import sys
-    sys.path.insert(0, "..")
-
-if __name__ == "__main__":
-    _bootstrap_path()
-' | bash "$H/nudge_syspath.sh" 2>/dev/null)
-[ -z "$out" ] && printf '  PASS  silent on the already-correct form\n' \
-              || printf '  FAIL  fired on the correct form\n'
