@@ -9,7 +9,7 @@ These rules carry only always-relevant judgment. Activity-scoped procedure is a 
 - Jobs, pueue, resource caps, sandbox failure modes → `jobs`
 - Second opinion from another model family → `second-opinion`
 - Interviewing the user to stress-test a plan → `interview-me`
-- Figures, plots, diagrams, styled pages → `house-plots`
+- Charts and figures → `house-plots` (matplotlib for papers; native SVG via built-in `dataviz` for artifact pages)
 - Browser automation and which browser tool to reach for → `agent-browser`
 - Bear notes and Bear-flavoured Markdown → `bear`
 - Modern CLI replacements (`rg`, `fd`, `eza`, `bat`, `jq`, …) → `core:fast-cli`

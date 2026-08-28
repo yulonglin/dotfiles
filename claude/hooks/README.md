@@ -136,7 +136,7 @@ echo "agentId: a5b5164" | ./agent_spawned.sh
 ## Integration with Task Management
 
 These hooks complement the task management system:
-- Task lists are scoped per session by Claude Code itself; the shell wrapper deliberately sets no task-list ID (`claude/rules/workflow-defaults.md`). The old `claude-new` / `claude-with` / `claude-last` helpers were removed 2026-08-28.
+- Task lists are scoped per session by Claude Code itself; the shell wrapper deliberately sets no task-list ID (`claude/skills/spawn-session/SKILL.md`). The old `claude-new` / `claude-with` / `claude-last` helpers were removed 2026-08-28.
 - CLAUDE.md: Conventions for naming and behavior
 - Skills: `task-management.md` for agent usage
 - Hooks: Automatic reminders and triggers
