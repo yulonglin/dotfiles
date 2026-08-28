@@ -290,14 +290,22 @@ claude() {
     # this line — the declarations below shadow both names for the rest of the
     # function.
     local -x CLAUDE_CODE_TASK_LIST_ID="$_tl_chosen"
-    # The pin is CONSUMED, not inherited: `+x` keeps it out of the child's
-    # environment, so nested `claude` calls, tmux panes and background jobs
-    # inside this session mint fresh instead of honoring this ID forever.
-    local +x CLAUDE_CODE_TASK_LIST_PIN
 
     activate_venv
+    # The pin is CONSUMED, not inherited: blanked on the launch line so nested
+    # `claude` calls, tmux panes and background jobs inside this session mint
+    # fresh instead of honoring this ID forever. The check above treats empty
+    # as unpinned, so an empty value is as good as absent.
+    #
+    # A prefix assignment, NOT `local +x`: `local +x` does not shadow a
+    # GLOBALLY EXPORTED variable under bash, and deploy.sh sources these
+    # aliases into ~/.bashrc, so claude() really does run under bash on
+    # bash-default hosts. Measured, same script both shells, with the pin
+    # exported globally — bash: child sees PIN=[1]; zsh: PIN=[unset]. A prefix
+    # assignment on a REGULAR builtin (`command`) is POSIX, reaches the child,
+    # and does not persist in the calling shell, in both shells.
     # Last command, so its exit status is the function's — nothing to restore.
-    command claude "${args[@]}"
+    CLAUDE_CODE_TASK_LIST_PIN='' command claude "${args[@]}"
 }
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
 alias yolo='claude --dangerously-skip-permissions'
@@ -362,8 +370,24 @@ _cw_launch() {
       # no venv, no git-root cd, no channels, and no task-list scoping. Same
       # trap documented in claude/skills/spawn-session/SKILL.md.
       local inner="$cmd; exec \$SHELL"
-      local shell_cmd
-      shell_cmd="zsh -ic $(printf '%q' "$inner")"
+      # An interactive shell that can read this repo's aliases. zsh is the
+      # normal case; bash is the fallback on bash-default hosts, where
+      # deploy.sh has sourced config/aliases/*.sh into ~/.bashrc. Without this
+      # guard, cw on a zsh-less host failed with no diagnostic.
+      local login_sh=""
+      if command -v zsh >/dev/null 2>&1; then login_sh=zsh
+      elif command -v bash >/dev/null 2>&1; then login_sh=bash
+      else
+        echo "cw: neither zsh nor bash found — cannot launch through the claude() wrapper" >&2
+        return 1
+      fi
+      # POSIX single-quote escaping, NOT printf '%q': tmux hands this string to
+      # /bin/sh, which is dash on Debian/Ubuntu, and zsh's %q emits $'\t' for a
+      # control character — which dash does not understand (measured: a tab in
+      # an argument arrived as the literal characters "$tb"). Per-arg %q above
+      # is fine because that layer is parsed by the inner zsh, not by sh.
+      local shell_cmd sq_rep="'\\''"
+      shell_cmd="$login_sh -ic '${inner//\'/$sq_rep}'"
       # Blank both task-list vars in the session's environment, exactly as
       # custom_bins/claude-spawn does. A tmux server started from a
       # pre-fix (contaminated) shell carries a stale ID in its environment,
