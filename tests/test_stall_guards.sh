@@ -19,6 +19,30 @@ failures=0
 fail() { echo "FAIL: $*" >&2; failures=$((failures + 1)); }
 pass() { echo "  ok   $*"; }
 
+# Every assertion below is driven by a grep. A grep that suddenly matches
+# nothing — because the code moved, was renamed, or was deleted — would make a
+# `while read` loop run zero times and report a confident pass over an empty
+# set. Route every such search through here so a vanished target fails loudly
+# instead of silently blessing whatever replaced it.
+# Returns 1 and prints nothing when the search comes up empty; the CALLER
+# reports it. It must not call fail() itself: every call site captures its
+# output with $(...), which is a subshell, so an increment to `failures` there
+# would be discarded and the suite would exit 0 with the message printed. That
+# is the same silent-pass bug this helper exists to prevent.
+# Usage: hits="$(require_hits <grep args...>)" || fail "found no X to check…"
+require_hits() {
+    local out
+    out="$(grep "$@" || true)"
+    [[ -n "$out" ]] || return 1
+    printf '%s\n' "$out"
+}
+
+# Wraps the pattern above so each call site is one line.
+# Usage: hits="$(hits_or_fail <description> <grep args...>)"
+missing_target() {
+    fail "found no $1 to check — has it been renamed, moved or removed? (without this check the guard below would pass over an empty set)"
+}
+
 # ── The component menu is the only prompt either script has ──────────────────
 # It must bow out when there is nobody to answer: no TTY (cron, CI, a Docker
 # build) or an explicit --non-interactive.
@@ -29,7 +53,7 @@ if grep -q 'NON_INTERACTIVE' <<<"$menu_body" && grep -q '\-t 0' <<<"$menu_body";
 else
     fail "show_component_menu no longer skips on NON_INTERACTIVE and/or a missing TTY — an unattended run will hang on the TUI"
 fi
-if grep -qE '^\s*(return 0|return)\s*$' <<<"$menu_body"; then
+if grep -qE '^[[:space:]]*return( 0)?[[:space:]]*$' <<<"$menu_body"; then
     pass "show_component_menu has an early return"
 else
     fail "show_component_menu lost its early return"
@@ -42,6 +66,14 @@ if grep -q '\[\[ -t 0 \]\] || return 0' <<<"$sudo_body"; then
     pass "front_load_sudo returns immediately without a TTY"
 else
     fail "front_load_sudo no longer returns early without a TTY — 'sudo -v' will block or abort in CI"
+fi
+# The TTY check alone is NOT enough, and this assertion used to pin only that —
+# blessing the bug. On a real terminal --non-interactive still reached 'sudo -v'
+# and waited forever for a password.
+if grep -q 'NON_INTERACTIVE' <<<"$sudo_body"; then
+    pass "front_load_sudo also honours --non-interactive"
+else
+    fail "front_load_sudo ignores NON_INTERACTIVE — on a TTY, --non-interactive will still stop at a sudo password prompt"
 fi
 if grep -q 'sudo -n true' <<<"$sudo_body"; then
     pass "front_load_sudo short-circuits when sudo is already cached"
@@ -69,7 +101,9 @@ done
 # zsh's prompting form is `read -r "var?prompt"`. Each one must sit behind a
 # NON_INTERACTIVE / TTY check, with a default chosen for the unattended case.
 echo "Interactive reads are guarded:"
-prompt_reads="$(grep -nE 'read .*"[A-Za-z_][A-Za-z_0-9]*\?' "$INSTALL_SH" "$DEPLOY_SH" || true)"
+# Covers zsh's `read -r "var?prompt"`, the single-quoted form, and the bare
+# `read "?prompt"` that reads into $REPLY.
+prompt_reads="$(grep -nE 'read [^|]*["'"'"'][A-Za-z_0-9]*\?' "$INSTALL_SH" "$DEPLOY_SH" || true)"
 if [[ -z "$prompt_reads" ]]; then
     pass "no prompting reads at all"
 else
@@ -77,7 +111,9 @@ else
         [[ -z "$hit" ]] && continue
         file="${hit%%:*}"; rest="${hit#*:}"; line="${rest%%:*}"
         start=$(( line > 20 ? line - 20 : 1 ))
-        if sed -n "${start},${line}p" "$file" | grep -q 'NON_INTERACTIVE\|-t 0'; then
+        # Strip comments first: a comment *mentioning* NON_INTERACTIVE is not a
+        # guard, and without this the check passes on a prompt with none.
+        if sed -n "${start},${line}p" "$file" | sed 's/#.*//' | grep -q 'NON_INTERACTIVE\|-t 0'; then
             pass "$(basename "$file"):$line prompt is behind a guard"
         else
             fail "$(basename "$file"):$line prompts for input with no NON_INTERACTIVE / TTY guard above it"
@@ -93,15 +129,19 @@ if grep -q 'NONINTERACTIVE=1 /bin/bash -c .*Homebrew/install' "$INSTALL_SH"; the
 else
     fail "the Homebrew installer lost NONINTERACTIVE=1 — it blocks on 'Press RETURN to continue' on a fresh Mac"
 fi
+rustup_hits="$(require_hits -n 'sh.rustup.rs' "$INSTALL_SH" "$HELPERS_SH")" \
+    || missing_target "rustup installer invocation"
 while IFS= read -r hit; do
     [[ -z "$hit" ]] && continue
-    if grep -q -- '-y' <<<"$hit"; then
+    if grep -qE -- '(^|[[:space:]])-y([[:space:]]|$)' <<<"$hit"; then
         pass "rustup installer passes -y (${hit%%:*}:$(cut -d: -f2 <<<"$hit"))"
     else
         fail "rustup installer without -y: $hit"
     fi
-done <<<"$(grep -n 'sh.rustup.rs' "$INSTALL_SH" "$HELPERS_SH" || true)"
+done <<<"$rustup_hits"
 
+brew_hits="$(require_hits -nE '^[^#]*[^[:alnum:]_-]brew bundle ' "$INSTALL_SH")" \
+    || missing_target "brew bundle invocation"
 while IFS= read -r hit; do
     [[ -z "$hit" ]] && continue
     if grep -q '</dev/null' <<<"$hit"; then
@@ -109,12 +149,14 @@ while IFS= read -r hit; do
     else
         fail "brew bundle without </dev/null: $hit — mas' internal sudo will block on it"
     fi
-done <<<"$(grep -nE '^[^#]*[^[:alnum:]_-]brew bundle ' "$INSTALL_SH" || true)"
+done <<<"$brew_hits"
 
 # app-picker is a gum TUI; it must only run when someone can drive it.
 echo "app-picker only runs interactively:"
 picker_line="$(grep -n 'app-picker"' "$INSTALL_SH" | head -1 | cut -d: -f1)"
-if [[ -n "$picker_line" ]]; then
+if [[ -z "$picker_line" ]]; then
+    fail "found no app-picker invocation to check — has it been renamed or removed?"
+else
     start=$(( picker_line > 15 ? picker_line - 15 : 1 ))
     if sed -n "${start},${picker_line}p" "$INSTALL_SH" | grep -q 'NON_INTERACTIVE\|-t 0'; then
         pass "app-picker invocation is behind a NON_INTERACTIVE / TTY guard"
@@ -126,10 +168,17 @@ fi
 # ── Package managers never ask for confirmation ──────────────────────────────
 echo "Package installs are non-interactive:"
 apt_missing=0
+apt_hits="$(require_hits -nE 'apt(-get)? install ' "$INSTALL_SH" "$DEPLOY_SH" "$HELPERS_SH")" \
+    || { missing_target "apt/apt-get install invocation"; apt_missing=1; }
 while IFS= read -r hit; do
     [[ -z "$hit" ]] && continue
-    grep -q -- '-y' <<<"$hit" || { fail "apt install without -y: $hit"; apt_missing=1; }
-done <<<"$(grep -nE 'apt(-get)? install ' "$INSTALL_SH" "$DEPLOY_SH" "$HELPERS_SH" | grep -v '^\s*#' || true)"
+    # Drop commented-out examples. The old filter was '^\s*#', which never
+    # matched: grep -n output always begins "path:lineno:".
+    [[ "$hit" =~ ^[^:]*:[0-9]+:[[:space:]]*# ]] && continue
+    # A whole word, not a substring: '-y' alone also matches "python3-yaml".
+    grep -qE -- '(^|[[:space:]])(-y|--yes|--assume-yes)([[:space:]]|$)' <<<"$hit" \
+        || { fail "apt install without -y: $hit"; apt_missing=1; }
+done <<<"$apt_hits"
 [[ $apt_missing -eq 0 ]] && pass "every apt/apt-get install passes -y"
 
 # ── Best-effort probes must not abort the run ────────────────────────────────
@@ -158,6 +207,26 @@ if grep -q 'local -a SUDO=()' "$HELPERS_SH" && ! grep -qE '\$SUDO -E' "$HELPERS_
     pass "install_node builds its sudo prefix as an array"
 else
     fail "install_node uses a scalar \$SUDO with -E — running as root this becomes the command '-E'"
+fi
+
+# ── Credential prompts that are not sudo's own ───────────────────────────────
+# chsh authenticates through PAM on stdin, so a bare call blocks in an
+# unattended run even where sudo is already cached.
+echo "Shell change does not open a PAM prompt:"
+if grep -qE '^[[:space:]]*sudo chsh ' "$HELPERS_SH" && ! grep -qE '^[[:space:]]*chsh -s' "$HELPERS_SH"; then
+    pass "set_zsh_default changes the shell via sudo, not a bare chsh"
+else
+    fail "set_zsh_default calls chsh directly — it will block on a PAM password prompt with nobody to answer"
+fi
+
+# The App Store credential prewarm had the same TTY-only guard as front_load_sudo.
+echo "App Store credential prewarm is skippable:"
+mas_ctx="$(require_hits -B3 "App Store installs (mas) need sudo" "$INSTALL_SH")" \
+    || missing_target "mas sudo prewarm"
+if [[ -n "$mas_ctx" ]] && sed 's/#.*//' <<<"$mas_ctx" | grep -q 'NON_INTERACTIVE'; then
+    pass "mas sudo prewarm is behind a NON_INTERACTIVE guard"
+else
+    fail "the mas sudo prewarm is TTY-guarded only — --non-interactive on a terminal will stop at a password prompt"
 fi
 
 echo ""

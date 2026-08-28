@@ -770,12 +770,16 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
 
         # Clean plugin-created symlinks from skills/ (they cause duplicate entries)
         if [[ -f "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh" ]]; then
-            "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"
+            "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh" \
+                || log_warning "plugin symlink cleanup failed — continuing"
         fi
 
         # Clean stale plugin cache versions (prevents skill shadowing warnings)
         if command -v claude-cache-clean &>/dev/null; then
-            claude-cache-clean --apply
+            # Exits 1 on a box that has launched Claude but never installed a
+            # plugin, and its python3 probe is silent — either used to end the
+            # deploy here, before secrets and SSH.
+            claude-cache-clean --apply || log_warning "plugin cache clean failed — continuing"
         fi
 
         # Re-apply the remember-plugin handoff patch. Upstream puts the
@@ -1274,36 +1278,43 @@ if [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos; then
     VPN_PLIST_PATH="/Library/LaunchDaemons/${VPN_PLIST_LABEL}.plist"
     VPN_SCRIPT_PATH="/usr/local/bin/tailscale-route-fix"
 
-    sudo -v  # Acquire sudo upfront
-
-    # Idempotent: unload existing before loading new
-    sudo launchctl bootout "system/${VPN_PLIST_LABEL}" 2>/dev/null || true
-
-    # Install script
-    sudo mkdir -p /usr/local/bin
-    sudo cp "$DOT_DIR/scripts/vpn/tailscale_route_fix.sh" "$VPN_SCRIPT_PATH"
-    sudo chmod 755 "$VPN_SCRIPT_PATH"
-    sudo chown root:wheel "$VPN_SCRIPT_PATH"
-
-    # Install plist
-    sudo cp "$DOT_DIR/scripts/vpn/${VPN_PLIST_LABEL}.plist" "$VPN_PLIST_PATH"
-    sudo chmod 644 "$VPN_PLIST_PATH"
-    sudo chown root:wheel "$VPN_PLIST_PATH"
-
-    # Log rotation: 5 files, 1MB max, compressed
-    echo "/var/log/tailscale-route-fix.log 640 5 1000 * J" | \
-        sudo tee /etc/newsyslog.d/tailscale-route-fix.conf > /dev/null
-
-    # Load daemon
-    sudo launchctl bootstrap system "$VPN_PLIST_PATH"
-    sudo launchctl enable "system/${VPN_PLIST_LABEL}"
-    sudo launchctl kickstart -k "system/${VPN_PLIST_LABEL}"
-
-    # Verify
-    if sudo launchctl print "system/${VPN_PLIST_LABEL}" &>/dev/null; then
-        log_success "VPN split tunnel daemon installed and running"
+    # Every step below needs root. Without a TTY sudo cannot prompt and exits
+    # non-zero, which under `set -e` ended the whole deploy here — before bws
+    # and SSH — over one optional component. Skip the component instead.
+    if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! sudo -v; then
+        log_warning "VPN split tunnel needs sudo — skipping (run './deploy.sh --only vpn' from a terminal)"
     else
-        log_warning "VPN daemon installed but may not be running — check: sudo launchctl print system/${VPN_PLIST_LABEL}"
+
+        # Idempotent: unload existing before loading new
+        sudo launchctl bootout "system/${VPN_PLIST_LABEL}" 2>/dev/null || true
+
+        # Install script
+        sudo mkdir -p /usr/local/bin
+        sudo cp "$DOT_DIR/scripts/vpn/tailscale_route_fix.sh" "$VPN_SCRIPT_PATH"
+        sudo chmod 755 "$VPN_SCRIPT_PATH"
+        sudo chown root:wheel "$VPN_SCRIPT_PATH"
+
+        # Install plist
+        sudo cp "$DOT_DIR/scripts/vpn/${VPN_PLIST_LABEL}.plist" "$VPN_PLIST_PATH"
+        sudo chmod 644 "$VPN_PLIST_PATH"
+        sudo chown root:wheel "$VPN_PLIST_PATH"
+
+        # Log rotation: 5 files, 1MB max, compressed
+        echo "/var/log/tailscale-route-fix.log 640 5 1000 * J" | \
+            sudo tee /etc/newsyslog.d/tailscale-route-fix.conf > /dev/null
+
+        # Load daemon
+        sudo launchctl bootstrap system "$VPN_PLIST_PATH"
+        sudo launchctl enable "system/${VPN_PLIST_LABEL}"
+        sudo launchctl kickstart -k "system/${VPN_PLIST_LABEL}"
+
+        # Verify
+        if sudo launchctl print "system/${VPN_PLIST_LABEL}" &>/dev/null; then
+            log_success "VPN split tunnel daemon installed and running"
+        else
+            log_warning "VPN daemon installed but may not be running — check: sudo launchctl print system/${VPN_PLIST_LABEL}"
+        fi
+
     fi
 fi
 

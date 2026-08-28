@@ -153,7 +153,10 @@ elif is_linux; then
     install_packages apt "${PACKAGES_CORE[@]}" less nano nvtop lsof unzip bubblewrap socat
 
     # Install mise for modern CLI tools
-    install_mise
+    # `|| log_warning`: install_mise returns 1 when the installer could not run,
+    # and at a bare call site `set -e` would end the install here — before gh,
+    # Node, zsh, tmux and the AI tools.
+    install_mise || log_warning "mise unavailable — modern CLI tools may be missing"
 
     # Modern CLI tools via mise
     log_info "Installing modern CLI tools..."
@@ -237,7 +240,8 @@ if [[ "$INSTALL_ZSH" == "true" ]]; then
         if is_macos; then
             brew_install zsh
         else
-            apt_install zsh || "$DOT_DIR/scripts/helpers/install_zsh_local.sh"
+            apt_install zsh || "$DOT_DIR/scripts/helpers/install_zsh_local.sh" \
+                || log_warning "zsh install failed — continuing with the current shell"
         fi
     fi
     set_zsh_default
@@ -500,7 +504,8 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             # internal sudo no way to read a password. Pre-warm the credential (interactive
             # TTY only) for any mas lines that remain (belt-and-suspenders after mas-get).
             sudo_keepalive_pid=""
-            if [[ -t 0 ]] && grep -q '^mas ' "$brewfile" 2>/dev/null; then
+            if [[ "${NON_INTERACTIVE:-false}" != "true" ]] && [[ -t 0 ]] \
+                && grep -q '^mas ' "$brewfile" 2>/dev/null; then
                 log_info "App Store installs (mas) need sudo — caching your credential…"
                 if sudo -v; then
                     # Capture parent PID before subshell so $$ resolves correctly in both
@@ -516,11 +521,11 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             log_info "Installing remaining apps from Brewfile (this can take a while)..."
             env "${BREW_NONINTERACTIVE_ENV[@]}" brew bundle --file="$brewfile" </dev/null || true
 
-            [[ -n "$sudo_keepalive_pid" ]] && kill "$sudo_keepalive_pid" 2>/dev/null
+            [[ -n "$sudo_keepalive_pid" ]] && kill "$sudo_keepalive_pid" 2>/dev/null || true
 
             # Step 3: Detect any mas apps that didn't land and tell the user what to do.
             if grep -q '^mas ' "$brewfile" 2>/dev/null; then
-                installed_ids=$(mas list 2>/dev/null | awk '{print $1}')
+                installed_ids=$(mas list 2>/dev/null | awk '{print $1}') || true
                 if [[ -z "$installed_ids" ]]; then
                     log_warning "Could not query installed App Store apps (mas list failed) — skipping post-install check"
                 else

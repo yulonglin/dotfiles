@@ -46,18 +46,20 @@ jobs:
   no-stall:
     name: No stall (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # Well above the ~1 minute a healthy run takes, and below the per-case
-    # ceiling times the case count, so a genuine hang is reported as a failing
-    # test rather than a cancelled job.
-    timeout-minutes: 20
+    # A healthy run takes about a minute. This is sized so that the WORST case
+    # still fits: a regression stalling all 16 cases costs 16 x 60s, and the job
+    # must outlive that to report the stalls rather than be cancelled mid-way.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     env:
-      # Each case really finishes in seconds; this only has to clear the
-      # slowest plausible runner. Anything past it is a hang, not slowness.
-      STALL_CASE_TIMEOUT: "90"
+      # Each case really finishes in a couple of seconds, so this is ~30x
+      # headroom. It is deliberately not larger: a regression that stalls every
+      # case must still fit inside timeout-minutes below, or the job is
+      # *cancelled* rather than reporting the stall it was built to report.
+      STALL_CASE_TIMEOUT: "60"
     steps:
       - uses: actions/checkout@v4
 

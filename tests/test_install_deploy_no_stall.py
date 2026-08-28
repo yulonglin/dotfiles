@@ -41,6 +41,7 @@ Run: python3 tests/test_install_deploy_no_stall.py [-v]
 
 import os
 import pty
+import select
 import shutil
 import signal
 import subprocess
@@ -73,10 +74,9 @@ STUBBED = """
     mise asdf nix
     docker podman
     systemctl loginctl launchctl crontab at
-    useradd usermod groupadd gpasswd chsh adduser deluser userdel
+    useradd usermod groupadd gpasswd adduser deluser userdel
     defaults osascript scutil dscl softwareupdate spctl
     tailscale pueued
-    curl wget
 """.split()
 
 # Deliberately NOT stubbed, even though the scripts call them: bws, gh, claude,
@@ -86,6 +86,18 @@ STUBBED = """
 # through a `set -o pipefail` command substitution exits 127 and used to abort
 # deploy.sh outright, and stubbing bws would have hidden that permanently. A
 # stub can simulate a tool that fails; it cannot simulate one that isn't there.
+#
+# `curl` and `wget` are likewise NOT stubbed. Egress already points at a closed
+# port, so the real binaries fail exactly as they would on a box with no
+# network — which is the condition several `curl … | sh` installers have to
+# survive. Stubbing curl to exit 0 would paper over every one of them.
+#
+# Each entry above carries a second, easily-missed claim: "this command never
+# prompts". A stub that exits 0 makes sudo look passwordless and chsh look like
+# it never reaches PAM, which would hide the very stalls this file exists to
+# find. `chsh` is therefore left unstubbed (it only edits the sandbox user's
+# shell entry, and it prompts), and `sudo` gets a realistic stub below rather
+# than a blanket success.
 
 
 def log(msg):
@@ -110,9 +122,27 @@ def make_sandbox(stub_mode):
     os.makedirs(home)
     os.makedirs(stubs)
 
-    rc = 0 if stub_mode == "ok" else 1
+    rc = 1 if stub_mode == "fail" else 0
     for name in STUBBED:
         path = os.path.join(stubs, name)
+        # "nosudo": model a machine whose sudo needs a password and has none
+        # cached — `sudo -n` fails, and a plain `sudo -v` PROMPTS. The prompt is
+        # the point: a blanket `exit 0` stub makes sudo look passwordless and
+        # hides every credential prompt, so a privileged step that should skip
+        # itself under --non-interactive looks fine while really it hangs.
+        if stub_mode == "nosudo" and name in ("sudo", "doas"):
+            with open(path, "w") as fh:
+                fh.write(
+                    "#!/bin/sh\n"
+                    "case \"$1\" in\n"
+                    "  -n) exit 1 ;;\n"       # never non-interactively authorised
+                    "esac\n"
+                    "printf '[sudo] password for %s: ' \"$(id -un)\" >&2\n"
+                    "head -n 1 >/dev/null\n"  # block exactly as a password prompt does
+                    "exit 1\n"
+                )
+            os.chmod(path, 0o755)
+            continue
         # Stubs must never touch stdin: reading it would hang the run and be
         # misreported as the script stalling.
         with open(path, "w") as fh:
@@ -171,13 +201,26 @@ def run_with_dead_stdin(argv, env, cwd, log_path, tty):
         )
         os.close(slave)
 
+        # Drain continuously: a full pty buffer would block the child on write
+        # and be misreported as a stall. Poll rather than blocking in os.read —
+        # a background grandchild can hold the slave open long after the child
+        # exits (install.sh leaves a sudo keepalive subshell on the pty), which
+        # wedged this thread forever, burnt the join timeout on every case and
+        # raised "write to closed file" once the log was closed underneath it.
+        stop_drain = threading.Event()
+
         def drain():
-            while True:
+            while not stop_drain.is_set():
                 try:
+                    ready, _, _ = select.select([master], [], [], 0.1)
+                    if not ready:
+                        continue
                     data = os.read(master, 65536)
                 except OSError:
                     break
                 if not data:
+                    break
+                if logfh.closed:
                     break
                 logfh.write(data)
                 logfh.flush()
@@ -207,6 +250,10 @@ def run_with_dead_stdin(argv, env, cwd, log_path, tty):
 
     elapsed = time.time() - started
     if tty:
+        # Order matters: stop the thread, join it, close the fd, and only then
+        # close the log. Closing out from under a live reader is what produced
+        # the traceback.
+        stop_drain.set()
         if drain_thread:
             drain_thread.join(timeout=2)
         try:
@@ -308,7 +355,32 @@ def self_test():
                     % (label, rc, timed_out))
     finally:
         shutil.rmtree(root, ignore_errors=True)
-    return ok == 4
+
+    # The checks above run outside the sandbox, so they say nothing about
+    # whether the stub PATH quietly neutralises the prompts we are hunting.
+    # That is not hypothetical: stubbing `sudo` as a blanket `exit 0` made it
+    # look passwordless and hid a real hang for a while. Prove the "nosudo"
+    # stub genuinely blocks, through the same env a real case gets.
+    sb_root, sb_repo, sb_env = make_sandbox("nosudo")
+    try:
+        probe = os.path.join(sb_root, "probe.sh")
+        with open(probe, "w") as fh:
+            fh.write("#!/usr/bin/env zsh\nsudo -v\necho 'NOT REACHED'\n")
+        os.chmod(probe, 0o755)
+        _, _, timed_out = run_with_dead_stdin(
+            ["zsh", probe], sb_env, sb_root,
+            os.path.join(sb_root, "c.log"), tty=True,
+        )
+        if timed_out:
+            log("  ok     the sandbox's sudo stub really does block on a prompt")
+            ok += 1
+        else:
+            log("  FAIL   the sudo stub does NOT block — every credential prompt "
+                "in the cases below is invisible to this test")
+    finally:
+        shutil.rmtree(sb_root, ignore_errors=True)
+
+    return ok == 5
 
 
 def main():
@@ -349,6 +421,19 @@ def main():
     # …and the same without a TTY, which is how CI actually invokes them.
     r.case("install.sh", ["--non-interactive"], tty=False)
     r.case("deploy.sh", ["--non-interactive"], tty=False)
+
+    # Root is not available to an unattended run on a machine whose sudo needs a
+    # password. Every privileged component has to skip itself rather than end
+    # the run for the components after it.
+    log("\nRuns where sudo would prompt must still finish cleanly:")
+    # The pty flavour is the one that matters: without a TTY the `-t 0` guards
+    # skip the credential prompt anyway, so a pipe-only case proves nothing.
+    # On a pty those guards pass and --non-interactive is all that stands
+    # between the run and a password prompt nobody will answer.
+    r.case("install.sh", ["--non-interactive"], tty=True, stub_mode="nosudo")
+    r.case("deploy.sh", ["--non-interactive"], tty=True, stub_mode="nosudo")
+    r.case("install.sh", ["--non-interactive"], tty=False, stub_mode="nosudo")
+    r.case("deploy.sh", ["--non-interactive"], tty=False, stub_mode="nosudo")
 
     log("\nRuns on a machine where every external tool fails must still finish:")
     # Only termination is asserted here. A non-zero exit is a legitimate outcome
