@@ -143,8 +143,7 @@
       "Bash(sudo *)",
       "Bash(kubectl delete *)",
       "Read(**/.env)",
-      "Read(**/.env.*)",
-      "mcp__claude_ai_Notion__notion-move-pages"
+      "Read(**/.env.*)"
     ],
     "defaultMode": "auto"
   },
