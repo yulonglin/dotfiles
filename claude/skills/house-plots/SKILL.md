@@ -1,57 +1,45 @@
 ---
 name: house-plots
-description: House visual style — pastel matplotlib defaults, Anthropic palette, annotation helpers, TikZ and web-CSS references. Use for any figure, chart, diagram, slide or styled page.
+description: House chart style — pastel matplotlib defaults, palette, overlap checking. Use for any figure, chart or plot.
 ---
 
-# House Plot And Visual Style
+# House Plots
 
-One skill for everything that should carry the house look: matplotlib figures first, plus TikZ diagrams, HTML/CSS and slides. `pastelplot` is the current default module; the Anthropic brand palette and the per-domain references sit beside it.
+All plotting code lives in `lib/plotting/` (deployed to `~/.local/lib/plotting`). Nothing importable lives in this skill any more — it was moved out on 2026-08-28 when `pastelplot.py` was merged into the package.
 
-## Quick Start — Copy The Module In, Then Set Defaults
+## Pick The Renderer By Destination, Not By Habit
 
-`references/pastelplot.py` is a **copy-in module, not a pip package** (the anthroplot convention). Copy it into the project, then:
+| Destination | Draw with | Why |
+|---|---|---|
+| Artifact / report page | **Native SVG** — load the built-in `dataviz` skill | Theme-aware, kilobytes not megabytes, selectable text, crisp at any zoom. A matplotlib PNG bakes its light ground into the pixels and glares in dark mode |
+| Paper figure | **matplotlib**, PGF backend for camera-ready | LaTeX typesets the text, so fonts match the document exactly. Reproducible from data |
+| Slide deck | matplotlib to SVG/PNG | Marp embeds files; the deck is not theme-reactive |
 
-```python
-import pastelplot
-pastelplot.set_defaults()  # call before plotting
-```
+Both surfaces read the same hexes: `lib/plotting/tokens.json` is generated from `palette.py`, so an SVG chart on a page and a matplotlib figure in a paper cannot drift apart. Regenerate it with `python3 lib/plotting/palette.py` after any palette edit — a test fails if it goes stale.
 
-**Alternative** (no module, no helpers): `plt.style.use('/path/to/dotfiles/config/matplotlib/pastel.mplstyle')` — or `plt.style.use('pastel')` if symlinked into `~/.config/matplotlib/stylelib/`.
+**`svg.fonttype` defaults to `"path"`**, which turns every label into outlines. Set it to `"none"` if you want an SVG whose text is still text. For LaTeX, prefer the PGF backend over SVG-to-PDF: it needs no converter (none of inkscape, rsvg-convert or cairosvg is installed here) and it matches document fonts properly.
 
-**Brand-strict alternative**, when the output must match Anthropic's official look rather than the pastel house default:
-
-```python
-from anthro_colors import use_anthropic_defaults
-use_anthropic_defaults()
-```
-
-That loads `~/.config/matplotlib/stylelib/anthropic.mplstyle`: white background, PRETTY_CYCLE colors, no top/right spines, 300 DPI saves with tight bbox.
-
-## Check For Overlapping Text Before Shipping A Figure
-
-Eyeballing catches the collisions you happen to look at; a caption lying across a legend or a label sitting on a bar survives review and then gets noticed by the reader. `references/figcheck.py` walks every rendered Text, Legend and bar artist, takes its true window extent after a draw, and fails on real intersections.
-
-Copy it in beside `pastelplot.py`, then either check one figure:
+## Quick Start
 
 ```python
-from figcheck import assert_no_overlaps
-fig.savefig(path, dpi=150, bbox_inches="tight")
-assert_no_overlaps(fig, "fig_name")
+import sys; sys.path.append("~/.local/lib/plotting")  # not at import time in a session
+import style as house
+
+house.set_defaults()                    # pastel + soft grid, the house default
+fig, ax = plt.subplots()
+ax.bar(arms, values, color=house.emphasis_colors(len(arms), highlight=2))
+house.rounded_bars(ax)                  # optional; call BEFORE annotate_values
+house.annotate_values(ax, format=lambda x: f"{x:.0%}")
+house.format_yaxis(ax, format=lambda x: f"{x:.0%}")
 ```
 
-or cover every figure the script writes with one line at the top:
+`set_defaults(style=...)` takes `pastel_grid` (default), `pastel`, `brand`, `petri`. An unknown name raises rather than silently falling back.
 
-```python
-import figcheck; figcheck.install()      # strict=False to warn instead of raise
-```
+## The Pastel Cycle Carries Series, The Accent Carries Emphasis
 
-For a script you did not write, `figcheck make_figs.py` (on PATH) runs it with the hook installed and exits non-zero on any collision; `figcheck --warn` reports without failing. Checking must happen on the live `Figure` — a saved PNG no longer knows where its text boxes were.
+Draw every series in pastels and the one you mean in its matching saturated accent — `emphasis_colors(n, highlight=i)` does exactly that via `palette.ACCENT_FOR`.
 
-Two gotchas it was built around: `axvspan`/`axhspan` shading is decoration, not a bar, so full-height patches are excluded (otherwise every value label reads as a collision), and a legend's own entries sitting inside its frame are not collisions.
-
-## Pastel Cycle For Series, Accents For Emphasis
-
-| Pastel (cycle order) | Hex | Accent (saturated brand) | Hex |
+| Pastel | Hex | Matching accent | Hex |
 |---|---|---|---|
 | PASTEL_CLAY | #E8A288 | ACCENT_CLAY | #D97757 |
 | PASTEL_SKY | #9DBFE3 | ACCENT_SKY | #6A9BCC |
@@ -62,46 +50,33 @@ Two gotchas it was built around: `axvspan`/`axhspan` shading is decoration, not 
 | PASTEL_AQUA | #93C7C1 | — | |
 | PASTEL_GRAY | #B9B6AE | — | |
 
-Text is `SLATE` (#141413); background white (`IVORY` #FAF9F5 available). Pastel hexes are softened derivations of the Anthropic secondaries, NOT official brand values — the ACCENT_* and SLATE/IVORY hexes are official. Highlight-one-series pattern: draw everything in pastels, the emphasized series in its matching accent (`pastelplot.ACCENT_FOR[color]`).
+Text is `SLATE` (#141413). The pastels are softened derivations, **not** official brand values; the accents, SLATE and IVORY are official. Every hex, including the full brand ramps, lives in `lib/plotting/palette.py` — that file is the source of truth, and there is deliberately no Markdown copy of it to drift.
 
-Official brand accents, for output that must be brand-strict:
+## Check For Overlapping Text Before Shipping A Figure
 
-| Name | Hex | Use |
-|------|-----|-----|
-| DARK_ORANGE (BOOK_CLOTH) | `#B86046` | Primary accent, first in cycle |
-| GREY | `#656565` | Secondary, neutral elements |
-| DARK_BLUE | `#40668C` | Tertiary accent |
-| SLATE (GREY_950) | `#141413` | Text, axes |
-| IVORY (GREY_050) | `#FAF9F5` | Light backgrounds (brand) |
-| CLAY | `#D97757` | Warm accent |
-| SKY | `#6A9BCC` | Cool accent |
-| OLIVE | `#788C5D` | Nature/green accent |
-
-## Helpers
+Eyeballing catches the collisions you happen to look at. A caption lying across a legend survives review and then gets noticed by the reader. `figcheck` walks every rendered Text, Legend and bar artist, takes its true window extent after a draw, and fails on real intersections.
 
 ```python
-pastelplot.annotate_values(ax, format=lambda x: f"{x:.0%}")  # bar heights + line endpoints
-pastelplot.format_yaxis(ax, format=lambda x: f"{x:.0%}")
-pastelplot.make_axes_transparent(ax)                          # clean overlay plots
+from figcheck import assert_no_overlaps
+fig.savefig(path, dpi=150, bbox_inches="tight")
+assert_no_overlaps(fig, "fig_name")
 ```
 
-## Load The Reference For Your Output Type
+Or cover every figure a script writes with `import figcheck; figcheck.install()` (`strict=False` to warn). For a script you did not write, `figcheck make_figs.py` runs it with the hook installed and exits non-zero on any collision.
 
-| Domain | Reference | When |
-|--------|-----------|------|
-| **matplotlib** | `references/matplotlib.md` | Python plots, charts, figures |
-| **Colors** | `references/colors.md` | Full palette — all 9 hue ramps (orange through red, 100-900 each). Accent colors have AA text-tier variants; check it before coloring text, because brand accents fail AA as text on Ivory |
-| **HTML/CSS** | `references/web-css.md` | Web pages, HTML artifacts |
-| **TikZ** | `references/tikz.md` | LaTeX diagrams for papers |
-| **Annotations & layout** | `references/visual-layout-quality.md` | Arrow anchoring, label placement in empty space, spacing minimums — read whenever adding annotations (callouts, gap markers, brackets) to any chart |
+Checking must happen on the live `Figure` — a saved PNG no longer knows where its text boxes were. Two deliberate exclusions: `axvspan`/`axhspan` shading is decoration rather than a bar, and a legend's own entries inside its frame are not collisions.
+
+## Load The Reference For What You Are Doing
+
+| Reference | When |
+|---|---|
+| `references/matplotlib.md` | Callout shapes, curved annotation arrows, error bars, common chart patterns |
+| `references/visual-layout-quality.md` | Arrow anchoring, label placement in empty space, spacing floors — read whenever adding annotations to any chart |
+
+For chart *design* — mark choice, colour assignment, legends, dashboards — load the built-in `dataviz` skill instead; it covers that across every medium. For LaTeX diagrams use the `viz:tikz-diagrams` plugin. For mechanisms and flows on a page, mermaid renders natively in Artifacts with no library.
 
 ## Conventions
 
-- Matplotlib (not Plotly) for paper figures — conferences require PDF with embedded fonts.
-- Figures self-explanatory: title, axis labels, legend; embed in report.html rather than loose PNGs (see workflow-defaults § Visual Outputs).
-- Fonts fall back sanely (Styrene B LC → Helvetica → DejaVu Sans); there is no S3 font install step.
-- Legacy: `references/anthroplot.md` documents the old module (its `.py` reference file no longer exists); brand tertiary gradients (ORANGE/…/GRAY 100–900) are documented there if a sequential ramp is needed.
-
-## Ground Truth For Brand Hexes
-
-All official color values come from `lib/plotting/anthro_colors.py` — that file is the single source of truth. If a hex code here conflicts with that file, the file wins. The PASTEL_* values are house derivations and live in `references/pastelplot.py`.
+- Figures are self-explanatory: title, axis labels, legend. Embed in the report page rather than shipping loose PNGs.
+- Fonts fall back sanely (Styrene B LC → Helvetica → DejaVu Sans); there is no font install step.
+- `lib/plotting` has **no `__init__.py` on purpose** — it goes on `sys.path` as a bare directory, so every import inside it is flat. A relative import there breaks the deployed copy while looking fine locally. Pinned by `tests/test_plotting_merge.py`.

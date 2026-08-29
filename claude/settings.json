@@ -137,8 +137,6 @@
       "Bash(* | zsh*)"
     ],
     "ask": [
-      "Bash(rm -rf *)",
-      "Bash(rm -r *)",
       "Bash(git checkout -- *)",
       "Bash(curl * | bash *)",
       "Bash(curl * | zsh *)",
@@ -174,7 +172,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "fable",
+  "model": "opus",
   "fallbackModel": [
     "opus"
   ],
@@ -613,6 +611,7 @@
     "dev-browser@dev-browser-marketplace": true,
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
+    "playground@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "remember@claude-plugins-official": true,
@@ -817,10 +816,11 @@
     ]
   },
   "feedbackSurveyRate": 0,
+  "promptCacheTtl": "1h",
   "alwaysThinkingEnabled": true,
   "promptCacheTtl": "1h",
   "effortLevel": "high",
-  "advisorModel": "opus",
+  "advisorModel": "fable",
   "showClearContextOnPlanAccept": true,
   "plansDirectory": "~/vault/specs",
   "autoMemoryDirectory": "memory",
@@ -868,5 +868,6 @@
   "chrome": {
     "enabled": true
   },
-  "installMethod": "native"
+  "installMethod": "native",
+  "mcpServers": {}
 }

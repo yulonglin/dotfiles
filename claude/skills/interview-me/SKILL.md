@@ -9,7 +9,7 @@ Interview me relentlessly about every aspect of this until we reach a shared und
 
 Decision-asking lands in **1-2 rounds totalling roughly 10-20 questions**. A drip of one question at a time is the failure mode: it stretches a ten-minute interview across an hour and forces me to reload the context on every reply.
 
-The **AskUserQuestion** tool caps at **4 questions per call**, so a round is built out of back-to-back calls of 4 with nothing interleaved between them — no commentary, no tool calls, no thinking out loud between the batches. When the batch is larger than a couple of rounds, collect the decisions through a board-style artifact instead, and let me fill it in one pass.
+The **AskUserQuestion** tool caps at **4 questions per call**, so a round is built out of back-to-back calls of 4 with nothing interleaved between them — no commentary, no tool calls, no thinking out loud between the batches. When the batch is larger than a couple of rounds, or the answers need comments rather than a pick, collect the decisions through an Artifact instead: every question on one page, answerable from the keyboard (move between questions, pick an option, type a comment), and a copy-all control that yields every answer and comment as one block I can paste straight back. `md2review` already builds that shape — write the questions as Markdown and publish the result (`artifact-writing`).
 
 Order the bundle so independent decisions come first and dependent ones follow, and put a decision in round 2 rather than round 1 when my round-1 answer could make it moot.
 

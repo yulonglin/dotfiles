@@ -9,7 +9,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 - **Sandbox blocks `git pull`/`merge`/`stash`** here, and `codex exec` crashes on macOS inside it — both need `dangerouslyDisableSandbox: true`.
 - **`claude/settings.json` is the global source of truth** (symlinked to `~/.claude/settings.json`). Before staging it, verify it has `statusLine`, `hooks` and `permissions` keys — [`.claude/rules/dotfiles-settings.md`](.claude/rules/dotfiles-settings.md).
 - **Secrets are NOT globally exported** (supply-chain defense). Use `setup-envrc` per project via direnv; `secrets-edit` to add or update.
-- **Plot with Anthropic style by default** — `from anthro_colors import use_anthropic_defaults`. Colours, the `petri`/`deepmind` alternatives and the full API are in the `house-plots` skill.
+- **Plot with the house style by default** — `import style as house; house.set_defaults()` from `lib/plotting/` (pastel + soft grid). Charts on an artifact page are drawn as native SVG from `lib/plotting/tokens.json` instead; matplotlib is for papers and decks. Full API in the `house-plots` skill.
 - **Specs, plans and reports are Artifacts**, not files in `specs/` or `plans/`. Publish them and record the URL with its finding in this file; write Markdown source only when it must be version-controlled with the code. See `~/.claude/rules/pointers.md`.
 - **Verification is a design problem** — plan *how* you'll verify before starting. If you catch yourself thinking "let me figure out how to verify this", that's EnterPlanMode. Triggers and checklist: [`.claude/skills/verification-planning/SKILL.md`](.claude/skills/verification-planning/SKILL.md).
 
@@ -63,6 +63,8 @@ This repo is **public** — and a branch in a public repo is public too, so pers
 ## Learnings
 
 Project-specific bugs, quirks, decisions and current state. Timestamp `- description (YYYY-MM-DD)`, keep under 20, prune past two weeks — retired entries move to [`docs/tooling-and-packages.md`](docs/tooling-and-packages.md) § Past Learnings, and git history is the archive for the rest.
+
+- **md2review's comment box flickered because a selection event could close it** — opening the box focuses its textarea, focusing collapses the selection, and the debounced `selectionchange` handler read that back as a deselect, closing the box ~350 ms after `mouseup` opened it. Opening and closing are now asymmetric: selection events only ever open. Enter saves, Esc discards, Save leads the buttons. **The persistence added alongside it was reviewed and cut** — an IndexedDB mirror let a save racing its own async recovery destroy what it was recovering; a backup key resurrected deliberately-cleared comments; a neighbouring-key scan copied one document's confidential note onto an unrelated page. What remains: a bare JSON array under a filename-derived key (older layers `.reduce()` it and die on anything else), prefix-namespaced aux keys, a keystroke draft. `tests/test_md2review_browser.py` drives Chromium — 19 of 27 checks fail against the pre-fix layer, 13 against the version review rejected (2026-08-28)
 
 - **Rules were cut from 24 files to 9 and activity-scoped procedure moved into skills** — the always-loaded tier (`claude/rules/*.md` + `claude/CLAUDE.md` + the output style) went from ~76 KB to ~28 KB. Rules now carry only always-relevant judgment; `rules/pointers.md` indexes which skill owns each activity (`artifact-writing`, `results-artifact`, `spec-artifact`, `llm-judge`, `jobs`, …). Anything procedural belongs in a skill, not in a rule (2026-08-28)
 
