@@ -18,7 +18,6 @@
   },
   "permissions": {
     "allow": [
-      "Bash",
       "Glob",
       "Grep",
       "ToolSearch",
@@ -137,38 +136,13 @@
       "Bash(* | zsh*)"
     ],
     "ask": [
-      "Bash(git checkout -- *)",
-      "Bash(curl * | bash *)",
-      "Bash(curl * | zsh *)",
-      "Bash(curl * | sh *)",
-      "Bash(wget * | bash *)",
-      "Bash(wget * | zsh *)",
-      "Bash(wget * | sh *)",
       "Bash(curl * | *)",
       "Bash(wget * | *)",
-      "Bash(xargs sh *)",
       "ExitPlanMode",
       "Bash(sudo *)",
-      "Bash(kill *)",
-      "Bash(killall *)",
-      "Bash(pkill *)",
-      "Bash(wget *)",
-      "Bash(docker compose *)",
-      "Bash(docker build *)",
-      "Bash(docker exec *)",
-      "Bash(docker run *)",
-      "Bash(docker container exec *)",
-      "Bash(nc *)",
-      "Bash(kubectl exec *)",
       "Bash(kubectl delete *)",
-      "Bash(git remote set-url *)",
-      "Bash(git remote add *)",
-      "Bash(git config --global *)",
       "Read(**/.env)",
-      "Read(**/.env.*)",
-      "mcp__plugin_things-mcp_things__update_todo",
-      "mcp__plugin_things-mcp_things__update_project",
-      "mcp__claude_ai_Notion__notion-move-pages"
+      "Read(**/.env.*)"
     ],
     "defaultMode": "auto"
   },

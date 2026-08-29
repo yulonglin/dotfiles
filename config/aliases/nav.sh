@@ -22,3 +22,6 @@ alias scratch='cd $SCRATCH_DIR'
 alias projects='cd $PROJECTS_DIR'
 alias website='cd $WRITING_DIR/${DOTFILES_WEBSITE:-yulonglin.github.io}'
 alias vault='cd $VAULT_DIR'
+
+alias cot='cd $PROJECTS_DIR/nla-vs-cot'
+alias sandbagging='cd $PROJECTS_DIR/sandbagging-detection/code'
