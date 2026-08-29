@@ -1,0 +1,90 @@
+---
+name: artifacts-sync
+description: Maintain and reconcile a repo's ARTIFACTS.md — the index mapping artifact URLs to what they established. Covers the row schema, recording the publishing org, public-sharing limits under a Team/Enterprise org, and the reconcile pass. Use when publishing an artifact and recording it, when a link 404s, after switching Claude accounts or orgs, or on "sync/audit/refresh the artifact index".
+---
+
+# Keep ARTIFACTS.md and the Index Page in Step
+
+`rules/pointers.md` requires each repo to keep one index of its artifacts, each row stating the finding rather than only the title. This skill owns the shape of that index and the pass that repairs it. Building the pages themselves is `artifact-writing`; this is about not losing them afterwards.
+
+The canonical filename is **`ARTIFACTS.md` at the repo root**. One per repo.
+
+## Write the row at publish time, because the org cannot be recovered later
+
+The moment an `Artifact` publish returns a URL, add or update its row in the same turn, before reporting back. Two facts are available then and never again: which repo the page belongs to, and which org published it. `Artifact action: list` carries neither.
+
+| Column | Content |
+|---|---|
+| Artifact | The linked title. It already asserts the finding, so it doubles as the summary; give a legacy topic-titled page a one-line gloss until it is renamed |
+| Org | `orgName` from `claude auth status` **at publish time** |
+| Status | `live`, `superseded`, or `elsewhere` — nothing else |
+| Source | Repo-relative path of the Markdown or HTML it was built from, or `—` when nothing was kept |
+| Public | `no`, or the public mirror URL |
+| Updated | ISO date of the last publish |
+
+Superseded rows stay, carrying a link to the page that replaced them. Deleting a row destroys the only trace of where a stale link points, and the comment threads on the old page are still the user's work.
+
+`ARTIFACTS.md` is itself published as the repo's index page and carries its own row. A living index may name its function rather than assert a finding — the documented exception to the title rule.
+
+## Absence from the listing is three different states, so record the org instead of probing
+
+`Artifact action: list` returns only artifacts in the org the session is authenticated to, and only within its listing window. A URL missing from it is ambiguous between *old*, *deleted*, and *published under another org*. Recording Org at publish time is what disambiguates: a missing URL whose recorded org differs from the current `orgName` is `elsewhere`, not lost.
+
+**Never demote a row to `superseded` on a listing miss alone.** That transition is only correct when a replacement page exists, and it always carries a link to the replacement. This is the commonest way a sync pass destroys information.
+
+## The reconcile pass
+
+Establish the org first — every verdict below is relative to it, so skipping this produces confident nonsense after an account switch:
+
+```bash
+claude auth status
+```
+
+`orgName: null` with `loggedIn: true` means the session is authenticated by API key rather than a claude.ai login. Record `unknown`; never stamp an org you did not read.
+
+Then list the gallery and join **by URL, never by title** — titles get rewritten, and two artifacts have already shared one in this gallery ("Monitoring Beyond CoT" appears twice under different UUIDs).
+
+```
+Artifact action: list, scope: "mine", limit: 50
+```
+
+| Row's recorded org | In the listing? | Verdict |
+|---|---|---|
+| = current `orgName` | yes | `live` — refresh Updated |
+| = current `orgName` | no | ambiguous: outside the listing window, or deleted. Leave status unchanged, flag it in the report |
+| ≠ current `orgName` | no | `elsewhere` — expected, not a fault. Do not try to fetch it |
+| any | listed but not in the file | unrecorded — attribute only on evidence |
+
+Attribute an unrecorded artifact to this repo only when something ties it here: a source file on disk, a commit on the same date, a subject that is unambiguously this repo's. Attribution by vibe pollutes every later sync — when it belongs elsewhere, leave it alone, and mark anything attributed after the fact as retro-attributed.
+
+Check each row's Source path still exists. A row whose source is gone cannot be rebuilt after an org switch, which is exactly when rebuilding matters. Report those; do not delete the row.
+
+Republish the index in the same pass — a sync that updates only the Markdown leaves the page stale, which is the drift this skill exists to remove:
+
+```bash
+md2review ARTIFACTS.md -o "$TMPDIR/artifacts-index.html"
+```
+
+Publish with the index's own `url` from its row so it updates in place. On `org_mismatch`, follow `artifact-writing` § in-place update refused: new file path, publish without `url`, supersedes note, then record it here as one `superseded` row plus one new row. Warn before republishing over annotations the user may have added.
+
+Close by reporting counts per verdict, ambiguous rows named individually, and missing sources. Say plainly when nothing changed — a clean sync is a result.
+
+## Public sharing is an org policy, not a setting you can reach
+
+Verified against the Claude Code docs, 2026-08-29:
+
+- On **Pro and Max**, a public link is the only sharing mode, and any artifact can have one.
+- On **Team and Enterprise**, public sharing is **off by default**; only an organization **Owner** enables it, under Settings > Claude Code > Capabilities > External sharing. Turning it back off kills every existing public link at once without changing any artifact's audience.
+- A **connector-backed** artifact can never be public on any plan.
+- Native comment threads work **only** on org-shared artifacts. A public artifact cannot take comments, and one with existing threads must have them deleted before it can go public. The `md2review` annotation layer is unaffected, being page-local.
+
+So under a Team or Enterprise org such as MATS, "make this public" is not yours to grant. Two fallbacks, both recorded in the Public column:
+
+- **Self-host the mirror** — the built HTML already exists on disk, so pushing it to GitHub Pages yields a URL no org toggle can revoke. Default for anything that must stay reachable.
+- **Publish outward-facing pages from a personal Pro/Max account**, where public is the only mode. Costs org comments and splits the gallery, so reserve it for genuinely external audiences.
+
+## No credential publishes into an org the session is not signed into
+
+There is no token for this and looking for one is a dead end. The docs require a session signed in with `/login` to a claude.ai account, and state that sessions using an API key, gateway token, or cloud-provider credential cannot publish at all. The artifact lands in whichever org that login resolves to; nothing in the tool call selects an org.
+
+The only candidate mechanism for two orgs on one machine is **two config directories** — `CLAUDE_CONFIG_DIR` relocates Claude Code's home-directory state, so a second directory with its own login could host personal-org sessions beside work-org ones. Treat this as plausible but unverified: the docs say it relocates settings, session history and plugins, and do not name credentials among them. Test it before relying on it, and record the outcome here rather than re-deriving it.

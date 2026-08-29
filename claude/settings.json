@@ -242,6 +242,17 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Artifact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/nudge_artifact_index.sh",
+            "timeout": 10,
+            "statusMessage": "Checking the artifact is recorded in ARTIFACTS.md"
+          }
+        ]
       }
     ],
     "PreToolUse": [
