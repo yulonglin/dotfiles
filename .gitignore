@@ -102,7 +102,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# `lib/*`, not `lib/`: git cannot re-include a path inside an excluded DIRECTORY,
+# so the `!lib/plotting/` below was inert and every file there had to be force-added.
+# Excluding lib's children instead leaves the directory itself visible to the negation.
+lib/*
 lib64/
 !lib/plotting/
 !claude/hooks/lib/

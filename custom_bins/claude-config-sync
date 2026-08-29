@@ -1,0 +1,563 @@
+#!/usr/bin/env python3
+"""Mirror the markdown surface of the Claude config into the Obsidian vault.
+
+Why this exists: the rules, skills, agents and output styles are the part of the
+Claude config that is worth reading and lightly editing from a phone. The vault
+is already on the phone via Obsidian Sync, so mirroring the markdown there costs
+nothing extra. Everything else in claude/ (settings.json, hooks, scripts,
+binaries) is deliberately out of scope.
+
+Why it is paranoid: in 2026-06/07 a bidirectional Obsidian sync ran against an
+incomplete local vault, read "never downloaded" as "deleted", and propagated the
+deletions upstream -- 135 files lost. Every rule below exists because of that.
+
+  * Real files only, never symlinks. A symlink in a synced vault recreates the
+    deletion-propagation pattern exactly.
+  * Nothing is ever deleted, on either side, for any reason. A file that
+    disappears on one side is REPORTED and otherwise ignored -- it is never
+    re-created and never mirrored as a deletion.
+  * Outbound (repo -> vault) is the automatic direction. Inbound (vault -> repo)
+    happens only on an explicit `pull`.
+  * Inbound edits land as uncommitted working-tree changes, so every phone edit
+    is reviewed as a git diff before it becomes real.
+  * Conflicts are listed and left alone -- never auto-merged, never overwritten.
+
+Inbound is a write into the live environment (claude/ is symlinked to
+~/.claude/), so every vault path is shape-matched against the scope below before
+it is mapped back, symlinks are refused, and the resolved destination is checked
+to be inside claude/ before anything is written.
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import hashlib
+import json
+import os
+import shutil
+import sys
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+
+# --- exit codes ---------------------------------------------------------------
+EXIT_OK = 0
+EXIT_ATTENTION = 1  # conflicts or vanished files -- a human needs to look
+EXIT_USAGE = 2  # argparse's own usage exit code
+EXIT_PRECONDITION = 3  # vault missing / unverifiable / unreadable; nothing touched
+
+DEST_REL = "tooling/claude-config"
+STATE_VERSION = 1
+SYNC_LOG_MARKER = "Fully synced"
+SYNC_LOG_MAX_BYTES = 32 * 1024 * 1024
+
+# Directories under claude/ whose *.md files are mirrored, one level deep.
+FLAT_DIRS = ("rules", "agents", "output-styles")
+
+
+# --- path shapes --------------------------------------------------------------
+def is_in_scope(rel: str) -> bool:
+    """True if a vault-relative path is one the mirror is allowed to touch.
+
+    The inbound direction maps vault paths back onto the live config, so this is
+    an allowlist of exact shapes, never a prefix strip.
+    """
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") or p.startswith(".") for p in parts):
+        return False
+    if rel == "CLAUDE.md":
+        return True
+    if len(parts) == 2 and parts[0] in FLAT_DIRS and parts[1].endswith(".md"):
+        return True
+    return len(parts) == 3 and parts[0] == "skills" and parts[2] == "SKILL.md"
+
+
+def repo_path_for(repo_root: Path, rel: str) -> Path:
+    return repo_root / "claude" / rel
+
+
+def scan_repo(repo_root: Path) -> dict[str, Path]:
+    """The in-scope markdown surface as {vault-relative path: repo path}."""
+    claude = repo_root / "claude"
+    found: dict[str, Path] = {}
+
+    top = claude / "CLAUDE.md"
+    if top.is_file() and not top.is_symlink():
+        found["CLAUDE.md"] = top
+
+    for sub in FLAT_DIRS:
+        d = claude / sub
+        if not d.is_dir() or d.is_symlink():
+            continue
+        for p in sorted(d.iterdir()):
+            if p.is_file() and not p.is_symlink() and p.name.endswith(".md"):
+                rel = f"{sub}/{p.name}"
+                if is_in_scope(rel):
+                    found[rel] = p
+
+    skills = claude / "skills"
+    if skills.is_dir() and not skills.is_symlink():
+        for d in sorted(skills.iterdir()):
+            if not d.is_dir() or d.is_symlink():
+                continue
+            p = d / "SKILL.md"
+            if p.is_file() and not p.is_symlink():
+                rel = f"skills/{d.name}/SKILL.md"
+                if is_in_scope(rel):
+                    found[rel] = p
+    return found
+
+
+def scan_vault(dest: Path) -> tuple[dict[str, Path], list[str]]:
+    """Return ({in-scope rel: path}, [rejected rel]) for the vault mirror.
+
+    os.walk with followlinks=False so a symlinked directory in the vault cannot
+    walk us out of the mirror; symlinked files are rejected, not followed.
+    """
+    found: dict[str, Path] = {}
+    rejected: list[str] = []
+    if not dest.is_dir():
+        return found, rejected
+
+    for dirpath, dirnames, filenames in os.walk(dest, followlinks=False):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        for name in sorted(filenames):
+            if name.startswith("."):
+                continue
+            p = Path(dirpath) / name
+            rel = p.relative_to(dest).as_posix()
+            if not is_in_scope(rel) or p.is_symlink():
+                rejected.append(rel)
+                continue
+            found[rel] = p
+    return found, rejected
+
+
+# --- hashing and state --------------------------------------------------------
+def sha256(path: Path) -> str | None:
+    h = hashlib.sha256()
+    try:
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 16), b""):
+                h.update(chunk)
+    except OSError:
+        return None
+    return h.hexdigest()
+
+
+def load_state(state_path: Path, vault: Path) -> dict:
+    """Baselines are only meaningful for the vault they were recorded against.
+
+    A run against a different vault (a fixture, a second machine) that reuses the
+    default state path would otherwise inherit the real vault's baselines and
+    report every file as vanished. A mismatch resets to "no baseline", which
+    makes everything look new -- the copying direction, never the deleting one.
+    """
+    try:
+        raw = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict) or raw.get("version") != STATE_VERSION:
+        return {}
+    recorded = raw.get("vault")
+    if isinstance(recorded, str) and os.path.realpath(recorded) != os.path.realpath(vault):
+        return {}
+    files = raw.get("files")
+    return files if isinstance(files, dict) else {}
+
+
+def save_state(state_path: Path, files: dict, repo_root: Path, vault: Path) -> None:
+    """Write the baseline atomically -- a truncated state file would make every
+    file look new and mass-conflict on the next run."""
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": STATE_VERSION,
+        "repo_root": str(repo_root),
+        "vault": str(vault),
+        "files": files,
+    }
+    write_atomic(state_path, json.dumps(payload, indent=2, sort_keys=True).encode() + b"\n")
+
+
+def write_atomic(dest: Path, data: bytes) -> None:
+    """Same-directory temp file + os.replace, so a crash never leaves a
+    half-written rule live in the running config."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(dest.parent), prefix=f".{dest.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, dest)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def copy_file(src: Path, dest: Path) -> None:
+    write_atomic(dest, src.read_bytes())
+    shutil.copystat(src, dest, follow_symlinks=False)
+
+
+# --- classification -----------------------------------------------------------
+IN_SYNC = "in-sync"
+NEW_IN_REPO = "new-in-repo"
+NEW_IN_VAULT = "new-in-vault"
+REPO_CHANGED = "repo-changed"
+VAULT_CHANGED = "vault-changed"
+CONFLICT = "conflict"
+GONE_FROM_VAULT = "gone-from-vault"
+GONE_FROM_REPO = "gone-from-repo"
+
+PUSH_ACTIONS = (NEW_IN_REPO, REPO_CHANGED)
+PULL_ACTIONS = (NEW_IN_VAULT, VAULT_CHANGED)
+ATTENTION = (CONFLICT, GONE_FROM_VAULT, GONE_FROM_REPO)
+
+
+@dataclass
+class Entry:
+    rel: str
+    state: str
+    repo_hash: str | None
+    vault_hash: str | None
+
+
+def classify(rel: str, repo_hash: str | None, vault_hash: str | None, base: str | None) -> Entry:
+    """Conflict rule, stated once.
+
+    The baseline is the content hash both sides had at the end of the last
+    successful sync of this file. "Changed" means "differs from that baseline".
+
+      both sides changed, and they now differ  -> conflict (listed, untouched)
+      only the repo changed                    -> push copies repo -> vault
+      only the vault changed                   -> pull copies vault -> repo
+      identical                                -> in sync, baseline refreshed
+      present on one side, no baseline         -> a new file, copied that way
+      present on one side, baseline existed    -> it VANISHED on the other side.
+                                                  Reported. Never deleted here,
+                                                  never re-created there.
+
+    Both sides present with no baseline is a conflict, not a guess: nothing
+    records who wrote which version.
+    """
+    if repo_hash is not None and vault_hash is not None:
+        if repo_hash == vault_hash:
+            return Entry(rel, IN_SYNC, repo_hash, vault_hash)
+        if base is None:
+            return Entry(rel, CONFLICT, repo_hash, vault_hash)
+        repo_moved = repo_hash != base
+        vault_moved = vault_hash != base
+        if repo_moved and vault_moved:
+            return Entry(rel, CONFLICT, repo_hash, vault_hash)
+        if repo_moved:
+            return Entry(rel, REPO_CHANGED, repo_hash, vault_hash)
+        if vault_moved:
+            return Entry(rel, VAULT_CHANGED, repo_hash, vault_hash)
+        return Entry(rel, IN_SYNC, repo_hash, vault_hash)
+    if repo_hash is not None:
+        return Entry(rel, NEW_IN_REPO if base is None else GONE_FROM_VAULT, repo_hash, None)
+    if vault_hash is not None:
+        return Entry(rel, NEW_IN_VAULT if base is None else GONE_FROM_REPO, None, vault_hash)
+    return Entry(rel, IN_SYNC, None, None)
+
+
+def build_plan(repo_root: Path, dest: Path, state: dict) -> tuple[list[Entry], list[str]]:
+    repo = scan_repo(repo_root)
+    vault, rejected = scan_vault(dest)
+    entries = []
+    for rel in sorted(set(repo) | set(vault) | set(state)):
+        rh = sha256(repo[rel]) if rel in repo else None
+        vh = sha256(vault[rel]) if rel in vault else None
+        entries.append(classify(rel, rh, vh, state.get(rel)))
+    return entries, rejected
+
+
+# --- vault preconditions ------------------------------------------------------
+def sync_log_for(vault: Path, ob_config_dir: Path) -> Path | None:
+    sync_dir = ob_config_dir / "sync"
+    if not sync_dir.is_dir():
+        return None
+    want = os.path.realpath(vault)
+    for conf in sorted(sync_dir.glob("*/config.json")):
+        try:
+            data = json.loads(conf.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        path = data.get("vaultPath")
+        if isinstance(path, str) and os.path.realpath(path) == want:
+            return conf.parent / "sync.log"
+    return None
+
+
+def check_vault(vault: Path, ob_config_dir: Path, skip_sync_check: bool) -> str | None:
+    """Return an error string if the vault must not be touched, else None.
+
+    The bar is "has this vault ever completed a full sync", not "is it quiescent
+    right now" -- an incomplete local copy is the 2026 failure mode, a transfer
+    in flight is not.
+    """
+    if not vault.is_dir():
+        return f"vault not found at {vault} (override with --vault)"
+    if not os.access(vault, os.R_OK | os.X_OK):
+        return f"vault at {vault} is not readable"
+    if skip_sync_check:
+        return None
+    log = sync_log_for(vault, ob_config_dir)
+    if log is None:
+        return (
+            f"{vault} is not registered with obsidian-headless under {ob_config_dir}/sync, "
+            "so it cannot be confirmed to hold a complete copy. Refusing to write into it. "
+            "Pass --no-sync-check only for a throwaway vault that is not synced anywhere."
+        )
+    if not log.is_file():
+        return f"{log} is missing -- this vault has never completed a sync. Refusing to write into it."
+    try:
+        with log.open("r", encoding="utf-8", errors="replace") as fh:
+            read = 0
+            for line in fh:
+                read += len(line)
+                if read > SYNC_LOG_MAX_BYTES:
+                    break
+                if SYNC_LOG_MARKER in line:
+                    return None
+    except OSError as exc:
+        return f"cannot read {log}: {exc}"
+    return (
+        f"{log} has no '{SYNC_LOG_MARKER}' entry -- this vault has never finished a sync, so the "
+        "local copy may be incomplete. Refusing to write into it (this is the 2026-06 failure mode)."
+    )
+
+
+# --- reporting ----------------------------------------------------------------
+LABEL = {
+    IN_SYNC: "in sync",
+    NEW_IN_REPO: "new in repo",
+    NEW_IN_VAULT: "new in vault",
+    REPO_CHANGED: "changed in repo",
+    VAULT_CHANGED: "changed in vault",
+    CONFLICT: "CONFLICT (both sides changed)",
+    GONE_FROM_VAULT: "VANISHED from vault (repo copy kept, nothing deleted)",
+    GONE_FROM_REPO: "VANISHED from repo (vault copy kept, nothing deleted)",
+}
+
+
+def report(entries: list[Entry], rejected: list[str], states: tuple[str, ...], header: str) -> None:
+    shown = [e for e in entries if e.state in states]
+    print(header)
+    if not shown:
+        print("  (nothing)")
+    for e in shown:
+        print(f"  {LABEL[e.state]:<52} {e.rel}")
+    if rejected:
+        print(f"  {len(rejected)} vault file(s) outside the mirrored shapes, ignored:")
+        for rel in rejected[:20]:
+            print(f"    - {rel}")
+        if len(rejected) > 20:
+            print(f"    ... and {len(rejected) - 20} more")
+
+
+# --- subcommands --------------------------------------------------------------
+def cmd_status(args, ctx) -> int:
+    entries, rejected = build_plan(ctx.repo_root, ctx.dest, ctx.state)
+    gate = check_vault(ctx.vault, ctx.ob_config_dir, args.no_sync_check)
+    print(f"repo   {ctx.repo_root}")
+    print(f"vault  {ctx.dest}")
+    print(f"state  {ctx.state_path}")
+    if gate:
+        print(f"WARNING: {gate}")
+    counts = {}
+    for e in entries:
+        counts[e.state] = counts.get(e.state, 0) + 1
+    print("summary: " + (", ".join(f"{LABEL[k]}={v}" for k, v in sorted(counts.items())) or "empty"))
+    report(entries, rejected, tuple(LABEL), "\nfiles:")
+    if gate:
+        return EXIT_PRECONDITION
+    return EXIT_ATTENTION if any(e.state in ATTENTION for e in entries) else EXIT_OK
+
+
+def transfer(args, ctx, direction: str) -> int:
+    outbound = direction == "push"
+    acting = PUSH_ACTIONS if outbound else PULL_ACTIONS
+
+    gate = check_vault(ctx.vault, ctx.ob_config_dir, args.no_sync_check)
+    if gate:
+        print(f"claude-config-sync: {gate}", file=sys.stderr)
+        print("Nothing was copied, moved or deleted.", file=sys.stderr)
+        return EXIT_PRECONDITION
+
+    entries, rejected = build_plan(ctx.repo_root, ctx.dest, ctx.state)
+    todo = [e for e in entries if e.state in acting]
+
+    verb = "would copy" if args.dry_run else "copied"
+    arrow = "repo -> vault" if outbound else "vault -> repo"
+    print(f"{'DRY RUN: ' if args.dry_run else ''}{direction} ({arrow})")
+    print(f"  repo   {ctx.repo_root}")
+    print(f"  vault  {ctx.dest}")
+
+    new_state = dict(ctx.state)
+    for e in todo:
+        if outbound:
+            src, dst = repo_path_for(ctx.repo_root, e.rel), ctx.dest / e.rel
+        else:
+            src, dst = ctx.dest / e.rel, repo_path_for(ctx.repo_root, e.rel)
+            # Inbound writes into the live config: prove the resolved destination
+            # is still inside claude/ before touching it.
+            root = os.path.realpath(ctx.repo_root / "claude")
+            if os.path.commonpath([root, os.path.realpath(dst)]) != root:
+                print(f"  REFUSED (escapes claude/): {e.rel}", file=sys.stderr)
+                continue
+            if src.is_symlink():
+                print(f"  REFUSED (symlink in vault): {e.rel}", file=sys.stderr)
+                continue
+        print(f"  {verb}: {e.rel}")
+        if not args.dry_run:
+            copy_file(src, dst)
+            new_state[e.rel] = e.repo_hash if outbound else e.vault_hash
+
+    if not todo:
+        print("  (nothing to copy)")
+
+    if not args.dry_run:
+        # Files identical on both sides get their baseline refreshed too, so a
+        # later one-sided edit is attributable.
+        for e in entries:
+            if e.state == IN_SYNC and e.repo_hash is not None:
+                new_state[e.rel] = e.repo_hash
+        save_state(ctx.state_path, new_state, ctx.repo_root, ctx.vault)
+
+    attention = [e for e in entries if e.state in ATTENTION]
+    if attention or rejected:
+        report(attention, rejected, ATTENTION, "\nneeds a human (nothing was changed for these):")
+    if not outbound and any(e.state in PULL_ACTIONS for e in entries) and not args.dry_run:
+        print("\nInbound edits are uncommitted working-tree changes. Review with: git diff -- claude/")
+    return EXIT_ATTENTION if attention else EXIT_OK
+
+
+# --- wiring -------------------------------------------------------------------
+@dataclass
+class Ctx:
+    repo_root: Path
+    vault: Path
+    dest: Path
+    state_path: Path
+    state: dict
+    ob_config_dir: Path
+
+
+def default_repo_root() -> Path | None:
+    root = Path(__file__).resolve().parent.parent
+    return root if (root / "claude").is_dir() else None
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="claude-config-sync",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Mirror the markdown surface of the Claude config into the Obsidian vault at\n"
+            f"<vault>/{DEST_REL}/, so rules and skills can be read and lightly edited from a phone."
+        ),
+        epilog="""\
+scope (nothing else is ever touched)
+  claude/CLAUDE.md              <-> CLAUDE.md
+  claude/rules/*.md             <-> rules/*.md
+  claude/skills/*/SKILL.md      <-> skills/*/SKILL.md
+  claude/agents/*.md            <-> agents/*.md
+  claude/output-styles/*.md     <-> output-styles/*.md
+
+conflict detection
+  The state file records, per mirrored file, the content hash both sides shared at
+  the end of the last successful sync. A side has "changed" if its hash differs
+  from that baseline.
+
+    both sides changed and now differ  -> CONFLICT: listed, and left alone in both
+                                          directions. Never auto-merged.
+    only the repo changed              -> push copies it out
+    only the vault changed             -> pull copies it in
+    present one side, no baseline      -> a new file; copied in that direction
+    present one side, baseline existed -> it VANISHED on the other side. Reported
+                                          only: never deleted here, never
+                                          re-created there, in either direction.
+    both present, no baseline          -> CONFLICT (nothing records who wrote what)
+
+  A mirror that has been wiped or is only partly downloaded therefore reads as a
+  pile of vanished files: everything is reported, nothing is re-created, and the
+  run exits 1. That is the loud version of the 2026-06 failure. If the mirror was
+  removed on purpose and you want to re-seed it, delete the state file and push
+  again -- with no baseline every file is simply new.
+
+safety
+  Real files only, never symlinks. No deletion is ever performed or propagated.
+  Outbound is automatic; inbound runs only on an explicit `pull` and lands as
+  uncommitted working-tree edits, so every phone edit is reviewed as a git diff.
+  Writing into a vault that has never completed a sync is refused -- an incomplete
+  local copy is what caused the 2026-06 data loss this design exists to prevent.
+
+exit codes
+  0  clean
+  1  conflicts or vanished files were reported
+  2  usage error
+  3  precondition failed (vault missing, unreadable, or never synced) -- nothing touched
+""",
+    )
+    p.add_argument("--vault", metavar="PATH", help="vault root (default: $VAULT_STRUCTURE_VAULT, else ~/vault)")
+    p.add_argument("--repo-root", metavar="PATH", help="dotfiles checkout (default: the parent of this script)")
+    p.add_argument("--state", metavar="PATH", help="sync state file (default: ~/.local/state/claude-config-sync/state.json)")
+    p.add_argument("--ob-config-dir", metavar="PATH", help="obsidian-headless config dir (default: ~/.config/obsidian-headless)")
+    p.add_argument("--no-sync-check", action="store_true", help="skip the 'vault has completed a sync' precondition (throwaway vaults only)")
+    p.add_argument("--dry-run", action="store_true", help="print exactly what would be copied, copy nothing")
+    p.add_argument("command", choices=("push", "pull", "status"), help="push: repo -> vault. pull: vault -> repo, as uncommitted edits. status: what differs")
+    return p
+
+
+def main(argv: list[str]) -> int:
+    args = build_parser().parse_args(argv)
+
+    repo_root = Path(args.repo_root).expanduser() if args.repo_root else default_repo_root()
+    if repo_root is None:
+        print("claude-config-sync: cannot locate the dotfiles checkout; pass --repo-root", file=sys.stderr)
+        return EXIT_PRECONDITION
+    repo_root = repo_root.resolve()
+    if not (repo_root / "claude").is_dir():
+        print(f"claude-config-sync: {repo_root}/claude does not exist", file=sys.stderr)
+        return EXIT_PRECONDITION
+
+    vault = Path(
+        args.vault
+        or os.environ.get("CLAUDE_CONFIG_SYNC_VAULT")
+        or os.environ.get("VAULT_STRUCTURE_VAULT")
+        or (Path.home() / "vault")
+    ).expanduser()
+
+    state_path = Path(
+        args.state
+        or os.environ.get("CLAUDE_CONFIG_SYNC_STATE")
+        or (Path.home() / ".local/state/claude-config-sync/state.json")
+    ).expanduser()
+
+    ob_config_dir = Path(
+        args.ob_config_dir
+        or os.environ.get("OB_CONFIG_DIR")
+        or (Path.home() / ".config/obsidian-headless")
+    ).expanduser()
+
+    ctx = Ctx(
+        repo_root=repo_root,
+        vault=vault,
+        dest=vault / DEST_REL,
+        state_path=state_path,
+        state=load_state(state_path, vault),
+        ob_config_dir=ob_config_dir,
+    )
+
+    if args.command == "status":
+        return cmd_status(args, ctx)
+    return transfer(args, ctx, args.command)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.exit(130)

@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# opencode — run OpenCode without running its blocked postinstall script.
+#
+# THE PROBLEM (measured 2026-08-28 on this box)
+# `bun add -g opencode-ai` installs, but the resulting `~/.bun/bin/opencode`
+# shim refuses to run:
+#
+#     Error: opencode-ai's postinstall script was not run.
+#
+# That is this machine's supply-chain policy working exactly as designed:
+# `ignore-scripts=true` in config/npmrc, and bun ignores lifecycle scripts by
+# default (claude/rules/safety.md). opencode-ai declares
+# `"postinstall": "node ./postinstall.mjs"`, whose only job is to pick the
+# platform package and wire up the shim.
+#
+# THE POINT
+# The postinstall does not DOWNLOAD anything. The real binaries ship as npm
+# optionalDependencies (`opencode-linux-x64`, `opencode-darwin-arm64`, ...) and
+# bun already resolved and installed them — verified: the 184 MB
+# `opencode-linux-x64/bin/opencode` was on disk and ran fine while the shim was
+# still erroring. So the executable is present and the only missing step is a
+# lookup this wrapper does itself.
+#
+# This is therefore NOT a bypass of the guard: no lifecycle script is executed,
+# `ignore-scripts` stays on, nothing is fetched from outside the quarantine, and
+# the 7-day `minimumReleaseAge` still decides which version bun installed. Do not
+# "fix" this by re-enabling scripts or by adding a third-party tap — both are
+# forbidden without Yulong's explicit approval.
+#
+# PREFER HOMEBREW WHERE IT EXISTS. homebrew-core ships an `opencode` formula
+# with bottles for arm64_linux and x86_64_linux as well as macOS, and a bottle
+# has no lifecycle script to block. If `brew install opencode` is available on
+# this box, that binary wins and this wrapper just defers to it.
+set -euo pipefail
+
+# A real opencode ahead of us on PATH (e.g. Homebrew's) is the better answer.
+# Skip our own directory so this wrapper cannot find and re-exec itself.
+self_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+while IFS= read -r candidate; do
+    [[ -x "$candidate" ]] || continue
+    [[ "$(cd "$(dirname "$candidate")" && pwd)" == "$self_dir" ]] && continue
+    # The broken bun shim is a real file too, so exclude it by behaviour
+    # rather than by path: it exits non-zero complaining about postinstall.
+    if "$candidate" --version >/dev/null 2>&1; then
+        exec "$candidate" "$@"
+    fi
+done < <(command -v -a opencode 2>/dev/null || true)
+
+# Fall back to the platform package bun installed alongside the shim.
+bun_root="${BUN_INSTALL:-$HOME/.bun}/install/global/node_modules"
+case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64)  platforms=(opencode-linux-x64 opencode-linux-x64-baseline opencode-linux-x64-musl) ;;
+    Linux-aarch64) platforms=(opencode-linux-arm64 opencode-linux-arm64-musl) ;;
+    Darwin-arm64)  platforms=(opencode-darwin-arm64) ;;
+    Darwin-x86_64) platforms=(opencode-darwin-x64 opencode-darwin-x64-baseline) ;;
+    *) platforms=() ;;
+esac
+
+for pkg in "${platforms[@]}"; do
+    bin="$bun_root/$pkg/bin/opencode"
+    [[ -x "$bin" ]] && exec "$bin" "$@"
+done
+
+cat >&2 <<'ERR'
+opencode: no usable binary found.
+
+Install it the compliant way (official sources only — NOT the anomalyco tap):
+  macOS / Linux with Homebrew:  brew install opencode      # homebrew-core
+  Linux with bun:               bun add -g opencode-ai
+
+If `bun add -g` succeeded but you still see this, the platform package is
+missing from ~/.bun/install/global/node_modules. Re-run the install; do NOT
+re-enable lifecycle scripts to work around it.
+ERR
+exit 1

@@ -1,6 +1,6 @@
 ---
 name: recall-feedback
-description: Resurface a random sample of feedback memories for spaced-repetition review — "still true? changed? promote to global rule?". Use when user asks for feedback retrospective, weekly memory review, or to audit accumulated coaching corrections. Also good for periodic via /schedule.
+description: "Resurface a random sample of feedback memories for spaced-repetition review. Use for feedback retrospective, weekly memory review, or /schedule."
 ---
 
 # Recall feedback memories

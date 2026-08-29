@@ -228,18 +228,17 @@ This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/c
 **What's included:**
 
 - **`CLAUDE.md`** — Slim identity file (~55 lines) pointing at modular rules and docs
-- **`rules/`** — 19 auto-loaded behavioral rules (safety, git, agents, refusal alternatives, supply-chain, browser automation, etc.)
-- **`docs/`** — On-demand knowledge loaded by skills (research methodology, async patterns, tmux, agent teams)
+- **`rules/`** — 9 auto-loaded behavioral rules holding only always-relevant judgment (safety, delegation, communication, research integrity, experiments, etc.). Activity-scoped procedure lives in skills instead; `rules/pointers.md` indexes which skill owns what
 - **`agents/`** — Personal agents (kept lean — most specialized agents live in plugins like `ai-safety-plugins`)
 - **`skills/`** — Project-level slash commands: `/commit`, `/merge-worktree`, `/jobs`, `/modal`, `/log-gap`, `/recall-feedback`, `/mv-repo`, etc.
 - **`hooks/`** — 40+ PreToolUse/PostToolUse/SessionStart scripts: approval classifier, secret blocking, modern-tool nudges, post-rebase guards, network audit
-- **`templates/`** — Context profiles (`contexts/profiles.yaml`), research spec template
+- **`templates/`** — Research spec template
 
 **Smart merge preserves your data** - if `~/.claude` already exists, credentials, history, and cache are automatically restored after symlinking.
 
 #### Claude Code Plugin Marketplaces
 
-Claude Code supports community plugin marketplaces. These are registered in [`claude/templates/contexts/profiles.yaml`](claude/templates/contexts/profiles.yaml) and synced via `claude-tools context --sync`:
+Claude Code supports community plugin marketplaces. These are declared natively in `extraKnownMarketplaces` in [`claude/settings.json`](claude/settings.json), which is symlinked to `~/.claude/settings.json` — a fresh machine registers them with no sync step:
 
 
 | Marketplace                                                                         | What's in it                                                     |
@@ -249,16 +248,14 @@ Claude Code supports community plugin marketplaces. These are registered in [`cl
 | **[productivity-tools](https://github.com/yulonglin/productivity-tools)**           | Personal productivity utilities                                  |
 | **[ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)**  | Design styles, palettes, production-grade frontend               |
 | **[alignment-hive](https://github.com/Crazytieguy/alignment-hive)**                 | Alignment research utilities                                     |
-| **[dev-browser-marketplace](https://github.com/sawyerhood/dev-browser)**            | Browser automation for development                               |
-| **[openai-codex](https://github.com/crazytieguy/codex-plugin-cc)**                  | Codex CLI integration plugins                                    |
+| **[codex-plugin-cc](https://github.com/crazytieguy/codex-plugin-cc)**               | Codex CLI integration plugins                                    |
 
 
-Profiles are managed via the `claude-tools context` CLI — compose multiple profiles to control which plugins load per-project:
+**Every installed plugin is enabled everywhere** — no profiles, no per-project setup step. Which plugins a machine should have is the `enabledPlugins` map in the same `settings.json`, where every entry is `true`. Full detail: [`docs/plugin-management.md`](./docs/plugin-management.md).
 
 ```bash
-claude-tools context code               # Software projects
-claude-tools context code typescript python    # Compose multiple profiles
-claude-tools context --list             # Show active plugins and available profiles
+claude plugin install <plugin>@<marketplace>    # then add the same key to enabledPlugins
+claude plugin list                              # what's installed, and at which scope
 ```
 
 ### Codex CLI (OpenAI)

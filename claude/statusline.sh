@@ -26,26 +26,6 @@ if [ -n "$machine_name_output" ]; then
 fi
 
 # ============================================================================
-# CONTEXT PROFILES from .claude/context.yaml
-# ============================================================================
-profiles_info=""
-context_yaml="$cwd/.claude/context.yaml"
-if [ -f "$context_yaml" ]; then
-  # Extract profiles from YAML (handles both flow [a, b] and block - a style)
-  profiles=$(python3 -c "
-import yaml, sys
-try:
-    d = yaml.safe_load(open('$context_yaml'))
-    p = d.get('profiles', [])
-    if p: print(' '.join(p))
-except: pass
-" 2>/dev/null)
-  if [ -n "$profiles" ]; then
-    profiles_info="[$(printf '\033[36m')${profiles}$(printf '\033[0m')] "
-  fi
-fi
-
-# ============================================================================
 # DIRECTORY PATH (~ for HOME)
 # ============================================================================
 if [ "$cwd" = "$HOME" ]; then
@@ -272,7 +252,7 @@ fi
 # OUTPUT: Line 1 (location) + Line 2 (session)
 # ============================================================================
 # Line 1: location
-printf "%s%s\033[2m\033[36m%s\033[0m%s" "$machine_prefix" "$profiles_info" "$dir" "$git_info"
+printf "%s\033[2m\033[36m%s\033[0m%s" "$machine_prefix" "$dir" "$git_info"
 
 # Line 2: session state (model+effort · ctx · duration · classifier)
 session_parts=()

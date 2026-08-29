@@ -1,6 +1,6 @@
 ---
 name: log-gap
-description: Log a one-line knowledge gap to the project's gaps.md file. Use when the user is surprised by Claude's answer, says "I didn't know that", "wait what", or wants to record a misconception they just discovered. Format "I assumed X but actually Y". Personal misconception log — much higher learning signal than feedback memories.
+description: "Log a one-line knowledge gap to gaps.md as 'I assumed X but actually Y'. Use on 'wait what', 'I did not know that', recording a misconception."
 ---
 
 # Log a knowledge gap
