@@ -187,7 +187,7 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:10.5px;background:var(--pane
 <header>
   <p class="eyebrow">Claude Code &middot; context budget</p>
   <h1>What your setup costs, every session</h1>
-  <p class="sub">A ledger of all <b>134 loaded components</b> across dotfiles and 18 enabled plugins, with real invocation counts mined from <b>~3,800 local transcripts</b>. Mark each one <b>keep / compress / edit / merge / drop</b> from the keyboard; the meter updates live. Press <kbd>?</kbd> for keys.</p>
+  <p class="sub">A ledger of all <b>134 loaded components</b> across dotfiles and 18 enabled plugins, with real invocation counts mined from <b>~4,100 local transcripts</b> (2.7&nbsp;GB, Mar&ndash;Aug 2026). Mark each one <b>keep / compress / edit / merge / drop</b> from the keyboard; the meter updates live. Press <kbd>?</kbd> for keys.</p>
 
   <div class="meter">
     <div class="meter-head">
@@ -209,7 +209,7 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:10.5px;background:var(--pane
       <span><i style="background:#3f7fb8"></i>Skill/agent description lines <b class="mono" id="ld"></b></span>
       <span><i style="background:#a3763c"></i>SessionStart injections <b class="mono" id="li"></b></span>
     </div>
-    <p class="assume">Tokens are estimated at <b>characters &divide; 4</b>, not a real tokenizer &mdash; treat them as &plusmn;15% and comparable to each other, not exact. Projected savings assume <b>drop</b> and <b>merge</b> remove a row's whole Tier-1 line and <b>compress</b> removes half of it; <b>edit</b> and <b>keep</b> save nothing. Tier 2 (bodies, <b id="t2"></b> tok) and Tier 3 (references, <b id="t3"></b> tok) are <em>not</em> in this number &mdash; you pay those only when a skill actually fires.</p>
+    <p class="assume">Tokens are estimated at <b>characters &divide; 4</b>, not a real tokenizer &mdash; treat them as &plusmn;15% and comparable to each other, not exact. Projected savings assume <b>drop</b> and <b>merge</b> remove a row's whole Tier-1 line and <b>compress</b> removes half of it; <b>edit</b> and <b>keep</b> save nothing. Tier 2 (bodies, <b id="t2"></b> tok) and Tier 3 (references, <b id="t3"></b> tok) are <em>not</em> in this number &mdash; you pay those only when a skill actually fires.<br><b>Usage counts are upper bounds.</b> They sum two invocation shapes (the <code class="mono">skill</code> field and <code class="mono">/slash</code> commands) and fold in pre-rename names, but resumed and compacted sessions copy earlier history into new transcript files, so a busy skill can be counted more than once. A <b>0</b> is trustworthy; a large number means &ldquo;heavily used&rdquo;, not an exact tally.</p>
   </div>
 </header>
 

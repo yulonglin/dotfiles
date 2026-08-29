@@ -31,8 +31,33 @@ def counts(field):
     return c
 
 
+def slash_counts():
+    """Skills invoked as slash commands appear in a different shape entirely.
+
+    Counting only "skill":"<name>" misses these: /grill-me shows 18 here and 2
+    there, /commit-push-sync 30 vs 8. Omitting this shape understates the most
+    keyboard-driven skills, which are exactly the ones worth keeping.
+    """
+    try:
+        r = subprocess.run(
+            ['rg', '-o', r'<command-name>[^<]*</command-name>', PROJ, '-g', '*.jsonl',
+             '--no-filename'], capture_output=True, text=True, timeout=600)
+    except Exception:
+        return {}
+    BUILTIN = {'model', 'clear', 'compact', 'login', 'rename', 'context', 'remote-control',
+               'advisor', 'resume', 'plugin', 'feedback', 'status', 'memory', 'mcp'}
+    c = {}
+    for line in r.stdout.splitlines():
+        n = line.replace('<command-name>', '').replace('</command-name>', '').strip().lstrip('/')
+        if not n or n in BUILTIN:
+            continue
+        c[n] = c.get(n, 0) + 1
+    return c
+
+
 skill_counts = counts('skill')
 agent_counts = counts('subagent_type')
+cmd_counts = slash_counts()
 
 # Renames verified from `git log --diff-filter=R` in the dotfiles repo (commit
 # 5b2bb67, 2026-08-28). Predecessor usage belongs to the successor.
@@ -49,17 +74,18 @@ inv = json.load(open(OUT / 'inventory.json'))
 
 
 def lookup(r):
-    """Total invocations for a component, summing plugin-qualified, bare and alias names."""
+    """Total invocations, summing plugin-qualified, bare, alias and slash-command names."""
     name = r['name']
-    pool = agent_counts if r['kind'] == 'agent' else skill_counts
     keys = {name, f"{r['plugin']}:{name}"}
     for a in ALIASES.get(name, []):
         keys.add(a)
+    pools = [agent_counts] if r['kind'] == 'agent' else [skill_counts, cmd_counts]
     total, hits = 0, {}
-    for k in keys:
-        if pool.get(k):
-            total += pool[k]
-            hits[k] = pool[k]
+    for pool, tag in zip(pools, ['', '/']):
+        for k in keys:
+            if pool.get(k):
+                total += pool[k]
+                hits[f'{tag}{k}'] = pool[k]
     return total, hits
 
 
