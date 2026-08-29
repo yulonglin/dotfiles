@@ -17,12 +17,26 @@ The moment an `Artifact` publish returns a URL, add or update its row in the sam
 |---|---|
 | Artifact | The linked title. It already asserts the finding, so it doubles as the summary; give a legacy topic-titled page a one-line gloss until it is renamed |
 | Org | `orgName` from `claude auth status` **at publish time** |
-| Status | `live`, `superseded`, or `elsewhere` — nothing else |
+| Status | one of the five below — nothing else |
 | Source | Repo-relative path of the Markdown or HTML it was built from, or `—` when nothing was kept |
 | Public | `no`, or the public mirror URL |
 | Updated | ISO date of the last publish |
 
-Superseded rows stay, carrying a link to the page that replaced them. Deleting a row destroys the only trace of where a stale link points, and the comment threads on the old page are still the user's work.
+### Status separates "still moving" from "finished" from "retired"
+
+A single `live` flag collapses three different things a reader needs to tell apart: a page still being updated, a page whose work is finished and whose conclusions stand, and a page nobody should cite any more. Five values, and no others:
+
+| Status | Meaning | Still cite it? |
+|---|---|---|
+| `live` | The current page for this topic, still being updated | yes |
+| `done` | The work it reports is finished; the page is final and its conclusions stand | yes |
+| `archived` | Deliberately retired — the topic moved on, or the work was abandoned | no, but keep the row |
+| `superseded` | Replaced by a specific newer page; the row **must** link to it | no, follow the link |
+| `elsewhere` | Published under an org this machine is not signed into | cannot reach it from here |
+
+`done` and `archived` are the pair people conflate. **`done` is an achievement, `archived` is a retirement**: a finished experiment write-up whose numbers still hold is `done` forever and stays quotable, while a page whose premise was abandoned is `archived` even if it was never replaced. Only `superseded` implies a successor exists, which is why it is the one status that carries a mandatory link.
+
+Nothing is ever deleted. Deleting a row destroys the only trace of where a stale link points, and the comment threads on a retired page are still the user's work.
 
 `ARTIFACTS.md` is itself published as the repo's index page and carries its own row. A living index may name its function rather than assert a finding — the documented exception to the title rule.
 
@@ -31,6 +45,8 @@ Superseded rows stay, carrying a link to the page that replaced them. Deleting a
 `Artifact action: list` returns only artifacts in the org the session is authenticated to, and only within its listing window. A URL missing from it is ambiguous between *old*, *deleted*, and *published under another org*. Recording Org at publish time is what disambiguates: a missing URL whose recorded org differs from the current `orgName` is `elsewhere`, not lost.
 
 **Never demote a row to `superseded` on a listing miss alone.** That transition is only correct when a replacement page exists, and it always carries a link to the replacement. This is the commonest way a sync pass destroys information.
+
+Equally, a sync pass never invents `done` or `archived`. Both are editorial judgements about whether work finished or was abandoned, and neither is visible in the gallery — they are set by the person or session that knows the work ended, not inferred from dates. An old `live` row is a prompt to ask, not a licence to retire it.
 
 ## The reconcile pass
 
