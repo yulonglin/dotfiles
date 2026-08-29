@@ -40,7 +40,7 @@ Establish the org first — every verdict below is relative to it, so skipping t
 claude auth status
 ```
 
-`orgName: null` with `loggedIn: true` means the session is authenticated by API key rather than a claude.ai login. Record `unknown`; never stamp an org you did not read.
+`orgName` can come back `null` on a session that publishes perfectly well — measured 2026-08-29, a session reporting `authMethod: "claude.ai"`, `orgName: null` published without trouble. So a null org is not a diagnosis of anything, least of all of API-key auth. Record `unknown` and stamp the real name from a session where the field is populated; never stamp an org you did not read.
 
 Then list the gallery and join **by URL, never by title** — titles get rewritten, and two artifacts have already shared one in this gallery ("Monitoring Beyond CoT" appears twice under different UUIDs).
 
