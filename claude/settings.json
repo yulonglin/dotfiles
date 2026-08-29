@@ -831,6 +831,7 @@
       "Read-only commands (cat, ls, head, tail, jq, grep, rg, fd, find, git log/status/diff/show, eza, bat, wc) targeting any personal repository under ~/code/, ~/writing/, ~/projects/, or ~/scratch/ \u2014 even when the current session is in a different personal repo. The user routinely runs read-only queries across their own repos. Cross-repo writes/edits/moves/deletes still require permission. Excludes paths under ~/.config/dotfiles-secrets/, ~/.config/sops/age/, ~/.aws/, ~/.ssh/id_* (private keys), ~/.claude/.credentials.json, ~/.claude/projects/*.jsonl, and .env* files with real secrets.",
       "Writes (Edit, Write, MultiEdit) and commits inside other personal repos under ~/code/, ~/writing/, ~/projects/, ~/scratch/ are allowed when the user's current message names the target repo or directory by path. Pushing to remotes in those other repos still requires confirmation."
     ],
+    "classifyAllShell": true,
     "environment": [
       "**Trusted repo**: The git repository the agent started in (its working directory) and its configured remote(s)",
       "**Source control**: The trusted repo and its remote(s) only (no additional orgs configured)",
