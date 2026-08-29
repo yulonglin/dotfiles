@@ -6,7 +6,7 @@
 # Line 1 (location): Machine name (SSH) + profiles + directory + git branch
 # Line 2 (session): Model name (with reasoning effort) + context tokens/%
 #                   + duration + approval-classifier state
-# Line 3 (usage): 5h and 7d API usage bars (cached, from /api/oauth/usage)
+# Line 3 (usage): 5h and 7d API usage gauges (cached, from /api/oauth/usage)
 #
 # Receives JSON via stdin from Claude Code.
 
@@ -275,20 +275,23 @@ cache_dir="${TMPDIR:-/tmp/claude}"
 cache_file="$cache_dir/claude-statusline-usage.json"
 cache_max_age=300
 
-# Helper: build a progress bar with an explicit color (color decision lives
-# in color_for_pace/color_for_pct so bar color and label color always agree)
-build_bar() {
-  local pct=$1 color=$2 width=10
+# Single-glyph usage gauge. Circle quadrants from the Geometric Shapes block —
+# deliberately not moon-phase emoji, which are Emoji_Presentation: double-width,
+# color-glyph, and immune to the ANSI pace colour that carries the signal.
+# Must stay byte-identical to GAUGE_GLYPHS in tools/claude-tools/src/usage.rs.
+GAUGE_GLYPHS=("○" "◔" "◑" "◕" "●")
+
+# Helper: build a one-glyph usage gauge with an explicit color (color decision
+# lives in color_for_pace/color_for_pct so gauge and label colors always agree).
+# Quantisation is integer round-half-up over 4 steps — identical arithmetic to
+# gauge_level() in tools/claude-tools/src/usage.rs, so the two renderers agree.
+build_gauge() {
+  local pct=$1 color=$2 steps=4
   [ "$pct" -lt 0 ] 2>/dev/null && pct=0
   [ "$pct" -gt 100 ] 2>/dev/null && pct=100
-  local filled=$((pct * width / 100))
-  local empty=$((width - filled))
+  local level=$(( (pct * steps + 50) / 100 ))
 
-  local filled_str="" empty_str=""
-  for ((i=0; i<filled; i++)); do filled_str+="●"; done
-  for ((i=0; i<empty; i++)); do empty_str+="○"; done
-
-  printf "${color}${filled_str}\033[2m${empty_str}\033[0m ${color}%d%%\033[0m" "$pct"
+  printf "${color}%s %d%%\033[0m" "${GAUGE_GLYPHS[$level]}" "$pct"
 }
 
 # Helper: color by absolute usage — fallback when reset time is unavailable
@@ -466,10 +469,15 @@ get_account_email() {
   return 1
 }
 
-# Render usage bars
+# Render usage gauges
 if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
-  five_pct=$(echo "$usage_data" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
-  seven_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
+  # int(x + 0.5), not printf "%.0f". C's %.0f rounds half to EVEN, while the
+  # Rust primary uses f64::round (half away from zero) — so a utilization of
+  # 12.5 rendered "12 ○" here and "13 ◔" there, diverging in both the glyph and
+  # the percentage. Utilization is never negative, so int(x + 0.5) matches Rust
+  # over the whole range. Same fix, same reason, as the context percentage above.
+  five_pct=$(echo "$usage_data" | jq -r '.five_hour.utilization // 0' | LC_ALL=C awk '{printf "%d", int($1 + 0.5)}')
+  seven_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | LC_ALL=C awk '{printf "%d", int($1 + 0.5)}')
 
   # Snapshot this account into the persistent multi-account cache, keyed by
   # email, so the *other* (logged-out) account's last-known usage windows
@@ -524,7 +532,7 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     fi
 
     printf "${five_color}5h\033[0m "
-    build_bar "$five_pct" "$five_color"
+    build_gauge "$five_pct" "$five_color"
     if [ -n "$five_delta" ]; then
       if [ "$five_delta" -gt 0 ]; then printf " ${five_color}+%d%%\033[0m" "$five_delta"
       else printf " ${five_color}%d%%\033[0m" "$five_delta"; fi
@@ -534,7 +542,7 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
       [ -n "$five_time" ] && printf " \033[2m⟳ %s\033[0m" "$five_time"
     fi
 
-    printf "  ·  "
+    printf " · "
 
     # 7d bucket: same pace-based treatment
     seven_resets=$(echo "$usage_data" | jq -r '.seven_day.resets_at // empty')
@@ -549,7 +557,7 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     fi
 
     printf "${seven_color}7d\033[0m "
-    build_bar "$seven_pct" "$seven_color"
+    build_gauge "$seven_pct" "$seven_color"
     if [ -n "$seven_delta" ]; then
       if [ "$seven_delta" -gt 0 ]; then printf " ${seven_color}+%d%%\033[0m" "$seven_delta"
       else printf " ${seven_color}%d%%\033[0m" "$seven_delta"; fi
@@ -563,8 +571,10 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     # aggregate 7d bucket above, surfaced by the API as `weekly_scoped`.
     while IFS=$'\t' read -r limit_name limit_pct_raw limit_resets; do
       [ -z "$limit_name" ] && continue
-      limit_pct=$(printf '%.0f' "$limit_pct_raw")
-      printf "  ·  "
+      # int(x + 0.5) rather than printf '%.0f', matching Rust's f64::round —
+      # see the five_pct/seven_pct note above for why half-to-even diverges.
+      limit_pct=$(LC_ALL=C awk -v p="$limit_pct_raw" 'BEGIN { printf "%d", int(p + 0.5) }')
+      printf " · "
       if compute_pace "$limit_pct" "$limit_resets" 604800; then
         limit_color=$(color_for_pace "$PACE_DELTA")
         limit_delta=$PACE_DELTA
@@ -575,7 +585,7 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
         limit_epoch=""
       fi
       printf "${limit_color}%s\033[0m " "$limit_name"
-      build_bar "$limit_pct" "$limit_color"
+      build_gauge "$limit_pct" "$limit_color"
       if [ -n "$limit_delta" ]; then
         if [ "$limit_delta" -gt 0 ]; then printf " ${limit_color}+%d%%\033[0m" "$limit_delta"
         else printf " ${limit_color}%d%%\033[0m" "$limit_delta"; fi
@@ -607,14 +617,14 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
         [ -z "$other_label" ] && continue
         other_epoch=$(parse_iso_epoch "$other_resets")
         [ -z "$other_epoch" ] && continue
-        [ -n "$other_rendered" ] && other_rendered="${other_rendered}  ·  "
+        [ -n "$other_rendered" ] && other_rendered="${other_rendered} · "
         if [ "$other_epoch" -gt "$now_epoch" ]; then
           other_rendered="${other_rendered}\033[2m${other_label} $(format_countdown "$((other_epoch - now_epoch))")\033[0m"
         else
           other_rendered="${other_rendered}\033[32m${other_label} ready\033[0m"
         fi
       done <<< "$other_windows"
-      [ -n "$other_rendered" ] && printf "  |  \033[2m⇄\033[0m %b" "$other_rendered"
+      [ -n "$other_rendered" ] && printf "  \033[2m⇄\033[0m %b" "$other_rendered"
     fi
   fi
 else
