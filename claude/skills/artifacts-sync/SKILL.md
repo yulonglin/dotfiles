@@ -77,6 +77,12 @@ Attribute an unrecorded artifact to this repo only when something ties it here: 
 
 Check each row's Source path still exists. A row whose source is gone cannot be rebuilt after an org switch, which is exactly when rebuilding matters. Report those; do not delete the row.
 
+### A published page is frozen at the tooling that built it
+
+`md2review` inlines the annotation layer into the HTML rather than linking it, so every page carries its own copy of whatever version was current when it was built. Fixing the layer fixes **future builds only**. Confirmed the hard way on 2026-08-29: the select-to-comment box flickered on older pages while newly published ones behaved, long after the 2026-08-28 fix landed — the builder on PATH was correct and its browser suite passed, because the broken copies were frozen inside pages published before it.
+
+Two consequences. A page showing behaviour the current tooling no longer produces needs a **rebuild and republish**, not a bug report. And a row whose Source is `—` can never get that rebuild, which is why the column is a durability requirement rather than bookkeeping — it is the difference between a page that can be repaired and one that is stuck forever. When a tooling fix matters (data loss, a broken export, an unusable comment box), rebuild the rows that have sources and list the ones that cannot be fixed.
+
 Republish the index in the same pass — a sync that updates only the Markdown leaves the page stale, which is the drift this skill exists to remove:
 
 ```bash
