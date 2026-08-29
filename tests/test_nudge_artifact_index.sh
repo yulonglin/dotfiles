@@ -64,8 +64,79 @@ grep -q "ARTIFACTS.md" <<<"$OUT" || fail "nudge does not name the index file"
 grep -q "additionalContext" <<<"$OUT" || fail "nudge is not PostToolUse additionalContext"
 ok
 
-# The org is unrecoverable after the fact, so the nudge must carry it or say so.
-grep -qi "org" <<<"$OUT" || fail "nudge omits the publishing org"
+# NOT `grep -qi org`: the static template contains "publishing org" regardless,
+# so that assertion passes even if every org mechanism is deleted. Assert the
+# thing that would actually change — the hook must NOT shell out to `claude`,
+# because the org value it returned was always null and a per-UID cache made a
+# WRONG org possible. A stub on PATH that reports being called is the check.
+STUBDIR="$WORK/stub"
+mkdir -p "$STUBDIR"
+printf '#!/bin/sh\ntouch "%s/claude-was-called"\nprintf "{}"\n' "$WORK" > "$STUBDIR/claude"
+chmod +x "$STUBDIR/claude"
+command rm -f "$WORK/claude-was-called"
+OUT="$(PATH="$STUBDIR:$PATH" CLAUDE_HOOK_FEATURES_FILE="$FEATCONF" bash "$HOOK" \
+    <<<"$(payload publish "$URL_A" "")" 2>/dev/null || true)"
+[ -e "$WORK/claude-was-called" ] && fail "hook shelled out to \`claude\` for the org"
+grep -q "$URL_A" <<<"$OUT" || fail "nudge lost its URL once the org lookup went"
+ok
+
+# It must still TELL the session to record the org — that instruction is the
+# whole point, even though the hook no longer resolves the value itself.
+grep -q "publishing org" <<<"$OUT" || fail "nudge no longer asks for the org"
+grep -q "artifacts-sync" <<<"$OUT" || fail "nudge does not point at the schema"
+ok
+
+# --- a failed publish is not a publish ---------------------------------------
+
+# The in-place update is the dangerous case: its URL lives in tool_input, so a
+# REJECTED republish would otherwise be announced as "Published <URL>".
+for REJECTION in \
+    '{"error":"org_mismatch: caller org does not match owner org"}' \
+    '{"message":"This Artifact is in another of the users organizations"}' \
+    '{"error":"failed to publish: version conflict"}'; do
+    P=$(python3 -c '
+import json, sys
+print(json.dumps({"tool_name":"Artifact","cwd":sys.argv[1],
+ "tool_input":{"action":"publish","file_path":"p.html","url":sys.argv[2]},
+ "tool_response":json.loads(sys.argv[3])}))' "$REPO" "$URL_A" "$REJECTION")
+    OUT="$(run_hook "$P")"
+    [ -z "$OUT" ] || fail "nudged on a REJECTED publish: $REJECTION -> $OUT"
+done
+ok
+
+# The structured error flag is honoured too, wherever it sits.
+P=$(python3 -c '
+import json, sys
+print(json.dumps({"tool_name":"Artifact","cwd":sys.argv[1],"is_error":True,
+ "tool_input":{"action":"publish","url":sys.argv[2]},
+ "tool_response":{"url":sys.argv[2]}}))' "$REPO" "$URL_A")
+OUT="$(run_hook "$P")"
+[ -z "$OUT" ] || fail "nudged despite is_error: $OUT"
+ok
+
+# --- payload shapes the fabricated fixtures did not cover --------------------
+
+# tool_response delivered as a bare string rather than an object.
+P=$(python3 -c '
+import json, sys
+print(json.dumps({"tool_name":"Artifact","cwd":sys.argv[1],
+ "tool_input":{"action":"publish","file_path":"p.html"},
+ "tool_response":"Published "+sys.argv[2]}))' "$REPO" "$URL_A")
+OUT="$(run_hook "$P")"
+grep -q "$URL_A" <<<"$OUT" || fail "missed a URL in a string-valued tool_response"
+ok
+
+# An index that exists but cannot be read must NOT nudge: grep cannot tell
+# "absent" from "unreadable", and guessing absent nudges forever.
+printf '# Artifacts\n\nnothing yet\n' > "$REPO/ARTIFACTS.md"
+chmod 000 "$REPO/ARTIFACTS.md"
+if [ -r "$REPO/ARTIFACTS.md" ]; then
+    chmod 644 "$REPO/ARTIFACTS.md"   # running as root; the case is untestable
+else
+    OUT="$(run_hook "$(payload publish "$URL_A" "")")"
+    chmod 644 "$REPO/ARTIFACTS.md"
+    [ -z "$OUT" ] || fail "nudged on an unreadable index: $OUT"
+fi
 ok
 
 # --- stays silent when there is nothing to say -------------------------------
