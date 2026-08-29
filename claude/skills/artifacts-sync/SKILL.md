@@ -42,7 +42,9 @@ Nothing is ever deleted. Deleting a row destroys the only trace of where a stale
 
 ## Absence from the listing is three different states, so record the org instead of probing
 
-`Artifact action: list` returns only artifacts in the org the session is authenticated to, and only within its listing window. A URL missing from it is ambiguous between *old*, *deleted*, and *published under another org*. Recording Org at publish time is what disambiguates: a missing URL whose recorded org differs from the current `orgName` is `elsewhere`, not lost.
+**Assumption, not documented fact:** the reconcile table below rests on `Artifact action: list` returning only the current org's artifacts. The Claude Code docs never say this — they describe `/artifacts` as listing "every artifact you own and every artifact shared with you", with no mention of org scoping. Only the listing window is documented, and only as the tool's `limit` (default 25, max 50). So treat org-scoping as an unverified premise: it matches observed behaviour, and the whole "elsewhere" verdict depends on it. If it turns out the listing spans orgs, `elsewhere` collapses into `deleted` and this table needs rewriting. Someone should confirm it directly by listing from two orgs.
+
+Granting the premise: a URL missing from the listing is ambiguous between *old*, *deleted*, and *published under another org*. Recording Org at publish time is what disambiguates — a missing URL whose recorded org differs from the current `orgName` is `elsewhere`, not lost. That is the value of the column regardless of how the listing scopes, because the org is unrecoverable afterwards either way.
 
 **Never demote a row to `superseded` on a listing miss alone.** That transition is only correct when a replacement page exists, and it always carries a link to the replacement. This is the commonest way a sync pass destroys information.
 
@@ -90,14 +92,14 @@ Close by reporting counts per verdict, ambiguous rows named individually, and mi
 Verified against the Claude Code docs, 2026-08-29:
 
 - On **Pro and Max**, a public link is the only sharing mode, and any artifact can have one.
-- On **Team and Enterprise**, public sharing is **off by default**; only an organization **Owner** enables it, under Settings > Claude Code > Capabilities > External sharing. Turning it back off kills every existing public link at once without changing any artifact's audience.
+- On **Team and Enterprise**, public sharing is **off by default**; only an organization **Owner** enables it, under Settings > Claude Code > Capabilities > External sharing. Turning it back off blocks access through every existing public link at once, without changing any artifact's audience — and access resumes if it is re-enabled. So the links are suspended, not destroyed; the risk is an outage you cannot fix yourself, not permanent loss.
 - A **connector-backed** artifact can never be public on any plan.
 - Native comment threads work **only** on org-shared artifacts. A public artifact cannot take comments, and one with existing threads must have them deleted before it can go public. The `md2review` annotation layer is unaffected, being page-local.
 
 So under a Team or Enterprise org such as MATS, "make this public" is not yours to grant. Two fallbacks, both recorded in the Public column:
 
 - **Self-host the mirror** — the built HTML already exists on disk, so pushing it to GitHub Pages yields a URL no org toggle can revoke. Default for anything that must stay reachable.
-- **Publish outward-facing pages from a personal Pro/Max account**, where public is the only mode. Costs org comments and splits the gallery, so reserve it for genuinely external audiences.
+- **Publish outward-facing pages from a personal Pro/Max account**, where public is the only mode. Costs org comments and splits the gallery, so reserve it for genuinely external audiences. **This fallback does not rescue a connector-backed page**: on Pro/Max such a page stays private to its author, because no plan allows a connector-backed artifact a public link. A page that must be both public and live-data has to become a self-hosted mirror with the data baked in, or stop calling connectors.
 
 ## No credential publishes into an org the session is not signed into
 
