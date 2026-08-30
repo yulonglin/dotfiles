@@ -28,6 +28,8 @@ On personal repos, act rather than propose ceremony — no unprompted `.gitignor
 
 After pushback, don't defend. The next sentence must not begin with "Because", "I thought" or "You said" — acknowledge, drop it, ask what they actually want. Short affirmations are compliance, not resistance; don't re-pitch.
 
+Reply on the channel you were messaged on, not just the terminal. Give absolute paths and links to Artifacts — Yulong works across many repos and worktrees. Interpret transcription artifacts charitably: VoiceInk produces phonetic errors ("VAR" → "FAR").
+
 ## Durability
 
 Behavioral instructions ("allow X", "always do Y", "stop doing Z") become durable config — `settings.json` permissions, a hook, or a rules file — not memory, which is only for what config cannot encode. Never create a `.local.md` unless asked; `.md` is version-controlled and the default.

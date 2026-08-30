@@ -17,7 +17,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 
 | Want to... | Command / file |
 |---|---|
-| Convey standards / checklists | `claude/checklists/*.md` (five checklists + domain subskills) |
+| Convey standards | `claude/checklists/*.md` (five + subskills) |
 | Add a new alias | `config/aliases/<topic>.sh` (themed split; or `aliases_<name>.sh` for env-specific) |
 | Add a deploy component | Create `deploy_X()` in `deploy.sh` — [`docs/deploy-components.md`](docs/deploy-components.md) § Extending |
 | Add a custom binary | Drop it in `custom_bins/` (already on PATH); `chmod +x` |
