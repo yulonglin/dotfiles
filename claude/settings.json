@@ -585,24 +585,24 @@
     "padding": 1
   },
   "enabledPlugins": {
-    "code@ai-safety-plugins": true,
+    "code@ai-safety-plugins": false,
     "codex@codex-plugin-cc": true,
-    "core@ai-safety-plugins": true,
-    "dev-browser@dev-browser-marketplace": true,
+    "core@ai-safety-plugins": false,
+    "dev-browser@dev-browser-marketplace": false,
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
     "playground@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
     "remember@claude-plugins-official": true,
-    "research@ai-safety-plugins": true,
+    "research@ai-safety-plugins": false,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "viz@ai-safety-plugins": true,
-    "workflow@ai-safety-plugins": true,
-    "writing@ai-safety-plugins": true
+    "viz@ai-safety-plugins": false,
+    "workflow@ai-safety-plugins": false,
+    "writing@ai-safety-plugins": false
   },
   "extraKnownMarketplaces": {
     "ai-safety-plugins": {

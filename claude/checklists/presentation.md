@@ -6,15 +6,21 @@ The file doubles as a review pass: judge each item **Good / Needs improvement / 
 
 ## Legibility is research time, not overhead
 
+*Advice, not checklist items — neither can be judged from a draft, and both are why the rest of the file is worth applying.*
+
 Two principles govern everything below. **Confusion is a debugging signal** — if someone unfamiliar with the latest work is confused by a term or a figure, the presentation is what needs fixing, not the audience. And **clear slides improve the research itself**: making results legible exposes missing controls, large error bars, weak baselines and unclear hypotheses. Time spent here is research time.
 
-## Numbers go in plots, not prose or tables
+## Plots carry pages, tables carry papers
 
-If a number can sit in prose it can sit in a table; if it can sit in a table it can be a plot. **Escalate to the plot and stop there.** Anything measured belongs in a chart; prose and captions say qualitatively how to read it. Hyperparameters are the exception — they are settings, not results.
+On artifact pages, dashboards and slides, escalate by what the reader has to do with the number. **A comparison or a distribution goes in a plot** — escalate it and stop there, because the failure this prevents is a dense chunk of digits inside a sentence, where the reader has to hold every value in their head to compare them. A single headline number is stated once, on the figure or in its caption. **Values a reader looks up exactly stay in a table** — a plot read for exact values is chartjunk. Prose and captions then say qualitatively how to read the chart. Hyperparameters are settings, not results, and go wherever they are easiest to check.
+
+Papers and reports keep their numerical tables: venue norms make the main-results table and the ablation table the thing reviewers cite, so **keep both**, with intervals and sample sizes in the cells, and let the figures carry the comparisons a reader should read as positions on an axis.
+
+The rule governs how **results are presented**. It does not govern the per-example tables a reader uses to **inspect evidence** — one row per sample, sorted and filtered from the headers — which are a `results-analysis.md` affordance. Results go in plots; evidence goes in tables you can sort and filter.
 
 - **One plot per claim.** A summary claim may open the page with its own summary plot.
-- **A paragraph carries at most one number, and never a confidence interval.** An interval in prose is a figure you have not drawn yet.
-- Chunks of numbers are unreadable. Chunks of prose are fine and skimmable — the problem is density of digits, not length of text.
+- **A paragraph carries at most one measured quantity, and that quantity carries its interval and its n.** An abstract's headline effect is exactly this case, and it keeps its uncertainty. A second measured quantity in the same paragraph is a figure or a table you have not drawn yet.
+- Chunks of prose are fine and skimmable, so length is not what is being policed here — the problem is density of digits.
 - Conceptual material — system design, UML, experiment design, eval structure — wants a **mermaid diagram**, not a paragraph describing a diagram.
 
 ## Headings assert, sections elaborate
@@ -25,7 +31,7 @@ State each research question in one sentence, and list them all at the top of th
 
 ## Say what you mean by the words you use
 
-Terminology section at the top, FAQ at the bottom. Define every term, acronym and metric on first use — never use undefined jargon — in a callout if it carries weight. Use only vocabulary the AI safety and LLM literature uses, and only as it uses it.
+Terminology section at the top, FAQ at the bottom. Define every term, acronym and metric on first use — never use undefined jargon — in a callout if it carries weight. Use only vocabulary the AI safety and LLM literature uses, and only as it uses it — the reference set is ICML, ICLR and NeurIPS, the Anthropic Alignment Science blog, METR, OpenAI Alignment, Apollo Research, Redwood and GDM Safety, so "common in the literature" is checkable rather than a matter of taste.
 
 Watch the words that sound standard and are not:
 
@@ -34,7 +40,7 @@ Watch the words that sound standard and are not:
 - **null** — what is the null, and what would the number be under it?
 - **gate**, **ceiling**, **floor** — of what, measured how?
 
-Explain any statistical test by name and by what its significance means: Fisher, McNemar, and the rest. Say whether an interval is a 95% CI or a SEM, and how it was obtained. Reserve **P0/P1/P2** for priorities and nothing else.
+Placement, for anything the reader has to know to read a number: the name of the statistical test and the definition of the interval sit **adjacent to the number they describe** — in the caption, the cell or the sentence — not in a methods section the reader has to go and find. What the test and the interval must say for themselves is `results-analysis.md`. Reserve **P0/P1/P2** for priorities and nothing else.
 
 Avoid buzzwords, corporate jargon and fluffy transitions. Avoid coining terms; when something genuinely is new, explain it the first time.
 
@@ -86,4 +92,4 @@ If a figure takes more than a few seconds to understand, simplify it.
 
 ## Related
 
-Sentence and paragraph mechanics: `writing.md`. What a results page must show — evidence one click away, provenance, manual review, annotation — and the per-finding shape (claim → figure → caption → setup → implications → caveats → next steps): `results-analysis.md`. Chart style: `house-plots` for papers, the built-in `dataviz` for artifact pages. Slide tooling: the `slidev` skill. Page mechanics, the annotation layer and `md2review`: the `artifact-writing` skill.
+Sentence and paragraph mechanics: `writing.md`. What a results page must show, and the shape of a finding: `results-analysis.md`. Chart style: `house-plots` for papers, the built-in `dataviz` for artifact pages. Slide tooling: the `slidev` skill. Page mechanics, the annotation layer and `md2review`: the `artifact-writing` skill.

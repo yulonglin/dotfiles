@@ -1,6 +1,6 @@
 # Experiments
 
-**Pilot before scale — a hard gate.** Nothing larger than about three samples until one or two have gone end to end through every stage and been eyeballed this session, on this code; `n=1` does not validate scaling, since memory and length failures first appear around `n≥4`.
+**Pilot in two stages, both hard gates.** Stage one at `n=1–2` for the correctness of every stage, eyeballed this session on this code. Stage two at `n≥4` for memory and length, which is where those failures first appear — so a one-sample pilot cannot clear them. Nothing reaches full scale until both pass.
 
 **Spend gate.** Estimate from actual rates. Under $100, run now and report the estimate with the result; $100 or more, propose and wait. Pre-paid cluster allocations skip it.
 

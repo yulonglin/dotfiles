@@ -1,6 +1,6 @@
 # Checklists
 
-Five files that say what good looks like, carved by activity. Yulong owns and edits these; everything else points at them. They fold his own meta-prompts directly — there is no separate "source" layer any more: **these files are the source**, and the verbatim originals live in Bear (`#prompt/meta`) and git history.
+Five activity checklists that say what good looks like, plus the domain subskills under `results-analysis/` that say it for one research area. Yulong owns and edits these; everything else points at them. They fold his own meta-prompts directly — there is no separate "source" layer any more: **these files are the source**, and the verbatim originals live in Bear (`#prompt/meta`) and git history.
 
 | File | Activity | The question it answers |
 |---|---|---|
@@ -12,7 +12,15 @@ Five files that say what good looks like, carved by activity. Yulong owns and ed
 
 `results-analysis/` holds domain subskills — what the generic standard cannot say about a specific research area: `monitoring.md` (usable verbatim as an analysis prompt), `jlens.md`, `sandbagging.md`.
 
-They are checklists, not essays. Each item is checkable by looking at a draft: a reader or a model can say yes or no. An item nobody can check is an aspiration and belongs in a different file.
+`claude/rules/research-core.md` is the always-loaded companion, and it owns the red lines rather than the craft: the reviewer test, no circular reasoning, separation of concerns, and report what happened. The checklists carry everything else, so a standard you cannot find in that file is delegated here, not missing.
+
+They are checklists, not essays: a reader or a model can say yes or no to an item. What an item is checked *against* differs by file, and the difference matters — an un-checkable item mixed in with checkable ones gets rubber-stamped along with them.
+
+- `writing.md`, `presentation.md` and `results-analysis.md` are checked against a **draft**.
+- `research.md` is checked against the **design artifacts**: the threat-model paragraph and who it says controls the prompt, the manifest's pre-run prediction and planned `n`, the named alternative explanations and the control that separates them. Its timeboxes ("thirty minutes, thirty ideas") are marked in place as advice, because nobody can check them off a document.
+- `experiments.md` is mostly run-time behaviour, so it is checked after the fact against the **run log, the manifest and the output directory** — the spend estimate, the pilot, the hashes.
+
+An item nothing can be checked against is an aspiration and belongs in a different file.
 
 ## Why five files and not thirty skills
 

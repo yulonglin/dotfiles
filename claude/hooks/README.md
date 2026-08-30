@@ -99,9 +99,7 @@ If Claude Code supports automatic hook triggering, this would be configured in `
 
 ### Manual Integration
 
-Until automatic hooks are available, the reminder is built into Claude's behavior via:
-- CLAUDE.md conventions (Claude outputs save commands automatically)
-- task-management.md skill (agents follow the pattern)
+Until automatic hooks are available, the reminder is built into Claude's behavior via CLAUDE.md conventions — Claude outputs the save commands automatically.
 
 ## Adding New Hooks
 
@@ -138,7 +136,6 @@ echo "agentId: a5b5164" | ./agent_spawned.sh
 These hooks complement the task management system:
 - Task lists are scoped per session by Claude Code itself; the shell wrapper deliberately sets no task-list ID (`claude/skills/spawn-session/SKILL.md`). The old `claude-new` / `claude-with` / `claude-last` helpers were removed 2026-08-28.
 - CLAUDE.md: Conventions for naming and behavior
-- Skills: `task-management.md` for agent usage
 - Hooks: Automatic reminders and triggers
 
 Together they create a seamless workflow for managing complex, long-running work.

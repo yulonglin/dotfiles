@@ -1,4 +1,4 @@
-<!-- Canonical source: research/agents/references/ci-standards.md — keep in sync -->
+<!-- Canonical source. The research plugin copy this was mirrored from is retired. -->
 
 # Confidence Interval Standards for Experiment Design and Analysis
 

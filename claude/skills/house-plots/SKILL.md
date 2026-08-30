@@ -73,7 +73,7 @@ Checking must happen on the live `Figure` — a saved PNG no longer knows where 
 | `references/matplotlib.md` | Callout shapes, curved annotation arrows, error bars, common chart patterns |
 | `references/visual-layout-quality.md` | Arrow anchoring, label placement in empty space, spacing floors — read whenever adding annotations to any chart |
 
-For chart *design* — mark choice, colour assignment, legends, dashboards — load the built-in `dataviz` skill instead; it covers that across every medium. For LaTeX diagrams use the `viz:tikz-diagrams` plugin. For mechanisms and flows on a page, mermaid renders natively in Artifacts with no library.
+For chart *design* — mark choice, colour assignment, legends, dashboards — load the built-in `dataviz` skill instead; it covers that across every medium. **This file owns the house style; `tufte-data-viz` owns the quality pass** — load it to review or clean up any chart, in any library or medium, against data-ink, direct labeling, range-frame axes and accessibility, once the style here is picked. For LaTeX diagrams use the `tikz-diagrams` skill. For mechanisms and flows on a page, mermaid renders natively in Artifacts with no library.
 
 ## Conventions
 

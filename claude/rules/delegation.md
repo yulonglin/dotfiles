@@ -14,4 +14,4 @@ Every dispatch states TASK, CONTEXT with explicit paths (agents don't share your
 
 **`isolation: "worktree"` sets cwd but does not rewrite paths in your prompt**, so an absolute path in the brief silently sends writes to the main tree. Brief worktree agents with repo-relative paths and check `git -C <worktree> status` afterwards.
 
-For multi-step projects or long sessions, invoke `core:orchestrate` at the start — the same philosophy at its ceiling, with the keep-inline list intact.
+On a multi-step project or a long session, take this posture from the first step rather than drifting into it once context is already full: main context decomposes, dispatches and synthesizes, and everything else is delegated. The keep-inline list above stays intact — it is the whole exception, not a starting point to negotiate down.

@@ -24,10 +24,6 @@
 # Track all files with extensions (user content always has extensions)
 !**/*.*
 
-# Standalone skill files (technically covered by !**/*.* but explicit for clarity)
-!docs-search.md
-!task-management.md
-
 # Skill aliases (symlinks to other skill dirs — extensionless, so need explicit allow)
 !migrate-repo
 

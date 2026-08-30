@@ -29,11 +29,10 @@ Based on Neel Nanda's guide on writing ML papers.
 
 ## 4. Writing and Communication
 
+The standard is `~/.claude/checklists/writing.md` for sentences, paragraphs, hedging and where editing time goes, and `~/.claude/checklists/presentation.md` for figures, headings and terminology. Read the relevant one and judge the draft against it rather than against this list. What is specific to a paper, and so stays here:
+
 - **Effective Abstract**: Motivates problem, states claims, indicates evidence, explains impact
 - **Comprehensive Introduction**: Extended abstract with context and literature review
-- **Clear Figures**: Visualizations communicate key results; good captions
-- **Accessible Language**: Precise but not unnecessarily complex; key terms defined
-- **Logical Structure**: Each section supports the overall narrative
 - **Technical Detail**: Sufficient methods and results detail for expert evaluation
 
 ## 5. Novelty and Context

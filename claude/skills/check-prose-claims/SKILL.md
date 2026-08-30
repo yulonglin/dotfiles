@@ -26,7 +26,7 @@ Prose drift between source and claim. The bib entry can be correct and the cited
 | **Wrong comparator** — paper beats a baseline, slide claims it beats SOTA | Same effect size, bigger claim |
 | **Missing context** — finding holds on subset A, slide drops the qualifier | "Best performance" when the paper says "best on the easy subset" |
 | **Attributed to nobody** — "Studies show X", "According to research…" | Padding that verifies to nothing |
-| **Causal inflation** — paper shows correlation, slide says "X causes Y" | See `~/.claude/rules/research-core.md` § Causal Claims |
+| **Causal inflation** — paper shows correlation, slide says "X causes Y" | See `~/.claude/checklists/results-analysis.md` § causal register |
 | **Visual distortion** — truncated y-axis turns a 2% gap into a 40% one | Chart compels, source data is mundane |
 | **Cherry-picked timeframe** — chart shows the spike, full series is flat | Misleading by omission |
 
@@ -193,5 +193,5 @@ Then findings grouped by status: Verified (ID, claim, source, location, confiden
 
 - `~/.claude/rules/delegation.md` — never delegate factual lookup to an agent without tools; delegate Pass 1 on long PDFs
 - `~/.claude/rules/verify-before-instructing.md` — same epistemic standard, applied mid-conversation
-- `~/.claude/rules/research-core.md` § Causal Claims Match Evidence — for the causal/correlational distinction
+- `~/.claude/checklists/results-analysis.md` — "causal claims match the evidence", for the causal/correlational distinction
 - `check-bib-references` — bib entry existence, titles, authors, arXiv IDs

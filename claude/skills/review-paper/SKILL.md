@@ -30,11 +30,13 @@ Read **`references/rubric.md`** for the full rubric. It covers 6 areas plus red 
 1. **Core Narrative Quality** — clear claims, motivation, context, takeaway
 2. **Experimental Evidence Rigor** — hypothesis distinction, stats, baselines, ablations
 3. **Scientific Integrity** — red-teaming, limitations, reproducibility
-4. **Writing and Communication** — abstract, figures, structure, accessibility
+4. **Writing and Communication** — abstract, introduction and technical detail; the clarity standard itself is `~/.claude/checklists/writing.md` and the figure, heading and terminology standard is `~/.claude/checklists/presentation.md`
 5. **Novelty and Context** — novelty claims, citations, literature integration
 6. **Process Indicators** — iterative development, evidence-claim alignment
 
 For each area, note **strengths** and **specific improvements needed**. Skip areas not applicable to the work's current stage. Flag any **red flags** (cherry-picking, weak stats, missing baselines, etc.).
+
+This skill owns the **rubric mechanics** — the six areas, the red flags, and the ranked output below. The writing standard behind area 4 lives in the checklists and is not restated here.
 
 ## Output Format
 
@@ -70,6 +72,14 @@ Structure the review as:
 [Concrete, actionable suggestions for the most impactful improvements.
 Reference specific sections, figures, or claims.]
 ```
+
+## Reach for a neighbour instead when
+
+- the draft is a **blog post, explainer or report** rather than a paper: the `review-draft` skill, which dispatches `clarity-critic`, `narrative-critic`, `fact-checker` and `red-team` in parallel
+- the question is only about **sentences and paragraphs**: `~/.claude/checklists/writing.md`
+- the question is about the **page or deck form** — plots, headings, attention, slides: `~/.claude/checklists/presentation.md`
+- the evidence rather than the write-up is the worry: `~/.claude/checklists/results-analysis.md`
+- the citations may be **fabricated**: the `check-bib-references` skill
 
 ## Tone
 

@@ -46,15 +46,15 @@ Match the strength of each claim to the evidence class behind it: an **existence
 
 **Describe a figure at the level of its marks, not its conclusions** — talk about the lines and the points, rather than only what you take them to show, and check that what you said about them is actually true. [Farquhar, How to Write ML Papers](https://sebastianfarquhar.com/on-research/2024/11/04/how_to_write_ml_papers/)
 
-## Spend editing time where readers actually are
+## The abstract, intro and figures carry the reading
 
-Most readers stop early: many read the abstract, some read the intro or skim the figures, few read the whole thing. So spend roughly equal time on **the abstract, the introduction, the figures, and everything else combined** — the last of which is most of the words. Effort spread evenly across the document is effort spent mostly where nobody is looking [Nanda, above].
+Most readers stop early: many read the abstract, some read the intro or skim the figures, few read the whole thing — so those three earn as much editing effort as everything else combined, which is most of the words. Effort spread evenly across the document is effort spent mostly where nobody is looking [Nanda, above]. What that effort has to buy is checkable in the draft: **the abstract states the claim, its evidence class and one limitation**; the introduction ends with the claim in a single sentence; and each figure's caption says what to see in the figure without the body text.
 
-On the final pass, **delete about a third of the words**; that is typically how much fluff a draft carries [Foerster, above].
+Foerster's rule of thumb is that a draft carries about a third fluff, cut on the final pass [Foerster, above]. Check what is left rather than what was deleted: **no sentence only restates its neighbour, no paragraph opens by announcing what it is about to do, and the conclusion says something the introduction did not.**
 
 ## You cannot imagine a naive reader, so reread cold instead
 
-The curse of knowledge is *"a difficulty in imagining what it is like for someone else not to know something that you know"*, and the remedy is mechanical rather than imaginative: *"Show a draft to yourself, ideally after enough time has passed that the text is no longer familiar."* Prefer pointing at concrete things a reader could see — classic style *"minimizes abstractions, which cannot be seen with the naked eye"*. [Pinker, *The Sense of Style*, via [summary](https://sive.rs/book/SenseOfStyle) — secondary source]
+The curse of knowledge is *"a difficulty in imagining what it is like for someone else not to know something that you know"*, and the remedy is mechanical rather than imaginative: *"Show a draft to yourself, ideally after enough time has passed that the text is no longer familiar."* That last is a working habit, not something a reader can check — but what the cold reread looks for is: **every abstraction on the page is either defined there or replaced by something a reader could see**, because classic style *"minimizes abstractions, which cannot be seen with the naked eye"*. [Pinker, *The Sense of Style*, via [summary](https://sive.rs/book/SenseOfStyle) — secondary source]
 
 **Where McEnerney and Pinker disagree, and how to resolve it.** McEnerney says do not explain — *"you explain stuff under the model of demonstrating to somebody that you understand it"*. Pinker says the curse of knowledge is fixed precisely by explaining: spell out the logic, supply the detail. They are addressing different readers. McEnerney is talking to experts writing for their own field, where explanation reads as a competence display; Pinker is talking to writers whose readers genuinely lack the background. For a mixed AI-safety readership: **Pinker governs mechanisms, McEnerney governs motivation.** Explain how the thing works; do not explain why you find it interesting.
 
@@ -75,4 +75,4 @@ ML papers where the first paragraph frames the problem without waste, threat mod
 
 ## Related
 
-Page, slide and report form: `presentation.md`. Results pages: `results-analysis.md`. `reduce-ambiguity` red-teams a finished draft for how it could be misread. `clarity-critic`, `narrative-critic`, `red-team` and `fact-checker` are the critic agents `review-draft` dispatches. Numbers belong in plots rather than prose or tables — `house-plots` for papers, `dataviz` for artifact pages. Terminology must match the AI safety and LLM literature: `claude/rules/research-core.md`.
+Page, slide and report form, where numbers go, and terminology: `presentation.md`. Results pages: `results-analysis.md`. `reduce-ambiguity` red-teams a finished draft for how it could be misread. `clarity-critic`, `narrative-critic`, `red-team` and `fact-checker` are the critic agents `review-draft` dispatches.

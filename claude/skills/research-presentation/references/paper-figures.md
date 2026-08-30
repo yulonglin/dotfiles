@@ -1,243 +1,95 @@
-# Paper Figures Guide
+# Paper Figures
 
-Publication-quality figures for ICML, NeurIPS, ICLR, and other ML conferences.
+Publication figures for ICML, NeurIPS, ICLR and similar. This file carries only what is specific to a **camera-ready paper**: the physical sizes, the font sizes that survive scaling, LaTeX integration, export and the pre-submission checks.
 
-## Quick Setup
+## Colours and setup come from house-plots, never from here
 
-**Option 1: Matplotlib style file (recommended for simplicity)**
-```python
-import matplotlib.pyplot as plt
-plt.style.use('anthropic')  # Requires anthropic.mplstyle installed in matplotlib stylelib
-```
-
-**Option 2: anthroplot module (when you need helpers)**
-```python
-# Copy anthroplot.py from this skill's references/ into your project
-import anthroplot
-anthroplot.set_defaults(pretty=True)
-```
-
-See the anthroplot reference (bundled at `research/agents/references/anthroplot.md`) for color reference.
-
-## Why Matplotlib (Not Plotly) for Papers
-
-| Aspect | Matplotlib | Plotly |
-|--------|------------|--------|
-| PDF/vector export | Native, publication-quality | Requires kaleido, can be finicky |
-| LaTeX integration | Seamless (`text.usetex=True`) | Poor |
-| File size | Small vector PDFs | Often larger |
-| Font embedding | Reliable | Can fail |
-| Conference standard | Yes | No |
-
-## Figure Specifications
-
-### Size Guidelines
+Set defaults with the house package — `lib/plotting/`, deployed to `~/.local/lib/plotting` — and read the `house-plots` skill for the API. There is no style file to install and nothing to copy into your project.
 
 ```python
-# Single column (most common)
-fig, ax = plt.subplots(figsize=(3.5, 2.5))  # inches
+import sys; sys.path.append("~/.local/lib/plotting")  # not at import time in a session
+import style as house
 
-# Double column (full width)
-fig, ax = plt.subplots(figsize=(7, 3))
-
-# Square (confusion matrices, heatmaps)
-fig, ax = plt.subplots(figsize=(3.5, 3.5))
+house.set_defaults()                       # pastel + soft grid
+colors = house.emphasis_colors(n, highlight=i)   # pastels for the series, accent for the one you mean
 ```
 
-Conference column widths:
-- **Single column**: ~3.25-3.5 inches
-- **Double column**: ~6.5-7 inches
-- **DPI**: 300+ for camera-ready
+**Every hex lives in `lib/plotting/palette.py`, which is the single source of truth.** This file lists no colours, and neither should your figure code — a hardcoded hex is a copy that drifts the moment the palette changes.
 
-### Font Sizes
+For camera-ready output prefer the **PGF backend** over SVG-to-PDF: LaTeX typesets the text, so the figure's fonts match the document exactly, and no converter is needed. `house-plots` has the detail.
+
+## Size the figure in inches, to the column it will sit in
+
+```python
+fig, ax = plt.subplots(figsize=(3.5, 2.5))   # single column, the common case
+fig, ax = plt.subplots(figsize=(7, 3))       # double column, full width
+fig, ax = plt.subplots(figsize=(3.5, 3.5))   # square: confusion matrices, heatmaps
+```
+
+Conference column widths are ~3.25-3.5 inches single column and ~6.5-7 inches double column. Render at 300 DPI or better for camera-ready.
+
+## Set font sizes for 50% scaling, not for your screen
+
+A figure drawn at 3.5 inches is often printed smaller still, so size the type for the printed page rather than the preview.
 
 ```python
 plt.rcParams.update({
-    'font.size': 8,           # Base font
-    'axes.titlesize': 9,      # Title
-    'axes.labelsize': 8,      # Axis labels
-    'xtick.labelsize': 7,     # Tick labels
+    'font.size': 8,           # base
+    'axes.titlesize': 9,
+    'axes.labelsize': 8,
+    'xtick.labelsize': 7,
     'ytick.labelsize': 7,
     'legend.fontsize': 7,
 })
 ```
 
-Rule of thumb: Figures are often scaled down; fonts should be readable at 50% size.
+Rule of thumb: every label must stay readable at 50% of the size you are looking at.
 
-### LaTeX Integration
+## LaTeX integration makes the maths match the body text
 
 ```python
 plt.rcParams.update({
     'text.usetex': True,
     'font.family': 'serif',
-    'text.latex.preamble': r'\usepackage{amsmath}'
+    'text.latex.preamble': r'\usepackage{amsmath}',
 })
 
-# Use in labels
 ax.set_xlabel(r'$\mathcal{L}(\theta)$')
 ax.set_ylabel(r'Accuracy (\%)')
 ```
 
-## Export Checklist
+Escape percent signs in labels once `usetex` is on, or LaTeX eats the rest of the line as a comment.
+
+## Export vector, and check the PDF rather than trusting it
 
 ```python
-# Standard export
 plt.savefig('figure.pdf', bbox_inches='tight', dpi=300)
-
-# With transparent background (for overlays)
-plt.savefig('figure.pdf', bbox_inches='tight', transparent=True)
+plt.savefig('figure.pdf', bbox_inches='tight', transparent=True)   # for an overlay
 ```
 
-**Pre-submission checks:**
-- [ ] Vector format (PDF, not PNG)
-- [ ] Fonts embedded (open PDF, check fonts menu)
-- [ ] Readable at 50% zoom
-- [ ] Colors distinguishable in grayscale
-- [ ] No text overlapping
-- [ ] Axis labels have units
-- [ ] Error bars/CIs present
+**Pre-submission checks**, run on the actual PDF you are about to upload:
 
-## Common Figure Types
+- Vector format (PDF, not PNG) — raster pixelates when the reviewer zooms
+- Fonts embedded — open the PDF and check its fonts panel
+- Readable at 50% zoom
+- Colours distinguishable in grayscale — convert and look: `Image.open('figure.png').convert('L')`
+- No overlapping text — run `figcheck.assert_no_overlaps` from the house package rather than eyeballing it
+- Axis labels carry units
+- Error bars or confidence intervals present, and the chance line drawn where one exists
 
-### Bar Chart with Error Bars
+## The mistakes that survive review and get noticed by readers
 
-```python
-import matplotlib.pyplot as plt
-import numpy as np
+1. **PNG instead of PDF** — raster images pixelate when scaled
+2. **Missing error bars** — every estimate carries an interval
+3. **No baseline or chance line** — a number with nothing to compare against says little
+4. **Tiny fonts** — test at 50% zoom
+5. **Legend obscuring data** — label the series directly, or move the legend outside the axes
+6. **Y-axis not starting at zero on a bar chart** — mark the truncation if you must truncate
+7. **Too many colours** — past four or five distinguishable series, the reader stops tracking them
+8. **Hardcoded hexes** — use `house.emphasis_colors`, so the figure follows the palette
 
-methods = ['Baseline', 'Method A', 'Method B']
-means = [0.65, 0.78, 0.82]
-cis = [0.03, 0.04, 0.02]  # 95% CI half-widths
+## Related
 
-fig, ax = plt.subplots(figsize=(3.5, 2.5))
-bars = ax.bar(methods, means, yerr=cis, capsize=3, color='#D97757')
-ax.set_ylabel('Accuracy')
-ax.set_ylim(0, 1)
-
-# Add value labels
-for bar, mean in zip(bars, means):
-    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.05,
-            f'{mean:.0%}', ha='center', fontsize=7)
-
-plt.tight_layout()
-plt.savefig('comparison.pdf', bbox_inches='tight')
-```
-
-### Line Plot with Error Bands
-
-```python
-x = np.array([10, 50, 100, 500, 1000])
-y_mean = np.array([0.55, 0.68, 0.75, 0.82, 0.85])
-y_std = np.array([0.05, 0.04, 0.03, 0.02, 0.02])
-
-fig, ax = plt.subplots(figsize=(3.5, 2.5))
-ax.plot(x, y_mean, '-o', color='#D97757', label='Our Method')
-ax.fill_between(x, y_mean - 1.96*y_std, y_mean + 1.96*y_std,
-                alpha=0.2, color='#D97757')
-ax.axhline(0.5, linestyle='--', color='gray', label='Random')
-
-ax.set_xscale('log')
-ax.set_xlabel('Training samples')
-ax.set_ylabel('Accuracy')
-ax.legend(frameon=False)
-
-plt.tight_layout()
-plt.savefig('scaling.pdf', bbox_inches='tight')
-```
-
-### Grouped Bar Chart
-
-```python
-methods = ['Baseline', 'Ours']
-datasets = ['MMLU', 'GSM8K', 'HumanEval']
-data = {
-    'Baseline': [0.65, 0.45, 0.32],
-    'Ours': [0.78, 0.62, 0.48],
-}
-
-x = np.arange(len(datasets))
-width = 0.35
-
-fig, ax = plt.subplots(figsize=(4, 2.5))
-for i, (method, values) in enumerate(data.items()):
-    offset = (i - 0.5) * width
-    ax.bar(x + offset, values, width, label=method)
-
-ax.set_ylabel('Accuracy')
-ax.set_xticks(x)
-ax.set_xticklabels(datasets)
-ax.legend(frameon=False)
-ax.set_ylim(0, 1)
-
-plt.tight_layout()
-plt.savefig('grouped.pdf', bbox_inches='tight')
-```
-
-## Anthropic Color Palette
-
-### Primary (use for main data)
-```python
-CLAY = '#D97757'      # Primary accent (orange)
-SLATE = '#141413'     # Text, dark elements
-IVORY = '#FAF9F5'     # Backgrounds
-```
-
-### Secondary (use for comparisons)
-```python
-SKY = '#6A9BCC'       # Blue
-FIG = '#C46686'       # Pink
-OLIVE = '#788C5D'     # Green
-```
-
-### Color Cycle (pretty=True)
-```python
-PRETTY_CYCLE = [
-    '#B86046',  # DARK_ORANGE
-    '#656565',  # GREY
-    '#40668C',  # DARK_BLUE
-    '#D19B75',  # MEDIUM_ORANGE
-    '#8778AB',  # LIGHT_PURPLE
-    '#4A366F',  # DARK_PURPLE
-]
-```
-
-### Gradients (for heatmaps, sequential data)
-```python
-# Blue gradient: BLUE_100 (light) to BLUE_900 (dark)
-BLUE_100 = '#EDF5FC'
-BLUE_300 = '#86B8EB'
-BLUE_500 = '#2C84DB'
-BLUE_700 = '#0F4B87'
-BLUE_900 = '#011A33'
-```
-
-## Accessibility
-
-### Colorblind-Friendly
-
-Use `pretty=False` in anthroplot for colorblind-friendly palette, or manually select:
-
-```python
-# Good colorblind-safe pairs
-COLORBLIND_SAFE = ['#0072B2', '#E69F00', '#009E73', '#CC79A7']
-```
-
-### Grayscale Test
-
-Before submitting, convert to grayscale to verify distinguishability:
-```python
-from PIL import Image
-img = Image.open('figure.png').convert('L')
-img.save('figure_gray.png')
-```
-
-## Common Mistakes
-
-1. **PNG instead of PDF** - Raster images pixelate when scaled
-2. **Missing error bars** - Always show uncertainty
-3. **Tiny fonts** - Test at 50% zoom
-4. **Legend obscuring data** - Use direct labels or move legend outside
-5. **Y-axis not starting at 0** - Misleading for bar charts (mark truncation if necessary)
-6. **Red-green color scheme** - Bad for colorblind readers
-7. **Too many colors** - Limit to 4-5 distinguishable colors
-8. **No baseline** - Include random/prior work for context
+- Drawing the chart at all, the palette, the overlap checker: the `house-plots` skill
+- Whether the figure earns its place on a slide rather than in a paper: `~/.claude/checklists/presentation.md`
+- Whether the numbers in it hold up — intervals, nulls, chance correction: `~/.claude/checklists/results-analysis.md`

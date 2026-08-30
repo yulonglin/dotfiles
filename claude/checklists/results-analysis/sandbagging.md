@@ -16,6 +16,12 @@ Organisms here are **prompted, not trained**. Three families: **instructed** ("g
 
 **Instructed sandbagging is neither obeyed nor calibrated.** Told to score 0% correct, gpt-5-nano scored 51.1% on 4-option GPQA. Do not assume the instruction set the level; measure it.
 
+## The out-of-context design, and why a tiny finetune is not a clean one
+
+The generative design for this area is Owain Evans' train-on-A, test-for-implied-but-never-stated-B: finetune on a narrow behaviour, then probe for out-of-context generalisation — here, **finetune a model on descriptions of an eval and test whether it sandbags without ever being told to**. The generic version of the template lives in `../research.md`; this is its sandbagging instance.
+
+The confound rule for narrow finetunes — why a small surgical set makes the causal story *less* clean, and the control that answers it — is generic and lives in `../research.md`. The sandbagging-specific version of the competing explanation is **verbalised eval awareness**: a model that has read descriptions of an eval may be recognising the eval rather than choosing to underperform, and those two produce the same accuracy drop. Separate them before claiming intent.
+
 ## Three nulls, in increasing strength — the third is the one that bites
 
 State which null a number is being read against, because they disagree by a wide margin:
@@ -28,6 +34,8 @@ State which null a number is being read against, because they disagree by a wide
 
 ## Achieved FPR belongs beside every recall
 
+**"Recall at 5% FPR" names the nominal calibration target, not the realised operating point.** Where no artefact records the achieved *test* FPR, that recall is not verified to sit at 5%, and two such numbers cannot be assumed to be compared at a matched operating point. The repo marks these in source with a `% SCRUB(fpr)` comment — a convention worth keeping, because it makes an unverified operating point greppable rather than forgotten.
+
 A threshold calibrated on dev does not transfer to test, and **headline recall and FPR transfer are close to mutually exclusive**: one C³ variant reached 100% GPQA recall by flagging **84.8% of a strong honest model**. A recall figure without its achieved FPR is not a detection result.
 
 Calibrate on the 40% dev split, report on the 60% test split, never the same rows. **Assert split disjointness in the landed logs, not in the loader** — an unseeded load-time shuffle once made ProtocolQA dev and test overlap rather than partition, which the loader could not have caught.
@@ -36,11 +44,18 @@ Calibrate on the 40% dev split, report on the 60% test split, never the same row
 
 **Thin negative groups break the ratio.** At k=10 a 65-negative test set yields **six** negative groups, so an achieved FPR at k=10 cannot honestly be quoted as a ratio.
 
-## The intervals on disk are wrong — recompute before quoting
+## Two quantities are both labelled "SE" and only one is one
 
-`sem_recall` in `src/detection_game/classifiers/run_multisample_bootstrap_cv.py` (around line 948) is a **per-observation standard deviation**, `sqrt(p(1-p))` — not a standard error. It does not shrink with n and runs roughly **31× too wide**; 39% of split-mode confidence intervals on disk are literally `[0, 1]`. This is unpatched.
+Check which pipeline produced an interval before quoting it — the distinction is the whole rule, and a blanket "the SEMs are broken" is as wrong as trusting them all.
 
-Recompute intervals — Wilson over the aggregated groups — rather than quoting what the pipeline wrote. An interval that spans the whole range is not conservative, it is uninformative, and pasting it into a results page presents no-information as rigour.
+- **Figure pipeline**: the standard deviation of 1000 bootstrap recall values, each iteration resampling *questions* and re-deriving the k=10 aggregates. This **is** a genuine standard error with respect to question sampling. Sound, and quotable as-is — no further division by √n.
+- **Split-mode `sem_recall`**: the standard deviation of 1000 per-iteration Bernoulli flag/no-flag outcomes under a **fixed** threshold — that is `sqrt(p(1-p))`, a deterministic function of the point estimate and not a standard error at all. An interval built from it degenerates toward `[0, 1]`, and 39% of the split-mode intervals on disk are literally that. Not quotable.
+
+**Where the degenerate quantity was the only interval available, report the point estimate alone and say so.** Printing an interval you know is meaningless is worse than printing none: it presents no-information as rigour. (Source: `d6-technical-report.tex:257`; the classifier is `src/detection_game/classifiers/run_multisample_bootstrap_cv.py`.)
+
+## An interval names its omissions *and* which way they bias
+
+"Names what it covers" is not enough — say the direction. The intervals here omit **question-level clustering** (rows are roughly five to six paraphrases of one question, resampled as if independent), **threshold-estimation noise** (the dev threshold is held fixed across iterations), and **sampling over the set of sandbagging prompts**. All three push the same way: the stated intervals are **narrower than the true uncertainty**. Say that where the number is displayed, so a reader cannot mistake a narrow interval for a precise one.
 
 ## Labels come from the trajectory file, never from the score
 
@@ -61,6 +76,14 @@ Run the detector on honest models' *incorrect* answers. If it fires at a compara
 The widely-quoted row — GPQA 100%, MATH 94%, USACO 67–75% at k=10 — has its figures **hardcoded in the generator**, and a reconstruction gave **40.9% for GPQA**. Treat it as disputed and do not repeat it as a result until it reproduces from data.
 
 The matched GPQA k=10 numbers that do come from the pipeline are in `out/gpqa_report/gpqa_results.md`: C³ categorical 53.3%, C³ embedding 31.2%, trusted monitoring 75.5%.
+
+## Adversarial collapse is the norm, not the exception
+
+Detection rates measured against a non-adaptive model organism are an upper bound, not a result — and the collapses are total rather than marginal. The **lie detector falls from roughly 89% to 2%** once the model-identity confound it depends on is removed. **Behavioural probes fall from 74% to 3.4%** under a single stealth instruction. Report the adaptive arm beside the static one, and treat a detector nobody has attacked as untested rather than robust.
+
+## No method dominates, so report the complementarity
+
+The detectors fail on disjoint sets, so a single headline hides the structure that matters. **Deterministic error recipes — off-by-one, loop boundary, sign flip — evade C³ at 4.7–18%, while trusted monitoring catches those same cases at 57.6% through chain-of-thought leakage; C³ in turn reaches 95% on blatant patterns.** Report the per-threat-model breakdown rather than an average across them, and say which method covers what the other misses. An ensemble claim needs the same-component-twice null from `../results-analysis.md` before it means anything.
 
 ## What each detector actually computes
 
