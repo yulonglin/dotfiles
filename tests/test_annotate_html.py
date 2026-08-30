@@ -167,7 +167,49 @@ def test_storage_stays_readable_by_older_deployed_layers() -> None:
     assert "savedAt" not in js and "STORE_V" not in js, "envelope reintroduced"
     assert "function saveDraft()" in js and "function restoreDraft()" in js
     assert 'addEventListener("pagehide"' in js
-    assert "tryDownload" in js
+
+
+def test_no_download_path() -> None:
+    """The layer offers no file download, deliberately.
+
+    The Artifact viewer never grants a page download permission, so a Download
+    button was inert exactly where these pages are read, while still making
+    every publish warn that the page offers the viewer a file. Copy all is the
+    single export, with the selectable textarea as its fallback.
+    """
+    mod = _layer_module()
+    js, html = mod.JS, mod.HTML
+    assert "tryDownload" not in js, "download path reintroduced"
+    assert "createObjectURL" not in js, "blob save reintroduced"
+    assert 'id="anDownload"' not in html and 'id="anExportBtn"' not in html
+    # The bar is exactly two controls; per-comment edit and delete carry the rest.
+    assert 'id="anCopy"' in html and 'id="anClear"' in html
+    assert "openExport()" in js, "clipboard fallback lost"
+    assert 'x.textContent = "delete"' in js, "per-comment delete missing"
+
+
+def test_layer_keys_do_not_reach_the_host_page() -> None:
+    """Typing a note must never fire a host page's single-key shortcuts.
+
+    The comment box is a TEXTAREA, so a page guarding only INPUT lets every
+    letter double as a command -- on the context-ledger page, typing "d" in a
+    comment marked the selected row `drop`. The layer stops its own key events
+    at its root in the BUBBLE phase: handlers inside the layer have already
+    run, and document/window handlers never see the event. A capture listener
+    on window would fire too early and kill the layer's own Enter and Escape.
+    """
+    js = _layer_module().JS
+    assert 'root.addEventListener(type, function(ev){ ev.stopPropagation(); })' in js
+    for kind in ("keydown", "keypress", "keyup"):
+        assert f'"{kind}"' in js, f"{kind} not stopped at the layer root"
+    # Bubble phase means no third argument on the registration: a capture-phase
+    # stop would fire before the layer's own Enter and Escape and swallow them.
+    stop_line = next(
+        ln for ln in js.splitlines() if "ev.stopPropagation()" in ln and "root." in ln
+    )
+    assert "true" not in stop_line and "capture" not in stop_line, (
+        f"the stop must stay in the bubble phase: {stop_line.strip()}"
+    )
 
 
 def test_no_cross_document_or_mirrored_storage() -> None:

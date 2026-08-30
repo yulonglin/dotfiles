@@ -133,6 +133,23 @@ SESSION_INJECTIONS = [
      'edit_path': '', 'body': 'The last-handoff notice plus rolling memory excerpts. The archive section carries weeks of history whose value decays fast; the note in this session said the handoff had "already been delivered 525 times".'},
 ]
 
+# Merge destinations. A chip reading "merge" without naming a target is not a
+# decision the reader can act on, so every merge row says what it folds into.
+INTO = {
+    'dotfiles:artifact-writing': 'results-artifact',
+    'core:spec-interview': 'interview-me',
+    'research:spec-interview-research': 'interview-me',
+    'dotfiles:server-storage-tiering': 'jobs (disk section)',
+    'code:performance-optimizer': 'experiments / resource-budgets',
+    'research:api-experiments': 'experiments / api-fanout',
+    'dotfiles:inspect-ai-evals': 'experiments / inspect',
+    'research:experiment-setup': 'experiments parent',
+    'research:new-experiment': 'experiments / records',
+    'research:run-experiment': 'becomes the experiments parent',
+    'research:mats-slurm': 'experiments / slurm',
+    'dotfiles:modal': 'experiments / modal',
+}
+
 rows = []
 for r in inv + SESSION_INJECTIONS:
     if not r.get('enabled'):
@@ -156,6 +173,7 @@ for r in inv + SESSION_INJECTIONS:
         'd': r['desc'], 'path': r['path'], 'edit': r.get('edit_path') or '',
         'body': r['body'], 'refs': r.get('ref_files', []),
         'lean': lean, 'why': why, 'auto': auto,
+        'into': INTO.get(key, ''),
         'cl': CLUSTER.get(r['name'], 'Other'),
     })
 
