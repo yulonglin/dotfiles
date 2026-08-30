@@ -75,4 +75,4 @@ ML papers where the first paragraph frames the problem without waste, threat mod
 
 ## Related
 
-Page-level standards: `artifacts.md`. `reduce-ambiguity` red-teams a finished draft for how it could be misread. `clarity-critic`, `narrative-critic`, `red-team` and `fact-checker` are the critic agents `review-draft` dispatches. Numbers belong in plots rather than prose or tables — `house-plots` for papers, `dataviz` for artifact pages. Terminology must match the AI safety and LLM literature: `claude/rules/research-core.md`.
+Page, slide and report form: `presentation.md`. Results pages: `results-analysis.md`. `reduce-ambiguity` red-teams a finished draft for how it could be misread. `clarity-critic`, `narrative-critic`, `red-team` and `fact-checker` are the critic agents `review-draft` dispatches. Numbers belong in plots rather than prose or tables — `house-plots` for papers, `dataviz` for artifact pages. Terminology must match the AI safety and LLM literature: `claude/rules/research-core.md`.

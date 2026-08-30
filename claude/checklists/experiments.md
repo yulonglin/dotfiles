@@ -1,6 +1,6 @@
 # Experiments
 
-Getting a run to finish, and trusting it when it does.
+Running experiments: getting a run to finish, and trusting it when it does.
 
 ## Run the small thing instead of writing about it
 
@@ -59,4 +59,4 @@ Every condition, including the ones that did not work. Never quietly drop a fail
 
 ## Related
 
-Choosing what to run: `research.md`. Reporting: `results.md`. Queue commands, caps and sandbox failure modes: the `jobs` skill.
+Choosing what to run and designing it: `research.md`. Analysing and reporting what came back: `results-analysis.md`. Queue commands, caps and sandbox failure modes: the `jobs` skill.
