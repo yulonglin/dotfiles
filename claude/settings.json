@@ -420,6 +420,12 @@
             "command": "bash $HOME/.claude/hooks/block_unannotated_artifact.sh",
             "timeout": 10,
             "statusMessage": "Checking the page carries the annotation layer"
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/block_throwaway_artifact_path.sh",
+            "timeout": 10,
+            "statusMessage": "Checking the artifact source lives in artifacts/"
           }
         ]
       }
@@ -792,7 +798,6 @@
   "feedbackSurveyRate": 0,
   "promptCacheTtl": "1h",
   "alwaysThinkingEnabled": true,
-  "promptCacheTtl": "1h",
   "effortLevel": "high",
   "advisorModel": "fable",
   "showClearContextOnPlanAccept": true,
