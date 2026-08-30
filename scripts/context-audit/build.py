@@ -58,7 +58,7 @@ L['dotfiles:reply'] = ('drop', "0 uses. `context-fetcher` (6 uses) already front
 L['dotfiles:check-misreads'] = ('review', "**The one to actually decide.** 0 uses, yet cited 3× in always-loaded rules — you pay for the pointer every session and it never fires. Either wire it into a hook so drafts really get red-teamed, or drop the skill *and* the three citations. Half-measures cost tokens for nothing.")
 L['dotfiles:second-opinion'] = ('compress', "0 direct uses, but cited 3× in always-loaded rules, and you clearly do get second opinions — via `codex-companion` and `openrouter-cli` directly. The routing knowledge is real; the 3,528-tok body is not. Cut to ~800 tok listing the four routes and when each applies.")
 L['dotfiles:artifact-writing'] = ('merge', "0 uses — while the *built-in* `artifact-design` ran **51 times**, the single most-used skill you have. Your custom one is being out-competed by the harness's own. Fold its genuinely unique parts (md2review, transcript rendering, the annotation layer) into `results-artifact` and drop the rest.")
-L['dotfiles:results-artifact'] = ('compress', "0 uses but it encodes the review standard you care most about (intervals, nulls, chance correction). Keep the content, tighten the body, and make it the single artifact skill that absorbs `artifact-writing`.")
+L['dotfiles:results-artifact'] = ('edit', "**Promote this into the medium-independent parent.** Most of what it encodes is not about HTML at all -- claim-shaped headers, a figure per claim, numbers in plots rather than prose, intervals and nulls beside every estimate, terms defined on first use, evidence one click from every aggregate. That taste applies identically to a deck, a paper and a research update, but today it is scattered across this skill, `artifact-writing`, `research-presentation`, `review-paper` and `communication.md`. Widen it into `presenting-results`, holding the standard once, with `references/artifact.md`, `references/slides.md` and `references/paper.md` for the per-medium mechanics only. That is the same tiering as the experiments parent, and it matches how your own presentation checklist is already written.")
 L['dotfiles:artifacts-sync'] = ('compress', "102-tok description — the most expensive dotfiles skill line — for 2 uses. The description is doing a tutorial's job. Cut it to one clause.")
 L['dotfiles:house-plots'] = ('keep', "6 uses, and already the result of merging `pastelplot` + `anthropic-style` yesterday. This is the right home for the plotting standard — make it absorb `tufte-data-viz` rather than competing with it.")
 L['viz:tufte-data-viz'] = ('edit', "**Softened from merge.** On reading it, this is not a duplicate: it is a *review* checklist for JS chart libraries (Recharts, ECharts, Chart.js, D3), whereas `house-plots` is already a router that sends artifact pages to the built-in `dataviz` and papers to matplotlib. So it never fires because nothing points at it — fixable without deleting anything. Have `house-plots` link to it and add one rule line so any charting request reaches the router. That is the triggering you asked for. The genuine plotting duplicate is elsewhere: `research/agents/references/anthroplot.md` documents the same `lib/plotting/` package from a stale copy.")
@@ -93,6 +93,16 @@ L['superpowers:systematic-debugging'] = ('keep', "25 uses. Real overlap with `di
 L['hookify:conversation-analyzer'] = ('compress', "**206-tok description — the single most expensive component line you have** — for 0 uses. Whatever this stays or goes, that description must shrink.")
 L['research:read-paper'] = ('compress', "140-tok line, 0 uses. The skill is worth keeping for literature work; the description is three times longer than it needs to be.")
 L['superpowers:using-superpowers'] = ('review', "0 uses as a *skill*, but it is injected **verbatim into every session** by a SessionStart hook — ~777 tok, the largest single non-dotfiles fixed cost, and it appears in no skill accounting. Decide deliberately whether that block earns its place every session.")
+L['research:audit-docs'] = ('move', "**Your comment, and I agree on both halves.** Documentation hygiene is not research, so it sits in the wrong plugin — nothing about it is specific to experiments. It also raises the general question you asked: *how* is it meant to fire? It has 0 uses because nothing triggers it and nothing schedules it. Skills split into three invocation modes — model-triggered by description, manually invoked by name, and scheduled — and only the first is ever stated. A skill that is really a periodic chore should say so in its own description, or be a cron entry rather than a skill.")
+L['writing:application-writer'] = ('edit', "**Your comments, and one of them is a correctness bug.** *(1)* It asserts organisation values as fact — \"AISI = empirical, Anthropic = thoughtful\" — which are invented, not sourced. A skill that hands you fabricated claims about the organisation you are applying to is worse than no skill. Cut them. *(2)* 3,267 tok of body for 0 uses, most of it scaffolding. *(3)* Its objective is wrong: it optimises for \"authentic voice\" where you want clarity, demonstrated skill, depth of understanding and thoughtfulness — say that instead. *(4)* It reads past applications and CV as fixed context, but your research interests and situation move between applications; it should ask for current context at the start and write anything durable back to `CLAUDE.md` rather than inferring it from stale drafts.")
+L['research:openrouter-fusion'] = ('move', "5 uses — genuinely used, and correctly built. But multi-model routing is infrastructure you reach for in any kind of work, not a research method; sitting in the research plugin hides it. Moving costs nothing and saves nothing — it is purely about being findable from the right place.")
+L['dotfiles:llm-judge'] = ('move', "0 uses, but this is research methodology (blinding, fan-out, judge construction) living in dotfiles while the research plugin is the natural home. Cross-links from `results-artifact` should follow it.")
+L['dotfiles:check-bib-references'] = ('move', "0 uses, 80-tok line. Catching fabricated citations is paper work; it belongs beside `read-paper` and `review-paper` in the research plugin rather than in general dotfiles.")
+L['dotfiles:sweep-ai-safety'] = ('move', "0 uses. A literature sweep is research, and it would sit naturally next to `read-paper` and `literature-scout`. Same invocation question as `audit-docs`: this is really a periodic chore, so decide whether it is a skill you call or a scheduled task.")
+L['writing:research-presentation'] = ('merge', "1 use. Deck structure -- summary slide, agenda, setup before results, backup slides -- is the slides half of one presentation standard, not a separate discipline. Its medium-independent half (lead with the decision-relevant result, one message per slide, show the prompt) is already stated elsewhere in different words. Becomes `presenting-results/references/slides.md`.")
+L['writing:review-paper'] = ('keep', "0 uses, but paper review against Neel Nanda's criteria is a real and "
+  "distinct job. Keep it, and have it cite the `presenting-results` parent for the shared standard rather than "
+  "restating claim-shaped headers and figure-per-claim in its own words.")
 L['dotfiles:catalog'] = ('keep', "0 uses but only 3 tok — the cheapest line you own, and it is the index the other skills point at. Nothing to gain by cutting.")
 L['dotfiles:llm-billing-process'] = ('keep', "6 tok. Below the noise floor; not worth a decision.")
 
@@ -148,6 +158,14 @@ INTO = {
     'research:run-experiment': 'becomes the experiments parent',
     'research:mats-slurm': 'experiments / slurm',
     'dotfiles:modal': 'experiments / modal',
+    # move destinations -- same field, different meaning: the content is right,
+    # the home is wrong. A move saves no tokens; it buys findability.
+    'research:audit-docs': 'core (not research)',
+    'research:openrouter-fusion': 'core (model routing is infrastructure)',
+    'dotfiles:llm-judge': 'research plugin',
+    'dotfiles:check-bib-references': 'research plugin',
+    'dotfiles:sweep-ai-safety': 'research plugin',
+    'dotfiles:inspect-ai-evals': 'experiments / inspect',
 }
 
 rows = []
@@ -159,7 +177,13 @@ for r in inv + SESSION_INJECTIONS:
     auto = lean is None
     if auto:
         u = r.get('uses')
-        if u is None:
+        if r.get('user_invoked'):
+            lean, why = 'keep', ("**User-invoked** (`disable-model-invocation: true`), so its description is "
+                                 "stripped from the model's reach: it costs **0 Tier-1 tokens** and the agent "
+                                 "cannot fire it. Its 0 uses mean the audit cannot see hand-typed invocations, "
+                                 "not that it is dead. Nothing to reclaim here.")
+            auto = False
+        elif u is None:
             lean, why = 'keep', 'Always loaded; not individually invoked.'
         elif u >= 10:
             lean, why = 'keep', f"Heavily used ({u} invocations). Auto-classified — not individually reviewed."
@@ -173,6 +197,7 @@ for r in inv + SESSION_INJECTIONS:
         'd': r['desc'], 'path': r['path'], 'edit': r.get('edit_path') or '',
         'body': r['body'], 'refs': r.get('ref_files', []),
         'lean': lean, 'why': why, 'auto': auto,
+        'manual': bool(r.get('user_invoked')),
         'into': INTO.get(key, ''),
         'cl': CLUSTER.get(r['name'], 'Other'),
     })

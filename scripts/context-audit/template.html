@@ -9,6 +9,7 @@
   --compress:#8a6410; --compress-bg:#f4e9cf;
   --edit:#2a5f9e; --edit-bg:#dbe7f5;
   --merge:#6b4f96; --merge-bg:#e6dff2;
+  --move:#0d6070; --move-bg:#d2e7eb;
   --drop:#a3413c; --drop-bg:#f5dcda;
   --review:#5a6774; --review-bg:#e4e9ee;
   --shadow:0 1px 2px rgba(22,27,33,.06),0 4px 14px rgba(22,27,33,.05);
@@ -22,6 +23,7 @@
     --compress:#d9b25f; --compress-bg:#2e2718;
     --edit:#7fb0e8; --edit-bg:#17242f;
     --merge:#b39ae0; --merge-bg:#241d31;
+    --move:#63c3d1; --move-bg:#0f2a30;
     --drop:#e78d86; --drop-bg:#311c1b;
     --review:#93a2b1; --review-bg:#212930;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
@@ -35,6 +37,7 @@
   --compress:#d9b25f; --compress-bg:#2e2718;
   --edit:#7fb0e8; --edit-bg:#17242f;
   --merge:#b39ae0; --merge-bg:#241d31;
+  --move:#63c3d1; --move-bg:#0f2a30;
   --drop:#e78d86; --drop-bg:#311c1b;
   --review:#93a2b1; --review-bg:#212930;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
@@ -111,7 +114,9 @@ input[type=search]:focus{outline:2px solid var(--accent);outline-offset:1px;bord
 .nm b{font-weight:600;font-size:13.5px;letter-spacing:-.004em}
 .nm .kd{font-family:"IBM Plex Mono",monospace;font-size:9.5px;text-transform:uppercase;
   letter-spacing:.07em;color:var(--ink-3);border:1px solid var(--line);padding:1px 5px;border-radius:3px}
+.nm .kd.mn{color:var(--accent-ink);border-color:var(--accent)}
 .nm .into{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--merge)}
+.nm .into.mv{color:var(--move)}
 .words{margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(216px,1fr));gap:8px 18px}
 .words div{font-size:12.5px;color:var(--ink-2)}
 .words b{font-family:"IBM Plex Mono",monospace;font-size:10.5px;text-transform:uppercase;
@@ -129,6 +134,7 @@ input[type=search]:focus{outline:2px solid var(--accent);outline-offset:1px;bord
 .m-compress{background:var(--compress-bg);color:var(--compress)}
 .m-edit{background:var(--edit-bg);color:var(--edit)}
 .m-merge{background:var(--merge-bg);color:var(--merge)}
+.m-move{background:var(--move-bg);color:var(--move)}
 .m-drop{background:var(--drop-bg);color:var(--drop)}
 .m-review{background:var(--review-bg);color:var(--review)}
 .mark.auto{opacity:.55;font-weight:500}
@@ -225,7 +231,7 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:10.5px;background:var(--pane
       </div>
       <div style="text-align:right">
         <div class="meter-t">Never invoked</div>
-        <div class="big" id="zc">67 <span style="font-size:14px;color:var(--ink-3)">of 120</span></div>
+        <div class="big" id="zc"></div>
       </div>
     </div>
     <div class="bar" id="bar">
@@ -241,10 +247,11 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:10.5px;background:var(--pane
       <div><b class="m-compress">compress</b>The job is right, the wording is long. Same file, fewer tokens.</div>
       <div><b class="m-edit">edit</b>Needs rework to do its job &mdash; usually it never fires and something must point at it.</div>
       <div><b class="m-merge">merge</b>Fold its content into one named sibling, then delete this one. Each merge row names its destination after the component name.</div>
+      <div><b class="m-move">move</b>Right content, wrong home &mdash; it stays whole, somewhere better. <b style="background:0;padding:0;font-family:inherit;font-size:inherit;text-transform:none;letter-spacing:0">Saves no tokens</b>, since both homes load the same; it buys findability and a coherent split between dotfiles and the plugins.</div>
       <div><b class="m-drop">drop</b>Delete outright. Nothing depends on it.</div>
       <div><b class="m-review">review</b>I did not reach a confident call &mdash; read the row and decide.</div>
     </div>
-    <p class="assume">Tokens are estimated at <b>characters &divide; 4</b>, not a real tokenizer &mdash; treat them as &plusmn;15% and comparable to each other, not exact. Projected savings assume <b>drop</b> and <b>merge</b> remove a row's whole Tier-1 line and <b>compress</b> removes half of it; <b>edit</b> and <b>keep</b> save nothing. Tier 2 (bodies, <b id="t2"></b> tok) and Tier 3 (references, <b id="t3"></b> tok) are <em>not</em> in this number &mdash; you pay those only when a skill actually fires.<br><b>Usage counts are upper bounds.</b> They sum two invocation shapes (the <code class="mono">skill</code> field and <code class="mono">/slash</code> commands) and fold in pre-rename names, but resumed and compacted sessions copy earlier history into new transcript files, so a busy skill can be counted more than once. A <b>0</b> is trustworthy; a large number means &ldquo;heavily used&rdquo;, not an exact tally.</p>
+    <p class="assume">Tokens are estimated at <b>characters &divide; 4</b>, not a real tokenizer &mdash; treat them as &plusmn;15% and comparable to each other, not exact. Projected savings assume <b>drop</b> and <b>merge</b> remove a row's whole Tier-1 line and <b>compress</b> removes half of it; <b>keep</b>, <b>edit</b> and <b>move</b> save nothing &mdash; a moved skill still loads, just from a better home. Tier 2 (bodies, <b id="t2"></b> tok) and Tier 3 (references, <b id="t3"></b> tok) are <em>not</em> in this number &mdash; you pay those only when a skill actually fires.<br><b>Usage counts are upper bounds.</b> They sum two invocation shapes (the <code class="mono">skill</code> field and <code class="mono">/slash</code> commands) and fold in pre-rename names, but resumed and compacted sessions copy earlier history into new transcript files, so a busy skill can be counted more than once. A <b>0</b> is trustworthy; a large number means &ldquo;heavily used&rdquo;, not an exact tally.</p>
   </div>
 </header>
 
@@ -272,14 +279,14 @@ kbd{font-family:"IBM Plex Mono",monospace;font-size:10.5px;background:var(--pane
   <span class="spacer"></span>
   <div class="keys">
     <span><kbd>j</kbd><kbd>k</kbd> move</span><span><kbd>o</kbd> open</span>
-    <span><kbd>a</kbd>keep <kbd>c</kbd>compress <kbd>e</kbd>edit <kbd>m</kbd>merge <kbd>d</kbd>drop <kbd>u</kbd>clear</span>
+    <span><kbd>a</kbd>keep <kbd>c</kbd>compress <kbd>e</kbd>edit <kbd>m</kbd>merge <kbd>v</kbd>move <kbd>d</kbd>drop <kbd>u</kbd>clear</span>
     <span><kbd>[</kbd><kbd>]</kbd> reorder</span><span><kbd>?</kbd> help</span>
   </div>
 </div></div>
 
 <script>
 const DATA = __PAYLOAD__;
-const MARKS = ['keep','compress','edit','merge','drop','review'];
+const MARKS = ['keep','compress','edit','merge','move','drop','review'];
 const KEY = 'ctxledger.v1';
 let rows = DATA.rows.slice(), meta = DATA.meta;
 let marks = {}, order = null, sel = 0, open = new Set(), filters = new Set(), q = '';
@@ -368,6 +375,10 @@ function renderMeter(){
   document.getElementById('lp').textContent=fmt(Math.max(p,0));
   document.getElementById('ld').textContent=fmt(Math.max(dd,0));
   document.getElementById('li').textContent=fmt(Math.max(ii,0));
+  const skillRows = rows.filter(r=>r.k==='skill'||r.k==='agent');
+  const zero = skillRows.filter(r=>r.u===0).length;
+  document.getElementById('zc').innerHTML =
+    `${zero} <span style="font-size:14px;color:var(--ink-3)">of ${skillRows.length}</span>`;
   document.getElementById('t2').textContent=fmt(meta.tier2);
   document.getElementById('t3').textContent=fmt(meta.tier3);
   const t={}; for(const r of rows){ const m=marks[id(r)]; if(m) t[m]=(t[m]||0)+1; }
@@ -383,8 +394,9 @@ function rowHTML(r,i){
   const uCls = r.u===0?'z':(r.u>=10?'hot':(r.u==null?'dim':''));
   return `<div class="row${i===sel?' sel':''}" data-i="${i}" draggable="true">
     <div class="grip" title="Drag to reorder">&#10495;</div>
-    <div class="nm"><b>${esc(r.n)}</b><span class="kd">${esc(r.k)}</span>${
-      m==='merge' && r.into ? `<span class="into">&rarr; ${esc(r.into)}</span>` : ''}</div>
+    <div class="nm"><b>${esc(r.n)}</b><span class="kd">${esc(r.k)}</span>${r.manual?'<span class="kd mn" title="User-invoked: no description in context, costs 0 Tier-1">manual</span>':''}${
+      (m==='merge'||m==='move') && r.into
+        ? `<span class="into${m==='move'?' mv':''}">&rarr; ${esc(r.into)}</span>` : ''}</div>
     <div class="src">${esc(r.p==='dotfiles'?'dotfiles':r.p)}</div>
     <div class="num ${uCls}">${r.u==null?'&mdash;':fmt(r.u)}</div>
     <div class="num">${fmt(r.t1)}</div>
@@ -538,6 +550,7 @@ addEventListener('keydown', e=>{
   else if(k==='c'){ setMark('compress'); }
   else if(k==='e'){ setMark('edit'); }
   else if(k==='m'){ setMark('merge'); }
+  else if(k==='v'){ setMark('move'); }
   else if(k==='d'){ setMark('drop'); }
   else if(k==='u'){ setMark(null); }
   else if(k===']'){ e.preventDefault(); move(1); }
@@ -610,6 +623,7 @@ function help(show){
    <tr><td><kbd>c</kbd></td><td>Mark <b>compress</b> &mdash; keep the job, cut the words</td></tr>
    <tr><td><kbd>e</kbd></td><td>Mark <b>edit</b> &mdash; needs rework, not removal</td></tr>
    <tr><td><kbd>m</kbd></td><td>Mark <b>merge</b> &mdash; fold into a sibling</td></tr>
+   <tr><td><kbd>v</kbd></td><td>Mark <b>move</b> &mdash; right content, wrong home</td></tr>
    <tr><td><kbd>d</kbd></td><td>Mark <b>drop</b></td></tr>
    <tr><td><kbd>u</kbd></td><td>Clear your mark (my lean returns)</td></tr>
    <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Reorder &mdash; move row up / down (drag the &#10495; grip works too)</td></tr>

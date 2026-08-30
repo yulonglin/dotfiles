@@ -89,12 +89,19 @@ def add(path, marketplace, plugin, kind, enabled=True):
                         ref_files.append({'f': str(f.relative_to(p.parent)), 't': toks(c), 'c': c[:24000]})
                     except Exception:
                         pass
+    # A skill with `disable-model-invocation: true` is user-invoked: its
+    # description is stripped from the agent's reach entirely, so it costs
+    # ZERO Tier-1 tokens. Charging it its description length overstates the
+    # always-loaded budget and makes a deliberately-manual skill look like
+    # dead weight, when its 0 uses are simply invocations we cannot see.
+    user_invoked = str(fm.get('disable-model-invocation', '')).lower() == 'true'
     rows.append({
         'name': name, 'kind': kind, 'source': marketplace, 'plugin': plugin,
+        'user_invoked': user_invoked,
         'enabled': enabled, 'path': str(p),
         'edit_path': find_editable(marketplace, plugin, kind, name) if marketplace != 'dotfiles' else str(p),
         'desc': desc,
-        'fm_tokens': toks(f"- {name}: {desc}"),
+        'fm_tokens': 0 if user_invoked else toks(f"- {name}: {desc}"),
         'body_tokens': toks(text),
         'ref_tokens': round(ref_bytes / 4),
         'ref_files': ref_files, 'body': body.strip(),
