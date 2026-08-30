@@ -90,8 +90,10 @@ Run `python scripts/update_experiment_index.py` to regenerate `docs/experiments/
 - **DECISIONS.md**: ADR-lite. Date + context + decision + rationale.
 - **OPEN_QUESTIONS.md**: Parking lot. Link to experiment records when addressed.
 
-## Skills
+## Keeping The Registry Current Is Manual Now
 
-- `/new-experiment` — Create a new experiment record from template
-- `/reflect` — Update PATTERNS.md from experiment records and conversation history
-- `/audit-docs` — Check for stale documentation relative to code changes
+The three slash commands that used to drive this (`/new-experiment`, `/reflect`, `/audit-docs`) were dropped rather than migrated. The practices they automated still hold, and each is a few minutes by hand:
+
+- **A new record** starts as a copy of `docs/experiments/_template.md`, renamed to `YYYY-MM-DD_short-name.md`, with the frontmatter filled in before the run rather than after it. Writing the prediction down first is what makes it an experiment — see `~/.claude/checklists/experiments.md`.
+- **PATTERNS.md** gets reviewed on its four-week cycle: read the records written since the last pass, promote what recurs into a pattern, and retire entries that are no longer active.
+- **Stale docs** are found by reading the docs next to the code they describe whenever that code changes, not by a periodic sweep — a sweep finds them long after they have misled someone.

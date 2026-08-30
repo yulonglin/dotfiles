@@ -37,6 +37,8 @@ Brainstorming and experiment design. AI safety differs from capabilities work in
 3. Iterate over related ideas from other fields
 4. Work backwards from future models
 5. Break the problem down into subtasks
+6. What are our key areas of uncertainty? Maybe we can probe more there!
+7. The SCAMPER Technique: Apply seven lenses to an existing theory or problem—Substitute, Combine, Adapt, Modify, Put to another use, Eliminate, and Reverse—to spark fresh angles or unconventional hypotheses
 
 ## The design is not done until the alternatives are named
 

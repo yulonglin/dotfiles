@@ -47,10 +47,11 @@ ALWAYS_ON = [
     # and four of the skills it indexed had never been invoked in 4,100 sessions
     # -- the index cost more every session than the things it indexed returned.
     # Its one unique rule ("one topic keeps one link") moved into artifacts-sync.
-    # Raised from 2600: research-core absorbed the rule that terminology must
-    # match the AI safety and LLM literature, with the reference venues named so
-    # "common in the literature" is checkable rather than a matter of taste.
-    ("claude/rules/research-core.md", 3000),
+    # Cut to four red lines on 2026-08-30: nulls, ceilings, intervals, causal
+    # register, judge-not-regex and the terminology reference venues all live in
+    # the checklists now (results-analysis.md, presentation.md), which the rule
+    # routes to instead of restating.
+    ("claude/rules/research-core.md", 1400),
     ("claude/rules/safety.md", 2550),
     ("claude/rules/verify-before-instructing.md", 1050),
     ("claude/CLAUDE.md", 4250),
