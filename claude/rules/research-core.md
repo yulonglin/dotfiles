@@ -18,4 +18,6 @@
 
 **Classification by meaning uses a judge, not a regex** — keyword matching silently misses paraphrase and over-counts quotation of the searched string. One API call per sample, never batched.
 
+**Use only terms the AI safety and LLM literature uses, and only as it uses them.** The reference set is ICML, ICLR and NeurIPS, the Anthropic Alignment Science blog, METR, OpenAI Alignment, Apollo Research, Redwood and GDM Safety. A term coined in-house reads as precision and carries none: the reader cannot look it up, cannot map it onto anything they know, and cannot tell whether you mean the standard thing. This bites hardest on words that sound standard but are being used loosely — *arm*, *smoke test*, *gate*, *ceiling*, *floor*, *null*. If a term is load-bearing, define it on first use in the same sentence; if it is not, delete it.
+
 Statistical machinery, the full null taxonomy and slicing: the `results-artifact` skill. Judge construction and persistence: `llm-judge`.
