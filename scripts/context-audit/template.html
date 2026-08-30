@@ -92,6 +92,7 @@ input[type=search]:focus{outline:2px solid var(--accent);outline-offset:1px;bord
   border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
 .btn:hover{filter:brightness(1.08)}
 .btn.ghost{background:var(--panel);color:var(--ink-2);border-color:var(--line)}
+.btn.armed{background:var(--drop);border-color:var(--drop);color:#fff;font-weight:700}
 .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ---- groups & rows ---- */
@@ -580,10 +581,29 @@ document.getElementById('q').addEventListener('input', e=>{ q=e.target.value.toL
 document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
   const f=c.dataset.f; filters.has(f)?filters.delete(f):filters.add(f);
   c.setAttribute('aria-pressed', filters.has(f)); sel=0; render(); }));
-document.getElementById('reset').addEventListener('click',()=>{
-  if(!Object.keys(marks).length){ toast('No marks to reset'); return; }
-  if(confirm('Clear all your marks? My leans stay as the default.')){
-    marks={}; save(); render(); toast('Marks cleared'); } });
+// Two-step, never window.confirm: the Artifact viewer runs this page in a
+// sandboxed iframe with no allow-modals, where confirm() returns false without
+// ever asking -- so a guarded destructive button silently does nothing exactly
+// where the page is read. The annotation layer had the same bug.
+let resetArmed = 0;
+document.getElementById('reset').addEventListener('click', e=>{
+  const b = e.currentTarget, n = Object.keys(marks).length;
+  if(!n){ toast('No marks to reset'); return; }
+  if(!resetArmed){
+    resetArmed = setTimeout(()=>{ resetArmed=0; b.textContent='Reset marks';
+                                  b.classList.remove('armed'); }, 4000);
+    b.textContent = `Click again to clear ${n}`;
+    b.classList.add('armed');
+    return;
+  }
+  clearTimeout(resetArmed); resetArmed = 0;
+  b.textContent = 'Reset marks'; b.classList.remove('armed');
+  marks = {}; save(); render(); toast('Marks cleared');
+});
+addEventListener('keydown', e=>{ if(e.key==='Escape' && resetArmed){
+  clearTimeout(resetArmed); resetArmed=0;
+  const b=document.getElementById('reset');
+  b.textContent='Reset marks'; b.classList.remove('armed'); } });
 document.getElementById('clearview').addEventListener('click',()=>{
   sortCol=null; sortDir=1; colFil={}; filters.clear(); q='';
   document.getElementById('q').value='';

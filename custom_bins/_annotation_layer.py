@@ -41,8 +41,13 @@ Behaviour, all of which the tests guard:
   parsed value and its whole script dies on anything else;
 - an end-of-page "Your comments" panel with Copy all (Markdown, `> quote`),
   Download .md, Export text (selectable textarea, since the Artifact viewer
-  blocks page-initiated downloads), and Clear all with a confirm. Only a copy
-  that actually happened clears the "not yet exported" state;
+  blocks page-initiated downloads), and Delete all. Only a copy that actually
+  happened clears the "not yet exported" state;
+- every destructive control asks twice in the page itself, never through a
+  blocking dialog. The Artifact viewer runs the page in a sandboxed iframe
+  with no `allow-modals` keyword, so `window.confirm` returns false without
+  ever asking and the browser only logs "Ignored call to ...". A delete
+  guarded that way is a dead button exactly where these pages are read;
 - a `beforeunload` guard while comments exist that have not been exported,
   which also saves the draft and attempts the download on the way out;
 - a fixed count badge that jumps to the panel.
@@ -146,6 +151,10 @@ mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--
  font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}
 .anbtn.ghost{background:transparent;color:var(--an-soft);border:1px solid var(--an-rule)}
 .anbtn.ghost.danger,.anbtn.ghost.tiny.danger{color:var(--an-bad);border-color:var(--an-bad)}
+/* An armed control must not look like the button that just did nothing, so it
+   fills: the second click is visibly a different act from the first. */
+.anbtn.anarmed,.anbtn.ghost.danger.anarmed,.anbtn.ghost.tiny.danger.anarmed{
+ background:var(--an-bad);color:#fff;border-color:var(--an-bad)}
 .anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
 #anPop:not(.editing) #anDelete{display:none}
 /* Save leads: it is the first button in the DOM, so it is also first in tab
@@ -528,6 +537,47 @@ function unpackDraft(){
 }
 function markDirty(){ dirty = true; lsSet(DIRTY, "1"); }
 function markClean(){ dirty = false; lsSet(DIRTY, "0"); }
+
+// ---- destructive controls ------------------------------------------------
+// No blocking dialog appears here, and none may be added. The Artifact viewer
+// runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
+// `window.confirm` returns false without ever asking -- the browser just logs
+// "Ignored call to ...". Every delete guarded that way returned early on a
+// refusal the reviewer never saw: a dead button in the one place these pages
+// are read, and working perfectly in a local tab, which is why it survived.
+//
+// The guard is in the page instead. A first click arms the button and makes it
+// say what a second click will destroy; it disarms after ARM_MS, on Escape, or
+// on any re-render. Buttons are focusable, so Enter and Space arm and confirm
+// exactly like the pointer does.
+var ARM_MS = 4000;
+var armedBtn = null, armedLabel = "", armedTimer = 0;
+function disarm(){
+  if (!armedBtn) return;
+  // render() may already have thrown this button away; restoring a detached
+  // node is harmless but pointless.
+  if (armedBtn.isConnected) { armedBtn.textContent = armedLabel; armedBtn.classList.remove("anarmed"); }
+  clearTimeout(armedTimer);
+  armedBtn = null; armedLabel = ""; armedTimer = 0;
+}
+// True only on the confirming click. On any other click it arms `btn` and the
+// caller must return without destroying anything.
+function arm(btn, label){
+  if (armedBtn === btn) { disarm(); return true; }
+  disarm();
+  armedBtn = btn; armedLabel = btn.textContent;
+  btn.textContent = label;
+  btn.classList.add("anarmed");
+  armedTimer = setTimeout(disarm, ARM_MS);
+  return false;
+}
+// Escape cancels, whether focus sits on the armed button or anywhere else.
+// Both listeners are needed: the layer root stops key events from bubbling out
+// to the host page, so the document listener never sees a keystroke aimed at
+// the button, and a listener on the root alone would miss one aimed outside.
+function escDisarm(ev){ if (ev.key === "Escape") disarm(); }
+root.addEventListener("keydown", escDisarm);
+document.addEventListener("keydown", escDisarm);
 // A refused write is the one failure the page must not hide: with the quota
 // full, the panel would otherwise count a comment that is already gone.
 function persist(){
@@ -570,6 +620,9 @@ $("anSave").onclick = save;
 // Builds into a fragment and swaps once, so the list never blanks between
 // clearing and refilling.
 function render(){
+  // Any armed row button is about to be replaced, and an arm left standing on
+  // a list this rebuild has changed would confirm a different comment.
+  disarm();
   var list = $("anList"), count = $("anCount");
   badge.textContent = "\uD83D\uDCAC " + comments.length;
   badge.className = unsaved || (dirty && comments.length) ? "warn" : "";
@@ -597,12 +650,12 @@ function render(){
       else openEdit(c, null);
     };
     // Deleting one comment used to require opening its popup first, which is a
-    // detour for the commonest correction. Confirmed, because the note itself
-    // is the only copy and there is no undo.
+    // detour for the commonest correction. It asks twice, because the note
+    // itself is the only copy and there is no undo.
     var x = document.createElement("button");
     x.className = "anbtn ghost tiny danger"; x.textContent = "delete";
     x.onclick = function(){
-      if (!window.confirm("Delete this comment?")) return;
+      if (!arm(x, "click again")) return;
       comments = comments.filter(function(y){ return y.id !== c.id; });
       unwrap(c.id);
       if (editingId === c.id) closePop();
@@ -663,8 +716,11 @@ $("anExportText").addEventListener("copy", function(){
 $("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
 $("anClear").onclick = function(){
   if (!comments.length) return;
-  if (dirty && !window.confirm("These " + comments.length + " comments have not been copied or exported yet. Delete anyway?")) return;
-  if (!dirty && !window.confirm("Delete all " + comments.length + " comments?")) return;
+  // "Not copied out yet" is the whole reason this control asks twice, so the
+  // warning goes on the armed button, where it is read, rather than into a
+  // dialog the viewer never shows.
+  if (!arm(this, (dirty ? "Not copied out yet \u2014 click again to delete "
+                        : "Click again to delete ") + comments.length)) return;
   comments.slice().forEach(function(c){ unwrap(c.id); });
   comments = []; markClean(); persist(); render();
 };
