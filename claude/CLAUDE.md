@@ -54,6 +54,8 @@ When uncertain, **ask rather than refuse silently**. Escalate anything that woul
 
 ## Where Things Live
 
+**Taste is five checklists at `~/.claude/taste/`** — writing, artifacts, research, experiments, results. Skills route there rather than restating them; edit those rather than adding a rule. Verbatim sources in `taste/sources/`.
+
 Instructions are `~/.claude/CLAUDE.md` and `<repo>/CLAUDE.md`; rules auto-load from `~/.claude/rules/*.md` and `<repo>/.claude/rules/*.md`. Those rules hold only always-relevant judgment — every activity-scoped procedure is a skill, listed in full by `catalog`. Specs, plans and reports are Artifacts rather than files in `specs/` or `plans/`; `artifacts-sync` has the convention.
 
 ## Learnings

@@ -63,6 +63,49 @@ Surface the most salient examples first — largest errors, disagreements, failu
 
 Transcripts distinguish system, developer, user, assistant reasoning, assistant output, tool definitions, tool calls, tool responses and environment messages by consistent colour *and* label — never colour alone. Preserve message order, show chat-template special tokens where possible, and highlight the sentences the analysis is about.
 
+## Slides: the first slide sets what the meeting is about
+
+Two guiding principles behind everything below. **Confusion is a debugging signal** — if someone unfamiliar with the work is confused by a term or a figure, the presentation is what needs fixing. And **clear slides improve the research itself**: making results legible exposes missing controls, wide error bars, weak baselines and unclear hypotheses. That time is research time, not overhead.
+
+**Open with a summary slide.** Where the project stands, what changed this week, the key takeaways from last meeting, and the main experimental outcome stated plainly. Include a simple plot of the headline result. Then say what you want feedback on — especially **the things you are least certain about**, which is what surfaces the right samples for review.
+
+The outcome framing decides the meeting: if the experiments **worked**, discussion goes to sanity checks, controls and extensions; if they **didn't**, it goes to debugging, prompts, data quality and alternative hypotheses. Say which, so nobody has to infer it.
+
+**Agenda next**, sections in priority order, with rough time or slide counts. Meetings are short and the audience needs to know whether to drill in.
+
+**Setup before results.** The prompt (shortened in the deck, full in backup), how each metric is measured, and the models, datasets, interventions and evaluation setup. Show the raw ingredients so people can critique the experiment rather than only the conclusion.
+
+**Most important result first** — not chronological order. Secondary analyses, failed experiments and exploratory work go to backup.
+
+**One message per slide.** If the audience has to hunt for the takeaway, the slide is doing too much; split it.
+
+**Backup slides** for full prompts with the relevant regions highlighted, definitions and methodology, representative examples and model outputs, baselines and controls, scaling curves, training details and loss curves, and failed experiments.
+
+**Anticipate the standard questions**: have an example showing exactly what is measured, be able to justify the prompt and evaluation choices, have a scaling plot ready for "have you tried more data?", and know which simple baseline could invalidate the conclusion.
+
+**End on discussion points**: proposed next experiments, open questions, the feedback you want, and any blockers or resource requests.
+
+**One deck per project** where practical, so previous work is easy to refer back to and the story the paper will eventually tell is rehearsed early.
+
+## Figures are read in seconds or not at all
+
+If a figure takes more than a few seconds to understand, simplify it.
+
+- As large as reasonably possible, and still readable over screen sharing.
+- Prefer bar and line charts. Avoid dense heatmaps unless they genuinely communicate better. Avoid diagonal axis labels.
+- Label every axis, define every metric, and say whether **higher or lower is better**.
+- Put the important values directly on the marks — numbers on bars, on points, on segments.
+- Report sample sizes, and show error bars or intervals so it is obvious whether a difference could be noise.
+- Roughly three to five colours, and few conditions per slide.
+
+## Provenance travels with every example
+
+Model and tokenizer or chat template; dataset and split; prompt version and system prompt; sampling parameters (temperature, top-p, max tokens, seed); and the training hyperparameters where they apply. Every result should be reproducible and attributable without reading the code.
+
+**Include all samples** unless that causes a severe performance hit.
+
+**Outputs are scripts, an Artifact, and figures** — the plotting, report and analysis code alongside the page it produced, not scratch that is thrown away.
+
 ## Commenting is the point of publishing
 
 Select text, a comment box appears, type, press Enter, saved. Nothing implicit ever writes a comment.
@@ -71,6 +114,7 @@ Select text, a comment box appears, type, press Enter, saved. Nothing implicit e
 - Comments survive refresh and republish, and never flicker or vanish when text is selected.
 - Destructive controls arm in the page — `confirm`, `alert` and `prompt` are inert in the Artifact viewer, so a button guarded by them silently does nothing.
 - No download button: the viewer never grants a page download permission.
+- Bookmark or star examples, and record labels and hypotheses while reviewing — then export those the same way as comments, so a review can be rejoined to the data.
 
 ## The results page has a fixed shape
 
