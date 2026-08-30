@@ -204,24 +204,6 @@ check_ty_beta() {
     esac
 }
 
-# --- claude/rules/experiments.md: plan filenames not configurable (#21342 open)
-check_issue_21342() {
-    local loc="claude/rules/experiments.md: claude-code #21342" state
-    if ! command -v gh >/dev/null 2>&1; then
-        skip "$loc" "gh not installed"
-        return
-    fi
-    state="$(gh issue view 21342 --repo anthropics/claude-code --json state --jq .state 2>/dev/null)" || {
-        skip "$loc" "gh unauthenticated or offline"
-        return
-    }
-    if [[ "$state" == "OPEN" ]]; then
-        ok "$loc" "still open"
-    else
-        drift "$loc" "now $state — re-check whether plan filenames became configurable, then drop the citation"
-    fi
-}
-
 # --- claude/rules/coding-conventions.md: fzf >=0.54 for `load:pos(N)+select`
 check_fzf_version() {
     local loc="claude/rules/coding-conventions.md: fzf >=0.54" ver
@@ -322,7 +304,6 @@ check_read_threshold
 check_fable_model
 check_uv_malware
 check_ty_beta
-check_issue_21342
 check_fzf_version
 check_plugin_manifest
 check_clean_skill_dupes
