@@ -25,20 +25,20 @@ The rule governs how **results are presented**. It does not govern the per-examp
 
 ## Headings assert, sections elaborate
 
-Every heading is either a claim, hedged to its evidence, or a question the section answers. Reading only the headings should give the findings. `## Results` becomes `## Assertion Sentences Survive Long Traces`.
+Every heading is either a claim, hedged to its evidence, or a question the section answers. Reading only the headings should give the findings. `## Results` becomes `## Token positions from assertion sentences are more useful for monitoring`.
 
 State each research question in one sentence, and list them all at the top of the page.
 
 ## Say what you mean by the words you use
 
-Terminology section at the top, FAQ at the bottom. Define every term, acronym and metric on first use — never use undefined jargon — in a callout if it carries weight. Use only vocabulary the AI safety and LLM literature uses, and only as it uses it — the reference set is ICML, ICLR and NeurIPS, the Anthropic Alignment Science blog, METR, OpenAI Alignment, Apollo Research, Redwood and GDM Safety, so "common in the literature" is checkable rather than a matter of taste.
+Terminology section at the top, FAQ at the bottom. Define every term, acronym and metric on first use — never use undefined jargon — in a callout if it carries weight. Use only vocabulary the AI safety and LLM literature uses, and only as it uses it — the reference set is ICML, ICLR and NeurIPS, the Anthropic Alignment Science blog, METR, OpenAI Alignment blog, Apollo Research, Redwood, GDM Safety (and potentially LessWrong/arXiV), so "common in the literature" is checkable rather than a matter of taste.
 
 Watch the words that sound standard and are not:
 
 - **arm** — what is an arm here, and what are the arms?
 - **smoke test** — what does it exercise, and what would it fail to catch?
 - **null** — what is the null, and what would the number be under it?
-- **gate**, **ceiling**, **floor** — of what, measured how?
+- **gate**, **ceiling**, **floor**, **cap** — of what, measured how?
 
 Placement, for anything the reader has to know to read a number: the name of the statistical test and the definition of the interval sit **adjacent to the number they describe** — in the caption, the cell or the sentence — not in a methods section the reader has to go and find. What the test and the interval must say for themselves is `results-analysis.md`. Reserve **P0/P1/P2** for priorities and nothing else.
 
