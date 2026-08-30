@@ -228,9 +228,9 @@ This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/c
 **What's included:**
 
 - **`CLAUDE.md`** — Slim identity file (~55 lines) pointing at modular rules and docs
-- **`rules/`** — 9 auto-loaded behavioral rules holding only always-relevant judgment (safety, delegation, communication, research integrity, experiments, etc.). Activity-scoped procedure lives in skills instead; `rules/pointers.md` indexes which skill owns what
+- **`rules/`** — 8 auto-loaded behavioral rules holding only always-relevant judgment (safety, delegation, communication, research integrity, experiments, etc.). Activity-scoped procedure lives in skills instead; the `catalog` skill indexes which skill owns what
 - **`agents/`** — Personal agents (kept lean — most specialized agents live in plugins like `ai-safety-plugins`)
-- **`skills/`** — Project-level slash commands: `/commit`, `/merge-worktree`, `/jobs`, `/modal`, `/log-gap`, `/recall-feedback`, `/mv-repo`, etc.
+- **`skills/`** — Project-level slash commands: `/commit`, `/merge-worktree`, `/jobs`, `/modal`, `/mv-repo`, etc.
 - **`hooks/`** — 40+ PreToolUse/PostToolUse/SessionStart scripts: approval classifier, secret blocking, modern-tool nudges, post-rebase guards, network audit
 - **`templates/`** — Research spec template
 

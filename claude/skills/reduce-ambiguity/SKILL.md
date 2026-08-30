@@ -1,6 +1,6 @@
 ---
-name: check-misreads
-description: Red-team a draft for how it could be misread — artifacts, results pages, specs, handoff briefs, prompts. Use before sending or acting on anything where a wrong reading is expensive, on "will this be misread", "is this clear", "red-team this doc", "sanity-check the wording".
+name: reduce-ambiguity
+description: Reduce ambiguity in a draft before it is sent or acted on — specs, briefs, results pages, prompts. Use on "is this clear", "will this be misread", "red-team this doc".
 ---
 
 # Check Misreads

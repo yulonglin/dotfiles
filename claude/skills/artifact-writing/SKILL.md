@@ -83,7 +83,7 @@ Sorting flattens any grouping — a sort the reader asked for must not be silent
 
 ## Clarity is checked by a reader who has never seen the work
 
-Before the page goes to Yulong, red-team it for misreads: a cooperative reader states what it understood the page to claim and what it would still need to ask, while an adversarial one gives the competing readings of each load-bearing sentence and what it would do differently under each. `check-misreads` carries the prompts, the choice of reader, and the rule that keeps the pass from becoming a nitpick generator — a finding counts only when it changes what someone would do. It runs once per page rather than per reply, and checks the writing rather than the findings.
+Before the page goes to Yulong, red-team it for misreads: a cooperative reader states what it understood the page to claim and what it would still need to ask, while an adversarial one gives the competing readings of each load-bearing sentence and what it would do differently under each. `reduce-ambiguity` carries the prompts, the choice of reader, and the rule that keeps the pass from becoming a nitpick generator — a finding counts only when it changes what someone would do. It runs once per page rather than per reply, and checks the writing rather than the findings.
 
 ## One topic, one living page
 

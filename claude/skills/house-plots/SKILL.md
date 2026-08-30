@@ -77,6 +77,7 @@ For chart *design* — mark choice, colour assignment, legends, dashboards — l
 
 ## Conventions
 
+- **Numbers belong in the plot, not in prose and not in a table.** The surrounding text says how to read the chart — direction, comparison, what to look at — and leaves the values to the chart itself. Hyperparameters are the exception: they are settings rather than results, so a table suits them.
 - Figures are self-explanatory: title, axis labels, legend. Embed in the report page rather than shipping loose PNGs.
 - Fonts fall back sanely (Styrene B LC → Helvetica → DejaVu Sans); there is no font install step.
 - `lib/plotting` has **no `__init__.py` on purpose** — it goes on `sys.path` as a bare directory, so every import inside it is flat. A relative import there breaks the deployed copy while looking fine locally. Pinned by `tests/test_plotting_merge.py`.

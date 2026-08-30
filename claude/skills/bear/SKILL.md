@@ -186,3 +186,12 @@ For CLI-specific failure modes (sandbox SIGABRT, PATH issues in cron, stdin/flag
 ## Bear-flavoured Markdown
 
 Bear's own FAQ omits the colour encoding, so Yulong's copied-from-Bear examples are the source of truth: highlight is `==text==`, a coloured highlight is a coloured-dot emoji at the START of the span (`==🔴text==`, where 🔴 means flag this / verify before shipping), strikethrough is `~~text~~`, and underline is `~text~`. Don't use `==` or `~text~` in files that render as plain GitHub Markdown.
+
+**Wikilinks are how the vault cross-references itself.** A link to another note is `[[Note Title]]`, and it resolves by **title**, not by ID — the same title lookup the rest of this skill uses, so it is case-insensitive and matches the note's first `# Heading` (Bear derives the title from that line). `search_notes(query="@wikilinks")` finds notes that contain one and `@backlinks` finds notes that are linked to, so both are searchable state, not decoration.
+
+Two consequences for editing:
+
+- **`overwrite_note` that changes the first `# Heading` changes the note's title, and therefore what every inbound `[[...]]` was pointing at.** Before rewriting a heading, run `search_notes(query="@wikilinks")` plus the old title to see who links in. This skill does not document whether Bear repairs those links itself — check the affected notes rather than assuming either way.
+- `[[Note Title]]` is a `find` anchor like any other string, so `edit_note` can retarget links in bulk (`{ find: "[[Old Title]]", replace: "[[New Title]]", all: true }`).
+
+As with `==` and `~text~`, `[[...]]` does not link in files that render as plain GitHub Markdown.

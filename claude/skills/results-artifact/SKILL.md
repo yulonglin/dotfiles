@@ -1,15 +1,15 @@
 ---
 name: results-artifact
-description: Build a research results page to Yulong's review standard — intervals, nulls, chance correction, slicing, review checklist.
+description: Build a research results page — intervals and what they cover, nulls and ceilings, chance correction, slicing, and the pre-publish review checklist.
 ---
 
 # Results Pages
 
-The checklist Yulong applies to every research artifact (2026-08-27). Build against it before publishing; it is what he checks first. Page mechanics — collapsible units, transcripts, annotation layer, titles — are in the `artifact-writing` skill.
+The checklist every research artifact is built against (2026-08-27), and the first thing a reviewer looks for. Work through it before publishing. Page mechanics — collapsible units, transcripts, annotation layer, titles — are in the `artifact-writing` skill.
 
 ## Presentation
 
-- **Numbers in prose can be a table; numbers in a table can be a plot.** Escalate to the richest form the data supports. On a page, draw charts as **native SVG** using the built-in `dataviz` skill and the hexes in `lib/plotting/tokens.json` — a matplotlib PNG bakes its light ground into the pixels and glares in dark mode. Reserve embedded images for figures whose point is what matplotlib itself produces.
+- **Numbers belong in a plot — not in prose, and not in a table.** A plot is where a number is read, compared and remembered; prose and captions say how to read it qualitatively (the direction, the comparison, what to look at) and leave the values to the chart. Hyperparameters are the exception: they are settings rather than results, so a table is the right home for them. On a page, draw charts as **native SVG** using the built-in `dataviz` skill and the hexes in `lib/plotting/tokens.json` — a matplotlib PNG bakes its light ground into the pixels and glares in dark mode. Reserve embedded images for figures whose point is what matplotlib itself produces.
 - Mermaid diagrams for mechanisms and pipelines.
 - Commenting layer that can save, delete and update a comment, copy all comments, and keep highlights stable with no flicker while selecting text.
 
@@ -22,7 +22,7 @@ The checklist Yulong applies to every research artifact (2026-08-27). Build agai
 - Define Claude's habitual jargon where it appears: what an **arm** is and which arms exist; what a **smoke test** is, what it exercises, and what it does and does not show.
 - A **Terminology** and an **FAQ** section at the bottom.
 - Write for a new colleague: context first, no buzzwords, no corporate phrasing, no fluffy transitions.
-- **Enumerations are lists, never prose.** Anything listing three or more items — models, settings, arms, what is held constant versus varied — is a bulleted or numbered list, or one comma-separated line (Yulong, 2026-08-27).
+- **Enumerations are lists, never prose.** Anything listing three or more items — models, settings, arms, what is held constant versus varied — is a bulleted or numbered list, or one comma-separated line (2026-08-27).
 
 ## Visibility, per set of experiments
 

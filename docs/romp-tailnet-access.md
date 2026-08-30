@@ -1,7 +1,5 @@
----
-name: romp
-description: Reach the romp dashboard (parallel Claude Code session manager) on hetzner from a phone or another device over Tailscale. Use when romp is unreachable, the tailnet URL fails to load, "server can't be found" appears in Safari, or when checking whether the romp kernel and its serve mapping are healthy.
----
+<!-- Moved out of the skill list on 2026-08-30: this is break-glass infra documentation, not a skill. -->
+
 
 # Romp over Tailscale
 

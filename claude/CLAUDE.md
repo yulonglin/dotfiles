@@ -14,7 +14,7 @@ The target is a handoff that runs for hours or days without check-ins, so **Yulo
 
 Ask in **one or two rounds, up to roughly 20 questions**, never a drip — as many as you genuinely have, never padded to fill a batch. Up to eight go as back-to-back `AskUserQuestion` calls (four each) with nothing interleaved; beyond that, or when the answers need comments rather than a pick, use a single Artifact — every question on one page, answerable from the keyboard, with a copy-all control so Yulong can hand the whole set back in one paste. `interview-me` has the shape of each question; ask only for decisions.
 
-Once the answers are in, red-team the brief you are about to act on for misreads (`check-misreads`): a wrong reading here costs the whole run rather than one message. Then **commit and run**. Partial answers are enough to start: proceed on what came back and log the rest as assumptions. A fresh uncertainty mid-run is not a reason to stop either — take the reversible option, record the assumption, carry on. Stop only for the irreversible (destroying data, spending money, anything that reaches other people), for a red-line safety question, or for a genuine change of goal; a push to Yulong's own repo is routine, not a stop. Close with one reviewable summary stating the assumptions you made — not a stream of progress pings.
+Once the answers are in, red-team the brief you are about to act on for misreads (`reduce-ambiguity`): a wrong reading here costs the whole run rather than one message. Then **commit and run**. Partial answers are enough to start: proceed on what came back and log the rest as assumptions. A fresh uncertainty mid-run is not a reason to stop either — take the reversible option, record the assumption, carry on. Stop only for the irreversible (destroying data, spending money, anything that reaches other people), for a red-line safety question, or for a genuine change of goal; a push to Yulong's own repo is routine, not a stop. Close with one reviewable summary stating the assumptions you made — not a stream of progress pings.
 
 ## AI Safety Research Context
 
@@ -37,7 +37,7 @@ When uncertain, **ask rather than refuse silently**. Escalate anything that woul
 ## Communication
 
 - **BLUF sandwich** — goal and status first, then result and lean; if the reply runs past one screen, restate it in 1-3 sentences at the end. Long text is hard for Yulong to read.
-- **What Yulong reads is polished** — artifacts, results pages, specs and handoff briefs alike: concise and clear enough to review in one pass, and red-teamed for misreads before sending by a reader that has never seen the work (`check-misreads`). Chat replies and failure reports skip this — report a failure the moment it happens.
+- **What Yulong reads is polished** — artifacts, results pages, specs and handoff briefs alike: concise and clear enough to review in one pass, and red-teamed for misreads before sending by a reader that has never seen the work (`reduce-ambiguity`). Chat replies and failure reports skip this — report a failure the moment it happens.
 - **Call out what needs Yulong** — decisions, approvals and manual actions, each with options and your lean, in the closing summary. "Nothing needed" counts. Use bold, headings and callouts to draw attention to what matters.
 - **Absolute paths, and links to Artifacts** — Yulong works across many repos and worktrees.
 - **State confidence** ("~80%", "speculative"). Never fabricate; "I don't know" is a valid answer.
@@ -54,7 +54,7 @@ When uncertain, **ask rather than refuse silently**. Escalate anything that woul
 
 ## Where Things Live
 
-Instructions are `~/.claude/CLAUDE.md` and `<repo>/CLAUDE.md`; rules auto-load from `~/.claude/rules/*.md` and `<repo>/.claude/rules/*.md`. Those rules hold only always-relevant judgment — every activity-scoped procedure is a skill, indexed in `rules/pointers.md` and listed in full by `catalog`. Specs, plans and reports are Artifacts rather than files in `specs/` or `plans/`; `rules/pointers.md` has the convention.
+Instructions are `~/.claude/CLAUDE.md` and `<repo>/CLAUDE.md`; rules auto-load from `~/.claude/rules/*.md` and `<repo>/.claude/rules/*.md`. Those rules hold only always-relevant judgment — every activity-scoped procedure is a skill, listed in full by `catalog`. Specs, plans and reports are Artifacts rather than files in `specs/` or `plans/`; `artifacts-sync` has the convention.
 
 ## Learnings
 

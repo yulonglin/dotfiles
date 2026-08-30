@@ -25,7 +25,7 @@ Pick model-invocation only when the agent must reach the skill on its own, or an
 
 When user-invoked skills multiply past what you can remember, the cure is one user-invoked **router skill** that names the others and says when to reach for each — so you remember one skill instead of many.
 
-A router can only hint, never fire: user-invoked skills have no description, so nothing but the human can reach them. In this repo `catalog` plays that role, and `rules/pointers.md` indexes which skill owns each activity.
+A router can only hint, never fire: user-invoked skills have no description, so nothing but the human can reach them. In this repo `catalog` plays that role, indexing which skill owns each activity.
 
 ## The Description Is A Context Pointer, So Its Wording Decides Reliability
 

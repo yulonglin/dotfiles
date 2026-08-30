@@ -34,7 +34,7 @@ Everything above except this index is `done`: each reports finished work whose c
 | Artifact gallery | Every artifact on the account, across repos, newest first and truncated by a listing window | [claude.ai/code/artifacts](https://claude.ai/code/artifacts) |
 | `dotfiles-personal` | The private repo holding `plans/`, `.remember/`, personal `docs/`, `config/machines.conf` — this repo is public, so personal working artifacts never live on a branch here | private GitHub repo |
 | Bitwarden Secrets Manager | API keys, reached per-project via `setup-envrc` and direnv, never globally exported | token at `~/.config/bws/token` |
-| Global rules | Always-loaded judgment; activity-scoped procedure lives in skills, indexed by `pointers.md` | `claude/rules/` |
+| Global rules | Always-loaded judgment; activity-scoped procedure lives in skills, indexed by `catalog` | `claude/rules/` |
 
 ## Publishing a page publicly is an org decision, not a local one
 

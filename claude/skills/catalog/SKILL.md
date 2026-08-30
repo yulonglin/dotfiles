@@ -42,8 +42,7 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 | `house-plots` | Any chart or figure — pastel matplotlib defaults, the palette, overlap checking. Code lives in `lib/plotting/` |
 | `check-bib-references` | Verifying BibTeX citations aren't LLM-fabricated |
 | `check-prose-claims` | Fact-checking stats/comparatives/quotes in slides, reports, papers |
-| `check-misreads` | Red-teaming a draft for misreads before sending — artifacts, results, specs, handoff briefs |
-| `marp-deck` | Building slide decks from Markdown with Marp |
+| `reduce-ambiguity` | Reducing ambiguity in a draft before sending — artifacts, results, specs, handoff briefs |
 
 ## Research / infra ops
 
@@ -63,17 +62,12 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 | `bear` | Reading/editing Bear notes (macOS) |
 | `things3` | Reading/managing Things 3 tasks, projects, areas, tags |
 | `setup-channel` | Setting up Telegram/iMessage/Things Cloud for a project |
-| `reply` | Stuck on replying to someone — scaffolds while you write |
-| `log-gap` | Recording a knowledge gap you just noticed ("wait, I didn't know that") |
-| `recall-feedback` | Spaced-repetition review of past feedback memories |
-| `decide` | Stuck overthinking/oscillating on a decision |
 
 ## Self-reflection / meta
 
 | Skill | Use when |
 |---|---|
 | `interview-me` | Stress-testing a plan or decision — "interview me", "grill me", "poke holes in this" |
-| `chronicle` | Resolving ambiguity via screen/recent-history context ("what was I just doing") |
 | `superpowers:writing-skills` (user-invoked only) | Reference for writing/editing skills well — read before authoring a new one |
 
 ## Agents (Task tool, not slash-invoked)

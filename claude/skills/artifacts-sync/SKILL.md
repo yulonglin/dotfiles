@@ -5,7 +5,7 @@ description: Maintain and reconcile a repo's ARTIFACTS.md — the index mapping 
 
 # Keep ARTIFACTS.md and the Index Page in Step
 
-`rules/pointers.md` requires each repo to keep one index of its artifacts, each row stating the finding rather than only the title. This skill owns the shape of that index and the pass that repairs it. Building the pages themselves is `artifact-writing`; this is about not losing them afterwards.
+Each repo keeps one index of its artifacts, each row stating the finding rather than only the title, and one topic keeps one link — update a page in place rather than minting a URL per revision. This skill owns the shape of that index and the pass that repairs it. Building the pages themselves is `artifact-writing`; this is about not losing them afterwards.
 
 The canonical filename is **`ARTIFACTS.md` at the repo root**. One per repo.
 
