@@ -177,6 +177,14 @@ input[type=search]:focus{outline:2px solid var(--accent);outline-offset:1px;bord
 .desc{color:var(--ink-2);max-width:82ch}
 .pth{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3);
   word-break:break-all;background:var(--panel-2);padding:6px 9px;border-radius:4px}
+/* Every code block wraps and scrolls, whether it is a body or a reference.
+   `details.ref pre` used to inherit none of this -- the rule below was keyed to
+   `.body` -- so a reference file rendered with browser-default `white-space:pre`
+   and its long lines ran out of the container with no scrollbar. */
+pre.body,details.ref pre{font-family:"IBM Plex Mono",monospace;font-size:11.5px;line-height:1.6;
+  white-space:pre-wrap;word-break:break-word;overflow-x:auto;color:var(--ink-2)}
+pre.trunc{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--compress);
+  background:var(--compress-bg);padding:6px 11px;margin:0;border-top:1px solid var(--line-2)}
 pre.body{font-family:"IBM Plex Mono",monospace;font-size:11.5px;line-height:1.6;
   background:var(--panel-2);border:1px solid var(--line-2);border-radius:6px;padding:13px;
   overflow-x:auto;max-height:460px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;color:var(--ink-2)}
@@ -184,7 +192,8 @@ details.ref{margin:5px 0;border:1px solid var(--line-2);border-radius:5px;backgr
 details.ref>summary{cursor:pointer;padding:7px 11px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;
   display:flex;justify-content:space-between;gap:12px;color:var(--ink-2)}
 details.ref>summary:hover{color:var(--ink)}
-details.ref pre{margin:0;border:0;border-top:1px solid var(--line-2);border-radius:0;max-height:360px}
+details.ref pre{margin:0;border:0;border-top:1px solid var(--line-2);border-radius:0;
+  max-height:360px;overflow-y:auto;padding:11px;background:var(--panel-2)}
 
 /* ---- footer ---- */
 .foot{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
@@ -408,7 +417,8 @@ function rowHTML(r,i){
 }
 
 function detailHTML(r){
-  const refs = (r.refs||[]).map(f=>`<details class="ref"><summary><span>${esc(f.f)}</span><span>${fmt(f.t)} tok</span></summary><pre>${esc(f.c)}</pre></details>`).join('');
+  const refs = (r.refs||[]).map(f=>`<details class="ref"><summary><span>${esc(f.f)}</span><span>${fmt(f.t)} tok</span></summary><pre>${esc(f.c)}</pre>${
+    f.cut ? `<pre class="trunc">shown to 120,000 characters &mdash; ${fmt(f.cut)} more in the file on disk</pre>` : ''}</details>`).join('');
   return `<div class="detail">
     <h4>${isAuto(r)?'Auto-classified &mdash; not individually reviewed':'My lean'}</h4>
     <div class="why${isAuto(r)?' autoy':''}">${mdish(r.why)}</div>

@@ -86,7 +86,13 @@ def add(path, marketplace, plugin, kind, enabled=True):
                     try:
                         c = f.read_text(errors='replace')
                         ref_bytes += len(c)
-                        ref_files.append({'f': str(f.relative_to(p.parent)), 't': toks(c), 'c': c[:24000]})
+                        # A reference cut mid-word that still looks whole is worse
+                        # than one that says it was cut. Keep the cap generous and
+                        # always declare the trim.
+                        CAP = 120000
+                        ref_files.append({'f': str(f.relative_to(p.parent)),
+                                          't': toks(c), 'c': c[:CAP],
+                                          'cut': max(0, len(c) - CAP)})
                     except Exception:
                         pass
     # A skill with `disable-model-invocation: true` is user-invoked: its
