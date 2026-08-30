@@ -7,6 +7,8 @@ description: "Read and edit Bear notes via the Bear MCP (macOS only): search, cr
 
 Bear is Yulong's note app. Treat its notes the way you'd treat source files. **Default to the Bear MCP** (`mcp__Bear__*`) — it has built-in destructive-action gating, mandatory `baseHash` on overwrite, and avoids the sandbox SIGABRT issue the CLI hits inside Claude Code.
 
+**The server is `bearcli mcp-server`, from the `bear-mcp` plugin** (`productivity-tools` marketplace, enabled in `settings.json` since 2026-08-30 — before that it was configured but never actually enabled, so the tools were missing). It needs `bearcli` on PATH and Bear 2.8+, so it is macOS-only: on Linux the server will not start and `mcp__Bear__*` simply will not appear.
+
 | Claude Code tool | Bear MCP equivalent | Notes |
 |---|---|---|
 | `Read` | `mcp__Bear__get_note` (set `includeContent: true`) | Metadata always includes `contentHash` — capture it as your concurrency token |

@@ -32,7 +32,9 @@ Facets are cached per-session — re-runs only process new/changed sessions.
 ## Execution
 
 ```bash
-python scripts/insights/run_insights.py $ARGUMENTS
+python3 ~/code/dotfiles/scripts/insights/run_insights.py $ARGUMENTS
 ```
+
+The path is absolute on purpose: `scripts/` is not part of what `deploy.sh` symlinks into `~/.claude/`, so a relative path only resolves when the session already sits in the dotfiles repo.
 
 Report output: `~/.claude/custom-insights/report.html`

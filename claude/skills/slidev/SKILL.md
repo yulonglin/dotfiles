@@ -62,6 +62,5 @@ Image-loading errors and component rendering failures (a `BarChart` that does no
 ## Reach for a neighbour instead when
 
 - the question is **what goes on the slide** — one message per slide, summary slide, agenda, backup slides, figure legibility: `~/.claude/checklists/presentation.md`
-- the deck is **Marp**, not Slidev: the `marp-deck` skill
 - the deck is a **research update** and you need its structure and narrative: the `research-presentation` skill
 - a **chart** is what needs building: `house-plots` for matplotlib figures, the built-in `dataviz` for native SVG

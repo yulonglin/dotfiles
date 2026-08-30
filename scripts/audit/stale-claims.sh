@@ -242,23 +242,41 @@ check_fzf_version() {
 }
 
 # --- CLAUDE.md: the context profiles named as examples actually exist
-# --- plugin manifest: every enabledPlugins entry is `true` (no gates left behind)
+# --- plugin manifest: the seven retired plugins carry `false` tombstones, every other
+# --- entry is `true`. The tombstones are load-bearing — a marketplace declaration is
+# --- not the enable gate, so a retired plugin with a surviving install record keeps
+# --- loading unless enabledPlugins says false. See docs/plugin-management.md.
 check_plugin_manifest() {
-    local loc="claude/settings.json: enabledPlugins all-true manifest" json falses
+    local loc="claude/settings.json: enabledPlugins tombstone manifest" json result
     json="$DOT_DIR/claude/settings.json"
     if [[ ! -f "$json" ]]; then
         skip "$loc" "settings.json not found"
         return
     fi
-    falses=$(python3 -c '
-import json,sys
-d=json.load(open(sys.argv[1]))
-print(" ".join(k for k,v in d.get("enabledPlugins",{}).items() if v is not True))
+    result=$(python3 -c '
+import json, sys
+RETIRED = {
+    "code@ai-safety-plugins", "core@ai-safety-plugins", "research@ai-safety-plugins",
+    "viz@ai-safety-plugins", "workflow@ai-safety-plugins", "writing@ai-safety-plugins",
+    "dev-browser@dev-browser-marketplace",
+}
+d = json.load(open(sys.argv[1])).get("enabledPlugins", {})
+problems = []
+missing = sorted(k for k in RETIRED if k not in d)
+if missing:
+    problems.append("retired plugin lost its false tombstone: " + " ".join(missing))
+live = sorted(k for k in RETIRED if k in d and d[k] is not False)
+if live:
+    problems.append("retired plugin not set to false: " + " ".join(live))
+bad = sorted(k for k, v in d.items() if k not in RETIRED and v is not True)
+if bad:
+    problems.append("non-retired entry is not true: " + " ".join(bad))
+print("; ".join(problems))
 ' "$json" 2>/dev/null) || { skip "$loc" "could not parse settings.json"; return; }
-    if [[ -z "$falses" ]]; then
-        ok "$loc" "every entry is true"
+    if [[ -z "$result" ]]; then
+        ok "$loc" "seven retired plugins tombstoned false, every other entry true"
     else
-        drift "$loc" "non-true entries present: $falses"
+        drift "$loc" "$result"
     fi
 }
 

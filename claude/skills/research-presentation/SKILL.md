@@ -1,6 +1,6 @@
 ---
 name: research-presentation
-description: The standard for how research is presented — structuring a research presentation, slide deck, research update, mentor or team meeting, a report or an artifact page. Covers the summary slide that opens the meeting, the agenda, explicit success/failure framing, explaining experiments before results, backup slides for likely questions, headings that assert rather than label, numbers belonging in plots rather than prose or tables, terminology defined on first use, attention managed with callouts and progressive disclosure, and figures that read in seconds. Use when building, structuring or critiquing slides, a research update, a findings page, or a figure destined for a deck.
+description: The standard for how research is presented — structuring a research presentation, slide deck, research update, mentor or team meeting, a report or an artifact page. Covers the summary slide that opens the meeting, the agenda, explicit success/failure framing, explaining experiments before results, backup slides for likely questions, headings that assert rather than label, numbers escalating to a plot and stopping there, terminology defined on first use, attention managed with callouts and progressive disclosure, and figures that read in seconds. Use when building, structuring or critiquing slides, a research update, a findings page, or a figure destined for a deck.
 ---
 
 # Research Presentation

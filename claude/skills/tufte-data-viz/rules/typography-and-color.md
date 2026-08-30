@@ -119,7 +119,7 @@ Use only when the chart must distinguish multiple categories and direct labeling
 | Coral | `#e15759` | Muted red |
 | Sage | `#76b7b2` | Teal-green |
 
-If more than 4 categories exist, use small multiples or group lesser categories into "Other."
+This palette supplies 4 categories; past what it covers, use small multiples or group lesser categories into "Other." The overall cap is the house range of roughly three to five — `~/.claude/checklists/presentation.md`.
 
 ### Sequential palette (single hue)
 

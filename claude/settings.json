@@ -581,10 +581,11 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "claude-tools statusline || bash $HOME/.claude/statusline.sh",
+    "command": "claude-tools statusline",
     "padding": 1
   },
   "enabledPlugins": {
+    "bear-mcp@productivity-tools": true,
     "code@ai-safety-plugins": false,
     "codex@codex-plugin-cc": true,
     "core@ai-safety-plugins": false,
@@ -599,18 +600,13 @@
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
+    "things-mcp@productivity-tools": true,
     "typescript-lsp@claude-plugins-official": true,
     "viz@ai-safety-plugins": false,
     "workflow@ai-safety-plugins": false,
     "writing@ai-safety-plugins": false
   },
   "extraKnownMarketplaces": {
-    "ai-safety-plugins": {
-      "source": {
-        "source": "github",
-        "repo": "yulonglin/ai-safety-plugins"
-      }
-    },
     "alignment-hive": {
       "source": {
         "source": "github",
@@ -627,12 +623,6 @@
       "source": {
         "source": "github",
         "repo": "crazytieguy/codex-plugin-cc"
-      }
-    },
-    "dev-browser-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "sawyerhood/dev-browser"
       }
     },
     "productivity-tools": {

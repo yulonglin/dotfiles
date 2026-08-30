@@ -140,7 +140,7 @@ def make_hooks_dir(
 
 def make_settings(root: Path, drop_key: str | None = None) -> Path:
     data = {
-        "statusLine": {"type": "command", "command": "statusline.sh"},
+        "statusLine": {"type": "command", "command": "claude-tools statusline"},
         "permissions": {"deny": []},
         "hooks": {
             "PreToolUse": [

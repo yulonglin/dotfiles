@@ -816,7 +816,7 @@ else:
 
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
-        log_info "  Plugins: declared in settings.json enabledPlugins; all enabled"
+        log_info "  Plugins: declared in settings.json enabledPlugins (7 retired ones tombstoned false)"
     else
         log_warning "Claude directory not found at $DOT_DIR/claude"
     fi
