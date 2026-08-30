@@ -1,6 +1,6 @@
 ---
 name: fast-cli
-description: Modern CLI tool mappings (eza, fd, rg, bat, dust, duf, fzf, zoxide, delta, jq). Use for file listing, searching, and disk usage.
+description: Reach for the modern CLI tool this machine actually has instead of the POSIX default — `rg` over grep, `fd` over find, `eza` over ls, plus bat, dust, duf, fzf, zoxide, delta and jq, with the flag differences that bite. Use when listing or finding files, searching file contents, inspecting disk usage, reading JSON, or viewing a diff at the shell — and when a habitual `grep -r`, `find .` or `ls -la` is about to be typed.
 ---
 
 # Fast CLI Tools

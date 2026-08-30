@@ -40,6 +40,8 @@ Brainstorming and experiment design. AI safety differs from capabilities work in
 6. What are our key areas of uncertainty? Maybe we can probe more there!
 7. The SCAMPER Technique: Apply seven lenses to an existing theory or problem—Substitute, Combine, Adapt, Modify, Put to another use, Eliminate, and Reverse—to spark fresh angles or unconventional hypotheses
 
+In general, it would be good to present to the user ideas/thoughts scored by plausibility (based on intuition), interestingness (surprisal + usefulness separately), falsifiability (this last one is super important). But I believe that it's the user who needs to rank and decide ultimately! As LLMs can be pretty bad at coming up with and deciding on ideas.
+
 ## The design is not done until the alternatives are named
 
 State the research question in one sentence, phrased so that it's falsifiable, and an outcome could contradict it — otherwise call the work exploratory and say so. Name the independent variable and its levels, **including anything varied by accident**: a changed prompt, renderer or model version is an independent variable whether or not you meant it to be. Name the dependent variable, its unit of analysis and how it aggregates. Name the null.

@@ -1,6 +1,6 @@
 ---
 name: docs-search
-description: Fast grep-based search across docs, specs, CLAUDE.md using fd + ripgrep
+description: Find where something is documented across a repo's Markdown — docs, specs, READMEs, CLAUDE.md and rules — without reading whole files into context. Use when asked "where is X documented", "do we have docs on Y", "what does the spec say about Z", when hunting for the convention or decision that governs a piece of code, or when a referenced doc's path is unknown and a plain Read has already missed.
 ---
 
 # /docs-search
