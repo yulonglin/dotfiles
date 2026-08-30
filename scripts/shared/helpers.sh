@@ -198,8 +198,11 @@ show_component_menu() {
     local items_file result
     items_file=$(mktemp "${TMPDIR:-/tmp}/claude-tools-select.XXXXXX")
     printf '%s' "$stdin_input" > "$items_file"
-    result=$(claude-tools select --title "Select ${mode} components" --items "$items_file")
-    local rc=$?
+    # `|| rc=$?`: cancelling the TUI (Esc, Ctrl-C) makes this a failing
+    # assignment, and under `set -e` that killed install.sh/deploy.sh outright —
+    # the rc check below, written for exactly that case, never ran.
+    local rc=0
+    result=$(claude-tools select --title "Select ${mode} components" --items "$items_file") || rc=$?
     rm -f "$items_file"
     [[ $rc -ne 0 ]] && return 0
 
@@ -237,8 +240,30 @@ cmd_exists() {
 # unavailable, or there's no TTY to prompt on. (sudo's password is the one prompt
 # with no software default, so it's the only interaction we cache rather than
 # skip — the component menu aside.)
+# Every privileged step in these scripts goes through sudo, and there are ~57 of
+# them. In a hands-off run — no TTY, or --non-interactive — a sudo that needs a
+# password prints its prompt and then blocks forever reading the script's stdin.
+# That is a stall, not a failure: nothing errors, nothing is logged, the run just
+# stops. Rather than audit every call site, shadow the command: `-n` makes sudo
+# fail fast instead of prompting, and each call site's existing `|| log_warning`
+# then does what it was written to do.
+#
+# An interactive TTY run is unaffected — `front_load_sudo` still caches the
+# credential once up front, which is the one prompt this repo accepts.
+sudo() {
+    if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; then
+        command sudo -n "$@"
+    else
+        command sudo "$@"
+    fi
+}
+
 front_load_sudo() {
     cmd_exists sudo || return 0
+    # --non-interactive promises a hands-off run, and a TTY check alone does not
+    # deliver that: on a real terminal `sudo -v` below prompts and waits forever
+    # with nobody to type. Privileged steps must skip themselves instead.
+    [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 0
     [[ -t 0 ]] || return 0
     sudo -n true 2>/dev/null && return 0   # already cached — no prompt needed
     log_info "Some steps need administrator access — caching sudo credentials up front."
@@ -538,7 +563,8 @@ install_rust_toolchain() {
             rustup default stable 2>/dev/null || log_warning "rustup default stable failed"
         fi
     else
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet \
+            || log_warning "rustup install failed — continuing without a Rust toolchain"
     fi
     source "$HOME/.cargo/env" 2>/dev/null || true
 }
@@ -716,7 +742,10 @@ run_parallel() {
     fi
 
     # Cleanup
-    rm -rf "$tmpdir"
+    # `|| true`: a job's own background grandchild can still be writing here
+    # when wait() returns, and rm -rf then loses the race with ENOTEMPTY. A
+    # leaked temp dir is harmless; ending the run over one is not.
+    rm -rf "$tmpdir" 2>/dev/null || true
     return 0
 }
 
@@ -724,17 +753,25 @@ run_parallel() {
 
 # Set ZSH as default shell if possible
 set_zsh_default() {
-    [[ "$SHELL" == *"zsh"* ]] && return 0
+    # ${SHELL:-}: unset in containers and under cron, and `set -u` would abort.
+    [[ "${SHELL:-}" == *"zsh"* ]] && return 0
 
+    # `|| true`: this runs inside the zsh-installation step, so zsh may well be
+    # absent — which is what the `-x` check below is for. Without the swallow
+    # `set -e` aborted here and never reached it.
     local zsh_path
-    zsh_path=$(which zsh 2>/dev/null)
+    zsh_path=$(command -v zsh 2>/dev/null) || true
 
     if [[ -x "$zsh_path" ]] && sudo -n true 2>/dev/null; then
         log_info "Setting ZSH as default shell..."
         grep -qxF "$zsh_path" /etc/shells 2>/dev/null || \
             echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
-        chsh -s "$zsh_path"
-        log_success "Default shell changed to ZSH"
+        # Via sudo, not bare: bare chsh authenticates through PAM on stdin and
+        # blocks forever in an unattended run. The `sudo -n true` above already
+        # proved sudo is cached, so this route needs no prompt at all.
+        sudo chsh -s "$zsh_path" "$(id -un)" </dev/null \
+            && log_success "Default shell changed to ZSH" \
+            || log_warning "Could not change default shell — run: chsh -s $zsh_path"
     fi
 }
 
@@ -903,10 +940,13 @@ install_gh_from_release() {
     esac
 
     mkdir -p "$HOME/.local/bin"
+    # `|| log_warning`: this chain is the function's last statement, so with no
+    # network its non-zero status became install.sh's exit status.
     curl -sSL "https://github.com/cli/cli/releases/download/v${version}/gh_${version}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz && \
     tar -xzf /tmp/gh.tar.gz -C /tmp && \
     mv "/tmp/gh_${version}_linux_${arch}/bin/gh" "$HOME/.local/bin/" && \
-    rm -rf /tmp/gh.tar.gz "/tmp/gh_${version}_linux_${arch}"
+    rm -rf /tmp/gh.tar.gz "/tmp/gh_${version}_linux_${arch}" \
+        || log_warning "gh download failed — install it manually"
 }
 
 # ─── Node.js LTS (global runtime, NOT a mise tool) ────────────────────────────
@@ -929,7 +969,7 @@ install_node() {
     # is the codename (truthy) for LTS releases, false otherwise.
     local want
     want=$(curl -fsSL https://nodejs.org/dist/index.json 2>/dev/null \
-        | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null)
+        | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null) || true
     [[ "$want" =~ ^[0-9]+$ ]] || want=24
     if is_installed node && (( $(node -v | cut -d. -f1 | tr -d 'v') >= want )); then
         return 0
@@ -944,10 +984,14 @@ install_node() {
     # install on its exit code — doing so once left a box on stock Ubuntu node.
     # Install unconditionally; apt resolves the NodeSource candidate (a higher
     # version than Ubuntu's, so an already-installed nodejs is upgraded in place).
-    local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash - \
+    # An array, not a string: as root SUDO is empty, and an unquoted empty scalar
+    # would leave `-E bash -` as the command — zsh does not word-split scalars, so
+    # `SUDO="sudo -E"` would not work either. Running as root (containers, RunPod)
+    # used to hit exactly that and skip the NodeSource repo entirely.
+    local -a SUDO=(); [[ $EUID -ne 0 ]] && SUDO=(sudo -E)
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | "${SUDO[@]}" bash - \
         || log_warning "NodeSource setup script exited non-zero (repo may still be configured) — continuing"
-    $SUDO apt-get install -y nodejs || log_warning "Node install via apt failed — install Node LTS manually"
+    "${SUDO[@]}" apt-get install -y nodejs || log_warning "Node install via apt failed — install Node LTS manually"
 }
 
 # ─── Mise (Universal Version Manager) ─────────────────────────────────────────
@@ -959,7 +1003,9 @@ install_mise() {
 
     log_info "Installing mise..."
     mkdir -p "$HOME/.local/bin"
-    curl https://mise.run | sh
+    # `|| true`: with no network curl fails, pipefail propagates it, and `set -e`
+    # aborted before the "mise installation failed" warning below could run.
+    curl -fsSL https://mise.run | sh || true
     export PATH="$HOME/.local/bin:$PATH"
 
     if cmd_exists mise; then
@@ -1065,7 +1111,9 @@ install_docker() {
 
     # Add current user to docker group (avoids needing sudo)
     # This runs even if Docker was already installed, in case user wasn't added to group
-    local current_user="${SUDO_USER:-$USER}"
+    # $USER is unset in containers and some CI shells; `set -u` would abort the
+    # whole install here, so fall back to id(1) rather than trusting the env.
+    local current_user="${SUDO_USER:-${USER:-$(id -un)}}"
     if [[ -n "$current_user" ]] && [[ "$current_user" != "root" ]]; then
         if ! groups "$current_user" 2>/dev/null | grep -q '\bdocker\b'; then
             usermod -aG docker "$current_user" 2>/dev/null || true

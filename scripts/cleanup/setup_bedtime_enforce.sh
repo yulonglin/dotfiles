@@ -15,6 +15,16 @@ INSTALLED_BIN="/usr/local/bin/enforce-timezone"
 [[ "$(uname -s)" != "Darwin" ]] && exit 0
 
 # Uninstall first (idempotent)
+# deploy.sh runs this unattended. Every step below needs root, and a sudo
+# password prompt here would block the whole deploy on a stdin nobody is
+# typing into — helpers.sh's sudo() wrapper is a shell function and does not
+# cross into this separate process. Skip instead of hanging.
+if ! sudo -n true 2>/dev/null \
+   && { [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; }; then
+    echo "bedtime enforcement needs sudo — skipping (run from a terminal)" >&2
+    exit 0
+fi
+
 sudo launchctl unload "$PLIST" 2>/dev/null || true
 [[ -f "$PLIST" ]] && sudo rm -f "$PLIST"
 

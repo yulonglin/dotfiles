@@ -1,0 +1,72 @@
+name: install/deploy stall checks
+
+# install.sh and deploy.sh are meant to be runnable unattended — from CI, from
+# scripts/cloud provisioning, from a fresh box over SSH. The failure mode that
+# matters there is not a crash but a *stall*: the script stops at a prompt
+# nobody is there to answer and waits forever, which is indistinguishable from
+# slow work until someone gives up on it. A silent mid-run abort (`set -euo
+# pipefail` killing the run after a probe for an absent tool) is the same class
+# of problem seen from the other side — the script "finished", having skipped
+# every component below the failure.
+#
+# These jobs run both scripts end-to-end against a throwaway HOME with an stdin
+# that never delivers a byte, and fail on either outcome.
+#
+# No path filter: deploy.sh reaches most of the repo (config/, scripts/,
+# claude/, custom_bins/), so a filter narrow enough to be meaningful would be
+# wrong more often than it saved a minute. The whole suite runs in about a
+# minute.
+#
+# First-party actions only (actions/*), matching this repo's supply-chain
+# posture — same rule as build-claude-tools.yml.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stall-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guards:
+    name: Stall guards (static)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert the no-prompt guards are intact
+        run: bash tests/test_stall_guards.sh
+
+  no-stall:
+    name: No stall (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # A healthy run takes about a minute. This is sized so that the WORST case
+    # still fits: a regression stalling all 16 cases costs 16 x 60s, and the job
+    # must outlive that to report the stalls rather than be cancelled mid-way.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      # Each case really finishes in a couple of seconds, so this is ~30x
+      # headroom. It is deliberately not larger: a regression that stalls every
+      # case must still fit inside timeout-minutes below, or the job is
+      # *cancelled* rather than reporting the stall it was built to report.
+      STALL_CASE_TIMEOUT: "60"
+    steps:
+      - uses: actions/checkout@v4
+
+      # install.sh and deploy.sh are zsh scripts. macOS ships zsh already.
+      - name: Install zsh
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y zsh
+
+      - name: install.sh / deploy.sh must never wait for input
+        run: python3 tests/test_install_deploy_no_stall.py -v
