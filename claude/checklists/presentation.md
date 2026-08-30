@@ -18,6 +18,8 @@ Papers and reports keep their numerical tables: venue norms make the main-result
 
 The rule governs how **results are presented**. It does not govern the per-example tables a reader uses to **inspect evidence** — one row per sample, sorted and filtered from the headers — which are a `results-analysis.md` affordance. Results go in plots; evidence goes in tables you can sort and filter.
 
+**Where the sources disagree: the two-bar chart.** Tufte's rule 22, as the `tufte-data-viz` skill carries it, holds that a chart of two bars is almost always worse than a sentence; the escalate-and-stop rule above sends any comparison to a plot. Both are stated rather than averaged, because they optimise for different things — Tufte for ink spent per number, this file for a reader comparing conditions across a page full of them. Judge it on what the two values are: the whole finding, quoted once, is a sentence, while one comparison among several a reader will make is a plot, so that every comparison on the page reads the same way.
+
 - **One plot per claim.** A summary claim may open the page with its own summary plot.
 - **A paragraph carries at most one measured quantity, and that quantity carries its interval and its n.** An abstract's headline effect is exactly this case, and it keeps its uncertainty. A second measured quantity in the same paragraph is a figure or a table you have not drawn yet.
 - Chunks of prose are fine and skimmable, so length is not what is being policed here — the problem is density of digits.

@@ -40,7 +40,7 @@ The enumerate helper (`scripts/helpers/enumerate_claude_skills.sh`) emits skills
 1. **User skills** — highest priority (your custom skills always win)
 2. **Standalone skills** — `.md` files directly in `skills/`
 3. **Plugin skills from `marketplaces/`** — canonical, git-cloned, always latest
-4. **Plugin skills from `cache/ai-safety-plugins/`** — user's custom plugins
+4. **Plugin skills from `cache/ai-safety-plugins/`** — a stale tier. That marketplace is retired and its plugins are tombstoned in `enabledPlugins`, but its cache directory survives with 36 `SKILL.md` files, so this tier still exports retired skills to Codex and Gemini. Dedup is by name, so any cached skill whose name now exists under `claude/skills/` is shadowed by tier 1; the ones dropped rather than migrated are not, and clearing the cache is what actually removes them
 5. **Plugin skills from remaining `cache/`** — versioned snapshots (may be stale)
 6. **Agent skills** — lowest priority
 

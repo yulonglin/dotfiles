@@ -59,7 +59,7 @@ The question is API-bound, GPU-bound, or memory-heavy — then route:
 
 Sweeping variants is fine and often the point, but **the winner is a hypothesis, not a result** — it needs fresh episodes before it is quoted. Say explicitly whether a run was exploratory or confirmatory.
 
-**One draw at temperature above zero is a sample, not a number.** Any stochastic run quoted as a result was either repeated across a stated number of seeds — three is the floor — with the variance reported, or run at temperature 0 — and the report says which of the two it was. A single nondeterministic draw quoted as a result is the cheapest way to publish noise.
+**One draw at temperature above zero is a sample, not a number.** Any stochastic run quoted as a result was either repeated across a stated number of seeds — at least two, the floor `results-analysis.md` sets and the one place to change it — with the variance reported, or run at temperature 0 — and the report says which of the two it was. A single nondeterministic draw quoted as a result is the cheapest way to publish noise.
 
 Keep pinned revisions, seeds, prompt hashes and rendered inputs. Delete guard machinery that has broken more of the last ten runs than it caught problems in — counted from the run log, not from memory, because a guard is remembered by its last save and forgotten for every hour it cost.
 

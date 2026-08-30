@@ -1,5 +1,9 @@
-//! Claude Code status line (Rust primary, for low-latency rendering).
-//! Bash fallback: claude/statusline.sh (keep feature-parity when editing either).
+//! Claude Code status line — the only implementation. The claude/statusline.sh
+//! fallback was retired on 2026-08-30, so an edit here changes what renders with
+//! nothing to cross-check it: the guard is tests/test_statusline_classifier.sh
+//! and tests/test_statusline_usage_gauge.sh, which pin the output to literal
+//! expected strings. Rebuild every platform asset you can and check
+//! scripts/check-claude-tools-fresh.sh — the committed binary is what runs.
 
 use serde::Deserialize;
 use std::fmt::Write;
@@ -263,13 +267,15 @@ fn format_git_info(output: &mut String, cwd: &str) {
 
 /// Model display name in brackets, with the reasoning effort folded in when the
 /// model reports one: "[Opus 5 (high)]". Effort keeps its own colour inside the
-/// blue bracket, so the bracket colour is re-opened after the suffix.
+/// blue bracket, so the bracket colour is re-opened after the suffix — at normal
+/// intensity (SGR 22), since a bare SGR 34 would leave the dim levels' SGR 2 set
+/// and render the closing bracket dimmer than the opening one.
 /// Effort has no segment of its own — a payload with an effort but no model
 /// display name renders neither, which Claude Code never sends.
 fn format_model_str(model: Option<&Model>, effort: Option<&Effort>) -> Option<String> {
     let name = model.and_then(|m| m.display_name.as_deref()).filter(|n| !n.is_empty())?;
     match format_effort_suffix(effort) {
-        Some(suffix) => Some(format!("\x1b[34m[{} {}\x1b[34m]\x1b[0m", name, suffix)),
+        Some(suffix) => Some(format!("\x1b[34m[{} {}\x1b[22;34m]\x1b[0m", name, suffix)),
         None => Some(format!("\x1b[34m[{}]\x1b[0m", name)),
     }
 }
@@ -277,7 +283,7 @@ fn format_model_str(model: Option<&Model>, effort: Option<&Effort>) -> Option<St
 /// Compact token count: "845" under a thousand, "123k", "1.0M".
 /// The `k` branch stops below 999_500 so a value that would round to "1000k"
 /// renders as "1.0M" instead.
-/// Parity: claude/statusline.sh::format_tokens
+/// Both boundaries are pinned in tests/test_statusline_classifier.sh.
 pub fn format_tokens(n: u64) -> String {
     if n < 1_000 {
         n.to_string()
@@ -320,8 +326,9 @@ fn format_context_usage_str(context_window: Option<&ContextWindow>) -> Option<St
 /// Live reasoning effort from `effort.level`, as the parenthesised suffix that
 /// goes inside the model bracket. Dim for the everyday levels; yellow for
 /// xhigh/max, which cost enough to be worth noticing. Deliberately leaves the
-/// colour open — format_model_str re-opens blue for the closing bracket.
-/// Parity: claude/statusline.sh (REASONING EFFORT section)
+/// colour and intensity open — format_model_str restores both for the closing bracket.
+/// tests/test_statusline_classifier.sh pins the resulting bytes for both the
+/// dim and the yellow case, so a palette change fails there rather than silently.
 fn format_effort_suffix(effort: Option<&Effort>) -> Option<String> {
     let level = effort
         .and_then(|e| e.level.as_deref())

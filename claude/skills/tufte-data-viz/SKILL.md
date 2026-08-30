@@ -75,7 +75,7 @@ Charts should be approximately 50% wider than tall. Standard sizes: 600x400, 750
 
 ### 8. Gray first, highlight selectively
 
-The default data series color is medium gray (`#666`). Use a single accent color to highlight the most important series or data point. Never use more than 4 distinct colors. Choose the right palette type: **categorical** (4-color muted) for unordered groups, **sequential** (single-hue ramp) for ordered magnitude, **diverging** (two-hue from center) for deviation from a midpoint. See `rules/typography-and-color.md` for hex values.
+The default data series color is medium gray (`#666`). Use a single accent color to highlight the most important series or data point. Never use more than 5 distinct colors — the house range is roughly three to five (`~/.claude/checklists/presentation.md`). Choose the right palette type: **categorical** (4-color muted) for unordered groups, **sequential** (single-hue ramp) for ordered magnitude, **diverging** (two-hue from center) for deviation from a midpoint. See `rules/typography-and-color.md` for hex values.
 
 ### 9. Off-white background
 
@@ -131,7 +131,7 @@ Abbreviate large numbers: $1.2M not $1,200,000. Use thousand separators for mid-
 
 ### 22. Don't chart what a sentence can say
 
-If the data is 1–2 numbers, write a sentence with inline context ("Revenue was $4.2M, up 23% from Q2"). If the data is a simple ranking of 3–5 items, consider a table. Charts earn their space by revealing patterns, trends, or distributions that text and tables cannot. A chart of two bars is almost always worse than a sentence.
+If the data is 1–2 numbers, write a sentence with inline context ("Revenue was $4.2M, up 23% from Q2"). If the data is a simple ranking of 3–5 items, consider a table. Charts earn their space by revealing patterns, trends, or distributions that text and tables cannot. A chart of two bars is almost always worse than a sentence — the house checklist disagrees for pages and slides, and both positions are stated rather than averaged in `~/.claude/checklists/presentation.md` § Plots carry pages, tables carry papers.
 
 ---
 

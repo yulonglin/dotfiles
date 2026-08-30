@@ -48,7 +48,7 @@ The Go server is **read-only by default**. Write tools require `ENABLE_WRITES=tr
 
 ### macOS (already configured)
 
-The `things-mcp` plugin is installed globally. No additional setup needed — it reads the local Things 3 SQLite database directly.
+The `things-mcp` plugin reads the local Things 3 SQLite database directly and needs no other setup — it runs `uvx --from git+https://github.com/yulonglin/things-mcp things-mcp`. It was enabled in `settings.json` on 2026-08-30; before that the marketplace was configured but the plugin was never actually enabled, so the tools were silently absent.
 
 ### Linux (requires setup)
 

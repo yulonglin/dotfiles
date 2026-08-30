@@ -4,7 +4,7 @@
 #
 # Outputs the machine name for display, used by:
 # - config/p10k.zsh (prompt_remote_host)
-# - claude/statusline.sh (machine info display)
+# - tools/claude-tools/src/statusline.rs (machine info display)
 #
 # Output format: "EMOJI NAME" (e.g., "🚀 hetzner-1")
 # Outputs nothing if machine is not registered and not in SSH session.

@@ -229,7 +229,7 @@ This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/c
 
 - **`CLAUDE.md`** — Slim identity file (~55 lines) pointing at modular rules and docs
 - **`rules/`** — 8 auto-loaded behavioral rules holding only always-relevant judgment (safety, delegation, communication, research integrity, experiments, etc.). Activity-scoped procedure lives in skills instead; the `catalog` skill indexes which skill owns what
-- **`agents/`** — Personal agents (kept lean — most specialized agents live in plugins like `ai-safety-plugins`)
+- **`agents/`** — Personal agents, version-controlled here. The specialized ones used to live in the `ai-safety-plugins` marketplace; that marketplace is retired and its agents were migrated in
 - **`skills/`** — Project-level slash commands: `/commit`, `/merge-worktree`, `/jobs`, `/modal`, `/mv-repo`, etc.
 - **`hooks/`** — 40+ PreToolUse/PostToolUse/SessionStart scripts: approval classifier, secret blocking, modern-tool nudges, post-rebase guards, network audit
 - **`templates/`** — Research spec template
@@ -244,17 +244,15 @@ Claude Code supports community plugin marketplaces. These are declared natively 
 | Marketplace                                                                         | What's in it                                                     |
 | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | **[claude-plugins-official](https://github.com/anthropics/claude-plugins-official)** | Superpowers, hookify, plugin-dev, commit-commands, productivity, engineering |
-| **[ai-safety-plugins](https://github.com/yulonglin/ai-safety-plugins)**             | Research, writing, code, workflow, viz — for AI safety work      |
-| **[productivity-tools](https://github.com/yulonglin/productivity-tools)**           | Personal productivity utilities                                  |
-| **[ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)**  | Design styles, palettes, production-grade frontend               |
+| **[productivity-tools](https://github.com/yulonglin/productivity-tools)**           | The Bear and Things 3 MCP servers                                |
 | **[alignment-hive](https://github.com/Crazytieguy/alignment-hive)**                 | Alignment research utilities                                     |
 | **[codex-plugin-cc](https://github.com/crazytieguy/codex-plugin-cc)**               | Codex CLI integration plugins                                    |
 
 
-**Every installed plugin is enabled everywhere** — no profiles, no per-project setup step. Which plugins a machine should have is the `enabledPlugins` map in the same `settings.json`, where every entry is `true`. Full detail: [`docs/plugin-management.md`](./docs/plugin-management.md).
+**Every plugin that is on is on everywhere** — no profiles, no per-project setup step. Which plugins a machine should have is the `enabledPlugins` map in the same `settings.json`: 13 entries are `true`, and 7 are `false` tombstones for retired plugins. **The tombstones are load-bearing** — removing a plugin's marketplace does not disable it, so a retired plugin with a surviving install record keeps loading until `enabledPlugins` says `false`. Full detail: [`docs/plugin-management.md`](./docs/plugin-management.md).
 
 ```bash
-claude plugin install <plugin>@<marketplace>    # then add the same key to enabledPlugins
+claude plugin install <plugin>@<marketplace>    # then add the same key to enabledPlugins as true
 claude plugin list                              # what's installed, and at which scope
 ```
 

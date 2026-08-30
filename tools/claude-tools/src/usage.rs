@@ -176,8 +176,10 @@ fn render_bucket(output: &mut String, label: &str, pct: u8, resets_at: Option<&s
 const GAUGE_GLYPHS: [char; 5] = ['\u{25CB}', '\u{25D4}', '\u{25D1}', '\u{25D5}', '\u{25CF}'];
 
 /// Quantise a percentage to a gauge level. Integer round-half-up over
-/// `GAUGE_GLYPHS.len() - 1` steps; `claude/statusline.sh` must compute this
-/// identically, so keep it integer arithmetic on both sides.
+/// `GAUGE_GLYPHS.len() - 1` steps — keep it integer arithmetic: a float path
+/// would reintroduce the half-to-even rounding that once put 12.5 on the wrong
+/// glyph. tests/test_statusline_usage_gauge.sh pins every boundary and the
+/// interior of each band against literal glyphs.
 fn gauge_level(pct: u8) -> usize {
     let steps = (GAUGE_GLYPHS.len() - 1) as u16;
     let pct = (pct as u16).min(100);

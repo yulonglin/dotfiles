@@ -15,7 +15,7 @@ It covers PEEL as the paragraph unit and the test that the first sentences alone
 - a draft is finished and the risk is being **misread**: the `reduce-ambiguity` skill
 - you want critics run over a draft: the `review-draft` skill, which dispatches `clarity-critic`, `narrative-critic`, `red-team` and `fact-checker`
 - the writing is a **results** page: `~/.claude/checklists/results-analysis.md` for its shape and evidence standards
-- numbers are involved: they belong in plots, not prose or tables — `house-plots` for papers, the built-in `dataviz` for artifact pages
+- numbers are involved: where they go — plot, table or sentence — is `~/.claude/checklists/presentation.md`; `house-plots` (papers) and the built-in `dataviz` (artifact pages) cover drawing the chart once that is settled
 
 ## Why this file is thin
 
