@@ -73,10 +73,11 @@ Checking must happen on the live `Figure` — a saved PNG no longer knows where 
 | `references/matplotlib.md` | Callout shapes, curved annotation arrows, error bars, common chart patterns |
 | `references/visual-layout-quality.md` | Arrow anchoring, label placement in empty space, spacing floors — read whenever adding annotations to any chart |
 
-For chart *design* — mark choice, colour assignment, legends, dashboards — load the built-in `dataviz` skill instead; it covers that across every medium. For LaTeX diagrams use the `viz:tikz-diagrams` plugin. For mechanisms and flows on a page, mermaid renders natively in Artifacts with no library.
+For chart *design* — mark choice, colour assignment, legends, dashboards — load the built-in `dataviz` skill instead; it covers that across every medium. **This file owns the house style; `tufte-data-viz` owns the quality pass** — load it to review or clean up any chart, in any library or medium, against data-ink, direct labeling, range-frame axes and accessibility, once the style here is picked. For LaTeX diagrams use the `tikz-diagrams` skill. For mechanisms and flows on a page, mermaid renders natively in Artifacts with no library.
 
 ## Conventions
 
+- **Numbers belong in the plot, not in prose and not in a table.** The surrounding text says how to read the chart — direction, comparison, what to look at — and leaves the values to the chart itself. Hyperparameters are the exception: they are settings rather than results, so a table suits them.
 - Figures are self-explanatory: title, axis labels, legend. Embed in the report page rather than shipping loose PNGs.
 - Fonts fall back sanely (Styrene B LC → Helvetica → DejaVu Sans); there is no font install step.
 - `lib/plotting` has **no `__init__.py` on purpose** — it goes on `sys.path` as a bare directory, so every import inside it is flat. A relative import there breaks the deployed copy while looking fine locally. Pinned by `tests/test_plotting_merge.py`.

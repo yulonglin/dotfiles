@@ -118,7 +118,9 @@ def test_layer_js_has_the_touch_and_focus_safeguards() -> None:
     assert "if (autofocus) txt.focus();" in js
     assert 'addEventListener("beforeunload"' in js
     assert "restoreHighlights" in js and "localStorage" in js
-    assert "window.confirm(" in js  # Clear all asks first
+    # Delete all still asks first, in the page rather than through a dialog
+    # the sandboxed viewer ignores -- see the two tests further down.
+    assert "if (!arm(this, (dirty ?" in js
 
 
 def test_no_selection_event_can_close_the_note_box() -> None:
@@ -167,7 +169,49 @@ def test_storage_stays_readable_by_older_deployed_layers() -> None:
     assert "savedAt" not in js and "STORE_V" not in js, "envelope reintroduced"
     assert "function saveDraft()" in js and "function restoreDraft()" in js
     assert 'addEventListener("pagehide"' in js
-    assert "tryDownload" in js
+
+
+def test_no_download_path() -> None:
+    """The layer offers no file download, deliberately.
+
+    The Artifact viewer never grants a page download permission, so a Download
+    button was inert exactly where these pages are read, while still making
+    every publish warn that the page offers the viewer a file. Copy all is the
+    single export, with the selectable textarea as its fallback.
+    """
+    mod = _layer_module()
+    js, html = mod.JS, mod.HTML
+    assert "tryDownload" not in js, "download path reintroduced"
+    assert "createObjectURL" not in js, "blob save reintroduced"
+    assert 'id="anDownload"' not in html and 'id="anExportBtn"' not in html
+    # The bar is exactly two controls; per-comment edit and delete carry the rest.
+    assert 'id="anCopy"' in html and 'id="anClear"' in html
+    assert "openExport()" in js, "clipboard fallback lost"
+    assert 'x.textContent = "delete"' in js, "per-comment delete missing"
+
+
+def test_layer_keys_do_not_reach_the_host_page() -> None:
+    """Typing a note must never fire a host page's single-key shortcuts.
+
+    The comment box is a TEXTAREA, so a page guarding only INPUT lets every
+    letter double as a command -- on the context-ledger page, typing "d" in a
+    comment marked the selected row `drop`. The layer stops its own key events
+    at its root in the BUBBLE phase: handlers inside the layer have already
+    run, and document/window handlers never see the event. A capture listener
+    on window would fire too early and kill the layer's own Enter and Escape.
+    """
+    js = _layer_module().JS
+    assert 'root.addEventListener(type, function(ev){ ev.stopPropagation(); })' in js
+    for kind in ("keydown", "keypress", "keyup"):
+        assert f'"{kind}"' in js, f"{kind} not stopped at the layer root"
+    # Bubble phase means no third argument on the registration: a capture-phase
+    # stop would fire before the layer's own Enter and Escape and swallow them.
+    stop_line = next(
+        ln for ln in js.splitlines() if "ev.stopPropagation()" in ln and "root." in ln
+    )
+    assert "true" not in stop_line and "capture" not in stop_line, (
+        f"the stop must stay in the bubble phase: {stop_line.strip()}"
+    )
 
 
 def test_no_cross_document_or_mirrored_storage() -> None:
@@ -201,6 +245,51 @@ def test_a_failed_write_and_a_failed_copy_are_both_surfaced() -> None:
     assert "refused to store them" in js
     # markClean() must be reachable only once a copy has actually happened.
     assert "if (!ok) {" in js and "ok = true;" in js
+
+
+def test_layer_opens_no_blocking_dialog() -> None:
+    """A dialog-guarded delete is a dead button in the Artifact viewer.
+
+    The viewer renders the page inside a sandboxed iframe, and a sandbox
+    without the `allow-modals` keyword makes `window.confirm` return false
+    without ever asking -- Chrome only logs "Ignored call to ...". Both
+    delete controls read that refusal as "the user said no" and returned
+    early, so the click did nothing at all, silently. The same code worked in
+    a local tab, which is why it shipped. `window.alert` and `window.prompt`
+    are ignored in the same way, so none of the three may come back.
+    """
+    for name in ("JS", "HTML"):
+        s = getattr(_layer_module(), name)
+        for banned in ("window.confirm(", "confirm(", "alert(", "prompt("):
+            assert banned not in s, f"{name} calls {banned} -- a no-op in the viewer"
+
+
+def test_destructive_controls_arm_before_they_destroy() -> None:
+    """The in-page replacement for the dialog, on both delete controls.
+
+    A first click arms the button and makes it say what a second click will
+    destroy; `arm()` returns true only on that second click. The "not copied
+    out yet" warning the dialog used to carry moves onto the armed label,
+    and `render()` disarms so a rebuilt list cannot confirm a stale row.
+    """
+    js = _layer_module().JS
+    assert "function arm(btn, label)" in js
+    assert "function disarm()" in js
+    assert "var ARM_MS = 4000;" in js
+    assert 'btn.classList.add("anarmed");' in js
+    # Escape cancels, from the button and from outside the layer.
+    assert 'function escDisarm(ev){ if (ev.key === "Escape") disarm(); }' in js
+    assert 'root.addEventListener("keydown", escDisarm);' in js
+    assert 'document.addEventListener("keydown", escDisarm);' in js
+    # Delete all: guarded, and still says the comments were never copied out.
+    assert "if (!arm(this, (dirty ?" in js
+    assert "Not copied out yet" in js
+    # Per-comment delete: guarded too.
+    assert 'if (!arm(x, "click again")) return;' in js
+    # A re-render must not leave an arm standing on a row it just replaced.
+    assert "function render(){" in js and js.split("function render(){", 1)[1].lstrip().startswith("//")
+    assert "  disarm();\n  var list = $(\"anList\")" in js
+    assert ".anarmed" in _layer_module().CSS
 
 
 def test_layer_emits_no_raw_non_ascii() -> None:

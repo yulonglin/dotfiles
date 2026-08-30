@@ -5,9 +5,21 @@ description: Maintain and reconcile a repo's ARTIFACTS.md — the index mapping 
 
 # Keep ARTIFACTS.md and the Index Page in Step
 
-`rules/pointers.md` requires each repo to keep one index of its artifacts, each row stating the finding rather than only the title. This skill owns the shape of that index and the pass that repairs it. Building the pages themselves is `artifact-writing`; this is about not losing them afterwards.
+Each repo keeps one index of its artifacts, each row stating the finding rather than only the title, and one topic keeps one link — update a page in place rather than minting a URL per revision. This skill owns the shape of that index and the pass that repairs it. Building the pages themselves is `artifact-writing`; this is about not losing them afterwards.
 
 The canonical filename is **`ARTIFACTS.md` at the repo root**. One per repo.
+
+## The source lives in `artifacts/`, in git, before the publish
+
+A published page lives on someone else's server under an org you may leave, so it can become unreachable without anything local changing — an account switch, an org's External-sharing toggle, a plan change. The committed source is the durable copy, and the publish is the last step rather than the record.
+
+Every artifact gets `artifacts/<slug>/` in the repo the work belongs to: `meta.yml` (url, title, **org**, dates, status), whatever rebuilds the page, and a gitignored `build/` for output. Commit the inputs, not the output — a built page is regenerable and often megabytes. The exception is an input that is itself ephemeral, such as a scan of a live environment: that cannot be regenerated because the thing it measured has moved on, so snapshot it and date it.
+
+`meta.yml` carries the publishing **org**, which the gallery cannot give back afterwards and which is precisely what breaks on an account switch.
+
+This is enforced rather than remembered: `claude/hooks/block_throwaway_artifact_path.sh` refuses a publish whose `file_path` is gitignored or under a temp directory. The rule was written after a page was built in `tmp/` and published cleanly, with the loss invisible until the row was reviewed. Full convention: `artifacts/README.md`.
+
+For a repo whose artifacts are personal rather than about the code, the same layout goes in the private `dotfiles-personal` repo — this repo is public.
 
 ## Write the row at publish time, because the org cannot be recovered later
 

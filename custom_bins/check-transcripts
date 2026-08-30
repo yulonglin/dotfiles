@@ -1,0 +1,720 @@
+#!/usr/bin/env python3
+"""Tier 1 deterministic transcript checker for AI safety research experiments.
+
+Extracts and samples transcripts from experiment output files, runs deterministic
+checks (no LLM calls), and produces normalized output for an LLM-based reviewer
+agent to read.
+
+Supported formats: .eval (Inspect AI), .jsonl, .json, directories, raw text logs.
+
+Usage:
+    check-transcripts path/to/results.eval
+    check-transcripts path/to/results.jsonl --score-field outcome
+    check-transcripts path/to/output_dir/ --max-samples 10
+    check-transcripts path/to/results.json --score-threshold 0.5
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import re
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Sample:
+    """Normalized transcript sample."""
+    id: str
+    input: str
+    output: str
+    score: float | None
+    score_label: str  # "pass", "fail", "error"
+    messages: list[dict[str, str]]
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "input": self.input,
+            "output": self.output,
+            "score": self.score,
+            "score_label": self.score_label,
+            "messages": self.messages,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class Issue:
+    """A deterministic finding."""
+    severity: str  # CRITICAL, WARNING, INFO
+    type: str
+    message: str
+    affected_samples: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "severity": self.severity,
+            "type": self.type,
+            "message": self.message,
+            "affected_samples": self.affected_samples,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Format parsers — each returns list[Sample]
+# ---------------------------------------------------------------------------
+
+def _score_label(score: float | None, threshold: float) -> str:
+    if score is None:
+        return "error"
+    return "pass" if score >= threshold else "fail"
+
+
+def _extract_messages(obj: dict[str, Any]) -> list[dict[str, str]]:
+    """Best-effort message extraction from various schema shapes."""
+    if "messages" in obj and isinstance(obj["messages"], list):
+        return [
+            {"role": m.get("role", "unknown"), "content": str(m.get("content", ""))}
+            for m in obj["messages"]
+        ]
+    msgs: list[dict[str, str]] = []
+    for key in ("input", "prompt", "question", "task"):
+        if key in obj:
+            msgs.append({"role": "user", "content": str(obj[key])})
+            break
+    for key in ("output", "response", "answer", "completion"):
+        if key in obj:
+            msgs.append({"role": "assistant", "content": str(obj[key])})
+            break
+    return msgs
+
+
+def _get_nested(obj: dict[str, Any], dotted_key: str) -> Any:
+    """Retrieve a value by dotted path (e.g. 'result.score')."""
+    parts = dotted_key.split(".")
+    cur: Any = obj
+    for p in parts:
+        if isinstance(cur, dict) and p in cur:
+            cur = cur[p]
+        else:
+            return None
+    return cur
+
+
+def _obj_to_sample(
+    obj: dict[str, Any],
+    idx: int,
+    score_field: str,
+    score_threshold: float,
+    source_format: str,
+) -> Sample:
+    raw_score = _get_nested(obj, score_field)
+    score: float | None = None
+    if raw_score is not None:
+        try:
+            score = float(raw_score)
+        except (ValueError, TypeError):
+            pass
+
+    input_text = str(
+        obj.get("input", obj.get("prompt", obj.get("question", obj.get("task", ""))))
+    )
+    output_text = str(
+        obj.get("output", obj.get("response", obj.get("answer", obj.get("completion", ""))))
+    )
+    original_id = str(obj.get("id", obj.get("sample_id", "")))
+
+    return Sample(
+        id=f"sample_{idx:04d}",
+        input=input_text,
+        output=output_text,
+        score=score,
+        score_label=_score_label(score, score_threshold),
+        messages=_extract_messages(obj),
+        metadata={"source_format": source_format, "original_id": original_id},
+    )
+
+
+def parse_inspect_log(path: Path, score_field: str, score_threshold: float) -> list[Sample]:
+    """Parse Inspect AI .eval files using inspect_ai.log.read_eval_log()."""
+    try:
+        from inspect_ai.log import read_eval_log
+    except ImportError:
+        print(
+            "ERROR: inspect_ai is not installed. Cannot parse .eval files.\n"
+            "Install with: pip install inspect-ai",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    log = read_eval_log(str(path))
+    samples: list[Sample] = []
+    if not hasattr(log, "samples") or log.samples is None:
+        return samples
+
+    for idx, s in enumerate(log.samples):
+        input_text = ""
+        output_text = ""
+        messages: list[dict[str, str]] = []
+
+        if hasattr(s, "messages") and s.messages:
+            for m in s.messages:
+                role = getattr(m, "role", "unknown")
+                content = getattr(m, "content", "")
+                if isinstance(content, list):
+                    content = " ".join(
+                        str(c.text) if hasattr(c, "text") else str(c) for c in content
+                    )
+                messages.append({"role": str(role), "content": str(content)})
+            # First user message as input, last assistant message as output
+            user_msgs = [m for m in messages if m["role"] == "user"]
+            asst_msgs = [m for m in messages if m["role"] == "assistant"]
+            if user_msgs:
+                input_text = user_msgs[0]["content"]
+            if asst_msgs:
+                output_text = asst_msgs[-1]["content"]
+
+        # Score extraction
+        raw_score: float | None = None
+        if hasattr(s, "scores") and s.scores:
+            # scores is a dict of scorer_name -> Score object
+            for _scorer_name, score_obj in s.scores.items():
+                if hasattr(score_obj, "value"):
+                    try:
+                        raw_score = float(score_obj.value)
+                    except (ValueError, TypeError):
+                        # Handle string scores like "C" or "I"
+                        val = str(score_obj.value).upper()
+                        if val in ("C", "CORRECT", "PASS", "TRUE", "1"):
+                            raw_score = 1.0
+                        elif val in ("I", "INCORRECT", "FAIL", "FALSE", "0"):
+                            raw_score = 0.0
+                    break  # Use first scorer
+
+        original_id = str(getattr(s, "id", ""))
+        samples.append(Sample(
+            id=f"sample_{idx:04d}",
+            input=input_text,
+            output=output_text,
+            score=raw_score,
+            score_label=_score_label(raw_score, score_threshold),
+            messages=messages,
+            metadata={"source_format": "inspect_eval", "original_id": original_id},
+        ))
+    return samples
+
+
+def parse_jsonl(path: Path, score_field: str, score_threshold: float) -> list[Sample]:
+    """Parse line-by-line JSONL files. Tracks malformed lines for reporting."""
+    samples: list[Sample] = []
+    skipped = 0
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for idx, line in enumerate(f):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                skipped += 1
+                continue
+            samples.append(_obj_to_sample(obj, idx, score_field, score_threshold, "jsonl"))
+    if skipped:
+        print(f"WARNING: {skipped} JSONL lines failed to parse", file=sys.stderr)
+    return samples
+
+
+def parse_json_file(path: Path, score_field: str, score_threshold: float) -> list[Sample]:
+    """Parse a single JSON file with a samples/results array."""
+    with open(path) as f:
+        data = json.load(f)
+
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        items = data.get("samples", data.get("results", data.get("data", [])))
+        if not isinstance(items, list):
+            items = [data]
+    else:
+        items = []
+
+    return [
+        _obj_to_sample(obj, idx, score_field, score_threshold, "json")
+        for idx, obj in enumerate(items)
+        if isinstance(obj, dict)
+    ]
+
+
+def parse_directory(path: Path, score_field: str, score_threshold: float) -> list[Sample]:
+    """Scan directory for .json/.jsonl/.log files, one per sample."""
+    samples: list[Sample] = []
+    files = sorted(
+        f for f in path.iterdir()
+        if f.suffix in (".json", ".jsonl", ".log") and f.is_file()
+    )
+    for fp in files:
+        if fp.suffix == ".jsonl":
+            samples.extend(parse_jsonl(fp, score_field, score_threshold))
+        elif fp.suffix == ".json":
+            samples.extend(parse_json_file(fp, score_field, score_threshold))
+        else:
+            # Raw text log
+            samples.extend(parse_text(fp, score_field, score_threshold))
+    # Re-index
+    for i, s in enumerate(samples):
+        s.id = f"sample_{i:04d}"
+    return samples
+
+
+def parse_text(path: Path, score_field: str, score_threshold: float) -> list[Sample]:
+    """Parse raw text logs, splitting on common delimiters."""
+    text = path.read_text(errors="replace")
+    # Try splitting on common delimiters
+    delimiters = [
+        r"\n={3,}\n",     # ===...
+        r"\n-{3,}\n",     # ---...
+        r"\n\*{3,}\n",    # ***...
+        r"\n#{2,}\s",     # ## headers
+    ]
+    chunks: list[str] = []
+    for delim in delimiters:
+        parts = re.split(delim, text)
+        if len(parts) > 1:
+            chunks = [p.strip() for p in parts if p.strip()]
+            break
+    if not chunks:
+        chunks = [text.strip()] if text.strip() else []
+
+    samples: list[Sample] = []
+    for idx, chunk in enumerate(chunks):
+        samples.append(Sample(
+            id=f"sample_{idx:04d}",
+            input="",
+            output=chunk,
+            score=None,
+            score_label="error",
+            messages=[{"role": "assistant", "content": chunk}],
+            metadata={"source_format": "text", "original_id": ""},
+        ))
+    return samples
+
+
+# ---------------------------------------------------------------------------
+# Format detection
+# ---------------------------------------------------------------------------
+
+def detect_format(path: Path) -> str:
+    if path.is_dir():
+        return "dir"
+    suffix = path.suffix.lower()
+    if suffix == ".eval":
+        return "inspect"
+    if suffix == ".jsonl":
+        return "jsonl"
+    if suffix == ".json":
+        return "json"
+    # Heuristic: peek at first bytes
+    try:
+        head = path.read_bytes()[:4096] if path.stat().st_size > 0 else b""
+        stripped = head.lstrip()
+        if stripped.startswith(b"{") or stripped.startswith(b"["):
+            lines = head.split(b"\n")
+            json_lines = sum(1 for ln in lines[:10] if ln.strip().startswith(b"{"))
+            if json_lines >= 2:
+                return "jsonl"
+            return "json"
+    except OSError:
+        pass
+    return "text"
+
+
+PARSERS = {
+    "inspect": parse_inspect_log,
+    "jsonl": parse_jsonl,
+    "json": parse_json_file,
+    "dir": parse_directory,
+    "text": parse_text,
+}
+
+FORMAT_LABELS = {
+    "inspect": "inspect_eval",
+    "dir": "directory",
+    "jsonl": "jsonl",
+    "json": "json",
+    "text": "text",
+}
+
+
+# ---------------------------------------------------------------------------
+# Sampling
+# ---------------------------------------------------------------------------
+
+def compute_sample_count(total: int, max_samples: int) -> int:
+    """Adaptive: min(max(3, 5% of N), max_samples)."""
+    return min(max(3, int(total * 0.05)), max_samples)
+
+
+def select_samples(
+    all_samples: list[Sample],
+    max_samples: int,
+    rng: random.Random | None = None,
+) -> tuple[list[Sample], dict[str, int]]:
+    """Select a stratified sample: ~40% failures, ~30% successes, ~30% random.
+
+    Returns (selected_samples, breakdown_dict).
+    """
+    if rng is None:
+        rng = random.Random(42)
+
+    n = compute_sample_count(len(all_samples), max_samples)
+
+    failures = [s for s in all_samples if s.score_label == "fail"]
+    successes = [s for s in all_samples if s.score_label == "pass"]
+
+    # If <20 total, review ALL failures
+    if len(all_samples) < 20:
+        fail_quota = len(failures)
+    else:
+        fail_quota = max(1, int(n * 0.4))
+
+    success_quota = max(1, int(n * 0.3))
+    random_quota = max(1, n - fail_quota - success_quota)
+
+    selected_ids: set[str] = set()
+    selected: list[Sample] = []
+
+    def _add(pool: list[Sample], quota: int) -> int:
+        picked = 0
+        rng.shuffle(pool)
+        for s in pool:
+            if s.id not in selected_ids and picked < quota:
+                selected.append(s)
+                selected_ids.add(s.id)
+                picked += 1
+        return picked
+
+    fail_picked = _add(failures, fail_quota)
+    success_picked = _add(successes, success_quota)
+
+    # Random from everything remaining
+    remaining = [s for s in all_samples if s.id not in selected_ids]
+    random_picked = _add(remaining, random_quota)
+
+    # Fill any leftover quota
+    leftover = n - len(selected)
+    if leftover > 0:
+        remaining2 = [s for s in all_samples if s.id not in selected_ids]
+        extra = _add(remaining2, leftover)
+        random_picked += extra
+
+    breakdown = {
+        "failures": fail_picked,
+        "successes": success_picked,
+        "random": random_picked,
+    }
+    return selected, breakdown
+
+
+# ---------------------------------------------------------------------------
+# Deterministic checks
+# ---------------------------------------------------------------------------
+
+REFUSAL_MARKERS = [
+    "i cannot", "i'm sorry", "as an ai", "i apologize",
+    "i'm not able", "i must decline",
+]
+
+TOOL_ERROR_MARKERS = [
+    "timeout", "permission denied", "api error", "rate limit", "connection refused",
+]
+
+
+
+def run_checks(samples: list[Sample]) -> list[Issue]:
+    """Run all deterministic checks on the full sample set. Returns issues found."""
+    issues: list[Issue] = []
+    scores = [s.score for s in samples if s.score is not None]
+
+    # --- Degenerate scores ---
+    if len(scores) >= 3:
+        unique = set(scores)
+        if len(unique) == 1:
+            issues.append(Issue(
+                severity="CRITICAL",
+                type="degenerate_scores",
+                message=f"All {len(scores)} scores are identical ({scores[0]})",
+                affected_samples=[s.id for s in samples if s.score is not None],
+            ))
+        elif len(unique) == 2 and len(scores) >= 10:
+            # Check suspiciously uniform distribution (within 5% of 50/50)
+            counts = {v: scores.count(v) for v in unique}
+            ratios = [c / len(scores) for c in counts.values()]
+            if all(0.45 <= r <= 0.55 for r in ratios):
+                issues.append(Issue(
+                    severity="WARNING",
+                    type="degenerate_scores",
+                    message=f"Suspiciously uniform score distribution: {counts}",
+                    affected_samples=[],
+                ))
+
+    # --- Empty/truncated responses ---
+    empty_ids: list[str] = []
+    for s in samples:
+        out = s.output.strip() if s.output else ""
+        if not out or out in ("None", "null") or len(out) < 10:
+            empty_ids.append(s.id)
+    if empty_ids:
+        sev = "CRITICAL" if len(empty_ids) > len(samples) * 0.1 else "WARNING"
+        issues.append(Issue(
+            severity=sev,
+            type="empty_truncated_responses",
+            message=f"{len(empty_ids)} samples have empty or very short (<10 char) responses",
+            affected_samples=empty_ids,
+        ))
+
+    # --- Refusal markers ---
+    refusal_ids: list[str] = []
+    for s in samples:
+        lower_out = s.output.lower()
+        if any(marker in lower_out for marker in REFUSAL_MARKERS):
+            refusal_ids.append(s.id)
+    if refusal_ids:
+        sev = "CRITICAL" if len(refusal_ids) >= len(samples) * 0.5 else "WARNING"
+        issues.append(Issue(
+            severity=sev,
+            type="refusal_markers",
+            message=f"{len(refusal_ids)} samples contain refusal language",
+            affected_samples=refusal_ids,
+        ))
+
+    # --- Tool call errors ---
+    error_ids: list[str] = []
+    for s in samples:
+        lower_out = s.output.lower()
+        if any(marker in lower_out for marker in TOOL_ERROR_MARKERS):
+            error_ids.append(s.id)
+    if error_ids:
+        issues.append(Issue(
+            severity="WARNING",
+            type="tool_call_errors",
+            message=f"{len(error_ids)} samples contain tool/API error markers",
+            affected_samples=error_ids,
+        ))
+
+    # --- Score distribution anomalies ---
+    if len(samples) >= 20:
+        pass_count = sum(1 for s in samples if s.score_label == "pass")
+        fail_count = sum(1 for s in samples if s.score_label == "fail")
+        total_scored = pass_count + fail_count
+        if total_scored > 0:
+            pass_rate = pass_count / total_scored
+            if pass_rate > 0.9:
+                issues.append(Issue(
+                    severity="WARNING",
+                    type="score_distribution_anomaly",
+                    message=f"Very high pass rate: {pass_rate:.1%} ({pass_count}/{total_scored})",
+                    affected_samples=[],
+                ))
+            elif pass_rate < 0.1:
+                issues.append(Issue(
+                    severity="WARNING",
+                    type="score_distribution_anomaly",
+                    message=f"Very high fail rate: {1 - pass_rate:.1%} ({fail_count}/{total_scored})",
+                    affected_samples=[],
+                ))
+
+    # --- Format parsing failures (score is None when expected) ---
+    null_score_ids = [s.id for s in samples if s.score is None]
+    if null_score_ids and len(null_score_ids) < len(samples):
+        issues.append(Issue(
+            severity="WARNING",
+            type="format_parsing_failures",
+            message=f"{len(null_score_ids)}/{len(samples)} samples have null scores",
+            affected_samples=null_score_ids,
+        ))
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+
+def write_output(
+    output_dir: Path,
+    source: str,
+    format_detected: str,
+    all_samples: list[Sample],
+    selected: list[Sample],
+    breakdown: dict[str, int],
+    issues: list[Issue],
+    verbose: bool,
+) -> None:
+    """Write summary.json and per-sample files, print report to stdout."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    samples_dir = output_dir / "samples"
+    samples_dir.mkdir(parents=True, exist_ok=True)
+
+    # Score distribution
+    dist: dict[str, int] = {"pass": 0, "fail": 0, "error": 0}
+    for s in all_samples:
+        dist[s.score_label] = dist.get(s.score_label, 0) + 1
+
+    summary = {
+        "source": source,
+        "format_detected": format_detected,
+        "total_samples": len(all_samples),
+        "score_distribution": dist,
+        "issues": [i.to_dict() for i in issues],
+        "samples_extracted": len(selected),
+        "extraction_breakdown": breakdown,
+    }
+
+    with open(output_dir / "summary.json", "w") as f:
+        json.dump(summary, f, indent=2)
+
+    for s in selected:
+        with open(samples_dir / f"{s.id}.json", "w") as f:
+            json.dump(s.to_dict(), f, indent=2)
+
+    # Human-readable report
+    _print_report(str(output_dir), summary, issues, selected, verbose)
+
+
+def _print_report(
+    output_dir_str: str,
+    summary: dict[str, Any],
+    issues: list[Issue],
+    selected: list[Sample],
+    verbose: bool,
+) -> None:
+    print("=" * 60)
+    print("TRANSCRIPT CHECK REPORT")
+    print("=" * 60)
+    print(f"Source:            {summary['source']}")
+    print(f"Format detected:   {summary['format_detected']}")
+    print(f"Total samples:     {summary['total_samples']}")
+    dist = summary["score_distribution"]
+    print(f"Score dist:        pass={dist['pass']}  fail={dist['fail']}  error={dist['error']}")
+    print(f"Samples extracted: {summary['samples_extracted']}")
+    bd = summary["extraction_breakdown"]
+    print(f"  Breakdown:       failures={bd['failures']}  successes={bd['successes']}  random={bd['random']}")
+    print()
+
+    if issues:
+        print("-" * 40)
+        print("ISSUES FOUND")
+        print("-" * 40)
+        for iss in issues:
+            marker = {"CRITICAL": "!!!", "WARNING": " ! ", "INFO": " i "}.get(iss.severity, "   ")
+            print(f"  [{marker}] {iss.severity}: {iss.type}")
+            print(f"        {iss.message}")
+            if iss.affected_samples:
+                shown = iss.affected_samples[:5]
+                extra = f" (+{len(iss.affected_samples) - 5} more)" if len(iss.affected_samples) > 5 else ""
+                print(f"        Affected: {', '.join(shown)}{extra}")
+            print()
+    else:
+        print("No issues found.\n")
+
+    if verbose and selected:
+        print("-" * 40)
+        print("SAMPLED TRANSCRIPTS")
+        print("-" * 40)
+        for s in selected:
+            print(f"\n  [{s.id}] score={s.score} ({s.score_label})")
+            print(f"  Input:  {s.input[:120]}{'...' if len(s.input) > 120 else ''}")
+            print(f"  Output: {s.output[:120]}{'...' if len(s.output) > 120 else ''}")
+
+    print(f"\nFull output written to: {output_dir_str}")
+
+
+# ---------------------------------------------------------------------------
+# CLI entrypoint
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Tier 1 deterministic transcript checker for AI safety experiments.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("path", type=Path, help="Input file or directory")
+    parser.add_argument(
+        "--format", dest="fmt", default="auto",
+        choices=["auto", "eval", "jsonl", "dir", "json", "text"],
+        help="Input format (default: auto)",
+    )
+    parser.add_argument(
+        "--output-dir", type=Path, default=Path("transcript_review"),
+        help="Output directory (default: transcript_review)",
+    )
+    parser.add_argument(
+        "--max-samples", type=int, default=15,
+        help="Max samples to extract (default: 15)",
+    )
+    parser.add_argument(
+        "--score-field", default="score",
+        help="JSON field for outcome, supports dotted paths (default: score)",
+    )
+    parser.add_argument(
+        "--score-threshold", type=float, default=0.5,
+        help="Score threshold for pass/fail (default: 0.5, >=threshold = pass)",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true",
+        help="Show detailed output including sampled transcript previews",
+    )
+    args = parser.parse_args()
+
+    if not args.path.exists():
+        print(f"ERROR: Path does not exist: {args.path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Detect or map format
+    fmt = args.fmt
+    if fmt == "auto":
+        fmt = detect_format(args.path)
+    elif fmt == "eval":
+        fmt = "inspect"
+    elif fmt == "dir":
+        fmt = "dir"
+    format_label = FORMAT_LABELS.get(fmt, fmt)
+
+    if args.verbose:
+        print(f"Detected format: {format_label}")
+
+    # Parse all samples
+    parse_fn = PARSERS[fmt]
+    all_samples = parse_fn(args.path, args.score_field, args.score_threshold)
+
+    if not all_samples:
+        print("WARNING: No samples found in input.", file=sys.stderr)
+        write_output(
+            args.output_dir, str(args.path), format_label,
+            [], [], {"failures": 0, "successes": 0, "random": 0}, [], args.verbose,
+        )
+        return
+
+    # Run deterministic checks on ALL samples
+    issues = run_checks(all_samples)
+
+    # Stratified sampling
+    selected, breakdown = select_samples(all_samples, args.max_samples)
+
+    # Write structured output + print report
+    write_output(
+        args.output_dir, str(args.path), format_label,
+        all_samples, selected, breakdown, issues, args.verbose,
+    )
+
+
+if __name__ == "__main__":
+    main()

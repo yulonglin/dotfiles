@@ -9,6 +9,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 | Artifact | Org | Status | Source | Public | Updated |
 |---|---|---|---|---|---|
 | [Artifacts and Resources for dotfiles](https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802) — this index; a living index may name its function rather than assert a finding | see note | live | `ARTIFACTS.md` | no | 2026-08-29 |
+| [Context Ledger](https://claude.ai/code/artifact/439482e4-0d10-4715-a7d1-add2805e614a) — 134 components cost 17,246 tok every session, 60% of it always-loaded prose rather than skill descriptions; 67 of 120 skills/agents have never been invoked, and the rules cite four skills with zero uses | see note | live | `artifacts/context-ledger/` | no | 2026-08-29 |
 | [Task Lists Follow the Shell](https://claude.ai/code/artifact/242e3dbb-600d-44b4-87ae-9a688542e132) — every session already gets its own task list, so the wrapper must never export a shared ID; the daemon is the last place a stale one hides | see note | done | — | no | 2026-08-28 |
 | [Most of the setup now loads on demand](https://claude.ai/code/artifact/26852bc6-e36f-4b55-97db-d0d3473a0b49) — the always-loaded rules tier fell from ~76 KB to ~28 KB by moving activity-scoped procedure into skills | see note | done | — | no | 2026-08-28 |
 | [Pick The House Chart Style](https://claude.ai/code/artifact/aecdec3a-7fb5-43b3-8841-c4d176de379d) — the chart-style options put side by side for a decision | see note | done | — | no | 2026-08-28 |
@@ -33,7 +34,7 @@ Everything above except this index is `done`: each reports finished work whose c
 | Artifact gallery | Every artifact on the account, across repos, newest first and truncated by a listing window | [claude.ai/code/artifacts](https://claude.ai/code/artifacts) |
 | `dotfiles-personal` | The private repo holding `plans/`, `.remember/`, personal `docs/`, `config/machines.conf` — this repo is public, so personal working artifacts never live on a branch here | private GitHub repo |
 | Bitwarden Secrets Manager | API keys, reached per-project via `setup-envrc` and direnv, never globally exported | token at `~/.config/bws/token` |
-| Global rules | Always-loaded judgment; activity-scoped procedure lives in skills, indexed by `pointers.md` | `claude/rules/` |
+| Global rules | Always-loaded judgment; activity-scoped procedure lives in skills, indexed by `catalog` | `claude/rules/` |
 
 ## Publishing a page publicly is an org decision, not a local one
 

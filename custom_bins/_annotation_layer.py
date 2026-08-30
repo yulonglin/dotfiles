@@ -41,8 +41,13 @@ Behaviour, all of which the tests guard:
   parsed value and its whole script dies on anything else;
 - an end-of-page "Your comments" panel with Copy all (Markdown, `> quote`),
   Download .md, Export text (selectable textarea, since the Artifact viewer
-  blocks page-initiated downloads), and Clear all with a confirm. Only a copy
-  that actually happened clears the "not yet exported" state;
+  blocks page-initiated downloads), and Delete all. Only a copy that actually
+  happened clears the "not yet exported" state;
+- every destructive control asks twice in the page itself, never through a
+  blocking dialog. The Artifact viewer runs the page in a sandboxed iframe
+  with no `allow-modals` keyword, so `window.confirm` returns false without
+  ever asking and the browser only logs "Ignored call to ...". A delete
+  guarded that way is a dead button exactly where these pages are read;
 - a `beforeunload` guard while comments exist that have not been exported,
   which also saves the draft and attempts the download on the way out;
 - a fixed count badge that jumps to the panel.
@@ -145,7 +150,11 @@ mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--
 .anbtn{background:var(--an-accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
  font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}
 .anbtn.ghost{background:transparent;color:var(--an-soft);border:1px solid var(--an-rule)}
-.anbtn.ghost.danger{color:var(--an-bad);border-color:var(--an-bad)}
+.anbtn.ghost.danger,.anbtn.ghost.tiny.danger{color:var(--an-bad);border-color:var(--an-bad)}
+/* An armed control must not look like the button that just did nothing, so it
+   fills: the second click is visibly a different act from the first. */
+.anbtn.anarmed,.anbtn.ghost.danger.anarmed,.anbtn.ghost.tiny.danger.anarmed{
+ background:var(--an-bad);color:#fff;border-color:var(--an-bad)}
 .anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
 #anPop:not(.editing) #anDelete{display:none}
 /* Save leads: it is the first button in the DOM, so it is also first in tab
@@ -159,6 +168,7 @@ mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--
 #anComments h2{font-size:1.2rem;margin:0 0 .5rem;padding-bottom:.32rem;border-bottom:1px solid var(--an-rule)}
 #anComments .anscope{color:var(--an-soft);font-size:.86rem;margin:0 0 .6rem}
 .anbar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem}
+.anacts{display:flex;gap:.4rem;margin-top:.4rem}
 .ancount{color:var(--an-soft);font-size:.87rem}
 .ancount.warn{color:var(--an-bad);font-weight:650}
 .cmt{background:var(--an-bg);border:1px solid var(--an-rule);border-left:3px solid var(--an-accent);
@@ -187,13 +197,11 @@ mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--
 HTML = r"""
 <section id="anComments">
 <h2 id="your-comments">Your comments</h2>
-<p class="anscope">Select any text on this page to attach a note, then press Enter. Notes are saved in this browser and survive a refresh or a republish of this page &mdash; copy or download them to keep them anywhere else.</p>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Notes are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
 <div class="anbar">
   <span class="ancount" id="anCount">No comments yet</span>
   <button class="anbtn" id="anCopy">Copy all</button>
-  <button class="anbtn ghost" id="anDownload">Download .md</button>
-  <button class="anbtn ghost" id="anExportBtn">Export text</button>
-  <button class="anbtn ghost danger" id="anClear">Clear all</button>
+  <button class="anbtn ghost danger" id="anClear">Delete all</button>
   <span id="anToast"></span>
 </div>
 <div id="anList"></div>
@@ -269,9 +277,8 @@ document.addEventListener("visibilitychange", function(){
 window.addEventListener("beforeunload", function(e){
   saveDraft();
   if (!dirty || !comments.length) return;
-  // Works in an ordinary tab; the Artifact viewer blocks page-initiated
-  // downloads, which is why the confirm below and the stored copy both stay.
-  tryDownload();
+  // The comments are already in localStorage; this only warns that they have
+  // not been copied anywhere outside this browser yet.
   e.preventDefault(); e.returnValue = ""; return "";
 });
 // A second tab on the same page used to be last-writer-wins. Take its write
@@ -530,6 +537,47 @@ function unpackDraft(){
 }
 function markDirty(){ dirty = true; lsSet(DIRTY, "1"); }
 function markClean(){ dirty = false; lsSet(DIRTY, "0"); }
+
+// ---- destructive controls ------------------------------------------------
+// No blocking dialog appears here, and none may be added. The Artifact viewer
+// runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
+// `window.confirm` returns false without ever asking -- the browser just logs
+// "Ignored call to ...". Every delete guarded that way returned early on a
+// refusal the reviewer never saw: a dead button in the one place these pages
+// are read, and working perfectly in a local tab, which is why it survived.
+//
+// The guard is in the page instead. A first click arms the button and makes it
+// say what a second click will destroy; it disarms after ARM_MS, on Escape, or
+// on any re-render. Buttons are focusable, so Enter and Space arm and confirm
+// exactly like the pointer does.
+var ARM_MS = 4000;
+var armedBtn = null, armedLabel = "", armedTimer = 0;
+function disarm(){
+  if (!armedBtn) return;
+  // render() may already have thrown this button away; restoring a detached
+  // node is harmless but pointless.
+  if (armedBtn.isConnected) { armedBtn.textContent = armedLabel; armedBtn.classList.remove("anarmed"); }
+  clearTimeout(armedTimer);
+  armedBtn = null; armedLabel = ""; armedTimer = 0;
+}
+// True only on the confirming click. On any other click it arms `btn` and the
+// caller must return without destroying anything.
+function arm(btn, label){
+  if (armedBtn === btn) { disarm(); return true; }
+  disarm();
+  armedBtn = btn; armedLabel = btn.textContent;
+  btn.textContent = label;
+  btn.classList.add("anarmed");
+  armedTimer = setTimeout(disarm, ARM_MS);
+  return false;
+}
+// Escape cancels, whether focus sits on the armed button or anywhere else.
+// Both listeners are needed: the layer root stops key events from bubbling out
+// to the host page, so the document listener never sees a keystroke aimed at
+// the button, and a listener on the root alone would miss one aimed outside.
+function escDisarm(ev){ if (ev.key === "Escape") disarm(); }
+root.addEventListener("keydown", escDisarm);
+document.addEventListener("keydown", escDisarm);
 // A refused write is the one failure the page must not hide: with the quota
 // full, the panel would otherwise count a comment that is already gone.
 function persist(){
@@ -572,6 +620,9 @@ $("anSave").onclick = save;
 // Builds into a fragment and swaps once, so the list never blanks between
 // clearing and refilling.
 function render(){
+  // Any armed row button is about to be replaced, and an arm left standing on
+  // a list this rebuild has changed would confirm a different comment.
+  disarm();
   var list = $("anList"), count = $("anCount");
   badge.textContent = "\uD83D\uDCAC " + comments.length;
   badge.className = unsaved || (dirty && comments.length) ? "warn" : "";
@@ -584,7 +635,7 @@ function render(){
   }
   count.textContent = comments.length + (comments.length === 1 ? " comment" : " comments") +
     (unsaved ? " \u2014 this browser refused to store them, copy them now"
-             : dirty ? " \u2014 not yet exported" : " \u2014 exported");
+             : dirty ? " \u2014 not yet copied out" : " \u2014 copied out");
   count.className = "ancount" + (unsaved || dirty ? " warn" : "");
   var frag = document.createDocumentFragment();
   comments.forEach(function(c){
@@ -598,9 +649,23 @@ function render(){
       if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
       else openEdit(c, null);
     };
+    // Deleting one comment used to require opening its popup first, which is a
+    // detour for the commonest correction. It asks twice, because the note
+    // itself is the only copy and there is no undo.
+    var x = document.createElement("button");
+    x.className = "anbtn ghost tiny danger"; x.textContent = "delete";
+    x.onclick = function(){
+      if (!arm(x, "click again")) return;
+      comments = comments.filter(function(y){ return y.id !== c.id; });
+      unwrap(c.id);
+      if (editingId === c.id) closePop();
+      markDirty(); persist(); render();
+    };
     d.append(w, q, n);
     if (!hasMark(c)) { var o = document.createElement("div"); o.className = "orphan"; o.textContent = "quoted text not found on this version of the page"; d.append(o); }
-    d.append(a); frag.appendChild(d);
+    var acts = document.createElement("div"); acts.className = "anacts";
+    acts.append(a, x);
+    d.append(acts); frag.appendChild(d);
   });
   list.replaceChildren(frag);
 }
@@ -612,20 +677,14 @@ function markdown(){
 }
 function exportText(){ return "# Comments \u2014 " + document.title + "\n\n" + markdown() + "\n"; }
 function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
-// Saves the comments as a .md file. Works in an ordinary browser tab; the
-// Artifact viewer sandboxes the page without download permission and swallows
-// the click, which is why Copy all and Export text stay the reliable paths.
-function tryDownload(){
-  if (!comments.length) return false;
-  try {
-    var url = URL.createObjectURL(new Blob([exportText()], { type: "text/markdown" }));
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = (document.title || "comments").replace(/[^\w.-]+/g, "-").replace(/^-|-$/g, "") + "-comments.md";
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
-    return true;
-  } catch (e) { return false; }
+// There is deliberately no download path. The Artifact viewer never grants a
+// page download permission, so a Download button was inert exactly where these
+// pages are read, while still making every publish warn about an offered file.
+// Copy all is the one export, with the textarea below as its fallback.
+function openExport(){
+  var ta = $("anExportText"); ta.value = exportText();
+  $("anExport").style.display = "block";
+  ta.focus(); ta.select();
 }
 
 // Only a copy that actually happened may clear the export state — otherwise
@@ -644,37 +703,42 @@ $("anCopy").onclick = async function(){
     try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
     ta.remove();
   }
-  if (!ok) { $("anExportBtn").click(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
+  // Clipboard refused: fall back to the selectable textarea. Opening it is not
+  // exporting -- the state clears when the text is actually copied out of it.
+  if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
   markClean(); render();
   toast('<span class="anok">copied ' + comments.length + '</span>');
-};
-// The Artifact viewer blocks any page-initiated file save, so the export that
-// always works is a selectable textarea. Opening it is not exporting: the
-// state clears when the text is actually copied out of it, not before.
-$("anExportBtn").onclick = function(){
-  if (!comments.length) { toast('<span class="anok">nothing to export</span>', 1600); return; }
-  var ta = $("anExportText"); ta.value = exportText();
-  $("anExport").style.display = "block";
-  ta.focus(); ta.select();
 };
 $("anExportText").addEventListener("copy", function(){
   markClean(); render();
   toast('<span class="anok">copied ' + comments.length + '</span>');
 });
-$("anDownload").onclick = function(){
-  if (!comments.length) { toast('<span class="anok">nothing to download</span>', 1600); return; }
-  if (tryDownload()) { markClean(); render(); toast('<span class="anok">saved ' + comments.length + ' as .md</span>'); }
-  else $("anExportBtn").click();
-};
 $("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
 $("anClear").onclick = function(){
   if (!comments.length) return;
-  if (dirty && !window.confirm("These " + comments.length + " comments have not been copied or exported yet. Delete anyway?")) return;
-  if (!dirty && !window.confirm("Delete all " + comments.length + " comments?")) return;
+  // "Not copied out yet" is the whole reason this control asks twice, so the
+  // warning goes on the armed button, where it is read, rather than into a
+  // dialog the viewer never shows.
+  if (!arm(this, (dirty ? "Not copied out yet \u2014 click again to delete "
+                        : "Click again to delete ") + comments.length)) return;
   comments.slice().forEach(function(c){ unwrap(c.id); });
   comments = []; markClean(); persist(); render();
 };
 badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+// A host page may bind single-key shortcuts on document or window -- a triage
+// console where `d` means delete, a slideshow where `j` means next. Typing a
+// note would fire them: the keystroke bubbles out of this textarea and reaches
+// those listeners, so the page acts on every letter of the comment.
+//
+// Attached at the layer root in the BUBBLE phase, which is the only position
+// that separates the two. Handlers inside the layer (the textarea's own Enter
+// and Escape) sit deeper and have already run; document- and window-level
+// handlers sit higher and never see the event. A capture-phase listener on
+// window would be too early and would kill this layer's own keys as well.
+["keydown", "keypress", "keyup"].forEach(function(type){
+  root.addEventListener(type, function(ev){ ev.stopPropagation(); });
+});
 
 restoreHighlights();
 render();

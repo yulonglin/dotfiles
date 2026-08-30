@@ -4,7 +4,7 @@ For documents with **>20 claims**. Below that threshold, verify inline in main s
 
 This file is the *runtime* counterpart to `SKILL.md`'s *protocol*. The protocol tells you what to check; this tells you how to dispatch the check across parallel agents without losing state.
 
-For the orchestrator-mode framework itself (when to delegate, how to phrase agent prompts), see `core:orchestrate` — don't duplicate that here.
+When to delegate at all, and the TASK / CONTEXT / CONSTRAINTS / OUTPUT shape every dispatch has to state, are in `~/.claude/rules/delegation.md` — don't duplicate that here.
 
 ## Default batch profile
 

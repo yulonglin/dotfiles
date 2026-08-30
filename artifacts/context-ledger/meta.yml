@@ -1,0 +1,33 @@
+title: Context Ledger
+url: https://claude.ai/code/artifact/439482e4-0d10-4715-a7d1-add2805e614a
+org: unknown
+# `claude auth status` returned orgName: null on the publishing session while
+# reporting authMethod "claude.ai" and publishing without trouble, so this is
+# genuinely unrecorded rather than merely untyped. Stamp it from a session
+# where the field is populated. This is the value the gallery cannot give back
+# afterwards, which is why the field exists.
+first_published: 2026-08-29
+last_updated: 2026-08-30
+status: live
+
+builds_with: |
+  python3 inventory.py && python3 usage.py && python3 build.py
+  python3 asciify.py && python3 emit.py
+  annotate-html build/context-ledger.html
+  Scripts read and write beside themselves; run them from this directory.
+
+snapshot:
+  file: environment-scan.json.gz
+  taken: 2026-08-30
+  why: |
+    inventory.py scans the live Claude Code setup — enabled plugins, skill
+    bodies, invocation counts mined from ~/.claude/projects. That setup is
+    being actively pruned, so re-running it later measures a different
+    machine and cannot reproduce this page. The scan is the one input that
+    is not regenerable; the scripts beside it are.
+
+established: |
+  134 loaded components cost 17,214 tokens every session, 60% of it
+  always-loaded prose rather than skill descriptions. 64 of 120 skills and
+  agents had never been invoked across ~4,100 transcripts. Four skills cited
+  by always-loaded rules had zero invocations.

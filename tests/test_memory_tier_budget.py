@@ -43,8 +43,15 @@ ALWAYS_ON = [
     ("claude/rules/communication.md", 3100),
     ("claude/rules/delegation.md", 2600),
     ("claude/rules/experiments.md", 3050),
-    ("claude/rules/pointers.md", 1950),
-    ("claude/rules/research-core.md", 2600),
+    # pointers.md was deleted on 2026-08-30. Its whole job was indexing skills,
+    # and four of the skills it indexed had never been invoked in 4,100 sessions
+    # -- the index cost more every session than the things it indexed returned.
+    # Its one unique rule ("one topic keeps one link") moved into artifacts-sync.
+    # Cut to four red lines on 2026-08-30: nulls, ceilings, intervals, causal
+    # register, judge-not-regex and the terminology reference venues all live in
+    # the checklists now (results-analysis.md, presentation.md), which the rule
+    # routes to instead of restating.
+    ("claude/rules/research-core.md", 1400),
     ("claude/rules/safety.md", 2550),
     ("claude/rules/verify-before-instructing.md", 1050),
     ("claude/CLAUDE.md", 4250),

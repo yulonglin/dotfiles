@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import functools
 import http.server
+import re
 import shutil
 import socketserver
 import subprocess
@@ -160,6 +161,24 @@ def page(browser, site):
     finally:
         ctx.close()
 
+
+
+def open_export_via_blocked_clipboard(page) -> None:
+    """Open the export textarea the only way a reader now can.
+
+    The "Export text" button is gone: a page-initiated download is inert in
+    the Artifact viewer, so Copy all is the single export and the textarea is
+    its fallback when the clipboard refuses. Forcing that refusal is therefore
+    how the box opens.
+    """
+    page.evaluate(
+        "() => { Object.defineProperty(navigator, 'clipboard',"
+        "  {value: {writeText: () => Promise.reject(new Error('blocked'))},"
+        "   configurable: true});"
+        "  document.execCommand = () => false; }"
+    )
+    page.click("#anCopy")
+    page.wait_for_selector("#anExport", state="visible", timeout=3000)
 
 def test_touch_selection_opens_the_box(page) -> None:
     """The iOS path: a selection with no mouse event at all opens the box.
@@ -294,7 +313,8 @@ def test_cancelling_clear_all_does_not_commit(page) -> None:
     page.evaluate(SELECT_JS)
     page.wait_for_function(POP_OPEN, timeout=3000)
     page.fill("#anTxt", "half typed")
-    page.on("dialog", lambda d: d.dismiss())
+    # One click only: Delete all now arms rather than deleting, and with
+    # nothing saved yet it does not even arm.
     page.click("#anClear")
     page.wait_for_timeout(400)
     assert page.locator("mark.note").count() == 0
@@ -327,13 +347,13 @@ def test_rereading_a_comment_does_not_reset_the_export_state(page) -> None:
     page.fill("#anTxt", "a note")
     page.press("#anTxt", "Enter")
     expect(page.locator("mark.note")).to_have_count(1)
-    page.click("#anExportBtn")
+    open_export_via_blocked_clipboard(page)
     page.evaluate(
         "() => document.getElementById('anExportText')"
         ".dispatchEvent(new ClipboardEvent('copy'))"
     )
     page.click("#anExportClose")
-    expect(page.locator("#anCount")).to_contain_text("exported")
+    expect(page.locator("#anCount")).to_contain_text("copied out")
     assert "not yet" not in page.locator("#anCount").inner_text()
     page.locator("mark.note").first.click()          # reopen to reread
     page.wait_for_function(POP_OPEN, timeout=3000)
@@ -423,7 +443,10 @@ def test_clearing_all_comments_stays_cleared_after_a_reload(page) -> None:
     page.fill("#anTxt", "delete me")
     page.press("#anTxt", "Enter")
     expect(page.locator("mark.note")).to_have_count(1)
-    page.on("dialog", lambda d: d.accept())
+    # Arm, then confirm. There is no dialog to accept: the Artifact viewer
+    # sandboxes the page and ignores one, so the guard is the second click.
+    page.click("#anClear")
+    expect(page.locator("#anClear")).to_have_class(re.compile(r"\banarmed\b"))
     page.click("#anClear")
     expect(page.locator("#anCount")).to_contain_text("No comments yet")
     page.reload()
@@ -466,7 +489,7 @@ def test_copy_all_puts_markdown_on_the_clipboard(browser, site) -> None:
         p.press("#anTxt", "Enter")
         expect(p.locator("mark.note")).to_have_count(1)
         p.click("#anCopy")
-        expect(p.locator("#anCount")).to_contain_text("exported")
+        expect(p.locator("#anCount")).to_contain_text("copied out")
         text = p.evaluate("() => navigator.clipboard.readText()")
         assert "copy me" in text
         assert text.startswith("# Comments")
@@ -489,7 +512,7 @@ def test_a_blocked_clipboard_does_not_claim_the_comments_are_exported(page) -> N
     )
     page.click("#anCopy")
     page.wait_for_timeout(500)
-    assert "not yet exported" in page.locator("#anCount").inner_text()
+    assert "not yet copied out" in page.locator("#anCount").inner_text()
     assert page.evaluate("() => localStorage.getItem('an-dirty:review-sample')") == "1"
 
 
@@ -551,12 +574,12 @@ def test_opening_the_export_box_is_not_itself_an_export(page) -> None:
     page.fill("#anTxt", "still in here")
     page.press("#anTxt", "Enter")
     expect(page.locator("mark.note")).to_have_count(1)
-    page.click("#anExportBtn")
+    open_export_via_blocked_clipboard(page)
     page.wait_for_timeout(300)
-    assert "not yet exported" in page.locator("#anCount").inner_text()
+    assert "not yet copied out" in page.locator("#anCount").inner_text()
     page.evaluate(
         "() => document.getElementById('anExportText')"
         ".dispatchEvent(new ClipboardEvent('copy'))"
     )
-    expect(page.locator("#anCount")).to_contain_text("exported")
+    expect(page.locator("#anCount")).to_contain_text("copied out")
     assert "not yet" not in page.locator("#anCount").inner_text()
