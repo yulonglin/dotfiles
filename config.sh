@@ -229,16 +229,51 @@ PACKAGES_EXTRAS_LINUX=(
 # not once at source time: a CLI flag re-applies a profile long after sourcing,
 # and a profile that resets to registry defaults would otherwise resurrect
 # components this platform cannot run.
+# parse_args fills these; declare them here so a platform override consulted
+# before parse_args runs does not trip `set -u`.
+typeset -ga EXPLICIT_OPT_OUTS EXPLICIT_OPT_INS
+
+# Platform facts outrank the PROFILE, but they do NOT outrank the user, and
+# they do not apply to a profile that means "nothing". Both exemptions are
+# load-bearing, because this now runs at the END of apply_profile (a CLI flag
+# re-runs it long after source time):
+#
+#   - `minimal` means nothing enabled, and `--only X` is built on it. Setting a
+#     component true here made `install.sh --only vim` resolve
+#     INSTALL_CREATE_USER=true, which as root runs useradd, grants
+#     NOPASSWD:ALL in /etc/sudoers.d and copies /root/.ssh.
+#   - an explicit `--no-X` or `--X` on the command line is the user saying it
+#     outright, and used to win because overrides ran once at source time,
+#     before parse_args.
+_platform_override() {
+    local var="$1" value="$2" component="${1#INSTALL_}"
+    component="${component#DEPLOY_}"
+    [[ "${PROFILE:-}" == "minimal" ]] && return 0
+    (( ${EXPLICIT_OPT_OUTS[(Ie)$component]} )) && return 0
+    (( ${EXPLICIT_OPT_INS[(Ie)$component]} )) && return 0
+    typeset -g "$var=$value"
+}
+
 _apply_platform_overrides() {
     if is_linux; then
-        INSTALL_CLEANUP=false       # File cleanup uses launchd (macOS only)
-        DEPLOY_CLEANUP=false        # File cleanup uses launchd (macOS only)
+        _platform_override INSTALL_CLEANUP false   # File cleanup uses launchd (macOS only)
+        _platform_override DEPLOY_CLEANUP false    # File cleanup uses launchd (macOS only)
         # DEPLOY_CLAUDE_CLEANUP stays true - works with cron on Linux
-        INSTALL_CREATE_USER=true    # Useful for containers
+        _platform_override INSTALL_CREATE_USER true  # Useful for containers
         # INSTALL_DOCKER=true is already default
     elif is_macos; then
-        INSTALL_DOCKER=false        # Use Docker Desktop on macOS
+        _platform_override INSTALL_DOCKER false    # Use Docker Desktop on macOS
     fi
+}
+
+# config.local.sh sits AFTER apply_profile in the documented precedence, so a
+# profile flag that re-runs apply_profile has to re-apply it too — otherwise
+# resetting the registry silently discards the machine's own opt-outs, and
+# `--server` resurrects DEPLOY_OBSIDIAN_SYNC on a box that turned it off.
+_apply_local_config() {
+    [[ "${DOTFILES_SKIP_LOCAL_CONFIG:-0}" == "1" ]] && return 0
+    [[ -n "${DOT_DIR:-}" && -f "$DOT_DIR/config.local.sh" ]] || return 0
+    source "$DOT_DIR/config.local.sh"
 }
 
 apply_profile() {
@@ -372,8 +407,10 @@ apply_profile() {
             ;;
     esac
 
-    # Platform facts outrank the profile, and must be re-applied here rather
-    # than once at source time — a CLI flag re-runs this long after sourcing.
+    # Precedence, restored in full: profile -> config.local.sh -> platform.
+    # Both must be re-applied here rather than once at source time, because a
+    # CLI flag re-runs this long after sourcing.
+    _apply_local_config
     _apply_platform_overrides
 }
 
@@ -407,7 +444,6 @@ detect_platform
 # Precedence: defaults -> apply_profile() -> config.local.sh -> CLI flags (parse_args)
 # DOTFILES_SKIP_LOCAL_CONFIG=1 ignores it — tests capturing reproducible
 # fixtures must not inherit whatever a particular machine has overridden.
-[[ "${DOTFILES_SKIP_LOCAL_CONFIG:-0}" != "1" && -n "$DOT_DIR" && -f "$DOT_DIR/config.local.sh" ]] \
-    && source "$DOT_DIR/config.local.sh"
+_apply_local_config
 
 _apply_platform_overrides

@@ -194,6 +194,81 @@ test_unknown_profile_falls_back_loudly() {
     fi
 }
 
+test_nothing_means_nothing() {
+    # `minimal` and the `--only` built on it must resolve to ZERO components.
+    # Regression: platform overrides moved to the end of apply_profile and
+    # re-enabled INSTALL_CREATE_USER after every profile, so `--only vim` on a
+    # root box ran create_dev_user — useradd, sudo group, /etc/sudoers.d with
+    # NOPASSWD:ALL, and a copy of /root/.ssh. The whole suite passed over it,
+    # because no fixture covers minimal and the bare/standard fixtures pin
+    # CREATE_USER=true.
+    local n
+    n=$(dump_cli --minimal | grep -c '=true' || true)
+    if [[ "$n" == "0" ]]; then
+        pass "--minimal enables nothing at all"
+    else
+        fail "--minimal enabled $n component(s)" "$(dump_cli --minimal | grep '=true')"
+    fi
+
+    n=$(dump_cli --only vim | grep -c '=true' || true)
+    if [[ "$n" == "1" ]]; then
+        pass "--only vim enables exactly the one component named"
+    else
+        fail "--only vim enabled $n component(s), not 1" "$(dump_cli --only vim | grep '=true')"
+    fi
+}
+
+test_explicit_flag_beats_platform_override() {
+    # Platform facts outrank the profile; they must NOT outrank the user. The
+    # overrides run last, so without an exemption they silently reverse the
+    # flag the user just typed.
+    local out
+    out=$(dump_cli --devbox --no-create-user | grep CREATE_USER || true)
+    if [[ "$out" == *"=false" ]]; then
+        pass "--no-create-user survives the end-of-profile platform overrides"
+    else
+        fail "--no-create-user was reversed by a platform override" "$out"
+    fi
+
+    out=$(dump_cli --no-create-user --minimal | grep CREATE_USER || true)
+    if [[ "$out" == *"=false" ]]; then
+        pass "--no-create-user holds even when a later flag resets the profile"
+    else
+        fail "--no-create-user lost to a later profile reset" "$out"
+    fi
+}
+
+test_local_config_survives_a_profile_flag() {
+    # Documented precedence is profile -> config.local.sh -> CLI flags. A
+    # profile flag re-runs apply_profile, which resets the registry; without
+    # re-applying local config that reset discards the machine's own opt-outs.
+    # obsidian-sync is the component this repo lost 135 files to, so
+    # resurrecting it is the direction that costs data.
+    local local_cfg="$DOT_DIR/config.local.sh"
+    if [[ -e "$local_cfg" ]]; then
+        echo "  SKIP config.local.sh precedence (a real one exists; not overwriting)"
+        return
+    fi
+    printf 'DEPLOY_OBSIDIAN_SYNC=false\n' > "$local_cfg"
+    local out rc=0
+    out=$(zsh -c '
+        emulate -L zsh; set -uo pipefail
+        export DOT_DIR="$1"
+        source "$DOT_DIR/config.sh" >/dev/null 2>&1
+        source "$DOT_DIR/scripts/shared/helpers.sh" >/dev/null 2>&1
+        show_help() { : }
+        parse_args --server >/dev/null 2>&1
+        print -r -- "DEPLOY_OBSIDIAN_SYNC=$DEPLOY_OBSIDIAN_SYNC"
+    ' _ "$DOT_DIR" 2>/dev/null || true)
+    rm -f "$local_cfg"
+    if [[ "$out" == *"=false" ]]; then
+        pass "config.local.sh opt-out survives a profile flag"
+    else
+        fail "a profile flag resurrected a component config.local.sh disabled" "$out"
+    fi
+    return $rc
+}
+
 # ─── Run ─────────────────────────────────────────────────────────────────────
 
 echo "Profile defaults — pinned component sets and invariants"
@@ -212,6 +287,9 @@ test_no_scheduled_jobs_in_ephemeral_profiles
 test_agent_can_actually_code
 test_bare_installs_no_ai_tools
 test_unknown_profile_falls_back_loudly
+test_nothing_means_nothing
+test_explicit_flag_beats_platform_override
+test_local_config_survives_a_profile_flag
 
 echo ""
 echo "─────────────────────────────────────────"
