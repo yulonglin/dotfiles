@@ -166,6 +166,80 @@ test_every_cargo_build_is_bounded() {
     fi
 }
 
+test_run_parallel_pid_capture_is_quoted() {
+    # In zsh an UNQUOTED $! on the RHS of an array-subscript assignment is not
+    # expanded — `pids[$name]=$!` stores the literal string "$!", every later
+    # `kill -0` fails, and the whole bounded-wait block becomes dead code while
+    # test_parallel_group_is_bounded still passes (run_parallel just returns
+    # instantly). Verified on zsh 5.9: unquoted -> [$!], quoted -> [12345].
+    if grep -qE 'pids\[\$name\]="\$!"' "$DOT_DIR/scripts/shared/helpers.sh"; then
+        pass "run_parallel captures its child PIDs (quoted \$!)"
+    else
+        fail "run_parallel's PID capture is unquoted" "the bounded wait is dead code in zsh"
+    fi
+}
+
+test_bounded_menu_does_not_abort_the_script() {
+    # Both scripts run under `set -euo pipefail`, and in zsh a failing command
+    # substitution in a plain assignment aborts the script right there. Without
+    # `|| rc=$?` the 124 branch is unreachable and an unattended TTY run dies
+    # silently after the timeout, having installed nothing — the inverse of
+    # what the deadline was added to do. Verified under a pty.
+    local out
+    out=$(grep -A2 'claude-tools select' "$DOT_DIR/scripts/shared/helpers.sh" | grep 'items_file')
+    if [[ "$out" == *'|| rc=$?'* ]]; then
+        pass "the component menu's timeout is caught, not fatal under set -e"
+    else
+        fail "menu timeout aborts the script under set -e" "$out"
+    fi
+}
+
+test_watchdog_child_keeps_the_terminal() {
+    # zsh points a backgrounded job's stdin at /dev/null even when the shell's
+    # stdin is a TTY, and `<&0` does not undo it. On the fresh-Mac path (no
+    # timeout/gtimeout) that hands the component menu and chsh's PAM prompt an
+    # instant EOF.
+    local out
+    out=$(helper_probe 'functions _watchdog_run' 2>&1)
+    if [[ "$out" == *"/dev/tty"* ]]; then
+        pass "_watchdog_run re-attaches the terminal for its child"
+    else
+        fail "_watchdog_run's child gets /dev/null stdin" "TTY-reading commands see instant EOF"
+    fi
+}
+
+test_retry_does_not_multiply_the_deadline() {
+    # `man curl`: --max-time is per TRANSFER, and "the maximum time counter is
+    # reset each time the transfer is retried". So --max-time N --retry 2 is up
+    # to 3N, not N. --retry-max-time is what bounds the sequence.
+    local hits
+    hits=$(grep -nE 'curl .*--retry [0-9]' \
+        "$DOT_DIR"/install.sh "$DOT_DIR"/deploy.sh "$DOT_DIR"/scripts/shared/helpers.sh 2>/dev/null \
+        | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+        | grep -v 'retry-max-time' || true)
+    if [[ -z "$hits" ]]; then
+        pass "every --retry is bounded by --retry-max-time"
+    else
+        fail "--retry without --retry-max-time multiplies the stated deadline" "$hits"
+    fi
+}
+
+test_installer_fetches_are_checked_not_interpolated() {
+    # `sh -c "$(fetch …)"` does not trip errexit when the fetch fails: sh runs
+    # an empty script and exits 0. At one site that followed an `rm -rf`, so a
+    # transient network failure deleted a working oh-my-zsh and installed
+    # nothing. Every such installer must go through a checked variable.
+    local hits
+    hits=$(grep -nE '(ba)?sh -c "\$\((fetch|curl)' \
+        "$DOT_DIR"/install.sh "$DOT_DIR"/deploy.sh "$DOT_DIR"/scripts/shared/helpers.sh 2>/dev/null \
+        | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
+    if [[ -z "$hits" ]]; then
+        pass "no installer script is interpolated straight from an unchecked fetch"
+    else
+        fail "unchecked \$(fetch) piped into a shell" "$hits"
+    fi
+}
+
 test_source_build_is_bounded_and_visible() {
     local out
     out=$(helper_probe 'functions _build_claude_tools_from_source' 2>&1)
@@ -370,6 +444,11 @@ test_fetch_carries_deadlines
 test_claude_tools_fetch_is_bounded
 test_source_build_is_bounded_and_visible
 test_every_cargo_build_is_bounded
+test_run_parallel_pid_capture_is_quoted
+test_bounded_menu_does_not_abort_the_script
+test_watchdog_child_keeps_the_terminal
+test_retry_does_not_multiply_the_deadline
+test_installer_fetches_are_checked_not_interpolated
 test_parallel_group_is_bounded
 test_no_untimed_curl_pipe_installers
 test_git_and_apt_are_bounded

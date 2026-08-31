@@ -616,7 +616,14 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
                     echo "  [d] Keep dotfiles config (discard local changes)"
                     echo "  [s] Skip htop deployment"
                     echo ""
-                    read -r "htop_choice?Choice [l/d/s]: "
+                    # A TTY is not proof a human is watching it. On no answer,
+                    # fall through to the same choice the non-interactive branch
+                    # makes — skip — rather than blocking the deploy forever.
+                    if ! read -t "${DOTFILES_PROMPT_TIMEOUT:-60}" -r "htop_choice?Choice [l/d/s]: "; then
+                        echo ""
+                        log_info "No answer in ${DOTFILES_PROMPT_TIMEOUT:-60}s — skipping htop"
+                        htop_choice="s"
+                    fi
                 fi
 
                 case "$htop_choice" in
@@ -1297,7 +1304,7 @@ _vpn_sudo_ready() {
     # there is no TTY to answer the password prompt ("a terminal is required").
     # Proceed only with cached credentials, or a successful attended prompt.
     sudo -n true 2>/dev/null && return 0
-    [[ -t 0 ]] && sudo -v && return 0
+    [[ -t 0 ]] && run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v && return 0
     return 1
 }
 

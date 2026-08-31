@@ -145,8 +145,17 @@ if is_macos; then
         # Homebrew never auto-detects non-interactive mode and would otherwise
         # block there — a silent-looking stall on a fresh Mac. sudo is already
         # cached above, so brew's privileged steps don't re-prompt either.
-        NONINTERACTIVE=1 run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" \
-            /bin/bash -c "$(fetch https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        # Checked, not interpolated: a failed fetch in argument position runs
+        # bash with an empty script and exits 0, after which every later
+        # brew_install fails against a Homebrew that was never installed.
+        if _brew_installer=$(fetch https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh) \
+           && [[ -n "$_brew_installer" ]]; then
+            NONINTERACTIVE=1 run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" \
+                /bin/bash -c "$_brew_installer" \
+                || log_warning "Homebrew installation failed"
+        else
+            log_warning "Could not fetch the Homebrew installer — skipping"
+        fi
         [[ $(uname -m) == "arm64" ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
 
@@ -310,7 +319,7 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Rust toolchain (needed for claude-tools build in deploy.sh)
     if ! is_installed cargo; then
         log_info "Installing Rust toolchain (user-level, no root needed)..."
-        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 \
+        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 \
             https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
     fi
     source "$HOME/.cargo/env" 2>/dev/null || true
@@ -502,7 +511,12 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             log_info "Non-interactive: using committed Brewfile (run 'app-picker' to customise)"
         else
             # Interactive: let the user toggle apps, regenerating the Brewfile.
-            "$DOT_DIR/custom_bins/app-picker" || log_warning "app-picker cancelled — using existing Brewfile"
+            # Bounded for the same reason as the component menu: this is a
+            # full-screen TUI that waits for a human, and a TTY nobody is
+            # watching would sit here forever. On expiry the committed Brewfile
+            # is used, exactly as in the non-interactive branch above.
+            run_with_timeout "${DOTFILES_MENU_TIMEOUT:-60}" "$DOT_DIR/custom_bins/app-picker" \
+                || log_warning "app-picker cancelled or unanswered — using existing Brewfile"
         fi
 
         if [[ -f "$brewfile" ]]; then
@@ -522,7 +536,7 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             sudo_keepalive_pid=""
             if [[ -t 0 ]] && grep -q '^mas ' "$brewfile" 2>/dev/null; then
                 log_info "App Store installs (mas) need sudo — caching your credential…"
-                if sudo -v; then
+                if run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v; then
                     # Capture parent PID before subshell so $$ resolves correctly in both
                     # zsh (where $$ is the parent in subshells) and bash (where it is not).
                     _mas_parent_pid=$$

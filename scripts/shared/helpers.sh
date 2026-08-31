@@ -136,7 +136,8 @@ _fetch_claude_tools() {
     # watching, even when it is only a slow download.
     if ! run_with_progress "Fetching prebuilt claude-tools (${asset})" \
         curl --proto '=https' --tlsv1.2 -fsSL \
-        --connect-timeout 10 --max-time 120 --retry 2 "$url" -o "$tmp"; then
+        --connect-timeout 10 --max-time 120 --retry 2 --retry-max-time 120 \
+        "$url" -o "$tmp"; then
         rm -f "$tmp"; return 1
     fi
 
@@ -274,9 +275,16 @@ show_component_menu() {
     # top of the run. The deadline makes an unattended run proceed with whatever
     # is pre-checked (the profile's set, plus any config.local.sh delta), which
     # is exactly what --non-interactive would have installed.
+    #
+    # `|| rc=$?` is load-bearing, not decoration: both scripts run under
+    # `set -euo pipefail`, and in zsh a failing command substitution in a plain
+    # assignment aborts the script THERE — verified, exit 124 with nothing
+    # printed. Without this, the 124 branch below was unreachable and an
+    # unattended TTY run died silently after the timeout having installed
+    # nothing, which is the exact scenario the deadline was added to rescue.
+    local rc=0
     result=$(run_with_timeout "${DOTFILES_MENU_TIMEOUT:-60}" \
-        claude-tools select --title "Select ${mode} components" --items "$items_file")
-    local rc=$?
+        claude-tools select --title "Select ${mode} components" --items "$items_file") || rc=$?
     if (( rc == 124 )); then
         log_warning "Component menu unanswered for ${DOTFILES_MENU_TIMEOUT:-60}s — continuing with the default selection"
         rm -f "$items_file"
@@ -319,10 +327,17 @@ cmd_exists() {
 # minutes instead of hanging at hour zero.
 
 # Network fetch with deadlines. Drop-in for `curl -fsSL` — extra curl args pass
-# through (-o, --retry overrides, headers). 10s to connect, 300s overall, two
-# retries on transient failures.
+# through (-o, --retry overrides, headers). 10s to connect, two retries on
+# transient failures, and 300s OVERALL.
+#
+# --retry-max-time is what makes "overall" true. Per `man curl`, --max-time is
+# "the maximum time that you allow each transfer to take", and "if you enable
+# retrying the transfer (--retry) then the maximum time counter is reset each
+# time the transfer is retried" — so --max-time 300 --retry 2 is three
+# transfers, up to ~900s, three times the number this comment used to claim.
+# --retry-max-time bounds the whole sequence.
 fetch() {
-    curl -fsSL --connect-timeout 10 --max-time 300 --retry 2 "$@"
+    curl -fsSL --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 "$@"
 }
 
 # Every apt/dpkg call must bound its wait for the lock. On a fresh box
@@ -367,7 +382,17 @@ run_with_timeout() {
 # Returns 124 on expiry, matching timeout(1), because callers switch on it.
 _watchdog_run() {
     local _secs="$1"; shift
-    "$@" &
+    # zsh points a BACKGROUNDED job's stdin at /dev/null even when the shell's
+    # own stdin is a terminal, and `<&0` does not undo it (both measured under
+    # a pty). The process-group reasoning above is correct but says nothing
+    # about stdin, so the fresh-Mac fallback was handing the component menu and
+    # chsh's PAM prompt an instant EOF — the two things on this path that must
+    # read the user. Re-attach the controlling terminal explicitly.
+    if [[ -t 0 ]]; then
+        "$@" </dev/tty &
+    else
+        "$@" &
+    fi
     local _pid=$! _waited=0
     while (( _waited < _secs )); do
         kill -0 "$_pid" 2>/dev/null || break
@@ -688,7 +713,7 @@ install_rust_toolchain() {
             rustup default stable 2>/dev/null || log_warning "rustup default stable failed"
         fi
     else
-        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 \
+        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 \
             https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
     fi
     source "$HOME/.cargo/env" 2>/dev/null || true
@@ -834,7 +859,11 @@ run_parallel() {
             trap 'echo $? > "'"$tmpdir/$name"'.exitcode"' EXIT
             eval "$cmd"
         ) &>"$tmpdir/$name.log" &
-        pids[$name]=$!
+        # QUOTED deliberately: in zsh an unquoted $! on the RHS of an
+        # array-subscript assignment is not expanded — the map stores the
+        # literal string "$!", every later `kill -0` fails, and the bounded
+        # wait below silently becomes dead code.
+        pids[$name]="$!"
     done
 
     # Bounded wait. A bare `wait` means ONE hung child (an untimed fetch, a
@@ -849,8 +878,15 @@ run_parallel() {
         done
         if kill -0 "$_pid" 2>/dev/null; then
             log_warning "$name exceeded ${DOTFILES_JOB_TIMEOUT:-600}s — terminating it"
+            # Descendants first: the job's real work runs as a grandchild of
+            # this subshell (`eval "$cmd"`), so killing only $_pid leaves it
+            # running and orphaned — measured, not assumed. Job control is off
+            # in scripts, so the children do not form their own process group
+            # and `kill -- -$_pid` is not available.
+            pkill -TERM -P "$_pid" 2>/dev/null || true
             kill -TERM "$_pid" 2>/dev/null || true
             sleep 1
+            pkill -KILL -P "$_pid" 2>/dev/null || true
             kill -KILL "$_pid" 2>/dev/null || true
             [[ -f "$tmpdir/$name.exitcode" ]] || echo 124 > "$tmpdir/$name.exitcode"
         fi
@@ -862,7 +898,10 @@ run_parallel() {
     PARALLEL_FAILURES=()
 
     for name in "${job_names[@]}"; do
-        local rc=0
+        # Absent exitcode means the job did not finish normally — killed
+        # before its EXIT trap ran, or no temp dir at all. Defaulting that to 0
+        # reported a still-running job as PASSED.
+        local rc=124
         [[ -f "$tmpdir/$name.exitcode" ]] && rc=$(<"$tmpdir/$name.exitcode")
 
         if [[ "$rc" -eq 0 ]]; then
@@ -941,11 +980,23 @@ install_ohmyzsh() {
     fi
 
     log_info "Installing oh-my-zsh..."
+    # Fetch BEFORE deleting, and check it. `sh -c "$(fetch …)"` in argument
+    # position does not trip errexit: a failed fetch yields an empty string, sh
+    # runs nothing and exits 0. Combined with the old ordering — rm -rf first —
+    # a transient network failure under FORCE_REINSTALL deleted a working
+    # oh-my-zsh and "installed" nothing, silently, and the p10k clone into the
+    # empty tree hid it.
+    local _omz_installer
+    if ! _omz_installer=$(fetch https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh) \
+       || [[ -z "$_omz_installer" ]]; then
+        log_warning "Could not fetch the oh-my-zsh installer — leaving $zsh_dir untouched"
+        return 1
+    fi
     rm -rf "$zsh_dir"
     # Unset ZSH so the official installer doesn't refuse when $ZSH points elsewhere
     # (e.g., RunPod containers where /root/.oh-my-zsh exists but HOME=/workspace)
     ZSH="$zsh_dir" run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" \
-        sh -c "$(fetch https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+        sh -c "$_omz_installer" "" --unattended
 
     log_info "Installing powerlevel10k theme..."
     git clone --quiet https://github.com/romkatv/powerlevel10k.git \
