@@ -6,6 +6,7 @@
 #   2. Install every plugin in the settings.json enabledPlugins manifest
 #   3. Clean stale plugin cache versions
 #   4. Clean duplicate skill symlinks
+#   5. Repair known plugin-hook incompatibilities
 #
 # The manifest in claude/settings.json is the single source of truth — this
 # script derives its marketplace and plugin lists from it at runtime.
@@ -150,6 +151,18 @@ if [[ -f "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh" ]]; then
   fi
 else
   echo -e "  ${YELLOW}clean_plugin_symlinks.sh not found — skipping${NC}"
+fi
+
+# --- Step 5: Repair known plugin-hook incompatibilities ---
+run_step "Repairing known plugin-hook incompatibilities..."
+
+RALPH_REPAIR="$DOT_DIR/claude/hooks/patch_ralph_loop_stop_hook.py"
+if [[ ! -f "$RALPH_REPAIR" ]]; then
+  echo -e "  ${YELLOW}Ralph Stop-hook repair not found — skipping${NC}"
+elif $DRY_RUN; then
+  echo -e "  ${YELLOW}Would repair installed Ralph Loop Stop hooks${NC}"
+elif ! python3 "$RALPH_REPAIR"; then
+  echo -e "  ${YELLOW}Ralph Stop-hook source changed — skipped unsafe repair${NC}"
 fi
 
 # Context profiles were removed — every installed plugin is enabled everywhere

@@ -207,9 +207,13 @@ check     "slow-quit is capped too"        "$OUT" "Would SLOW-QUIT (0):"
 check     "skipped app stays skipped"      "$OUT" "Would SKIP (no-touch):
   - Ghostty"
 
-# --- 2. the shipped config, after the deliberate moves ---------------------
-print -r -- "2. the shipped config quits what was moved off close-windows"
-cp "$REPO/config/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
+# --- 2. an unlisted app quits, a listed close-app only closes --------------
+# The four unlisted apps below stand in for anything the config never names;
+# Bear and Spotify come from the fixture. This ran against the SHIPPED config
+# until the fixture existed, and was named for the deliberate moves in it, so
+# changing your mind about Granola failed a test about bucket dispatch.
+print -r -- "2. an unlisted app quits while a listed close-app only closes"
+cp "$REPO/tests/fixtures/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
 export STUB_APP_LIST="Claude|com.anthropic.claudefordesktop
 Granola|so.granola.app
 Tailscale|io.tailscale.ipn.macsys
@@ -218,11 +222,26 @@ Bear|net.shinyfrog.bear
 Spotify|com.spotify.client
 "
 run --dry-run
-check     "Claude is quit"                 "$OUT" "- Claude"
-check     "Granola is quit"                "$OUT" "- Granola"
-check     "five apps quit, none closed"    "$OUT" "Would QUIT (4):"
-check     "Bear still only closes"         "$OUT" "Would CLOSE WINDOWS (2):"
-check     "Spotify still only closes"      "$OUT" "- Spotify"
+check     "an unlisted app is quit"        "$OUT" "- Claude"
+check     "and so is a second one"         "$OUT" "- Granola"
+check     "all four unlisted apps quit"    "$OUT" "Would QUIT (4):"
+check     "Bear only closes"               "$OUT" "Would CLOSE WINDOWS (2):"
+check     "and so does Spotify"            "$OUT" "- Spotify"
+
+# --- 2b. the shipped config, for validity and never for policy -------------
+# Everything else in both suites runs against tests/fixtures/app-lifecycle.yaml
+# so that editing real app policy cannot turn a test red. That leaves exactly
+# one thing about the shipped file worth asserting, and it is not what any app
+# is set to: that it PARSES. app-lifecycle-config validates every action
+# against its own ACTIONS tuple and exits 78 on anything else, so a clean exit
+# is proof that no entry says `manaul: close` or `manual: closs` - typos that
+# otherwise resolve silently to the `quit` default, which is the harshest
+# action, applied to the app you were trying to spare.
+print -r -- "2b. the shipped config parses, whatever it happens to say"
+SHIPPED_OUT=$("$REPO/custom_bins/app-lifecycle-config" --file "$REPO/config/app-lifecycle.yaml" 2>&1)
+SHIPPED_RC=$?
+check_eq  "it parses and validates"        "$SHIPPED_RC" "0"
+check     "and it resolved some apps"      "$SHIPPED_OUT" "ALC_APP_KEYS=("
 
 # --- the close path itself, not dry-run ------------------------------------
 # Everything above stops at --dry-run, so none of it ever reaches the code that
@@ -283,12 +302,14 @@ check_eq  "no keystroke"             "$(cat "$STUB_KEY_LOG" 2>/dev/null)" ""
 check_not "not recorded"             "$(cat "$AXCAP" 2>/dev/null)"        "Spotify"
 
 # --- every value on the scale gets dispatched ------------------------------
-# No app in the shipped config asks for `manual: hide`, and none pairs `close`
-# with `slow`, so nothing above would notice either going wrong. Both did: with
-# a bucket per value missing, `hide` fell through to the `quit` default, and
-# `slow` - which only says how a quit is AWAITED - was checked as though it were
-# a bucket of its own and outranked `close`. Either way the config asked for a
-# gentler action and got the harshest one.
+# Nothing above exercises `manual: hide` on a running app, and no app pairs
+# `close` with `slow`, so neither would be noticed going wrong there. Both did
+# go wrong. With a bucket per value missing, `hide` fell through to the `quit`
+# default. `slow` - which only says how a quit is AWAITED - was checked as
+# though it were a bucket of its own, and outranked `close`. Either way the
+# config asked for a gentler action and got the harshest one. The shipped
+# config's Focusmate and Obsidian entries ride on the `hide` bucket, so test 13
+# is what stands between them and being quit outright.
 print -r -- "13. a hide-only app is hidden, not quit"
 print -r -- 'defaults:
   manual: quit
@@ -319,7 +340,7 @@ check     "and is not slow-quit"           "$OUT" "Would SLOW-QUIT (0):"
 # worth keeping -> quit the app" branch fired and the idle job's CLOSE rung
 # performed a quit.
 print -r -- "15. --max-action close survives a protected tab vanishing mid-run"
-cp "$REPO/config/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
+cp "$REPO/tests/fixtures/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
 export STUB_APP_LIST="Google Chrome|com.google.Chrome
 "
 export STUB_CHROME_CALLS="$WORK/chrome.calls"
@@ -412,7 +433,7 @@ unset STUB_HIDE_RC
 # satisfies. The rung now does its actual job - close the windows - and reports
 # whether that worked.
 print -r -- "18. a capped selective-close closes, rather than reporting a refusal as success"
-cp "$REPO/config/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
+cp "$REPO/tests/fixtures/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
 export STUB_APP_LIST="Google Chrome|com.google.Chrome
 "
 export STUB_CHROME_CALLS="$WORK/chrome.calls"
@@ -505,7 +526,7 @@ check     "both apps are skipped"          "$OUT" "Would SKIP (no-touch):
 # close rung completed" and keeps the `closed` phase it wrote before the call, so a
 # window that never closed is quit by quit_after instead of being retried.
 print -r -- "21. pass 2 reports whether the targeted windows actually closed"
-cp "$REPO/config/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
+cp "$REPO/tests/fixtures/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
 export STUB_APP_LIST="Google Chrome|com.google.Chrome
 "
 export STUB_CHROME_CALLS="$WORK/chrome.calls"
