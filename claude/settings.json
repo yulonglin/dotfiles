@@ -1073,12 +1073,9 @@
       "jupyter",
       "ipython",
       "tensorboard",
-      "ps",
-      "ps *",
-      "top",
-      "top *",
-      "pgrep",
-      "pgrep *"
+      "ps:*",
+      "top:*",
+      "pgrep:*"
     ]
   },
   "feedbackSurveyRate": 0,
