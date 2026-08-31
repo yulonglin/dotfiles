@@ -151,6 +151,14 @@ def details_passthrough(tokens: list[Token]) -> list[Token]:
     balance, nothing passes through: an unclosed <details> would otherwise
     swallow every element after it, so the safe fallback is today's behavior
     (escaped, visible tags).
+
+    The balance counter is FLAT — it counts tags, not block nesting — so a
+    <details> opened inside a blockquote and closed outside it counts as
+    balanced and passes through, emitting tags that straddle the blockquote.
+    Browsers recover (</details> is in the HTML spec's implied-end-tag branch),
+    so the "cannot swallow the page" guarantee holds; what the reader gets is a
+    cosmetic mess — an empty collapsible and a section that never collapsed.
+    Worth knowing before trusting the fallback to catch every malformed input.
     """
 
     def classify(i: int) -> tuple[str, str] | None:
