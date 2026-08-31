@@ -22,14 +22,13 @@ defaults:
 
 apps:
   Ghostty:               {manual: skip, auto: skip}
-  cmux:                  {manual: skip}
   Lettera:               {manual: skip}
-  Super Productivity:    {manual: skip}
-  Things:                {manual: skip}
-  Things3:               {manual: skip}
-  Focusmate (Safari):    {manual: skip}
+  Super Productivity:    {manual: close}
+  Things:                {manual: close}
+  Things3:               {manual: close}
+  Focusmate (Safari):    {manual: hide}
   zoom.us:               {manual: skip}
-  Obsidian:              {manual: skip}
+  Obsidian:              {manual: hide}
   VoiceInk:              {manual: close}
   Bear:                  {manual: close}
   MacMediaKeyForwarder:  {manual: close}

@@ -238,7 +238,12 @@ check     "first sight hides nothing"      "$OUT" "Nothing to hide."
 check     "the resolved decision, in full"  "$OUT" "visible close/quit  -> hide  visible enough"
 check     "a gate that is the streak"       "$OUT" "-> hide  streak 1/2"
 check     "a gate that is the frontmost"    "$OUT" "-> hide  frontmost"
-check     "manual: skip shows as itself"    "$OUT" "skip/quit"
+# This reads Obsidian, whose `manual:` comes from the SHIPPED config (copied in
+# wholesale above), so editing Obsidian's entry moves this expectation with it -
+# it was `skip/quit` until Obsidian became `manual: hide`. What is under test is
+# that an app's own value is rendered rather than the default, so any
+# non-default value serves.
+check     "manual: hide shows as itself"    "$OUT" "hide/quit"
 # zsh leaves TYPESET_SILENT unset, so a bare `local x` for an x that already has
 # a value prints it. Three such lines used to head every dry-run report.
 check_not "no declarations leak into it"    "$OUT" "akey="

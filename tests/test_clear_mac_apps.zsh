@@ -283,12 +283,14 @@ check_eq  "no keystroke"             "$(cat "$STUB_KEY_LOG" 2>/dev/null)" ""
 check_not "not recorded"             "$(cat "$AXCAP" 2>/dev/null)"        "Spotify"
 
 # --- every value on the scale gets dispatched ------------------------------
-# No app in the shipped config asks for `manual: hide`, and none pairs `close`
-# with `slow`, so nothing above would notice either going wrong. Both did: with
-# a bucket per value missing, `hide` fell through to the `quit` default, and
-# `slow` - which only says how a quit is AWAITED - was checked as though it were
-# a bucket of its own and outranked `close`. Either way the config asked for a
-# gentler action and got the harshest one.
+# Nothing above exercises `manual: hide` on a running app, and no app pairs
+# `close` with `slow`, so neither would be noticed going wrong there. Both did
+# go wrong. With a bucket per value missing, `hide` fell through to the `quit`
+# default. `slow` - which only says how a quit is AWAITED - was checked as
+# though it were a bucket of its own, and outranked `close`. Either way the
+# config asked for a gentler action and got the harshest one. The shipped
+# config's Focusmate and Obsidian entries ride on the `hide` bucket, so test 13
+# is what stands between them and being quit outright.
 print -r -- "13. a hide-only app is hidden, not quit"
 print -r -- 'defaults:
   manual: quit

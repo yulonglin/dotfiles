@@ -17,9 +17,12 @@ The ladder stops at `min(manual:, auto:)`, but that ceiling binds **only the des
 | Config | Hidden? | Windows closed? | Quit? |
 |---|---|---|---|
 | `{auto: skip}` | no | no | no |
-| `{manual: skip}` (Obsidian, Things) | yes | no | no |
-| `{manual: close}` (Spotify) | yes | yes | no |
+| `{manual: skip}` (Lettera, zoom.us) | yes | no | no |
+| `{manual: hide}` (Obsidian, Focusmate) | yes | no | no |
+| `{manual: close}` (Spotify, Things) | yes | yes | no |
 | unlisted (defaults) | yes | yes | yes |
+
+The `skip` and `hide` rows are identical here because this table is about the idle ladder, and the two differ only in the manual trigger: the Shortcut leaves a `skip` app untouched and hides a `hide` one. Neither ever has a window closed.
 
 Both scripts read the YAML through `custom_bins/app-lifecycle-config`, so no zsh parses YAML. Only the poll interval lives elsewhere, in `config/hide-idle.conf`: it is not a policy about apps, and it has to match the launchd `StartInterval` or gap detection means nothing.
 
