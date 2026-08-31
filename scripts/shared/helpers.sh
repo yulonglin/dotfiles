@@ -125,15 +125,18 @@ _fetch_claude_tools() {
     [[ -z "$slug" ]] && return 1
 
     local url="https://github.com/${slug}/releases/download/claude-tools-bin/${asset}"
-    log_info "Fetching prebuilt claude-tools (${asset})..."
     mkdir -p "${DOT_DIR}/custom_bins"
     local tmp="${bin}.tmp.$$"
 
     # HTTPS + TLS 1.2 only; never pipe-to-shell — download to temp, then verify.
     # Deadlines are mandatory here: this runs at the top of both scripts, before
     # anything is printed but one log line, so an untimed fetch reads as a hang.
-    if ! curl --proto '=https' --tlsv1.2 -fsSL \
-        --connect-timeout 10 --max-time 120 --retry 2 "$url" -o "$tmp" 2>/dev/null; then
+    # Wrapped in the spinner because this is the very first thing either script
+    # does: a silent pause here is what a stall looks like to whoever is
+    # watching, even when it is only a slow download.
+    if ! run_with_progress "Fetching prebuilt claude-tools (${asset})" \
+        curl --proto '=https' --tlsv1.2 -fsSL \
+        --connect-timeout 10 --max-time 120 --retry 2 "$url" -o "$tmp"; then
         rm -f "$tmp"; return 1
     fi
 
@@ -574,7 +577,11 @@ install_packages() {
             return 0
         fi
         log_info "Installing ${#missing[@]} missing package(s): ${missing[*]}"
-        sudo apt install -y "${missing[@]}" 2>/dev/null || log_warning "Some apt packages failed to install"
+        # DPkg::Lock::Timeout bounds the wait for the dpkg lock, which
+        # DEBIAN_FRONTEND does not touch: on a fresh box running
+        # unattended-upgrades at boot, apt otherwise blocks indefinitely.
+        sudo apt install -y -o "DPkg::Lock::Timeout=${APT_LOCK_TIMEOUT:-120}" "${missing[@]}" 2>/dev/null \
+            || log_warning "Some apt packages failed to install"
         return
     fi
 

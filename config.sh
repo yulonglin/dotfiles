@@ -223,14 +223,37 @@ PACKAGES_EXTRAS_LINUX=(
 # Profile Presets
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Platform facts that outrank any profile. Called at the END of apply_profile,
+# not once at source time: a CLI flag re-applies a profile long after sourcing,
+# and a profile that resets to registry defaults would otherwise resurrect
+# components this platform cannot run.
+_apply_platform_overrides() {
+    if is_linux; then
+        INSTALL_CLEANUP=false       # File cleanup uses launchd (macOS only)
+        DEPLOY_CLEANUP=false        # File cleanup uses launchd (macOS only)
+        # DEPLOY_CLAUDE_CLEANUP stays true - works with cron on Linux
+        INSTALL_CREATE_USER=true    # Useful for containers
+        # INSTALL_DOCKER=true is already default
+    elif is_macos; then
+        INSTALL_DOCKER=false        # Use Docker Desktop on macOS
+    fi
+}
+
 apply_profile() {
     local profile="${1:-$PROFILE}"
     PROFILE="$profile"   # keep the banner label in sync with the flags actually applied
 
     case "$profile" in
         personal)
-            # Everything enabled (the registry defaults above). `devbox` is the
-            # name to prefer; this one stays for existing invocations.
+            # Everything enabled. _init_component_vars is load-bearing, not
+            # decorative: this case used to be EMPTY, assuming the registry
+            # defaults were still live. Once `standard` became the source-time
+            # default it ran apply_profile minimal first, zeroing every
+            # component — so a later `--devbox`/`--personal` on the CLI composed
+            # on top of zero and produced 14 components instead of 50. Every
+            # profile must therefore establish its own base explicitly rather
+            # than inherit whatever the last one left behind.
+            _init_component_vars
             ;;
         standard)
             # What a BARE ./install.sh or ./deploy.sh gets: enough to open a
@@ -288,7 +311,9 @@ apply_profile() {
             DEPLOY_SHELL=true
             ;;
         server)
-            # Minimal server setup
+            # Subtracts from the full set, so it must start from the full set —
+            # see the note in `personal)`.
+            _init_component_vars
             INSTALL_AI_TOOLS=false
             INSTALL_CLEANUP=false
             INSTALL_DOCKER=false
@@ -340,9 +365,14 @@ apply_profile() {
             ;;
         *)
             echo "Warning: Unknown profile '$profile', using personal" >&2
+            _init_component_vars
             PROFILE="personal"   # fell back to personal defaults — label accordingly
             ;;
     esac
+
+    # Platform facts outrank the profile, and must be re-applied here rather
+    # than once at source time — a CLI flag re-runs this long after sourcing.
+    _apply_platform_overrides
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -378,13 +408,4 @@ detect_platform
 [[ "${DOTFILES_SKIP_LOCAL_CONFIG:-0}" != "1" && -n "$DOT_DIR" && -f "$DOT_DIR/config.local.sh" ]] \
     && source "$DOT_DIR/config.local.sh"
 
-# Platform-specific defaults
-if is_linux; then
-    INSTALL_CLEANUP=false       # File cleanup uses launchd (macOS only)
-    DEPLOY_CLEANUP=false        # File cleanup uses launchd (macOS only)
-    # DEPLOY_CLAUDE_CLEANUP stays true - works with cron on Linux
-    INSTALL_CREATE_USER=true    # Useful for containers
-    # INSTALL_DOCKER=true is already default
-elif is_macos; then
-    INSTALL_DOCKER=false        # Use Docker Desktop on macOS
-fi
+_apply_platform_overrides

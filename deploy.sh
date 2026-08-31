@@ -21,6 +21,12 @@ set -euo pipefail
 export GIT_TERMINAL_PROMPT=0
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
+# GIT_TERMINAL_PROMPT stops the credential prompt but not a stalled TCP
+# connection, and DEBIAN_FRONTEND stops needrestart but not the dpkg lock —
+# on a fresh box with unattended-upgrades running at boot, apt waits forever.
+# These two bound what those variables leave unbounded.
+export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30
+export APT_LOCK_TIMEOUT="${APT_LOCK_TIMEOUT:-120}"
 
 # Script directory
 DOT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"

@@ -110,10 +110,22 @@ jobs:
 
       # Each profile must resolve and run without prompting. bare/agent/standard
       # are the ephemeral-box profiles, which is exactly where nobody is watching.
+      #
+      # NOT `--profile=X --only vim`: --only calls apply_profile minimal during
+      # its deferred apply, wiping the profile entirely, so every iteration
+      # deployed one identical component and the step tested nothing. --no-* on
+      # the components with side effects keeps each profile's real resolution.
       - name: Every profile parses unattended
         run: |
           for profile in standard devbox agent bare server cloud minimal; do
             echo "── $profile ──"
-            timeout 120 zsh ./deploy.sh --allow-worktree-deploy \
-              "--profile=$profile" --only vim < /dev/null
+            timeout 180 zsh ./deploy.sh --allow-worktree-deploy \
+              "--profile=$profile" --no-secrets --no-secrets-env --no-bws \
+              --no-obsidian-sync --no-claude-tools < /dev/null
           done
+
+      # The CLI flag path resolves differently from the PROFILE= env path, and
+      # only the env path was ever pinned — which is how --devbox silently
+      # became 14 components instead of 50 while every fixture stayed green.
+      - name: CLI flags resolve to the same sets as env profiles
+        run: bash tests/test_profile_defaults.sh

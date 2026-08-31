@@ -55,6 +55,50 @@ test_fixtures() {
     done
 }
 
+# ─── 1b. The CLI path must agree with the env path ───────────────────────────
+
+# The blind spot that let a critical regression ship green. config.sh applies
+# the default profile when sourced; a CLI flag then re-applies a profile on top
+# of that already-mutated state, so the two paths can disagree — and did:
+# `--devbox` resolved to 14 components while `PROFILE=devbox` gave 50, because
+# the `personal)` case body was empty and assumed registry defaults were still
+# live. Every fixture passed throughout. Real invocations use flags, so the
+# flag path is the one that actually matters.
+dump_cli() { zsh "$DOT_DIR/tests/dump_components_cli.zsh" "$DOT_DIR" "$@"; }
+
+test_cli_flags_match_env_profiles() {
+    if ! is_linux; then
+        echo "  SKIP CLI/env agreement (fixtures are Linux-resolved)"
+        return
+    fi
+    # flag-set : fixture it must reproduce
+    local -a cases=(
+        "--devbox:personal"
+        "--personal:personal"
+        "--agent:agent"
+        "--bare:bare"
+        "--standard:standard"
+        "--server:server"
+        "--profile=cloud:cloud"
+    )
+    local entry flags profile diff_out
+    for entry in "${cases[@]}"; do
+        flags="${entry%%:*}"
+        profile="${entry##*:}"
+        if diff_out=$(diff "$GOLDEN/profile-${profile}-linux.txt" <(dump_cli "$flags") 2>&1); then
+            pass "CLI '$flags' resolves exactly like profile '$profile'"
+        else
+            fail "CLI '$flags' disagrees with profile '$profile'" "$diff_out"
+        fi
+    done
+    # A bare invocation (no flags at all) is the default everyone gets.
+    if diff_out=$(diff "$GOLDEN/profile-standard-linux.txt" <(dump_cli) 2>&1); then
+        pass "a bare invocation resolves to 'standard'"
+    else
+        fail "a bare invocation does not resolve to 'standard'" "$diff_out"
+    fi
+}
+
 # ─── 2. Invariants that must hold on any platform ────────────────────────────
 
 test_default_is_standard_not_full() {
@@ -156,6 +200,9 @@ echo "Profile defaults — pinned component sets and invariants"
 echo ""
 echo "1. Pinned fixtures"
 test_fixtures
+echo ""
+echo "1b. CLI flags agree with env profiles"
+test_cli_flags_match_env_profiles
 echo ""
 echo "2. Invariants"
 test_default_is_standard_not_full

@@ -51,9 +51,20 @@ run_bounded() {
 }
 
 require_timeout_cmd() {
+    # This used to `exit 0`, which made the whole canary report success on
+    # macOS — the one platform where the guards were weakest and CI never runs.
+    # A suite that passes by not running is worse than no suite, so a missing
+    # timeout(1) is now a hard failure that names its own fix.
+    if ! command -v timeout >/dev/null 2>&1 && ! command -v gtimeout >/dev/null 2>&1; then
+        echo "FAIL: neither timeout(1) nor gtimeout is available, so this suite" >&2
+        echo "      cannot bound anything and would pass vacuously." >&2
+        echo "      On macOS: brew install coreutils (provides gtimeout)." >&2
+        exit 1
+    fi
+    # gtimeout-only (a Mac with coreutils) still runs everything below; the
+    # harness itself needs a bounding binary, so alias the name it uses.
     if ! command -v timeout >/dev/null 2>&1; then
-        echo "SKIP: coreutils timeout(1) unavailable — cannot bound anything reliably" >&2
-        exit 0
+        timeout() { gtimeout "$@"; }
     fi
 }
 
@@ -233,6 +244,24 @@ test_deadline_holds_without_coreutils() {
     fi
 }
 
+test_git_and_apt_are_bounded() {
+    # The curl-pipe check covers only the curl class. GIT_TERMINAL_PROMPT stops
+    # a credential prompt but not a stalled TCP connection, and
+    # DEBIAN_FRONTEND stops needrestart but not the dpkg lock — on a fresh box
+    # with unattended-upgrades running at boot, apt blocks indefinitely.
+    local missing=""
+    for script in install.sh deploy.sh; do
+        grep -q 'GIT_HTTP_LOW_SPEED_TIME' "$DOT_DIR/$script" || missing+="$script:git "
+        grep -q 'APT_LOCK_TIMEOUT' "$DOT_DIR/$script" || missing+="$script:apt "
+    done
+    grep -q 'DPkg::Lock::Timeout' "$DOT_DIR/scripts/shared/helpers.sh" || missing+="helpers:dpkg-lock "
+    if [[ -z "$missing" ]]; then
+        pass "git fetches and apt installs carry deadlines too"
+    else
+        fail "git/apt can still block indefinitely" "$missing"
+    fi
+}
+
 test_timeout_fallback_covers_macos() {
     # macOS ships no coreutils `timeout`; PACKAGES_MACOS installs coreutils,
     # which provides `gtimeout`. run_with_timeout must try both, or every guard
@@ -309,6 +338,7 @@ test_claude_tools_fetch_is_bounded
 test_source_build_is_bounded_and_visible
 test_parallel_group_is_bounded
 test_no_untimed_curl_pipe_installers
+test_git_and_apt_are_bounded
 test_timeout_fallback_covers_macos
 test_deadline_holds_without_coreutils
 echo ""
