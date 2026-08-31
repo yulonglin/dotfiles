@@ -30,4 +30,9 @@ source "$DOT_DIR/config.sh"
         var="DEPLOY_${(U)name//-/_}"
         print -r -- "$var=${(P)var}"
     done
-} | sort
+} | LC_ALL=C sort
+# LC_ALL=C is load-bearing: sort's collation is locale-dependent, so
+# DEPLOY_CLAUDE / DEPLOY_CLAUDE_CLEANUP / DEPLOY_CLAUDE_TOOLS order differently
+# under en_US.UTF-8 (punctuation-insensitive) than under C (byte order). Without
+# it the fixtures pass on the machine that generated them and fail everywhere
+# else — which is exactly how CI caught this.

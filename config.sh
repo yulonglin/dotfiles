@@ -373,7 +373,10 @@ detect_platform
 
 # User overrides (gitignored) — create config.local.sh to customize defaults
 # Precedence: defaults -> apply_profile() -> config.local.sh -> CLI flags (parse_args)
-[[ -n "$DOT_DIR" && -f "$DOT_DIR/config.local.sh" ]] && source "$DOT_DIR/config.local.sh"
+# DOTFILES_SKIP_LOCAL_CONFIG=1 ignores it — tests capturing reproducible
+# fixtures must not inherit whatever a particular machine has overridden.
+[[ "${DOTFILES_SKIP_LOCAL_CONFIG:-0}" != "1" && -n "$DOT_DIR" && -f "$DOT_DIR/config.local.sh" ]] \
+    && source "$DOT_DIR/config.local.sh"
 
 # Platform-specific defaults
 if is_linux; then
