@@ -113,10 +113,104 @@ def mermaid_passthrough(tokens: list[Token]) -> list[Token]:
     return out
 
 
+DETAILS_OPEN_RE = re.compile(
+    r"^<details( open)?>(?:\s*<summary>(.*?)</summary>)?$", re.DOTALL
+)
+DETAILS_SUMMARY_RE = re.compile(r"^<summary>(.*?)</summary>$", re.DOTALL)
+DETAILS_CLOSE_RE = re.compile(r"^</details>$")
+
+
+def _details_html_token(content: str) -> Token:
+    return Token("html_block", "", 0, content=content + "\n", block=True)
+
+
+def details_passthrough(tokens: list[Token]) -> list[Token]:
+    """Rebuild <details>/<summary> lines as real collapsible elements.
+
+    The second deliberate exception to html-off, alongside mermaid: a reviewed
+    document legitimately wants collapsible sections (full transcripts beside
+    excerpts, long inventories). Only four exact standalone-paragraph shapes
+    pass through — `<details>`, `<details open>` (either optionally carrying a
+    same-line <summary>), a standalone `<summary>…</summary>`, and
+    `</details>` — and summary text is entity-escaped, so no arbitrary markup
+    or attributes ever reach the page. If the document's details tags don't
+    balance, nothing passes through: an unclosed <details> would otherwise
+    swallow every element after it, so the safe fallback is today's behavior
+    (escaped, visible tags).
+    """
+
+    def classify(i: int) -> tuple[str, str] | None:
+        if not (
+            i + 2 < len(tokens)
+            and tokens[i].type == "paragraph_open"
+            and tokens[i + 1].type == "inline"
+            and tokens[i + 2].type == "paragraph_close"
+        ):
+            return None
+        text = tokens[i + 1].content.strip()
+        if m := DETAILS_OPEN_RE.match(text):
+            open_tag = "<details open>" if m.group(1) else "<details>"
+            if m.group(2) is not None:
+                return ("open", open_tag + "<summary>" + html.escape(m.group(2)) + "</summary>")
+            return ("open", open_tag)
+        if m := DETAILS_SUMMARY_RE.match(text):
+            return ("summary", "<summary>" + html.escape(m.group(1)) + "</summary>")
+        if DETAILS_CLOSE_RE.match(text):
+            return ("close", "</details>")
+        return None
+
+    # Balance check first: refuse the whole passthrough on any imbalance.
+    depth = 0
+    for i in range(len(tokens)):
+        kind = classify(i)
+        if kind is None:
+            continue
+        if kind[0] == "open":
+            depth += 1
+        elif kind[0] == "close":
+            depth -= 1
+            if depth < 0:
+                return tokens
+    if depth != 0:
+        return tokens
+
+    out: list[Token] = []
+    i = 0
+    in_details = 0
+    while i < len(tokens):
+        kind = classify(i)
+        if kind is not None and (kind[0] != "summary" or in_details):
+            out.append(_details_html_token(kind[1]))
+            if kind[0] == "open":
+                in_details += 1
+            elif kind[0] == "close":
+                in_details -= 1
+            i += 3
+            continue
+        out.append(tokens[i])
+        i += 1
+    return out
+
+
+# ─── Sanctioned passthroughs ──────────────────────────────────────────────────
+# The parser keeps html OFF so a reviewed document can never inject markup into
+# the published page. Anything the Artifact viewer renders natively (mermaid
+# today) or that reviewed documents legitimately need as real elements
+# (<details> collapsibles) gets its own narrow passthrough here instead of
+# flipping html on globally. When Anthropic ships a new viewer-native construct,
+# preserve it by adding one entry to this list: a token pass that rebuilds ONLY
+# that construct's exact spelling as an html_block, escapes any user text it
+# carries, and leaves every other spelling escaped. Each entry ships with a
+# guard test (tests/test_md2artifact_<name>.py).
+PASSTHROUGHS = [mermaid_passthrough, details_passthrough]
+
+
 def render(md_text: str) -> tuple[str, list[tuple[int, str, str]]]:
     """Return (html, headings) where headings are (level, slug, text)."""
     md = MarkdownIt("commonmark", {"html": False, "linkify": True}).enable("table")
-    tokens = mermaid_passthrough(md.parse(md_text))
+    tokens = md.parse(md_text)
+    for passthrough in PASSTHROUGHS:
+        tokens = passthrough(tokens)
 
     headings: list[tuple[int, str, str]] = []
     seen: dict[str, int] = {}
@@ -213,6 +307,13 @@ th,td{{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}
 th{{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}}
 hr{{border:0;border-top:1px solid var(--rule);margin:2rem 0}}
 a{{color:var(--accent)}}
+details{{border:1px solid var(--rule);border-radius:7px;background:var(--panel);
+ margin:1rem 0;padding:.55rem .9rem}}
+details>summary{{cursor:pointer;font-weight:600;margin:-.55rem -.9rem;padding:.55rem .9rem;
+ border-radius:7px;list-style-position:inside}}
+details>summary:hover{{color:var(--accent)}}
+details[open]>summary{{border-bottom:1px solid var(--rule);border-radius:7px 7px 0 0;
+ margin-bottom:.8rem;background:var(--code)}}
 @media (max-width:56rem){{
   .shell.has-toc{{display:block}}
   .toc{{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--rule);

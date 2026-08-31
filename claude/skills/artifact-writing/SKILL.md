@@ -17,6 +17,8 @@ Yulong's primary reading surface is the Artifact, not terminal scrollback. For a
 
 `md2artifact` takes the document's H1 as the `<title>`, so the H1 is the artifact's name in the gallery and the qualifying detail belongs in the `description` parameter and in the line below the H1 rather than in the H1 itself. What the title should *say* is the heading standard in `~/.claude/checklists/presentation.md`.
 
+**Raw HTML in the source stays escaped, except sanctioned passthroughs.** `md2artifact` parses with html off, so arbitrary tags render as visible literal text — never write raw HTML expecting it to work. The sanctioned exceptions are the `PASSTHROUGHS` registry in `custom_bins/md2artifact`: mermaid (```mermaid fence or `<pre class="mermaid">`) and `<details>`/`<summary>` collapsibles (tags on their own lines, plain-text summary). When Anthropic ships a new viewer-native construct that pages should carry, preserve it by adding one registry entry plus a guard test there — not by enabling raw HTML.
+
 ## One topic, one living page
 
 Update the existing artifact for the topic in place — same URL, passing `url` when the artifact came from an earlier session — rather than minting a new artifact per session. New URL only on a hard topic pivot.
