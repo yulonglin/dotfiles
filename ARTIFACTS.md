@@ -4,11 +4,15 @@ The pages this repo's work has produced, and where the things it depends on live
 
 Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written at publish time, because neither the repo nor the publishing org can be recovered from the gallery afterwards. Run `/artifacts-sync` to reconcile.
 
+**This index page supersedes [its previous URL](https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802)** (2026-08-31): that page sits in another of the account's orgs and refused an in-place update from this session, so the index moved to a new URL in the current org. The old page stays for its history; do not update it.
+
 ## Artifacts
 
 | Artifact | Org | Status | Source | Public | Updated |
 |---|---|---|---|---|---|
-| [Artifacts and Resources for dotfiles](https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802) — this index; a living index may name its function rather than assert a finding | see note | live | `ARTIFACTS.md` | no | 2026-08-29 |
+| [Artifacts and Resources for dotfiles](https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c) — this index; a living index may name its function rather than assert a finding | unknown (see note) | live | `ARTIFACTS.md` | no | 2026-08-31 |
+| [Artifacts and Resources for dotfiles (previous URL)](https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802) — org-locked former home of this index | see note | superseded — by [the current index](https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c) | `ARTIFACTS.md` | no | 2026-08-29 |
+| [README Trimmed; Two Proposals Await](https://claude.ai/code/artifact/720f1fce-0147-47ef-a9f5-9afb98768445) — the README TODOs are resolved on `worktree-readme-todos` (trim + `md2artifact` rename) with nothing merged; the installer's picker already exists and its hangs have named `file:line` causes; three independent decisions are Yulong's | unknown (see note) | live | — (built from the job's gitignored `tmp/`, not kept) | no | 2026-08-31 |
 | [Context Ledger](https://claude.ai/code/artifact/439482e4-0d10-4715-a7d1-add2805e614a) — 134 components cost 17,246 tok every session, 60% of it always-loaded prose rather than skill descriptions; 67 of 120 skills/agents have never been invoked, and the rules cite four skills with zero uses | see note | live | `artifacts/context-ledger/` | no | 2026-08-29 |
 | [Task Lists Follow the Shell](https://claude.ai/code/artifact/242e3dbb-600d-44b4-87ae-9a688542e132) — every session already gets its own task list, so the wrapper must never export a shared ID; the daemon is the last place a stale one hides | see note | done | — | no | 2026-08-28 |
 | [Most of the setup now loads on demand](https://claude.ai/code/artifact/26852bc6-e36f-4b55-97db-d0d3473a0b49) — the always-loaded rules tier fell from ~76 KB to ~28 KB by moving activity-scoped procedure into skills | see note | done | — | no | 2026-08-28 |
@@ -21,7 +25,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 
 **Status vocabulary.** `live` — still being updated, cite it. `done` — the work is finished and its conclusions stand, still quotable. `archived` — deliberately retired, do not cite, row kept for its history and comment threads. `superseded` — replaced by a specific newer page, and the row links to it. `elsewhere` — published under an org this machine is not signed into. `done` is an achievement and `archived` is a retirement; only `superseded` implies a successor exists. Nothing is ever deleted from this table.
 
-Everything above except this index is `done`: each reports finished work whose conclusions still hold. Nothing here is `archived` yet.
+Everything above except this index and *README Trimmed; Two Proposals Await* (still collecting decisions) is `done`: each reports finished work whose conclusions still hold. Nothing here is `archived` yet.
 
 **Org, and why it is not filled in yet.** Every row above appeared in the `Artifact action: list` result of 2026-08-29. Whether that *means* they are in the currently signed-in org depends on the listing being org-scoped, which the Claude Code docs nowhere state — so read "see note" as genuinely unknown rather than as a name I merely failed to type. The org's *name* is missing only because `claude auth status` returned `orgName: null` on the session that wrote this file — while reporting `authMethod: "claude.ai"` and publishing the index page without trouble. A null org therefore diagnoses nothing about how the session is authenticated; it is simply a field that is sometimes unpopulated. Run `/artifacts-sync` from a session where it is populated to stamp the real name.
 
