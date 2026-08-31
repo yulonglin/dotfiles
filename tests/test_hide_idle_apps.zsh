@@ -48,7 +48,12 @@ mkdir -p "$ROOT/custom_bins" "$ROOT/config" "$ROOT/tools/window-exposure" \
          "$ROOT/bin" "$FAKEHOME"
 ln "$REPO/custom_bins/hide-idle-apps"       "$ROOT/custom_bins/hide-idle-apps"
 ln "$REPO/custom_bins/app-lifecycle-config" "$ROOT/custom_bins/app-lifecycle-config"
-cp "$REPO/config/app-lifecycle.yaml" "$REPO/config/hide-idle.conf" "$ROOT/config/"
+# The app policy is the FIXTURE's, not the shipped config's: these scenarios
+# assert on resolved rungs per app, so reading real policy made a change of mind
+# about Obsidian or Bear a test failure. hide-idle.conf is copied for real - it
+# holds the poll interval, which is not a policy about apps.
+cp "$REPO/tests/fixtures/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
+cp "$REPO/config/hide-idle.conf" "$ROOT/config/"
 
 # Stands in for osascript: returns a canned System Events snapshot, and records
 # hide attempts instead of performing them.
@@ -238,11 +243,9 @@ check     "first sight hides nothing"      "$OUT" "Nothing to hide."
 check     "the resolved decision, in full"  "$OUT" "visible close/quit  -> hide  visible enough"
 check     "a gate that is the streak"       "$OUT" "-> hide  streak 1/2"
 check     "a gate that is the frontmost"    "$OUT" "-> hide  frontmost"
-# This reads Obsidian, whose `manual:` comes from the SHIPPED config (copied in
-# wholesale above), so editing Obsidian's entry moves this expectation with it -
-# it was `skip/quit` until Obsidian became `manual: hide`. What is under test is
-# that an app's own value is rendered rather than the default, so any
-# non-default value serves.
+# Obsidian is the fixture's hide-rung app. What is under test is that an app's
+# own value is rendered rather than the default, so any non-default value
+# serves; `hide` is used because no other assertion here needs that rung.
 check     "manual: hide shows as itself"    "$OUT" "hide/quit"
 # zsh leaves TYPESET_SILENT unset, so a bare `local x` for an x that already has
 # a value prints it. Three such lines used to head every dry-run report.
