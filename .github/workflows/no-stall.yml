@@ -23,6 +23,8 @@ on:
       - 'tests/test_no_stall.sh'
       - 'tests/test_profile_defaults.sh'
       - 'tests/dump_components.zsh'
+      - 'tests/dump_components_cli.zsh'
+      - 'scripts/helpers/**'
       - 'tests/golden/**'
       - '.github/workflows/no-stall.yml'
   pull_request:
@@ -35,12 +37,20 @@ on:
       - 'tests/test_no_stall.sh'
       - 'tests/test_profile_defaults.sh'
       - 'tests/dump_components.zsh'
+      - 'tests/dump_components_cli.zsh'
+      - 'scripts/helpers/**'
       - 'tests/golden/**'
       - '.github/workflows/no-stall.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# The unattended job is minutes long and its subject is things that hang, so a
+# rapid series of pushes must not stack full-length runs on top of each other.
+concurrency:
+  group: no-stall-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   canary:
@@ -80,7 +90,11 @@ jobs:
   unattended:
     name: Real unattended runs (disposable container)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Must exceed the sum of this job's own step deadlines (4x300s + 7x180s =
+    # 41min), or the outer cap fires first and a slow-but-honest run is
+    # reported as a stall. In a workflow about deadlines, the inner ones have
+    # to be the binding constraint.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
@@ -124,8 +138,8 @@ jobs:
               --no-obsidian-sync --no-claude-tools < /dev/null
           done
 
-      # The CLI flag path resolves differently from the PROFILE= env path, and
-      # only the env path was ever pinned — which is how --devbox silently
-      # became 14 components instead of 50 while every fixture stayed green.
-      - name: CLI flags resolve to the same sets as env profiles
-        run: bash tests/test_profile_defaults.sh
+      # NOTE: no test_profile_defaults.sh here. It used to run again at this
+      # point, described as covering the CLI-flag path — but it is the same
+      # command the canary job already runs, so it added no coverage and only
+      # spent minutes against the cap. The CLI-vs-env agreement it refers to is
+      # asserted there, by test_cli_flags_match_env_profiles.
