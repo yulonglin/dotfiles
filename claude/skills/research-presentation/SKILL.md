@@ -28,7 +28,7 @@ Never read an exported PDF or a long deck in main context. Delegate it: a subage
 - the question is **whether the evidence holds** rather than how it looks — intervals, nulls, chance correction, slicing, provenance: `~/.claude/checklists/results-analysis.md`
 - the question is about **sentences and paragraphs** rather than the page or deck: `~/.claude/checklists/writing.md`
 - you are **drawing the chart**: `house-plots` for matplotlib in papers and decks, the built-in `dataviz` for native SVG on an artifact page
-- you are building the **page** — transcripts, collapsible units, the annotation layer, `md2review`: the `artifact-writing` skill
+- you are building the **page** — transcripts, collapsible units, the annotation layer, `md2artifact`: the `artifact-writing` skill
 - the draft is finished and the risk is being **misread**: the `reduce-ambiguity` skill
 
 ## Why this file is thin

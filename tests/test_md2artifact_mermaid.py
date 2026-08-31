@@ -1,6 +1,6 @@
-"""Guards md2review's mermaid passthrough.
+"""Guards md2artifact's mermaid passthrough.
 
-Background: md2review parses Markdown with html disabled (so a reviewed
+Background: md2artifact parses Markdown with html disabled (so a reviewed
 document cannot inject script into the published page), which escaped mermaid
 blocks into literal visible text — `<p>&lt;pre class=&quot;mermaid&quot;&gt;`
 instead of a diagram. The Artifact viewer renders `<pre class="mermaid">`
@@ -18,11 +18,11 @@ from pathlib import Path
 
 import pytest
 
-MD2REVIEW = Path(__file__).resolve().parent.parent / "custom_bins" / "md2review"
+MD2REVIEW = Path(__file__).resolve().parent.parent / "custom_bins" / "md2artifact"
 
 
 def _interpreter() -> str:
-    """An interpreter that can import md2review's markdown-it-py dependency.
+    """An interpreter that can import md2artifact's markdown-it-py dependency.
 
     Under `uv run` the ambient `python3` is uv's own, which does not carry the
     dependency, so prefer the system interpreter when it has it.
@@ -40,7 +40,7 @@ def _interpreter() -> str:
 
 
 def _render(src_text: str, tmp: Path) -> str:
-    """Render Markdown through md2review and return the generated HTML."""
+    """Render Markdown through md2artifact and return the generated HTML."""
     src = tmp / "sample.md"
     src.write_text(src_text, encoding="utf-8")
     out = tmp / "sample.html"
@@ -84,7 +84,7 @@ Closing paragraph.
 
 @pytest.fixture(scope="module")
 def page_html(tmp_path_factory) -> str:
-    return _render(SAMPLE, tmp_path_factory.mktemp("md2review_mermaid"))
+    return _render(SAMPLE, tmp_path_factory.mktemp("md2artifact_mermaid"))
 
 
 def test_both_spellings_become_real_mermaid_elements(page_html: str) -> None:

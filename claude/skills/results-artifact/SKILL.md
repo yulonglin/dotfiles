@@ -42,7 +42,7 @@ State the factors the result can be sliced by, and slice by them when a slice co
 
 - the question is what the page must **show** or how it is reviewed — evidence links, provenance, transcript review, annotation, the per-finding shape: `~/.claude/checklists/results-analysis.md`
 - the question is the page's **form** — headings as claims, numbers in plots, terminology and FAQ, attention and progressive disclosure, slides: `~/.claude/checklists/presentation.md`
-- you need **page mechanics** — collapsible units, transcript rendering, the annotation layer, `md2review`, publishing and republishing: the `artifact-writing` skill
+- you need **page mechanics** — collapsible units, transcript rendering, the annotation layer, `md2artifact`, publishing and republishing: the `artifact-writing` skill
 - the metric's ground truth is a **judge**: the `llm-judge` skill, for prompt design, blinding, fan-out and persistence
 - the thing being analysed is a **monitor or judge** — errors, disagreements, comparative advantage: `~/.claude/checklists/results-analysis/monitoring.md`
 - a chart needs drawing: `house-plots` for papers, the built-in `dataviz` for artifact pages

@@ -1,6 +1,6 @@
-"""Behavioural checks for the md2review comment box, driven in a real browser.
+"""Behavioural checks for the md2artifact comment box, driven in a real browser.
 
-The structural tests in `test_md2review_ios.py` assert the generated page still
+The structural tests in `test_md2artifact_ios.py` assert the generated page still
 carries each load-bearing piece. These assert what a reviewer actually
 experiences, because the bugs they guard were all invisible to a string match:
 
@@ -59,7 +59,7 @@ class _Server(socketserver.ThreadingTCPServer):
 
 
 ROOT = Path(__file__).resolve().parent.parent
-MD2REVIEW = ROOT / "custom_bins" / "md2review"
+MD2REVIEW = ROOT / "custom_bins" / "md2artifact"
 
 SAMPLE = """# Review Sample
 
@@ -87,7 +87,7 @@ POP_OPEN = "() => getComputedStyle(document.getElementById('anPop')).display ===
 @pytest.fixture(scope="module")
 def site(tmp_path_factory) -> str:
     """Render the sample and serve its directory; yields the page URL."""
-    tmp = tmp_path_factory.mktemp("md2review-browser")
+    tmp = tmp_path_factory.mktemp("md2artifact-browser")
     src = tmp / "sample.md"
     src.write_text(SAMPLE, encoding="utf-8")
     for name, key in (("index.html", "review-sample"), ("renamed.html", "review-sample-v2")):
@@ -97,7 +97,7 @@ def site(tmp_path_factory) -> str:
             text=True,
         )
         # A render failure is a real regression, not a reason to skip.
-        assert r.returncode == 0, f"md2review failed: {r.stderr}"
+        assert r.returncode == 0, f"md2artifact failed: {r.stderr}"
 
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(tmp))
     httpd = _Server(("127.0.0.1", 0), handler)
