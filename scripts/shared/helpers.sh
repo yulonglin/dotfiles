@@ -628,7 +628,11 @@ install_direnv() {
     if is_macos; then
         brew_install direnv
     else
-        curl -sfL https://direnv.net/install.sh | bash 2>/dev/null || { log_warning "direnv installation failed"; return 1; }
+        # Deadlines on both halves: the fetch, and the script it pipes to bash
+        # (an installer that stalls hangs the run just as hard as a stalled curl).
+        fetch https://direnv.net/install.sh 2>/dev/null \
+            | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" bash 2>/dev/null \
+            || { log_warning "direnv installation failed or timed out"; return 1; }
     fi
 }
 
@@ -651,7 +655,8 @@ install_rust_toolchain() {
             rustup default stable 2>/dev/null || log_warning "rustup default stable failed"
         fi
     else
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 \
+            https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
     fi
     source "$HOME/.cargo/env" 2>/dev/null || true
 }
@@ -688,7 +693,9 @@ install_bws() {
 install_claude_code() {
     if is_installed claude; then return 0; fi
     log_info "Installing Claude Code..."
-    curl -fsSL https://claude.ai/install.sh | bash || { log_warning "Claude Code installation failed"; return 1; }
+    fetch https://claude.ai/install.sh \
+        | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" bash \
+        || { log_warning "Claude Code installation failed or timed out"; return 1; }
     # Alpine Linux dependencies
     if is_linux && cmd_exists apk; then
         apk add libgcc libstdc++ ripgrep 2>/dev/null || true
@@ -904,7 +911,8 @@ install_ohmyzsh() {
     rm -rf "$zsh_dir"
     # Unset ZSH so the official installer doesn't refuse when $ZSH points elsewhere
     # (e.g., RunPod containers where /root/.oh-my-zsh exists but HOME=/workspace)
-    ZSH="$zsh_dir" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    ZSH="$zsh_dir" run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" \
+        sh -c "$(fetch https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
     log_info "Installing powerlevel10k theme..."
     git clone --quiet https://github.com/romkatv/powerlevel10k.git \
@@ -1097,7 +1105,7 @@ install_mise() {
 
     log_info "Installing mise..."
     mkdir -p "$HOME/.local/bin"
-    curl https://mise.run | sh
+    fetch https://mise.run | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" sh
     export PATH="$HOME/.local/bin:$PATH"
 
     if cmd_exists mise; then

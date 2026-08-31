@@ -193,6 +193,35 @@ test_scripts_parse_without_prompting() {
     done
 }
 
+test_no_untimed_curl_pipe_installers() {
+    # The class, not the three instances: any `curl … | bash|sh` that carries no
+    # deadline can hang a fresh install forever. Deadlines come from fetch() or
+    # from an explicit --max-time, so a bare `curl` piped to a shell is a
+    # regression. (Checks source files only, not this test or docs.)
+    local hits
+    hits=$(grep -nE 'curl [^|]*\|[[:space:]]*(sudo )?(ba)?sh' \
+        "$DOT_DIR"/install.sh "$DOT_DIR"/deploy.sh "$DOT_DIR"/scripts/shared/helpers.sh 2>/dev/null \
+        | grep -v -- '--max-time' || true)
+    if [[ -z "$hits" ]]; then
+        pass "no untimed 'curl | sh' installers in the install path"
+    else
+        fail "untimed curl-pipe installer(s) found" "$hits"
+    fi
+}
+
+test_timeout_fallback_covers_macos() {
+    # macOS ships no coreutils `timeout`; PACKAGES_MACOS installs coreutils,
+    # which provides `gtimeout`. run_with_timeout must try both, or every guard
+    # here silently becomes a no-op on a Mac.
+    local out
+    out=$(helper_probe 'functions run_with_timeout' 2>&1)
+    if [[ "$out" == *"gtimeout"* ]]; then
+        pass "run_with_timeout falls back to gtimeout (macOS via coreutils)"
+    else
+        fail "run_with_timeout has no macOS fallback" "all deadlines no-op on a Mac"
+    fi
+}
+
 test_no_unguarded_bare_sudo_v() {
     # deploy.sh:1274 aborted the whole run under set -euo pipefail on non-TTY.
     # Any bare `sudo -v` that is not inside a guard function is a regression.
@@ -255,6 +284,8 @@ test_fetch_carries_deadlines
 test_claude_tools_fetch_is_bounded
 test_source_build_is_bounded_and_visible
 test_parallel_group_is_bounded
+test_no_untimed_curl_pipe_installers
+test_timeout_fallback_covers_macos
 echo ""
 echo "2. The real scripts, unattended"
 test_help_is_instant

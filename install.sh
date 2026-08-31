@@ -139,7 +139,8 @@ if is_macos; then
         # Homebrew never auto-detects non-interactive mode and would otherwise
         # block there — a silent-looking stall on a fresh Mac. sudo is already
         # cached above, so brew's privileged steps don't re-prompt either.
-        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        NONINTERACTIVE=1 run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" \
+            /bin/bash -c "$(fetch https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         [[ $(uname -m) == "arm64" ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
 
@@ -206,7 +207,7 @@ if ! is_installed uv; then
     if is_macos && cmd_exists brew; then
         brew_install uv
     else
-        curl -LsSf https://astral.sh/uv/install.sh | sh
+        fetch https://astral.sh/uv/install.sh | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" sh
     fi
 fi
 
@@ -302,7 +303,8 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Rust toolchain (needed for claude-tools build in deploy.sh)
     if ! is_installed cargo; then
         log_info "Installing Rust toolchain (user-level, no root needed)..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 \
+            https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
     fi
     source "$HOME/.cargo/env" 2>/dev/null || true
 
@@ -312,7 +314,7 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Bun must install before Codex/OpenCode on Linux (they need `bun add -g`)
     if is_linux && ! cmd_exists bun; then
         log_info "Installing bun..."
-        curl -fsSL https://bun.sh/install | bash
+        fetch https://bun.sh/install | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" bash
         export BUN_INSTALL="$HOME/.bun"
         export PATH="$BUN_INSTALL/bin:$PATH"
     fi
