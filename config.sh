@@ -84,6 +84,7 @@ DEPLOY_REGISTRY=(
     "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true|macOS"
     "vpn|NordVPN + Tailscale split tunnel daemon|macos|true|macOS"
     "pueue|Pueue + systemd resource slices|linux|true|Linux"
+    "storage|Per-machine data-volume config (config/storage.conf)|linux|true|Linux"
     "matplotlib|Style files: anthropic, deepmind, petri|all|true|Dev Tools"
     "pdb|pdb++ debugger config (high-contrast)|all|true|Dev Tools"
     "claude-tools|Build claude-tools Rust binary|all|true|Build"

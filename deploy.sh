@@ -92,6 +92,7 @@ COMPONENTS:
     --bearcli         Symlink Bear CLI → /usr/local/bin (macOS only, for cron/scripts)
     --vpn             Install NordVPN+Tailscale split tunnel daemon (macOS only)
     --pueue           Deploy Pueue + systemd resource management (Linux only)
+    --storage         Write per-machine data-volume config (Linux only)
     --bws             Install Bitwarden Secrets Manager CLI (bws)
     --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
     --aliases=LIST    Additional alias scripts (comma-separated)
@@ -960,6 +961,22 @@ if [[ "$DEPLOY_CLEANUP" == "true" ]] && is_macos; then
         "$DOT_DIR/scripts/cleanup/install.sh" --non-interactive || log_warning "File cleanup installation failed"
     else
         log_warning "File cleanup install script not found"
+    fi
+fi
+
+# ─── Storage Tiering Config (Linux) ──────────────────────────────────────────
+
+if [[ "$DEPLOY_STORAGE" == "true" ]] && is_linux; then
+    log_section "STORAGE TIERING CONFIG"
+
+    # Records this machine's data volume in config/storage.conf, which
+    # config/aliases/storage.sh reads on every interactive shell. Config only —
+    # it never moves or deletes data. Idempotent: an existing config is left
+    # alone, and a box with no attached volume is a silent success.
+    if [[ -x "$DOT_DIR/custom_bins/storage-setup" ]]; then
+        "$DOT_DIR/custom_bins/storage-setup" || log_warning "storage-setup failed"
+    else
+        log_warning "custom_bins/storage-setup not found or not executable"
     fi
 fi
 
