@@ -68,6 +68,15 @@ export TORCH_HOME=/workspace/torch
 # Leave UV_CACHE_DIR / PIP_CACHE_DIR at local defaults — they're latency-sensitive and may host live venvs.
 ```
 
+**Already in dotfiles:** `config/aliases/storage.sh` (sourced by zshrc on every interactive
+shell) does this automatically when `/workspace` exists — no manual profile edit needed. It
+deliberately **skips the export when the default cache path is already a symlink onto the
+volume** (a relocated `~/.cache/huggingface` redirects transparently; re-pointing `HF_HOME`
+would orphan the moved cache and force re-downloads), so an unset `HF_HOME` on a tiered box
+is correct, not a gap. The same file prints a one-line warning on shell start when root has
+<20G free. Scope boundary: zshrc-sourced env reaches interactive shells only — pueue
+daemons, cron and systemd services won't see it.
+
 ---
 
 ## Pillar B — Latency-aware placement (tier by access pattern)
