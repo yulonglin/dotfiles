@@ -14,6 +14,20 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
+# Non-interactive hardening: no hidden prompt below may block an unattended run.
+# git must never open a credential prompt (clones here are public repos), apt
+# must never open needrestart's ncurses dialog on Ubuntu 22.04+, and services
+# apt touches restart automatically. Attended runs lose nothing.
+export GIT_TERMINAL_PROMPT=0
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+# GIT_TERMINAL_PROMPT stops the credential prompt but not a stalled TCP
+# connection, and DEBIAN_FRONTEND stops needrestart but not the dpkg lock —
+# on a fresh box with unattended-upgrades running at boot, apt waits forever.
+# These two bound what those variables leave unbounded.
+export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30
+export APT_LOCK_TIMEOUT="${APT_LOCK_TIMEOUT:-120}"
+
 # Script directory
 DOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 export DOT_DIR
@@ -42,13 +56,19 @@ Usage: ./install.sh [OPTIONS]
 Install dotfile dependencies on macOS or Linux.
 Configuration is in config.sh - edit it to change defaults.
 
-PROFILES:
-    --profile=NAME    Use a profile: personal, server, minimal
-    --default         Safe base for shared/new machines (alias for --profile=server)
+PROFILES (pick by what the machine is FOR):
+    (no flag)         'standard' — shell, editor, git, Claude/Codex, supply-chain
+                      defenses. Nothing scheduled, nothing GUI. This is the
+                      default; it is NOT the full set.
+    --devbox          A machine you live on: the full set (was --personal)
+    --agent           Ephemeral box you DO code on: standard + per-project secrets
+    --bare            Ephemeral box you will NOT code on: shell + uv only
+    --server          Shared machine: no GUI, no cleanup, no scheduled jobs
     --minimal         Suppress ALL components — specify what you want explicitly
     --no-defaults     Same as --minimal (clearer name)
-    --server          Server-appropriate subset
-    --personal        Full personal setup (default)
+    --profile=NAME    standard, devbox, agent, bare, server, cloud, minimal
+    --default         Alias for --server
+    --personal        Synonym for --devbox (kept for existing invocations)
 
 SELECTIVE INSTALLATION:
     --only COMP...    Install ONLY these components, nothing else
@@ -125,7 +145,17 @@ if is_macos; then
         # Homebrew never auto-detects non-interactive mode and would otherwise
         # block there — a silent-looking stall on a fresh Mac. sudo is already
         # cached above, so brew's privileged steps don't re-prompt either.
-        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        # Checked, not interpolated: a failed fetch in argument position runs
+        # bash with an empty script and exits 0, after which every later
+        # brew_install fails against a Homebrew that was never installed.
+        if _brew_installer=$(fetch https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh) \
+           && [[ -n "$_brew_installer" ]]; then
+            NONINTERACTIVE=1 run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" \
+                /bin/bash -c "$_brew_installer" \
+                || log_warning "Homebrew installation failed"
+        else
+            log_warning "Could not fetch the Homebrew installer — skipping"
+        fi
         [[ $(uname -m) == "arm64" ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
     fi
 
@@ -143,7 +173,7 @@ elif is_linux; then
     # Skip apt update if cache is less than 1 hour old
     apt_cache="/var/lib/apt/lists/partial"
     if [[ ! -d "$apt_cache" ]] || [[ $(( $(date +%s) - $(stat -c %Y "$apt_cache" 2>/dev/null || echo 0) )) -gt 3600 ]]; then
-        apt update 2>/dev/null || log_info "Skipping apt update (no permissions)"
+        apt update "${APT_LOCK_OPT[@]}" 2>/dev/null || log_info "Skipping apt update (no permissions)"
     else
         log_info "apt cache fresh (< 1h old) — skipping update"
     fi
@@ -189,7 +219,7 @@ if ! is_installed uv; then
     if is_macos && cmd_exists brew; then
         brew_install uv
     else
-        curl -LsSf https://astral.sh/uv/install.sh | sh
+        fetch https://astral.sh/uv/install.sh | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" sh
     fi
 fi
 
@@ -289,7 +319,8 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Rust toolchain (needed for claude-tools build in deploy.sh)
     if ! is_installed cargo; then
         log_info "Installing Rust toolchain (user-level, no root needed)..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 \
+            https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
     fi
     source "$HOME/.cargo/env" 2>/dev/null || true
 
@@ -480,7 +511,12 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             log_info "Non-interactive: using committed Brewfile (run 'app-picker' to customise)"
         else
             # Interactive: let the user toggle apps, regenerating the Brewfile.
-            "$DOT_DIR/custom_bins/app-picker" || log_warning "app-picker cancelled — using existing Brewfile"
+            # Bounded for the same reason as the component menu: this is a
+            # full-screen TUI that waits for a human, and a TTY nobody is
+            # watching would sit here forever. On expiry the committed Brewfile
+            # is used, exactly as in the non-interactive branch above.
+            run_with_timeout "${DOTFILES_MENU_TIMEOUT:-60}" "$DOT_DIR/custom_bins/app-picker" \
+                || log_warning "app-picker cancelled or unanswered — using existing Brewfile"
         fi
 
         if [[ -f "$brewfile" ]]; then
@@ -500,7 +536,7 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             sudo_keepalive_pid=""
             if [[ -t 0 ]] && grep -q '^mas ' "$brewfile" 2>/dev/null; then
                 log_info "App Store installs (mas) need sudo — caching your credential…"
-                if sudo -v; then
+                if run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v; then
                     # Capture parent PID before subshell so $$ resolves correctly in both
                     # zsh (where $$ is the parent in subshells) and bash (where it is not).
                     _mas_parent_pid=$$

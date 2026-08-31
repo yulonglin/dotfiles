@@ -14,6 +14,20 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
+# Non-interactive hardening: no hidden prompt below may block an unattended run.
+# git must never open a credential prompt (clones here are public repos), apt
+# must never open needrestart's ncurses dialog on Ubuntu 22.04+, and services
+# apt touches restart automatically. Attended runs lose nothing.
+export GIT_TERMINAL_PROMPT=0
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+# GIT_TERMINAL_PROMPT stops the credential prompt but not a stalled TCP
+# connection, and DEBIAN_FRONTEND stops needrestart but not the dpkg lock —
+# on a fresh box with unattended-upgrades running at boot, apt waits forever.
+# These two bound what those variables leave unbounded.
+export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30
+export APT_LOCK_TIMEOUT="${APT_LOCK_TIMEOUT:-120}"
+
 # Script directory
 DOT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 export DOT_DIR
@@ -41,13 +55,22 @@ Usage: ./deploy.sh [OPTIONS]
 
 Deploy dotfile configurations. Settings are in config.sh.
 
-PROFILES:
-    --profile=NAME    Use a profile: personal, server, minimal
-    --default         Safe base for shared/new machines (alias for --profile=server)
+PROFILES (pick by what the machine is FOR):
+    (no flag)         'standard' — shell, editor, git, Claude/Codex, supply-chain
+                      defenses. Nothing scheduled, nothing GUI. This is the
+                      default; it is NOT the full set.
+    --devbox          A machine you live on: the full set (was --personal)
+    --agent           Ephemeral box you DO code on: standard + per-project secrets
+    --bare            Ephemeral box you will NOT code on: shell + uv only
+    --server          Shared machine: no GUI, no file cleanup. NOTE: still
+                      installs the recurring agent jobs (mcp-sync, usage-ping,
+                      tmux-resume, dep-audit, stale-claims) — unchanged from
+                      before, so curl|bash provisioning keeps working
     --minimal         Suppress ALL components — specify what you want explicitly
     --no-defaults     Same as --minimal (clearer name)
-    --server          Server-appropriate subset
-    --personal        Full personal setup (default)
+    --profile=NAME    standard, devbox, agent, bare, server, cloud, minimal
+    --default         Alias for --server
+    --personal        Synonym for --devbox (kept for existing invocations)
 
 SELECTIVE DEPLOYMENT:
     --only COMP...    Deploy ONLY these components, nothing else
@@ -596,7 +619,14 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
                     echo "  [d] Keep dotfiles config (discard local changes)"
                     echo "  [s] Skip htop deployment"
                     echo ""
-                    read -r "htop_choice?Choice [l/d/s]: "
+                    # A TTY is not proof a human is watching it. On no answer,
+                    # fall through to the same choice the non-interactive branch
+                    # makes — skip — rather than blocking the deploy forever.
+                    if ! read -t "${DOTFILES_PROMPT_TIMEOUT:-60}" -r "htop_choice?Choice [l/d/s]: "; then
+                        echo ""
+                        log_info "No answer in ${DOTFILES_PROMPT_TIMEOUT:-60}s — skipping htop"
+                        htop_choice="s"
+                    fi
                 fi
 
                 case "$htop_choice" in
@@ -713,7 +743,15 @@ if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/
         # cross-platform dispatch wrapper (see custom_bins/claude-tools) and
         # overwriting it with a native binary breaks it on every other platform
         # once committed.
-        cd "$DOT_DIR/tools/claude-tools" && cargo build --release --quiet 2>&1 && \
+        # Bounded, and not --quiet: this runs in the background with its output
+        # captured to a log, so the only thing --quiet bought was an empty log
+        # on failure. The deadline is what matters — a bare `wait` below has no
+        # timeout of its own, so an unbounded cargo build here hangs the whole
+        # deploy at the very last step, silently. This is the same stall class
+        # the canary is named for; it just lived in deploy.sh rather than in
+        # _build_claude_tools_from_source.
+        cd "$DOT_DIR/tools/claude-tools" \
+        && run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release 2>&1 && \
         cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET" && \
         chmod +x "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET"
     ) &>"$CLAUDE_TOOLS_LOG" &
@@ -1264,14 +1302,23 @@ fi
 
 # ─── VPN Split Tunneling (macOS only) ────────────────────────────────────────
 
-if [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos; then
+_vpn_sudo_ready() {
+    # A bare `sudo -v` under `set -euo pipefail` aborts the whole deploy when
+    # there is no TTY to answer the password prompt ("a terminal is required").
+    # Proceed only with cached credentials, or a successful attended prompt.
+    sudo -n true 2>/dev/null && return 0
+    [[ -t 0 ]] && run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v && return 0
+    return 1
+}
+
+if [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos && ! _vpn_sudo_ready; then
+    log_warning "Skipping VPN split tunnel daemon — sudo credentials unavailable (re-run attended or with cached sudo)"
+elif [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos; then
     log_section "INSTALLING VPN SPLIT TUNNEL DAEMON"
 
     VPN_PLIST_LABEL="com.dotfiles.tailscale-route-fix"
     VPN_PLIST_PATH="/Library/LaunchDaemons/${VPN_PLIST_LABEL}.plist"
     VPN_SCRIPT_PATH="/usr/local/bin/tailscale-route-fix"
-
-    sudo -v  # Acquire sudo upfront
 
     # Idempotent: unload existing before loading new
     sudo launchctl bootout "system/${VPN_PLIST_LABEL}" 2>/dev/null || true
@@ -1375,7 +1422,7 @@ if [[ "${DEPLOY_BWS:-false}" == "true" ]]; then
             BWS_TMP="$(mktemp -d)"
             trap 'rm -rf "$BWS_TMP"' EXIT
             log_info "Downloading bws ${BWS_VERSION} from GitHub releases..."
-            if curl -sSL "$BWS_URL" -o "${BWS_TMP}/bws.zip" && \
+            if fetch "$BWS_URL" -o "${BWS_TMP}/bws.zip" && \
                unzip -qo "${BWS_TMP}/bws.zip" -d "${BWS_TMP}" && \
                install -m 755 "${BWS_TMP}/bws" "${BWS_INSTALL_DIR}/bws"; then
                 log_success "bws installed to ${BWS_INSTALL_DIR}/bws: $(bws --version 2>/dev/null)"

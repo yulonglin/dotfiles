@@ -1,6 +1,6 @@
 """Guards `annotate-html` and the shared annotation layer it injects.
 
-The layer is the single copy of md2review's select-to-comment code
+The layer is the single copy of md2artifact's select-to-comment code
 (`custom_bins/_annotation_layer.py`). `block_unannotated_artifact.sh` refuses
 to publish an HTML Artifact that lacks it, so the CLI's --check exit codes and
 its idempotence are what the hook depends on.
@@ -19,7 +19,7 @@ import pytest
 
 BINS = Path(__file__).resolve().parent.parent / "custom_bins"
 CLI = BINS / "annotate-html"
-MD2REVIEW = BINS / "md2review"
+MD2REVIEW = BINS / "md2artifact"
 
 PAGE = "<title>Smoke Page</title>\n<h1>Smoke Page</h1>\n<p>hello world</p>\n"
 PAGE_WITH_BODY = "<html><head><title>T</title></head><body><p>x</p></body></html>\n"
@@ -336,8 +336,8 @@ def test_layer_javascript_parses(tmp_path: Path) -> None:
     assert r.returncode == 0, r.stderr
 
 
-def test_md2review_output_uses_the_same_layer(tmp_path: Path) -> None:
-    """One copy: a md2review page passes --check and carries the v1 root."""
+def test_md2artifact_output_uses_the_same_layer(tmp_path: Path) -> None:
+    """One copy: a md2artifact page passes --check and carries the v1 root."""
     probe = subprocess.run(
         ["/usr/bin/python3", "-c", "import markdown_it"], capture_output=True
     )
