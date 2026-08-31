@@ -14,6 +14,14 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
+# Non-interactive hardening: no hidden prompt below may block an unattended run.
+# git must never open a credential prompt (clones here are public repos), apt
+# must never open needrestart's ncurses dialog on Ubuntu 22.04+, and services
+# apt touches restart automatically. Attended runs lose nothing.
+export GIT_TERMINAL_PROMPT=0
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
 # Script directory
 DOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 export DOT_DIR
