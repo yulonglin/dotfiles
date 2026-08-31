@@ -59,7 +59,7 @@ After the script is clean, **still verify**:
 
 ### 3. If sub-agent fact-checking is used
 
-⚠️ **Do not trust subagent output for specific factual claims about authors or venues.** Sub-agents (writing:fact-checker etc.) without web access will confidently invent author names, conference names, paper titles. Always verify high-stakes findings (claims of fabrication, claims about who is or isn't on a paper) via direct WebFetch in the main context. See `~/.claude/rules/agents-and-delegation.md` § Factual Verification.
+⚠️ **Do not trust subagent output for specific factual claims about authors or venues.** Sub-agents (fact-checker etc.) without web access will confidently invent author names, conference names, paper titles. Always verify high-stakes findings (claims of fabrication, claims about who is or isn't on a paper) via direct WebFetch in the main context. See `~/.claude/rules/delegation.md` § Factual Verification.
 
 ## Source-of-truth APIs
 

@@ -76,6 +76,7 @@ DEPLOY_REGISTRY=(
     "finicky|Browser routing config (symlinked)|macos|true|macOS"
     "file-apps|Default editor for coding file types|macos|true|macOS"
     "keyboard|Keyboard repeat rate enforcement at login|macos|true|macOS"
+    "kill-sky-cua|Kill OpenAI Sky Computer Use helpers (AX-polling lag watchdog)|macos|true|macOS"
     "bedtime|Bedtime timezone enforcement|macos|true|macOS"
     "text-replacements|Sync macOS + Alfred text replacements|macos|true|macOS"
     "mouseless|Keyboard-driven mouse control|macos|true|macOS"
@@ -139,30 +140,9 @@ MCP_SERVERS=(
 # Format: "name:repo:binary_name:env_var_for_token"
 MCP_SERVERS_LOCAL=()
 
-# Claude Code Plugin Marketplaces
-# Format: "name:source" (source = GitHub user/repo)
-# Both official and custom marketplaces need explicit registration + plugin install
-PLUGIN_MARKETPLACES=(
-    "claude-plugins-official:anthropics/claude-plugins-official"
-    "ai-safety-plugins:yulonglin/ai-safety-plugins"
-)
-
-# Official plugins to auto-install from claude-plugins-official marketplace.
-# Matches everything referenced in settings.json enabledPlugins.
-OFFICIAL_PLUGINS=(
-    # Base profile (always-on)
-    "superpowers" "hookify" "plugin-dev" "commit-commands"
-    "claude-md-management" "context7"
-    # Development
-    "code-simplifier" "code-review" "security-guidance" "feature-dev"
-    "pr-review-toolkit" "playground" "ralph-loop"
-    # Integrations
-    "Notion" "vercel" "playwright"
-    # Language servers
-    "pyright-lsp" "typescript-lsp"
-    # Specialized
-    "frontend-design"
-)
+# Claude Code plugins and marketplaces are NOT listed here — the single source
+# of truth is claude/settings.json (extraKnownMarketplaces + enabledPlugins).
+# claude-plugin-reset derives its lists from that file at runtime.
 
 # ─── Core Packages ────────────────────────────────────────────────────────────
 # Installed on all platforms

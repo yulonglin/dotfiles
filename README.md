@@ -100,6 +100,7 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
 - [Dev Tools](#dev-tools)
   - [htop](#htop-process-monitor)
   - [pdb++](#pdb-python-debugger)
+  - [macOS Media Recovery](#macos-media-recovery)
 - [Secrets & Security](#secrets--security)
   - [Encrypted Secrets (Bitwarden Secrets Manager)](#encrypted-secrets-bitwarden-secrets-manager)
   - [Gist Sync](#gist-sync-automation-both-platforms)
@@ -227,37 +228,32 @@ This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/c
 **What's included:**
 
 - **`CLAUDE.md`** — Slim identity file (~55 lines) pointing at modular rules and docs
-- **`rules/`** — 19 auto-loaded behavioral rules (safety, git, agents, refusal alternatives, supply-chain, browser automation, etc.)
-- **`docs/`** — On-demand knowledge loaded by skills (research methodology, async patterns, tmux, agent teams)
-- **`agents/`** — Personal agents (kept lean — most specialized agents live in plugins like `ai-safety-plugins`)
-- **`skills/`** — Project-level slash commands: `/commit`, `/merge-worktree`, `/jobs`, `/modal`, `/log-gap`, `/recall-feedback`, `/mv-repo`, etc.
+- **`rules/`** — 8 auto-loaded behavioral rules holding only always-relevant judgment (safety, delegation, communication, research integrity, experiments, etc.). Activity-scoped procedure lives in skills instead; the `catalog` skill indexes which skill owns what
+- **`agents/`** — Personal agents, version-controlled here. The specialized ones used to live in the `ai-safety-plugins` marketplace; that marketplace is retired and its agents were migrated in
+- **`skills/`** — Project-level slash commands: `/commit`, `/merge-worktree`, `/jobs`, `/modal`, `/mv-repo`, etc.
 - **`hooks/`** — 40+ PreToolUse/PostToolUse/SessionStart scripts: approval classifier, secret blocking, modern-tool nudges, post-rebase guards, network audit
-- **`templates/`** — Context profiles (`contexts/profiles.yaml`), research spec template
+- **`templates/`** — Research spec template
 
 **Smart merge preserves your data** - if `~/.claude` already exists, credentials, history, and cache are automatically restored after symlinking.
 
 #### Claude Code Plugin Marketplaces
 
-Claude Code supports community plugin marketplaces. These are registered in [`claude/templates/contexts/profiles.yaml`](claude/templates/contexts/profiles.yaml) and synced via `claude-tools context --sync`:
+Claude Code supports community plugin marketplaces. These are declared natively in `extraKnownMarketplaces` in [`claude/settings.json`](claude/settings.json), which is symlinked to `~/.claude/settings.json` — a fresh machine registers them with no sync step:
 
 
 | Marketplace                                                                         | What's in it                                                     |
 | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | **[claude-plugins-official](https://github.com/anthropics/claude-plugins-official)** | Superpowers, hookify, plugin-dev, commit-commands, productivity, engineering |
-| **[ai-safety-plugins](https://github.com/yulonglin/ai-safety-plugins)**             | Research, writing, code, workflow, viz — for AI safety work      |
-| **[productivity-tools](https://github.com/yulonglin/productivity-tools)**           | Personal productivity utilities                                  |
-| **[ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)**  | Design styles, palettes, production-grade frontend               |
+| **[productivity-tools](https://github.com/yulonglin/productivity-tools)**           | The Bear and Things 3 MCP servers                                |
 | **[alignment-hive](https://github.com/Crazytieguy/alignment-hive)**                 | Alignment research utilities                                     |
-| **[dev-browser-marketplace](https://github.com/sawyerhood/dev-browser)**            | Browser automation for development                               |
-| **[openai-codex](https://github.com/crazytieguy/codex-plugin-cc)**                  | Codex CLI integration plugins                                    |
+| **[codex-plugin-cc](https://github.com/crazytieguy/codex-plugin-cc)**               | Codex CLI integration plugins                                    |
 
 
-Profiles are managed via the `claude-tools context` CLI — compose multiple profiles to control which plugins load per-project:
+**Every plugin that is on is on everywhere** — no profiles, no per-project setup step. Which plugins a machine should have is the `enabledPlugins` map in the same `settings.json`: 13 entries are `true`, and 7 are `false` tombstones for retired plugins. **The tombstones are load-bearing** — removing a plugin's marketplace does not disable it, so a retired plugin with a surviving install record keeps loading until `enabledPlugins` says `false`. Full detail: [`docs/plugin-management.md`](./docs/plugin-management.md).
 
 ```bash
-claude-tools context code               # Software projects
-claude-tools context code typescript python    # Compose multiple profiles
-claude-tools context --list             # Show active plugins and available profiles
+claude plugin install <plugin>@<marketplace>    # then add the same key to enabledPlugins as true
+claude plugin list                              # what's installed, and at which scope
 ```
 
 ### Codex CLI (OpenAI)
@@ -536,6 +532,30 @@ python -c "import pdb; pdb.set_trace()" <<< "c"
 ```
 
 **Per-project override** (advanced): Create `.pdbrc.py` in project root. It takes precedence over the global config. See [pdb++ docs](https://github.com/pdbpp/pdbpp#configuration) for details.
+
+### macOS Media Recovery
+
+If Spotify, FaceTime, FineTune, or other audio apps hang together, use the
+manual `reset-mac-media` helper. It saves a private diagnostic bundle before
+restarting only CoreAudio and FaceTime's supporting services; it does not quit
+the affected GUI apps or restart Bluetooth or WindowServer.
+
+```bash
+# Preview the bounded action
+reset-mac-media --dry-run
+
+# Capture diagnostics, restart the media services, and verify recovery
+reset-mac-media
+```
+
+The real run requires administrator authentication and briefly interrupts all
+audio, video, and active calls. Reports go to
+`~/Library/Logs/reset-mac-media/`. A bundle can contain device metadata, local
+paths, and call or app context, so review it before sharing. If the helper
+cannot verify that the old service PIDs disappeared while their launchd jobs
+remain loaded, it exits nonzero and keeps the report; rebooting remains the
+fallback. To reduce recurrence, add FaceTime to FineTune's ignore list and use
+the MacBook microphone when Bluetooth call routing is unstable.
 
 ## Automation
 

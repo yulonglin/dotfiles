@@ -88,20 +88,8 @@ claude() {
         cd "$git_root" || true
     fi
 
-    # Generate task list ID: -t flag always overrides, otherwise keep existing or auto-generate
-    if [[ -n "$task_name" ]]; then
-        # Explicit -t flag: always generate fresh with custom name
-        local timestamp
-        timestamp=$(date -u +%Y%m%d_%H%M%S)
-        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${task_name}"
-    elif [[ -z "$CLAUDE_CODE_TASK_LIST_ID" ]]; then
-        # No existing ID: auto-generate from directory name
-        local suffix timestamp
-        suffix=$(basename "$PWD" | tr ' ' '_')
-        timestamp=$(date -u +%Y%m%d_%H%M%S)
-        export CLAUDE_CODE_TASK_LIST_ID="${timestamp}_UTC_${suffix}"
-    fi
-    # else: keep existing CLAUDE_CODE_TASK_LIST_ID (set by claude-new, claude-with, etc.)
+    # Task list ID generation moved to just before the launch (see below), so
+    # no early return can leave a half-configured export behind.
 
     # --channels only applies to session mode, not subcommands (doctor, auth, etc.).
     # Derive subcommand list from `claude --help`, cached per version to avoid 200ms/call.
@@ -148,6 +136,16 @@ claude() {
                     mkdir -p "$_cache_dir" && printf '%s' "$_subcmds" > "$_cache_file" 2>/dev/null
                 fi
             fi
+            # HIDDEN subcommands: real, but absent from `claude --help`, so the
+            # scrape above cannot find them and they get misclassified as
+            # session prompts — which prepends --settings and makes the
+            # top-level parser reject their own flags. Measured 2026-08-28:
+            # `claude daemon stop --any` died with "unknown option '--any'"
+            # purely because --settings was injected ahead of `daemon`.
+            # Appended AFTER the cache read, not inside it: the cache is keyed
+            # on CLI version and may predate this list, so folding these in at
+            # write time would leave warm caches broken.
+            _subcmds="${_subcmds}daemon|"
             # Check if first positional matches a known subcommand
             if [[ -n "$_subcmds" && "|${_subcmds}" == *"|${_first_positional}|"* ]]; then
                 _is_session=false
@@ -259,8 +257,73 @@ claude() {
         fi
     fi
 
+    # Task lists: the wrapper does NOT auto-generate an ID, deliberately.
+    #
+    # Claude Code already gives every session its own list when
+    # CLAUDE_CODE_TASK_LIST_ID is unset — measured on 2026-08-28 from
+    # ~/.claude/tasks/: 683 `session-<id>` lists it created itself, against 11
+    # `<ts>_UTC_<dir>` lists from ~2 months of this wrapper auto-generating.
+    # So the auto-generated ID bought nothing the platform wasn't already
+    # doing, and cost a leak that no wrapper can close: the ID has to be
+    # exported into the claude process for Claude Code to read it, and every
+    # session that process spawns — the `claude agents` view included —
+    # inherits its environment. That is a different path from the shell leak
+    # fixed in 3359daf/57145e5, and it is not reachable from here.
+    #
+    # `-t <name>` is the ONE way to set a list deliberately. Anything else
+    # inherited is removed from the child's environment, unconditionally.
+    #
+    # There is no "is this deliberate?" marker any more, because there is no
+    # longer anything that could legitimately pass an ID in: `-t` sets its own,
+    # and the claude-new/with/last helpers are gone. Every other inherited
+    # value is residue — `source ~/.zshrc` cannot unset what an older wrapper
+    # exported, so contaminated shells keep theirs until they die, and honoring
+    # it is how the original cross-repo leak survived a re-source (2026-08-28).
+    #
+    # `env -u`, not `local +x` or `unset`: the value must be absent from the
+    # CHILD's environment, and `local +x` does not shadow a globally exported
+    # variable under bash (measured; deploy.sh sources these aliases into
+    # ~/.bashrc, so bash is a real target). `env -u` removes it from the child
+    # in both shells and leaves the calling shell untouched.
+    #
+    # NOTE this cannot reach sessions spawned by `claude daemon run` — those
+    # inherit the daemon's environment, captured once when it started. See
+    # claude/skills/spawn-session/SKILL.md for the diagnostic and the restart.
+    local -a _tl_launch=(env -u CLAUDE_CODE_TASK_LIST_ID)
+    if [[ -n "$task_name" ]]; then
+        local _tl_timestamp
+        _tl_timestamp=$(date -u +%Y%m%d_%H%M%S)
+        # Function-local, so zsh and bash both unwind it on every exit
+        # including a Ctrl-C mid-launch; nothing is left for the next launch.
+        local -x CLAUDE_CODE_TASK_LIST_ID="${_tl_timestamp}_UTC_${task_name}"
+        _tl_launch=(command)
+    fi
+
+    # Coordinator mode is set here, per-invocation, rather than in the global
+    # settings env block: there it was inherited by every `claude -p` child,
+    # which then came up with no Read/Bash/Write at all. Prefixed rather than
+    # exported so it does not leak into the calling shell's later processes.
+    local _coord=1 _c
+    if [[ "$_is_session" != true ]]; then
+        _coord=0
+    else
+        for _c in "${args[@]}"; do
+            case "$_c" in
+                --) break ;;
+                -p|--print) _coord=0; break ;;
+            esac
+        done
+    fi
+
     activate_venv
-    command claude "${args[@]}"
+    # Last command in each branch, so its exit status is the function's —
+    # nothing to restore. `env` execs the binary from PATH, so this does not
+    # re-enter this function.
+    if [[ "$_coord" == 1 ]]; then
+        CLAUDE_CODE_COORDINATOR_MODE=1 "${_tl_launch[@]}" claude "${args[@]}"
+    else
+        "${_tl_launch[@]}" claude "${args[@]}"
+    fi
 }
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
 alias yolo='claude --dangerously-skip-permissions'
@@ -319,11 +382,40 @@ _cw_launch() {
       for arg in "${extra[@]}"; do
         cmd+=" $(printf '%q' "$arg")"
       done
+      # `zsh -ic`, not a bare command string: tmux runs command strings under a
+      # NON-interactive shell, which sources no aliases, so a bare `claude`
+      # resolves to the raw binary and skips the claude() wrapper entirely —
+      # no venv, no git-root cd, no channels, and no task-list scoping. Same
+      # trap documented in claude/skills/spawn-session/SKILL.md.
+      # UNSET, not blanked. The wrapper no longer regenerates from an empty
+      # value, so `-e VAR=` would hand the session a literal empty list name
+      # instead of letting Claude Code assign its own per-session list. Unset
+      # inside the command is the only way to guarantee absence — tmux's `-e`
+      # can set a variable but not remove one.
+      local inner="unset CLAUDE_CODE_TASK_LIST_ID CLAUDE_CODE_TASK_LIST_PIN; $cmd; exec \$SHELL"
+      # An interactive shell that can read this repo's aliases. zsh is the
+      # normal case; bash is the fallback on bash-default hosts, where
+      # deploy.sh has sourced config/aliases/*.sh into ~/.bashrc. Without this
+      # guard, cw on a zsh-less host failed with no diagnostic.
+      local login_sh=""
+      if command -v zsh >/dev/null 2>&1; then login_sh=zsh
+      elif command -v bash >/dev/null 2>&1; then login_sh=bash
+      else
+        echo "cw: neither zsh nor bash found — cannot launch through the claude() wrapper" >&2
+        return 1
+      fi
+      # POSIX single-quote escaping, NOT printf '%q': tmux hands this string to
+      # /bin/sh, which is dash on Debian/Ubuntu, and zsh's %q emits $'\t' for a
+      # control character — which dash does not understand (measured: a tab in
+      # an argument arrived as the literal characters "$tb"). Per-arg %q above
+      # is fine because that layer is parsed by the inner zsh, not by sh.
+      local shell_cmd sq_rep="'\\''"
+      shell_cmd="$login_sh -ic '${inner//\'/$sq_rep}'"
       if [[ -n "$TMUX" ]]; then
-        tmux new-session -d -s "$session" -c "$wt_path" "$cmd; exec \$SHELL"
+        tmux new-session -d -s "$session" -c "$wt_path" "$shell_cmd"
         tmux switch-client -t "=$session"
       else
-        tmux new-session -s "$session" -c "$wt_path" "$cmd; exec \$SHELL"
+        tmux new-session -s "$session" -c "$wt_path" "$shell_cmd"
       fi
       return
     fi
@@ -616,67 +708,15 @@ codex-denials() {
   fi
 }
 
-# Claude Code Task List Management
-# Start new work with custom description (overrides auto-generated name)
-claude-new() {
-  local description="$1"
-  if [ -z "$description" ]; then
-    echo "Usage: claude-new <description>"
-    echo "Example: claude-new oauth-refactor"
-    return 1
-  fi
-
-  local timestamp
-  timestamp=$(date -u +%Y%m%d_%H%M%S)
-  local task_list_id="${timestamp}_UTC_${description}"
-
-  echo "Starting Claude with task list: $task_list_id"
-  echo "export CLAUDE_CODE_TASK_LIST_ID=$task_list_id" > .claude_task_list_id
-
-  export CLAUDE_CODE_TASK_LIST_ID="$task_list_id"
-  claude
-}
-
-# Resume last task list in current directory
-claude-last() {
-  if [ -f .claude_task_list_id ]; then
-    # shellcheck disable=SC1091
-    source .claude_task_list_id
-    echo "Resuming task list: $CLAUDE_CODE_TASK_LIST_ID"
-    claude
-  else
-    echo "No previous task list found in this directory"
-    echo "Start a new one with: claude-new <description>"
-  fi
-}
-
-# List all task lists
-claude-tasks-list() {
-  echo "Available task lists:"
-  echo ""
-  if [ -d ~/.claude/tasks/ ]; then
-    ls -1t ~/.claude/tasks/ | head -20
-  else
-    echo "(none yet)"
-  fi
-  echo ""
-  echo "Start a new task list: claude-new <description>"
-}
-
-# Start Claude with a specific task list (by name)
-claude-with() {
-  local task_list_id="$1"
-  if [ -z "$task_list_id" ]; then
-    echo "Usage: claude-with <task-list-name>"
-    echo ""
-    claude-tasks-list
-    return 1
-  fi
-
-  export CLAUDE_CODE_TASK_LIST_ID="$task_list_id"
-  echo "Using task list: $task_list_id"
-  claude
-}
+# claude-new / claude-last / claude-with / claude-tasks-list were removed on
+# 2026-08-28. Claude Code gives every session its own task list already, so the
+# helpers only existed to make two sessions share one — which zsh history says
+# never actually happened (0 uses of claude-new/claude-last/`-t`, and the single
+# claude-with was a bare invocation that just printed its usage). Meanwhile they
+# were the last code able to set CLAUDE_CODE_TASK_LIST_ID, i.e. the only
+# remaining way to reintroduce the cross-repo shared-list bug. `claude -t <name>`
+# survives as the one deliberate spelling; it sets its own ID, which is why the
+# CLAUDE_CODE_TASK_LIST_PIN marker could go too.
 
 # Switch Claude Code account (full logout + login, not just restart)
 alias claude-switch='claude auth logout && claude auth login'

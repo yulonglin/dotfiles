@@ -126,9 +126,9 @@ check_tasks_directory() {
     fi
 }
 
-# --- claude/rules/context-management.md: the 500-line bar is ours, not the harness's
+# --- claude/rules/delegation.md: the 500-line bar is ours, not the harness's
 check_read_threshold() {
-    local loc="claude/rules/context-management.md: 500-line bar is convention" bin n
+    local loc="claude/rules/delegation.md: 500-line bar is convention" bin n
     if ! bin="$(claude_binary)"; then
         skip "$loc" "Claude Code binary not found"
         return
@@ -144,9 +144,9 @@ check_read_threshold() {
     fi
 }
 
-# --- claude/rules/second-opinions.md: the Fable channel's model family exists
+# --- claude/rules/delegation.md: the Fable channel's model family exists
 check_fable_model() {
-    local loc="claude/rules/second-opinions.md: Fable family available" bin n
+    local loc="claude/rules/delegation.md: Fable family available" bin n
     if ! bin="$(claude_binary)"; then
         skip "$loc" "Claude Code binary not found"
         return
@@ -162,9 +162,9 @@ check_fable_model() {
     fi
 }
 
-# --- claude/rules/supply-chain-security.md: UV_MALWARE_CHECK, lockfile-only, undocumented
+# --- claude/rules/safety.md: UV_MALWARE_CHECK, lockfile-only, undocumented
 check_uv_malware() {
-    local loc="claude/rules/supply-chain-security.md: UV_MALWARE_CHECK" uv n
+    local loc="claude/rules/safety.md: UV_MALWARE_CHECK" uv n
     if ! uv="$(command -v uv)"; then
         skip "$loc" "uv not installed"
         return
@@ -204,24 +204,6 @@ check_ty_beta() {
     esac
 }
 
-# --- claude/rules/workflow-defaults.md: plan filenames not configurable (#21342 open)
-check_issue_21342() {
-    local loc="claude/rules/workflow-defaults.md: claude-code #21342" state
-    if ! command -v gh >/dev/null 2>&1; then
-        skip "$loc" "gh not installed"
-        return
-    fi
-    state="$(gh issue view 21342 --repo anthropics/claude-code --json state --jq .state 2>/dev/null)" || {
-        skip "$loc" "gh unauthenticated or offline"
-        return
-    }
-    if [[ "$state" == "OPEN" ]]; then
-        ok "$loc" "still open"
-    else
-        drift "$loc" "now $state — re-check whether plan filenames became configurable, then drop the citation"
-    fi
-}
-
 # --- claude/rules/coding-conventions.md: fzf >=0.54 for `load:pos(N)+select`
 check_fzf_version() {
     local loc="claude/rules/coding-conventions.md: fzf >=0.54" ver
@@ -242,26 +224,47 @@ check_fzf_version() {
 }
 
 # --- CLAUDE.md: the context profiles named as examples actually exist
-check_context_profiles() {
-    local loc="CLAUDE.md: context profile examples" yaml missing=()
-    yaml="$DOT_DIR/claude/templates/contexts/profiles.yaml"
-    if [[ ! -f "$yaml" ]]; then
-        skip "$loc" "profiles.yaml not found"
+# --- plugin manifest: the seven retired plugins carry `false` tombstones, every other
+# --- entry is `true`. The tombstones are load-bearing — a marketplace declaration is
+# --- not the enable gate, so a retired plugin with a surviving install record keeps
+# --- loading unless enabledPlugins says false. See docs/plugin-management.md.
+check_plugin_manifest() {
+    local loc="claude/settings.json: enabledPlugins tombstone manifest" json result
+    json="$DOT_DIR/claude/settings.json"
+    if [[ ! -f "$json" ]]; then
+        skip "$loc" "settings.json not found"
         return
     fi
-    for profile in code python rust; do
-        rg -q "^  $profile:" "$yaml" || missing+=("$profile")
-    done
-    if [[ ${#missing[@]} -eq 0 ]]; then
-        ok "$loc" "code, python, rust all defined"
+    result=$(python3 -c '
+import json, sys
+RETIRED = {
+    "code@ai-safety-plugins", "core@ai-safety-plugins", "research@ai-safety-plugins",
+    "viz@ai-safety-plugins", "workflow@ai-safety-plugins", "writing@ai-safety-plugins",
+    "dev-browser@dev-browser-marketplace",
+}
+d = json.load(open(sys.argv[1])).get("enabledPlugins", {})
+problems = []
+missing = sorted(k for k in RETIRED if k not in d)
+if missing:
+    problems.append("retired plugin lost its false tombstone: " + " ".join(missing))
+live = sorted(k for k in RETIRED if k in d and d[k] is not False)
+if live:
+    problems.append("retired plugin not set to false: " + " ".join(live))
+bad = sorted(k for k, v in d.items() if k not in RETIRED and v is not True)
+if bad:
+    problems.append("non-retired entry is not true: " + " ".join(bad))
+print("; ".join(problems))
+' "$json" 2>/dev/null) || { skip "$loc" "could not parse settings.json"; return; }
+    if [[ -z "$result" ]]; then
+        ok "$loc" "seven retired plugins tombstoned false, every other entry true"
     else
-        drift "$loc" "profiles named in CLAUDE.md no longer exist: ${missing[*]}"
+        drift "$loc" "$result"
     fi
 }
 
-# --- claude/rules/workflow-defaults.md: `clean-skill-dupes` still resolves
+# --- claude/rules/experiments.md: `clean-skill-dupes` still resolves
 check_clean_skill_dupes() {
-    local loc="claude/rules/workflow-defaults.md: clean-skill-dupes" target
+    local loc="claude/rules/experiments.md: clean-skill-dupes" target
     target="$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh"
     if [[ -x "$target" ]]; then
         ok "$loc" "alias target present"
@@ -301,9 +304,8 @@ check_read_threshold
 check_fable_model
 check_uv_malware
 check_ty_beta
-check_issue_21342
 check_fzf_version
-check_context_profiles
+check_plugin_manifest
 check_clean_skill_dupes
 check_no_counts
 

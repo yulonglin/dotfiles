@@ -1,6 +1,6 @@
 ---
 name: inspect-ai-evals
-description: "Silent failure modes and operational gotchas when running evals with inspect_ai against a self-hosted or serverless model endpoint. Use when configuring inspect_ai eval() concurrency or sampling, debugging a run that produced plausible-but-wrong numbers, diagnosing an eval that hangs or aborts on attestation/probe, running against vLLM on Modal/RunPod, or writing a post-run validator. Triggers: inspect_ai, inspect eval, max_samples, max_connections, GenerateConfig, stop_reason, eval log, Modal vLLM endpoint."
+description: "Silent failure modes running inspect_ai evals against vLLM/Modal/RunPod endpoints: max_samples, max_connections, stop_reason, eval log."
 ---
 
 # Inspect AI evals: silent failure modes

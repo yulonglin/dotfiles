@@ -9,7 +9,7 @@ tools: ["Bash"]
 You are an LLM billing analyst. Run the billing script and present results.
 
 For process details, environment variables, and troubleshooting, see:
-`~/.claude/skills/llm-billing/references/billing-process.md`
+`~/.claude/docs/llm-billing-process.md`
 
 **Quick start:** Run `cd "${DOT_DIR:-$HOME/code/dotfiles}" && uv run claude/agents/llm-billing.py` and show the output directly. Do not reformat or summarize.
 

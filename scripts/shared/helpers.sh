@@ -271,6 +271,23 @@ is_installed() {
     return 1
 }
 
+# Like is_installed, but an executable inside an active Python environment
+# (virtualenv or conda/micromamba) does not count — used for persistent global
+# tools (uv tool install), where an env-local binary vanishes once the
+# environment is deactivated.
+is_installed_global() {
+    # NB: not named "path" — in zsh that variable is tied to $PATH and
+    # assigning it clobbers command lookup for the rest of the function.
+    local resolved envroot
+    resolved=$(command -v "$1" 2>/dev/null) || return 1
+    for envroot in "${VIRTUAL_ENV:-}" "${CONDA_PREFIX:-}"; do
+        if [[ -n "$envroot" && "$resolved" == "${envroot}"/* ]]; then
+            return 1
+        fi
+    done
+    is_installed "$@"
+}
+
 # Check if brew cask is installed (macOS)
 is_cask_installed() {
     local cask="$1"
@@ -505,7 +522,7 @@ install_direnv() {
 # Rust toolchain (cargo) via rustup. macOS: official Homebrew formula (sha-pinned,
 # reviewed) provides `rustup-init`; run it non-interactively. Linux: keep the upstream
 # rustup installer but pin TLS (--proto '=https' --tlsv1.2) — no brew dependency.
-# See claude/rules/supply-chain-security.md § curl|bash Installers.
+# See claude/rules/safety.md § curl|bash Installers.
 install_rust_toolchain() {
     if is_installed cargo; then
         source "$HOME/.cargo/env" 2>/dev/null || true
@@ -579,13 +596,27 @@ install_claude_code() {
 install_opencode() {
     if is_installed opencode; then return 0; fi
     log_info "Installing OpenCode..."
-    # Official CORE Homebrew formula (NOT the anomalyco/tap) — see supply-chain-security.md
-    if is_macos; then
+    # Official CORE Homebrew formula (NOT the anomalyco/tap) — see claude/rules/safety.md
+    #
+    # Homebrew FIRST on Linux too, not just macOS: homebrew-core's `opencode`
+    # ships arm64_linux and x86_64_linux bottles, and a bottle has no lifecycle
+    # script for `ignore-scripts=true` to block. The bun route does:
+    # opencode-ai declares `"postinstall": "node ./postinstall.mjs"`, and with
+    # scripts ignored (as policy requires) the installed shim refuses to run at
+    # all — "Error: opencode-ai's postinstall script was not run." That was the
+    # live state of this box on 2026-08-28.
+    if cmd_exists brew; then
         brew_install opencode
     elif cmd_exists bun; then
+        # Still supported, and still compliant: bun installs the real binaries
+        # as platform optionalDependencies, so only the shim is broken, not the
+        # program. custom_bins/opencode finds the platform binary directly —
+        # no lifecycle script is run and no guard is bypassed.
         bun add -g opencode-ai &>/dev/null || { log_warning "OpenCode failed"; return 1; }
+        log_info "OpenCode via bun: its own shim is inert under ignore-scripts;"
+        log_info "  custom_bins/opencode wraps the platform binary instead."
     else
-        log_warning "bun is required to install OpenCode on Linux; skipping"
+        log_warning "OpenCode needs brew or bun; skipping"
         return 1
     fi
 }
@@ -598,7 +629,7 @@ install_antigravity_cli() {
     if is_macos; then
         brew_install antigravity-cli true   # official cask
     else
-        # Linux: Google ships a curl installer, but per supply-chain-security.md we
+        # Linux: Google ships a curl installer, but per claude/rules/safety.md we
         # do NOT blind-pipe an unverified URL. Install manually on Linux.
         log_warning "Antigravity CLI on Linux: install manually — https://antigravity.google/docs/cli-features (skipping)"
         return 1

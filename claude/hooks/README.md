@@ -64,9 +64,20 @@ Hooks for automating task and agent management workflows.
 - `simplify_mark_dirty.sh` (`PostToolUse`, `Write|Edit`) touches a per-session marker when a code file changes → "run a quality pass".
 - `simplify_track_reuse.py` (`PostToolUse`, `Bash`) tallies *executions* of throwaway scripts in a per-session JSON state file (under a 0700 per-user dir in `TMPDIR` — its contents reach the user as a message). A run whose file is unchanged since the previous run counts as "stable", so edit-run-edit-run debugging never accumulates, and a path that can't be stat'ed is never stable.
 - Scratch-ness is judged *relative to the enclosing repo*: `tmp_probe.py` or anything under a `tmp/`/`scratch/` segment qualifies, but a repo or worktree checked out under `/tmp` doesn't turn its own `tests/` into scratch. Commands are followed through `cd`, glued operators, interpreter flags and `uv run`; redirect targets and huge inline programs are skipped.
-- `simplify_nudge.sh` (`Stop`) fires when a script hit `CLAUDE_SIMPLIFY_REUSE_RUNS` (default 3) runs with at least one stable run → "promote it into a permanent component" (criteria and destinations: `rules/reusable-component-promotion.md`). Each candidate is nudged once per session.
+- `simplify_nudge.sh` (`Stop`) fires when a script hit `CLAUDE_SIMPLIFY_REUSE_RUNS` (default 3) runs with at least one stable run → "promote it into a permanent component" (criteria and destinations: `rules/coding-conventions.md`). Each candidate is nudged once per session.
 
 **Tests:** `test_simplify_reuse.sh`.
+
+### fix_hook_permissions.sh / patch_ralph_loop_stop_hook.py
+
+**Purpose:** Repair ignored plugin-cache problems before a session uses them.
+
+**Behavior:** Preserves marketplace shell executable bits and converts Ralph
+Loop 1.0.0's two plain-text successful `Stop` messages into JSON
+`systemMessage` objects. The Ralph repair validates both exact upstream lines,
+is atomic and idempotent, and refuses partial or unknown source drift.
+
+**Tests:** `test_patch_ralph_loop_stop_hook.sh`.
 
 ## Runtime Policy
 
@@ -99,9 +110,7 @@ If Claude Code supports automatic hook triggering, this would be configured in `
 
 ### Manual Integration
 
-Until automatic hooks are available, the reminder is built into Claude's behavior via:
-- CLAUDE.md conventions (Claude outputs save commands automatically)
-- task-management.md skill (agents follow the pattern)
+Until automatic hooks are available, the reminder is built into Claude's behavior via CLAUDE.md conventions — Claude outputs the save commands automatically.
 
 ## Adding New Hooks
 
@@ -117,7 +126,6 @@ To add a new hook:
 
 Potential hooks to implement:
 
-- **task_list_created.sh** - Reminds to set up .claude_task_list_id
 - **task_completed.sh** - Celebrates milestone completions
 - **session_start.sh** - Shows task list summary on startup
 - **agent_completed.sh** - Summarizes agent work and suggests cleanup
@@ -137,9 +145,8 @@ echo "agentId: a5b5164" | ./agent_spawned.sh
 ## Integration with Task Management
 
 These hooks complement the task management system:
-- Shell functions: `claude-new`, `claude-agent-save`, etc.
+- Task lists are scoped per session by Claude Code itself; the shell wrapper deliberately sets no task-list ID (`claude/skills/spawn-session/SKILL.md`). The old `claude-new` / `claude-with` / `claude-last` helpers were removed 2026-08-28.
 - CLAUDE.md: Conventions for naming and behavior
-- Skills: `task-management.md` for agent usage
 - Hooks: Automatic reminders and triggers
 
 Together they create a seamless workflow for managing complex, long-running work.

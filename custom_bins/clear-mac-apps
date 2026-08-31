@@ -8,6 +8,7 @@
 # Behaviour comes from config/app-lifecycle.yaml, read via app-lifecycle-config
 # so no zsh here parses YAML:
 #   manual: skip   - leave the app completely alone
+#   manual: hide   - hide it as Cmd+H does; no window is touched
 #   manual: close  - close its windows but never quit it
 #   manual: quit   - quit it (the default for unlisted apps)
 #   slow: true     - ignores keystrokes; quit then poll for exit
@@ -756,9 +757,10 @@ main() {
         for app in "${apps_to_quit[@]}"; do
             echo "  - $app"
         done
-        # Printed only when it applies, like SELECTIVE-CLOSE below: no app in the
-        # shipped config asks for `manual: hide`, and an always-empty section
-        # would be noise in the output people actually read.
+        # Printed only when it applies, like SELECTIVE-CLOSE below: an app asking
+        # for `manual: hide` has to be both running and matched for this to have
+        # anything in it, and an empty section would be noise in the output
+        # people actually read.
         if (( ${#apps_hide} > 0 )); then
             echo ""
             echo "Would HIDE (${#apps_hide}):"

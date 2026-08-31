@@ -80,10 +80,10 @@ struct WeeklyScopedEntry {
 
 // --- Public entry point ---
 
-/// Append usage bars (or error) to output as a second statusline line.
+/// Append usage gauges (or error) to output as a third statusline line.
 pub fn format_usage(output: &mut String) {
     match fetch_cached_usage() {
-        Ok(usage) => format_usage_bars(output, &usage),
+        Ok(usage) => format_usage_line(output, &usage),
         Err(e) => {
             output.push('\n');
             let _ = write!(output, "\x1b[2m\x1b[31m{}\x1b[0m", e);
@@ -91,7 +91,7 @@ pub fn format_usage(output: &mut String) {
     }
 }
 
-fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
+fn format_usage_line(output: &mut String, usage: &UsageResponse) {
     let five = usage.five_hour.as_ref().and_then(|b| b.utilization);
     let seven = usage.seven_day.as_ref().and_then(|b| b.utilization);
 
@@ -123,7 +123,7 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
     if let Some(pct) = seven {
         let pct = pct.round().clamp(0.0, 100.0) as u8;
         if five.is_some() {
-            output.push_str("  \u{00b7}  ");
+            output.push_str(" \u{00b7} ");
         }
         let resets_at = usage.seven_day.as_ref().and_then(|b| b.resets_at.as_deref());
         render_bucket(output, "7d", pct, resets_at, SEVEN_DAY_SECS);
@@ -142,7 +142,7 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
             continue;
         };
         let pct = pct.round().clamp(0.0, 100.0) as u8;
-        output.push_str("  \u{00b7}  ");
+        output.push_str(" \u{00b7} ");
         render_bucket(output, name, pct, limit.resets_at.as_deref(), SEVEN_DAY_SECS);
     }
 
@@ -151,9 +151,9 @@ fn format_usage_bars(output: &mut String, usage: &UsageResponse) {
     }
 }
 
-/// Render one rate-limit bucket: bar + pace indicator, colored by pace (not
+/// Render one rate-limit bucket: gauge + pace indicator, colored by pace (not
 /// absolute usage). Pace = how far ahead/behind the linear burn rate you are;
-/// the bar goes warm only when you're burning *faster* than the window allows.
+/// the gauge goes warm only when you're burning *faster* than the window allows.
 /// Falls back to absolute-usage color when the reset time is unavailable.
 fn render_bucket(output: &mut String, label: &str, pct: u8, resets_at: Option<&str>, window_secs: f64) {
     let pace = compute_pace(pct, resets_at, window_secs);
@@ -161,7 +161,7 @@ fn render_bucket(output: &mut String, label: &str, pct: u8, resets_at: Option<&s
         Some((delta, _)) => color_for_pace(delta),
         None => color_for_pct(pct),
     };
-    format_bar(output, label, pct, color);
+    format_gauge(output, label, pct, color);
     if let Some((delta, remaining_secs)) = pace {
         format_pace(output, delta, remaining_secs, color);
     }
@@ -169,21 +169,26 @@ fn render_bucket(output: &mut String, label: &str, pct: u8, resets_at: Option<&s
 
 // --- Bar rendering ---
 
-fn format_bar(output: &mut String, label: &str, pct: u8, color: &str) {
-    const BAR_WIDTH: u8 = 10;
-    let filled = (pct as u16 * BAR_WIDTH as u16 / 100).min(BAR_WIDTH as u16) as u8;
-    let empty = BAR_WIDTH - filled;
+/// Fill levels for the single-glyph gauge, coarsest to fullest. Circle
+/// quadrants from the Geometric Shapes block — deliberately *not* moon-phase
+/// emoji, which are Emoji_Presentation: double-width, color-glyph, and immune
+/// to the ANSI pace colour that carries the actual signal here.
+const GAUGE_GLYPHS: [char; 5] = ['\u{25CB}', '\u{25D4}', '\u{25D1}', '\u{25D5}', '\u{25CF}'];
 
-    let _ = write!(output, "{}{}\x1b[0m ", color, label);
-    let _ = write!(output, "{}", color);
-    for _ in 0..filled {
-        output.push('●');
-    }
-    output.push_str("\x1b[2m");
-    for _ in 0..empty {
-        output.push('○');
-    }
-    let _ = write!(output, "\x1b[0m {}{}%\x1b[0m", color, pct);
+/// Quantise a percentage to a gauge level. Integer round-half-up over
+/// `GAUGE_GLYPHS.len() - 1` steps — keep it integer arithmetic: a float path
+/// would reintroduce the half-to-even rounding that once put 12.5 on the wrong
+/// glyph. tests/test_statusline_usage_gauge.sh pins every boundary and the
+/// interior of each band against literal glyphs.
+fn gauge_level(pct: u8) -> usize {
+    let steps = (GAUGE_GLYPHS.len() - 1) as u16;
+    let pct = (pct as u16).min(100);
+    ((pct * steps + 50) / 100) as usize
+}
+
+fn format_gauge(output: &mut String, label: &str, pct: u8, color: &str) {
+    let glyph = GAUGE_GLYPHS[gauge_level(pct)];
+    let _ = write!(output, "{}{} {} {}%\x1b[0m", color, label, glyph, pct);
 }
 
 /// Compute pace delta and time-to-reset for a rate-limit bucket.
@@ -427,7 +432,7 @@ fn render_other_account(output: &mut String, current_email: &str) {
     for (label, resets_at) in &windows {
         let Some(epoch) = resets_at.as_deref().and_then(parse_iso_epoch) else { continue };
         if !rendered.is_empty() {
-            rendered.push_str("  \u{00b7}  ");
+            rendered.push_str(" \u{00b7} ");
         }
         if epoch > now {
             let remaining = (epoch - now) as f64;
@@ -441,7 +446,7 @@ fn render_other_account(output: &mut String, current_email: &str) {
         return;
     }
 
-    output.push_str("  |  \x1b[2m\u{21c4}\x1b[0m ");
+    output.push_str("  \x1b[2m\u{21c4}\x1b[0m ");
     output.push_str(&rendered);
 }
 
@@ -626,4 +631,41 @@ fn fetch_cached_usage() -> Result<UsageResponse, String> {
     }
 
     Err(token.unwrap_err().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Literal glyphs on both sides — asserting `gauge_level` against
+    /// `GAUGE_GLYPHS` would hold for any table the constant is changed to.
+    #[test]
+    fn gauge_glyph_boundaries() {
+        let cases: [(u8, char); 14] = [
+            (0, '○'),
+            (12, '○'),
+            (13, '◔'),
+            (25, '◔'),
+            (37, '◔'),
+            (38, '◑'),
+            (50, '◑'),
+            (62, '◑'),
+            (63, '◕'),
+            (75, '◕'),
+            (87, '◕'),
+            (88, '●'),
+            (100, '●'),
+            (255, '●'), // clamped, never panics on an out-of-range percent
+        ];
+        for (pct, expected) in cases {
+            assert_eq!(GAUGE_GLYPHS[gauge_level(pct)], expected, "pct={}", pct);
+        }
+    }
+
+    #[test]
+    fn format_gauge_is_one_glyph_wide() {
+        let mut out = String::new();
+        format_gauge(&mut out, "5h", 24, "");
+        assert_eq!(out, "5h ◔ 24%\u{1b}[0m");
+    }
 }

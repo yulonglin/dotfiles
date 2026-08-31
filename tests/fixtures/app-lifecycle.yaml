@@ -1,0 +1,39 @@
+# Frozen test baseline for test_clear_mac_apps.zsh and test_hide_idle_apps.zsh.
+#
+# This is NOT a copy of config/app-lifecycle.yaml and is deliberately not kept
+# in step with it. Both suites used to `cp` the shipped config in as their
+# baseline, which made personal app policy load-bearing: 18 assertions broke
+# when the app list was stripped, and 12 of those were the AX close-button
+# sequence, which cares only that SOME app sits on the close rung and had
+# adopted Bear because the real config happened to put it there. Changing your
+# mind about an app is not a code change and must not turn a test red.
+#
+# So the values here exist to exercise every rung and mechanism the suites
+# drive, one app per job, and nothing else. Add an app only when a test needs a
+# behaviour no listed app already provides.
+#
+# The one thing genuinely worth asserting about the SHIPPED file is that it
+# parses and resolves - a typo like `manaul: close` silently means "quit" - and
+# test 2 in test_clear_mac_apps.zsh does exactly that, without reading a single
+# policy value. Policy assertions do not belong in either place.
+
+defaults:
+  manual: quit
+  auto: quit
+  hide_after: 15
+  close_after: 15
+  quit_after: 30
+  user_idle: 5
+  min_visible_percent: 40
+
+apps:
+  Ghostty:               {manual: skip, auto: skip}   # no-touch, and exempt from idle hiding
+  Lettera:               {manual: skip}               # skip against the default `auto: quit`
+  Obsidian:              {manual: hide}               # the hide rung
+  Bear:                  {manual: close}              # the close rung, and the AX-probe subject
+  Spotify:               {manual: close}              # a second close app, so counts are not 1
+  Spark Desktop:         {slow: true}                 # a quit that is awaited by polling
+  FaceTime:              {manual: quit, auto: skip}   # quit by hand, never touched by the idle job
+
+protect_windows:
+  - Google Meet

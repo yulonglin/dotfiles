@@ -1,0 +1,32 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "_comment_secrets": [
+    "No API key is stored here. `{env:OPENROUTER_API_KEY}` is resolved by",
+    "OpenCode at startup from the environment, which fits this machine's",
+    "per-project secrets model: keys live in Bitwarden Secrets Manager and are",
+    "NEVER globally exported. So OpenCode only sees a key when you launch it",
+    "from a repo with `setup-envrc` (direnv), or via a one-shot",
+    "`with-secrets OPENROUTER_API_KEY -- opencode run ...`.",
+    "Launching it from a directory with no .envrc and getting an auth error is",
+    "the supply-chain defense working, not a bug.",
+    "",
+    "Do NOT run OpenCode's own `/connect` command: it writes the resolved key in",
+    "plaintext to ~/.local/share/opencode/auth.json, which is exactly the",
+    "global-key-on-disk situation this setup exists to avoid."
+  ],
+
+  "_comment_deploy": [
+    "This file is the REPO TEMPLATE. OpenCode reads it from",
+    "~/.config/opencode/opencode.json; a project-level ./opencode.json overrides",
+    "it. See docs and the second-opinion skill for the deploy snippet."
+  ],
+
+  "provider": {
+    "openrouter": {
+      "options": {
+        "apiKey": "{env:OPENROUTER_API_KEY}"
+      }
+    }
+  }
+}

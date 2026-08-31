@@ -1,6 +1,6 @@
 [Unit]
 Description=Romp dashboard over the tailnet by raw IP (DNS-free fallback)
-Documentation=file://%h/.claude/skills/romp/SKILL.md
+Documentation=https://github.com/yulonglin/dotfiles/blob/main/docs/romp-tailnet-access.md
 # Why this exists: tailscale serve routes by Host header, so a raw tailnet IP
 # gets a 404 from it. A device with "Use Tailscale DNS" off cannot resolve the
 # MagicDNS name at all, and routing is independent of naming -- the 100.x

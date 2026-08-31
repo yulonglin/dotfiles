@@ -228,6 +228,11 @@
         },
         {
           "paths": [
+            "/home/yulong/vault"
+          ]
+        },
+        {
+          "paths": [
             "/home/yulong/writing/papers/sandbagging-detection-paper/./"
           ]
         },

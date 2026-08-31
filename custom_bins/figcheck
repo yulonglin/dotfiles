@@ -15,8 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path.home() / ".local/lib/plotting"))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent
-                      / "claude/skills/pastelplot/references"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib/plotting"))
 
 import figcheck  # noqa: E402
 

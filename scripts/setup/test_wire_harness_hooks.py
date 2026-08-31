@@ -126,7 +126,7 @@ def make_hooks_dir(
     variants = variants or {}
     hooks = root / "hooks"
     hooks.mkdir(parents=True, exist_ok=True)
-    names = {w[2] for w in wh.WIRINGS} | {"block_gws_delete.sh", "warn_dep_install.sh"}
+    names = {w[2] for w in wh.WIRINGS} | {"block_gws_delete.sh", "nudge_modern_tools.sh"}
     for name in names:
         if name in omit:
             continue
@@ -140,7 +140,7 @@ def make_hooks_dir(
 
 def make_settings(root: Path, drop_key: str | None = None) -> Path:
     data = {
-        "statusLine": {"type": "command", "command": "statusline.sh"},
+        "statusLine": {"type": "command", "command": "claude-tools statusline"},
         "permissions": {"deny": []},
         "hooks": {
             "PreToolUse": [
@@ -148,7 +148,7 @@ def make_settings(root: Path, drop_key: str | None = None) -> Path:
                     "matcher": "Bash",
                     "hooks": [
                         {"type": "command", "command": "$HOME/.claude/hooks/block_gws_delete.sh"},
-                        {"type": "command", "command": "$HOME/.claude/hooks/warn_dep_install.sh"},
+                        {"type": "command", "command": "$HOME/.claude/hooks/nudge_modern_tools.sh"},
                     ],
                 },
                 {"matcher": "Write", "hooks": []},
@@ -266,7 +266,7 @@ def main() -> None:
         bash = next(b for b in pre if b.get("matcher") == "Bash")
         cmds = [h["command"] for h in bash["hooks"]]
         blocker = next(i for i, c in enumerate(cmds) if "block_unsafe_install.py" in c)
-        anchor = next(i for i, c in enumerate(cmds) if "warn_dep_install.sh" in c)
+        anchor = next(i for i, c in enumerate(cmds) if "nudge_modern_tools.sh" in c)
         check("blocker inserted before its anchor", blocker < anchor, f"{blocker} vs {anchor}")
 
         matchers = [b.get("matcher") for b in pre]
