@@ -213,7 +213,7 @@ test_no_untimed_curl_pipe_installers() {
     # Two shapes, because only catching the pipe lets the other one back in:
     #   curl … | sh          (the pipe)
     #   sh -c "$(curl …)"    (command substitution — Homebrew's own installer)
-    hits=$(grep -nE "curl [^|]*\\|[[:space:]]*(sudo )?(ba)?sh|(ba)?sh -c .*\\\$\\(curl" \
+    hits=$(grep -nE "curl [^|]*\\|[^|]*(ba)?sh( |$|-)|(ba)?sh -c .*\\\$\\(curl" \
         "$DOT_DIR"/install.sh "$DOT_DIR"/deploy.sh "$DOT_DIR"/scripts/shared/helpers.sh 2>/dev/null \
         | grep -v -- '--max-time' || true)
     if [[ -z "$hits" ]]; then
@@ -258,10 +258,22 @@ test_git_and_apt_are_bounded() {
         grep -q 'APT_LOCK_TIMEOUT' "$DOT_DIR/$script" || missing+="$script:apt "
     done
     grep -q 'DPkg::Lock::Timeout' "$DOT_DIR/scripts/shared/helpers.sh" || missing+="helpers:dpkg-lock "
+
+    # Per CALL SITE, not per file: one bounded apt call used to satisfy a bare
+    # `grep -q`, while eight others waited on the dpkg lock forever. Every
+    # apt/apt-get install|update must carry the lock bound.
+    local unbounded
+    unbounded=$(grep -nE '(^|[^-[:alnum:]])(sudo |\$SUDO )?apt(-get)? (install|update)' \
+        "$DOT_DIR"/install.sh "$DOT_DIR"/deploy.sh "$DOT_DIR"/scripts/shared/helpers.sh 2>/dev/null \
+        | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+        | grep -v 'APT_LOCK_OPT' | grep -v 'DPkg::Lock::Timeout' || true)
+    [[ -n "$unbounded" ]] && missing+="unbounded-apt-call-sites "
+
     if [[ -z "$missing" ]]; then
-        pass "git fetches and apt installs carry deadlines too"
+        pass "every apt call site and git fetch carries a deadline"
     else
-        fail "git/apt can still block indefinitely" "$missing"
+        fail "git/apt can still block indefinitely" "$missing
+$unbounded"
     fi
 }
 

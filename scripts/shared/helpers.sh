@@ -325,6 +325,12 @@ fetch() {
     curl -fsSL --connect-timeout 10 --max-time 300 --retry 2 "$@"
 }
 
+# Every apt/dpkg call must bound its wait for the lock. On a fresh box
+# unattended-upgrades holds it at boot, and DEBIAN_FRONTEND does nothing about
+# that — apt just waits, forever, with no output. One definition so a new call
+# site cannot quietly omit it.
+APT_LOCK_OPT=(-o "DPkg::Lock::Timeout=${APT_LOCK_TIMEOUT:-120}")
+
 # Run a command under a deadline where the platform allows it. timeout(1) is
 # coreutils — present on Linux, absent on stock macOS (until `core` installs
 # coreutils, which provides no unprefixed `timeout` anyway) — so this degrades
@@ -542,7 +548,7 @@ apt_install() {
     if apt_is_installed "$pkg"; then
         return 0
     fi
-    sudo apt install -y "$pkg" 2>/dev/null || log_warning "$pkg installation via apt failed"
+    sudo apt install -y "${APT_LOCK_OPT[@]}" "$pkg" 2>/dev/null || log_warning "$pkg installation via apt failed"
 }
 
 # Install multiple packages
@@ -567,7 +573,7 @@ install_packages() {
         # DPkg::Lock::Timeout bounds the wait for the dpkg lock, which
         # DEBIAN_FRONTEND does not touch: on a fresh box running
         # unattended-upgrades at boot, apt otherwise blocks indefinitely.
-        sudo apt install -y -o "DPkg::Lock::Timeout=${APT_LOCK_TIMEOUT:-120}" "${missing[@]}" 2>/dev/null \
+        sudo apt install -y "${APT_LOCK_OPT[@]}" "${missing[@]}" 2>/dev/null \
             || log_warning "Some apt packages failed to install"
         return
     fi
@@ -994,14 +1000,14 @@ can_sudo() {
 install_gh_from_apt_repo() {
     log_info "Installing gh from official GitHub apt repo..."
     local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
-    cmd_exists wget || $SUDO apt-get install -y wget 2>/dev/null
+    cmd_exists wget || $SUDO apt-get install -y "${APT_LOCK_OPT[@]}" wget 2>/dev/null
     $SUDO mkdir -p -m 755 /etc/apt/keyrings || return 1
-    wget -nv -O- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    wget -nv --timeout=10 --tries=2 -O- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
         | $SUDO tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null || return 1
     $SUDO chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
         | $SUDO tee /etc/apt/sources.list.d/github-cli.list > /dev/null || return 1
-    $SUDO apt update 2>/dev/null && $SUDO apt install gh -y 2>/dev/null
+    $SUDO apt update "${APT_LOCK_OPT[@]}" 2>/dev/null && $SUDO apt install gh -y "${APT_LOCK_OPT[@]}" 2>/dev/null
 }
 
 # Install and authenticate GitHub CLI
@@ -1118,9 +1124,10 @@ install_node() {
     # Install unconditionally; apt resolves the NodeSource candidate (a higher
     # version than Ubuntu's, so an already-installed nodejs is upgraded in place).
     local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash - \
+    fetch https://deb.nodesource.com/setup_lts.x \
+        | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" $SUDO -E bash - \
         || log_warning "NodeSource setup script exited non-zero (repo may still be configured) — continuing"
-    $SUDO apt-get install -y nodejs || log_warning "Node install via apt failed — install Node LTS manually"
+    $SUDO apt-get install -y "${APT_LOCK_OPT[@]}" nodejs || log_warning "Node install via apt failed — install Node LTS manually"
 }
 
 # ─── Linuxbrew (CLI tool manager on Linux) ────────────────────────────────────
@@ -1258,16 +1265,16 @@ install_docker() {
         log_section "INSTALLING DOCKER 🐳"
 
         # Install prerequisites
-        apt-get install -y ca-certificates curl gnupg 2>/dev/null || {
+        apt-get install -y "${APT_LOCK_OPT[@]}" ca-certificates curl gnupg 2>/dev/null || {
             log_warning "Could not install Docker prerequisites"
             return 1
         }
 
         # Add Docker's official GPG key
         install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
+        fetch https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
             # Try Debian if Ubuntu fails
-            curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
+            fetch https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
                 log_warning "Could not add Docker GPG key"
                 return 1
             }
@@ -1290,8 +1297,8 @@ install_docker() {
             tee /etc/apt/sources.list.d/docker.list > /dev/null
 
         # Install Docker
-        apt-get update -y 2>/dev/null
-        apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null || {
+        apt-get update -y "${APT_LOCK_OPT[@]}" 2>/dev/null
+        apt-get install -y "${APT_LOCK_OPT[@]}" docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null || {
             log_warning "Docker installation failed"
             return 1
         }

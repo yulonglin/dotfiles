@@ -164,7 +164,7 @@ elif is_linux; then
     # Skip apt update if cache is less than 1 hour old
     apt_cache="/var/lib/apt/lists/partial"
     if [[ ! -d "$apt_cache" ]] || [[ $(( $(date +%s) - $(stat -c %Y "$apt_cache" 2>/dev/null || echo 0) )) -gt 3600 ]]; then
-        apt update 2>/dev/null || log_info "Skipping apt update (no permissions)"
+        apt update "${APT_LOCK_OPT[@]}" 2>/dev/null || log_info "Skipping apt update (no permissions)"
     else
         log_info "apt cache fresh (< 1h old) — skipping update"
     fi
