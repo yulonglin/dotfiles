@@ -8,6 +8,7 @@ config/safari_web_apps.local
 config.local.sh
 config/machines.conf
 config/secrets-global.conf
+config/storage.conf
 .secrets
 .envrc
 

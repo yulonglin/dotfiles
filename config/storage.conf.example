@@ -1,0 +1,20 @@
+# Storage tiering — per-machine settings
+#
+# Copy this file to storage.conf and edit, or let `storage-setup` write it:
+#   storage-setup              # detect the volume and write config/storage.conf
+#   storage-setup --help
+#
+# Read by config/aliases/storage.sh on every interactive shell. The real file is
+# gitignored (this repo is public, and mount paths are machine-specific).
+# Absent the file the defaults below apply, so a laptop needs no config at all.
+
+# Mount point of the attached data volume — bulky caches (HF_HOME, TORCH_HOME)
+# are forwarded here when it exists. `/workspace` is the RunPod convention and
+# the layout the server-storage-tiering skill assumes; on other boxes point it
+# at the volume itself (e.g. /mnt/<volume>) or symlink /workspace to it.
+# When the path does not exist, every export below is skipped silently.
+STORAGE_VOLUME=/workspace
+
+# Warn on shell start when the root filesystem has less than this many GB free.
+# Linux only, one `df`, no `du`. Set to 0 to disable the warning entirely.
+STORAGE_ROOT_WARN_GB=20

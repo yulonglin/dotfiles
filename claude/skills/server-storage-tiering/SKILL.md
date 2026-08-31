@@ -69,13 +69,36 @@ export TORCH_HOME=/workspace/torch
 ```
 
 **Already in dotfiles:** `config/aliases/storage.sh` (sourced by zshrc on every interactive
-shell) does this automatically when `/workspace` exists — no manual profile edit needed. It
+shell) does this automatically when the volume exists — no manual profile edit needed. It
 deliberately **skips the export when the default cache path is already a symlink onto the
 volume** (a relocated `~/.cache/huggingface` redirects transparently; re-pointing `HF_HOME`
 would orphan the moved cache and force re-downloads), so an unset `HF_HOME` on a tiered box
-is correct, not a gap. The same file prints a one-line warning on shell start when root has
-<20G free. Scope boundary: zshrc-sourced env reaches interactive shells only — pueue
-daemons, cron and systemd services won't see it.
+is correct, not a gap. The same file prints a one-line warning on shell start when root runs
+low. Scope boundary: zshrc-sourced env reaches interactive shells only — pueue daemons, cron
+and systemd services won't see it.
+
+**The mount point and the warning threshold are per-machine**, not hardcoded — boxes differ
+(`/workspace` on RunPod, `/mnt/<volume>` elsewhere, nothing on a laptop). They come from
+`config/storage.conf` (gitignored; `config/storage.conf.example` documents both keys):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `STORAGE_VOLUME` | `/workspace` | Volume mount point; every export is skipped when the path is absent |
+| `STORAGE_ROOT_WARN_GB` | `20` | Warn under this many GB free on `/`; `0` disables the warning |
+
+Write it with **`storage-setup`** (`custom_bins/`, on PATH), which `./deploy.sh --only storage`
+also runs on every Linux box:
+
+```bash
+storage-setup                     # detect the volume, write config/storage.conf if absent
+storage-setup --show              # what the shell fragment will actually use
+storage-setup --volume /mnt/data --threshold-gb 50 --force
+```
+
+Detection prefers an existing `/workspace`, else the mounted block-device filesystem with the
+most free space, requiring at least 2x root's free space and at least 50G — so a second small
+disk or `/boot` never wins. It writes config only, never touching data, is idempotent (an
+existing config is left alone without `--force`), and treats "no volume here" as success.
 
 ---
 
