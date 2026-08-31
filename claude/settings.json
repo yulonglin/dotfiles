@@ -1072,7 +1072,13 @@
       "nvidia-smi",
       "jupyter",
       "ipython",
-      "tensorboard"
+      "tensorboard",
+      "ps",
+      "ps *",
+      "top",
+      "top *",
+      "pgrep",
+      "pgrep *"
     ]
   },
   "feedbackSurveyRate": 0,
