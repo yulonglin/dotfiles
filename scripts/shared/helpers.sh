@@ -2003,12 +2003,21 @@ parse_args() {
                 fi
                 apply_profile "cloud"
                 ;;
-            --personal)
+            --personal|--devbox)
                 if [[ "$_only_mode" == true ]]; then
                     echo "Error: --only cannot be mixed with profile or component flags" >&2
                     exit 1
                 fi
-                apply_profile "personal"
+                apply_profile "devbox"
+                ;;
+            --standard|--agent|--bare)
+                # Explicit cases: the --* catch-all below would otherwise mangle
+                # a profile name into a bogus DEPLOY_<NAME> component.
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
+                apply_profile "${1#--}"
                 ;;
             --default)
                 if [[ "$_only_mode" == true ]]; then

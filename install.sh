@@ -50,13 +50,19 @@ Usage: ./install.sh [OPTIONS]
 Install dotfile dependencies on macOS or Linux.
 Configuration is in config.sh - edit it to change defaults.
 
-PROFILES:
-    --profile=NAME    Use a profile: personal, server, minimal
-    --default         Safe base for shared/new machines (alias for --profile=server)
+PROFILES (pick by what the machine is FOR):
+    (no flag)         'standard' — shell, editor, git, Claude/Codex, supply-chain
+                      defenses. Nothing scheduled, nothing GUI. This is the
+                      default; it is NOT the full set.
+    --devbox          A machine you live on: the full set (was --personal)
+    --agent           Ephemeral box you DO code on: standard + per-project secrets
+    --bare            Ephemeral box you will NOT code on: shell + uv only
+    --server          Shared machine: no GUI, no cleanup, no scheduled jobs
     --minimal         Suppress ALL components — specify what you want explicitly
     --no-defaults     Same as --minimal (clearer name)
-    --server          Server-appropriate subset
-    --personal        Full personal setup (default)
+    --profile=NAME    standard, devbox, agent, bare, server, cloud, minimal
+    --default         Alias for --server
+    --personal        Synonym for --devbox (kept for existing invocations)
 
 SELECTIVE INSTALLATION:
     --only COMP...    Install ONLY these components, nothing else
