@@ -178,22 +178,24 @@ PACKAGES_MACOS=(
     "fpart"       # parallel rsync (fpsync) for fast many-file copies
 )
 
-# Linux packages (via mise github: backend)
-PACKAGES_LINUX_MISE=(
-    "github:junegunn/fzf"
-    "github:sharkdp/bat"
-    "github:eza-community/eza"
-    "github:sharkdp/fd"
-    "github:BurntSushi/ripgrep"
-    "github:dandavison/delta"
-    "github:bootandy/dust"
-    "github:ajeetdsouza/zoxide"
-    "github:PaulJuliusMartinez/jless"
-    "github:casey/just"
-    "github:chmln/sd"
-    "github:muesli/duf"
-    "github:charmbracelet/gum"
-    "github:sharkdp/vivid"
+# Linux packages (via Homebrew / Linuxbrew)
+# FORMULA names, which differ from the binary for two entries: ripgrep→rg,
+# git-delta→delta. Getting these wrong is a silent "no available formula".
+PACKAGES_LINUX_BREW=(
+    "fzf"
+    "bat"
+    "eza"
+    "fd"
+    "ripgrep"     # binary: rg
+    "git-delta"   # binary: delta
+    "dust"
+    "zoxide"
+    "jless"
+    "just"
+    "sd"
+    "duf"
+    "gum"
+    "vivid"
 )
 
 # Extra packages (--extras flag)
@@ -204,9 +206,9 @@ PACKAGES_EXTRAS_MACOS=(
 )
 
 PACKAGES_EXTRAS_LINUX=(
-    "github:sharkdp/hyperfine"
-    "github:extrawurst/gitui"
-    "cargo:code2prompt"
+    "hyperfine"
+    "gitui"
+    "code2prompt"
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -12,11 +12,27 @@ UPDATE_BIN="$DOT_DIR/custom_bins/update-ai-tools"
 # Source scheduler abstraction
 source "$DOT_DIR/scripts/scheduler/scheduler.sh"
 
+# Shared helpers, for install_bun. config.sh is deliberately NOT sourced: it is
+# zsh-only (`${(U)name//-/_}`) and dies with "bad substitution" under this bash
+# script. helpers.sh's only entry guard is PLATFORM being set, so set it here
+# with config.sh's own Darwin/else rule. Consequence: is_macos/is_linux stay
+# undefined in this script, so install_bun must never start using them.
+export DOT_DIR
+case "$(uname -s)" in
+    Darwin*) PLATFORM="macos" ;;
+    *)       PLATFORM="linux" ;;
+esac
+export PLATFORM
+source "$DOT_DIR/scripts/shared/helpers.sh"
+
 JOB_ID="update-ai-tools"
 
 # Logging (uses scheduler's internal prefix to avoid conflicts)
 log_step() { echo -e "${BLUE}==>${NC} $1"; }
 
+# macOS updates Codex/OpenCode through brew, so bun is only a hard requirement
+# on Linux. The install itself is install_bun in scripts/shared/helpers.sh —
+# this wrapper keeps the Darwin gate and the "skipping setup" contract.
 ensure_bun_for_linux() {
     if [[ "$(uname -s)" == "Darwin" ]]; then
         return 0
@@ -28,21 +44,8 @@ ensure_bun_for_linux() {
 
     _sched_log_info "bun not found; installing bun for Codex/OpenCode updates..."
 
-    if ! command -v curl &>/dev/null; then
-        _sched_log_warn "curl is required to install bun. Skipping AI tools auto-update setup."
-        return 1
-    fi
-
-    if ! curl -fsSL https://bun.sh/install | bash; then
-        _sched_log_warn "bun installation failed. Skipping AI tools auto-update setup."
-        return 1
-    fi
-
-    export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
-    export PATH="$BUN_INSTALL/bin:$PATH"
-
-    if ! command -v bun &>/dev/null; then
-        _sched_log_warn "bun still not found after install. Skipping AI tools auto-update setup."
+    if ! install_bun; then
+        _sched_log_warn "bun install failed. Skipping AI tools auto-update setup."
         return 1
     fi
 

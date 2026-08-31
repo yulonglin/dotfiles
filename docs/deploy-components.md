@@ -34,7 +34,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Global gitattributes - Binary file handling + line endings (deployed with --git-config flag)
 - File associations - Set default editor for coding file types and default terminal for `.command`/`.tool` (macOS only, reads `config/macos_default_apps.conf`)
 - Pueue + resource slices - Local job queue with cgroup-enforced CPU/memory limits (Linux only, systemd user slices, `j*` aliases)
-- Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, brew/apt/dnf/pacman, launchd/cron)
+- Package auto-update - Weekly upgrade + cleanup (Sunday 5 AM, launchd/cron). `custom_bins/update-packages` runs brew wherever it exists (macOS Homebrew or Linuxbrew) and then the system manager on Linux (apt/dnf/pacman), so a Linux box with brew CLI tools gets both upgraded in one pass
 - Package manager configs - Global npmrc, bunfig.toml, pnpm rc, uv.toml with 7-day min-release-age + ignore-scripts (symlinked)
 - Dependency audit - Weekly scan for known-bad packages across all repos (Sunday 10 AM, launchd/cron)
 

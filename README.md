@@ -178,7 +178,7 @@ Install dependencies (e.g. oh-my-zsh and related plugins). The installer auto-de
 | Platform  | Defaults                                                                            |
 | --------- | ----------------------------------------------------------------------------------- |
 | **macOS** | zsh, tmux, AI tools, cleanup + Rust CLI tools via Homebrew                          |
-| **Linux** | zsh, tmux, AI tools, create-user + Rust CLI tools via [mise](https://mise.jdx.dev/) |
+| **Linux** | zsh, tmux, AI tools, create-user + Rust CLI tools via [Homebrew](https://brew.sh/) (Linuxbrew) |
 
 
 Installation on macOS requires Homebrew - install from [brew.sh](https://brew.sh/) first if needed.
@@ -623,7 +623,7 @@ Weekly package upgrade + cleanup on Sundays at 05:00:
 ./deploy.sh --brew-update  # Part of defaults
 ```
 
-Supports Homebrew (macOS), apt, dnf, and pacman (Linux). Includes cleanup of stale caches.
+Runs Homebrew wherever it exists (macOS Homebrew or Linuxbrew), then the system package manager on Linux (apt, dnf, or pacman). Includes cleanup of stale caches.
 
 ### Text Replacements (macOS)
 

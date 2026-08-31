@@ -360,7 +360,7 @@ BREW_NONINTERACTIVE_ENV=(
     HOMEBREW_NO_INSTALL_CLEANUP=1
 )
 
-# Install package via Homebrew (macOS)
+# Install package via Homebrew (macOS and Linuxbrew)
 brew_install() {
     local pkg="$1"
     local cask="${2:-false}"
@@ -395,19 +395,6 @@ apt_install() {
     sudo apt install -y "$pkg" 2>/dev/null || log_warning "$pkg installation via apt failed"
 }
 
-# Install package via mise (Linux)
-mise_install() {
-    local pkg="$1"
-    if ! cmd_exists mise; then
-        log_warning "mise not available for $pkg"
-        return 1
-    fi
-    if mise where "$pkg" &>/dev/null; then
-        return 0
-    fi
-    mise use -g "$pkg" || log_warning "$pkg installation via mise failed"
-}
-
 # Install multiple packages
 # Usage: install_packages <manager> <pkg1> <pkg2> ...
 # For apt: filters already-installed packages, installs remaining in one call
@@ -434,7 +421,6 @@ install_packages() {
     for pkg in "$@"; do
         case "$manager" in
             brew) brew_install "$pkg" ;;
-            mise) mise_install "$pkg" ;;
         esac
     done
 }
@@ -909,14 +895,14 @@ install_gh_from_release() {
     rm -rf /tmp/gh.tar.gz "/tmp/gh_${version}_linux_${arch}"
 }
 
-# ─── Node.js LTS (global runtime, NOT a mise tool) ────────────────────────────
+# ─── Node.js LTS (global runtime, NOT a brew tool on Linux) ───────────────────
 
 # Node is a RUNTIME that other tools shebang against (e.g. obsidian-headless's
 # `ob` → #!/usr/bin/env node), so it must resolve on a global PATH that
-# systemd/cron contexts see — which mise's shell-activated shims do not. Install
-# it globally: NodeSource's setup_lts.x on Linux (the *current LTS* line — only
-# even/LTS majors, never an odd "Current" release), brew on macOS; never via
-# mise, which here manages interactive leaf-CLIs only (fzf, bat, …).
+# systemd/cron contexts see — which Linuxbrew's shell-activated prefix does not.
+# Install it globally: NodeSource's setup_lts.x on Linux (the *current LTS* line
+# — only even/LTS majors, never an odd "Current" release), brew on macOS; never
+# Linuxbrew, which here manages interactive leaf-CLIs only (fzf, bat, …).
 #
 # The skip-guard floor is the *live* latest-LTS major fetched from nodejs.org
 # (fallback 24 = Krypton if offline), NOT a hardcoded number. That keeps two
@@ -950,25 +936,78 @@ install_node() {
     $SUDO apt-get install -y nodejs || log_warning "Node install via apt failed — install Node LTS manually"
 }
 
-# ─── Mise (Universal Version Manager) ─────────────────────────────────────────
+# ─── Linuxbrew (CLI tool manager on Linux) ────────────────────────────────────
 
-install_mise() {
-    if is_installed mise; then
+# Homebrew is the single source of modern CLI leaf-tools on Linux as well as
+# macOS. Two cases both have to end with brew on PATH, and missing the second is
+# the subtle one: on a machine where Linuxbrew is already installed, install.sh
+# still runs BEFORE the new ~/.zshrc (with its shellenv line) is deployed, so
+# `brew` may exist on disk while `cmd_exists brew` is false. Every later
+# brew_install would then fail. So activate whenever the binary is present,
+# whether or not this call installed it.
+LINUXBREW_PREFIX="/home/linuxbrew/.linuxbrew"
+
+install_linuxbrew() {
+    if ! is_macos && [[ ! -x "$LINUXBREW_PREFIX/bin/brew" ]]; then
+        # Homebrew's installer aborts as root ("Don't run this as root!") on
+        # anything it does not detect as a container — /.dockerenv,
+        # /run/.containerenv or a docker/kubepods/actions_job cgroup marker. On a
+        # plain cloud VM SSH'd into as root (README's cloud path) the install
+        # therefore cannot succeed, and every brew-managed tool would be skipped
+        # behind a generic "installation failed" warning. Name the cause instead.
+        if [[ $EUID -eq 0 ]] \
+           && [[ ! -e /.dockerenv && ! -e /run/.containerenv ]] \
+           && ! grep -qE '(docker|kubepods|actions_job)' /proc/1/cgroup 2>/dev/null; then
+            log_warning "Homebrew refuses to install as root on a non-container host, so the brew-managed CLI tools will be skipped."
+            log_warning "  Re-run install.sh as a non-root user (or use --create-user first), then re-run to pick them up."
+            return 1
+        fi
+        log_info "Installing Homebrew (Linuxbrew)..."
+        # NONINTERACTIVE=1 skips the installer's "Press RETURN to continue"
+        # prompt; install.sh keeps stdin on the TTY for the component menu, so
+        # the installer cannot auto-detect non-interactive mode on its own.
+        NONINTERACTIVE=1 /bin/bash -c \
+            "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
+            || log_warning "Homebrew (Linuxbrew) installation failed"
+    fi
+
+    if ! cmd_exists brew && [[ -x "$LINUXBREW_PREFIX/bin/brew" ]]; then
+        eval "$("$LINUXBREW_PREFIX/bin/brew" shellenv)"
+    fi
+
+    if cmd_exists brew; then
         return 0
     fi
 
-    log_info "Installing mise..."
-    mkdir -p "$HOME/.local/bin"
-    curl https://mise.run | sh
-    export PATH="$HOME/.local/bin:$PATH"
-
-    if cmd_exists mise; then
-        eval "$(mise activate bash)"
-        return 0
-    fi
-
-    log_warning "mise installation failed"
+    log_warning "brew not available after bootstrap — skipping brew-managed tools"
     return 1
+}
+
+# ─── bun (global JS CLI package manager) ──────────────────────────────────────
+
+# Single installer shared by install.sh and scripts/cleanup/setup_ai_update.sh.
+# Exports BUN_INSTALL/PATH into the CALLING shell so the very next `bun add -g`
+# resolves without waiting for a new login shell.
+install_bun() {
+    if cmd_exists bun; then
+        return 0
+    fi
+
+    if ! cmd_exists curl; then
+        log_warning "curl is required to install bun"
+        return 1
+    fi
+
+    log_info "Installing bun..."
+    curl -fsSL https://bun.sh/install | bash || log_warning "bun installation failed"
+
+    export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+
+    if ! cmd_exists bun; then
+        log_warning "bun still not found after install"
+        return 1
+    fi
 }
 
 # ─── User Management (Linux) ──────────────────────────────────────────────────

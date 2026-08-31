@@ -152,14 +152,11 @@ elif is_linux; then
     log_info "Installing core packages via apt..."
     install_packages apt "${PACKAGES_CORE[@]}" less nano nvtop lsof unzip bubblewrap socat
 
-    # Install mise for modern CLI tools
-    install_mise
-
-    # Modern CLI tools via mise
-    log_info "Installing modern CLI tools..."
-    for pkg in "${PACKAGES_LINUX_MISE[@]}"; do
-        mise_install "$pkg"
-    done
+    # Modern CLI tools via Linuxbrew
+    if install_linuxbrew; then
+        log_info "Installing modern CLI tools via brew..."
+        install_packages brew "${PACKAGES_LINUX_BREW[@]}"
+    fi
 fi
 
 # ─── GitHub CLI ───────────────────────────────────────────────────────────────
@@ -263,10 +260,11 @@ fi
 if [[ "$INSTALL_EXTRAS" == "true" ]]; then
     log_section "INSTALLING EXTRAS"
 
-    # Rust toolchain (needed for code2prompt)
-    install_rust_toolchain
-
     if is_macos; then
+        # Rust toolchain: macOS still builds code2prompt from source (no formula
+        # in the extras list there). Linux gets it from brew, so no cargo needed.
+        install_rust_toolchain
+
         install_packages brew "${PACKAGES_EXTRAS_MACOS[@]}"
 
         if cmd_exists cargo && ! is_installed code2prompt; then
@@ -274,9 +272,12 @@ if [[ "$INSTALL_EXTRAS" == "true" ]]; then
             cargo install code2prompt --quiet 2>/dev/null || log_warning "code2prompt failed"
         fi
     else
-        for pkg in "${PACKAGES_EXTRAS_LINUX[@]}"; do
-            mise_install "$pkg"
-        done
+        # `--only extras` skips the core block, so bootstrap brew here too.
+        # install_linuxbrew is idempotent; without it brew_install's `return 1`
+        # would abort the whole run under `set -e`.
+        if install_linuxbrew; then
+            install_packages brew "${PACKAGES_EXTRAS_LINUX[@]}"
+        fi
     fi
 fi
 
@@ -295,13 +296,10 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Pre-set PATH for subshells
     [[ -d "$HOME/.claude/bin" ]] && export PATH="$HOME/.claude/bin:$PATH"
 
-    # Bun must install before Codex/OpenCode on Linux (they need `bun add -g`)
-    if is_linux && ! cmd_exists bun; then
-        log_info "Installing bun..."
-        curl -fsSL https://bun.sh/install | bash
-        export BUN_INSTALL="$HOME/.bun"
-        export PATH="$BUN_INSTALL/bin:$PATH"
-    fi
+    # Bun is the global JS CLI package manager on BOTH platforms — it must land
+    # before Codex/OpenCode on Linux (they need `bun add -g`) and before the
+    # Socket CLI install below, which is `bun add -g` everywhere.
+    install_bun || true
 
     if is_macos; then
         # brew has a global lock — sequential
@@ -378,7 +376,7 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Socket CLI — wraps npm/npx with supply chain scanning
     if ! cmd_exists socket; then
         log_info "Installing Socket CLI..."
-        npm install -g @socketsecurity/cli 2>/dev/null || log_warning "Socket CLI install failed (npm required)"
+        bun add -g @socketsecurity/cli 2>/dev/null || log_warning "Socket CLI install failed (bun required)"
     fi
 
     # pip-audit — vulnerability scanner for Python dependencies
