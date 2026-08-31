@@ -280,6 +280,13 @@ apply_profile() {
     local profile="${1:-$PROFILE}"
     PROFILE="$profile"   # keep the banner label in sync with the flags actually applied
 
+    # Profiles delegate: standard -> minimal, agent -> standard, devbox ->
+    # personal, cloud -> server. The tail passes below must run ONCE, at the
+    # outermost call — otherwise a bare run sources config.local.sh twice
+    # (measured), which is harmless for plain assignments but double-appends
+    # anything written as `+=(…)`.
+    typeset -g _APPLY_PROFILE_DEPTH=$(( ${_APPLY_PROFILE_DEPTH:-0} + 1 ))
+
     case "$profile" in
         personal)
             # Everything enabled. _init_component_vars is load-bearing, not
@@ -409,9 +416,13 @@ apply_profile() {
 
     # Precedence, restored in full: profile -> config.local.sh -> platform.
     # Both must be re-applied here rather than once at source time, because a
-    # CLI flag re-runs this long after sourcing.
-    _apply_local_config
-    _apply_platform_overrides
+    # CLI flag re-runs this long after sourcing — but only once per invocation,
+    # not once per delegation level.
+    typeset -g _APPLY_PROFILE_DEPTH=$(( _APPLY_PROFILE_DEPTH - 1 ))
+    if (( _APPLY_PROFILE_DEPTH == 0 )); then
+        _apply_local_config
+        _apply_platform_overrides
+    fi
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -437,13 +448,19 @@ is_linux() { [[ "$PLATFORM" == "linux" ]]; }
 # Detect platform on source
 detect_platform
 
-# Apply profile if set (can be overridden by CLI)
-[[ -n "$PROFILE" ]] && apply_profile "$PROFILE"
-
-# User overrides (gitignored) — create config.local.sh to customize defaults
-# Precedence: defaults -> apply_profile() -> config.local.sh -> CLI flags (parse_args)
-# DOTFILES_SKIP_LOCAL_CONFIG=1 ignores it — tests capturing reproducible
-# fixtures must not inherit whatever a particular machine has overridden.
-_apply_local_config
-
-_apply_platform_overrides
+# Precedence: defaults -> apply_profile() -> config.local.sh -> CLI flags
+# (parse_args). DOTFILES_SKIP_LOCAL_CONFIG=1 ignores config.local.sh — tests
+# capturing reproducible fixtures must not inherit whatever a particular
+# machine has overridden.
+#
+# Either/or, not both: apply_profile now ends with _apply_local_config and
+# _apply_platform_overrides itself (a CLI flag re-runs it long after this
+# point). Calling them again here sourced config.local.sh twice on every run,
+# which is harmless for plain assignments but double-appends anything using
+# `+=(…)`.
+if [[ -n "$PROFILE" ]]; then
+    apply_profile "$PROFILE"
+else
+    _apply_local_config
+    _apply_platform_overrides
+fi

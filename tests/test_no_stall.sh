@@ -155,10 +155,14 @@ test_every_cargo_build_is_bounded() {
     # while the guard stayed green. Check the class: every cargo build in the
     # install path must be wrapped in a deadline.
     local hits
+    # NOT `grep -v run_with_timeout`: `run_with_timeout 0` is this suite's own
+    # documented way to run something WITHOUT a deadline, so that spelling
+    # would walk straight past the guard. Accept only a non-zero deadline.
     hits=$(grep -nE 'cargo build' \
-        "$DOT_DIR"/install.sh "$DOT_DIR"/deploy.sh "$DOT_DIR"/scripts/shared/helpers.sh 2>/dev/null \
+        "$DOT_DIR"/install.sh "$DOT_DIR"/deploy.sh "$DOT_DIR"/scripts/shared/helpers.sh \
+        "$DOT_DIR"/scripts/cloud/*.sh 2>/dev/null \
         | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
-        | grep -v 'run_with_timeout' || true)
+        | grep -vE 'run_with_timeout ["'"'"']?[^0[:space:]]' || true)
     if [[ -z "$hits" ]]; then
         pass "every cargo build in the install path carries a deadline"
     else
@@ -386,11 +390,17 @@ test_no_unguarded_bare_sudo_v() {
     # deploy.sh:1274 aborted the whole run under set -euo pipefail on non-TTY.
     # Any bare `sudo -v` that is not inside a guard function is a regression.
     local hits
-    hits=$(grep -n '^\s*sudo -v' "$DOT_DIR/deploy.sh" "$DOT_DIR/install.sh" 2>/dev/null || true)
+    # Every occurrence, not just statement-initial ones: the two real sites were
+    # `if sudo -v; then` and `[[ -t 0 ]] && sudo -v`, and the old anchored
+    # pattern matched neither, so this check passed while both were unbounded.
+    # `[[ -t 0 ]]` is not proof anyone is watching, so a deadline is required.
+    hits=$(grep -n 'sudo -v' "$DOT_DIR/deploy.sh" "$DOT_DIR/install.sh" 2>/dev/null \
+        | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+        | grep -v 'run_with_timeout' || true)
     if [[ -z "$hits" ]]; then
-        pass "no bare 'sudo -v' at statement level in either script"
+        pass "every 'sudo -v' carries a deadline"
     else
-        fail "bare 'sudo -v' found — aborts non-TTY runs under set -e" "$hits"
+        fail "unbounded 'sudo -v' found — blocks or aborts an unattended run" "$hits"
     fi
 }
 

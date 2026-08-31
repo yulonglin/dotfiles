@@ -1175,8 +1175,20 @@ install_node() {
     # Install unconditionally; apt resolves the NodeSource candidate (a higher
     # version than Ubuntu's, so an already-installed nodejs is upgraded in place).
     local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
+    # An ARRAY, not "$SUDO -E": as root $SUDO is empty and the word simply
+    # disappears, leaving `-E bash -`, i.e. an attempt to run a command called
+    # `-E`. Measured: `timeout: failed to run command '-E'`, rc 127, swallowed
+    # by the `|| log_warning` below — so the NodeSource repo was never added
+    # and apt then installed stock Ubuntu node. `-E` is a sudo flag and has no
+    # meaning without sudo. This is the README's cloud path (root over ssh).
+    local -a _node_setup
+    if [[ -n "$SUDO" ]]; then
+        _node_setup=(sudo -E bash -)
+    else
+        _node_setup=(bash -)
+    fi
     fetch https://deb.nodesource.com/setup_lts.x \
-        | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" $SUDO -E bash - \
+        | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" "${_node_setup[@]}" \
         || log_warning "NodeSource setup script exited non-zero (repo may still be configured) — continuing"
     $SUDO apt-get install -y "${APT_LOCK_OPT[@]}" nodejs || log_warning "Node install via apt failed — install Node LTS manually"
 }
