@@ -10,6 +10,7 @@ These rules carry only always-relevant judgment. Activity-scoped procedure is a 
 - Classifying text by meaning with a model → `llm-judge`
 - Jobs, pueue, resource caps, sandbox failure modes → `jobs`
 - Second opinion from another model family → `second-opinion`
+- Running a finished report past a multi-family review panel and consolidating the critiques → `panel-review`
 - Interviewing the user to stress-test a plan → `interview-me`
 - Charts and figures → `house-plots` (matplotlib for papers; native SVG via built-in `dataviz` for artifact pages)
 - Browser automation and which browser tool to reach for → `agent-browser`

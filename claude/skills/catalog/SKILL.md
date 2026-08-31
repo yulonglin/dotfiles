@@ -43,6 +43,7 @@ Most skills below are **model-invoked**: Claude fires them automatically when yo
 | `check-bib-references` | Verifying BibTeX citations aren't LLM-fabricated |
 | `check-prose-claims` | Fact-checking stats/comparatives/quotes in slides, reports, papers |
 | `check-misreads` | Red-teaming a draft for misreads before sending — artifacts, results, specs, handoff briefs |
+| `panel-review` | Running a finished report past a multi-family panel (fusion + Fable + codex) and consolidating the critiques |
 | `marp-deck` | Building slide decks from Markdown with Marp |
 
 ## Research / infra ops
