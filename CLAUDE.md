@@ -33,6 +33,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 
 - Deploy components, per-component behaviors, cloud provisioning, how to extend → [`docs/deploy-components.md`](docs/deploy-components.md)
 - Package strategy, symlink-vs-copy, directory env vars, operational gotchas → [`docs/tooling-and-packages.md`](docs/tooling-and-packages.md)
+- Terminal/shell/dev-tool usage detail (Ghostty themes, p10k machine ID, statusline, `claude-tools ignore`, pdb++, media recovery) → [`docs/terminal-and-dev-tools.md`](docs/terminal-and-dev-tools.md)
 - File layout → `eza --tree -L2 config claude custom_bins tools lib` (filenames are self-describing)
 - Global behavioral rules → `~/.claude/rules/*.md`; this repo's → `.claude/rules/*.md`
 
