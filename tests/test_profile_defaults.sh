@@ -181,16 +181,60 @@ test_bare_installs_no_ai_tools() {
     fi
 }
 
-test_unknown_profile_falls_back_loudly() {
+test_unknown_profile_fails_closed() {
+    # It used to warn and fall back to `personal`, so `--profile=servre`
+    # resolved to the FULL 50-component devbox install and exited 0 — a typo
+    # meant for a shared server produced the most invasive setup available,
+    # with one warning line as the only signal. It must now refuse.
     local out
     out=$(zsh -c "
         DOT_DIR='$DOT_DIR'; PROFILE=not-a-profile
         source '$DOT_DIR/config.sh'
     " 2>&1 >/dev/null)
     if [[ "$out" == *"Unknown profile"* ]]; then
-        pass "an unknown profile warns instead of silently doing something"
+        pass "an unknown profile says so instead of being silent"
     else
         fail "unknown profile is silent" "$out"
+    fi
+
+    # And says so by refusing, not by installing everything.
+    local n
+    n=$(dump_cli --profile=servre 2>/dev/null | grep -c '=true' || true)
+    if [[ "$n" == "0" ]]; then
+        pass "a misspelled profile enables nothing (fails closed)"
+    else
+        fail "a misspelled profile resolved to $n components" \
+             "$(dump_cli --profile=servre 2>/dev/null | grep '=true' | head -5)"
+    fi
+}
+
+test_minimal_overrides_local_config_positives() {
+    # config.local.sh sits after the profile in the precedence chain, so
+    # re-applying it inside apply_profile (needed so `--server` cannot
+    # resurrect a component the machine disabled) also let a POSITIVE local
+    # override survive `--minimal`, which promises to suppress everything.
+    # Measured before the guard: --minimal left MCP=true OBSIDIAN=true.
+    local local_cfg="$DOT_DIR/config.local.sh"
+    if [[ -e "$local_cfg" ]]; then
+        echo "  SKIP minimal-vs-local (a real config.local.sh exists)"
+        return
+    fi
+    printf 'DEPLOY_MCP_SYNC=true\nDEPLOY_OBSIDIAN_SYNC=true\n' > "$local_cfg"
+    local out
+    out=$(zsh -c '
+        emulate -L zsh; set -uo pipefail
+        export DOT_DIR="$1"
+        source "$DOT_DIR/config.sh" >/dev/null 2>&1
+        source "$DOT_DIR/scripts/shared/helpers.sh" >/dev/null 2>&1
+        show_help() { : }
+        parse_args --minimal >/dev/null 2>&1
+        print "$DEPLOY_MCP_SYNC $DEPLOY_OBSIDIAN_SYNC"
+    ' _ "$DOT_DIR" 2>/dev/null || true)
+    rm -f "$local_cfg"
+    if [[ "$out" == "false false" ]]; then
+        pass "--minimal suppresses even a positive config.local.sh override"
+    else
+        fail "--minimal left locally-enabled components on" "got: $out"
     fi
 }
 
@@ -286,7 +330,8 @@ test_defenses_are_never_opt_in
 test_no_scheduled_jobs_in_ephemeral_profiles
 test_agent_can_actually_code
 test_bare_installs_no_ai_tools
-test_unknown_profile_falls_back_loudly
+test_unknown_profile_fails_closed
+test_minimal_overrides_local_config_positives
 test_nothing_means_nothing
 test_explicit_flag_beats_platform_override
 test_local_config_survives_a_profile_flag

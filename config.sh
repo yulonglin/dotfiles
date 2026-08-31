@@ -272,6 +272,11 @@ _apply_platform_overrides() {
 # `--server` resurrects DEPLOY_OBSIDIAN_SYNC on a box that turned it off.
 _apply_local_config() {
     [[ "${DOTFILES_SKIP_LOCAL_CONFIG:-0}" == "1" ]] && return 0
+    # `minimal` means nothing enabled, and `--only X` is built on it. A
+    # positive override in config.local.sh (DEPLOY_MCP_SYNC=true) would
+    # otherwise survive `--minimal` and install the very background jobs the
+    # invocation asked to suppress — measured before this guard.
+    [[ "${PROFILE:-}" == "minimal" ]] && return 0
     [[ -n "${DOT_DIR:-}" && -f "$DOT_DIR/config.local.sh" ]] || return 0
     source "$DOT_DIR/config.local.sh"
 }
@@ -286,6 +291,11 @@ apply_profile() {
     # (measured), which is harmless for plain assignments but double-appends
     # anything written as `+=(…)`.
     typeset -g _APPLY_PROFILE_DEPTH=$(( ${_APPLY_PROFILE_DEPTH:-0} + 1 ))
+    # Unwind the counter on every exit path, including the unknown-profile
+    # refusal below, or a later apply_profile would think it is nested.
+    _apply_profile_unwind() {
+        typeset -g _APPLY_PROFILE_DEPTH=$(( _APPLY_PROFILE_DEPTH - 1 ))
+    }
 
     case "$profile" in
         personal)
@@ -408,9 +418,15 @@ apply_profile() {
             done
             ;;
         *)
-            echo "Warning: Unknown profile '$profile', using personal" >&2
-            _init_component_vars
-            PROFILE="personal"   # fell back to personal defaults — label accordingly
+            # Fail CLOSED. This used to warn and fall back to `personal`, so a
+            # typo like `--profile=servre` silently resolved to the full
+            # 50-component devbox install on a machine meant to be a server,
+            # with one warning as the only signal. Refuse instead: a
+            # misspelled profile must install nothing.
+            echo "Error: Unknown profile '$profile'." >&2
+            echo "       Valid profiles: bare, standard, agent, devbox, personal, server, cloud, minimal" >&2
+            _apply_profile_unwind
+            return 2
             ;;
     esac
 

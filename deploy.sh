@@ -62,7 +62,10 @@ PROFILES (pick by what the machine is FOR):
     --devbox          A machine you live on: the full set (was --personal)
     --agent           Ephemeral box you DO code on: standard + per-project secrets
     --bare            Ephemeral box you will NOT code on: shell + uv only
-    --server          Shared machine: no GUI, no cleanup, no scheduled jobs
+    --server          Shared machine: no GUI, no file cleanup. NOTE: still
+                      installs the recurring agent jobs (mcp-sync, usage-ping,
+                      tmux-resume, dep-audit, stale-claims) — unchanged from
+                      before, so curl|bash provisioning keeps working
     --minimal         Suppress ALL components — specify what you want explicitly
     --no-defaults     Same as --minimal (clearer name)
     --profile=NAME    standard, devbox, agent, bare, server, cloud, minimal
@@ -1419,7 +1422,7 @@ if [[ "${DEPLOY_BWS:-false}" == "true" ]]; then
             BWS_TMP="$(mktemp -d)"
             trap 'rm -rf "$BWS_TMP"' EXIT
             log_info "Downloading bws ${BWS_VERSION} from GitHub releases..."
-            if curl -sSL "$BWS_URL" -o "${BWS_TMP}/bws.zip" && \
+            if fetch "$BWS_URL" -o "${BWS_TMP}/bws.zip" && \
                unzip -qo "${BWS_TMP}/bws.zip" -d "${BWS_TMP}" && \
                install -m 755 "${BWS_TMP}/bws" "${BWS_INSTALL_DIR}/bws"; then
                 log_success "bws installed to ${BWS_INSTALL_DIR}/bws: $(bws --version 2>/dev/null)"

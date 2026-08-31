@@ -619,7 +619,7 @@ install_gitleaks() {
         brew_install gitleaks
     else
         local version arch tmpd
-        version=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "8.24.3")
+        version=$(fetch https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "8.24.3")
         case "$(uname -m)" in
             x86_64)  arch="x64" ;;
             aarch64) arch="arm64" ;;
@@ -627,7 +627,7 @@ install_gitleaks() {
         esac
         tmpd=$(mktemp -d)
         mkdir -p "$HOME/.local/bin"
-        curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_${arch}.tar.gz" -o "$tmpd/gitleaks.tar.gz" && \
+        fetch "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_${arch}.tar.gz" -o "$tmpd/gitleaks.tar.gz" && \
         tar -xzf "$tmpd/gitleaks.tar.gz" -C "$tmpd" && \
         mv "$tmpd/gitleaks" "$HOME/.local/bin/" && \
         log_success "gitleaks $version installed" || { log_warning "gitleaks installation failed"; rm -rf "$tmpd"; return 1; }
@@ -642,7 +642,7 @@ install_sops() {
         brew_install sops
     else
         local sops_ver sops_arch
-        sops_ver=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        sops_ver=$(fetch https://api.github.com/repos/getsops/sops/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
         sops_ver="${sops_ver:-3.9.4}"
         case "$(uname -m)" in
             x86_64)  sops_arch="amd64" ;;
@@ -650,7 +650,7 @@ install_sops() {
             *)       log_warning "Unsupported architecture for sops"; return 1 ;;
         esac
         mkdir -p "$HOME/.local/bin"
-        curl -fsSL "https://github.com/getsops/sops/releases/download/v${sops_ver}/sops-v${sops_ver}.linux.${sops_arch}" -o "$HOME/.local/bin/sops" && \
+        fetch "https://github.com/getsops/sops/releases/download/v${sops_ver}/sops-v${sops_ver}.linux.${sops_arch}" -o "$HOME/.local/bin/sops" && \
             chmod +x "$HOME/.local/bin/sops" && \
             log_success "sops $sops_ver installed" || { log_warning "sops installation failed"; return 1; }
     fi
@@ -663,7 +663,7 @@ install_age() {
         brew_install age
     else
         local age_ver age_arch tmpd
-        age_ver=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        age_ver=$(fetch https://api.github.com/repos/FiloSottile/age/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
         age_ver="${age_ver:-1.2.1}"
         case "$(uname -m)" in
             x86_64)  age_arch="amd64" ;;
@@ -672,7 +672,7 @@ install_age() {
         esac
         tmpd=$(mktemp -d)
         mkdir -p "$HOME/.local/bin"
-        curl -fsSL "https://github.com/FiloSottile/age/releases/download/v${age_ver}/age-v${age_ver}-linux-${age_arch}.tar.gz" -o "$tmpd/age.tar.gz" && \
+        fetch "https://github.com/FiloSottile/age/releases/download/v${age_ver}/age-v${age_ver}-linux-${age_arch}.tar.gz" -o "$tmpd/age.tar.gz" && \
             tar -xzf "$tmpd/age.tar.gz" -C "$tmpd" && \
             mv "$tmpd/age/age" "$tmpd/age/age-keygen" "$HOME/.local/bin/" && \
             log_success "age $age_ver installed" || { log_warning "age installation failed"; rm -rf "$tmpd"; return 1; }
@@ -736,7 +736,7 @@ install_bws() {
         esac
         url="https://github.com/bitwarden/sdk-sm/releases/download/bws-v${bws_version}/bws-${arch}-unknown-linux-gnu-${bws_version}.zip"
     fi
-    if curl -fsSL "$url" -o "$tmpd/bws.zip" && \
+    if fetch "$url" -o "$tmpd/bws.zip" && \
        unzip -o "$tmpd/bws.zip" -d "$HOME/.local/bin/" && \
        chmod +x "$HOME/.local/bin/bws"; then
         log_success "bws installed"
@@ -1124,7 +1124,7 @@ install_gh_from_release() {
     log_info "Installing gh from GitHub releases..."
     local version arch
 
-    version=$(curl -s https://api.github.com/repos/cli/cli/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "2.62.0")
+    version=$(fetch https://api.github.com/repos/cli/cli/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "2.62.0")
 
     case "$(uname -m)" in
         x86_64)  arch="amd64" ;;
@@ -1133,7 +1133,7 @@ install_gh_from_release() {
     esac
 
     mkdir -p "$HOME/.local/bin"
-    curl -sSL "https://github.com/cli/cli/releases/download/v${version}/gh_${version}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz && \
+    fetch "https://github.com/cli/cli/releases/download/v${version}/gh_${version}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz && \
     tar -xzf /tmp/gh.tar.gz -C /tmp && \
     mv "/tmp/gh_${version}_linux_${arch}/bin/gh" "$HOME/.local/bin/" && \
     rm -rf /tmp/gh.tar.gz "/tmp/gh_${version}_linux_${arch}"
@@ -1158,7 +1158,7 @@ install_node() {
     # Current LTS major from nodejs.org; dist index is newest-first and r['lts']
     # is the codename (truthy) for LTS releases, false otherwise.
     local want
-    want=$(curl -fsSL https://nodejs.org/dist/index.json 2>/dev/null \
+    want=$(fetch https://nodejs.org/dist/index.json 2>/dev/null \
         | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null)
     [[ "$want" =~ ^[0-9]+$ ]] || want=24
     if is_installed node && (( $(node -v | cut -d. -f1 | tr -d 'v') >= want )); then
@@ -2132,7 +2132,12 @@ parse_args() {
                     echo "Error: --only cannot be mixed with profile or component flags" >&2
                     exit 1
                 fi
-                apply_profile "${1#*=}"
+                # apply_profile refuses an unknown name (returns 2). Propagate
+                # it: without this the run continued with whatever the
+                # source-time default had already set, so `--profile=servre`
+                # installed the 14-component `standard` set and exited 0
+                # instead of refusing.
+                apply_profile "${1#*=}" || exit 2
                 ;;
             --force|--force-reinstall)
                 FORCE_REINSTALL=true

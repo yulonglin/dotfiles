@@ -244,6 +244,38 @@ test_installer_fetches_are_checked_not_interpolated() {
     fi
 }
 
+test_every_curl_carries_a_deadline() {
+    # The widest form of the class. Earlier checks caught `curl | sh`,
+    # `sh -c "$(curl …)"` and `--retry` without `--retry-max-time`, but a plain
+    # `curl -s URL` or `curl -fsSL URL -o file` has no deadline at all and
+    # stalls a fresh install just as hard. Eleven of these were still on the
+    # default path (gitleaks, sops, age, bws, gh, the Node dist index).
+    #
+    # Continuation lines are joined first, or a curl whose --max-time sits on
+    # the next line reads as unbounded.
+    local hits
+    hits=$(for f in "$DOT_DIR"/install.sh "$DOT_DIR"/deploy.sh \
+                    "$DOT_DIR"/scripts/shared/helpers.sh; do
+        awk -v F="$f" '
+            /\\$/ { line = line substr($0, 1, length($0)-1) " "; next }
+            { line = line $0; n = NR
+              if (line ~ /(^|[^[:alnum:]_-])curl[[:space:]]/ \
+                  && line !~ /--max-time/ \
+                  && line !~ /^[[:space:]]*#/ \
+                  && line !~ /cmd_exists curl/ \
+                  && line !~ /required to install/ \
+                  && line !~ /ca-certificates curl/)
+                  printf "%s:%d:%s\n", F, n, line
+              line = "" }
+        ' "$f"
+    done)
+    if [[ -z "$hits" ]]; then
+        pass "every curl in the install path carries a deadline"
+    else
+        fail "untimed curl(s) found in the install path" "$hits"
+    fi
+}
+
 test_source_build_is_bounded_and_visible() {
     local out
     out=$(helper_probe 'functions _build_claude_tools_from_source' 2>&1)
@@ -459,6 +491,7 @@ test_bounded_menu_does_not_abort_the_script
 test_watchdog_child_keeps_the_terminal
 test_retry_does_not_multiply_the_deadline
 test_installer_fetches_are_checked_not_interpolated
+test_every_curl_carries_a_deadline
 test_parallel_group_is_bounded
 test_no_untimed_curl_pipe_installers
 test_git_and_apt_are_bounded
