@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""annotate-html - add the md2review annotation layer to an existing HTML page.
+"""annotate-html - add the md2artifact annotation layer to an existing HTML page.
 
 Every reviewable Artifact carries select-to-comment annotation
-(the `artifact-writing` skill). md2review builds that in when the source
+(the `artifact-writing` skill). md2artifact builds that in when the source
 is Markdown; this adds the same layer to a page built any other way, so the
 `block_unannotated_artifact.sh` hook lets it publish.
 

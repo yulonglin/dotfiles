@@ -13,11 +13,21 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ─── Profile ──────────────────────────────────────────────────────────────────
-# Available: personal, server, minimal
-# - personal: Full setup with all tools (default)
-# - server:   Minimal server setup (no GUI tools, no cleanup)
-# - minimal:  Nothing enabled by default
-PROFILE="${PROFILE:-personal}"
+# Pick by what the machine is FOR:
+# - standard: default for a bare ./install.sh / ./deploy.sh — shell, editor,
+#             git, Claude/Codex, supply-chain defenses. Nothing scheduled.
+# - devbox:   a machine you live on (macOS/Linux) — the full set
+# - agent:    ephemeral box you DO code on: standard + per-project secrets
+# - bare:     ephemeral box you will NOT code on: shell + uv only
+# - server:   shared machine — no GUI, no cleanup, no scheduled jobs
+# - cloud:    lean remote dev box (RunPod); used by scripts/cloud/setup.sh
+# - minimal:  nothing enabled; name what you want explicitly
+# - personal: synonym for devbox, kept for existing invocations
+#
+# The default is `standard`, NOT the full set: a bare invocation on a fresh box
+# should not schedule background jobs or touch a laptop's GUI settings. Use
+# --devbox (or PROFILE=devbox) for the full set, or persist a picker selection.
+PROFILE="${PROFILE:-standard}"
 
 # ─── Component Registry (single source of truth) ────────────────────────────
 # Format: "name|description|platform|default"
@@ -215,16 +225,97 @@ PACKAGES_EXTRAS_LINUX=(
 # Profile Presets
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Platform facts that outrank any profile. Called at the END of apply_profile,
+# not once at source time: a CLI flag re-applies a profile long after sourcing,
+# and a profile that resets to registry defaults would otherwise resurrect
+# components this platform cannot run.
+_apply_platform_overrides() {
+    if is_linux; then
+        INSTALL_CLEANUP=false       # File cleanup uses launchd (macOS only)
+        DEPLOY_CLEANUP=false        # File cleanup uses launchd (macOS only)
+        # DEPLOY_CLAUDE_CLEANUP stays true - works with cron on Linux
+        INSTALL_CREATE_USER=true    # Useful for containers
+        # INSTALL_DOCKER=true is already default
+    elif is_macos; then
+        INSTALL_DOCKER=false        # Use Docker Desktop on macOS
+    fi
+}
+
 apply_profile() {
     local profile="${1:-$PROFILE}"
     PROFILE="$profile"   # keep the banner label in sync with the flags actually applied
 
     case "$profile" in
         personal)
-            # Default - everything enabled (values above)
+            # Everything enabled. _init_component_vars is load-bearing, not
+            # decorative: this case used to be EMPTY, assuming the registry
+            # defaults were still live. Once `standard` became the source-time
+            # default it ran apply_profile minimal first, zeroing every
+            # component — so a later `--devbox`/`--personal` on the CLI composed
+            # on top of zero and produced 14 components instead of 50. Every
+            # profile must therefore establish its own base explicitly rather
+            # than inherit whatever the last one left behind.
+            _init_component_vars
+            ;;
+        standard)
+            # What a BARE ./install.sh or ./deploy.sh gets: enough to open a
+            # shell, edit, commit, and run Claude/Codex on a fresh machine.
+            # Deliberately excluded — everything that schedules a background
+            # job, needs auth/hardware/apps that do not exist yet, or is
+            # specific to one person's laptop. The picker puts any of it one
+            # keystroke away, and --devbox restores the full set.
+            #
+            # git-hooks and pkg-configs are in the base set on purpose: they are
+            # the secret-leak and supply-chain defenses, and a default you have
+            # to remember to enable is not a defense.
+            apply_profile minimal
+            PROFILE="standard"
+            INSTALL_CORE=true          # modern CLI tools, gh, uv
+            INSTALL_ZSH=true
+            INSTALL_TMUX=true
+            INSTALL_AI_TOOLS=true      # the point of a new machine
+            DEPLOY_SHELL=true
+            DEPLOY_TMUX=true
+            DEPLOY_VIM=true
+            DEPLOY_GIT_CONFIG=true
+            DEPLOY_GIT_HOOKS=true
+            DEPLOY_CLAUDE=true
+            DEPLOY_CODEX=true
+            DEPLOY_PKG_CONFIGS=true
+            DEPLOY_CLAUDE_TOOLS=true
+            ;;
+        devbox)
+            # A machine you live on (macOS or Linux): the full set.
+            apply_profile personal
+            PROFILE="devbox"
+            ;;
+        agent)
+            # Ephemeral box you DO code on — Claude Code, and the things that
+            # make coding there safe rather than merely possible:
+            #   tmux        a dropped ssh/mosh must not kill a running agent
+            #   git-hooks   secret scan before you commit from a throwaway box
+            #   pkg-configs the 7-day quarantine still applies here
+            #   bws/direnv  per-project keys, so nothing is globally exported
+            # No scheduled jobs, no editors, no GUI, no gist sync.
+            apply_profile standard
+            PROFILE="agent"
+            DEPLOY_SECRETS_ENV=true    # direnv needs keys available to expose
+            DEPLOY_BWS=true
+            ;;
+        bare)
+            # Ephemeral box you will NOT code on: a usable shell and uv, so a
+            # script or notebook can run. No AI tools, no git identity, nothing
+            # scheduled. Fastest install of the lot.
+            apply_profile minimal
+            PROFILE="bare"
+            INSTALL_CORE=true          # uv + modern CLI
+            INSTALL_ZSH=true
+            DEPLOY_SHELL=true
             ;;
         server)
-            # Minimal server setup
+            # Subtracts from the full set, so it must start from the full set —
+            # see the note in `personal)`.
+            _init_component_vars
             INSTALL_AI_TOOLS=false
             INSTALL_CLEANUP=false
             INSTALL_DOCKER=false
@@ -276,9 +367,14 @@ apply_profile() {
             ;;
         *)
             echo "Warning: Unknown profile '$profile', using personal" >&2
+            _init_component_vars
             PROFILE="personal"   # fell back to personal defaults — label accordingly
             ;;
     esac
+
+    # Platform facts outrank the profile, and must be re-applied here rather
+    # than once at source time — a CLI flag re-runs this long after sourcing.
+    _apply_platform_overrides
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -309,15 +405,9 @@ detect_platform
 
 # User overrides (gitignored) — create config.local.sh to customize defaults
 # Precedence: defaults -> apply_profile() -> config.local.sh -> CLI flags (parse_args)
-[[ -n "$DOT_DIR" && -f "$DOT_DIR/config.local.sh" ]] && source "$DOT_DIR/config.local.sh"
+# DOTFILES_SKIP_LOCAL_CONFIG=1 ignores it — tests capturing reproducible
+# fixtures must not inherit whatever a particular machine has overridden.
+[[ "${DOTFILES_SKIP_LOCAL_CONFIG:-0}" != "1" && -n "$DOT_DIR" && -f "$DOT_DIR/config.local.sh" ]] \
+    && source "$DOT_DIR/config.local.sh"
 
-# Platform-specific defaults
-if is_linux; then
-    INSTALL_CLEANUP=false       # File cleanup uses launchd (macOS only)
-    DEPLOY_CLEANUP=false        # File cleanup uses launchd (macOS only)
-    # DEPLOY_CLAUDE_CLEANUP stays true - works with cron on Linux
-    INSTALL_CREATE_USER=true    # Useful for containers
-    # INSTALL_DOCKER=true is already default
-elif is_macos; then
-    INSTALL_DOCKER=false        # Use Docker Desktop on macOS
-fi
+_apply_platform_overrides

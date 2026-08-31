@@ -14,6 +14,20 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
+# Non-interactive hardening: no hidden prompt below may block an unattended run.
+# git must never open a credential prompt (clones here are public repos), apt
+# must never open needrestart's ncurses dialog on Ubuntu 22.04+, and services
+# apt touches restart automatically. Attended runs lose nothing.
+export GIT_TERMINAL_PROMPT=0
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+# GIT_TERMINAL_PROMPT stops the credential prompt but not a stalled TCP
+# connection, and DEBIAN_FRONTEND stops needrestart but not the dpkg lock —
+# on a fresh box with unattended-upgrades running at boot, apt waits forever.
+# These two bound what those variables leave unbounded.
+export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30
+export APT_LOCK_TIMEOUT="${APT_LOCK_TIMEOUT:-120}"
+
 # Script directory
 DOT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 export DOT_DIR
@@ -41,13 +55,19 @@ Usage: ./deploy.sh [OPTIONS]
 
 Deploy dotfile configurations. Settings are in config.sh.
 
-PROFILES:
-    --profile=NAME    Use a profile: personal, server, minimal
-    --default         Safe base for shared/new machines (alias for --profile=server)
+PROFILES (pick by what the machine is FOR):
+    (no flag)         'standard' — shell, editor, git, Claude/Codex, supply-chain
+                      defenses. Nothing scheduled, nothing GUI. This is the
+                      default; it is NOT the full set.
+    --devbox          A machine you live on: the full set (was --personal)
+    --agent           Ephemeral box you DO code on: standard + per-project secrets
+    --bare            Ephemeral box you will NOT code on: shell + uv only
+    --server          Shared machine: no GUI, no cleanup, no scheduled jobs
     --minimal         Suppress ALL components — specify what you want explicitly
     --no-defaults     Same as --minimal (clearer name)
-    --server          Server-appropriate subset
-    --personal        Full personal setup (default)
+    --profile=NAME    standard, devbox, agent, bare, server, cloud, minimal
+    --default         Alias for --server
+    --personal        Synonym for --devbox (kept for existing invocations)
 
 SELECTIVE DEPLOYMENT:
     --only COMP...    Deploy ONLY these components, nothing else
@@ -1264,14 +1284,23 @@ fi
 
 # ─── VPN Split Tunneling (macOS only) ────────────────────────────────────────
 
-if [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos; then
+_vpn_sudo_ready() {
+    # A bare `sudo -v` under `set -euo pipefail` aborts the whole deploy when
+    # there is no TTY to answer the password prompt ("a terminal is required").
+    # Proceed only with cached credentials, or a successful attended prompt.
+    sudo -n true 2>/dev/null && return 0
+    [[ -t 0 ]] && sudo -v && return 0
+    return 1
+}
+
+if [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos && ! _vpn_sudo_ready; then
+    log_warning "Skipping VPN split tunnel daemon — sudo credentials unavailable (re-run attended or with cached sudo)"
+elif [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos; then
     log_section "INSTALLING VPN SPLIT TUNNEL DAEMON"
 
     VPN_PLIST_LABEL="com.dotfiles.tailscale-route-fix"
     VPN_PLIST_PATH="/Library/LaunchDaemons/${VPN_PLIST_LABEL}.plist"
     VPN_SCRIPT_PATH="/usr/local/bin/tailscale-route-fix"
-
-    sudo -v  # Acquire sudo upfront
 
     # Idempotent: unload existing before loading new
     sudo launchctl bootout "system/${VPN_PLIST_LABEL}" 2>/dev/null || true

@@ -94,4 +94,4 @@ If a figure takes more than a few seconds to understand, simplify it.
 
 ## Related
 
-Sentence and paragraph mechanics: `writing.md`. What a results page must show, and the shape of a finding: `results-analysis.md`. Chart style: `house-plots` for papers, the built-in `dataviz` for artifact pages. Slide tooling: the `slidev` skill. Page mechanics, the annotation layer and `md2review`: the `artifact-writing` skill.
+Sentence and paragraph mechanics: `writing.md`. What a results page must show, and the shape of a finding: `results-analysis.md`. Chart style: `house-plots` for papers, the built-in `dataviz` for artifact pages. Slide tooling: the `slidev` skill. Page mechanics, the annotation layer and `md2artifact`: the `artifact-writing` skill.

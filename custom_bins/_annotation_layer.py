@@ -1,10 +1,10 @@
-"""The md2review annotation layer, as one shared block of CSS + HTML + JS.
+"""The md2artifact annotation layer, as one shared block of CSS + HTML + JS.
 
 This is the single copy of the select-to-comment layer that
 the `artifact-writing` skill requires on every reviewable page. Two
 callers use it:
 
-- `md2review` renders Markdown into a page and appends the layer.
+- `md2artifact` renders Markdown into a page and appends the layer.
 - `annotate-html` injects the layer into any existing HTML page (an Artifact
   built by hand, a report from another tool), which is what the
   `block_unannotated_artifact.sh` hook checks for before a publish.

@@ -18,7 +18,64 @@ log_info()    { echo "  $*"; }
 log_success() { echo "✓ $*"; }
 log_warning() { echo "⚠️  $*"; }
 log_error()   { echo "✗ $*" >&2; }
-log_section() { echo ""; echo "───────── $* ─────────"; }
+# Sections carry a counter and the run's elapsed time, so "is it stuck?" is
+# answerable at a glance — the question that made silent steps read as hangs.
+# DOTFILES_SECTION_TOTAL (optional) turns the counter into "n/total".
+typeset -g DOTFILES_SECTION_N=0
+typeset -g DOTFILES_RUN_START=${DOTFILES_RUN_START:-$SECONDS}
+log_section() {
+    DOTFILES_SECTION_N=$((DOTFILES_SECTION_N + 1))
+    local counter="$DOTFILES_SECTION_N"
+    [[ -n "${DOTFILES_SECTION_TOTAL:-}" ]] && counter="${counter}/${DOTFILES_SECTION_TOTAL}"
+    local elapsed=$((SECONDS - DOTFILES_RUN_START))
+    printf '\n───────── [%s] %s (%dm%02ds) ─────────\n' \
+        "$counter" "$*" "$((elapsed / 60))" "$((elapsed % 60))"
+}
+
+# Run a long, quiet command with a live spinner + elapsed seconds on a TTY, so
+# it never looks hung. Output is captured and replayed on failure only.
+#
+# Leaves NO scrollback behind: the spinner redraws one line in place with \r and
+# erases it (\033[K) before printing the single result line. It ticks once a
+# second rather than faster, which also keeps it cheap over mosh — mosh
+# coalesces frames, so a fast spinner would only burn bandwidth for frames
+# nobody sees. Opt out with DOTFILES_NO_PROGRESS=1, and TERM=dumb (or any
+# non-TTY: pipes, cron, CI) takes the plain path automatically.
+#
+# Usage: run_with_progress "Label" <cmd> [args...]
+run_with_progress() {
+    local label="$1"; shift
+    local logfile; logfile=$(mktemp "${TMPDIR:-/tmp}/progress.XXXXXX")
+
+    if ! [[ -t 1 ]] || [[ "${DOTFILES_NO_PROGRESS:-0}" == "1" ]] || [[ "${TERM:-}" == "dumb" ]]; then
+        log_info "${label}..."
+        "$@" >"$logfile" 2>&1
+        local rc=$?
+        (( rc != 0 )) && cat "$logfile" >&2
+        rm -f "$logfile"
+        return $rc
+    fi
+
+    "$@" >"$logfile" 2>&1 &
+    local pid=$! start=$SECONDS i=0
+    local frames='|/-\'
+    while kill -0 "$pid" 2>/dev/null; do
+        printf '\r  %s %s (%ds)' "${frames[$((i % 4 + 1))]}" "$label" "$((SECONDS - start))"
+        i=$((i + 1))
+        sleep 1
+    done
+    wait "$pid"
+    local rc=$?
+    printf '\r\033[K'
+    if (( rc == 0 )); then
+        log_success "${label} ($((SECONDS - start))s)"
+    else
+        log_warning "${label} failed after $((SECONDS - start))s"
+        cat "$logfile" >&2
+    fi
+    rm -f "$logfile"
+    return $rc
+}
 
 # ─── Interactive Component Menu ──────────────────────────────────────────────
 
@@ -68,12 +125,18 @@ _fetch_claude_tools() {
     [[ -z "$slug" ]] && return 1
 
     local url="https://github.com/${slug}/releases/download/claude-tools-bin/${asset}"
-    log_info "Fetching prebuilt claude-tools (${asset})..."
     mkdir -p "${DOT_DIR}/custom_bins"
     local tmp="${bin}.tmp.$$"
 
     # HTTPS + TLS 1.2 only; never pipe-to-shell — download to temp, then verify.
-    if ! curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmp" 2>/dev/null; then
+    # Deadlines are mandatory here: this runs at the top of both scripts, before
+    # anything is printed but one log line, so an untimed fetch reads as a hang.
+    # Wrapped in the spinner because this is the very first thing either script
+    # does: a silent pause here is what a stall looks like to whoever is
+    # watching, even when it is only a slow download.
+    if ! run_with_progress "Fetching prebuilt claude-tools (${asset})" \
+        curl --proto '=https' --tlsv1.2 -fsSL \
+        --connect-timeout 10 --max-time 120 --retry 2 "$url" -o "$tmp"; then
         rm -f "$tmp"; return 1
     fi
 
@@ -96,8 +159,16 @@ _fetch_claude_tools() {
 _build_claude_tools_from_source() {
     cmd_exists cargo || return 1
     [[ -f "${DOT_DIR}/tools/claude-tools/Cargo.toml" ]] || return 1
-    log_info "Building claude-tools from source (fallback)..."
-    ( cd "${DOT_DIR}/tools/claude-tools" && cargo build --release --quiet ) || return 1
+    # A cold Rust build is minutes long. It used to run --quiet, which made the
+    # top of every install indistinguishable from a hang; cargo's own progress
+    # now shows, and a deadline bounds it. This is the stall that outlived
+    # several rounds of prompt fixes, because it is not a prompt.
+    log_info "Building claude-tools from source (fallback) — a cold build takes a few minutes..."
+    ( cd "${DOT_DIR}/tools/claude-tools" \
+        && run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release ) || {
+        log_warning "claude-tools build failed or exceeded its deadline — continuing with defaults"
+        return 1
+    }
     local asset; asset="$(_claude_tools_asset)"
     [[ -z "$asset" ]] && return 1
     mkdir -p "${DOT_DIR}/custom_bins"
@@ -198,8 +269,19 @@ show_component_menu() {
     local items_file result
     items_file=$(mktemp "${TMPDIR:-/tmp}/claude-tools-select.XXXXXX")
     printf '%s' "$stdin_input" > "$items_file"
-    result=$(claude-tools select --title "Select ${mode} components" --items "$items_file")
+    # A TTY is not proof a human is watching it: launched in tmux, from an agent
+    # pty, or simply walked away from, this menu would wait forever at the very
+    # top of the run. The deadline makes an unattended run proceed with whatever
+    # is pre-checked (the profile's set, plus any config.local.sh delta), which
+    # is exactly what --non-interactive would have installed.
+    result=$(run_with_timeout "${DOTFILES_MENU_TIMEOUT:-60}" \
+        claude-tools select --title "Select ${mode} components" --items "$items_file")
     local rc=$?
+    if (( rc == 124 )); then
+        log_warning "Component menu unanswered for ${DOTFILES_MENU_TIMEOUT:-60}s — continuing with the default selection"
+        rm -f "$items_file"
+        return 0
+    fi
     rm -f "$items_file"
     [[ $rc -ne 0 ]] && return 0
 
@@ -231,6 +313,71 @@ cmd_exists() {
     command -v "$1" &>/dev/null
 }
 
+# ─── Deadlines ────────────────────────────────────────────────────────────────
+# The installers must never stall: every network fetch and every prompt carries
+# a deadline, so an unattended run (tmux pane, agent pty, cron) fails loudly in
+# minutes instead of hanging at hour zero.
+
+# Network fetch with deadlines. Drop-in for `curl -fsSL` — extra curl args pass
+# through (-o, --retry overrides, headers). 10s to connect, 300s overall, two
+# retries on transient failures.
+fetch() {
+    curl -fsSL --connect-timeout 10 --max-time 300 --retry 2 "$@"
+}
+
+# Run a command under a deadline where the platform allows it. timeout(1) is
+# coreutils — present on Linux, absent on stock macOS (until `core` installs
+# coreutils, which provides no unprefixed `timeout` anyway) — so this degrades
+# to running without a deadline rather than failing. --foreground keeps TTY
+# prompts (sudo, TUIs) able to read the terminal. Exit 124 means the deadline
+# fired.
+run_with_timeout() {
+    local _secs="$1"; shift
+    if [[ "$_secs" == "0" ]]; then
+        "$@"   # 0 disables the deadline (test hook, and an explicit opt-out)
+    elif cmd_exists timeout; then
+        timeout --foreground "$_secs" "$@"
+    elif cmd_exists gtimeout; then
+        gtimeout --foreground "$_secs" "$@"
+    else
+        _watchdog_run "$_secs" "$@"
+    fi
+}
+
+# Deadline without coreutils. This exists for exactly one situation, and it is
+# not a rare one: a FRESH Mac. macOS ships no `timeout`, and `gtimeout` arrives
+# only with coreutils — which install.sh installs *after* the component menu and
+# the sudo prompt have already run. Falling back to running unbounded there
+# would leave the first run on every new Mac, the run most likely to be watched
+# by nobody, with no deadline at all.
+#
+# Why backgrounding is safe here despite the command needing a TTY: scripts run
+# with job control off, so `cmd &` does NOT put the child in a new process
+# group. It stays in the terminal's foreground group and can still read the
+# terminal — SIGTTIN only strikes a background *process group*. Interactive
+# shells (job control on) would behave differently, which is why this is a
+# script-only helper.
+#
+# Returns 124 on expiry, matching timeout(1), because callers switch on it.
+_watchdog_run() {
+    local _secs="$1"; shift
+    "$@" &
+    local _pid=$! _waited=0
+    while (( _waited < _secs )); do
+        kill -0 "$_pid" 2>/dev/null || break
+        sleep 1
+        _waited=$((_waited + 1))
+    done
+    if kill -0 "$_pid" 2>/dev/null; then
+        kill -TERM "$_pid" 2>/dev/null || true
+        sleep 1
+        kill -KILL "$_pid" 2>/dev/null || true
+        wait "$_pid" 2>/dev/null
+        return 124
+    fi
+    wait "$_pid"
+}
+
 # Cache sudo credentials once, up front, so privileged steps later in the run
 # don't block on a password prompt mid-install. A background keepalive refreshes
 # the timestamp until the calling script exits. No-op if sudo is already cached,
@@ -242,7 +389,10 @@ front_load_sudo() {
     [[ -t 0 ]] || return 0
     sudo -n true 2>/dev/null && return 0   # already cached — no prompt needed
     log_info "Some steps need administrator access — caching sudo credentials up front."
-    sudo -v || return 0
+    # A TTY is no proof anyone is watching it (tmux pane, agent pty), so the
+    # prompt itself carries a deadline; unanswered, sudo-needing steps skip.
+    # DOTFILES_PROMPT_TIMEOUT: seconds (0 disables the deadline; tests shrink it).
+    run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v || { log_warning "sudo prompt unanswered — privileged steps will be skipped"; return 0; }
     # Refresh until the parent script exits (canonical installer pattern).
     ( while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done ) &>/dev/null &
 }
@@ -414,7 +564,11 @@ install_packages() {
             return 0
         fi
         log_info "Installing ${#missing[@]} missing package(s): ${missing[*]}"
-        sudo apt install -y "${missing[@]}" 2>/dev/null || log_warning "Some apt packages failed to install"
+        # DPkg::Lock::Timeout bounds the wait for the dpkg lock, which
+        # DEBIAN_FRONTEND does not touch: on a fresh box running
+        # unattended-upgrades at boot, apt otherwise blocks indefinitely.
+        sudo apt install -y -o "DPkg::Lock::Timeout=${APT_LOCK_TIMEOUT:-120}" "${missing[@]}" 2>/dev/null \
+            || log_warning "Some apt packages failed to install"
         return
     fi
 
@@ -501,7 +655,11 @@ install_direnv() {
     if is_macos; then
         brew_install direnv
     else
-        curl -sfL https://direnv.net/install.sh | bash 2>/dev/null || { log_warning "direnv installation failed"; return 1; }
+        # Deadlines on both halves: the fetch, and the script it pipes to bash
+        # (an installer that stalls hangs the run just as hard as a stalled curl).
+        fetch https://direnv.net/install.sh 2>/dev/null \
+            | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" bash 2>/dev/null \
+            || { log_warning "direnv installation failed or timed out"; return 1; }
     fi
 }
 
@@ -524,7 +682,8 @@ install_rust_toolchain() {
             rustup default stable 2>/dev/null || log_warning "rustup default stable failed"
         fi
     else
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 \
+            https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
     fi
     source "$HOME/.cargo/env" 2>/dev/null || true
 }
@@ -561,7 +720,9 @@ install_bws() {
 install_claude_code() {
     if is_installed claude; then return 0; fi
     log_info "Installing Claude Code..."
-    curl -fsSL https://claude.ai/install.sh | bash || { log_warning "Claude Code installation failed"; return 1; }
+    fetch https://claude.ai/install.sh \
+        | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" bash \
+        || { log_warning "Claude Code installation failed or timed out"; return 1; }
     # Alpine Linux dependencies
     if is_linux && cmd_exists apk; then
         apk add libgcc libstdc++ ripgrep 2>/dev/null || true
@@ -670,9 +831,24 @@ run_parallel() {
         pids[$name]=$!
     done
 
-    # Wait for all jobs
+    # Bounded wait. A bare `wait` means ONE hung child (an untimed fetch, a
+    # stuck package manager) hangs the entire run with no indication of which
+    # job is stuck. The deadline is enforced here rather than around `eval`
+    # because the jobs call helper functions that only exist in this shell.
+    local _job_deadline=$((SECONDS + ${DOTFILES_JOB_TIMEOUT:-600}))
     for name in "${job_names[@]}"; do
-        wait ${pids[$name]} 2>/dev/null || true
+        local _pid=${pids[$name]}
+        while kill -0 "$_pid" 2>/dev/null && (( SECONDS < _job_deadline )); do
+            sleep 0.5
+        done
+        if kill -0 "$_pid" 2>/dev/null; then
+            log_warning "$name exceeded ${DOTFILES_JOB_TIMEOUT:-600}s — terminating it"
+            kill -TERM "$_pid" 2>/dev/null || true
+            sleep 1
+            kill -KILL "$_pid" 2>/dev/null || true
+            [[ -f "$tmpdir/$name.exitcode" ]] || echo 124 > "$tmpdir/$name.exitcode"
+        fi
+        wait "$_pid" 2>/dev/null || true
     done
 
     # Replay logs and collect results
@@ -716,11 +892,21 @@ set_zsh_default() {
     zsh_path=$(which zsh 2>/dev/null)
 
     if [[ -x "$zsh_path" ]] && sudo -n true 2>/dev/null; then
+        # chsh prompts PAM for the USER's password on Linux even when
+        # passwordless sudo works, so it runs only attended and with a
+        # deadline — a TTY nobody is watching must not hang the install.
+        if ! [[ -t 0 ]]; then
+            log_warning "Skipping default-shell change (no TTY for chsh's password prompt) — run: chsh -s $zsh_path"
+            return 0
+        fi
         log_info "Setting ZSH as default shell..."
         grep -qxF "$zsh_path" /etc/shells 2>/dev/null || \
             echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
-        chsh -s "$zsh_path"
-        log_success "Default shell changed to ZSH"
+        if run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" chsh -s "$zsh_path"; then
+            log_success "Default shell changed to ZSH"
+        else
+            log_warning "chsh unanswered or failed — run: chsh -s $zsh_path"
+        fi
     fi
 }
 
@@ -752,7 +938,8 @@ install_ohmyzsh() {
     rm -rf "$zsh_dir"
     # Unset ZSH so the official installer doesn't refuse when $ZSH points elsewhere
     # (e.g., RunPod containers where /root/.oh-my-zsh exists but HOME=/workspace)
-    ZSH="$zsh_dir" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    ZSH="$zsh_dir" run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" \
+        sh -c "$(fetch https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
     log_info "Installing powerlevel10k theme..."
     git clone --quiet https://github.com/romkatv/powerlevel10k.git \
@@ -966,9 +1153,17 @@ install_linuxbrew() {
         # NONINTERACTIVE=1 skips the installer's "Press RETURN to continue"
         # prompt; install.sh keeps stdin on the TTY for the component menu, so
         # the installer cannot auto-detect non-interactive mode on its own.
-        NONINTERACTIVE=1 /bin/bash -c \
-            "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
-            || log_warning "Homebrew (Linuxbrew) installation failed"
+        # Both halves need a deadline: the fetch, and the installer it feeds.
+        # An installer that stalls hangs the run exactly as hard as a stalled
+        # download, and this one runs before anything else on a fresh box.
+        local _brew_installer
+        if _brew_installer=$(fetch https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh); then
+            NONINTERACTIVE=1 run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-900}" \
+                /bin/bash -c "$_brew_installer" \
+                || log_warning "Homebrew (Linuxbrew) installation failed"
+        else
+            log_warning "Could not fetch the Homebrew installer"
+        fi
     fi
 
     if ! cmd_exists brew && [[ -x "$LINUXBREW_PREFIX/bin/brew" ]]; then
@@ -999,7 +1194,9 @@ install_bun() {
     fi
 
     log_info "Installing bun..."
-    curl -fsSL https://bun.sh/install | bash || log_warning "bun installation failed"
+    fetch https://bun.sh/install \
+        | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" bash \
+        || log_warning "bun installation failed"
 
     export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
     export PATH="$BUN_INSTALL/bin:$PATH"
@@ -1904,12 +2101,21 @@ parse_args() {
                 fi
                 apply_profile "cloud"
                 ;;
-            --personal)
+            --personal|--devbox)
                 if [[ "$_only_mode" == true ]]; then
                     echo "Error: --only cannot be mixed with profile or component flags" >&2
                     exit 1
                 fi
-                apply_profile "personal"
+                apply_profile "devbox"
+                ;;
+            --standard|--agent|--bare)
+                # Explicit cases: the --* catch-all below would otherwise mangle
+                # a profile name into a bogus DEPLOY_<NAME> component.
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
+                apply_profile "${1#--}"
                 ;;
             --default)
                 if [[ "$_only_mode" == true ]]; then

@@ -1,0 +1,131 @@
+name: Installers must never stall
+
+# The installers have had this failure mode declared fixed more than once, and
+# it came back each time, because the fixes were reasoned about rather than
+# reproduced. This workflow reproduces them — on a throwaway runner, which is
+# the whole point: the one place it is safe to actually RUN install.sh and
+# deploy.sh unattended is a container nobody has to live in afterwards. Never
+# run these against a real machine to test them; deploy.sh symlinks ~/.claude
+# and bakes DOT_DIR into scheduled jobs.
+#
+# Only first-party actions (actions/*), matching this repo's supply-chain
+# posture (no third-party GHA actions).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'install.sh'
+      - 'deploy.sh'
+      - 'config.sh'
+      - 'scripts/shared/helpers.sh'
+      - 'scripts/cloud/**'
+      - 'tests/test_no_stall.sh'
+      - 'tests/test_profile_defaults.sh'
+      - 'tests/dump_components.zsh'
+      - 'tests/golden/**'
+      - '.github/workflows/no-stall.yml'
+  pull_request:
+    paths:
+      - 'install.sh'
+      - 'deploy.sh'
+      - 'config.sh'
+      - 'scripts/shared/helpers.sh'
+      - 'scripts/cloud/**'
+      - 'tests/test_no_stall.sh'
+      - 'tests/test_profile_defaults.sh'
+      - 'tests/dump_components.zsh'
+      - 'tests/golden/**'
+      - '.github/workflows/no-stall.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    name: Stall canary + profile defaults
+    runs-on: ubuntu-latest
+    # A stalled job must fail fast rather than burn the 6h default: the whole
+    # subject of this workflow is things that hang.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
+      - name: Stall canary
+        run: bash tests/test_no_stall.sh
+
+      - name: Profile defaults (pinned component sets)
+        run: bash tests/test_profile_defaults.sh
+
+      - name: Mutation check — the canary must still be able to fail
+        # A guard that cannot fail proves nothing. Reintroduce the silent cargo
+        # build (the stall that outlived several prompt fixes) and require the
+        # canary to catch it. Runs on a scratch copy so the checkout stays clean.
+        run: |
+          cp scripts/shared/helpers.sh "$RUNNER_TEMP/helpers.bak"
+          sed -i 's|run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release|cargo build --release --quiet|' \
+            scripts/shared/helpers.sh
+          if bash tests/test_no_stall.sh >/dev/null 2>&1; then
+            echo "::error::The stall canary passed against a deliberately broken guard — it is vacuous."
+            cp "$RUNNER_TEMP/helpers.bak" scripts/shared/helpers.sh
+            exit 1
+          fi
+          echo "Canary correctly caught the reintroduced silent build."
+          cp "$RUNNER_TEMP/helpers.bak" scripts/shared/helpers.sh
+
+  unattended:
+    name: Real unattended runs (disposable container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
+      # --allow-worktree/--allow-worktree-deploy are safe HERE and only here:
+      # the runner is destroyed afterwards, so a symlink or scheduled job that
+      # points at this checkout harms nothing.
+      - name: deploy.sh --minimal, stdin closed
+        run: timeout 300 zsh ./deploy.sh --allow-worktree-deploy --minimal < /dev/null
+
+      - name: install.sh --minimal, stdin closed
+        run: timeout 300 zsh ./install.sh --allow-worktree --minimal < /dev/null
+
+      # The real failure mode is not "no TTY" — it is a TTY with nobody
+      # watching it (tmux pane, agent pty, a run you walked away from). `script`
+      # allocates a pty, so [[ -t 0 ]] is true and every prompt is reachable,
+      # yet no one ever types. Anything without a deadline hangs here.
+      - name: deploy.sh under an unattended PTY
+        run: |
+          script -qec 'timeout 300 zsh ./deploy.sh --allow-worktree-deploy --minimal' /dev/null
+
+      - name: install.sh under an unattended PTY
+        run: |
+          script -qec 'timeout 300 zsh ./install.sh --allow-worktree --minimal' /dev/null
+
+      # Each profile must resolve and run without prompting. bare/agent/standard
+      # are the ephemeral-box profiles, which is exactly where nobody is watching.
+      #
+      # NOT `--profile=X --only vim`: --only calls apply_profile minimal during
+      # its deferred apply, wiping the profile entirely, so every iteration
+      # deployed one identical component and the step tested nothing. --no-* on
+      # the components with side effects keeps each profile's real resolution.
+      - name: Every profile parses unattended
+        run: |
+          for profile in standard devbox agent bare server cloud minimal; do
+            echo "── $profile ──"
+            timeout 180 zsh ./deploy.sh --allow-worktree-deploy \
+              "--profile=$profile" --no-secrets --no-secrets-env --no-bws \
+              --no-obsidian-sync --no-claude-tools < /dev/null
+          done
+
+      # The CLI flag path resolves differently from the PROFILE= env path, and
+      # only the env path was ever pinned — which is how --devbox silently
+      # became 14 components instead of 50 while every fixture stayed green.
+      - name: CLI flags resolve to the same sets as env profiles
+        run: bash tests/test_profile_defaults.sh
