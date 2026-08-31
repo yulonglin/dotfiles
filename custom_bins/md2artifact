@@ -52,16 +52,30 @@ def _mermaid_token(source: str) -> Token:
     The parser runs with html disabled so that raw HTML in a reviewed document
     cannot inject script into the published page. Mermaid diagrams are the one
     deliberate exception: the Artifact viewer renders <pre class="mermaid">
-    natively, and entity-escaping the diagram source breaks it (labels
-    legitimately contain quotes and <br/>). So rather than enabling raw HTML
-    globally, only mermaid blocks are rebuilt as real elements — and only ever
-    as the text content of a <pre class="mermaid">, never arbitrary markup.
+    natively. So rather than enabling raw HTML globally, only mermaid blocks
+    are rebuilt as real elements — and only ever as the TEXT CONTENT of a
+    <pre class="mermaid">, never arbitrary markup.
+
+    The diagram source is entity-escaped to hold that promise. It used to be
+    interpolated raw, on the belief that escaping breaks mermaid because labels
+    legitimately carry quotes and <br/>. That belief is wrong: mermaid reads the
+    element's textContent, and the HTML parser decodes &lt;br/&gt; back to
+    <br/> before mermaid ever sees it, so escaping is transparent to the
+    diagram. Interpolating raw was not: a `</pre>` anywhere in the fence closed
+    the element early and everything after it became live markup — verified
+    executing in Chrome from a plain ```mermaid fence. Any Markdown you did not
+    write yourself (a pasted transcript, a model's output, someone else's
+    report) could inject script into your published page.
     """
     return Token(
         "html_block",
         "",
         0,
-        content=f"{MERMAID_OPEN}\n{source.strip()}\n{MERMAID_CLOSE}\n",
+        content=(
+            f"{MERMAID_OPEN}\n"
+            f"{html.escape(source.strip(), quote=False)}\n"
+            f"{MERMAID_CLOSE}\n"
+        ),
         block=True,
     )
 

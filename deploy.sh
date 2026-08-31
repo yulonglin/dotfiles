@@ -733,7 +733,15 @@ if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/
         # cross-platform dispatch wrapper (see custom_bins/claude-tools) and
         # overwriting it with a native binary breaks it on every other platform
         # once committed.
-        cd "$DOT_DIR/tools/claude-tools" && cargo build --release --quiet 2>&1 && \
+        # Bounded, and not --quiet: this runs in the background with its output
+        # captured to a log, so the only thing --quiet bought was an empty log
+        # on failure. The deadline is what matters — a bare `wait` below has no
+        # timeout of its own, so an unbounded cargo build here hangs the whole
+        # deploy at the very last step, silently. This is the same stall class
+        # the canary is named for; it just lived in deploy.sh rather than in
+        # _build_claude_tools_from_source.
+        cd "$DOT_DIR/tools/claude-tools" \
+        && run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release 2>&1 && \
         cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET" && \
         chmod +x "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET"
     ) &>"$CLAUDE_TOOLS_LOG" &

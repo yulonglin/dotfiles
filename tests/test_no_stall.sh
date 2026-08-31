@@ -148,6 +148,24 @@ test_claude_tools_fetch_is_bounded() {
     fi
 }
 
+test_every_cargo_build_is_bounded() {
+    # The probe below covers ONE helper. deploy.sh had its own
+    # `cargo build --release --quiet`, backgrounded and reaped by a bare
+    # `wait` with no deadline — the same stall class, in the shipped path,
+    # while the guard stayed green. Check the class: every cargo build in the
+    # install path must be wrapped in a deadline.
+    local hits
+    hits=$(grep -nE 'cargo build' \
+        "$DOT_DIR"/install.sh "$DOT_DIR"/deploy.sh "$DOT_DIR"/scripts/shared/helpers.sh 2>/dev/null \
+        | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+        | grep -v 'run_with_timeout' || true)
+    if [[ -z "$hits" ]]; then
+        pass "every cargo build in the install path carries a deadline"
+    else
+        fail "unbounded cargo build(s) found" "$hits"
+    fi
+}
+
 test_source_build_is_bounded_and_visible() {
     local out
     out=$(helper_probe 'functions _build_claude_tools_from_source' 2>&1)
@@ -351,6 +369,7 @@ test_run_with_timeout_zero_disables
 test_fetch_carries_deadlines
 test_claude_tools_fetch_is_bounded
 test_source_build_is_bounded_and_visible
+test_every_cargo_build_is_bounded
 test_parallel_group_is_bounded
 test_no_untimed_curl_pipe_installers
 test_git_and_apt_are_bounded
