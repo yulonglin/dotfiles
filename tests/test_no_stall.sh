@@ -209,6 +209,30 @@ test_no_untimed_curl_pipe_installers() {
     fi
 }
 
+test_deadline_holds_without_coreutils() {
+    # The fresh-Mac case, and the one an adversarial review flagged: macOS ships
+    # no `timeout`, and `gtimeout` only arrives with coreutils — which install.sh
+    # installs AFTER the component menu and the sudo prompt have already run. So
+    # the deadline must survive with neither binary available, or the very first
+    # run on every new Mac is unbounded.
+    local start elapsed
+    start=$SECONDS
+    timeout --foreground 30 zsh -c "
+        DOT_DIR='$DOT_DIR'
+        source '$DOT_DIR/config.sh' >/dev/null 2>&1
+        source '$DOT_DIR/scripts/shared/helpers.sh' >/dev/null 2>&1
+        # Hide both binaries from the lookup the helper uses.
+        cmd_exists() { [[ \"\$1\" != timeout && \"\$1\" != gtimeout ]] && command -v \"\$1\" &>/dev/null }
+        run_with_timeout 2 sleep 60
+    " >/dev/null 2>&1
+    elapsed=$((SECONDS - start))
+    if (( elapsed < 15 )); then
+        pass "deadline still bounds a hang with no timeout/gtimeout (${elapsed}s, not 60s)"
+    else
+        fail "no deadline without coreutils — every guard no-ops on a fresh Mac" "took ${elapsed}s"
+    fi
+}
+
 test_timeout_fallback_covers_macos() {
     # macOS ships no coreutils `timeout`; PACKAGES_MACOS installs coreutils,
     # which provides `gtimeout`. run_with_timeout must try both, or every guard
@@ -286,6 +310,7 @@ test_source_build_is_bounded_and_visible
 test_parallel_group_is_bounded
 test_no_untimed_curl_pipe_installers
 test_timeout_fallback_covers_macos
+test_deadline_holds_without_coreutils
 echo ""
 echo "2. The real scripts, unattended"
 test_help_is_instant

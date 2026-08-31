@@ -337,8 +337,42 @@ run_with_timeout() {
     elif cmd_exists gtimeout; then
         gtimeout --foreground "$_secs" "$@"
     else
-        "$@"
+        _watchdog_run "$_secs" "$@"
     fi
+}
+
+# Deadline without coreutils. This exists for exactly one situation, and it is
+# not a rare one: a FRESH Mac. macOS ships no `timeout`, and `gtimeout` arrives
+# only with coreutils — which install.sh installs *after* the component menu and
+# the sudo prompt have already run. Falling back to running unbounded there
+# would leave the first run on every new Mac, the run most likely to be watched
+# by nobody, with no deadline at all.
+#
+# Why backgrounding is safe here despite the command needing a TTY: scripts run
+# with job control off, so `cmd &` does NOT put the child in a new process
+# group. It stays in the terminal's foreground group and can still read the
+# terminal — SIGTTIN only strikes a background *process group*. Interactive
+# shells (job control on) would behave differently, which is why this is a
+# script-only helper.
+#
+# Returns 124 on expiry, matching timeout(1), because callers switch on it.
+_watchdog_run() {
+    local _secs="$1"; shift
+    "$@" &
+    local _pid=$! _waited=0
+    while (( _waited < _secs )); do
+        kill -0 "$_pid" 2>/dev/null || break
+        sleep 1
+        _waited=$((_waited + 1))
+    done
+    if kill -0 "$_pid" 2>/dev/null; then
+        kill -TERM "$_pid" 2>/dev/null || true
+        sleep 1
+        kill -KILL "$_pid" 2>/dev/null || true
+        wait "$_pid" 2>/dev/null
+        return 124
+    fi
+    wait "$_pid"
 }
 
 # Cache sudo credentials once, up front, so privileged steps later in the run
