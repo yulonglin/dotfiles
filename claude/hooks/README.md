@@ -68,6 +68,17 @@ Hooks for automating task and agent management workflows.
 
 **Tests:** `test_simplify_reuse.sh`.
 
+### fix_hook_permissions.sh / patch_ralph_loop_stop_hook.py
+
+**Purpose:** Repair ignored plugin-cache problems before a session uses them.
+
+**Behavior:** Preserves marketplace shell executable bits and converts Ralph
+Loop 1.0.0's two plain-text successful `Stop` messages into JSON
+`systemMessage` objects. The Ralph repair validates both exact upstream lines,
+is atomic and idempotent, and refuses partial or unknown source drift.
+
+**Tests:** `test_patch_ralph_loop_stop_hook.sh`.
+
 ## Runtime Policy
 
 Shared config is in `config/ai_automation.sh` (optionally overridden by `~/.claude/ai_automation.local.sh`).
