@@ -35,6 +35,7 @@ apps:
   Spotify:               {manual: close}   # playback survives a close; never quit
   Mouseless:             {manual: close}
   Antinote:              {manual: close}
+  Tailscale:             {manual: close}
   Spark Desktop:         {slow: true}      # ignores keystrokes; poll up to 30 s
   FaceTime:              {manual: quit, auto: skip}   # never touched automatically
 
