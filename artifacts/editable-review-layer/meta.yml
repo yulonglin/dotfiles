@@ -1,0 +1,11 @@
+title: Artifacts Become Editable As Well As Commentable
+url: pending-first-publish
+org: unknown
+first_published: pending
+last_updated: 2026-09-01
+status: live
+
+source: spec.md
+built: spec.html   # committed beside the source — first artifact under the all-artifacts committed-HTML rule (Yulong, 2026-09-01)
+builds_with: |
+  md2artifact spec.md -o spec.html
