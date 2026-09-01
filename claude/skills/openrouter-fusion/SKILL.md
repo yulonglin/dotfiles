@@ -41,6 +41,6 @@ Fusion as a raw tool call is `"tools": [{"type": "openrouter:fusion", "parameter
 
 ## Reach for a neighbour instead when
 
-- the point is an **adversarial check on your own work** rather than an OpenRouter query — that is the `second-opinion` skill, which picks the route (Fable, codex-companion, OpenCode, or this CLI)
+- the point is an **adversarial check on your own work** rather than an OpenRouter query — that is the `council` skill, which picks the rung (one model, two advisors, agentic, or the full panel)
 - the question is about **spend or queueing** a long fan-out: the `jobs` skill, and `~/.claude/checklists/experiments.md` for the spend gate
 - you are **judging text by meaning** at scale rather than asking a question once: the `llm-judge` skill

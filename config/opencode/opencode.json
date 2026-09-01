@@ -19,7 +19,7 @@
   "_comment_deploy": [
     "This file is the REPO TEMPLATE. OpenCode reads it from",
     "~/.config/opencode/opencode.json; a project-level ./opencode.json overrides",
-    "it. See docs and the second-opinion skill for the deploy snippet."
+    "it. See docs and the council skill for the deploy snippet."
   ],
 
   "provider": {
