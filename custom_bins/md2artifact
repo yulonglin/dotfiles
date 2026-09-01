@@ -39,6 +39,28 @@ import _annotation_layer  # noqa: E402
 
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 
+# A localStorage key is shared by every page that derives the same one, and all
+# artifacts are read from one origin — so two pages with the same key show each
+# other's comments. `artifacts/<slug>/spec.md` is now the standard layout, which
+# would give EVERY spec the key "review-spec". These stems are therefore
+# qualified by their parent directory, which is the artifact slug and unique.
+# Specific stems keep their old key, so no already-published page is orphaned by
+# this rule.
+GENERIC_STEMS = frozenset(
+    {"spec", "plan", "report", "page", "index", "readme", "draft", "notes", "artifact"}
+)
+
+
+def storage_key(source: Path) -> str:
+    """The localStorage key for a document, unique per artifact directory."""
+    stem = source.stem
+    if stem.lower() in GENERIC_STEMS:
+        parent = source.resolve().parent.name
+        if parent and parent not in {"artifacts", "/"}:
+            return f"review-{slugify(parent)}-{slugify(stem)}"
+    return f"review-{slugify(stem)}"
+
+
 MERMAID_OPEN = '<pre class="mermaid">'
 MERMAID_CLOSE = "</pre>"
 
@@ -382,8 +404,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-toc", action="store_true", help="omit the table of contents")
     ap.add_argument(
         "--key",
-        help="localStorage key for comments (default: derived from the filename, so "
-        "republishing the same document keeps its comments)",
+        help="localStorage key for comments (default: derived from the filename, "
+        "qualified by the parent directory for a generic stem like spec.md, so "
+        "republishing the same document keeps its comments and two specs never share them)",
     )
     args = ap.parse_args(argv)
 
@@ -397,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
         title = m.group(1).strip() if m else args.source.stem
 
     out = args.output or args.source.with_suffix(".review.html")
-    key = args.key or f"review-{slugify(args.source.stem)}"
+    key = args.key or storage_key(args.source)
     out.write_text(
         build(text, title=title, with_toc=not args.no_toc, key=key), encoding="utf-8"
     )

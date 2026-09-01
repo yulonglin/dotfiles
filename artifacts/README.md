@@ -27,6 +27,8 @@ An input that is itself ephemeral — a scan of the live environment, a query re
 
 `meta.yml` carries what the gallery cannot: the **publishing org**, which is unrecoverable afterwards and is exactly what breaks when accounts change.
 
+Name the source for what it is (`spec.md`, `plan.md`) — `md2artifact` qualifies a generic stem with the artifact directory, so the comment key is `review-<slug>-spec` rather than the `review-spec` that every spec in the gallery would otherwise share. All artifacts are read from one origin, so a shared key means two pages showing each other's comments; `tests/test_md2artifact_key.py` pins it. A specific stem keeps its historic key, so no already-published page is orphaned.
+
 ## The rule
 
 Never pass a path under `tmp/`, `$TMPDIR`, `/tmp`, or any gitignored directory to the Artifact tool. Publish the committed HTML at `artifacts/<slug>/<slug>.html` — publishing is the last step, not the record, and the commit comes first.
