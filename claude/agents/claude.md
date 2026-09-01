@@ -1,6 +1,6 @@
 ---
 name: claude
-description: Delegate fresh-auth or separate-billing headless work to Claude Code CLI via `claude -p` (runs synchronously). NOT the default for routine judgment — prefer Task subagents. For detached/long-running work, launch `claude -p` from the MAIN context via Bash(run_in_background) or Monitor instead — this agent runs as a subagent and cannot safely own a job that outlives its turn.
+description: Delegate fresh-auth or separate-billing headless work to Claude Code CLI via `claude -p` (runs synchronously). NOT the default for routine judgment — prefer Task subagents. Detached or long-running work is dispatched from the MAIN context instead — a backgrounded Task subagent, or `Bash(run_in_background)`/Monitor when the worker must be `claude -p` — because this agent runs as a subagent and cannot safely own a job that outlives its turn.
 
 model: inherit
 color: purple
@@ -22,7 +22,7 @@ tools: ["Bash"]
 
 This agent runs **synchronously**: it calls `claude -p`, blocks until it returns, and integrates the result.
 
-> **Detached / long-running work does NOT belong in this agent.** A subagent's turn ends when it returns — any job it backgrounded is then orphaned (nothing re-notifies the parent; you get a false "completed"). For work that must outlive the current turn, launch `claude -p` from the **main context** via `Bash(run_in_background: true)` (harness-tracked — re-notifies the main loop on completion) or drive it with the Monitor tool. This mirrors how Codex delegation moved off the old subagent+tmux pattern onto the harness-tracked `codex-companion` + Monitor path.
+> **Detached / long-running work does NOT belong in this agent.** A subagent's turn ends when it returns — any job it backgrounded is then orphaned (nothing re-notifies the parent; you get a false "completed"). Work that must outlive the current turn is dispatched from the **main context**, which is the orchestrator — but the worker does not have to be headless Claude. A backgrounded Task subagent is the default (subscription quota, harness-tracked, same fresh context); `Bash(run_in_background: true)` or the Monitor tool around `claude -p` is for the cases in the list above, chiefly a job that must survive the session or start from cron. The orchestrator is fixed; the mechanism is a choice. This mirrors how Codex delegation moved off the old subagent+tmux pattern onto the harness-tracked `codex-companion` + Monitor path.
 
 For routine "review this plan / give me a second opinion / explore this codebase" → **Task subagent, not this agent.** Same capabilities, free under subscription.
 
@@ -99,7 +99,7 @@ Check if task is appropriate for Claude delegation:
 
 This agent always runs `claude -p` **synchronously** — execute, read output, integrate results. A subagent that blocks on its own job cannot orphan it.
 
-If a task is long enough that you'd want to fire-and-forget it, it does **not** belong in this agent. Hand it back to the main context and launch it there via `Bash(run_in_background: true)` or the Monitor tool, both of which are harness-tracked and re-notify the main loop on completion. See the orphan-safety note at the top of this file.
+If a task is long enough that you'd want to fire-and-forget it, it does **not** belong in this agent. Hand it back to the main context, which dispatches it as a backgrounded Task subagent — or via `Bash(run_in_background: true)` or the Monitor tool when headless `claude -p` is what the job needs. Every one of those paths is harness-tracked and re-notifies the main loop on completion. See the orphan-safety note at the top of this file.
 
 ## Step 3: Choose Model
 
@@ -185,7 +185,7 @@ claude -p --model sonnet --permission-mode bypassPermissions "<prompt>"
 claude -p --model sonnet --permission-mode bypassPermissions "<prompt>" > ./tmp/claude-review.txt
 ```
 
-Block on the command, then move to Step 6. Do **not** background it with `tmux send`-and-return — that orphans the job (no result integration, false "completed"). If the work genuinely needs to be detached, it belongs in the main context, not this subagent (see the orphan-safety note at the top).
+Block on the command, then move to Step 6. Do **not** background it with `tmux send`-and-return — that orphans the job (no result integration, false "completed"). If the work genuinely needs to be detached, it belongs in the main context — as a backgrounded Task subagent or a harness-tracked `claude -p` job — not in this subagent (see the orphan-safety note at the top).
 
 ## Step 6: Integrate Results
 
