@@ -148,6 +148,7 @@
   },
   "model": "opus",
   "fallbackModel": [
+    "claude-opus-5",
     "opus"
   ],
   "skillOverrides": {
