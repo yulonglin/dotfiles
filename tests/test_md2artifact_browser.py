@@ -870,3 +870,317 @@ def test_copying_only_part_of_the_export_box_marks_nothing(page) -> None:
     expect(page.locator("#anCount")).to_contain_text("copied out")
     assert "not yet" not in page.locator("#anCount").inner_text()
     expect(page.locator("#anClearCopied")).to_be_enabled()
+
+
+# --- suggest-edit mode (layer v2) -----------------------------------------
+# The second mode: select text, propose a replacement, export it as Markdown a
+# session can apply to the source. Comment stays the default, so every test
+# above doubles as the regression suite for "edit mode changed nothing".
+
+SELECT_EDIT_JS = """() => {
+  const m = document.querySelector('mark.anedit');
+  const r = document.createRange();
+  r.selectNodeContents(m);
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+  return r.toString();
+}"""
+
+
+def open_edit_box(page, select_js: str = SELECT_JS) -> str:
+    """Select, switch the open box to Suggest edit; returns the selected text."""
+    quote = page.evaluate(select_js)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.click("#anModeEdit")
+    return quote
+
+
+def add_edit(page, replacement: str, select_js: str = SELECT_JS) -> str:
+    quote = open_edit_box(page, select_js)
+    page.fill("#anTxt", replacement)
+    page.dispatch_event("#anTxt", "input")
+    page.press("#anTxt", "Enter")
+    return quote
+
+
+def test_edit_mode_prefills_the_textarea_with_the_selection(page) -> None:
+    quote = open_edit_box(page)
+    assert page.input_value("#anTxt") == quote
+
+
+def test_a_saved_edit_renders_strikethrough_plus_the_replacement(page) -> None:
+    add_edit(page, "REPLACEMENT WORDS")
+    expect(page.locator("mark.anedit")).to_have_count(1)
+    expect(page.locator(".anins")).to_have_text("REPLACEMENT WORDS")
+    # visually distinct from a comment highlight, which is a different element
+    assert page.locator("mark.note").count() == 0
+    assert page.evaluate(POP_OPEN) is False
+
+
+def test_an_edit_survives_reload_and_reopens_with_its_replacement(page) -> None:
+    add_edit(page, "REPLACEMENT WORDS")
+    page.reload()
+    expect(page.locator("mark.anedit")).to_have_count(1)
+    expect(page.locator(".anins")).to_have_text("REPLACEMENT WORDS")
+    page.locator("mark.anedit").first.click()
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    assert page.input_value("#anTxt") == "REPLACEMENT WORDS"
+
+
+def test_an_empty_replacement_is_a_suggested_deletion(page) -> None:
+    """Pure strikethrough, reachable only by actively clearing the prefill."""
+    add_edit(page, "")
+    expect(page.locator("mark.anedit")).to_have_count(1)
+    expect(page.locator(".anins")).to_have_count(0)
+    expect(page.locator("#anList")).to_contain_text("delete")
+    # and it round-trips: reopening shows an empty box, Enter leaves it alone
+    page.locator("mark.anedit").first.click()
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    assert page.input_value("#anTxt") == ""
+    page.press("#anTxt", "Enter")
+    page.wait_for_timeout(300)
+    expect(page.locator("mark.anedit")).to_have_count(1)
+    expect(page.locator(".anins")).to_have_count(0)
+
+
+def test_inserted_text_is_invisible_to_re_anchoring(page) -> None:
+    """THE v2 regression: the first saved edit corrupting every later anchor.
+
+    The replacement deliberately repeats the words of the second paragraph, so
+    a re-anchoring pass that scans layer-inserted text finds the later
+    comment's quote inside the insertion -- early in the page, in the wrong
+    place -- instead of where the reader put it.
+    """
+    add_edit(page, "second paragraph living under its own heading")
+    quote = page.evaluate(SELECT_SECOND_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "a note anchored after the edit")
+    page.press("#anTxt", "Enter")
+    expect(page.locator("mark.note")).to_have_count(1)
+
+    page.reload()
+    expect(page.locator("mark.anedit")).to_have_count(1)
+    expect(page.locator("mark.note")).to_have_count(1)
+    where = page.evaluate(
+        "() => { const m = document.querySelector('mark.note');"
+        "  return {inserted: !!m.closest('[data-an-inserted]'), text: m.textContent}; }"
+    )
+    assert where["inserted"] is False, "the comment re-attached inside inserted text"
+    assert where["text"].strip() == quote.strip(), where
+    assert "not found on this version" not in page.locator("#anList").inner_text()
+
+
+def test_an_untouched_edit_box_closes_on_a_press_outside(page) -> None:
+    """The prefill is not user work.
+
+    Keying "refuses to close" on non-emptiness would make every opened edit box
+    an unclosable phantom draft, because it opens with the selection in it.
+    """
+    open_edit_box(page)
+    page.mouse.click(5, 5)
+    page.wait_for_function("() => !(%s)()" % POP_OPEN, timeout=3000)
+    assert page.locator("mark.anedit").count() == 0
+    assert page.evaluate("() => localStorage.getItem('review-sample')") in (None, "[]")
+
+
+def test_the_prefill_alone_is_not_autosaved_as_a_draft(page) -> None:
+    open_edit_box(page)
+    page.wait_for_timeout(400)  # absence: past any debounce
+    assert page.evaluate("() => localStorage.getItem('an-draft:review-sample')") is None
+
+
+def test_a_modified_edit_box_does_autosave_and_refuses_to_close(page) -> None:
+    open_edit_box(page)
+    page.fill("#anTxt", "my replacement")
+    page.dispatch_event("#anTxt", "input")
+    page.wait_for_function(
+        "() => (localStorage.getItem('an-draft:review-sample') || '')"
+        ".includes('my replacement')",
+        timeout=3000,
+    )
+    page.mouse.click(5, 5)
+    page.wait_for_timeout(400)  # absence
+    assert page.evaluate(POP_OPEN), "a modified edit box closed on a press outside"
+    assert page.input_value("#anTxt") == "my replacement"
+
+
+def test_a_fresh_selection_comes_back_in_comment_mode(page) -> None:
+    """Sticky edit mode would silently change what select-type-Enter means."""
+    add_edit(page, "a replacement")
+    page.evaluate(SELECT_SECOND_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    assert page.input_value("#anTxt") == ""
+    assert page.get_attribute("#anModeComment", "aria-pressed") == "true"
+    page.fill("#anTxt", "an ordinary comment")
+    page.press("#anTxt", "Enter")
+    expect(page.locator("mark.note")).to_have_count(1)
+
+
+def test_a_selection_overlapping_an_edit_points_at_it(page) -> None:
+    """Overlapping edits cannot be exported appliably, so the second is declined."""
+    add_edit(page, "the first replacement")
+    page.evaluate(SELECT_EDIT_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    assert page.input_value("#anTxt") == "the first replacement"
+    expect(page.locator("mark.anedit")).to_have_count(1)
+    stored = page.evaluate("() => JSON.parse(localStorage.getItem('review-sample'))")
+    assert len(stored) == 1, stored
+
+
+def test_switching_mode_declines_rather_than_overwriting_typed_words(page) -> None:
+    page.evaluate(SELECT_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "words I have not saved")
+    page.click("#anModeEdit")
+    page.wait_for_timeout(300)
+    assert page.input_value("#anTxt") == "words I have not saved"
+    assert page.get_attribute("#anModeComment", "aria-pressed") == "true"
+
+
+def test_edit_mode_keeps_enter_shift_enter_and_escape(page) -> None:
+    open_edit_box(page)
+    page.click("#anTxt")
+    page.keyboard.press("Control+a")
+    page.keyboard.type("one")
+    page.keyboard.press("Shift+Enter")
+    page.keyboard.type("two")
+    assert page.input_value("#anTxt") == "one\ntwo"
+    assert page.locator("mark.anedit").count() == 0
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => !(%s)()" % POP_OPEN, timeout=3000)
+    assert page.locator("mark.anedit").count() == 0
+    assert page.evaluate("() => localStorage.getItem('review-sample')") in (None, "[]")
+
+
+def test_typing_a_bare_letter_does_not_switch_mode(page) -> None:
+    """A mode-switch keystroke must be a chord: the bare-letter collision
+    inside a textarea is a documented incident."""
+    page.evaluate(SELECT_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.click("#anTxt")
+    page.keyboard.type("edit e E")
+    assert page.get_attribute("#anModeComment", "aria-pressed") == "true"
+    assert page.input_value("#anTxt") == "edit e E"
+
+
+def test_an_edit_is_revised_and_deleted_from_its_own_box(page) -> None:
+    add_edit(page, "first replacement")
+    page.locator("mark.anedit").first.click()
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "second replacement")
+    page.press("#anTxt", "Enter")
+    expect(page.locator(".anins")).to_have_text("second replacement")
+
+    page.locator("mark.anedit").first.click()
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    # Arms first: the replacement is written text, and there is no undo.
+    page.click("#anDelete")
+    expect(page.locator("#anDelete")).to_have_class(re.compile(r"\banarmed\b"))
+    expect(page.locator("mark.anedit")).to_have_count(1)
+    page.click("#anDelete")
+    expect(page.locator("mark.anedit")).to_have_count(0)
+    expect(page.locator(".anins")).to_have_count(0)
+    expect(page.locator("#anCount")).to_contain_text("No comments yet")
+
+
+def test_the_badge_and_the_count_include_edits(page) -> None:
+    add_edit(page, "a replacement")
+    add_comment(page, SELECT_SECOND_JS, "a note")
+    expect(page.locator("#anBadge")).to_contain_text("2")
+    count = page.locator("#anCount").inner_text()
+    assert "suggested edit" in count, count
+    assert "not yet copied out" in count, count
+
+
+def test_the_export_carries_a_suggested_edits_section(browser, site) -> None:
+    ctx = browser.new_context(permissions=["clipboard-read", "clipboard-write"])
+    try:
+        p = ctx.new_page()
+        p.goto(site)
+        add_edit(p, "the proposed wording")
+        add_comment(p, SELECT_SECOND_JS, "an ordinary note")
+        p.click("#anCopy")
+        expect(p.locator("#anCount")).to_contain_text("copied out")
+        text = p.evaluate("() => navigator.clipboard.readText()")
+        assert text.startswith("# Comments")
+        assert "## Suggested edits" in text, text
+        assert "Replace:" in text and "With:" in text, text
+        assert "> the proposed wording" in text, text
+        assert "1." in text
+        assert "an ordinary note" in text
+        # the edits come first, the unchanged comments section after
+        assert text.index("## Suggested edits") < text.index("an ordinary note")
+    finally:
+        ctx.close()
+
+
+def test_a_deletion_exports_as_a_deletion(browser, site) -> None:
+    ctx = browser.new_context(permissions=["clipboard-read", "clipboard-write"])
+    try:
+        p = ctx.new_page()
+        p.goto(site)
+        add_edit(p, "")
+        p.click("#anCopy")
+        expect(p.locator("#anCount")).to_contain_text("copied out")
+        text = p.evaluate("() => navigator.clipboard.readText()")
+        assert "## Suggested edits" in text, text
+        assert "delete" in text.lower(), text
+    finally:
+        ctx.close()
+
+
+def test_v1_entries_without_a_type_still_load_as_comments(page) -> None:
+    """Every page's existing comments must load unchanged on a v2 rebuild."""
+    quote = page.evaluate(SELECT_JS)
+    page.evaluate(
+        "(q) => localStorage.setItem('review-sample', JSON.stringify(["
+        "  {id: 7, where: 'Review Sample', quote: q, note: 'written under v1'}]))",
+        quote,
+    )
+    page.reload()
+    expect(page.locator("#anList")).to_contain_text("written under v1")
+    expect(page.locator("mark.note")).to_have_count(1)
+    expect(page.locator("mark.anedit")).to_have_count(0)
+    page.locator("mark.note").first.click()
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    assert page.input_value("#anTxt") == "written under v1"
+
+
+def test_suggest_edit_works_where_the_viewer_suppresses_modals(
+    browser, sandboxed_site
+) -> None:
+    """The whole round trip inside the viewer's own sandbox.
+
+    Nothing in edit mode may reach for `confirm` -- it returns false without
+    ever asking in a frame with no `allow-modals`, which is how three controls
+    shipped dead.
+    """
+    ctx = browser.new_context()
+    try:
+        page = ctx.new_page()
+        dialogs: list[str] = []
+        page.on("dialog", lambda d: (dialogs.append(d.type), d.accept()))
+        page.goto(sandboxed_site)
+
+        framed = page.frame_locator("#f")
+        expect(framed.locator("#anCount")).to_be_visible()
+        frame = page.frames[1]
+        assert frame.evaluate("() => window.confirm('probe')") is False
+
+        assert frame.evaluate(SELECT_JS)
+        expect(framed.locator("#anTxt")).to_be_visible()
+        framed.locator("#anModeEdit").click()
+        framed.locator("#anTxt").fill("a replacement made in the viewer")
+        framed.locator("#anTxt").press("Enter")
+        expect(framed.locator("mark.anedit")).to_have_count(1)
+        expect(framed.locator(".anins")).to_have_text("a replacement made in the viewer")
+
+        framed.locator("mark.anedit").first.click()
+        expect(framed.locator("#anTxt")).to_have_value("a replacement made in the viewer")
+        delete = framed.locator("#anDelete")
+        delete.click()
+        expect(framed.locator("mark.anedit")).to_have_count(1)  # armed, not gone
+        delete.click()
+        expect(framed.locator("mark.anedit")).to_have_count(0)
+        assert dialogs == [], f"a modal was used as the guard: {dialogs}"
+    finally:
+        ctx.close()

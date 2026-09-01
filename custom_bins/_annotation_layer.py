@@ -75,6 +75,42 @@ Behaviour, all of which the tests guard:
   localStorage;
 - a fixed count badge that jumps to the panel.
 
+Layer v2 adds a second mode, **Suggest edit**, to the same box. Comment stays
+the default, so select-type-Enter means exactly what it meant before. The
+additions, all of which the tests guard:
+
+- the box carries two mode buttons above the textarea. Entering edit mode
+  pre-fills the textarea with the selection; the user edits it into the
+  replacement. The prefill is NOT user work: draft autosave and the "a box with
+  words in it refuses to close" invariant key on a `dirty` flag set by the
+  first user modification, never on non-emptiness, because otherwise every
+  opened edit box is an unclosable phantom draft. Mode resets to Comment on
+  every fresh selection, so the default cannot go sticky;
+- an empty replacement is a suggested deletion, rendered as pure strikethrough.
+  It is reachable only by actively clearing the prefill, which is deliberate;
+- a saved edit renders the original struck through with the replacement
+  inserted after it, in the good/insert colour rather than the comment
+  highlight's yellow. Clicking either part reopens the box on the stored
+  replacement. Its Delete arms first, unlike a comment's -- a replacement is
+  written text plus an anchor, and there is no undo;
+- **layer-inserted text is marked `data-an-inserted` and excluded from every
+  quote scan.** Re-anchoring matches original document text only. Without this
+  the first saved edit corrupts the anchor of every comment after it: the
+  replacement's words are searched too, so a later quote matches inside the
+  insertion and the highlight lands early in the page in the wrong place;
+- a selection overlapping an existing edit is declined -- the box points at
+  that edit instead of opening a second one, because overlapping edits cannot
+  be exported appliably;
+- entries gained `type: "comment" | "edit"`. An entry with no `type` is a
+  comment, so every page's existing comments load unchanged; the key, the bare
+  array and the loud `setItem` failure are all as they were. Edits store the
+  quote, its section, and the replacement;
+- Copy all gains a numbered "Suggested edits" section of `Replace:` /`With:`
+  blockquotes, before the unchanged comments section. The quotes are RENDERED
+  text while the source is Markdown, so the export promises no mechanical
+  application: a session locates each quote in the source and adapts the
+  markup. A page with no edits exports exactly what it did under v1.
+
 Deliberately absent, each having been built and then removed for causing a
 worse failure than it prevented: an IndexedDB mirror (a save racing its own
 asynchronous recovery destroyed the comments being recovered), a rolling
@@ -90,7 +126,7 @@ from __future__ import annotations
 import json
 import re
 
-LAYER_VERSION = "v1"
+LAYER_VERSION = "v2"
 MARKER_OPEN = f"<!-- annotation-layer {LAYER_VERSION} -->"
 MARKER_CLOSE = "<!-- /annotation-layer -->"
 ROOT_ATTR = "data-annotation-layer"
@@ -101,8 +137,13 @@ ROOT_ATTR = "data-annotation-layer"
 _PRESENT_RE = re.compile(
     r"<!--\s*annotation-layer(\s+v\d+)?\s*-->|" + re.escape(ROOT_ATTR) + r"=",
 )
+# Matches ANY version's open marker, not this module's. Pinned to MARKER_OPEN,
+# `strip_layer` stopped matching the moment LAYER_VERSION was bumped, so
+# `--force` on a deployed page of the previous version stripped nothing and
+# injected a second layer: two scripts, two note boxes, two writers of one key.
 _BLOCK_RE = re.compile(
-    re.escape(MARKER_OPEN) + r".*?" + re.escape(MARKER_CLOSE) + r"\n?", re.S
+    r"<!--\s*annotation-layer(?:\s+v\d+)?\s*-->.*?" + re.escape(MARKER_CLOSE) + r"\n?",
+    re.S,
 )
 _BODY_CLOSE_RE = re.compile(r"</body\s*>", re.I)
 
@@ -113,7 +154,11 @@ def has_layer(page: str) -> bool:
 
 
 def strip_layer(page: str) -> str:
-    """Remove a layer injected by this module (older hand ports are left alone)."""
+    """Remove a layer injected by this module, of any version.
+
+    A hand port that carries no closing marker is left alone: there is nothing
+    to bound the removal with, and guessing an end would eat the page.
+    """
     return _BLOCK_RE.sub("", page)
 
 
@@ -159,6 +204,12 @@ CSS = r"""
 :root[data-theme="dark"]{--an-bg:#1f2124;--an-ink:#eceae6;--an-soft:#a9a59e;--an-rule:#3a3d42;
  --an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;--an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}
 mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--an-accent);cursor:pointer;border-radius:2px}
+/* A suggested edit must not read as a comment highlight: the original is
+   struck rather than filled, and the replacement carries the insert colour. */
+mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-through;
+ text-decoration-color:var(--an-bad);text-decoration-thickness:2px;cursor:pointer;border-radius:2px}
+.anins{background:var(--an-good-bg);color:var(--an-good);border-bottom:2px solid var(--an-good);
+ border-radius:2px;padding:0 .12em;cursor:pointer}
 [data-annotation-layer]{font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;color:var(--an-ink);line-height:1.5}
 [data-annotation-layer] *{box-sizing:border-box}
 #anPop{position:absolute;z-index:1050;display:none;background:var(--an-bg);border:1px solid var(--an-rule);
@@ -186,6 +237,17 @@ mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--
  background:var(--an-bad);color:#fff;border-color:var(--an-bad)}
 .anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
 #anPop:not(.editing) #anDelete{display:none}
+/* The mode strip is deliberately NOT in .anrow: Save has to stay the first
+   control of that row, which is also its tab order. */
+.anmodebar{display:flex;gap:.3rem;margin-bottom:.45rem}
+.anmode{flex:1;background:transparent;color:var(--an-soft);border:1px solid var(--an-rule);
+ border-radius:5px;padding:.22rem .5rem;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer}
+.anmode.ansel{background:var(--an-accent);color:#fff;border-color:var(--an-accent)}
+/* Reopening an existing note is not the place to change what it is. */
+#anPop.editing .anmodebar{display:none}
+.cmt.ansuggest{border-left-color:var(--an-good)}
+.cmt .q.struck{text-decoration:line-through}
+.cmt .ins{color:var(--an-good)}
 /* Save leads: it is the first button in the DOM, so it is also first in tab
    order. Delete is pushed to the far end so it is never the near miss. */
 .anrow{display:flex;gap:.4rem;align-items:center;margin-top:.45rem;flex-wrap:wrap}
@@ -226,7 +288,7 @@ mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--
 HTML = r"""
 <section id="anComments">
 <h2 id="your-comments">Your comments</h2>
-<p class="anscope">Select any text on this page to attach a note, then press Enter. Notes are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
 <div class="anbar">
   <span class="ancount" id="anCount">No comments yet</span>
   <button class="anbtn" id="anCopy">Copy all</button>
@@ -237,13 +299,17 @@ HTML = r"""
 <div id="anList"></div>
 </section>
 <div id="anPop" role="dialog" aria-label="Comment">
+  <div class="anmodebar" role="group" aria-label="Annotation mode">
+    <button class="anmode ansel" type="button" id="anModeComment" aria-pressed="true">Comment</button>
+    <button class="anmode" type="button" id="anModeEdit" aria-pressed="false">Suggest edit</button>
+  </div>
   <textarea id="anTxt" placeholder="What do you think?"></textarea>
   <div class="anrow">
     <button class="anbtn" id="anSave">Save</button>
     <button class="anbtn ghost" id="anCancel">Cancel</button>
     <button class="anbtn ghost danger" id="anDelete">Delete</button>
   </div>
-  <div class="anhint"><kbd>Enter</kbd> saves &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> newline &middot; <kbd>Esc</kbd> discards</div>
+  <div class="anhint"><kbd>Enter</kbd> saves &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> newline &middot; <kbd>Esc</kbd> discards &middot; <kbd>Ctrl</kbd>+<kbd>E</kbd> switches mode</div>
 </div>
 <div id="anExport" role="dialog" aria-label="Export comments">
   <div class="exphead">
@@ -329,6 +395,15 @@ function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
 })();
 var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
 var pending = null, editingId = null;
+// The box has two modes and one dirty flag. `dirty` is set by the first user
+// modification and by nothing else: an edit box OPENS with the selection
+// already in its textarea, so keying the draft autosave and the "a box with
+// words in it refuses to close" invariant on non-emptiness would turn every
+// opened edit box into an unclosable phantom draft nobody typed.
+var mode = "comment", dirty = false;
+// An entry written before v2 carries no `type`, so absence means comment.
+function isEdit(c){ return c && c.type === "edit"; }
+function bodyOf(c){ return isEdit(c) ? (c.replacement || "") : (c.note || ""); }
 
 window.addEventListener("pagehide", saveDraft);
 document.addEventListener("visibilitychange", function(){
@@ -386,20 +461,55 @@ function placePop(rect){
 }
 // Words the user has not saved are not something another control may
 // overwrite: clicking a second highlight used to replace the text outright.
-function nudge(){
-  txt.focus();
+// `focus` is false on the touch path, where focusing a field while iOS shows
+// its selection handles collapses the selection.
+function nudge(focus){
+  if (focus !== false) txt.focus();
   pop.classList.add("nudge");
   setTimeout(function(){ pop.classList.remove("nudge"); }, 700);
 }
-function openEdit(c, anchor){
-  if (isOpen() && editingId !== c.id && hasText()) { nudge(); return; }
-  editingId = c.id; pending = null; txt.value = c.note;
-  pop.classList.add("editing");
-  placePop(anchor ? anchor.getBoundingClientRect() : { left: 16, top: 100, bottom: 100 });
+// Applies a mode WITHOUT touching the textarea. The prefill belongs to the
+// user-driven switch below; the restore paths (an existing entry, a recovered
+// draft) supply their own text and must not have it overwritten.
+function setModeState(next){
+  mode = next;
+  var isE = mode === "edit";
+  $("anModeComment").classList.toggle("ansel", !isE);
+  $("anModeEdit").classList.toggle("ansel", isE);
+  $("anModeComment").setAttribute("aria-pressed", isE ? "false" : "true");
+  $("anModeEdit").setAttribute("aria-pressed", isE ? "true" : "false");
+  txt.placeholder = isE ? "Replacement text; an empty box suggests deleting it"
+                        : "What do you think?";
+}
+// The user-driven switch rewrites the textarea, so it declines while there are
+// unsaved words and points at them instead, exactly as a second highlight
+// click does. Reopening an existing entry is not the place to change its kind,
+// so the strip is hidden then and this is a no-op.
+function switchMode(next){
+  if (mode === next || editingId !== null) return;
+  if (dirty) { nudge(); return; }
+  setModeState(next);
+  txt.value = (next === "edit" && pending) ? pending.quote : "";
+  dirty = false;
   txt.focus();
 }
+$("anModeComment").onclick = function(){ switchMode("comment"); };
+$("anModeEdit").onclick = function(){ switchMode("edit"); };
+
+function openEdit(c, anchor, focus){
+  if (isOpen() && editingId !== c.id && dirty) { nudge(focus); return; }
+  editingId = c.id; pending = null;
+  setModeState(isEdit(c) ? "edit" : "comment");
+  txt.value = bodyOf(c);
+  dirty = false;
+  pop.classList.add("editing");
+  placePop(anchor ? anchor.getBoundingClientRect() : { left: 16, top: 100, bottom: 100 });
+  if (focus !== false) txt.focus();
+}
+// Both parts of a suggested edit carry the entry id, as a comment highlight
+// does, so clicking the strikethrough or the replacement reopens the same box.
 document.addEventListener("click", function(ev){
-  var m = ev.target.closest && ev.target.closest("mark.note");
+  var m = ev.target.closest && ev.target.closest("[data-cid]");
   if (!m || pop.contains(ev.target)) return;
   var c = comments.find(function(x){ return x.id === Number(m.dataset.cid); });
   if (!c) return;
@@ -408,20 +518,44 @@ document.addEventListener("click", function(ev){
 
 // Wraps a range in a highlight. surroundContents refuses a range that crosses
 // element boundaries, so fall back to lifting the contents out and wrapping.
-function wrapRange(range, id, note){
+function wrapRange(range, id, title, cls){
   var m = document.createElement("mark");
-  m.className = "note"; m.title = note; m.dataset.cid = String(id);
+  m.className = cls || "note"; m.title = title; m.dataset.cid = String(id);
   try { range.surroundContents(m); }
   catch (e) { m.appendChild(range.extractContents()); range.insertNode(m); }
   return m;
 }
-// Every text node of the page, skipping the layer's own UI and existing highlights.
+// The ONE place the replacement span is created, rewritten or removed. Three
+// call sites need it (save a new edit, revise one, restore one on load) and
+// they drift apart if each does its own DOM work: an edit revised to empty has
+// to lose its span and become pure strikethrough again.
+function renderEditInline(c){
+  var m = document.querySelector('mark.anedit[data-cid="' + c.id + '"]');
+  if (!m) return;
+  m.title = c.replacement ? "suggested: " + c.replacement : "suggested deletion";
+  var s = document.querySelector('span.anins[data-cid="' + c.id + '"]');
+  if (!c.replacement) { if (s) s.remove(); return; }
+  if (!s) {
+    s = document.createElement("span");
+    s.className = "anins"; s.dataset.cid = String(c.id);
+    // The marker docTextNodes() looks for. Without it the first saved edit
+    // corrupts the anchor of every comment after it, because the replacement's
+    // words join the text that quotes are searched in.
+    s.setAttribute("data-an-inserted", "1");
+    m.parentNode.insertBefore(s, m.nextSibling);
+  }
+  s.textContent = c.replacement;
+}
+// Every text node of the page, skipping the layer's own UI, existing
+// highlights, and anything the layer itself put on the page. Re-anchoring
+// matches ORIGINAL document text only.
 function docTextNodes(){
   var host = document.querySelector(".doc") || document.querySelector("main") || document.body;
   var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, { acceptNode: function(n){
     var p = n.parentNode;
     if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
-    if (p.closest("mark.note") || p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
+    if (p.closest("mark.note") || p.closest("mark.anedit") || p.closest("[data-an-inserted]") ||
+        p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
     return NodeFilter.FILTER_ACCEPT;
   }});
   var out = [], n;
@@ -477,14 +611,32 @@ function rangeForQuote(quote){
 function restoreHighlights(){
   var missed = 0;
   comments.forEach(function(c){
-    if (document.querySelector('mark.note[data-cid="' + c.id + '"]')) return;
+    if (document.querySelector('mark[data-cid="' + c.id + '"]')) return;
     var r = rangeForQuote(c.quote);
     if (!r) { missed++; return; }
-    try { wrapRange(r, c.id, c.note); } catch (e) { missed++; }
+    try {
+      if (isEdit(c)) { wrapRange(r, c.id, "", "anedit"); renderEditInline(c); }
+      else wrapRange(r, c.id, c.note, "note");
+    } catch (e) { missed++; }
   });
   return missed;
 }
-function hasMark(c){ return !!document.querySelector('mark.note[data-cid="' + c.id + '"]'); }
+function hasMark(c){ return !!document.querySelector('mark[data-cid="' + c.id + '"]'); }
+// A selection touching an existing suggested edit, if there is one. Overlapping
+// edits cannot be exported appliably, and a quote that spans inserted text can
+// never be re-anchored, so such a selection is declined rather than annotated.
+function editOverlapping(range){
+  var els = document.querySelectorAll('mark.anedit[data-cid], span.anins[data-cid]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i], hit = false;
+    try { hit = range.intersectsNode(el); } catch (e) { hit = false; }
+    if (!hit) continue;
+    var cid = Number(el.dataset.cid);
+    var c = comments.find(function(x){ return x.id === cid; });
+    if (c) return { entry: c, el: el };
+  }
+  return null;
+}
 
 // Opens the note box for the current selection. autofocus is false on touch:
 // focusing a textarea while iOS is showing its selection handles collapses the
@@ -509,10 +661,18 @@ function openForSelection(autofocus){
   // rather than throwing away words the user has not saved.
   if (isOpen() && hasText()) return true;
   var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
+  // Overlaps an existing suggested edit: point at that edit rather than open a
+  // second box on the range.
+  var hit = editOverlapping(range);
+  if (hit) { openEdit(hit.entry, hit.el, autofocus); nudge(autofocus); return true; }
   editingId = null; pop.classList.remove("editing");
+  // Comment is the default on every fresh selection. A mode that stayed where
+  // it was last left would silently change what select-type-Enter means.
+  setModeState("comment");
   pending = { quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() };
   placePop(rect);
   txt.value = "";
+  dirty = false;
   if (autofocus) txt.focus();
   return true;
 }
@@ -520,18 +680,22 @@ function openForSelection(autofocus){
 // raises the soft keyboard for a focus() called within one.
 document.addEventListener("mouseup", function(ev){
   if (pop.contains(ev.target)) return;
-  if (ev.target.closest && ev.target.closest("mark.note")) return;
+  if (ev.target.closest && ev.target.closest("[data-cid]")) return;
   clearTimeout(selTimer);
   openForSelection(true);
 });
-// A press outside closes an EMPTY box. A box with words in it stays open: no
-// gesture the user did not mean as "save" may commit a comment, and plenty of
-// ordinary ones land here — right-clicking your own selection to copy it,
-// grabbing the scrollbar to reread the passage, or pressing Clear all and
-// then cancelling the confirm.
+// A press outside closes a box the user has not modified. A box with words the
+// user put there stays open: no gesture the user did not mean as "save" may
+// commit anything, and plenty of ordinary ones land here — right-clicking your
+// own selection to copy it, grabbing the scrollbar to reread the passage, or
+// pressing Clear all and then cancelling the confirm.
+//
+// The test is the dirty flag, NOT emptiness, because an edit box opens with
+// the selection already in it. Keyed on emptiness, opening one and changing
+// your mind would leave a box that cannot be dismissed.
 document.addEventListener("mousedown", function(ev){
   if (!isOpen() || pop.contains(ev.target)) return;
-  if (hasText()) return;
+  if (dirty) return;
   closePop();
 });
 // iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
@@ -549,8 +713,16 @@ document.addEventListener("selectionchange", function(){
 txt.addEventListener("keydown", function(ev){
   if (ev.key === "Enter" && !ev.shiftKey && !ev.altKey && !ev.isComposing) { ev.preventDefault(); save(); }
   else if (ev.key === "Escape") { ev.preventDefault(); discard(); }
+  // A CHORD, never a bare letter. A single-key binding on a control that lives
+  // inside a textarea fires on the note being typed: on the context-ledger
+  // page, `d` in a comment marked the selected row dropped.
+  else if ((ev.ctrlKey || ev.metaKey) && (ev.key === "e" || ev.key === "E")) {
+    ev.preventDefault(); switchMode(mode === "edit" ? "comment" : "edit");
+  }
 });
-txt.addEventListener("input", saveDraft);
+// The user touched the text: from here the box holds work, whether or not the
+// prefill it opened with is still in it.
+txt.addEventListener("input", function(){ dirty = true; saveDraft(); });
 document.addEventListener("keydown", function(ev){
   if (ev.key === "Escape" && isOpen() && document.activeElement !== txt) discard();
 });
@@ -558,15 +730,19 @@ document.addEventListener("keydown", function(ev){
 function closePop(){
   pop.style.display = "none"; pending = null; editingId = null;
   pop.classList.remove("editing"); pop.classList.remove("nudge");
+  setModeState("comment"); dirty = false;
   txt.value = ""; lsDel(DRAFT);
 }
 function discard(){ closePop(); }
 // The in-progress note, saved on every keystroke, so a forced refresh reopens
 // the box where it was instead of losing what was typed into it.
+// `dirty` gates this, not emptiness: an edit box opens pre-filled with the
+// selection, and autosaving that would leave a draft nobody typed, which then
+// reopens the box on the next load for a note that was never begun.
 function saveDraft(){
-  if (!isOpen() || !hasText()) { lsDel(DRAFT); return; }
+  if (!isOpen() || !dirty || !hasText()) { lsDel(DRAFT); return; }
   lsSet(DRAFT, JSON.stringify({
-    note: txt.value, editingId: editingId,
+    note: txt.value, editingId: editingId, mode: mode,
     quote: pending ? pending.quote : null, where: pending ? pending.where : null
   }));
 }
@@ -578,8 +754,8 @@ function restoreDraft(){
     // The comment was deleted elsewhere. Drop the draft rather than leave it
     // to reattach itself to whichever comment is handed that id next.
     if (!c) { lsDel(DRAFT); return; }
-    openEdit(c, document.querySelector('mark.note[data-cid="' + c.id + '"]'));
-    txt.value = d.note;
+    openEdit(c, document.querySelector('mark[data-cid="' + c.id + '"]'));
+    txt.value = d.note; dirty = true;
     return;
   }
   var r = rangeForQuote(d.quote);
@@ -587,9 +763,11 @@ function restoreDraft(){
   var sel = window.getSelection();
   if (sel) { try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {} }
   editingId = null; pop.classList.remove("editing");
+  setModeState(d.mode === "edit" ? "edit" : "comment");
   pending = { quote: d.quote, where: d.where || sectionOf(r.startContainer), range: r.cloneRange() };
   placePop(r.getBoundingClientRect());
-  txt.value = d.note;
+  // Restored words ARE user work, whatever they started as.
+  txt.value = d.note; dirty = true;
 }
 function unpackDraft(){
   var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
@@ -606,7 +784,7 @@ function markDirty(){ syncLegacyFlag(); }
 // delete-copied set.
 function copySnapshot(){
   return comments.map(function(c){
-    return { id: c.id, where: c.where, quote: c.quote, note: c.note };
+    return { id: c.id, where: c.where, quote: c.quote, note: bodyOf(c) };
   });
 }
 function markClean(snap){
@@ -614,7 +792,7 @@ function markClean(snap){
   (snap || copySnapshot()).forEach(function(x){ by[x.id] = x; });
   comments.forEach(function(c){
     var x = by[c.id];
-    if (x && x.where === c.where && x.quote === c.quote && x.note === c.note) c.copiedAt = now;
+    if (x && x.where === c.where && x.quote === c.quote && x.note === bodyOf(c)) c.copiedAt = now;
   });
   persist(); syncLegacyFlag();
 }
@@ -649,7 +827,7 @@ function disarm(){
 // label described, rather than trust that nothing moved under it.
 function bindingOf(list){
   return list.map(function(c){
-    return c.id + ":" + (c.copiedAt || 0) + ":" + c.note.length + ":" + c.quote.length;
+    return c.id + ":" + (c.copiedAt || 0) + ":" + bodyOf(c).length + ":" + c.quote.length;
   }).join(",");
 }
 // True only on the confirming click, and only while the set it was armed
@@ -683,11 +861,14 @@ function persist(){
   unsaved = !lsSet(KEY, JSON.stringify(comments));
 }
 function unwrap(id){
-  var m = document.querySelector('mark.note[data-cid="' + id + '"]');
+  var s = document.querySelector('span.anins[data-cid="' + id + '"]');
+  if (s) s.remove();
+  var m = document.querySelector('mark[data-cid="' + id + '"]');
   if (m) { while (m.firstChild) m.parentNode.insertBefore(m.firstChild, m); m.remove(); }
 }
 
 function save(){
+  if (mode === "edit") { saveEdit(txt.value.trim()); return; }
   var note = txt.value.trim();
   if (!note) { closePop(); return; }
   if (editingId !== null) {
@@ -703,8 +884,31 @@ function save(){
     if (m) m.title = note;
   } else if (pending) {
     var id = newId();
-    try { wrapRange(pending.range, id, note); } catch (e) {}
+    try { wrapRange(pending.range, id, note, "note"); } catch (e) {}
     comments.push({ id: id, where: pending.where, quote: pending.quote, note: note });
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+// An empty replacement is a suggested DELETION, so there is no empty-means-
+// cancel shortcut here: the comment path's `if (!note) closePop()` would throw
+// away exactly the edit the reader worked to express.
+function saveEdit(replacement){
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    if (c && c.replacement === replacement) { closePop(); return; }
+    if (c) { c.replacement = replacement; delete c.copiedAt; renderEditInline(c); }
+  } else if (pending) {
+    // The prefill is not user work: an untouched box saves nothing, so Enter
+    // on a box still holding the selection verbatim is a close, not an entry
+    // proposing to replace the text with itself.
+    if (!dirty) { closePop(); return; }
+    var id = newId();
+    var fresh = { id: id, type: "edit", where: pending.where,
+                  quote: pending.quote, replacement: replacement };
+    try { wrapRange(pending.range, id, "", "anedit"); } catch (e) {}
+    comments.push(fresh);
+    renderEditInline(fresh);
   }
   markDirty(); persist(); render(); closePop();
   var sel = window.getSelection(); if (sel) sel.removeAllRanges();
@@ -713,8 +917,15 @@ function save(){
 $("anCancel").onclick = discard;
 $("anDelete").onclick = function(){
   if (editingId === null) { closePop(); return; }
-  comments = comments.filter(function(c){ return c.id !== editingId; });
-  unwrap(editingId);
+  var id = editingId;
+  var c = comments.find(function(x){ return x.id === id; });
+  // A comment's Delete stays immediate -- the popup's CSS hides it while
+  // composing, it sits at the far end of the row, and it acts on one note the
+  // reader has just opened. A suggested edit arms first: it is written
+  // replacement text plus an anchor, and one stray click takes both.
+  if (isEdit(c) && !arm(this, "click again")) return;
+  comments = comments.filter(function(x){ return x.id !== id; });
+  unwrap(id);
   markDirty(); persist(); render(); closePop();
 };
 $("anSave").onclick = save;
@@ -744,8 +955,15 @@ function render(){
   }
   // Once the list can be part copied and part not, a single verdict is a lie
   // for one half of it. The split form appears only when the list is actually
-  // mixed, so the common uniform cases stay as short as they were.
-  count.textContent = comments.length + (comments.length === 1 ? " comment" : " comments") +
+  // mixed, so the common uniform cases stay as short as they were. The same
+  // applies to the noun: "N comments" is wrong for half a mixed page, and the
+  // plain wording is kept for the comment-only page, which is most of them.
+  var nEdits = comments.filter(isEdit).length;
+  var what = nEdits
+    ? comments.length + (comments.length === 1 ? " item (" : " items (") +
+      nEdits + (nEdits === 1 ? " suggested edit)" : " suggested edits)")
+    : comments.length + (comments.length === 1 ? " comment" : " comments");
+  count.textContent = what +
     (unsaved ? " \u2014 this browser refused to store them, copy them now"
              : !fresh ? " \u2014 copied out"
              : fresh === comments.length ? " \u2014 not yet copied out"
@@ -754,13 +972,21 @@ function render(){
   var frag = document.createDocumentFragment();
   comments.forEach(function(c){
     var d = document.createElement("div");
-    d.className = "cmt" + (isCopied(c) ? " ancopied" : "");
+    d.className = "cmt" + (isCopied(c) ? " ancopied" : "") + (isEdit(c) ? " ansuggest" : "");
     var w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
-    var q = document.createElement("div"); q.className = "q"; q.textContent = "\u201C" + c.quote + "\u201D";
-    var n = document.createElement("div"); n.textContent = c.note;
+    var q = document.createElement("div");
+    q.className = isEdit(c) ? "q struck" : "q";
+    q.textContent = "\u201C" + c.quote + "\u201D";
+    var n = document.createElement("div");
+    if (isEdit(c)) {
+      n.className = "ins";
+      n.textContent = c.replacement
+        ? "\u2192 " + c.replacement
+        : "\u2192 delete this text";
+    } else n.textContent = c.note;
     var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
     a.onclick = function(){
-      var m = document.querySelector('mark.note[data-cid="' + c.id + '"]');
+      var m = document.querySelector('mark[data-cid="' + c.id + '"]');
       if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
       else openEdit(c, null);
     };
@@ -785,12 +1011,40 @@ function render(){
   list.replaceChildren(frag);
 }
 
-function markdown(){
-  return comments.map(function(c){
+function markdown(list){
+  return list.map(function(c){
     return "- **" + c.where + "** \u2014 " + c.note + "\n  > " + c.quote.replace(/\n/g, "\n  > ");
   }).join("\n");
 }
-function exportText(){ return "# Comments \u2014 " + document.title + "\n\n" + markdown() + "\n"; }
+// Numbered, so a session applying them can say which one it could not place.
+function editMarkdown(list){
+  return list.map(function(c, i){
+    return (i + 1) + ". **" + c.where + "**" +
+      "\n   Replace:\n   > " + c.quote.replace(/\n/g, "\n   > ") +
+      "\n   With:" + (c.replacement
+        ? "\n   > " + c.replacement.replace(/\n/g, "\n   > ")
+        : " _(nothing \u2014 delete this text)_");
+  }).join("\n\n");
+}
+// The quotes are RENDERED text and the source is Markdown, so emphasis
+// markers, links and code spans differ between the two. The note below says so
+// in the export itself, because the export leaves this page and is read
+// without it. Nobody builds a sed loop over this format.
+var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markdown. " +
+  "Locate each quote in the source and adapt the markup \u2014 do not apply these " +
+  "blocks byte-for-byte.";
+// A page with no suggested edits exports exactly what it did under v1: no
+// headings appear, so every existing paste-into-a-session habit still works.
+function exportText(){
+  var edits = comments.filter(isEdit);
+  var notes = comments.filter(function(c){ return !isEdit(c); });
+  var out = "# Comments \u2014 " + document.title + "\n\n";
+  if (edits.length) {
+    out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
+    if (notes.length) out += "## Comments\n\n";
+  }
+  return out + (notes.length ? markdown(notes) + "\n" : "");
+}
 function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
 // There is deliberately no download path. The Artifact viewer never grants a
 // page download permission, so a Download button was inert exactly where these

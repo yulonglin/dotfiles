@@ -69,8 +69,8 @@ def test_help_exits_zero() -> None:
 def test_inject_adds_marker_root_and_one_script(page: Path) -> None:
     assert run(str(page)).returncode == 0
     html = page.read_text(encoding="utf-8")
-    assert "<!-- annotation-layer v1 -->" in html
-    assert '<div data-annotation-layer="v1"' in html
+    assert "<!-- annotation-layer v2 -->" in html
+    assert '<div data-annotation-layer="v2"' in html
     assert "<!-- /annotation-layer -->" in html
     assert html.count("<script>") == 1
     # The original content is untouched and precedes the layer.
@@ -86,7 +86,7 @@ def test_inject_is_idempotent_unless_forced(page: Path) -> None:
     r = run(str(page), "--force")
     assert r.returncode == 0 and "replaced" in r.stdout
     html = page.read_text(encoding="utf-8")
-    assert html.count("<!-- annotation-layer v1 -->") == 1
+    assert html.count("<!-- annotation-layer v2 -->") == 1
     assert html.count("<script>") == 1
 
 
@@ -95,7 +95,7 @@ def test_layer_goes_before_body_close_when_there_is_one(tmp_path: Path) -> None:
     p.write_text(PAGE_WITH_BODY, encoding="utf-8")
     assert run(str(p)).returncode == 0
     html = p.read_text(encoding="utf-8")
-    assert html.index("<!-- annotation-layer v1 -->") < html.index("</body>")
+    assert html.index("<!-- annotation-layer v2 -->") < html.index("</body>")
 
 
 def test_older_hand_ported_marker_counts_as_present(tmp_path: Path) -> None:
@@ -108,7 +108,7 @@ def test_older_hand_ported_marker_counts_as_present(tmp_path: Path) -> None:
 
 def test_explicit_key_lands_on_the_root(page: Path) -> None:
     run(str(page), "--key", "review-x")
-    assert 'data-annotation-layer="v1" data-key="review-x"' in page.read_text()
+    assert 'data-annotation-layer="v2" data-key="review-x"' in page.read_text()
 
 
 def test_layer_js_has_the_touch_and_focus_safeguards() -> None:
@@ -362,5 +362,135 @@ def test_md2artifact_output_uses_the_same_layer(tmp_path: Path) -> None:
     )
     assert r.returncode == 0, r.stderr
     html = out.read_text(encoding="utf-8")
-    assert '<div data-annotation-layer="v1" data-key="review-s"' in html
+    assert '<div data-annotation-layer="v2" data-key="review-s"' in html
     assert run(str(out), "--check").returncode == 0
+
+
+# --- suggest-edit mode (layer v2) -----------------------------------------
+
+
+def test_a_v1_block_is_replaced_not_duplicated_on_force(tmp_path: Path) -> None:
+    """`--force` on a page carrying the PREVIOUS version must still strip it.
+
+    A strip regex pinned to the current `MARKER_OPEN` stops matching the moment
+    the version is bumped, so a deployed v1 page gains a SECOND layer: two
+    scripts, two note boxes, two writers of one localStorage key. The
+    idempotence test above only ever exercises same-version force, so it cannot
+    see this.
+    """
+    mod = _layer_module()
+    v1 = (
+        "<!-- annotation-layer v1 -->\n<style>.x{}</style>\n"
+        '<div data-annotation-layer="v1"><p>old layer</p></div>\n'
+        "<script>1</script>\n<!-- /annotation-layer -->\n"
+    )
+    p = tmp_path / "old.html"
+    p.write_text(PAGE + v1, encoding="utf-8")
+    assert run(str(p), "--check").returncode == 0  # present, so no double-inject
+    assert run(str(p), "--force").returncode == 0
+    html = p.read_text(encoding="utf-8")
+    assert "annotation-layer v1" not in html, "the old block survived --force"
+    assert html.count(f"<!-- annotation-layer {mod.LAYER_VERSION} -->") == 1
+    assert html.count("<script>") == 1
+    assert "old layer" not in html
+
+
+def test_the_box_carries_a_mode_control_and_save_is_still_first() -> None:
+    """Comment is the default; the mode buttons sit outside the button row.
+
+    They are deliberately NOT in `.anrow`: Save must stay the first control in
+    that row, which is also tab order.
+    """
+    html = _layer_module().HTML
+    assert 'id="anModeComment"' in html and 'id="anModeEdit"' in html
+    assert "Suggest edit" in html
+    assert 'aria-pressed="true"' in html.split('id="anModeComment"', 1)[1][:120]
+    mode_bar = re.search(r'<div class="anmodebar".*?</div>', html, re.S)
+    assert mode_bar and "anrow" not in mode_bar.group(0)
+    row = re.search(r'<div class="anrow">(.*?)</div>', html, re.S)
+    assert row and row.group(1).index("anSave") < row.group(1).index("anCancel")
+
+
+def test_layer_inserted_text_is_excluded_from_quote_scanning() -> None:
+    """Without this the first saved edit corrupts every anchor after it.
+
+    Re-anchoring matches against original document text only, so the walker
+    that feeds it must reject the replacement spans the layer itself inserted
+    (and the struck original, exactly as it already rejects comment
+    highlights). Behaviourally guarded in the browser suite; this catches the
+    rejection being dropped where no browser is installed.
+    """
+    js = _layer_module().JS
+    walker = js.split("function docTextNodes()", 1)[1].split("function ", 1)[0]
+    for sel in ("mark.note", "mark.anedit", "[data-an-inserted]"):
+        assert f'closest("{sel}")' in walker, f"{sel} is scanned again"
+    # and the attribute is actually put on the inserted span
+    assert 'setAttribute("data-an-inserted", "1")' in js
+
+
+def test_the_prefill_is_not_user_work() -> None:
+    """Draft autosave and "refuses to close" key on a dirty flag.
+
+    An edit box opens with the selection already in it. Keying either rule on
+    non-emptiness would make every opened edit box an unclosable phantom draft
+    that writes a draft nobody typed.
+    """
+    js = _layer_module().JS
+    assert 'var mode = "comment", dirty = false;' in js
+    assert "if (!isOpen() || !dirty || !hasText()) { lsDel(DRAFT); return; }" in js
+    # the press-outside guard reads the flag, not the textarea
+    outside = re.search(
+        r'document\.addEventListener\("mousedown", function\(.*?\n\}\);', js, re.S
+    )
+    assert outside and "if (dirty) return;" in outside.group(0)
+
+
+def test_the_mode_shortcut_is_a_chord_never_a_bare_letter() -> None:
+    """A single-key binding inside a textarea is a documented incident."""
+    js = _layer_module().JS
+    keydown = js.split('txt.addEventListener("keydown"', 1)[1].split("txt.addEventListener", 1)[0]
+    assert "ev.ctrlKey || ev.metaKey" in keydown
+    assert 'ev.key === "e" || ev.key === "E"' in keydown
+    for bare in ('ev.key === "e") {', 'ev.key === "E") {'):
+        assert bare not in keydown, f"bare-letter binding {bare}"
+
+
+def test_an_entry_without_a_type_is_a_comment() -> None:
+    """Every page's v1 comments must load unchanged on a v2 rebuild."""
+    js = _layer_module().JS
+    assert 'function isEdit(c){ return c && c.type === "edit"; }' in js
+    assert "JSON.stringify(comments)" in js  # still one bare array, still one key
+    assert 'type: "edit"' in js
+    assert "replacement" in js
+
+
+def test_the_export_carries_suggested_edits_before_the_comments() -> None:
+    js = _layer_module().JS
+    assert '"## Suggested edits' in js
+    assert '"\\n   Replace:\\n   > "' in js
+    assert '"\\n   With:"' in js
+    # the comments section keeps its v1 shape, so a page with no edits exports
+    # byte-for-byte what it did before
+    assert '"- **" + c.where + "** \\u2014 " + c.note + "\\n  > "' in js
+
+
+def test_an_overlapping_selection_is_declined_not_opened() -> None:
+    """Overlapping suggested edits cannot be exported appliably."""
+    js = _layer_module().JS
+    assert "function editOverlapping(range)" in js
+    assert "intersectsNode" in js
+    opener = js.split("function openForSelection(autofocus)", 1)[1].split("\n}", 1)[0]
+    assert "editOverlapping" in opener
+
+
+def test_the_edit_delete_arms_while_the_comment_delete_stays_immediate() -> None:
+    """The popup Delete is the documented exception -- for comments only.
+
+    A comment's note is one line the reader just opened; a suggested edit is
+    written replacement text plus an anchor, and the same stray click throws
+    both away. `window.confirm` is not available to guard either.
+    """
+    js = _layer_module().JS
+    assert 'if (isEdit(c) && !arm(this, "click again")) return;' in js
+    for banned in ("window.confirm(", "confirm(", "alert(", "prompt("):
+        assert banned not in js
