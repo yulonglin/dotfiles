@@ -100,10 +100,18 @@ families = [
 # catalogue under the price cap.
 advisor_families = ["anthropic", "openai"]
 
-# Per-seat output-price ceiling in USD per million tokens. 60.0 admits
-# `claude-fable-5` at $50 and excludes `gpt-5.5-pro` at $180. Raising this
-# changes which models can be seated, so it is a spend decision: a council run
-# costs roughly the sum of its seats.
+# Per-seat price ceilings in USD per million tokens. Raising either changes
+# which models can be seated, so both are spend decisions: a council run costs
+# roughly the sum of its seats.
+#
+# 60.0 output admits `claude-fable-5` at $50 and excludes `gpt-5.5-pro` at $180.
+#
+# The INPUT cap exists because an output-only cap misprices this workload. The
+# `--rank` round sends every seat the other seven answers, so input dominates
+# there -- a model at $59/M output but $200/M input would pass an output-only
+# check and then cost more than anything it displaced. 15.0 admits the current
+# roster (dearest input is claude-fable-5 at $10) with headroom.
+max_input_price = 15.0
 max_output_price = 60.0
 
 # How many days before the roster is considered stale. The fortnightly timer
