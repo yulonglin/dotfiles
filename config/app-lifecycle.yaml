@@ -8,6 +8,9 @@
 #     Tailscale and NordVPN apps leaves their network extensions running
 #     (io.tailscale.ipn.macsys.network-extension 58 MB, com.nordvpn.macos.helper
 #     plus Shield.systemextension 205 MB), so the connection survives.
+#     Tailscale has since been pulled back to `close` below: the reasoning
+#     above says quitting is SAFE, not that it is wanted, and reopening the
+#     menu bar app is the friction this avoids. NordVPN and Codex still quit.
 #   Claude, Granola - the one change that will actually be felt, and the point
 #     of the exercise: closing their windows left the processes resident.
 
