@@ -169,9 +169,11 @@ slug = "deepseek/deepseek-v4-pro-0813"
 alias = "deepseek"
 
 # EXPENSIVE: $30/M input, $180/M output -- ~15x the seated OpenAI model for 0.6
-# index points. Excluded from the council by `max_output_price`, which is the
-# whole mechanism; there is no opt-in flag and none was invented, because a
-# field the CLI does not read would look like a guard without being one.
+# index points. Excluded from the council by the price caps, which it breaches
+# on BOTH axes ($30 against max_input_price 15.0, $180 against
+# max_output_price 60.0). That exclusion is the whole mechanism; there is no
+# opt-in flag and none was invented, because a field the CLI does not read
+# would look like a guard without being one.
 # Reach it explicitly: `openrouter-cli ask gpt55pro "..."`.
 [[models]]
 slug = "openai/gpt-5.5-pro"

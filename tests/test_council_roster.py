@@ -321,6 +321,83 @@ class TestPromptInjectionFencing:
                 assert "====deadbeef====" in body
 
 
+class TestBallotParsing:
+    """Regressions from the Fable correctness review. Both were silent: the
+    tally still looked like a tally, it just measured the wrong thing."""
+
+    def _rank(self, monkeypatch, reply, n=3):
+        answers = {f"m/{i}": {"content": f"answer {i}"} for i in range(n)}
+        monkeypatch.setattr(orc, "ask_one", lambda *a, **k: (reply, {}))
+        return orc.cross_rank(answers, "q", "key", 100)
+
+    def test_an_english_article_is_not_a_vote(self, monkeypatch):
+        """'A ranking follows:' once credited label A with the TOP rank.
+
+        Asserted on the parser, not on the tally: labels are shuffled per
+        ranker, so two runs map labels to different models and their tallies
+        are not comparable.
+        """
+        points, notes = self._rank(monkeypatch, "A ranking follows shortly:")
+        assert all(v == 0.0 for v in points.values()), "prose scored as a ballot"
+        assert len(notes) == 3 and all("no parseable ranking" in n for n in notes)
+
+    def test_a_partial_ballot_does_not_deflate_its_top_pick(self, monkeypatch):
+        """Scaling by labels PARSED let a terse ranker award its top pick 1
+        point where a complete ballot awards len(labels)."""
+        points, notes = self._rank(monkeypatch, "B")
+        # Each ranker sees two answers, so its single named pick is worth 2,
+        # not 1. Three rankers => 6 points total. The SUM is the deterministic
+        # quantity: labels are shuffled, so which model collects them varies.
+        assert sum(points.values()) == 6.0
+        assert any("ranked 1 of 2" in n for n in notes)
+
+    def test_list_chrome_around_a_label_still_counts(self, monkeypatch):
+        points, _ = self._rank(monkeypatch, "1. B\n2. A")
+        assert sum(points.values()) > 0
+
+
+class TestCatalogVariantExclusion:
+    def test_free_and_batch_variants_are_excluded(self, monkeypatch):
+        """':free' prices at 0/0, clears both caps, matches no index name, and
+        would win the all-unscored fallback -- seating a rate-limited tier."""
+        payload = {"data": [
+            {"id": "x/model", "pricing": {"prompt": "0.000002",
+                                          "completion": "0.000008"}, "created": 1},
+            {"id": "x/model:free", "pricing": {"prompt": "0", "completion": "0"},
+             "created": 2},
+            {"id": "x/model:batch", "pricing": {"prompt": "0.000001",
+                                                "completion": "0.000004"},
+             "created": 3},
+            {"id": "~x/model-latest", "pricing": {"prompt": "0.000002",
+                                                  "completion": "0.000008"},
+             "created": 4},
+        ]}
+        monkeypatch.setattr(orc, "get_json", lambda *a, **k: payload)
+        slugs = {r["slug"] for r in orc.catalog_rows()}
+        assert slugs == {"x/model"}
+
+
+class TestSeatsMarkerOrder:
+    def test_end_before_begin_refuses(self, tmp_path):
+        """Counts alone passed, and the splice then deleted everything after
+        BEGIN while still producing parseable TOML."""
+        text = (f"chair = \"a/c\"\nreviewed = \"2020-01-01\"\n\n"
+                f"{orc.SEATS_END}\nseats = []\n{orc.SEATS_BEGIN}\n\n"
+                f"[fusion]\nmax_tool_calls = 4\n")
+        p = tmp_path / "models.toml"
+        p.write_text(text)
+        before = p.read_text()
+        with pytest.raises(SystemExit):
+            orc.rewrite_seats(p, NEW, "2026-09-01")
+        assert p.read_text() == before
+
+
+class TestFanOut:
+    def test_empty_slug_list_returns_empty(self):
+        """ThreadPoolExecutor(max_workers=0) raises ValueError."""
+        assert orc.fan_out([], "prompt", "key", 100) == {}
+
+
 class TestInputPriceCap:
     """--rank sends every seat the other seven answers, so input dominates
     there and an output-only ceiling misprices the workload."""

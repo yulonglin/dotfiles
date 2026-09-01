@@ -332,14 +332,19 @@ def cmd_models(args, cfg) -> None:
     if args.check:
         live = {m["id"]: m for m in get_json(f"{OR_BASE}/models").get("data", [])}
 
-    # Judge and panel are checked alongside [[models]], not skipped. Checking
-    # only the models table is what let a broken `judge` slug sit here breaking
-    # every fusion call unnoticed, so an on-demand check has to cover the same
-    # ground the scheduled drift check does.
+    # Chair and seats are checked alongside [[models]], not skipped. Checking
+    # only the models table is what let a broken synthesiser slug sit here
+    # breaking every fusion call unnoticed, so an on-demand check has to cover
+    # the same ground the scheduled drift check does.
+    #
+    # Aliases come from entries(), which spans seats AND off-roster models. It
+    # used to read cfg["models"] alone, so every council seat printed a blank
+    # alias -- and raised KeyError outright on a config with no [[models]]
+    # table, which is now a legitimate shape.
     bad = 0
     for role, slug in configured(cfg):
         alias = next(
-            (m.get("alias") or "" for m in cfg["models"] if m["slug"] == slug), ""
+            (m.get("alias") or "" for m in entries(cfg) if m["slug"] == slug), ""
         )
         row = f"{role:<7} {alias:<10} {slug}"
         if args.check:
@@ -829,7 +834,12 @@ def catalog_rows() -> list[dict]:
         # Floating aliases cannot be seated (they hide which tier answers) and
         # :batch variants are the same model on a slower, cheaper queue -- both
         # would distort a capability ranking rather than inform it.
-        if not slug or slug.startswith("~") or ":batch" in slug:
+        # Any ":" variant (:batch, :free, :nitro, ...) is the same model on
+        # different terms, so it distorts a capability ranking rather than
+        # informing it. ":free" is the dangerous one: it prices at 0/0, clears
+        # both caps, never matches an index name, and would therefore win the
+        # all-unscored fallback and seat a rate-limited tier.
+        if not slug or slug.startswith("~") or ":" in slug:
             continue
         provider, _, tail = slug.partition("/")
         if not provider or not tail:
@@ -972,6 +982,11 @@ def rewrite_seats(path: Path, picked: list[dict], today: str) -> None:
     text = path.read_text()
     if text.count(SEATS_BEGIN) != 1 or text.count(SEATS_END) != 1:
         die(f"{path}: expected exactly one {SEATS_BEGIN} / {SEATS_END} pair")
+    # Order too: with END above BEGIN the counts still pass, and the partition
+    # below would delete everything after BEGIN -- producing a file that still
+    # parses as TOML, so nothing downstream would notice the loss.
+    if text.index(SEATS_BEGIN) > text.index(SEATS_END):
+        die(f"{path}: {SEATS_END} appears before {SEATS_BEGIN}")
     head, _, rest = text.partition(SEATS_BEGIN)
     _, _, tail = rest.partition(SEATS_END)
     new = f"{head}{SEATS_BEGIN}\n{render_seats(picked)}\n{SEATS_END}{tail}"
@@ -1007,7 +1022,9 @@ def cmd_council_roster(args, cfg) -> None:
           f" ({'unknown age' if age is None else f'{age}d ago'}, review every {due}d)\n")
     print(f"{'alias':<8} {'slug':<32} {'score':>6}  basis")
     for s in current:
-        sc = "-" if not s.get("score") else f"{s['score']:.1f}"
+        # Read `basis`, never the magnitude: a normalised score can legitimately
+        # be 0.0, so "score == 0 means unscored" would hide a real measurement.
+        sc = "-" if s.get("basis") == "newest-in-line" else f"{s.get('score', 0):.1f}"
         print(f"{s['alias']:<8} {s['slug']:<32} {sc:>6}  {s.get('basis', '?')}")
     if not args.check:
         return
@@ -1040,7 +1057,7 @@ def cmd_council_refresh(args, cfg) -> None:
         die("index-driven pick produced no seats - refusing to empty the roster")
     print(f"{'family':<11} {'slug':<32} {'score':>6} {'out$/M':>7}  basis")
     for s in picked:
-        sc = "-" if not s["score"] else f"{s['score']:.1f}"
+        sc = "-" if s["basis"] == "newest-in-line" else f"{s['score']:.1f}"
         print(f"{s['family']:<11} {s['slug']:<32} {sc:>6} {s['out']:7.2f}  {s['basis']}")
     for fam in gaps:
         print(f"{fam:<11} (no model under the price caps)", file=sys.stderr)
@@ -1083,6 +1100,8 @@ def fan_out(slugs: list[str], prompt: str, key: str, max_tokens: int) -> dict[st
     here -- the caller decides whether a partial council is acceptable."""
     import concurrent.futures as cf
     out: dict[str, dict] = {}
+    if not slugs:
+        return out  # max_workers=0 raises; callers guard today, this is belt
     with cf.ThreadPoolExecutor(max_workers=len(slugs)) as pool:
         futs = {pool.submit(ask_one, s, prompt, key, max_tokens): s for s in slugs}
         for fut in cf.as_completed(futs):
@@ -1195,13 +1214,26 @@ def cross_rank(answers: dict[str, dict], question: str, key: str,
         labels = ballots[ranker][1]
         order = []
         for line in content.splitlines():
-            m = re.search(r"\b([A-H])\b", line.strip())
+            # The whole line must BE a label, allowing only list chrome around
+            # it ("B", "2. B", "- B."). Searching for any A-H in the line read
+            # the English article in "A ranking follows:" as a vote for A, and
+            # awarded it top rank.
+            m = re.fullmatch(r"[\s\-*>]*(?:\d+[.)]\s*)?([A-H])[\s.,:;)]*",
+                             line.strip())
             if m and m.group(1) in labels and labels[m.group(1)] not in order:
                 order.append(labels[m.group(1)])
         if not order:
             notes.append(f"{ranker} produced no parseable ranking")
             continue
-        n = len(order)
+        # Scale by the number of answers SHOWN, not the number parsed. Using
+        # len(order) let a ranker that named only its top pick award it 1 point
+        # where a complete ballot awards len(labels) -- silently deflating the
+        # opinion of anyone who answered tersely.
+        n = len(labels)
+        if len(order) < n:
+            notes.append(
+                f"{ranker} ranked {len(order)} of {n} answers; unranked ones "
+                "score 0 for this ballot")
         for pos, slug in enumerate(order):
             points[slug] += n - pos
     return points, notes
@@ -1391,6 +1423,10 @@ def cmd_council_ask(args, cfg) -> None:
         # contradictions and unique insights, and it fails closed on a degraded
         # panel. Fusion has no peer-ranking stage, which is what --rank adds.
         args.panel = ",".join(panel)
+        # cmd_fusion sends args.prompt, not our local `prompt`, so the context
+        # files have to be written back or the panel is billed for a question it
+        # never saw. This silently dropped every --context file before.
+        args.prompt = prompt
         return cmd_fusion(args, cfg)
 
     answers = fan_out(panel, prompt, key, max_tokens)

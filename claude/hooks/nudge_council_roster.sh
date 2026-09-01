@@ -57,9 +57,11 @@ if age <= due:
     sys.exit(0)
 
 seats = council.get("seats") or []
-# A seat scored 0 is seated on recency alone -- the index has not reached it.
-# Worth naming: it is the part of the roster resting on the least evidence.
-unscored = [s.get("alias", "?") for s in seats if not s.get("score")]
+# Read `basis`, not the score magnitude: with two indices the scores are
+# normalised, so a real measurement can legitimately be 0.0. "newest-in-line"
+# is the seat resting on recency alone -- the least evidence on the roster.
+unscored = [s.get("alias", "?") for s in seats
+            if s.get("basis") == "newest-in-line"]
 extra = f" {len(unscored)} seat(s) unscored ({', '.join(unscored)})." if unscored else ""
 print(
     f"The LLM council roster was last reviewed {age} days ago (every {due} days)."
