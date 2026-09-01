@@ -836,3 +836,37 @@ def test_the_stored_shape_stays_a_bare_array_with_the_new_key(page) -> None:
     assert data[0]["copiedAt"] > 0
     # the shape an older deployed layer calls .reduce() on
     assert page.evaluate("(r) => Array.isArray(JSON.parse(r))", raw)
+
+
+def test_copying_only_part_of_the_export_box_marks_nothing(page) -> None:
+    """A partial selection did not carry every comment out of the browser.
+
+    Stamping them all would put comments the reader never copied into the
+    set that "Delete copied" destroys -- the copy is the only evidence the
+    layer has, so half a copy has to count as no copy.
+    """
+    add_comment(page, SELECT_JS, "first note")
+    add_comment(page, SELECT_SECOND_JS, "second note")
+    open_export_via_blocked_clipboard(page)
+    page.wait_for_timeout(300)
+    assert "not yet copied out" in page.locator("#anCount").inner_text()
+
+    # Select a few characters instead of the whole blob, then copy.
+    page.evaluate(
+        "() => { const ta = document.getElementById('anExportText');"
+        "  ta.setSelectionRange(0, 12);"
+        "  ta.dispatchEvent(new ClipboardEvent('copy')); }"
+    )
+    page.wait_for_timeout(300)
+    assert "not yet copied out" in page.locator("#anCount").inner_text()
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+
+    # The whole blob still counts.
+    page.evaluate(
+        "() => { const ta = document.getElementById('anExportText');"
+        "  ta.setSelectionRange(0, ta.value.length);"
+        "  ta.dispatchEvent(new ClipboardEvent('copy')); }"
+    )
+    expect(page.locator("#anCount")).to_contain_text("copied out")
+    assert "not yet" not in page.locator("#anCount").inner_text()
+    expect(page.locator("#anClearCopied")).to_be_enabled()

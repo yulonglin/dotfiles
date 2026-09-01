@@ -833,6 +833,16 @@ $("anCopy").onclick = async function(){
   toast('<span class="anok">copied ' + comments.length + '</span>');
 };
 $("anExportText").addEventListener("copy", function(){
+  // A copy of PART of the box carried part of the Markdown, so it did not
+  // take every comment out of the browser. Stamping them all would drop
+  // comments the user never copied into the "Delete copied" set, which is now
+  // a set something deletes. The whole-blob case is the normal one: the box
+  // opens with everything already selected.
+  var ta = this;
+  if (ta.selectionStart !== 0 || ta.selectionEnd !== ta.value.length) {
+    toast('<span class="anwarn">partial copy \u2014 nothing marked copied out</span>', 4000);
+    return;
+  }
   markClean(exportSnap); render();
   toast('<span class="anok">copied ' + comments.length + '</span>');
 });
