@@ -1034,9 +1034,19 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
             fi
         fi
 
-        # Deploy remaining service/timer units verbatim
+        # Deploy remaining service/timer units verbatim.
+        #
+        # This list is enumerated, not globbed, so a unit added to
+        # config/systemd-user/ is NOT installed until its name appears here.
+        # openrouter-drift.{service,timer} were added in 2026-08 and never
+        # listed, so the "monthly drift check" documented in the second-opinion
+        # skill had never run on any box -- no unit, no timer, no state
+        # directory. Adding a unit file is half the change; this is the other
+        # half.
         for unit in reset-failed.service reset-failed.timer \
                     vault-sync-tripwire.service vault-sync-tripwire.timer \
+                    openrouter-drift.service openrouter-drift.timer \
+                    council-roster.service council-roster.timer \
                     romp-tailnet-proxy.service; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             # -f: installed units are copies, not symlinks into the repo, so a
@@ -1058,6 +1068,20 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                 log_warning "could not enable vault-sync-tripwire.timer"
             fi
         fi
+
+        # Model-roster timers. Both need no API key and no pueue: they read the
+        # public OpenRouter catalogue and the public Epoch index, and write only
+        # their own state directories. Enabled unconditionally for the same
+        # reason as the tripwire above -- a check that is installed but never
+        # scheduled reports nothing while looking healthy.
+        for timer in openrouter-drift.timer council-roster.timer; do
+            [[ -f "$systemd_user_dir/$timer" ]] || continue
+            if systemctl --user enable --now "$timer" 2>/dev/null; then
+                log_success "$timer enabled"
+            else
+                log_warning "could not enable $timer"
+            fi
+        done
 
         # Romp tailnet proxy: only where romp is actually installed. Enabling it
         # elsewhere leaves a service retrying a bind forever against a romp kernel
