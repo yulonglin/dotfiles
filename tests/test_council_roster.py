@@ -225,7 +225,7 @@ class TestAdvisorPair:
 class TestCrossRank:
     def test_needs_at_least_three_live_answers(self):
         answers = {"a/one": {"content": "x"}, "b/two": {"content": "y"}}
-        points, notes = orc.cross_rank(answers, "q", "key", 100)
+        points, notes, _ = orc.cross_rank(answers, "q", "key", 100)
         assert points == {} and notes
 
     def test_ballots_exclude_the_ranker_and_borda_totals(self, monkeypatch):
@@ -240,7 +240,7 @@ class TestCrossRank:
             return "\n".join(labels), {}
 
         monkeypatch.setattr(orc, "ask_one", fake_ask)
-        points, notes = orc.cross_rank(answers, "q", "key", 100)
+        points, notes, _ = orc.cross_rank(answers, "q", "key", 100)
         assert not notes
         for slug, prompt in seen.items():
             assert answers[slug]["content"] not in prompt, "a ranker saw its own answer"
@@ -251,7 +251,7 @@ class TestCrossRank:
     def test_an_unparseable_ballot_is_noted_not_fatal(self, monkeypatch):
         answers = {f"m/{i}": {"content": f"answer {i}"} for i in range(3)}
         monkeypatch.setattr(orc, "ask_one", lambda *a, **k: ("no labels here", {}))
-        points, notes = orc.cross_rank(answers, "q", "key", 100)
+        points, notes, _ = orc.cross_rank(answers, "q", "key", 100)
         assert points == {s: 0.0 for s in answers}
         assert len(notes) == 3
 
@@ -328,7 +328,8 @@ class TestBallotParsing:
     def _rank(self, monkeypatch, reply, n=3):
         answers = {f"m/{i}": {"content": f"answer {i}"} for i in range(n)}
         monkeypatch.setattr(orc, "ask_one", lambda *a, **k: (reply, {}))
-        return orc.cross_rank(answers, "q", "key", 100)
+        points, notes, _ = orc.cross_rank(answers, "q", "key", 100)
+        return points, notes
 
     def test_an_english_article_is_not_a_vote(self, monkeypatch):
         """'A ranking follows:' once credited label A with the TOP rank.
@@ -354,6 +355,26 @@ class TestBallotParsing:
     def test_list_chrome_around_a_label_still_counts(self, monkeypatch):
         points, _ = self._rank(monkeypatch, "1. B\n2. A")
         assert sum(points.values()) > 0
+
+
+class TestBallotUsageIsRecorded:
+    """The eight ballots are about half a --rank run's requests. Discarding
+    their usage left the call log -- whose whole job is to say what a run cost
+    -- understating the run by roughly half."""
+
+    def test_ballot_usage_is_returned_and_summed(self, monkeypatch):
+        answers = {f"m/{i}": {"content": f"answer {i}"} for i in range(3)}
+        monkeypatch.setattr(
+            orc, "ask_one",
+            lambda *a, **k: ("A\nB", {"usage": {"cost": 0.25, "total_tokens": 10}}))
+        _, _, usage = orc.cross_rank(answers, "q", "key", 100)
+        assert usage == {"cost": 0.75, "total_tokens": 30}
+
+    def test_no_ballots_yields_empty_usage(self, monkeypatch):
+        """Below three live answers cross-ranking is skipped entirely."""
+        answers = {"a/one": {"content": "x"}, "b/two": {"content": "y"}}
+        points, notes, usage = orc.cross_rank(answers, "q", "key", 100)
+        assert points == {} and notes and usage == {}
 
 
 class TestCatalogVariantExclusion:
