@@ -1060,7 +1060,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
         # This list is enumerated, not globbed, so a unit added to
         # config/systemd-user/ is NOT installed until its name appears here.
         # openrouter-drift.{service,timer} were added in 2026-08 and never
-        # listed, so the "monthly drift check" documented in the second-opinion
+        # listed, so the "monthly drift check" documented in the council
         # skill had never run on any box -- no unit, no timer, no state
         # directory. Adding a unit file is half the change; this is the other
         # half.

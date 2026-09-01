@@ -1231,6 +1231,76 @@ def estimate_council(chair: str, panel: list[str], prompt: str, rank: bool,
           f" chars/token; actual billing is reported per call)")
 
 
+def advisor_slugs(cfg: dict) -> list[str]:
+    """The two-model advisor pair, resolved from families to seated slugs.
+
+    Families rather than slugs so the pair follows a refresh: whoever holds the
+    anthropic and openai seats is the pair, with no second list to update.
+    """
+    council = cfg.get("council") or {}
+    fams = list(council.get("advisor_families") or [])
+    if not fams:
+        die("no [council].advisor_families configured")
+    by_family = {s.get("family"): s["slug"] for s in seats(cfg)}
+    out, missing = [], []
+    for f in fams:
+        if f in by_family:
+            out.append(by_family[f])
+        else:
+            missing.append(f)
+    if missing:
+        die(f"advisor_families names unseated families: {', '.join(missing)}")
+    return out
+
+
+def cmd_council_advise(args, cfg) -> None:
+    """Ask the two strongest families and show both answers, unsynthesised.
+
+    No chair on purpose. With two answers the disagreement IS the signal, and a
+    synthesis would average it away for the price of another call -- the exact
+    failure mode the council's bucket (d) exists to prevent.
+    """
+    pair = advisor_slugs(cfg)
+    caps = cfg.get("fusion", {})
+    max_tokens = caps.get("max_completion_tokens", 16000)
+    prompt = args.prompt + read_context(args.context or [])
+    if args.dry_run:
+        # Not estimate_council(): that prices a chair plus a panel plus a
+        # synthesis, and advise has no chair and no synthesis. Reusing it would
+        # mislabel the plan as well as overcharge it.
+        print(f"advisors: {', '.join(pair)}")
+        print(f"calls: {len(pair)} answers, no synthesis = {len(pair)}")
+        print(f"prompt {len(prompt)} chars, cap {max_tokens} tokens per call")
+        try:
+            price = {r["slug"]: (r["in"], r["out"]) for r in catalog_rows()}
+        except SystemExit:
+            print("\n(catalogue unreachable - no cost estimate)", file=sys.stderr)
+            return
+        q = len(prompt) / CHARS_PER_TOKEN
+        total = sum((q * price.get(s, (0, 0))[0]
+                     + TYPICAL_ANSWER_TOKENS * price.get(s, (0, 0))[1]) / 1e6
+                    for s in pair)
+        print(f"\nestimated cost ~${total:.2f}"
+              f" (assumes ~{TYPICAL_ANSWER_TOKENS} output tokens per answer)")
+        return
+    answers = fan_out(pair, prompt, api_key(), max_tokens)
+    log_call("advise", prompt,
+             [{"role": "advisor", "requested": s, "resolved": a.get("resolved"),
+               "error": a.get("error")} for s, a in answers.items()],
+             None, None)
+    live = [s for s in pair if answers[s].get("content")]
+    if not live:
+        die("no advisor answered")
+    for slug in pair:
+        a = answers[slug]
+        print(f"## {slug}\n")
+        print(a["content"] if a.get("content") else f"(no answer: {a.get('error')})")
+        print()
+    if len(live) < len(pair):
+        print("openrouter-cli: advisor pair incomplete - the answers above are "
+              "one view, not two", file=sys.stderr)
+
+
 def cmd_council_ask(args, cfg) -> None:
     council = cfg.get("council") or {}
     chair = chair_of(cfg)
@@ -1350,6 +1420,16 @@ def main() -> None:
     cf_.add_argument("--apply", action="store_true",
                      help="write the new seats into the config")
     cf_.set_defaults(fn=cmd_council_refresh)
+
+    cv = csub.add_parser(
+        "advise",
+        help="the cheap rung: the two strongest families, both answers, no synthesis")
+    cv.add_argument("prompt")
+    cv.add_argument("--context", metavar="PATH", action="append",
+                    help="inline a file into the brief; repeatable")
+    cv.add_argument("--dry-run", action="store_true",
+                    help="print the plan and a cost estimate instead of spending")
+    cv.set_defaults(fn=cmd_council_advise)
 
     ca = csub.add_parser("ask", help="put a question to the council")
     ca.add_argument("prompt")

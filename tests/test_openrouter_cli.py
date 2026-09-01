@@ -17,13 +17,20 @@ _spec = importlib.util.spec_from_loader("openrouter_cli", _loader)
 orc = importlib.util.module_from_spec(_spec)
 _loader.exec_module(orc)
 
+# Council seats are the roster: they supply the alias table AND the default
+# fusion panel, so there is no separate `panel` key to keep in step.
 CFG = {
-    "judge": "anthropic/claude-opus-4-8",
-    "panel": ["a/one", "b/two"],
-    "models": [
-        {"slug": "a/one", "alias": "one"},
-        {"slug": "b/two", "alias": "two"},
-    ],
+    "council": {
+        "chair": "anthropic/claude-opus-4-8",
+        "advisor_families": ["a", "b"],
+        "seats": [
+            {"slug": "a/one", "alias": "one", "family": "a", "score": 9.0,
+             "basis": "eci"},
+            {"slug": "b/two", "alias": "two", "family": "b", "score": 8.0,
+             "basis": "eci"},
+        ],
+    },
+    "models": [{"slug": "c/three", "alias": "three"}],
 }
 
 

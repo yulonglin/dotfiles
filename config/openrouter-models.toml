@@ -89,6 +89,17 @@ families = [
   "google",
 ]
 
+# The cheap rung: `openrouter-cli council advise` asks only the seats from these
+# families and prints both answers side by side, with no chair and no synthesis.
+# Two strong, disagreeing priors answer most questions that need a second view,
+# at roughly a fifth of a full council's cost.
+#
+# Families, not slugs, so this stays index-driven: whoever holds the anthropic
+# and openai seats after a refresh becomes the advisor pair automatically. Today
+# that is claude-fable-5 and gpt-5.6-sol, the two highest-scoring models in the
+# catalogue under the price cap.
+advisor_families = ["anthropic", "openai"]
+
 # Per-seat output-price ceiling in USD per million tokens. 60.0 admits
 # `claude-fable-5` at $50 and excludes `gpt-5.5-pro` at $180. Raising this
 # changes which models can be seated, so it is a spend decision: a council run

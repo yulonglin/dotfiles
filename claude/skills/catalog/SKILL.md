@@ -87,7 +87,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 
 | Skill | Use when |
 |---|---|
-| `second-opinion` | "sanity check this", "am I wrong", adversarial review — routes to Fable, codex-companion, OpenCode |
+| `council` | "second opinion", "sanity check this", "am I wrong", "llm council", panel review — one ladder from one model to an eight-seat panel with blind peer ranking |
 | `openrouter-fusion` | A multi-model panel with judge synthesis, one non-Anthropic model, or the raw OpenRouter API reference |
 
 ## Code, git and session workflow
