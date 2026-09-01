@@ -1,6 +1,6 @@
 ---
 name: artifact-writing
-description: The mechanics of publishing to the Artifact platform — md2artifact, the annotation and commenting layer, localStorage keys and comment recovery, transcript and code-block rendering, sortable tables, the table of contents, mermaid layout, title-from-H1, republishing in place, org-mismatch recovery and supersedes notes, and the viewer sandbox quirks (no confirm/alert/prompt, no page-initiated downloads). Use when publishing or updating any report, plan, spec, findings page, transcript view or dashboard as an Artifact, when running md2artifact, when building or debugging a select-to-comment layer, when a republish is refused, or when a control works locally but not in the viewer.
+description: The mechanics of publishing to the Artifact platform — md2artifact, the annotation and commenting layer, rendering, republishing, and the viewer sandbox quirks. Use when publishing or updating any report, plan, spec, findings page, transcript view or dashboard as an Artifact, when running md2artifact, when building or debugging a select-to-comment layer, when a republish is refused, or when a control works locally but not in the viewer.
 ---
 
 # Artifact Writing

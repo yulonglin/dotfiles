@@ -1,6 +1,6 @@
 ---
 name: tufte-data-viz
-description: The chart-quality pass — review or style ANY chart, graph, plot, dashboard, sparkline, table or data visualization for clarity, in any library and any medium. Use when drawing a new chart, when reviewing or critiquing an existing one, when a figure is cluttered or hard to read, when asked to "clean up", "improve" or "make this chart clearer", and when checking a figure before it ships. Covers data-ink (no chartjunk, no gridlines, no 3D, no pie charts), direct labeling instead of legends, range-frame axes, gray-first colour with one accent, titles that assert the finding, numbers formatted for humans, and screen-first standards — accessibility and contrast, responsive layout, dark mode, progressive disclosure. Applies to Recharts, ECharts, Chart.js, matplotlib, Plotly, seaborn, D3.js, inline SVG, HTML and artifact pages alike.
+description: The chart-quality pass — review or style ANY chart, graph, plot, dashboard, sparkline, table or data visualization for clarity, in any library and any medium. Use when drawing a new chart, when reviewing or critiquing an existing one, when a figure is cluttered or hard to read, when asked to "clean up", "improve" or "make this chart clearer", and when checking a figure before it ships.
 allowed-tools: Read, Glob, Grep
 ---
 
