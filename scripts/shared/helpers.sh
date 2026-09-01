@@ -18,7 +18,64 @@ log_info()    { echo "  $*"; }
 log_success() { echo "✓ $*"; }
 log_warning() { echo "⚠️  $*"; }
 log_error()   { echo "✗ $*" >&2; }
-log_section() { echo ""; echo "───────── $* ─────────"; }
+# Sections carry a counter and the run's elapsed time, so "is it stuck?" is
+# answerable at a glance — the question that made silent steps read as hangs.
+# DOTFILES_SECTION_TOTAL (optional) turns the counter into "n/total".
+typeset -g DOTFILES_SECTION_N=0
+typeset -g DOTFILES_RUN_START=${DOTFILES_RUN_START:-$SECONDS}
+log_section() {
+    DOTFILES_SECTION_N=$((DOTFILES_SECTION_N + 1))
+    local counter="$DOTFILES_SECTION_N"
+    [[ -n "${DOTFILES_SECTION_TOTAL:-}" ]] && counter="${counter}/${DOTFILES_SECTION_TOTAL}"
+    local elapsed=$((SECONDS - DOTFILES_RUN_START))
+    printf '\n───────── [%s] %s (%dm%02ds) ─────────\n' \
+        "$counter" "$*" "$((elapsed / 60))" "$((elapsed % 60))"
+}
+
+# Run a long, quiet command with a live spinner + elapsed seconds on a TTY, so
+# it never looks hung. Output is captured and replayed on failure only.
+#
+# Leaves NO scrollback behind: the spinner redraws one line in place with \r and
+# erases it (\033[K) before printing the single result line. It ticks once a
+# second rather than faster, which also keeps it cheap over mosh — mosh
+# coalesces frames, so a fast spinner would only burn bandwidth for frames
+# nobody sees. Opt out with DOTFILES_NO_PROGRESS=1, and TERM=dumb (or any
+# non-TTY: pipes, cron, CI) takes the plain path automatically.
+#
+# Usage: run_with_progress "Label" <cmd> [args...]
+run_with_progress() {
+    local label="$1"; shift
+    local logfile; logfile=$(mktemp "${TMPDIR:-/tmp}/progress.XXXXXX")
+
+    if ! [[ -t 1 ]] || [[ "${DOTFILES_NO_PROGRESS:-0}" == "1" ]] || [[ "${TERM:-}" == "dumb" ]]; then
+        log_info "${label}..."
+        "$@" >"$logfile" 2>&1
+        local rc=$?
+        (( rc != 0 )) && cat "$logfile" >&2
+        rm -f "$logfile"
+        return $rc
+    fi
+
+    "$@" >"$logfile" 2>&1 &
+    local pid=$! start=$SECONDS i=0
+    local frames='|/-\'
+    while kill -0 "$pid" 2>/dev/null; do
+        printf '\r  %s %s (%ds)' "${frames[$((i % 4 + 1))]}" "$label" "$((SECONDS - start))"
+        i=$((i + 1))
+        sleep 1
+    done
+    wait "$pid"
+    local rc=$?
+    printf '\r\033[K'
+    if (( rc == 0 )); then
+        log_success "${label} ($((SECONDS - start))s)"
+    else
+        log_warning "${label} failed after $((SECONDS - start))s"
+        cat "$logfile" >&2
+    fi
+    rm -f "$logfile"
+    return $rc
+}
 
 # ─── Interactive Component Menu ──────────────────────────────────────────────
 
@@ -68,12 +125,19 @@ _fetch_claude_tools() {
     [[ -z "$slug" ]] && return 1
 
     local url="https://github.com/${slug}/releases/download/claude-tools-bin/${asset}"
-    log_info "Fetching prebuilt claude-tools (${asset})..."
     mkdir -p "${DOT_DIR}/custom_bins"
     local tmp="${bin}.tmp.$$"
 
     # HTTPS + TLS 1.2 only; never pipe-to-shell — download to temp, then verify.
-    if ! curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmp" 2>/dev/null; then
+    # Deadlines are mandatory here: this runs at the top of both scripts, before
+    # anything is printed but one log line, so an untimed fetch reads as a hang.
+    # Wrapped in the spinner because this is the very first thing either script
+    # does: a silent pause here is what a stall looks like to whoever is
+    # watching, even when it is only a slow download.
+    if ! run_with_progress "Fetching prebuilt claude-tools (${asset})" \
+        curl --proto '=https' --tlsv1.2 -fsSL \
+        --connect-timeout 10 --max-time 120 --retry 2 --retry-max-time 120 \
+        "$url" -o "$tmp"; then
         rm -f "$tmp"; return 1
     fi
 
@@ -96,8 +160,16 @@ _fetch_claude_tools() {
 _build_claude_tools_from_source() {
     cmd_exists cargo || return 1
     [[ -f "${DOT_DIR}/tools/claude-tools/Cargo.toml" ]] || return 1
-    log_info "Building claude-tools from source (fallback)..."
-    ( cd "${DOT_DIR}/tools/claude-tools" && cargo build --release --quiet ) || return 1
+    # A cold Rust build is minutes long. It used to run --quiet, which made the
+    # top of every install indistinguishable from a hang; cargo's own progress
+    # now shows, and a deadline bounds it. This is the stall that outlived
+    # several rounds of prompt fixes, because it is not a prompt.
+    log_info "Building claude-tools from source (fallback) — a cold build takes a few minutes..."
+    ( cd "${DOT_DIR}/tools/claude-tools" \
+        && run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release ) || {
+        log_warning "claude-tools build failed or exceeded its deadline — continuing with defaults"
+        return 1
+    }
     local asset; asset="$(_claude_tools_asset)"
     [[ -z "$asset" ]] && return 1
     mkdir -p "${DOT_DIR}/custom_bins"
@@ -198,8 +270,26 @@ show_component_menu() {
     local items_file result
     items_file=$(mktemp "${TMPDIR:-/tmp}/claude-tools-select.XXXXXX")
     printf '%s' "$stdin_input" > "$items_file"
-    result=$(claude-tools select --title "Select ${mode} components" --items "$items_file")
-    local rc=$?
+    # A TTY is not proof a human is watching it: launched in tmux, from an agent
+    # pty, or simply walked away from, this menu would wait forever at the very
+    # top of the run. The deadline makes an unattended run proceed with whatever
+    # is pre-checked (the profile's set, plus any config.local.sh delta), which
+    # is exactly what --non-interactive would have installed.
+    #
+    # `|| rc=$?` is load-bearing, not decoration: both scripts run under
+    # `set -euo pipefail`, and in zsh a failing command substitution in a plain
+    # assignment aborts the script THERE — verified, exit 124 with nothing
+    # printed. Without this, the 124 branch below was unreachable and an
+    # unattended TTY run died silently after the timeout having installed
+    # nothing, which is the exact scenario the deadline was added to rescue.
+    local rc=0
+    result=$(run_with_timeout "${DOTFILES_MENU_TIMEOUT:-60}" \
+        claude-tools select --title "Select ${mode} components" --items "$items_file") || rc=$?
+    if (( rc == 124 )); then
+        log_warning "Component menu unanswered for ${DOTFILES_MENU_TIMEOUT:-60}s — continuing with the default selection"
+        rm -f "$items_file"
+        return 0
+    fi
     rm -f "$items_file"
     [[ $rc -ne 0 ]] && return 0
 
@@ -231,6 +321,94 @@ cmd_exists() {
     command -v "$1" &>/dev/null
 }
 
+# ─── Deadlines ────────────────────────────────────────────────────────────────
+# The installers must never stall: every network fetch and every prompt carries
+# a deadline, so an unattended run (tmux pane, agent pty, cron) fails loudly in
+# minutes instead of hanging at hour zero.
+
+# Network fetch with deadlines. Drop-in for `curl -fsSL` — extra curl args pass
+# through (-o, --retry overrides, headers). 10s to connect, two retries on
+# transient failures, and 300s OVERALL.
+#
+# --retry-max-time is what makes "overall" true. Per `man curl`, --max-time is
+# "the maximum time that you allow each transfer to take", and "if you enable
+# retrying the transfer (--retry) then the maximum time counter is reset each
+# time the transfer is retried" — so --max-time 300 --retry 2 is three
+# transfers, up to ~900s, three times the number this comment used to claim.
+# --retry-max-time bounds the whole sequence.
+fetch() {
+    curl -fsSL --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 "$@"
+}
+
+# Every apt/dpkg call must bound its wait for the lock. On a fresh box
+# unattended-upgrades holds it at boot, and DEBIAN_FRONTEND does nothing about
+# that — apt just waits, forever, with no output. One definition so a new call
+# site cannot quietly omit it.
+APT_LOCK_OPT=(-o "DPkg::Lock::Timeout=${APT_LOCK_TIMEOUT:-120}")
+
+# Run a command under a deadline where the platform allows it. timeout(1) is
+# coreutils — present on Linux, absent on stock macOS (until `core` installs
+# coreutils, which provides no unprefixed `timeout` anyway) — so this degrades
+# to running without a deadline rather than failing. --foreground keeps TTY
+# prompts (sudo, TUIs) able to read the terminal. Exit 124 means the deadline
+# fired.
+run_with_timeout() {
+    local _secs="$1"; shift
+    if [[ "$_secs" == "0" ]]; then
+        "$@"   # 0 disables the deadline (test hook, and an explicit opt-out)
+    elif cmd_exists timeout; then
+        timeout --foreground "$_secs" "$@"
+    elif cmd_exists gtimeout; then
+        gtimeout --foreground "$_secs" "$@"
+    else
+        _watchdog_run "$_secs" "$@"
+    fi
+}
+
+# Deadline without coreutils. This exists for exactly one situation, and it is
+# not a rare one: a FRESH Mac. macOS ships no `timeout`, and `gtimeout` arrives
+# only with coreutils — which install.sh installs *after* the component menu and
+# the sudo prompt have already run. Falling back to running unbounded there
+# would leave the first run on every new Mac, the run most likely to be watched
+# by nobody, with no deadline at all.
+#
+# Why backgrounding is safe here despite the command needing a TTY: scripts run
+# with job control off, so `cmd &` does NOT put the child in a new process
+# group. It stays in the terminal's foreground group and can still read the
+# terminal — SIGTTIN only strikes a background *process group*. Interactive
+# shells (job control on) would behave differently, which is why this is a
+# script-only helper.
+#
+# Returns 124 on expiry, matching timeout(1), because callers switch on it.
+_watchdog_run() {
+    local _secs="$1"; shift
+    # zsh points a BACKGROUNDED job's stdin at /dev/null even when the shell's
+    # own stdin is a terminal, and `<&0` does not undo it (both measured under
+    # a pty). The process-group reasoning above is correct but says nothing
+    # about stdin, so the fresh-Mac fallback was handing the component menu and
+    # chsh's PAM prompt an instant EOF — the two things on this path that must
+    # read the user. Re-attach the controlling terminal explicitly.
+    if [[ -t 0 ]]; then
+        "$@" </dev/tty &
+    else
+        "$@" &
+    fi
+    local _pid=$! _waited=0
+    while (( _waited < _secs )); do
+        kill -0 "$_pid" 2>/dev/null || break
+        sleep 1
+        _waited=$((_waited + 1))
+    done
+    if kill -0 "$_pid" 2>/dev/null; then
+        kill -TERM "$_pid" 2>/dev/null || true
+        sleep 1
+        kill -KILL "$_pid" 2>/dev/null || true
+        wait "$_pid" 2>/dev/null
+        return 124
+    fi
+    wait "$_pid"
+}
+
 # Cache sudo credentials once, up front, so privileged steps later in the run
 # don't block on a password prompt mid-install. A background keepalive refreshes
 # the timestamp until the calling script exits. No-op if sudo is already cached,
@@ -242,7 +420,10 @@ front_load_sudo() {
     [[ -t 0 ]] || return 0
     sudo -n true 2>/dev/null && return 0   # already cached — no prompt needed
     log_info "Some steps need administrator access — caching sudo credentials up front."
-    sudo -v || return 0
+    # A TTY is no proof anyone is watching it (tmux pane, agent pty), so the
+    # prompt itself carries a deadline; unanswered, sudo-needing steps skip.
+    # DOTFILES_PROMPT_TIMEOUT: seconds (0 disables the deadline; tests shrink it).
+    run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v || { log_warning "sudo prompt unanswered — privileged steps will be skipped"; return 0; }
     # Refresh until the parent script exits (canonical installer pattern).
     ( while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done ) &>/dev/null &
 }
@@ -360,7 +541,7 @@ BREW_NONINTERACTIVE_ENV=(
     HOMEBREW_NO_INSTALL_CLEANUP=1
 )
 
-# Install package via Homebrew (macOS)
+# Install package via Homebrew (macOS and Linuxbrew)
 brew_install() {
     local pkg="$1"
     local cask="${2:-false}"
@@ -392,20 +573,7 @@ apt_install() {
     if apt_is_installed "$pkg"; then
         return 0
     fi
-    sudo apt install -y "$pkg" 2>/dev/null || log_warning "$pkg installation via apt failed"
-}
-
-# Install package via mise (Linux)
-mise_install() {
-    local pkg="$1"
-    if ! cmd_exists mise; then
-        log_warning "mise not available for $pkg"
-        return 1
-    fi
-    if mise where "$pkg" &>/dev/null; then
-        return 0
-    fi
-    mise use -g "$pkg" || log_warning "$pkg installation via mise failed"
+    sudo apt install -y "${APT_LOCK_OPT[@]}" "$pkg" 2>/dev/null || log_warning "$pkg installation via apt failed"
 }
 
 # Install multiple packages
@@ -427,14 +595,17 @@ install_packages() {
             return 0
         fi
         log_info "Installing ${#missing[@]} missing package(s): ${missing[*]}"
-        sudo apt install -y "${missing[@]}" 2>/dev/null || log_warning "Some apt packages failed to install"
+        # DPkg::Lock::Timeout bounds the wait for the dpkg lock, which
+        # DEBIAN_FRONTEND does not touch: on a fresh box running
+        # unattended-upgrades at boot, apt otherwise blocks indefinitely.
+        sudo apt install -y "${APT_LOCK_OPT[@]}" "${missing[@]}" 2>/dev/null \
+            || log_warning "Some apt packages failed to install"
         return
     fi
 
     for pkg in "$@"; do
         case "$manager" in
             brew) brew_install "$pkg" ;;
-            mise) mise_install "$pkg" ;;
         esac
     done
 }
@@ -448,7 +619,7 @@ install_gitleaks() {
         brew_install gitleaks
     else
         local version arch tmpd
-        version=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "8.24.3")
+        version=$(fetch https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "8.24.3")
         case "$(uname -m)" in
             x86_64)  arch="x64" ;;
             aarch64) arch="arm64" ;;
@@ -456,7 +627,7 @@ install_gitleaks() {
         esac
         tmpd=$(mktemp -d)
         mkdir -p "$HOME/.local/bin"
-        curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_${arch}.tar.gz" -o "$tmpd/gitleaks.tar.gz" && \
+        fetch "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_${arch}.tar.gz" -o "$tmpd/gitleaks.tar.gz" && \
         tar -xzf "$tmpd/gitleaks.tar.gz" -C "$tmpd" && \
         mv "$tmpd/gitleaks" "$HOME/.local/bin/" && \
         log_success "gitleaks $version installed" || { log_warning "gitleaks installation failed"; rm -rf "$tmpd"; return 1; }
@@ -471,7 +642,7 @@ install_sops() {
         brew_install sops
     else
         local sops_ver sops_arch
-        sops_ver=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        sops_ver=$(fetch https://api.github.com/repos/getsops/sops/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
         sops_ver="${sops_ver:-3.9.4}"
         case "$(uname -m)" in
             x86_64)  sops_arch="amd64" ;;
@@ -479,7 +650,7 @@ install_sops() {
             *)       log_warning "Unsupported architecture for sops"; return 1 ;;
         esac
         mkdir -p "$HOME/.local/bin"
-        curl -fsSL "https://github.com/getsops/sops/releases/download/v${sops_ver}/sops-v${sops_ver}.linux.${sops_arch}" -o "$HOME/.local/bin/sops" && \
+        fetch "https://github.com/getsops/sops/releases/download/v${sops_ver}/sops-v${sops_ver}.linux.${sops_arch}" -o "$HOME/.local/bin/sops" && \
             chmod +x "$HOME/.local/bin/sops" && \
             log_success "sops $sops_ver installed" || { log_warning "sops installation failed"; return 1; }
     fi
@@ -492,7 +663,7 @@ install_age() {
         brew_install age
     else
         local age_ver age_arch tmpd
-        age_ver=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        age_ver=$(fetch https://api.github.com/repos/FiloSottile/age/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
         age_ver="${age_ver:-1.2.1}"
         case "$(uname -m)" in
             x86_64)  age_arch="amd64" ;;
@@ -501,7 +672,7 @@ install_age() {
         esac
         tmpd=$(mktemp -d)
         mkdir -p "$HOME/.local/bin"
-        curl -fsSL "https://github.com/FiloSottile/age/releases/download/v${age_ver}/age-v${age_ver}-linux-${age_arch}.tar.gz" -o "$tmpd/age.tar.gz" && \
+        fetch "https://github.com/FiloSottile/age/releases/download/v${age_ver}/age-v${age_ver}-linux-${age_arch}.tar.gz" -o "$tmpd/age.tar.gz" && \
             tar -xzf "$tmpd/age.tar.gz" -C "$tmpd" && \
             mv "$tmpd/age/age" "$tmpd/age/age-keygen" "$HOME/.local/bin/" && \
             log_success "age $age_ver installed" || { log_warning "age installation failed"; rm -rf "$tmpd"; return 1; }
@@ -515,7 +686,11 @@ install_direnv() {
     if is_macos; then
         brew_install direnv
     else
-        curl -sfL https://direnv.net/install.sh | bash 2>/dev/null || { log_warning "direnv installation failed"; return 1; }
+        # Deadlines on both halves: the fetch, and the script it pipes to bash
+        # (an installer that stalls hangs the run just as hard as a stalled curl).
+        fetch https://direnv.net/install.sh 2>/dev/null \
+            | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" bash 2>/dev/null \
+            || { log_warning "direnv installation failed or timed out"; return 1; }
     fi
 }
 
@@ -538,7 +713,8 @@ install_rust_toolchain() {
             rustup default stable 2>/dev/null || log_warning "rustup default stable failed"
         fi
     else
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 \
+            https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
     fi
     source "$HOME/.cargo/env" 2>/dev/null || true
 }
@@ -560,7 +736,7 @@ install_bws() {
         esac
         url="https://github.com/bitwarden/sdk-sm/releases/download/bws-v${bws_version}/bws-${arch}-unknown-linux-gnu-${bws_version}.zip"
     fi
-    if curl -fsSL "$url" -o "$tmpd/bws.zip" && \
+    if fetch "$url" -o "$tmpd/bws.zip" && \
        unzip -o "$tmpd/bws.zip" -d "$HOME/.local/bin/" && \
        chmod +x "$HOME/.local/bin/bws"; then
         log_success "bws installed"
@@ -575,7 +751,9 @@ install_bws() {
 install_claude_code() {
     if is_installed claude; then return 0; fi
     log_info "Installing Claude Code..."
-    curl -fsSL https://claude.ai/install.sh | bash || { log_warning "Claude Code installation failed"; return 1; }
+    fetch https://claude.ai/install.sh \
+        | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" bash \
+        || { log_warning "Claude Code installation failed or timed out"; return 1; }
     # Alpine Linux dependencies
     if is_linux && cmd_exists apk; then
         apk add libgcc libstdc++ ripgrep 2>/dev/null || true
@@ -681,12 +859,38 @@ run_parallel() {
             trap 'echo $? > "'"$tmpdir/$name"'.exitcode"' EXIT
             eval "$cmd"
         ) &>"$tmpdir/$name.log" &
-        pids[$name]=$!
+        # QUOTED deliberately: in zsh an unquoted $! on the RHS of an
+        # array-subscript assignment is not expanded — the map stores the
+        # literal string "$!", every later `kill -0` fails, and the bounded
+        # wait below silently becomes dead code.
+        pids[$name]="$!"
     done
 
-    # Wait for all jobs
+    # Bounded wait. A bare `wait` means ONE hung child (an untimed fetch, a
+    # stuck package manager) hangs the entire run with no indication of which
+    # job is stuck. The deadline is enforced here rather than around `eval`
+    # because the jobs call helper functions that only exist in this shell.
+    local _job_deadline=$((SECONDS + ${DOTFILES_JOB_TIMEOUT:-600}))
     for name in "${job_names[@]}"; do
-        wait ${pids[$name]} 2>/dev/null || true
+        local _pid=${pids[$name]}
+        while kill -0 "$_pid" 2>/dev/null && (( SECONDS < _job_deadline )); do
+            sleep 0.5
+        done
+        if kill -0 "$_pid" 2>/dev/null; then
+            log_warning "$name exceeded ${DOTFILES_JOB_TIMEOUT:-600}s — terminating it"
+            # Descendants first: the job's real work runs as a grandchild of
+            # this subshell (`eval "$cmd"`), so killing only $_pid leaves it
+            # running and orphaned — measured, not assumed. Job control is off
+            # in scripts, so the children do not form their own process group
+            # and `kill -- -$_pid` is not available.
+            pkill -TERM -P "$_pid" 2>/dev/null || true
+            kill -TERM "$_pid" 2>/dev/null || true
+            sleep 1
+            pkill -KILL -P "$_pid" 2>/dev/null || true
+            kill -KILL "$_pid" 2>/dev/null || true
+            [[ -f "$tmpdir/$name.exitcode" ]] || echo 124 > "$tmpdir/$name.exitcode"
+        fi
+        wait "$_pid" 2>/dev/null || true
     done
 
     # Replay logs and collect results
@@ -694,7 +898,10 @@ run_parallel() {
     PARALLEL_FAILURES=()
 
     for name in "${job_names[@]}"; do
-        local rc=0
+        # Absent exitcode means the job did not finish normally — killed
+        # before its EXIT trap ran, or no temp dir at all. Defaulting that to 0
+        # reported a still-running job as PASSED.
+        local rc=124
         [[ -f "$tmpdir/$name.exitcode" ]] && rc=$(<"$tmpdir/$name.exitcode")
 
         if [[ "$rc" -eq 0 ]]; then
@@ -730,11 +937,21 @@ set_zsh_default() {
     zsh_path=$(which zsh 2>/dev/null)
 
     if [[ -x "$zsh_path" ]] && sudo -n true 2>/dev/null; then
+        # chsh prompts PAM for the USER's password on Linux even when
+        # passwordless sudo works, so it runs only attended and with a
+        # deadline — a TTY nobody is watching must not hang the install.
+        if ! [[ -t 0 ]]; then
+            log_warning "Skipping default-shell change (no TTY for chsh's password prompt) — run: chsh -s $zsh_path"
+            return 0
+        fi
         log_info "Setting ZSH as default shell..."
         grep -qxF "$zsh_path" /etc/shells 2>/dev/null || \
             echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
-        chsh -s "$zsh_path"
-        log_success "Default shell changed to ZSH"
+        if run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" chsh -s "$zsh_path"; then
+            log_success "Default shell changed to ZSH"
+        else
+            log_warning "chsh unanswered or failed — run: chsh -s $zsh_path"
+        fi
     fi
 }
 
@@ -763,10 +980,23 @@ install_ohmyzsh() {
     fi
 
     log_info "Installing oh-my-zsh..."
+    # Fetch BEFORE deleting, and check it. `sh -c "$(fetch …)"` in argument
+    # position does not trip errexit: a failed fetch yields an empty string, sh
+    # runs nothing and exits 0. Combined with the old ordering — rm -rf first —
+    # a transient network failure under FORCE_REINSTALL deleted a working
+    # oh-my-zsh and "installed" nothing, silently, and the p10k clone into the
+    # empty tree hid it.
+    local _omz_installer
+    if ! _omz_installer=$(fetch https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh) \
+       || [[ -z "$_omz_installer" ]]; then
+        log_warning "Could not fetch the oh-my-zsh installer — leaving $zsh_dir untouched"
+        return 1
+    fi
     rm -rf "$zsh_dir"
     # Unset ZSH so the official installer doesn't refuse when $ZSH points elsewhere
     # (e.g., RunPod containers where /root/.oh-my-zsh exists but HOME=/workspace)
-    ZSH="$zsh_dir" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    ZSH="$zsh_dir" run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" \
+        sh -c "$_omz_installer" "" --unattended
 
     log_info "Installing powerlevel10k theme..."
     git clone --quiet https://github.com/romkatv/powerlevel10k.git \
@@ -821,14 +1051,14 @@ can_sudo() {
 install_gh_from_apt_repo() {
     log_info "Installing gh from official GitHub apt repo..."
     local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
-    cmd_exists wget || $SUDO apt-get install -y wget 2>/dev/null
+    cmd_exists wget || $SUDO apt-get install -y "${APT_LOCK_OPT[@]}" wget 2>/dev/null
     $SUDO mkdir -p -m 755 /etc/apt/keyrings || return 1
-    wget -nv -O- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    wget -nv --timeout=10 --tries=2 -O- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
         | $SUDO tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null || return 1
     $SUDO chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
         | $SUDO tee /etc/apt/sources.list.d/github-cli.list > /dev/null || return 1
-    $SUDO apt update 2>/dev/null && $SUDO apt install gh -y 2>/dev/null
+    $SUDO apt update "${APT_LOCK_OPT[@]}" 2>/dev/null && $SUDO apt install gh -y "${APT_LOCK_OPT[@]}" 2>/dev/null
 }
 
 # Install and authenticate GitHub CLI
@@ -894,7 +1124,7 @@ install_gh_from_release() {
     log_info "Installing gh from GitHub releases..."
     local version arch
 
-    version=$(curl -s https://api.github.com/repos/cli/cli/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "2.62.0")
+    version=$(fetch https://api.github.com/repos/cli/cli/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2 || echo "2.62.0")
 
     case "$(uname -m)" in
         x86_64)  arch="amd64" ;;
@@ -903,20 +1133,20 @@ install_gh_from_release() {
     esac
 
     mkdir -p "$HOME/.local/bin"
-    curl -sSL "https://github.com/cli/cli/releases/download/v${version}/gh_${version}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz && \
+    fetch "https://github.com/cli/cli/releases/download/v${version}/gh_${version}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz && \
     tar -xzf /tmp/gh.tar.gz -C /tmp && \
     mv "/tmp/gh_${version}_linux_${arch}/bin/gh" "$HOME/.local/bin/" && \
     rm -rf /tmp/gh.tar.gz "/tmp/gh_${version}_linux_${arch}"
 }
 
-# ─── Node.js LTS (global runtime, NOT a mise tool) ────────────────────────────
+# ─── Node.js LTS (global runtime, NOT a brew tool on Linux) ───────────────────
 
 # Node is a RUNTIME that other tools shebang against (e.g. obsidian-headless's
 # `ob` → #!/usr/bin/env node), so it must resolve on a global PATH that
-# systemd/cron contexts see — which mise's shell-activated shims do not. Install
-# it globally: NodeSource's setup_lts.x on Linux (the *current LTS* line — only
-# even/LTS majors, never an odd "Current" release), brew on macOS; never via
-# mise, which here manages interactive leaf-CLIs only (fzf, bat, …).
+# systemd/cron contexts see — which Linuxbrew's shell-activated prefix does not.
+# Install it globally: NodeSource's setup_lts.x on Linux (the *current LTS* line
+# — only even/LTS majors, never an odd "Current" release), brew on macOS; never
+# Linuxbrew, which here manages interactive leaf-CLIs only (fzf, bat, …).
 #
 # The skip-guard floor is the *live* latest-LTS major fetched from nodejs.org
 # (fallback 24 = Krypton if offline), NOT a hardcoded number. That keeps two
@@ -928,7 +1158,7 @@ install_node() {
     # Current LTS major from nodejs.org; dist index is newest-first and r['lts']
     # is the codename (truthy) for LTS releases, false otherwise.
     local want
-    want=$(curl -fsSL https://nodejs.org/dist/index.json 2>/dev/null \
+    want=$(fetch https://nodejs.org/dist/index.json 2>/dev/null \
         | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null)
     [[ "$want" =~ ^[0-9]+$ ]] || want=24
     if is_installed node && (( $(node -v | cut -d. -f1 | tr -d 'v') >= want )); then
@@ -945,30 +1175,106 @@ install_node() {
     # Install unconditionally; apt resolves the NodeSource candidate (a higher
     # version than Ubuntu's, so an already-installed nodejs is upgraded in place).
     local SUDO=""; [[ $EUID -ne 0 ]] && SUDO="sudo"
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash - \
+    # An ARRAY, not "$SUDO -E": as root $SUDO is empty and the word simply
+    # disappears, leaving `-E bash -`, i.e. an attempt to run a command called
+    # `-E`. Measured: `timeout: failed to run command '-E'`, rc 127, swallowed
+    # by the `|| log_warning` below — so the NodeSource repo was never added
+    # and apt then installed stock Ubuntu node. `-E` is a sudo flag and has no
+    # meaning without sudo. This is the README's cloud path (root over ssh).
+    local -a _node_setup
+    if [[ -n "$SUDO" ]]; then
+        _node_setup=(sudo -E bash -)
+    else
+        _node_setup=(bash -)
+    fi
+    fetch https://deb.nodesource.com/setup_lts.x \
+        | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" "${_node_setup[@]}" \
         || log_warning "NodeSource setup script exited non-zero (repo may still be configured) — continuing"
-    $SUDO apt-get install -y nodejs || log_warning "Node install via apt failed — install Node LTS manually"
+    $SUDO apt-get install -y "${APT_LOCK_OPT[@]}" nodejs || log_warning "Node install via apt failed — install Node LTS manually"
 }
 
-# ─── Mise (Universal Version Manager) ─────────────────────────────────────────
+# ─── Linuxbrew (CLI tool manager on Linux) ────────────────────────────────────
 
-install_mise() {
-    if is_installed mise; then
+# Homebrew is the single source of modern CLI leaf-tools on Linux as well as
+# macOS. Two cases both have to end with brew on PATH, and missing the second is
+# the subtle one: on a machine where Linuxbrew is already installed, install.sh
+# still runs BEFORE the new ~/.zshrc (with its shellenv line) is deployed, so
+# `brew` may exist on disk while `cmd_exists brew` is false. Every later
+# brew_install would then fail. So activate whenever the binary is present,
+# whether or not this call installed it.
+LINUXBREW_PREFIX="/home/linuxbrew/.linuxbrew"
+
+install_linuxbrew() {
+    if ! is_macos && [[ ! -x "$LINUXBREW_PREFIX/bin/brew" ]]; then
+        # Homebrew's installer aborts as root ("Don't run this as root!") on
+        # anything it does not detect as a container — /.dockerenv,
+        # /run/.containerenv or a docker/kubepods/actions_job cgroup marker. On a
+        # plain cloud VM SSH'd into as root (README's cloud path) the install
+        # therefore cannot succeed, and every brew-managed tool would be skipped
+        # behind a generic "installation failed" warning. Name the cause instead.
+        if [[ $EUID -eq 0 ]] \
+           && [[ ! -e /.dockerenv && ! -e /run/.containerenv ]] \
+           && ! grep -qE '(docker|kubepods|actions_job)' /proc/1/cgroup 2>/dev/null; then
+            log_warning "Homebrew refuses to install as root on a non-container host, so the brew-managed CLI tools will be skipped."
+            log_warning "  Re-run install.sh as a non-root user (or use --create-user first), then re-run to pick them up."
+            return 1
+        fi
+        log_info "Installing Homebrew (Linuxbrew)..."
+        # NONINTERACTIVE=1 skips the installer's "Press RETURN to continue"
+        # prompt; install.sh keeps stdin on the TTY for the component menu, so
+        # the installer cannot auto-detect non-interactive mode on its own.
+        # Both halves need a deadline: the fetch, and the installer it feeds.
+        # An installer that stalls hangs the run exactly as hard as a stalled
+        # download, and this one runs before anything else on a fresh box.
+        local _brew_installer
+        if _brew_installer=$(fetch https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh); then
+            NONINTERACTIVE=1 run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-900}" \
+                /bin/bash -c "$_brew_installer" \
+                || log_warning "Homebrew (Linuxbrew) installation failed"
+        else
+            log_warning "Could not fetch the Homebrew installer"
+        fi
+    fi
+
+    if ! cmd_exists brew && [[ -x "$LINUXBREW_PREFIX/bin/brew" ]]; then
+        eval "$("$LINUXBREW_PREFIX/bin/brew" shellenv)"
+    fi
+
+    if cmd_exists brew; then
         return 0
     fi
 
-    log_info "Installing mise..."
-    mkdir -p "$HOME/.local/bin"
-    curl https://mise.run | sh
-    export PATH="$HOME/.local/bin:$PATH"
-
-    if cmd_exists mise; then
-        eval "$(mise activate bash)"
-        return 0
-    fi
-
-    log_warning "mise installation failed"
+    log_warning "brew not available after bootstrap — skipping brew-managed tools"
     return 1
+}
+
+# ─── bun (global JS CLI package manager) ──────────────────────────────────────
+
+# Single installer shared by install.sh and scripts/cleanup/setup_ai_update.sh.
+# Exports BUN_INSTALL/PATH into the CALLING shell so the very next `bun add -g`
+# resolves without waiting for a new login shell.
+install_bun() {
+    if cmd_exists bun; then
+        return 0
+    fi
+
+    if ! cmd_exists curl; then
+        log_warning "curl is required to install bun"
+        return 1
+    fi
+
+    log_info "Installing bun..."
+    fetch https://bun.sh/install \
+        | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-300}" bash \
+        || log_warning "bun installation failed"
+
+    export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+
+    if ! cmd_exists bun; then
+        log_warning "bun still not found after install"
+        return 1
+    fi
 }
 
 # ─── User Management (Linux) ──────────────────────────────────────────────────
@@ -1022,16 +1328,16 @@ install_docker() {
         log_section "INSTALLING DOCKER 🐳"
 
         # Install prerequisites
-        apt-get install -y ca-certificates curl gnupg 2>/dev/null || {
+        apt-get install -y "${APT_LOCK_OPT[@]}" ca-certificates curl gnupg 2>/dev/null || {
             log_warning "Could not install Docker prerequisites"
             return 1
         }
 
         # Add Docker's official GPG key
         install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
+        fetch https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
             # Try Debian if Ubuntu fails
-            curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
+            fetch https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || {
                 log_warning "Could not add Docker GPG key"
                 return 1
             }
@@ -1054,8 +1360,8 @@ install_docker() {
             tee /etc/apt/sources.list.d/docker.list > /dev/null
 
         # Install Docker
-        apt-get update -y 2>/dev/null
-        apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null || {
+        apt-get update -y "${APT_LOCK_OPT[@]}" 2>/dev/null
+        apt-get install -y "${APT_LOCK_OPT[@]}" docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null || {
             log_warning "Docker installation failed"
             return 1
         }
@@ -1826,7 +2132,12 @@ parse_args() {
                     echo "Error: --only cannot be mixed with profile or component flags" >&2
                     exit 1
                 fi
-                apply_profile "${1#*=}"
+                # apply_profile refuses an unknown name (returns 2). Propagate
+                # it: without this the run continued with whatever the
+                # source-time default had already set, so `--profile=servre`
+                # installed the 14-component `standard` set and exited 0
+                # instead of refusing.
+                apply_profile "${1#*=}" || exit 2
                 ;;
             --force|--force-reinstall)
                 FORCE_REINSTALL=true
@@ -1865,12 +2176,21 @@ parse_args() {
                 fi
                 apply_profile "cloud"
                 ;;
-            --personal)
+            --personal|--devbox)
                 if [[ "$_only_mode" == true ]]; then
                     echo "Error: --only cannot be mixed with profile or component flags" >&2
                     exit 1
                 fi
-                apply_profile "personal"
+                apply_profile "devbox"
+                ;;
+            --standard|--agent|--bare)
+                # Explicit cases: the --* catch-all below would otherwise mangle
+                # a profile name into a bogus DEPLOY_<NAME> component.
+                if [[ "$_only_mode" == true ]]; then
+                    echo "Error: --only cannot be mixed with profile or component flags" >&2
+                    exit 1
+                fi
+                apply_profile "${1#--}"
                 ;;
             --default)
                 if [[ "$_only_mode" == true ]]; then

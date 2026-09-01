@@ -4,6 +4,6 @@
 
 **Spend gate.** Estimate from actual rates. Under $100, run now and report the estimate with the result; $100 or more, propose and wait. Pre-paid cluster allocations skip it.
 
-**Never launch detached work inside a subagent** — its children are orphaned when the turn ends. Memory-heavy or long-lived work (past ~2 GB RSS or ~1 h) goes to the queue via `jexp` for its caps; pure API fan-out runs backgrounded from main context. The runner-by-shape table is in the checklist; commands and caps are in the `jobs` skill.
+**Never launch detached work inside a subagent** — its children are orphaned when the turn ends. Memory-heavy or long-lived work (past ~2 GB RSS or ~1 h) goes to the queue via `jexp` for its caps; pure API fan-out runs backgrounded from main context. On a server with an attached volume at `/workspace`, experiment outputs and log directories go under `/workspace`, not the root disk. The runner-by-shape table is in the checklist; commands and caps are in the `jobs` skill.
 
 **The full standard is `~/.claude/checklists/experiments.md`** — piloting, the five-minute failure checks, resource awareness, exploratory vs confirmatory, and what the output directory must explain on its own. Designing the experiment before it runs: `~/.claude/checklists/research.md`.

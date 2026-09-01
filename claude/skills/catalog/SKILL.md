@@ -46,7 +46,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 
 | Skill | Use when |
 |---|---|
-| `artifact-writing` | Publishing or updating any report, plan, findings page or transcript view as an Artifact — md2review, the annotation layer, republishing, viewer sandbox quirks |
+| `artifact-writing` | Publishing or updating any report, plan, findings page or transcript view as an Artifact — md2artifact, the annotation layer, republishing, viewer sandbox quirks |
 | `artifacts-sync` | Recording a published artifact in `ARTIFACTS.md`, or reconciling the index after a link 404s or an org switch |
 | `spec-artifact` | Writing a spec or plan — the three mandatory sections, per-requirement variables |
 | `results-artifact` | The statistics for a results page — which interval or test a number gets, the four nulls, chance correction, when to slice |
@@ -87,7 +87,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 
 | Skill | Use when |
 |---|---|
-| `second-opinion` | "sanity check this", "am I wrong", adversarial review — routes to Fable, codex-companion, OpenCode |
+| `council` | "second opinion", "sanity check this", "am I wrong", "llm council", panel review — one ladder from one model to an eight-seat panel with blind peer ranking |
 | `openrouter-fusion` | A multi-model panel with judge synthesis, one non-Anthropic model, or the raw OpenRouter API reference |
 
 ## Code, git and session workflow

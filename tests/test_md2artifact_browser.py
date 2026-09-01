@@ -1,6 +1,6 @@
-"""Behavioural checks for the md2review comment box, driven in a real browser.
+"""Behavioural checks for the md2artifact comment box, driven in a real browser.
 
-The structural tests in `test_md2review_ios.py` assert the generated page still
+The structural tests in `test_md2artifact_ios.py` assert the generated page still
 carries each load-bearing piece. These assert what a reviewer actually
 experiences, because the bugs they guard were all invisible to a string match:
 
@@ -59,7 +59,7 @@ class _Server(socketserver.ThreadingTCPServer):
 
 
 ROOT = Path(__file__).resolve().parent.parent
-MD2REVIEW = ROOT / "custom_bins" / "md2review"
+MD2REVIEW = ROOT / "custom_bins" / "md2artifact"
 
 SAMPLE = """# Review Sample
 
@@ -87,7 +87,7 @@ POP_OPEN = "() => getComputedStyle(document.getElementById('anPop')).display ===
 @pytest.fixture(scope="module")
 def site(tmp_path_factory) -> str:
     """Render the sample and serve its directory; yields the page URL."""
-    tmp = tmp_path_factory.mktemp("md2review-browser")
+    tmp = tmp_path_factory.mktemp("md2artifact-browser")
     src = tmp / "sample.md"
     src.write_text(SAMPLE, encoding="utf-8")
     for name, key in (("index.html", "review-sample"), ("renamed.html", "review-sample-v2")):
@@ -97,7 +97,7 @@ def site(tmp_path_factory) -> str:
             text=True,
         )
         # A render failure is a real regression, not a reason to skip.
-        assert r.returncode == 0, f"md2review failed: {r.stderr}"
+        assert r.returncode == 0, f"md2artifact failed: {r.stderr}"
 
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(tmp))
     httpd = _Server(("127.0.0.1", 0), handler)
@@ -583,3 +583,290 @@ def test_opening_the_export_box_is_not_itself_an_export(page) -> None:
     )
     expect(page.locator("#anCount")).to_contain_text("copied out")
     assert "not yet" not in page.locator("#anCount").inner_text()
+
+
+# ---- the viewer's sandbox -------------------------------------------------
+# Every test above drives the page top-level, which is the one condition the
+# real bug could not appear in. The Artifact viewer frames the page with no
+# `allow-modals`, and Playwright services dialogs automatically, so a
+# confirm-guarded delete passes top-level and is a dead button where these
+# pages are actually read. That gap is what shipped it; this closes it.
+
+SANDBOX_HOST = """<!doctype html><meta charset=utf8><title>host</title>
+<iframe id="f" src="index.html" sandbox="allow-scripts allow-same-origin"
+        style="width:100%;height:900px;border:0"></iframe>
+"""
+
+
+@pytest.fixture(scope="module")
+def sandboxed_site(tmp_path_factory) -> str:
+    """The rendered page inside a sandboxed iframe; yields the host page URL.
+
+    `allow-same-origin` is deliberate and matches the viewer: comments survive
+    a refresh of a published artifact, so its frame has working localStorage.
+    `allow-modals` is deliberately absent, which is the whole point.
+    """
+    tmp = tmp_path_factory.mktemp("md2review-sandboxed")
+    src = tmp / "sample.md"
+    src.write_text(SAMPLE, encoding="utf-8")
+    r = subprocess.run(
+        [sys.executable, str(MD2REVIEW), str(src),
+         "-o", str(tmp / "index.html"), "--key", "review-sample"],
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, f"md2review failed: {r.stderr}"
+    (tmp / "host.html").write_text(SANDBOX_HOST, encoding="utf-8")
+
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(tmp))
+    httpd = _Server(("127.0.0.1", 0), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{httpd.server_address[1]}/host.html"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_delete_all_works_where_the_viewer_suppresses_modals(browser, sandboxed_site) -> None:
+    """Delete all was dead in the viewer and perfect in a local tab.
+
+    `window.confirm` returns false in a frame without `allow-modals` — the
+    browser only logs "Ignored call to confirm()" — so both branches of the old
+    handler returned early on a refusal the reader never made. The dialog
+    counter below is the load-bearing assertion: it must stay empty, because a
+    dialog appearing again means the guard went back to being a modal.
+    """
+    ctx = browser.new_context()
+    try:
+        page = ctx.new_page()
+        dialogs: list[str] = []
+        page.on("dialog", lambda d: (dialogs.append(d.type), d.accept()))
+        page.goto(sandboxed_site)
+
+        framed = page.frame_locator("#f")
+        expect(framed.locator("#anCount")).to_be_visible()
+        frame = page.frames[1]
+
+        # If modals are not really suppressed here, the rest proves nothing.
+        assert frame.evaluate("() => window.confirm('probe')") is False
+
+        assert frame.evaluate(SELECT_JS)
+        expect(framed.locator("#anTxt")).to_be_visible()
+        framed.locator("#anTxt").fill("a note worth keeping")
+        framed.locator("#anTxt").press("Enter")
+        expect(framed.locator("#anCount")).to_contain_text("1 comment")
+
+        clear = framed.locator("#anClear")
+        clear.click()
+        # One click arms and destroys nothing.
+        expect(clear).to_have_class(re.compile(r"\banarmed\b"))
+        expect(framed.locator("#anCount")).to_contain_text("1 comment")
+
+        clear.click()
+        expect(framed.locator("#anCount")).to_contain_text("No comments yet")
+        assert frame.evaluate("() => localStorage.getItem('review-sample')") in (None, "[]")
+        assert dialogs == [], f"a modal was used as the guard: {dialogs}"
+    finally:
+        ctx.close()
+
+
+# --- the copied subset ----------------------------------------------------
+# "Delete all" was the only pruning tool, so the second Copy all re-sent every
+# comment an agent had already acted on. These cover the narrower control and,
+# more importantly, the states in which it must NOT fire.
+
+SELECT_SECOND_JS = """() => {
+  const n = document.querySelectorAll('.doc p')[1].firstChild;
+  const r = document.createRange();
+  r.setStart(n, 2); r.setEnd(n, 30);
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+  return r.toString();
+}"""
+
+
+def add_comment(page, select_js: str, note: str) -> None:
+    page.evaluate(select_js)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", note)
+    page.press("#anTxt", "Enter")
+
+
+def copy_all(page) -> None:
+    """Copy all with a clipboard that resolves, which is what stamps."""
+    page.evaluate(
+        "() => { Object.defineProperty(navigator, 'clipboard',"
+        "  {value: {writeText: () => Promise.resolve()}, configurable: true}); }"
+    )
+    page.click("#anCopy")
+    page.wait_for_timeout(300)
+
+
+def test_delete_copied_removes_only_what_a_copy_carried_out(page) -> None:
+    """The whole point: the next Copy all must send fresh feedback only."""
+    add_comment(page, SELECT_JS, "already actioned")
+    copy_all(page)
+    add_comment(page, SELECT_SECOND_JS, "written after the copy")
+    expect(page.locator("#anCount")).to_contain_text("1 of 2 not yet copied out")
+
+    page.click("#anClearCopied")
+    page.click("#anClearCopied")
+
+    expect(page.locator(".cmt")).to_have_count(1)
+    assert "written after the copy" in page.locator("#anList").inner_text()
+    assert "already actioned" not in page.locator("#anList").inner_text()
+    # and its highlight went with it
+    expect(page.locator("mark.note")).to_have_count(1)
+
+
+def test_the_first_click_on_delete_copied_destroys_nothing(page) -> None:
+    add_comment(page, SELECT_JS, "keep me")
+    copy_all(page)
+    page.click("#anClearCopied")
+    expect(page.locator("#anClearCopied")).to_contain_text("Click again")
+    expect(page.locator(".cmt")).to_have_count(1)
+
+
+def test_delete_copied_is_disabled_until_something_has_been_copied(page) -> None:
+    """Disabled rather than hidden: a control that appears and vanishes is
+    harder to aim at, and its count is where the copied total is shown."""
+    add_comment(page, SELECT_JS, "never copied")
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+    expect(page.locator("#anClearCopied")).to_contain_text("(0)")
+    copy_all(page)
+    expect(page.locator("#anClearCopied")).to_be_enabled()
+    expect(page.locator("#anClearCopied")).to_contain_text("(1)")
+
+
+def test_editing_a_copied_comment_puts_it_back_in_the_unsent_set(page) -> None:
+    """The copy carried the OLD wording. If the stamp survived an edit,
+    "delete copied" would destroy the only copy of the new words."""
+    add_comment(page, SELECT_JS, "first wording")
+    copy_all(page)
+    expect(page.locator("#anCount")).to_contain_text("copied out")
+
+    page.click("mark.note")
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "rewritten after the copy")
+    page.press("#anTxt", "Enter")
+
+    expect(page.locator("#anCount")).to_contain_text("not yet copied out")
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+
+
+def test_delete_all_names_the_unsent_count_on_its_armed_label(page) -> None:
+    add_comment(page, SELECT_JS, "safe, already out")
+    copy_all(page)
+    add_comment(page, SELECT_SECOND_JS, "the only copy")
+    page.click("#anClear")
+    label = page.locator("#anClear").inner_text()
+    assert "1 not yet copied out" in label, label
+    assert "delete all 2" in label, label
+
+
+def test_delete_all_says_so_when_nothing_would_be_lost(page) -> None:
+    add_comment(page, SELECT_JS, "already out")
+    copy_all(page)
+    page.click("#anClear")
+    assert "All copied out" in page.locator("#anClear").inner_text()
+
+
+def test_a_missing_legacy_flag_never_marks_anything_copied(page, site) -> None:
+    """An absent key is not evidence. Only an explicit "0" is.
+
+    This is the case the migration must not treat as clean: a page nobody has
+    commented on yet has no flag at all, and inferring "copied" from that is
+    how the removed backup key destroyed work.
+    """
+    page.evaluate(
+        "() => { localStorage.setItem('review-sample',"
+        "  JSON.stringify([{id: 1, where: 'x', quote: 'q', note: 'legacy note'}]));"
+        "  localStorage.removeItem('an-dirty:review-sample'); }"
+    )
+    page.goto(site)
+    expect(page.locator("#anCount")).to_contain_text("not yet copied out")
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+
+
+def test_a_clean_legacy_flag_marks_the_comments_already_there(page, site) -> None:
+    """Otherwise every upgraded page nags someone who copied out yesterday."""
+    page.evaluate(
+        "() => { localStorage.setItem('review-sample',"
+        "  JSON.stringify([{id: 1, where: 'x', quote: 'q', note: 'legacy note'}]));"
+        "  localStorage.setItem('an-dirty:review-sample', '0'); }"
+    )
+    page.goto(site)
+    expect(page.locator("#anCount")).to_contain_text("copied out")
+    assert "not yet" not in page.locator("#anCount").inner_text()
+    expect(page.locator("#anClearCopied")).to_be_enabled()
+
+
+def test_a_dirty_legacy_flag_leaves_the_comments_unstamped(page, site) -> None:
+    page.evaluate(
+        "() => { localStorage.setItem('review-sample',"
+        "  JSON.stringify([{id: 1, where: 'x', quote: 'q', note: 'legacy note'}]));"
+        "  localStorage.setItem('an-dirty:review-sample', '1'); }"
+    )
+    page.goto(site)
+    expect(page.locator("#anCount")).to_contain_text("not yet copied out")
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+
+
+def test_there_is_no_bulk_delete_of_the_uncopied(page) -> None:
+    """Deliberately absent. Every comment predating `copiedAt` reads as
+    uncopied, so such a control would have wiped every existing page."""
+    add_comment(page, SELECT_JS, "a note")
+    ids = page.evaluate(
+        "() => Array.from(document.querySelectorAll('[data-annotation-layer] button'))"
+        "  .map(b => b.id + '|' + b.textContent).join(' ')"
+    )
+    assert "uncopied" not in ids.lower()
+    assert "not copied" not in ids.lower()
+
+
+def test_the_stored_shape_stays_a_bare_array_with_the_new_key(page) -> None:
+    """Extra keys on the objects are safe; an envelope kills older layers."""
+    add_comment(page, SELECT_JS, "stamped")
+    copy_all(page)
+    raw = page.evaluate("() => localStorage.getItem('review-sample')")
+    import json as _json
+
+    data = _json.loads(raw)
+    assert isinstance(data, list), data
+    assert data[0]["copiedAt"] > 0
+    # the shape an older deployed layer calls .reduce() on
+    assert page.evaluate("(r) => Array.isArray(JSON.parse(r))", raw)
+
+
+def test_copying_only_part_of_the_export_box_marks_nothing(page) -> None:
+    """A partial selection did not carry every comment out of the browser.
+
+    Stamping them all would put comments the reader never copied into the
+    set that "Delete copied" destroys -- the copy is the only evidence the
+    layer has, so half a copy has to count as no copy.
+    """
+    add_comment(page, SELECT_JS, "first note")
+    add_comment(page, SELECT_SECOND_JS, "second note")
+    open_export_via_blocked_clipboard(page)
+    page.wait_for_timeout(300)
+    assert "not yet copied out" in page.locator("#anCount").inner_text()
+
+    # Select a few characters instead of the whole blob, then copy.
+    page.evaluate(
+        "() => { const ta = document.getElementById('anExportText');"
+        "  ta.setSelectionRange(0, 12);"
+        "  ta.dispatchEvent(new ClipboardEvent('copy')); }"
+    )
+    page.wait_for_timeout(300)
+    assert "not yet copied out" in page.locator("#anCount").inner_text()
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+
+    # The whole blob still counts.
+    page.evaluate(
+        "() => { const ta = document.getElementById('anExportText');"
+        "  ta.setSelectionRange(0, ta.value.length);"
+        "  ta.dispatchEvent(new ClipboardEvent('copy')); }"
+    )
+    expect(page.locator("#anCount")).to_contain_text("copied out")
+    assert "not yet" not in page.locator("#anCount").inner_text()
+    expect(page.locator("#anClearCopied")).to_be_enabled()

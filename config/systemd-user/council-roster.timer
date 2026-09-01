@@ -1,0 +1,20 @@
+[Unit]
+Description=Fortnightly LLM council roster check
+
+[Timer]
+# The 1st and the 15th, rather than OnUnitActiveSec=14d. A monotonic interval
+# restarts its clock at every boot, so on a laptop that sleeps and reboots it
+# drifts steadily later and a "fortnightly" check quietly becomes monthly. A
+# calendar expression cannot drift.
+OnCalendar=*-*-01,15 09:00:00
+
+# The box is a laptop/workstation, not a server: without this a missed window is
+# simply skipped, and a check that silently never runs is worse than no check.
+Persistent=true
+
+# Every box fires at the same instant otherwise; spread the load on the two
+# public data sources.
+RandomizedDelaySec=4h
+
+[Install]
+WantedBy=timers.target

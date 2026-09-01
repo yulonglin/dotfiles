@@ -13,11 +13,21 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ─── Profile ──────────────────────────────────────────────────────────────────
-# Available: personal, server, minimal
-# - personal: Full setup with all tools (default)
-# - server:   Minimal server setup (no GUI tools, no cleanup)
-# - minimal:  Nothing enabled by default
-PROFILE="${PROFILE:-personal}"
+# Pick by what the machine is FOR:
+# - standard: default for a bare ./install.sh / ./deploy.sh — shell, editor,
+#             git, Claude/Codex, supply-chain defenses. Nothing scheduled.
+# - devbox:   a machine you live on (macOS/Linux) — the full set
+# - agent:    ephemeral box you DO code on: standard + per-project secrets
+# - bare:     ephemeral box you will NOT code on: shell + uv only
+# - server:   shared machine — no GUI, no cleanup, no scheduled jobs
+# - cloud:    lean remote dev box (RunPod); used by scripts/cloud/setup.sh
+# - minimal:  nothing enabled; name what you want explicitly
+# - personal: synonym for devbox, kept for existing invocations
+#
+# The default is `standard`, NOT the full set: a bare invocation on a fresh box
+# should not schedule background jobs or touch a laptop's GUI settings. Use
+# --devbox (or PROFILE=devbox) for the full set, or persist a picker selection.
+PROFILE="${PROFILE:-standard}"
 
 # ─── Component Registry (single source of truth) ────────────────────────────
 # Format: "name|description|platform|default"
@@ -84,7 +94,9 @@ DEPLOY_REGISTRY=(
     "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true|macOS"
     "vpn|NordVPN + Tailscale split tunnel daemon|macos|true|macOS"
     "pueue|Pueue + systemd resource slices|linux|true|Linux"
+    "storage|Per-machine data-volume config (config/storage.conf)|linux|true|Linux"
     "matplotlib|Style files: anthropic, deepmind, petri|all|true|Dev Tools"
+    "playwright|Playwright + Chromium for the browser tests (~650MB, opt-in)|all|false|Dev Tools"
     "pdb|pdb++ debugger config (high-contrast)|all|true|Dev Tools"
     "claude-tools|Build claude-tools Rust binary|all|true|Build"
 )
@@ -178,22 +190,24 @@ PACKAGES_MACOS=(
     "fpart"       # parallel rsync (fpsync) for fast many-file copies
 )
 
-# Linux packages (via mise github: backend)
-PACKAGES_LINUX_MISE=(
-    "github:junegunn/fzf"
-    "github:sharkdp/bat"
-    "github:eza-community/eza"
-    "github:sharkdp/fd"
-    "github:BurntSushi/ripgrep"
-    "github:dandavison/delta"
-    "github:bootandy/dust"
-    "github:ajeetdsouza/zoxide"
-    "github:PaulJuliusMartinez/jless"
-    "github:casey/just"
-    "github:chmln/sd"
-    "github:muesli/duf"
-    "github:charmbracelet/gum"
-    "github:sharkdp/vivid"
+# Linux packages (via Homebrew / Linuxbrew)
+# FORMULA names, which differ from the binary for two entries: ripgrep→rg,
+# git-delta→delta. Getting these wrong is a silent "no available formula".
+PACKAGES_LINUX_BREW=(
+    "fzf"
+    "bat"
+    "eza"
+    "fd"
+    "ripgrep"     # binary: rg
+    "git-delta"   # binary: delta
+    "dust"
+    "zoxide"
+    "jless"
+    "just"
+    "sd"
+    "duf"
+    "gum"
+    "vivid"
 )
 
 # Extra packages (--extras flag)
@@ -204,25 +218,158 @@ PACKAGES_EXTRAS_MACOS=(
 )
 
 PACKAGES_EXTRAS_LINUX=(
-    "github:sharkdp/hyperfine"
-    "github:extrawurst/gitui"
-    "cargo:code2prompt"
+    "hyperfine"
+    "gitui"
+    "code2prompt"
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Profile Presets
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Platform facts that outrank any profile. Called at the END of apply_profile,
+# not once at source time: a CLI flag re-applies a profile long after sourcing,
+# and a profile that resets to registry defaults would otherwise resurrect
+# components this platform cannot run.
+# parse_args fills these; declare them here so a platform override consulted
+# before parse_args runs does not trip `set -u`.
+typeset -ga EXPLICIT_OPT_OUTS EXPLICIT_OPT_INS
+
+# Platform facts outrank the PROFILE, but they do NOT outrank the user, and
+# they do not apply to a profile that means "nothing". Both exemptions are
+# load-bearing, because this now runs at the END of apply_profile (a CLI flag
+# re-runs it long after source time):
+#
+#   - `minimal` means nothing enabled, and `--only X` is built on it. Setting a
+#     component true here made `install.sh --only vim` resolve
+#     INSTALL_CREATE_USER=true, which as root runs useradd, grants
+#     NOPASSWD:ALL in /etc/sudoers.d and copies /root/.ssh.
+#   - an explicit `--no-X` or `--X` on the command line is the user saying it
+#     outright, and used to win because overrides ran once at source time,
+#     before parse_args.
+_platform_override() {
+    local var="$1" value="$2" component="${1#INSTALL_}"
+    component="${component#DEPLOY_}"
+    [[ "${PROFILE:-}" == "minimal" ]] && return 0
+    (( ${EXPLICIT_OPT_OUTS[(Ie)$component]} )) && return 0
+    (( ${EXPLICIT_OPT_INS[(Ie)$component]} )) && return 0
+    typeset -g "$var=$value"
+}
+
+_apply_platform_overrides() {
+    if is_linux; then
+        _platform_override INSTALL_CLEANUP false   # File cleanup uses launchd (macOS only)
+        _platform_override DEPLOY_CLEANUP false    # File cleanup uses launchd (macOS only)
+        # DEPLOY_CLAUDE_CLEANUP stays true - works with cron on Linux
+        _platform_override INSTALL_CREATE_USER true  # Useful for containers
+        # INSTALL_DOCKER=true is already default
+    elif is_macos; then
+        _platform_override INSTALL_DOCKER false    # Use Docker Desktop on macOS
+    fi
+}
+
+# config.local.sh sits AFTER apply_profile in the documented precedence, so a
+# profile flag that re-runs apply_profile has to re-apply it too — otherwise
+# resetting the registry silently discards the machine's own opt-outs, and
+# `--server` resurrects DEPLOY_OBSIDIAN_SYNC on a box that turned it off.
+_apply_local_config() {
+    [[ "${DOTFILES_SKIP_LOCAL_CONFIG:-0}" == "1" ]] && return 0
+    # `minimal` means nothing enabled, and `--only X` is built on it. A
+    # positive override in config.local.sh (DEPLOY_MCP_SYNC=true) would
+    # otherwise survive `--minimal` and install the very background jobs the
+    # invocation asked to suppress — measured before this guard.
+    [[ "${PROFILE:-}" == "minimal" ]] && return 0
+    [[ -n "${DOT_DIR:-}" && -f "$DOT_DIR/config.local.sh" ]] || return 0
+    source "$DOT_DIR/config.local.sh"
+}
+
 apply_profile() {
     local profile="${1:-$PROFILE}"
     PROFILE="$profile"   # keep the banner label in sync with the flags actually applied
 
+    # Profiles delegate: standard -> minimal, agent -> standard, devbox ->
+    # personal, cloud -> server. The tail passes below must run ONCE, at the
+    # outermost call — otherwise a bare run sources config.local.sh twice
+    # (measured), which is harmless for plain assignments but double-appends
+    # anything written as `+=(…)`.
+    typeset -g _APPLY_PROFILE_DEPTH=$(( ${_APPLY_PROFILE_DEPTH:-0} + 1 ))
+    # Unwind the counter on every exit path, including the unknown-profile
+    # refusal below, or a later apply_profile would think it is nested.
+    _apply_profile_unwind() {
+        typeset -g _APPLY_PROFILE_DEPTH=$(( _APPLY_PROFILE_DEPTH - 1 ))
+    }
+
     case "$profile" in
         personal)
-            # Default - everything enabled (values above)
+            # Everything enabled. _init_component_vars is load-bearing, not
+            # decorative: this case used to be EMPTY, assuming the registry
+            # defaults were still live. Once `standard` became the source-time
+            # default it ran apply_profile minimal first, zeroing every
+            # component — so a later `--devbox`/`--personal` on the CLI composed
+            # on top of zero and produced 14 components instead of 50. Every
+            # profile must therefore establish its own base explicitly rather
+            # than inherit whatever the last one left behind.
+            _init_component_vars
+            ;;
+        standard)
+            # What a BARE ./install.sh or ./deploy.sh gets: enough to open a
+            # shell, edit, commit, and run Claude/Codex on a fresh machine.
+            # Deliberately excluded — everything that schedules a background
+            # job, needs auth/hardware/apps that do not exist yet, or is
+            # specific to one person's laptop. The picker puts any of it one
+            # keystroke away, and --devbox restores the full set.
+            #
+            # git-hooks and pkg-configs are in the base set on purpose: they are
+            # the secret-leak and supply-chain defenses, and a default you have
+            # to remember to enable is not a defense.
+            apply_profile minimal
+            PROFILE="standard"
+            INSTALL_CORE=true          # modern CLI tools, gh, uv
+            INSTALL_ZSH=true
+            INSTALL_TMUX=true
+            INSTALL_AI_TOOLS=true      # the point of a new machine
+            DEPLOY_SHELL=true
+            DEPLOY_TMUX=true
+            DEPLOY_VIM=true
+            DEPLOY_GIT_CONFIG=true
+            DEPLOY_GIT_HOOKS=true
+            DEPLOY_CLAUDE=true
+            DEPLOY_CODEX=true
+            DEPLOY_PKG_CONFIGS=true
+            DEPLOY_CLAUDE_TOOLS=true
+            ;;
+        devbox)
+            # A machine you live on (macOS or Linux): the full set.
+            apply_profile personal
+            PROFILE="devbox"
+            ;;
+        agent)
+            # Ephemeral box you DO code on — Claude Code, and the things that
+            # make coding there safe rather than merely possible:
+            #   tmux        a dropped ssh/mosh must not kill a running agent
+            #   git-hooks   secret scan before you commit from a throwaway box
+            #   pkg-configs the 7-day quarantine still applies here
+            #   bws/direnv  per-project keys, so nothing is globally exported
+            # No scheduled jobs, no editors, no GUI, no gist sync.
+            apply_profile standard
+            PROFILE="agent"
+            DEPLOY_SECRETS_ENV=true    # direnv needs keys available to expose
+            DEPLOY_BWS=true
+            ;;
+        bare)
+            # Ephemeral box you will NOT code on: a usable shell and uv, so a
+            # script or notebook can run. No AI tools, no git identity, nothing
+            # scheduled. Fastest install of the lot.
+            apply_profile minimal
+            PROFILE="bare"
+            INSTALL_CORE=true          # uv + modern CLI
+            INSTALL_ZSH=true
+            DEPLOY_SHELL=true
             ;;
         server)
-            # Minimal server setup
+            # Subtracts from the full set, so it must start from the full set —
+            # see the note in `personal)`.
+            _init_component_vars
             INSTALL_AI_TOOLS=false
             INSTALL_CLEANUP=false
             INSTALL_DOCKER=false
@@ -273,10 +420,27 @@ apply_profile() {
             done
             ;;
         *)
-            echo "Warning: Unknown profile '$profile', using personal" >&2
-            PROFILE="personal"   # fell back to personal defaults — label accordingly
+            # Fail CLOSED. This used to warn and fall back to `personal`, so a
+            # typo like `--profile=servre` silently resolved to the full
+            # 50-component devbox install on a machine meant to be a server,
+            # with one warning as the only signal. Refuse instead: a
+            # misspelled profile must install nothing.
+            echo "Error: Unknown profile '$profile'." >&2
+            echo "       Valid profiles: bare, standard, agent, devbox, personal, server, cloud, minimal" >&2
+            _apply_profile_unwind
+            return 2
             ;;
     esac
+
+    # Precedence, restored in full: profile -> config.local.sh -> platform.
+    # Both must be re-applied here rather than once at source time, because a
+    # CLI flag re-runs this long after sourcing — but only once per invocation,
+    # not once per delegation level.
+    typeset -g _APPLY_PROFILE_DEPTH=$(( _APPLY_PROFILE_DEPTH - 1 ))
+    if (( _APPLY_PROFILE_DEPTH == 0 )); then
+        _apply_local_config
+        _apply_platform_overrides
+    fi
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -302,20 +466,19 @@ is_linux() { [[ "$PLATFORM" == "linux" ]]; }
 # Detect platform on source
 detect_platform
 
-# Apply profile if set (can be overridden by CLI)
-[[ -n "$PROFILE" ]] && apply_profile "$PROFILE"
-
-# User overrides (gitignored) — create config.local.sh to customize defaults
-# Precedence: defaults -> apply_profile() -> config.local.sh -> CLI flags (parse_args)
-[[ -n "$DOT_DIR" && -f "$DOT_DIR/config.local.sh" ]] && source "$DOT_DIR/config.local.sh"
-
-# Platform-specific defaults
-if is_linux; then
-    INSTALL_CLEANUP=false       # File cleanup uses launchd (macOS only)
-    DEPLOY_CLEANUP=false        # File cleanup uses launchd (macOS only)
-    # DEPLOY_CLAUDE_CLEANUP stays true - works with cron on Linux
-    INSTALL_CREATE_USER=true    # Useful for containers
-    # INSTALL_DOCKER=true is already default
-elif is_macos; then
-    INSTALL_DOCKER=false        # Use Docker Desktop on macOS
+# Precedence: defaults -> apply_profile() -> config.local.sh -> CLI flags
+# (parse_args). DOTFILES_SKIP_LOCAL_CONFIG=1 ignores config.local.sh — tests
+# capturing reproducible fixtures must not inherit whatever a particular
+# machine has overridden.
+#
+# Either/or, not both: apply_profile now ends with _apply_local_config and
+# _apply_platform_overrides itself (a CLI flag re-runs it long after this
+# point). Calling them again here sourced config.local.sh twice on every run,
+# which is harmless for plain assignments but double-appends anything using
+# `+=(…)`.
+if [[ -n "$PROFILE" ]]; then
+    apply_profile "$PROFILE"
+else
+    _apply_local_config
+    _apply_platform_overrides
 fi

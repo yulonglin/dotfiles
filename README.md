@@ -1,14 +1,13 @@
 # dotfiles
 
-**Highly opinionated** development environment for AI safety research. ZSH, Tmux, Vim, SSH, and AI coding assistants across macOS, Linux, and cloud containers.
+**Highly opinionated** development environment for AI safety research. ZSH, Tmux, Vim, SSH, and AI coding assistants across macOS, Ubuntu, and cloud containers.
 
 This setup reflects workflows optimized for ML research: reproducibility, experiment tracking, async API patterns, and rigorous methodology. The AI assistant configurations enforce research discipline—interview before planning, plan before implementing, skepticism of surprisingly good results.
 
 **Key highlights:**
 
-- 🤖 **AI Coding Assistants** - Extensively configured Claude Code, plus Codex CLI, OpenCode, and Antigravity CLI support
-- 👻 **[Ghostty](https://ghostty.org/)** - Fast, GPU-accelerated terminal with sensible defaults
-- 📊 **[htop](https://htop.dev/)** - Dynamic CPU meter configuration that adapts to your core count
+- 🤖 **AI Coding Assistants** - Extensively configured Claude Code and some Codex support
+- 👻 **Sensible defaults for [Ghostty](https://ghostty.org/)**
 - 🦀 **Rust-powered CLI tools** - Modern, blazing-fast replacements for standard Unix utilities
 - 🧹 **Automatic cleanup** - Scheduled cleanup of Downloads/Screenshots (macOS, moves to trash)
 
@@ -61,7 +60,7 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
    # Hetzner / standard VPS (persistent /home)
    curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | USER_HOME=/home bash
    ```
-   This creates a non-root user, installs dependencies, clones dotfiles, and runs `install.sh --profile=cloud` + `deploy.sh --profile=cloud` (a lean remote-dev set — no pueue/zotero/Rust toolchain). It will prompt for GitHub auth.
+   This creates a non-root user in persistent storage (`/workspace/yulong` on RunPod), copies SSH keys, installs dependencies, clones dotfiles, and runs `install.sh --profile=cloud` + `deploy.sh --profile=cloud` (a lean remote-dev set — no pueue/zotero/Rust toolchain). It will prompt for GitHub auth.
 
    Provisions the **`main`** branch by default. To pin another branch, pass `--branch` (use `bash -s --` to forward args through `curl | bash`) or set `DOTFILES_BRANCH`:
    ```bash
@@ -79,84 +78,6 @@ For cloud environments (RunPod, Hetzner, Lambda Labs, etc):
    Edit [`config.sh`](./config.sh) to disable resource-intensive options (AI assistants, cleanup automation, etc.) before running install/deploy.
 
 **Tip:** The setup auto-detects cloud providers and adjusts accordingly (persistent storage paths, SSH config, no macOS-only features). See [`scripts/cloud/README.md`](./scripts/cloud/README.md) for details.
-
-## Table of Contents
-
-- [Quickstart](#quickstart)
-- [Adopting These Dotfiles](#adopting-these-dotfiles)
-- [Rust CLI Tools](#rust-cli-tools)
-- [Installation](#installation)
-  - [Step 1: Install dependencies](#step-1-install-dependencies)
-  - [Step 2: Deploy configurations](#step-2-deploy-configurations)
-- [AI Assistants](#ai-assistants)
-  - [Claude Code](#claude-code-primary-ai-assistant)
-  - [Codex CLI](#codex-cli-openai)
-  - [Antigravity CLI + OpenCode](#antigravity-cli-google--opencode)
-- [Terminal & Shell](#terminal--shell)
-  - [Ghostty](#ghostty-terminal-emulator)
-  - [Powerlevel10k Prompt](#powerlevel10k-prompt)
-  - [Claude Code Statusline](#claude-code-statusline)
-  - [SSH Key Management](#ssh-key-management)
-- [Dev Tools](#dev-tools)
-  - [htop](#htop-process-monitor)
-  - [pdb++](#pdb-python-debugger)
-  - [macOS Media Recovery](#macos-media-recovery)
-- [Secrets & Security](#secrets--security)
-  - [Encrypted Secrets (Bitwarden Secrets Manager)](#encrypted-secrets-bitwarden-secrets-manager)
-  - [Gist Sync](#gist-sync-automation-both-platforms)
-  - [Global Git Hooks](#global-git-hooks)
-  - [Supply Chain Defense](#supply-chain-defense)
-- [Automation](#automation)
-  - [Automatic Cleanup](#automatic-cleanup-macos)
-  - [Claude Code Session Cleanup](#claude-code-session-cleanup-both-platforms)
-  - [AI Tools Auto-Update](#ai-tools-auto-update-both-platforms)
-  - [Package Auto-Update](#package-auto-update-both-platforms)
-  - [Text Replacements](#text-replacements-macos)
-- [Cloud Setup](#cloud-setup-runpod-hetzner-etc)
-- [Getting to Know These Dotfiles](#getting-to-know-these-dotfiles)
-
-## Adopting These Dotfiles
-
-This repo is highly personal — it reflects one person's workflow, opinions, and tooling choices. The best way to use it is to **point a coding agent at this repo and ask it to extract the parts you find useful** into your own dotfiles.
-
-**What's generalizable vs personal:**
-
-
-| Generalizable (worth extracting)                   | Personal (skip or replace)        |
-| -------------------------------------------------- | --------------------------------- |
-| Shell config (zsh/tmux/p10k)                       | Claude Code plugins/agents/skills |
-| Modern CLI tools (bat, eza, fd, rg, etc.)          | Website alias, SSH host colors    |
-| Git config + global gitignore/gitattributes        | Mouseless config                  |
-| Editor settings (VSCode/Cursor merge logic)        | Ghostty theme aliases             |
-| Cleanup automation (Downloads/Screenshots)         | Specific API keys and gist IDs    |
-| Gist sync (bidirectional SSH config/identity sync) | Cloud setup scripts (RunPod user) |
-| BWS encrypted secrets workflow                     | Plugin marketplace selections     |
-
-
-All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIST_SYNC_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
-
-## Rust CLI Tools
-
-These modern alternatives are installed by default and significantly faster than their traditional counterparts:
-
-
-| Tool                                                        | Replaces      | Why it's better                                          |
-| ----------------------------------------------------------- | ------------- | -------------------------------------------------------- |
-| [`bat`](https://github.com/sharkdp/bat)                     | `cat`         | Syntax highlighting, line numbers, git integration       |
-| [`eza`](https://github.com/eza-community/eza)               | `ls`          | Colors, icons, git status, tree view built-in            |
-| [`fd`](https://github.com/sharkdp/fd)                       | `find`        | Intuitive syntax, respects `.gitignore`, 5x faster       |
-| [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`)   | `grep`        | Recursive by default, respects `.gitignore`, 10x+ faster |
-| [`delta`](https://github.com/dandavison/delta)              | `diff`        | Side-by-side, syntax highlighting, line numbers          |
-| [`zoxide`](https://github.com/ajeetdsouza/zoxide)           | `cd`          | Learns your habits, jump with `z dirname`                |
-| [`dust`](https://github.com/bootandy/dust)                  | `du`          | Intuitive visualization of disk usage                    |
-| [`jless`](https://github.com/PaulJuliusMartinez/jless)      | `less` (JSON) | Interactive JSON viewer with vim keybindings             |
-
-
-**Extras** (`--extras` flag):
-
-- [`hyperfine`](https://github.com/sharkdp/hyperfine) — statistical benchmarking with warmup and multiple runs
-- [`gitui`](https://github.com/extrawurst/gitui) — TUI for git
-- [`code2prompt`](https://github.com/mufeedvh/code2prompt) — generate LLM prompts from codebases
 
 ## Installation
 
@@ -178,10 +99,12 @@ Install dependencies (e.g. oh-my-zsh and related plugins). The installer auto-de
 | Platform  | Defaults                                                                            |
 | --------- | ----------------------------------------------------------------------------------- |
 | **macOS** | zsh, tmux, AI tools, cleanup + Rust CLI tools via Homebrew                          |
-| **Linux** | zsh, tmux, AI tools, create-user + Rust CLI tools via [mise](https://mise.jdx.dev/) |
+| **Linux** | zsh, tmux, AI tools, create-user + Rust CLI tools via [Homebrew](https://brew.sh/) (Linuxbrew) |
 
 
 Installation on macOS requires Homebrew - install from [brew.sh](https://brew.sh/) first if needed.
+
+The Rust CLI tools installed by default: [`bat`](https://github.com/sharkdp/bat) (cat), [`eza`](https://github.com/eza-community/eza) (ls), [`fd`](https://github.com/sharkdp/fd) (find), [`ripgrep`](https://github.com/BurntSushi/ripgrep) (grep), [`delta`](https://github.com/dandavison/delta) (diff), [`zoxide`](https://github.com/ajeetdsouza/zoxide) (cd), [`dust`](https://github.com/bootandy/dust) (du), [`jless`](https://github.com/PaulJuliusMartinez/jless) (JSON viewer). `--extras` adds [`hyperfine`](https://github.com/sharkdp/hyperfine), [`gitui`](https://github.com/extrawurst/gitui), and [`code2prompt`](https://github.com/mufeedvh/code2prompt).
 
 ### Step 2: Deploy configurations
 
@@ -215,437 +138,37 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 
 **Flags are additive** — e.g., `./deploy.sh --mouseless` deploys defaults + mouseless. Use `--minimal` to disable all defaults, then specify only what you want.
 
-## AI Assistants
-
-### Claude Code (Primary AI Assistant)
-
-This setup includes extensive [Claude Code](https://docs.anthropic.com/en/docs/claude-code) customization optimized for AI safety research:
-
-```bash
-./deploy.sh --claude  # Symlinks claude/ → ~/.claude
-```
-
-**What's included:**
-
-- **`CLAUDE.md`** — Slim identity file (~55 lines) pointing at modular rules and docs
-- **`rules/`** — 8 auto-loaded behavioral rules holding only always-relevant judgment (safety, delegation, communication, research integrity, experiments, etc.). Activity-scoped procedure lives in skills instead; the `catalog` skill indexes which skill owns what
-- **`agents/`** — Personal agents, version-controlled here. The specialized ones used to live in the `ai-safety-plugins` marketplace; that marketplace is retired and its agents were migrated in
-- **`skills/`** — Project-level slash commands: `/commit`, `/merge-worktree`, `/jobs`, `/modal`, `/mv-repo`, etc.
-- **`hooks/`** — 40+ PreToolUse/PostToolUse/SessionStart scripts: approval classifier, secret blocking, modern-tool nudges, post-rebase guards, network audit
-- **`templates/`** — Research spec template
-
-**Smart merge preserves your data** - if `~/.claude` already exists, credentials, history, and cache are automatically restored after symlinking.
-
-#### Claude Code Plugin Marketplaces
-
-Claude Code supports community plugin marketplaces. These are declared natively in `extraKnownMarketplaces` in [`claude/settings.json`](claude/settings.json), which is symlinked to `~/.claude/settings.json` — a fresh machine registers them with no sync step:
-
-
-| Marketplace                                                                         | What's in it                                                     |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **[claude-plugins-official](https://github.com/anthropics/claude-plugins-official)** | Superpowers, hookify, plugin-dev, commit-commands, productivity, engineering |
-| **[productivity-tools](https://github.com/yulonglin/productivity-tools)**           | The Bear and Things 3 MCP servers                                |
-| **[alignment-hive](https://github.com/Crazytieguy/alignment-hive)**                 | Alignment research utilities                                     |
-| **[codex-plugin-cc](https://github.com/crazytieguy/codex-plugin-cc)**               | Codex CLI integration plugins                                    |
-
-
-**Every plugin that is on is on everywhere** — no profiles, no per-project setup step. Which plugins a machine should have is the `enabledPlugins` map in the same `settings.json`: 13 entries are `true`, and 7 are `false` tombstones for retired plugins. **The tombstones are load-bearing** — removing a plugin's marketplace does not disable it, so a retired plugin with a surviving install record keeps loading until `enabledPlugins` says `false`. Full detail: [`docs/plugin-management.md`](./docs/plugin-management.md).
-
-```bash
-claude plugin install <plugin>@<marketplace>    # then add the same key to enabledPlugins as true
-claude plugin list                              # what's installed, and at which scope
-```
-
-### Codex CLI (OpenAI)
-
-[Codex CLI](https://github.com/openai/codex) configuration that reuses Claude Code's skills:
-
-```bash
-./deploy.sh --codex  # Symlinks codex/ → ~/.codex
-```
-
-**What's included:**
-
-- **`AGENTS.md`** — Global instructions (references CLAUDE.md as source of truth)
-- **`config.toml`** — Model settings, status line config, and per-project trust levels
-- **`rules/`** — Behavioral rule files synced from Claude Code's `rules/`
-- **`skills/`** → symlink to `claude/skills/` so both CLIs share the same skill set
-
-The configuration follows the same research discipline as Claude Code but adapted for Codex's execution model.
-
-### Antigravity CLI (Google) + OpenCode
-
-Gemini CLI was retired by Google on **2026-06-18**; [Antigravity CLI](https://antigravity.google/docs/cli-features) (`agy`) is its official successor. [OpenCode](https://opencode.ai) is installed alongside as a model-agnostic OSS option. Both are installed by the `ai-tools` component.
-
-Antigravity CLI can sync with Claude Code skills:
-
-```bash
-./scripts/sync_claude_to_antigravity.sh  # Symlinks Claude skills into agy
-```
-
-**What it does:**
-
-- Symlinks Claude Code skills to `~/.gemini/antigravity-cli/skills/`
-- Project instructions come from `AGENTS.md` (Antigravity reads it natively)
-
-**Note:** Antigravity CLI is closed-source and brand-new; its skills/permissions schema differs from Claude's. The skills sync is adapted but untested end-to-end — permission sync is not yet ported (see the script header).
-
-## Terminal & Shell
-
-### Ghostty (Terminal Emulator)
-
-[Ghostty](https://ghostty.org/) is a fast, GPU-accelerated terminal written in Zig. Config is symlinked to the platform-specific location:
-
-```bash
-./deploy.sh --ghostty  # Part of defaults
-```
-
-**Key settings in `config/ghostty.conf`:**
-
-- `Cmd+C` triggers shell-based copy (integrates with tmux)
-- `Shift+Enter` for multiline input
-- Sensible font and color defaults
-
-Config location: macOS `~/Library/Application Support/com.mitchellh.ghostty/config`, Linux `~/.config/ghostty/config`
-
-#### Theme Aliases
-
-Launch new Ghostty windows with different color themes - useful for visually distinguishing contexts:
-
-
-Default Ghostty config uses Catppuccin Mocha. The `g0`–`g9` aliases launch a new window with a different theme:
-
-| Alias | Theme                        | Character                          |
-| ----- | ---------------------------- | ---------------------------------- |
-| `g0`  | TokyoNight                   | Deep blue bg — neon city           |
-| `g1`  | Dracula                      | Purple-grey bg — vibrant classic   |
-| `g2`  | Nord                         | Arctic blue-grey bg — calm         |
-| `g3`  | Rose Pine                    | Deep purple bg — botanical         |
-| `g4`  | Kanagawa Dragon              | Warm near-black bg — Japanese ink  |
-| `g5`  | Gruvbox Dark                 | Neutral warm bg — retro            |
-| `g6`  | Everforest Dark Hard         | Green-grey bg — forest             |
-| `g7`  | Solarized Dark Higher Contrast | Dark teal bg — high contrast     |
-| `g8`  | Melange Dark                 | Warm brown bg — earthy             |
-| `g9`  | Material Ocean               | Near-black bg — minimal            |
-
-
-```bash
-g1                        # Launch Ghostty with Dracula theme
-gtheme "Tomorrow Night"   # Launch with any theme by name
-ghostty +list-themes      # See all available themes
-```
-
-Each alias opens a **single fresh window** (no tab restoration) with the specified theme.
-
-#### SSH Color Switching
-
-Terminal colors automatically change when SSH-ing to help identify which machine you're on. Colors revert when the session ends.
-
-```bash
-ssh myserver     # In Ghostty: colors change automatically
-sshc myserver    # Explicit color-changing SSH (works in any terminal)
-```
-
-**Configure per-host colors** by editing `SSH_HOST_COLORS` in `config/ssh_themes.sh`:
-
-```bash
-# Format: "background:foreground:cursor" in hex
-SSH_HOST_COLORS[prod*]="#3d0000:#ffffff:#ff6666"      # Red-tinted for production
-SSH_HOST_COLORS[dev*]="#002200:#ffffff:#66ff66"       # Green-tinted for dev
-SSH_HOST_COLORS[gpu*]="#1a0033:#ffffff:#cc66ff"       # Purple for GPU servers
-SSH_HOST_COLORS[default]="#0d1926:#c5d4dd:#88c0d0"    # Blue-gray fallback
-```
-
-Patterns support wildcards (`prod*` matches `prod1`, `prod-web`, etc.). The `default` key applies to any host without a specific match.
-
-### Powerlevel10k Prompt
-
-[Powerlevel10k](https://github.com/romkatv/powerlevel10k) provides a fast, feature-rich ZSH prompt. This config includes custom segments for SSH-aware machine identification.
-
-**Requirements**: Install a [Nerd Font](https://github.com/romkatv/powerlevel10k#meslo-nerd-font-patched-for-powerlevel10k) for icons.
-
-**Reconfigure**: Run `p10k configure` (when prompted, overwrite `p10k.zsh` but don't apply to `.zshrc`).
-
-
-| Segment         | Description                                              |
-| --------------- | -------------------------------------------------------- |
-| **Remote host** | Machine name + emoji (SSH sessions only)                 |
-| **Directory**   | Current path with git root highlighting                  |
-| **Git status**  | Branch, dirty indicator, stash count                     |
-| **Right side**  | Exit code, command duration, Python venv, cloud contexts |
-
-
-#### SSH-Aware Machine Identification
-
-When SSH'd to a remote machine, the prompt shows a **consistent machine name** derived from your SSH config:
-
-```
-🌊 mats ~/code/project (main)                   # Instead of: user@ip-172-31-42-17
-```
-
-Each machine gets a **unique emoji** based on its name hash, so you can visually distinguish machines at a glance.
-
-**How it works:**
-
-1. Looks up your public IP against `~/.ssh/config` `HostName` entries
-2. Uses the matching `Host` alias as the display name
-3. Falls back to abbreviated hostname if no match
-4. Hashes the name to assign a stable emoji from a curated palette
-
-**Example SSH config:**
-
-```
-Host mats
-    HostName 203.0.113.42
-    User yulong
-
-Host hetzner-gpu
-    HostName 198.51.100.10
-    User root
-```
-
-SSH to `203.0.113.42` → prompt shows `🌊 mats` instead of the IP or hostname.
-
-**Customization:**
-
-- `SERVER_NAME` env var overrides everything
-- `MACHINE_EMOJI` env var overrides the auto-assigned emoji
-
-### Claude Code Statusline
-
-Claude Code displays a custom statusline with session info. Configuration: `claude/settings.json` (`statusLine.command = "claude-tools statusline"`).
-
-```
-🌊 mats [code python] ~/code/project (main*) · 📊 45% · $0.23 · 12m
-│        │             │              │      │        │        └─ Session duration
-│        │             │              │      │        └─ Session cost
-│        │             │              │      └─ Context usage (color-coded)
-│        │             │              └─ Branch (* = dirty)
-│        │             └─ Active Claude context profiles
-│        └─ Directory
-└─ Machine name (SSH only, same as p10k)
-```
-
-**Features:**
-
-- **Machine name**: Uses same `machine-name` script as Powerlevel10k for consistency
-- **Git info**: Branch with dirty indicator
-- **Context %**: Color-coded usage (green <70%, yellow 70-89%, red 90%+)
-- **Cost**: Running session total in USD
-- **Duration**: Session runtime in minutes/hours
-
-`ccusage statusline` is not wired into the live Claude hook path because it can OOM on large local histories; guard logic still uses lightweight `ccusage blocks --active --json` where available.
-
-Both the shell prompt and Claude Code statusline use your SSH config aliases, so machine identification is consistent across tools.
-
-### Ignore Pattern Management
-
-`claude-tools ignore` manages per-repo `.gitignore` and `.ignore` patterns interactively.
-
-```bash
-claude-tools ignore                    # Launch TUI (same as `ignore apply`)
-claude-tools ignore apply              # Interactive pattern selection
-claude-tools ignore apply --dry-run    # Preview without writing
-claude-tools ignore apply --non-interactive  # Apply defaults without TUI
-claude-tools ignore status             # Show current managed patterns
-```
-
-The TUI shows patterns grouped by category with tri-state toggles:
-- `[   ]` skip — pattern not applied
-- `[ G ]` gitignore — added to `.gitignore` only
-- `[G+S]` gitignore + searchable — added to `.gitignore` AND negated in `.ignore`
-
-Patterns in `[G+S]` state are git-ignored but remain searchable by rg, fd, Claude Code, and Cursor. Pattern definitions live in `config/ignore/patterns`.
-
-### Codex Statusline
-
-Codex uses built-in status items configured in `codex/config.toml` under `[tui].status_line` (for example: model, current dir, git branch, weekly/5h limits, context remaining).
-
-### SSH Key Management
-
-Automatically adds your SSH key to ssh-agent on shell startup:
-
-```bash
-# Automatically enabled when you deploy ZSH config
-./deploy.sh  # (default: includes ZSH)
-```
-
-**How it works:**
-
-- Checks for `~/.ssh/id_ed25519` (customizable via `SSH_KEY_PATH` env var)
-- **Prompts to generate** if key doesn't exist (never overwrites existing keys)
-- Adds to macOS Keychain (`--apple-use-keychain`) or Linux ssh-agent
-- Only runs in interactive shells
-- Skips if key already loaded in agent
-
-**First-time setup flow:**
-
-1. Shell starts → detects no key → prompts "Generate a new ed25519 SSH key now? [y/N]"
-2. If yes → generates key → shows command to copy public key
-3. Automatically adds to agent on this and future shell sessions
-
-**Custom key path:**
-
-```bash
-export SSH_KEY_PATH=~/.ssh/id_rsa  # Use RSA key instead
-```
-
-Configuration: [`config/ssh_setup.sh`](config/ssh_setup.sh)
-
-## Dev Tools
-
-### htop (Process Monitor)
-
-Dynamic [htop](https://htop.dev/) configuration that adapts CPU meters to your core count:
-
-```bash
-./deploy.sh --htop  # Part of defaults
-```
-
-The config in `config/htop/htoprc` uses a dynamic layout that works across machines with different CPU counts—no manual adjustment needed.
-
-### pdb++ (Python Debugger)
-
-High-contrast color scheme for [pdb++](https://github.com/pdbpp/pdbpp), the enhanced Python debugger:
-
-```bash
-./deploy.sh --pdb  # Part of defaults
-```
-
-**Global config works with per-project installations**. The config is deployed to `~/.pdbrc.py` (symlinked), but pdb++is installed per-project via `uv add --dev pdbpp`. This works because pdb++ reads the global config at runtime.
-
-**Auto-detects terminal background** using OSC 11 escape sequence:
-
-- **Light terminals**: Dark colors on light background (solarized-light theme)
-- **Dark terminals**: Bright colors on dark background (monokai theme)
-- **Fallback**: Defaults to dark theme if detection fails (SSH, older terminals)
-
-Detection succeeds in modern terminals (iTerm2, Ghostty, Kitty, Alacritty) and fails gracefully elsewhere.
-
-**Test it works:**
-
-```bash
-cd /path/to/project
-uv add --dev pdbpp
-python -c "import pdb; pdb.set_trace()" <<< "c"
-# Should show high-contrast colors
-```
-
-**Per-project override** (advanced): Create `.pdbrc.py` in project root. It takes precedence over the global config. See [pdb++ docs](https://github.com/pdbpp/pdbpp#configuration) for details.
-
-### macOS Media Recovery
-
-If Spotify, FaceTime, FineTune, or other audio apps hang together, use the
-manual `reset-mac-media` helper. It saves a private diagnostic bundle before
-restarting only CoreAudio and FaceTime's supporting services; it does not quit
-the affected GUI apps or restart Bluetooth or WindowServer.
-
-```bash
-# Preview the bounded action
-reset-mac-media --dry-run
-
-# Capture diagnostics, restart the media services, and verify recovery
-reset-mac-media
-```
-
-The real run requires administrator authentication and briefly interrupts all
-audio, video, and active calls. Reports go to
-`~/Library/Logs/reset-mac-media/`. A bundle can contain device metadata, local
-paths, and call or app context, so review it before sharing. If the helper
-cannot verify that the old service PIDs disappeared while their launchd jobs
-remain loaded, it exits nonzero and keeps the report; rebooting remains the
-fallback. To reduce recurrence, add FaceTime to FineTune's ignore list and use
-the MacBook microphone when Bluetooth call routing is unstable.
-
-## Automation
-
-### Automatic Cleanup (macOS)
-
-Scheduled cleanup of old files from `~/Downloads` and `~/Screenshots`:
-
-```bash
-./deploy.sh --cleanup  # Part of macOS defaults
-```
-
-**How it works:**
-
-- Moves files older than 180 days (configurable) to **Trash** (not permanent delete)
-- Runs monthly via launchd
-- Only deletes files not accessed AND not modified in retention period
-
-```bash
-# Preview what would be cleaned
-./scripts/cleanup/cleanup_old_files.sh --dry-run
-
-# Custom retention (90 days) and schedule (weekly)
-./scripts/cleanup/install.sh --days 90 --schedule weekly
-```
-
-See [`scripts/cleanup/README.md`](./scripts/cleanup/README.md) for full documentation.
-
-### Claude Code Session Cleanup (both platforms)
-
-Automatically kills idle Claude Code processes daily at 17:00:
-
-```bash
-./deploy.sh --claude-cleanup  # Part of defaults (both macOS and Linux)
-```
-
-**How it works:**
-
-- Only kills processes with **no output activity for 24h** (preserves active + tmux sessions)
-- Runs daily via launchd (macOS) or cron (Linux)
-- Manual control via `clear-claude-code` command (aliases: `ccl`, `cci`, `ccf`)
-
-```bash
-# Check status
-clear-claude-code --list
-
-# Uninstall
-./scripts/cleanup/setup_claude_cleanup.sh --uninstall
-```
-
-### AI Tools Auto-Update (both platforms)
-
-Daily automatic updates for Claude Code, Codex CLI, OpenCode, and Antigravity CLI at 06:00:
-
-```bash
-./deploy.sh --ai-update  # Part of defaults
-```
-
-Runs via launchd (macOS) or cron (Linux). Uninstall with `scripts/cleanup/setup_ai_update.sh --uninstall`.
-
-### Package Auto-Update (both platforms)
-
-Weekly package upgrade + cleanup on Sundays at 05:00:
-
-```bash
-./deploy.sh --brew-update  # Part of defaults
-```
-
-Supports Homebrew (macOS), apt, dnf, and pacman (Linux). Includes cleanup of stale caches.
-
-### Text Replacements (macOS)
-
-Bidirectional sync between macOS text replacements and [Alfred](https://www.alfredapp.com/) snippets. Runs daily at 09:00:
-
-```bash
-./deploy.sh --text-replacements  # macOS only, part of defaults
-```
-
-macOS uses raw shortcuts; Alfred applies a collection prefix at runtime (e.g., `fm.hi`). Requires Full Disk Access for your terminal app.
+## Adopting These Dotfiles
+
+This repo is highly personal — it reflects one person's workflow, opinions, and tooling choices. The best way to use it is to **point a coding agent at this repo and ask it to extract the parts you find useful** into your own dotfiles.
+
+**Generalizable (worth extracting):**
+
+- Shell config (zsh/tmux/p10k)
+- Modern CLI tools (bat, eza, fd, rg, etc.)
+- Git config + global gitignore/gitattributes
+- Editor settings (VSCode/Cursor merge logic)
+- Cleanup automation (Downloads/Screenshots)
+- Gist sync (bidirectional SSH config/identity sync)
+- BWS encrypted secrets workflow
+
+**Personal (skip or replace):**
+
+- Claude Code plugins/agents/skills
+- Website alias, SSH host colors
+- Mouseless config
+- Ghostty theme aliases
+- Specific API keys and gist IDs
+- Cloud setup scripts (RunPod user)
+- Plugin marketplace selections
+
+All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIST_SYNC_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
 
 ## Secrets & Security
 
 ### Encrypted Secrets (Bitwarden Secrets Manager)
 
-API keys are stored in [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) (BWS) — a hosted, team-shareable secrets vault. The CLI (`bws`) fetches secrets on demand; nothing is written to disk except a machine access token.
-
-**File locations:**
-
-| File | Location | Purpose |
-|------|----------|---------|
-| BWS token | `~/.config/bws/token` | Machine access token (paste from Bitwarden on new machines) |
+API keys are stored in [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) (BWS) — a hosted, team-shareable secrets vault. The CLI (`bws`) fetches secrets on demand; nothing is written to disk except a machine access token (at `~/.config/bws/token`).
 
 **Commands:**
 
@@ -663,42 +186,6 @@ secrets-paths            # Show resolved backend + token path
 **Per-project usage:** Run `setup-envrc` in any repo to create a `.envrc` that selectively exposes only the secrets that repo should see. It supports direct exports (`KEY`), renamed exports (`ENV_VAR=SECRET_NAME`), and a repo-specific Telegram plugin binding (`--telegram-secret SECRET_NAME`). If local `.env` files already exist, the TUI scans the repo root recursively and can offer to delete selected files.
 
 `setup-envrc` tries `direnv allow` automatically. If that cannot update direnv's allowlist (for example in a sandboxed environment), it prints the manual `direnv allow .` command and still completes the rest of the setup.
-
-### Gist Sync Automation (both platforms)
-
-Automatically sync config with GitHub gist daily at 08:00:
-
-```bash
-./deploy.sh --secrets  # Part of defaults
-```
-
-**How it works:**
-
-- Bidirectional sync with GitHub gist (SSH config, authorized_keys, git identity)
-- Auto-adds local public key to `authorized_keys` (enables SSH between your machines)
-- Last-modified wins: compares local vs gist timestamps
-- Requires `gh auth login` (run once for authentication)
-- Runs daily via launchd (macOS) or cron (Linux)
-
-```bash
-# Manual sync
-sync-gist
-
-# Uninstall automation
-./scripts/cleanup/setup_gist_sync.sh --uninstall
-```
-
-> **Note:** Secret gists are unlisted, not encrypted. Only non-secret config (SSH config, authorized_keys, git identity) should be synced via gist.
-
-### Global Git Hooks
-
-Pre-commit hooks for secret detection across all repositories:
-
-```bash
-./deploy.sh --git-hooks  # Part of defaults
-```
-
-Scans staged files for API keys, tokens, and credentials before each commit.
 
 ### Supply Chain Defense
 
@@ -785,33 +272,19 @@ dep-audit                    # Scan all repos for known-bad packages now
 ./deploy.sh --only dep-audit      # Just the weekly audit
 ```
 
-## Getting to know these dotfiles
+### Global Git Hooks
 
-- Any software or command line tools you need, add them to the [install.sh](./install.sh) script. Try adding a new command line tool to the install script.
-- Any new plugins or environment setup, add them to the [config/zshrc.sh](./config/zshrc.sh) script.
-- Any aliases you need, add them to the relevant `config/aliases/<theme>.sh` file (git.sh for git, nav.sh for navigation, net.sh for network/system, etc.). Try adding your own alias to the bottom of the matching file. For example, try setting `cd1` to your most used git repo so you can just type `cd1` to get to it.
-- **Utility functions** in `config/modern_tools.sh`: `mkd` (mkdir+cd), `cdf` (cd to Finder window, macOS), `targz` (smart compression), `dataurl`, `digga` (DNS lookup), `getcertnames` (SSL certs), `o` (cross-platform open), `server` (quick HTTP server)
-- **System aliases** in `config/aliases/net.sh`: `flush` (DNS cache), `afk` (lock screen, macOS), `week` (ISO week number)
+Pre-commit hooks for secret detection across all repositories (`./deploy.sh --git-hooks`, part of defaults). Scans staged files for API keys, tokens, and credentials before each commit.
 
-## Cloud Setup (RunPod, Hetzner, etc.)
+## Where The Detail Lives
 
-One-command setup for cloud VMs and containers:
+Everything else this repo does is documented next to the code it configures:
 
-```bash
-# RunPod (fresh pod, as root)
-curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | bash
-
-# After pod restart (recreates user entry)
-curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/restart.sh | bash
-
-# Hetzner / standard VPS (persistent /home)
-curl -fsSL https://raw.githubusercontent.com/yulonglin/dotfiles/main/scripts/cloud/setup.sh | USER_HOME=/home bash
-```
-
-Then SSH as `yulong@<ip>` (not root). Runs the lean `cloud` profile and provisions the `main` branch by default — pin another with `| bash -s -- --branch <name>` or `DOTFILES_BRANCH=<name>`. See [`scripts/cloud/README.md`](./scripts/cloud/README.md) for details.
-
-**What it does:**
-
-- Creates non-root user in persistent storage (`/workspace/yulong` on RunPod)
-- Installs uv, dotfiles, Claude Code
-- Copies SSH keys for direct access
+- **Deploy components** (every component, mechanisms, gotchas, how to extend) → [`docs/deploy-components.md`](./docs/deploy-components.md)
+- **Terminal, shell & dev tools** (Ghostty themes + SSH colors, Powerlevel10k machine ID, Claude Code statusline, `claude-tools ignore`, SSH keys, pdb++, htop, media recovery) → [`docs/terminal-and-dev-tools.md`](./docs/terminal-and-dev-tools.md)
+- **Claude Code setup** (rules/skills/hooks layout, smart-merge restore) → [`CLAUDE.md`](./CLAUDE.md) + [`docs/deploy-components.md`](./docs/deploy-components.md)
+- **Plugin marketplaces & management** → [`docs/plugin-management.md`](./docs/plugin-management.md)
+- **Codex / Antigravity / OpenCode integration** → [`docs/cross-tool-extensibility.md`](./docs/cross-tool-extensibility.md)
+- **Automation schedules** (cleanup, auto-updates, uninstall commands) → [`scripts/cleanup/README.md`](./scripts/cleanup/README.md)
+- **Cloud provisioning detail** → [`scripts/cloud/README.md`](./scripts/cloud/README.md)
+- **Packages & tooling strategy** (symlink-vs-copy, operational gotchas) → [`docs/tooling-and-packages.md`](./docs/tooling-and-packages.md)
