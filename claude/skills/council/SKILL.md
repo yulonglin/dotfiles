@@ -78,6 +78,8 @@ The ones you already know — so the panel spends its budget past them.
 
 **Fusion has no peer-ranking stage** — panel models never see each other's answers, and OpenRouter ships no council product (checked 2026-09-01: Labs offers Fusion, Cost Simulator and Spawn). `--rank` is built here, and it is the only way to learn which answer the *other models* found strongest. Skip it for a straightforward question; it roughly doubles cost for a signal you will not use.
 
+The call log records **every** stage of a `--rank` run — the eight seat answers, the eight ballots and the chair — so the recorded spend is the whole run. The `--dry-run` estimate is still a floor, because it counts no reasoning tokens.
+
 **Both modes fail closed.** A council that quietly lost three members still looks like corroboration, which is worse than no council. Default mode inherits fusion's integrity check; `--rank` refuses outright if any seat returns no answer. If it refuses, report the degraded panel and stop — do not retry with `--panel` trimmed to whoever answered, which converts a failure into a fabricated consensus.
 
 ### Borda measures acceptability, not correctness

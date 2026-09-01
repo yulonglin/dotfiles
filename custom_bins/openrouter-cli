@@ -1162,19 +1162,24 @@ line, and nothing else.
 
 
 def cross_rank(answers: dict[str, dict], question: str, key: str,
-               max_tokens: int) -> tuple[dict[str, float], list[str]]:
+               max_tokens: int) -> tuple[dict[str, float], list[str], dict]:
     """Blind peer ranking, aggregated by Borda count.
 
     Each ranker sees every answer but its own, under labels shuffled per ranker
     so position and identity both carry no signal. Excluding self is what makes
     the ballot a peer review rather than a self-assessment; shuffling per ranker
     is what stops "answer A" meaning the same model to everyone.
+
+    Returns the tally, any notes, and the BALLOT USAGE. The usage used to be
+    discarded, which left roughly half a --rank run missing from the recorded
+    spend -- the call log's whole job is to say what a run cost.
     """
     import concurrent.futures as cf
     import random
     live = {s: a for s, a in answers.items() if a.get("content")}
+    usage: dict[str, dict] = {}
     if len(live) < 3:
-        return {}, ["cross-ranking needs at least 3 live answers"]
+        return {}, ["cross-ranking needs at least 3 live answers"], {}
     points: dict[str, float] = {s: 0.0 for s in live}
     notes: list[str] = []
     # Per ranker: the prompt it sees, and the label -> slug map needed to read
@@ -1203,12 +1208,13 @@ def cross_rank(answers: dict[str, dict], question: str, key: str,
         for fut in cf.as_completed(futs):
             ranker = futs[fut]
             try:
-                content, _ = fut.result()
+                content, resp = fut.result()
             # SystemExit too: ask_one reports provider failures through die().
             except (SystemExit, Exception) as exc:  # noqa: BLE001
                 notes.append(f"{ranker} cast no ballot: {exc}")
                 continue
             results[ranker] = content
+            usage[ranker] = {"usage": resp.get("usage") or {}}
 
     for ranker, content in results.items():
         labels = ballots[ranker][1]
@@ -1236,7 +1242,7 @@ def cross_rank(answers: dict[str, dict], question: str, key: str,
                 "score 0 for this ballot")
         for pos, slug in enumerate(order):
             points[slug] += n - pos
-    return points, notes
+    return points, notes, sum_usage(usage)
 
 
 CHAIR_PROMPT = """You are chairing a panel of independent AI models that each \
@@ -1442,7 +1448,7 @@ def cmd_council_ask(args, cfg) -> None:
         die("council incomplete - no answer from: " + ", ".join(dead)
             + "\nrefusing to present a partial council as a full one")
 
-    points, notes = cross_rank(live, prompt, key, max_tokens)
+    points, notes, ballot_usage = cross_rank(live, prompt, key, max_tokens)
     for n in notes:
         print(f"openrouter-cli: {n}", file=sys.stderr)
 
@@ -1461,12 +1467,14 @@ def cmd_council_ask(args, cfg) -> None:
                                rankings=rank_block, nonce=nonce)
     content, resp = ask_one(chair, final, key, max_tokens)
     entries_.append({"role": "chair", "requested": chair, "resolved": resp.get("model")})
-    # Seats + chair, not the chair alone: the synthesis is one call out of
-    # seventeen, so logging only its usage would understate the run ~16-fold.
-    # Ballot usage is not captured -- cross_rank discards its responses -- so
-    # this is a floor, and the flag says so.
-    spend = sum_usage({**answers, "_chair": {"usage": resp.get("usage") or {}}})
-    spend["excludes_ballots"] = True
+    # Every stage: seat answers, ballots and the chair. Logging the chair alone
+    # understated a seventeen-call run ~16-fold, and counting seats+chair still
+    # left the eight ballots -- about half the requests -- out of the record.
+    spend = sum_usage({
+        **answers,
+        "_ballots": {"usage": ballot_usage},
+        "_chair": {"usage": resp.get("usage") or {}},
+    })
     log_call("council", prompt, entries_, resp.get("id"), spend)
 
     if args.show_answers:
