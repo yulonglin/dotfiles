@@ -40,7 +40,7 @@
   "autosave": "on_focus_change",
   "format_on_save": "off", // globally off; enabled per-language for TS/JS/Rust
   "remove_trailing_whitespace_on_save": false,
-  "multi_cursor_modifier": "cmd_or_ctrl",
+  "multi_cursor_modifier": "alt", // alt-click adds a cursor; cmd-click = go to definition (Cursor parity)
   "soft_wrap": "editor_width",
 
   // === Display (non-default only) ===
@@ -57,13 +57,31 @@
   "tabs": {
     "show_diagnostics": "errors"
   },
+  // Native replacement for the errorlens extension (Zed default is false)
+  "diagnostics": {
+    "inline": {
+      "enabled": true
+    }
+  },
+  // show_wrap_guides is true by default but the guide list is empty,
+  // so nothing is drawn until a column is named here
+  "wrap_guides": [100],
   "toolbar": {
     "breadcrumbs": false
   },
 
   // === Search (CRITICAL: include gitignored files) ===
+  // Two separate keys. `search` governs project search (cmd-shift-f);
+  // `file_finder` governs the command-palette file finder (cmd-p).
+  // file_finder default is "smart", which only looks at ignored files when the
+  // worktree itself is gitignored — hence cmd-p missing tmp/ and .remember/.
+  // "all" = use all gitignored files. file_scan_exclusions below still applies,
+  // so .venv/node_modules/__pycache__ stay out of results.
   "search": {
     "include_ignored": true
+  },
+  "file_finder": {
+    "include_ignored": "all"
   },
   "use_smartcase_search": true,
 
@@ -72,6 +90,12 @@
     "**/.git",
     "**/.svn",
     "**/.hg",
+    "**/.jj",
+    "**/.sl",
+    "**/.repo",
+    "**/CVS",
+    "**/.classpath",
+    "**/.settings",
     "**/.DS_Store",
     "**/Thumbs.db",
     "**/.cache",
@@ -79,7 +103,14 @@
     "**/node_modules",
     "**/__pycache__",
     "**/*.pyc",
-    "**/prompt_history"
+    "**/prompt_history",
+    // Hides secret files from cmd-p. Zed's default file_scan_inclusions is
+    // [".env*"], which force-indexes them even though they are gitignored,
+    // and file_finder.include_ignored: "all" then surfaces them.
+    // Deliberately NOT "**/.env*" — that glob also matches .envrc, which is
+    // direnv config you edit by hand and want to keep reachable.
+    "**/.env",
+    "**/.env.*"
   ],
 
   // === Git (inline blame = built-in GitLens) ===
@@ -148,9 +179,14 @@
     "toml": true,
     "dockerfile": true,
     "git-firefly": true,
-    "csv": true,
+    "rainbow-csv": true,
     "just": true,
-    "html": true
+    "html": true,
+    "xml": true,
+    "latex": true,
+    "mermaid": true,
+    "markdownlint": true,
+    "env": true
   },
 
   // === Language Overrides ===
@@ -159,7 +195,18 @@
       "tab_size": 4,
       "format_on_save": "off",
       "preferred_line_length": 100,
-      "language_servers": ["pyright", "ruff"]
+      "soft_wrap": "bounded",
+      "use_on_type_format": true,
+      "formatter": {
+        "language_server": {
+          "name": "ruff"
+        }
+      },
+      // ty, pyright, basedpyright and pylsp are all BUILT INTO Zed — no extension needed.
+      // Only ONE type checker can run at a time: two both publish diagnostics for the
+      // same lines, which is why Zed's own default disables all but one.
+      // To flip back to Zed's default, swap "ty" and "!basedpyright".
+      "language_servers": ["ty", "ruff", "!basedpyright", "!pyright", "!pylsp"]
     },
     "TypeScript": {
       "tab_size": 2,
