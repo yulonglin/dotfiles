@@ -2,17 +2,16 @@
 
 Clarity is not politeness or plain style. It is the reader finishing your sentence holding the idea you meant them to hold, and it fails in specific, checkable ways. This file collects the rules that survive contact with a real draft, ordered by how much a violation costs the reader.
 
-Sources are cited so you can argue with them. Where two disagree, both are given rather than averaged.
-
-## The unit is PEEL, and the units have to compose
+## Use PEEL as the unit of writing, and together the points across these units form the argument
 
 Every paragraph is **Point, Evidence or Explanation, Link back to the point.** State the claim; give what supports it; close by connecting back, so the reader leaves holding the idea they entered with. A paragraph that ends on its evidence leaves the reader to infer the claim, and they will infer a different one.
 
-The paragraphs then have to add up. A narrative is a sequence of PEEL units — A, B, C — arranged so the sequence itself argues something. **Read only the first sentence of each paragraph: that should be the argument.** If it is not, the problem is the structure, and rewriting sentences will not fix it.
+The paragraphs then have to add up. A narrative is a sequence of PEEL units — A, B, C — arranged so the sequence itself argues something. **Read only the first sentence of each paragraph, and that should form the argument of the passage.**
 
 This catches the failure that is invisible one paragraph at a time: a run of well-formed paragraphs whose points do not compose reads as competent and says nothing. Every unit passes; the whole fails.
 
-## The opening's job is instability, and the cost lands on the reader
+## In the opening, incite instability and say what it costs the reader
+<!--FIXME: I'm somewhat skeptical of this section-->
 
 Open by making something the reader cares about visibly unstable, then name what that instability costs *them*. McEnerney: *"you have to generate a sense of instability. Words like, but, however, inconsistent, although, anomaly, show the situation to be unstable"* — and then *"show them that the instability imposes a cost on them. Not on you. On them."*
 
@@ -68,6 +67,10 @@ The goal is not to sound human. It is that each of these actively obscures the p
 - **Uniformity** — every paragraph the same length and shape, so nothing signals which one matters.
 - **Refusing to take a position** — presenting "both sides" where the evidence favours one. If you have a lean, state it and mark its confidence.
 - **Bullet points for narrative or argument.** Chains of "because A, therefore B" belong in prose, where the connectives carry the logic. Save bullets and tables for comparable data and parallel independent items.
+- **Dramatic framing** — "confesses", "blabbers", "clear win", "earns its keep" — trades precision for story; state what happened in the register the evidence supports.
+- **Narrative self-reference** — "this half of the report", "five findings carry the report", "the most useful single view of our data" — the document talking about itself instead of the subject.
+- **Lecturing the self-evident** — explaining standard practice the venue's readers already know (why results compare to chance). If every reader knows it, cut it.
+- **Provoking and deferring** — a claim that raises "why?" or "which ones?" and answers somewhere else. Carry the answer in the same sentence or the next.
 
 ## Reference drafts worth calibrating against
 
@@ -76,3 +79,10 @@ ML papers where the first paragraph frames the problem without waste, threat mod
 ## Related
 
 Page, slide and report form, where numbers go, and terminology: `presentation.md`. Results pages: `results-analysis.md`. `reduce-ambiguity` red-teams a finished draft for how it could be misread. `clarity-critic`, `narrative-critic`, `red-team` and `fact-checker` are the critic agents `review-draft` dispatches.
+
+<!--TODO: The best pieces of writing I know are:
+http://www.incompleteideas.net/IncIdeas/BitterLesson.html
+https://arxiv.org/pdf/2312.06942
+https://arxiv.org/html/2402.06782
+Kaiming He's papers
+-->

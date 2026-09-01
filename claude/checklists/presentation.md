@@ -27,7 +27,7 @@ The rule governs how **results are presented**. It does not govern the per-examp
 
 ## Headings assert, sections elaborate
 
-Every heading is either a claim, hedged to its evidence, or a question the section answers. Reading only the headings should give the findings. `## Results` becomes `## Token positions from assertion sentences are more useful for monitoring`.
+Every heading is either a claim, hedged to its evidence, or a question the section answers. Reading only the headings should give the findings. `## Results` becomes `## Token positions from assertion sentences are more useful for monitoring`. In papers (NeurIPS/ICML/ICLR), top-level section names follow the venue's conventions — Discussion, Limitations and Future Work — and no heading anywhere is imperative or metaphorical ("…So Deploy Two", "Resampling Pays").
 
 State each research question in one sentence, and list them all at the top of the page.
 
@@ -44,7 +44,9 @@ Watch the words that sound standard and are not:
 
 Placement, for anything the reader has to know to read a number: the name of the statistical test and the definition of the interval sit **adjacent to the number they describe** — in the caption, the cell or the sentence — not in a methods section the reader has to go and find. What the test and the interval must say for themselves is `results-analysis.md`. Reserve **P0/P1/P2** for priorities and nothing else.
 
-Avoid buzzwords, corporate jargon and fluffy transitions. Avoid coining terms; when something genuinely is new, explain it the first time. Coinings feedback has already caught: “substrate” → dataset; “arm” → condition (“arm” is bandits-only at ML venues); “upstream” → name the actual source (the benchmark's authors, the original paper). The test: would a reviewer who skipped the setup section know the word?
+Avoid buzzwords, corporate jargon and fluffy transitions. Avoid coining terms; when something genuinely is new, explain it the first time. Coinings feedback has already caught: “substrate” → dataset; “arm” → condition (“arm” is bandits-only at ML venues); “upstream” → name the actual source (the benchmark's authors, the original paper); “surface of record” → “we report the X surface”; “behaviour-blind diagnostic” → name it plainly (a length-only baseline); “finest step” → say the granularity in words. The test: would a reviewer who skipped the setup section know the word? The same goes for people and labs: “Vivek Hebbar at Redwood”, “Mary Phuong at GDM” — never “a group at X”.
+
+Shipping mechanics: no FIXME/TODO/placeholder text that renders into the output — author notes are `%` or `<!-- -->` comments, resolved before shipping. No inline arXiv IDs; every citation verified against live metadata (title and full author list) before its entry is written (`check-bib-references`). Artifacts are mobile-first (~390px, wrapped code, capped SVG width); slides follow the 6×6 rule.
 
 ## Reports lead each bullet with a bolded takeaway
 
