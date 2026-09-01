@@ -39,17 +39,25 @@ Behaviour, all of which the tests guard:
   the title. Comments are written as a bare JSON array, which every generation
   of this layer can read — an older deployed page calls `.reduce()` on the
   parsed value and its whole script dies on anything else;
-- an end-of-page "Your comments" panel with Copy all (Markdown, `> quote`),
-  Download .md, Export text (selectable textarea, since the Artifact viewer
-  blocks page-initiated downloads), and Delete all. Only a copy that actually
-  happened clears the "not yet exported" state;
+- an end-of-page "Your comments" panel with exactly two controls, Copy all
+  (Markdown, `> quote`) and Delete all. There is no download button: the
+  Artifact viewer blocks any page-initiated file save, so one was a button
+  that did nothing wherever these pages are read. When the clipboard itself
+  refuses, Copy all opens a selectable textarea as its fallback — that box is
+  still here, it just has no button of its own. Both routes out are therefore
+  clipboard copies, and only a copy that actually happened clears the "not yet
+  exported" state;
 - every destructive control asks twice in the page itself, never through a
   blocking dialog. The Artifact viewer runs the page in a sandboxed iframe
   with no `allow-modals` keyword, so `window.confirm` returns false without
   ever asking and the browser only logs "Ignored call to ...". A delete
   guarded that way is a dead button exactly where these pages are read;
-- a `beforeunload` guard while comments exist that have not been exported,
-  which also saves the draft and attempts the download on the way out;
+- a `beforeunload` guard while comments exist that have not been copied out,
+  which also saves the draft on the way out. It no longer attempts a download,
+  and it protects an ordinary tab rather than a published page: the same
+  sandbox that suppresses `confirm` excludes the document from unload
+  prompting, so the comments' real safety net is that they are already in
+  localStorage;
 - a fixed count badge that jumps to the panel.
 
 Deliberately absent, each having been built and then removed for causing a
