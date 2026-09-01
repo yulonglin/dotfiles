@@ -40,13 +40,16 @@ rc()   { "$@" >/dev/null 2>&1; echo $?; }
 
 seed_repo() {
   mkdir -p "$REPO/claude/rules" "$REPO/claude/skills/demo" \
-           "$REPO/claude/agents" "$REPO/claude/output-styles"
+           "$REPO/claude/agents" "$REPO/claude/output-styles" \
+           "$REPO/claude/checklists/results-analysis"
   echo "top" > "$REPO/claude/CLAUDE.md"
   echo "rule a" > "$REPO/claude/rules/a.md"
   echo "rule b" > "$REPO/claude/rules/b.md"
   echo "skill" > "$REPO/claude/skills/demo/SKILL.md"
   echo "agent" > "$REPO/claude/agents/x.md"
   echo "style" > "$REPO/claude/output-styles/y.md"
+  echo "checklist" > "$REPO/claude/checklists/c.md"
+  echo "nested checklist" > "$REPO/claude/checklists/results-analysis/n.md"
   # out of scope: must never be mirrored
   echo '{}' > "$REPO/claude/settings.json"
   mkdir -p "$REPO/claude/hooks"; echo "#!/bin/sh" > "$REPO/claude/hooks/h.sh"
@@ -81,7 +84,8 @@ check "dry run wrote no state"                    test ! -e "$STATE"
 
 echo "=== push: repo -> vault, scope respected ==="
 check "push succeeds"                             test "$(rc sync push)" = 0
-for f in CLAUDE.md rules/a.md rules/b.md skills/demo/SKILL.md agents/x.md output-styles/y.md; do
+for f in CLAUDE.md rules/a.md rules/b.md skills/demo/SKILL.md agents/x.md output-styles/y.md \
+         checklists/c.md checklists/results-analysis/n.md; do
   check "mirrored $f"                             test -f "$DEST/$f"
   check "  $f is a real file, not a symlink"      test ! -L "$DEST/$f"
 done
