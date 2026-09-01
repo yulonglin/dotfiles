@@ -9,8 +9,8 @@ These rules carry only always-relevant judgment. Activity-scoped procedure is a 
 - Red-teaming a draft for how it could be misread, before sending it → `check-misreads`
 - Classifying text by meaning with a model → `llm-judge`
 - Jobs, pueue, resource caps, sandbox failure modes → `jobs`
-- Second opinion from another model family → `second-opinion`
-- Running a finished report past a multi-family review panel and consolidating the critiques → `panel-review`
+- A second opinion from another model family — one model, two advisors, or the full eight-seat panel → `council`
+- Putting a question or a finished report to the standing eight-family LLM council, and consolidating the answers → `council`
 - Interviewing the user to stress-test a plan → `interview-me`
 - Charts and figures → `house-plots` (matplotlib for papers; native SVG via built-in `dataviz` for artifact pages)
 - Browser automation and which browser tool to reach for → `agent-browser`

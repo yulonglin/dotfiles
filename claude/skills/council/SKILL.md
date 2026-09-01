@@ -1,52 +1,42 @@
 ---
 name: council
-description: Put a question to the standing multi-family LLM council (8 seats, one per lab, chaired by Fable 5) and consolidate the answers. Use for "ask the council", "llm council", "panel review", "review this report with multiple models", "get several models to critique this", "what would other models say", before publishing a results page or spec someone will act on.
+description: Ask another model family — one model, an agentic reviewer, or the full eight-seat LLM council with blind peer ranking. Use for "second opinion", "sanity check this", "ask another model", "am I wrong", "llm council", "panel review", "review this with multiple models", "adversarial review", before publishing a result or spec someone will act on.
 ---
 
-# The LLM Council
+# Asking Another Model
 
-Eight models, one per lab family, answer the same question independently. A chair then synthesises them — and with `--rank`, each member first ranks the others' answers blind. The output worth reading is not the consensus; it is **which parts of your argument survive disagreement**.
+A second opinion is only worth its cost when it comes from a **different model family**. Another call to the model that is already stuck reliably produces agreeing-sounding text, because it shares the priors that produced the stuck answer.
 
-One question at a time, one command:
+Everything here is one ladder. Start at the cheapest rung that can answer the question, and climb only when the answer needs to survive disagreement.
 
-```
-with-secrets OPENROUTER_API_KEY -- openrouter-cli council ask "<self-contained brief>"
-```
+## Pick the rung by how hard the question is
 
-## The roster is picked by index, not by hand
+Difficulty sets the rung, not stakes and not cost. A hard question is one where competent models would genuinely disagree; an easy one has an answer you could look up or derive. Climbing past the difficulty of the question buys latency and a longer thing to read.
 
-`config/openrouter-models.toml` is the single place any of this is configured — seats, chair, price cap, review cadence. Nothing else names a model.
+| Rung | Command | Calls | Cost | Latency | The question is… |
+|---|---|---|---|---|---|
+| **advisor** | `advisor()` | 1 | — | seconds | About work it can already see. No brief to write — always try this first |
+| **one family** | `openrouter-cli ask <alias> "…"` | 1 | ~$0.01 | seconds | Bounded, and you want one genuinely different prior on it |
+| **two advisors** | `openrouter-cli council advise "…"` | 2 | ~$0.09 | seconds | Real but not contested: the two strongest models, both answers, no synthesis |
+| **agentic** | `codex-companion` (GPT), `opencode run` (others) | many | varies | minutes | Only answerable by *running* things — reading the repo, running tests, iterating |
+| **council** | `openrouter-cli council ask "…"` | 9 | ~$0.34 | ~1 min | Genuinely contested: you need the spread of opinion, not one view |
+| **council --rank** | `openrouter-cli council ask "…" --rank` | 17 | ~$0.60 | ~2 min | So contested that you need to know which answer *the other models* found strongest |
 
-Seats are chosen automatically from the Epoch Capabilities Index (and Artificial Analysis when `AA_API_KEY` is set): the highest-scoring model per family whose output price is under the cap, preferring a newer sibling in the same product line when the index has not scored it yet. Run `openrouter-cli council roster` to see who is seated and `--check` to compare against a fresh pick.
+Costs are for a short question and scale with the brief; `--dry-run` prints a priced estimate on every rung before spending. Above roughly $100 propose and wait — nothing here comes close.
 
-**Do not hand-edit the seats block.** It sits between `# BEGIN council-auto` / `# END council-auto` markers and a refresh overwrites it. Change the *rule* instead — `families`, `max_output_price` — or the chair, which is hand-picked.
+**`advise` is the rung to reach for by default**, and usually the right answer to "get a second opinion". It asks whoever holds the anthropic and openai seats — today `claude-fable-5` and `gpt-5.6-sol`, the two highest-scoring models in the catalogue under the price cap — and prints both answers with **no synthesis**. Two strong disagreeing priors settle most questions, and with only two answers the disagreement *is* the signal; a chair would average it away for the price of another call.
 
-A seat whose `basis` is `newest-in-line` is seated on **recency alone**; no index has scored it. Say so if you quote the roster as evidence of capability.
+**Do not climb reflexively.** A second opinion on scoped, settled work buys nothing. Three triggers justify the climb: the same approach has failed twice (two genuine attempts, not two symptoms of one bug); a high-ambiguity design call where the trade-off axis is judgement rather than measurement; corroborating a high-stakes conclusion before it ships.
 
-## Two modes, and what each one actually is
+## Every channel except advisor is amnesiac
 
-| Mode | What runs | Calls |
-|---|---|---|
-| default | One OpenRouter `fusion` call: the panel answers server-side in parallel, an analyst returns consensus, contradictions, unique insights and blind spots, the chair writes the answer | 9 |
-| `--rank` | Eight answers gathered directly, then **every member ranks the others blind**, then the chair synthesises with the Borda tally | 17 |
+None of them can see your conversation, open a URL, or read an artifact. `advisor` is the exception — it is forwarded the whole transcript.
 
-**Fusion has no peer-ranking stage** — panel models never see each other's answers, and OpenRouter ships no "council" product (checked 2026-09-01: Labs offers Fusion, Cost Simulator and Spawn). `--rank` is the part built here, and it is the only way to learn which answer the *other models* found strongest.
+So every brief is **self-contained**: what the system is, what was tried, what happened, the actual question, and the constraints that make the obvious answer wrong. Paste the code, the error and the config rather than naming them. A brief that says "does this look right?" gets an answer about a system the model invented.
 
-Reach for `--rank` when the answers will disagree and you need to know who is persuasive to peers rather than to you — a contested design call, a result you are about to publish. Skip it for a straightforward question; it roughly doubles the cost for a signal you will not use.
-
-`--dry-run` prints the plan, the call count and a priced estimate before spending. A short question costs about **$0.34** in default mode and **$0.60** with `--rank`; a long brief with `--context` files costs more, and the dry run is how you find out which.
-
-## Both modes fail closed
-
-A council that quietly lost three members is worse than no council, because it still looks like corroboration. Default mode inherits fusion's integrity check; `--rank` refuses outright if any seat returns no answer. **If it refuses, report the degraded panel and stop** — do not retry with `--panel` trimmed to whoever answered, which converts a failure into a fabricated consensus.
-
-## Brief completeness is the main quality lever
-
-Every seat is amnesiac. None can see your conversation, open a URL, or read an artifact. A model given a gap fills it confidently, invents a method you did not use, and critiques the invention — so every omission becomes a fabricated finding you then have to triage away.
+**Brief completeness is the main quality lever at the council rung.** A model given a gap fills it confidently, invents a method you did not use, and critiques the invention — so every omission becomes a fabricated finding you then triage away.
 
 Convert the target to plain text first: an Artifact via the Artifact tool's `read` then `any2md`; a local `.html` via `any2md`; results JSON or CSV pasted verbatim, never summarised — numbers you summarise are numbers nobody can check.
-
-Write the brief to a file and pass it in:
 
 ```markdown
 ## What this is
@@ -72,13 +62,64 @@ The ones you already know — so the panel spends its budget past them.
 "Is the null right for this metric?" beats "any thoughts?".
 ```
 
-## Code goes in with `--context`, agentic loops do not
+`--context <path>` inlines a file into the council brief, repeatable, so all eight seats see the same code. That is the tool for "review this diff". It is **not** an agentic loop — no seat can run the tests or grep the repo. When the question needs that, drop to the agentic rung instead of pasting a whole repository.
 
-`--context <path>` inlines a file into the brief, repeatable, so all eight families see the same code. That is the right tool for "review this diff", "is this design sound", "what breaks here".
+## The council: eight seats, one per lab family
 
-It is **not** an agentic loop: no seat can run the tests, grep the repo, or iterate. When the question genuinely needs that, the council is the wrong instrument — use `codex-companion` for GPT or `opencode run -m openrouter/<slug>` for the others, both covered in `second-opinion`. Do not fake it by pasting a whole repository.
+| Mode | What runs | Calls |
+|---|---|---|
+| default | One OpenRouter `fusion` call: the panel answers server-side in parallel, an analyst returns consensus, contradictions, unique insights and blind spots, the chair writes the answer | 9 |
+| `--rank` | Eight answers gathered directly, then **every member ranks the others blind**, then the chair synthesises with the Borda tally | 17 |
 
-## Reading the result
+**Fusion has no peer-ranking stage** — panel models never see each other's answers, and OpenRouter ships no council product (checked 2026-09-01: Labs offers Fusion, Cost Simulator and Spawn). `--rank` is built here, and it is the only way to learn which answer the *other models* found strongest. Skip it for a straightforward question; it roughly doubles cost for a signal you will not use.
+
+**Both modes fail closed.** A council that quietly lost three members still looks like corroboration, which is worse than no council. Default mode inherits fusion's integrity check; `--rank` refuses outright if any seat returns no answer. If it refuses, report the degraded panel and stop — do not retry with `--panel` trimmed to whoever answered, which converts a failure into a fabricated consensus.
+
+### The chair grades its own answer
+
+The chair holds a seat as well. The blind ranking excludes a ranker's own answer from its ballot, so the self-preference is confined to the synthesis step — but it is real. Where the synthesis favours the chair's own contribution, discount it or read that answer yourself. `--show-answers` prints every raw answer before the synthesis, which is the cheap check.
+
+## The roster is picked by index, and lives in ONE file
+
+`config/openrouter-models.toml` is the single place any model is named — seats, chair, price cap, cadence. It is deliberately not restated in this skill: a table in a skill is a copy that drifts, and a stale copy of a roster still reads as authoritative.
+
+```
+openrouter-cli council roster          # who is seated, with scores and why
+openrouter-cli council roster --check  # ...and whether the indices have moved
+openrouter-cli models --check          # every configured slug vs the live catalogue
+```
+
+Seats are chosen from the Epoch Capabilities Index (and Artificial Analysis when `AA_API_KEY` is set): the highest scorer per family under a price cap, preferring a newer sibling **in the same product line** when the index has not scored it yet. Both guards are load-bearing — without the cap the rule buys 0.6 index points for 15x the price, and without the product-line constraint "newest" seats a roster of cheap `-flash` and `-mini` tiers.
+
+**Do not hand-edit the seats block.** It sits between `# BEGIN council-auto` / `# END council-auto` and a refresh overwrites it. Change the *rule* — `families`, `max_output_price` — or the chair, which is hand-picked. A seat whose `basis` is `newest-in-line` is seated on **recency alone**; say so if you quote the roster as evidence of capability.
+
+Use the alias (`openrouter-cli ask glm "…"`), never a raw slug — an alias follows a refresh, a pasted slug does not.
+
+Two traps worth holding onto:
+
+- **`gpt55pro` is deliberately off the roster.** At $30/M in and $180/M out it is ~15x the seated OpenAI model for 0.6 index points, so the price cap excludes it. Keeping it out of the seats *is* the mechanism — there is no opt-in flag, because a field the CLI does not read would look like a guard without being one.
+- **x-ai version numbers are not chronological.** `grok-4.20` belongs to an OLDER line than `grok-4.6`, so "pick the biggest number" selects the wrong model. The index and the catalogue's `created` timestamp avoid that; reading the version by eye does not.
+
+### Staleness is handled for you
+
+A fortnightly timer (`council-roster.timer`) compares the roster against the indices and writes `~/.local/state/council-roster/roster-report.txt`. Past `review_days`, a session-start nudge asks for `council refresh --apply` plus a commit. The timer never edits the config — it runs `ProtectHome=read-only`, and an automated edit to a tracked file leaves uncommitted drift nobody notices.
+
+`openrouter-cli drift` separately checks every slug that can spend money against the live catalogue, monthly, needing no key. It reports **gone** (not in the catalogue, so calls fail outright), **superseded** (a newer checkpoint exists) and **expiring** (a retirement date within a year; far-future sentinels like `2098-12-31` are ignored). Neither job ever edits the config.
+
+This matters because a stale slug fails in a way nobody notices. On 2026-08-28 the synthesiser was found pointing at `anthropic/claude-opus-4-8`, which the catalogue spells `claude-opus-4.8` — so **every fusion call had been failing invisibly** while `models --check` validated only the models table. Both checks now cover every role.
+
+Attribution is required by the data licences wherever these scores appear: **Epoch AI** (CC-BY) and **artificialanalysis.ai**.
+
+## Non-Anthropic models CANNOT be reached through subagents
+
+A hard constraint, not a preference, and it has bitten before. An agent's frontmatter `model:` resolves **only** against api.anthropic.com. Naming a non-Anthropic model there produces one of two outcomes, and the second is far worse:
+
+- It hard-fails with "There's an issue with the selected model".
+- It answers from Claude **wearing another family's label** — silently fabricating a multi-family result. A panel that is secretly one model agreeing with itself is worse than no panel, because it looks like corroboration.
+
+The `kimi-k3`, `glm-5.3`, `qwen3.8-max` and `muse-spark-1.2` agent files were deleted on 2026-08-25 for exactly this. Do not recreate them. The model-router gateway that once made such names resolve is unwired, because it hard-disables Remote Control. **The CLI is the only sanctioned route.**
+
+## Reading a multi-model result
 
 De-duplicate first: three families raising one point is **one finding with three names on it**, not three findings.
 
@@ -89,35 +130,54 @@ De-duplicate first: three families raising one point is **one finding with three
 | (c) Presentation and clarity | Topic headings that should be claims, numbers in prose that should be a figure, undefined jargon |
 | **(d) Disagreements between members** | Where seats reached opposite conclusions on the same passage |
 
-**(d) is the highest-signal bucket and must never be averaged away.** Report both positions and who held each, then adjudicate against the data yourself. A synthesis that resolves a contradiction into a middle position has destroyed the finding — which is why the chair is instructed not to, and why you should check that it did not.
+**(d) is the highest-signal bucket and must never be averaged away.** Report both positions and who held each, then adjudicate against the data yourself. A synthesis that resolves a contradiction into a middle position has destroyed the finding — the chair is instructed not to, and you should check that it did not.
 
-Two rules that survive every council:
-
-- **Agreement is weak evidence, not strong.** These models share most of their training data, so a unanimous panel may be one prior wearing eight labels. Weight a contradiction above a consensus, and never quote "all eight agreed" as corroboration.
+- **Agreement is weak evidence, not strong.** These models share most of their training data, so a unanimous panel may be one prior wearing eight labels. Weight a contradiction above a consensus; never quote "all eight agreed" as corroboration.
 - **The council never adjudicates data.** It critiques reasoning, framing and presentation. A measured number from the repo beats the panel's aggregate opinion every time; if a seat disputes a number, re-derive it from the source, and if the source holds, the finding is declined.
 
-Triage every finding as must-fix (bucket a or b, or anything that changes what a reader would do), should-fix, or **noted and declined with a stated reason**. Name the seat that raised each one, so a later reader can tell an eight-family consensus from one model's idiosyncrasy.
+Triage each finding as must-fix (bucket a or b, or anything that changes what a reader would do), should-fix, or **noted and declined with a stated reason**. Name the seat that raised each, so a later reader can tell an eight-family consensus from one model's idiosyncrasy.
 
-## The chair grades its own answer
+## Every billed call records which model actually served it
 
-Fable 5 chairs while holding the anthropic seat. The blind ranking already excludes a ranker's own answer from its ballot, so the self-preference is confined to the synthesis step — but it is real. **Where the synthesis favours the anthropic seat's contribution, discount it or read that answer yourself.** `--show-answers` prints every seat's raw answer before the synthesis, which is the cheap way to check.
+The slug you request is not always the model that answers. `openrouter-cli` logs, for every `ask`, `fusion` and `council` call, the concrete model id from the response — per seat and for the chair separately: one line to stderr as it happens, and one append-only JSON row in `~/.local/state/openrouter-cli/calls.jsonl` carrying timestamp, response id, token usage, cost and each requested/resolved pair.
 
-## Keys, and why the council cannot be subagents
+Prompts are **not** stored, only a `prompt_sha256`, so the log ties a result to its input without keeping the text. A failed log write warns and never discards an answer you already paid for.
 
-`council ask` spends money and needs `OPENROUTER_API_KEY`. Secrets here are per-project, never global: `setup-envrc` for a repo, or `with-secrets OPENROUTER_API_KEY -- ...` for one shot. `roster` and `refresh` need no key at all — both data sources are public.
+```
+tail -5 ~/.local/state/openrouter-cli/calls.jsonl | jq '{ts, command, models}'
+```
 
-Non-Anthropic models **cannot** be reached through subagents: an agent's frontmatter `model:` resolves only against api.anthropic.com, so a non-Anthropic name there either hard-fails or answers from Claude wearing another family's label — a panel that is secretly one model agreeing with itself. `second-opinion` has the full reasoning. The CLI is the only sanctioned route.
+Seats are pinned rather than floating precisely so provenance survives. Floating `~family-latest` slugs gave zero-maintenance freshness and destroyed attribution: the catalogue does not publish what one points at, and measured against the call log most of them resolved to *themselves*, so even the log could not recover which model answered. A fortnightly index refresh buys the freshness back without that cost. **If a result matters, capture the resolved id at the time** — the log is local and unsynced.
 
-## Staleness is handled for you
+## The agentic rung
 
-A fortnightly timer (`council-roster.timer`) compares the roster against the indices and writes `~/.local/state/council-roster/roster-report.txt`. When the roster goes past `review_days`, a session-start nudge says so and asks for `council refresh --apply` plus a commit. The timer never edits the config — it runs `ProtectHome=read-only`, and an automated edit to a tracked file leaves uncommitted drift nobody notices.
+`codex-companion` gives GPT a real agentic loop over the code; OpenCode is the equivalent for every other family. GPT agentic coding always goes through codex-companion; OpenCode covers the rest.
 
-Attribution is required by the data licences wherever these scores appear: **Epoch AI** (CC-BY) and **artificialanalysis.ai**.
+| You want | Invocation |
+|---|---|
+| Code-level critique of a diff | Monitor tool, `codex-companion adversarial-review` |
+| Critique of a written plan | Monitor tool, `codex-companion plan-review` |
+| Open-ended investigation | Monitor tool, `codex-companion task` |
+| Agentic coding, non-GPT | `opencode run -m openrouter/<slug> "<brief>"` |
+| Judgement or research taste, Anthropic | Agent tool, `model: "fable"` |
+
+OpenCode config lives at `~/.config/opencode/opencode.json`, overridden by a project-level `./opencode.json`; the repo template is `config/opencode/opencode.json` and uses `{env:OPENROUTER_API_KEY}` rather than an on-disk key.
+
+**Do not run OpenCode's `/connect`.** It writes the resolved key in plaintext to `~/.local/share/opencode/auth.json` — exactly the global-key-on-disk situation the per-project model avoids. And if OpenCode reports that its postinstall did not run, **that is the guard working**: `opencode-ai` declares a `postinstall` script and this machine sets `ignore-scripts=true`. Do not re-enable lifecycle scripts and do not add the `anomalyco` tap — both need explicit approval and neither is necessary, because the real binaries ship as platform packages that `custom_bins/opencode` finds directly.
+
+## Keys are per-project, never global
+
+`ask`, `fusion` and `council ask` spend money and need `OPENROUTER_API_KEY`. Secrets here are **not** globally exported — that is the supply-chain defense, not a misconfiguration:
+
+- `setup-envrc` in the repo that needs it, so direnv provides it persistently.
+- `with-secrets OPENROUTER_API_KEY -- openrouter-cli council ask "..."` for one shot.
+
+`with-secrets` is a **zsh function**, so it is unavailable to systemd units and non-shell callers; those use `dotfiles-secrets shell KEY` or `jkeys exec`. `roster`, `refresh`, `drift` and `models --check` need no key — every source they read is public.
 
 ## Related
 
-- `second-opinion` — one family rather than eight, plus codex-companion, OpenCode and the key rules
 - `advisor` — the only channel that already has the conversation; no brief needed
 - `check-misreads` — how a draft could be *misread*, a different pass; run it after the council's substantive findings are fixed
 - `results-artifact` — the intervals, nulls and ceilings the council will be checking against
 - `config/openrouter-models.toml` — the single place: seats, chair, cap, cadence
+- `custom_bins/openrouter-cli` — `council`, `ask`, `fusion`, `models`, `drift`
