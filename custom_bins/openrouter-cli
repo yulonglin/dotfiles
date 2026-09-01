@@ -1226,9 +1226,27 @@ def estimate_council(chair: str, panel: list[str], prompt: str, rank: bool,
     cin, cout = price.get(chair, (0, 0))  # stage 3: the chair reads everything
     total += ((q + ans * len(panel)) * cin + ans * cout) / 1e6
 
-    print(f"\nestimated cost ~${total:.2f}"
-          f" (assumes ~{ans} output tokens per answer at {CHARS_PER_TOKEN}"
-          f" chars/token; actual billing is reported per call)")
+    print(f"\nestimated cost ~${total:.2f} -- a FLOOR, not a quote."
+          f" Assumes ~{ans} output tokens per answer at {CHARS_PER_TOKEN}"
+          f" chars/token and counts no reasoning tokens, which are billed as"
+          f" output and can exceed the visible answer (measured: 699 reasoning"
+          f" tokens on a two-sentence synthesis). Actual billing is reported"
+          f" per call.")
+
+
+def sum_usage(answers: dict[str, dict]) -> dict:
+    """Total tokens and cost across a fan-out.
+
+    A multi-call rung has no single response to take usage from, and logging
+    None there would make the call log understate what was actually spent --
+    the one thing the log exists to record.
+    """
+    total: dict[str, float] = {}
+    for a in answers.values():
+        for k, v in (a.get("usage") or {}).items():
+            if isinstance(v, (int, float)):
+                total[k] = total.get(k, 0) + v
+    return total
 
 
 def advisor_slugs(cfg: dict) -> list[str]:
@@ -1287,7 +1305,7 @@ def cmd_council_advise(args, cfg) -> None:
     log_call("advise", prompt,
              [{"role": "advisor", "requested": s, "resolved": a.get("resolved"),
                "error": a.get("error")} for s, a in answers.items()],
-             None, None)
+             None, sum_usage(answers))
     live = [s for s in pair if answers[s].get("content")]
     if not live:
         die("no advisor answered")
@@ -1350,7 +1368,13 @@ def cmd_council_ask(args, cfg) -> None:
     final = CHAIR_PROMPT.format(question=prompt, answers=body, rankings=rank_block)
     content, resp = ask_one(chair, final, key, max_tokens)
     entries_.append({"role": "chair", "requested": chair, "resolved": resp.get("model")})
-    log_call("council", prompt, entries_, resp.get("id"), resp.get("usage"))
+    # Seats + chair, not the chair alone: the synthesis is one call out of
+    # seventeen, so logging only its usage would understate the run ~16-fold.
+    # Ballot usage is not captured -- cross_rank discards its responses -- so
+    # this is a floor, and the flag says so.
+    spend = sum_usage({**answers, "_chair": {"usage": resp.get("usage") or {}}})
+    spend["excludes_ballots"] = True
+    log_call("council", prompt, entries_, resp.get("id"), spend)
 
     if args.show_answers:
         print("# Individual answers\n")

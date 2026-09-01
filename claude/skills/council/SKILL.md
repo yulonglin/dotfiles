@@ -22,7 +22,7 @@ Difficulty sets the rung, not stakes and not cost. A hard question is one where 
 | **council** | `openrouter-cli council ask "…"` | 9 | ~$0.34 | ~1 min | Genuinely contested: you need the spread of opinion, not one view |
 | **council --rank** | `openrouter-cli council ask "…" --rank` | 17 | ~$0.60 | ~2 min | So contested that you need to know which answer *the other models* found strongest |
 
-Costs are for a short question and scale with the brief; `--dry-run` prints a priced estimate on every rung before spending. Above roughly $100 propose and wait — nothing here comes close.
+Costs are **floors** for a short question, and scale with the brief. `--dry-run` prints an estimate on every rung, but it counts no **reasoning tokens** — those are billed as output and can exceed the visible answer, so treat the estimate as a lower bound rather than a quote. Measured on a two-sentence council question: the chair's synthesis call alone cost **$0.10** with 699 reasoning tokens. Above roughly $100 propose and wait; nothing here comes close.
 
 **`advise` is the rung to reach for by default**, and usually the right answer to "get a second opinion". It asks whoever holds the anthropic and openai seats — today `claude-fable-5` and `gpt-5.6-sol`, the two highest-scoring models in the catalogue under the price cap — and prints both answers with **no synthesis**. Two strong disagreeing priors settle most questions, and with only two answers the disagreement *is* the signal; a chair would average it away for the price of another call.
 
