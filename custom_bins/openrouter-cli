@@ -12,7 +12,10 @@ OpenRouter families stay reachable.
     openrouter-cli drift                  # every configured slug vs the catalogue
     openrouter-cli refresh                # rank via Epoch ECI (+ AA if keyed)
     openrouter-cli ask glm "question"     # one model
-    openrouter-cli fusion "question"      # panel in parallel + judge synthesis
+    openrouter-cli fusion "question"      # panel in parallel + chair synthesis
+    openrouter-cli council roster --check # is the seated roster still the best?
+    openrouter-cli council refresh --apply# re-pick every seat from the indices
+    openrouter-cli council ask "question" # the standing multi-family council
 
 `fusion` is the primitive for multi-family work: OpenRouter dispatches the
 panel server-side and the response names consensus, contradictions and
@@ -174,14 +177,47 @@ def is_floating(slug: str) -> bool:
     return slug.startswith("~")
 
 
+def seats(cfg: dict) -> list[dict]:
+    """The council roster, in seating order.
+
+    Seats are the primary roster: they supply the alias table, the default
+    fusion panel and the council itself. Off-roster `[[models]]` entries are a
+    secondary lookup, never a parallel roster.
+    """
+    return list(cfg.get("council", {}).get("seats") or [])
+
+
+def entries(cfg: dict) -> list[dict]:
+    """Every named model, council seats first then off-roster extras.
+
+    Order matters: a seat and an off-roster entry sharing an alias must resolve
+    to the seat, because the seat is what a refresh maintains.
+    """
+    return seats(cfg) + list(cfg.get("models") or [])
+
+
+def chair_of(cfg: dict) -> str:
+    """The one model that synthesises, for both `council ask` and `fusion`.
+
+    A single key on purpose: a separate `judge` for fusion once existed, and two
+    keys answering "who synthesises" only gave the config a second place to
+    drift. `judge` is still read as a fallback so an older copy of the config
+    keeps working.
+    """
+    chair = (cfg.get("council") or {}).get("chair") or cfg.get("judge")
+    if not chair:
+        die("no [council].chair configured")
+    return chair
+
+
 def resolve(cfg: dict, name: str) -> str:
-    """Accept an alias, a bare slug, or a slug suffix."""
-    for m in cfg["models"]:
+    """Accept an alias or a bare slug. Council seats win over off-roster models."""
+    for m in entries(cfg):
         if name in (m.get("alias"), m["slug"]):
             return m["slug"]
     if "/" in name:  # an unlisted slug is allowed, just not abbreviated
         return name
-    known = ", ".join(sorted(str(m.get("alias") or m["slug"]) for m in cfg["models"]))
+    known = ", ".join(sorted(str(m.get("alias") or m["slug"]) for m in entries(cfg)))
     die(f"unknown model {name!r}. Configured: {known}")
 
 
@@ -216,7 +252,9 @@ def parse_panel(spec: str | None, cfg: dict) -> list[str]:
     while providing no independent second opinion.
     """
     if spec is None:
-        panel = [resolve(cfg, p) for p in cfg["panel"]]
+        panel = [s["slug"] for s in seats(cfg)]
+        if not panel:
+            die("no council seats configured - run `openrouter-cli council refresh --apply`")
     else:
         names = [s.strip() for s in spec.split(",")]
         if not names or not all(names):
@@ -427,12 +465,13 @@ def stem(slug: str) -> str:
 def configured(cfg: dict) -> list[tuple[str, str]]:
     """Every slug this config can spend money on, as (role, slug).
 
-    All three roles, not just [[models]]: `models --check` validated only the
+    Every role, not just [[models]]: `models --check` once validated only the
     models table, which is how the `judge` slug rotted unnoticed into a value
-    the catalog does not have -- breaking every `fusion` call silently.
+    the catalog does not have -- breaking every `fusion` call silently. The
+    chair and the council seats are checked here for the same reason.
     """
-    out = [("judge", cfg["judge"])]
-    out += [("panel", resolve(cfg, p)) for p in cfg.get("panel", [])]
+    out = [("chair", chair_of(cfg))]
+    out += [("seat", s["slug"]) for s in seats(cfg)]
     out += [("models", m["slug"]) for m in cfg.get("models", [])]
     seen, uniq = set(), []
     for role, slug in out:
@@ -625,9 +664,10 @@ def render_drift(findings: list[dict], total: int, checked: int) -> str:
     lines += [
         "## To act on this",
         "",
-        "Edit `config/openrouter-models.toml` by hand, then confirm with",
-        "`openrouter-cli drift`. Panel members are aliases, so repointing a",
-        "`[[models]]` entry updates the panel too.",
+        "Council seats are re-picked from the capability indices, not by hand:",
+        "`openrouter-cli council refresh` to see the proposal, `--apply` to write",
+        "it. Only the chair and off-roster `[[models]]` entries are",
+        "hand-edited. Confirm either way with `openrouter-cli drift`.",
         "",
     ]
     return "\n".join(lines)
@@ -705,15 +745,15 @@ def cmd_fusion(args, cfg) -> None:
     caps = cfg.get("fusion", {})
     payload = {
         # The outer voice that writes the final prose.
-        "model": cfg["judge"],
+        "model": chair_of(cfg),
         "messages": [{"role": "user", "content": args.prompt}],
         "tools": [{
             "type": "openrouter:fusion",
             "parameters": {
                 "analysis_models": panel,
                 # The analyst that structures the panel's answers. Distinct
-                # role from the outer model above; one judge fills both here.
-                "model": cfg["judge"],
+                # role from the outer model above; the chair fills both here.
+                "model": chair_of(cfg),
                 # Pinned so an upstream beta-default change cannot silently
                 # raise spend per inner call.
                 "max_tool_calls": caps.get("max_tool_calls", 4),
@@ -724,13 +764,13 @@ def cmd_fusion(args, cfg) -> None:
     }
     if args.dry_run:
         print(json.dumps(payload, indent=2))
-        print(f"\npanel of {len(panel)}, judge {cfg['judge']}", file=sys.stderr)
+        print(f"\npanel of {len(panel)}, chair {chair_of(cfg)}", file=sys.stderr)
         return
     resp = post_json(f"{OR_BASE}/chat/completions", payload, api_key())
     content = extract_content(resp)
     result = fusion_result(resp)
 
-    # Provenance for every model in the call, not just the outer one: the judge
+    # Provenance for every model in the call, not just the outer one: the chair
     # fills both the outer and analyst roles, and each panel member answered
     # separately. `responses[].model` carries the per-member served id where the
     # API provides it; the flat `models` list is the documented fallback.
@@ -741,8 +781,8 @@ def cmd_fusion(args, cfg) -> None:
     for m in result.get("models") or []:
         served.setdefault(m, m)
     entries = [{
-        "role": "judge",
-        "requested": cfg["judge"],
+        "role": "chair",
+        "requested": chair_of(cfg),
         "resolved": resp.get("model"),
     }]
     entries += [
@@ -765,6 +805,496 @@ def cmd_fusion(args, cfg) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# The council
+# ---------------------------------------------------------------------------
+
+# The auto-managed seats block. Only the text BETWEEN these markers is rewritten
+# by a refresh, because tomllib reads TOML but cannot write it, and a
+# round-trip through a generic serialiser would delete every comment in the
+# file. The commentary in openrouter-models.toml is the institutional memory of
+# why each guard exists, so preserving it is a correctness requirement, not
+# tidiness.
+SEATS_BEGIN = "# BEGIN council-auto"
+SEATS_END = "# END council-auto"
+
+
+def catalog_rows() -> list[dict]:
+    """Every billable non-floating catalog entry, with prices in USD per M."""
+    data = get_json(f"{OR_BASE}/models").get("data", [])
+    rows = []
+    for e in data:
+        slug = e.get("id") or ""
+        # Floating aliases cannot be seated (they hide which tier answers) and
+        # :batch variants are the same model on a slower, cheaper queue -- both
+        # would distort a capability ranking rather than inform it.
+        if not slug or slug.startswith("~") or ":batch" in slug:
+            continue
+        provider, _, tail = slug.partition("/")
+        if not provider or not tail:
+            continue
+        p = e.get("pricing") or {}
+        try:
+            din = float(p.get("prompt") or 0) * 1e6
+            dout = float(p.get("completion") or 0) * 1e6
+        except (TypeError, ValueError):
+            continue
+        rows.append({
+            "slug": slug, "family": provider, "tail": tail,
+            "in": din, "out": dout, "created": e.get("created") or 0,
+        })
+    return rows
+
+
+def index_scores() -> tuple[dict[str, float], list[str]]:
+    """Capability score per normalised model name, plus attribution lines.
+
+    Epoch alone when AA_API_KEY is unset. With both, each index is min-max
+    normalised before averaging: the two use different scales, so a raw mean
+    would silently let whichever has the wider range dominate the ranking.
+    """
+    eci = fetch_eci()
+    aa = fetch_aa()
+    credits = ["Epoch AI Capabilities Index (CC-BY)"]
+    if not aa:
+        return eci, credits
+    credits.append("artificialanalysis.ai intelligence index")
+
+    def unit(d: dict[str, float]) -> dict[str, float]:
+        vals = list(d.values())
+        lo, hi = min(vals), max(vals)
+        if hi == lo:
+            return {k: 1.0 for k in d}
+        return {k: (v - lo) / (hi - lo) for k, v in d.items()}
+
+    ne, na = unit(eci), unit(aa)
+    out = {}
+    for name in set(ne) | set(na):
+        parts = [d[name] for d in (ne, na) if name in d]
+        out[name] = sum(parts) / len(parts)
+    return out, credits
+
+
+def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
+              cap: float) -> dict | None:
+    """The best seat for one family under the price cap, or None.
+
+    Returns None rather than raising when a family has nothing affordable: a
+    vanished or fully-over-cap family must degrade to a reported gap, not a
+    crash inside a scheduled job.
+    """
+    pool = [r for r in rows if r["family"] == family and r["out"] <= cap]
+    if not pool:
+        return None
+    scored = [(r, scores.get(norm(r["tail"]))) for r in pool]
+    have = [(r, s) for r, s in scored if s is not None]
+    if not have:
+        best = max(pool, key=lambda r: r["created"])
+        return {**best, "score": 0.0, "basis": "newest-in-line"}
+    best, score = max(have, key=lambda rs: rs[1])
+    # An unscored model in the SAME product line that is newer than the scored
+    # best is a release the index has not reached yet. Restricting this to the
+    # same stem is load-bearing: without it the rule seats `-flash`, `-mini` and
+    # `-contributor` tiers, which is a capability demotion wearing the word
+    # "newest".
+    line = stem(best["slug"])
+    newer = [r for r, s in scored
+             if s is None and stem(r["slug"]) == line and r["created"] > best["created"]]
+    if newer:
+        cand = max(newer, key=lambda r: r["created"])
+        return {**cand, "score": 0.0, "basis": "newest-in-line"}
+    return {**best, "score": round(score, 1), "basis": "eci"}
+
+
+def alias_for(cfg: dict, family: str, slug: str) -> str:
+    """Keep the alias a family already had, so `ask glm` survives a refresh."""
+    for s in seats(cfg):
+        if s.get("family") == family:
+            return s["alias"]
+    for m in cfg.get("models") or []:
+        if m["slug"] == slug:
+            return m.get("alias") or family
+    return family.split("-")[0]
+
+
+def propose_roster(cfg: dict) -> tuple[list[dict], list[str], list[str]]:
+    """(seats, families with no affordable model, index attribution lines)."""
+    council = cfg.get("council") or {}
+    families = list(council.get("families") or [])
+    cap = float(council.get("max_output_price") or 0) or float("inf")
+    if len(families) > 8:
+        die(f"council has {len(families)} families; fusion panels take at most 8")
+    rows = catalog_rows()
+    scores, credits = index_scores()
+    picked, gaps = [], []
+    for fam in families:
+        best = pick_seat(fam, rows, scores, cap)
+        if best is None:
+            gaps.append(fam)
+            continue
+        picked.append({
+            "alias": alias_for(cfg, fam, best["slug"]),
+            "slug": best["slug"], "family": fam,
+            "score": best["score"], "basis": best["basis"],
+            "in": best["in"], "out": best["out"],
+        })
+    picked.sort(key=lambda s: (-s["score"], s["family"]))
+    return picked, gaps, credits
+
+
+def render_seats(picked: list[dict]) -> str:
+    """The seats array as TOML, matching the hand-written layout."""
+    lines = ["seats = ["]
+    for s in picked:
+        lines.append(
+            f'  {{ alias = "{s["alias"]}", slug = "{s["slug"]}", '
+            f'family = "{s["family"]}", score = {float(s["score"])}, '
+            f'basis = "{s["basis"]}" }},'
+        )
+    lines.append("]")
+    return "\n".join(lines)
+
+
+def rewrite_seats(path: Path, picked: list[dict], today: str) -> None:
+    """Replace the marked seats block and the `reviewed` stamp, nothing else.
+
+    Textual, not a TOML round-trip: see the SEATS_BEGIN comment. The result is
+    parsed before it is written, so a malformed render fails loudly instead of
+    leaving the config unreadable.
+    """
+    text = path.read_text()
+    if text.count(SEATS_BEGIN) != 1 or text.count(SEATS_END) != 1:
+        die(f"{path}: expected exactly one {SEATS_BEGIN} / {SEATS_END} pair")
+    head, _, rest = text.partition(SEATS_BEGIN)
+    _, _, tail = rest.partition(SEATS_END)
+    new = f"{head}{SEATS_BEGIN}\n{render_seats(picked)}\n{SEATS_END}{tail}"
+    new, n = re.subn(r'(?m)^reviewed = "[^"]*"$', f'reviewed = "{today}"', new)
+    if n != 1:
+        die(f"{path}: expected exactly one `reviewed` line, found {n}")
+    try:
+        tomllib.loads(new)
+    except tomllib.TOMLDecodeError as exc:
+        die(f"refusing to write malformed TOML: {exc}")
+    path.write_text(new)
+
+
+def days_since_review(cfg: dict) -> int | None:
+    stamp = (cfg.get("council") or {}).get("reviewed")
+    if not stamp:
+        return None
+    try:
+        when = datetime.date.fromisoformat(str(stamp))
+    except ValueError:
+        return None
+    return (datetime.date.today() - when).days
+
+
+def cmd_council_roster(args, cfg) -> None:
+    """Show the seated council; with --check, compare against a fresh pick."""
+    current = seats(cfg)
+    council = cfg.get("council") or {}
+    age = days_since_review(cfg)
+    due = council.get("review_days", 14)
+    print(f"chair  {council.get('chair', '(none)')}")
+    print(f"seats  {len(current)}   reviewed {council.get('reviewed', '?')}"
+          f" ({'unknown age' if age is None else f'{age}d ago'}, review every {due}d)\n")
+    print(f"{'alias':<8} {'slug':<32} {'score':>6}  basis")
+    for s in current:
+        sc = "-" if not s.get("score") else f"{s['score']:.1f}"
+        print(f"{s['alias']:<8} {s['slug']:<32} {sc:>6}  {s.get('basis', '?')}")
+    if not args.check:
+        return
+    picked, gaps, credits = propose_roster(cfg)
+    now = {s["slug"] for s in picked}
+    was = {s["slug"] for s in current}
+    if now == was and not gaps:
+        print("\nroster matches the indices - nothing to change.")
+    else:
+        print("\nproposed changes:")
+        for s in picked:
+            if s["slug"] not in was:
+                print(f"  + {s['family']:<11} {s['slug']} ({s['basis']})")
+        for s in current:
+            if s["slug"] not in now:
+                print(f"  - {s['family']:<11} {s['slug']}")
+        for fam in gaps:
+            print(f"  ! {fam:<11} no model under the price cap")
+        print("\napply with: openrouter-cli council refresh --apply")
+    print("\nScores: " + "; ".join(credits) + ". Attribution required.")
+    if age is not None and age > due:
+        raise SystemExit(3)
+    if now != was:
+        raise SystemExit(3)
+
+
+def cmd_council_refresh(args, cfg) -> None:
+    picked, gaps, credits = propose_roster(cfg)
+    if not picked:
+        die("index-driven pick produced no seats - refusing to empty the roster")
+    print(f"{'family':<11} {'slug':<32} {'score':>6} {'out$/M':>7}  basis")
+    for s in picked:
+        sc = "-" if not s["score"] else f"{s['score']:.1f}"
+        print(f"{s['family']:<11} {s['slug']:<32} {sc:>6} {s['out']:7.2f}  {s['basis']}")
+    for fam in gaps:
+        print(f"{fam:<11} (no model under the price cap)", file=sys.stderr)
+    print("\nScores: " + "; ".join(credits) + ". Attribution required.")
+    if not os.environ.get("AA_API_KEY"):
+        print("note: AA_API_KEY unset - ranked on Epoch alone. `secrets-edit` to add it.",
+              file=sys.stderr)
+    if not args.apply:
+        print("\n(dry run - pass --apply to write the config)")
+        return
+    rewrite_seats(CONFIG, picked, datetime.date.today().isoformat())
+    print(f"\nwrote {len(picked)} seats to {CONFIG}")
+
+
+def read_context(paths: list[str]) -> str:
+    """Inline files into the brief, so every seat sees the same code."""
+    if not paths:
+        return ""
+    chunks = []
+    for p in paths:
+        f = Path(p)
+        if not f.is_file():
+            die(f"--context {p}: not a file")
+        chunks.append(f"### {f.name}\n```\n{f.read_text()}\n```")
+    return "\n\n## Context files\n\n" + "\n\n".join(chunks)
+
+
+def ask_one(slug: str, prompt: str, key: str, max_tokens: int) -> tuple[str, dict]:
+    payload = {
+        "model": slug,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+    }
+    resp = post_json(f"{OR_BASE}/chat/completions", payload, key)
+    return extract_content(resp), resp
+
+
+def fan_out(slugs: list[str], prompt: str, key: str, max_tokens: int) -> dict[str, dict]:
+    """One call per seat, in parallel. A seat that fails is recorded, not fatal
+    here -- the caller decides whether a partial council is acceptable."""
+    import concurrent.futures as cf
+    out: dict[str, dict] = {}
+    with cf.ThreadPoolExecutor(max_workers=len(slugs)) as pool:
+        futs = {pool.submit(ask_one, s, prompt, key, max_tokens): s for s in slugs}
+        for fut in cf.as_completed(futs):
+            slug = futs[fut]
+            try:
+                content, resp = fut.result()
+                out[slug] = {"content": content, "resolved": resp.get("model"),
+                             "id": resp.get("id"), "usage": resp.get("usage") or {}}
+            except SystemExit as exc:
+                out[slug] = {"error": str(exc) or "call failed"}
+            except Exception as exc:  # noqa: BLE001 - one seat must not kill the run
+                out[slug] = {"error": f"{type(exc).__name__}: {exc}"}
+    return out
+
+
+RANK_PROMPT = """You are one member of a review panel. Below are anonymised \
+answers to the question that follows, written by other panel members. Your own \
+answer is not among them.
+
+Rank them from best to worst on correctness, insight, and whether they engage \
+the actual question. Reply with ONLY the labels, best first, one per line, and \
+nothing else.
+
+## Question
+{question}
+
+## Answers
+{answers}
+"""
+
+
+def cross_rank(answers: dict[str, dict], question: str, key: str,
+               max_tokens: int) -> tuple[dict[str, float], list[str]]:
+    """Blind peer ranking, aggregated by Borda count.
+
+    Each ranker sees every answer but its own, under labels shuffled per ranker
+    so position and identity both carry no signal. Excluding self is what makes
+    the ballot a peer review rather than a self-assessment; shuffling per ranker
+    is what stops "answer A" meaning the same model to everyone.
+    """
+    import concurrent.futures as cf
+    import random
+    live = {s: a for s, a in answers.items() if a.get("content")}
+    if len(live) < 3:
+        return {}, ["cross-ranking needs at least 3 live answers"]
+    points: dict[str, float] = {s: 0.0 for s in live}
+    notes: list[str] = []
+    # Per ranker: the prompt it sees, and the label -> slug map needed to read
+    # its ballot back. Kept together so a shuffled label can never be decoded
+    # against another ranker's mapping.
+    ballots: dict[str, tuple[str, dict[str, str]]] = {}
+    for ranker in live:
+        others = [s for s in live if s != ranker]
+        random.shuffle(others)
+        labels = {chr(ord("A") + i): s for i, s in enumerate(others)}
+        body = "\n\n".join(
+            f"### Answer {lab}\n{live[s]['content']}" for lab, s in labels.items())
+        ballots[ranker] = (RANK_PROMPT.format(question=question, answers=body), labels)
+
+    results: dict[str, str] = {}
+    with cf.ThreadPoolExecutor(max_workers=len(ballots)) as pool:
+        futs = {pool.submit(ask_one, r, p, key, max_tokens): r
+                for r, (p, _) in ballots.items()}
+        for fut in cf.as_completed(futs):
+            ranker = futs[fut]
+            try:
+                content, _ = fut.result()
+            # SystemExit too: ask_one reports provider failures through die().
+            except (SystemExit, Exception) as exc:  # noqa: BLE001
+                notes.append(f"{ranker} cast no ballot: {exc}")
+                continue
+            results[ranker] = content
+
+    for ranker, content in results.items():
+        labels = ballots[ranker][1]
+        order = []
+        for line in content.splitlines():
+            m = re.search(r"\b([A-H])\b", line.strip())
+            if m and m.group(1) in labels and labels[m.group(1)] not in order:
+                order.append(labels[m.group(1)])
+        if not order:
+            notes.append(f"{ranker} produced no parseable ranking")
+            continue
+        n = len(order)
+        for pos, slug in enumerate(order):
+            points[slug] += n - pos
+    return points, notes
+
+
+CHAIR_PROMPT = """You are chairing a panel of independent AI models that each \
+answered the same question. Synthesise their answers into one response.
+
+State where they agree, where they contradict each other, and what only one \
+model saw. Do NOT average a contradiction into a middle position - name both \
+sides and say which the evidence favours. Treat unanimity as weak evidence: \
+these models share training data, so agreement can be one prior wearing several \
+labels.
+
+## Question
+{question}
+
+## Panel answers
+{answers}
+{rankings}
+Write the synthesis now."""
+
+
+# Rough token accounting for the dry-run estimate. Chars-per-token is the
+# standard ~4 for English prose; the output figure is a typical answer length,
+# not the 16k cap, because every seat billing its ceiling would overstate a
+# normal run by an order of magnitude. Both are ASSUMPTIONS and the estimate
+# says so -- an estimate presented as a quote is worse than no estimate.
+CHARS_PER_TOKEN = 4
+TYPICAL_ANSWER_TOKENS = 1500
+TYPICAL_BALLOT_TOKENS = 200
+
+
+def estimate_council(chair: str, panel: list[str], prompt: str, rank: bool,
+                     max_tokens: int) -> None:
+    """Print the plan and a priced estimate for a council run."""
+    stage1, stage2 = len(panel), len(panel) if rank else 0
+    print(f"chair {chair}\npanel of {stage1}: {', '.join(panel)}")
+    print(f"calls: {stage1} answers"
+          + (f" + {stage2} ballots" if rank else "")
+          + f" + 1 synthesis = {stage1 + stage2 + 1}")
+    print(f"prompt {len(prompt)} chars, cap {max_tokens} tokens per call")
+
+    try:
+        price = {r["slug"]: (r["in"], r["out"]) for r in catalog_rows()}
+    except SystemExit:
+        print("\n(catalogue unreachable - no cost estimate)", file=sys.stderr)
+        return
+    missing = [s for s in [*panel, chair] if s not in price]
+    if missing:
+        print(f"\n(unpriced, estimate incomplete: {', '.join(missing)})", file=sys.stderr)
+
+    q = len(prompt) / CHARS_PER_TOKEN
+    ans = TYPICAL_ANSWER_TOKENS
+    total = 0.0
+    for s in panel:                       # stage 1: everyone answers the question
+        pin, pout = price.get(s, (0, 0))
+        total += (q * pin + ans * pout) / 1e6
+    if rank:                              # stage 2: everyone reads the others
+        for s in panel:
+            pin, pout = price.get(s, (0, 0))
+            seen = q + ans * (len(panel) - 1)
+            total += (seen * pin + TYPICAL_BALLOT_TOKENS * pout) / 1e6
+    cin, cout = price.get(chair, (0, 0))  # stage 3: the chair reads everything
+    total += ((q + ans * len(panel)) * cin + ans * cout) / 1e6
+
+    print(f"\nestimated cost ~${total:.2f}"
+          f" (assumes ~{ans} output tokens per answer at {CHARS_PER_TOKEN}"
+          f" chars/token; actual billing is reported per call)")
+
+
+def cmd_council_ask(args, cfg) -> None:
+    council = cfg.get("council") or {}
+    chair = chair_of(cfg)
+    panel = parse_panel(args.panel, cfg)
+    caps = cfg.get("fusion", {})
+    max_tokens = caps.get("max_completion_tokens", 16000)
+    prompt = args.prompt + read_context(args.context or [])
+
+    if args.dry_run:
+        estimate_council(chair, panel, prompt, args.rank, max_tokens)
+        return
+
+    key = api_key()
+    if not args.rank:
+        # Without cross-ranking the whole council is one fusion call: the
+        # server-side panel plus analyst already produces consensus,
+        # contradictions and unique insights, and it fails closed on a degraded
+        # panel. Fusion has no peer-ranking stage, which is what --rank adds.
+        args.panel = ",".join(panel)
+        return cmd_fusion(args, cfg)
+
+    answers = fan_out(panel, prompt, key, max_tokens)
+    entries_ = [{"role": "seat", "requested": s,
+                 "resolved": a.get("resolved"), "error": a.get("error")}
+                for s, a in answers.items()]
+    live = {s: a for s, a in answers.items() if a.get("content")}
+    for slug, a in answers.items():
+        tag = a.get("resolved") or f"FAILED: {a.get('error')}"
+        print(f"  {slug} -> {tag}", file=sys.stderr)
+    if len(live) < len(panel):
+        dead = [s for s in panel if s not in live]
+        die("council incomplete - no answer from: " + ", ".join(dead)
+            + "\nrefusing to present a partial council as a full one")
+
+    points, notes = cross_rank(live, prompt, key, max_tokens)
+    for n in notes:
+        print(f"openrouter-cli: {n}", file=sys.stderr)
+
+    body = "\n\n".join(f"### {s}\n{a['content']}" for s, a in live.items())
+    rank_block = ""
+    if points:
+        order = sorted(points, key=lambda s: -points[s])
+        rank_block = ("\n## Peer ranking (Borda, each model ranked the others "
+                      "blind)\n"
+                      + "\n".join(f"{i + 1}. {s} ({points[s]:.0f} pts)"
+                                  for i, s in enumerate(order)) + "\n")
+    final = CHAIR_PROMPT.format(question=prompt, answers=body, rankings=rank_block)
+    content, resp = ask_one(chair, final, key, max_tokens)
+    entries_.append({"role": "chair", "requested": chair, "resolved": resp.get("model")})
+    log_call("council", prompt, entries_, resp.get("id"), resp.get("usage"))
+
+    if args.show_answers:
+        print("# Individual answers\n")
+        for s, a in live.items():
+            print(f"## {s}\n\n{a['content']}\n")
+        print("# Chair synthesis\n")
+    print(content)
+    if rank_block:
+        print(rank_block, file=sys.stderr)
+    usage = resp.get("usage") or {}
+    print(f"[council ok: {len(live)} seats, chair {resp.get('model')}, "
+          f"synthesis cost ${usage.get('cost', '?')}]", file=sys.stderr)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="openrouter-cli", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -777,7 +1307,7 @@ def main() -> None:
 
     d = sub.add_parser(
         "drift",
-        help="check every configured slug (judge, panel, models) against the catalogue",
+        help="check every configured slug (chair, seats, models) against the catalogue",
     )
     d.add_argument("--report", metavar="FILE",
                    help="write the readable report to FILE instead of stdout")
@@ -798,12 +1328,42 @@ def main() -> None:
                    help="print the request body instead of spending")
     a.set_defaults(fn=cmd_ask)
 
-    f = sub.add_parser("fusion", help="parallel panel plus judge synthesis")
+    f = sub.add_parser("fusion", help="parallel panel plus chair synthesis")
     f.add_argument("prompt")
     f.add_argument("--panel", help="comma-separated aliases/slugs (default: config)")
     f.add_argument("--dry-run", action="store_true",
                    help="print the request body instead of spending")
     f.set_defaults(fn=cmd_fusion)
+
+    c = sub.add_parser("council", help="the standing multi-family council")
+    csub = c.add_subparsers(dest="council_cmd", required=True)
+
+    cr = csub.add_parser("roster", help="show the seated council")
+    cr.add_argument("--check", action="store_true",
+                    help="compare the seated roster against a fresh index pick; "
+                         "exit 3 when it differs or the review is overdue")
+    cr.set_defaults(fn=cmd_council_roster)
+
+    cf_ = csub.add_parser(
+        "refresh",
+        help="re-pick every seat from the capability indices (dry run by default)")
+    cf_.add_argument("--apply", action="store_true",
+                     help="write the new seats into the config")
+    cf_.set_defaults(fn=cmd_council_refresh)
+
+    ca = csub.add_parser("ask", help="put a question to the council")
+    ca.add_argument("prompt")
+    ca.add_argument("--rank", action="store_true",
+                    help="add the blind peer-ranking round before synthesis; "
+                         "roughly doubles the calls")
+    ca.add_argument("--context", metavar="PATH", action="append",
+                    help="inline a file into the brief; repeatable")
+    ca.add_argument("--show-answers", action="store_true",
+                    help="print every seat's answer before the synthesis")
+    ca.add_argument("--panel", help="override the seated council for this call")
+    ca.add_argument("--dry-run", action="store_true",
+                    help="print the plan and call count instead of spending")
+    ca.set_defaults(fn=cmd_council_ask)
 
     args = p.parse_args()
     args.fn(args, load_config())
