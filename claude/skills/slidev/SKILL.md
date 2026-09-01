@@ -1,6 +1,6 @@
 ---
 name: slidev
-description: Slidev deck tooling — build and preview a deck, export it to PDF or PNG, and fix a slide whose content overflows, is cut off, or renders as a blank page. Use when creating or editing slides, when the user mentions Slidev, slides.md, `pages/*.md` slide files, a dev server for slides, presentation export, or a PDF/PNG export of a deck; and equally when a slide overflows its boundaries, text or a table runs off the edge, a page comes out blank, or the user asks to fix, check or clean up slides in an existing deck. Slidev-only: it drives `bunx slidev`, and assumes Slidev's `src:` imports and `---` slide separators.
+description: Slidev deck tooling — build and preview a deck, export it to PDF or PNG, and fix a slide whose content overflows, is cut off, or renders as a blank page. Use when creating or editing slides, when the user mentions Slidev, slides.md, `pages/*.md` slide files, a dev server for slides, or a PDF/PNG export; and equally when a slide overflows, text runs off the edge, a page comes out blank, or the user asks to fix or clean up slides in an existing deck. Slidev-only — it drives `bunx slidev`.
 ---
 
 # Slidev

@@ -15,6 +15,17 @@ if [[ -x /opt/homebrew/bin/brew ]]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
 
+# Homebrew (Linuxbrew): CLI tools (rg, fd, eza, bat, ...) live here on Linux.
+# Activated EARLY on purpose: config/modern_tools.sh (sourced below) gates its
+# eza/bat/fd/rg aliases on `command -v`, and the vivid LS_COLORS block does the
+# same, so brew must be on PATH before them. Precedence is re-asserted at the
+# bottom of this file, after the add_to_path/cargo prepends.
+# HOMEBREW_PREFIX guard: a deployed ~/.zshrc may already carry a manual
+# `brew shellenv` line above the source line — skip re-activation then.
+if [[ -x /home/linuxbrew/.linuxbrew/bin/brew && -z "$HOMEBREW_PREFIX" ]]; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+
 # Instant prompt
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
@@ -173,13 +184,6 @@ add_to_path "$HOME/.local/bin"
 # bun - fast JavaScript runtime and package manager (preferred on Linux)
 [[ -d "$HOME/.bun/bin" ]] && add_to_path "$HOME/.bun/bin"
 
-# npm global packages - avoid permission issues with /usr/lib/node_modules
-# Installs to ~/.npm-global instead of requiring sudo
-if command -v npm &>/dev/null; then
-  export NPM_CONFIG_PREFIX="$HOME/.npm-global"
-  add_to_path "$HOME/.npm-global/bin"
-fi
-
 # Add plotting library to PYTHONPATH (anthro_colors, petriplot)
 if [[ -d "$HOME/.local/lib/plotting" ]]; then
     export PYTHONPATH="$HOME/.local/lib/plotting:${PYTHONPATH}"
@@ -203,25 +207,22 @@ if [ -d "$HOME/.cargo" ]; then
   . "$HOME/.cargo/env"
 fi
 
-# mise - universal version manager (replaces pyenv, nvm, rbenv, etc.)
-# Installed by default on Linux, manages CLI tools and language runtimes
-if command -v mise &>/dev/null; then
-  eval "$(mise activate zsh)"
+# Linuxbrew precedence, re-asserted last. The shellenv near the top of this file
+# runs BEFORE the add_to_path calls and ~/.cargo/env, each of which prepends —
+# without this, brew's tools would sit below ~/.cargo/bin, ~/.local/bin and
+# ~/.bun/bin, flipping the order a deployed shell has today (brew's gitui and
+# just currently win over cargo's and uv's). Re-running `brew shellenv` cannot
+# fix it: it emits no PATH export once the prefix is already on PATH. Linuxbrew
+# only — macOS ordering is left to path_helper + the /opt/homebrew shellenv.
+if [[ -n "$HOMEBREW_PREFIX" && "$HOMEBREW_PREFIX" == /home/linuxbrew/* ]]; then
+  path=("$HOMEBREW_PREFIX/bin" "$HOMEBREW_PREFIX/sbin" ${${path:#$HOMEBREW_PREFIX/bin}:#$HOMEBREW_PREFIX/sbin})
 fi
 
 # zoxide (smarter cd - use 'z' command, not replacing cd)
-# Note: If installed via mise, it's already in PATH after mise activate
 command -v zoxide &> /dev/null && eval "$(zoxide init zsh)"
 
 # direnv — auto-load .envrc per-directory (SOPS secrets, env vars)
 command -v direnv &>/dev/null && eval "$(direnv hook zsh)"
-
-# Legacy version managers (used if mise is not available)
-if [ -d "$HOME/.pyenv" ] && ! command -v mise &>/dev/null; then
-  export PYENV_ROOT="$HOME/.pyenv"
-  command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-  eval "$(pyenv init -)"
-fi
 
 if [ -d "$HOME/.local/bin/micromamba" ]; then
   export MAMBA_EXE="$HOME/.local/bin/micromamba"
@@ -233,13 +234,6 @@ if [ -d "$HOME/.local/bin/micromamba" ]; then
       alias micromamba="$MAMBA_EXE"  # Fallback on help from mamba activate
   fi
   unset __mamba_setup
-fi
-
-# fnm (fast node manager) - legacy, prefer mise for Node.js management
-FNM_PATH="$HOME/.local/share/fnm"
-if [ -d "$FNM_PATH" ] && ! command -v mise &>/dev/null; then
-  export PATH="$FNM_PATH:$PATH"
-  eval "`fnm env`"
 fi
 
 if command -v ask-sh &> /dev/null; then

@@ -1,10 +1,10 @@
-"""The md2review annotation layer, as one shared block of CSS + HTML + JS.
+"""The md2artifact annotation layer, as one shared block of CSS + HTML + JS.
 
 This is the single copy of the select-to-comment layer that
 the `artifact-writing` skill requires on every reviewable page. Two
 callers use it:
 
-- `md2review` renders Markdown into a page and appends the layer.
+- `md2artifact` renders Markdown into a page and appends the layer.
 - `annotate-html` injects the layer into any existing HTML page (an Artifact
   built by hand, a report from another tool), which is what the
   `block_unannotated_artifact.sh` hook checks for before a publish.
@@ -39,17 +39,40 @@ Behaviour, all of which the tests guard:
   the title. Comments are written as a bare JSON array, which every generation
   of this layer can read — an older deployed page calls `.reduce()` on the
   parsed value and its whole script dies on anything else;
-- an end-of-page "Your comments" panel with Copy all (Markdown, `> quote`),
-  Download .md, Export text (selectable textarea, since the Artifact viewer
-  blocks page-initiated downloads), and Delete all. Only a copy that actually
-  happened clears the "not yet exported" state;
-- every destructive control asks twice in the page itself, never through a
-  blocking dialog. The Artifact viewer runs the page in a sandboxed iframe
+- an end-of-page "Your comments" panel with three controls: Copy all
+  (Markdown, `> quote`), Delete copied, and Delete all. There is no download button: the
+  Artifact viewer blocks any page-initiated file save, so one was a button
+  that did nothing wherever these pages are read. When the clipboard itself
+  refuses, Copy all opens a selectable textarea as its fallback — that box is
+  still here, it just has no button of its own. Both routes out are therefore
+  clipboard copies, and only a copy that actually happened clears the "not yet
+  copied out" state;
+- per-comment export state. A copy that actually happened stamps `copiedAt` on
+  the comments it carried, and the page-level "not copied out yet" is derived
+  from whether any comment lacks one; the legacy `an-dirty:` key is still
+  written in lockstep for tabs running an older layer. Editing a comment drops
+  its stamp, because the copy that happened carried the previous wording.
+  "Delete copied" prunes the stamped set, so the next Copy all sends only fresh
+  feedback. There is deliberately NO "delete the uncopied" counterpart: every
+  comment predating this key reads as uncopied, so that button would have wiped
+  every existing page the first time it ran. On upgrade, comments are stamped
+  only when the legacy key reads an explicit "0" -- evidence that a copy really
+  happened. A missing key is not evidence and is left alone;
+- every destructive control in the comments panel asks twice in the page
+  itself, never through a blocking dialog. (The one exception is the Delete
+  inside the note popup, which acts on a single comment the user has just
+  opened and is reached only for a comment that already exists -- the popup's
+  CSS hides it while composing, and it sits at the far end of the row so it is
+  never the near miss. The list's own per-row delete does arm.) The Artifact viewer runs the page in a sandboxed iframe
   with no `allow-modals` keyword, so `window.confirm` returns false without
   ever asking and the browser only logs "Ignored call to ...". A delete
   guarded that way is a dead button exactly where these pages are read;
-- a `beforeunload` guard while comments exist that have not been exported,
-  which also saves the draft and attempts the download on the way out;
+- a `beforeunload` guard while comments exist that have not been copied out,
+  which also saves the draft on the way out. It no longer attempts a download,
+  and it protects an ordinary tab rather than a published page: the same
+  sandbox that suppresses `confirm` excludes the document from unload
+  prompting, so the comments' real safety net is that they are already in
+  localStorage;
 - a fixed count badge that jumps to the panel.
 
 Deliberately absent, each having been built and then removed for causing a
@@ -151,6 +174,12 @@ mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--
  font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}
 .anbtn.ghost{background:transparent;color:var(--an-soft);border:1px solid var(--an-rule)}
 .anbtn.ghost.danger,.anbtn.ghost.tiny.danger{color:var(--an-bad);border-color:var(--an-bad)}
+.anbtn[disabled]{opacity:.42;cursor:default}
+/* A copied comment is marked by taking its accent AWAY, never by adding a
+   chip: after the first round most of the list is copied, so anything
+   additive becomes noise on the majority. The fresh ones keep the accent and
+   are what the eye lands on. */
+.cmt.ancopied{border-left-color:var(--an-rule)}
 /* An armed control must not look like the button that just did nothing, so it
    fills: the second click is visibly a different act from the first. */
 .anbtn.anarmed,.anbtn.ghost.danger.anarmed,.anbtn.ghost.tiny.danger.anarmed{
@@ -201,6 +230,7 @@ HTML = r"""
 <div class="anbar">
   <span class="ancount" id="anCount">No comments yet</span>
   <button class="anbtn" id="anCopy">Copy all</button>
+  <button class="anbtn ghost danger" id="anClearCopied">Delete copied</button>
   <button class="anbtn ghost danger" id="anClear">Delete all</button>
   <span id="anToast"></span>
 </div>
@@ -264,9 +294,39 @@ function readComments(){
 // Not a per-tab counter: two tabs on one page would both hand out id 1.
 function newId(){ return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
 
-var comments = readComments(), dirty = false, unsaved = false;
-try { dirty = localStorage.getItem(DIRTY) === "1"; } catch (e) {}
+var comments = readComments(), unsaved = false;
 comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+
+// Per-comment export state. `copiedAt` is stamped only where the page-level
+// flag was cleared before -- a clipboard write that resolved, or a real copy
+// event on the fallback textarea -- so its absence means "never left this
+// browser". The asymmetry is deliberate: an unstamped comment can never fall
+// into the delete-copied set, so a miss costs one redundant copy rather than
+// a page of lost notes. That is also why there is no "delete the uncopied"
+// action: every comment predating this key reads as uncopied, so such a
+// button would have wiped every existing page on first run.
+function isCopied(c){ return !!c.copiedAt; }
+function copiedSet(){ return comments.filter(isCopied); }
+function freshCount(){ return comments.length - copiedSet().length; }
+function isDirty(){ return freshCount() > 0; }
+// The legacy page-level key is still written, in lockstep, because a stale tab
+// running an older layer reads it and would otherwise raise or stand down its
+// unload guard against state it cannot see.
+function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
+
+// One-time migration for comments written before `copiedAt` existed. Without
+// it every upgraded page announces "N of N not yet copied out" and re-arms the
+// unload guard for someone who copied everything out yesterday: a false alarm
+// on every page in existence, which is how a warning stops being read.
+// The legacy flag is EVIDENCE, not an inference -- an explicit "0" was written
+// by a copy that actually happened. A key that is MISSING is not evidence and
+// is left alone, so absence can never manufacture a safe state.
+(function migrateFromLegacyFlag(){
+  if (lsGet(DIRTY) !== "0" || !comments.length) return;
+  var now = Date.now(), touched = false;
+  comments.forEach(function(c){ if (!c.copiedAt) { c.copiedAt = now; touched = true; } });
+  if (touched) persist();
+})();
 var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
 var pending = null, editingId = null;
 
@@ -276,7 +336,7 @@ document.addEventListener("visibilitychange", function(){
 });
 window.addEventListener("beforeunload", function(e){
   saveDraft();
-  if (!dirty || !comments.length) return;
+  if (!isDirty() || !comments.length) return;
   // The comments are already in localStorage; this only warns that they have
   // not been copied anywhere outside this browser yet.
   e.preventDefault(); e.returnValue = ""; return "";
@@ -535,8 +595,29 @@ function unpackDraft(){
   var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
   return d && typeof d.note === "string" && d.note.trim() ? d : null;
 }
-function markDirty(){ dirty = true; lsSet(DIRTY, "1"); }
-function markClean(){ dirty = false; lsSet(DIRTY, "0"); }
+// These keep their names and every existing call site; what changed is that
+// the state lives on the comments now and the page-level key is derived from
+// it. Renaming them to say "copied out" is a separate no-behaviour commit.
+function markDirty(){ syncLegacyFlag(); }
+// A snapshot of exactly what went into the copied text, so a comment edited
+// while an async clipboard write was in flight is not stamped as copied. The
+// copy carried the OLD wording; the comment now holds new wording that has
+// never left the page, and stamping it would put unsent words in the
+// delete-copied set.
+function copySnapshot(){
+  return comments.map(function(c){
+    return { id: c.id, where: c.where, quote: c.quote, note: c.note };
+  });
+}
+function markClean(snap){
+  var now = Date.now(), by = {};
+  (snap || copySnapshot()).forEach(function(x){ by[x.id] = x; });
+  comments.forEach(function(c){
+    var x = by[c.id];
+    if (x && x.where === c.where && x.quote === c.quote && x.note === c.note) c.copiedAt = now;
+  });
+  persist(); syncLegacyFlag();
+}
 
 // ---- destructive controls ------------------------------------------------
 // No blocking dialog appears here, and none may be added. The Artifact viewer
@@ -551,21 +632,39 @@ function markClean(){ dirty = false; lsSet(DIRTY, "0"); }
 // on any re-render. Buttons are focusable, so Enter and Space arm and confirm
 // exactly like the pointer does.
 var ARM_MS = 4000;
-var armedBtn = null, armedLabel = "", armedTimer = 0;
+var WARN_CHANGED = '<span class="anwarn">the comments changed \u2014 nothing deleted</span>';
+var armedBtn = null, armedLabel = "", armedTimer = 0, armedBinding = null;
 function disarm(){
   if (!armedBtn) return;
   // render() may already have thrown this button away; restoring a detached
   // node is harmless but pointless.
   if (armedBtn.isConnected) { armedBtn.textContent = armedLabel; armedBtn.classList.remove("anarmed"); }
   clearTimeout(armedTimer);
-  armedBtn = null; armedLabel = ""; armedTimer = 0;
+  armedBtn = null; armedLabel = ""; armedTimer = 0; armedBinding = null;
 }
-// True only on the confirming click. On any other click it arms `btn` and the
-// caller must return without destroying anything.
-function arm(btn, label){
-  if (armedBtn === btn) { disarm(); return true; }
+// What an arm was armed AGAINST: the exact comments, plus enough of their
+// content to notice a change. A second tab's write can land inside the four
+// seconds an arm is live, and the `storage` handler only rebuilds when no note
+// is open -- so the confirming click has to prove the set is still the one the
+// label described, rather than trust that nothing moved under it.
+function bindingOf(list){
+  return list.map(function(c){
+    return c.id + ":" + (c.copiedAt || 0) + ":" + c.note.length + ":" + c.quote.length;
+  }).join(",");
+}
+// True only on the confirming click, and only while the set it was armed
+// against is unchanged. On any other click it arms `btn` and the caller must
+// return without destroying anything.
+function arm(btn, label, binding){
+  if (armedBtn === btn) {
+    var stale = armedBinding !== null && armedBinding !== binding;
+    disarm();
+    if (stale) { render(); toast(WARN_CHANGED, 4000); return false; }
+    return true;
+  }
   disarm();
   armedBtn = btn; armedLabel = btn.textContent;
+  armedBinding = binding === undefined ? null : binding;
   btn.textContent = label;
   btn.classList.add("anarmed");
   armedTimer = setTimeout(disarm, ARM_MS);
@@ -596,7 +695,10 @@ function save(){
     // Reopened to reread and closed unchanged: not an edit, so it must not
     // reset the export state and re-arm the unload prompt.
     if (c && c.note === note) { closePop(); return; }
-    if (c) c.note = note;
+    // The copy that happened carried the previous wording, so the stamp no
+    // longer describes this comment. Without this, "delete copied" destroys
+    // the only copy of the edit and the next Copy all silently omits it.
+    if (c) { c.note = note; delete c.copiedAt; }
     var m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
     if (m) m.title = note;
   } else if (pending) {
@@ -624,8 +726,15 @@ function render(){
   // a list this rebuild has changed would confirm a different comment.
   disarm();
   var list = $("anList"), count = $("anCount");
+  // Kept in step with the list on every rebuild, and disabled rather than
+  // hidden: a control that vanishes and reappears is harder to aim at than one
+  // that greys out, and its count is the only place the copied total is shown.
+  var nCopied = copiedSet().length, clearCopied = $("anClearCopied");
+  clearCopied.textContent = "Delete copied (" + nCopied + ")";
+  clearCopied.disabled = !nCopied;
+  var fresh = freshCount();
   badge.textContent = "\uD83D\uDCAC " + comments.length;
-  badge.className = unsaved || (dirty && comments.length) ? "warn" : "";
+  badge.className = unsaved || (isDirty() && comments.length) ? "warn" : "";
   if (!comments.length) {
     count.textContent = "No comments yet"; count.className = "ancount";
     var empty = document.createElement("p");
@@ -633,13 +742,19 @@ function render(){
     list.replaceChildren(empty);
     return;
   }
+  // Once the list can be part copied and part not, a single verdict is a lie
+  // for one half of it. The split form appears only when the list is actually
+  // mixed, so the common uniform cases stay as short as they were.
   count.textContent = comments.length + (comments.length === 1 ? " comment" : " comments") +
     (unsaved ? " \u2014 this browser refused to store them, copy them now"
-             : dirty ? " \u2014 not yet copied out" : " \u2014 copied out");
-  count.className = "ancount" + (unsaved || dirty ? " warn" : "");
+             : !fresh ? " \u2014 copied out"
+             : fresh === comments.length ? " \u2014 not yet copied out"
+             : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
+  count.className = "ancount" + (unsaved || isDirty() ? " warn" : "");
   var frag = document.createDocumentFragment();
   comments.forEach(function(c){
-    var d = document.createElement("div"); d.className = "cmt";
+    var d = document.createElement("div");
+    d.className = "cmt" + (isCopied(c) ? " ancopied" : "");
     var w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
     var q = document.createElement("div"); q.className = "q"; q.textContent = "\u201C" + c.quote + "\u201D";
     var n = document.createElement("div"); n.textContent = c.note;
@@ -681,8 +796,13 @@ function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(f
 // page download permission, so a Download button was inert exactly where these
 // pages are read, while still making every publish warn about an offered file.
 // Copy all is the one export, with the textarea below as its fallback.
+// What the textarea currently holds. The box can sit open while the page is
+// edited behind it, so the copy event stamps the snapshot the text was built
+// from, not whatever the list happens to be when the user finally hits copy.
+var exportSnap = null;
 function openExport(){
   var ta = $("anExportText"); ta.value = exportText();
+  exportSnap = copySnapshot();
   $("anExport").style.display = "block";
   ta.focus(); ta.select();
 }
@@ -693,10 +813,13 @@ function openExport(){
 $("anCopy").onclick = async function(){
   if (!comments.length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
   var ok = false;
-  try { await navigator.clipboard.writeText(exportText()); ok = true; }
+  // Both taken before the await: the clipboard promise can resolve after an
+  // edit has landed, and the text that went out is this one.
+  var snap = copySnapshot(), text = exportText();
+  try { await navigator.clipboard.writeText(text); ok = true; }
   catch (e) {
     var ta = document.createElement("textarea");
-    ta.value = exportText();
+    ta.value = text;
     ta.setAttribute("readonly", "");
     ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
     document.body.appendChild(ta); ta.select();
@@ -706,21 +829,51 @@ $("anCopy").onclick = async function(){
   // Clipboard refused: fall back to the selectable textarea. Opening it is not
   // exporting -- the state clears when the text is actually copied out of it.
   if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
-  markClean(); render();
+  markClean(snap); render();
   toast('<span class="anok">copied ' + comments.length + '</span>');
 };
 $("anExportText").addEventListener("copy", function(){
-  markClean(); render();
+  // A copy of PART of the box carried part of the Markdown, so it did not
+  // take every comment out of the browser. Stamping them all would drop
+  // comments the user never copied into the "Delete copied" set, which is now
+  // a set something deletes. The whole-blob case is the normal one: the box
+  // opens with everything already selected.
+  var ta = this;
+  if (ta.selectionStart !== 0 || ta.selectionEnd !== ta.value.length) {
+    toast('<span class="anwarn">partial copy \u2014 nothing marked copied out</span>', 4000);
+    return;
+  }
+  markClean(exportSnap); render();
   toast('<span class="anok">copied ' + comments.length + '</span>');
 });
 $("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
+// The safe prune, and the reason the literal request was inverted: this
+// deletes only what a copy actually carried out of the browser, so the next
+// Copy all sends fresh feedback rather than re-sending an actioned list.
+$("anClearCopied").onclick = function(){
+  var set = copiedSet();
+  if (!set.length) return;
+  if (!arm(this, "Click again to delete " + set.length + " copied out", bindingOf(set))) return;
+  var doomed = {};
+  set.forEach(function(c){ doomed[c.id] = true; unwrap(c.id); });
+  comments = comments.filter(function(c){ return !doomed[c.id]; });
+  if (editingId !== null && doomed[editingId]) closePop();
+  persist(); syncLegacyFlag(); render();
+};
 $("anClear").onclick = function(){
   if (!comments.length) return;
   // "Not copied out yet" is the whole reason this control asks twice, so the
   // warning goes on the armed button, where it is read, rather than into a
   // dialog the viewer never shows.
-  if (!arm(this, (dirty ? "Not copied out yet \u2014 click again to delete "
-                        : "Click again to delete ") + comments.length)) return;
+  // The armed label carries the warning, because the dialog that would
+  // otherwise carry it never appears in the viewer. Naming the unsent count
+  // separately from the total is the whole point: "delete all 12" and "3 of
+  // these have never left this browser" are different facts.
+  var fresh = freshCount();
+  var warn = fresh
+    ? fresh + " not yet copied out \u2014 click again to delete all " + comments.length
+    : "All copied out \u2014 click again to delete all " + comments.length;
+  if (!arm(this, warn, bindingOf(comments))) return;
   comments.slice().forEach(function(c){ unwrap(c.id); });
   comments = []; markClean(); persist(); render();
 };

@@ -23,4 +23,4 @@ A spec is these three sections and often fits in a message. Don't escalate a two
 
 ## Publish it
 
-A spec exists to be argued with, and a file in a folder cannot be argued with — you cannot select a paragraph and say "no, not this". So every spec is published as an Artifact through `md2review`, and the closing reply carries the link rather than only a path. One spec keeps one link: update the same Artifact in place. Mechanics are in `artifact-writing`.
+A spec exists to be argued with, and a file in a folder cannot be argued with — you cannot select a paragraph and say "no, not this". So every spec is published as an Artifact through `md2artifact`, and the closing reply carries the link rather than only a path. One spec keeps one link: update the same Artifact in place. Mechanics are in `artifact-writing`.

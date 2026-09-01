@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Mirror the markdown surface of the Claude config into the Obsidian vault.
 
-Why this exists: the rules, skills, agents and output styles are the part of the
-Claude config that is worth reading and lightly editing from a phone. The vault
+Why this exists: the rules, skills, agents, output styles and checklists are the
+part of the Claude config that is worth reading and lightly editing from a phone. The vault
 is already on the phone via Obsidian Sync, so mirroring the markdown there costs
 nothing extra. Everything else in claude/ (settings.json, hooks, scripts,
 binaries) is deliberately out of scope.
@@ -52,8 +52,9 @@ STATE_VERSION = 1
 SYNC_LOG_MARKER = "Fully synced"
 SYNC_LOG_MAX_BYTES = 32 * 1024 * 1024
 
-# Directories under claude/ whose *.md files are mirrored, one level deep.
-FLAT_DIRS = ("rules", "agents", "output-styles")
+# Directories under claude/ whose *.md files are mirrored, non-recursively --
+# a nested directory is mirrored only if it is listed here itself.
+FLAT_DIRS = ("rules", "agents", "output-styles", "checklists", "checklists/results-analysis")
 
 
 # --- path shapes --------------------------------------------------------------
@@ -68,7 +69,8 @@ def is_in_scope(rel: str) -> bool:
         return False
     if rel == "CLAUDE.md":
         return True
-    if len(parts) == 2 and parts[0] in FLAT_DIRS and parts[1].endswith(".md"):
+    head, _, name = rel.rpartition("/")
+    if head in FLAT_DIRS and name.endswith(".md"):
         return True
     return len(parts) == 3 and parts[0] == "skills" and parts[2] == "SKILL.md"
 
@@ -88,7 +90,9 @@ def scan_repo(repo_root: Path) -> dict[str, Path]:
 
     for sub in FLAT_DIRS:
         d = claude / sub
-        if not d.is_dir() or d.is_symlink():
+        # every level of a nested dir must be real -- a symlinked parent would
+        # slip past a leaf-only check
+        if not d.is_dir() or any(x.is_symlink() for x in [d, *d.parents[: sub.count("/")]]):
             continue
         for p in sorted(d.iterdir()):
             if p.is_file() and not p.is_symlink() and p.name.endswith(".md"):
@@ -465,6 +469,9 @@ scope (nothing else is ever touched)
   claude/skills/*/SKILL.md      <-> skills/*/SKILL.md
   claude/agents/*.md            <-> agents/*.md
   claude/output-styles/*.md     <-> output-styles/*.md
+  claude/checklists/*.md        <-> checklists/*.md
+  claude/checklists/results-analysis/*.md
+                                <-> checklists/results-analysis/*.md
 
 conflict detection
   The state file records, per mirrored file, the content hash both sides shared at
