@@ -479,3 +479,4 @@ TSWLatexianTemp*
 .claude/autopilot/
 .agent-claims/
 settings.local.json
+**/.claude/.cc-writes/
