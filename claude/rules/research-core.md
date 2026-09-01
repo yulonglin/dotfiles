@@ -12,6 +12,8 @@
 
 **Every number ships with its null and its ceiling** — what the number would be with no signal at all, beside it rather than in a footnote.
 
+**The null a detector is judged against is CHANCE, not a confound baseline.** Chance means the simulated chance band at that n, not an assumed 0.5. A behaviour-free baseline — a length or style classifier, a scaffold-only predictor, anything that cannot see the behaviour — is a **diagnostic of the model organism, not the bar the detector must clear**. Reporting "the detector failed to beat the style null" converts the organism's leakiness into the detector's failure, which is the wrong attribution and reads as a stronger negative result than the data supports. Report both, separately and labelled for what each is: *does it detect* (versus chance) and *can this substrate support a detection claim at all* (how high the behaviour-free baseline sits). A substrate whose style baseline is near ceiling cannot support attribution either way, and that is a finding about the organism to fix, not a verdict on the detector.
+
 **Causal claims match the evidence.** Default register: associated with, consistent with, suggests, is higher in the X condition, we observe. Reserve causal verbs for tested mechanism or RCT-style designs. When the evidence is strong, state the claim plainly.
 
 **State four things before any number appears:** the research question in one sentence, phrased so an outcome could contradict it (otherwise call it exploratory); the independent variable and its levels, including anything varied by accident, since a changed prompt, renderer or model version is an independent variable whether or not it was meant to be; the dependent variable, its unit of analysis and how it aggregates; and the null.
