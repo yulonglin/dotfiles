@@ -12,6 +12,8 @@ What would this number be with no signal at all? Put that beside it, not in a fo
 
 **Every comparison names its test, its effect size and `n` per condition.** Which test — Fisher, McNemar, a bootstrap — and what its significance means for this comparison (`presentation.md`); how large the difference is in the units of the metric; and how many units of analysis sat in each arm. A p-value on its own is incomplete: it says the difference is unlikely under the null, not that it is large enough to matter.
 
+**The null a detector is judged against is CHANCE, not a confound baseline.** Chance means the simulated chance band at that n, not an assumed 0.5. A behaviour-free baseline — a length or style classifier, a scaffold-only predictor, anything that cannot see the behaviour — is a **diagnostic of the model organism, not the bar the detector must clear**. Reporting “the detector failed to beat the style null” converts the organism’s leakiness into the detector’s failure, which is the wrong attribution and reads as a stronger negative result than the data supports. Report both, separately and labelled for what each is: *does it detect* (versus chance) and *can this substrate support a detection claim at all* (how high the behaviour-free baseline sits). A substrate whose style baseline is near ceiling cannot support attribution either way, and that is a finding about the organism to fix, not a verdict on the detector.
+
 **Causal claims match the evidence.** Default register: *associated with*, *consistent with*, *suggests*, *is higher in the X condition*, *we observe*. Reserve causal verbs for tested mechanism or RCT-style designs. When the evidence is strong, say it plainly.
 
 ## Metric, before anything else
