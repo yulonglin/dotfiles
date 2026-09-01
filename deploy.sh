@@ -97,6 +97,7 @@ COMPONENTS:
     --gitui           Deploy gitui theme (theme-reactive, symlinked)
     --pdb             Deploy pdb++ debugger config
     --matplotlib      Deploy matplotlib styles
+    --playwright      Deploy Playwright + Chromium for browser tests (~650MB, opt-in)
     --git-hooks       Deploy global git hooks
     --pkg-configs     Deploy package manager security configs (7-day quarantine)
     --secrets         Sync secrets with GitHub gist
@@ -689,6 +690,53 @@ if [[ "$DEPLOY_PDB" == "true" ]]; then
     else
         safe_symlink "$PDB_DOTFILES" "$PDB_LOCAL"
         log_info "  High-contrast color scheme for better readability"
+    fi
+fi
+
+# ─── Playwright Browsers ──────────────────────────────────────────────────────
+
+# Off by default, and it is the download that decides that: Chromium plus its
+# headless shell is ~650MB, which is not something to pull onto every throwaway
+# pod. Machines that have to run the annotation-layer browser tests opt in with
+# --playwright.
+#
+# The browsers are keyed to the package version that fetched them. A cache
+# holding chromium-1228 is invisible to a playwright that wants 1234, and the
+# failure surfaces as "Executable doesn't exist at ...", which reads like a
+# missing install rather than a version skew. Installing the CLI and running
+# its OWN `playwright install` is what keeps the two in step: whatever version
+# lands here is the version that chooses the browser build.
+if [[ "$DEPLOY_PLAYWRIGHT" == "true" ]]; then
+    log_info "Deploying Playwright browsers..."
+
+    if ! cmd_exists uv; then
+        log_warning "uv not found — skipping Playwright (install.sh provides uv)"
+    else
+        # Machine-level on purpose. The browsers live in one shared cache that
+        # every checkout reads, so this is not per-repo state; a repo only
+        # needs the Python package, which `uv run --with playwright` supplies.
+        # PLAYWRIGHT_BROWSERS_PATH is honoured if the environment sets it, so a
+        # box that tiers bulky caches onto an attached volume keeps them there.
+        pw_browsers="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+
+        if uv tool install --quiet playwright 2>/dev/null || cmd_exists playwright; then
+            pw_version=$(playwright --version 2>/dev/null | awk '{print $NF}')
+            log_info "  playwright ${pw_version:-unknown} → $pw_browsers"
+
+            # Chromium only. Firefox and WebKit triple the download and nothing
+            # in this repo drives them.
+            if playwright install chromium >/dev/null 2>&1; then
+                log_success "Chromium ready for the browser tests"
+            else
+                # On a bare Linux box the shared libraries are missing too, and
+                # that install needs root — which deploy.sh does not assume.
+                log_warning "playwright install chromium failed"
+                log_info "  On Linux the system libraries may be missing:"
+                log_info "    sudo \$(command -v playwright) install-deps chromium"
+            fi
+        else
+            log_warning "Could not install the playwright CLI via uv"
+        fi
     fi
 fi
 

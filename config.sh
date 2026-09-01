@@ -95,6 +95,7 @@ DEPLOY_REGISTRY=(
     "vpn|NordVPN + Tailscale split tunnel daemon|macos|true|macOS"
     "pueue|Pueue + systemd resource slices|linux|true|Linux"
     "matplotlib|Style files: anthropic, deepmind, petri|all|true|Dev Tools"
+    "playwright|Playwright + Chromium for the browser tests (~650MB, opt-in)|all|false|Dev Tools"
     "pdb|pdb++ debugger config (high-contrast)|all|true|Dev Tools"
     "claude-tools|Build claude-tools Rust binary|all|true|Build"
 )
