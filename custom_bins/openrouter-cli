@@ -77,8 +77,8 @@ def api_key() -> str:
     if not key:
         die(
             "OPENROUTER_API_KEY not set. Secrets are per-project here, not global:\n"
-            "  setup-envrc            (direnv, persistent for this repo)\n"
-            "  with-secrets OPENROUTER_API_KEY -- openrouter ...   (one shot)"
+            "  secrets envrc          (direnv, persistent for this repo)\n"
+            "  secrets run OPENROUTER_API_KEY -- openrouter ...   (one shot)"
         )
     return key
 
@@ -244,6 +244,25 @@ def extract_content(resp: dict) -> str:
     return content
 
 
+def reasoning_starved(resp: dict) -> bool:
+    """True when a seat spent its whole token budget on reasoning and returned
+    no answer.
+
+    Reasoning tokens are billed as output and count against ``max_tokens``, so a
+    long structured brief can leave nothing for the visible answer: the response
+    comes back with finish_reason 'length' and empty content. That is a budget
+    failure, not a refusal or a provider error, and it is worth one retry with
+    room to answer.
+    """
+    ch = (resp.get("choices") or [{}])[0]
+    if ch.get("finish_reason") not in ("length", "max_tokens"):
+        return False
+    if ch.get("native_finish_reason") not in (None, "max_tokens", "length"):
+        return False
+    content = (ch.get("message") or {}).get("content")
+    return not (isinstance(content, str) and content.strip())
+
+
 def parse_panel(spec: str | None, cfg: dict) -> list[str]:
     """Panel slugs from --panel, or the config default when no flag was given.
 
@@ -393,7 +412,7 @@ def fetch_aa() -> dict[str, float]:
         print(
             "note: AA_API_KEY unset - skipping Artificial Analysis, using Epoch only.\n"
             "      Get a free key (1000 req/day) at artificialanalysis.ai, then\n"
-            "      add it with `secrets-edit`.",
+            "      add it with `secrets edit`.",
             file=sys.stderr,
         )
         return {}
@@ -1063,7 +1082,7 @@ def cmd_council_refresh(args, cfg) -> None:
         print(f"{fam:<11} (no model under the price caps)", file=sys.stderr)
     print("\nScores: " + "; ".join(credits) + ". Attribution required.")
     if not os.environ.get("AA_API_KEY"):
-        print("note: AA_API_KEY unset - ranked on Epoch alone. `secrets-edit` to add it.",
+        print("note: AA_API_KEY unset - ranked on Epoch alone. `secrets edit` to add it.",
               file=sys.stderr)
     if not args.apply:
         print("\n(dry run - pass --apply to write the config)")
@@ -1086,12 +1105,35 @@ def read_context(paths: list[str]) -> str:
 
 
 def ask_one(slug: str, prompt: str, key: str, max_tokens: int) -> tuple[str, dict]:
-    payload = {
-        "model": slug,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-    }
-    resp = post_json(f"{OR_BASE}/chat/completions", payload, key)
+    """One seat's answer. Retries once when reasoning starved the answer.
+
+    A reasoning model given a long brief can spend the entire cap thinking and
+    return empty content. Left alone that kills the seat, and on a council it
+    kills the whole run, because a partial panel is refused. The retry doubles
+    the cap and asks for low reasoning effort, which buys an answer without
+    changing the question. The rescue is flagged so callers can disclose that
+    the seat answered under different settings from the rest of the panel.
+    """
+    def call(cap: int, reasoning: dict | None) -> dict:
+        payload = {
+            "model": slug,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": cap,
+        }
+        if reasoning:
+            payload["reasoning"] = reasoning
+        return post_json(f"{OR_BASE}/chat/completions", payload, key)
+
+    resp = call(max_tokens, None)
+    if reasoning_starved(resp):
+        retry = call(max_tokens * 2, {"effort": "low"})
+        if not reasoning_starved(retry):
+            retry["_rescued"] = (
+                f"answer was starved by reasoning tokens at cap {max_tokens};"
+                f" retried at {max_tokens * 2} with low reasoning effort"
+            )
+            return extract_content(retry), retry
+        resp = retry
     return extract_content(resp), resp
 
 
@@ -1109,7 +1151,8 @@ def fan_out(slugs: list[str], prompt: str, key: str, max_tokens: int) -> dict[st
             try:
                 content, resp = fut.result()
                 out[slug] = {"content": content, "resolved": resp.get("model"),
-                             "id": resp.get("id"), "usage": resp.get("usage") or {}}
+                             "id": resp.get("id"), "usage": resp.get("usage") or {},
+                             "rescued": resp.get("_rescued")}
             except SystemExit as exc:
                 out[slug] = {"error": str(exc) or "call failed"}
             except Exception as exc:  # noqa: BLE001 - one seat must not kill the run
@@ -1443,10 +1486,15 @@ def cmd_council_ask(args, cfg) -> None:
     for slug, a in answers.items():
         tag = a.get("resolved") or f"FAILED: {a.get('error')}"
         print(f"  {slug} -> {tag}", file=sys.stderr)
+    for slug, a in answers.items():
+        if a.get("rescued"):
+            print(f"openrouter-cli: {slug} -- {a['rescued']}", file=sys.stderr)
     if len(live) < len(panel):
         dead = [s for s in panel if s not in live]
         die("council incomplete - no answer from: " + ", ".join(dead)
-            + "\nrefusing to present a partial council as a full one")
+            + "\nrefusing to present a partial council as a full one"
+            + "\nretry, or seat a different panel with --panel; pass a long"
+            " brief with --context PATH rather than as an argument")
 
     points, notes, ballot_usage = cross_rank(live, prompt, key, max_tokens)
     for n in notes:

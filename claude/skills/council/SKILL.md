@@ -69,6 +69,12 @@ The ones you already know — so the panel spends its budget past them.
 
 `--context <path>` inlines a file into the council brief, repeatable, so all eight seats see the same code. That is the tool for "review this diff". It is **not** an agentic loop — no seat can run the tests or grep the repo. When the question needs that, drop to the agentic rung instead of pasting a whole repository.
 
+**Pass a long brief with `--context`, not as an argument.** The prompt is an argv string, so a brief past roughly 100 KB dies with `argument list too long` before any model is reached. Write the brief to a file and point `--context` at it; the positional prompt then carries only the instruction ("answer the brief in the context file").
+
+**A seat that returns nothing was starved, not refusing.** Reasoning tokens are billed as output and count against the per-call cap, so a reasoning model given a long structured brief can spend the whole budget thinking and return empty content — `finish_reason` comes back `length` with no answer. The CLI now detects exactly that signature and retries the seat once at double the cap with low reasoning effort, printing `openrouter-cli: <seat> -- answer was starved by reasoning tokens...` so you know that seat answered under different settings from the rest of the panel. Two consequences: a rescued seat costs more than the estimate, and a brief that starves several seats is a brief to shorten rather than to re-run.
+
+**The partial-panel refusal is deliberate.** If a seat still has no answer, `council ask` prints the dead seats and exits rather than presenting six answers as eight — a panel you report as complete must be complete. Retry, or seat the survivors explicitly with `--panel`, and say which panel you used when you report the result.
+
 ## The council: eight seats, one per lab family
 
 | Mode | What runs | Calls |
@@ -201,9 +207,9 @@ OpenCode config lives at `~/.config/opencode/opencode.json`, overridden by a pro
 `ask`, `fusion` and `council ask` spend money and need `OPENROUTER_API_KEY`. Secrets here are **not** globally exported — that is the supply-chain defense, not a misconfiguration:
 
 - `setup-envrc` in the repo that needs it, so direnv provides it persistently.
-- `with-secrets OPENROUTER_API_KEY -- openrouter-cli council ask "..."` for one shot.
+- `secrets run OPENROUTER_API_KEY -- openrouter-cli council ask "..."` for one shot.
 
-`with-secrets` is a **zsh function**, so it is unavailable to systemd units and non-shell callers; those use `dotfiles-secrets shell KEY` or `jkeys exec`. `roster`, `refresh`, `drift` and `models --check` need no key — every source they read is public.
+`secrets run` is a binary, so systemd units and non-shell callers can use it directly too — no separate workaround needed. `roster`, `refresh`, `drift` and `models --check` need no key — every source they read is public.
 
 ## Related
 
