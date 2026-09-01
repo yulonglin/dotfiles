@@ -40,6 +40,6 @@ When uncertain, **ask rather than refuse silently**. Escalate anything that woul
 
 **The standards are five checklists at `~/.claude/checklists/`** — writing, presentation, results-analysis (plus domain subskills), research, experiments. Skills route there rather than restating them; edit those rather than adding a rule.
 
-Rules auto-load from `~/.claude/rules/*.md` and `<repo>/.claude/rules/*.md`, holding only always-relevant judgment — activity-scoped procedure is a skill, listed by `catalog`. Specs, plans and reports are Artifacts, not files in `specs/` or `plans/` (`artifacts-sync`). Each project's CLAUDE.md ends with `## Learnings`: `- description (YYYY-MM-DD)`, under 20, pruned past two weeks.
+Rules auto-load from `~/.claude/rules/*.md` and `<repo>/.claude/rules/*.md`, holding only always-relevant judgment — activity-scoped procedure is a skill, listed by `catalog`. Specs, plans and reports are Artifacts — editable and commentable, source and built HTML committed under `artifacts/<slug>/`, reviewed via the suggested-edits round-trip (`spec-artifact`, `artifacts-sync`). Each project's CLAUDE.md ends with `## Learnings`: `- description (YYYY-MM-DD)`, under 20, pruned past two weeks.
 
 **Author name on papers: Lin Yulong** (family name first). In most other contexts it's "Yulong Lin".

@@ -1,6 +1,6 @@
 ---
 name: spec-artifact
-description: Write and publish a spec or plan — the three mandatory sections, what to leave out, per-requirement variables.
+description: Write and publish a spec or plan — the three mandatory sections, what to leave out, per-requirement variables, the editable-commentable publish round-trip, and where plans come from.
 ---
 
 # Writing A Spec
@@ -21,6 +21,17 @@ Not once at the top — per requirement. State the research question in one sent
 
 A spec is these three sections and often fits in a message. Don't escalate a two-arm contrast into a document — see `rules/experiments.md`.
 
-## Publish it
+## Plans are mostly generated, and reviewed the same way
 
-A spec exists to be argued with, and a file in a folder cannot be argued with — you cannot select a paragraph and say "no, not this". So every spec is published as an Artifact through `md2artifact`, and the closing reply carries the link rather than only a path. One spec keeps one link: update the same Artifact in place. Mechanics are in `artifact-writing`.
+Implementation plans come from sessions running the superpowers `writing-plans` skill, which owns their shape (bite-sized tasks, per-task test cycle) and their home (`docs/superpowers/plans/`). Don't restate that shape here — route to it. A plan that needs Yulong's review before execution is published exactly like a spec: through the round-trip below, one plan one URL.
+
+## Publish it: the page takes edits back, not only objections
+
+A spec exists to be argued with, and a file in a folder cannot be argued with — you cannot select a paragraph and say "no, not this". Since layer v2, the published page takes **suggested edits** as well as comments: select text, propose the replacement in place, and the export carries both. So every spec and reviewable plan runs this loop:
+
+1. Write the source under `artifacts/<slug>/`, build with `md2artifact`, **commit source and built HTML together** (`artifacts/README.md` has the layout), publish, record the row per `artifacts-sync`. The closing reply carries the link, not only a path.
+2. Yulong reviews on the page — comments and suggested edits — and pastes the Copy-all export back into a session.
+3. The session applies the export to the committed source. Exported quotes are **rendered text**, not Markdown: locate each in the source and adapt the markup by judgment, never mechanically — a sed loop over the export corrupts the file.
+4. Rebuild, update the committed HTML in the same commit, republish at the **same URL**. One spec keeps one link; warn before republishing over a page with unexported annotations.
+
+Layer mechanics — what edit mode does, its invariants, what the viewer refuses — are in `artifact-writing`.

@@ -19,7 +19,7 @@ Then ask **2-4 questions per round**, and probe deeper whenever an answer is vag
 
 ## The spec is an Artifact, not a file
 
-There is no `specs/` folder convention here — a spec exists to be argued with, and a file in a folder cannot be argued with. Publish the finished spec as an Artifact and hand back the link.
+There is no `specs/` folder convention here — a spec exists to be argued with, and a file in a folder cannot be argued with. Write the source under `artifacts/<slug>/`, commit it with the built HTML, publish, and hand back the link; the published page takes suggested edits as well as comments, and the review round-trip (export → session applies to source → republish, same URL) is in `spec-artifact`.
 
 `references/spec-template.md` gives the section-by-section shape — overview, context, functional and non-functional requirements, design, edge cases, acceptance criteria, out of scope, open questions. It maps onto the three mandatory spec sections: Overview, Requirements, Acceptance Criteria. The format and what to leave out are in the `spec-artifact` skill; the publishing mechanics are in `artifact-writing`; record the URL and what it establishes per `artifacts-sync`.
 

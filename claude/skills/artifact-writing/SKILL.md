@@ -1,6 +1,6 @@
 ---
 name: artifact-writing
-description: The mechanics of publishing to the Artifact platform — md2artifact, the annotation and commenting layer, localStorage keys and comment recovery, transcript and code-block rendering, sortable tables, the table of contents, mermaid layout, title-from-H1, republishing in place, org-mismatch recovery and supersedes notes, and the viewer sandbox quirks (no confirm/alert/prompt, no page-initiated downloads). Use when publishing or updating any report, plan, spec, findings page, transcript view or dashboard as an Artifact, when running md2artifact, when building or debugging a select-to-comment layer, when a republish is refused, or when a control works locally but not in the viewer.
+description: The mechanics of publishing to the Artifact platform — md2artifact, the annotation layer (comments and suggested edits), localStorage keys and comment recovery, transcript and code-block rendering, sortable tables, the table of contents, mermaid layout, title-from-H1, republishing in place, org-mismatch recovery and supersedes notes, and the viewer sandbox quirks (no confirm/alert/prompt, no page-initiated downloads). Use when publishing or updating any report, plan, spec, findings page, transcript view or dashboard as an Artifact, when running md2artifact, when building or debugging a select-to-comment layer, when a republish is refused, or when a control works locally but not in the viewer.
 ---
 
 # Artifact Writing
@@ -9,7 +9,7 @@ This skill is the **mechanics** of the Artifact platform and `md2artifact` — w
 
 Yulong's primary reading surface is the Artifact, not terminal scrollback. For any substantive unit of work — an explanation of how something works, a design or audit, experiment results, a debugging postmortem — publish or update an Artifact and keep the chat reply to BLUF plus what changed plus the link. Inline chat text is for quick answers, status and decisions.
 
-**Deliverables live on disk first.** A page that exists only as a successful `Artifact` call is lost when publishing breaks, so write the Markdown source and the built HTML before publishing, and let the publish be the last step.
+**Deliverables live in git first.** A page that exists only as a successful `Artifact` call is lost when publishing breaks, so write the source and the built HTML under `artifacts/<slug>/`, **commit both**, and let the publish be the last step — the layout and the commit-the-HTML rule are in `artifacts/README.md`.
 
 ## `md2artifact` builds the page; raw `.md` drops everything
 
@@ -32,6 +32,14 @@ Update the existing artifact for the topic in place — same URL, passing `url` 
 ## The annotation layer: comments are the user's work
 
 Losing a comment is the worst failure the page can have. The shape: select text, a box appears, type, Enter saves; comments persist in `localStorage`, the collected comments are listed at the end of the page, and one button copies them all to the clipboard **as Markdown** Yulong can paste straight back into a session. `md2artifact` implements all of this; the rules below matter when building, debugging or reviewing a select-to-comment layer.
+
+**Layer v2 adds a Suggest-edit mode, and Comment stays the default.** The box gains a Suggest edit button; entering that mode pre-fills the textarea with the selected text for the user to rewrite, and an actively-cleared replacement is a suggested deletion. A saved edit renders as strikethrough original plus inserted replacement, visually distinct from comment highlights, and clicking either part reopens it. The export gains a "Suggested edits" section of numbered Replace/With blocks that the badge and unload guard count alongside comments — and those quotes are **rendered text, applied to the Markdown source by an LLM session's judgment, never mechanically**: a sed loop over the export corrupts the source (the round-trip itself is in `spec-artifact`). Three rules specific to the mode:
+
+- **The prefill is not user work.** Draft autosave and "a non-empty box refuses to close on an outside press" key on a dirty flag set by the first user modification, not on non-emptiness — otherwise every opened edit box is an unclosable phantom draft.
+- **Layer-inserted text is invisible to anchoring.** Replacement text the layer inserts into the flow is marked and excluded from all quote-scanning, so re-anchoring matches original document text only; without this the first saved edit corrupts every anchor after it.
+- **A selection overlapping an existing edit is declined**, pointing at the existing edit rather than opening a second box — overlapping edits cannot be exported appliably.
+
+Pages built before v2 are frozen at v1 per the rule below and gain the mode only on rebuild and republish.
 
 - **A comment stays readable and editable after it is written** — clicking its highlight reopens it with the existing text, to reread, revise or delete. A note that survives only as a `title` tooltip is effectively gone the moment it is written.
 - **Unexported comments block destructive transitions**: track whether anything changed since the last copy or export, and guard `beforeunload` while it has.

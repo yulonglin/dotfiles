@@ -13,7 +13,7 @@ The canonical filename is **`ARTIFACTS.md` at the repo root**. One per repo.
 
 A published page lives on someone else's server under an org you may leave, so it can become unreachable without anything local changing — an account switch, an org's External-sharing toggle, a plan change. The committed source is the durable copy, and the publish is the last step rather than the record.
 
-Every artifact gets `artifacts/<slug>/` in the repo the work belongs to: `meta.yml` (url, title, **org**, dates, status), whatever rebuilds the page, and a gitignored `build/` for output. Commit the inputs, not the output — a built page is regenerable and often megabytes. The exception is an input that is itself ephemeral, such as a scan of a live environment: that cannot be regenerated because the thing it measured has moved on, so snapshot it and date it.
+Every artifact gets `artifacts/<slug>/` in the repo the work belongs to: `meta.yml` (url, title, **org**, dates, status), whatever rebuilds the page, and **the built HTML, committed beside the source** (Yulong, 2026-09-01 — this reversed the earlier inputs-only rule); a gitignored `build/` holds only scratch intermediates. An input that is itself ephemeral, such as a scan of a live environment, cannot be regenerated because the thing it measured has moved on — snapshot it and date it.
 
 `meta.yml` carries the publishing **org**, which the gallery cannot give back afterwards and which is precisely what breaks on an account switch.
 
@@ -30,7 +30,7 @@ The moment an `Artifact` publish returns a URL, add or update its row in the sam
 | Artifact | The linked title. It already asserts the finding, so it doubles as the summary; give a legacy topic-titled page a one-line gloss until it is renamed |
 | Org | `orgName` from `claude auth status` **at publish time** |
 | Status | one of the five below — nothing else |
-| Source | Repo-relative path of the Markdown or HTML it was built from, or `—` when nothing was kept |
+| Source | Repo-relative path of the committed source; since 2026-09-01 the built HTML is committed beside it (`artifacts/README.md`). `—` only on legacy rows where nothing was kept |
 | Public | `no`, or the public mirror URL |
 | Updated | ISO date of the last publish |
 
@@ -87,7 +87,7 @@ Artifact action: list, scope: "mine", limit: 50
 
 Attribute an unrecorded artifact to this repo only when something ties it here: a source file on disk, a commit on the same date, a subject that is unambiguously this repo's. Attribution by vibe pollutes every later sync — when it belongs elsewhere, leave it alone, and mark anything attributed after the fact as retro-attributed.
 
-Check each row's Source path still exists. A row whose source is gone cannot be rebuilt after an org switch, which is exactly when rebuilding matters. Report those; do not delete the row.
+Check each row's Source path still exists, and that the committed built HTML sits beside it — a post-2026-09-01 row missing its HTML is a build that was never committed, so rebuild and commit it in the pass. A row whose source is gone cannot be rebuilt after an org switch, which is exactly when rebuilding matters. Report those; do not delete the row.
 
 ### A published page is frozen at the tooling that built it
 
