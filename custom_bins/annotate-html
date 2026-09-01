@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """annotate-html - add the md2artifact annotation layer to an existing HTML page.
 
-Every reviewable Artifact carries select-to-comment annotation
-(the `artifact-writing` skill). md2artifact builds that in when the source
-is Markdown; this adds the same layer to a page built any other way, so the
-`block_unannotated_artifact.sh` hook lets it publish.
+Every reviewable Artifact carries select-to-comment annotation and
+select-to-suggest-an-edit (the `artifact-writing` skill). md2artifact builds
+that in when the source is Markdown; this adds the same layer to a page built
+any other way, so the `block_unannotated_artifact.sh` hook lets it publish.
 
     annotate-html page.html            # inject; no-op if already present
     annotate-html page.html --check    # exit 0 if present, 2 if absent
@@ -13,8 +13,8 @@ is Markdown; this adds the same layer to a page built any other way, so the
 
 The layer is inlined (CSS + HTML + JS, no external assets) before `</body>`,
 or at the end of the file when there is no body tag, which is how Artifact
-files are written. It is wrapped in `<!-- annotation-layer v1 -->` ...
-`<!-- /annotation-layer -->` and rooted at `<div data-annotation-layer="v1">`.
+files are written. It is wrapped in `<!-- annotation-layer v2 -->` ...
+`<!-- /annotation-layer -->` and rooted at `<div data-annotation-layer="v2">`.
 
 Exit codes: 0 done or already present; 1 usage or file error; 2 (--check)
 layer absent.
