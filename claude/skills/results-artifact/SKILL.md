@@ -1,6 +1,6 @@
 ---
 name: results-artifact
-description: Statistical machinery for a research results or findings page — which interval or test a number gets (Wilson, paired, bootstrap, small-denominator counts), the four nulls a rate must be read against (chance, degenerate, marginal-preserving, behaviour-free), chance correction and ceilings, and when to slice. Use when building or reviewing a results page, findings report or analysis writeup, when picking an interval or a significance test, when asking what a number would be with no signal, when correcting for chance or agreement, or when a pooled number spans strata that differ. The standards for such a page — evidence one click away, provenance, metric hygiene, manual review, annotation, the per-finding shape — live in the results-analysis checklist this file routes to; the machinery lives here.
+description: Statistical machinery for a research results or findings page — which interval or test a number gets, the nulls a rate must be read against, chance correction and ceilings, and when to slice. Use when building or reviewing a results page, findings report or analysis writeup, when picking an interval or a significance test, when asking what a number would be with no signal, when correcting for chance or agreement, or when a pooled number spans strata that differ.
 ---
 
 # Results Pages
