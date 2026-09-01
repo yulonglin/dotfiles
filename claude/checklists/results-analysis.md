@@ -112,4 +112,4 @@ Scoring is computed from raw outputs, blind to labels and to condition. Analysis
 
 ## Related
 
-How the page communicates — plots, headings, attention, slides: `presentation.md`. Statistical machinery, nulls and slicing: the `results-artifact` skill. Judge construction and persistence: the `llm-judge` skill. Annotation mechanics and `md2review`: the `artifact-writing` skill. Always-on integrity rules: `claude/rules/research-core.md`.
+How the page communicates — plots, headings, attention, slides: `presentation.md`. Statistical machinery, nulls and slicing: the `results-artifact` skill. Judge construction and persistence: the `llm-judge` skill. Annotation mechanics and `md2artifact`: the `artifact-writing` skill. Always-on integrity rules: `claude/rules/research-core.md`.

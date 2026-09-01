@@ -1,6 +1,6 @@
-"""Guards the md2review comment flow, especially on iOS.
+"""Guards the md2artifact comment flow, especially on iOS.
 
-Background: a md2review page opened the note box only from a `mouseup` event.
+Background: a md2artifact page opened the note box only from a `mouseup` event.
 iOS Safari fires no `mouseup` for a touch selection drag, so the page was not
 commentable on iPhone or iPad at all. Two further gaps came out of the same
 fix: a selection crossing element boundaries saved a comment with no highlight,
@@ -39,11 +39,11 @@ from pathlib import Path
 
 import pytest
 
-MD2REVIEW = Path(__file__).resolve().parent.parent / "custom_bins" / "md2review"
+MD2REVIEW = Path(__file__).resolve().parent.parent / "custom_bins" / "md2artifact"
 
 
 def _interpreter() -> str:
-    """An interpreter that can import md2review's markdown-it-py dependency.
+    """An interpreter that can import md2artifact's markdown-it-py dependency.
 
     Under `uv run` the ambient `python3` is uv's own, which does not carry the
     dependency, so prefer the system interpreter when it has it.
@@ -61,7 +61,7 @@ def _interpreter() -> str:
 
 
 def _render(src_text: str, tmp: Path) -> str:
-    """Render Markdown through md2review and return the generated HTML."""
+    """Render Markdown through md2artifact and return the generated HTML."""
     src = tmp / "sample.md"
     src.write_text(src_text, encoding="utf-8")
     out = tmp / "sample.html"
@@ -86,7 +86,7 @@ Text with `inline code` in the middle of the sentence.
 
 @pytest.fixture(scope="module")
 def page_html(tmp_path_factory) -> str:
-    return _render(SAMPLE, tmp_path_factory.mktemp("md2review"))
+    return _render(SAMPLE, tmp_path_factory.mktemp("md2artifact"))
 
 
 @pytest.fixture(scope="module")
@@ -105,7 +105,7 @@ def test_source_compiles_without_syntax_warning() -> None:
             "-W",
             "error::SyntaxWarning",
             "-c",
-            f"compile(open({str(MD2REVIEW)!r}).read(), 'md2review', 'exec')",
+            f"compile(open({str(MD2REVIEW)!r}).read(), 'md2artifact', 'exec')",
         ],
         capture_output=True,
         text=True,
@@ -128,7 +128,7 @@ def test_debounced_reopen_does_not_wipe_a_half_typed_note(page_js: str) -> None:
     assert "pending.quote === text" in page_js
     assert "document.activeElement === txt" in page_js
     # Typed words survive a selection landing somewhere else entirely.
-    # Behaviourally guarded by test_md2review_browser.py; this catches the
+    # Behaviourally guarded by test_md2artifact_browser.py; this catches the
     # guard being deleted without a browser present.
     assert "if (isOpen() && hasText()) return true;" in page_js
 

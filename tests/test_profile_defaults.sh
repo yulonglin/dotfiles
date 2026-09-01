@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# Pins what each profile resolves to, so a default flip cannot silently change
+# a machine's component set. The fixtures in tests/golden/ were captured BEFORE
+# the standard-default flip, which is what makes the devbox check meaningful:
+# devbox must reproduce the old full `personal` set byte for byte.
+#
+# Fixtures are Linux-resolved (config.sh applies platform overrides at the end),
+# so the byte-comparisons run on Linux only; the invariants below run anywhere.
+#
+# Usage: tests/test_profile_defaults.sh
+set -uo pipefail
+
+DOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GOLDEN="$DOT_DIR/tests/golden"
+DUMP="$DOT_DIR/tests/dump_components.zsh"
+
+PASS=0
+FAIL=0
+declare -a FAILURES=()
+pass() { PASS=$((PASS + 1)); printf '  \033[32mPASS\033[0m %s\n' "$1"; }
+fail() {
+    FAIL=$((FAIL + 1)); FAILURES+=("$1")
+    printf '  \033[31mFAIL\033[0m %s\n' "$1"
+    [[ -n "${2:-}" ]] && printf '%s\n' "$2" | head -12
+}
+
+dump() { zsh "$DUMP" "$1" "$DOT_DIR"; }
+enabled_count() { dump "$1" | grep -c '=true'; }
+is_on() { dump "$1" | grep -qx "$2=true"; }
+
+is_linux() { [[ "$(uname -s)" == "Linux" ]]; }
+
+# ─── 1. Byte-for-byte fixtures (Linux) ───────────────────────────────────────
+
+test_fixtures() {
+    if ! is_linux; then
+        echo "  SKIP fixture comparison (fixtures are Linux-resolved)"
+        return
+    fi
+    for profile in personal devbox standard agent bare server cloud; do
+        local fixture="$GOLDEN/profile-${profile}-linux.txt"
+        # devbox and personal share one fixture: devbox must equal the old full set.
+        [[ "$profile" == "devbox" ]] && fixture="$GOLDEN/profile-personal-linux.txt"
+        if [[ ! -f "$fixture" ]]; then
+            fail "no fixture for profile '$profile'" "expected $fixture"
+            continue
+        fi
+        local diff_out
+        if diff_out=$(diff "$fixture" <(dump "$profile") 2>&1); then
+            pass "profile '$profile' matches its pinned component set"
+        else
+            fail "profile '$profile' drifted from its pinned set" "$diff_out"
+        fi
+    done
+}
+
+# ─── 1b. The CLI path must agree with the env path ───────────────────────────
+
+# The blind spot that let a critical regression ship green. config.sh applies
+# the default profile when sourced; a CLI flag then re-applies a profile on top
+# of that already-mutated state, so the two paths can disagree — and did:
+# `--devbox` resolved to 14 components while `PROFILE=devbox` gave 50, because
+# the `personal)` case body was empty and assumed registry defaults were still
+# live. Every fixture passed throughout. Real invocations use flags, so the
+# flag path is the one that actually matters.
+dump_cli() { zsh "$DOT_DIR/tests/dump_components_cli.zsh" "$DOT_DIR" "$@"; }
+
+test_cli_flags_match_env_profiles() {
+    if ! is_linux; then
+        echo "  SKIP CLI/env agreement (fixtures are Linux-resolved)"
+        return
+    fi
+    # flag-set : fixture it must reproduce
+    local -a cases=(
+        "--devbox:personal"
+        "--personal:personal"
+        "--agent:agent"
+        "--bare:bare"
+        "--standard:standard"
+        "--server:server"
+        "--profile=cloud:cloud"
+    )
+    local entry flags profile diff_out
+    for entry in "${cases[@]}"; do
+        flags="${entry%%:*}"
+        profile="${entry##*:}"
+        if diff_out=$(diff "$GOLDEN/profile-${profile}-linux.txt" <(dump_cli "$flags") 2>&1); then
+            pass "CLI '$flags' resolves exactly like profile '$profile'"
+        else
+            fail "CLI '$flags' disagrees with profile '$profile'" "$diff_out"
+        fi
+    done
+    # A bare invocation (no flags at all) is the default everyone gets.
+    if diff_out=$(diff "$GOLDEN/profile-standard-linux.txt" <(dump_cli) 2>&1); then
+        pass "a bare invocation resolves to 'standard'"
+    else
+        fail "a bare invocation does not resolve to 'standard'" "$diff_out"
+    fi
+}
+
+# ─── 2. Invariants that must hold on any platform ────────────────────────────
+
+test_default_is_standard_not_full() {
+    # The flip itself: a bare invocation must NOT be the full set.
+    local std full
+    std=$(enabled_count standard)
+    full=$(enabled_count devbox)
+    if (( std < full )); then
+        pass "default 'standard' ($std enabled) is smaller than 'devbox' ($full)"
+    else
+        fail "default profile is not narrower than devbox" "standard=$std devbox=$full"
+    fi
+}
+
+test_ladder_is_ordered() {
+    # bare ⊂ standard ⊂ agent ⊂ devbox, by size at least.
+    local bare std agent full
+    bare=$(enabled_count bare); std=$(enabled_count standard)
+    agent=$(enabled_count agent); full=$(enabled_count devbox)
+    if (( bare < std && std <= agent && agent < full )); then
+        pass "profile ladder is ordered: bare=$bare < standard=$std <= agent=$agent < devbox=$full"
+    else
+        fail "profile ladder is not ordered" "bare=$bare standard=$std agent=$agent devbox=$full"
+    fi
+}
+
+test_defenses_are_never_opt_in() {
+    # A defense you must remember to enable is not a defense. Every profile that
+    # deploys any config at all must carry the secret-scan hook and the
+    # package-manager quarantine.
+    for profile in standard agent devbox; do
+        if is_on "$profile" DEPLOY_GIT_HOOKS && is_on "$profile" DEPLOY_PKG_CONFIGS; then
+            pass "profile '$profile' keeps git-hooks + pkg-configs enabled"
+        else
+            fail "profile '$profile' makes a security defense opt-in" \
+                 "git-hooks and pkg-configs must be on"
+        fi
+    done
+}
+
+test_no_scheduled_jobs_in_ephemeral_profiles() {
+    # Nothing on a throwaway box should install launchd/cron jobs.
+    local scheduled=(DEPLOY_CLEANUP DEPLOY_CLAUDE_CLEANUP DEPLOY_AI_UPDATE
+                     DEPLOY_BREW_UPDATE DEPLOY_USAGE_PING DEPLOY_TMUX_RESUME
+                     DEPLOY_MCP_SYNC DEPLOY_DEP_AUDIT DEPLOY_STALE_CLAIMS
+                     DEPLOY_SECRETS)
+    for profile in standard agent bare; do
+        local bad=""
+        for var in "${scheduled[@]}"; do
+            is_on "$profile" "$var" && bad+="$var "
+        done
+        if [[ -z "$bad" ]]; then
+            pass "profile '$profile' schedules no background jobs"
+        else
+            fail "profile '$profile' schedules background jobs" "$bad"
+        fi
+    done
+}
+
+test_agent_can_actually_code() {
+    # The profile exists to run Claude Code with per-project secrets.
+    local need=(INSTALL_AI_TOOLS DEPLOY_CLAUDE DEPLOY_CODEX DEPLOY_TMUX
+                DEPLOY_GIT_CONFIG DEPLOY_SECRETS_ENV DEPLOY_BWS)
+    local missing=""
+    for var in "${need[@]}"; do
+        is_on agent "$var" || missing+="$var "
+    done
+    if [[ -z "$missing" ]]; then
+        pass "profile 'agent' carries what coding on a throwaway box needs"
+    else
+        fail "profile 'agent' is missing coding essentials" "$missing"
+    fi
+}
+
+test_bare_installs_no_ai_tools() {
+    if ! is_on bare INSTALL_AI_TOOLS && ! is_on bare DEPLOY_CLAUDE; then
+        pass "profile 'bare' installs no AI tooling"
+    else
+        fail "profile 'bare' pulls in AI tooling" "it is the no-coding profile"
+    fi
+}
+
+test_unknown_profile_fails_closed() {
+    # It used to warn and fall back to `personal`, so `--profile=servre`
+    # resolved to the FULL 50-component devbox install and exited 0 — a typo
+    # meant for a shared server produced the most invasive setup available,
+    # with one warning line as the only signal. It must now refuse.
+    local out
+    out=$(zsh -c "
+        DOT_DIR='$DOT_DIR'; PROFILE=not-a-profile
+        source '$DOT_DIR/config.sh'
+    " 2>&1 >/dev/null)
+    if [[ "$out" == *"Unknown profile"* ]]; then
+        pass "an unknown profile says so instead of being silent"
+    else
+        fail "unknown profile is silent" "$out"
+    fi
+
+    # And says so by refusing, not by installing everything.
+    local n
+    n=$(dump_cli --profile=servre 2>/dev/null | grep -c '=true' || true)
+    if [[ "$n" == "0" ]]; then
+        pass "a misspelled profile enables nothing (fails closed)"
+    else
+        fail "a misspelled profile resolved to $n components" \
+             "$(dump_cli --profile=servre 2>/dev/null | grep '=true' | head -5)"
+    fi
+}
+
+test_minimal_overrides_local_config_positives() {
+    # config.local.sh sits after the profile in the precedence chain, so
+    # re-applying it inside apply_profile (needed so `--server` cannot
+    # resurrect a component the machine disabled) also let a POSITIVE local
+    # override survive `--minimal`, which promises to suppress everything.
+    # Measured before the guard: --minimal left MCP=true OBSIDIAN=true.
+    local local_cfg="$DOT_DIR/config.local.sh"
+    if [[ -e "$local_cfg" ]]; then
+        echo "  SKIP minimal-vs-local (a real config.local.sh exists)"
+        return
+    fi
+    printf 'DEPLOY_MCP_SYNC=true\nDEPLOY_OBSIDIAN_SYNC=true\n' > "$local_cfg"
+    local out
+    out=$(zsh -c '
+        emulate -L zsh; set -uo pipefail
+        export DOT_DIR="$1"
+        source "$DOT_DIR/config.sh" >/dev/null 2>&1
+        source "$DOT_DIR/scripts/shared/helpers.sh" >/dev/null 2>&1
+        show_help() { : }
+        parse_args --minimal >/dev/null 2>&1
+        print "$DEPLOY_MCP_SYNC $DEPLOY_OBSIDIAN_SYNC"
+    ' _ "$DOT_DIR" 2>/dev/null || true)
+    rm -f "$local_cfg"
+    if [[ "$out" == "false false" ]]; then
+        pass "--minimal suppresses even a positive config.local.sh override"
+    else
+        fail "--minimal left locally-enabled components on" "got: $out"
+    fi
+}
+
+test_nothing_means_nothing() {
+    # `minimal` and the `--only` built on it must resolve to ZERO components.
+    # Regression: platform overrides moved to the end of apply_profile and
+    # re-enabled INSTALL_CREATE_USER after every profile, so `--only vim` on a
+    # root box ran create_dev_user — useradd, sudo group, /etc/sudoers.d with
+    # NOPASSWD:ALL, and a copy of /root/.ssh. The whole suite passed over it,
+    # because no fixture covers minimal and the bare/standard fixtures pin
+    # CREATE_USER=true.
+    local n
+    n=$(dump_cli --minimal | grep -c '=true' || true)
+    if [[ "$n" == "0" ]]; then
+        pass "--minimal enables nothing at all"
+    else
+        fail "--minimal enabled $n component(s)" "$(dump_cli --minimal | grep '=true')"
+    fi
+
+    n=$(dump_cli --only vim | grep -c '=true' || true)
+    if [[ "$n" == "1" ]]; then
+        pass "--only vim enables exactly the one component named"
+    else
+        fail "--only vim enabled $n component(s), not 1" "$(dump_cli --only vim | grep '=true')"
+    fi
+}
+
+test_explicit_flag_beats_platform_override() {
+    # Platform facts outrank the profile; they must NOT outrank the user. The
+    # overrides run last, so without an exemption they silently reverse the
+    # flag the user just typed.
+    local out
+    out=$(dump_cli --devbox --no-create-user | grep CREATE_USER || true)
+    if [[ "$out" == *"=false" ]]; then
+        pass "--no-create-user survives the end-of-profile platform overrides"
+    else
+        fail "--no-create-user was reversed by a platform override" "$out"
+    fi
+
+    out=$(dump_cli --no-create-user --minimal | grep CREATE_USER || true)
+    if [[ "$out" == *"=false" ]]; then
+        pass "--no-create-user holds even when a later flag resets the profile"
+    else
+        fail "--no-create-user lost to a later profile reset" "$out"
+    fi
+}
+
+test_local_config_survives_a_profile_flag() {
+    # Documented precedence is profile -> config.local.sh -> CLI flags. A
+    # profile flag re-runs apply_profile, which resets the registry; without
+    # re-applying local config that reset discards the machine's own opt-outs.
+    # obsidian-sync is the component this repo lost 135 files to, so
+    # resurrecting it is the direction that costs data.
+    local local_cfg="$DOT_DIR/config.local.sh"
+    if [[ -e "$local_cfg" ]]; then
+        echo "  SKIP config.local.sh precedence (a real one exists; not overwriting)"
+        return
+    fi
+    printf 'DEPLOY_OBSIDIAN_SYNC=false\n' > "$local_cfg"
+    local out rc=0
+    out=$(zsh -c '
+        emulate -L zsh; set -uo pipefail
+        export DOT_DIR="$1"
+        source "$DOT_DIR/config.sh" >/dev/null 2>&1
+        source "$DOT_DIR/scripts/shared/helpers.sh" >/dev/null 2>&1
+        show_help() { : }
+        parse_args --server >/dev/null 2>&1
+        print -r -- "DEPLOY_OBSIDIAN_SYNC=$DEPLOY_OBSIDIAN_SYNC"
+    ' _ "$DOT_DIR" 2>/dev/null || true)
+    rm -f "$local_cfg"
+    if [[ "$out" == *"=false" ]]; then
+        pass "config.local.sh opt-out survives a profile flag"
+    else
+        fail "a profile flag resurrected a component config.local.sh disabled" "$out"
+    fi
+    return $rc
+}
+
+# ─── Run ─────────────────────────────────────────────────────────────────────
+
+echo "Profile defaults — pinned component sets and invariants"
+echo ""
+echo "1. Pinned fixtures"
+test_fixtures
+echo ""
+echo "1b. CLI flags agree with env profiles"
+test_cli_flags_match_env_profiles
+echo ""
+echo "2. Invariants"
+test_default_is_standard_not_full
+test_ladder_is_ordered
+test_defenses_are_never_opt_in
+test_no_scheduled_jobs_in_ephemeral_profiles
+test_agent_can_actually_code
+test_bare_installs_no_ai_tools
+test_unknown_profile_fails_closed
+test_minimal_overrides_local_config_positives
+test_nothing_means_nothing
+test_explicit_flag_beats_platform_override
+test_local_config_survives_a_profile_flag
+
+echo ""
+echo "─────────────────────────────────────────"
+printf 'passed: %d   failed: %d\n' "$PASS" "$FAIL"
+if (( FAIL > 0 )); then
+    printf 'failures:\n'
+    for f in "${FAILURES[@]}"; do printf '  - %s\n' "$f"; done
+    exit 1
+fi
+exit 0
