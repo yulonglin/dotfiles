@@ -583,3 +583,89 @@ def test_opening_the_export_box_is_not_itself_an_export(page) -> None:
     )
     expect(page.locator("#anCount")).to_contain_text("copied out")
     assert "not yet" not in page.locator("#anCount").inner_text()
+
+
+# ---- the viewer's sandbox -------------------------------------------------
+# Every test above drives the page top-level, which is the one condition the
+# real bug could not appear in. The Artifact viewer frames the page with no
+# `allow-modals`, and Playwright services dialogs automatically, so a
+# confirm-guarded delete passes top-level and is a dead button where these
+# pages are actually read. That gap is what shipped it; this closes it.
+
+SANDBOX_HOST = """<!doctype html><meta charset=utf8><title>host</title>
+<iframe id="f" src="index.html" sandbox="allow-scripts allow-same-origin"
+        style="width:100%;height:900px;border:0"></iframe>
+"""
+
+
+@pytest.fixture(scope="module")
+def sandboxed_site(tmp_path_factory) -> str:
+    """The rendered page inside a sandboxed iframe; yields the host page URL.
+
+    `allow-same-origin` is deliberate and matches the viewer: comments survive
+    a refresh of a published artifact, so its frame has working localStorage.
+    `allow-modals` is deliberately absent, which is the whole point.
+    """
+    tmp = tmp_path_factory.mktemp("md2review-sandboxed")
+    src = tmp / "sample.md"
+    src.write_text(SAMPLE, encoding="utf-8")
+    r = subprocess.run(
+        [sys.executable, str(MD2REVIEW), str(src),
+         "-o", str(tmp / "index.html"), "--key", "review-sample"],
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, f"md2review failed: {r.stderr}"
+    (tmp / "host.html").write_text(SANDBOX_HOST, encoding="utf-8")
+
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(tmp))
+    httpd = _Server(("127.0.0.1", 0), handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{httpd.server_address[1]}/host.html"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_delete_all_works_where_the_viewer_suppresses_modals(browser, sandboxed_site) -> None:
+    """Delete all was dead in the viewer and perfect in a local tab.
+
+    `window.confirm` returns false in a frame without `allow-modals` — the
+    browser only logs "Ignored call to confirm()" — so both branches of the old
+    handler returned early on a refusal the reader never made. The dialog
+    counter below is the load-bearing assertion: it must stay empty, because a
+    dialog appearing again means the guard went back to being a modal.
+    """
+    ctx = browser.new_context()
+    try:
+        page = ctx.new_page()
+        dialogs: list[str] = []
+        page.on("dialog", lambda d: (dialogs.append(d.type), d.accept()))
+        page.goto(sandboxed_site)
+
+        framed = page.frame_locator("#f")
+        expect(framed.locator("#anCount")).to_be_visible()
+        frame = page.frames[1]
+
+        # If modals are not really suppressed here, the rest proves nothing.
+        assert frame.evaluate("() => window.confirm('probe')") is False
+
+        assert frame.evaluate(SELECT_JS)
+        expect(framed.locator("#anTxt")).to_be_visible()
+        framed.locator("#anTxt").fill("a note worth keeping")
+        framed.locator("#anTxt").press("Enter")
+        expect(framed.locator("#anCount")).to_contain_text("1 comment")
+
+        clear = framed.locator("#anClear")
+        clear.click()
+        # One click arms and destroys nothing.
+        expect(clear).to_have_class(re.compile(r"\banarmed\b"))
+        expect(framed.locator("#anCount")).to_contain_text("1 comment")
+
+        clear.click()
+        expect(framed.locator("#anCount")).to_contain_text("No comments yet")
+        assert frame.evaluate("() => localStorage.getItem('review-sample')") in (None, "[]")
+        assert dialogs == [], f"a modal was used as the guard: {dialogs}"
+    finally:
+        ctx.close()

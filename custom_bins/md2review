@@ -4,7 +4,8 @@
 Renders Markdown to a self-contained page carrying the review affordances that
 the `artifact-writing` skill requires: a sticky table of contents built
 from the headings, select-to-comment annotation, per-comment edit and delete,
-an unexported-comments guard on tab close, and clipboard plus file export.
+an unexported-comments guard on tab close, and clipboard export. There is no
+file export: a page-initiated download is inert in the Artifact viewer.
 
 Markdown artifacts cannot carry JavaScript, so a spec or report published as
 raw `.md` silently loses all of that. Run it through here first.
