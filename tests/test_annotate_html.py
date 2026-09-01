@@ -120,7 +120,7 @@ def test_layer_js_has_the_touch_and_focus_safeguards() -> None:
     assert "restoreHighlights" in js and "localStorage" in js
     # Delete all still asks first, in the page rather than through a dialog
     # the sandboxed viewer ignores -- see the two tests further down.
-    assert "if (!arm(this, (dirty ?" in js
+    assert "if (!arm(this, warn, bindingOf(comments))) return;" in js
 
 
 def test_no_selection_event_can_close_the_note_box() -> None:
@@ -268,12 +268,19 @@ def test_destructive_controls_arm_before_they_destroy() -> None:
     """The in-page replacement for the dialog, on both delete controls.
 
     A first click arms the button and makes it say what a second click will
-    destroy; `arm()` returns true only on that second click. The "not copied
-    out yet" warning the dialog used to carry moves onto the armed label,
+    destroy; `arm()` returns true only on that second click. The "not yet
+    copied out" warning the dialog used to carry moves onto the armed label,
     and `render()` disarms so a rebuilt list cannot confirm a stale row.
+
+    The arm also carries a BINDING -- the set it was armed against -- because
+    a second tab's write can land inside the four seconds it is live, and the
+    `storage` handler only rebuilds when no note is open. Confirming has to
+    prove the set is still the one the label named.
     """
     js = _layer_module().JS
-    assert "function arm(btn, label)" in js
+    assert "function arm(btn, label, binding)" in js
+    assert "function bindingOf(list){" in js
+    assert "var stale = armedBinding !== null && armedBinding !== binding;" in js
     assert "function disarm()" in js
     assert "var ARM_MS = 4000;" in js
     assert 'btn.classList.add("anarmed");' in js
@@ -281,9 +288,11 @@ def test_destructive_controls_arm_before_they_destroy() -> None:
     assert 'function escDisarm(ev){ if (ev.key === "Escape") disarm(); }' in js
     assert 'root.addEventListener("keydown", escDisarm);' in js
     assert 'document.addEventListener("keydown", escDisarm);' in js
-    # Delete all: guarded, and still says the comments were never copied out.
-    assert "if (!arm(this, (dirty ?" in js
-    assert "Not copied out yet" in js
+    # Delete all: guarded, and still names how many were never copied out.
+    assert "if (!arm(this, warn, bindingOf(comments))) return;" in js
+    assert 'fresh + " not yet copied out \\u2014 click again to delete all "' in js
+    # Delete copied: guarded too, and bound to exactly the set it names.
+    assert 'if (!arm(this, "Click again to delete " + set.length + " copied out", bindingOf(set))) return;' in js
     # Per-comment delete: guarded too.
     assert 'if (!arm(x, "click again")) return;' in js
     # A re-render must not leave an arm standing on a row it just replaced.

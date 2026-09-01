@@ -669,3 +669,204 @@ def test_delete_all_works_where_the_viewer_suppresses_modals(browser, sandboxed_
         assert dialogs == [], f"a modal was used as the guard: {dialogs}"
     finally:
         ctx.close()
+
+
+# --- the copied subset ----------------------------------------------------
+# "Delete all" was the only pruning tool, so the second Copy all re-sent every
+# comment an agent had already acted on. These cover the narrower control and,
+# more importantly, the states in which it must NOT fire.
+
+SELECT_SECOND_JS = """() => {
+  const n = document.querySelectorAll('.doc p')[1].firstChild;
+  const r = document.createRange();
+  r.setStart(n, 2); r.setEnd(n, 30);
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+  return r.toString();
+}"""
+
+
+def add_comment(page, select_js: str, note: str) -> None:
+    page.evaluate(select_js)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", note)
+    page.press("#anTxt", "Enter")
+
+
+def copy_all(page) -> None:
+    """Copy all with a clipboard that resolves, which is what stamps."""
+    page.evaluate(
+        "() => { Object.defineProperty(navigator, 'clipboard',"
+        "  {value: {writeText: () => Promise.resolve()}, configurable: true}); }"
+    )
+    page.click("#anCopy")
+    page.wait_for_timeout(300)
+
+
+def test_delete_copied_removes_only_what_a_copy_carried_out(page) -> None:
+    """The whole point: the next Copy all must send fresh feedback only."""
+    add_comment(page, SELECT_JS, "already actioned")
+    copy_all(page)
+    add_comment(page, SELECT_SECOND_JS, "written after the copy")
+    expect(page.locator("#anCount")).to_contain_text("1 of 2 not yet copied out")
+
+    page.click("#anClearCopied")
+    page.click("#anClearCopied")
+
+    expect(page.locator(".cmt")).to_have_count(1)
+    assert "written after the copy" in page.locator("#anList").inner_text()
+    assert "already actioned" not in page.locator("#anList").inner_text()
+    # and its highlight went with it
+    expect(page.locator("mark.note")).to_have_count(1)
+
+
+def test_the_first_click_on_delete_copied_destroys_nothing(page) -> None:
+    add_comment(page, SELECT_JS, "keep me")
+    copy_all(page)
+    page.click("#anClearCopied")
+    expect(page.locator("#anClearCopied")).to_contain_text("Click again")
+    expect(page.locator(".cmt")).to_have_count(1)
+
+
+def test_delete_copied_is_disabled_until_something_has_been_copied(page) -> None:
+    """Disabled rather than hidden: a control that appears and vanishes is
+    harder to aim at, and its count is where the copied total is shown."""
+    add_comment(page, SELECT_JS, "never copied")
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+    expect(page.locator("#anClearCopied")).to_contain_text("(0)")
+    copy_all(page)
+    expect(page.locator("#anClearCopied")).to_be_enabled()
+    expect(page.locator("#anClearCopied")).to_contain_text("(1)")
+
+
+def test_editing_a_copied_comment_puts_it_back_in_the_unsent_set(page) -> None:
+    """The copy carried the OLD wording. If the stamp survived an edit,
+    "delete copied" would destroy the only copy of the new words."""
+    add_comment(page, SELECT_JS, "first wording")
+    copy_all(page)
+    expect(page.locator("#anCount")).to_contain_text("copied out")
+
+    page.click("mark.note")
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "rewritten after the copy")
+    page.press("#anTxt", "Enter")
+
+    expect(page.locator("#anCount")).to_contain_text("not yet copied out")
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+
+
+def test_delete_all_names_the_unsent_count_on_its_armed_label(page) -> None:
+    add_comment(page, SELECT_JS, "safe, already out")
+    copy_all(page)
+    add_comment(page, SELECT_SECOND_JS, "the only copy")
+    page.click("#anClear")
+    label = page.locator("#anClear").inner_text()
+    assert "1 not yet copied out" in label, label
+    assert "delete all 2" in label, label
+
+
+def test_delete_all_says_so_when_nothing_would_be_lost(page) -> None:
+    add_comment(page, SELECT_JS, "already out")
+    copy_all(page)
+    page.click("#anClear")
+    assert "All copied out" in page.locator("#anClear").inner_text()
+
+
+def test_a_missing_legacy_flag_never_marks_anything_copied(page, site) -> None:
+    """An absent key is not evidence. Only an explicit "0" is.
+
+    This is the case the migration must not treat as clean: a page nobody has
+    commented on yet has no flag at all, and inferring "copied" from that is
+    how the removed backup key destroyed work.
+    """
+    page.evaluate(
+        "() => { localStorage.setItem('review-sample',"
+        "  JSON.stringify([{id: 1, where: 'x', quote: 'q', note: 'legacy note'}]));"
+        "  localStorage.removeItem('an-dirty:review-sample'); }"
+    )
+    page.goto(site)
+    expect(page.locator("#anCount")).to_contain_text("not yet copied out")
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+
+
+def test_a_clean_legacy_flag_marks_the_comments_already_there(page, site) -> None:
+    """Otherwise every upgraded page nags someone who copied out yesterday."""
+    page.evaluate(
+        "() => { localStorage.setItem('review-sample',"
+        "  JSON.stringify([{id: 1, where: 'x', quote: 'q', note: 'legacy note'}]));"
+        "  localStorage.setItem('an-dirty:review-sample', '0'); }"
+    )
+    page.goto(site)
+    expect(page.locator("#anCount")).to_contain_text("copied out")
+    assert "not yet" not in page.locator("#anCount").inner_text()
+    expect(page.locator("#anClearCopied")).to_be_enabled()
+
+
+def test_a_dirty_legacy_flag_leaves_the_comments_unstamped(page, site) -> None:
+    page.evaluate(
+        "() => { localStorage.setItem('review-sample',"
+        "  JSON.stringify([{id: 1, where: 'x', quote: 'q', note: 'legacy note'}]));"
+        "  localStorage.setItem('an-dirty:review-sample', '1'); }"
+    )
+    page.goto(site)
+    expect(page.locator("#anCount")).to_contain_text("not yet copied out")
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+
+
+def test_there_is_no_bulk_delete_of_the_uncopied(page) -> None:
+    """Deliberately absent. Every comment predating `copiedAt` reads as
+    uncopied, so such a control would have wiped every existing page."""
+    add_comment(page, SELECT_JS, "a note")
+    ids = page.evaluate(
+        "() => Array.from(document.querySelectorAll('[data-annotation-layer] button'))"
+        "  .map(b => b.id + '|' + b.textContent).join(' ')"
+    )
+    assert "uncopied" not in ids.lower()
+    assert "not copied" not in ids.lower()
+
+
+def test_the_stored_shape_stays_a_bare_array_with_the_new_key(page) -> None:
+    """Extra keys on the objects are safe; an envelope kills older layers."""
+    add_comment(page, SELECT_JS, "stamped")
+    copy_all(page)
+    raw = page.evaluate("() => localStorage.getItem('review-sample')")
+    import json as _json
+
+    data = _json.loads(raw)
+    assert isinstance(data, list), data
+    assert data[0]["copiedAt"] > 0
+    # the shape an older deployed layer calls .reduce() on
+    assert page.evaluate("(r) => Array.isArray(JSON.parse(r))", raw)
+
+
+def test_copying_only_part_of_the_export_box_marks_nothing(page) -> None:
+    """A partial selection did not carry every comment out of the browser.
+
+    Stamping them all would put comments the reader never copied into the
+    set that "Delete copied" destroys -- the copy is the only evidence the
+    layer has, so half a copy has to count as no copy.
+    """
+    add_comment(page, SELECT_JS, "first note")
+    add_comment(page, SELECT_SECOND_JS, "second note")
+    open_export_via_blocked_clipboard(page)
+    page.wait_for_timeout(300)
+    assert "not yet copied out" in page.locator("#anCount").inner_text()
+
+    # Select a few characters instead of the whole blob, then copy.
+    page.evaluate(
+        "() => { const ta = document.getElementById('anExportText');"
+        "  ta.setSelectionRange(0, 12);"
+        "  ta.dispatchEvent(new ClipboardEvent('copy')); }"
+    )
+    page.wait_for_timeout(300)
+    assert "not yet copied out" in page.locator("#anCount").inner_text()
+    expect(page.locator("#anClearCopied")).to_be_disabled()
+
+    # The whole blob still counts.
+    page.evaluate(
+        "() => { const ta = document.getElementById('anExportText');"
+        "  ta.setSelectionRange(0, ta.value.length);"
+        "  ta.dispatchEvent(new ClipboardEvent('copy')); }"
+    )
+    expect(page.locator("#anCount")).to_contain_text("copied out")
+    assert "not yet" not in page.locator("#anCount").inner_text()
+    expect(page.locator("#anClearCopied")).to_be_enabled()
