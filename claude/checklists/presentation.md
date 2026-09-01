@@ -14,20 +14,24 @@ Two principles govern everything below. **Confusion is a debugging signal** — 
 
 On artifact pages, dashboards and slides, escalate by what the reader has to do with the number. **A comparison or a distribution goes in a plot** — escalate it and stop there, because the failure this prevents is a dense chunk of digits inside a sentence, where the reader has to hold every value in their head to compare them. A single headline number is stated once, on the figure or in its caption. **Values a reader looks up exactly stay in a table** — a plot read for exact values is chartjunk. Prose and captions then say qualitatively how to read the chart. Hyperparameters are settings, not results, and go wherever they are easiest to check.
 
-Papers and reports keep their numerical tables: venue norms make the main-results table and the ablation table the thing reviewers cite, so **keep both**, with intervals and sample sizes in the cells, and let the figures carry the comparisons a reader should read as positions on an axis.
+Papers and reports still prioritise plots for clarity: figures carry every comparison a reader should read as positions on an axis, and tables hold only the exact values a reader looks up, with intervals and sample sizes in the cells.
 
 The rule governs how **results are presented**. It does not govern the per-example tables a reader uses to **inspect evidence** — one row per sample, sorted and filtered from the headers — which are a `results-analysis.md` affordance. Results go in plots; evidence goes in tables you can sort and filter.
 
 **Where the sources disagree: the two-bar chart.** Tufte's rule 22, as the `tufte-data-viz` skill carries it, holds that a chart of two bars is almost always worse than a sentence; the escalate-and-stop rule above sends any comparison to a plot. Both are stated rather than averaged, because they optimise for different things — Tufte for ink spent per number, this file for a reader comparing conditions across a page full of them. Judge it on what the two values are: the whole finding, quoted once, is a sentence, while one comparison among several a reader will make is a plot, so that every comparison on the page reads the same way.
 
 - **One plot per claim.** A summary claim may open the page with its own summary plot.
-- **A paragraph carries at most one measured quantity, and that quantity carries its interval and its n.** An abstract's headline effect is exactly this case, and it keeps its uncertainty. A second measured quantity in the same paragraph is a figure or a table you have not drawn yet.
+- **A paragraph carries at most one measured quantity, and that quantity carries its interval and its sample size n.** An abstract's headline effect is exactly this case, and it keeps its uncertainty. A second measured quantity in the same paragraph is a figure or a table you have not drawn yet.
 - Chunks of prose are fine and skimmable, so length is not what is being policed here — the problem is density of digits.
-- Conceptual material — system design, UML, experiment design, eval structure — wants a **mermaid diagram**, not a paragraph describing a diagram.
+- Conceptual material — system design, UML, infra, experiment design, eval structure — wants a **mermaid diagram**, not a paragraph describing a diagram.
 
 ## Headings assert, sections elaborate
 
-Every heading is either a claim, hedged to its evidence, or a question the section answers. Reading only the headings should give the findings. `## Results` becomes `## Token positions from assertion sentences are more useful for monitoring`. In papers (NeurIPS/ICML/ICLR), top-level section names follow the venue's conventions — Discussion, Limitations and Future Work — and no heading anywhere is imperative or metaphorical ("…So Deploy Two", "Resampling Pays").
+Every heading is either a claim, hedged to its evidence, or a question the section answers. Reading only the headings should give the findings. `## Results` becomes `## Token positions from assertion sentences are more useful for monitoring`. In papers (NeurIPS/ICML/ICLR), top-level section names follow the venue's conventions — Discussion, Limitations and Future Work — and no heading anywhere is imperative, metaphorical ("…So Deploy Two", "Resampling Pays") or dependent on its section to decode ("An Organism's Scaffold Leaks, and Without a Null That Leakage Reads as Detection"). Two clauses are fine when both state the finding plainly: "No Single Method Dominates; the Two Are Complementary" reads on its own. A heading the reader cannot understand before reading its section fails, however true it is — the plain-statement test is the aphoristic headings and openers entry in `writing.md`.
+
+The claim-or-question test is section-scoped: inside a results or findings section every subsection heading must be a claim or finding with no exceptions, so a heading that describes setup instead — "Five Datasets, All With Instructed Sabotage", "Detection Is Judged Against Chance; a Behaviour-Free Baseline Flags Dataset Leakage" — means that material is misfiled into results, not that it needs a cleverer phrasing; move it to the setup section instead of sharpening the heading.
+
+Setup, methods, problem-statement, related-work and appendix sections take the opposite treatment: plain descriptive names like "Detection Methods", "Reporting Conventions" or "Problem Setting" are correct as they stand, because there is no finding to state there, and forcing a claim onto a heading with nothing behind it is exactly what manufactures the metaphorical, aphoristic headings this section already bans.
 
 State each research question in one sentence, and list them all at the top of the page.
 

@@ -4,7 +4,9 @@
 
 One paragraph is ONE line in `.md` files — never a hard newline inside a paragraph. Blank lines separate paragraphs; readers soft-wrap. This covers prose, bullet bodies and table cells.
 
-Every header asserts a point, not a topic — in specs, plans, reports, READMEs, slide titles and HTML headings alike. `## Results` becomes `## Assertion Sentences Survive Long Traces`. Someone reading only the headers should know what the document found. Roughly four to seven words, with the qualifier in the line below. The artifact-title version of this rule is in `artifact-writing`.
+Every header asserts a point, not a topic — in specs, plans, reports, READMEs, slide titles and headings alike; setup, methods and appendix sections take a plain descriptive name instead. State it plainly, with concrete referents, not a metaphor the body must decode — roughly four to seven words, qualifier below. Artifact-title version: `artifact-writing`.
+
+**Results belong in figures, not in paragraphs.** A passage carrying three or more numbers with intervals is a figure you have not drawn yet. This holds for papers, reports, artifacts, specs and slides alike: a reader compares positions on an axis far faster than they parse bracketed intervals in prose, and a comparison across conditions is nearly unreadable as sentences. Keep a number inline only when it is the single headline value, or the one figure a reader must be able to quote. Every comparison plot shows its chance line and its null. Tooling and style: `house-plots` for papers, `dataviz` for artifact pages.
 
 Links never end with a full stop — a trailing period gets copied into the URL. No checkbox checklists in specs or docs; `[ ]` belongs only in working todo lists.
 

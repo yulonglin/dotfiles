@@ -40,6 +40,7 @@ You MUST check for these issues:
 6. **Buried ledes** - Key points hidden mid-paragraph instead of leading
 7. **Nominalizations** - Actions hidden as nouns ("we performed an analysis" → "we analyzed")
 8. **Topic string breaks** - Subject changes mid-paragraph that disrupt flow
+9. **Aphoristic headings and openers** - A metaphor standing in for the thing named, a referent the reader must read on to decode, an abstract noun as subject where the actor belongs, or a second clause whose meaning arrives only after the paragraph. Test before reading the body: understandable on its own, names the concrete actor and finding, couldn't headline three different paragraphs. Bad: "Detection difficulty tracks the threat model, and the hardest corner is the one we care about." Good: "Prompted Sandbaggers Are Less Consistent Than Honest Ones." Inside a results or findings section every subsection heading states a finding, while setup, methods, related-work and appendix headings stay plain and descriptive — forcing a claim onto a heading with no finding behind it is what produces the aphorisms.
 
 # PROCESS
 
