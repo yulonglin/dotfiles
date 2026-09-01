@@ -34,4 +34,8 @@ A spec exists to be argued with, and a file in a folder cannot be argued with �
 3. The session applies the export to the committed source. Exported quotes are **rendered text**, not Markdown: locate each in the source and adapt the markup by judgment, never mechanically — a sed loop over the export corrupts the file.
 4. Rebuild, update the committed HTML in the same commit, republish at the **same URL**. One spec keeps one link; warn before republishing over a page with unexported annotations.
 
+## Which repo the spec lives in
+
+The spec goes in the repo whose work it is: a spec about a repo's code lives in that repo. A spec about Yulong's own working life — research directions, personal tooling, anything not about a public repo's code — goes in the private `dotfiles-personal` repo, which in practice is where most of them land. The dotfiles repo is public, and a branch in a public repo is public too, so a personal spec never lands on a branch here.
+
 Layer mechanics — what edit mode does, its invariants, what the viewer refuses — are in `artifact-writing`.
