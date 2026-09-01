@@ -44,13 +44,15 @@ Watch the words that sound standard and are not:
 
 Placement, for anything the reader has to know to read a number: the name of the statistical test and the definition of the interval sit **adjacent to the number they describe** — in the caption, the cell or the sentence — not in a methods section the reader has to go and find. What the test and the interval must say for themselves is `results-analysis.md`. Reserve **P0/P1/P2** for priorities and nothing else.
 
-Avoid buzzwords, corporate jargon and fluffy transitions. Avoid coining terms; when something genuinely is new, explain it the first time.
+Avoid buzzwords, corporate jargon and fluffy transitions. Avoid coining terms; when something genuinely is new, explain it the first time. Coinings feedback has already caught: “substrate” → dataset; “arm” → condition (“arm” is bandits-only at ML venues); “upstream” → name the actual source (the benchmark's authors, the original paper). The test: would a reviewer who skipped the setup section know the word?
 
 ## Reports lead each bullet with a bolded takeaway
 
 In reports, prefer bullet points with clear signposting over long-running paragraphs: lead each bullet with a **bolded takeaway** so the report is scannable, one idea per bullet, and split any bullet that turns into a paragraph. Reviewers skim — walls of prose with undefined terms force re-reading and hide the findings.
 
 This deliberately pulls against `writing.md`, which says chains of "because A, therefore B" belong in prose because the connectives carry the logic. Both hold, for different genres: **reports for skimming reviewers lead with bolded bullet takeaways; papers and argumentative prose carry the logic in sentences.** The dividing question is whether the reader is evaluating findings or following an argument.
+
+Bold follows the same genre split. In papers, bold is scarce: defined terms at first use, headline numbers, and paragraph leads of at most ~6 words — never a whole claim sentence. A page with ten bolded sentences has zero emphasised ones.
 
 ## Manage attention deliberately
 

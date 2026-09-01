@@ -30,6 +30,8 @@ That also fixes the loading cost. A skill's description sits in context every se
 
 ## How to edit these
 
+Every writing, presentation or results comment Yulong gives in a session is distilled into an item in the matching checklist in that same session — merged into an existing item when it names the same class.
+
 Add the rule where you would look for it, not where it was learned. Say what a violation costs the reader — a rule with a stated cost survives argument; a rule without one gets ignored the first time it is inconvenient. Prefer a test over an adjective: "the first sentence of each paragraph, read alone, gives the argument" beats "be well structured".
 
 Where a rule is borrowed, cite it with a link, and mark whether the source was read directly or through a summary. Where two sources disagree, keep both and say who disagrees — averaging them produces advice that is true of nothing.
