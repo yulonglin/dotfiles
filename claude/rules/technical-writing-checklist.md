@@ -24,6 +24,8 @@ One common checklist for papers, slides, artifacts, and reports. **Every writing
 
 - Cut caveats that restate the standard setup; keep only limitations a reader would act on. A caveat repeated from the field's default design is noise. (2026-09-01)
 - The details a reader actually needs (which datasets, which models, what failed and why) beat exhaustive hedging about minor conditions. If a section is mostly qualifications, invert it. (2026-09-01)
+- State a limitation once, in one dedicated section — never relitigate it beside every number. Measure with the imperfect instrument, then surface its issues in one place. (2026-09-01)
+- Delete the self-evident: no lectures on standard practice (e.g. why results are compared to chance). If every reader at the venue already knows it, cut it. (2026-09-01)
 
 ## Register — reads like a paper, not a story
 
