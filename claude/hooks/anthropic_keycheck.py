@@ -16,10 +16,20 @@ import os
 import sys
 import time
 import urllib.error
-import urllib.request
 
 PING_MODEL = "claude-haiku-4-5-20251001"
 TIMEOUT_SECONDS = 8
+# This hook's OWN deadline. MUST match the SessionStart "timeout" for the
+# anthropic_keycheck.py entry in claude/settings.json (pinned by
+# tests/test_anthropic_key_retry.py). It is NOT the classifier's 30s
+# PermissionRequest budget: the 401 retry inside post_anthropic is gated on
+# whatever budget it is given, and handing it the classifier's 26s let this hook
+# plan a refresh-plus-retry that could only end in Claude killing it at 10s —
+# no health file written, no warning printed, a silent stall at session start.
+HOOK_TIMEOUT_SECONDS = 10
+# write the cache file / render and flush the warning JSON
+EPILOGUE_RESERVE_SECONDS = 1.5
+TOTAL_BUDGET_SECONDS = HOOK_TIMEOUT_SECONDS - EPILOGUE_RESERVE_SECONDS
 CACHE_FILE = os.path.expanduser("~/.cache/claude/keycheck-ok")
 CACHE_TTL_SECONDS = 3600  # 1 hour — re-check at most once per hour
 
@@ -48,9 +58,14 @@ def main() -> None:
     from approval_classifier import (  # noqa: E402
         parse_anthropic_error,
         classify_api_problem,
-        API_URL,
         build_warning_message,
+        budget_clock,
+        post_anthropic,
     )
+
+    # Started here rather than at import so it measures this invocation even if
+    # the module is already cached; the wrapper's pre-Python time counts too.
+    remaining = budget_clock(TOTAL_BUDGET_SECONDS)
 
     if _is_cache_fresh():
         return
@@ -65,19 +80,13 @@ def main() -> None:
         "max_tokens": 1,
         "messages": [{"role": "user", "content": "ping"}],
     }).encode()
-    req = urllib.request.Request(
-        API_URL,
-        data=body,
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-            resp.read()
+        # Shared with approval_classifier.classify(): a 401 here re-resolves the
+        # key from dotfiles-secrets and retries once, so a session holding a
+        # pre-rotation key from its direnv snapshot recovers instead of warning.
+        # The retry is gated on THIS hook's countdown, so every stage — helper
+        # call and retried request alike — is clamped to what is left of the 10s.
+        post_anthropic(body, timeout=TIMEOUT_SECONDS, remaining=remaining)
         # HTTP 200 → key is healthy. Cache the result and stay silent.
         _mark_cache_ok()
         return

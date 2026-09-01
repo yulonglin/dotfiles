@@ -64,8 +64,14 @@ _STARTED_MONOTONIC = time.monotonic()
 HOOK_START_ENV = "APPROVAL_CLASSIFIER_HOOK_START"
 
 
-def _pre_python_elapsed() -> float:
-    """Seconds burned by the wrapper before this interpreter started."""
+def _pre_python_elapsed(limit: float | None = None) -> float:
+    """Seconds burned by the wrapper before this interpreter started.
+
+    `limit` is the budget the value is sanity-checked against; a caller with a
+    shorter hook timeout passes its own.
+    """
+    if limit is None:
+        limit = TOTAL_BUDGET_SECONDS
     raw = os.environ.get(HOOK_START_ENV, "")
     if not raw:
         return 0.0
@@ -75,7 +81,7 @@ def _pre_python_elapsed() -> float:
         return 0.0
     # Clock skew, a stale inherited value, or a wrapper that never ran would all
     # show up as nonsense here. Clamp instead of letting it distort the budget.
-    if not 0.0 <= elapsed <= TOTAL_BUDGET_SECONDS:
+    if not 0.0 <= elapsed <= limit:
         return 0.0
     return elapsed
 
@@ -163,7 +169,7 @@ ANSI_CYAN = "\033[1;36m"
 # Files that should NEVER be read by any tool. No masking — just block.
 # Each entry: (path pattern, reason, alternative)
 SENSITIVE_PATHS: list[tuple[str, str, str]] = [
-    ("/.config/sops/age/keys.txt", "age private key (decryption master key)", "Use `sops -d` to decrypt files, or `with-secrets KEY -- printenv KEY` for individual secrets"),
+    ("/.config/sops/age/keys.txt", "age private key (decryption master key)", "Use `sops -d` to decrypt files, or `secrets run KEY -- printenv KEY` for individual secrets"),
     ("/.ssh/id_", "SSH private key", "Use `ssh-add -l` to list loaded keys, or `ssh-keygen -l -f <pubkey>` for fingerprints"),
     ("/.config/bws/token", "Bitwarden Secrets Manager token", "Use `bws secret list` to interact with secrets via CLI"),
     ("/.aws/credentials", "AWS credentials", "Use `aws configure list` to check config, or `aws sts get-caller-identity` to verify auth"),
@@ -850,6 +856,161 @@ def classify_api_problem(status: int, error_type: str, message: str) -> Approval
     )
 
 
+# --- Stale-key recovery: re-resolve once on HTTP 401 -------------------------
+# A long-lived shell keeps whatever ANTHROPIC_API_KEY direnv snapshotted when it
+# started. `.envrc` cannot watch a *remote* secret's value, so after the BWS
+# secret is rotated that shell exports a dead key forever — and
+# with-anthropic-key.sh deliberately defers to an already-set key, so every hook
+# in that session inherits it. The symptom is this hook failing open on every
+# tool call while the statusline blames the key.
+#
+# The recovery is reactive ONLY. Validating the key up front would add a network
+# round trip to every tool call inside a 30s hook budget that is already tight,
+# so nothing here runs unless Anthropic has already answered 401: on the happy
+# path this costs zero extra calls and zero extra latency.
+#
+# Bounded to exactly one retry. A second 401 propagates to the caller's existing
+# HTTPError handling, which is what produces the "API key was rejected" warning.
+# realpath, NOT abspath: ~/.claude is a symlink to <dotfiles>/claude and
+# settings.json invokes this hook through that symlink, so abspath leaves the
+# link unresolved and the "../.." traversal lands on ~/custom_bins — a path that
+# does not exist, which made the retry log "no executable helper" and give up in
+# every production session. with-anthropic-key.sh already resolves it the same
+# way (its `realpath "${BASH_SOURCE[0]}"`).
+SECRETS_HELPER = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..",
+                 "custom_bins", "dotfiles-secrets")
+)
+SECRET_REFRESH_TIMEOUT_SECONDS = 6  # ceiling; clamped to the remaining budget
+# Floor below which the retry is not attempted at all. Being killed by the hook
+# deadline mid-retry writes no health file and emits no warning — the silent
+# stale-health case the whole budget above exists to prevent. Surfacing the
+# original 401 is strictly better than that.
+RETRY_MIN_SECONDS = 3.0
+
+
+def refresh_api_key(current_key: str, timeout: float) -> str | None:
+    """Re-resolve ANTHROPIC_API_KEY from dotfiles-secrets after a 401.
+
+    Returns a key that DIFFERS from the rejected one, or None. Secrets resolve
+    live from the backend (dotfiles-secrets keeps no disk cache), so this is a
+    genuinely fresh value rather than the same snapshot that just failed.
+
+    Never logs, prints or returns any part of the key on a failure path.
+    """
+    if not os.access(SECRETS_HELPER, os.X_OK):
+        log(f"KEY REFRESH: no executable helper at {SECRETS_HELPER}")
+        return None
+    try:
+        proc = subprocess.run(
+            [SECRETS_HELPER, "get-value", "ANTHROPIC_API_KEY"],
+            stdout=subprocess.PIPE,   # captured so the value never reaches a log
+            stderr=None,              # inherited on purpose: the helper's own
+                                      # diagnostics (ambiguous name, missing BWS
+                                      # token) are the only signal it failed.
+            timeout=timeout,
+            text=True,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        log(f"KEY REFRESH: helper did not run ({type(exc).__name__})")
+        return None
+
+    # Exit 0 is not success on its own — the helper can resolve nothing and still
+    # exit 0, which is how the classifier once ran keyless for ~349 denials.
+    if proc.returncode != 0:
+        log(f"KEY REFRESH: helper exited {proc.returncode}")
+        return None
+    fresh = (proc.stdout or "").strip()
+    if not fresh:
+        log("KEY REFRESH: helper exited 0 but resolved nothing")
+        return None
+    if fresh == current_key:
+        # Same key came back: the 401 is about the key itself, not staleness.
+        # Retrying would spend a second call to be told the same thing.
+        log("KEY REFRESH: resolved key is identical to the rejected one — not retrying")
+        return None
+    log(f"KEY REFRESH: resolved a different key ({len(fresh)} chars) after HTTP 401")
+    return fresh
+
+
+def _anthropic_request(body: bytes, api_key: str) -> urllib.request.Request:
+    return urllib.request.Request(
+        API_URL,
+        data=body,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+    )
+
+
+def budget_clock(total_budget: float):
+    """Return a countdown to a hook deadline `total_budget` seconds from now.
+
+    For callers whose hook timeout is NOT the classifier's 30s PermissionRequest
+    deadline — anthropic_keycheck.py runs as a SessionStart hook with a 10s
+    timeout, and borrowing the 26s budget let it plan a retry that could only
+    end in the process being killed: no health file, no warning, a silent stall
+    at every session start.
+
+    The clock starts when this is CALLED, not at import, so a module cached in
+    sys.modules across several hook invocations still measures the live one.
+    Time the wrapper burned before this interpreter started counts against it.
+    """
+    pre = _pre_python_elapsed(total_budget)
+    start = time.monotonic()
+
+    def remaining() -> float:
+        return total_budget - pre - (time.monotonic() - start)
+
+    return remaining
+
+
+def post_anthropic(body: bytes, timeout: float, remaining) -> bytes:
+    """POST to the messages API, retrying ONCE if the key was rotated.
+
+    `remaining` is a zero-argument callable returning the seconds left before
+    the CALLER's hook deadline. It is required, and deliberately has no default:
+    the budget belongs to the hook that is running, not to this module, and a
+    default here would silently hand every future caller the classifier's 26s.
+
+    Raises the same exceptions urlopen does, so callers keep their existing
+    HTTPError/URLError handling. On HTTP 401 the key is re-resolved from
+    dotfiles-secrets and the request is sent again with a freshly built Request
+    — reusing the first one would resend the stale key in its headers.
+
+    401 only, never 403: classify_api_problem groups the two for *messaging*,
+    but 403 is a permissions answer that a different key value will not change.
+    The error body is deliberately not read here; parse_anthropic_error consumes
+    exc.read() and can only do that once.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    try:
+        with urllib.request.urlopen(_anthropic_request(body, api_key), timeout=timeout) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as rejected:
+        if rejected.code != 401:
+            raise
+        budget = remaining()
+        if budget < RETRY_MIN_SECONDS:
+            log(f"KEY REFRESH SKIPPED: only {budget:.1f}s of budget left")
+            raise
+        fresh = refresh_api_key(api_key, timeout=min(SECRET_REFRESH_TIMEOUT_SECONDS, budget))
+        if not fresh:
+            raise
+        # The rest of the process (and any later call in this hook) should use
+        # the working key, not the one that was just rejected.
+        os.environ["ANTHROPIC_API_KEY"] = fresh
+        retry_timeout = min(timeout, remaining())
+        if retry_timeout < 1.0:
+            log(f"KEY REFRESH: no time left to retry ({retry_timeout:.1f}s)")
+            raise
+        log("KEY REFRESH: retrying the request once with the re-resolved key")
+        with urllib.request.urlopen(_anthropic_request(body, fresh), timeout=retry_timeout) as resp:
+            return resp.read()
+
+
 def extract_recent_user_messages(transcript_path: str, count: int = MAX_USER_MESSAGES) -> str:
     """Extract the N most recent user messages from the transcript JSONL.
 
@@ -1162,19 +1323,11 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, trust_secti
         "messages": [{"role": "user", "content": user_msg}],
     }).encode()
 
-    req = urllib.request.Request(
-        API_URL,
-        data=body,
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-            data = json.loads(resp.read())
+        # post_anthropic re-resolves the key and retries once on HTTP 401, so a
+        # rotated secret behind a long-lived shell heals itself here.
+        data = json.loads(post_anthropic(body, timeout=TIMEOUT_SECONDS,
+                                         remaining=remaining_budget))
         text = data["content"][0]["text"].strip()
         # Log token usage so we can verify the prompt cache is landing.
         # cache_read_input_tokens > 0 on most calls → cache hit; if it's
