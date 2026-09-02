@@ -43,6 +43,9 @@ make_job() {  # <name> <state>
 for s in 'done' failed stopped blocked working idle; do make_job "$s" "$s"; done
 mkdir -p "$d/jobs/nostate"
 make_job self 'done'
+# A pinned finished job: the user chose to keep it on screen.
+mkdir -p "$d/jobs/pinned"
+printf '{"state":"done","pinned":true,"updatedAt":"2026-01-01T00:00:00Z"}\n' >"$d/jobs/pinned/state.json"
 
 # Glob order is sorted, so this is a stable listing without ls.
 listing() { (cd "$1" 2>/dev/null || exit 0; for f in *; do [[ -e "$f" ]] && printf '%s ' "$f"; done); }
@@ -58,10 +61,10 @@ if [[ "$moved" == "done failed stopped " ]]; then
 else
   bad "archive holds exactly done, failed, stopped" "archive: ${moved:-<empty>}; output: $out"
 fi
-if [[ "$left" == "blocked idle nostate self working " ]]; then
-  ok "blocked, working, idle, no-state and own-session dirs stay"
+if [[ "$left" == "blocked idle nostate pinned self working " ]]; then
+  ok "blocked, working, idle, pinned, no-state and own-session dirs stay"
 else
-  bad "blocked, working, idle, no-state and own-session dirs stay" "left: ${left:-<empty>}; output: $out"
+  bad "blocked, working, idle, pinned, no-state and own-session dirs stay" "left: ${left:-<empty>}; output: $out"
 fi
 case "$out" in
   *"reaped 3 job(s)"*", 3 other-state"*) ok "summary counts the reaped and the other-state keeps" ;;

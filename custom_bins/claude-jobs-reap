@@ -22,8 +22,9 @@ a terminal state. That is how the `claude()` wrapper hides finished rows from
 the agents view before it opens: `--finished --hours 0 --archive-to DIR`. The
 view itself is compiled into the CLI and has no hide toggle, so removing the
 job dir is the only lever. `blocked` (the "Needs you" row) is not a terminal
-state and survives that filter whatever the grace. Worktrees a job created are
-left in place; the view's own delete key is what reaps those.
+state and survives that filter whatever the grace. A pinned job is never
+reaped in any mode. Worktrees a job created are left in place; the view's own
+delete key is what reaps those.
 """
 
 import argparse
@@ -139,7 +140,7 @@ def main() -> int:
     now = time.time()
 
     reaped, reaped_mb, kept_recent, kept_active, kept_unreadable = 0, 0.0, 0, 0, 0
-    kept_other, errors = 0, 0
+    kept_other, kept_pinned, errors = 0, 0, 0
 
     for job_dir in sorted(args.jobs_dir.iterdir()):
         if not job_dir.is_dir():
@@ -158,9 +159,19 @@ def main() -> int:
 
         try:
             data = json.loads(state_file.read_text())
-            state = data.get("state", "") if isinstance(data, dict) else ""
+            if not isinstance(data, dict):
+                data = {}
         except (json.JSONDecodeError, OSError):
-            state = ""
+            data = {}
+        state = data.get("state", "")
+
+        # A pinned row is one the user chose to keep on screen; the view's own
+        # delete path unpins first, so a pin is an explicit "not yet".
+        if data.get("pinned") is True:
+            kept_pinned += 1
+            if args.verbose:
+                print(f"keep {job_dir.name}: pinned")
+            continue
 
         if only_states is not None and state not in only_states:
             kept_other += 1
@@ -207,9 +218,10 @@ def main() -> int:
     verb = "would reap" if args.dry_run else "reaped"
     if not args.quiet or reaped or errors:
         other = f", {kept_other} other-state" if only_states is not None else ""
+        pinned = f", {kept_pinned} pinned" if kept_pinned else ""
         print(
             f"{verb} {reaped} job(s), {reaped_mb:.0f}MB; kept {kept_recent} recent, "
-            f"{kept_active} active, {kept_unreadable} unreadable{other}; {errors} error(s)"
+            f"{kept_active} active, {kept_unreadable} unreadable{other}{pinned}; {errors} error(s)"
         )
     return 1 if errors else 0
 
