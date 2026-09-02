@@ -44,8 +44,12 @@ SLUG_RE = re.compile(r"[^a-z0-9]+")
 # other's comments. `artifacts/<slug>/spec.md` is now the standard layout, which
 # would give EVERY spec the key "review-spec". These stems are therefore
 # qualified by their parent directory, which is the artifact slug and unique.
-# Specific stems keep their old key, so no already-published page is orphaned by
-# this rule.
+# A SPECIFIC stem keeps its old key. A generic-stem page published before this
+# rule (2026-09-02) would derive a new key on rebuild and stop seeing its stored
+# comments: rebuild it with --key review-<stem> to keep them, accepting that it
+# goes on sharing that key. There is deliberately no automatic migration from
+# the legacy shared key -- reading review-spec into a page is exactly the
+# cross-document leak this exists to stop.
 GENERIC_STEMS = frozenset(
     {"spec", "plan", "report", "page", "index", "readme", "draft", "notes", "artifact"}
 )
@@ -421,6 +425,13 @@ def main(argv: list[str] | None = None) -> int:
 
     out = args.output or args.source.with_suffix(".review.html")
     key = args.key or storage_key(args.source)
+    if not args.key and key != f"review-{slugify(args.source.stem)}":
+        print(
+            f"md2artifact: comment key qualified by directory: {key} "
+            "(a page published before 2026-09-02 from this filename keeps its "
+            f"comments only with --key review-{slugify(args.source.stem)})",
+            file=sys.stderr,
+        )
     out.write_text(
         build(text, title=title, with_toc=not args.no_toc, key=key), encoding="utf-8"
     )

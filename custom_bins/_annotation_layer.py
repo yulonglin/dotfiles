@@ -657,9 +657,11 @@ function openForSelection(autofocus){
   if (inLayer(sel.anchorNode) || inLayer(sel.focusNode)) return false;
   // Already open on this exact selection: do not wipe a half-typed note.
   if (pending && pending.quote === text && isOpen()) return true;
-  // Open on some other selection with a note already typed: leave it be
-  // rather than throwing away words the user has not saved.
-  if (isOpen() && hasText()) return true;
+  // Open on some other selection the user has MODIFIED: leave it be rather
+  // than throwing away work. The test is `dirty`, not non-emptiness: an
+  // untouched prefilled edit box yields to a fresh selection, and a dirty
+  // EMPTY edit box (a pending deletion) is work and must not be overwritten.
+  if (isOpen() && dirty) return true;
   var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
   // Overlaps an existing suggested edit: point at that edit rather than open a
   // second box on the range.
@@ -705,7 +707,9 @@ var selTimer = null;
 document.addEventListener("selectionchange", function(){
   if (document.activeElement === txt) return;
   if (editingId !== null) return;
-  if (isOpen() && hasText()) return;
+  // Same test as openForSelection: modified work stays, an untouched prefill
+  // does not hold the page hostage.
+  if (isOpen() && dirty) return;
   clearTimeout(selTimer);
   selTimer = setTimeout(function(){ openForSelection(false); }, 250);
 });
@@ -728,6 +732,9 @@ document.addEventListener("keydown", function(ev){
 });
 
 function closePop(){
+  // #anDelete is one element reused by every entry: an arm left live here
+  // would confirm on the next opened entry's first click.
+  disarm();
   pop.style.display = "none"; pending = null; editingId = null;
   pop.classList.remove("editing"); pop.classList.remove("nudge");
   setModeState("comment"); dirty = false;
@@ -892,7 +899,7 @@ function save(){
   } else if (pending) {
     var id = newId();
     try { wrapRange(pending.range, id, note, "note"); } catch (e) {}
-    comments.push({ id: id, where: pending.where, quote: pending.quote, note: note });
+    comments.push({ id: id, type: "comment", where: pending.where, quote: pending.quote, note: note });
   }
   markDirty(); persist(); render(); closePop();
   var sel = window.getSelection(); if (sel) sel.removeAllRanges();

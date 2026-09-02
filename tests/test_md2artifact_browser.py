@@ -1223,3 +1223,40 @@ def test_an_emptied_comment_box_keeps_no_draft(page) -> None:
     page.wait_for_function(
         "() => localStorage.getItem('an-draft:review-sample') === null", timeout=3000
     )
+
+
+def test_a_pending_deletion_is_not_overwritten_by_a_fresh_selection(page) -> None:
+    """A dirty EMPTY edit box is work (a suggested deletion); selecting other
+    text must not replace it. The old guard keyed on non-emptiness and would."""
+    open_edit_box(page)
+    page.fill("#anTxt", "")
+    page.dispatch_event("#anTxt", "input")
+    page.evaluate(SELECT_SECOND_JS)
+    page.dispatch_event(".doc", "mouseup")  # the real end-of-drag path
+    page.wait_for_timeout(400)  # absence: past the debounce
+    assert page.get_attribute("#anModeEdit", "aria-pressed") == "true"
+    assert page.input_value("#anTxt") == ""
+    page.press("#anTxt", "Enter")
+    expect(page.locator("mark.anedit")).to_have_count(1)
+
+
+def test_an_untouched_prefilled_edit_box_yields_to_a_fresh_selection(page) -> None:
+    """The prefill is not user work, so it must not block the next selection."""
+    open_edit_box(page)
+    assert page.input_value("#anTxt") != ""
+    page.evaluate(SELECT_SECOND_JS)
+    page.dispatch_event(".doc", "mouseup")  # the real end-of-drag path
+    page.wait_for_function(
+        "() => document.querySelector('#anModeComment').getAttribute('aria-pressed') === 'true'"
+        " && document.querySelector('#anTxt').value === ''",
+        timeout=3000,
+    )
+
+
+def test_a_new_comment_is_stored_with_its_type(page) -> None:
+    page.evaluate(SELECT_SECOND_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "typed v2 comment")
+    page.press("#anTxt", "Enter")
+    stored = page.evaluate("() => JSON.parse(localStorage.getItem('review-sample') || '[]')")
+    assert stored and stored[-1]["type"] == "comment"
