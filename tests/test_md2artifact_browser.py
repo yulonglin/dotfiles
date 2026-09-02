@@ -1184,3 +1184,42 @@ def test_suggest_edit_works_where_the_viewer_suppresses_modals(
         assert dialogs == [], f"a modal was used as the guard: {dialogs}"
     finally:
         ctx.close()
+
+
+def test_a_cleared_prefill_survives_a_refresh_as_a_pending_deletion(page) -> None:
+    """Empty is the defined 'suggest deletion' value, so a dirty empty edit box is
+    work in progress, not nothing — a refresh before Enter must bring it back."""
+    open_edit_box(page)
+    page.fill("#anTxt", "")
+    page.dispatch_event("#anTxt", "input")
+    page.wait_for_function(
+        "() => { const d = JSON.parse(localStorage.getItem('an-draft:review-sample') || 'null');"
+        " return !!d && d.mode === 'edit' && d.note === '' && !!d.quote; }",
+        timeout=3000,
+    )
+    page.reload()
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    assert page.get_attribute("#anModeEdit", "aria-pressed") == "true"
+    assert page.input_value("#anTxt") == ""
+    page.press("#anTxt", "Enter")
+    expect(page.locator("mark.anedit")).to_have_count(1)
+    assert page.evaluate("() => document.querySelectorAll('[data-an-inserted]').length") == 0 or \
+        page.evaluate("() => Array.from(document.querySelectorAll('[data-an-inserted]')).every(e => e.textContent === '')")
+
+
+def test_an_emptied_comment_box_keeps_no_draft(page) -> None:
+    """The edit-mode exception must not leak into comment mode, where an empty
+    box is nothing to keep."""
+    page.evaluate(SELECT_SECOND_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "half a thought")
+    page.dispatch_event("#anTxt", "input")
+    page.wait_for_function(
+        "() => (localStorage.getItem('an-draft:review-sample') || '').includes('half a thought')",
+        timeout=3000,
+    )
+    page.fill("#anTxt", "")
+    page.dispatch_event("#anTxt", "input")
+    page.wait_for_function(
+        "() => localStorage.getItem('an-draft:review-sample') === null", timeout=3000
+    )

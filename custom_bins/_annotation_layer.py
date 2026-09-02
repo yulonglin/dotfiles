@@ -739,8 +739,11 @@ function discard(){ closePop(); }
 // `dirty` gates this, not emptiness: an edit box opens pre-filled with the
 // selection, and autosaving that would leave a draft nobody typed, which then
 // reopens the box on the next load for a note that was never begun.
+// In edit mode an EMPTY dirty box is meaningful: the prefill was cleared to
+// suggest a deletion, and a refresh before Enter must bring that back. In
+// comment mode an empty box is nothing to keep.
 function saveDraft(){
-  if (!isOpen() || !dirty || !hasText()) { lsDel(DRAFT); return; }
+  if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
   lsSet(DRAFT, JSON.stringify({
     note: txt.value, editingId: editingId, mode: mode,
     quote: pending ? pending.quote : null, where: pending ? pending.where : null
@@ -771,7 +774,11 @@ function restoreDraft(){
 }
 function unpackDraft(){
   var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
-  return d && typeof d.note === "string" && d.note.trim() ? d : null;
+  if (!d || typeof d.note !== "string") return null;
+  // An empty note is a draft only for an edit that still knows its target: a
+  // pending deletion of `quote`, or a revision of an existing edit.
+  if (!d.note.trim() && !(d.mode === "edit" && (d.quote || d.editingId != null))) return null;
+  return d;
 }
 // These keep their names and every existing call site; what changed is that
 // the state lives on the comments now and the page-level key is derived from

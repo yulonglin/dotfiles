@@ -437,7 +437,8 @@ def test_the_prefill_is_not_user_work() -> None:
     """
     js = _layer_module().JS
     assert 'var mode = "comment", dirty = false;' in js
-    assert "if (!isOpen() || !dirty || !hasText()) { lsDel(DRAFT); return; }" in js
+    assert 'if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }' in js
+    # ...and in edit mode an emptied box is a pending deletion, kept as a draft
     # the press-outside guard reads the flag, not the textarea
     outside = re.search(
         r'document\.addEventListener\("mousedown", function\(.*?\n\}\);', js, re.S
