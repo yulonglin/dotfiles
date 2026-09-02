@@ -1,11 +1,15 @@
 ---
-name: claude
+name: headless-claude
 description: Delegate headless work to Claude Code CLI via `claude -p` (runs synchronously) only when it needs fresh credentials, a separate API billing pool, or execution outside this session (cron, an external trigger, the `jexp` queue). NOT the default for routine judgment — prefer Task subagents. Detached or long-running work is owned by the MAIN context, which orchestrates by managing subagents — a backgrounded Task subagent by default, backgrounded `claude -p` only for those exceptions — because this agent runs as a subagent and cannot safely own a job that outlives its turn.
 
 model: inherit
 color: purple
 tools: ["Bash"]
 ---
+
+# WHY THIS IS NOT NAMED `claude`
+
+It was, until 2026-09-01. An agent named `claude` reads as "plain Claude" in the agents view, and a session dispatched under it inherits `tools: ["Bash"]` — no Artifact, Task, WebFetch or Read. That is how a full working session ended up unable to publish the page it had built. The name must never look like the default.
 
 # WHEN NOT TO USE THIS AGENT
 
