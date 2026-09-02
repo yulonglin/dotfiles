@@ -41,6 +41,8 @@ Losing a comment is the worst failure the page can have. The shape: select text,
 
 Pages built before v2 are frozen at v1 per the rule below and gain the mode only on rebuild and republish.
 
+Known edges, reviewed by council 2026-09-02 and left as they are because none loses a stored entry: a comment made *before* an edit whose struck span later contains it re-anchors as "missed" (still stored, still exported); a replacement identical to its quote saves a no-op edit; and because the comment key is derived from the artifact directory, a page rebuilt from a scratch copy under `build/` derives a different key — build in place, or pass `--key`.
+
 - **A comment stays readable and editable after it is written** — clicking its highlight reopens it with the existing text, to reread, revise or delete. A note that survives only as a `title` tooltip is effectively gone the moment it is written.
 - **Unexported comments block destructive transitions**: track whether anything changed since the last copy or export, and guard `beforeunload` while it has.
 - **A half-typed note is already the user's work**: autosave it as a draft on every keystroke and reopen the box on it, so a forced refresh costs nothing.
