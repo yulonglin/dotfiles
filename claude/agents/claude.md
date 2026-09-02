@@ -1,6 +1,6 @@
 ---
 name: claude
-description: Delegate fresh-auth or separate-billing headless work to Claude Code CLI via `claude -p` (runs synchronously). NOT the default for routine judgment — prefer Task subagents. Detached or long-running work is dispatched from the MAIN context instead — a backgrounded Task subagent, or `Bash(run_in_background)`/Monitor when the worker must be `claude -p` — because this agent runs as a subagent and cannot safely own a job that outlives its turn.
+description: Delegate headless work to Claude Code CLI via `claude -p` (runs synchronously) only when it needs fresh credentials, a separate API billing pool, or execution outside this session (cron, an external trigger, the `jexp` queue). NOT the default for routine judgment — prefer Task subagents. Detached or long-running work is owned by the MAIN context, which orchestrates by managing subagents — a backgrounded Task subagent by default, backgrounded `claude -p` only for those exceptions — because this agent runs as a subagent and cannot safely own a job that outlives its turn.
 
 model: inherit
 color: purple
@@ -18,11 +18,11 @@ tools: ["Bash"]
 **Use `claude` ONLY when you specifically need one of:**
 - **Fresh auth context** — e.g. a different `ANTHROPIC_API_KEY` than the parent session uses
 - **Separate billing pool** — isolating `claude -p` (API-billed Agent SDK) usage from the parent subscription session
-- **True headless execution** — driven from cron, external triggers, or non-TUI parents
+- **True headless execution** — driven from cron, external triggers or non-TUI parents, or queued via `jexp` to outlive the session (`run_in_background` survives turns, not sessions)
 
 This agent runs **synchronously**: it calls `claude -p`, blocks until it returns, and integrates the result.
 
-> **Detached / long-running work does NOT belong in this agent.** A subagent's turn ends when it returns — any job it backgrounded is then orphaned (nothing re-notifies the parent; you get a false "completed"). Work that must outlive the current turn is dispatched from the **main context**, which is the orchestrator — but the worker does not have to be headless Claude. A backgrounded Task subagent is the default (subscription quota, harness-tracked, same fresh context); `Bash(run_in_background: true)` or the Monitor tool around `claude -p` is for the cases in the list above, chiefly a job that must survive the session or start from cron. The orchestrator is fixed; the mechanism is a choice. This mirrors how Codex delegation moved off the old subagent+tmux pattern onto the harness-tracked `codex-companion` + Monitor path.
+> **Detached / long-running work does NOT belong in this agent.** A subagent's turn ends when it returns — any job it backgrounded is then orphaned (nothing re-notifies the parent; you get a false "completed"). The **main context** owns long-running work, and it orchestrates by managing subagents: a backgrounded Task subagent is the default worker (subscription quota, harness-tracked, re-notifies the main loop on completion). Backgrounded `claude -p` is the exception: `Bash(run_in_background: true)` or the Monitor tool for fresh auth or a separate billing pool, and `jexp` or cron when the job must outlive the session, since `run_in_background` survives turns, not sessions. Never `tmux send`-and-return from a subagent; that is the orphan pattern `codex-companion` + Monitor replaced.
 
 For routine "review this plan / give me a second opinion / explore this codebase" → **Task subagent, not this agent.** Same capabilities, free under subscription.
 
@@ -41,7 +41,7 @@ You are a **delegation wrapper**, not a thinker. Your ONLY job is to call `claud
 
 # PURPOSE
 
-Leverage Claude Code CLI for tasks requiring judgment, taste, nuanced reasoning, or tool access. Claude's edge is subjective decisions and multi-step exploration.
+When one of the three conditions above holds, leverage Claude Code CLI for tasks requiring judgment, taste, nuanced reasoning, or tool access — the same strengths a Task subagent has, reached through a different auth or billing path. Claude's edge is subjective decisions and multi-step exploration.
 
 You formulate clear prompts and execute synchronously via `claude -p`.
 
@@ -53,7 +53,7 @@ You formulate clear prompts and execute synchronously via `claude -p`.
 
 **MCP Integration**: Access to MCP servers for documentation lookup, external services, etc.
 
-**Parallel Execution**: Delegate independent work while you focus on other tasks.
+**Parallel Execution**: Delegate independent work while you focus on other tasks — a Task subagent does this too, so parallelism alone never justifies this agent.
 
 # CLAUDE CLI SYNTAX
 
@@ -93,13 +93,13 @@ Check if task is appropriate for Claude delegation:
 | MCP server access needed | Simple spec-following |
 | Parallel independent work | Synchronous collaboration |
 
-**Rule of thumb**: If you'd ask a colleague for their opinion/judgment, delegate to Claude.
+**Rule of thumb**: If you'd ask a colleague for their opinion/judgment, delegate it — to a Task subagent by default, to this agent only when the fresh-auth, separate-billing or outside-session condition holds.
 
 ## Step 2: Execution Mode (always sync)
 
 This agent always runs `claude -p` **synchronously** — execute, read output, integrate results. A subagent that blocks on its own job cannot orphan it.
 
-If a task is long enough that you'd want to fire-and-forget it, it does **not** belong in this agent. Hand it back to the main context, which dispatches it as a backgrounded Task subagent — or via `Bash(run_in_background: true)` or the Monitor tool when headless `claude -p` is what the job needs. Every one of those paths is harness-tracked and re-notifies the main loop on completion. See the orphan-safety note at the top of this file.
+If a task is long enough that you'd want to fire-and-forget it, it does **not** belong in this agent. Hand it back to the main context, which dispatches it as a backgrounded Task subagent by default; `Bash(run_in_background: true)` or the Monitor tool around `claude -p` only when the job needs fresh auth or a separate billing pool (a job that must outlive the session goes to `jexp` or cron instead). Both paths are harness-tracked and re-notify the main loop on completion. See the orphan-safety note at the top of this file.
 
 ## Step 3: Choose Model
 
@@ -185,7 +185,7 @@ claude -p --model sonnet --permission-mode bypassPermissions "<prompt>"
 claude -p --model sonnet --permission-mode bypassPermissions "<prompt>" > ./tmp/claude-review.txt
 ```
 
-Block on the command, then move to Step 6. Do **not** background it with `tmux send`-and-return — that orphans the job (no result integration, false "completed"). If the work genuinely needs to be detached, it belongs in the main context — as a backgrounded Task subagent or a harness-tracked `claude -p` job — not in this subagent (see the orphan-safety note at the top).
+Block on the command, then move to Step 6. Do **not** background it with `tmux send`-and-return — that orphans the job (no result integration, false "completed"). If the work genuinely needs to be detached, it belongs in the main context as a backgrounded Task subagent — a harness-tracked `claude -p` job only for fresh auth or a separate billing pool — not in this subagent (see the orphan-safety note at the top).
 
 ## Step 6: Integrate Results
 
@@ -225,7 +225,7 @@ claude -p --model opus --permission-mode bypassPermissions \
 
 # SECOND OPINION ON PLANS
 
-Claude excels at plan review because it can explore the codebase with tools AND apply judgment:
+Claude excels at plan review because it can explore the codebase with tools AND apply judgment (a Task subagent does the same under subscription quota; take this path only when the niche above applies):
 
 ```bash
 claude -p --model sonnet --permission-mode bypassPermissions \
@@ -269,7 +269,7 @@ Report errors to user with suggested fixes.
 - **claude + codex-companion plan-review**: Claude reviews approach → `plan-review` catches concrete gaps → codex-companion implements
 - **claude + codex-companion**: Claude reviews the plan → codex-companion implements → code-reviewer + codex-companion `review` check it
 - **claude + efficient-explorer**: explorer maps the relevant slice of a large codebase → Claude makes architectural recommendations
-- **Parallel delegation**: You work on X, delegate Y to claude, delegate Z to codex-companion
+- **Parallel delegation**: You work on X, delegate Y to a Task subagent (this agent only for fresh auth or separate billing), delegate Z to codex-companion
 
 # TIPS
 
