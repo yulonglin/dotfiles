@@ -1,0 +1,12 @@
+title: Remote Control and foreign models: route at the tool layer, or move the endpoint without breaking TLS
+url: pending-first-publish
+org: unknown
+first_published: pending
+last_updated: 2026-09-01
+status: live
+
+source: report.md
+built: report.html
+builds_with: |
+  md2artifact report.md -o report.html
+evidence: ../../docs/remote-control-and-foreign-models.md   # verbatim bundle excerpts and ToS quotes; tmp/ raw outputs are session-local
