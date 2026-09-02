@@ -12,10 +12,18 @@ touched, so history and --resume are unaffected.
 
 A job is reaped when its last activity (state.json updatedAt, falling back to
 directory mtime) is older than --days AND its recorded state is not active.
-Active-looking states (running/working/starting) get a 30-day grace period
-instead, since a state.json that hasn't been touched in a month belongs to a
-dead daemon, not a live one. The job dir of the invoking session
+Active-looking states (running/working/starting/idle/queued) get a 30-day grace
+period instead, since a state.json that hasn't been touched in a month belongs
+to a dead daemon, not a live one. The job dir of the invoking session
 ($CLAUDE_JOB_DIR) and dirs without state.json are never reaped.
+
+--finished (or --states done,failed,stopped) narrows the candidates to jobs in
+a terminal state. That is how the `claude()` wrapper hides finished rows from
+the agents view before it opens: `--finished --hours 0 --archive-to DIR`. The
+view itself is compiled into the CLI and has no hide toggle, so removing the
+job dir is the only lever. `blocked` (the "Needs you" row) is not a terminal
+state and survives that filter whatever the grace. Worktrees a job created are
+left in place; the view's own delete key is what reaps those.
 """
 
 import argparse
@@ -29,8 +37,11 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-ACTIVE_STATES = {"running", "working", "starting"}
+ACTIVE_STATES = {"running", "working", "starting", "idle", "queued"}
 ACTIVE_GRACE_DAYS = 30.0
+# The states the agents view files under its done bucket. Failed rows sit
+# there too, so hiding only `done` would leave the list half-cleared.
+FINISHED_STATES = ("done", "failed", "stopped")
 
 
 def last_activity_epoch(job_dir: Path) -> float:
@@ -66,17 +77,51 @@ def main() -> int:
         description="Reap stale Claude Code background-session job dirs.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--days", type=float, default=7.0, help="reap jobs inactive longer than this")
+    parser.add_argument("--days", type=float, default=None, help="reap jobs inactive longer than this (default 7)")
+    parser.add_argument("--hours", type=float, default=None, help="like --days, in hours; the two are exclusive")
+    parser.add_argument(
+        "--states",
+        metavar="A,B",
+        help="only reap jobs whose recorded state is one of these (comma-separated); every other state is kept",
+    )
+    parser.add_argument(
+        "--finished",
+        action="store_true",
+        help=f"shorthand for --states {','.join(FINISHED_STATES)}: the agents view's done bucket",
+    )
     parser.add_argument("--jobs-dir", type=Path, default=Path.home() / ".claude" / "jobs")
     parser.add_argument("--dry-run", action="store_true", help="report what would be reaped, delete nothing")
     parser.add_argument("--trash", action="store_true", help="move to system trash (via `trash` CLI) instead of deleting")
     parser.add_argument("--archive-to", type=Path, metavar="DIR", help="move reaped dirs into DIR instead of deleting")
     parser.add_argument("-v", "--verbose", action="store_true", help="list each job and the decision made")
+    parser.add_argument("-q", "--quiet", action="store_true", help="print the summary only when something was reaped or failed")
     args = parser.parse_args()
 
+    if args.days is not None and args.hours is not None:
+        print("--days and --hours are mutually exclusive", file=sys.stderr)
+        return 2
+    if args.hours is not None:
+        args.days = args.hours / 24.0
+    if args.days is None:
+        args.days = 7.0
     if not math.isfinite(args.days) or args.days < 0:
         print(f"--days must be a non-negative finite number, got {args.days}", file=sys.stderr)
         return 2
+    if args.finished and args.states:
+        print("--finished and --states are mutually exclusive", file=sys.stderr)
+        return 2
+    only_states = None
+    if args.finished:
+        only_states = set(FINISHED_STATES)
+    elif args.states:
+        only_states = {s.strip() for s in args.states.split(",") if s.strip()}
+        if not only_states:
+            print("--states needs at least one state", file=sys.stderr)
+            return 2
+        if only_states & ACTIVE_STATES:
+            names = ", ".join(sorted(only_states & ACTIVE_STATES))
+            print(f"--states must not name an active state ({names})", file=sys.stderr)
+            return 2
     if not args.jobs_dir.is_dir():
         print(f"jobs dir not found: {args.jobs_dir}", file=sys.stderr)
         return 1
@@ -94,7 +139,7 @@ def main() -> int:
     now = time.time()
 
     reaped, reaped_mb, kept_recent, kept_active, kept_unreadable = 0, 0.0, 0, 0, 0
-    errors = 0
+    kept_other, errors = 0, 0
 
     for job_dir in sorted(args.jobs_dir.iterdir()):
         if not job_dir.is_dir():
@@ -116,6 +161,12 @@ def main() -> int:
             state = data.get("state", "") if isinstance(data, dict) else ""
         except (json.JSONDecodeError, OSError):
             state = ""
+
+        if only_states is not None and state not in only_states:
+            kept_other += 1
+            if args.verbose:
+                print(f"keep {job_dir.name}: state={state or '?'} not in {','.join(sorted(only_states))}")
+            continue
 
         age_days = (now - last_activity_epoch(job_dir)) / 86400
         threshold = max(args.days, ACTIVE_GRACE_DAYS) if state in ACTIVE_STATES else args.days
@@ -154,10 +205,12 @@ def main() -> int:
         reaped_mb += size_mb
 
     verb = "would reap" if args.dry_run else "reaped"
-    print(
-        f"{verb} {reaped} job(s), {reaped_mb:.0f}MB; kept {kept_recent} recent, "
-        f"{kept_active} active, {kept_unreadable} unreadable; {errors} error(s)"
-    )
+    if not args.quiet or reaped or errors:
+        other = f", {kept_other} other-state" if only_states is not None else ""
+        print(
+            f"{verb} {reaped} job(s), {reaped_mb:.0f}MB; kept {kept_recent} recent, "
+            f"{kept_active} active, {kept_unreadable} unreadable{other}; {errors} error(s)"
+        )
     return 1 if errors else 0
 
 

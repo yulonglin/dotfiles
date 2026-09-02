@@ -4,6 +4,9 @@
 # than 7 days, at most once per day. Claude Code has no built-in retention for
 # these (cleanupPeriodDays covers ~/.claude/projects transcripts only), so
 # without this they accumulate indefinitely. Transcripts are untouched.
+# Also purges ~/.claude/jobs-archive, where the claude() wrapper parks finished
+# jobs to hide them from `claude agents`, at 30 days — a recoverable holding
+# pen, not a second indefinite pile.
 set -u
 
 STAMP="$HOME/.cache/claude-jobs-reap.stamp"
@@ -27,4 +30,7 @@ else
 fi
 
 "$REAPER" --days 7 >/dev/null 2>&1 || true
+if [ -d "$HOME/.claude/jobs-archive" ]; then
+  "$REAPER" --jobs-dir "$HOME/.claude/jobs-archive" --days 30 >/dev/null 2>&1 || true
+fi
 exit 0

@@ -90,6 +90,10 @@ Verified on Claude Code 2.1.237 (2026-08-20): a **bare-word** entry compiles to 
 
 Note `git pull`/`merge`/`stash` still need `dangerouslyDisableSandbox: true` despite `git:*` — that is the runtime `denyWithinAllow` in the table below, not a matcher problem. If `systemd --user` is unavailable: `loginctl enable-linger $(whoami)`. If memory limits are silently ignored: `sudo systemctl set-property user-$(id -u).slice Delegate=yes`.
 
+## Finished sessions are hidden from `claude agents` by archiving their job dirs
+
+The agents view is compiled into the CLI and has no hide toggle (2.1.258 only folds its done bucket past a terminal-height cap). Its list is the set of dirs under `~/.claude/jobs`, so the `claude()` wrapper runs `claude-jobs-reap --finished --hours 0 --archive-to ~/.claude/jobs-archive` right before the view mounts: every `done`/`failed`/`stopped` job moves to the archive and stops appearing; `blocked` ("Needs you") and working rows are never touched, and the transcript under `~/.claude/projects` is untouched either way, so `claude --resume <session-id>` still works. A job's `output.result` and name stay readable in `~/.claude/jobs-archive/<id>/state.json` for 30 days, then `reap_jobs.sh` purges it. `CLAUDE_AGENTS_HIDE_FINISHED=0` opts out for one launch; `CLAUDE_AGENTS_FINISHED_GRACE_HOURS=6` keeps rows that finished in the last six hours. The view's own delete key is still what reaps a job's worktree — the wrapper leaves worktrees in place.
+
 ## Sandbox failure modes
 
 | Symptom | Reality | Fix |
