@@ -126,7 +126,7 @@ sources:
     verified: false
     notes: |
       Apollo's research output. Heavy on scheming, situational awareness, corrigibility
-      assessments. See ~/.claude/docs/apollo-eval-types.md for their taxonomy.
+      assessments. See claude/skills/sweep-ai-safety/references/apollo-eval-types.md for their taxonomy.
       No RSS at any common path (all 404, checked /rss.xml /feed.xml /index.xml /blog/rss.xml).
       Also check https://www.apolloresearch.ai/science/. SCRAPE LANE: WebFetch.
 

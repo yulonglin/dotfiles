@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Markdown hard-wrap nudge — enforces markdown-style.md's "one paragraph =
+"""Markdown hard-wrap nudge — enforces rules/communication.md's "one paragraph =
 one line" at write time.
 
 PostToolUse(Write|Edit) on `.md` files: flag prose paragraphs broken by hard
@@ -136,7 +136,7 @@ def main() -> None:
             f"NUDGE: hard-wrapped paragraph(s) in {path.rsplit('/', 1)[-1]}, "
             f"e.g. “{hits[0][:60]}…”{more}. One paragraph = one line "
             "— join the lines; blank lines separate paragraphs "
-            "(markdown-style.md)."
+            "(rules/communication.md)."
         )
     }))
     sys.exit(0)

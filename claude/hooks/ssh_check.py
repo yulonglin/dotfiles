@@ -4,7 +4,7 @@
 Reads PermissionRequest JSON on stdin.
 Outputs {"decision":"allow"} for hosts in ~/.ssh/config.
 Outputs {"decision":"ask"} for hardcoded IPv4/IPv6 addresses.
-Exits 0 with no output to fall through to the next hook (auto_classify.py).
+Exits 0 with no output to fall through to the next hook (approval_classifier.py).
 """
 
 import json
@@ -154,7 +154,7 @@ def main():
                 }))
                 return
 
-    # Fall through to auto_classify.py for unknown named hosts
+    # Fall through to approval_classifier.py for unknown named hosts
 
 
 if __name__ == "__main__":

@@ -3,9 +3,9 @@
 
 Pings the Anthropic API once at session start with a tiny request so the user
 learns up front if the key is rejected or the workspace is over its usage
-limit — instead of discovering it mid-task when auto_classify.py fails open.
+limit — instead of discovering it mid-task when approval_classifier.py fails open.
 
-Reuses the error parsing/classification logic from auto_classify.py.
+Reuses the error parsing/classification logic from approval_classifier.py.
 Fails open on ANY unexpected error: exit 0, no output, never block the session.
 Stays completely silent on success. Results are cached for 1 hour.
 """
@@ -45,7 +45,7 @@ def main() -> None:
     hooks_dir = os.path.dirname(os.path.abspath(__file__))
     if hooks_dir not in sys.path:
         sys.path.insert(0, hooks_dir)
-    from auto_classify import (  # noqa: E402
+    from approval_classifier import (  # noqa: E402
         parse_anthropic_error,
         classify_api_problem,
         API_URL,
@@ -88,7 +88,7 @@ def main() -> None:
         # Emit both: systemMessage surfaces the warning directly to the user (a top-level
         # field shown to the user on any event, per the hooks docs), and
         # hookSpecificOutput.additionalContext adds it to Claude's context so it can offer
-        # to help. Mirrors auto_classify.py's emit_warning, which sets both fields.
+        # to help. Mirrors approval_classifier.py's emit_warning, which sets both fields.
         print(json.dumps({
             "systemMessage": msg,
             "hookSpecificOutput": {

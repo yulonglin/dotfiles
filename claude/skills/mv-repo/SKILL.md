@@ -1,6 +1,6 @@
 ---
 name: mv-repo
-description: "Move a repo to a new directory. Handles venv, Claude Code project state, path references, and tmux sessions."
+description: "Move or relocate a repo to a new directory — 'move this repo to <path>', 'relocate this project', 'move ~/code/X into ~/code/Y/'. Handles venv, Claude Code project state, symlinks, cache invalidation, path references, and tmux sessions."
 ---
 
 # Move Repo
@@ -15,10 +15,32 @@ Examples:
 
 ## Steps
 
-### 1. Validate
+### 1. Validate, and warn before anything moves
 
 - Confirm source repo(s) exist and dest directory exists (or create it)
 - Confirm no name collisions in dest
+
+**Inventory symlinks in both directions now** — a dangling link fails silently at read time, so the list has to be taken before the target disappears:
+
+```bash
+# Links pointing OUT of the repo (vaults, shared data dirs, linked configs)
+find <source> -type l -exec ls -ld {} +
+
+# Links pointing INTO the repo from elsewhere — these are the dangerous ones
+find ~ -maxdepth 5 -type l -lname "*<source-basename>*" 2>/dev/null
+```
+
+Obsidian vaults and other synced directories are the common inbound case. A sync that reads a dangling link can interpret "target missing" as "files deleted" and propagate the deletion, so re-point these in step 6 before running any sync.
+
+**Say which caches the move invalidates BEFORE moving, not after.** Anything keyed on the absolute project path is orphaned by the move — disk stays used, the next run is cold, and a large rebuild is a surprise the user should agree to first. Name the ones that apply here:
+
+- `.venv/` — the absolute path is baked into `pyvenv.cfg` and every console script (step 3 recreates it)
+- direnv — the allow list is keyed by path, so `direnv allow` must be re-run in the new location
+- Editable installs (`uv pip install -e`, `pip install -e`) — the `.pth` entry still points at the old path
+- Build caches that record absolute paths: Rust `target/`, `ccache`/`sccache`, `node_modules/.cache`, `.next`, `.turbo`
+- Anything the user's own tooling pins by path: pueue task cwd, `jexp` job definitions, IDE project files
+
+If a rebuild is expensive (a large Rust `target/`, a big model or dataset cache), say the size and confirm before continuing.
 
 ### 2. Move
 
@@ -125,7 +147,31 @@ for wt_config in <new-path>/.git/worktrees/*/config; do
 done
 ```
 
-### 6. Grep for stale path references
+### 6. Re-point symlinks
+
+Work from the inventory taken in step 1.
+
+**Links pointing INTO the repo** — anything outside the repo whose target was under the old path:
+
+```bash
+for link in <inbound links from step 1>; do
+  target="$(readlink "$link")"
+  case "$target" in
+    "$old_path"*) ln -sfn "${target/$old_path/$new_path}" "$link" ;;
+  esac
+done
+```
+
+**Links pointing OUT of the repo** — absolute links still resolve and need no change; relative links break if the new location sits at a different depth. Re-point only the ones that stopped resolving.
+
+Verify nothing dangles before moving on:
+
+```bash
+find <new-path> -xtype l          # broken links inside the repo
+find ~ -maxdepth 5 -xtype l -lname "*<old-path-fragment>*" 2>/dev/null
+```
+
+### 7. Grep for stale path references
 
 Search for old paths across common locations:
 - `~/code/` (all repos — CLAUDE.md, specs, scripts, configs)
@@ -141,7 +187,7 @@ For each match:
 - Offer to fix (replace old path with new path)
 - Skip `tmp/`, `archive/`, `.git/`, `node_modules/` matches — these are throwaway
 
-### 7. Update tmux sessions
+### 8. Update tmux sessions
 
 Check for tmux sessions named after the repo:
 
@@ -155,7 +201,7 @@ If found, send `cd` to the new path:
 tmux send-keys -t <session> "cd <new-path>" Enter
 ```
 
-### 8. Remind about manual steps
+### 9. Remind about manual steps
 
 After completing all automated steps, remind the user about:
 - **Crontab entries**: `crontab -l | grep <old-path>` — update manually with `crontab -e`

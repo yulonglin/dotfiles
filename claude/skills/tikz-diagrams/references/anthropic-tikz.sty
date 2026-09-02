@@ -1,0 +1,70 @@
+% anthropic-tikz.sty v2 — Pastel minimalist TikZ styles for ML papers
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{anthropic-tikz}[2025/02/06 v2 Anthropic-style TikZ diagrams]
+\RequirePackage{tikz}
+\RequirePackage{fontawesome5}
+\RequirePackage{graphicx}
+\usetikzlibrary{
+  arrows.meta, calc, positioning, shapes.geometric, shapes.symbols,
+  fit, backgrounds, decorations.pathmorphing, decorations.pathreplacing,
+  shadows.blur, chains, matrix,
+}
+% Colors
+\definecolor{peach}{HTML}{FDDCB5}
+\definecolor{softblue}{HTML}{C5D5EA}
+\definecolor{lavender}{HTML}{D5C5E8}
+\definecolor{mint}{HTML}{C5E8D5}
+\definecolor{warmgray}{HTML}{F5F0EB}
+\definecolor{blush}{HTML}{F2D0D0}
+\definecolor{cream}{HTML}{FFF5E6}
+\definecolor{skyblue}{HTML}{D4E8F7}
+\definecolor{deeppeach}{HTML}{E8A870}
+\definecolor{deepblue}{HTML}{7A9DBF}
+\definecolor{deeplavender}{HTML}{9B7DBF}
+\definecolor{deepmint}{HTML}{6BA889}
+\definecolor{deepblush}{HTML}{C98A8A}
+\definecolor{charcoal}{HTML}{3D3D3D}
+\definecolor{medgray}{HTML}{888888}
+\definecolor{lightgray}{HTML}{E8E8E8}
+\definecolor{bgcard}{HTML}{F9F6F2}
+\definecolor{systembg}{HTML}{E8E0F0}
+\definecolor{userbg}{HTML}{E8F0E8}
+\definecolor{assistbg}{HTML}{F0F0F0}
+\definecolor{toolbg}{HTML}{FFF3E0}
+% Styles
+\tikzset{
+  basebox/.style={rounded corners=6pt, minimum height=1cm, minimum width=2.2cm,
+    inner sep=8pt, font=\sffamily\small, text=charcoal, line width=0.4pt},
+  peachbox/.style={basebox, fill=peach, draw=deeppeach},
+  bluebox/.style={basebox, fill=softblue, draw=deepblue},
+  lavbox/.style={basebox, fill=lavender, draw=deeplavender},
+  mintbox/.style={basebox, fill=mint, draw=deepmint},
+  blushbox/.style={basebox, fill=blush, draw=deepblush},
+  graybox/.style={basebox, fill=warmgray, draw=lightgray},
+  creambox/.style={basebox, fill=cream, draw=deeppeach!50},
+  skybox/.style={basebox, fill=skyblue, draw=deepblue!70},
+  card/.style={rounded corners=10pt, fill=bgcard, draw=lightgray, line width=0.3pt, inner sep=12pt},
+  pill/.style={rounded corners=10pt, fill=#1, inner xsep=8pt, inner ysep=4pt,
+    font=\sffamily\scriptsize, text=charcoal},
+  pill/.default=warmgray,
+  iconcirc/.style={circle, fill=#1, minimum size=1.2cm, inner sep=0pt, font=\large, text=charcoal},
+  iconcirc/.default=warmgray,
+  arrbase/.style={-{Stealth[length=5pt, width=4pt]}, line width=0.6pt, color=medgray},
+  arrdashed/.style={arrbase, dashed},
+  arrthick/.style={-{Stealth[length=6pt, width=5pt]}, line width=1pt, color=charcoal},
+  annot/.style={font=\sffamily\scriptsize, text=medgray},
+  heading/.style={font=\sffamily\bfseries\normalsize, text=charcoal},
+  subheading/.style={font=\sffamily\small, text=medgray},
+  groupbox/.style={rounded corners=8pt, draw=lightgray, dashed, line width=0.5pt, inner sep=10pt},
+  msgbase/.style={rounded corners=6pt, text width=10cm, align=left, inner sep=8pt,
+    font=\sffamily\small, text=charcoal, line width=0.3pt},
+  sysmsg/.style={msgbase, fill=systembg, draw=systembg!60!black},
+  usermsg/.style={msgbase, fill=userbg, draw=userbg!60!black},
+  asstmsg/.style={msgbase, fill=assistbg, draw=assistbg!60!black},
+  toolmsg/.style={msgbase, fill=toolbg, draw=toolbg!60!black},
+  msglabel/.style={font=\sffamily\scriptsize\bfseries, text=medgray},
+  layercard/.style={rounded corners=8pt, fill=#1, draw=#1!60!black,
+    line width=0.3pt, inner sep=10pt, minimum width=12cm},
+  layercard/.default=bgcard,
+}
+\endinput

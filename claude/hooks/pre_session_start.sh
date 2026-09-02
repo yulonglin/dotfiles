@@ -6,7 +6,10 @@
 
 set -euo pipefail
 
-# Reset per-session flags so warnings repeat in new sessions
+# Clear the classifier's per-session no-key warning flag. The classifier stopped
+# writing this file once the subscription fallback landed (a missing API key is
+# now a degradation the statusline reports, not a once-per-session warning), so
+# this only cleans up the leftover from an older checkout.
 rm -f "$HOME/.cache/claude/auto-classify-no-key-warned" 2>/dev/null || true
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
@@ -50,10 +53,10 @@ check_commits_since() {
     git rev-list --count "${last_commit}..HEAD" 2>/dev/null || echo 0
 }
 
-# --- Check auto-classify health ---
+# --- Check approval classifier health ---
 
-# Verify auto-classify can function (rules file + API key)
-CLASSIFY_RULES="$HOME/.claude/hooks/auto_classify_rules.md"
+# Verify approval classifier can function (rules file + API key)
+CLASSIFY_RULES="$HOME/.claude/hooks/approval_classifier_rules.md"
 # Resolve DOT_DIR: hooks/ lives inside claude/ which is symlinked to ~/.claude/
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _DOT_DIR="${DOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
@@ -70,7 +73,7 @@ classify_warnings=""
 
 if [[ ! -f "$CLASSIFY_RULES" ]]; then
     classify_ok=false
-    classify_warnings+="auto-classify rules missing: $CLASSIFY_RULES"$'\n'
+    classify_warnings+="approval classifier rules missing: $CLASSIFY_RULES"$'\n'
 fi
 
 # Check if API key is available (same logic as with-anthropic-key.sh).
@@ -113,19 +116,27 @@ fi
 
 if ! $has_key; then
     classify_ok=false
-    classify_warnings+="auto-classify has NO API key — all non-trivial commands will need manual approval. Fix: setup-envrc ANTHROPIC_API_KEY"$'\n'
+    # Not a dead end any more: without a key the classifier falls back to the
+    # Claude subscription (`claude -p`), which still auto-approves but takes
+    # ~9s per call instead of ~1s. Still worth a warning — it is a real
+    # slowdown, and the fallback fails too if the CLI is not logged in.
+    classify_warnings+="approval classifier has NO API key — falling back to the slower subscription backend (~9s/call). Fix: setup-envrc ANTHROPIC_API_KEY"$'\n'
     [[ -n "$key_error" ]] && classify_warnings+="  reason: $key_error"$'\n'
 fi
 
 # --- Collect warnings ---
 
 warnings=""
+feature_rc=0
+python3 "$HOME/.claude/hooks/hook_feature.py" enabled nudges.session-start-warnings >/dev/null 2>&1 || feature_rc=$?
+advisory_enabled=true
+[[ "$feature_rc" -eq 1 ]] && advisory_enabled=false
 
 if ! $classify_ok; then
-    # Loud terminal warning (stderr — user sees this immediately)
-    printf '\033[1;31m🚨 AUTO-CLASSIFY DEGRADED:\033[0m\n%s\n' "$classify_warnings" >&2
-    # Also include in Claude's context
-    warnings+="🚨 AUTO-CLASSIFY DEGRADED:"$'\n'"$classify_warnings"
+    # Loud terminal warning stays active; it adds no model context.
+    printf '\033[1;31m🚨 APPROVAL CLASSIFIER DEGRADED:\033[0m\n%s\n' "$classify_warnings" >&2
+    # Keep collecting so the same result can enter context when enabled.
+    warnings+="🚨 APPROVAL CLASSIFIER DEGRADED:"$'\n'"$classify_warnings"
 fi
 
 # Check CLAUDE.md staleness
@@ -170,8 +181,10 @@ fi
 
 # --- Output ---
 
-# Exit silently if nothing to report
+# Exit silently if nothing should enter the session context. The setup and health
+# checks above still run when advisory nudges are disabled.
 [[ -z "$warnings" ]] && exit 0
+$advisory_enabled || exit 0
 
 # Emit structured hook output so Claude sees the warnings in context
 jq -n --arg w "$warnings" '{

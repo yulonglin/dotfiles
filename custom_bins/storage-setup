@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+
+# Storage Setup — record this machine's data-volume mount point and disk-warning threshold
+#
+# Writes config/storage.conf, which config/aliases/storage.sh reads on every
+# interactive shell to forward HF_HOME/TORCH_HOME onto the volume and to warn
+# when the root disk is nearly full. Config only: never moves, copies, deletes
+# or chowns data. Idempotent and non-interactive — safe from deploy.sh.
+#
+# Usage:
+#   storage-setup                    Detect a volume and write the config if absent
+#   storage-setup --volume PATH      Use PATH instead of auto-detecting
+#   storage-setup --threshold-gb N   Warn under N GB free on / (default 20; 0 disables)
+#   storage-setup --force            Overwrite an existing config
+#   storage-setup --show             Print the effective settings and exit
+#   storage-setup --detect           Print the auto-detected volume and exit
+#   storage-setup --help
+#
+# Detection: an existing /workspace wins (the RunPod convention the
+# server-storage-tiering skill assumes); otherwise the mounted block-device
+# filesystem with the most free space, provided it holds at least twice root's
+# free space and at least 50G. No candidate is a normal outcome (laptop) and
+# exits 0 without writing.
+#
+# Exit codes: 0 success or nothing to configure, 1 usage error, 2 --volume path missing
+
+set -euo pipefail
+
+# Locate dotfiles repo (follow symlinks from custom_bins)
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")")" && pwd)"
+DOT_DIR="${SCRIPT_DIR%/custom_bins}"
+CONF="${DOT_DIR}/config/storage.conf"
+
+DEFAULT_THRESHOLD_GB=20
+
+usage() {
+  # The header comment block, from line 3 to the first non-comment line.
+  awk 'NR < 3 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
+}
+
+# Auto-detect an attached data volume. Prints the mount point, or nothing.
+detect_volume() {
+  if [[ -d /workspace ]]; then
+    printf '%s\n' /workspace
+    return 0
+  fi
+  # Single df pass. Real block devices only, which drops tmpfs, overlay,
+  # squashfs (/snap) and network mounts. Candidate must have >=2x root's free
+  # space and >=50G, so a same-size second disk or a small /boot never wins.
+  df -Pk 2>/dev/null | awk '
+    NR == 1 { next }
+    $1 !~ /^\/dev\// { next }
+    {
+      mp = $6
+      for (i = 7; i <= NF; i++) mp = mp " " $i
+      if (mp == "/") { root = $4; next }
+      if (mp ~ /^\/(boot|snap|var\/lib\/docker|var\/lib\/snapd)/) next
+      free[mp] = $4
+    }
+    END {
+      best = ""; best_free = 0
+      for (mp in free) {
+        if (free[mp] < 2 * root) continue
+        if (free[mp] < 50 * 1048576) continue
+        if (free[mp] > best_free) { best_free = free[mp]; best = mp }
+      }
+      if (best != "") print best
+    }
+  '
+}
+
+write_conf() {
+  local volume="$1" threshold="$2"
+  mkdir -p "$(dirname "$CONF")"
+  cat > "$CONF" <<EOF
+# Storage tiering — per-machine settings (gitignored)
+# Written by storage-setup on $(date -u +%Y-%m-%dT%H:%M:%SZ) on $(hostname -s 2>/dev/null || echo unknown).
+# Edit freely; rerun 'storage-setup --force' to regenerate.
+# Documentation: config/storage.conf.example
+
+STORAGE_VOLUME=$volume
+STORAGE_ROOT_WARN_GB=$threshold
+EOF
+}
+
+# --- Arguments ---
+
+volume=""
+threshold=""
+force=false
+action="setup"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --volume)
+      [[ $# -ge 2 ]] || { echo "storage-setup: --volume needs a path (try --help)" >&2; exit 1; }
+      volume="$2"; shift 2 ;;
+    --volume=*)     volume="${1#*=}"; shift ;;
+    --threshold-gb)
+      [[ $# -ge 2 ]] || { echo "storage-setup: --threshold-gb needs a number (try --help)" >&2; exit 1; }
+      threshold="$2"; shift 2 ;;
+    --threshold-gb=*) threshold="${1#*=}"; shift ;;
+    --force|-f)     force=true; shift ;;
+    --show)         action="show"; shift ;;
+    --detect)       action="detect"; shift ;;
+    --help|-h)      usage; exit 0 ;;
+    *)              echo "storage-setup: unknown argument '$1' (try --help)" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -n "$threshold" && ! "$threshold" =~ ^[0-9]+$ ]]; then
+  echo "storage-setup: --threshold-gb must be a non-negative integer, got '$threshold'" >&2
+  exit 1
+fi
+
+# --- Actions ---
+
+case "$action" in
+  detect)
+    detected="$(detect_volume)"
+    if [[ -z "$detected" ]]; then
+      echo "No data volume detected."
+      exit 0
+    fi
+    printf '%s\n' "$detected"
+    exit 0
+    ;;
+  show)
+    eff_volume="/workspace"
+    eff_threshold="$DEFAULT_THRESHOLD_GB"
+    if [[ -r "$CONF" ]]; then
+      # shellcheck source=/dev/null
+      . "$CONF"
+      eff_volume="${STORAGE_VOLUME:-$eff_volume}"
+      eff_threshold="${STORAGE_ROOT_WARN_GB:-$eff_threshold}"
+      echo "Config: $CONF"
+    else
+      echo "Config: $CONF (absent — showing defaults)"
+    fi
+    state="missing"
+    [[ -d "$eff_volume" ]] && state="present"
+    echo "STORAGE_VOLUME=$eff_volume ($state)"
+    echo "STORAGE_ROOT_WARN_GB=$eff_threshold"
+    exit 0
+    ;;
+esac
+
+if [[ -e "$CONF" && "$force" != true ]]; then
+  echo "storage-setup: $CONF already exists — leaving it alone (--force to regenerate)."
+  exit 0
+fi
+
+if [[ -n "$volume" ]]; then
+  if [[ ! -d "$volume" ]]; then
+    echo "storage-setup: --volume path does not exist: $volume" >&2
+    exit 2
+  fi
+else
+  volume="$(detect_volume)"
+  if [[ -z "$volume" ]]; then
+    echo "storage-setup: no data volume detected — nothing to configure."
+    echo "  Defaults apply (volume /workspace, warn under ${DEFAULT_THRESHOLD_GB}G); pass --volume PATH to set one anyway."
+    exit 0
+  fi
+fi
+
+write_conf "$volume" "${threshold:-$DEFAULT_THRESHOLD_GB}"
+echo "storage-setup: wrote $CONF"
+echo "  STORAGE_VOLUME=$volume"
+echo "  STORAGE_ROOT_WARN_GB=${threshold:-$DEFAULT_THRESHOLD_GB}"
+echo "  Takes effect in new shells (config/aliases/storage.sh)."

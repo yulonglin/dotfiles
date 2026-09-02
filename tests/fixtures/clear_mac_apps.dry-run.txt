@@ -1,0 +1,17 @@
+=== DRY RUN ===
+
+Would QUIT (1):
+  - Safari
+
+Would CLOSE WINDOWS (2):
+  - Bear
+  - Mouseless
+
+Would SLOW-QUIT (1):
+  - Spark Desktop
+
+Would SELECTIVE-CLOSE (matching: 'Google Meet', 'Focusmate (Safari)'):
+  - Google Chrome
+
+Would SKIP (no-touch):
+  - Ghostty

@@ -1,0 +1,462 @@
+# music-roulette.tsv — data for the `music-roulette` alias (config/aliases/misc.sh)
+#
+# Tab-separated. Lines starting with # and blank lines are ignored.
+#
+#   C<TAB>Country<TAB>tier
+#     tier 1 = deep recorded catalogue (portable modern genres are plausible here)
+#     tier 2 = thinner catalogue (only traditional/portable + its own regional genres)
+#     Country list: UN member states, cleaned to the name Spotify actually indexes
+#     (ISO 3166 "Korea, Republic of" -> "South Korea"), plus stateless music
+#     cultures that have catalogues but no seat (Kurdish, Tuareg, Sami, ...).
+#     Uninhabited territories (Antarctica, Bouvet, Heard, US Minor Outlying) are
+#     omitted: no catalogue, guaranteed dead pair.
+#
+#   G<TAB>Genre<TAB>scope
+#     scope = *mod   portable modern genre -> paired only with tier-1 countries
+#     scope = *trad  portable traditional  -> paired with any country
+#     scope = Country[,Country...]  regional genre -> only its home countries
+#
+# Provenance: the country list comes from ISO 3166. The genres and every
+# genre->country mapping are hand-curated -- no machine-readable source for
+# them existed (Spotify's available-genre-seeds endpoint is deprecated, the
+# usual genre gists are not enumerable, Wikipedia's lists truncate). Expect
+# some attributions to be arguable; fix them by editing the row.
+#
+# Dead-pair prevention: music-roulette draws the GENRE first, then draws a
+# country from that genre's eligible set. An impossible pairing is therefore
+# unconstructible rather than filtered after the fact. Adding a genre with a
+# country name that does not appear as a C row is the one way to break this --
+# tmp/test-music-roulette.sh checks for exactly that.
+
+# --------------------------------------------------------------------------
+# Countries and music cultures
+# --------------------------------------------------------------------------
+
+# -- tier 1: deep catalogue --
+C	Argentina	1
+C	Australia	1
+C	Austria	1
+C	Bangladesh	1
+C	Belgium	1
+C	Brazil	1
+C	Bulgaria	1
+C	Canada	1
+C	Chile	1
+C	China	1
+C	Colombia	1
+C	Croatia	1
+C	Cuba	1
+C	Czechia	1
+C	Denmark	1
+C	Egypt	1
+C	Estonia	1
+C	Ethiopia	1
+C	Finland	1
+C	France	1
+C	Germany	1
+C	Ghana	1
+C	Greece	1
+C	Hungary	1
+C	Iceland	1
+C	India	1
+C	Indonesia	1
+C	Iran	1
+C	Ireland	1
+C	Israel	1
+C	Italy	1
+C	Jamaica	1
+C	Japan	1
+C	Kenya	1
+C	Latvia	1
+C	Lebanon	1
+C	Lithuania	1
+C	Malaysia	1
+C	Mali	1
+C	Mexico	1
+C	Morocco	1
+C	Netherlands	1
+C	New Zealand	1
+C	Nigeria	1
+C	Norway	1
+C	Pakistan	1
+C	Peru	1
+C	Philippines	1
+C	Poland	1
+C	Portugal	1
+C	Romania	1
+C	Russia	1
+C	Senegal	1
+C	Serbia	1
+C	Singapore	1
+C	Slovakia	1
+C	Slovenia	1
+C	South Africa	1
+C	South Korea	1
+C	Spain	1
+C	Sweden	1
+C	Switzerland	1
+C	Taiwan	1
+C	Thailand	1
+C	Turkey	1
+C	Ukraine	1
+C	United Kingdom	1
+C	United States	1
+C	Uruguay	1
+C	Venezuela	1
+C	Vietnam	1
+
+# -- tier 2: thinner catalogue --
+C	Afghanistan	2
+C	Albania	2
+C	Algeria	2
+C	Andorra	2
+C	Angola	2
+C	Antigua and Barbuda	2
+C	Armenia	2
+C	Azerbaijan	2
+C	Bahamas	2
+C	Bahrain	2
+C	Barbados	2
+C	Belarus	2
+C	Belize	2
+C	Benin	2
+C	Bhutan	2
+C	Bolivia	2
+C	Bosnia and Herzegovina	2
+C	Botswana	2
+C	Brunei	2
+C	Burkina Faso	2
+C	Burundi	2
+C	Cabo Verde	2
+C	Cambodia	2
+C	Cameroon	2
+C	Central African Republic	2
+C	Chad	2
+C	Comoros	2
+C	Costa Rica	2
+C	Cyprus	2
+C	Democratic Republic of the Congo	2
+C	Djibouti	2
+C	Dominica	2
+C	Dominican Republic	2
+C	Ecuador	2
+C	El Salvador	2
+C	Equatorial Guinea	2
+C	Eritrea	2
+C	Eswatini	2
+C	Fiji	2
+C	Gabon	2
+C	Gambia	2
+C	Georgia	2
+C	Grenada	2
+C	Guatemala	2
+C	Guinea	2
+C	Guinea-Bissau	2
+C	Guyana	2
+C	Haiti	2
+C	Honduras	2
+C	Iraq	2
+C	Ivory Coast	2
+C	Jordan	2
+C	Kazakhstan	2
+C	Kiribati	2
+C	Kosovo	2
+C	Kuwait	2
+C	Kyrgyzstan	2
+C	Laos	2
+C	Lesotho	2
+C	Liberia	2
+C	Libya	2
+C	Liechtenstein	2
+C	Luxembourg	2
+C	Madagascar	2
+C	Malawi	2
+C	Maldives	2
+C	Malta	2
+C	Marshall Islands	2
+C	Mauritania	2
+C	Mauritius	2
+C	Micronesia	2
+C	Moldova	2
+C	Monaco	2
+C	Mongolia	2
+C	Montenegro	2
+C	Mozambique	2
+C	Myanmar	2
+C	Namibia	2
+C	Nauru	2
+C	Nepal	2
+C	Nicaragua	2
+C	Niger	2
+C	North Korea	2
+C	North Macedonia	2
+C	Oman	2
+C	Palau	2
+C	Palestine	2
+C	Panama	2
+C	Papua New Guinea	2
+C	Paraguay	2
+C	Puerto Rico	2
+C	Qatar	2
+C	Republic of the Congo	2
+C	Rwanda	2
+C	Saint Lucia	2
+C	Samoa	2
+C	San Marino	2
+C	Sao Tome and Principe	2
+C	Saudi Arabia	2
+C	Seychelles	2
+C	Sierra Leone	2
+C	Solomon Islands	2
+C	Somalia	2
+C	South Sudan	2
+C	Sri Lanka	2
+C	Sudan	2
+C	Suriname	2
+C	Syria	2
+C	Tajikistan	2
+C	Tanzania	2
+C	Timor-Leste	2
+C	Togo	2
+C	Tonga	2
+C	Trinidad and Tobago	2
+C	Tunisia	2
+C	Turkmenistan	2
+C	Tuvalu	2
+C	Uganda	2
+C	United Arab Emirates	2
+C	Uzbekistan	2
+C	Vanuatu	2
+C	Yemen	2
+C	Zambia	2
+C	Zimbabwe	2
+
+# -- stateless / regional music cultures --
+C	Appalachia	2
+C	Basque Country	2
+C	Brittany	2
+C	Cape Breton	2
+C	Catalonia	2
+C	Corsica	2
+C	French Antilles	2
+C	Greenland	2
+C	Hawaii	2
+C	Hong Kong	1
+C	Kurdistan	2
+C	Occitania	2
+C	Okinawa	2
+C	Quebec	2
+C	Roma	2
+C	Sapmi	2
+C	Scotland	2
+C	Tibet	2
+C	Tuareg	2
+C	Tuva	2
+C	Wales	2
+C	Zanzibar	2
+
+# --------------------------------------------------------------------------
+# Genres
+# --------------------------------------------------------------------------
+
+# -- portable modern (tier-1 countries only) --
+G	Ambient	*mod
+G	Big Band	*mod
+G	Black Metal	*mod
+G	Blues	*mod
+G	Breakbeat	*mod
+G	Chamber	*mod
+G	Classical	*mod
+G	Disco	*mod
+G	Doom Metal	*mod
+G	Downtempo	*mod
+G	Dream Pop	*mod
+G	Drone	*mod
+G	Drum and Bass	*mod
+G	Dub Techno	*mod
+G	Electronic	*mod
+G	Experimental	*mod
+G	Free Jazz	*mod
+G	Funk	*mod
+G	Fusion	*mod
+G	Garage	*mod
+G	Grunge	*mod
+G	Hardcore	*mod
+G	Hip Hop	*mod
+G	House	*mod
+G	Indie	*mod
+G	Industrial	*mod
+G	Jazz	*mod
+G	Lo-fi	*mod
+G	Metal	*mod
+G	Minimalism	*mod
+G	New Wave	*mod
+G	Noise	*mod
+G	Opera	*mod
+G	Post Punk	*mod
+G	Post Rock	*mod
+G	Progressive Rock	*mod
+G	Psychedelic	*mod
+G	Punk	*mod
+G	R&B	*mod
+G	Rap	*mod
+G	Rock	*mod
+G	Shoegaze	*mod
+G	Soul	*mod
+G	Soundtrack	*mod
+G	Surf	*mod
+G	Synth Pop	*mod
+G	Techno	*mod
+G	Trance	*mod
+G	Trip Hop	*mod
+
+# -- portable traditional (any country) --
+G	Brass Band	*trad
+G	Chant	*trad
+G	Choral	*trad
+G	Dance	*trad
+G	Devotional	*trad
+G	Drumming	*trad
+G	Field Recordings	*trad
+G	Flute	*trad
+G	Folk	*trad
+G	Lullabies	*trad
+G	Percussion	*trad
+G	Protest Songs	*trad
+G	Spiritual	*trad
+G	Street Music	*trad
+G	Traditional	*trad
+G	Vocal	*trad
+G	Wedding Music	*trad
+
+# -- regional: Latin America --
+G	Bachata	Dominican Republic
+G	Bolero	Cuba,Mexico
+G	Bossa Nova	Brazil
+G	Cumbia	Colombia,Argentina,Mexico
+G	Forro	Brazil
+G	Huayno	Peru,Bolivia
+G	Mariachi	Mexico
+G	Merengue	Dominican Republic
+G	MPB	Brazil
+G	Nueva Cancion	Chile,Argentina
+G	Ranchera	Mexico
+G	Reggaeton	Puerto Rico,Colombia,Panama
+G	Salsa	Cuba,Puerto Rico,Colombia,Venezuela
+G	Samba	Brazil
+G	Tango	Argentina,Uruguay
+G	Vallenato	Colombia
+
+# -- regional: Caribbean --
+G	Calypso	Trinidad and Tobago
+G	Dancehall	Jamaica
+G	Dub	Jamaica
+G	Kompa	Haiti
+G	Reggae	Jamaica
+G	Rocksteady	Jamaica
+G	Ska	Jamaica
+G	Soca	Trinidad and Tobago,Barbados
+G	Steelpan	Trinidad and Tobago
+G	Zouk	French Antilles,Haiti
+
+# -- regional: Africa --
+G	Afrobeat	Nigeria
+G	Afrobeats	Nigeria,Ghana
+G	Amapiano	South Africa
+G	Benga	Kenya
+G	Bongo Flava	Tanzania
+G	Chaabi	Morocco,Algeria
+G	Coupe-Decale	Ivory Coast
+G	Desert Blues	Mali,Niger,Tuareg,Mauritania
+G	Ethio Jazz	Ethiopia
+G	Gnawa	Morocco
+G	Gqom	South Africa
+G	Griot	Mali,Senegal,Gambia
+G	Highlife	Ghana,Nigeria
+G	Isicathamiya	South Africa
+G	Juju	Nigeria
+G	Kwaito	South Africa
+G	Makossa	Cameroon
+G	Mbalax	Senegal
+G	Mbaqanga	South Africa
+G	Ndombolo	Democratic Republic of the Congo
+G	Rai	Algeria,Morocco
+G	Soukous	Democratic Republic of the Congo,Republic of the Congo
+G	Taarab	Tanzania,Zanzibar,Kenya
+
+# -- regional: Middle East and Central Asia --
+G	Arabesque	Turkey
+G	Dabke	Lebanon,Syria,Palestine,Jordan
+G	Dastgah	Iran
+G	Maqam	Iraq,Syria,Egypt
+G	Mizrahi	Israel
+G	Morin Khuur	Mongolia
+G	Shashmaqam	Uzbekistan,Tajikistan
+G	Sufi	Pakistan,Turkey,Morocco,Iran
+G	Throat Singing	Mongolia,Tuva
+G	Turkish Psych	Turkey
+
+# -- regional: South Asia --
+G	Baul	Bangladesh
+G	Bhangra	India,Pakistan
+G	Bollywood	India
+G	Carnatic	India
+G	Filmi	India
+G	Ghazal	India,Pakistan
+G	Hindustani	India,Pakistan
+G	Qawwali	Pakistan,India
+G	Tabla	India
+
+# -- regional: East and Southeast Asia --
+G	Cantopop	Hong Kong,China
+G	City Pop	Japan
+G	Dangdut	Indonesia
+G	Enka	Japan
+G	Gagaku	Japan
+G	Gamelan	Indonesia
+G	Guqin	China
+G	J-pop	Japan
+G	K-pop	South Korea
+G	Kroncong	Indonesia
+G	Luk Thung	Thailand
+G	Mandopop	Taiwan,China
+G	Mor Lam	Thailand,Laos
+G	Peking Opera	China
+G	Pinoy Rock	Philippines
+G	Sanjo	South Korea
+
+# -- regional: Europe --
+G	Balkan Brass	Serbia,North Macedonia,Roma,Bulgaria
+G	Celtic	Ireland,Scotland,Wales,Brittany,Cape Breton
+G	Chanson	France
+G	Csardas	Hungary
+G	Fado	Portugal
+G	Flamenco	Spain
+G	Joik	Sapmi
+G	Klezmer	Poland,Ukraine,Israel
+G	Kulning	Sweden
+G	Manele	Romania
+G	Musette	France
+G	Polka	Poland,Czechia
+G	Rebetiko	Greece
+G	Schlager	Germany,Austria
+G	Sea Shanties	United Kingdom,Ireland
+G	Sevdalinka	Bosnia and Herzegovina
+G	Tarantella	Italy
+G	Turbo Folk	Serbia
+
+# -- regional: North America and Oceania --
+G	Americana	United States
+G	Bluegrass	United States,Appalachia
+G	Cajun	United States
+G	Country	United States
+G	Delta Blues	United States
+G	Didgeridoo	Australia
+G	Gospel	United States
+G	Hula	Hawaii
+G	Motown	United States
+G	Powwow	United States,Canada
+G	Slack Key	Hawaii
+G	String Band	Papua New Guinea,Solomon Islands,Vanuatu
+G	Waiata	New Zealand
+G	Zydeco	United States

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from matplotlib import font_manager
+from matplotlib import font_manager, ticker
 from seaborn.palettes import SEABORN_PALETTES
 
 import log
@@ -204,46 +204,56 @@ def annotate_values(
     annotate_bars: bool = True,
     annotate_lines: bool = True,
 ):
+    """Label bar heights and line endpoints.
+
+    Rewritten 2026-08-28 during the pastelplot merge. The previous version walked
+    raw `ax.patches` — which catches any patch, not just bars — and put a label on
+    EVERY point of every line, which is unreadable past a handful of points. This
+    uses `ax.bar_label` per container and labels only the line's last point.
+
+    `x_offset` / `y_offset` are kept for signature compatibility and are applied as
+    a point offset; no caller in this repo passes them.
+    """
     if annotate_bars:
-        for p in ax.patches:
-            x, y = p.get_x() + p.get_width() / 2, p.get_height()  # pyright: ignore[reportAttributeAccessIssue]
-            ax.text(
-                x + x_offset,
-                y + y_offset,
-                format(y),
-                ha="center",
+        for container in ax.containers:  # pyright: ignore[reportAttributeAccessIssue]
+            labels = [format(v) if v is not None else "" for v in container.datavalues]
+            ax.bar_label(container, labels=labels, fontsize=fontsize, padding=2, bbox=bbox)
+
+    if annotate_lines:
+        for line in ax.get_lines():
+            xdata, ydata = line.get_xdata(), line.get_ydata()
+            if len(xdata) == 0:
+                continue
+            ax.annotate(
+                format(float(ydata[-1])),  # pyright: ignore[reportArgumentType]
+                (xdata[-1], ydata[-1]),
+                textcoords="offset points",
+                xytext=(6 + x_offset, y_offset),
+                va="center",
                 fontsize=fontsize,
                 bbox=bbox,
             )
-
-    if annotate_lines:
-        for l in ax.get_lines():
-            for x, y in zip(l.get_xdata(), l.get_ydata(), strict=True):  # pyright: ignore[reportArgumentType]
-                ax.text(
-                    x + x_offset,
-                    y + y_offset,
-                    format(y),
-                    ha="center",
-                    fontsize=fontsize,
-                    bbox=bbox,
-                )
 
 
 def format_yaxis(
     ax: plt.Axes,
     format: Callable[[float], str] = lambda x: f"{x:.0%}",
 ) -> None:
-    ax.set_yticklabels([format(x) for x in ax.get_yticks()])  # pyright: ignore[reportCallIssue]
+    """Format y-axis tick labels.
+
+    Uses a FuncFormatter rather than `set_yticklabels`. The old call pinned labels
+    to the tick positions as they were at call time, so any later rescale left the
+    labels describing the wrong values — silently, and only on some figures.
+    """
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _pos: format(x)))
 
 
 def make_axes_transparent(ax: plt.Axes):
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.spines["right"].set_visible(False)
-    ax.spines["top"].set_visible(False)
-    ax.spines["bottom"].set_visible(False)
-    ax.spines["left"].set_visible(False)
-    ax.set_facecolor("none")
+    """Strip spines, ticks, and background for clean overlay plots."""
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    ax.patch.set_alpha(0)
 
 
 def add_fonts(fontpaths: str | list[str]):

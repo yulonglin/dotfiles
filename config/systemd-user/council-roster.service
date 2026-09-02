@@ -1,0 +1,44 @@
+[Unit]
+Description=Check the LLM council roster against the capability indices
+Documentation=file:%h/code/dotfiles/config/openrouter-models.toml
+
+[Service]
+Type=oneshot
+
+# No API key. Both data sources this needs are public: the OpenRouter /models
+# catalogue and the Epoch Capabilities Index zip. The Artificial Analysis index
+# would need AA_API_KEY, and it is deliberately NOT wired in here -- secrets on
+# this machine are per-project via direnv, and `with-secrets` is a zsh FUNCTION,
+# so a systemd unit could never have called it. Running on Epoch alone is the
+# supported degraded mode and the report says which indices it used.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+# --check only. This job NEVER writes the config, for two reasons: the unit runs
+# ProtectHome=read-only, and a timer that edits a tracked file leaves
+# uncommitted drift nobody notices. The proposal lands in the state directory
+# and the session-start nudge tells Claude to apply and commit it, which is
+# where an edit can actually be reviewed and recorded.
+ExecStart=/bin/sh -c '%h/code/dotfiles/custom_bins/openrouter-cli council roster --check > %S/council-roster/roster-report.txt 2>&1'
+
+# Exit 3 means "the roster is stale or the indices moved" -- a normal outcome of
+# a working check, not a unit failure. Declaring it a success keeps
+# `systemctl --user status` honest about whether the CHECK ran. It is also why
+# the durable signal is the report file: reset-failed.timer wipes failed-unit
+# state hourly on this box, so a finding recorded as a unit failure would be
+# erased before anyone saw it.
+SuccessExitStatus=0 3
+
+StateDirectory=council-roster
+
+# Reads two public URLs and writes its own state directory, nothing else.
+#
+# ProtectHome=read-only is safe even though a USER unit's StateDirectory
+# resolves under $XDG_STATE_HOME (inside $HOME): systemd bind-mounts the state
+# directory writable INSIDE the sandbox, so the report still lands. This is the
+# opposite of what the directive names suggest, and `systemd-analyze verify`
+# does not evaluate sandbox semantics, so only running it settles the question
+# -- measured for the sibling openrouter-drift unit on 2026-08-28.
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true

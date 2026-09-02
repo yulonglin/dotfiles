@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Global PreToolUse(Bash) hook: BLOCKS the four hard supply-chain gates.
 
-These are the prohibitions from rules/supply-chain-security.md that were
+These are the prohibitions from rules/safety.md § Supply chain that were
 previously prose-only. Prose asks the model to refrain; this refuses.
 
 Blocks:
@@ -463,7 +463,7 @@ def check_segment(tokens: list[str], depth: int) -> None:
             "`--no-quarantine` disables Gatekeeper.",
             "Notarization + quarantine are the defense against a malicious cask.",
             "ask the user; this flag is never used unattended "
-            "(rules/supply-chain-security.md).",
+            "(rules/safety.md § Supply chain).",
         )
 
     # --- Gate 3: npm lifecycle scripts re-enabled ---

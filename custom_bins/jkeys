@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# jkeys — API-key files for pueue/systemd jobs (promoted 2026-08-27 from
+# sandbagging-detection scripts/jobs/{mkenv.sh,with_keys.sh}).
+#
+# Why: direnv's bws secrets backend is unreachable inside a systemd user unit,
+# so jobs launched via jexp/jagent otherwise start with NO API keys. jkeys
+# resolves the keys once, in the submitting shell, from the repo's MAIN
+# checkout .envrc (worktrees resolve to their parent), and writes only the
+# key lines to a mode-600 file that the job sources at start.
+# Key values are never printed.
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  jkeys [write] [--repo DIR] [--out FILE] [--pattern REGEX]
+  jkeys path  [--repo DIR]
+  jkeys exec  [--keyfile FILE] [--] CMD [ARGS...]
+
+Commands:
+  write     (default) Resolve keys via `direnv exec REPO env`, write the
+            mode-600 key file, print its path and the variable NAMES only.
+  path      Print the default key-file path for the repo (no side effects).
+  exec      Source the key file into the environment, then exec CMD.
+            This is the job-side shim jexp/jagent wrap commands in.
+
+Options:
+  --repo DIR      Checkout whose .envrc resolves the keys. Default: the MAIN
+                  checkout of the current repo (`git rev-parse --git-common-dir`,
+                  so it works from worktrees).
+  --out FILE      Key file to write (write only). Default: see `jkeys path`.
+  --pattern RE    grep -E pattern selecting env lines to keep (write only).
+                  Default: ^([A-Za-z0-9_]+_API_KEY|HF_TOKEN)=
+  --keyfile FILE  Key file to source (exec only). Default: $JEXP_KEY_FILE,
+                  else the repo-derived `jkeys path`.
+  -h, --help      Show this help.
+
+Default key-file location (per repo, survives reboots, mode 600):
+  ${XDG_STATE_HOME:-~/.local/state}/jkeys/<repo-basename>-<hash8>.env
+
+jexp/jagent call all of this automatically (JEXP_NO_KEYS=1 opts out).
+Re-run `jkeys` after rotating keys — the file is a snapshot, not live.
+USAGE
+}
+
+# Main checkout of the repo containing DIR (or cwd): parent of the git common dir.
+resolve_repo() {
+  local dir="${1:-}"
+  if [ -n "$dir" ]; then
+    cd "$dir" && pwd
+    return
+  fi
+  local common
+  common="$(git rev-parse --git-common-dir 2>/dev/null)" || {
+    echo "jkeys: not inside a git repo; pass --repo" >&2
+    return 2
+  }
+  cd "$(dirname "$(readlink -f "$common")")" && pwd
+}
+
+default_keyfile() {
+  local repo="$1" hash
+  hash="$(printf '%s' "$repo" | sha256sum | cut -c1-8)"
+  printf '%s/jkeys/%s-%s.env\n' "${XDG_STATE_HOME:-$HOME/.local/state}" \
+    "$(basename "$repo")" "$hash"
+}
+
+cmd="write"
+case "${1:-}" in
+  write|path|exec) cmd="$1"; shift ;;
+  -h|--help) usage; exit 0 ;;
+esac
+
+repo_arg=""
+out=""
+keyfile=""
+pattern='^([A-Za-z0-9_]+_API_KEY|HF_TOKEN)='
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --repo) repo_arg="$2"; shift 2 ;;
+    --out) out="$2"; shift 2 ;;
+    --pattern) pattern="$2"; shift 2 ;;
+    --keyfile) keyfile="$2"; shift 2 ;;
+    --) shift; break ;;
+    -h|--help) usage; exit 0 ;;
+    *) [ "$cmd" = exec ] && break
+       echo "jkeys: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+case "$cmd" in
+  path)
+    repo="$(resolve_repo "$repo_arg")"
+    default_keyfile "$repo"
+    ;;
+
+  write)
+    repo="$(resolve_repo "$repo_arg")"
+    [ -n "$out" ] || out="$(default_keyfile "$repo")"
+    [ -f "$repo/.envrc" ] || { echo "jkeys: no .envrc in $repo" >&2; exit 2; }
+    command -v direnv >/dev/null || { echo "jkeys: direnv not on PATH" >&2; exit 2; }
+    umask 077
+    mkdir -p "$(dirname "$out")"
+    tmp="$(mktemp "$out.XXXXXX")"
+    # grep exits 1 on no match; handle that explicitly rather than via pipefail.
+    direnv exec "$repo" env 2>/dev/null | { grep -E "$pattern" || true; } > "$tmp"
+    if [ ! -s "$tmp" ]; then
+      rm -f "$tmp"
+      echo "jkeys: no lines matched '$pattern' from direnv exec $repo" >&2
+      exit 1
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$out"
+    echo "wrote $out ($(stat -c '%A %s bytes' "$out"))"
+    echo "keys: $(cut -d= -f1 "$out" | paste -sd' ')"
+    ;;
+
+  exec)
+    [ $# -gt 0 ] || { echo "jkeys exec: no command given" >&2; usage >&2; exit 2; }
+    if [ -z "$keyfile" ]; then
+      keyfile="${JEXP_KEY_FILE:-}"
+      if [ -z "$keyfile" ]; then
+        repo="$(resolve_repo "$repo_arg" 2>/dev/null || true)"
+        [ -n "$repo" ] && keyfile="$(default_keyfile "$repo")"
+      fi
+    fi
+    if [ -z "$keyfile" ] || [ ! -r "$keyfile" ]; then
+      echo "jkeys exec: key file not readable (${keyfile:-none}) — run \`jkeys\` in the repo first" >&2
+      echo "  (direnv/bws are unreachable inside pueue/systemd units)" >&2
+      exit 2
+    fi
+    set -a
+    # shellcheck disable=SC1090
+    . "$keyfile"
+    set +a
+    exec "$@"
+    ;;
+esac

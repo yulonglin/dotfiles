@@ -1,0 +1,64 @@
+title: Zed Now Matches Cursor Where It Should And Diverges Where It Is Better
+url: unpublished
+# Not yet published. The session that produced this had Bash only, no Artifact
+# tool, so it could not publish and deliberately did not claim to have.
+#
+# SYNC BEFORE PUBLISHING, not after. At the time of this commit, main was 48
+# commits behind origin, and those commits rewrote the publishing procedure
+# itself: md2review became md2artifact everywhere (a8a236b), the artifact index
+# moved to a reachable org (d2fdf75), and the index recorded that its own
+# published pages were gone (d5d9e71). Publishing first would use a stale
+# procedure and possibly a dead org, and would write an ARTIFACTS.md row into a
+# file the incoming commits also change.
+#
+# The merge is not mechanical: four files dirty in the working tree are also
+# touched by the incoming commits, including claude/settings.json, which carries
+# the permanent model-router gateway diff that must never be committed. See
+# .claude/rules/dotfiles-settings.md before merging.
+#
+# After the sync: publish, then stamp the URL and org here and add the
+# ARTIFACTS.md row in the same turn — per artifacts-sync, the org is the one
+# fact the gallery cannot give back afterwards.
+org: unknown
+first_published:
+last_updated: 2026-09-01
+status: done
+
+source: zed-settings-port.md
+
+builds_with: |
+  Nothing to build — the Markdown is the page. Publish the .md directly.
+  It lives here rather than in tmp/ because
+  claude/hooks/block_throwaway_artifact_path.sh refuses a publish whose
+  file_path is gitignored, and tmp/ is gitignored in this repo.
+
+verified_against:
+  zed_version: 1.17.2
+  method: |
+    Every setting key and value was checked against three sources before being
+    written, because Zed ignores unknown keys silently rather than erroring, so
+    a plausible-looking invented key fails invisibly:
+      1. upstream assets/settings/default.json (annotated defaults)
+      2. the embedded defaults inside /Applications/Zed.app/Contents/MacOS/zed,
+         read with `strings`, to rule out upstream-only features
+      3. api.zed.dev/extensions for every extension ID
+    Two first-draft recommendations failed this and were corrected:
+    `preserve_wrap_indent` does not exist at all, and `soft_wrap` takes
+    "bounded", not "preferred_line_length".
+    The JSONC record block in the page was then parsed and compared key-by-key
+    against the live config/zed/settings.json — zero mismatches.
+
+established: |
+  Zed's command-palette file finder ignores `search.include_ignored`; it reads
+  `file_finder.include_ignored`, whose default "smart" only consults gitignored
+  files when the worktree is itself gitignored. Setting it to "all" — an enum,
+  not a boolean — is what makes cmd-p find gitignored files.
+
+  Two Python type checkers cannot run together: Zed's shipped default enables
+  exactly one and explicitly disables the other four with the "!" prefix,
+  because both publish diagnostics for the same lines. ty, pyright,
+  basedpyright and pylsp are all built into Zed and need no extension.
+
+  Of ~79 Cursor and VSCode settings surveyed, most had no Zed equivalent —
+  every Jupyter setting, all Pylance analysis tuning, and all remote-SSH
+  plumbing that Zed reads from ~/.ssh/config instead.

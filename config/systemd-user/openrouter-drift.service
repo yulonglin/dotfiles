@@ -1,0 +1,45 @@
+[Unit]
+Description=Check configured OpenRouter model slugs against the live catalogue
+Documentation=file:%h/code/dotfiles/config/openrouter-models.toml
+
+[Service]
+Type=oneshot
+
+# No API key. The OpenRouter /models catalogue is a public endpoint (verified
+# HTTP 200 unauthenticated, 2026-08-28), so this job needs no secret at all.
+# That matters here: secrets on this machine are per-project via direnv, and
+# `with-secrets` is a zsh FUNCTION in config/zshrc.sh, so a systemd unit could
+# never have called it anyway. The optional index-based re-ranking that DOES
+# need a key (AA_API_KEY) stays on the manual `openrouter-cli refresh` path.
+#
+# deploy.sh copies this unit verbatim -- no templating -- so nothing here may
+# depend on the repo living somewhere else, and PATH is set explicitly because
+# systemd --user does not inherit the login shell's.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# One invocation, one catalogue fetch, both report forms -- so the readable and
+# the machine-readable report always describe the same moment.
+ExecStart=%h/code/dotfiles/custom_bins/openrouter-cli drift --report %S/openrouter-drift/drift-report.md --json-report %S/openrouter-drift/drift.json
+
+# Exit 3 means "drift found", which is a normal outcome of a working check, not
+# a unit failure. Declaring it a success keeps `systemctl --user status` honest
+# about whether the CHECK ran, and it is why the durable signal is the report
+# file rather than the unit's state: reset-failed.timer wipes failed-unit state
+# hourly, so a failed unit could never have carried the finding anyway.
+SuccessExitStatus=0 3
+
+StateDirectory=openrouter-drift
+
+# It only reads a public URL and writes its own state directory.
+#
+# ProtectHome=read-only is safe here even though a USER unit's StateDirectory
+# resolves under $XDG_STATE_HOME (inside $HOME): systemd bind-mounts the state
+# directory writable INSIDE the sandbox, so the reports still land. Measured
+# 2026-08-28 with `systemd-run --user` carrying exactly these properties --
+# both reports were written to ~/.local/state and the unit finished "success".
+# Worth recording because it is the opposite of what the directive names
+# suggest, and `systemd-analyze verify` does not evaluate sandbox semantics at
+# all, so only actually running it settles the question.
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true

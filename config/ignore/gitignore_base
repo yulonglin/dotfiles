@@ -57,7 +57,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# `lib/*` not `lib/`: a re-include cannot reach inside an excluded DIRECTORY,
+# so repos keeping real source in lib/ (e.g. dotfiles' lib/plotting) had to
+# force-add every file. Excluding the children keeps the negation usable.
+lib/*
 lib64/
 parts/
 sdist/

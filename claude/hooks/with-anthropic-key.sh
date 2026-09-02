@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Stamp the hook's real start time BEFORE doing any work. Claude's hook timeout
+# starts when this wrapper is exec'd, but the secret resolution below is a live
+# network call — so a classifier that timed only from its own startup would think
+# it had more of the deadline left than it does, and could be killed mid-fallback
+# without writing its health file. approval_classifier.py reads this and subtracts
+# it (HOOK_START_ENV there); anything that cannot parse it falls back to 0.
+# EPOCHREALTIME is bash 5+; /bin/bash on macOS is 3.2 and `date +%N` is a GNU
+# extension, so whole seconds are the portable floor. That is precise enough for
+# a 30s budget — it can only ever under-report by <1s, never over-report.
+export APPROVAL_CLASSIFIER_HOOK_START="${EPOCHREALTIME:-$(date +%s)}"
+
 SCRIPT_PATH=$(realpath "${BASH_SOURCE[0]}")
 DOT_DIR=$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd)
 SECRETS_HELPER="$DOT_DIR/custom_bins/dotfiles-secrets"

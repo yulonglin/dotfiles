@@ -6,13 +6,13 @@
 # alongside the tool result — i.e. after `gh pr create` has already opened the
 # PR. A reminder at that point cannot stop un-reviewed code from being
 # published, it can only ask for a follow-up commit. This is the one hard gate;
-# the paired Stop hook (quality_stop_nudge.sh) stays a soft nudge.
+# the paired Stop hook (simplify_nudge.sh) stays a soft nudge.
 #
 # ── The design rule, learned the hard way ────────────────────────────────────
 #
 # A PATTERN MATCH IN THIS FILE MAY ONLY EVER PRODUCE A DENY, NEVER AN ALLOW.
 #
-# Two adversarial review rounds found eight bypasses between them. Every single
+# Three adversarial review rounds found ten bypasses between them. Every single
 # one was a regex whose match produced an allow: a `--help` token borrowed from
 # a quoted title, a `--base "main"` whose value became `--draft` once quotes
 # were stripped, a mutator prefix that `git -c x=y commit` slipped past. The

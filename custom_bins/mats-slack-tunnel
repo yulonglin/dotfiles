@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Keep the private, read-only MATS Slack MCP reachable through OpenAI's
+# outbound-only Secure MCP Tunnel.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PATH="$DOT_DIR/custom_bins:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
+KEYCHAIN_HELPER_BIN="${KEYCHAIN_HELPER_BIN:-$DOT_DIR/tools/mats-slack-keychain/mats-slack-keychain}"
+[[ -x "$KEYCHAIN_HELPER_BIN" ]] || {
+    echo "mats-slack-tunnel: local Keychain helper is not available" >&2
+    exit 1
+}
+
+TUNNEL_CLIENT_BIN="${TUNNEL_CLIENT_BIN:-$HOME/.local/bin/tunnel-client}"
+[[ -x "$TUNNEL_CLIENT_BIN" ]] || {
+    echo "mats-slack-tunnel: tunnel-client is not installed at $TUNNEL_CLIENT_BIN" >&2
+    exit 1
+}
+
+CONTROL_PLANE_API_KEY=$("$KEYCHAIN_HELPER_BIN" get \
+    com.yulonglin.mats-slack-mcp.openai-api-key) || exit 1
+OPENAI_MCP_TUNNEL_ID=$("$KEYCHAIN_HELPER_BIN" get \
+    com.yulonglin.mats-slack-mcp.tunnel-id) || exit 1
+[[ -n "$CONTROL_PLANE_API_KEY" && "$OPENAI_MCP_TUNNEL_ID" == tunnel_* ]] || {
+    echo "mats-slack-tunnel: Keychain entries have unexpected formats" >&2
+    exit 1
+}
+export CONTROL_PLANE_API_KEY
+
+printf -v mcp_command '%q' "$DOT_DIR/custom_bins/mats-slack-mcp"
+
+"$TUNNEL_CLIENT_BIN" init \
+    --sample sample_mcp_stdio_local \
+    --profile mats-slack \
+    --force \
+    --health-listen-addr 127.0.0.1:18080 \
+    --tunnel-id "$OPENAI_MCP_TUNNEL_ID" \
+    --mcp-command "$mcp_command"
+
+exec "$TUNNEL_CLIENT_BIN" run --profile mats-slack

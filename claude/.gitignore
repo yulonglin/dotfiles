@@ -71,3 +71,12 @@ local
 routines
 scheduled_tasks.json
 workflows
+
+# Harness/desktop-app runtime state (sandbox deny-listed; 0-byte stubs or masks)
+cowork_plugins
+mcp-discovery-cache
+remote-settings-consent.json
+remote-settings-helper-consent
+seed-admin
+shares
+uploads/

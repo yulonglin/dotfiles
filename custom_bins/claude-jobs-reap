@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""Reap stale Claude Code background-session job dirs under ~/.claude/jobs.
+
+Each `claude agents` background session leaves a directory ~/.claude/jobs/<id>/
+holding daemon state (state.json, timeline.jsonl) and scratch space (tmp/).
+Nothing built into Claude Code cleans these up (cleanupPeriodDays covers
+~/.claude/projects transcripts only), so they accumulate indefinitely.
+
+Deleting a job dir removes the entry from the `claude agents` list and its
+scratch files. The session transcript lives in ~/.claude/projects/ and is NOT
+touched, so history and --resume are unaffected.
+
+A job is reaped when its last activity (state.json updatedAt, falling back to
+directory mtime) is older than --days AND its recorded state is not active.
+Active-looking states (running/working/starting) get a 30-day grace period
+instead, since a state.json that hasn't been touched in a month belongs to a
+dead daemon, not a live one. The job dir of the invoking session
+($CLAUDE_JOB_DIR) and dirs without state.json are never reaped.
+"""
+
+import argparse
+import json
+import math
+import os
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+ACTIVE_STATES = {"running", "working", "starting"}
+ACTIVE_GRACE_DAYS = 30.0
+
+
+def last_activity_epoch(job_dir: Path) -> float:
+    """Best-known last-activity time: state.json updatedAt, else dir mtime."""
+    state_file = job_dir / "state.json"
+    candidates = [job_dir.stat().st_mtime]
+    if state_file.exists():
+        candidates.append(state_file.stat().st_mtime)
+        try:
+            data = json.loads(state_file.read_text())
+            updated = data.get("updatedAt") if isinstance(data, dict) else None
+            if isinstance(updated, str) and updated:
+                dt = datetime.fromisoformat(updated.replace("Z", "+00:00"))
+                candidates.append(dt.timestamp())
+        except (ValueError, json.JSONDecodeError, OSError):
+            pass
+    return max(candidates)
+
+
+def dir_size_mb(path: Path) -> float:
+    total = 0
+    for p in path.rglob("*"):
+        try:
+            if p.is_file() and not p.is_symlink():
+                total += p.stat().st_size
+        except OSError:
+            continue
+    return total / 1_000_000
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Reap stale Claude Code background-session job dirs.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--days", type=float, default=7.0, help="reap jobs inactive longer than this")
+    parser.add_argument("--jobs-dir", type=Path, default=Path.home() / ".claude" / "jobs")
+    parser.add_argument("--dry-run", action="store_true", help="report what would be reaped, delete nothing")
+    parser.add_argument("--trash", action="store_true", help="move to system trash (via `trash` CLI) instead of deleting")
+    parser.add_argument("--archive-to", type=Path, metavar="DIR", help="move reaped dirs into DIR instead of deleting")
+    parser.add_argument("-v", "--verbose", action="store_true", help="list each job and the decision made")
+    args = parser.parse_args()
+
+    if not math.isfinite(args.days) or args.days < 0:
+        print(f"--days must be a non-negative finite number, got {args.days}", file=sys.stderr)
+        return 2
+    if not args.jobs_dir.is_dir():
+        print(f"jobs dir not found: {args.jobs_dir}", file=sys.stderr)
+        return 1
+    if args.trash and shutil.which("trash") is None:
+        print("--trash requested but no `trash` CLI on PATH", file=sys.stderr)
+        return 1
+    if args.trash and args.archive_to:
+        print("--trash and --archive-to are mutually exclusive", file=sys.stderr)
+        return 1
+    if args.archive_to and not args.dry_run:
+        args.archive_to.mkdir(parents=True, exist_ok=True)
+
+    protected = os.environ.get("CLAUDE_JOB_DIR")
+    protected_dir = Path(protected).resolve() if protected else None
+    now = time.time()
+
+    reaped, reaped_mb, kept_recent, kept_active, kept_unreadable = 0, 0.0, 0, 0, 0
+    errors = 0
+
+    for job_dir in sorted(args.jobs_dir.iterdir()):
+        if not job_dir.is_dir():
+            continue
+        if protected_dir and job_dir.resolve() == protected_dir:
+            if args.verbose:
+                print(f"keep {job_dir.name}: current session")
+            continue
+
+        state_file = job_dir / "state.json"
+        if not state_file.exists():
+            kept_unreadable += 1
+            if args.verbose:
+                print(f"keep {job_dir.name}: no state.json")
+            continue
+
+        try:
+            data = json.loads(state_file.read_text())
+            state = data.get("state", "") if isinstance(data, dict) else ""
+        except (json.JSONDecodeError, OSError):
+            state = ""
+
+        age_days = (now - last_activity_epoch(job_dir)) / 86400
+        threshold = max(args.days, ACTIVE_GRACE_DAYS) if state in ACTIVE_STATES else args.days
+
+        if age_days < threshold:
+            if state in ACTIVE_STATES:
+                kept_active += 1
+            else:
+                kept_recent += 1
+            if args.verbose:
+                print(f"keep {job_dir.name}: state={state or '?'} age={age_days:.1f}d < {threshold:g}d")
+            continue
+
+        size_mb = dir_size_mb(job_dir)
+        action = "would reap" if args.dry_run else "reap"
+        if args.verbose or args.dry_run:
+            print(f"{action} {job_dir.name}: state={state or '?'} age={age_days:.1f}d size={size_mb:.0f}MB")
+        if not args.dry_run:
+            try:
+                if args.trash:
+                    subprocess.run(["trash", str(job_dir)], check=True, capture_output=True)
+                elif args.archive_to:
+                    # shutil.move into an existing dir would nest src INSIDE it
+                    # (and its copy-fallback on any OSError can leave duplicates)
+                    dest = args.archive_to / job_dir.name
+                    if dest.exists():
+                        raise FileExistsError(f"archive collision: {dest} already exists")
+                    shutil.move(str(job_dir), str(dest))
+                else:
+                    shutil.rmtree(job_dir)
+            except (OSError, subprocess.CalledProcessError) as exc:
+                print(f"failed to reap {job_dir.name}: {exc}", file=sys.stderr)
+                errors += 1
+                continue
+        reaped += 1
+        reaped_mb += size_mb
+
+    verb = "would reap" if args.dry_run else "reaped"
+    print(
+        f"{verb} {reaped} job(s), {reaped_mb:.0f}MB; kept {kept_recent} recent, "
+        f"{kept_active} active, {kept_unreadable} unreadable; {errors} error(s)"
+    )
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

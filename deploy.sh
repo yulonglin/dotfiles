@@ -14,6 +14,20 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
+# Non-interactive hardening: no hidden prompt below may block an unattended run.
+# git must never open a credential prompt (clones here are public repos), apt
+# must never open needrestart's ncurses dialog on Ubuntu 22.04+, and services
+# apt touches restart automatically. Attended runs lose nothing.
+export GIT_TERMINAL_PROMPT=0
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+# GIT_TERMINAL_PROMPT stops the credential prompt but not a stalled TCP
+# connection, and DEBIAN_FRONTEND stops needrestart but not the dpkg lock —
+# on a fresh box with unattended-upgrades running at boot, apt waits forever.
+# These two bound what those variables leave unbounded.
+export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30
+export APT_LOCK_TIMEOUT="${APT_LOCK_TIMEOUT:-120}"
+
 # Script directory
 DOT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 export DOT_DIR
@@ -41,13 +55,22 @@ Usage: ./deploy.sh [OPTIONS]
 
 Deploy dotfile configurations. Settings are in config.sh.
 
-PROFILES:
-    --profile=NAME    Use a profile: personal, server, minimal
-    --default         Safe base for shared/new machines (alias for --profile=server)
+PROFILES (pick by what the machine is FOR):
+    (no flag)         'standard' — shell, editor, git, Claude/Codex, supply-chain
+                      defenses. Nothing scheduled, nothing GUI. This is the
+                      default; it is NOT the full set.
+    --devbox          A machine you live on: the full set (was --personal)
+    --agent           Ephemeral box you DO code on: standard + per-project secrets
+    --bare            Ephemeral box you will NOT code on: shell + uv only
+    --server          Shared machine: no GUI, no file cleanup. NOTE: still
+                      installs the recurring agent jobs (mcp-sync, usage-ping,
+                      tmux-resume, dep-audit, stale-claims) — unchanged from
+                      before, so curl|bash provisioning keeps working
     --minimal         Suppress ALL components — specify what you want explicitly
     --no-defaults     Same as --minimal (clearer name)
-    --server          Server-appropriate subset
-    --personal        Full personal setup (default)
+    --profile=NAME    standard, devbox, agent, bare, server, cloud, minimal
+    --default         Alias for --server
+    --personal        Synonym for --devbox (kept for existing invocations)
 
 SELECTIVE DEPLOYMENT:
     --only COMP...    Deploy ONLY these components, nothing else
@@ -74,6 +97,7 @@ COMPONENTS:
     --gitui           Deploy gitui theme (theme-reactive, symlinked)
     --pdb             Deploy pdb++ debugger config
     --matplotlib      Deploy matplotlib styles
+    --playwright      Deploy Playwright + Chromium for browser tests (~650MB, opt-in)
     --git-hooks       Deploy global git hooks
     --pkg-configs     Deploy package manager security configs (7-day quarantine)
     --secrets         Sync secrets with GitHub gist
@@ -86,12 +110,13 @@ COMPONENTS:
     --mcp-sync        Install daily shared MCP sync for Claude and Codex
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
-    --hide-idle-apps  Hide idle apps (Cmd+H) after N min not frontmost, except [hide-idle-exclude] (macOS only)
+    --hide-idle-apps  Hide, then close, then quit apps left covered up, per config/app-lifecycle.yaml (macOS only, off by default)
     --file-apps       Set default editor for coding file types (macOS only)
     --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
     --bearcli         Symlink Bear CLI → /usr/local/bin (macOS only, for cron/scripts)
     --vpn             Install NordVPN+Tailscale split tunnel daemon (macOS only)
     --pueue           Deploy Pueue + systemd resource management (Linux only)
+    --storage         Write per-machine data-volume config (Linux only)
     --bws             Install Bitwarden Secrets Manager CLI (bws)
     --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
     --aliases=LIST    Additional alias scripts (comma-separated)
@@ -349,6 +374,31 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
     dotfiles_secrets_harden_permissions
     log_info "Hardened private secret file permissions"
 
+    # The approval classifier (claude/hooks/with-anthropic-key.sh) and the
+    # SessionStart health probe (claude/hooks/pre_session_start.sh) both resolve
+    # ANTHROPIC_API_KEY by bare name from a hook, where there is no TTY — the one
+    # access class the "[global]" name marker declares. The marker is not yet
+    # enforced — nothing gates bare-name resolution today — so this migration
+    # changes no behavior. It exists so the declaration is already correct on
+    # every machine when the gate does land, instead of hooks breaking that day.
+    # Marking is
+    # inventory-independent (it writes the conf line without consulting BWS), so
+    # this completes on a fresh machine before bws is installed, and it is
+    # idempotent: an already-marked name is left byte-identical.
+    #
+    # --global-once, not --global: this runs on every deployment, and an
+    # unconditional mark would undo a deliberate `secrets-use ANTHROPIC_API_KEY
+    # --no-global` at the next deploy. The once-only form stands down as soon as
+    # the conf carries a "# global-scope-decided:" line, so revocation sticks.
+    if PATH="$DOT_DIR/custom_bins:$PATH" \
+        "$DOT_DIR/custom_bins/secrets-use" ANTHROPIC_API_KEY --global-once >/dev/null 2>&1; then
+        log_success "ANTHROPIC_API_KEY [global] declaration recorded (not yet enforced)"
+    else
+        log_warning "Could not mark ANTHROPIC_API_KEY as [global]"
+        log_warning "  Harmless today — the marker is inert until the scoping gate lands."
+        log_warning "  Record it by hand: secrets-use ANTHROPIC_API_KEY --global-once"
+    fi
+
     if [[ -e "$DOT_DIR/.secrets" ]]; then
         log_warning "Legacy plaintext secrets still exist at $DOT_DIR/.secrets"
         log_warning "  Safe to delete after confirming your repos use setup-envrc/.envrc"
@@ -571,7 +621,14 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
                     echo "  [d] Keep dotfiles config (discard local changes)"
                     echo "  [s] Skip htop deployment"
                     echo ""
-                    read -r "htop_choice?Choice [l/d/s]: "
+                    # A TTY is not proof a human is watching it. On no answer,
+                    # fall through to the same choice the non-interactive branch
+                    # makes — skip — rather than blocking the deploy forever.
+                    if ! read -t "${DOTFILES_PROMPT_TIMEOUT:-60}" -r "htop_choice?Choice [l/d/s]: "; then
+                        echo ""
+                        log_info "No answer in ${DOTFILES_PROMPT_TIMEOUT:-60}s — skipping htop"
+                        htop_choice="s"
+                    fi
                 fi
 
                 case "$htop_choice" in
@@ -637,6 +694,53 @@ if [[ "$DEPLOY_PDB" == "true" ]]; then
     fi
 fi
 
+# ─── Playwright Browsers ──────────────────────────────────────────────────────
+
+# Off by default, and it is the download that decides that: Chromium plus its
+# headless shell is ~650MB, which is not something to pull onto every throwaway
+# pod. Machines that have to run the annotation-layer browser tests opt in with
+# --playwright.
+#
+# The browsers are keyed to the package version that fetched them. A cache
+# holding chromium-1228 is invisible to a playwright that wants 1234, and the
+# failure surfaces as "Executable doesn't exist at ...", which reads like a
+# missing install rather than a version skew. Installing the CLI and running
+# its OWN `playwright install` is what keeps the two in step: whatever version
+# lands here is the version that chooses the browser build.
+if [[ "$DEPLOY_PLAYWRIGHT" == "true" ]]; then
+    log_info "Deploying Playwright browsers..."
+
+    if ! cmd_exists uv; then
+        log_warning "uv not found — skipping Playwright (install.sh provides uv)"
+    else
+        # Machine-level on purpose. The browsers live in one shared cache that
+        # every checkout reads, so this is not per-repo state; a repo only
+        # needs the Python package, which `uv run --with playwright` supplies.
+        # PLAYWRIGHT_BROWSERS_PATH is honoured if the environment sets it, so a
+        # box that tiers bulky caches onto an attached volume keeps them there.
+        pw_browsers="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+
+        if uv tool install --quiet playwright 2>/dev/null || cmd_exists playwright; then
+            pw_version=$(playwright --version 2>/dev/null | awk '{print $NF}')
+            log_info "  playwright ${pw_version:-unknown} → $pw_browsers"
+
+            # Chromium only. Firefox and WebKit triple the download and nothing
+            # in this repo drives them.
+            if playwright install chromium >/dev/null 2>&1; then
+                log_success "Chromium ready for the browser tests"
+            else
+                # On a bare Linux box the shared libraries are missing too, and
+                # that install needs root — which deploy.sh does not assume.
+                log_warning "playwright install chromium failed"
+                log_info "  On Linux the system libraries may be missing:"
+                log_info "    sudo \$(command -v playwright) install-deps chromium"
+            fi
+        else
+            log_warning "Could not install the playwright CLI via uv"
+        fi
+    fi
+fi
+
 # ─── Plotting Library ─────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_MATPLOTLIB" == "true" ]]; then
@@ -688,7 +792,15 @@ if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/
         # cross-platform dispatch wrapper (see custom_bins/claude-tools) and
         # overwriting it with a native binary breaks it on every other platform
         # once committed.
-        cd "$DOT_DIR/tools/claude-tools" && cargo build --release --quiet 2>&1 && \
+        # Bounded, and not --quiet: this runs in the background with its output
+        # captured to a log, so the only thing --quiet bought was an empty log
+        # on failure. The deadline is what matters — a bare `wait` below has no
+        # timeout of its own, so an unbounded cargo build here hangs the whole
+        # deploy at the very last step, silently. This is the same stall class
+        # the canary is named for; it just lived in deploy.sh rather than in
+        # _build_claude_tools_from_source.
+        cd "$DOT_DIR/tools/claude-tools" \
+        && run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release 2>&1 && \
         cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET" && \
         chmod +x "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET"
     ) &>"$CLAUDE_TOOLS_LOG" &
@@ -740,14 +852,8 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             ln -sf "$DOT_DIR/claude" "$HOME/.claude"
         fi
 
-        # Sync plugin marketplaces (declarative, from profiles.yaml)
-        if command -v claude-tools &>/dev/null; then
-            log_info "Syncing plugin marketplaces..."
-            claude-tools context --sync -v || \
-                log_warning "Marketplace sync had issues — run manually: claude-tools context --sync"
-        else
-            log_warning "claude-tools not found — skipping marketplace sync"
-        fi
+        # Plugin marketplaces are declared natively in claude/settings.json
+        # (extraKnownMarketplaces), which is symlinked into place above — no sync step needed.
 
         # Clean plugin-created symlinks from skills/ (they cause duplicate entries)
         if [[ -f "$DOT_DIR/scripts/cleanup/clean_plugin_symlinks.sh" ]]; then
@@ -759,26 +865,45 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             claude-cache-clean --apply
         fi
 
-        # Deploy context templates (skip if ~/.claude already points here)
-        local ctx_src="$DOT_DIR/claude/templates/contexts"
-        local ctx_dst="$HOME/.claude/templates/contexts"
-        if [[ -d "$ctx_src" ]]; then
-            mkdir -p "$ctx_dst"
-            local tmpl_count=0
-            for tmpl in "$ctx_src"/*.json(N) "$ctx_src"/*.yaml(N); do
-                [[ -f "$tmpl" ]] || continue
-                local dst="$ctx_dst/$(basename "$tmpl")"
-                # Skip if source and destination resolve to the same file (symlinked ~/.claude)
-                [[ "$(realpath "$tmpl")" == "$(realpath "$dst" 2>/dev/null)" ]] && { tmpl_count=$((tmpl_count + 1)); continue; }
-                ln -sf "$tmpl" "$dst"
-                tmpl_count=$((tmpl_count + 1))
-            done
-            log_success "Context templates deployed ($tmpl_count files)"
+        # Re-apply the remember-plugin handoff patch. Upstream puts the
+        # `cat "$REMEMBER_HANDOFF"` OUTSIDE the fingerprint if/else, so a handoff
+        # that was already delivered is re-injected in full every session instead
+        # of collapsing to its one-line staleness notice (measured: a 14KB file
+        # re-delivered 495 times since 2026-08-13). A version bump lands in a NEW
+        # cache directory and silently reverts the fix, so it is re-applied on
+        # every deploy rather than patched once by hand. Fails soft: a changed
+        # upstream shape warns and is left alone, and never aborts the deploy.
+        remember_cache="$HOME/.claude/plugins/cache/claude-plugins-official/remember"
+        if [[ -d "$remember_cache" ]]; then
+            remember_hook=$(find "$remember_cache" -mindepth 3 -maxdepth 3 \
+                -path '*/scripts/session-start-hook.sh' 2>/dev/null | sort -V | tail -1)
+            if [[ -n "$remember_hook" ]]; then
+                remember_result=$(python3 -c '
+import io, sys
+UNPATCHED = "    fi\n    cat \"$REMEMBER_HANDOFF\"\n"
+PATCHED = "        cat \"$REMEMBER_HANDOFF\"\n    fi\n"
+path = sys.argv[1]
+src = io.open(path, encoding="utf-8").read()
+if PATCHED in src:
+    print("already-patched")
+elif UNPATCHED not in src:
+    print("no-match")
+    raise SystemExit(3)
+else:
+    io.open(path, "w", encoding="utf-8").write(src.replace(UNPATCHED, PATCHED, 1))
+    print("patched")
+' "$remember_hook" 2>/dev/null) || remember_result="error"
+                case "$remember_result" in
+                    patched)         log_success "Patched remember handoff re-delivery ($remember_hook)" ;;
+                    already-patched) log_info "Remember handoff patch already applied" ;;
+                    *)               log_warning "Remember handoff patch skipped ($remember_result) — upstream shape changed, re-check $remember_hook" ;;
+                esac
+            fi
         fi
 
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
-        log_info "  Plugins: claude-plugins-official (27), ai-safety-plugins (core, research, writing, code, workflow, viz)"
+        log_info "  Plugins: declared in settings.json enabledPlugins (7 retired ones tombstoned false)"
     else
         log_warning "Claude directory not found at $DOT_DIR/claude"
     fi
@@ -925,6 +1050,22 @@ if [[ "$DEPLOY_CLEANUP" == "true" ]] && is_macos; then
     fi
 fi
 
+# ─── Storage Tiering Config (Linux) ──────────────────────────────────────────
+
+if [[ "$DEPLOY_STORAGE" == "true" ]] && is_linux; then
+    log_section "STORAGE TIERING CONFIG"
+
+    # Records this machine's data volume in config/storage.conf, which
+    # config/aliases/storage.sh reads on every interactive shell. Config only —
+    # it never moves or deletes data. Idempotent: an existing config is left
+    # alone, and a box with no attached volume is a silent success.
+    if [[ -x "$DOT_DIR/custom_bins/storage-setup" ]]; then
+        "$DOT_DIR/custom_bins/storage-setup" || log_warning "storage-setup failed"
+    else
+        log_warning "custom_bins/storage-setup not found or not executable"
+    fi
+fi
+
 # ─── Pueue + Resource Slices (Linux) ─────────────────────────────────────────
 
 if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
@@ -979,9 +1120,20 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
             fi
         fi
 
-        # Deploy remaining service/timer units verbatim
+        # Deploy remaining service/timer units verbatim.
+        #
+        # This list is enumerated, not globbed, so a unit added to
+        # config/systemd-user/ is NOT installed until its name appears here.
+        # openrouter-drift.{service,timer} were added in 2026-08 and never
+        # listed, so the "monthly drift check" documented in the council
+        # skill had never run on any box -- no unit, no timer, no state
+        # directory. Adding a unit file is half the change; this is the other
+        # half.
         for unit in reset-failed.service reset-failed.timer \
-                    vault-sync-tripwire.service vault-sync-tripwire.timer; do
+                    vault-sync-tripwire.service vault-sync-tripwire.timer \
+                    openrouter-drift.service openrouter-drift.timer \
+                    council-roster.service council-roster.timer \
+                    romp-tailnet-proxy.service; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             # -f: installed units are copies, not symlinks into the repo, so a
             # redeploy must overwrite the stale one rather than silently keep it.
@@ -1000,6 +1152,31 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                 log_success "vault-sync tripwire timer enabled"
             else
                 log_warning "could not enable vault-sync-tripwire.timer"
+            fi
+        fi
+
+        # Model-roster timers. Both need no API key and no pueue: they read the
+        # public OpenRouter catalogue and the public Epoch index, and write only
+        # their own state directories. Enabled unconditionally for the same
+        # reason as the tripwire above -- a check that is installed but never
+        # scheduled reports nothing while looking healthy.
+        for timer in openrouter-drift.timer council-roster.timer; do
+            [[ -f "$systemd_user_dir/$timer" ]] || continue
+            if systemctl --user enable --now "$timer" 2>/dev/null; then
+                log_success "$timer enabled"
+            else
+                log_warning "could not enable $timer"
+            fi
+        done
+
+        # Romp tailnet proxy: only where romp is actually installed. Enabling it
+        # elsewhere leaves a service retrying a bind forever against a romp kernel
+        # that will never answer -- a permanently-failing unit nobody asked for.
+        if [[ -d "$HOME/romp" && -f "$systemd_user_dir/romp-tailnet-proxy.service" ]]; then
+            if systemctl --user enable --now romp-tailnet-proxy.service 2>/dev/null; then
+                log_success "romp tailnet proxy enabled"
+            else
+                log_warning "could not enable romp-tailnet-proxy.service"
             fi
         fi
 
@@ -1126,8 +1303,54 @@ queue_scheduled_job() {
         queue_scheduled_job keyboard-repeat "$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh"
     fi
 
+    if [[ "$DEPLOY_KILL_SKY_CUA" == "true" ]] && is_macos; then
+        queue_scheduled_job kill-sky-cua "$DOT_DIR/scripts/cleanup/setup_kill_sky_cua.sh"
+    fi
+
     if [[ "$DEPLOY_HIDE_IDLE_APPS" == "true" ]] && is_macos; then
+        # Provenance, not the resolved boolean, decides whether this run may MINT
+        # the escalation token. DEPLOY_HIDE_IDLE_APPS=true can come from a CLI
+        # flag, a profile, or a config.local.sh line written long ago - and
+        # config.local.sh is sourced before parse_args. A host that pinned
+        # `DEPLOY_HIDE_IDLE_APPS=true` back in the hide-only era would otherwise
+        # be handed close/quit consent by a plain `./deploy.sh --non-interactive`,
+        # which is exactly the silent hide->quit upgrade the token exists to stop.
+        # The setup script still re-writes an already-present token, so ordinary
+        # redeploys of a consenting machine are unaffected.
+        # Assigned on BOTH branches, never merely set on one. A sentinel that is
+        # only ever written to true is not a gate: run_parallel passes our
+        # environment down, so an inherited HIDE_IDLE_APPS_EXPLICIT_CONSENT=true -
+        # left by an earlier opt-in deploy in the same shell, or exported by a
+        # wrapper - would sail through an if-without-else and be read as fresh
+        # consent. Deriving it unconditionally makes this invocation the only
+        # thing that can decide.
+        if (( ${EXPLICIT_OPT_INS[(Ie)HIDE_IDLE_APPS]} )); then
+            export HIDE_IDLE_APPS_EXPLICIT_CONSENT=true
+        else
+            export HIDE_IDLE_APPS_EXPLICIT_CONSENT=false
+        fi
         queue_scheduled_job hide-idle-apps "$DOT_DIR/scripts/cleanup/setup_hide_idle_apps.sh"
+    elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)HIDE_IDLE_APPS]} )); then
+        # This job used to default to on, and its plist points at the same
+        # binary, so an upgrade that flips the default to off would otherwise
+        # leave the old schedule running - now with close and quit rungs it
+        # never had. Opting out has to actually unload it.
+        #
+        # Gated on an EXPLICIT --no-hide-idle-apps, not on the flag being false:
+        # --only and --minimal set every other component false, so `--only vim`
+        # would otherwise tear this job down despite --only promising to touch
+        # nothing else. Refusing a component and not selecting it differ.
+        #
+        # That narrowness leaves a real gap, and it is deliberately NOT closed
+        # here: a plain `./deploy.sh` on a machine from the default-on era takes
+        # neither branch, so the legacy job stays loaded and runs today's binary.
+        # Widening this condition is the one fix that cannot work - it is the
+        # `--only vim` bug above. The gap is closed at the other end instead, by
+        # an escalation token that only the install path writes: an inherited job
+        # keeps hiding and can no longer close or quit. See ESCALATION_TOKEN in
+        # custom_bins/hide-idle-apps.
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_hide_idle_apps.sh" ]] && \
+            "$DOT_DIR/scripts/cleanup/setup_hide_idle_apps.sh" --uninstall >/dev/null 2>&1 || true
     fi
 
     if (( ${#scheduled_jobs[@]} > 0 )); then
@@ -1168,14 +1391,23 @@ fi
 
 # ─── VPN Split Tunneling (macOS only) ────────────────────────────────────────
 
-if [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos; then
+_vpn_sudo_ready() {
+    # A bare `sudo -v` under `set -euo pipefail` aborts the whole deploy when
+    # there is no TTY to answer the password prompt ("a terminal is required").
+    # Proceed only with cached credentials, or a successful attended prompt.
+    sudo -n true 2>/dev/null && return 0
+    [[ -t 0 ]] && run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v && return 0
+    return 1
+}
+
+if [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos && ! _vpn_sudo_ready; then
+    log_warning "Skipping VPN split tunnel daemon — sudo credentials unavailable (re-run attended or with cached sudo)"
+elif [[ "${DEPLOY_VPN:-false}" == "true" ]] && is_macos; then
     log_section "INSTALLING VPN SPLIT TUNNEL DAEMON"
 
     VPN_PLIST_LABEL="com.dotfiles.tailscale-route-fix"
     VPN_PLIST_PATH="/Library/LaunchDaemons/${VPN_PLIST_LABEL}.plist"
     VPN_SCRIPT_PATH="/usr/local/bin/tailscale-route-fix"
-
-    sudo -v  # Acquire sudo upfront
 
     # Idempotent: unload existing before loading new
     sudo launchctl bootout "system/${VPN_PLIST_LABEL}" 2>/dev/null || true
@@ -1279,7 +1511,7 @@ if [[ "${DEPLOY_BWS:-false}" == "true" ]]; then
             BWS_TMP="$(mktemp -d)"
             trap 'rm -rf "$BWS_TMP"' EXIT
             log_info "Downloading bws ${BWS_VERSION} from GitHub releases..."
-            if curl -sSL "$BWS_URL" -o "${BWS_TMP}/bws.zip" && \
+            if fetch "$BWS_URL" -o "${BWS_TMP}/bws.zip" && \
                unzip -qo "${BWS_TMP}/bws.zip" -d "${BWS_TMP}" && \
                install -m 755 "${BWS_TMP}/bws" "${BWS_INSTALL_DIR}/bws"; then
                 log_success "bws installed to ${BWS_INSTALL_DIR}/bws: $(bws --version 2>/dev/null)"

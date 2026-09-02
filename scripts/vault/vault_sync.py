@@ -37,6 +37,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -124,6 +125,24 @@ REGENERABLE_DIRS = (
     ".mypy_cache",
 )
 
+# Manifest filename -> the sibling directories that manifest can regenerate.
+# Drives pre-emptive exclusion: a regenerable directory is only safe to exclude
+# BEFORE it exists, because exclusion is not retroactive. Once `bun install` has
+# run and the tree has synced, excluding it strands those rows on the server
+# with no way to reclaim the quota -- which is exactly how the 271 MB incident
+# became unrecoverable. Waiting for the directory to appear is waiting too long.
+MANIFEST_REGENERABLE = {
+    "package.json": ("node_modules",),
+    "bun.lock": ("node_modules",),
+    "package-lock.json": ("node_modules",),
+    "pnpm-lock.yaml": ("node_modules",),
+    "yarn.lock": ("node_modules",),
+    "pyproject.toml": (".venv", "venv", "__pycache__"),
+    "requirements.txt": (".venv", "venv"),
+    "uv.lock": (".venv",),
+    "Cargo.toml": ("target",),
+}
+
 # The Obsidian Sync per-file cap. Files above it never reach the remote at all,
 # so they are a silent-failure class, not a quota class.
 DEFAULT_MAX_FILE_MB = 5.00
@@ -188,6 +207,18 @@ def under_target(folder: str) -> tuple[str, tuple]:
     """
     child = folder + "/"
     return "(path = ? OR substr(path, 1, ?) = ?)", (folder, len(child), child)
+
+
+def path_is_excluded(rel: str, excluded: Sequence[str]) -> bool:
+    """Whether a vault-relative path is hidden by an ignoreFolders entry.
+
+    The local-filesystem twin of under_target() above, and it must stay one:
+    both encode the same ob matcher, so a divergence between them would let the
+    server-row gate and the local walk disagree about what a given exclusion
+    covers. cli.js does `e === r || e.startsWith(r + "/")` -- vault-relative,
+    segment-safe, case-sensitive, and with no wildcard support whatsoever.
+    """
+    return any(rel == f or rel.startswith(f + "/") for f in excluded)
 
 
 def utc_stamp() -> str:
@@ -1077,14 +1108,87 @@ def cmd_filters(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------
 
 
+def predicted_exclusions(excluded: list[str]) -> list[str]:
+    """Vault-relative regenerable dirs a manifest implies, not already excluded.
+
+    Returns paths whether or not they exist on disk -- that is the point. The
+    directory that has not been created yet is precisely the one it is still
+    safe to exclude.
+
+    Dot-directories are skipped at the vault root ONLY. cli.js's own rule is
+    `e.startsWith(".")` against the whole vault-relative path -- first segment,
+    not any segment -- so `.claude/worktrees/**/node_modules` can never consume
+    quota and excluding it would be noise in a list that must stay auditable.
+    Its general any-segment dot rejection applies only under the Obsidian
+    config dir. A nested `writing/site/.tmp/node_modules` therefore IS
+    syncable, so the walk must keep descending into non-root dot-dirs.
+    """
+
+    def is_excluded(rel: str) -> bool:
+        return path_is_excluded(rel, excluded)
+
+    found: set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(VAULT, onerror=lambda e: None):
+        rel_dir = os.path.relpath(dirpath, VAULT)
+        rel_dir = "" if rel_dir == "." else rel_dir
+        if rel_dir and is_excluded(rel_dir):
+            dirnames[:] = []
+            continue
+        # Prune already-generated trees, and root-level dot-dirs; neither can
+        # host a manifest whose sibling we would need to exclude. Non-root
+        # dot-dirs stay in the walk -- see the docstring.
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if d not in REGENERABLE_DIRS and not (rel_dir == "" and d.startswith("."))
+        ]
+        for name in filenames:
+            for child in MANIFEST_REGENERABLE.get(name, ()):
+                rel = f"{rel_dir}/{child}" if rel_dir else child
+                if not is_excluded(rel):
+                    found.add(rel)
+    return sorted(found)
+
+
+def server_rows_under(conn: sqlite3.Connection, folder: str) -> int:
+    """Every server_files row at or beneath `folder`, tombstoned or not.
+
+    Tombstones count. A tombstoned row is still a row the server holds and
+    still a path the remote knows about; excluding the folder freezes whatever
+    state it is in, so "there is nothing there" is the only condition under
+    which exclusion is unambiguously safe.
+    """
+    where, params = under_target(folder)
+    return scalar(conn, f"SELECT count(*) FROM server_files WHERE {where}", params)
+
+
+def server_file_rows_under(conn: sqlite3.Connection, folder: str) -> int:
+    """Non-folder rows at or beneath `folder` -- the ones that hold bytes.
+
+    Folder rows carry no content and cost no quota; this vault has 2,927 of
+    them under a single already-excluded node_modules. Counting those in an
+    ALARM would fire every night over nothing, and a channel that cries wolf
+    nightly is one nobody reads -- the same failure the clean-run-stays-silent
+    rule elsewhere in this file exists to prevent.
+
+    The auto-exclude GATE deliberately keeps using the stricter
+    server_rows_under(): declining to exclude costs a line in a report, while a
+    wrong exclusion strands rows irreversibly. Alarm on what matters, gate on
+    anything at all.
+    """
+    where, params = under_target(folder)
+    return scalar(conn,
+                  f"SELECT count(*) FROM server_files WHERE {where} AND NOT {IS_FOLDER}",
+                  params)
+
+
 def cmd_tripwire(args: argparse.Namespace) -> int:
     state_dir = find_state_dir()
     cfg = read_config(state_dir)
     excluded = list(cfg.get(EXCLUSION_KEY) or [])
 
     def is_excluded(rel: str) -> bool:
-        # Mirrors the ob matcher exactly: vault-relative, segment-safe, case-sensitive.
-        return any(rel == f or rel.startswith(f + "/") for f in excluded)
+        return path_is_excluded(rel, excluded)
 
     max_bytes = int(args.max_file_mb * MB)
     regenerable: list[tuple[str, int]] = []
@@ -1164,13 +1268,109 @@ def cmd_tripwire(args: argparse.Namespace) -> int:
         for rel, size in sorted(oversized, key=lambda x: -x[1]):
             log(f"    {fmt_mb(size):>12}  {rel}")
 
-    if not regenerable and not oversized:
+    # Pre-emptive exclusion. Everything above reports what already exists; this
+    # asks what a lockfile in the vault could still create, and shuts the door
+    # while the far side is empty.
+    added: list[str] = []
+    stranded: list[str] = []
+    leaked: list[str] = []
+    candidates = predicted_exclusions(excluded)
+    # Exclusion is exactly the state in which rows can accrue unwatched: the
+    # walk above prunes an excluded path and the regenerable report skips it, so
+    # once a path is excluded nothing local ever looks at it again. But filters
+    # are read only at client startup -- anything created between an exclusion
+    # and the next restart is synced by the still-old filter, and then stays on
+    # the server forever, invisible. Re-checking the server side is the only
+    # thing that can see it, so do it for every excluded regenerable path on
+    # every run, not just the ones we are about to add.
+    #
+    # Scope is deliberately the basename, which makes this complete for every
+    # path --auto-exclude can ever add (each one is a MANIFEST_REGENERABLE
+    # child, all of which are in REGENERABLE_DIRS) and incomplete for a
+    # hand-excluded ANCESTOR of a regenerable tree -- excluding
+    # `.../slides/slidev` hides rows under its node_modules from this alarm.
+    # Widening to every excluded folder would fire on deliberate exclusions
+    # like `Private`, whose whole purpose is to hold rows the operator does not
+    # want synced, turning a nightly channel into noise. Watch what the tool
+    # itself excludes; a human who excludes a parent owns that choice.
+    watch = [f for f in excluded if f.rsplit("/", 1)[-1] in REGENERABLE_DIRS]
+    if candidates or watch:
+        with tempfile.TemporaryDirectory(prefix="vault-sync-tripwire-") as tmp:
+            conn = open_ro(copy_state_db(state_dir, Path(tmp)))
+            try:
+                for rel in candidates:
+                    (stranded if server_rows_under(conn, rel) else added).append(rel)
+                leaked = [f for f in watch if server_file_rows_under(conn, f)]
+            finally:
+                conn.close()
+
+    if leaked:
+        log()
+        log(f"  EXCLUDED BUT ON SERVER ({len(leaked)}):")
+        for rel in leaked:
+            log(f"    STRANDED rows under an excluded path   {rel}")
+        log("    (the filter hides these locally; they still consume quota.")
+        log("     un-exclude, restart, let the delete propagate, then re-exclude)")
+
+    if candidates:
+        log()
+        log(f"  PREDICTED REGENERABLE PATHS ({len(candidates)}):")
+        for rel in added:
+            log(f"    safe to exclude (0 server rows)  {rel}")
+        for rel in stranded:
+            log(f"    ALREADY ON SERVER, not touched   {rel}")
+        if stranded:
+            log("    (excluding these would strand their rows -- delete, sync, then exclude)")
+
+    # getattr, not attribute access: cmd_tripwire is also driven directly with a
+    # hand-built Namespace, and an absent flag must mean "report only" rather
+    # than an AttributeError raised halfway through a report.
+    if added and getattr(args, "auto_exclude", False):
+        want = excluded + added
+        if any("," in f for f in want):
+            die(f"an excluded folder contains the list separator: "
+                f"{[f for f in want if ',' in f]!r}")
+        # --excluded-folders is whole-list ASSIGNMENT; re-list what is already
+        # there. --file-types is deliberately omitted rather than re-sent:
+        # omission preserves it, and an unattended nightly job has no business
+        # rewriting a setting it was not asked to change.
+        cmd = [resolve_ob(), "sync-config", "--path", str(VAULT),
+               "--excluded-folders", ",".join(want)]
+        log()
+        log(f"  $ {' '.join(cmd)}")
+        if getattr(args, "dry_run", False):
+            log("  Dry run, not executing.")
+        else:
+            proc = subprocess.run(cmd, cwd=str(VAULT))
+            if proc.returncode != 0:
+                die(f"ob sync-config exited {proc.returncode}")
+            got = read_config(state_dir).get(EXCLUSION_KEY) or []
+            if sorted(got) != sorted(want):
+                die(f"exclusion did not take: {EXCLUSION_KEY} is {got!r}, "
+                    f"expected {want!r}", clean=False)
+            excluded = want
+            log(f"  Excluded {len(added)} new path(s); {len(got)} total.")
+            # Filters are read once, when the client starts. Until it is
+            # restarted the running daemon still has the old list, so a
+            # directory created before then syncs anyway -- and the config now
+            # says otherwise, which is the worst of both.
+            log("  RESTART REQUIRED: `ob sync --continuous` reads filters only at "
+                "startup.")
+    elif added:
+        log()
+        log("  Re-run with --auto-exclude to apply, or:")
+        log(f"    ob sync-config --path {VAULT} \\")
+        log(f"      --excluded-folders '{','.join(excluded + added)}'")
+
+    if not regenerable and not oversized and not added and not stranded and not leaked:
         log()
         log("  Clean. No findings.")
         return 0
 
     log()
-    log(f"  {len(regenerable)} regenerable dir(s), {len(oversized)} oversized file(s).")
+    log(f"  {len(regenerable)} regenerable dir(s), {len(oversized)} oversized file(s), "
+        f"{len(added)} pre-emptive exclusion(s), {len(stranded)} already stranded, "
+        f"{len(leaked)} excluded-but-on-server.")
     # Non-zero exit is the notification trigger: the cron wrapper notifies on
     # findings only, so a clean run must stay silent.
     return 2
@@ -1208,6 +1408,15 @@ def main(argv: list[str] | None = None) -> int:
 
     t = sub.add_parser("tripwire", help="EX-9 regenerable dirs and oversized files")
     t.add_argument("--max-file-mb", type=float, default=DEFAULT_MAX_FILE_MB)
+    # Off by default: every other read-only subcommand stays read-only unless
+    # asked, and a tool that mutates sync config merely by being run is one
+    # stray invocation away from a config nobody chose.
+    t.add_argument(
+        "--auto-exclude",
+        action="store_true",
+        help="add predicted regenerable paths with zero server rows to ignoreFolders",
+    )
+    t.add_argument("--dry-run", action="store_true")
     t.set_defaults(func=cmd_tripwire)
 
     args = p.parse_args(argv)

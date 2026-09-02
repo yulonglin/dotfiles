@@ -1,0 +1,669 @@
+<title>Context Ledger</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ink:#161b21; --ink-2:#3d4a57; --ink-3:#69798a;
+  --ground:#f4f6f8; --panel:#ffffff; --panel-2:#eef1f5; --line:#d8dee6; --line-2:#e7ecf1;
+  --accent:#0d6b62; --accent-soft:#d3e8e4; --accent-ink:#0a544d;
+  --keep:#2f6d4f; --keep-bg:#dcecdf;
+  --compress:#8a6410; --compress-bg:#f4e9cf;
+  --edit:#2a5f9e; --edit-bg:#dbe7f5;
+  --merge:#6b4f96; --merge-bg:#e6dff2;
+  --move:#0d6070; --move-bg:#d2e7eb;
+  --drop:#a3413c; --drop-bg:#f5dcda;
+  --review:#5a6774; --review-bg:#e4e9ee;
+  --shadow:0 1px 2px rgba(22,27,33,.06),0 4px 14px rgba(22,27,33,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#e6ecf2; --ink-2:#adbcca; --ink-3:#7d8d9d;
+    --ground:#101418; --panel:#171d23; --panel-2:#1e262e; --line:#2c363f; --line-2:#232c34;
+    --accent:#4fbdaf; --accent-soft:#17332f; --accent-ink:#7ad3c6;
+    --keep:#7fc79b; --keep-bg:#1a2c22;
+    --compress:#d9b25f; --compress-bg:#2e2718;
+    --edit:#7fb0e8; --edit-bg:#17242f;
+    --merge:#b39ae0; --merge-bg:#241d31;
+    --move:#63c3d1; --move-bg:#0f2a30;
+    --drop:#e78d86; --drop-bg:#311c1b;
+    --review:#93a2b1; --review-bg:#212930;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e6ecf2; --ink-2:#adbcca; --ink-3:#7d8d9d;
+  --ground:#101418; --panel:#171d23; --panel-2:#1e262e; --line:#2c363f; --line-2:#232c34;
+  --accent:#4fbdaf; --accent-soft:#17332f; --accent-ink:#7ad3c6;
+  --keep:#7fc79b; --keep-bg:#1a2c22;
+  --compress:#d9b25f; --compress-bg:#2e2718;
+  --edit:#7fb0e8; --edit-bg:#17242f;
+  --merge:#b39ae0; --merge-bg:#241d31;
+  --move:#63c3d1; --move-bg:#0f2a30;
+  --drop:#e78d86; --drop-bg:#311c1b;
+  --review:#93a2b1; --review-bg:#212930;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.wrap{max-width:1240px;margin:0 auto;padding:0 20px 140px}
+
+/* ---- header ---- */
+header{padding:36px 0 20px;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--accent-ink);margin:0 0 10px}
+h1{font-size:31px;line-height:1.12;margin:0 0 10px;font-weight:650;letter-spacing:-.019em;text-wrap:balance}
+.sub{color:var(--ink-2);max-width:66ch;margin:0}
+.sub b{color:var(--ink);font-weight:600}
+
+/* ---- meter ---- */
+.meter{margin:22px 0 4px;background:var(--panel);border:1px solid var(--line);
+  border-radius:9px;padding:16px 18px;box-shadow:var(--shadow)}
+.meter-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.meter-t{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3)}
+.big{font-family:"IBM Plex Mono",monospace;font-size:25px;font-weight:600;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.delta{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:var(--keep)}
+.bar{display:flex;height:24px;border-radius:5px;overflow:hidden;background:var(--panel-2);border:1px solid var(--line-2)}
+.seg{display:flex;align-items:center;justify-content:center;font-family:"IBM Plex Mono",monospace;
+  font-size:10px;font-weight:600;color:#fff;min-width:0;overflow:hidden;white-space:nowrap;
+  transition:width .35s cubic-bezier(.4,0,.2,1)}
+.s-prose{background:#0d6b62}.s-desc{background:#3f7fb8}.s-inj{background:#a3763c}
+.legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:11px;font-size:12px;color:var(--ink-2)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+.assume{margin-top:11px;padding-top:10px;border-top:1px dashed var(--line);font-size:12px;color:var(--ink-3)}
+
+/* ---- controls ---- */
+.controls{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:20px 0 14px;
+  position:sticky;top:0;background:var(--ground);padding:11px 0;z-index:20;border-bottom:1px solid var(--line-2)}
+input[type=search]{font-family:"IBM Plex Mono",monospace;font-size:13px;padding:7px 11px;
+  border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);min-width:230px}
+input[type=search]:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.chip{font-family:"IBM Plex Mono",monospace;font-size:11.5px;padding:5px 10px;border-radius:20px;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink-2);cursor:pointer;
+  user-select:none;transition:.14s}
+.chip:hover{border-color:var(--accent);color:var(--ink)}
+.chip[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.spacer{flex:1}
+.btn{font-family:"IBM Plex Sans",sans-serif;font-size:13px;font-weight:600;padding:7px 14px;
+  border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:var(--panel);color:var(--ink-2);border-color:var(--line)}
+.btn.armed{background:var(--drop);border-color:var(--drop);color:#fff;font-weight:700}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- groups & rows ---- */
+.group{margin:26px 0 0}
+.group-h{display:flex;align-items:baseline;gap:11px;padding:0 0 8px;border-bottom:1px solid var(--line);margin-bottom:2px}
+.group-h h2{font-size:14.5px;margin:0;font-weight:650;letter-spacing:-.005em}
+.group-h .gt{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3);
+  font-variant-numeric:tabular-nums;margin-left:auto}
+
+.row{display:grid;grid-template-columns:26px 1.9fr 96px 62px 74px 74px 74px 104px;
+  gap:9px;align-items:center;padding:8px 9px;border-bottom:1px solid var(--line-2);
+  cursor:pointer;border-radius:5px;transition:background .1s}
+.row:hover{background:var(--panel-2)}
+.row.sel{background:var(--panel);box-shadow:inset 3px 0 0 var(--accent);border-radius:0 5px 5px 0}
+.row.drag{opacity:.4}
+.row.over{box-shadow:inset 0 -2px 0 var(--accent)}
+.grip{color:var(--ink-3);font-size:13px;text-align:center;cursor:grab;line-height:1}
+.grip:active{cursor:grabbing}
+.nm{min-width:0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.nm b{font-weight:600;font-size:13.5px;letter-spacing:-.004em}
+.nm .kd{font-family:"IBM Plex Mono",monospace;font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--ink-3);border:1px solid var(--line);padding:1px 5px;border-radius:3px}
+.nm .kd.mn{color:var(--accent-ink);border-color:var(--accent)}
+.nm .into{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--merge)}
+.nm .into.mv{color:var(--move)}
+.words{margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(216px,1fr));gap:8px 18px}
+.words div{font-size:12.5px;color:var(--ink-2)}
+.words b{font-family:"IBM Plex Mono",monospace;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.06em;padding:2px 7px;border-radius:4px;margin-right:7px}
+.src{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.num{font-family:"IBM Plex Mono",monospace;font-size:12px;text-align:right;
+  font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.num.z{color:var(--drop);font-weight:600}
+.num.hot{color:var(--keep);font-weight:600}
+.num.dim{color:var(--ink-3);opacity:.5}
+.mark{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;text-align:center;
+  padding:3px 0;border-radius:4px;text-transform:uppercase;letter-spacing:.06em}
+.m-keep{background:var(--keep-bg);color:var(--keep)}
+.m-compress{background:var(--compress-bg);color:var(--compress)}
+.m-edit{background:var(--edit-bg);color:var(--edit)}
+.m-merge{background:var(--merge-bg);color:var(--merge)}
+.m-move{background:var(--move-bg);color:var(--move)}
+.m-drop{background:var(--drop-bg);color:var(--drop)}
+.m-review{background:var(--review-bg);color:var(--review)}
+.mark.auto{opacity:.55;font-weight:500}
+.hdr-row{display:grid;grid-template-columns:26px 1.9fr 96px 62px 74px 74px 74px 104px;gap:9px;
+  padding:7px 9px;font-family:"IBM Plex Mono",monospace;font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--ink-3);border-bottom:1px solid var(--line);
+  position:sticky;top:52px;background:var(--ground);z-index:15}
+.hcell{display:flex;align-items:center;gap:3px;min-width:0}
+.hcell.r{justify-content:flex-end}
+.hcell.c{justify-content:center}
+.hsort{font:inherit;color:inherit;background:0;border:0;padding:2px 1px;cursor:pointer;
+  text-transform:inherit;letter-spacing:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hsort:hover{color:var(--accent-ink)}
+.hsort[aria-sort]{color:var(--accent-ink);font-weight:700}
+.hfil{font:inherit;background:0;border:0;cursor:pointer;color:inherit;padding:2px 3px;
+  border-radius:3px;line-height:1;opacity:.5}
+.hfil:hover{opacity:1;color:var(--accent-ink)}
+.hfil.on{opacity:1;color:var(--accent-ink);background:var(--accent-soft)}
+.hsort:focus-visible,.hfil:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+#fmenu{position:absolute;z-index:40;background:var(--panel);border:1px solid var(--line);
+  border-radius:7px;box-shadow:var(--shadow);padding:8px;min-width:172px;max-height:320px;overflow:auto}
+#fmenu h5{margin:0 0 6px;font-family:"IBM Plex Mono",monospace;font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--ink-3)}
+#fmenu label{display:flex;align-items:center;gap:7px;padding:3px 2px;font-size:12.5px;
+  cursor:pointer;border-radius:4px}
+#fmenu label:hover{background:var(--panel-2)}
+#fmenu .fbar{display:flex;gap:6px;margin-top:7px;padding-top:7px;border-top:1px solid var(--line-2)}
+#fmenu .fbar button{flex:1;font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:3px 0;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink-2);border-radius:4px;cursor:pointer}
+#fmenu .fbar button:hover{border-color:var(--accent);color:var(--ink)}
+
+/* ---- detail ---- */
+.detail{padding:2px 9px 20px 44px;border-bottom:1px solid var(--line-2);background:var(--panel)}
+.detail h4{font-family:"IBM Plex Mono",monospace;font-size:10px;text-transform:uppercase;
+  letter-spacing:.1em;color:var(--ink-3);margin:16px 0 6px;font-weight:600}
+.why{background:var(--accent-soft);border-left:3px solid var(--accent);padding:11px 14px;
+  border-radius:0 6px 6px 0;color:var(--ink);max-width:82ch}
+.why.autoy{background:var(--panel-2);border-left-color:var(--line)}
+.desc{color:var(--ink-2);max-width:82ch}
+.pth{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3);
+  word-break:break-all;background:var(--panel-2);padding:6px 9px;border-radius:4px}
+/* Every code block wraps and scrolls, whether it is a body or a reference.
+   `details.ref pre` used to inherit none of this -- the rule below was keyed to
+   `.body` -- so a reference file rendered with browser-default `white-space:pre`
+   and its long lines ran out of the container with no scrollbar. */
+pre.body,details.ref pre{font-family:"IBM Plex Mono",monospace;font-size:11.5px;line-height:1.6;
+  white-space:pre-wrap;word-break:break-word;overflow-x:auto;color:var(--ink-2)}
+pre.trunc{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--compress);
+  background:var(--compress-bg);padding:6px 11px;margin:0;border-top:1px solid var(--line-2)}
+pre.body{font-family:"IBM Plex Mono",monospace;font-size:11.5px;line-height:1.6;
+  background:var(--panel-2);border:1px solid var(--line-2);border-radius:6px;padding:13px;
+  overflow-x:auto;max-height:460px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;color:var(--ink-2)}
+details.ref{margin:5px 0;border:1px solid var(--line-2);border-radius:5px;background:var(--panel-2)}
+details.ref>summary{cursor:pointer;padding:7px 11px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;
+  display:flex;justify-content:space-between;gap:12px;color:var(--ink-2)}
+details.ref>summary:hover{color:var(--ink)}
+details.ref pre{margin:0;border:0;border-top:1px solid var(--line-2);border-radius:0;
+  max-height:360px;overflow-y:auto;padding:11px;background:var(--panel-2)}
+
+/* ---- footer ---- */
+.foot{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
+  padding:11px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;z-index:30;box-shadow:0 -2px 12px rgba(0,0,0,.05)}
+.foot .inner{max-width:1240px;margin:0 auto;width:100%;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.tally{display:flex;gap:7px;flex-wrap:wrap}
+.tally span{font-family:"IBM Plex Mono",monospace;font-size:11px;padding:3px 8px;border-radius:4px;font-weight:600}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:10.5px;background:var(--panel-2);
+  border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:1px 5px;color:var(--ink-2)}
+.keys{font-size:11.5px;color:var(--ink-3);display:flex;gap:11px;flex-wrap:wrap;align-items:center}
+
+/* ---- help ---- */
+.help{position:fixed;inset:0;background:rgba(10,14,18,.62);display:flex;align-items:center;
+  justify-content:center;z-index:60;padding:20px}
+.help-in{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:26px 30px;
+  max-width:620px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:86vh;overflow:auto}
+.help-in h3{margin:0 0 16px;font-size:17px}
+.help-in table{width:100%;border-collapse:collapse;font-size:13px}
+.help-in td{padding:5px 0;border-bottom:1px solid var(--line-2);color:var(--ink-2)}
+.help-in td:first-child{width:112px}
+.toast{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);background:var(--ink);
+  color:var(--ground);padding:9px 18px;border-radius:6px;font-size:13px;font-weight:500;z-index:70;
+  box-shadow:0 6px 22px rgba(0,0,0,.25)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media(max-width:860px){
+  .row,.hdr-row{grid-template-columns:22px 1fr 62px 74px 96px}
+  .row>.src,.row>.num:nth-child(6),.row>.num:nth-child(7),
+  .hdr-row>span:nth-child(3),.hdr-row>span:nth-child(6),.hdr-row>span:nth-child(7){display:none}
+  .detail{padding-left:16px}
+}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">Claude Code &middot; context budget</p>
+  <h1>What your setup costs, every session</h1>
+  <p class="sub">A ledger of all <b>134 loaded components</b> across dotfiles and 18 enabled plugins, with real invocation counts mined from <b>~4,100 local transcripts</b> (2.7&nbsp;GB, Mar&ndash;Aug 2026). Mark each one <b>keep / compress / edit / merge / drop</b> from the keyboard; the meter updates live. Press <kbd>?</kbd> for keys.</p>
+
+  <div class="meter">
+    <div class="meter-head">
+      <div>
+        <div class="meter-t">Tier 1 &mdash; paid on every single session</div>
+        <div class="big"><span id="cur">17,246</span> <span style="font-size:14px;color:var(--ink-3)">tok</span>
+          <span class="delta" id="delta"></span></div>
+      </div>
+      <div style="text-align:right">
+        <div class="meter-t">Never invoked</div>
+        <div class="big" id="zc"></div>
+      </div>
+    </div>
+    <div class="bar" id="bar">
+      <div class="seg s-prose" id="sp"></div><div class="seg s-desc" id="sd"></div><div class="seg s-inj" id="si"></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:#0d6b62"></i>Rules + CLAUDE.md <b class="mono" id="lp"></b></span>
+      <span><i style="background:#3f7fb8"></i>Skill/agent description lines <b class="mono" id="ld"></b></span>
+      <span><i style="background:#a3763c"></i>SessionStart injections <b class="mono" id="li"></b></span>
+    </div>
+    <div class="words">
+      <div><b class="m-keep">keep</b>Earns its place as it stands. No work.</div>
+      <div><b class="m-compress">compress</b>The job is right, the wording is long. Same file, fewer tokens.</div>
+      <div><b class="m-edit">edit</b>Needs rework to do its job &mdash; usually it never fires and something must point at it.</div>
+      <div><b class="m-merge">merge</b>Fold its content into one named sibling, then delete this one. Each merge row names its destination after the component name.</div>
+      <div><b class="m-move">move</b>Right content, wrong home &mdash; it stays whole, somewhere better. <b style="background:0;padding:0;font-family:inherit;font-size:inherit;text-transform:none;letter-spacing:0">Saves no tokens</b>, since both homes load the same; it buys findability and a coherent split between dotfiles and the plugins.</div>
+      <div><b class="m-drop">drop</b>Delete outright. Nothing depends on it.</div>
+      <div><b class="m-review">review</b>I did not reach a confident call &mdash; read the row and decide.</div>
+    </div>
+    <p class="assume">Tokens are estimated at <b>characters &divide; 4</b>, not a real tokenizer &mdash; treat them as &plusmn;15% and comparable to each other, not exact. Projected savings assume <b>drop</b> and <b>merge</b> remove a row's whole Tier-1 line and <b>compress</b> removes half of it; <b>keep</b>, <b>edit</b> and <b>move</b> save nothing &mdash; a moved skill still loads, just from a better home. Tier 2 (bodies, <b id="t2"></b> tok) and Tier 3 (references, <b id="t3"></b> tok) are <em>not</em> in this number &mdash; you pay those only when a skill actually fires.<br><b>Usage counts are upper bounds.</b> They sum two invocation shapes (the <code class="mono">skill</code> field and <code class="mono">/slash</code> commands) and fold in pre-rename names, but resumed and compacted sessions copy earlier history into new transcript files, so a busy skill can be counted more than once. A <b>0</b> is trustworthy; a large number means &ldquo;heavily used&rdquo;, not an exact tally.</p>
+  </div>
+</header>
+
+<div class="controls">
+  <input type="search" id="q" placeholder="/ to search name, source, text&hellip;" aria-label="Search components">
+  <button class="chip" data-f="zero" aria-pressed="false">never used</button>
+  <button class="chip" data-f="undecided" aria-pressed="false">undecided</button>
+  <button class="chip" data-f="dotfiles" aria-pressed="false">dotfiles</button>
+  <button class="chip" data-f="plugin" aria-pressed="false">plugins</button>
+  <button class="chip" data-f="tier1" aria-pressed="false">costly (&ge;50 tok)</button>
+  <span class="spacer"></span>
+  <button class="btn ghost" id="clearview">Clear sort &amp; filters</button>
+  <button class="btn ghost" id="reset">Reset marks</button>
+  <button class="btn" id="copy">Copy decisions</button>
+</div>
+
+<div class="hdr-row" id="hdr"></div>
+<div id="fmenu" hidden></div>
+
+<div id="list"></div>
+</div>
+
+<div class="foot"><div class="inner">
+  <div class="tally" id="tally"></div>
+  <span class="spacer"></span>
+  <div class="keys">
+    <span><kbd>j</kbd><kbd>k</kbd> move</span><span><kbd>o</kbd> open</span>
+    <span><kbd>a</kbd>keep <kbd>c</kbd>compress <kbd>e</kbd>edit <kbd>m</kbd>merge <kbd>v</kbd>move <kbd>d</kbd>drop <kbd>u</kbd>clear</span>
+    <span><kbd>[</kbd><kbd>]</kbd> reorder</span><span><kbd>?</kbd> help</span>
+  </div>
+</div></div>
+
+<script>
+const DATA = __PAYLOAD__;
+const MARKS = ['keep','compress','edit','merge','move','drop','review'];
+const KEY = 'ctxledger.v1';
+let rows = DATA.rows.slice(), meta = DATA.meta;
+let marks = {}, order = null, sel = 0, open = new Set(), filters = new Set(), q = '';
+let sortCol = null, sortDir = 1, colFil = {};   // colFil[key] = Set of EXCLUDED facet labels
+
+const id = r => r.p + ':' + r.n;
+try{ const s = JSON.parse(localStorage.getItem(KEY)||'{}');
+     if(s && typeof s==='object'){ marks = s.marks||{}; order = s.order||null; } }catch(e){}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({marks, order:rows.map(id)})); }catch(e){} }
+if(order){ const pos = new Map(order.map((k,i)=>[k,i]));
+  rows.sort((a,b)=>(pos.has(id(a))?pos.get(id(a)):1e9)-(pos.has(id(b))?pos.get(id(b)):1e9)); }
+
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const fmt = n => n==null ? '&mdash;' : n.toLocaleString('en-US');
+const markOf = r => marks[id(r)] || r.lean;
+const isAuto = r => !marks[id(r)] && r.auto;
+
+// Every column sorts and filters. Numeric columns facet into bands rather than
+// listing 40 distinct integers, which is a menu nobody can use.
+const band = (v, cuts, names) => { for (let i = 0; i < cuts.length; i++) if (v >= cuts[i]) return names[i]; return names[names.length - 1]; };
+const COLS = [
+  {k:'n',    label:'Component', align:'',  sort:r=>r.n.toLowerCase(), facet:r=>r.k},
+  {k:'p',    label:'Source',    align:'',  sort:r=>r.p,               facet:r=>r.p},
+  {k:'u',    label:'Uses',      align:'r', sort:r=>r.u==null?-1:r.u,
+             facet:r=>r.u==null?'always loaded':(r.u===0?'never used':band(r.u,[10,1],['10+','1-9']))},
+  {k:'t1',   label:'Tier 1',    align:'r', sort:r=>r.t1, facet:r=>band(r.t1,[200,50],['200+','50-199','under 50'])},
+  {k:'t2',   label:'Body',      align:'r', sort:r=>r.t2, facet:r=>band(r.t2,[2000,500],['2000+','500-1999','under 500'])},
+  {k:'t3',   label:'Refs',      align:'r', sort:r=>r.t3, facet:r=>r.t3?'has references':'none'},
+  {k:'lean', label:'Decision',  align:'c', sort:r=>markOf(r), facet:r=>markOf(r)},
+];
+const colOf = k => COLS.find(c => c.k === k);
+const passesCols = r => COLS.every(c => !(colFil[c.k] && colFil[c.k].has(String(c.facet(r)))));
+
+function visible(){
+  return rows.filter(r=>{
+    if(filters.has('zero') && r.u!==0) return false;
+    if(filters.has('undecided') && marks[id(r)]) return false;
+    if(filters.has('dotfiles') && r.p!=='dotfiles') return false;
+    if(filters.has('plugin') && r.p==='dotfiles') return false;
+    if(filters.has('tier1') && r.t1<50) return false;
+    if(q){ const h=(r.n+' '+r.p+' '+r.s+' '+r.d+' '+r.cl+' '+r.why).toLowerCase();
+           if(!h.includes(q)) return false; }
+    if(!passesCols(r)) return false;
+    return true;
+  });
+}
+
+// Sorting flattens the cluster grouping: a sort the reader asked for must not
+// be silently confined inside twelve buckets.
+function ordered(){
+  const vis = visible();
+  if(!sortCol) return vis;
+  const c = colOf(sortCol);
+  return vis.slice().sort((a,b)=>{
+    const x=c.sort(a), y=c.sort(b);
+    if(x===y) return a.n.localeCompare(b.n);
+    return (x>y?1:-1)*sortDir;
+  });
+}
+
+function projected(){
+  let saved = 0;
+  for(const r of rows){
+    const m = marks[id(r)];
+    if(m==='drop'||m==='merge') saved += r.t1;
+    else if(m==='compress') saved += Math.round(r.t1/2);
+  }
+  return saved;
+}
+
+function renderMeter(){
+  const saved = projected(), cur = meta.tier1 - saved;
+  document.getElementById('cur').textContent = fmt(cur);
+  const d = document.getElementById('delta');
+  d.textContent = saved>0 ? `\u2212${fmt(saved)} (${Math.round(saved/meta.tier1*100)}%)` : '';
+  // segments scale against the ORIGINAL total so shrinkage is visible
+  const tot = meta.tier1;
+  let p=meta.tier1_prose, dd=meta.tier1_desc, ii=meta.tier1_inject;
+  for(const r of rows){ const m=marks[id(r)]; if(!m) continue;
+    const cut = (m==='drop'||m==='merge') ? r.t1 : (m==='compress'? Math.round(r.t1/2):0);
+    if(!cut) continue;
+    if(r.k==='rule'||r.k==='always') p-=cut; else if(r.k==='inject') ii-=cut; else dd-=cut; }
+  const seg=(el,v)=>{ const e=document.getElementById(el); e.style.width=(Math.max(v,0)/tot*100)+'%';
+                      e.textContent = v/tot>0.09 ? fmt(Math.max(v,0)) : ''; };
+  seg('sp',p); seg('sd',dd); seg('si',ii);
+  document.getElementById('lp').textContent=fmt(Math.max(p,0));
+  document.getElementById('ld').textContent=fmt(Math.max(dd,0));
+  document.getElementById('li').textContent=fmt(Math.max(ii,0));
+  const skillRows = rows.filter(r=>r.k==='skill'||r.k==='agent');
+  const zero = skillRows.filter(r=>r.u===0).length;
+  document.getElementById('zc').innerHTML =
+    `${zero} <span style="font-size:14px;color:var(--ink-3)">of ${skillRows.length}</span>`;
+  document.getElementById('t2').textContent=fmt(meta.tier2);
+  document.getElementById('t3').textContent=fmt(meta.tier3);
+  const t={}; for(const r of rows){ const m=marks[id(r)]; if(m) t[m]=(t[m]||0)+1; }
+  const el=document.getElementById('tally');
+  const n=Object.values(t).reduce((a,b)=>a+b,0);
+  el.innerHTML = n===0 ? '<span style="background:var(--panel-2);color:var(--ink-3)">no decisions yet &mdash; my leans shown in grey</span>'
+    : MARKS.filter(m=>t[m]).map(m=>`<span class="m-${m}">${t[m]} ${m}</span>`).join('')
+      + `<span style="background:var(--panel-2);color:var(--ink-3)">${rows.length-n} left</span>`;
+}
+
+function rowHTML(r,i){
+  const m = markOf(r), auto = isAuto(r);
+  const uCls = r.u===0?'z':(r.u>=10?'hot':(r.u==null?'dim':''));
+  return `<div class="row${i===sel?' sel':''}" data-i="${i}" draggable="true">
+    <div class="grip" title="Drag to reorder">&#10495;</div>
+    <div class="nm"><b>${esc(r.n)}</b><span class="kd">${esc(r.k)}</span>${r.manual?'<span class="kd mn" title="User-invoked: no description in context, costs 0 Tier-1">manual</span>':''}${
+      (m==='merge'||m==='move') && r.into
+        ? `<span class="into${m==='move'?' mv':''}">&rarr; ${esc(r.into)}</span>` : ''}</div>
+    <div class="src">${esc(r.p==='dotfiles'?'dotfiles':r.p)}</div>
+    <div class="num ${uCls}">${r.u==null?'&mdash;':fmt(r.u)}</div>
+    <div class="num">${fmt(r.t1)}</div>
+    <div class="num dim">${r.t2?fmt(r.t2):'&mdash;'}</div>
+    <div class="num dim">${r.t3?fmt(r.t3):'&mdash;'}</div>
+    <div class="mark m-${m}${auto?' auto':''}">${m}</div>
+  </div>` + (open.has(id(r)) ? detailHTML(r) : '');
+}
+
+function detailHTML(r){
+  const refs = (r.refs||[]).map(f=>`<details class="ref"><summary><span>${esc(f.f)}</span><span>${fmt(f.t)} tok</span></summary><pre>${esc(f.c)}</pre>${
+    f.cut ? `<pre class="trunc">shown to 120,000 characters &mdash; ${fmt(f.cut)} more in the file on disk</pre>` : ''}</details>`).join('');
+  return `<div class="detail">
+    <h4>${isAuto(r)?'Auto-classified &mdash; not individually reviewed':'My lean'}</h4>
+    <div class="why${isAuto(r)?' autoy':''}">${mdish(r.why)}</div>
+    <h4>Description (this is the Tier-1 text &mdash; ${fmt(r.t1)} tok)</h4>
+    <div class="desc">${esc(r.d)||'<em>none</em>'}</div>
+    <h4>File</h4><div class="pth">${esc(r.path)}</div>
+    ${r.body?`<h4>Full body &mdash; ${fmt(r.t2)} tok, loaded only when invoked</h4><pre class="body">${esc(r.body)}</pre>`:''}
+    ${refs?`<h4>References &mdash; ${fmt(r.t3)} tok, loaded only on demand</h4>${refs}`:''}
+  </div>`;
+}
+const mdish = s => esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`(.+?)`/g,'<code class="mono">$1</code>');
+
+function renderHeader(){
+  document.getElementById('hdr').innerHTML = '<span></span>' + COLS.map(c=>{
+    const on = colFil[c.k] && colFil[c.k].size;
+    const arrow = sortCol===c.k ? (sortDir>0?' &uarr;':' &darr;') : '';
+    const sorted = sortCol===c.k ? ` aria-sort="${sortDir>0?'ascending':'descending'}"` : '';
+    return `<span class="hcell ${c.align}">
+      <button class="hsort" data-sort="${c.k}"${sorted}
+        title="Sort by ${esc(c.label)}">${esc(c.label)}${arrow}</button>
+      <button class="hfil${on?' on':''}" data-fil="${c.k}" aria-label="Filter by ${esc(c.label)}"
+        title="Filter by ${esc(c.label)}">&#9662;</button></span>`;
+  }).join('');
+}
+
+function closeMenu(){ const m=document.getElementById('fmenu'); m.hidden=true; m.innerHTML=''; }
+
+function openMenu(key, anchor){
+  const c = colOf(key), m = document.getElementById('fmenu');
+  const labels = [...new Set(rows.map(r=>String(c.facet(r))))].sort();
+  const excl = colFil[key] || new Set();
+  m.innerHTML = `<h5>${esc(c.label)}</h5>` + labels.map(l=>{
+    const n = rows.filter(r=>String(c.facet(r))===l).length;
+    return `<label><input type="checkbox" data-v="${esc(l)}"${excl.has(l)?'':' checked'}>
+      <span>${esc(l)}</span>
+      <span style="margin-left:auto;color:var(--ink-3);font-family:'IBM Plex Mono',monospace;font-size:11px">${n}</span></label>`;
+  }).join('') + `<div class="fbar"><button data-all="1">All</button><button data-none="1">None</button></div>`;
+  m.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(r.left + scrollX, innerWidth - m.offsetWidth - 14)) + 'px';
+  m.style.top = (r.bottom + scrollY + 5) + 'px';
+  m.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change',()=>{
+    const s = colFil[key] || (colFil[key] = new Set());
+    cb.checked ? s.delete(cb.dataset.v) : s.add(cb.dataset.v);
+    if(!s.size) delete colFil[key];
+    sel = 0; render();
+  }));
+  m.querySelector('[data-all]').onclick = ()=>{ delete colFil[key]; sel=0; render(); openMenu(key, anchor); };
+  m.querySelector('[data-none]').onclick = ()=>{ colFil[key] = new Set(labels); sel=0; render(); openMenu(key, anchor); };
+}
+
+document.getElementById('hdr').addEventListener('click', e=>{
+  const s = e.target.closest('[data-sort]'), f = e.target.closest('[data-fil]');
+  if(f){ const open = !document.getElementById('fmenu').hidden && menuKey===f.dataset.fil;
+         closeMenu(); if(!open){ menuKey=f.dataset.fil; openMenu(menuKey, f); } return; }
+  if(s){ const k=s.dataset.sort;
+         if(sortCol===k && sortDir>0) sortDir=-1;
+         else if(sortCol===k){ sortCol=null; sortDir=1; }
+         else { sortCol=k; sortDir=1; }
+         sel=0; render(); }
+});
+let menuKey = null;
+document.addEventListener('mousedown', e=>{
+  if(document.getElementById('fmenu').hidden) return;
+  if(e.target.closest('#fmenu') || e.target.closest('[data-fil]')) return;
+  closeMenu();
+});
+
+function render(){
+  const vis = ordered();
+  if(sel>=vis.length) sel = Math.max(0, vis.length-1);
+  let i = -1, html;
+  if(sortCol){
+    const c = colOf(sortCol);
+    html = `<div class="group"><div class="group-h"><h2>Sorted by ${esc(c.label)}</h2>
+      <span class="gt">${vis.length} components &middot; ${fmt(vis.reduce((a,b)=>a+b.t1,0))} tok/session &middot; click again to reverse, a third time for grouped order</span></div>`
+      + vis.map(r=>{ i++; return rowHTML(r,i); }).join('') + `</div>`;
+  } else {
+    const groups = [];
+    let last = null;
+    vis.forEach((r)=>{ if(r.cl!==last){ groups.push({cl:r.cl, rows:[]}); last=r.cl; }
+                       groups[groups.length-1].rows.push(r); });
+    html = groups.map(g=>{
+      const tot = g.rows.reduce((a,b)=>a+b.t1,0);
+      return `<div class="group"><div class="group-h"><h2>${esc(g.cl)}</h2>
+        <span class="gt">${g.rows.length} components &middot; ${fmt(tot)} tok/session</span></div>`
+        + g.rows.map(r=>{ i++; return rowHTML(r,i); }).join('') + `</div>`;
+    }).join('');
+  }
+  document.getElementById('list').innerHTML = html;
+  VIS = vis;
+  renderHeader();
+  renderMeter();
+  const s = document.querySelector('.row.sel');
+  if(s) s.scrollIntoView({block:'nearest'});
+}
+let VIS = [];
+
+document.getElementById('list').addEventListener('click', e=>{
+  if(e.target.closest('details')) return;
+  const row = e.target.closest('.row'); if(!row) return;
+  sel = +row.dataset.i; toggle(); });
+
+function toggle(){ const r = VIS[sel]; if(!r) return;
+  const k = id(r); open.has(k) ? open.delete(k) : open.add(k); render(); }
+function setMark(m){ const r = VIS[sel]; if(!r) return;
+  if(m===null) delete marks[id(r)]; else marks[id(r)] = m;
+  save(); render(); }
+function move(d){ const r = VIS[sel]; if(!r) return;
+  // Manual order and a column sort are two different orderings; moving a row
+  // under an active sort would appear to do nothing.
+  if(sortCol){ toast('Clear the column sort first to reorder by hand'); return; }
+  const gi = rows.indexOf(r), tgt = gi+d;
+  if(tgt<0||tgt>=rows.length) return;
+  rows.splice(gi,1); rows.splice(tgt,0,r); save(); render(); }
+
+addEventListener('keydown', e=>{
+  // Single-key shortcuts must never fire while the reader is typing. The comment
+  // box is a TEXTAREA inside the annotation layer, so an INPUT-only guard let
+  // every letter of a note double as a command -- typing "d" marked a row drop.
+  const t = e.target;
+  const typing = t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' ||
+                       t.tagName==='SELECT' || t.isContentEditable);
+  const inLayer = t && t.closest && t.closest('[data-annotation-layer]');
+  if(typing || inLayer){
+    if(e.key==='Escape' && t.tagName==='INPUT') t.blur();
+    return;
+  }
+  if(e.metaKey||e.ctrlKey||e.altKey) return;
+  const k = e.key;
+  if(k==='?'){ e.preventDefault(); help(true); return; }
+  if(k==='Escape'){ help(false); return; }
+  if(k==='/'){ e.preventDefault(); document.getElementById('q').focus(); return; }
+  if(k==='j'||k==='ArrowDown'){ e.preventDefault(); sel=Math.min(sel+1,VIS.length-1); render(); }
+  else if(k==='k'||k==='ArrowUp'){ e.preventDefault(); sel=Math.max(sel-1,0); render(); }
+  else if(k==='g'){ sel=0; render(); }
+  else if(k==='G'){ sel=VIS.length-1; render(); }
+  else if(k==='o'||k==='Enter'||k===' '){ e.preventDefault(); toggle(); }
+  else if(k==='a'){ setMark('keep'); }
+  else if(k==='c'){ setMark('compress'); }
+  else if(k==='e'){ setMark('edit'); }
+  else if(k==='m'){ setMark('merge'); }
+  else if(k==='v'){ setMark('move'); }
+  else if(k==='d'){ setMark('drop'); }
+  else if(k==='u'){ setMark(null); }
+  else if(k===']'){ e.preventDefault(); move(1); }
+  else if(k==='['){ e.preventDefault(); move(-1); }
+  else if(k==='C'){ copy(); }
+});
+
+// drag + drop
+let dragI = null;
+document.getElementById('list').addEventListener('dragstart', e=>{
+  const r = e.target.closest('.row'); if(!r) return;
+  dragI = +r.dataset.i; r.classList.add('drag'); e.dataTransfer.effectAllowed='move'; });
+document.getElementById('list').addEventListener('dragover', e=>{
+  e.preventDefault(); const r=e.target.closest('.row'); if(!r) return;
+  document.querySelectorAll('.row.over').forEach(x=>x.classList.remove('over')); r.classList.add('over'); });
+document.getElementById('list').addEventListener('drop', e=>{
+  e.preventDefault(); const r=e.target.closest('.row'); if(!r||dragI===null) return;
+  if(sortCol){ toast('Clear the column sort first to reorder by hand'); dragI=null; return; }
+  const from = VIS[dragI], to = VIS[+r.dataset.i];
+  if(!from||!to||from===to) return;
+  const a = rows.indexOf(from); rows.splice(a,1);
+  rows.splice(rows.indexOf(to),0,from); dragI=null; save(); render(); });
+document.getElementById('list').addEventListener('dragend', ()=>{
+  document.querySelectorAll('.drag,.over').forEach(x=>x.classList.remove('drag','over')); dragI=null; });
+
+document.getElementById('q').addEventListener('input', e=>{ q=e.target.value.toLowerCase().trim(); sel=0; render(); });
+document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
+  const f=c.dataset.f; filters.has(f)?filters.delete(f):filters.add(f);
+  c.setAttribute('aria-pressed', filters.has(f)); sel=0; render(); }));
+// Two-step, never window.confirm: the Artifact viewer runs this page in a
+// sandboxed iframe with no allow-modals, where confirm() returns false without
+// ever asking -- so a guarded destructive button silently does nothing exactly
+// where the page is read. The annotation layer had the same bug.
+let resetArmed = 0;
+document.getElementById('reset').addEventListener('click', e=>{
+  const b = e.currentTarget, n = Object.keys(marks).length;
+  if(!n){ toast('No marks to reset'); return; }
+  if(!resetArmed){
+    resetArmed = setTimeout(()=>{ resetArmed=0; b.textContent='Reset marks';
+                                  b.classList.remove('armed'); }, 4000);
+    b.textContent = `Click again to clear ${n}`;
+    b.classList.add('armed');
+    return;
+  }
+  clearTimeout(resetArmed); resetArmed = 0;
+  b.textContent = 'Reset marks'; b.classList.remove('armed');
+  marks = {}; save(); render(); toast('Marks cleared');
+});
+addEventListener('keydown', e=>{ if(e.key==='Escape' && resetArmed){
+  clearTimeout(resetArmed); resetArmed=0;
+  const b=document.getElementById('reset');
+  b.textContent='Reset marks'; b.classList.remove('armed'); } });
+document.getElementById('clearview').addEventListener('click',()=>{
+  sortCol=null; sortDir=1; colFil={}; filters.clear(); q='';
+  document.getElementById('q').value='';
+  document.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed','false'));
+  closeMenu(); sel=0; render(); toast('Sorting and filters cleared'); });
+
+function copy(){
+  const dec = rows.filter(r=>marks[id(r)]);
+  const lines = ['# Context ledger decisions', '',
+    `Tier 1 now: ${fmt(meta.tier1)} tok/session \u2192 projected ${fmt(meta.tier1-projected())} tok (\u2212${fmt(projected())})`,
+    `Decided ${dec.length} of ${rows.length} components.`, ''];
+  for(const m of MARKS){
+    const g = dec.filter(r=>marks[id(r)]===m); if(!g.length) continue;
+    lines.push(`## ${m.toUpperCase()} (${g.length}) &mdash; ${fmt(g.reduce((a,b)=>a+b.t1,0))} tok`);
+    for(const r of g) lines.push(`- ${r.n} (${r.p}, ${r.k}) &mdash; ${r.u==null?'always-loaded':r.u+' uses'}, ${r.t1} tok &mdash; ${r.path}`);
+    lines.push('');
+  }
+  lines.push('## Order', ...rows.map((r,i)=>`${i+1}. ${r.n} (${r.p})`));
+  const txt = lines.join('\n');
+  navigator.clipboard.writeText(txt).then(()=>toast('Decisions copied &mdash; paste into Claude Code'),
+    ()=>{ const t=document.createElement('textarea'); t.value=txt; document.body.appendChild(t);
+          t.select(); document.execCommand('copy'); t.remove(); toast('Decisions copied'); });
+}
+document.getElementById('copy').addEventListener('click', copy);
+function toast(m){ const d=document.createElement('div'); d.className='toast'; d.textContent=m;
+  document.body.appendChild(d); setTimeout(()=>d.remove(),2200); }
+
+function help(show){
+  let h=document.getElementById('help');
+  if(!show){ if(h) h.remove(); return; }
+  if(h) return;
+  h=document.createElement('div'); h.className='help'; h.id='help';
+  h.innerHTML=`<div class="help-in"><h3>Keyboard</h3><table>
+   <tr><td><kbd>j</kbd> <kbd>k</kbd></td><td>Move down / up</td></tr>
+   <tr><td><kbd>o</kbd> <kbd>&crarr;</kbd></td><td>Expand &mdash; full body text and every reference file</td></tr>
+   <tr><td><kbd>a</kbd></td><td>Mark <b>keep</b> (accept as is)</td></tr>
+   <tr><td><kbd>c</kbd></td><td>Mark <b>compress</b> &mdash; keep the job, cut the words</td></tr>
+   <tr><td><kbd>e</kbd></td><td>Mark <b>edit</b> &mdash; needs rework, not removal</td></tr>
+   <tr><td><kbd>m</kbd></td><td>Mark <b>merge</b> &mdash; fold into a sibling</td></tr>
+   <tr><td><kbd>v</kbd></td><td>Mark <b>move</b> &mdash; right content, wrong home</td></tr>
+   <tr><td><kbd>d</kbd></td><td>Mark <b>drop</b></td></tr>
+   <tr><td><kbd>u</kbd></td><td>Clear your mark (my lean returns)</td></tr>
+   <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Reorder &mdash; move row up / down (drag the &#10495; grip works too)</td></tr>
+   <tr><td><kbd>g</kbd> <kbd>G</kbd></td><td>First / last</td></tr>
+   <tr><td><kbd>/</kbd></td><td>Search</td></tr>
+   <tr><td><kbd>C</kbd></td><td>Copy all decisions to clipboard</td></tr>
+   <tr><td><kbd>Esc</kbd></td><td>Close</td></tr></table>
+   <p style="color:var(--ink-3);font-size:12.5px;margin-top:16px">Marks and row order persist in this browser only. Grey decisions are my leans; they turn solid once you set one yourself.</p></div>`;
+  h.addEventListener('click',e=>{ if(e.target===h) help(false); });
+  document.body.appendChild(h);
+}
+render();
+</script>

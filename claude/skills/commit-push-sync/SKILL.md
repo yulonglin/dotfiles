@@ -6,443 +6,96 @@ version: 0.2.0
 
 # Commit, Smart Sync, and Push Workflow
 
-Automates the complete workflow of committing local changes, syncing with remote using a context-aware pull strategy, and pushing updates.
+Commit local changes, sync with the remote using a context-aware strategy, then push. Use `/commit` instead when the user only wants a commit.
 
-## Purpose
+## Fetch The Tracked Remote Before Judging State
 
-Handle the full git workflow in a single command:
-1. Stage and commit changes (following commit skill best practices)
-2. Fetch and evaluate remote state
-3. Sync with remote using the safest strategy for the situation
-4. Push local commits to remote
+`@{u}` is stale until you fetch, so `git log ..@{u}` on cached data can miss remote commits entirely.
 
-## When to Use
+- `UPSTREAM_REF=$(git rev-parse --abbrev-ref @{u} 2>/dev/null)` — empty means no upstream: skip to committing, then push with `-u` (Step 4).
+- Fetch the remote `@{u}` actually names, never a hardcoded `origin` — a branch may track `upstream/main`, and fetching the wrong remote leaves `@{u}` stale and misclassifies the state: `git fetch "$(echo "$UPSTREAM_REF" | cut -d/ -f1)"`.
+- **If the fetch fails, abort the whole workflow** and show the user the error. Never proceed on stale refs. Common causes: network, expired auth, renamed/deleted remote.
+- Detached HEAD (`git symbolic-ref -q HEAD` fails) cannot be pushed — tell the user to `git checkout -b <branch>` first.
 
-Trigger this skill when the user requests:
-- "commit and push"
-- "commit push"
-- "sync changes"
-- "push changes" (after uncommitted work detected)
-- "commit and sync"
-- "update remote"
+Then gather state in parallel: `git status`, `git log @{u}.. --oneline` (local-only), `git log ..@{u} --oneline` (remote-only), `git log @{u}.. --merges --oneline` (local merge commits).
 
-**Do NOT use** when:
-- User only wants to commit (use `/commit` skill)
-- User only wants to push existing commits (use direct `git push`)
-- Working on a branch that shouldn't be pushed yet
-- Conflicts are expected (handle manually)
-
-## Workflow
-
-### Step 1: Fetch and Evaluate State
-
-**CRITICAL: Fetch first.** The local tracking ref (`@{u}`) is stale until you fetch. Without fetching, `git log ..@{u}` uses cached data and can miss remote changes.
-
-First, check if upstream tracking exists and determine the correct remote:
-```bash
-UPSTREAM_REF=$(git rev-parse --abbrev-ref @{u} 2>/dev/null)
-```
-
-**If no upstream tracking branch (`UPSTREAM_REF` is empty):** Skip to Step 2 (commit), then push with `-u origin <branch>` in Step 4.
-
-**If upstream exists**, extract the remote name and fetch it:
-```bash
-UPSTREAM_REMOTE=$(echo "$UPSTREAM_REF" | cut -d/ -f1)  # e.g., "origin" from "origin/main"
-git fetch "$UPSTREAM_REMOTE"  # MUST succeed — abort entire workflow on failure
-```
-
-**IMPORTANT:** Always fetch the remote that `@{u}` actually points to, not hardcoded `origin`. A branch may track `upstream/main` or another remote — fetching the wrong remote leaves `@{u}` stale and causes incorrect state classification.
-
-If fetch fails (network error, auth failure, etc.), **stop the entire workflow** and notify the user. Do not proceed with stale data.
-
-**If upstream exists**, gather state (run in parallel):
-```bash
-git status                          # Uncommitted changes and branch info
-git log @{u}.. --oneline            # Local-only commits (ahead count)
-git log ..@{u} --oneline            # Remote-only commits (behind count)
-git log @{u}.. --merges --oneline   # Merge commits in local history
-```
-
-Classify the state using the **Smart Pull Decision Tree**:
+## Rebase Only When Cheap And Safe, Otherwise Merge
 
 ```
-After git fetch origin:
-+-- Local ahead, remote has nothing     -> just push (no pull needed)
+After fetching the tracked remote:
++-- Local ahead, remote has nothing     -> just push (no pull)
 +-- Local behind, no local commits      -> git pull --ff-only
 +-- Diverged:
-|   +-- Local has merge commits?        -> git pull --no-rebase (merge)
-|   +-- >20 local commits to replay?    -> git pull --no-rebase (merge)
+|   +-- Local has merge commits?        -> git pull --no-rebase
+|   +-- >20 local commits to replay?    -> git pull --no-rebase
 |   +-- Few commits, no merges          -> git pull --rebase
 |   +-- Any pull fails?                 -> abort, show state, ask user
 +-- @{u} not configured                 -> commit, git push -u origin <branch>
 ```
 
-**Principle: rebase only when cheap and safe** (few commits, no merges). Otherwise merge. Never rebase merge commits — rebase drops them and replays their individual commits, causing massive conflicts.
+Never rebase across merge commits: rebase drops the merge and replays its N constituent commits individually, each able to conflict — that is how an 81-commit rebase disaster happens. Show `git log @{u}.. --merges --oneline` when explaining why merge was chosen. `--ff-only` cannot conflict; if it fails, something unexpected happened — abort and ask.
 
-### Step 2: Commit Changes (if needed)
+## Triage Untracked Paths Before Staging Them
 
-If uncommitted changes exist, follow the commit skill workflow:
+Gather context in parallel first: `git status` (never `-uall`), `git diff --staged`, `git diff`, `git log -10 --oneline` for style. Coding agents accrete runtime state, caches, job queues and control keys over time — for each *newly appeared* untracked path ask whether it is worth versioning and sharing across machines.
 
-1. **Gather context** (run in parallel):
-   ```bash
-   git status              # See untracked files (NEVER use -uall flag)
-   git diff --staged       # See staged changes
-   git diff                # See unstaged changes
-   git log -10 --oneline   # Recent commits for style reference
-   ```
+| Signal | Action |
+|--------|--------|
+| Machine-local runtime state, regenerated on the fly (caches, session dirs, queues, daemon/job state) | Add to `.gitignore` — don't commit |
+| Contains a credential or secret (tokens, `*.key`, control keys) | Add to `.gitignore` **and** verify it never entered history |
+| Server-pushed state that re-syncs itself (policy / remote-settings files) | Add to `.gitignore` — versioning it is churn plus conflicts |
+| Genuine config or source meant to be shared (settings, rules, agents, scripts) | Stage and commit normally |
 
-   **Triage new untracked files/dirs for `.gitignore` before staging.** Coding agents
-   (Claude Code, Codex, agent scaffolds) accrete new files over time — runtime state,
-   session caches, job queues, control keys, scratch dirs. Don't reflexively commit them.
-   For each *newly appeared* untracked path, ask: **is this relevant to version and share
-   across machines?**
+When unsure whether a path is durable config or agent scaffold, **ask the user**. Put the pattern in the nearest relevant `.gitignore` and confirm with `git check-ignore <path>`; if the scaffold is already tracked, `git rm --cached <path>` first (keeps the working copy).
 
-   | Signal | Action |
-   |--------|--------|
-   | Machine-local runtime state, regenerated on the fly (caches, session dirs, queues, daemon/job state) | Add to `.gitignore` — don't commit |
-   | Contains a credential/secret (tokens, `*.key`, control keys) | Add to `.gitignore` **and** verify it never entered history |
-   | Server-pushed state that re-syncs itself (e.g. policy/remote-settings files) | Add to `.gitignore` — versioning it just creates churn + conflicts |
-   | Genuine config/source meant to be shared (settings, rules, agents, scripts) | Stage and commit normally |
+## Commit Without Heredocs, And Never Amend Past A Hook
 
-   When unsure whether a path is durable config or agent scaffold, **ask the user** rather
-   than committing it. Place new ignore patterns in the nearest relevant `.gitignore`
-   (e.g. a tool's nested `.gitignore` for its own runtime dir), and confirm with
-   `git check-ignore <path>`. If a scaffold file is *already tracked*, untrack it with
-   `git rm --cached <path>` (keeps the working copy) before adding the ignore rule.
-
-2. **Draft commit message**:
-   - Summarize nature of changes (feature/fix/refactor/docs/etc.)
-   - Focus on "why" rather than "what"
-   - Match repository's commit style (from git log)
-   - Keep concise (1-2 sentences)
-
-3. **Stage and commit** (run sequentially):
-   ```bash
-   git add [specific files]  # Prefer specific files over "git add -A"
-
-   # Sandbox-safe commit (NEVER use heredoc — sandbox blocks /tmp)
-   # For multi-line messages:
-   mkdir -p "$TMPDIR" && printf '%s\n' "subject line" "" "Body details here" > "$TMPDIR/commit_msg.txt" && git commit -F "$TMPDIR/commit_msg.txt"
-
-   # For single-line messages:
-   git commit -m "subject line"
-
-   git status  # Verify commit succeeded
-   ```
-
-**Important commit rules** (from CLAUDE.md):
-- NEVER skip hooks (no `--no-verify`)
-- NEVER use `git add -A` or `git add .` (specify files to avoid secrets)
-- NEVER commit secrets (.env, credentials.json, etc.)
-- NEVER use heredoc (`<<EOF`) in commit commands (sandbox blocks `/tmp`)
-- If pre-commit hook fails, create NEW commit after fixing (never `--amend`)
-
-### Step 3: Sync with Remote (if needed)
-
-**Based on the state classification from Step 1, choose the appropriate strategy:**
-
-#### Case A: Local strictly ahead (no remote-only commits)
-
-**Skip this step entirely.** Go straight to Step 4 (push). This is the most common case.
-
-#### Case B: Local behind, no local commits (fast-forward)
+Message: name the nature of the change, say *why* rather than *what*, match the repo's style from `git log`, keep it to 1-2 sentences.
 
 ```bash
-git pull --ff-only
-```
+git add <specific files>   # never `git add -A` / `git add .` — risks committing secrets
 
-This cannot fail with conflicts. If it fails, something unexpected happened — abort and ask user.
-
-#### Case C: Diverged — local has merge commits OR >20 local commits
-
-**Use merge (not rebase)** to preserve merge commits and avoid replaying a large number of commits:
-
-```bash
-git pull --no-rebase
-```
-
-**Why not rebase here:** `git rebase` drops merge commits by default and replays their individual commits. A merge commit containing N upstream commits would expand into N individual replays, each potentially conflicting. This is how the 81-commit rebase disaster happens.
-
-If merge conflicts occur:
-1. **Immediately abort**: `git merge --abort`
-2. Show the user the conflicting state: `git status`
-3. Explain what diverged: show `git log @{u}.. --oneline` and `git log ..@{u} --oneline`
-4. **Ask the user how to proceed** — do NOT auto-resolve
-
-#### Case D: Diverged — few local commits (<= 20), no merge commits
-
-**Rebase is safe here** — small, linear history is easy to replay:
-
-```bash
-git pull --rebase
-```
-
-If rebase conflicts occur:
-1. **Immediately abort**: `git rebase --abort`
-2. Show the user the conflicting state: `git status`
-3. Explain what diverged
-4. **Ask the user how to proceed** — do NOT auto-resolve
-
-#### General conflict handling
-
-- **NEVER attempt automatic conflict resolution** — always abort and ask user
-- **NEVER continue a rebase/merge with unresolved conflicts**
-- Show conflicting files with `git status`
-- Provide guidance:
-  - For rebase: resolve, `git add`, `git rebase --continue`, or `git rebase --abort`
-  - For merge: resolve, `git add`, `git commit`, or `git merge --abort`
-
-#### CRITICAL: Working tree contamination after failed rebase/merge
-
-**A failed `git pull --rebase` or `git pull --no-rebase` can leave the working tree in a MIXED state** — some files reverted to the remote's version, others untouched. This is the #1 source of silent regressions.
-
-**What happens:** The rebase/merge starts applying remote changes to the working tree, then aborts (due to conflicts, sandbox issues, dirty files). The abort restores HEAD but may NOT fully restore the working tree. Files that were cleanly merged get the remote's version; files that conflicted get restored.
-
-**Required behavior after ANY failed pull (rebase or merge):**
-
-1. **STOP.** Do NOT proceed to commit dirty files.
-2. **Check for contamination**: Run `git diff` on all dirty files and compare against the COMMIT you just made (not HEAD, which may be wrong after abort).
-3. **Look for regressions**: If a diff shows your recent changes being REMOVED (lines you added are gone, renames reverted), the working tree is contaminated.
-4. **Restore from your commit**: `git checkout <your-commit-hash> -- <contaminated-files>` to restore your version.
-5. **If unsure**, ask the user: "The failed rebase left some files modified. These diffs show [your changes] being reverted. Should I restore from your commit or keep the current state?"
-
-**Anti-pattern (caused the 2026-04-03 profiles.yaml regression):**
-```
-git commit -m "my changes"           # Committed profiles.yaml with new profiles
-git pull --rebase                    # FAILED (sandbox blocked settings.json)
-# Working tree now has REMOTE's old profiles.yaml!
-git add profiles.yaml                # Staged the REGRESSION
-git commit -m "sync"                 # Committed the regression ❌
-```
-
-**Correct pattern:**
-```
-git commit -m "my changes"           # Committed profiles.yaml with new profiles
-git pull --rebase                    # FAILED
-git diff                             # Check what changed — profiles.yaml shows YOUR additions removed!
-git checkout HEAD -- profiles.yaml   # Restore YOUR version
-# Now decide: push directly, or try merge instead
-```
-
-**Rule:** After a failed rebase/merge, treat EVERY dirty file as potentially contaminated. Verify each diff is a genuine change, not a reversion of your recent commit.
-
-### Step 4: Push to Remote
-
-Push commits to remote:
-
-```bash
-git push
-```
-
-**If no upstream tracking branch:**
-```bash
-git push -u origin <branch-name>
-```
-Ask user to confirm branch name before pushing.
-
-**Handle push failures**:
-
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `rejected (non-fast-forward)` | Remote updated after our fetch | Re-fetch, re-evaluate state, sync again |
-| `no upstream branch` | New branch never pushed | `git push -u origin <branch>` (confirm with user) |
-| `protected branch` | Branch has push restrictions | Notify user (need PR or permissions) |
-
-**Force push guidance**:
-- NEVER suggest `git push --force` for main/master — warn the user if they request it
-- For other branches, only suggest after explicit user request
-- **Always use `--force-with-lease`** over `--force` — it checks that the remote hasn't been updated by someone else since your last fetch
-- See `references/force-push-guidelines.md` for detailed guidance
-- Warn: "Force push will overwrite remote history. `--force-with-lease` provides a safety check."
-
-### Step 5: Verify Success
-
-After successful push:
-```bash
-git status            # Should show "Your branch is up to date with 'origin/<branch>'"
-git log -3 --oneline  # Show recent commits for confirmation
-```
-
-Output summary:
-- "Committed: [commit message]" (if committed)
-- "Synced: [N] commits from remote via [merge/rebase/fast-forward]" (if synced)
-- "Pushed: [N] commits to origin/<branch>"
-
-## Stash Workflow (Alternative Pattern)
-
-For users with unstaged changes who prefer stash over committing. **Only use when remote actually has commits to pull** (check after fetch).
-
-**WARNING:** `.claude/settings*.json` files cannot be stashed — the sandbox denies write/unlink on these files. If the working tree has dirty settings files:
-1. Fallback: commit the non-settings dirty files first, then push directly
-2. Or: just push if local is strictly ahead (stash is unnecessary)
-
-```bash
-git fetch origin
-
-# Only if `git log ..@{u} --oneline` shows remote commits:
-LOCAL_MERGES=$(git log @{u}.. --merges --oneline | wc -l)
-LOCAL_COUNT=$(git log @{u}.. --oneline | wc -l)
-
-git stash
-
-if [ "$LOCAL_MERGES" -gt 0 ] || [ "$LOCAL_COUNT" -gt 20 ]; then
-  git pull --no-rebase   # Preserve merge commits
-else
-  git pull --rebase      # Safe for small linear history
-fi
-
-git stash pop
-```
-
-**Handle stash pop conflicts**:
-- Notify user about conflicts after stash pop
-- Show conflicting files
-- Provide guidance: resolve conflicts, then `git add [files]`
-- No `git stash drop` until conflicts resolved
-
-## Edge Cases
-
-### Case 1: Detached HEAD
-
-```bash
-# Check if detached
-git symbolic-ref -q HEAD || echo "Detached HEAD"
-```
-
-If detached, notify user: "Cannot push from detached HEAD. Create a branch first: `git checkout -b <branch-name>`"
-
-### Case 2: No Remote Tracking Branch
-
-Handled in Step 1 (detected by `git rev-parse --abbrev-ref @{u}`) and Step 4 (push with `-u`).
-
-### Case 3: Diverged Branches with Merge Commits
-
-This is the critical case that motivated the smart pull strategy. When local history contains merge commits (e.g., from `git merge upstream/main`):
-
-- **NEVER rebase** — rebase drops the merge commit and replays all N individual commits from the merged branch
-- **Always merge** — `git pull --no-rebase` preserves the merge commit intact
-- Show the user: `git log @{u}.. --merges --oneline` to explain why merge was chosen
-
-### Case 4: Nothing to Commit or Push
-
-```bash
-git status                 # "nothing to commit, working tree clean"
-git log @{u}.. --oneline   # No output = no unpushed commits
-```
-
-Notify user: "No changes to commit or push. Working tree is clean and up to date."
-
-### Case 5: Fetch Fails
-
-If `git fetch origin` fails:
-- **Abort the entire workflow** — do not proceed with stale tracking refs
-- Show the error to the user
-- Common causes: network issues, auth expired, remote renamed/deleted
-
-## Common Mistakes to Avoid
-
-**Don't:**
-- Run `git add -A` or `git add .` (risk committing secrets)
-- Use `--no-verify` to skip hooks
-- Force push to main/master without explicit request
-- Auto-resolve merge conflicts (always involve user)
-- Amend commits after hook failures
-- Skip verification steps
-- Use heredoc (`<<EOF`) in commit commands (sandbox blocks `/tmp`)
-- Rebase when local history contains merge commits
-- Rebase >20 commits without warning the user
-- Use `--force` when `--force-with-lease` is available
-
-**Do:**
-- Stage specific files by name
-- Choose pull strategy based on local history (merge commits? commit count?)
-- Let hooks run (respect pre-commit checks)
-- Create new commits after hook failures
-- Use `$TMPDIR` for commit message files
-- Verify success with `git status`
-- Handle errors gracefully with clear user guidance
-- Use `--force-with-lease` over `--force` when force push is needed
-
-## Integration with Rules
-
-This skill follows the smart pull strategy from `rules/safety-and-git.md`:
-
-**Context-aware pull strategy** (not unconditional rebase):
-- Rebase only when cheap and safe (few commits, no merges)
-- Merge when local has merge commits or many commits
-- Fast-forward when local has no work
-- Skip pull entirely when local is strictly ahead
-
-**Git Safety Protocol**:
-- Never update git config
-- Never run destructive commands (--force push to main)
-- Never skip hooks
-- Always create new commits (not amend after failures)
-- Prefer specific file staging
-
-**Sandbox-safe commits**:
-- Use `printf` + `git commit -F` for multi-line messages
-- Use `-m` for single-line messages
-- Never use heredoc (`<<EOF`) in commit commands
-
-## Additional Resources
-
-### Reference Files
-
-For detailed guidance:
-- **`references/conflict-resolution.md`** - Handling merge conflicts during rebase or merge
-- **`references/force-push-guidelines.md`** - When and how to force push safely
-
-### Related Skills
-
-- **`/commit`** - Just commit workflow (no push)
-- Standard git commands for manual control
-
-## Quick Command Reference
-
-```bash
-# ALWAYS fetch the correct remote first (matches @{u})
-UPSTREAM_REMOTE=$(git rev-parse --abbrev-ref @{u} 2>/dev/null | cut -d/ -f1)
-git fetch "${UPSTREAM_REMOTE:-origin}"
-
-# Check state AFTER fetch
-git status
-git log @{u}.. --oneline            # Unpushed local commits
-git log ..@{u} --oneline            # Remote-only commits to pull
-git log @{u}.. --merges --oneline   # Merge commits in local history
-
-# Decision tree:
-# Local strictly ahead (no remote-only commits) — just push
-git push
-
-# Local behind only (no local commits) — fast-forward
-git pull --ff-only && git push
-
-# Diverged with merge commits or >20 local commits — merge
-git pull --no-rebase && git push
-
-# Diverged with few commits, no merges — rebase
-git pull --rebase && git push
-
-# No upstream tracking — set it
-git push -u origin <branch>
-
-# Sandbox-safe commit (multi-line)
+# Multi-line message. NEVER a heredoc: the sandbox blocks the shell's /tmp scratch file,
+# which yields an EMPTY commit message and a failed commit.
 mkdir -p "$TMPDIR" && printf '%s\n' "subject" "" "body" > "$TMPDIR/commit_msg.txt" && git commit -F "$TMPDIR/commit_msg.txt"
 
-# Verify success
-git status  # Should show "up to date with origin/<branch>"
-git log -3 --oneline
+git commit -m "subject"    # single-line messages only
+git status                 # verify the commit landed
 ```
 
-## Success Criteria
+Never `--no-verify` — let hooks run. If a pre-commit hook fails, fix and make a **new** commit; never `--amend`.
 
-A successful commit-push-sync completes when:
-1. All changes are committed (if any uncommitted work existed)
-2. Remote changes are synced using the appropriate strategy (if any remote updates existed)
-3. Local commits are pushed to remote
-4. `git status` shows "Your branch is up to date with 'origin/<branch>'"
-5. No conflicts or errors remain unresolved
-6. Merge commits in local history are preserved (not flattened by rebase)
+## A Failed Pull Can Silently Revert Your Files
 
-If any step fails, provide clear guidance and stop — don't proceed to next step until user resolves the issue.
+A failed `git pull --rebase` or `--no-rebase` leaves the working tree in a MIXED state: cleanly-merged files keep the remote's version while conflicted ones get restored, so the abort restores HEAD but not necessarily the tree. This is the top source of silent regressions (it caused the 2026-04-03 `profiles.yaml` loss, where the remote's old file was staged and committed as a "sync").
+
+After **any** failed pull:
+
+- STOP. Do not stage or commit dirty files.
+- Diff every dirty file against **the commit you just made**, not HEAD, which may be wrong after the abort.
+- If a diff shows your own recent additions being removed or renames reverted, the tree is contaminated: `git checkout <your-commit-hash> -- <contaminated-files>`.
+- If unsure, ask the user whether to restore from the commit or keep the current state.
+
+## Abort Conflicts And Hand Them To The User
+
+Never auto-resolve, and never continue a rebase or merge with unresolved conflicts. Abort immediately (`git rebase --abort` / `git merge --abort`), show `git status` and both `git log @{u}.. --oneline` and `git log ..@{u} --oneline` to explain the divergence, then ask how to proceed. Guidance to offer: rebase → resolve, `git add`, `git rebase --continue`; merge → resolve, `git add`, `git commit`. Detail in `references/conflict-resolution.md`.
+
+`.claude/settings*.json` cannot be stashed — the sandbox denies write and unlink on them. With dirty settings files, commit the non-settings changes and push directly instead of stashing.
+
+## Push, Then Confirm The Branch Is Up To Date
+
+`git push`, or `git push -u origin <branch-name>` with the branch name confirmed by the user when there is no upstream.
+
+| Error | Cause | Response |
+|-------|-------|----------|
+| `rejected (non-fast-forward)` | Remote moved after our fetch | Re-fetch, re-classify state, sync again — not force |
+| `no upstream branch` | New branch never pushed | `git push -u origin <branch>` after confirming with the user |
+| `protected branch` | Push restrictions | Notify the user; a PR or extra permissions is needed |
+
+Verify with `git status` ("up to date with 'origin/<branch>'") and `git log -3 --oneline`. Report what was committed, what was synced and by which strategy, and how many commits were pushed. If any step fails, stop and hand the problem to the user rather than continuing.
+
+## Force-Push With Lease, Never To Main
+
+Never suggest force-pushing `main`/`master` — warn if asked. On other branches, only after an explicit user request, and always `--force-with-lease` over `--force` so the push fails if someone else updated the remote since your fetch. Warn that history will be overwritten. Detail in `references/force-push-guidelines.md`.
+
+The pull strategy here implements `rules/safety.md`; never update git config, and never run destructive git commands unasked.

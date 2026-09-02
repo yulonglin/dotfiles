@@ -7,9 +7,9 @@
 #   1. User skills (real directories in claude/skills/)
 #   2. Standalone skill files (*.md directly in claude/skills/, not in dirs)
 #   3. Plugin skills from marketplaces/ (canonical, git-cloned, always latest)
-#   4. Plugin skills from cache/ai-safety-plugins/ (user's custom plugins)
-#   5. Plugin skills from remaining cache/ dirs (versioned snapshots, may be stale)
-#   6. Agent skills (claude/agents/*.md, wrapped as skills)
+#   4. Plugin skills from cache/ dirs (versioned snapshots, may be stale;
+#      cache/ai-safety-plugins/ is excluded — that marketplace was retired)
+#   5. Agent skills (claude/agents/*.md, wrapped as skills)
 #
 # Deduplication: Each skill name appears exactly once — first source wins.
 # Shadowed skills emit warnings to stderr.
@@ -18,6 +18,18 @@
 #   <type>\t<name>\t<path>
 # Types: user_skill, plugin_skill, agent_skill, standalone_skill
 # ==============================================================================
+
+# Marketplaces retired on 2026-08-30. Their checkouts and caches survive on disk,
+# so without this filter the export still ships their skills to Codex and Gemini —
+# shadowed by claude/skills/ for the names that were migrated, but live for the
+# ones deliberately dropped. Keep in step with `extraKnownMarketplaces` in
+# claude/settings.json: a marketplace absent there belongs here.
+is_retired_marketplace() {
+    case "$1" in
+        ai-safety-plugins | dev-browser-marketplace) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
 # Internal: emit all entries in priority order (may contain duplicates)
 _enumerate_raw() {
@@ -45,34 +57,9 @@ _enumerate_raw() {
     # 3. Plugin skills from marketplaces/ (canonical — always latest)
     local marketplaces_dir="$claude_dir/plugins/marketplaces"
     if [ -d "$marketplaces_dir" ]; then
-        find "$marketplaces_dir" -name "SKILL.md" -type f 2>/dev/null | while IFS= read -r skill_md; do
-            local skill_dir name
-            skill_dir=$(dirname "$skill_md")
-            name=$(basename "$skill_dir")
-            printf 'plugin_skill\t%s\t%s\n' "$name" "$skill_dir"
-        done
-    fi
-
-    # 4. Plugin skills from cache/ai-safety-plugins/ (user custom plugins)
-    local custom_mp_cache="$claude_dir/plugins/cache/ai-safety-plugins"
-    if [ -d "$custom_mp_cache" ]; then
-        find "$custom_mp_cache" -name "SKILL.md" -type f 2>/dev/null | while IFS= read -r skill_md; do
-            local skill_dir name
-            skill_dir=$(dirname "$skill_md")
-            name=$(basename "$skill_dir")
-            printf 'plugin_skill\t%s\t%s\n' "$name" "$skill_dir"
-        done
-    fi
-
-    # 5. Plugin skills from remaining cache/ dirs (versioned, may be stale)
-    local cache_dir="$claude_dir/plugins/cache"
-    if [ -d "$cache_dir" ]; then
-        for subdir in "$cache_dir"/*/; do
+        for subdir in "$marketplaces_dir"/*/; do
             [ -d "$subdir" ] || continue
-            local subdir_name
-            subdir_name=$(basename "$subdir")
-            # Skip ai-safety-plugins (already handled above)
-            [ "$subdir_name" = "ai-safety-plugins" ] && continue
+            is_retired_marketplace "$(basename "$subdir")" && continue
             find "$subdir" -name "SKILL.md" -type f 2>/dev/null | while IFS= read -r skill_md; do
                 local skill_dir name
                 skill_dir=$(dirname "$skill_md")
@@ -82,7 +69,24 @@ _enumerate_raw() {
         done
     fi
 
-    # 6. Agent skills (claude/agents/*.md → can be wrapped as skills)
+    # 4. Plugin skills from remaining cache/ dirs (versioned, may be stale)
+    local cache_dir="$claude_dir/plugins/cache"
+    if [ -d "$cache_dir" ]; then
+        for subdir in "$cache_dir"/*/; do
+            [ -d "$subdir" ] || continue
+            local subdir_name
+            subdir_name=$(basename "$subdir")
+            is_retired_marketplace "$subdir_name" && continue
+            find "$subdir" -name "SKILL.md" -type f 2>/dev/null | while IFS= read -r skill_md; do
+                local skill_dir name
+                skill_dir=$(dirname "$skill_md")
+                name=$(basename "$skill_dir")
+                printf 'plugin_skill\t%s\t%s\n' "$name" "$skill_dir"
+            done
+        done
+    fi
+
+    # 5. Agent skills (claude/agents/*.md → can be wrapped as skills)
     for agent in "$claude_dir/agents"/*.md; do
         [ -f "$agent" ] || continue
         local name

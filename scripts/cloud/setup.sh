@@ -115,8 +115,11 @@ _dotfiles() {
                  || git stash push -u -m 'setup auto-stash'; } \
             && git checkout $DOTFILES_BRANCH && git pull --ff-only"
     fi
-    run_as "cd $DOTFILES && ./install.sh --profile=cloud"
-    run_as "cd $DOTFILES && ./deploy.sh --profile=cloud"
+    # --non-interactive is explicit rather than inferred: run_as goes through
+    # `sudo bash -c`, so stdin happens not to be a TTY today and the component
+    # menu is skipped by accident. A provisioning path must not depend on that.
+    run_as "cd $DOTFILES && ./install.sh --profile=cloud --non-interactive"
+    run_as "cd $DOTFILES && ./deploy.sh --profile=cloud --non-interactive"
 }
 try "dotfiles" _dotfiles
 

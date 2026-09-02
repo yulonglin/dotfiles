@@ -1,0 +1,409 @@
+#!/usr/bin/env python3
+"""md2artifact - wrap a Markdown document in a reviewable HTML artifact.
+
+Renders Markdown to a self-contained page carrying the review affordances that
+the `artifact-writing` skill requires: a sticky table of contents built
+from the headings, select-to-comment annotation, per-comment edit and delete,
+an unexported-comments guard on tab close, and clipboard export. There is no
+file export: a page-initiated download is inert in the Artifact viewer.
+
+Markdown artifacts cannot carry JavaScript, so a spec or report published as
+raw `.md` silently loses all of that. Run it through here first.
+
+    md2artifact spec.md                  # -> spec.review.html
+    md2artifact spec.md -o /tmp/out.html
+    md2artifact spec.md --title "P1 spec" --no-toc
+
+The output is a fragment (no <html>/<head>/<body>), which is what the Artifact
+tool expects; it is also viewable directly in a browser.
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import re
+import sys
+from pathlib import Path
+
+try:
+    from markdown_it import MarkdownIt
+    from markdown_it.token import Token
+except ImportError:  # pragma: no cover - depends on the host environment
+    sys.exit("md2artifact needs markdown-it-py (uv pip install markdown-it-py)")
+
+# The annotation layer (select-to-comment, export, unload guard) is shared with
+# `annotate-html` so there is exactly one copy of it.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _annotation_layer  # noqa: E402
+
+SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+MERMAID_OPEN = '<pre class="mermaid">'
+MERMAID_CLOSE = "</pre>"
+
+
+def slugify(text: str) -> str:
+    return SLUG_RE.sub("-", text.strip().lower()).strip("-") or "section"
+
+
+def _mermaid_token(source: str) -> Token:
+    """A raw-HTML token carrying one mermaid diagram.
+
+    The parser runs with html disabled so that raw HTML in a reviewed document
+    cannot inject script into the published page. Mermaid diagrams are the one
+    deliberate exception: the Artifact viewer renders <pre class="mermaid">
+    natively. So rather than enabling raw HTML globally, only mermaid blocks
+    are rebuilt as real elements — and only ever as the TEXT CONTENT of a
+    <pre class="mermaid">, never arbitrary markup.
+
+    The diagram source is entity-escaped to hold that promise. It used to be
+    interpolated raw, on the belief that escaping breaks mermaid because labels
+    legitimately carry quotes and <br/>. That belief is wrong: mermaid reads the
+    element's textContent, and the HTML parser decodes &lt;br/&gt; back to
+    <br/> before mermaid ever sees it, so escaping is transparent to the
+    diagram. Interpolating raw was not: a `</pre>` anywhere in the fence closed
+    the element early and everything after it became live markup — verified
+    executing in Chrome from a plain ```mermaid fence. Any Markdown you did not
+    write yourself (a pasted transcript, a model's output, someone else's
+    report) could inject script into your published page.
+    """
+    return Token(
+        "html_block",
+        "",
+        0,
+        content=(
+            f"{MERMAID_OPEN}\n"
+            f"{html.escape(source.strip(), quote=False)}\n"
+            f"{MERMAID_CLOSE}\n"
+        ),
+        block=True,
+    )
+
+
+def mermaid_passthrough(tokens: list[Token]) -> list[Token]:
+    """Rewrite both mermaid spellings into real <pre class="mermaid"> blocks.
+
+    Handles a ```mermaid fence, and a raw <pre class="mermaid">...</pre> block
+    (which, with html off, parses as one or more plain paragraphs). A mermaid
+    example nested inside an ordinary code fence stays escaped, as it should.
+    """
+    out: list[Token] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.type == "fence" and tok.info.strip().split() == ["mermaid"]:
+            out.append(_mermaid_token(tok.content))
+            i += 1
+            continue
+        if (
+            tok.type == "paragraph_open"
+            and i + 1 < len(tokens)
+            and tokens[i + 1].type == "inline"
+            and tokens[i + 1].content.startswith(MERMAID_OPEN)
+        ):
+            # A blank line inside the diagram splits it across paragraphs, so
+            # collect consecutive paragraph triples until one ends </pre>.
+            parts: list[str] = []
+            j = i
+            closed = False
+            while (
+                not closed
+                and j + 2 < len(tokens)
+                and tokens[j].type == "paragraph_open"
+                and tokens[j + 1].type == "inline"
+                and tokens[j + 2].type == "paragraph_close"
+            ):
+                parts.append(tokens[j + 1].content)
+                closed = tokens[j + 1].content.rstrip().endswith(MERMAID_CLOSE)
+                j += 3
+            if closed:
+                source = "\n\n".join(parts).strip()
+                source = source[len(MERMAID_OPEN) : -len(MERMAID_CLOSE)]
+                out.append(_mermaid_token(source))
+                i = j
+                continue
+        out.append(tok)
+        i += 1
+    return out
+
+
+DETAILS_OPEN_RE = re.compile(
+    r"^<details( open)?>(?:\s*<summary>(.*?)</summary>)?$", re.DOTALL
+)
+DETAILS_SUMMARY_RE = re.compile(r"^<summary>(.*?)</summary>$", re.DOTALL)
+DETAILS_CLOSE_RE = re.compile(r"^</details>$")
+
+
+def _details_html_token(content: str) -> Token:
+    return Token("html_block", "", 0, content=content + "\n", block=True)
+
+
+def details_passthrough(tokens: list[Token]) -> list[Token]:
+    """Rebuild <details>/<summary> lines as real collapsible elements.
+
+    The second deliberate exception to html-off, alongside mermaid: a reviewed
+    document legitimately wants collapsible sections (full transcripts beside
+    excerpts, long inventories). Only four exact standalone-paragraph shapes
+    pass through — `<details>`, `<details open>` (either optionally carrying a
+    same-line <summary>), a standalone `<summary>…</summary>`, and
+    `</details>` — and summary text is entity-escaped, so no arbitrary markup
+    or attributes ever reach the page. If the document's details tags don't
+    balance, nothing passes through: an unclosed <details> would otherwise
+    swallow every element after it, so the safe fallback is today's behavior
+    (escaped, visible tags).
+
+    The balance counter is FLAT — it counts tags, not block nesting — so a
+    <details> opened inside a blockquote and closed outside it counts as
+    balanced and passes through, emitting tags that straddle the blockquote.
+    Browsers recover (</details> is in the HTML spec's implied-end-tag branch),
+    so the "cannot swallow the page" guarantee holds; what the reader gets is a
+    cosmetic mess — an empty collapsible and a section that never collapsed.
+    Worth knowing before trusting the fallback to catch every malformed input.
+    """
+
+    def classify(i: int) -> tuple[str, str] | None:
+        if not (
+            i + 2 < len(tokens)
+            and tokens[i].type == "paragraph_open"
+            and tokens[i + 1].type == "inline"
+            and tokens[i + 2].type == "paragraph_close"
+        ):
+            return None
+        text = tokens[i + 1].content.strip()
+        if m := DETAILS_OPEN_RE.match(text):
+            open_tag = "<details open>" if m.group(1) else "<details>"
+            if m.group(2) is not None:
+                return ("open", open_tag + "<summary>" + html.escape(m.group(2)) + "</summary>")
+            return ("open", open_tag)
+        if m := DETAILS_SUMMARY_RE.match(text):
+            return ("summary", "<summary>" + html.escape(m.group(1)) + "</summary>")
+        if DETAILS_CLOSE_RE.match(text):
+            return ("close", "</details>")
+        return None
+
+    # Balance check first: refuse the whole passthrough on any imbalance.
+    depth = 0
+    for i in range(len(tokens)):
+        kind = classify(i)
+        if kind is None:
+            continue
+        if kind[0] == "open":
+            depth += 1
+        elif kind[0] == "close":
+            depth -= 1
+            if depth < 0:
+                return tokens
+    if depth != 0:
+        return tokens
+
+    out: list[Token] = []
+    i = 0
+    in_details = 0
+    while i < len(tokens):
+        kind = classify(i)
+        if kind is not None and (kind[0] != "summary" or in_details):
+            out.append(_details_html_token(kind[1]))
+            if kind[0] == "open":
+                in_details += 1
+            elif kind[0] == "close":
+                in_details -= 1
+            i += 3
+            continue
+        out.append(tokens[i])
+        i += 1
+    return out
+
+
+# ─── Sanctioned passthroughs ──────────────────────────────────────────────────
+# The parser keeps html OFF so a reviewed document can never inject markup into
+# the published page. Anything the Artifact viewer renders natively (mermaid
+# today) or that reviewed documents legitimately need as real elements
+# (<details> collapsibles) gets its own narrow passthrough here instead of
+# flipping html on globally. When Anthropic ships a new viewer-native construct,
+# preserve it by adding one entry to this list: a token pass that rebuilds ONLY
+# that construct's exact spelling as an html_block, escapes any user text it
+# carries, and leaves every other spelling escaped. Each entry ships with a
+# guard test (tests/test_md2artifact_<name>.py).
+PASSTHROUGHS = [mermaid_passthrough, details_passthrough]
+
+
+def render(md_text: str) -> tuple[str, list[tuple[int, str, str]]]:
+    """Return (html, headings) where headings are (level, slug, text)."""
+    md = MarkdownIt("commonmark", {"html": False, "linkify": True}).enable("table")
+    tokens = md.parse(md_text)
+    for passthrough in PASSTHROUGHS:
+        tokens = passthrough(tokens)
+
+    headings: list[tuple[int, str, str]] = []
+    seen: dict[str, int] = {}
+    for i, tok in enumerate(tokens):
+        if tok.type != "heading_open":
+            continue
+        level = int(tok.tag[1])
+        if level > 3:
+            continue
+        text = tokens[i + 1].content
+        slug = slugify(text)
+        if slug in seen:
+            seen[slug] += 1
+            slug = f"{slug}-{seen[slug]}"
+        else:
+            seen[slug] = 0
+        tok.attrSet("id", slug)
+        headings.append((level, slug, text))
+
+    return md.renderer.render(tokens, md.options, {}), headings
+
+
+def toc_html(headings: list[tuple[int, str, str]]) -> str:
+    if not headings:
+        return ""
+    rows = [
+        f'<a href="#{slug}" class="lvl{level}">{html.escape(text)}</a>'
+        for level, slug, text in headings
+        if level >= 2
+    ]
+    if not rows:
+        return ""
+    return '<nav class="toc" aria-label="Contents"><h4>Contents</h4>' + "".join(rows) + "</nav>"
+
+
+def build(md_text: str, *, title: str, with_toc: bool, key: str) -> str:
+    body, headings = render(md_text)
+    toc = toc_html(headings) if with_toc else ""
+    shell_open = '<div class="shell has-toc">' if toc else '<div class="shell">'
+    page = TEMPLATE.format(
+        title=html.escape(title),
+        toc=toc,
+        shell_open=shell_open,
+        body=body,
+    )
+    return page + _annotation_layer.layer_html(key)
+
+
+TEMPLATE = """<title>{title}</title>
+<style>
+:root {{
+  --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
+  --accent:#bd5d3a; --accent-bg:#f7e9e2; --good:#2f6b4f; --good-bg:#e4f0e9;
+  --bad:#a33f2a; --bad-bg:#f9e4de; --code:#f4f2ee; --mark:#fbe6a2;
+}}
+@media (prefers-color-scheme: dark) {{ :root:not([data-theme="light"]) {{
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+}} }}
+:root[data-theme="dark"] {{
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+}}
+*{{box-sizing:border-box}}
+body{{background:var(--bg);color:var(--ink);margin:0;padding:2.5rem 1rem 6rem;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;line-height:1.65}}
+.shell{{max-width:48rem;margin:0 auto}}
+.shell.has-toc{{display:grid;grid-template-columns:15rem minmax(0,1fr);gap:2.4rem;max-width:72rem}}
+.toc{{position:sticky;top:1.5rem;align-self:start;max-height:calc(100vh - 3rem);overflow:auto;
+ font-size:.84rem;border-right:1px solid var(--rule);padding-right:.9rem}}
+.toc h4{{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+ margin:0 0 .45rem;font-weight:700}}
+.toc a{{display:block;color:var(--soft);text-decoration:none;padding:.22rem .45rem;
+ border-radius:5px;border-left:2px solid transparent}}
+.toc a.lvl3{{padding-left:1.2rem;font-size:.8rem}}
+.toc a:hover{{background:var(--code);color:var(--ink)}}
+.toc a.on{{color:var(--ink);background:var(--code);border-left-color:var(--accent);font-weight:600}}
+.doc{{min-width:0}}
+h1{{font-size:1.75rem;line-height:1.25;margin:0 0 .8rem;letter-spacing:-.015em}}
+h2{{font-size:1.2rem;margin:2.4rem 0 .7rem;padding-bottom:.32rem;border-bottom:1px solid var(--rule)}}
+h3{{font-size:1.02rem;margin:1.7rem 0 .45rem}}
+p,li{{margin:0 0 .85rem}}
+ul,ol{{padding-left:1.35rem}}
+blockquote{{margin:1rem 0;padding:.1rem 1rem;border-left:3px solid var(--accent);
+ background:var(--accent-bg);border-radius:0 6px 6px 0}}
+pre{{background:var(--code);border:1px solid var(--rule);border-radius:7px;padding:.75rem .9rem;
+ overflow-x:auto;font-size:.83rem;line-height:1.5}}
+code{{font-family:ui-monospace,"SF Mono",Menlo,monospace}}
+p code,li code,td code,h2 code,h3 code{{background:var(--code);padding:.06rem .32rem;border-radius:4px;font-size:.9em}}
+table{{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0;display:block;overflow-x:auto}}
+th,td{{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}}
+th{{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}}
+hr{{border:0;border-top:1px solid var(--rule);margin:2rem 0}}
+a{{color:var(--accent)}}
+details{{border:1px solid var(--rule);border-radius:7px;background:var(--panel);
+ margin:1rem 0;padding:.55rem .9rem}}
+details>summary{{cursor:pointer;font-weight:600;margin:-.55rem -.9rem;padding:.55rem .9rem;
+ border-radius:7px;list-style-position:inside}}
+details>summary:hover{{color:var(--accent)}}
+details[open]>summary{{border-bottom:1px solid var(--rule);border-radius:7px 7px 0 0;
+ margin-bottom:.8rem;background:var(--code)}}
+@media (max-width:56rem){{
+  .shell.has-toc{{display:block}}
+  .toc{{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--rule);
+   padding:0 0 .8rem;margin-bottom:1.4rem}}
+  .toc a{{display:inline-block;margin:.15rem .3rem .15rem 0;border-left:0}}
+  .toc a.lvl3{{padding-left:.45rem}}
+}}
+</style>
+{shell_open}
+{toc}
+<div class="doc">
+{body}
+</div>
+</div>
+
+<script>
+const tocLinks = Array.from(document.querySelectorAll(".toc a"));
+const targets = tocLinks
+  .map((a) => ({{ a, el: document.getElementById(a.getAttribute("href").slice(1)) }}))
+  .filter((t) => t.el);
+if ("IntersectionObserver" in window && targets.length) {{
+  const io = new IntersectionObserver((entries) => {{
+    entries.forEach((e) => {{
+      if (!e.isIntersecting) return;
+      const hit = targets.find((t) => t.el === e.target);
+      if (!hit) return;
+      tocLinks.forEach((a) => a.classList.remove("on"));
+      hit.a.classList.add("on");
+    }});
+  }}, {{ rootMargin: "-12% 0px -75% 0px" }});
+  targets.forEach((t) => io.observe(t.el));
+}}
+</script>
+"""
+
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("source", type=Path, help="Markdown file to wrap")
+    ap.add_argument("-o", "--output", type=Path, help="output HTML (default: <source>.review.html)")
+    ap.add_argument("--title", help="page title (default: first H1, else the filename stem)")
+    ap.add_argument("--no-toc", action="store_true", help="omit the table of contents")
+    ap.add_argument(
+        "--key",
+        help="localStorage key for comments (default: derived from the filename, so "
+        "republishing the same document keeps its comments)",
+    )
+    args = ap.parse_args(argv)
+
+    if not args.source.is_file():
+        ap.error(f"no such file: {args.source}")
+    text = args.source.read_text(encoding="utf-8")
+
+    title = args.title
+    if not title:
+        m = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
+        title = m.group(1).strip() if m else args.source.stem
+
+    out = args.output or args.source.with_suffix(".review.html")
+    key = args.key or f"review-{slugify(args.source.stem)}"
+    out.write_text(
+        build(text, title=title, with_toc=not args.no_toc, key=key), encoding="utf-8"
+    )
+    print(out)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,66 @@
+# Pastel matplotlib style (pastelplot defaults, no helpers)
+# Usage: plt.style.use('pastel') after symlinking to ~/.config/matplotlib/stylelib/
+# Pastel hexes are softened derivations of the Anthropic secondaries, not brand values.
+
+# Figure (white background)
+figure.facecolor: FFFFFF
+figure.edgecolor: FFFFFF
+figure.figsize: 8, 5
+figure.dpi: 150
+
+# Axes (white background)
+axes.facecolor: FFFFFF
+axes.edgecolor: 141413
+axes.labelcolor: 141413
+axes.linewidth: 0.8
+axes.spines.top: False
+axes.spines.right: False
+axes.prop_cycle: cycler('color', ['E8A288', '9DBFE3', 'A9BC8F', 'D99BB4', 'B3A5D3', 'E3C692', '93C7C1', 'B9B6AE'])
+# PASTEL_CYCLE: CLAY, SKY, OLIVE, FIG, VIOLET, SAND, AQUA, GRAY
+
+axes.titlesize: 14
+axes.titleweight: bold
+axes.labelsize: 11
+axes.labelweight: normal
+
+# Grid
+axes.grid: False
+grid.color: E5E5E5
+grid.linestyle: -
+grid.linewidth: 0.5
+grid.alpha: 0.7
+
+# Ticks
+xtick.color: 141413
+ytick.color: 141413
+xtick.labelsize: 10
+ytick.labelsize: 10
+xtick.direction: out
+ytick.direction: out
+xtick.major.width: 0.8
+ytick.major.width: 0.8
+
+# Legend
+legend.frameon: False
+legend.fontsize: 10
+legend.loc: best
+
+# Lines
+lines.linewidth: 2
+lines.markersize: 6
+
+# Patches (bars, etc.)
+patch.linewidth: 0.5
+patch.edgecolor: 141413
+
+# Font - falls back to sans-serif if Styrene not installed
+font.family: sans-serif
+font.sans-serif: Styrene B LC, Helvetica Neue, Helvetica, Arial, sans-serif
+font.size: 10
+
+# Saving (white background)
+savefig.dpi: 300
+savefig.facecolor: FFFFFF
+savefig.edgecolor: FFFFFF
+savefig.bbox: tight
+savefig.pad_inches: 0.1

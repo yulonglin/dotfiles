@@ -108,7 +108,7 @@ PROBE_TIMEOUT = 5  # a hung hook must not hang --apply
 # string; None appends. Blockers go ahead of nudges so a refused call short-
 # circuits before anything advisory runs.
 WIRINGS = [
-    ("PreToolUse", "Bash", "block_unsafe_install.py", 5, "warn_dep_install.sh"),
+    ("PreToolUse", "Bash", "block_unsafe_install.py", 5, "nudge_modern_tools.sh"),
     ("PreToolUse", "Write", "guard_existing_code.sh", 5, None),
     ("PostToolUse", "Write|Edit", "nudge_synthetic_data.py", 5, None),
     ("PostToolUse", "Write|Edit", "nudge_hyperparam_provenance.py", 5, None),

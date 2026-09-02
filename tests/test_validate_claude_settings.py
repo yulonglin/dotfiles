@@ -3,6 +3,7 @@ from __future__ import annotations
 import http.client
 import importlib.util
 import json
+import re
 import urllib.error
 from pathlib import Path
 
@@ -119,3 +120,59 @@ def test_valid_settings_passes_without_any_schema(mod, monkeypatch, tmp_path):
     )
     errors, _warnings = mod.validate(settings)
     assert errors == []
+
+
+def test_permission_hook_timeout_matches_classifier_budget():
+    """The classifier's internal budget must fit the hook timeout that kills it.
+
+    approval_classifier.py runs two sequential backends. If their combined
+    budget exceeds settings.json's PermissionRequest "timeout", Claude kills the
+    process before it can write the health file or emit its warning — so the
+    statusline reports "healthy" during exactly the outage it exists to surface.
+    That is the 2026-08-03 review finding; these two numbers live in different
+    files and nothing else ties them together.
+    """
+    repo = Path(__file__).resolve().parent.parent
+    settings = json.loads((repo / "claude" / "settings.json").read_text())
+
+    # Import for real rather than regexing: the budget constants are computed
+    # from each other, so a literal-matching test would silently stop matching.
+    spec = importlib.util.spec_from_file_location(
+        "approval_classifier", repo / "claude" / "hooks" / "approval_classifier.py"
+    )
+    clf = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(clf)
+
+    hook_timeout = None
+    for matcher in settings["hooks"].get("PermissionRequest", []):
+        for hook in matcher.get("hooks", []):
+            if "approval_classifier.py" in hook.get("command", ""):
+                hook_timeout = hook.get("timeout")
+    assert hook_timeout is not None, "no PermissionRequest hook runs approval_classifier.py"
+
+    const = lambda name: getattr(clf, name)
+
+    # The Python side must know the same deadline it is being held to.
+    assert const("HOOK_TIMEOUT_SECONDS") == hook_timeout
+
+    # Every backend runs inside TOTAL_BUDGET_SECONDS (the subscription timeout is
+    # clamped to remaining_budget()), so the whole run plus the epilogue reserve
+    # is what has to fit under the hook deadline.
+    assert const("TOTAL_BUDGET_SECONDS") + const("EPILOGUE_RESERVE_SECONDS") <= hook_timeout
+
+    # The API backend must leave usable room for the fallback behind it.
+    assert const("TIMEOUT_SECONDS") + const("SUBSCRIPTION_MIN_SECONDS") <= const("TOTAL_BUDGET_SECONDS")
+
+
+def test_bundled_skills_enabled_but_claude_api_off():
+    repo = Path(__file__).resolve().parent.parent
+    settings = json.loads((repo / "claude" / "settings.json").read_text())
+
+    # Bundled skills stay enabled globally: disabling them all hid the
+    # artifact-design/artifact-capabilities skills the Artifact tool requires
+    # and the /simplify pass. Only claude-api (the 922KB injector) stays off,
+    # via the per-skill override, which the resolver honors pre-injection.
+    # Exact-match on the whole map: a later "artifact-design": "off" entry
+    # would recreate the same silent breakage while a key-wise check passes.
+    assert settings["disableBundledSkills"] is False
+    assert settings["skillOverrides"] == {"claude-api": "off"}

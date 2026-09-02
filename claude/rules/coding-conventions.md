@@ -2,37 +2,14 @@
 
 ## Python
 
-| Need | Tool |
-|---|---|
-| Packages, Python versions, CLI tools | `uv` |
-| Lint + format | `ruff` |
-| Type check | `ty` (beta as of 2026-07-27 — 0.0.x, diagnostics can change between releases) |
-| Task runner | `just` |
-| CLI | `cyclopts` |
-| Config / env | `pydantic-settings` |
-| Validation | `pydantic` |
-| Testing | `pytest` |
-| HTTP | `httpx` |
-| Async | `anyio` |
+Stack: `uv` (packages, Python versions, CLI tools), `ruff` (lint + format), `ty` (types, beta), `just` (tasks), `cyclopts` (CLIs), `pydantic-settings` (config/env), `pydantic` (validation), `pytest`, `httpx`, `anyio`.
 
-Invoke tools via `uv run` — avoids stale `VIRTUAL_ENV`. `uv run --no-sync` when deps are unchanged. Read `.eval` files with Inspect AI's `read_eval_log()`.
+Invoke via `uv run` (`--no-sync` when deps are unchanged); read `.eval` logs with Inspect AI's `read_eval_log()`. **Never call `sys.path.insert` at import time — it crashes the session.** Pass data as pydantic `BaseModel`/`dataclass`, not `pd.DataFrame`; JSONL for intermediates, pandas only at the pipeline edge. Copy shared configs, don't mutate them. Rewrite shell in Python past ~50 lines.
 
-**Never call `sys.path.insert` directly — it crashes the Claude Code session.** Wrap it in a helper invoked only under `if __name__ == "__main__":`.
+## Any language
 
-Pass data as pydantic `BaseModel`/`dataclass`, not `pd.DataFrame`; JSONL for intermediates; pandas only at the pipeline edge for metrics. Copy shared configs/prompts rather than mutating them. Rewrite shell in Python past ~50 lines.
+**Parallelize embarrassingly parallel loops by default** — background N independent iterations and wait (`asyncio.gather`, `Promise.all`, `cmd & … wait`). Sequential only for real ordering dependencies, shared mutable state, or OS-level exclusivity.
 
-## Shell
+`shellcheck` before committing, `# shellcheck shell=bash` atop zsh scripts. UTC/ISO-8601 timestamps: `$(utc_date)`, `$(utc_timestamp)`. TypeScript over JS; bun over npm; Biome over ESLint+Prettier. Available: `rg` `fd` `fzf` `bat` `eza` `z` `delta` `jq` `jless` `dust` `duf` `sd` `trash` `gws`, and `any2md <input>` → Markdown; usage detail in `fast-cli`. Piped output that looks stuck is usually block buffering — `stdbuf -oL` or Python's `-u`.
 
-`shellcheck` before committing; `# shellcheck shell=bash` at the top of zsh scripts. fzf pickers: `--bind 'space:toggle'` for multi-select; `--bind "load:pos(N)+select"` needs fzf 0.54+.
-
-## Any Language
-
-**Parallelize embarrassingly parallel loops by default** — background N independent iterations and wait, rather than looping (`asyncio.gather`, `Promise.all`, `cmd & … wait`). Stay sequential only for a genuine ordering dependency, shared mutable state, or OS-level exclusivity (keystroke UI automation needs the app frontmost).
-
-UTC and ISO-8601 for all timestamps: `$(utc_date)` → `YYYY-MM-DD`, `$(utc_timestamp)` → `YYYY-MM-DD_HH-MM-SS`.
-
-TypeScript over JavaScript; bun/bunx over npm/npx; Biome over ESLint + Prettier. Installs: Homebrew on macOS, apt/dnf/pacman on Linux, then ecosystem-native (`uv tool`, `cargo`, `bun`). Avoid nix, Flatpak, Snap.
-
-Available: `rg` `fd` `fzf` `bat` `eza` `z` `delta` `jq` `jless` `dust` `duf` `sd` (over `sed`) `trash` (over `rm`) `gws`. `any2md <input>` converts to Markdown — arxiv id, file, directory, URL, or `-c` for clipboard.
-
-Visual output (TikZ, CSS, Slidev, matplotlib): `docs/visual-layout-quality.md`.
+**Promote a scratch script once it has run three or more times, at least once unchanged, with a foreseeable next use.** A PATH command goes to `custom_bins/`, a repo task to that repo's `scripts/` or `justfile`, a shell wrapper to `config/aliases/<topic>.sh`, an importable helper into the owning package, a procedure Claude reruns into a skill. Promotion means argument parsing, a `--help`, real exit codes and no hardcoded absolute paths — copy-with-a-new-name is not promotion. Search first, delete the original, and port what it does today.

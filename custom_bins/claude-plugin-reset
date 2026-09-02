@@ -2,15 +2,17 @@
 # claude-plugin-reset — Reinstall plugin defaults for Claude Code.
 #
 # Bundles the full plugin reset workflow:
-#   1. Update all plugins from registered marketplaces
-#   2. Install official marketplace plugins
+#   1. Update all marketplaces declared in settings.json extraKnownMarketplaces
+#   2. Install every plugin in the settings.json enabledPlugins manifest
 #   3. Clean stale plugin cache versions
 #   4. Clean duplicate skill symlinks
-#   5. Re-apply context profile (or reset to global defaults)
+#   5. Repair known plugin-hook incompatibilities
+#
+# The manifest in claude/settings.json is the single source of truth — this
+# script derives its marketplace and plugin lists from it at runtime.
 #
 # Usage:
-#   claude-plugin-reset            # Full reset, re-apply current context.yaml
-#   claude-plugin-reset --global   # Reset to global defaults (remove per-project config)
+#   claude-plugin-reset            # Full reset
 #   claude-plugin-reset --dry-run  # Preview what would happen
 
 set -euo pipefail
@@ -23,23 +25,17 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 DOT_DIR="${DOT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
-GLOBAL_RESET=false
 DRY_RUN=false
-FORCE=false
 
 for arg in "$@"; do
   case "$arg" in
-    --global)  GLOBAL_RESET=true ;;
-    --force|-f) FORCE=true ;;
     --dry-run|-n) DRY_RUN=true ;;
     --help|-h)
-      echo "Usage: $(basename "$0") [--global] [--force] [--dry-run]"
+      echo "Usage: $(basename "$0") [--dry-run]"
       echo ""
       echo "Reinstall plugin defaults for Claude Code."
       echo ""
       echo "Options:"
-      echo "  --global    Reset to global defaults (remove per-project plugin config)"
-      echo "  --force     Force --global even when files are git-tracked"
       echo "  --dry-run   Preview what would happen without making changes"
       echo "  --help      Show this help"
       exit 0
@@ -53,16 +49,20 @@ run_step() {
   echo -e "\n${BOLD}[$step]${NC} $1"
 }
 
+SETTINGS_JSON="$DOT_DIR/claude/settings.json"
+if [[ ! -f "$SETTINGS_JSON" ]]; then
+  echo -e "${RED}Manifest not found: $SETTINGS_JSON${NC}"
+  exit 1
+fi
+
 # --- Step 1: Update plugin marketplaces ---
-source "$DOT_DIR/config.sh"
 run_step "Updating plugin marketplaces..."
 
 if ! command -v claude &>/dev/null; then
   echo -e "  ${RED}claude CLI not found — skipping marketplace update${NC}"
 else
-  for entry in "${PLUGIN_MARKETPLACES[@]}"; do
-    name="${entry%%:*}"
-    src="${entry#*:}"
+  while IFS=$'\t' read -r name src; do
+    [[ -n "$name" ]] || continue
 
     if $DRY_RUN; then
       echo -e "  ${YELLOW}Would ensure marketplace: $name ($src)${NC}"
@@ -81,18 +81,25 @@ else
     # Update
     claude plugin marketplace update "$name" 2>&1 || \
       echo -e "  ${YELLOW}$name update had warnings (may be OK)${NC}"
-  done
+  done < <(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+for name, m in d.get("extraKnownMarketplaces", {}).items():
+    src = m.get("source", {})
+    if src.get("source") == "github" and src.get("repo"):
+        print(name + "\t" + src["repo"])
+' "$SETTINGS_JSON")
 fi
 
-# --- Step 2: Install official marketplace plugins ---
-run_step "Installing official marketplace plugins..."
+# --- Step 2: Install manifest plugins ---
+run_step "Installing manifest plugins (settings.json enabledPlugins)..."
 
 if ! command -v claude &>/dev/null; then
   echo -e "  ${RED}claude CLI not found — skipping${NC}"
 else
   installed=0 skipped=0 failed=0
-  for plugin in "${OFFICIAL_PLUGINS[@]}"; do
-    qualified="${plugin}@claude-plugins-official"
+  while IFS= read -r qualified; do
+    [[ -n "$qualified" ]] || continue
     if $DRY_RUN; then
       echo -e "  ${YELLOW}Would ensure: $qualified${NC}"
       continue
@@ -108,7 +115,13 @@ else
       echo -e "  ${YELLOW}Failed: $qualified${NC}"
       failed=$((failed + 1))
     fi
-  done
+  done < <(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+for k, v in sorted(d.get("enabledPlugins", {}).items()):
+    if v is True:
+        print(k)
+' "$SETTINGS_JSON")
   if ! $DRY_RUN; then
     echo -e "  ${GREEN}Installed: $installed${NC}, Skipped: $skipped, Failed: $failed"
   fi
@@ -140,33 +153,21 @@ else
   echo -e "  ${YELLOW}clean_plugin_symlinks.sh not found — skipping${NC}"
 fi
 
-# --- Step 5: Re-apply context profile ---
-if $GLOBAL_RESET; then
-  run_step "Resetting to global plugin defaults..."
-  if command -v claude-context &>/dev/null; then
-    local force_flag=""
-    $FORCE && force_flag="--force"
-    if $DRY_RUN; then
-      echo -e "  ${YELLOW}Would run: claude-context --clean $force_flag${NC}"
-    else
-      claude-context --clean $force_flag
-    fi
-  else
-    echo -e "  ${YELLOW}claude-context not found — skipping${NC}"
-  fi
-else
-  run_step "Re-applying context profile..."
-  if command -v claude-context &>/dev/null; then
-    if $DRY_RUN; then
-      echo -e "  ${YELLOW}Would re-apply current context.yaml${NC}"
-      claude-context --list
-    else
-      claude-context
-    fi
-  else
-    echo -e "  ${YELLOW}claude-context not found — skipping${NC}"
-  fi
+# --- Step 5: Repair known plugin-hook incompatibilities ---
+run_step "Repairing known plugin-hook incompatibilities..."
+
+RALPH_REPAIR="$DOT_DIR/claude/hooks/patch_ralph_loop_stop_hook.py"
+if [[ ! -f "$RALPH_REPAIR" ]]; then
+  echo -e "  ${YELLOW}Ralph Stop-hook repair not found — skipping${NC}"
+elif $DRY_RUN; then
+  echo -e "  ${YELLOW}Would repair installed Ralph Loop Stop hooks${NC}"
+elif ! python3 "$RALPH_REPAIR"; then
+  echo -e "  ${YELLOW}Ralph Stop-hook source changed — skipped unsafe repair${NC}"
 fi
+
+# Context profiles were removed — every installed plugin is enabled everywhere
+# via the all-true enabledPlugins manifest in settings.json, so there is no
+# per-project plugin state left to re-apply or reset.
 
 # --- Done ---
 echo ""

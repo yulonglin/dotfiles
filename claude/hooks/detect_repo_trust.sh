@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# SessionStart hook: cache repo trust level for auto_classify.py
-# Writes JSON to ~/.cache/claude/repo-trust.json so auto_classify
+# SessionStart hook: cache repo trust level for approval_classifier.py
+# Writes JSON to ~/.cache/claude/repo-trust.json so approval_classifier
 # doesn't need to fork git on every PermissionRequest.
 
 set -euo pipefail

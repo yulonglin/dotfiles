@@ -1,6 +1,6 @@
 ---
 name: sweep-ai-safety
-description: Sweep recent AI safety research from curated sources (Anthropic alignment science / red team, OpenAI, GDM, Apollo, Redwood, METR, FAR AI, Truthful AI, alphaxiv, arXiv) and surface items matching tracked topic terms (inoculation prompting, reward hacking, exploration hacking, metagaming, eval gaming, OOCR, scheming, alignment faking, sandbagging, etc.). Use when asked to "sweep AI safety", "what's new in alignment", "any recent papers on X", "weekly safety digest", or for staying current on AI safety literature.
+description: "Sweep recent AI safety research (Anthropic, OpenAI, GDM, Apollo, Redwood, METR, arXiv). Use on 'sweep AI safety', 'what is new in alignment'."
 ---
 
 # Sweep AI Safety Research

@@ -484,3 +484,260 @@ def test_a_structurally_damaged_snapshot_is_refused(vs, monkeypatch, tmp_path, c
         verify(vs)
     out = capsys.readouterr().out.lower()
     assert "quick_check" in out or "malformed" in out
+
+
+# --------------------------------------------------------------------------
+# Pre-emptive exclusion: shut the door before the directory exists
+#
+# Exclusion is not retroactive, so the only safe moment to exclude a
+# regenerable directory is while the server still has zero rows under it. The
+# tripwire therefore derives candidates from the *manifests* that would create
+# them (package.json -> node_modules, pyproject.toml -> .venv, ...) rather than
+# waiting for the directory to appear and cost quota. Zero-server-rows is the
+# entire safety condition; every test below exists to keep it load-bearing.
+# --------------------------------------------------------------------------
+
+
+def make_vault(vs, monkeypatch, tmp_path, files):
+    """A real on-disk vault for predicted_exclusions()/cmd_tripwire() to walk.
+
+    Call before make_sync_root: that fixture stamps the *current* VAULT into
+    config.json's vaultPath, which find_state_dir insists must match.
+    """
+    vault = tmp_path / "vault"
+    vault.mkdir(parents=True, exist_ok=True)
+    for rel, body in files.items():
+        p = vault / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body)
+    monkeypatch.setattr(vs, "VAULT", vault)
+    return vault
+
+
+def tripwire(vs, **over):
+    args = argparse.Namespace(max_file_mb=vs.DEFAULT_MAX_FILE_MB,
+                              auto_exclude=False, dry_run=False)
+    for k, v in over.items():
+        setattr(args, k, v)
+    return vs.cmd_tripwire(args)
+
+
+def test_predicted_exclusions_derives_siblings_of_every_manifest(vs, monkeypatch, tmp_path):
+    make_vault(vs, monkeypatch, tmp_path, {
+        "site/package.json": "{}",
+        "tool/pyproject.toml": "",
+        "rs/Cargo.toml": "",
+        "notes/a.md": "hello",
+    })
+    found = set(vs.predicted_exclusions([]))
+    assert "site/node_modules" in found
+    assert "rs/target" in found
+    assert {"tool/.venv", "tool/venv", "tool/__pycache__"} <= found
+    assert not any(f.startswith("notes/") for f in found), \
+        "a directory with no manifest can regenerate nothing"
+
+
+def test_predicted_exclusions_does_not_re_propose_what_is_already_excluded(vs, monkeypatch,
+                                                                          tmp_path):
+    """--excluded-folders is whole-list assignment, so a duplicate is not
+    harmless noise -- it is a second copy of the same string in the list that
+    gets written back to config.json."""
+    make_vault(vs, monkeypatch, tmp_path, {"a/package.json": "{}", "b/package.json": "{}"})
+    assert vs.predicted_exclusions(["a/node_modules"]) == ["b/node_modules"]
+
+
+def test_predicted_exclusions_stops_descending_into_an_excluded_parent(vs, monkeypatch, tmp_path):
+    """Excluding `a` already covers `a/node_modules`; re-adding the child would
+    grow the list forever across nightly runs."""
+    make_vault(vs, monkeypatch, tmp_path, {"a/deep/package.json": "{}", "b/package.json": "{}"})
+    assert vs.predicted_exclusions(["a"]) == ["b/node_modules"]
+
+
+def test_predicted_exclusions_ignores_dot_directories(vs, monkeypatch, tmp_path):
+    """Obsidian never syncs dot-directories, so a lockfile inside one (a
+    .claude worktree, say) can never consume quota and must not be proposed."""
+    make_vault(vs, monkeypatch, tmp_path, {".claude/worktrees/x/package.json": "{}"})
+    assert vs.predicted_exclusions([]) == []
+
+
+def test_server_rows_under_does_not_match_a_sibling_prefix(vs, monkeypatch, tmp_path):
+    """The safety condition is a row *count*, so a count that over-matches is a
+    false stranding alarm and one that under-matches is a real stranding."""
+    state = make_sync_root(vs, monkeypatch, tmp_path, [
+        ("site/node_modules/a.js", LIVE),
+        ("site/node_modules_old/b.js", LIVE),
+        ("site/node-modules/c.js", LIVE),
+        ("other/node_modules/d.js", LIVE),
+    ])
+    conn = sqlite3.connect(state / "state.db")
+    try:
+        assert vs.server_rows_under(conn, "site/node_modules") == 1
+        assert vs.server_rows_under(conn, "site/nothing_here") == 0
+    finally:
+        conn.close()
+
+
+def test_auto_exclude_refuses_a_path_that_already_has_server_rows(vs, monkeypatch, tmp_path,
+                                                                  capsys):
+    """The non-retroactive trap. Excluding a folder whose rows are live orphans
+    them on the server with no way left to reclaim the quota -- the exact
+    failure the whole gate exists to prevent, reached here by a nightly job
+    nobody is watching."""
+    make_vault(vs, monkeypatch, tmp_path, {"site/package.json": "{}"})
+    make_sync_root(vs, monkeypatch, tmp_path, [("site/node_modules/left-pad/index.js", LIVE)])
+
+    calls = []
+
+    def record(cmd, **kw):
+        # A real CompletedProcess, so a regression fails on the explicit
+        # assertion below rather than incidentally on a None return value.
+        calls.append(cmd)
+        return vs.subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(vs, "resolve_ob", lambda: "ob")
+    monkeypatch.setattr(vs.subprocess, "run", record)
+
+    assert tripwire(vs, auto_exclude=True) == 2
+    assert calls == [], "a path with live server rows must never be excluded"
+    assert "ALREADY ON SERVER" in capsys.readouterr().out
+
+
+def test_auto_exclude_applies_zero_row_paths_and_re_lists_the_existing_ones(vs, monkeypatch,
+                                                                           tmp_path):
+    make_vault(vs, monkeypatch, tmp_path, {"site/package.json": "{}"})
+    state = make_sync_root(vs, monkeypatch, tmp_path, [("notes/a.md", LIVE)],
+                           excluded=["already/there"])
+
+    sent = {}
+
+    def fake_run(cmd, **kw):
+        sent["cmd"] = cmd
+        folders = cmd[cmd.index("--excluded-folders") + 1].split(",")
+        cfg = json.loads((state / "config.json").read_text())
+        cfg[vs.EXCLUSION_KEY] = folders
+        (state / "config.json").write_text(json.dumps(cfg))
+        return vs.subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(vs, "resolve_ob", lambda: "ob")
+    monkeypatch.setattr(vs.subprocess, "run", fake_run)
+
+    # Nonzero even on success: the new filter does not take effect until the
+    # daemon is restarted, so the run still needs a human to look at it.
+    assert tripwire(vs, auto_exclude=True) == 2
+    cmd = sent["cmd"]
+    assert "--file-types" not in cmd, \
+        "EX-7: an unattended job must not rewrite a setting it was not asked to change"
+    folders = cmd[cmd.index("--excluded-folders") + 1].split(",")
+    assert "already/there" in folders, "omitting an entry silently un-excludes it"
+    assert "site/node_modules" in folders
+
+
+def test_auto_exclude_is_inert_without_the_flag(vs, monkeypatch, tmp_path, capsys):
+    make_vault(vs, monkeypatch, tmp_path, {"site/package.json": "{}"})
+    make_sync_root(vs, monkeypatch, tmp_path, [])
+
+    def explode():
+        raise AssertionError("reporting must never invoke ob")
+
+    monkeypatch.setattr(vs, "resolve_ob", explode)
+    assert tripwire(vs) == 2
+    assert "--auto-exclude" in capsys.readouterr().out
+
+
+def test_tripwire_without_the_flag_attribute_still_reports(vs, monkeypatch, tmp_path):
+    """cmd_tripwire is also driven with a hand-built Namespace; a missing flag
+    must mean report-only, not an AttributeError raised mid-report."""
+    make_vault(vs, monkeypatch, tmp_path, {"site/package.json": "{}"})
+    make_sync_root(vs, monkeypatch, tmp_path, [])
+    assert vs.cmd_tripwire(argparse.Namespace(max_file_mb=vs.DEFAULT_MAX_FILE_MB)) == 2
+
+
+def test_predicted_exclusions_finds_a_manifest_under_a_nested_dot_directory(
+        vs, monkeypatch, tmp_path):
+    """cli.js rejects a dot only in the FIRST path segment (`e.startsWith(".")`
+    on the whole vault-relative path). A nested dot-dir is therefore syncable,
+    so pruning every dot-dir would blind the walk to a real quota risk."""
+    make_vault(vs, monkeypatch, tmp_path, {
+        ".claude/worktrees/x/package.json": "{}",   # root dot-dir: unsyncable
+        "site/.tmp/pkg/package.json": "{}",         # nested: syncable
+    })
+    # NB "pkg", not "build"/"dist": those are themselves in REGENERABLE_DIRS
+    # and get pruned as already-generated trees, which would make this pass or
+    # fail for a reason unrelated to the dot-dir rule under test.
+    assert vs.predicted_exclusions([]) == ["site/.tmp/pkg/node_modules"]
+
+
+def test_tripwire_reports_rows_that_appeared_under_an_already_excluded_path(
+        vs, monkeypatch, tmp_path, capsys):
+    """The back door: filters are read at client startup, so a tree created
+    after an exclusion but before the restart is synced by the still-old
+    filter. Every local scan then prunes that path, so the server side is the
+    only thing that can still see the rows."""
+    make_vault(vs, monkeypatch, tmp_path, {"site/package.json": "{}"})
+    make_sync_root(vs, monkeypatch, tmp_path,
+                   [("site/node_modules/left-pad/readme.md", LIVE)],
+                   excluded=["site/node_modules"])
+
+    assert tripwire(vs) == 2
+    out = capsys.readouterr().out
+    assert "EXCLUDED BUT ON SERVER" in out
+    assert "site/node_modules" in out
+
+
+def test_tripwire_does_not_cry_leak_for_a_clean_or_non_regenerable_exclusion(
+        vs, monkeypatch, tmp_path, capsys):
+    """Scoped to regenerable basenames: a deliberately excluded user folder
+    holding rows is a choice, not a leak, and must not raise the alarm that
+    means 'quota is being consumed invisibly'."""
+    make_vault(vs, monkeypatch, tmp_path, {"site/package.json": "{}"})
+    make_sync_root(vs, monkeypatch, tmp_path, [("Private/journal.md", LIVE)],
+                   excluded=["site/node_modules", "Private"])
+
+    assert tripwire(vs) == 0, "no findings: one exclusion is empty, one is deliberate"
+    assert "EXCLUDED BUT ON SERVER" not in capsys.readouterr().out
+
+
+LIVE_DIR = '{"deleted":false,"folder":true}'
+
+
+def test_leak_alarm_ignores_folder_rows(vs, monkeypatch, tmp_path, capsys):
+    """Folder rows hold no bytes. The live vault has 2,927 of them under one
+    already-excluded node_modules, so counting them would fire this alarm every
+    night over zero quota -- and a nightly false alarm is an unread channel."""
+    make_vault(vs, monkeypatch, tmp_path, {"site/package.json": "{}"})
+    make_sync_root(vs, monkeypatch, tmp_path,
+                   [("site/node_modules/a/b", LIVE_DIR),
+                    ("site/node_modules/a/c", LIVE_DIR)],
+                   excluded=["site/node_modules"])
+    assert tripwire(vs) == 0
+    assert "EXCLUDED BUT ON SERVER" not in capsys.readouterr().out
+
+
+def test_leak_alarm_fires_on_a_real_file_under_an_excluded_path(
+        vs, monkeypatch, tmp_path, capsys):
+    """One real file among the folder rows is bytes on the server behind a
+    filter that hides them locally -- exactly what nothing else can see."""
+    make_vault(vs, monkeypatch, tmp_path, {"site/package.json": "{}"})
+    make_sync_root(vs, monkeypatch, tmp_path,
+                   [("site/node_modules/a/b", LIVE_DIR),
+                    ("site/node_modules/a/readme.md", LIVE)],
+                   excluded=["site/node_modules"])
+    assert tripwire(vs) == 2
+    assert "EXCLUDED BUT ON SERVER" in capsys.readouterr().out
+
+
+def test_auto_exclude_gate_still_counts_folder_rows(vs, monkeypatch, tmp_path, capsys):
+    """The alarm is lenient, the gate is not: folder rows are still rows the
+    server knows about, and excluding over them would freeze that state."""
+    make_vault(vs, monkeypatch, tmp_path, {"site/package.json": "{}"})
+    make_sync_root(vs, monkeypatch, tmp_path, [("site/node_modules/a", LIVE_DIR)])
+
+    calls = []
+    monkeypatch.setattr(vs, "resolve_ob", lambda: "ob")
+    monkeypatch.setattr(vs.subprocess, "run",
+                        lambda cmd, **kw: (calls.append(cmd),
+                                           vs.subprocess.CompletedProcess(cmd, 0))[1])
+
+    assert tripwire(vs, auto_exclude=True) == 2
+    assert calls == [], "folder rows must still block a pre-emptive exclusion"
+    assert "ALREADY ON SERVER" in capsys.readouterr().out

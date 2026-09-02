@@ -31,6 +31,18 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 DOT_DIR="${DOT_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 SECRETS_HELPER="$DOT_DIR/custom_bins/dotfiles-secrets"
+
+# The dotfiles main checkout, even when this script runs from a git worktree.
+# Used for paths written into a generated .envrc, which must outlive any
+# worktree. Degrades to DOT_DIR outside a git tree.
+main_checkout_dir() {
+    local common
+    common=$(git -C "$DOT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
+        || { printf '%s\n' "$DOT_DIR"; return; }
+    [[ -n "$common" ]] || { printf '%s\n' "$DOT_DIR"; return; }
+    printf '%s\n' "$(dirname "$common")"
+}
+
 # shellcheck source=/dev/null
 source "$DOT_DIR/scripts/helpers/dotfiles_secrets.sh"
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -257,6 +269,27 @@ binding_display() {
     fi
 }
 
+# How many BWS keys share this env name. >1 means the machine switch governs it,
+# so the binding choice is follow-the-switch vs pin-a-tenant.
+_KEYS_META_CACHE=""
+_KEYS_META_LOADED=false
+env_name_key_count() {
+    if [[ "$_KEYS_META_LOADED" == false ]]; then
+        _KEYS_META_CACHE=$("$SECRETS_HELPER" keys-meta 2>/dev/null || true)
+        _KEYS_META_LOADED=true
+    fi
+    printf '%s\n' "$_KEYS_META_CACHE" \
+        | awk -F'\t' -v e="$1" '$1 == e { n++ } END { print n+0 }'
+}
+
+# True when the machine switch already declares an active key for this env name.
+# Undeclared + ambiguous is the only combination a follow-mode binding cannot
+# resolve, so this is what separates "fine" from "warn".
+env_name_is_declared() {
+    "$SECRETS_HELPER" scope-entries "$1" 2>/dev/null \
+        | awk -F'\t' '$1 == "active" { found = 1 } END { exit !found }'
+}
+
 normalize_export_bindings() {
     # --lenient: drop ambiguous bindings with a warning instead of dying.
     # Used when re-reading existing .envrc state (picker, --list); a stale
@@ -284,24 +317,27 @@ normalize_export_bindings() {
             die "Duplicate export binding for $env_key"
         fi
 
-        # Refuse plain env-name lookups when multiple BWS secrets share that
-        # env name — otherwise `dotfiles-secrets shell` would silently pick
-        # one tenant's value by list order. Applies to both direct bindings
-        # (OPENAI_API_KEY) and renamed bindings (PROJECT_KEY=OPENAI_API_KEY);
-        # only exact "ENV - description" lookups bypass this check.
-        if ! is_bws_key "$secret_key"; then
+        # A plain env name is a FOLLOW-MODE binding: it resolves through
+        # config/secrets-global.conf at load time, so the repo tracks whichever
+        # key the machine has active and a newly added BWS key never breaks it.
+        # Only exact "ENV - description" / bws-id: bindings pin a specific key.
+        #
+        # This used to be refused outright, because `dotfiles-secrets shell`
+        # would silently pick one tenant's value by list order. That path is now
+        # conf-consulted and fails loud, so the binding is correct — but it can
+        # only resolve once the machine has chosen. Warn when the name is
+        # ambiguous and still undeclared, and name the command that fixes it.
+        if ! is_bws_key "$secret_key" && [[ "$lenient" == false ]]; then
             if ! $keys_meta_loaded; then
                 keys_meta=$("$SECRETS_HELPER" keys-meta 2>/dev/null || true)
                 keys_meta_loaded=true
             fi
             local match_count
             match_count=$(printf '%s\n' "$keys_meta" | awk -F'\t' -v e="$secret_key" '$1 == e { n++ } END { print n+0 }')
-            if [[ "$match_count" -gt 1 ]]; then
-                if [[ "$lenient" == true ]]; then
-                    echo "Warning: existing binding '$secret_key' matches $match_count BWS secrets — pick an exact 'ENV - description' in the picker." >&2
-                    continue
-                fi
-                die "Ambiguous: $match_count BWS secrets share env name '$secret_key'. Bind an exact key via ENV=ENV - description."
+            if [[ "$match_count" -gt 1 ]] && ! env_name_is_declared "$secret_key"; then
+                echo "Warning: '$secret_key' maps to $match_count BWS keys and this machine has not chosen one." >&2
+                echo "         The binding is fine (it follows the machine switch), but it cannot resolve yet." >&2
+                echo "         Choose once, machine-wide:  secrets-use $secret_key" >&2
             fi
         fi
 
@@ -411,22 +447,21 @@ write_envrc() {
     local telegram_secret="$1"
     shift
     local export_bindings=("$@")
-    local helper_bin="$DOT_DIR/custom_bins/dotfiles-secrets"
-    local binding env_key secret_key
-    local plain_required_secrets=()   # Valid env names — loaded via 'shell' batch
-    local bws_key_bindings=()         # Secret key contains spaces — use 'get-value'
-    local final_env_names=""
+    # Bake the MAIN checkout's helper, never a worktree copy: this absolute path
+    # is written into the repo's .envrc and outlives the shell that generated it.
+    # A worktree path would break that .envrc when the worktree is removed.
+    local helper_bin
+    helper_bin="$(main_checkout_dir)/custom_bins/dotfiles-secrets"
+    local binding env_key secret_key scrub_names=""
 
     for binding in "${export_bindings[@]}"; do
         env_key=$(binding_env_key "$binding")
         secret_key=$(binding_secret_key "$binding")
-        final_env_names+="$env_key"$'\n'
-        if is_bws_key "$secret_key"; then
-            bws_key_bindings+=("$binding")
-        else
-            if ! has_line "$secret_key" "$(printf '%s\n' "${plain_required_secrets[@]}")"; then
-                plain_required_secrets+=("$secret_key")
-            fi
+        if ! has_line "$env_key" "$scrub_names"; then
+            scrub_names+="$env_key"$'\n'
+        fi
+        if ! is_bws_key "$secret_key" && ! has_line "$secret_key" "$scrub_names"; then
+            scrub_names+="$secret_key"$'\n'
         fi
     done
 
@@ -440,13 +475,22 @@ write_envrc() {
             printf '# setup-envrc telegram-secret: %s\n' "$telegram_secret"
         fi
         printf 'watch_file %q\n' "$helper_bin"
-        # Watch the secrets cache file so direnv reloads when background refresh lands
-        local _cache_path
-        _cache_path=$("$helper_bin" cache-path 2>/dev/null)
-        [[ -n "$_cache_path" ]] && printf 'watch_file %q\n' "$_cache_path"
+        # Watch the machine switch so `secrets-use` propagates without any
+        # per-repo action: a shell already sitting in this repo re-exports at
+        # its next prompt. Watched even when the file does not exist yet —
+        # direnv treats creation as a change, which is exactly the case where a
+        # follow-mode binding goes from unresolvable to resolvable.
+        # `|| true` is load-bearing: this block runs under `set -e` inside a
+        # redirected group, so a helper that exits non-zero (an older
+        # dotfiles-secrets with no `scope-conf-path`, a transient failure) would
+        # abort generation here and leave a half-written .envrc with no message.
+        # A missing watch_file only costs a manual `direnv reload`.
+        local _scope_conf
+        _scope_conf=$("$helper_bin" scope-conf-path 2>/dev/null) || true
+        [[ -n "$_scope_conf" ]] && printf 'watch_file %q\n' "$_scope_conf"
         # Watch backend token file so direnv detects when BWS becomes available
         local _paths_output
-        _paths_output=$("$helper_bin" paths 2>/dev/null)
+        _paths_output=$("$helper_bin" paths 2>/dev/null) || true
         local _bws_token
         _bws_token=$(printf '%s\n' "$_paths_output" | sed -n 's/^BWS_TOKEN_FILE=//p')
         [[ -n "$_bws_token" ]] && printf 'watch_file %q\n' "$_bws_token"
@@ -456,49 +500,34 @@ write_envrc() {
         fi
         printf 'DOTFILES_SECRETS_BIN=%q\n' "$helper_bin"
 
-        # Batch path: plain env-name secrets (no spaces) via `shell` eval
-        if [[ ${#plain_required_secrets[@]} -gt 0 ]]; then
-            # Capture-then-eval, never eval "$(...)": a command substitution
-            # inside eval throws away the helper's exit status, so if a newly
-            # added BWS secret makes one of these env names ambiguous after this
-            # .envrc was generated, the eval would silently expand to nothing and
-            # leave the variable unset with no indication why.
+        # Clear managed names before the backend call. A failed refresh must not
+        # leave an inherited or previously exported credential in the project.
+        # Plain renamed sources are scrubbed too; exact BWS keys and UUIDs are
+        # selectors, not shell variable names.
+        if [[ -n "$scrub_names" ]]; then
+            while IFS= read -r env_key; do
+                [[ -n "$env_key" ]] && printf 'unset %s\n' "$env_key"
+            done <<< "$scrub_names"
+        fi
+
+        # Resolve every binding through one helper process so one direnv load
+        # performs one backend read. This also gives the repo one consistent
+        # snapshot when it mixes follow-mode names and pinned UUIDs.
+        if [[ ${#export_bindings[@]} -gt 0 ]]; then
             # shellcheck disable=SC2016
-            printf 'if _dfs_exports=$("$DOTFILES_SECRETS_BIN" shell'
-            for secret_key in "${plain_required_secrets[@]}"; do
-                printf ' %q' "$secret_key"
+            printf 'if _dfs_exports=$("$DOTFILES_SECRETS_BIN" shell-bindings'
+            local binding
+            for binding in "${export_bindings[@]}"; do
+                printf ' %q' "$binding"
             done
             echo '); then'
             # shellcheck disable=SC2016
             printf '%s\n' '  eval "$_dfs_exports"'
             printf '%s\n' 'else'
-            printf '%s\n' '  echo "direnv: dotfiles-secrets could not resolve this repo'"'"'s secrets (reason above). If a new BWS key made an env name ambiguous, re-run: setup-envrc" >&2'
+            printf '%s\n' '  echo "direnv: dotfiles-secrets could not resolve this repo'"'"'s secrets (reason above). Re-run: setup-envrc" >&2'
             printf '%s\n' 'fi'
             printf '%s\n' 'unset _dfs_exports'
-
-            for binding in "${export_bindings[@]}"; do
-                env_key=$(binding_env_key "$binding")
-                secret_key=$(binding_secret_key "$binding")
-                is_bws_key "$secret_key" && continue
-                if [[ "$env_key" != "$secret_key" ]]; then
-                    printf 'export %s="$%s"\n' "$env_key" "$secret_key"
-                fi
-            done
-
-            for secret_key in "${plain_required_secrets[@]}"; do
-                if ! has_line "$secret_key" "$final_env_names"; then
-                    printf 'unset %s\n' "$secret_key"
-                fi
-            done
         fi
-
-        # Per-binding path: BWS keys with spaces (e.g. "OPENAI_API_KEY - mats")
-        for binding in "${bws_key_bindings[@]}"; do
-            env_key=$(binding_env_key "$binding")
-            secret_key=$(binding_secret_key "$binding")
-            # shellcheck disable=SC2016
-            printf 'export %s="$("$DOTFILES_SECRETS_BIN" get-value %q)"\n' "$env_key" "$secret_key"
-        done
 
         echo 'unset DOTFILES_SECRETS_BIN'
 
@@ -1355,8 +1384,10 @@ COPY_EOF
         fi
 
         if [[ "$action" == "ctrl-r" ]]; then
-            printf '\nRefreshing secrets from %s...\n' "$backend" >/dev/tty
-            "$SECRETS_HELPER" cache-refresh >/dev/null 2>&1 || true
+            # Nothing to invalidate — every call is live. Re-looping re-fetches;
+            # drop this process's key list so a key added elsewhere shows up.
+            printf '\nRe-reading secrets from %s...\n' "$backend" >/dev/tty
+            _KEYS_META_LOADED=false
             continue
         fi
 
@@ -1389,7 +1420,9 @@ COPY_EOF
             else
                 "$SECRETS_HELPER" set "$new_key" "$new_value" >/dev/tty
             fi
-            "$SECRETS_HELPER" cache-clear >/dev/null 2>&1 || true
+            # `set` settles the machine default itself when this add makes an
+            # env name ambiguous (R4). Nothing to invalidate; just re-read.
+            _KEYS_META_LOADED=false
             continue
         fi
 
@@ -1415,9 +1448,29 @@ COPY_EOF
             local_name=""
             read -r local_name </dev/tty
             [[ -n "$local_name" ]] || local_name="$default_env"
+            # When several BWS keys share this env name, the default is to
+            # FOLLOW the machine switch: the repo tracks whatever `secrets-use`
+            # has active, and never needs re-running when the key changes. Pin
+            # only when this repo genuinely needs a different tenant than the
+            # machine default (e.g. MATS billing vs personal).
+            follow_mode=false
+            if [[ "$local_name" == "$default_env" ]] \
+               && [[ "$(env_name_key_count "$default_env")" -gt 1 ]]; then
+                printf '  "%s" has several keys. Follow the machine switch, or pin this one? [F/p]: ' \
+                    "$default_env" >/dev/tty
+                pin_answer=""
+                read -r pin_answer </dev/tty
+                case "$pin_answer" in
+                    [Pp]*) follow_mode=false ;;
+                    *)     follow_mode=true ;;
+                esac
+            fi
+
             # Bind by UUID when available — stable even if the BWS key name changes
             # or a sibling key with the same env_name is added later.
-            if [[ -n "$item_uuid" ]]; then
+            if [[ "$follow_mode" == true ]]; then
+                selected_export_bindings+=("$local_name")
+            elif [[ -n "$item_uuid" ]]; then
                 selected_export_bindings+=("$local_name=bws-id:$item_uuid")
             elif [[ "$local_name" == "$bws_name" ]]; then
                 selected_export_bindings+=("$bws_name")

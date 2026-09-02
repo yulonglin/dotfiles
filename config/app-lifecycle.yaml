@@ -1,0 +1,47 @@
+# What each trigger may do to each app. `manual:` is the macOS Shortcut's action
+# and the ceiling for the idle job's destructive rungs; `auto:` governs hiding
+# alone. Scale: skip < hide < close < quit.
+#
+# Started as `clear-mac-apps --migrate-config` output from the old sectioned
+# config, then five apps were deliberately moved to the `quit` default:
+#   Tailscale, NordVPN, Codex - the GUI is not the daemon. Quitting the
+#     Tailscale and NordVPN apps leaves their network extensions running
+#     (io.tailscale.ipn.macsys.network-extension 58 MB, com.nordvpn.macos.helper
+#     plus Shield.systemextension 205 MB), so the connection survives.
+#     Tailscale has since been pulled back to `close` below: the reasoning
+#     above says quitting is SAFE, not that it is wanted, and reopening the
+#     menu bar app is the friction this avoids. NordVPN and Codex still quit.
+#   Claude, Granola - the one change that will actually be felt, and the point
+#     of the exercise: closing their windows left the processes resident.
+
+defaults:
+  manual: quit
+  auto: quit
+  hide_after: 15
+  close_after: 15
+  quit_after: 30
+  user_idle: 5
+  min_visible_percent: 40
+
+apps:
+  Ghostty:               {manual: skip, auto: skip}
+  Lettera:               {manual: skip}
+  Super Productivity:    {manual: close}
+  Things:                {manual: close}
+  Things3:               {manual: close}
+  Focusmate (Safari):    {manual: hide}
+  zoom.us:               {manual: skip}
+  Obsidian:              {manual: hide}
+  VoiceInk:              {manual: close}
+  Bear:                  {manual: close}
+  MacMediaKeyForwarder:  {manual: close}
+  Spotify:               {manual: close}   # playback survives a close; never quit
+  Mouseless:             {manual: close}
+  Antinote:              {manual: close}
+  Tailscale:             {manual: close}
+  Spark Desktop:         {slow: true}      # ignores keystrokes; poll up to 30 s
+  FaceTime:              {manual: quit, auto: skip}   # never touched automatically
+
+protect_windows:
+  - Google Meet
+  - Focusmate (Safari)

@@ -1,0 +1,116 @@
+---
+name: inspect-ai-evals
+description: "Silent failure modes running inspect_ai evals against vLLM/Modal/RunPod endpoints: max_samples, max_connections, stop_reason, eval log."
+---
+
+# Inspect AI evals: silent failure modes
+
+Each of these produced a run that *completed* with numbers that looked fine. Ordered by how much they cost when missed. Verified against `inspect_ai` 0.3.241; re-check defaults against the installed version before quoting one.
+
+## 0. Preflight before every launch, and use the harness's dry-run
+
+The most expensive habit is discovering a launch-blocking fault *after* committing to a run. If the harness has a `--dry-run` — attest, probe, bind data, publish identity, stop before any generation — use it every single time. On 2026-08-12 it would have surfaced a 303-redirect defect in about 90 seconds; not using it turned four diagnostic cycles into roughly two hours, and every one of those failures was reachable in a minute.
+
+A standing preflight, cheapest check first, each of which has failed in practice:
+
+1. **the serving engine is idle** — a killed run's generation continues server-side, and on a single-replica endpoint your attestation queues behind it;
+2. **the endpoint answers a trivial request** (`/v1/models`);
+3. **`--dry-run` completes.**
+
+If the harness has no dry-run mode, that is the first thing to build. Fail-*closed* validation is not the same as fail-*fast*: refusing to certify a bad run protects the numbers, but it does nothing for the loop time, and loop time is what turns a day into three.
+
+## The governing principle
+
+**Inspect's config surface and the bytes that reach the server are different things.** Every claim about how a run sampled should be read out of the persisted `ModelEvent.call.request`, never out of the config object you passed. The strongest form is a post-run validator comparing every recorded event field-by-field against a `Literal`-pinned fingerprint model, so an unplanned value fails at construction rather than producing a run that silently differs.
+
+## 1. `max_samples` is the gate that creates concurrency
+
+`max_connections` bounds concurrent *requests*, but a solver issues one request per sample, so it bounds nothing unless something runs samples in parallel. `max_samples` defaults to `None` and does **not** inherit `max_connections`.
+
+Symptom: the serving engine reports `Running: 1 reqs, Waiting: 0 reqs` at single-stream throughput while you believe you configured N-way concurrency.
+
+**But check the server before blaming the client.** On Modal, a `@app.function` with no `@modal.concurrent(max_inputs=N)` forwards **one request per container**, whatever the client sends. The queue then sits at the platform proxy and is invisible to the inference engine — which is why `Waiting: 0` is not evidence of an idle queue. Diagnostic: compare a request's wall duration against its execution time in the platform's request log. An attestation showing `duration: 121.0 s, execution: 88.3 ms` is a proxy queue, not a slow model. The cheap fix is `@modal.concurrent`, which multiplies throughput on the *same* GPU; raising `max_containers` adds GPUs and cost for the same effect.
+
+Beware also of *when* you sample: with several samples in flight, the short ones finish first, so a late reading shows one straggler and looks like no concurrency at all. Read concurrency from the eval log's per-sample event timestamps — identical start times prove parallel dispatch — not from a spot check of the engine. On an endpoint billed by wall-clock this is a straight multiple on cost — observed once as ~48 GPU-hours where ~7 were expected, roughly $190 against $30.
+
+Set it explicitly, and **confirm from the server's own logs**, not from the config you passed.
+
+## 2. `ModelOutput.stop_reason` raises instead of defaulting
+
+It is a property over `choices[0]`. On an errored or aborted generation `choices` is empty and reading it raises `IndexError` — which `getattr(output, "stop_reason", None)` does **not** catch, because the default covers `AttributeError` only, not an exception raised inside the property.
+
+```python
+def stopped_on_length(state) -> bool:
+    output = getattr(state, "output", None)
+    if output is None or not getattr(output, "choices", None):
+        return False                      # guard the list, then read
+    return output.stop_reason in ("max_tokens", "model_length")
+```
+
+The same shape applies to any Inspect property that indexes into a list.
+
+## 3. `GenerateConfig` silently drops provider-specific fields
+
+`top_k` and similar non-standard sampling fields do not survive to the request. They must ride `extra_body`. Verify from a persisted request body.
+
+## 3b. `pueue kill` does not stop a job launched through `systemd-run`
+
+The most expensive failure of the night it was written. If pueue's command is `systemd-run --user ... -- <payload>`, then `systemd-run` hands the work to a **transient systemd unit that systemd owns**. pueue signals only its own child — the `systemd-run` *client* — and reports the task "Killed". The unit and the payload survive, reparented to the user systemd manager, outside pueue's process tree entirely.
+
+Observed consequence: a run believed killed at 22:32 was still running at 23:54, had completed two full evaluation splits in the meantime, and monopolised a single-replica endpoint so that every subsequent attempt lost its capability probe to the queue. Roughly ninety minutes of diagnosis went into "why is the endpoint mysteriously busy". The endpoint was busy with us.
+
+```bash
+pueue status                                  # says Killed. It is not.
+systemctl --user list-units 'run-u*'          # the truth
+ps -eo pid,etime,cmd | grep <your entrypoint> # elapsed time gives it away
+systemctl --user stop run-uNNNN.service       # what actually stops it
+```
+
+After any kill of a `systemd-run`-wrapped job, verify with `list-units` and by elapsed process time before concluding anything about the endpoint. A stale run also holds its TLS connections open, so `ss -tp` attributes it to a PID.
+
+## 4. Killing a run does not stop the server
+
+The client dies; the server keeps generating. With a single serving replica the next run's attestation or probe queues behind the orphan, and a short probe timeout then expires against a busy endpoint — which presents as an endpoint fault and is not one.
+
+Before relaunching after a kill: wait for the engine to go idle, raise the probe timeout past one orphaned generation, or restart the container. Budget probe timeouts for a **contended** endpoint, not a warm idle one.
+
+## 5. Serverless endpoints answer with redirects, and `httpx` does not follow them
+
+Modal answers a request on a cold or scaling container with a **303** pointing at the eventual result on the same origin. `httpx` does not follow redirects by default (unlike `requests`), so a client that ignores this reads a healthy endpoint as a broken one.
+
+If one code path in your harness handles it and another does not, the asymmetry surfaces only under contention — attestation succeeds, the probe fails, the run aborts. Follow them **bounded and same-origin**: a request carrying a bearer token must not be redirectable to another host.
+
+## 6. A shared serving endpoint makes your wall-clock unforecastable
+
+Before estimating any cost or duration, check **who owns the endpoint and how many replicas it has**. `modal profile current` (or the equivalent) tells you whose workspace you are in; the deployment source tells you `max_containers`.
+
+A single-container deployment shared with a collaborator means every one of your requests can queue behind theirs, and no amount of client-side concurrency helps. Diagnostic: watch the engine log during a window when *you* are running nothing. Traffic there is someone else's, and it is competing with you.
+
+Raising `max_containers` on shared infrastructure raises somebody else's bill — get agreement rather than assuming, or deploy your own.
+
+## 7. Digest-bearing source files cannot be edited mid-run
+
+If a manifest records a `source_digest` of some module and the validator **recomputes it at validation time**, then editing that file while a run is in flight makes the run fail validation retroactively — even if the evaluation itself completed perfectly. Redeploying a serving wrapper is the common case.
+
+Finish or abandon the run before touching anything it fingerprinted. This is the cost of strong provenance and it is worth paying, but it has to be scheduled around.
+
+## 8. Code extraction from model output
+
+Not Inspect-specific, but it fails the same way. If your harness extracts code with regexes, check whether a bare-fence pattern can open on a *closing* delimiter and capture the prose between two blocks — it manufactures a block the model never wrote. Prefer a single pass pairing each opening delimiter with its own closing one; select by parsing (`ast.parse`) plus binding the expected entry point at module top level; and record an explicit `extraction_failed` outcome rather than executing text that was never code.
+
+## Sizing a run: breadth before depth
+
+When a benchmark has N problems and you can afford K episodes, one draw of every problem beats five draws of a fifth of them. Breadth estimates the quantity you actually care about across the whole benchmark; repeat draws estimate within-task variance, which is only worth measuring once you know the quantity is non-zero. Repeat seeds are a second phase, gated on the first showing signal.
+
+State the cost as a function of the concurrency you have **measured**, not the one you configured, and give the single-stream figure alongside it — the gap between them is usually the whole decision. Per-episode token counts taken from one or two pilot episodes carry unknown spread; say so where the estimate is displayed.
+
+## Checklist before a billed run
+
+- **preflight passed**: engine idle, endpoint answering, `--dry-run` clean
+- endpoint ownership and `max_containers` known; contention ruled out or accepted
+- nothing in flight that fingerprinted a file you are about to change
+- `max_samples` set explicitly, verified from server logs at the intended concurrency
+- sampling values read back out of a persisted request, not asserted from config
+- probe and attestation timeouts sized for a contended endpoint
+- endpoint confirmed idle, or orphans cleared, before launch
+- a post-run validator that fails closed on any drift from the pinned fingerprint

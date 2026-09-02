@@ -4,7 +4,7 @@ For documents with **>20 claims**. Below that threshold, verify inline in main s
 
 This file is the *runtime* counterpart to `SKILL.md`'s *protocol*. The protocol tells you what to check; this tells you how to dispatch the check across parallel agents without losing state.
 
-For the orchestrator-mode framework itself (when to delegate, how to phrase agent prompts), see `core:orchestrate` — don't duplicate that here.
+When to delegate at all, and the TASK / CONTEXT / CONSTRAINTS / OUTPUT shape every dispatch has to state, are in `~/.claude/rules/delegation.md` — don't duplicate that here.
 
 ## Default batch profile
 
@@ -113,9 +113,9 @@ CONSTRAINTS:
 
 | Signal | Action |
 |--------|--------|
-| Agent returns with `status: failed` | **Verify on disk first.** `classifyHandoffIfNeeded` bug returns false failures (see `~/.claude/rules/agents-and-delegation.md`). Read that agent's `results-batch<N>-agent<M>.jsonl` — if the claims are there, it succeeded |
+| Agent returns with `status: failed` | **Verify on disk first.** `classifyHandoffIfNeeded` bug returns false failures (see `~/.claude/rules/delegation.md`). Read that agent's `results-batch<N>-agent<M>.jsonl` — if the claims are there, it succeeded |
 | Agent crashes mid-batch | Re-dispatch only the missing `claim_id`s in the next batch |
-| Single agent returns 0 verifications | Inspect the prompt — likely it failed to delegate to web search. See `~/.claude/rules/agents-and-delegation.md` § CLI Agent Delegation |
+| Single agent returns 0 verifications | Inspect the prompt — likely it failed to delegate to web search. See `~/.claude/rules/delegation.md` § CLI Agent Delegation |
 | **Batch failure rate >20%** | **Stop. Surface to user.** Don't burn the rest of the budget on a broken pipeline |
 | Hit per-agent web-search quota | Reduce claims-per-agent to 3, raise concurrent agents if quota is per-agent not global |
 | arXiv 429 (you ignored the pre-resolve advice) | Wait 60s; pre-resolve everything; retry |
@@ -159,4 +159,4 @@ out/claim-check-2026-05-23_14-30-00/
 └── report.md             # Rendered verification report
 ```
 
-Per `~/.claude/rules/workflow-defaults.md` § Auditability: someone arriving cold should open this directory and understand the audit without reading the transcript.
+Per `~/.claude/CLAUDE.md` § Defaults (auditability): someone arriving cold should open this directory and understand the audit without reading the transcript.

@@ -1,0 +1,481 @@
+#!/bin/bash
+# Recover macOS media services after a CoreAudio/FaceTime hang.
+
+set -euo pipefail
+
+RMM_UNAME_BIN="${RMM_UNAME_BIN:-/usr/bin/uname}"
+RMM_DATE_BIN="${RMM_DATE_BIN:-/bin/date}"
+RMM_ID_BIN="${RMM_ID_BIN:-/usr/bin/id}"
+RMM_SW_VERS_BIN="${RMM_SW_VERS_BIN:-/usr/bin/sw_vers}"
+RMM_UPTIME_BIN="${RMM_UPTIME_BIN:-/usr/bin/uptime}"
+RMM_VM_STAT_BIN="${RMM_VM_STAT_BIN:-/usr/bin/vm_stat}"
+RMM_DF_BIN="${RMM_DF_BIN:-/bin/df}"
+RMM_PMSET_BIN="${RMM_PMSET_BIN:-/usr/bin/pmset}"
+RMM_PS_BIN="${RMM_PS_BIN:-/bin/ps}"
+RMM_LOG_BIN="${RMM_LOG_BIN:-/usr/bin/log}"
+RMM_SAMPLE_BIN="${RMM_SAMPLE_BIN:-/usr/bin/sample}"
+RMM_PGREP_BIN="${RMM_PGREP_BIN:-/usr/bin/pgrep}"
+RMM_LAUNCHCTL_BIN="${RMM_LAUNCHCTL_BIN:-/bin/launchctl}"
+RMM_USER_KILLALL_BIN="${RMM_USER_KILLALL_BIN:-/usr/bin/killall}"
+RMM_SLEEP_BIN="${RMM_SLEEP_BIN:-/bin/sleep}"
+RMM_USER_DIAGNOSTIC_DIR="${RMM_USER_DIAGNOSTIC_DIR:-${HOME}/Library/Logs/DiagnosticReports}"
+RMM_SYSTEM_DIAGNOSTIC_DIR="${RMM_SYSTEM_DIAGNOSTIC_DIR:-/Library/Logs/DiagnosticReports}"
+
+DRY_RUN=false
+ASSUME_YES=false
+REPORT_ROOT="${HOME}/Library/Logs/reset-mac-media"
+REPORT_DIR=""
+COLLECTOR_ERRORS=""
+
+COREAUDIO_LABEL="system/com.apple.audio.coreaudiod"
+AUDIOMXD_LABEL="system/com.apple.audiomxd"
+SYSTEMSOUND_LABEL="system/com.apple.audio.systemsoundserverd"
+AVCONFERENCE_LABEL=""
+
+usage() {
+    cat <<'EOF'
+Usage: reset-mac-media [--yes] [--dry-run] [--report-dir DIR]
+
+Capture a small macOS audio/video diagnostic bundle, restart only the four
+media services implicated in CoreAudio/FaceTime hangs, and verify launchd
+recovered them. Running it interrupts active audio and video calls.
+
+Options:
+  --yes             Skip the confirmation prompt.
+  --dry-run         Print the plan without writing files or restarting services.
+  --report-dir DIR  Put the timestamped bundle under DIR.
+                    Default: ~/Library/Logs/reset-mac-media
+  --help, -h        Show this help.
+EOF
+}
+
+log() {
+    printf 'reset-mac-media: %s\n' "$*"
+}
+
+warn() {
+    printf 'reset-mac-media: warning: %s\n' "$*" >&2
+}
+
+parse_args() {
+    while (( $# > 0 )); do
+        case "$1" in
+            --yes)
+                ASSUME_YES=true
+                shift
+                ;;
+            --dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            --report-dir)
+                if (( $# < 2 )) || [[ -z "$2" ]]; then
+                    echo "reset-mac-media: --report-dir needs a directory" >&2
+                    return 2
+                fi
+                REPORT_ROOT="$2"
+                shift 2
+                ;;
+            --help|-h)
+                usage
+                exit 0
+                ;;
+            *)
+                echo "reset-mac-media: unknown option: $1" >&2
+                usage >&2
+                return 2
+                ;;
+        esac
+    done
+}
+
+confirm_restart() {
+    if $ASSUME_YES; then
+        return 0
+    fi
+
+    printf '%s\n' "This will briefly interrupt all audio, video, and active calls."
+    printf 'Continue? [y/N] '
+    local answer=""
+    IFS= read -r answer || true
+    case "$answer" in
+        y|Y|yes|YES|Yes) return 0 ;;
+        *) log "cancelled"; return 1 ;;
+    esac
+}
+
+record_collector_error() {
+    printf '%s\n' "$1" >> "$COLLECTOR_ERRORS"
+    warn "$1"
+}
+
+capture_command() {
+    local description="$1"
+    local output_file="$2"
+    shift 2
+
+    if ! "$@" > "$output_file" 2>&1; then
+        record_collector_error "$description failed; see ${output_file##*/}"
+        return 0
+    fi
+}
+
+process_pid() {
+    local process_name="$1"
+    local output=""
+    if output=$("$RMM_PGREP_BIN" -x "$process_name" 2>/dev/null); then
+        printf '%s\n' "${output%%$'\n'*}"
+    fi
+}
+
+capture_service_snapshot() {
+    local output_file="$1"
+    local uid="$2"
+    local label=""
+
+    : > "$output_file"
+    for label in \
+        "$COREAUDIO_LABEL" \
+        "$AUDIOMXD_LABEL" \
+        "$SYSTEMSOUND_LABEL" \
+        "gui/${uid}/com.apple.videoconference.camera"
+    do
+        printf '=== %s ===\n' "$label" >> "$output_file"
+        if ! "$RMM_LAUNCHCTL_BIN" print "$label" >> "$output_file" 2>&1; then
+            printf 'not loaded\n' >> "$output_file"
+            record_collector_error "launchd snapshot failed for $label"
+        fi
+        printf '\n' >> "$output_file"
+    done
+}
+
+capture_samples() {
+    local process_name=""
+    local pid=""
+    local safe_name=""
+
+    for process_name in Spotify FineTune FaceTime avconferenced; do
+        pid="$(process_pid "$process_name")"
+        [[ -n "$pid" ]] || continue
+        safe_name="$(printf '%s' "$process_name" | /usr/bin/tr '[:upper:]' '[:lower:]')"
+        if ! "$RMM_SAMPLE_BIN" "$pid" 1 1 > "$REPORT_DIR/samples/${safe_name}.txt" 2>&1; then
+            record_collector_error "sample failed for $process_name"
+        fi
+    done
+}
+
+capture_recent_crash_reports() {
+    local source_dir=""
+    local report=""
+    local modified=""
+    local size=""
+    local copied=0
+    local total_bytes=0
+    local max_files=6
+    local max_bytes=$((10 * 1024 * 1024))
+    local candidates="$REPORT_DIR/crash-reports/candidates.tsv"
+
+    : > "$candidates"
+
+    for source_dir in "$RMM_USER_DIAGNOSTIC_DIR" "$RMM_SYSTEM_DIAGNOSTIC_DIR"; do
+        [[ -d "$source_dir" ]] || continue
+        while IFS= read -r report; do
+            [[ -n "$report" ]] || continue
+            modified="$(/usr/bin/stat -f '%m' "$report" 2>/dev/null || true)"
+            size="$(/usr/bin/stat -f '%z' "$report" 2>/dev/null || true)"
+            [[ "$modified" =~ ^[0-9]+$ && "$size" =~ ^[0-9]+$ ]] || continue
+            printf '%s\t%s\t%s\n' "$modified" "$size" "$report" >> "$candidates"
+        done < <(
+            /usr/bin/find "$source_dir" -maxdepth 1 -type f -mtime -2 \
+                \( -name 'audiomxd*.ips' \
+                -o -name 'avconferenced*.ips' \
+                -o -name 'coreaudiod*.ips' \
+                -o -name 'systemsoundserverd*.ips' \
+                -o -name 'FaceTime*.ips' \
+                -o -name 'Spotify*.ips' \
+                -o -name 'FineTune*.ips' \) \
+                -print 2>/dev/null
+        )
+    done
+
+    while IFS=$'\t' read -r modified size report; do
+        (( copied < max_files )) || break
+        if (( size > max_bytes || total_bytes + size > max_bytes )); then
+            printf 'skipped for 10 MiB cap: %s\n' "$report" \
+                >> "$REPORT_DIR/crash-reports/selection.txt"
+            continue
+        fi
+        if /bin/cp -p "$report" \
+            "$REPORT_DIR/crash-reports/$((copied + 1))-${report##*/}" 2>/dev/null; then
+            copied=$((copied + 1))
+            total_bytes=$((total_bytes + size))
+        else
+            record_collector_error "could not copy crash report ${report##*/}"
+        fi
+    done < <(/usr/bin/sort -t $'\t' -k1,1nr "$candidates")
+
+    printf '%s recent crash report(s) copied (%s bytes; caps: %s files, 10 MiB)\n' \
+        "$copied" "$total_bytes" "$max_files" > "$REPORT_DIR/crash-reports/count.txt"
+}
+
+capture_diagnostics() {
+    local uid="$1"
+    local timestamp=""
+
+    timestamp="$("$RMM_DATE_BIN" '+%Y%m%d-%H%M%S')"
+    if ! /bin/mkdir -p "$REPORT_ROOT"; then
+        echo "reset-mac-media: cannot create report root: $REPORT_ROOT" >&2
+        return 1
+    fi
+    REPORT_DIR="$REPORT_ROOT/reset-mac-media-${timestamp}-$$"
+    if ! /bin/mkdir "$REPORT_DIR"; then
+        echo "reset-mac-media: cannot create diagnostic bundle: $REPORT_DIR" >&2
+        return 1
+    fi
+    /bin/chmod 700 "$REPORT_DIR"
+    /bin/mkdir "$REPORT_DIR/samples" "$REPORT_DIR/crash-reports"
+    COLLECTOR_ERRORS="$REPORT_DIR/collector-errors.txt"
+    : > "$COLLECTOR_ERRORS"
+    cat > "$REPORT_DIR/README.txt" <<'EOF'
+This bundle contains process names, recent media-service logs, short stack
+samples, and recent matching crash reports. It does not capture process
+arguments or environments. Review the contents before sharing them.
+EOF
+
+    {
+        printf 'Captured: '
+        "$RMM_DATE_BIN"
+        "$RMM_SW_VERS_BIN" || true
+        "$RMM_UPTIME_BIN" || true
+        printf '\nDisk:\n'
+        "$RMM_DF_BIN" -h / || true
+        printf '\nMemory:\n'
+        "$RMM_VM_STAT_BIN" || true
+    } > "$REPORT_DIR/system-summary.txt" 2>&1
+
+    # `comm`, rather than full command arguments or `ps e`, avoids capturing
+    # tokens and process environments in a support bundle.
+    capture_command "process snapshot" "$REPORT_DIR/processes.txt" \
+        "$RMM_PS_BIN" -axo pid=,ppid=,state=,etime=,%cpu=,%mem=,comm=
+    capture_command "power assertion snapshot" "$REPORT_DIR/power-assertions.txt" \
+        "$RMM_PMSET_BIN" -g assertions
+    capture_service_snapshot "$REPORT_DIR/launchd-before.txt" "$uid"
+    capture_command "unified log" "$REPORT_DIR/unified-log.txt" \
+        "$RMM_LOG_BIN" show --style compact --last 15m --predicate \
+        'process == "coreaudiod" OR process == "audiomxd" OR process == "avconferenced" OR process == "systemsoundserverd" OR process == "Spotify" OR process == "FaceTime" OR process == "FineTune"'
+    capture_samples
+    capture_recent_crash_reports
+
+    # Recovery never starts unless this write succeeds. Optional collectors may
+    # fail, but an incomplete/unwritable baseline is not safe to call captured.
+    if ! : > "$REPORT_DIR/capture-complete"; then
+        echo "reset-mac-media: could not finalize diagnostic bundle" >&2
+        return 1
+    fi
+    log "diagnostics saved to $REPORT_DIR"
+}
+
+restart_root_process() {
+    local process_name="$1"
+    # Keep both privileged executables fixed. Tests source this script and
+    # override run_sudo as a function; production execution always reaches
+    # these absolute paths.
+    if ! run_sudo /usr/bin/killall "$process_name"; then
+        warn "$process_name was not terminated; verification will decide recovery status"
+    fi
+}
+
+run_sudo() {
+    /usr/bin/sudo "$@"
+}
+
+restart_media_services() {
+    if ! run_sudo -v; then
+        echo "reset-mac-media: administrator authentication failed; no services restarted" >&2
+        return 1
+    fi
+
+    restart_root_process coreaudiod
+    restart_root_process audiomxd
+    restart_root_process systemsoundserverd
+
+    if ! "$RMM_USER_KILLALL_BIN" avconferenced; then
+        log "avconferenced was dormant; launchd will start it on demand"
+    fi
+}
+
+launchd_job_output() {
+    local label="$1"
+    "$RMM_LAUNCHCTL_BIN" print "$label" 2>/dev/null
+}
+
+launchd_field() {
+    local job_output="$1"
+    local field_name="$2"
+    printf '%s\n' "$job_output" | /usr/bin/awk -v field="$field_name" \
+        '$1 == field && $2 == "=" {
+            value = $0
+            sub(/^[^=]*=[[:space:]]*/, "", value)
+            print value
+            exit
+        }'
+}
+
+launchd_result_number() {
+    local job_output="$1"
+    local result_name="$2"
+    printf '%s\n' "$job_output" | /usr/bin/awk -v result="$result_name" '
+        result == "exit" && $1 == "last" && $2 == "exit" && $3 == "code" && $4 == "=" {
+            print $NF; exit
+        }
+        result == "signal" && $1 == "last" && $2 == "terminating" && $3 == "signal" && $4 == "=" {
+            print $NF; exit
+        }'
+}
+
+dormant_exit_is_healthy() {
+    local job_output="$1"
+    local exit_code=""
+    local terminating_signal=""
+    exit_code="$(launchd_result_number "$job_output" exit)"
+    terminating_signal="$(launchd_result_number "$job_output" signal)"
+
+    if [[ "$exit_code" =~ ^[0-9]+$ ]] && (( exit_code != 0 )); then
+        return 1
+    fi
+    # SIGTERM (15) is the expected result of this helper's killall. Any other
+    # recorded signal is evidence of a crash, not a healthy pressure exit.
+    if [[ "$terminating_signal" =~ ^[0-9]+$ ]] \
+        && (( terminating_signal != 15 )); then
+        return 1
+    fi
+    return 0
+}
+
+launchd_service_pid() {
+    local label="$1"
+    local process_name="${2:-}"
+    local job_output=""
+    local pid=""
+    job_output="$(launchd_job_output "$label" || true)"
+    pid="$(launchd_field "$job_output" pid)"
+    if [[ -z "$pid" && -n "$process_name" ]]; then
+        pid="$(process_pid "$process_name")"
+    fi
+    printf '%s\n' "$pid"
+}
+
+verify_launchd_service() {
+    local process_name="$1"
+    local label="$2"
+    local old_pid="$3"
+    local attempt=0
+    local new_pid=""
+    local job_output=""
+    local state=""
+    local stable_pid=""
+    local stable_checks=0
+
+    while (( attempt < 10 )); do
+        job_output="$(launchd_job_output "$label" || true)"
+        new_pid="$(launchd_field "$job_output" pid)"
+        state="$(launchd_field "$job_output" state)"
+
+        if [[ -n "$job_output" && ( -z "$old_pid" || "$new_pid" != "$old_pid" ) ]]; then
+            if [[ "$state" == "not running" ]] && dormant_exit_is_healthy "$job_output"; then
+                return 0
+            fi
+            if [[ "$state" == running && -n "$new_pid" ]]; then
+                if [[ "$new_pid" == "$stable_pid" ]]; then
+                    stable_checks=$((stable_checks + 1))
+                else
+                    stable_pid="$new_pid"
+                    stable_checks=1
+                fi
+                if (( stable_checks >= 2 )); then
+                    return 0
+                fi
+            else
+                stable_pid=""
+                stable_checks=0
+            fi
+        fi
+        attempt=$((attempt + 1))
+        "$RMM_SLEEP_BIN" 1
+    done
+
+    warn "$process_name kept its old PID, disappeared from launchd, or exited abnormally"
+    return 1
+}
+
+verify_recovery() {
+    local uid="$1"
+    local old_coreaudiod="$2"
+    local old_audiomxd="$3"
+    local old_systemsound="$4"
+    local old_avconference="$5"
+    local failed=false
+
+    verify_launchd_service coreaudiod "$COREAUDIO_LABEL" "$old_coreaudiod" || failed=true
+    verify_launchd_service audiomxd "$AUDIOMXD_LABEL" "$old_audiomxd" || failed=true
+    verify_launchd_service systemsoundserverd "$SYSTEMSOUND_LABEL" "$old_systemsound" || failed=true
+    verify_launchd_service avconferenced "$AVCONFERENCE_LABEL" "$old_avconference" || failed=true
+    capture_service_snapshot "$REPORT_DIR/launchd-after.txt" "$uid"
+
+    if $failed; then
+        echo "reset-mac-media: recovery verification failed; diagnostics remain at $REPORT_DIR" >&2
+        return 1
+    fi
+    log "media services recovered and verified"
+}
+
+print_dry_run() {
+    cat <<EOF
+reset-mac-media: dry run
+  Report root: $REPORT_ROOT
+  Would capture bounded diagnostics, then restart:
+    root: coreaudiod, audiomxd, systemsoundserverd
+    user: avconferenced
+  Would verify each old PID is gone and all four launchd jobs remain loaded;
+  loaded-but-dormant jobs are accepted because macOS starts them on demand.
+  Spotify, FaceTime, FineTune, Bluetooth, and WindowServer would not be killed.
+EOF
+}
+
+main() {
+    parse_args "$@"
+    umask 077
+
+    if [[ "$("$RMM_UNAME_BIN" -s)" != Darwin ]]; then
+        echo "reset-mac-media: macOS only" >&2
+        return 1
+    fi
+
+    if $DRY_RUN; then
+        print_dry_run
+        return 0
+    fi
+
+    confirm_restart || return 1
+
+    local uid=""
+    local old_coreaudiod=""
+    local old_audiomxd=""
+    local old_systemsound=""
+    local old_avconference=""
+    uid="$("$RMM_ID_BIN" -u)"
+    AVCONFERENCE_LABEL="gui/${uid}/com.apple.videoconference.camera"
+
+    capture_diagnostics "$uid" || return 1
+    old_coreaudiod="$(launchd_service_pid "$COREAUDIO_LABEL" coreaudiod)"
+    old_audiomxd="$(launchd_service_pid "$AUDIOMXD_LABEL" audiomxd)"
+    old_systemsound="$(launchd_service_pid "$SYSTEMSOUND_LABEL" systemsoundserverd)"
+    old_avconference="$(launchd_service_pid "$AVCONFERENCE_LABEL" avconferenced)"
+
+    restart_media_services || return 1
+    verify_recovery "$uid" "$old_coreaudiod" "$old_audiomxd" "$old_systemsound" "$old_avconference"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

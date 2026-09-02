@@ -1,0 +1,213 @@
+# The single place that names the models this machine asks for opinions.
+#
+# One file, one roster. `[council].seats` below IS the council, the default
+# `fusion` panel, and the alias table that `openrouter-cli ask <alias>` resolves
+# against -- there is deliberately no second list to keep in sync, because the
+# two-places problem is what this file exists to prevent.
+#
+# Why a config file and not agent frontmatter: Claude Code resolves a `model:`
+# name against api.anthropic.com, so a non-Anthropic name in an agent's
+# frontmatter cannot resolve without an ANTHROPIC_BASE_URL gateway -- and that
+# gateway hard-disables Remote Control. These models are therefore reached by
+# shelling out to `custom_bins/openrouter-cli`. Do NOT reintroduce them as agent
+# files: an agent naming an unreachable model either hard-fails, or (worse)
+# answers from Claude while wearing another family's label, which silently fakes
+# a multi-family result.
+#
+# TOML rather than YAML so the CLI needs only the standard library (tomllib,
+# Python >= 3.11) -- no PyYAML to install first. deploy.sh's shell component
+# puts custom_bins on PATH; a Python 3.11+ interpreter is assumed, not
+# provisioned.
+
+# ---------------------------------------------------------------------------
+# The council
+# ---------------------------------------------------------------------------
+#
+# Eight seats, one per lab family. One-per-family is the whole point: a panel
+# exists to supply independent priors, and two checkpoints of the same base
+# model do not give that. Eight is also fusion's hard maximum panel size
+# (documented range for `analysis_models` is 1-8), so this roster is exactly
+# full -- adding a ninth family means dropping one.
+#
+# Seats are PICKED AUTOMATICALLY from capability indices, not hand-curated.
+# `openrouter-cli council refresh --apply` rewrites the marked block below.
+# The rule, in order:
+#
+#   1. Consider only models in the family, excluding floating `~` aliases and
+#      `:batch` variants, whose OUTPUT price is at or under `max_output_price`.
+#   2. Take the highest capability score among those.
+#   3. If a NEWER model exists in the same product line (same `stem()`, so
+#      `glm-5.3` counts as a sibling of `glm-5.2` but `glm-5.3-flash` does not)
+#      and the index has not scored it yet, prefer the newer one and record
+#      basis = "newest-in-line".
+#
+# Step 3 exists because index coverage lags releases by weeks, and step 1
+# exists because raw ranking buys capability at any price: Epoch ranks
+# `openai/gpt-5.5-pro` (161.7) above `openai/gpt-5.6-sol` (161.1), which is
+# 0.6 points for 15x the price ($30/$180 vs $2/$10 per M). The cap is what
+# makes "pick the best" mean "pick the best worth paying for".
+#
+# Step 3's product-line constraint is load-bearing and was found empirically:
+# without it the rule seats `glm-5.3-flash`, `qwen3.8-flash`,
+# `muse-spark-1.2-contributor` and `claude-opus-5-fast` -- a whole roster of
+# cheap tiers wearing the word "newest". Tier demotion is the failure mode this
+# config has guarded against since floating aliases were adopted; the same trap
+# reappears in index-driven picking and needs the same explicit guard.
+[council]
+
+# The chair reads every answer (and, under `--rank`, the ranking matrix) and
+# writes the final synthesis. It also fills fusion's outer `model` and analyst
+# roles -- for `council ask` AND for the bare `openrouter-cli fusion` command.
+#
+# There used to be a separate top-level `judge` key for `fusion`, floating on
+# `~anthropic/claude-opus-latest`. It was deleted: both keys answered the one
+# question "who synthesises", so the split bought nothing and gave the config a
+# second place to drift. One synthesiser, named once.
+#
+# Fable 5 chairs while also holding the anthropic seat. That is a deliberate
+# accepted trade, not an oversight: it tops the index at 162.5, and benching the
+# strongest model to keep the chair neutral costs more than the bias it avoids.
+# The blind ranking round already excludes a ranker's own answer from its
+# ballot, so the self-preference is confined to the synthesis step. Weigh the
+# chair's summary accordingly where it favours its own contribution.
+#
+# PINNED, not floating. Every seat here is a concrete slug on purpose -- see
+# the provenance note at the bottom of this file.
+chair = "anthropic/claude-fable-5"
+
+# One seat per family, in the order seats are picked. Adding a family here
+# without removing another overflows fusion's 8-model panel and `council
+# refresh` will refuse rather than silently truncate.
+families = [
+  "anthropic",
+  "openai",
+  "moonshotai",
+  "z-ai",
+  "x-ai",
+  "qwen",
+  "meta",
+  "google",
+]
+
+# The cheap rung: `openrouter-cli council advise` asks only the seats from these
+# families and prints both answers side by side, with no chair and no synthesis.
+# Two strong, disagreeing priors answer most questions that need a second view,
+# at roughly a fifth of a full council's cost.
+#
+# Families, not slugs, so this stays index-driven: whoever holds the anthropic
+# and openai seats after a refresh becomes the advisor pair automatically. Today
+# that is claude-fable-5 and gpt-5.6-sol, the two highest-scoring models in the
+# catalogue under the price cap.
+advisor_families = ["anthropic", "openai"]
+
+# Per-seat price ceilings in USD per million tokens. Raising either changes
+# which models can be seated, so both are spend decisions: a council run costs
+# roughly the sum of its seats.
+#
+# 60.0 output admits `claude-fable-5` at $50 and excludes `gpt-5.5-pro` at $180.
+#
+# The INPUT cap exists because an output-only cap misprices this workload. The
+# `--rank` round sends every seat the other seven answers, so input dominates
+# there -- a model at $59/M output but $200/M input would pass an output-only
+# check and then cost more than anything it displaced. 15.0 admits the current
+# roster (dearest input is claude-fable-5 at $10) with headroom.
+max_input_price = 15.0
+max_output_price = 60.0
+
+# How many days before the roster is considered stale. The fortnightly timer
+# and the session-start nudge both read this.
+review_days = 14
+
+# Stamped by `council refresh --apply`. A date in the past by more than
+# `review_days` is what makes the nudge fire.
+reviewed = "2026-09-01"
+
+# Everything between the markers is REWRITTEN mechanically by
+# `openrouter-cli council refresh --apply`. Edit by hand only to force a seat;
+# the next refresh overwrites it. Nothing outside the markers is touched, which
+# is why the commentary in this file survives an automated update.
+#
+# `basis` records why a seat was chosen, and it is not decoration: "eci" means
+# an index actually scored the model, "newest-in-line" means it is seated on
+# recency alone because no index has reached it yet. A roster where several
+# seats read "newest-in-line" is running ahead of the evidence, and its
+# capability claims should be stated that way.
+#
+# BEGIN council-auto
+seats = [
+  { alias = "fable", slug = "anthropic/claude-fable-5", family = "anthropic", score = 162.5, basis = "eci" },
+  { alias = "gpt", slug = "openai/gpt-5.6-sol", family = "openai", score = 161.1, basis = "eci" },
+  { alias = "kimi", slug = "moonshotai/kimi-k3", family = "moonshotai", score = 157.3, basis = "eci" },
+  { alias = "gemini", slug = "google/gemini-3.7-flash", family = "google", score = 157.1, basis = "eci" },
+  { alias = "qwen", slug = "qwen/qwen3.8-max", family = "qwen", score = 156.4, basis = "eci" },
+  { alias = "grok", slug = "x-ai/grok-4.6", family = "x-ai", score = 156.2, basis = "eci" },
+  { alias = "muse", slug = "meta/muse-spark-1.2", family = "meta", score = 155.2, basis = "eci" },
+  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 0.0, basis = "newest-in-line" },
+]
+# END council-auto
+
+# Caps forwarded to each inner fusion call, pinned so an upstream beta-default
+# change cannot silently raise spend. `max_tool_calls` has a documented range of
+# 1-16 (default 4); `max_completion_tokens` defaults to 16000 upstream.
+[fusion]
+max_tool_calls = 4
+max_completion_tokens = 16000
+
+# ---------------------------------------------------------------------------
+# Off-roster models
+# ---------------------------------------------------------------------------
+#
+# Aliases reachable by name but NOT seated on the council, so they never enter a
+# fan-out by accident. `resolve()` checks council seats first, then these.
+
+# BENCHED. deepseek/deepseek-v4-pro-0813 scores 155.2 -- level with the meta
+# seat and cheaper -- and lost its seat only because the council is capped at
+# eight families and this one was cut. Kept addressable so a question that wants
+# a ninth opinion can name it: `openrouter-cli ask deepseek "..."`.
+[[models]]
+slug = "deepseek/deepseek-v4-pro-0813"
+alias = "deepseek"
+
+# EXPENSIVE: $30/M input, $180/M output -- ~15x the seated OpenAI model for 0.6
+# index points. Excluded from the council by the price caps, which it breaches
+# on BOTH axes ($30 against max_input_price 15.0, $180 against
+# max_output_price 60.0). That exclusion is the whole mechanism; there is no
+# opt-in flag and none was invented, because a field the CLI does not read
+# would look like a guard without being one.
+# Reach it explicitly: `openrouter-cli ask gpt55pro "..."`.
+[[models]]
+slug = "openai/gpt-5.5-pro"
+alias = "gpt55pro"
+
+# ---------------------------------------------------------------------------
+# Provenance: why every seat is pinned
+# ---------------------------------------------------------------------------
+#
+# This file used to float most seats behind `~family-latest` aliases for
+# zero-maintenance freshness. Index-driven picking replaces that, and pinning is
+# now the better trade for two measured reasons:
+#
+#   1. A floating alias destroys provenance. OpenRouter does not publish what a
+#      `~` alias points at -- its `canonical_slug` is just the tilde name again
+#      -- so the only way to learn the target is to call it and read the
+#      response. Worse, measured 2026-09-01 against the call log, most floating
+#      slugs came back resolving to THEMSELVES (`~z-ai/glm-latest` ->
+#      `~z-ai/glm-latest`), so even the call log could not recover the concrete
+#      model for those families. Only the anthropic alias resolved to a real id.
+#   2. Floating cannot express a tier. The families whose newest release is a
+#      cheap `-flash` or `-mini` would silently demote themselves, which is why
+#      three seats had to stay pinned by hand anyway.
+#
+# Pinning plus a fortnightly index-driven refresh gives the freshness floating
+# was bought for, while keeping the slug an honest record of which model
+# answered. `openrouter-cli drift` still checks every slug here against the live
+# catalogue, and still never edits the file.
+#
+# Ranking data comes from `openrouter-cli council refresh`:
+#   - Epoch Capabilities Index -- CC-BY, no key needed, credit Epoch AI.
+#   - Artificial Analysis intelligence index -- needs AA_API_KEY, free tier
+#     1000 req/day. Their licence REQUIRES attribution to artificialanalysis.ai
+#     wherever these numbers are shown.
+# When both are available the seat score is the mean of the per-index
+# normalised scores; with only Epoch present it is the Epoch score, and the
+# roster table says so.

@@ -11,9 +11,8 @@ fi
 # personal
 # -------------------------------------------------------------------
 
-alias dot="cd $DOT_DIR"
-alias jp="jupyter lab"
-alias hn="hostname"
+# `dot`/`jp`/`hn` removed 2026-08-18: dot duplicated `dotfiles` (nav.sh), jp was
+# jupyter-lab-era, and hn=hostname collided with the `hn` Hetzner SSH host (srv).
 # Manual gist sync (SSH config + authorized_keys + git identity); daily 8AM via launchd/cron
 alias sync-gist='"$DOT_DIR/scripts/sync_gist.sh"'
 # Define bearcli alias only if Bear is installed (avoids cryptic runtime failures)
@@ -174,3 +173,85 @@ things() {
             ;;
     esac
 }
+
+#-------------------------------------------------------------
+# music-roulette — random country + genre, for Spotify exploration
+#-------------------------------------------------------------
+
+# Draw one genre, then one country from that genre's eligible set, from $1 (a
+# music-roulette.tsv path). $2/$3 are random numbers that MUST be expanded by
+# the calling shell: zsh does not re-seed $RANDOM in forked subshells, so a
+# $RANDOM referenced inside $( ) returns the same value every call and every
+# draw comes out identical. bash re-seeds, which hides the bug. Randomising in
+# the caller works under both. Emits "country<TAB>genre".
+#
+# Genre first, then country, is what makes dead pairs unconstructible: a genre
+# never sees a country outside its own scope, so "Mongolia Reggaeton" has no
+# code path. Drawing the country first would need a rejection loop instead.
+_music_roulette_draw() {
+    awk -F'\t' -v r1="$2" -v r2="$3" '
+        /^#/ || NF == 0 { next }
+        $1 == "C" { cn[++nc] = $2; ct[nc] = $3; known[$2] = 1 }
+        $1 == "G" { gn[++ng] = $2; gs[ng] = $3 }
+        END {
+            if (nc == 0 || ng == 0) { exit 3 }
+            g = (r1 % ng) + 1
+            if (gs[g] == "*mod")        { for (i = 1; i <= nc; i++) if (ct[i] == "1") e[++ne] = cn[i] }
+            else if (gs[g] == "*trad")  { for (i = 1; i <= nc; i++)                   e[++ne] = cn[i] }
+            else { n = split(gs[g], p, ","); for (i = 1; i <= n; i++) if (p[i] in known) e[++ne] = p[i] }
+            if (ne == 0) { exit 4 }
+            printf "%s\t%s\n", e[(r2 % ne) + 1], gn[g]
+        }
+    ' "$1"
+}
+
+# music-roulette        one country + genre pairing, with a Spotify search link
+# music-roulette 5      five pairings
+# music-roulette -o     also open the first pairing's Spotify search
+music-roulette() {
+    local do_open=0 count=1
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -o|--open) do_open=1 ;;
+            [0-9]*)    count="$1" ;;
+            *)         echo "Usage: music-roulette [-o] [count]"; return 1 ;;
+        esac
+        shift
+    done
+
+    local data="${MUSIC_ROULETTE_DATA:-$DOT_DIR/config/data/music-roulette.tsv}"
+    if [[ ! -r "$data" ]]; then
+        echo "music-roulette: cannot read data file: $data" >&2
+        return 1
+    fi
+
+    local i draw country genre query url r1 r2
+    for ((i = 0; i < count; i++)); do
+        # Expand $RANDOM HERE, not inside the $( ) below: zsh evaluates
+        # arguments to a command substitution in the forked subshell, where it
+        # does not re-seed, so every draw would come out identical.
+        r1=$RANDOM
+        r2=$RANDOM
+        draw=$(_music_roulette_draw "$data" "$r1" "$r2") || {
+            echo "music-roulette: no usable country/genre data in $data" >&2
+            return 1
+        }
+        country="${draw%%	*}"
+        genre="${draw##*	}"
+        query="$country $genre"
+        url="https://open.spotify.com/search/${query// /%20}"
+        printf '%s — %s\n  %s\n' "$country" "$genre" "$url"
+        if (( do_open )); then
+            # `o` is the repo's cross-platform opener (config/modern_tools.sh);
+            # bare `open` is macOS-only and would silently do nothing on Linux.
+            o "$url"
+            do_open=0
+        fi
+    done
+}
+
+# Transitional: `smix` was the original name. Kept so muscle memory still works.
+# A function, not an alias: zsh expands aliases at parse time, so an alias
+# defined by a sourced file is invisible to anything parsed alongside the
+# `source` itself (scripts, `zsh -c`). A function resolves at call time.
+smix() { music-roulette "$@"; }

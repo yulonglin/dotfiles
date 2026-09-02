@@ -36,6 +36,28 @@ log_decision() {
     printf '%s %s | %s | %s\n' "$ts" "$decision" "$cmd_short" "$reason" >> "$LOG_PATH"
 }
 
+# Debounce: each distinct nudge fires at most once per DEBOUNCE_SECS across all
+# sessions. Without this the same handful of messages repeat on every Bash call —
+# measured at ~1275 fires / ~251K chars over 60 transcripts, the same 6 strings.
+# Mirrors the 30-min window in lib/codex-freshness.mjs and fails open the same
+# way: if the marker dir can't be written, nudge rather than go silently missing.
+DEBOUNCE_DIR="${HOME}/.cache/claude/nudge-modern.d"
+DEBOUNCE_SECS=$((30 * 60))
+should_nudge() {
+    local key="$1" marker now last
+    mkdir -p "$DEBOUNCE_DIR" 2>/dev/null || return 0  # fail open
+    marker="$DEBOUNCE_DIR/$key"
+    now=$(date +%s)
+    if [[ -f "$marker" ]]; then
+        last=$(stat -f%m "$marker" 2>/dev/null || stat -c%Y "$marker" 2>/dev/null || echo 0)
+        if [[ $(( now - last )) -lt $DEBOUNCE_SECS ]]; then
+            return 1
+        fi
+    fi
+    : > "$marker" 2>/dev/null || return 0  # fail open
+    return 0
+}
+
 nudge=""
 
 # Detect if a command appears as a standalone file operation vs pipeline usage.
@@ -144,6 +166,13 @@ fi
 
 # Nudge: informational message only — never blocks the command.
 if [[ -n "$nudge" ]]; then
+    # Key on the message text, so each distinct nudge debounces independently:
+    # being reminded about `grep` doesn't suppress a later reminder about `ls`.
+    nudge_key=$(printf '%s' "$nudge" | cksum | cut -d' ' -f1)
+    if ! should_nudge "$nudge_key"; then
+        log_decision "DEBOUNCED" "$nudge"
+        exit 0
+    fi
     log_decision "NUDGE" "$nudge"
     jq -n --arg msg "$nudge" '{
       hookSpecificOutput: {

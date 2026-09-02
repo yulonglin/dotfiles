@@ -1,5 +1,9 @@
-//! Claude Code status line (Rust primary, for low-latency rendering).
-//! Bash fallback: claude/statusline.sh (keep feature-parity when editing either).
+//! Claude Code status line — the only implementation. The claude/statusline.sh
+//! fallback was retired on 2026-08-30, so an edit here changes what renders with
+//! nothing to cross-check it: the guard is tests/test_statusline_classifier.sh
+//! and tests/test_statusline_usage_gauge.sh, which pin the output to literal
+//! expected strings. Rebuild every platform asset you can and check
+//! scripts/check-claude-tools-fresh.sh — the committed binary is what runs.
 
 use serde::Deserialize;
 use std::fmt::Write;
@@ -13,6 +17,7 @@ struct Input {
     model: Option<Model>,
     cost: Option<Cost>,
     context_window: Option<ContextWindow>,
+    effort: Option<Effort>,
 }
 
 #[derive(Deserialize)]
@@ -33,7 +38,41 @@ struct Cost {
 #[derive(Deserialize)]
 struct ContextWindow {
     used_percentage: Option<f64>,
+    /// Everything currently in the window, cache reads and writes included.
+    total_input_tokens: Option<u64>,
+    /// The current model's limit — 200000, or 1000000 on a long-context model.
+    context_window_size: Option<u64>,
 }
+
+/// Only present when the current model supports reasoning effort, so its
+/// absence is normal rather than an error.
+#[derive(Deserialize)]
+struct Effort {
+    level: Option<String>,
+}
+
+/// Written by claude/hooks/approval_classifier.py on every classification attempt.
+#[derive(Deserialize)]
+struct ClassifierHealth {
+    backend: Option<String>,
+    ts: Option<u64>,
+}
+
+/// Past this age the health file is treated as absent. The hook rewrites it on
+/// every classification, so an active session refreshes it constantly; a
+/// degraded marker left over from this morning is noise, not news.
+const CLASSIFIER_HEALTH_MAX_AGE_SECS: u64 = 6 * 3600;
+
+/// Past this age the recorded backend is reported as unknown rather than as
+/// fact. write_health() runs ONLY on the classify() path — fast-path allows,
+/// denies and question-to-user surfaces never touch it — so a session whose
+/// tool calls all hit a fast path leaves the file frozen at whatever the last
+/// backend attempt saw. On 2026-08-05 that pinned `dead` for over two hours on
+/// the strength of one transient API read timeout, with the statusline
+/// insisting the classifier was down long after the outage had passed.
+/// A stale entry is not evidence of the current state, and rendering it as if
+/// it were is the bug; `auto?` says what is actually known.
+const CLASSIFIER_HEALTH_STALE_AFTER_SECS: u64 = 15 * 60;
 
 // --- Main entry point ---
 
@@ -64,13 +103,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Line 2: session state (collect parts, join with " · ")
     let mut session_parts: Vec<String> = Vec::new();
-    if let Some(s) = format_model_str(input.model.as_ref()) {
+    if let Some(s) = format_model_str(input.model.as_ref(), input.effort.as_ref()) {
         session_parts.push(s);
     }
     if let Some(s) = format_context_usage_str(input.context_window.as_ref()) {
         session_parts.push(s);
     }
     if let Some(s) = format_duration_str(&input.cost) {
+        session_parts.push(s);
+    }
+    if let Some(s) = format_classifier_str() {
         session_parts.push(s);
     }
     if !session_parts.is_empty() {
@@ -223,15 +265,43 @@ fn format_git_info(output: &mut String, cwd: &str) {
     }
 }
 
-/// Model display name in brackets.
-fn format_model_str(model: Option<&Model>) -> Option<String> {
+/// Model display name in brackets, with the reasoning effort folded in when the
+/// model reports one: "[Opus 5 (high)]". Effort keeps its own colour inside the
+/// blue bracket, so the bracket colour is re-opened after the suffix — at normal
+/// intensity (SGR 22), since a bare SGR 34 would leave the dim levels' SGR 2 set
+/// and render the closing bracket dimmer than the opening one.
+/// Effort has no segment of its own — a payload with an effort but no model
+/// display name renders neither, which Claude Code never sends.
+fn format_model_str(model: Option<&Model>, effort: Option<&Effort>) -> Option<String> {
     let name = model.and_then(|m| m.display_name.as_deref()).filter(|n| !n.is_empty())?;
-    Some(format!("\x1b[34m[{}]\x1b[0m", name))
+    match format_effort_suffix(effort) {
+        Some(suffix) => Some(format!("\x1b[34m[{} {}\x1b[22;34m]\x1b[0m", name, suffix)),
+        None => Some(format!("\x1b[34m[{}]\x1b[0m", name)),
+    }
 }
 
-/// Context usage percentage from `context_window.used_percentage` (pre-computed by Claude Code).
+/// Compact token count: "845" under a thousand, "123k", "1.0M".
+/// The `k` branch stops below 999_500 so a value that would round to "1000k"
+/// renders as "1.0M" instead.
+/// Both boundaries are pinned in tests/test_statusline_classifier.sh.
+pub fn format_tokens(n: u64) -> String {
+    if n < 1_000 {
+        n.to_string()
+    } else if n < 999_500 {
+        format!("{}k", ((n as f64) / 1_000.0).round() as u64)
+    } else {
+        format!("{:.1}M", (n as f64) / 1_000_000.0)
+    }
+}
+
+/// Context usage from `context_window` (pre-computed by Claude Code): absolute
+/// tokens against the model's window, plus the percentage that drives the colour.
+/// Renders "ctx:123k/200k (62%)", degrading to "ctx:123k (62%)" without a window
+/// size and to "ctx:62%" without a token count — the percentage only takes
+/// parentheses when it is qualifying a token count in front of it.
 fn format_context_usage_str(context_window: Option<&ContextWindow>) -> Option<String> {
-    let pct = context_window.and_then(|cw| cw.used_percentage)?.round() as u64;
+    let cw = context_window?;
+    let pct = cw.used_percentage?.round() as u64;
     if pct == 0 {
         return None;
     }
@@ -242,7 +312,132 @@ fn format_context_usage_str(context_window: Option<&ContextWindow>) -> Option<St
     } else {
         "\x1b[32m" // Green
     };
-    Some(format!("{}ctx:{}%\x1b[0m", color, pct))
+
+    let body = match cw.total_input_tokens.filter(|t| *t > 0) {
+        Some(tokens) => match cw.context_window_size.filter(|s| *s > 0) {
+            Some(size) => format!("{}/{} ({}%)", format_tokens(tokens), format_tokens(size), pct),
+            None => format!("{} ({}%)", format_tokens(tokens), pct),
+        },
+        None => format!("{}%", pct),
+    };
+    Some(format!("{}ctx:{}\x1b[0m", color, body))
+}
+
+/// Live reasoning effort from `effort.level`, as the parenthesised suffix that
+/// goes inside the model bracket. Dim for the everyday levels; yellow for
+/// xhigh/max, which cost enough to be worth noticing. Deliberately leaves the
+/// colour and intensity open — format_model_str restores both for the closing bracket.
+/// tests/test_statusline_classifier.sh pins the resulting bytes for both the
+/// dim and the yellow case, so a palette change fails there rather than silently.
+fn format_effort_suffix(effort: Option<&Effort>) -> Option<String> {
+    let level = effort
+        .and_then(|e| e.level.as_deref())
+        .map(str::trim)
+        .filter(|l| !l.is_empty())?;
+    let color = match level {
+        "xhigh" | "max" => "\x1b[33m", // Yellow
+        _ => "\x1b[2m",                // Dim
+    };
+    Some(format!("{}({})", color, level))
+}
+
+/// The dotfiles checkout root, for reading config/secrets-global.conf.
+/// `~/.claude` is a symlink into the checkout, so it doubles as a locator when
+/// DOT_DIR is not exported (Claude Code spawns the statusline, not a shell).
+fn dotfiles_root() -> Option<std::path::PathBuf> {
+    if let Ok(dir) = std::env::var("DOT_DIR") {
+        if !dir.is_empty() {
+            return Some(std::path::PathBuf::from(dir));
+        }
+    }
+    let home = std::env::var("HOME").ok()?;
+    let target = std::fs::read_link(std::path::PathBuf::from(home).join(".claude")).ok()?;
+    target.parent().map(|p| p.to_path_buf())
+}
+
+/// Short label of the ANTHROPIC_API_KEY that config/secrets-global.conf makes
+/// active — "ANTHROPIC_API_KEY - mats" renders as "mats". Mirrors the resolver
+/// in custom_bins/dotfiles-secrets: first line for the name whose value is not
+/// prefixed with `!` (blocked) wins.
+fn active_anthropic_key_label() -> Option<String> {
+    let conf = dotfiles_root()?.join("config/secrets-global.conf");
+    let content = std::fs::read_to_string(conf).ok()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((name, value)) = line.split_once('=') else {
+            continue;
+        };
+        // " [global]" marks the name resolvable outside a repo; it is part of
+        // the NAME field, so it must come off before matching.
+        let name = name.trim();
+        let name = name.strip_suffix("[global]").map_or(name, str::trim_end);
+        if name != "ANTHROPIC_API_KEY" {
+            continue;
+        }
+        let value = value.trim();
+        if value.is_empty() {
+            continue; // marker-only line ("NAME [global] =") declares no key
+        }
+        if value.starts_with('!') {
+            continue; // blocked key — keep looking down the preference list
+        }
+        return Some(match value.split_once(" - ") {
+            Some((_, desc)) => desc.trim().to_string(),
+            None => String::new(),
+        });
+    }
+    None
+}
+
+/// Which backend last served an auto-approval, and on which key.
+/// Healthy renders dim and minimal; anything else is meant to be noticed.
+fn format_classifier_str() -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let path = std::path::PathBuf::from(home)
+        .join(".cache/claude/approval-classifier-health.json");
+    let health: ClassifierHealth = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+    let backend = health.backend.as_deref()?;
+    // Validate the backend BEFORE the age tiers, so a corrupt or future-versioned
+    // file renders nothing at either age rather than an authoritative-looking
+    // "stale" marker for a value we cannot interpret.
+    if !matches!(backend, "api" | "subscription" | "dead") {
+        return None;
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    let age = now.saturating_sub(health.ts.unwrap_or(0));
+    if age > CLASSIFIER_HEALTH_MAX_AGE_SECS {
+        return None;
+    }
+    // Applies to every backend, healthy included: past the window we don't know
+    // that the API path still works either, and claiming otherwise is the same
+    // error as the sticky `dead` in the opposite direction.
+    if age > CLASSIFIER_HEALTH_STALE_AFTER_SECS {
+        return Some("\x1b[2mauto?\x1b[0m".to_string());
+    }
+
+    let label = active_anthropic_key_label().unwrap_or_default();
+    // The suffix after `auto-` names the BACKEND, not the key: `-ant` is the
+    // Anthropic API key path, `-sub` the subscription fallback. Keeping the two
+    // in the same position means a key that happened to be labelled "sub" can no
+    // longer read as the degraded state.
+    match backend {
+        "api" if label.is_empty() => Some("\x1b[2mauto-ant\x1b[0m".to_string()),
+        "api" => Some(format!("\x1b[2mauto-ant:{}\x1b[0m", label)),
+        // Deliberately does NOT name a key. `label` is the conf's preferred key,
+        // but with-anthropic-key.sh defers to an already-exported ANTHROPIC_API_KEY,
+        // so the key that actually failed may be a different one — naming the wrong
+        // key as down is worse than naming none. The healthy line still shows it.
+        "subscription" => Some("\x1b[33mauto-sub\x1b[0m \x1b[2m(api down)\x1b[0m".to_string()),
+        "dead" => Some("\x1b[31m🔴auto\x1b[0m".to_string()),
+        _ => None,
+    }
 }
 
 /// Session duration from `cost.total_duration_ms`.

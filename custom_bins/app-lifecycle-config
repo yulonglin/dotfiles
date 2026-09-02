@@ -1,0 +1,479 @@
+#!/usr/bin/python3
+"""Read config/app-lifecycle.yaml and emit shell-eval'able KEY=VALUE lines.
+
+Both clear-mac-apps (manual trigger) and hide-idle-apps (idle trigger) read the
+one config through this helper, so neither zsh script parses YAML itself.
+
+Deliberately /usr/bin/python3 with no imports outside the stdlib: hide-idle-apps
+runs from launchd every 60 seconds, so resolving a dependency at run time is not
+an option, and PyYAML is not installed. The parser therefore accepts a small
+documented subset of YAML - the shape this file is actually written in - and
+REJECTS anything else rather than guessing. Rejecting unknown shape (not just
+bad values) is what keeps a typo from silently meaning "use the default".
+
+Subset:
+    top-level keys `defaults:`, `apps:`, `protect_windows:` only
+    defaults: `key: scalar` pairs
+    apps:     `Name: {k: v, ...}` flow maps, or `Name:` with indented `k: v`
+    protect_windows: `- item` sequence
+    `#` outside quotes starts a comment; blank lines ignored
+
+Usage:
+    app-lifecycle-config [--file PATH]     emit shell for eval
+    app-lifecycle-config --migrate PATH    print YAML converted from an old
+                                           clear_mac_apps.conf, on stdout
+
+Exit codes: 0 ok, 78 (EX_CONFIG) the config is unusable - reason on stderr.
+"""
+
+import os
+import re
+import shlex
+import sys
+
+EX_CONFIG = 78
+
+# The action scale, in order. `manual:` is the Shortcut's action and also the
+# ceiling for the destructive rungs of `auto:`; comparing ranks is how that
+# ceiling is applied.
+ACTIONS = ("skip", "hide", "close", "quit")
+
+# Every key allowed under `defaults:`, with its built-in fallback and the
+# environment variable that overrides it. The three names spelled out in the
+# spec (QUIT_AFTER_MINUTES, USER_IDLE_MINUTES, HIDE_IDLE_MIN_VISIBLE_PERCENT)
+# fix the pattern: minute-valued keys take a _MINUTES suffix, and the visibility
+# threshold keeps the name it already shipped under.
+DEFAULT_KEYS = {
+    # Fallbacks are `skip`, not `quit`. These two fields authorise closing and
+    # quitting, so whatever they resolve to when ABSENT is what an incomplete
+    # policy means. Defaulting them to quit made every way of losing the section -
+    # a zero-byte file, a comments-only file, a redirect interrupted right after
+    # `defaults:` - resolve to "quit every app, protect nothing", at exactly the
+    # moment the safety policy went missing. Absence must mean do nothing.
+    #
+    # This costs no behaviour on a complete policy: config/app-lifecycle.yaml sets
+    # both explicitly. It is also why a sparse `apps:`-only document is still
+    # accepted rather than rejected as corrupt - it now resolves to a harmless
+    # no-op instead of to a massacre, so there is nothing to reject.
+    "manual": ("action", "skip", None),
+    "auto": ("action", "skip", None),
+    # See MIGRATION_DEFAULTS below before changing either of the two above:
+    # migrate() writes these same fallbacks into the YAML it generates, where
+    # they carry the opposite meaning.
+    "hide_after": ("minutes", 15, "HIDE_AFTER_MINUTES"),
+    "close_after": ("minutes", 15, "CLOSE_AFTER_MINUTES"),
+    "quit_after": ("minutes", 30, "QUIT_AFTER_MINUTES"),
+    "user_idle": ("minutes", 5, "USER_IDLE_MINUTES"),
+    "min_visible_percent": ("percent", 40, "HIDE_IDLE_MIN_VISIBLE_PERCENT"),
+}
+
+# What migrate() writes for keys whose runtime fallback is deliberately not what
+# the legacy config meant. The two mappings answer different questions and must
+# not be collapsed back together:
+#
+#   DEFAULT_KEYS  - "the policy does not say; what should we do?" Answer: as
+#                   little as possible, because not-saying is usually a
+#                   truncated or half-written file.
+#   MIGRATION_DEFAULTS - "the old clear-mac-apps.conf did not list this app;
+#                   what did that MEAN?" Answer: quit. Absence there was an
+#                   affirmative policy, and the migration's whole claim is that
+#                   it changes no behaviour - there is a golden-file test in
+#                   tests/test_clear_mac_apps.zsh asserting the migrated config
+#                   reproduces the pre-migration dry run byte for byte.
+#
+# So migrate() emits these EXPLICITLY. That is also why the runtime fallback can
+# be safely inert: every migrated file states its own manual/auto rather than
+# relying on the built-in.
+MIGRATION_DEFAULTS = {
+    "manual": "quit",
+    "auto": "quit",
+}
+
+# Per-app keys. `slow` has no defaults: counterpart - it is a property of the
+# app (ignores synthetic keystrokes), not a tunable.
+APP_KEYS = {
+    "manual": "action",
+    "auto": "action",
+    "hide_after": "minutes",
+    "close_after": "minutes",
+    "quit_after": "minutes",
+    "slow": "bool",
+}
+
+
+class ConfigError(Exception):
+    pass
+
+
+def fail(msg):
+    raise ConfigError(msg)
+
+
+# --- YAML subset parser ----------------------------------------------------
+
+
+def strip_comment(line):
+    """Drop a trailing `#` comment, honouring quotes so a `#` inside a name
+    (or a pattern) is kept."""
+    out = []
+    quote = None
+    for ch in line:
+        if quote:
+            out.append(ch)
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+            out.append(ch)
+        elif ch == "#":
+            break
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def unquote(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+
+def tokenize(text):
+    """-> [(lineno, indent, content)] for every non-blank, non-comment line."""
+    items = []
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        if "\t" in raw.expandtabs(1)[: len(raw) - len(raw.lstrip())] or "\t" in raw:
+            fail("line %d: tabs are not valid YAML indentation" % lineno)
+        content = strip_comment(raw).rstrip()
+        if not content.strip():
+            continue
+        indent = len(content) - len(content.lstrip())
+        items.append((lineno, indent, content.strip()))
+    return items
+
+
+def split_key(lineno, content):
+    """`Spark Desktop: {slow: true}` -> ('Spark Desktop', '{slow: true}')."""
+    match = re.match(r'^(?:"([^"]*)"|\'([^\']*)\'|(.+?))\s*:\s*(.*)$', content)
+    if not match:
+        fail("line %d: expected `key: value`, got %r" % (lineno, content))
+    key = next(g for g in match.groups()[:3] if g is not None)
+    return key.strip(), match.group(4).strip()
+
+
+def parse_flow_map(lineno, text):
+    """`{manual: skip, auto: skip}` -> dict. Only scalars, no nesting."""
+    inner = text[1:-1].strip()
+    if not inner:
+        return {}
+    result = {}
+    for part in split_outside_quotes(lineno, inner):
+        key, value = split_key(lineno, part.strip())
+        if key in result:
+            fail("line %d: duplicate key %r" % (lineno, key))
+        result[key] = unquote(value)
+    return result
+
+
+def split_outside_quotes(lineno, text):
+    parts, buf, quote = [], [], None
+    for ch in text:
+        if quote:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+            buf.append(ch)
+        elif ch == ",":
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    if quote:
+        fail("line %d: unterminated quote" % lineno)
+    parts.append("".join(buf))
+    return [p for p in parts if p.strip()]
+
+
+def child_block(items, index, parent_indent):
+    """Items indented deeper than parent_indent, starting at index."""
+    end = index
+    while end < len(items) and items[end][1] > parent_indent:
+        end += 1
+    return items[index:end], end
+
+
+def parse_yaml_subset(text):
+    items = tokenize(text)
+    doc = {}
+    i = 0
+    while i < len(items):
+        lineno, indent, content = items[i]
+        if indent != 0:
+            fail("line %d: unexpected indentation at top level" % lineno)
+        key, inline = split_key(lineno, content)
+        if key in doc:
+            fail("line %d: duplicate top-level key %r" % (lineno, key))
+        if inline:
+            fail("line %d: %r must be a block, not an inline value" % (lineno, key))
+        kids, i = child_block(items, i + 1, indent)
+        if key == "protect_windows":
+            doc[key] = parse_sequence(kids)
+        elif key in ("defaults", "apps"):
+            doc[key] = parse_mapping(kids, nested=(key == "apps"))
+        else:
+            fail("line %d: unknown top-level key %r" % (lineno, key))
+    return doc
+
+
+def parse_sequence(items):
+    out = []
+    for lineno, _indent, content in items:
+        if not content.startswith("- "):
+            fail("line %d: expected a `- item` sequence entry" % lineno)
+        out.append(unquote(content[2:]))
+    return out
+
+
+def parse_mapping(items, nested):
+    out = {}
+    i = 0
+    base = items[0][1] if items else 0
+    while i < len(items):
+        lineno, indent, content = items[i]
+        if indent != base:
+            fail("line %d: inconsistent indentation" % lineno)
+        key, value = split_key(lineno, content)
+        if key in out:
+            fail("line %d: duplicate key %r" % (lineno, key))
+        if not nested:
+            out[key] = unquote(value)
+            i += 1
+            continue
+        if value.startswith("{"):
+            if not value.endswith("}"):
+                fail("line %d: unterminated flow mapping" % lineno)
+            out[key] = parse_flow_map(lineno, value)
+            i += 1
+        elif value:
+            fail("line %d: app %r takes a mapping, not a scalar" % (lineno, key))
+        else:
+            kids, i = child_block(items, i + 1, indent)
+            out[key] = parse_mapping(kids, nested=False) if kids else {}
+    return out
+
+
+# --- validation ------------------------------------------------------------
+
+
+def check(kind, key, value, where):
+    if kind == "action":
+        if value not in ACTIONS:
+            fail("%s: %s=%r must be one of %s" % (where, key, value, "/".join(ACTIONS)))
+        return value
+    if kind == "bool":
+        if value not in ("true", "false"):
+            fail("%s: %s=%r must be true or false" % (where, key, value))
+        return value
+    if not re.fullmatch(r"\d+", value):
+        fail("%s: %s=%r must be a whole number" % (where, key, value))
+    number = int(value)
+    if kind == "percent" and not 0 <= number <= 100:
+        fail("%s: %s=%d must be a whole percent, 0-100" % (where, key, number))
+    return str(number)
+
+
+def resolve(doc, env):
+    # An unreadable policy must never resolve to something MORE destructive than
+    # a readable one. The primary defence is in DEFAULT_KEYS, where manual and
+    # auto fall back to `skip`: any way of losing part of the document now
+    # resolves toward doing nothing rather than toward quitting everything.
+    #
+    # A wholly empty document is still rejected outright rather than left to
+    # resolve to a silent no-op. Both are safe; this one is also honest. A
+    # zero-byte config is a broken install, not a policy of inaction, and the
+    # difference matters when someone is trying to work out why the automation
+    # stopped. This is the parser's existing rule ("reject unknown shape, don't
+    # guess", see the module docstring) applied to the empty document, which
+    # slipped through because every field had a fallback. A missing file is
+    # already rejected in main(); a present-but-empty one must be too.
+    #
+    # Note what is deliberately NOT rejected: a document with no `defaults:` at
+    # all, or a truncated one carrying only `defaults:`. Requiring the section
+    # would break sparse-but-valid policies that only set `apps:` and lean on the
+    # built-ins - and with the built-ins now `skip`, leaning on them is harmless.
+    # Truncation partway THROUGH a written-out defaults block (`manual: quit`
+    # saved, `protect_windows:` lost) still resolves to something destructive, and
+    # no presence check can catch that; only a trailing completeness marker or
+    # atomic emission would. That is a config-format change, flagged rather than
+    # taken unilaterally.
+    if not doc:
+        fail("config is empty - refusing to guess a policy. A zero-byte or"
+             " comments-only file is a broken install, not an instruction to do"
+             " nothing; restore it rather than letting the idle job run against a"
+             " policy that is not there")
+    defaults = {}
+    raw_defaults = doc.get("defaults", {})
+    for key, value in raw_defaults.items():
+        if key not in DEFAULT_KEYS:
+            fail("defaults: unknown key %r" % key)
+        kind = DEFAULT_KEYS[key][0]
+        defaults[key] = check(kind, key, value, "defaults")
+    for key, (kind, fallback, env_name) in DEFAULT_KEYS.items():
+        defaults.setdefault(key, str(fallback))
+        override = env.get(env_name) if env_name else None
+        if override is not None and override != "":
+            defaults[key] = check(kind, key, override.strip(), "$%s" % env_name)
+
+    apps = []
+    seen = {}
+    for name, entry in doc.get("apps", {}).items():
+        lowered = name.lower()
+        if lowered in seen:
+            fail("apps: %r duplicates %r (names match case-insensitively)"
+                 % (name, seen[lowered]))
+        seen[lowered] = name
+        resolved = dict(defaults)
+        resolved.pop("user_idle", None)
+        resolved.pop("min_visible_percent", None)
+        resolved["slow"] = "false"
+        for key, value in entry.items():
+            if key not in APP_KEYS:
+                fail("apps: %s: unknown key %r" % (name, key))
+            resolved[key] = check(APP_KEYS[key], key, value, "apps: %s" % name)
+        apps.append((lowered, name, resolved))
+
+    return defaults, apps, list(doc.get("protect_windows", []))
+
+
+# --- emission --------------------------------------------------------------
+
+
+def emit(defaults, apps, protect_windows, out):
+    q = shlex.quote
+    # zsh needs the associative arrays declared before any subscripted
+    # assignment - `FOO[bar]=x` on an undeclared name is not an assoc array.
+    out.write("typeset -gA ALC_NAME ALC_MANUAL ALC_AUTO ALC_SLOW"
+              " ALC_HIDE_AFTER ALC_CLOSE_AFTER ALC_QUIT_AFTER\n")
+    out.write("typeset -ga ALC_APP_KEYS ALC_PROTECT_WINDOWS\n")
+    for key, value in defaults.items():
+        out.write("ALC_DEFAULT_%s=%s\n" % (key.upper(), q(value)))
+    out.write("ALC_APP_KEYS=(%s)\n" % " ".join(q(k) for k, _n, _r in apps))
+    # `arr+=(key value)`, not `arr[key]=value`: zsh does NOT strip quotes from a
+    # quoted subscript, so `arr['spark desktop']=x` stores the key WITH its
+    # quotes and every later lookup misses. The += form quotes normally.
+    for lowered, name, resolved in apps:
+        out.write("ALC_NAME+=(%s %s)\n" % (q(lowered), q(name)))
+        for key in ("manual", "auto", "slow", "hide_after", "close_after", "quit_after"):
+            out.write("ALC_%s+=(%s %s)\n" % (key.upper(), q(lowered), q(resolved[key])))
+    # Order is preserved: the dry-run prints these patterns in file order.
+    out.write("ALC_PROTECT_WINDOWS=(%s)\n" % " ".join(q(p) for p in protect_windows))
+
+
+# --- migration from the old sectioned config -------------------------------
+
+# Each old section maps onto one field of the new per-app entry. This is
+# behaviour-preserving by construction: nothing here changes what an app does,
+# it only restates it. Changing behaviour is a separate, deliberate edit.
+SECTION_TO_ENTRY = {
+    "no-touch": ("manual", "skip"),
+    "close-windows": ("manual", "close"),
+    "slow-quit": ("slow", "true"),
+    "hide-idle-exclude": ("auto", "skip"),
+}
+
+
+def read_old_sections(path):
+    sections = {}
+    current = None
+    with open(path, encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if line.startswith("[") and line.endswith("]"):
+                current = line[1:-1]
+                sections.setdefault(current, [])
+                continue
+            if current is None or line.startswith("#") or not line:
+                continue
+            line = re.sub(r"\s*#.*$", "", line).strip()
+            if line:
+                sections[current].append(line)
+    return sections
+
+
+def migrate(path, out):
+    sections = read_old_sections(path)
+    entries = {}
+    order = []
+    for section, (field, value) in SECTION_TO_ENTRY.items():
+        for name in sections.get(section, []):
+            if name not in entries:
+                entries[name] = {}
+                order.append(name)
+            entries[name][field] = value
+
+    # The path is echoed from the argument rather than hardcoded: the old file was
+    # moved out of config/ when this format replaced it, so a fixed string here
+    # would name a path that no longer exists.
+    out.write("# Generated by `clear-mac-apps --migrate-config` from %s.\n" % path)
+    out.write("# What each trigger may do to each app. `manual:` is the macOS"
+              " Shortcut's action\n")
+    out.write("# and the ceiling for the idle job's destructive rungs;"
+              " `auto:` governs hiding\n")
+    out.write("# alone. Scale: skip < hide < close < quit.\n\n")
+    out.write("defaults:\n")
+    for key, (_kind, fallback, _env) in DEFAULT_KEYS.items():
+        out.write("  %s: %s\n" % (key, MIGRATION_DEFAULTS.get(key, fallback)))
+    out.write("\napps:\n")
+    width = max((len(name) for name in order), default=0) + 2
+    for name in order:
+        fields = ", ".join("%s: %s" % kv for kv in entries[name].items())
+        out.write("  %s {%s}\n" % ((name + ":").ljust(width), fields))
+    out.write("\nprotect_windows:\n")
+    for pattern in sections.get("protected-windows", []):
+        out.write("  - %s\n" % pattern)
+
+
+# --- entry point -----------------------------------------------------------
+
+
+def main(argv):
+    here = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
+    path = os.path.join(os.path.dirname(here), "config", "app-lifecycle.yaml")
+    migrate_from = None
+
+    args = list(argv[1:])
+    while args:
+        arg = args.pop(0)
+        if arg == "--file" and args:
+            path = args.pop(0)
+        elif arg == "--migrate" and args:
+            migrate_from = args.pop(0)
+        elif arg in ("--help", "-h"):
+            sys.stdout.write(__doc__)
+            return 0
+        else:
+            sys.stderr.write("app-lifecycle-config: unknown argument %r\n" % arg)
+            return EX_CONFIG
+
+    try:
+        if migrate_from is not None:
+            if not os.path.exists(migrate_from):
+                fail("no such file: %s" % migrate_from)
+            migrate(migrate_from, sys.stdout)
+            return 0
+        if not os.path.exists(path):
+            fail("config file not found: %s" % path)
+        with open(path, encoding="utf-8") as handle:
+            doc = parse_yaml_subset(handle.read())
+        emit(*resolve(doc, os.environ), out=sys.stdout)
+    except ConfigError as exc:
+        sys.stderr.write("app-lifecycle-config: %s\n" % exc)
+        return EX_CONFIG
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

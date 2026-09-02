@@ -1,22 +1,113 @@
 #!/usr/bin/env zsh
-# hide-idle-apps - Hide (Cmd+H equivalent) every running app after it's spent
-# N minutes not frontmost, EXCEPT apps in config's [hide-idle-exclude] section
-# (opt-out: hide-by-default, exclude-list-to-stay-visible). Scheduled as a
-# polling job (see scripts/cleanup/setup_hide_idle_apps.sh).
+# hide-idle-apps - hide (Cmd+H equivalent) an app once it has been continuously
+# COVERED for N minutes, EXCEPT apps whose `auto:` is skip in
+# config/app-lifecycle.yaml (opt-out: hide-by-default). Scheduled as a polling
+# job (see scripts/cleanup/setup_hide_idle_apps.sh).
 #
-# State: ~/.cache/hide-idle-apps/state - tab-separated "app<TAB>last_frontmost_epoch",
-# rewritten atomically each run. On first sight of an app, its timer starts now
-# (not "already idle") so nothing hides immediately after enabling the feature.
+# Hiding is governed by `auto:` alone and is never capped by `manual:`, because
+# "don't quit this" was never the same statement as "don't hide this".
+#
+# The tracked signal is EXPOSURE, not focus: an app with a window at least
+# HIDE_IDLE_MIN_VISIBLE_PERCENT visible is never hidden, however long since it was
+# last focused, and neither is whatever is frontmost. Focus is exclusive (one app
+# at a time), so a 60s poll misses most short visits; exposure is shared and
+# continuous, so one poll observes every visible app at once.
+#
+# Exposure comes from tools/window-exposure (CGWindowList, keyed by owner PID).
+# An app absent from that list - another Space, fullscreen, minimised - is
+# UNKNOWN, never "not exposed", and is never hidden.
+#
+# Once hidden, an app climbs a timed ladder: hide -> close windows -> quit. Each
+# rung is a separate clock, and the ladder stops at min(manual:, auto:) - the
+# ceiling that `manual:` puts on the destructive rungs. Hiding is not capped:
+# only `auto: skip` exempts an app from being hidden.
+#
+# The destructive rungs are gated on the machine being IDLE (no HID input for
+# user_idle minutes, no live microphone). Busy PAUSES those clocks rather than
+# resetting them, so a working session doesn't earn an app a fresh 15 minutes
+# every time you touch the trackpad. Hiding is never gated - it needs only
+# occlusion, so its clock is the v2 exposure timer and not the phase clock.
+#
+# State: ~/.cache/hide-idle-apps/state, rewritten atomically each run:
+#   #v3
+#   #last_poll<TAB>epoch
+#   pid<TAB>last_exposed_epoch<TAB>not_exposed_polls<TAB>phase<TAB>phase_clock_epoch
+# On first sight of an app its timer starts now (not "already idle").
+#
+# phase is visible|hidden|closed - which rung the app is on. It exists because
+# exposure alone cannot tell "on another Space" from "hidden by us": neither owns
+# an onscreen window, so both read as unknown. phase_clock_epoch is NOT when the
+# phase began; it is that time pushed forward by however long the busy gate held
+# the clock shut, so `now - phase_clock_epoch` always reads elapsed UNPAUSED time.
+#
+# A state file from an older version is discarded and rebuilt, never migrated,
+# and that poll acts on nothing.
 
 set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
-CONFIG_FILE="${SCRIPT_DIR}/../config/clear_mac_apps.conf"
+DOT_DIR="${SCRIPT_DIR:h}"
+CONFIG_FILE="${DOT_DIR}/config/app-lifecycle.yaml"
+CONFIG_HELPER="${SCRIPT_DIR}/app-lifecycle-config"
+TUNABLES_CONF="${DOT_DIR}/config/hide-idle.conf"
+HELPER_SRC="${DOT_DIR}/tools/window-exposure/main.swift"
+HELPER_BIN="${DOT_DIR}/tools/window-exposure/window-exposure"
 CACHE_DIR="${HOME}/.cache/hide-idle-apps"
 STATE_FILE="${CACHE_DIR}/state"
-IDLE_MINUTES="${HIDE_IDLE_MINUTES:-5}"
-DRY_RUN=false
+STATE_VERSION="#v3"
+# Consent to the destructive rungs is not inheritable. This job used to default
+# to ON and only hid apps; the ladder that closes windows and quits apps came
+# later, and the launchd label and binary path never changed. So a machine set
+# up under the old default already has a loaded job that would silently start
+# quitting applications with unsaved work - consent to HIDING read as consent to
+# QUITTING. The component default is now off, but that only governs fresh
+# installs: an existing schedule keeps firing whether or not deploy.sh is re-run.
+#
+# From config.sh's history: 66feba6 added the component as `true`, hide-only;
+# 10a5f11 flipped it to `false`, still hide-only; 31e8d58 added close and quit
+# with the default already off. Note the order - the flip was NOT a response to
+# the ladder, so nobody running it in the `true` era was ever re-prompted, and
+# because the default is now false a plain ./deploy.sh takes neither branch.
+#
+# The gate is a token rather than a versioned label because the legacy plist
+# points at THIS binary, so a new label would not stop the old job - it would
+# also have to be unloaded, and unloading is exactly what deploy.sh cannot do
+# unconditionally (--only and --minimal set every other component false, so
+# `--only vim` would tear down a job it promised not to touch). A token needs no
+# unload at all: the inherited job keeps hiding, which is what was consented to,
+# and simply cannot climb higher. Written only by an explicit --hide-idle-apps,
+# via scripts/cleanup/setup_hide_idle_apps.sh.
+#
+# Deliberately NOT under CACHE_DIR, which holds STATE_FILE and is therefore
+# disposable by design - the test suite rm -rf's it between scenarios, and a
+# cache cleaner would do the same on a real machine. A record of consent that a
+# cache sweep can revoke is the wrong shape: it fails safe, but it fails
+# silently, and the user would only learn from a launchd log they never read.
+# ~/.local/state is where data that must outlive a cache purge belongs.
+ESCALATION_TOKEN="${HOME}/.local/state/hide-idle-apps/escalation-enabled"
+# The escalation rungs are not reimplemented here: they are one call into the
+# manual trigger, so config vetoes apply to both triggers through one code path.
+CLEAR_APPS="${SCRIPT_DIR}/clear-mac-apps"
 
+# The poll interval lives here rather than in app-lifecycle.yaml because it is
+# not a policy about apps: it mirrors the launchd StartInterval, and the two
+# have to agree for gap detection to mean anything. Environment wins over the
+# file. Every other tunable comes from app-lifecycle.yaml, which applies its own
+# environment overrides (HIDE_AFTER_MINUTES, HIDE_IDLE_MIN_VISIBLE_PERCENT, ...).
+env_poll="${HIDE_IDLE_POLL_SECONDS:-}"
+HIDE_IDLE_POLL_SECONDS=60
+[[ -f "$TUNABLES_CONF" ]] && source "$TUNABLES_CONF"
+[[ -n "$env_poll" ]] && HIDE_IDLE_POLL_SECONDS="$env_poll"
+
+# An app must be observed covered on this many consecutive valid polls before it
+# is eligible to hide - one bad snapshot should never be enough.
+REQUIRED_STREAK=2
+# A longer gap than this means polls were skipped (sleep, logout, session switch).
+# Wall-clock idle times are then meaningless, so restart every timer rather than
+# hiding everything on the first poll after waking.
+MAX_GAP=$(( HIDE_IDLE_POLL_SECONDS * 3 ))
+
+DRY_RUN=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run|-n)
@@ -25,8 +116,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --help|-h)
             echo "Usage: hide-idle-apps [--dry-run|-n]"
-            echo "  --dry-run, -n  Show what would happen without hiding anything"
-            echo "  HIDE_IDLE_MINUTES env var overrides the idle threshold (default: 5)"
+            echo "  --dry-run, -n  Show what would happen, plus each app's measured"
+            echo "                 visibility - use it to calibrate the threshold below"
+            echo ""
+            echo "Tunables (config/app-lifecycle.yaml defaults:, overridable by environment):"
+            echo "  HIDE_AFTER_MINUTES      minutes covered before hiding (default: 15)"
+            echo "  CLOSE_AFTER_MINUTES     minutes hidden before closing windows (default: 15)"
+            echo "  QUIT_AFTER_MINUTES      minutes closed before quitting (default: 30)"
+            echo "  USER_IDLE_MINUTES       minutes without input or mic before the close and"
+            echo "                          quit clocks run at all (default: 5)"
+            echo "  HIDE_IDLE_MIN_VISIBLE_PERCENT"
+            echo "                          whole percent of a window that must be visible for"
+            echo "                          the app to count as on screen (default: 40, not 0.4)"
+            echo ""
+            echo "Tunable (config/hide-idle.conf, overridable by environment):"
+            echo "  HIDE_IDLE_POLL_SECONDS  poll interval, used for gap detection (default: 60)."
+            echo "                          Must match the launchd StartInterval."
             exit 0
             ;;
         *)
@@ -36,122 +141,546 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Parse apps from the [hide-idle-exclude] section in config (same format as clear-mac-apps)
-get_hide_idle_exclude() {
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        echo "Error: Config file not found: $CONFIG_FILE" >&2
-        exit 1
+# Load config into ALC_* variables, or report why not. Returns non-zero rather
+# than exiting: an unreadable config is handled like any other untrustworthy
+# poll - act on nothing, restart the timers - and never by guessing a default.
+CONFIG_ERROR=""
+load_config() {
+    local emitted
+    if ! emitted=$("$CONFIG_HELPER" --file "$CONFIG_FILE" 2>&1); then
+        CONFIG_ERROR="${emitted//$'\n'/; }"
+        return 1
     fi
-    awk -v section="[hide-idle-exclude]" '
-        /^\[.*\]$/ { in_section = ($0 == section); next }
-        in_section && !/^#/ && !/^[[:space:]]*$/ {
-            sub(/#.*/, "")
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
-            if (length > 0) print
-        }
-    ' "$CONFIG_FILE"
+    eval "$emitted"
 }
 
 # OS chrome that isn't a "program" in the hide-idle sense - hardcoded, not
-# user-configurable via [hide-idle-exclude]. Toggling visibility on these is
+# user-configurable via `auto: skip`. Toggling visibility on these is
 # either meaningless or risky (Finder/Dock underpin the desktop shell).
 HARDCODED_EXCLUDE=(Finder Dock SystemUIServer loginwindow WindowServer)
 
-# Snapshot frontmost app name + all running process names in one osascript call
+# Compile the exposure helper once and cache it (deploy.sh does this too; this is
+# the fallback for a machine that hasn't redeployed yet). Never per poll.
+ensure_helper() {
+    [[ -x "$HELPER_BIN" && "$HELPER_BIN" -nt "$HELPER_SRC" ]] && return 0
+    [[ -f "$HELPER_SRC" ]] || return 1
+    command -v swiftc >/dev/null 2>&1 || return 1
+    swiftc -O -o "$HELPER_BIN" "$HELPER_SRC" >/dev/null 2>&1
+}
+
+# Snapshot frontmost PID, and every non-background-only process as
+# "pid<TAB>visible<TAB>name", in one osascript call. Names are read twice and
+# compared so a process starting or quitting mid-query can't misalign the lists.
 get_snapshot() {
     osascript -e 'tell application "System Events"
-        set frontApp to name of first process whose frontmost is true
-        set procNames to name of every process whose background only is false
-        set output to "FRONT:" & frontApp & linefeed
-        repeat with n in procNames
-            set output to output & "RUN:" & n & linefeed
+        set frontPid to unix id of first process whose frontmost is true
+        set nm to name of every process whose background only is false
+        set ids to unix id of every process whose background only is false
+        set vis to visible of every process whose background only is false
+        set nm2 to name of every process whose background only is false
+        if nm is not nm2 then return "INVALID"
+        if (count of nm) is not (count of ids) then return "INVALID"
+        if (count of nm) is not (count of vis) then return "INVALID"
+        set output to "FRONT:" & (frontPid as text) & linefeed
+        repeat with i from 1 to count of nm
+            set output to output & "RUN:" & ((item i of ids) as text) & tab & ((item i of vis) as text) & tab & (item i of nm) & linefeed
         end repeat
         return output
     end tell'
 }
 
-# Hide an app (Cmd+H equivalent). No focus dependency (visibility toggle is
-# name-based, not a keystroke), safe to run in parallel.
-hide_app() {
-    local app="$1"
-    osascript -e "tell application \"System Events\" to set visible of process \"$app\" to false" 2>/dev/null || true
+# Hide an app by PID (Cmd+H equivalent). PID rather than name so WindowServer and
+# System Events can't disagree about what an app is called. No focus dependency
+# (visibility is a property, not a keystroke), so this is safe to run in parallel.
+# The exit status matters: an app that failed to hide must not start the close
+# clock, or in 15 minutes we close the windows of something still on screen.
+hide_pid() {
+    local pid="$1"
+    osascript -e "tell application \"System Events\" to set visible of (first process whose unix id is $pid) to false" 2>/dev/null
+}
+
+# Ordered action scale, so `min(manual:, auto:)` is arithmetic rather than a
+# nest of cases. Anything unrecognised ranks lowest - the config helper already
+# rejects those, so this only ever fires on a value we never emitted.
+rank_action() {
+    case "$1" in
+        quit)  print -r -- 3 ;;
+        close) print -r -- 2 ;;
+        hide)  print -r -- 1 ;;
+        *)     print -r -- 0 ;;
+    esac
+}
+
+# Seconds remaining on a clock, as the dry run words it. Rounded UP, so a rung
+# that is 1s short never reads as "due now" when this poll declined to take it.
+due_in() {
+    (( $1 <= 0 )) && { print -r -- "due now"; return }
+    print -r -- "in $(( ($1 + 59) / 60 ))m"
+}
+
+# Is the machine in use? Two signals: HID input within USER_IDLE_MINUTES, and any
+# live microphone (a coreaudiod power assertion listing audio-in - what a call or
+# a dictation session holds). EITHER SIGNAL BEING UNREADABLE COUNTS AS BUSY:
+# "cannot tell whether the mic is live" must never license closing windows.
+is_busy() {
+    local idle_ns assertions
+    idle_ns=$(ioreg -c IOHIDSystem 2>/dev/null | awk -F' = ' '/HIDIdleTime/ {print $2; exit}') || idle_ns=""
+    idle_ns="${idle_ns//[^0-9]/}"
+    [[ -n "$idle_ns" ]] || return 0             # no reading at all -> assume busy
+    # Nanoseconds down to seconds, rather than scaling the threshold up: the
+    # threshold is small and the reading is not, so scaling up is what overflows.
+    (( idle_ns / 1000000000 < USER_IDLE_MINUTES * 60 )) && return 0
+
+    assertions=$(pmset -g assertions 2>/dev/null) || return 0
+    [[ -n "$assertions" ]] || return 0
+    # `Resources: audio-in ...` sits on a line BELOW the assertion that owns it,
+    # but not necessarily the next one - `Created for PID:` and other detail
+    # lines come between. So ownership is reset only by the next assertion
+    # header (`pid 419(coreaudiod):`), never by an unrecognised line: clearing
+    # it on any non-matching line silently misses every real live microphone.
+    print -r -- "$assertions" | awk '
+        /^[[:space:]]*pid [0-9]+\(/ { ca = ($0 ~ /\(coreaudiod\):/); next }
+        /Resources:/                { if (ca && $0 ~ /audio-in/) { found = 1; exit } }
+        END                         { exit !found }
+    ' && return 0
+    return 1
+}
+
+# Climb one rung, by calling the manual trigger for exactly this app. --only
+# filters before classification, so config still vetoes; --max-action caps the
+# result afterwards, so it can only ever downgrade. Without that cap the close
+# rung would QUIT anything whose manual: is quit, collapsing the ladder to one step.
+escalate() {
+    local name="$1" rung="$2"
+    # Both destructive rungs come through here; hiding is implemented locally and
+    # never does, so an ungated install still hides exactly as it always did.
+    # Non-zero deliberately: that is the give-back status, so the app keeps its
+    # current rung and is simply never advanced. Reporting success would mark a
+    # rung done that was refused, and quit_after would later act on that lie.
+    if [[ ! -f "$ESCALATION_TOKEN" ]]; then
+        if [[ "${_escalation_warned:-}" != true ]]; then
+            print -ru2 -- "hide-idle-apps: close/quit not enabled on this machine; hiding only."
+            print -ru2 -- "  Run ./deploy.sh --hide-idle-apps to consent to the destructive rungs."
+            _escalation_warned=true
+        fi
+        return 1
+    fi
+    local -a cmd=("$CLEAR_APPS" --only "$name")
+    [[ "$rung" == close ]] && cmd+=(--max-action close)
+    "${cmd[@]}" >/dev/null 2>&1
+}
+
+# Restart every timer without hiding anything, and send every app back to the
+# `visible` rung. Used whenever the snapshot can't be trusted: a covered app must
+# never be hidden - still less closed - on evidence we know is unreliable.
+write_reset_state() {
+    local now="$1"
+    local out="$STATE_VERSION"$'\n'"#last_poll"$'\t'"$now"$'\n'
+    local pid
+    for pid in "${(k)last_active[@]}"; do
+        out+="${pid}"$'\t'"${now}"$'\t'"0"$'\t'"visible"$'\t'"${now}"$'\n'
+    done
+    local tmp="${STATE_FILE}.tmp.$$"
+    print -rn -- "$out" > "$tmp"
+    mv "$tmp" "$STATE_FILE"
 }
 
 main() {
+    local now
+    now=$(date +%s)
+    mkdir -p "$CACHE_DIR"
+
     typeset -A exclude_set
+    local app
     for app in "${HARDCODED_EXCLUDE[@]}"; do
         exclude_set[${(L)app}]="$app"
     done
-    while IFS= read -r app; do
-        [[ -n "$app" ]] && exclude_set[${(L)app}]="$app"
-    done < <(get_hide_idle_exclude)
 
-    local snapshot front_app
-    snapshot=$(get_snapshot)
-    front_app=$(echo "$snapshot" | awk -F: '/^FRONT:/ { sub(/^FRONT:/, ""); print; exit }')
+    local config_ok=true
+    if load_config; then
+        # `auto: skip` is the whole exemption from hiding, and the only one:
+        # it is what the old [hide-idle-exclude] section became.
+        local akey
+        for akey in "${ALC_APP_KEYS[@]}"; do
+            [[ "${ALC_AUTO[$akey]}" == skip ]] && exclude_set[$akey]="${ALC_NAME[$akey]}"
+        done
+        HIDE_IDLE_MINUTES="$ALC_DEFAULT_HIDE_AFTER"
+        HIDE_IDLE_MIN_VISIBLE_PERCENT="$ALC_DEFAULT_MIN_VISIBLE_PERCENT"
+        USER_IDLE_MINUTES="$ALC_DEFAULT_USER_IDLE"
+    else
+        config_ok=false
+        HIDE_IDLE_MINUTES=0
+        HIDE_IDLE_MIN_VISIBLE_PERCENT=0
+        USER_IDLE_MINUTES=0
+    fi
 
-    typeset -A running_set
+    # Load state. A file without the current version tag is discarded and rebuilt,
+    # never migrated: in v1 the stored timestamp meant "last frontmost", and v2
+    # had no phase at all, so an old row cannot say which rung an app is on.
+    typeset -A last_active streak phase phase_clock
+    local last_poll=0 stale_state=false
+    local key val extra ph clk
+    if [[ -f "$STATE_FILE" ]]; then
+        if [[ "$(head -1 "$STATE_FILE")" == "$STATE_VERSION" ]]; then
+            while IFS=$'\t' read -r key val extra ph clk; do
+                case "$key" in
+                    '#last_poll') last_poll="$val" ;;
+                    '#'*|'') ;;
+                    *)
+                        last_active[$key]="$val"
+                        streak[$key]="${extra:-0}"
+                        phase[$key]="${ph:-visible}"
+                        phase_clock[$key]="${clk:-$now}"
+                        ;;
+                esac
+            done < "$STATE_FILE"
+        else
+            stale_state=true
+        fi
+    fi
+
+    local invalid="" misconfigured=false
+    if ! $config_ok; then
+        # Same posture as a bad threshold: say what is wrong and do nothing,
+        # rather than falling back to a default nobody asked for.
+        invalid="unreadable config: ${CONFIG_ERROR}"
+        misconfigured=true
+    elif $stale_state; then
+        invalid="state file was written by an older version; discarded and rebuilt"
+    elif (( last_poll > 0 )) && (( now - last_poll > MAX_GAP )); then
+        invalid="polls were skipped ($(( now - last_poll ))s gap; sleep, logout, or session switch)"
+    fi
+
+    local snapshot=""
+    if [[ -z "$invalid" ]]; then
+        snapshot=$(get_snapshot 2>/dev/null) || snapshot=""
+        [[ -z "$snapshot" || "$snapshot" == INVALID* ]] && invalid="System Events snapshot unavailable"
+    fi
+
+    local exposure="" helper_rc=0
+    local -a helper_args=(--min-visible "$HIDE_IDLE_MIN_VISIBLE_PERCENT")
+    # --verbose adds the measured fraction as a third column, which the dry run
+    # prints. The scheduled run stays on two columns so the parser is unaffected.
+    if $DRY_RUN; then helper_args+=(--verbose); fi
+    if [[ -z "$invalid" ]]; then
+        if ! ensure_helper; then
+            invalid="window-exposure helper unavailable (swiftc missing or compile failed)"
+        else
+            exposure=$("$HELPER_BIN" "${helper_args[@]}" 2>/dev/null) || helper_rc=$?
+            if (( helper_rc == 64 )); then
+                # 64 is bad usage, which from here can only mean an unparseable
+                # threshold: a conf typo, not a transient screen state. Without this
+                # branch a typo reads as "no window list" and silently disables the
+                # job forever with a misleading reason.
+                invalid="bad HIDE_IDLE_MIN_VISIBLE_PERCENT='${HIDE_IDLE_MIN_VISIBLE_PERCENT}' (want a whole percent, 0-100)"
+                misconfigured=true
+            elif (( helper_rc != 0 )); then
+                invalid="no usable window list (screen locked, Mission Control, or a Space transition)"
+            fi
+        fi
+    fi
+
+    if [[ -n "$invalid" ]]; then
+        write_reset_state "$now"
+        # A bad tunable needs fixing by hand, so say so on stderr (launchd captures
+        # it) instead of failing quietly every poll. Transient states stay silent.
+        if $misconfigured; then echo "hide-idle-apps: $invalid" >&2; fi
+        if $DRY_RUN; then
+            echo "=== DRY RUN ==="
+            echo "Snapshot not trusted: ${invalid}. Nothing would be hidden; all timers restarted."
+        fi
+        return 0
+    fi
+
+    # pid -> 1 if some window of it is at least HIDE_IDLE_MIN_VISIBLE_PERCENT
+    # visible, 0 if every window is more covered than that. A PID absent from this
+    # map owns no window on the current Space: unknown, and never grounds to hide.
+    typeset -A exposed exposed_frac
+    local pid frac
+    while IFS=$'\t' read -r pid val frac; do
+        [[ -n "$pid" ]] || continue
+        exposed[$pid]="$val"
+        [[ -n "$frac" ]] && exposed_frac[$pid]="$frac"  # --verbose only, so dry run only
+    done <<< "$exposure"
+
+    typeset -A proc_name proc_visible
+    local front_pid="" line rest name vis
     while IFS= read -r line; do
-        [[ "$line" == RUN:* ]] || continue
-        local name="${line#RUN:}"
-        running_set[${(L)name}]="$name"
+        case "$line" in
+            FRONT:*)
+                front_pid="${line#FRONT:}"
+                ;;
+            RUN:*)
+                rest="${line#RUN:}"
+                pid="${rest%%$'\t'*}"
+                rest="${rest#*$'\t'}"
+                vis="${rest%%$'\t'*}"
+                name="${rest#*$'\t'}"
+                [[ -n "$pid" && -n "$name" ]] || continue
+                proc_name[$pid]="$name"
+                proc_visible[$pid]="$vis"
+                ;;
+        esac
     done <<< "$snapshot"
 
-    if (( ${#running_set} == 0 )); then
+    if (( ${#proc_name} == 0 )); then
+        write_reset_state "$now"
         echo "No running apps detected."
         return 0
     fi
 
-    # Load previous state: app_lower -> last_frontmost_epoch
-    typeset -A last_active
-    mkdir -p "$CACHE_DIR"
-    if [[ -f "$STATE_FILE" ]]; then
-        while IFS=$'\t' read -r app_lower epoch; do
-            [[ -n "$app_lower" ]] && last_active[$app_lower]="$epoch"
-        done < "$STATE_FILE"
+    # The busy gate, read once per poll. Hiding never consults it - occlusion is
+    # the whole test there - so only the close and quit rungs below do.
+    local busy=false
+    if is_busy; then busy=true; fi
+
+    # Busy PAUSES the destructive clocks; it does not reset them. Pushing every
+    # clock forward by exactly the elapsed interval is what makes `now - clock`
+    # read elapsed UNPAUSED time. It happens before anything is evaluated, and
+    # after the invalid checks above: advancing by a sleep-sized delta and only
+    # then discovering the gap would corrupt every clock on the way to the bin.
+    # `last_poll > 0` guards the first-ever poll, where the delta is an epoch.
+    if $busy && (( last_poll > 0 )); then
+        local paused=$(( now - last_poll ))
+        for pid in "${(k)phase_clock[@]}"; do
+            phase_clock[$pid]=$(( ${phase_clock[$pid]} + paused ))
+        done
     fi
 
-    local now front_app_lower
-    now=$(date +%s)
-    front_app_lower="${(L)front_app}"
+    local -a would_hide=() hide_pids=() exposure_report=()
+    local -a would_close=() would_quit=()
+    local -a esc_names=() esc_rungs=() esc_pids=() esc_overdue=()
+    typeset -A next_phase next_clock
+    # Every one of these carries an explicit `=`, and the loop below declares no
+    # locals of its own. zsh leaves TYPESET_SILENT unset, so `local x` with NO
+    # value, for an x that already exists, PRINTS `x=<value>` to stdout - and
+    # `akey`, `ph` and `clk` all already exist by this point (the exclude-set loop
+    # and the state reader above). Bare, these three lines put `akey=facetime`,
+    # `ph=''` and `clk=''` at the top of every dry-run report.
+    local is_exposed= since= idle= s=
+    local akey= manual= auto= rank_m= rank_a= ceiling= ph= clk= hide_min= close_min= quit_min=
+    local _vis= _nm= _next= _gate=
+    for pid in "${(k)proc_name[@]}"; do
+        name="${proc_name[$pid]}"
+        (( ${+exclude_set[${(L)name}]} )) && continue  # excluded: never track, never hide
 
-    local -a would_hide=()
-    local new_state=""
-    for app_lower in "${(k)running_set[@]}"; do
-        (( ${+exclude_set[$app_lower]} )) && continue  # excluded, never track/hide
-        local app="${running_set[$app_lower]}"
-
-        if [[ "$app_lower" == "$front_app_lower" ]]; then
-            last_active[$app_lower]="$now"
+        # Per-app settings, or the defaults for an app the config never names.
+        # The helper has already merged defaults into each listed app, so a name
+        # present in one map is present in all of them.
+        akey="${(L)name}"
+        if (( ${+ALC_MANUAL[$akey]} )); then
+            manual="${ALC_MANUAL[$akey]}";      auto="${ALC_AUTO[$akey]}"
+            hide_min="${ALC_HIDE_AFTER[$akey]}"; close_min="${ALC_CLOSE_AFTER[$akey]}"
+            quit_min="${ALC_QUIT_AFTER[$akey]}"
         else
-            local since="${last_active[$app_lower]:-$now}"  # first sight: start timer now
-            local idle_seconds=$(( now - since ))
-            (( idle_seconds >= IDLE_MINUTES * 60 )) && would_hide+=("$app")
-            last_active[$app_lower]="$since"
+            manual="$ALC_DEFAULT_MANUAL";        auto="$ALC_DEFAULT_AUTO"
+            hide_min="$ALC_DEFAULT_HIDE_AFTER";  close_min="$ALC_DEFAULT_CLOSE_AFTER"
+            quit_min="$ALC_DEFAULT_QUIT_AFTER"
         fi
-        new_state+="${app_lower}"$'\t'"${last_active[$app_lower]}"$'\n'
+        # exclude_set is built from ALC_APP_KEYS, so it can only ever hold apps
+        # the config names. `defaults.auto: skip` reaches an unlisted app here
+        # and nowhere else - without this it was hidden despite resolving to skip.
+        [[ "$auto" == skip ]] && continue
+
+        # How far up the ladder this app may go. `manual:` caps the destructive
+        # rungs only - hiding got its say via `auto: skip` just above.
+        rank_m=$(rank_action "$manual"); rank_a=$(rank_action "$auto")
+        ceiling=$(( rank_m < rank_a ? rank_m : rank_a ))
+
+        ph="${phase[$pid]:-visible}"
+        clk="${phase_clock[$pid]:-$now}"
+
+        is_exposed=true
+        if [[ "$pid" != "$front_pid" ]] && [[ "${exposed[$pid]:-unknown}" == "0" ]]; then
+            is_exposed=false  # has windows here, and every one is under the visible threshold
+        fi
+
+        # Back in play: frontmost, owning a window on this Space again, or un-hidden
+        # by the user. Owning a window again is also how a hide or a close that
+        # silently failed heals itself - the windows are still on screen, so the app
+        # drops back to `visible` instead of climbing a rung it never really left.
+        # Note the un-hidden test is only for `hidden`: an app whose windows we
+        # closed is still "visible" to System Events, having merely nothing to show.
+        if [[ "$ph" != visible ]]; then
+            if [[ "$pid" == "$front_pid" ]] || [[ -n "${exposed[$pid]:-}" ]] \
+               || { [[ "$ph" == hidden ]] && [[ "${proc_visible[$pid]}" == "true" ]] }; then
+                ph=visible
+                clk="$now"
+                # The exposure timer has to be reset here as well as the phase
+                # clock. The rungs below keep it fresh on every poll they run,
+                # but this poll runs the `visible` branch instead, so nothing
+                # else refreshes it on the way through - and an app arriving
+                # with an hour-old timer is hidden again in the same second the
+                # user brought it back.
+                last_active[$pid]="$now"
+                streak[$pid]=0
+            fi
+        fi
+
+        case "$ph" in
+            visible)
+                # The hide clock is the v2 exposure timer, deliberately: hiding
+                # needs occlusion and nothing else, so it never reads the phase
+                # clock and is therefore never paused by the busy gate.
+                if $is_exposed; then
+                    last_active[$pid]="$now"
+                    streak[$pid]=0
+                else
+                    since="${last_active[$pid]:-$now}"  # first sight: start the timer now
+                    s=$(( ${streak[$pid]:-0} + 1 ))
+                    idle=$(( now - since ))
+                    last_active[$pid]="$since"
+                    streak[$pid]="$s"
+                    if (( idle >= hide_min * 60 )) && (( s >= REQUIRED_STREAK )) \
+                       && [[ "${proc_visible[$pid]}" == "true" ]]; then
+                        would_hide+=("$name")
+                        hide_pids+=("$pid")
+                    fi
+                fi
+                ;;
+            hidden)
+                # Off the visible rung the exposure timer means nothing, so keep it
+                # fresh: an app dropping back to `visible` must not arrive already
+                # overdue to be hidden again the same second.
+                last_active[$pid]="$now"; streak[$pid]=0
+                if (( ceiling >= 2 )) && ! $busy && (( now - clk >= close_min * 60 )); then
+                    would_close+=("$name")
+                    esc_names+=("$name"); esc_rungs+=(close); esc_pids+=("$pid")
+                    esc_overdue+=( $(( now - clk - close_min * 60 )) )
+                fi
+                ;;
+            closed)
+                last_active[$pid]="$now"; streak[$pid]=0
+                if (( ceiling >= 3 )) && ! $busy && (( now - clk >= quit_min * 60 )); then
+                    would_quit+=("$name")
+                    esc_names+=("$name"); esc_rungs+=(quit); esc_pids+=("$pid")
+                    esc_overdue+=( $(( now - clk - quit_min * 60 )) )
+                fi
+                ;;
+        esac
+
+        # The resolved decision for this app, built after the rung has been
+        # settled so it reports what the poll actually concluded. Visibility
+        # alone answers "is my threshold right"; the rest answers "why is this
+        # app sitting where it is", which is the other half of calibrating
+        # against a real layout - and the reason a per-app line exists at all.
+        if $DRY_RUN; then
+            if [[ "$pid" == "$front_pid" ]]; then
+                _vis=frontmost; _nm="$name"
+            elif [[ -z "${exposed[$pid]:-}" ]]; then
+                _vis=unknown;   _nm="$name (no window on this Space)"
+            else
+                _vis="$(printf '%.0f%%' "$(( ${exposed_frac[$pid]:-0} * 100 ))")"; _nm="$name"
+            fi
+            case "$ph" in
+                visible)
+                    _next=hide
+                    if [[ "$pid" == "$front_pid" ]]; then                _gate="frontmost"
+                    elif [[ -z "${exposed[$pid]:-}" ]]; then             _gate="no window here"
+                    elif $is_exposed; then                               _gate="visible enough"
+                    elif [[ "${proc_visible[$pid]}" != "true" ]]; then   _gate="already not visible"
+                    elif (( ${streak[$pid]:-0} < REQUIRED_STREAK )); then
+                        _gate="streak ${streak[$pid]:-0}/$REQUIRED_STREAK"
+                    else
+                        _gate="$(due_in $(( hide_min * 60 - (now - ${last_active[$pid]:-now}) )))"
+                    fi ;;
+                hidden)
+                    _next=close
+                    if   (( ceiling < 2 )); then _gate="ceiling"
+                    elif $busy;             then _gate="busy"
+                    else _gate="$(due_in $(( close_min * 60 - (now - clk) )))"; fi ;;
+                closed)
+                    _next=quit
+                    if   (( ceiling < 3 )); then _gate="ceiling"
+                    elif $busy;             then _gate="busy"
+                    else _gate="$(due_in $(( quit_min * 60 - (now - clk) )))"; fi ;;
+            esac
+            exposure_report+=("$(printf '%9s  %-34s %-7s %5s/%-5s -> %-5s %s' \
+                "$_vis" "$_nm" "$ph" "$manual" "$auto" "$_next" "$_gate")")
+        fi
+
+        next_phase[$pid]="$ph"
+        next_clock[$pid]="$clk"
     done
 
-    # Atomic rewrite of state file
-    local tmp_state="${STATE_FILE}.tmp.$$"
-    print -rn -- "$new_state" > "$tmp_state"
-    mv "$tmp_state" "$STATE_FILE"
-
-    # Dispatch the actual hide calls in parallel, only after state is fully
-    # computed and written above - hide_app() just spawns an osascript
-    # process with no shared state, so backgrounding it is safe. State
-    # tracking (last_active, new_state) stays entirely synchronous in the
-    # parent; these subshells never touch it. Matches clear-mac-apps'
-    # slow-quit parallelization pattern.
-    if ! $DRY_RUN && (( ${#would_hide} > 0 )); then
-        for app in "${would_hide[@]}"; do
-            hide_app "$app" &
+    # Hides run before the state is written, because whether one worked decides
+    # whether its close clock starts at all. They stay parallel - hide_pid() only
+    # spawns an osascript with no shared state - so successes come back through a
+    # file rather than through variables a subshell could not export.
+    local -a hid_names=()
+    if ! $DRY_RUN && (( ${#hide_pids} > 0 )); then
+        local ok_log="${CACHE_DIR}/hide-ok.$$"
+        : > "$ok_log"
+        for pid in "${hide_pids[@]}"; do
+            ( hide_pid "$pid" && print -r -- "$pid" >> "$ok_log" ) &
         done
-        wait
+        wait || true
+        while IFS= read -r pid; do
+            [[ -n "$pid" ]] || continue
+            next_phase[$pid]=hidden
+            next_clock[$pid]="$now"
+            hid_names+=("${proc_name[$pid]}")
+        done < "$ok_log"
+        rm -f "$ok_log"
+    fi
+
+    # At most one destructive action per poll. clear-mac-apps can spend up to 30s
+    # on a slow-quit app, and several in one poll would overrun the interval,
+    # inflating the next poll's gap until it trips the 3x check and resets every
+    # timer - flakiness we would have inflicted on ourselves. The most overdue
+    # goes first; the rest stay overdue and follow on later polls.
+    local esc_i=0 esc_best=1 i
+    if ! $DRY_RUN && (( ${#esc_names} > 0 )); then
+        for i in {1..${#esc_names}}; do
+            (( esc_overdue[i] > esc_overdue[esc_best] )) && esc_best=$i
+        done
+        esc_i=$esc_best
+        # Advance the phase BEFORE the call, and persist it below: a rung that
+        # silently failed heals on the next poll (its windows are still in the
+        # onscreen list, which resets the app to `visible`), whereas a clock that
+        # never advanced would re-fire every 60s forever.
+        pid="${esc_pids[$esc_i]}"
+        next_clock[$pid]="$now"
+        [[ "${esc_rungs[$esc_i]}" == close ]] && next_phase[$pid]=closed
+    fi
+
+    # Atomic rewrite of state, before any escalation runs: a job killed mid-close
+    # must not come back believing the clock never started. Reads the arrays above
+    # by zsh's dynamic scoping, so the failure path below can rewrite with one call.
+    write_state() {
+        local new_state="$STATE_VERSION"$'\n'"#last_poll"$'\t'"$now"$'\n' p
+        for p in "${(k)next_phase[@]}"; do
+            new_state+="${p}"$'\t'"${last_active[$p]}"$'\t'"${streak[$p]}"$'\t'"${next_phase[$p]}"$'\t'"${next_clock[$p]}"$'\n'
+        done
+        local tmp_state="${STATE_FILE}.tmp.$$"
+        print -rn -- "$new_state" > "$tmp_state"
+        mv "$tmp_state" "$STATE_FILE"
+    }
+    write_state
+
+    local acted=""
+    if (( esc_i > 0 )); then
+        if escalate "${esc_names[$esc_i]}" "${esc_rungs[$esc_i]}"; then
+            acted="${esc_rungs[$esc_i]}: ${esc_names[$esc_i]}"
+        elif [[ "${esc_rungs[$esc_i]}" == close ]]; then
+            # A close that came back nonzero has to be taken back. Advancing
+            # first is right for a job that gets KILLED - it cannot re-fire
+            # forever - but a call that returned and failed is different: the app
+            # is still hidden and still owns no onscreen window, so the reset
+            # rule that supposedly heals a failed rung never sees it, and
+            # quit_after would later quit an app whose windows were never closed.
+            # The clock stays at `now`, so this retries in close_after rather
+            # than every poll.
+            next_phase[${esc_pids[$esc_i]}]=hidden
+            write_state
+        fi
     fi
 
     if $DRY_RUN; then
-        echo "=== DRY RUN (threshold: ${IDLE_MINUTES}m, frontmost: ${front_app:-none}) ==="
+        echo "=== DRY RUN (threshold: ${HIDE_IDLE_MINUTES}m under ${HIDE_IDLE_MIN_VISIBLE_PERCENT}% visible, frontmost pid: ${front_pid:-none}) ==="
+        if $busy; then
+            echo "Machine BUSY (input within ${USER_IDLE_MINUTES}m or mic live): close and quit clocks are paused."
+        fi
         if (( ${#would_hide} > 0 )); then
             echo "Would HIDE:"
             for app in "${would_hide[@]}"; do
@@ -160,9 +689,24 @@ main() {
         else
             echo "Nothing to hide."
         fi
-    elif (( ${#would_hide} > 0 )); then
-        echo "Hid: ${would_hide[*]}"
+        if (( ${#would_close} > 0 )); then
+            echo "Would CLOSE WINDOWS (one per poll, most overdue first):"
+            printf '  - %s\n' "${would_close[@]}"
+        fi
+        if (( ${#would_quit} > 0 )); then
+            echo "Would QUIT (one per poll, most overdue first):"
+            printf '  - %s\n' "${would_quit[@]}"
+        fi
+        if (( ${#exposure_report} > 0 )); then
+            echo ""
+            echo "Visible now (an app below ${HIDE_IDLE_MIN_VISIBLE_PERCENT}% counts as covered):"
+            printf '  %s\n' "${(on)exposure_report[@]}"
+        fi
+    else
+        (( ${#hid_names} > 0 )) && echo "Hid: ${hid_names[*]}"
+        [[ -n "$acted" ]] && echo "Escalated ${acted}"
     fi
+    return 0
 }
 
 main "$@"
