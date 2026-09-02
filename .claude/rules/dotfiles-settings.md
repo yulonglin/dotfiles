@@ -11,11 +11,13 @@ Verify:
 python3 -c "import json; d=json.load(open('claude/settings.json')); assert all(k in d for k in ['statusLine','hooks','permissions'])"
 ```
 
-## The machine-local gateway stays dirty on purpose
+## If the gateway is ever re-enabled, it lives only in the working copy
+
+**The gateway is currently OFF** (unwired 2026-08-18): neither the committed `claude/settings.json` nor the deployed `~/.claude/settings.json` carries any `ANTHROPIC_*` env key, so today there is no permanent diff on this file. The rest of this section describes the state to return to if it is re-enabled — and note that a non-Anthropic `ANTHROPIC_BASE_URL` hard-disables Remote Control, which is why it was unwired (`docs/remote-control-and-foreign-models.md`, 2026-09-01).
 
 `claude/settings.json` is public, but it is also the **only** place Claude Code reads `ANTHROPIC_BASE_URL` from — model-router's own measurements (2.1.222) found an ambient shell `ANTHROPIC_BASE_URL`, a project-level `settings.local.json`, and `CLAUDE_CONFIG_DIR` were all ignored for the base URL, and a user-level `settings.local.json` does not exist at all. So model-router's `http://127.0.0.1:<port>/t/<token>` endpoint cannot be relocated — it can only be kept out of commits.
 
-That means the working tree carries a permanent diff on this file, and that is the intended state, not something to tidy away. gitleaks does not catch the value (a bare hex token in a URL path has no adjacent secret keyword), so the guard is `_validate_no_local_gateway` in `config/git-hooks/pre-commit`, pinned by `tests/test_pre_commit_gateway_guard.sh`.
+While the gateway is on, the working tree carries a permanent diff on this file, and that is the intended state, not something to tidy away. gitleaks does not catch the value (a bare hex token in a URL path has no adjacent secret keyword), so the guard is `_validate_no_local_gateway` in `config/git-hooks/pre-commit`, pinned by `tests/test_pre_commit_gateway_guard.sh`.
 
 To commit the file's *other* changes, stage a stripped copy rather than editing the live file (editing it changes your running environment):
 
