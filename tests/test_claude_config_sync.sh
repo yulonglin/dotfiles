@@ -2,9 +2,12 @@
 # shellcheck shell=bash
 # Tests for custom_bins/claude-config-sync against fixture trees.
 #
-# The load-bearing block is "deletion is never propagated": in 2026-06/07 a
-# bidirectional Obsidian sync read an incomplete local vault as deletions and
-# destroyed 135 files. Those assertions are the reason this file exists.
+# The load-bearing blocks are the deletion ones. In 2026-06/07 a bidirectional
+# Obsidian sync read an incomplete local vault as deletions and destroyed 135
+# files -- so VAULT-side deletions are never propagated into the repo, ever.
+# REPO-side deletions do propagate outbound (2026-09-01): quarantined rather
+# than unlinked, refused in bulk without --allow-mass-delete, refused under an
+# unscannable source dir, and refused when the vault copy carries a phone edit.
 # shellcheck disable=SC2015  # ok() always succeeds, so `A && ok || fail` is safe
 set -uo pipefail
 
@@ -120,9 +123,7 @@ cp "$REPO/claude/rules/a.md" "$DEST/rules/a.md"
 sync push >/dev/null
 check "conflict clears once both sides match"     test "$(rc sync status)" = 0
 
-echo "=== DELETION IS NEVER PROPAGATED (the 2026-06 regression) ==="
-before_repo=$(find "$REPO/claude" -type f | wc -l)
-before_vault=$(find "$DEST" -type f | wc -l)
+echo "=== VAULT deletions are NEVER propagated (the 2026-06 regression) ==="
 rm "$DEST/rules/b.md"                             # a file vanishes on the vault side
 sync push > "$TMP/push.out" 2>&1; push_rc=$?
 sync pull > "$TMP/pull.out" 2>&1; pull_rc=$?
@@ -132,21 +133,68 @@ grep -q "VANISHED from vault" "$TMP/push.out" \
   && ok "push reports the vanished file" || fail "push reports the vanished file"
 check "push exits 1 (needs a human)"              test "$push_rc" = 1
 check "pull exits 1 (needs a human)"              test "$pull_rc" = 1
-rm "$REPO/claude/agents/x.md"                     # and one vanishes on the repo side
-sync pull > "$TMP/pull2.out" 2>&1
-sync push > "$TMP/push2.out" 2>&1
-check "vault copy of the repo-side deletion survives" test -f "$DEST/agents/x.md"
-check "pull did NOT re-create it in the repo"     test ! -e "$REPO/claude/agents/x.md"
-grep -q "VANISHED from repo" "$TMP/pull2.out" \
-  && ok "pull reports the vanished file" || fail "pull reports the vanished file"
-after_repo=$(find "$REPO/claude" -type f | wc -l)
-after_vault=$(find "$DEST" -type f | wc -l)
-check "no repo file deleted by the tool"          test "$after_repo" = "$((before_repo - 1))"
-check "no vault file deleted by the tool"         test "$after_vault" = "$((before_vault - 1))"
-# restore so later blocks start clean
-echo "rule b edited on phone" > "$DEST/rules/b.md"
+# restore: recreating the same content clears the report
+cp "$REPO/claude/rules/b.md" "$DEST/rules/b.md"
+check "recreating the vault copy clears it"       test "$(rc sync push)" = 0
+
+echo "=== REPO deletions propagate outbound, quarantined ==="
+rm "$REPO/claude/agents/x.md"
+says "dry run announces the removal" "would remove" sync push --dry-run
+check "  ... and removed nothing"                 test -f "$DEST/agents/x.md"
+check "a pending removal is not attention: status exits 0" test "$(rc sync status)" = 0
+check "pull does not re-create a repo-deleted file" test "$(rc sync pull)" = 0
+check "  ... in the repo"                         test ! -e "$REPO/claude/agents/x.md"
+check "push exits 0"                              test "$(rc sync push)" = 0
+check "vault copy removed"                        test ! -e "$DEST/agents/x.md"
+Q=$(find "$TMP/removed" -type f -name "x.md" 2>/dev/null | head -1)
+check "removed copy is quarantined, not unlinked" test -n "$Q"
+check "  ... with its content intact"             grep -q "agent" "$Q"
+check "state entry dropped"                       bash -c "! grep -q 'agents/x.md' '$STATE'"
+check "next push is silent"                       test "$(rc sync push)" = 0
+rm -rf "$REPO/claude/skills/demo"                 # a whole retired skill
+sync push >/dev/null 2>&1
+check "skill removal reaches the vault"           test ! -e "$DEST/skills/demo/SKILL.md"
+check "  ... and prunes the empty skill dir"      test ! -e "$DEST/skills/demo"
+check "  ... but never the mirror root"           test -d "$DEST"
+# restore for later blocks
 echo "agent" > "$REPO/claude/agents/x.md"
-sync push >/dev/null 2>&1; sync pull >/dev/null 2>&1
+mkdir -p "$REPO/claude/skills/demo"; echo "skill" > "$REPO/claude/skills/demo/SKILL.md"
+sync push >/dev/null 2>&1
+
+echo "=== a phone edit shields a repo deletion ==="
+echo "edited on phone after the deletion" > "$DEST/rules/b.md"
+rm "$REPO/claude/rules/b.md"
+sync push > "$TMP/push3.out" 2>&1; rc3=$?
+check "edited vault copy is kept"                 test -f "$DEST/rules/b.md"
+grep -q "EDITED in vault" "$TMP/push3.out" \
+  && ok "push reports the edit-vs-deletion" || fail "push reports the edit-vs-deletion"
+check "push exits 1 (needs a human)"              test "$rc3" = 1
+cp "$DEST/rules/b.md" "$REPO/claude/rules/b.md"   # resolve by hand: keep the edit
+check "restoring the repo copy resolves it"       test "$(rc sync push)" = 0
+
+echo "=== the mass-delete guard refuses bulk removals without the flag ==="
+for i in $(seq 1 12); do echo "bulk $i" > "$REPO/claude/rules/bulk$i.md"; done
+sync push >/dev/null 2>&1
+for i in $(seq 1 12); do rm "$REPO/claude/rules/bulk$i.md"; done
+sync push > "$TMP/push4.out" 2>&1; rc4=$?
+check "all 12 vault copies survive"               test "$(find "$DEST/rules" -name 'bulk*.md' | wc -l)" = 12
+grep -q "mass-delete" "$TMP/push4.out" \
+  && ok "the guard names itself" || fail "the guard names itself"
+check "guarded push exits 1"                      test "$rc4" = 1
+check "push --allow-mass-delete removes them"     test "$(rc sync push --allow-mass-delete)" = 0
+check "  ... all 12"                              test "$(find "$DEST/rules" -name 'bulk*.md' | wc -l)" = 0
+
+echo "=== an unscannable source dir is never read as deletions ==="
+mv "$REPO/claude/agents" "$TMP/agents-real"
+ln -s "$TMP/agents-real" "$REPO/claude/agents"    # deploy-transient symlink
+sync push > "$TMP/push5.out" 2>&1; rc5=$?
+check "vault copy under the symlinked dir survives" test -f "$DEST/agents/x.md"
+grep -q "unscannable" "$TMP/push5.out" \
+  && ok "push says why it kept the file" || fail "push says why it kept the file"
+check "push exits 1"                              test "$rc5" = 1
+says "status carries the same warning" "unscannable" sync status
+rm "$REPO/claude/agents"; mv "$TMP/agents-real" "$REPO/claude/agents"
+check "restoring the dir clears it"               test "$(rc sync push)" = 0
 
 echo "=== inbound writes are validated before they touch the live config ==="
 mkdir -p "$DEST/hooks"; echo "pwned" > "$DEST/hooks/evil.sh"

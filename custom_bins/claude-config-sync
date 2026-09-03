@@ -13,9 +13,16 @@ deletions upstream -- 135 files lost. Every rule below exists because of that.
 
   * Real files only, never symlinks. A symlink in a synced vault recreates the
     deletion-propagation pattern exactly.
-  * Nothing is ever deleted, on either side, for any reason. A file that
-    disappears on one side is REPORTED and otherwise ignored -- it is never
-    re-created and never mirrored as a deletion.
+  * Deletions flow in ONE direction only. A file deleted in the repo is
+    removed from the vault on push -- moved into a quarantine directory next
+    to the state file, never unlinked, and only when the vault copy is
+    unchanged since the last sync; a phone-edited copy is kept and reported.
+    A file that disappears on the VAULT side is REPORTED and otherwise
+    ignored: an incomplete local vault reading as deletions is exactly the
+    2026-06 incident, so vault-side deletions are never mirrored to the repo.
+  * Quarantining drops the baseline, so a repo file that reappears later
+    reads as new and is simply re-pushed; a phone edit made in that window
+    survives only in the quarantine directory.
   * Outbound (repo -> vault) is the automatic direction. Inbound (vault -> repo)
     happens only on an explicit `pull`.
   * Inbound edits land as uncommitted working-tree changes, so every phone edit
@@ -39,6 +46,7 @@ import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 # --- exit codes ---------------------------------------------------------------
@@ -51,6 +59,7 @@ DEST_REL = "tooling/claude-config"
 STATE_VERSION = 1
 SYNC_LOG_MARKER = "Fully synced"
 SYNC_LOG_MAX_BYTES = 32 * 1024 * 1024
+MAX_DELETES = 10  # more pending removals than this refuses them all without --allow-mass-delete
 
 # Directories under claude/ whose *.md files are mirrored, non-recursively --
 # a nested directory is mirrored only if it is listed here itself.
@@ -79,38 +88,61 @@ def repo_path_for(repo_root: Path, rel: str) -> Path:
     return repo_root / "claude" / rel
 
 
-def scan_repo(repo_root: Path) -> dict[str, Path]:
-    """The in-scope markdown surface as {vault-relative path: repo path}."""
+def scan_repo(repo_root: Path) -> tuple[dict[str, Path], list[str]]:
+    """The in-scope markdown surface: ({vault-relative path: repo path}, [skipped]).
+
+    skipped lists the path prefixes the scan could not read as real files and
+    directories -- missing or symlinked source dirs, symlinked files. Anything
+    under a skipped prefix is an infrastructure failure, not a deletion, and
+    push must never treat it as a repo-side delete.
+    """
     claude = repo_root / "claude"
     found: dict[str, Path] = {}
+    skipped: list[str] = []
+    if not claude.is_dir() or claude.is_symlink():
+        return found, [""]  # the whole tree is unscannable
 
     top = claude / "CLAUDE.md"
     if top.is_file() and not top.is_symlink():
         found["CLAUDE.md"] = top
+    elif top.is_symlink() or top.exists():
+        skipped.append("CLAUDE.md")
 
     for sub in FLAT_DIRS:
         d = claude / sub
         # every level of a nested dir must be real -- a symlinked parent would
         # slip past a leaf-only check
         if not d.is_dir() or any(x.is_symlink() for x in [d, *d.parents[: sub.count("/")]]):
+            skipped.append(sub)
             continue
         for p in sorted(d.iterdir()):
-            if p.is_file() and not p.is_symlink() and p.name.endswith(".md"):
-                rel = f"{sub}/{p.name}"
-                if is_in_scope(rel):
-                    found[rel] = p
+            rel = f"{sub}/{p.name}"
+            if not is_in_scope(rel):
+                continue
+            if p.is_file() and not p.is_symlink():
+                found[rel] = p
+            elif p.is_symlink():
+                skipped.append(rel)
 
     skills = claude / "skills"
     if skills.is_dir() and not skills.is_symlink():
         for d in sorted(skills.iterdir()):
-            if not d.is_dir() or d.is_symlink():
+            if d.is_symlink():
+                skipped.append(f"skills/{d.name}")
+                continue
+            if not d.is_dir():
                 continue
             p = d / "SKILL.md"
+            rel = f"skills/{d.name}/SKILL.md"
+            if not is_in_scope(rel):
+                continue
             if p.is_file() and not p.is_symlink():
-                rel = f"skills/{d.name}/SKILL.md"
-                if is_in_scope(rel):
-                    found[rel] = p
-    return found
+                found[rel] = p
+            elif p.is_symlink():
+                skipped.append(rel)
+    else:
+        skipped.append("skills")
+    return found, skipped
 
 
 def scan_vault(dest: Path) -> tuple[dict[str, Path], list[str]]:
@@ -213,10 +245,11 @@ VAULT_CHANGED = "vault-changed"
 CONFLICT = "conflict"
 GONE_FROM_VAULT = "gone-from-vault"
 GONE_FROM_REPO = "gone-from-repo"
+DELETED_EDITED = "deleted-in-repo-but-vault-edited"
 
 PUSH_ACTIONS = (NEW_IN_REPO, REPO_CHANGED)
 PULL_ACTIONS = (NEW_IN_VAULT, VAULT_CHANGED)
-ATTENTION = (CONFLICT, GONE_FROM_VAULT, GONE_FROM_REPO)
+ATTENTION = (CONFLICT, GONE_FROM_VAULT, DELETED_EDITED)
 
 
 @dataclass
@@ -238,9 +271,13 @@ def classify(rel: str, repo_hash: str | None, vault_hash: str | None, base: str 
       only the vault changed                   -> pull copies vault -> repo
       identical                                -> in sync, baseline refreshed
       present on one side, no baseline         -> a new file, copied that way
-      present on one side, baseline existed    -> it VANISHED on the other side.
-                                                  Reported. Never deleted here,
-                                                  never re-created there.
+      repo gone, vault matches the baseline    -> deleted in the repo: push
+                                                  quarantines the vault copy.
+      repo gone, vault edited since baseline   -> deletion vs phone edit. Kept,
+                                                  reported, a human decides.
+      vault gone, baseline existed             -> VANISHED from the vault.
+                                                  Reported only: never deleted
+                                                  in the repo, never re-created.
 
     Both sides present with no baseline is a conflict, not a guess: nothing
     records who wrote which version.
@@ -262,19 +299,27 @@ def classify(rel: str, repo_hash: str | None, vault_hash: str | None, base: str 
     if repo_hash is not None:
         return Entry(rel, NEW_IN_REPO if base is None else GONE_FROM_VAULT, repo_hash, None)
     if vault_hash is not None:
-        return Entry(rel, NEW_IN_VAULT if base is None else GONE_FROM_REPO, None, vault_hash)
+        if base is None:
+            return Entry(rel, NEW_IN_VAULT, None, vault_hash)
+        if vault_hash == base:
+            return Entry(rel, GONE_FROM_REPO, None, vault_hash)
+        return Entry(rel, DELETED_EDITED, None, vault_hash)
     return Entry(rel, IN_SYNC, None, None)
 
 
-def build_plan(repo_root: Path, dest: Path, state: dict) -> tuple[list[Entry], list[str]]:
-    repo = scan_repo(repo_root)
+def build_plan(repo_root: Path, dest: Path, state: dict) -> tuple[list[Entry], list[str], list[str]]:
+    repo, skipped = scan_repo(repo_root)
     vault, rejected = scan_vault(dest)
     entries = []
     for rel in sorted(set(repo) | set(vault) | set(state)):
         rh = sha256(repo[rel]) if rel in repo else None
         vh = sha256(vault[rel]) if rel in vault else None
         entries.append(classify(rel, rh, vh, state.get(rel)))
-    return entries, rejected
+    return entries, rejected, skipped
+
+
+def under_skipped(rel: str, skipped: list[str]) -> bool:
+    return any(s == "" or rel == s or rel.startswith(s + "/") for s in skipped)
 
 
 # --- vault preconditions ------------------------------------------------------
@@ -342,7 +387,8 @@ LABEL = {
     VAULT_CHANGED: "changed in vault",
     CONFLICT: "CONFLICT (both sides changed)",
     GONE_FROM_VAULT: "VANISHED from vault (repo copy kept, nothing deleted)",
-    GONE_FROM_REPO: "VANISHED from repo (vault copy kept, nothing deleted)",
+    GONE_FROM_REPO: "deleted in repo (push removes the vault copy)",
+    DELETED_EDITED: "deleted in repo but EDITED in vault (kept)",
 }
 
 
@@ -363,7 +409,7 @@ def report(entries: list[Entry], rejected: list[str], states: tuple[str, ...], h
 
 # --- subcommands --------------------------------------------------------------
 def cmd_status(args, ctx) -> int:
-    entries, rejected = build_plan(ctx.repo_root, ctx.dest, ctx.state)
+    entries, rejected, skipped = build_plan(ctx.repo_root, ctx.dest, ctx.state)
     gate = check_vault(ctx.vault, ctx.ob_config_dir, args.no_sync_check)
     print(f"repo   {ctx.repo_root}")
     print(f"vault  {ctx.dest}")
@@ -374,6 +420,9 @@ def cmd_status(args, ctx) -> int:
     for e in entries:
         counts[e.state] = counts.get(e.state, 0) + 1
     print("summary: " + (", ".join(f"{LABEL[k]}={v}" for k, v in sorted(counts.items())) or "empty"))
+    if skipped:
+        print("WARNING: unscannable in repo (missing or symlinked; never read as deletions): "
+              + ", ".join(s or "claude/" for s in skipped))
     report(entries, rejected, tuple(LABEL), "\nfiles:")
     if gate:
         return EXIT_PRECONDITION
@@ -390,7 +439,7 @@ def transfer(args, ctx, direction: str) -> int:
         print("Nothing was copied, moved or deleted.", file=sys.stderr)
         return EXIT_PRECONDITION
 
-    entries, rejected = build_plan(ctx.repo_root, ctx.dest, ctx.state)
+    entries, rejected, skipped = build_plan(ctx.repo_root, ctx.dest, ctx.state)
     todo = [e for e in entries if e.state in acting]
 
     verb = "would copy" if args.dry_run else "copied"
@@ -422,20 +471,81 @@ def transfer(args, ctx, direction: str) -> int:
     if not todo:
         print("  (nothing to copy)")
 
+    # --- outbound deletion propagation ------------------------------------
+    # A repo-side deletion removes the vault copy on push, but only when the
+    # vault copy is unchanged since the last sync, only below the mass-delete
+    # threshold, and never under an unscannable source dir. Removal is a move
+    # into a quarantine directory next to the state file, never an unlink.
+    blocked: list[tuple[Entry, str]] = []
+    if outbound:
+        deletable = []
+        for e in entries:
+            if e.state != GONE_FROM_REPO:
+                continue
+            if under_skipped(e.rel, skipped):
+                blocked.append((e, "source dir unscannable (missing or symlinked): not read as a deletion"))
+            else:
+                deletable.append(e)
+        if len(deletable) > MAX_DELETES and not args.allow_mass_delete:
+            reason = f"mass-delete guard: {len(deletable)} removals > {MAX_DELETES}; re-run with --allow-mass-delete if intended"
+            blocked.extend((e, reason) for e in deletable)
+            deletable = []
+        qroot = ctx.state_path.parent / "removed" / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        removed_any = False
+        for e in deletable:
+            src = ctx.dest / e.rel
+            print(f"  {'would remove' if args.dry_run else 'removed'} (quarantined): {e.rel}")
+            if args.dry_run:
+                continue
+            qdst = qroot / e.rel
+            try:
+                qdst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src), str(qdst))
+            except OSError as err:
+                print(f"  FAILED to quarantine {e.rel}: {err}", file=sys.stderr)
+                blocked.append((e, "quarantine move failed; vault copy kept"))
+                continue
+            removed_any = True
+            new_state.pop(e.rel, None)
+            # prune now-empty parent dirs, but never the mirror root itself
+            parent = src.parent
+            while parent != ctx.dest:
+                with contextlib.suppress(OSError):
+                    parent.rmdir()  # raises (suppressed) unless empty
+                if parent.exists():
+                    break
+                parent = parent.parent
+        if removed_any:
+            print(f"  quarantine: {qroot}")
+
     if not args.dry_run:
         # Files identical on both sides get their baseline refreshed too, so a
-        # later one-sided edit is attributable.
+        # later one-sided edit is attributable; a baseline whose file is gone
+        # on both sides is retired.
         for e in entries:
-            if e.state == IN_SYNC and e.repo_hash is not None:
-                new_state[e.rel] = e.repo_hash
+            if e.state == IN_SYNC:
+                if e.repo_hash is not None:
+                    new_state[e.rel] = e.repo_hash
+                else:
+                    new_state.pop(e.rel, None)
         save_state(ctx.state_path, new_state, ctx.repo_root, ctx.vault)
 
     attention = [e for e in entries if e.state in ATTENTION]
-    if attention or rejected:
-        report(attention, rejected, ATTENTION, "\nneeds a human (nothing was changed for these):")
+    if attention or rejected or blocked:
+        print("\nneeds a human (nothing was changed for these):")
+        for e in attention:
+            print(f"  {LABEL[e.state]:<52} {e.rel}")
+        for e, why in blocked:
+            print(f"  KEPT in vault: {e.rel} -- {why}")
+        if rejected:
+            print(f"  {len(rejected)} vault file(s) outside the mirrored shapes, ignored:")
+            for rel in rejected[:20]:
+                print(f"    - {rel}")
+            if len(rejected) > 20:
+                print(f"    ... and {len(rejected) - 20} more")
     if not outbound and any(e.state in PULL_ACTIONS for e in entries) and not args.dry_run:
         print("\nInbound edits are uncommitted working-tree changes. Review with: git diff -- claude/")
-    return EXIT_ATTENTION if attention else EXIT_OK
+    return EXIT_ATTENTION if attention or blocked else EXIT_OK
 
 
 # --- wiring -------------------------------------------------------------------
@@ -483,9 +593,12 @@ conflict detection
     only the repo changed              -> push copies it out
     only the vault changed             -> pull copies it in
     present one side, no baseline      -> a new file; copied in that direction
-    present one side, baseline existed -> it VANISHED on the other side. Reported
-                                          only: never deleted here, never
-                                          re-created there, in either direction.
+    repo gone, vault unchanged         -> deleted in the repo: push moves the
+                                          vault copy into quarantine
+    repo gone, vault edited            -> deletion vs phone edit: kept, reported
+    vault gone, baseline existed       -> VANISHED from the vault: reported only,
+                                          never deleted in the repo, never
+                                          re-created in the vault
     both present, no baseline          -> CONFLICT (nothing records who wrote what)
 
   A mirror that has been wiped or is only partly downloaded therefore reads as a
@@ -495,15 +608,23 @@ conflict detection
   again -- with no baseline every file is simply new.
 
 safety
-  Real files only, never symlinks. No deletion is ever performed or propagated.
-  Outbound is automatic; inbound runs only on an explicit `pull` and lands as
-  uncommitted working-tree edits, so every phone edit is reviewed as a git diff.
-  Writing into a vault that has never completed a sync is refused -- an incomplete
-  local copy is what caused the 2026-06 data loss this design exists to prevent.
+  Real files only, never symlinks. Deletions flow ONE way: a file deleted in the
+  repo is removed from the vault on push, moved into <state dir>/removed/<UTC>/
+  rather than unlinked, and only when the vault copy is unchanged since the last
+  sync -- a phone-edited copy is kept and reported. More pending removals than
+  the mass-delete threshold refuses them all without --allow-mass-delete, and a
+  file under a missing or symlinked source directory is never read as deleted.
+  Quarantining retires the baseline, so a repo file that reappears later is
+  simply re-pushed as new. Vault-side deletions are NEVER mirrored into the
+  repo: an incomplete local vault reading as deletions is the 2026-06 data loss
+  this design exists to prevent. Inbound content runs only on an explicit
+  `pull` and lands as uncommitted working-tree edits, so every phone edit is
+  reviewed as a git diff. Writing into a vault that has never completed a sync
+  is refused.
 
 exit codes
   0  clean
-  1  conflicts or vanished files were reported
+  1  conflicts, vault-side vanished files, or refused removals were reported
   2  usage error
   3  precondition failed (vault missing, unreadable, or never synced) -- nothing touched
 """,
@@ -513,7 +634,9 @@ exit codes
     p.add_argument("--state", metavar="PATH", help="sync state file (default: ~/.local/state/claude-config-sync/state.json)")
     p.add_argument("--ob-config-dir", metavar="PATH", help="obsidian-headless config dir (default: ~/.config/obsidian-headless)")
     p.add_argument("--no-sync-check", action="store_true", help="skip the 'vault has completed a sync' precondition (throwaway vaults only)")
-    p.add_argument("--dry-run", action="store_true", help="print exactly what would be copied, copy nothing")
+    p.add_argument("--dry-run", action="store_true", help="print exactly what would be copied or removed, touch nothing")
+    p.add_argument("--allow-mass-delete", action="store_true",
+                   help=f"let push remove more than {MAX_DELETES} vault files in one run (still quarantined, never unlinked)")
     p.add_argument("command", choices=("push", "pull", "status"), help="push: repo -> vault. pull: vault -> repo, as uncommitted edits. status: what differs")
     return p
 
