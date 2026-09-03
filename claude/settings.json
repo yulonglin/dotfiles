@@ -146,7 +146,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "fable",
   "fallbackModel": [
     "claude-opus-5",
     "opus"
@@ -616,7 +616,8 @@
     "typescript-lsp@claude-plugins-official": true,
     "viz@ai-safety-plugins": false,
     "workflow@ai-safety-plugins": false,
-    "writing@ai-safety-plugins": false
+    "writing@ai-safety-plugins": false,
+    "frontend-design@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "alignment-hive": {
