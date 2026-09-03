@@ -1,38 +1,47 @@
 #!/usr/bin/env bash
-# fx — convert an amount to USD, showing the high / low / latest conversion
+# fx — convert an amount to USD (or --to CUR), showing the high / low / latest conversion
 # over the trailing 3 months of ECB daily reference rates.
 # Data: api.frankfurter.app (free, no key). Rates update once per weekday.
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: fx [-q] [--fresh] AMOUNT CURRENCY
+Usage: fx [-q] [--fresh] [--to CUR] AMOUNT CURRENCY
 
-Convert AMOUNT of CURRENCY to USD over the trailing 3 months of ECB
-daily reference rates (high / low / latest).
+Convert AMOUNT of CURRENCY to USD (or to CUR) over the trailing 3 months
+of ECB daily reference rates (high / low / latest).
 
-  -q        print only the highest USD amount (for piping)
+  -q        print only the highest converted amount (for piping)
+  --to CUR  target currency (default USD)
   --fresh   bypass the daily cache and refetch
   -h        show this help
 
 Examples:
   fx 100 EUR
   fx -q 2500 sgd
+  fx --to GBP 200 USD
 EOF
 }
 
-quiet=0 fresh=0
+quiet=0 fresh=0 to=USD
 args=()
+expect_to=0
 for a in "$@"; do
+  if (( expect_to )); then to=$a; expect_to=0; continue; fi
   case "$a" in
     -q) quiet=1 ;;
     --fresh) fresh=1 ;;
+    --to) expect_to=1 ;;
+    --to=*) to=${a#--to=} ;;
     -h|--help) usage; exit 0 ;;
     -*) printf 'fx: unknown option %s\n' "$a" >&2; usage >&2; exit 2 ;;
     *) args+=("$a") ;;
   esac
 done
+(( expect_to )) && { printf 'fx: --to needs a currency\n' >&2; exit 2; }
 [[ ${#args[@]} -eq 2 ]] || { usage >&2; exit 2; }
+to=$(printf '%s' "$to" | tr '[:lower:]' '[:upper:]')
+[[ $to =~ ^[A-Z]{3}$ ]] || { printf "fx: invalid target currency '%s'\n" "$to" >&2; exit 2; }
 raw=${args[0]}
 cur=$(printf '%s' "${args[1]}" | tr '[:lower:]' '[:upper:]')
 
@@ -47,8 +56,8 @@ amount=${raw//,/}  # strip thousands separators: 2,199,855 -> 2199855
   printf "fx: invalid currency '%s'\n" "$cur" >&2; exit 2
 }
 
-if [[ $cur == USD ]]; then
-  if (( quiet )); then printf '%.2f\n' "$amount"; else printf '%s USD is already USD\n' "$amount"; fi
+if [[ $cur == "$to" ]]; then
+  if (( quiet )); then printf '%.2f\n' "$amount"; else printf '%s %s is already %s\n' "$amount" "$cur" "$to"; fi
   exit 0
 fi
 
@@ -60,27 +69,27 @@ fi
 
 cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/fx
 mkdir -p "$cache_dir"
-cache="$cache_dir/$cur-$today.json"
+cache="$cache_dir/$cur-$to-$today.json"
 
 if (( fresh )) || [[ ! -s $cache ]]; then
   tmp="$cache.tmp.$$"
   if curl -fsS --max-time 15 \
-      "https://api.frankfurter.app/${start}..${today}?from=${cur}&to=USD" -o "$tmp"; then
+      "https://api.frankfurter.app/${start}..${today}?from=${cur}&to=${to}" -o "$tmp"; then
     mv "$tmp" "$cache"
     # prune this currency's stale cache entries
-    find "$cache_dir" -name "$cur-*.json" ! -name "${cache##*/}" -delete 2>/dev/null || true
+    find "$cache_dir" -name "$cur-$to-*.json" ! -name "${cache##*/}" -delete 2>/dev/null || true
   else
     rm -f "$tmp"
     # fall back to the newest cached series for this currency, if any
     shopt -s nullglob
-    old=("$cache_dir/$cur-"*.json)
+    old=("$cache_dir/$cur-$to-"*.json)
     shopt -u nullglob
     if (( ${#old[@]} )); then
       # bash 3.2 (macOS) has no negative subscripts; glob order is lexicographic
       # = chronological for ISO dates, so last element is newest. A concurrent
       # succeeding fx can prune this file before we read it — narrow, benign race.
       cache=${old[${#old[@]}-1]}
-      cached_day=${cache##*/}; cached_day=${cached_day#"$cur-"}; cached_day=${cached_day%.json}
+      cached_day=${cache##*/}; cached_day=${cached_day#"$cur-$to-"}; cached_day=${cached_day%.json}
       printf 'fx: fetch failed; using cached rates from %s\n' "$cached_day" >&2
     else
       printf 'fx: could not fetch rates for %s (unknown currency, or network down)\n' "$cur" >&2
@@ -89,10 +98,10 @@ if (( fresh )) || [[ ! -s $cache ]]; then
   fi
 fi
 
-jq -r --arg amt "$amount" --argjson quiet "$quiet" '
+jq -r --arg amt "$amount" --arg to "$to" --argjson quiet "$quiet" '
   def money: (. * 100 | round) as $c
     | "\($c / 100 | floor).\($c % 100 | tostring | if length == 1 then "0" + . else . end)";
-  ((.rates // {}) | to_entries | map(select(.value.USD != null) | {date: .key, rate: .value.USD})) as $r
+  ((.rates // {}) | to_entries | map(select(.value[$to] != null) | {date: .key, rate: .value[$to]})) as $r
   | if ($r | length) == 0 then ("fx: no usable rates in response\n" | halt_error(1)) else . end
   | ($r | max_by(.rate)) as $hi
   | ($r | min_by(.rate)) as $lo
@@ -100,9 +109,9 @@ jq -r --arg amt "$amount" --argjson quiet "$quiet" '
   | ($amt | tonumber) as $a
   | if $quiet == 1 then ($a * $hi.rate | money)
     else
-      "\($amt) \(.base) -> USD over the past 3 months:",
-      "  high    \($a * $hi.rate | money) USD  (\($hi.rate) on \($hi.date))",
-      "  low     \($a * $lo.rate | money) USD  (\($lo.rate) on \($lo.date))",
-      "  latest  \($a * $now.rate | money) USD  (\($now.rate) on \($now.date))"
+      "\($amt) \(.base) -> \($to) over the past 3 months:",
+      "  high    \($a * $hi.rate | money) \($to)  (\($hi.rate) on \($hi.date))",
+      "  low     \($a * $lo.rate | money) \($to)  (\($lo.rate) on \($lo.date))",
+      "  latest  \($a * $now.rate | money) \($to)  (\($now.rate) on \($now.date))"
     end
 ' "$cache"
