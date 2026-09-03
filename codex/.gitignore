@@ -27,3 +27,4 @@ chrome-native-hosts-v2.json
 .codex-chronicle-assets-to-install.marker
 mcp-oauth-locks/
 packages/
+thread-writer-locks/

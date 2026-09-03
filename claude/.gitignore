@@ -80,3 +80,6 @@ remote-settings-helper-consent
 seed-admin
 shares
 uploads/
+
+# SendFeedback drafts queued locally by Claude Code, never sent without approval
+feedback/
