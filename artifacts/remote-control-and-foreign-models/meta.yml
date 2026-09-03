@@ -1,8 +1,8 @@
-title: Remote Control and foreign models: route at the tool layer, or move the endpoint without breaking TLS
-url: pending-first-publish
-org: unknown
-first_published: pending
-last_updated: 2026-09-01
+title: Remote Control and Foreign Models
+url: https://claude.ai/code/artifact/d224e859-2f4d-452c-9781-5ab3941e57cf
+org: unknown   # claude.ai login, orgName null at publish time
+first_published: 2026-09-03
+last_updated: 2026-09-03
 status: live
 
 source: report.md

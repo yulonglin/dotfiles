@@ -12,6 +12,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 |---|---|---|---|---|---|
 | [Artifacts and Resources for dotfiles](https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c) — this index, published 2026-08-31 and deleted the same day | unknown | archived — deleted upstream; the URL 404s | `ARTIFACTS.md` | no | 2026-08-31 |
 | [Artifacts and Resources for dotfiles (previous URL)](https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802) — org-locked former home of this index | see note | superseded — by [the current index](https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c) | `ARTIFACTS.md` | no | 2026-08-29 |
+| [Remote Control and Foreign Models](https://claude.ai/code/artifact/d224e859-2f4d-452c-9781-5ab3941e57cf) — native Remote Control and a non-Claude `/model` menu are mutually exclusive in one process by construction; an unrecognised model ID silently answers from the default Claude model; route at the tool layer, and the one workaround worth a test moves the endpoint without breaking TLS | unknown (claude.ai login; `claude auth status` reports `orgName: null`) | live | `artifacts/remote-control-and-foreign-models/` | no | 2026-09-03 |
 | [Installers Stop Stalling; Profiles Get Names](https://claude.ai/code/artifact/8d07cd03-d6f6-4b86-b72c-1ce1c03d2191) — the stall was never the prompts: a silent `cargo build --quiet` and untimed fetches at the top of both scripts, plus five more untimed `curl \| sh` installers found only by checking the class; fixed with deadlines and purpose-named profiles (bare/standard/agent/devbox) on draft PR #77, CI green | unknown (see note) | live | — (built from the job's gitignored `tmp/`, not kept) | no | 2026-08-31 |
 | [README Trimmed; Two Proposals Await](https://claude.ai/code/artifact/720f1fce-0147-47ef-a9f5-9afb98768445) — the same report at its original URL | unknown | archived — deleted upstream; the URL 404s | — | no | 2026-08-31 |
 | [Context Ledger](https://claude.ai/code/artifact/439482e4-0d10-4715-a7d1-add2805e614a) — 134 components cost 17,246 tok every session, 60% of it always-loaded prose rather than skill descriptions; 67 of 120 skills/agents have never been invoked, and the rules cite four skills with zero uses | see note | live | `artifacts/context-ledger/` | no | 2026-08-29 |
@@ -39,7 +40,7 @@ Everything above except this index and *README Trimmed; Two Proposals Await* (st
 |---|---|---|
 | Artifact gallery | Every artifact on the account, across repos, newest first and truncated by a listing window | [claude.ai/code/artifacts](https://claude.ai/code/artifacts) |
 | `dotfiles-personal` | The private repo holding `plans/`, `.remember/`, personal `docs/`, `config/machines.conf` — this repo is public, so personal working artifacts never live on a branch here | private GitHub repo |
-| Bitwarden Secrets Manager | API keys, reached per-project via `setup-envrc` and direnv, never globally exported | token at `~/.config/bws/token` |
+| Bitwarden Secrets Manager | API keys, reached through the `secrets` command; never exported into every shell | token at `~/.config/bws/token` |
 | Global rules | Always-loaded judgment; activity-scoped procedure lives in skills, indexed by `catalog` | `claude/rules/` |
 
 ## Publishing a page publicly is an org decision, not a local one
