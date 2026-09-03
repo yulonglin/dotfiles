@@ -191,6 +191,11 @@
           },
           {
             "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run git.pr-after-push -- $HOME/.claude/hooks/pr_after_push.sh",
+            "timeout": 30
+          },
+          {
+            "type": "command",
             "command": "python3 $HOME/.claude/hooks/simplify_track_reuse.py",
             "timeout": 5
           }
