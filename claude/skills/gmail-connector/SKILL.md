@@ -45,6 +45,18 @@ HTML-only receipts: save `_body.txt` (or the `html_body` from `FULL_CONTENT`) ne
 - **Record coverage.** End the inventory with every query run and what was not searched (trash, taxi apps by sender, meal merchants). The next pass extends rather than repeats.
 - **Link a message for the user** as `https://mail.google.com/mail/u/0/#all/<message-id>`.
 
+## Google Drive binaries: the same trick, plus a no-parse alternative
+
+`mcp__claude_ai_Google_Drive__download_file_content` returns `{"content": <base64>, ...}` inline. **Never retype the base64 into a heredoc** — a 48 KB xlsx lost its `styles.xml` that way in 2026-09. The harness writes every tool result verbatim to the session transcript, so recover the exact bytes from disk instead:
+
+```python
+# grep the session jsonl for '"content":"UEsDB...","id":"<fileId>"', b64decode, then zipfile.testzip() before trusting it
+~/.claude/projects/<project-slug>/<session-id>.jsonl   # inline results
+~/.claude/projects/<project-slug>/<session-id>/tool-results/mcp-claude_ai_Google_Drive-*.txt  # spilled results
+```
+
+If the user asks for a plain download with no parsing, a Chrome tab at `https://drive.google.com/uc?export=download&id=<fileId>` lands the file in `~/Downloads` (needs the user's OK: it is a file download).
+
 ## Rules
 
 Read-only by default: never `send_message`, `reply`, `forward`, label, archive, mark spam or trash. `create_draft` only when the user asks for a draft — never send, even when told to (see `rules/safety.md`, Google Workspace). Never invent an invoice number or amount; write "unreadable" and keep the file. Personal-versus-work charges are the user's call: list them under `AMBIGUOUS:` with a recommendation instead of deciding.
