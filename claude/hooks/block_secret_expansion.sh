@@ -18,7 +18,13 @@
 #       declare -p/-x, direnv export|dump
 #   (b) a secret-named variable expanded with a NON-EMPTY default —
 #       ${KEY:-x} ${KEY:=x} ${KEY-x} ${KEY=x}.  ${KEY:-} and ${KEY:+x} pass.
-#   (c) a secret-named variable inside an obvious print sink — echo, printf
+#   (c) a secret-named variable inside an obvious print sink — echo, printf.
+#       Two redacted-display slices are exempt: a prefix with offset
+#       literally 0 and length <= 12 (${VAR:0:12} — key prefixes are
+#       public constants), and a suffix of at most 6 (${VAR: -4} or
+#       ${VAR:(-4)} — the distinguishing tail, capped tighter).
+#       Without the space the suffix form is a DEFAULT expansion that
+#       prints the whole value; class (b) keeps blocking it.
 #
 # WHY TOKENIZATION, NOT REGEX
 # Same reasoning as block_gws_delete.sh: `pri""ntenv` executes as printenv but
@@ -173,9 +179,19 @@ def check_defaults(view):
 
 # --- class (c): secret-named variable in a print sink ---------------------
 SINKS = {"echo", "printf"}
+# The last three alternatives are the redacted-display exemptions:
+#   prefix — offset literally 0, length 1-12: ${VAR:0:12}
+#   suffix — last 1-6 chars only: ${VAR: -4} (space required by bash)
+#            or ${VAR:(-4)}
+# ${VAR:13} (everything AFTER the prefix), ${VAR:0:100}, ${VAR: -12} and
+# any other offset stay blocked. The no-space suffix form is a non-empty
+# DEFAULT, caught by class (b).
 SAFE_EXPANSION = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:\+[^}]*\}"
                             r"|\$\{#[A-Za-z_][A-Za-z0-9_]*\}"
-                            r"|\$\{[A-Za-z_][A-Za-z0-9_]*:-\}")
+                            r"|\$\{[A-Za-z_][A-Za-z0-9_]*:-\}"
+                            r"|\$\{[A-Za-z_][A-Za-z0-9_]*:0:(?:[1-9]|1[0-2])\}"
+                            r"|\$\{[A-Za-z_][A-Za-z0-9_]*: -[1-6]\}"
+                            r"|\$\{[A-Za-z_][A-Za-z0-9_]*:\(-[1-6]\)\}")
 ANY_EXPANSION = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)")
 
 
@@ -190,8 +206,10 @@ def check_print_sinks(view):
             if secretish(m.group(1)):
                 hits.append(
                     "printing $%s would put the secret in the transcript. "
-                    "Test presence instead: [ -n \"${%s:+x}\" ]."
-                    % (safe_name(m.group(1)), safe_name(m.group(1))))
+                    "Test presence instead: [ -n \"${%s:+x}\" ], or show a "
+                    "redacted slice: ${%s:0:12} (prefix) or "
+                    "${%s: -4} (suffix, space required)."
+                    % ((safe_name(m.group(1)),) * 4))
     return hits
 
 

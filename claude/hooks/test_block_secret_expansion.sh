@@ -62,7 +62,13 @@ run_test "echo bare"               'echo $HF_TOKEN'                            b
 run_test "echo double-quoted"      'echo "$AWS_SECRET_ACCESS_KEY"'             block
 run_test "echo braced"            'echo "${CLIENT_SECRET}"'                    block
 run_test "printf"                  'printf "%s\n" "$GH_PAT"'                   block
-run_test "substring slice"         'echo "${MODAL_TOKEN_SECRET:0:4}"'          block
+run_test "long slice"              'echo "${MODAL_TOKEN_SECRET:0:100}"'        block
+run_test "13-char slice"           'echo "${HF_TOKEN:0:13}"'                   block
+run_test "offset-only slice"       'echo "${ANTHROPIC_API_KEY:13}"'            block
+run_test "nonzero-offset slice"    'echo "${ANTHROPIC_API_KEY:1:4}"'          block
+run_test "suffix too long"         'echo "${ANTHROPIC_API_KEY: -12}"'          block
+run_test "suffix with length"      'echo "${ANTHROPIC_API_KEY: -4:4}"'         block
+run_test "no-space suffix=default" 'echo "${ANTHROPIC_API_KEY:-4}"'            block
 run_test "echo -n"                 'echo -n "$MY_PASSWORD"'                    block
 run_test "passphrase"              'echo "$SSH_PASSPHRASE"'                    block
 run_test "credential"              'echo "$GCP_CREDENTIALS"'                   block
@@ -92,6 +98,11 @@ run_test "empty default"           'echo "${ANTHROPIC_API_KEY:-}"'             a
 run_test "plus-form default"       'echo "${ANTHROPIC_API_KEY:+set}"'          allow
 run_test "test -n plus-form"       '[ -n "${ANTHROPIC_API_KEY:+x}" ] && echo present'  allow
 run_test "length only"             'echo "${#ANTHROPIC_API_KEY}"'              allow
+run_test "redacted 12-char prefix" 'echo "key: ${ANTHROPIC_API_KEY:0:12}..."'  allow
+run_test "redacted short prefix"   'echo "${MODAL_TOKEN_SECRET:0:4}"'          allow
+run_test "redacted suffix"         'echo "ends ...${ANTHROPIC_API_KEY: -4}"'   allow
+run_test "redacted suffix parens"  'echo "${HF_TOKEN:(-6)}"'                   allow
+run_test "unquoted suffix"         'echo key ends ${ANTHROPIC_API_KEY: -4}'    allow
 
 echo "=== SHOULD ALLOW: backslash-escaped text does not expand ==="
 # This is how a commit message or doc quotes the bug it is describing.
