@@ -149,12 +149,9 @@ Attribution is required by the data licences wherever these scores appear: **Epo
 
 ## Non-Anthropic models CANNOT be reached through subagents
 
-A hard constraint, not a preference, and it has bitten before. An agent's frontmatter `model:` resolves **only** against api.anthropic.com. Naming a non-Anthropic model there produces one of two outcomes, and the second is far worse:
+A hard constraint, not a preference, and it has bitten before. An agent's frontmatter `model:` resolves **only** against api.anthropic.com, and an unrecognised model ID does not fail — **it silently falls back to the session's default model.** Measured on 2.1.252 (2026-09-01): an agent file with `model: openai/gpt-5.6-sol` loaded, ran, and answered from `claude-opus-5`; the only signal was a stderr line `[claude-code:unrecognized_model]` that the calling session never sees. The `availableModels` allowlist in the bundle did not reject it. So the result is Claude **wearing another family's label** — a fabricated multi-family result, and a panel that is secretly one model agreeing with itself is worse than no panel, because it looks like corroboration. (An earlier version of this note said it might instead hard-fail; on this version it does not.)
 
-- It hard-fails with "There's an issue with the selected model".
-- It answers from Claude **wearing another family's label** — silently fabricating a multi-family result. A panel that is secretly one model agreeing with itself is worse than no panel, because it looks like corroboration.
-
-The `kimi-k3`, `glm-5.3`, `qwen3.8-max` and `muse-spark-1.2` agent files were deleted on 2026-08-25 for exactly this. Do not recreate them. The model-router gateway that once made such names resolve is unwired, because it hard-disables Remote Control. **The CLI is the only sanctioned route.**
+The `kimi-k3`, `glm-5.3`, `qwen3.8-max` and `muse-spark-1.2` agent files were deleted on 2026-08-25 for exactly this. Do not recreate them. The model-router gateway that once made such names resolve is unwired, because a non-Anthropic `ANTHROPIC_BASE_URL` hard-disables Remote Control — and gateway model discovery needs exactly that URL, so a foreign-model picker and Remote Control cannot coexist in one process. **The CLI is the only sanctioned route**; the full investigation, including the rejected proxy route and the ToS reading, is in `docs/remote-control-and-foreign-models.md` (2026-09-01).
 
 ## Disagreement is the finding, not the consensus
 

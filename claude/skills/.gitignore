@@ -1,6 +1,10 @@
 # Claude Code Skills Directory
 # =============================
-# Runtime artifacts created by Claude Code's plugin system:
+# Generated symlinks that used to appear here on every deploy (2026-02 to 2026-09),
+# long blamed on Claude Code's plugin system but actually written by
+# scripts/sync_claude_to_codex.sh into its own source, because codex/skills is a
+# symlink to this directory. That script now refuses to link into itself; the
+# patterns stay ignored so a stale checkout cannot commit them:
 # 1. Self-referencing symlinks: skills/<name>/<name> (extensionless, circular)
 # 2. SKILL.md symlinks: point to agents/*.md or skills/*.md (absolute paths)
 #

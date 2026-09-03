@@ -1,4 +1,4 @@
-<title>Artifacts Become Editable As Well As Commentable</title>
+<title>Remote Control and Foreign Models</title>
 <style>
 :root {
   --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
@@ -62,60 +62,178 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 }
 </style>
 <div class="shell has-toc">
-<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#overview" class="lvl2">Overview</a><a href="#requirements" class="lvl2">Requirements</a><a href="#suggest-edit-mode-extends-the-existing-box-comment-stays-the-default" class="lvl3">Suggest-edit mode extends the existing box; Comment stays the default</a><a href="#a-saved-edit-renders-as-strikethrough-plus-insertion-and-inserted-text-is-invisible-to-anchoring" class="lvl3">A saved edit renders as strikethrough plus insertion, and inserted text is invisible to anchoring</a><a href="#storage-stays-one-localstorage-key-entries-typed-old-data-readable" class="lvl3">Storage stays one localStorage key, entries typed, old data readable</a><a href="#export-is-rendered-text-quotes-that-an-llm-session-applies-never-a-mechanical-patch" class="lvl3">Export is rendered-text quotes that an LLM session applies — never a mechanical patch</a><a href="#the-built-html-is-committed-beside-the-source-for-all-artifacts" class="lvl3">The built HTML is committed beside the source, for all artifacts</a><a href="#the-docs-route-updates-as-one-pass" class="lvl3">The docs route updates as one pass</a><a href="#acceptance-criteria" class="lvl2">Acceptance Criteria</a></nav>
+<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#the-question-and-the-answer-in-one-paragraph" class="lvl2">The question, and the answer in one paragraph</a><a href="#the-finding-that-matters-more-than-the-architecture" class="lvl2">The finding that matters more than the architecture</a><a href="#how-remote-control-works-and-why-it-demands-a-first-party-endpoint" class="lvl2">How Remote Control works, and why it demands a first-party endpoint</a><a href="#every-route-is-one-of-three-shapes" class="lvl2">Every route is one of three shapes</a><a href="#shape-1-keeps-tls-because-the-plaintext-leg-is-loopback" class="lvl3">Shape 1 keeps TLS because the plaintext leg is loopback</a><a href="#shape-2-only-works-by-breaking-tls" class="lvl3">Shape 2 only works by breaking TLS</a><a href="#shape-3-leaves-anthropic-bound-traffic-untouched" class="lvl3">Shape 3 leaves Anthropic-bound traffic untouched</a><a href="#terms-of-service-corrected" class="lvl2">Terms of service, corrected</a><a href="#recommendation-and-the-one-experiment-left" class="lvl2">Recommendation and the one experiment left</a><a href="#quiet-failures-in-the-recommended-design-and-the-detector-for-each" class="lvl2">Quiet failures in the recommended design, and the detector for each</a><a href="#what-the-panel-missed-including-in-the-brief-it-was-given" class="lvl2">What the panel missed, including in the brief it was given</a></nav>
 <div class="doc">
-<h1 id="artifacts-become-editable-as-well-as-commentable">Artifacts Become Editable As Well As Commentable</h1>
-<p>Spec for the suggested-edits layer (annotation layer v2) and the committed-HTML convention. Decided with Yulong 2026-09-01; this page is the first artifact published under its own rules.</p>
-<h2 id="overview">Overview</h2>
-<p>Specs, plans and reports are reviewed as Artifacts, but today the review surface only takes comments. Yulong can say &quot;this paragraph is wrong&quot; and paste the objection back; he cannot say &quot;make it this instead&quot; without writing the replacement into a comment and hoping the session applies it faithfully. This spec adds a <strong>suggest-edit mode</strong> to the md2artifact annotation layer — Google-Docs suggesting mode, adapted to a static sandboxed page — and changes the <code>artifacts/</code> convention so that <strong>the built HTML is committed beside the source for all artifacts</strong>, making the repo copy the durable, rebuildable record.</p>
-<p>The round-trip this buys: select text on the published page, propose a replacement, export everything as Markdown, paste it into a session; the session applies the edits to the committed source, rebuilds, and republishes at the same URL. The page is the edit surface; the source stays the truth.</p>
-<p>Out of scope, deliberately: mechanical patch application (see Requirements — export), overlapping edit ranges, edits spanning block boundaries, native claude.ai comment threads, and any cross-document storage recovery (three attempts documented in <code>artifact-writing</code> all lost or leaked data).</p>
-<h2 id="requirements">Requirements</h2>
-<h3 id="suggest-edit-mode-extends-the-existing-box-comment-stays-the-default">Suggest-edit mode extends the existing box; Comment stays the default</h3>
+<h1 id="remote-control-and-foreign-models-route-at-the-tool-layer-or-move-the-endpoint-without-breaking-tls">Remote Control and foreign models: route at the tool layer, or move the endpoint without breaking TLS</h1>
+<p><strong>Status:</strong> measured on Claude Code v2.1.252, 2026-09-01. Eight-family council consulted ($2.30). Durable copy of the evidence: <code>docs/remote-control-and-foreign-models.md</code>.</p>
+<h2 id="the-question-and-the-answer-in-one-paragraph">The question, and the answer in one paragraph</h2>
+<p>Can one Claude Code session have native Remote Control <strong>and</strong> non-Claude models (GPT, Kimi, GLM, Gemini, Qwen, Grok) as first-class citizens — in the <code>/model</code> picker and as subagents? <strong>Not in the form asked.</strong> The gate that disables Remote Control is the same condition that enables a multi-model picker, so the two are mutually exclusive in one process by construction. Every route falls into one of three shapes — move the endpoint, sit in the connection, or stay out of it — and only the third keeps Remote Control with no workaround. One variant of the first keeps the gate passing and TLS intact, and is the only workaround worth testing.</p>
+<h2 id="the-finding-that-matters-more-than-the-architecture">The finding that matters more than the architecture</h2>
+<p><strong>An unrecognised model ID does not fail. Claude Code silently answers from your default model.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Requested</th>
+<th>Actually answered</th>
+<th>Only signal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>claude -p --model openai/gpt-5.6-sol</code></td>
+<td>GPT</td>
+<td><code>claude-opus-5</code></td>
+<td>stderr <code>[claude-code:unrecognized_model]</code></td>
+</tr>
+<tr>
+<td>agent file, <code>model: openai/gpt-5.6-sol</code></td>
+<td>GPT</td>
+<td><code>claude-opus-5</code></td>
+<td>same line, <code>query_source: agent:custom:…</code></td>
+</tr>
+<tr>
+<td><code>ANTHROPIC_CUSTOM_MODEL_OPTION=x</code>, <code>--model x</code></td>
+<td>custom</td>
+<td><code>claude-opus-5</code></td>
+<td>same</td>
+</tr>
+</tbody>
+</table>
+<p>The agent loads and runs normally. A subagent's caller never sees stderr. So an agent file naming a foreign model fabricates a multi-family result quietly — this sharpens the 2026-08-25 deletion of the foreign-model agent files: the &quot;hard-fail&quot; branch that note allowed for does not happen on this version.</p>
+<p>It also means the model field carries no routing signal on the wire: substitution happens before the request leaves the process, so anything sitting in the connection sees <code>claude-opus-5</code> on every request.</p>
+<h2 id="how-remote-control-works-and-why-it-demands-a-first-party-endpoint">How Remote Control works, and why it demands a first-party endpoint</h2>
+<p>Confidence ~70% on internals, from bundle naming (<code>tengu_ccr_bridge</code>, <code>CLAUDE_CODE_USE_CCR_V2</code>, <code>SESSION_INGRESS_URL</code>) plus the docs. The local session opens an authenticated channel to Anthropic's relay. The phone app never touches the machine: it talks to Anthropic, which relays messages and permission prompts to the session and answers back. Tools still execute locally. That relay is tied to the claude.ai identity, so it requires OAuth rather than an API key, and Anthropic wants to see the relayed session end to end, which is the stated reason for the first-party rule.</p>
+<p>The gate itself, verbatim from the bundle:</p>
+<pre><code class="language-js">function Nw(e){try{let t=new URL(e).host;return[&quot;api.anthropic.com&quot;].includes(t)}catch{return!1}}
+function DB(){let e=process.env.ANTHROPIC_BASE_URL;if(!e)return!0;return Nw(e)}
+</code></pre>
+<p>It compares the <strong>configured</strong> host string. No socket, no DNS, no check of where traffic actually goes. Unset passes; so do <code>http://</code>, a trailing slash and a subpath. <code>_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL</code> is explicitly exempted. It is re-evaluated live, not once at startup.</p>
+<p>And the multi-model picker needs exactly the opposite:</p>
+<pre><code class="language-js">function mu(){if(!a.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY)return!1;
+              if(Oe()!==&quot;firstParty&quot;)return!1;if(jo())return!1;
+              if(!a.ANTHROPIC_BASE_URL)return!1;return!0}
+</code></pre>
+<p>Discovery populates several <code>/model</code> rows from <code>&lt;base&gt;/v1/models</code>, but only when the base URL is set <strong>and</strong> fails the gate. That is the whole conflict in two functions.</p>
+<h2 id="every-route-is-one-of-three-shapes">Every route is one of three shapes</h2>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Mechanism</th>
+<th>Remote Control</th>
+<th>TLS on external hops</th>
+<th>Foreign models</th>
+<th>Support status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1a. Move the endpoint</strong> — model-router (2026-08)</td>
+<td><code>ANTHROPIC_BASE_URL=http://127.0.0.1:&lt;port&gt;</code>; router speaks TLS outward to Anthropic and OpenRouter, translating formats</td>
+<td><strong>off</strong> — gate fires</td>
+<td>intact, no CA</td>
+<td>full menu via discovery; subagents by name</td>
+<td>unsupported</td>
+</tr>
+<tr>
+<td><strong>1b. Move the endpoint, keep the host</strong> — <em>untested</em></td>
+<td><code>ANTHROPIC_BASE_URL=http://api.anthropic.com</code> + <code>/etc/hosts</code> → <code>127.0.0.1</code>; router on port 80</td>
+<td><strong>gate passes</strong></td>
+<td>intact, no CA</td>
+<td>as 1a</td>
+<td>unsupported</td>
+</tr>
+<tr>
+<td><strong>2. Sit in the connection</strong> — MITM proxy</td>
+<td><code>https_proxy</code> + own CA via <code>NODE_EXTRA_CA_CERTS</code>; proxy terminates TLS, reads body, re-encrypts</td>
+<td>gate passes</td>
+<td><strong>broken</strong> on the client leg</td>
+<td>unlimited subagents if routed on a system-prompt sentinel; picker: one row at most</td>
+<td>unsupported</td>
+</tr>
+<tr>
+<td><strong>3a. Stay out of it</strong> — MCP server</td>
+<td>Claude Code spawns the server over stdio; tools <code>ask</code>, <code>council</code>, <code>delegate</code> call OpenRouter / <code>opencode</code> / <code>codex-companion</code></td>
+<td><strong>on</strong>, untouched</td>
+<td>intact</td>
+<td>as tool results; provenance enforceable</td>
+<td>supported</td>
+</tr>
+<tr>
+<td><strong>3b. Stay out of it</strong> — child Claude Code</td>
+<td>Parent (RC on) spawns <code>claude --settings gateway.json</code>, a 1a session in a worktree</td>
+<td>parent <strong>on</strong></td>
+<td>intact</td>
+<td>child gets the real loop on a foreign model</td>
+<td>unsupported for the child only</td>
+</tr>
+<tr>
+<td><strong>3c. Stay out of it</strong> — worker CLIs</td>
+<td><code>opencode run</code>, <code>codex-companion</code></td>
+<td>on</td>
+<td>intact</td>
+<td>each family's own harness</td>
+<td>supported</td>
+</tr>
+</tbody>
+</table>
+<h3 id="shape-1-keeps-tls-because-the-plaintext-leg-is-loopback">Shape 1 keeps TLS because the plaintext leg is loopback</h3>
+<p>Claude Code speaks plain HTTP to a local router; the router opens its own TLS connections outward. Nothing is decrypted that was ever encrypted. 1b differs from 1a only in what the client <em>believes</em> the host is, which is all the gate checks. Open questions for 1b, both testable without any MITM: whether the client refuses <code>http://</code> for OAuth traffic, and whether the Remote Control bridge resolves through the same hosts entry — if so the router must pass that channel through untouched. It needs sudo for <code>/etc/hosts</code> and port 80, and the router must reach the real Anthropic by IP or a separate resolver.</p>
+<h3 id="shape-2-only-works-by-breaking-tls">Shape 2 only works by breaking TLS</h3>
+<p>An HTTPS proxy sees <code>CONNECT api.anthropic.com:443</code> and nothing else. The routing signal is inside the encrypted body, so the proxy must terminate TLS with its own CA to read it. The client honours lowercase <code>https_proxy</code> (measured) and the bundle has no certificate pinning (measured), so it would work — at the cost of your own OAuth traffic passing through a process you wrote, and a translation layer that must never fall back to Claude on an OpenRouter error or the silent-fallback bug returns one layer down.</p>
+<h3 id="shape-3-leaves-anthropic-bound-traffic-untouched">Shape 3 leaves Anthropic-bound traffic untouched</h3>
+<p>MCP: at startup the server advertises tools with JSON schemas; Claude emits a tool call like any built-in; Claude Code runs its permission check, calls the server, and the return value lands in the transcript as a <code>tool_result</code>. The foreign model's answer enters Claude's context as <strong>data</strong>; the foreign model never enters Claude Code's loop. Because tool calls go through the normal permission system, the prompt <em>should</em> surface in Remote Control's phone approval UI — a council claim, not yet tested. What you do not get: a foreign model reading the live transcript as a true shared-context subagent. Two seats (<code>gpt-5.6-sol</code>, <code>qwen3.8-max</code>) were emphatic that this residual gap is the one thing that would justify Shape 1.</p>
+<h2 id="terms-of-service-corrected">Terms of service, corrected</h2>
+<p>An earlier draft called Shape 2 a likely breach of Consumer Terms §3 (&quot;bypassing any of our systems or protective measures&quot;). That was stretching the clause: on a plain reading &quot;protective measures&quot; means rate limits, abuse controls, safety filters and auth, and routing around a compatibility gate makes nothing less secure. Corrected position:</p>
 <ul>
-<li>The select-to-annotate box gains a second mode, <strong>Suggest edit</strong>, reachable by a button in the box. Comment remains the default: select → type → Enter must keep meaning exactly what it means today.</li>
-<li>Entering edit mode pre-fills the textarea with the selected text; the user edits it into the replacement. <strong>The prefill is not user work</strong>: draft autosave and the &quot;non-empty box refuses to close&quot; invariant key on a dirty flag set by the first user modification, not on non-emptiness — otherwise every opened edit box becomes an unclosable phantom draft.</li>
-<li>An empty replacement is a <strong>suggested deletion</strong>, rendered as pure strikethrough. It is reachable only by actively clearing the prefill; that is deliberate.</li>
-<li>Keyboard path completes without a pointer: Enter saves, Shift+Enter newline, Escape discards. Any mode-switch keystroke must be a chord (e.g. Ctrl+E), never a bare letter — the single-key collision inside a textarea is a documented incident.</li>
-<li>A selection overlapping an existing suggested edit is <strong>declined</strong>: the box points at the existing edit instead of opening a second one. Overlapping edits cannot be exported appliably.</li>
-<li>All existing invariants hold unchanged for the new mode: nothing implicit writes, selection events only ever open the box, a press outside closes only an empty (non-dirty) box, destructive controls arm-then-confirm in-page (the viewer has no <code>confirm</code>), touch selection via debounced <code>selectionchange</code>.</li>
+<li><strong>Explicitly prohibited:</strong> third parties routing <em>other users'</em> requests through subscription credentials (<code>legal-and-compliance</code>, no-notice enforcement). Not this shape.</li>
+<li><strong>Explicitly unsupported, not prohibited:</strong> routing Claude Code to non-Claude models through any gateway (<code>llm-gateway</code>). Shapes 1 and 2.</li>
+<li><strong>Enforcement that happened</strong> (2026-01-09, 2026-04-04): other harnesses — OpenCode, Cline, Roo Code — using subscription OAuth. Not this shape; no incident found naming a router or proxy.</li>
+<li><strong>Residual exposure:</strong> the §3 clause is broad and undefined, and any material breach is a no-notice termination ground, so a deliberate workaround of a gate tightened on purpose <em>could</em> be read that way. Nothing says it would.</li>
 </ul>
-<h3 id="a-saved-edit-renders-as-strikethrough-plus-insertion-and-inserted-text-is-invisible-to-anchoring">A saved edit renders as strikethrough plus insertion, and inserted text is invisible to anchoring</h3>
-<ul>
-<li>A saved edit renders inline: original text struck through, replacement inserted after it, visually distinct from comment highlights (both theme-aware). Clicking either part reopens the box with the stored replacement for revise or delete.</li>
-<li><strong>Layer-inserted content is marked and excluded from all quote-scanning.</strong> Re-anchoring of every comment and edit matches against original document text only; text the layer inserted (replacements, UI) must never be scanned. Without this, the first saved edit corrupts the anchors of everything after it.</li>
-</ul>
-<h3 id="storage-stays-one-localstorage-key-entries-typed-old-data-readable">Storage stays one localStorage key, entries typed, old data readable</h3>
-<ul>
-<li>Entries live in the existing filename-derived key. Each entry carries <code>type: &quot;comment&quot; | &quot;edit&quot;</code>; an entry without <code>type</code> is a comment, so every page's existing comments load unchanged.</li>
-<li>Edits store the quote, its locating context, and the replacement. Aux keys stay prefix-namespaced; <code>setItem</code> failures stay loud.</li>
-<li><code>LAYER_VERSION</code> bumps to <code>v2</code>. Pages built before v2 are frozen at v1 per the existing rule — they gain edit mode only on rebuild and republish.</li>
-</ul>
-<h3 id="export-is-rendered-text-quotes-that-an-llm-session-applies-never-a-mechanical-patch">Export is rendered-text quotes that an LLM session applies — never a mechanical patch</h3>
-<ul>
-<li>Copy-all gains a <strong>Suggested edits</strong> section: numbered blocks of <code>Replace: &gt; quote</code> / <code>With: &gt; replacement</code>, followed by the unchanged comments section. The badge and the unexported-work unload guard count both types.</li>
-<li>The quotes are <strong>rendered text</strong>, and the source is Markdown, so emphasis markers, links and code spans differ between the two. The export therefore does not promise mechanical application: the applying session locates each quote in the source and adapts the markup. Nobody builds a sed loop over this format; a tool that applies these blocks byte-for-byte will corrupt the source.</li>
-</ul>
-<h3 id="the-built-html-is-committed-beside-the-source-for-all-artifacts">The built HTML is committed beside the source, for all artifacts</h3>
-<ul>
-<li><code>artifacts/&lt;slug&gt;/</code> now holds the built page (e.g. <code>&lt;slug&gt;.html</code>) as a committed file beside <code>meta.yml</code> and the source. <code>build/</code> remains gitignored scratch. Decided by Yulong 2026-09-01: this applies to <strong>all artifacts</strong>, not only specs and plans; the context-ledger &quot;too large to commit&quot; example in <code>artifacts/README.md</code> is superseded and its README rewritten.</li>
-<li>Rebuild and republish update the committed HTML in the same commit as the source change, so the repo copy always matches the published page.</li>
-<li>The publish-path hook (<code>block_throwaway_artifact_path.sh</code>) already admits tracked paths; no hook change is required.</li>
-</ul>
-<h3 id="the-docs-route-updates-as-one-pass">The docs route updates as one pass</h3>
-<ul>
-<li><code>spec-artifact</code> gains the round-trip loop (publish → suggest edits → export → session applies → republish, one topic one URL) and a short plan-shape note: plans are mostly generated by sessions via superpowers <code>writing-plans</code> (saved under <code>docs/superpowers/plans/</code>), and a plan needing Yulong's review publishes the same editable-commentable way — route, don't restate.</li>
-<li><code>artifacts/README.md</code>, <code>artifacts-sync</code> (Source column now includes the committed HTML), <code>artifact-writing</code> (edit-mode mechanics and invariants), <code>spec-interview</code> (tail cross-refs), and the repo <code>CLAUDE.md</code> top rule all update to match. Standards live in one place each; the rest route.</li>
-</ul>
-<h2 id="acceptance-criteria">Acceptance Criteria</h2>
-<ul>
-<li>In a real browser inside <code>&lt;iframe sandbox=&quot;allow-scripts allow-same-origin&quot;&gt;</code>: select text, switch to Suggest edit, modify the prefill, Enter — the page shows strikethrough plus replacement; reload — the edit re-attaches; click it — the box reopens with the stored replacement; clear to empty and save — pure strikethrough.</li>
-<li>Save an edit early in the page, then confirm a comment anchored <strong>after</strong> it still re-attaches on reload — inserted text is provably excluded from anchoring.</li>
-<li>Copy-all yields Markdown with a Suggested edits section and the comments section; the unload guard blocks until export; a fresh session given the export and the committed source applies every edit correctly.</li>
-<li>Open the edit box, change nothing, click outside — the box closes and no draft or entry is written. Type the letters of any host-page shortcut into the box — page state does not change.</li>
-<li>Existing v1 comments on a rebuilt page load and render unchanged; all existing suites (<code>test_md2artifact_browser.py</code>, <code>test_md2artifact_ios.py</code>, <code>test_annotate_html.py</code>, details/mermaid) stay green, extended with the cases above.</li>
-<li><code>artifacts/editable-review-layer/</code> contains committed source and built HTML; <code>ARTIFACTS.md</code> carries the row; the six docs-route files are consistent with each other and with this spec.</li>
-</ul>
+<p><strong>Why Claude Code is Claude-only:</strong> no formal statement exists. Press-reported staff comment cites engineering constraints and traffic patterns that break debugging. Beyond that, the loop is Claude-shaped — prompt formats, tool schemas, retries, caching, compaction — and several seats noted a foreign model driving it through a shim performs worse than in its own harness.</p>
+<h2 id="recommendation-and-the-one-experiment-left">Recommendation and the one experiment left</h2>
+<p><strong>Build Shape 3a now.</strong> It is supported, keeps Remote Control everywhere, gives provenance for free, and the workers already exist; the marginal cost is one server with a fail-fast key preflight and a hard rule that a missing tool is loud and a failing one never paraphrased.</p>
+<p><strong>Test Shape 1b once</strong>, from a shell rather than a sandboxed session: does the client accept <code>http://api.anthropic.com</code>, and does the Remote Control bridge still connect with the hosts entry in place? If both hold, 1b is a full foreign-model menu plus native Remote Control with TLS intact and no certificate — the closest thing to the original ask — at the price of being unsupported and liable to break silently on any version bump.</p>
+<p><strong>Do not build Shape 2.</strong> It buys nothing 1b does not, and it is the only shape that decrypts your own traffic.</p>
+<h2 id="quiet-failures-in-the-recommended-design-and-the-detector-for-each">Quiet failures in the recommended design, and the detector for each</h2>
+<table>
+<thead>
+<tr>
+<th>Failure</th>
+<th>Detector</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Worker fails; Claude paraphrases an answer as &quot;Kimi said&quot; — the silent fallback reborn</td>
+<td>Server returns provider, exact slug, generation id, token counts; skill prints them verbatim; non-2xx is a hard error</td>
+</tr>
+<tr>
+<td>Keys absent in the spawned environment</td>
+<td>Server preflights keys and refuses to register tools without them</td>
+</tr>
+<tr>
+<td>OpenRouter renames a slug that resolves back to a Claude model, so a &quot;council&quot; is one family</td>
+<td><code>openrouter-cli drift</code>, plus a canary on the echoed <code>model</code> field</td>
+</tr>
+<tr>
+<td>A version bump re-tightens the gate or changes the loop</td>
+<td>Post-upgrade smoke test: Remote Control connects, base URL unset, each worker answers from the requested family</td>
+</tr>
+<tr>
+<td>Headless worker blocks on an interactive prompt</td>
+<td><code>timeout --signal=KILL</code>, stderr captured into the failure payload</td>
+</tr>
+<tr>
+<td>Claude spends on councils autonomously, outside the token ledger</td>
+<td>Per-tool spend log and a session cap; this run cost 5.3x its <code>--dry-run</code> floor, all reasoning tokens</td>
+</tr>
+</tbody>
+</table>
+<h2 id="what-the-panel-missed-including-in-the-brief-it-was-given">What the panel missed, including in the brief it was given</h2>
+<p>Data governance went unweighed by all eight seats: a council or <code>opencode</code> worker ships repo text to eight providers under their own retention and training policies, which belongs in the server's design. Nobody priced the MCP server's build cost against simply improving CLI ergonomics. Nobody costed the dual auth the hybrid requires — an OAuth subscription for Remote Control and API spend for workers. And the romp-over-Tailscale fallback everyone leaned on has an unhardened <code>socat</code> link that does not survive a reboot.</p>
 
 </div>
 </div>
@@ -228,7 +346,7 @@ mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-thr
  font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
 #anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
 </style>
-<div data-annotation-layer="v2" data-key="review-editable-review-layer-spec">
+<div data-annotation-layer="v2" data-key="review-remote-control-and-foreign-models-report">
 <section id="anComments">
 <h2 id="your-comments">Your comments</h2>
 <p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>

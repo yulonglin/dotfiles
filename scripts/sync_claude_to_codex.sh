@@ -26,6 +26,16 @@ fi
 # shellcheck source=scripts/helpers/enumerate_claude_skills.sh
 source "$HELPER"
 
+# Refuse to link into our own source. On this repo's layout codex/skills is a
+# symlink to ../claude/skills, so TARGET_SKILLS *is* ~/.claude/skills and every
+# link below would land in Claude's own directory: each agent mirrored as a Claude
+# skill (skills/<agent>/SKILL.md -> agents/<agent>.md) and each skill dir linked
+# onto itself (skills/X/X). That ran on every deploy from 2026-02-05 to 2026-09-01
+# and was misread as Claude Code runtime artifacts, hidden by claude/skills/.gitignore.
+# Codex already sees every user skill through the shared directory; nothing to link.
+if [ "$(readlink -f "$TARGET_SKILLS" 2>/dev/null)" = "$(readlink -f "$SOURCE_DIR/skills")" ]; then
+    echo ">>> Codex skills dir is Claude's own skills dir (shared by symlink) -- skipping skill links"
+else
 mkdir -p "$TARGET_SKILLS"
 
 # Clean stale symlinks (broken or from old *__* pattern)
@@ -60,6 +70,7 @@ done
 
 TOTAL=$(find -L "$TARGET_SKILLS" -maxdepth 1 -mindepth 1 | wc -l | tr -d ' ')
 echo "  Synced $TOTAL skills to $TARGET_SKILLS"
+fi
 
 # ---------- Permissions Sync ----------
 
