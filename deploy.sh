@@ -367,45 +367,20 @@ if [[ "${DEPLOY_SECRETS_ENV:-false}" == "true" ]]; then
         if [[ -f "$bws_token_file" ]]; then
             log_success "BWS token found at $bws_token_file"
         else
-            log_info "No BWS token at $bws_token_file — run: secrets-init bws"
+            log_info "No BWS token at $bws_token_file — run: secrets init"
         fi
     fi
 
     dotfiles_secrets_harden_permissions
     log_info "Hardened private secret file permissions"
 
-    # The approval classifier (claude/hooks/with-anthropic-key.sh) and the
-    # SessionStart health probe (claude/hooks/pre_session_start.sh) both resolve
-    # ANTHROPIC_API_KEY by bare name from a hook, where there is no TTY — the one
-    # access class the "[global]" name marker declares. The marker is not yet
-    # enforced — nothing gates bare-name resolution today — so this migration
-    # changes no behavior. It exists so the declaration is already correct on
-    # every machine when the gate does land, instead of hooks breaking that day.
-    # Marking is
-    # inventory-independent (it writes the conf line without consulting BWS), so
-    # this completes on a fresh machine before bws is installed, and it is
-    # idempotent: an already-marked name is left byte-identical.
-    #
-    # --global-once, not --global: this runs on every deployment, and an
-    # unconditional mark would undo a deliberate `secrets-use ANTHROPIC_API_KEY
-    # --no-global` at the next deploy. The once-only form stands down as soon as
-    # the conf carries a "# global-scope-decided:" line, so revocation sticks.
-    if PATH="$DOT_DIR/custom_bins:$PATH" \
-        "$DOT_DIR/custom_bins/secrets-use" ANTHROPIC_API_KEY --global-once >/dev/null 2>&1; then
-        log_success "ANTHROPIC_API_KEY [global] declaration recorded (not yet enforced)"
-    else
-        log_warning "Could not mark ANTHROPIC_API_KEY as [global]"
-        log_warning "  Harmless today — the marker is inert until the scoping gate lands."
-        log_warning "  Record it by hand: secrets-use ANTHROPIC_API_KEY --global-once"
-    fi
-
     if [[ -e "$DOT_DIR/.secrets" ]]; then
         log_warning "Legacy plaintext secrets still exist at $DOT_DIR/.secrets"
-        log_warning "  Safe to delete after confirming your repos use setup-envrc/.envrc"
+        log_warning "  Safe to delete after confirming your repos use 'secrets envrc'/.envrc"
     fi
     if [[ -e "$DOT_DIR/.env" || -L "$DOT_DIR/.env" ]]; then
         log_warning "Legacy local .env still exists at $DOT_DIR/.env"
-        log_warning "  setup-envrc can compare it against encrypted secrets and remove it"
+        log_warning "  'secrets envrc' can compare it against encrypted secrets and remove it"
     fi
 fi
 
@@ -1528,7 +1503,7 @@ if [[ "${DEPLOY_BWS:-false}" == "true" ]]; then
     if [[ -f "$BWS_TOKEN_FILE" ]]; then
         log_success "BWS token already configured at ${BWS_TOKEN_FILE}"
     else
-        log_info "Run 'secrets-init bws' to store your BWS access token"
+        log_info "Run 'secrets init' to store your BWS access token"
     fi
 fi
 

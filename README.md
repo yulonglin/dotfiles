@@ -170,22 +170,32 @@ All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTF
 
 API keys are stored in [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) (BWS) — a hosted, team-shareable secrets vault. The CLI (`bws`) fetches secrets on demand; nothing is written to disk except a machine access token (at `~/.config/bws/token`).
 
-**Commands:**
+**One command, `secrets`.** Typing it bare prints a status header — backend, token path, this repo's bindings, ambiguous env names, permission problems — and then offers a menu, but only at an interactive terminal with `gum` installed. Piped or scripted (`secrets | cat`), it prints the header and exits 0, so a hook or CI job can call it unconditionally.
 
 ```bash
-secrets-init bws         # First-time setup: save BWS access token
-secrets-edit             # Add/update/delete secrets (fzf TUI or: secrets-edit KEY VALUE)
-secrets-paths            # Show resolved backend + token path
+secrets                  # Status header, plus a menu at an interactive terminal
+secrets init             # First-time setup on this machine: save the BWS access token
+secrets edit             # Add/update/delete secrets (fzf TUI, or: secrets edit KEY VALUE)
+secrets ls [ENV]         # Env names, their active BWS key, blocked siblings
+secrets get ENV          # Print one value to stdout
+secrets use ENV          # Choose which BWS key an ambiguous env name resolves to
+secrets envrc [KEY...]   # Wire this repo's .envrc (direnv, resolved live)
+secrets run KEY... -- CMD   # Run CMD with only those keys in its environment
+secrets doctor           # Show backend paths and repair file permissions
 ```
+
+`secrets get` prints a secret; `secrets run` uses one without printing it. Prefer `run` in anything whose output is logged or pasted.
 
 **New machine setup:**
 
 1. Run `./install.sh` (installs bws CLI)
-2. Run `secrets-init bws` and paste your BWS access token from Bitwarden
+2. Run `secrets init` and paste your BWS access token from Bitwarden
 
-**Per-project usage:** Run `setup-envrc` in any repo to create a `.envrc` that selectively exposes only the secrets that repo should see. It supports direct exports (`KEY`), renamed exports (`ENV_VAR=SECRET_NAME`), and a repo-specific Telegram plugin binding (`--telegram-secret SECRET_NAME`). If local `.env` files already exist, the TUI scans the repo root recursively and can offer to delete selected files.
+**Per-project usage:** Run `secrets envrc` in any repo to create a `.envrc` that selectively exposes only the secrets that repo should see. It supports direct exports (`KEY`), renamed exports (`ENV_VAR=SECRET_NAME`), and a repo-specific Telegram plugin binding (`--telegram-secret SECRET_NAME`). If local `.env` files already exist, the TUI scans the repo root recursively and can offer to delete selected files.
 
-`setup-envrc` tries `direnv allow` automatically. If that cannot update direnv's allowlist (for example in a sandboxed environment), it prints the manual `direnv allow .` command and still completes the rest of the setup.
+`secrets envrc` tries `direnv allow` automatically. If that cannot update direnv's allowlist (for example in a sandboxed environment), it prints the manual `direnv allow .` command and still completes the rest of the setup.
+
+**Daemon repos that never reach direnv** — a container, a systemd unit — use `secrets envrc --plaintext`, which materializes real values into `.env` at mode 600. It refuses to write unless `.gitignore` already covers `.env`, and the values are static: rotating the secret in BWS means re-running the command. Everything with a shell session uses plain `secrets envrc` instead, which resolves live and leaves no secret at rest.
 
 ### Supply Chain Defense
 
@@ -197,7 +207,7 @@ Multi-layer defense against npm/PyPI supply chain attacks (axios 2026, litellm 2
 |-------|---------|----------------|
 | 7-day quarantine | `min-release-age` on all package managers | Freshly-published malicious versions (caught within days) |
 | Script blocking | `ignore-scripts=true` in npm/pnpm | Postinstall scripts that exfiltrate secrets or install RATs |
-| Credential isolation | API keys scoped per-project via direnv | Compromised package in project A can't read project B's keys |
+| Credential isolation | No ambient exports; each repo's `.envrc` binds only its own keys | A postinstall script in project A finds none of project B's keys in its environment |
 | Lockfile scanning | Pre-commit hook checks changed lockfiles | Known-bad packages entering your lockfile |
 | Weekly audit | Scans all repos for known-bad IOCs | Packages you already have that were later found compromised |
 | Claude Code hook | Warns before any `npm install` / `pip install` | AI assistant installing packages without checking them first |
@@ -222,30 +232,30 @@ UV_EXCLUDE_NEWER= uv pip install some-brand-new-pkg   # uv
 
 **Credential isolation:**
 
-API keys stay in `$DOTFILES_SECRETS_DIR/secrets.env.enc` and are NOT globally exported. Each project gets only the keys it needs:
+API keys are NOT exported into every shell, so a compromised postinstall script finds nothing in its environment. Each project's `.envrc` binds only the keys it needs:
 
 ```bash
 # Interactive picker (fzf)
 cd ~/code/my-project
-setup-envrc                  # Select keys with TAB, confirm with ENTER
+secrets envrc                # Select keys with TAB, confirm with ENTER
 # → Creates .envrc with eval-based exports, direnv auto-loads on cd
 
 # Non-interactive
-setup-envrc ANTHROPIC_API_KEY OPENAI_API_KEY
+secrets envrc ANTHROPIC_API_KEY OPENAI_API_KEY
 
 # Map a namespaced secret into the env var your app expects
-setup-envrc ANTHROPIC_API_KEY TELEGRAM_BOT_TOKEN=NUDGE_TELEGRAM_BOT_TOKEN
+secrets envrc ANTHROPIC_API_KEY TELEGRAM_BOT_TOKEN=NUDGE_TELEGRAM_BOT_TOKEN
 
-# Claude Telegram plugin: keep the token canonical in dotfiles-secrets,
+# Claude Telegram plugin: keep the token canonical in the secrets store,
 # and generate .claude/channels/telegram/.env only at launch time
-setup-envrc --telegram-secret AMBASSADOR_TELEGRAM_BOT_TOKEN
+secrets envrc --telegram-secret AMBASSADOR_TELEGRAM_BOT_TOKEN
 
 # Check what's configured
-setup-envrc --list           # Show keys in current .envrc
-setup-envrc --clean          # Remove .envrc
+secrets envrc --list         # Show keys in current .envrc
+secrets envrc --clean        # Remove .envrc
 
 # One-off command with selected keys (no .envrc needed)
-with-secrets ANTHROPIC_API_KEY OPENAI_API_KEY -- python my_script.py
+secrets run ANTHROPIC_API_KEY OPENAI_API_KEY -- python my_script.py
 ```
 
 **Manual audit:**

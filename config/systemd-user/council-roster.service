@@ -8,9 +8,10 @@ Type=oneshot
 # No API key. Both data sources this needs are public: the OpenRouter /models
 # catalogue and the Epoch Capabilities Index zip. The Artificial Analysis index
 # would need AA_API_KEY, and it is deliberately NOT wired in here -- secrets on
-# this machine are per-project via direnv, and `with-secrets` is a zsh FUNCTION,
-# so a systemd unit could never have called it. Running on Epoch alone is the
-# supported degraded mode and the report says which indices it used.
+# this machine are reached through `secrets`, a binary, so a systemd unit
+# genuinely could call `secrets run KEY -- cmd` if it needed one. Running on
+# Epoch alone is the supported degraded mode and the report says which indices
+# it used.
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 
 # --check only. This job NEVER writes the config, for two reasons: the unit runs

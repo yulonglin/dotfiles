@@ -203,7 +203,7 @@ else
         unset BWS_TOKEN
     else
         BWS_NEEDS_SETUP=1
-        log "Skipping — run: secrets-init-bws"
+        log "Skipping — run: secrets init"
     fi
 fi
 
@@ -236,5 +236,5 @@ log "Mosh:   mosh $USERNAME@<host>  (UDP 60000-61000, or use Tailscale)"
 log "Switch: su - $USERNAME"
 log "SSH:    ssh $USERNAME@<ip> -p <port>"
 [[ "$GH_NEEDS_AUTH"   == "1" ]] && log "Next: gh auth login  →  sync-gist"
-[[ "$BWS_NEEDS_SETUP" == "1" ]] && log "Next: secrets-init-bws   (or re-run with BWS_TOKEN=…)"
+[[ "$BWS_NEEDS_SETUP" == "1" ]] && log "Next: secrets init   (or re-run with BWS_TOKEN=…)"
 [[ "$TS_NEEDS_SETUP"  == "1" ]] && log "Next: tailscale up --ssh --authkey <key>"

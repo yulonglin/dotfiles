@@ -18,7 +18,7 @@ Each project gets its own bot (e.g., `ambassador_bot`, `nudge_bot`).
 ### 2. Store the canonical token in `dotfiles-secrets`
 
 ```bash
-secrets-edit
+secrets edit
 # Add a namespaced key such as:
 #   AMBASSADOR_TELEGRAM_BOT_TOKEN=123456789:AAH...
 ```
@@ -26,7 +26,7 @@ secrets-edit
 Then bind the repo to that secret:
 
 ```bash
-setup-envrc --telegram-secret AMBASSADOR_TELEGRAM_BOT_TOKEN
+secrets envrc --telegram-secret AMBASSADOR_TELEGRAM_BOT_TOKEN
 ```
 
 This records the secret name in `.envrc` and exports:

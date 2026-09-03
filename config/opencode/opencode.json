@@ -7,7 +7,7 @@
     "per-project secrets model: keys live in Bitwarden Secrets Manager and are",
     "NEVER globally exported. So OpenCode only sees a key when you launch it",
     "from a repo with `setup-envrc` (direnv), or via a one-shot",
-    "`with-secrets OPENROUTER_API_KEY -- opencode run ...`.",
+    "`secrets run OPENROUTER_API_KEY -- opencode run ...`.",
     "Launching it from a directory with no .envrc and getting an auth error is",
     "the supply-chain defense working, not a bug.",
     "",

@@ -432,7 +432,7 @@ def cmd_provision(args: argparse.Namespace) -> None:
     if args.max_lifetime:
         print(f"  ⚠  Max lifetime: {args.max_lifetime}h — expires {entry['expires_at']}")
         print("     Run teardown above by then (no auto-teardown scheduled)")
-    print("  Next: ssh in and run secrets-init bws, tailscale up")
+    print("  Next: ssh in and run secrets init, tailscale up")
     print("  ML stack: run setup_stack.sh from nla-vs-cot repo (not done here)")
     print(f"{'='*60}")
 

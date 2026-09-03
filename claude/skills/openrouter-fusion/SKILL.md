@@ -13,7 +13,7 @@ openrouter-cli ask glm "question"  # one model
 openrouter-cli fusion "question"   # panel in parallel, then judge synthesis
 ```
 
-`fusion` takes `--panel <aliases>` to override the configured panel and `--dry-run` to print the request body instead of spending. Model config lives in `config/openrouter-models.toml`; the key comes from per-project secrets (`setup-envrc`, or `with-secrets OPENROUTER_API_KEY -- <cmd>`), never a global export.
+`fusion` takes `--panel <aliases>` to override the configured panel and `--dry-run` to print the request body instead of spending. Model config lives in `config/openrouter-models.toml`; the key comes from per-project secrets (`setup-envrc`, or `secrets run OPENROUTER_API_KEY -- <cmd>`), never a global export.
 
 ## Fusion is for disagreement, not for lookup
 

@@ -198,6 +198,6 @@ jq -n \
           reason: ("Secret values masked in " + $path + ". To get one specific value, use `dotfiles-secrets get-value '\''ENV_NAME - description'\''` (list keys with `dotfiles-secrets keys-meta`). Note `printenv KEY_NAME` is blocked by block_secret_expansion.sh — it would write the value into the transcript permanently.")
         }
       },
-      systemMessage: ("## Masked contents of " + $path + "\n\nSecret values are masked (first 4 chars visible). To read one value: `dotfiles-secrets get-value '\''ENV_NAME - description'\''`. To USE a secret without printing it: `with-secrets KEY_NAME -- <command>`.\n\n```\n" + $content + "\n```")
+      systemMessage: ("## Masked contents of " + $path + "\n\nSecret values are masked (first 4 chars visible). To read one value: `dotfiles-secrets get-value '\''ENV_NAME - description'\''`. To USE a secret without printing it: `secrets run KEY_NAME -- <command>`.\n\n```\n" + $content + "\n```")
     }'
 exit 0

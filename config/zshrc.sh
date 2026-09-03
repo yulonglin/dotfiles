@@ -112,45 +112,6 @@ for _aliases_file in "$CONFIG_DIR"/aliases/*.sh; do
 done
 unset _aliases_file
 [ -f $CONFIG_DIR/secrets.sh ] && source $CONFIG_DIR/secrets.sh
-if [ -x "$DOT_DIR/custom_bins/dotfiles-secrets" ]; then
-  # Ad-hoc least-privilege helper for one-off commands.
-  # Usage: with-secrets KEY1 [KEY2 ...] -- command [args...]
-  with-secrets() {
-    local args=("$@")
-    local keys=()
-    local saw_separator=false
-    local i
-
-    [[ $# -gt 0 ]] || { echo "Usage: with-secrets KEY1 [KEY2 ...] -- command [args...]" >&2; return 1; }
-
-    for ((i = 1; i <= $#; i++)); do
-      if [[ "${args[i]}" == "--" ]]; then
-        saw_separator=true
-        break
-      fi
-      keys+=("${args[i]}")
-    done
-
-    [[ "$saw_separator" == true ]] || { echo "Usage: with-secrets KEY1 [KEY2 ...] -- command [args...]" >&2; return 1; }
-    [[ ${#keys[@]} -gt 0 ]] || { echo "Provide at least one key or use --all before --" >&2; return 1; }
-    shift $(( ${#keys[@]} + 1 ))
-    [[ $# -gt 0 ]] || { echo "Provide a command after --" >&2; return 1; }
-
-    (
-      # Capture-then-eval, not `source <(...)`: process substitution hides the
-      # producer's exit status, so a helper that failed to resolve a named key
-      # would leave the command below running silently keyless.
-      local exports
-      if [[ "${keys[1]}" == "--all" ]]; then
-        exports=$("$DOT_DIR/custom_bins/dotfiles-secrets" shell --all) || exit 1
-      else
-        exports=$("$DOT_DIR/custom_bins/dotfiles-secrets" shell "${keys[@]}") || exit 1
-      fi
-      eval "$exports"
-      "$@"
-    )
-  }
-fi
 source $CONFIG_DIR/ssh_setup.sh
 source $CONFIG_DIR/p10k.zsh
 source $CONFIG_DIR/extras.sh

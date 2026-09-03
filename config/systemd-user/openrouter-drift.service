@@ -7,9 +7,9 @@ Type=oneshot
 
 # No API key. The OpenRouter /models catalogue is a public endpoint (verified
 # HTTP 200 unauthenticated, 2026-08-28), so this job needs no secret at all.
-# That matters here: secrets on this machine are per-project via direnv, and
-# `with-secrets` is a zsh FUNCTION in config/zshrc.sh, so a systemd unit could
-# never have called it anyway. The optional index-based re-ranking that DOES
+# Secrets on this machine are reached through `secrets`, a binary, so a
+# systemd unit genuinely could call `secrets run KEY -- cmd` if it needed one
+# -- it just doesn't today. The optional index-based re-ranking that DOES
 # need a key (AA_API_KEY) stays on the manual `openrouter-cli refresh` path.
 #
 # deploy.sh copies this unit verbatim -- no templating -- so nothing here may

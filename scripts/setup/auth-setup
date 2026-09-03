@@ -10,7 +10,7 @@
 #   auth-setup --checklist  # ONLY print the auth/login checklist
 #
 # Nothing here stores secrets. API-key apps are pointed at the existing secrets
-# flow (setup-envrc / with-secrets) — never plaintext.
+# flow (`secrets envrc` / `secrets run`) — never plaintext.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
 
@@ -38,7 +38,7 @@ hdr() { print -P "%F{cyan}── $* ──%f"; }
 auth_hint() {
     case "$1" in
         login)        echo "Open and sign in." ;;
-        apikey)       echo "API key — add via 'setup-envrc' in the relevant repo (no plaintext)." ;;
+        apikey)       echo "API key — add via 'secrets envrc' in the relevant repo (no plaintext)." ;;
         pair-phone)   echo "Pair with the phone app (scan QR in the desktop/extension)." ;;
         safari-ext)   echo "Enable in Safari → Settings → Extensions, then grant site access." ;;
         license)      echo "Enter your license key (paid app)." ;;
