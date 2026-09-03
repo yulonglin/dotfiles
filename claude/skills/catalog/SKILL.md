@@ -187,7 +187,6 @@ These are not in this repo, but they fire automatically like any other skill —
 | `debugger` | An error, exception, test failure or intermittent bug needing systematic root-cause work |
 | `tooling-engineer` | A well-scoped support tool — API client, parser, data processor, automation script |
 | `efficient-explorer` | Exploring an unfamiliar codebase without pulling whole files into context |
-| `claude` | Delegating headless work to `claude -p` for fresh auth or separate billing (synchronous only) |
 | `context-fetcher` | Gathering Gmail/Slack/Granola/Calendar context on a named person before drafting a reply |
 | `llm-billing` | "how much have I spent on OpenRouter/OpenAI/Anthropic", checking API credits |
 
