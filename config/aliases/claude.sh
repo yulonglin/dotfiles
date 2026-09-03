@@ -289,15 +289,28 @@ claude() {
     # NOTE this cannot reach sessions spawned by `claude daemon run` — those
     # inherit the daemon's environment, captured once when it started. See
     # claude/skills/spawn-session/SKILL.md for the diagnostic and the restart.
-    local -a _tl_launch=(env -u CLAUDE_CODE_TASK_LIST_ID)
+    #
+    # ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are stripped the same way, always.
+    # An inherited key (typically a repo .envrc binding, e.g. the dotfiles
+    # checkout's own) makes Claude Code prefer API-key auth over the claude.ai
+    # login, which silently disables every claude.ai connector (Gmail, Drive,
+    # Slack, Calendar) in that session and in everything it spawns — observed
+    # 2026-09-02 on a daemon started from the dotfiles dir. Nothing the wrapper
+    # launches needs the key in its environment: the approval classifier and
+    # SessionStart probe resolve it themselves from config/secrets-global.conf
+    # (claude/hooks/with-anthropic-key.sh). The model-router path (--model
+    # gpt-5.6-sol) was not exercised with the key stripped; rc-direct sessions
+    # blank the base URL anyway, so RC sessions never touched the router.
+    local -a _strip_env=(-u CLAUDE_CODE_TASK_LIST_ID -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN)
     if [[ -n "$task_name" ]]; then
         local _tl_timestamp
         _tl_timestamp=$(date -u +%Y%m%d_%H%M%S)
         # Function-local, so zsh and bash both unwind it on every exit
         # including a Ctrl-C mid-launch; nothing is left for the next launch.
         local -x CLAUDE_CODE_TASK_LIST_ID="${_tl_timestamp}_UTC_${task_name}"
-        _tl_launch=(command)
+        _strip_env=(-u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN)
     fi
+    local -a _tl_launch=(env "${_strip_env[@]}")
 
     # Coordinator mode is set here, per-invocation, rather than in the global
     # settings env block: there it was inherited by every `claude -p` child,

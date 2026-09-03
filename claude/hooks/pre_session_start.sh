@@ -120,7 +120,7 @@ if ! $has_key; then
     # Claude subscription (`claude -p`), which still auto-approves but takes
     # ~9s per call instead of ~1s. Still worth a warning — it is a real
     # slowdown, and the fallback fails too if the CLI is not logged in.
-    classify_warnings+="approval classifier has NO API key — falling back to the slower subscription backend (~9s/call). Fix: setup-envrc ANTHROPIC_API_KEY"$'\n'
+    classify_warnings+="approval classifier has NO API key — falling back to the slower subscription backend (~9s/call). Fix: secrets-use ANTHROPIC_API_KEY <key> (NOT setup-envrc — a repo .envrc binding leaks the key into every session launched there and disables the claude.ai connectors)"$'\n'
     [[ -n "$key_error" ]] && classify_warnings+="  reason: $key_error"$'\n'
 fi
 
