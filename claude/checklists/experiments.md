@@ -22,7 +22,7 @@ The input audit above catches formatting damage; it says nothing about validity.
 
 Record the dataset and split hashes in the manifest alongside the prompt hashes. State the contamination check you ran — canary strings, n-gram or embedding overlap against the finetuning data — or state explicitly in the manifest that none was possible and that the numbers carry that caveat. Draw few-shot exemplars from a pool disjoint from the test items, and never reuse a test item across two conditions you intend to compare.
 
-## Fail in five minutes, not at hour three
+## Repeat with me: fail fast! Fail in five minutes, not at hour three
 
 Before generating: endpoint health, disk for 3× projected output, memory against the readers' budgets, auth. Estimate dollars, GPU-hours, peak RSS and tokens out loud.
 
@@ -33,6 +33,8 @@ Debug on one-sample runs or fixtures — never by relaunching the full run with 
 ## Resource choices are decided and recorded
 
 Concurrency is a decision about what else shares the box, not a number to maximise — so the manifest states the concurrency level chosen and what else was running on the box while the run held it. A level nobody wrote down cannot be blamed for the OOM afterwards.
+
+Be aware of: GPU, CPU, memory, disk, memory bandwidth, financial cost, rate limit, time cost.
 
 - **Memory-heavy or long-lived** (past ~2 GB RSS or ~1 h) goes to the queue, whose cgroup caps are what stop the box OOMing.
 - **Pure API fan-out** runs backgrounded from the main context, where a queue only adds latency.
