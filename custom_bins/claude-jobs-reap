@@ -110,11 +110,16 @@ def unmerged_reason(data: dict) -> str | None:
     branch = data.get("worktreeBranch")
     worktree = data.get("worktreePath")
     if worktree and Path(worktree).is_dir():
-        rc, out = git(worktree, "status", "--porcelain")
+        # --no-optional-locks: the reaper runs at every `claude agents` launch,
+        # and a "done" session can be live and mid-commit in that worktree. A
+        # plain status refreshes the index under index.lock and would make that
+        # session's commit fail with a lock error nobody could attribute.
+        rc, out = git(worktree, "--no-optional-locks", "status", "--porcelain")
         if rc != 0:
             return f"git status failed in {worktree}"
         if out:
-            return f"worktree {worktree} has uncommitted changes"
+            first = out.splitlines()[0].strip()
+            return f"worktree {worktree} has uncommitted changes ({first})"
     if not branch:
         return None
     repo = data.get("originCwd") or data.get("cwd")
