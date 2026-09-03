@@ -717,9 +717,11 @@ function openForSelection(autofocus){
   if (inLayer(sel.anchorNode) || inLayer(sel.focusNode)) return false;
   // Already open on this exact selection: do not wipe a half-typed note.
   if (pending && pending.quote === text && isOpen()) return true;
-  // Open on some other selection with a note already typed: leave it be
-  // rather than throwing away words the user has not saved.
-  if (isOpen() && hasText()) return true;
+  // Open on some other selection the user has MODIFIED: leave it be rather
+  // than throwing away work. The test is `dirty`, not non-emptiness: an
+  // untouched prefilled edit box yields to a fresh selection, and a dirty
+  // EMPTY edit box (a pending deletion) is work and must not be overwritten.
+  if (isOpen() && dirty) return true;
   var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
   // Overlaps an existing suggested edit: point at that edit rather than open a
   // second box on the range.
@@ -765,7 +767,9 @@ var selTimer = null;
 document.addEventListener("selectionchange", function(){
   if (document.activeElement === txt) return;
   if (editingId !== null) return;
-  if (isOpen() && hasText()) return;
+  // Same test as openForSelection: modified work stays, an untouched prefill
+  // does not hold the page hostage.
+  if (isOpen() && dirty) return;
   clearTimeout(selTimer);
   selTimer = setTimeout(function(){ openForSelection(false); }, 250);
 });
@@ -788,6 +792,9 @@ document.addEventListener("keydown", function(ev){
 });
 
 function closePop(){
+  // #anDelete is one element reused by every entry: an arm left live here
+  // would confirm on the next opened entry's first click.
+  disarm();
   pop.style.display = "none"; pending = null; editingId = null;
   pop.classList.remove("editing"); pop.classList.remove("nudge");
   setModeState("comment"); dirty = false;
@@ -799,8 +806,11 @@ function discard(){ closePop(); }
 // `dirty` gates this, not emptiness: an edit box opens pre-filled with the
 // selection, and autosaving that would leave a draft nobody typed, which then
 // reopens the box on the next load for a note that was never begun.
+// In edit mode an EMPTY dirty box is meaningful: the prefill was cleared to
+// suggest a deletion, and a refresh before Enter must bring that back. In
+// comment mode an empty box is nothing to keep.
 function saveDraft(){
-  if (!isOpen() || !dirty || !hasText()) { lsDel(DRAFT); return; }
+  if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
   lsSet(DRAFT, JSON.stringify({
     note: txt.value, editingId: editingId, mode: mode,
     quote: pending ? pending.quote : null, where: pending ? pending.where : null
@@ -831,7 +841,11 @@ function restoreDraft(){
 }
 function unpackDraft(){
   var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
-  return d && typeof d.note === "string" && d.note.trim() ? d : null;
+  if (!d || typeof d.note !== "string") return null;
+  // An empty note is a draft only for an edit that still knows its target: a
+  // pending deletion of `quote`, or a revision of an existing edit.
+  if (!d.note.trim() && !(d.mode === "edit" && (d.quote || d.editingId != null))) return null;
+  return d;
 }
 // These keep their names and every existing call site; what changed is that
 // the state lives on the comments now and the page-level key is derived from
@@ -945,7 +959,7 @@ function save(){
   } else if (pending) {
     var id = newId();
     try { wrapRange(pending.range, id, note, "note"); } catch (e) {}
-    comments.push({ id: id, where: pending.where, quote: pending.quote, note: note });
+    comments.push({ id: id, type: "comment", where: pending.where, quote: pending.quote, note: note });
   }
   markDirty(); persist(); render(); closePop();
   var sel = window.getSelection(); if (sel) sel.removeAllRanges();
