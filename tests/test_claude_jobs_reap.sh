@@ -117,5 +117,71 @@ else
   bad "without a filter, --days 0 still reaps blocked but never working or idle" "archive: ${moved:-<empty>}; output: $out"
 fi
 
+# --- unmerged work keeps a finished job visible ---------------------------------
+#
+# `done` means the last turn ended, not that the work landed. A real repo with
+# real worktrees, one per shape: branch merged into main, branch unmerged,
+# branch merged but worktree dirty, branch deleted, and no worktree at all.
+
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+# Hermetic: no global hooks (gitleaks) or signing config reach the fixture.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+repo="$d/repo"
+git init -q -b main "$repo"
+git -C "$repo" commit -q --allow-empty -m base
+for b in merged unmerged dirty gone; do
+  git -C "$repo" worktree add -q "$repo/.wt/$b" -b "wt-$b"
+  git -C "$repo/.wt/$b" commit -q --allow-empty -m "work on $b"
+done
+git -C "$repo" merge -q --no-edit wt-merged
+git -C "$repo" merge -q --no-edit wt-dirty
+printf 'x\n' >"$repo/.wt/dirty/scratch.txt"
+git -C "$repo" worktree remove --force "$repo/.wt/gone"
+git -C "$repo" branch -q -D wt-gone
+
+rm -rf "$d/jobs" "$d/archive"
+make_wt_job() {  # <name> <branch> <worktree path>
+  mkdir -p "$d/jobs/$1"
+  printf '{"state":"done","updatedAt":"2026-01-01T00:00:00Z","originCwd":"%s","worktreeBranch":"%s","worktreePath":"%s"}\n' \
+    "$repo" "$2" "$3" >"$d/jobs/$1/state.json"
+}
+make_wt_job merged wt-merged "$repo/.wt/merged"
+make_wt_job unmerged wt-unmerged "$repo/.wt/unmerged"
+make_wt_job dirty wt-dirty "$repo/.wt/dirty"
+make_wt_job gone wt-gone "$repo/.wt/gone"
+make_job plain 'done'
+
+out=$("$REAPER" --jobs-dir "$d/jobs" --finished --hours 0 --archive-to "$d/archive" -v 2>&1)
+moved=$(listing "$d/archive")
+left=$(listing "$d/jobs")
+if [[ "$moved" == "gone merged plain " ]]; then
+  ok "merged, branch-deleted and worktree-less finished jobs are hidden"
+else
+  bad "merged, branch-deleted and worktree-less finished jobs are hidden" "archive: ${moved:-<empty>}; output: $out"
+fi
+if [[ "$left" == "dirty unmerged " ]]; then
+  ok "an unmerged branch or a dirty worktree keeps the job visible"
+else
+  bad "an unmerged branch or a dirty worktree keeps the job visible" "left: ${left:-<empty>}; output: $out"
+fi
+case "$out" in
+  *"keep unmerged: state=done branch wt-unmerged not merged into main"*) ok "verbose names the unmerged branch" ;;
+  *) bad "verbose names the unmerged branch" "output: $out" ;;
+esac
+case "$out" in
+  *"keep dirty: state=done worktree "*"has uncommitted changes"*) ok "verbose names the dirty worktree" ;;
+  *) bad "verbose names the dirty worktree" "output: $out" ;;
+esac
+
+# The guard holds in the plain age-based mode too: a 7-day cleanup must not
+# take the reminder either.
+out=$("$REAPER" --jobs-dir "$d/jobs" --days 0 --archive-to "$d/archive" 2>&1)
+left=$(listing "$d/jobs")
+if [[ "$left" == "dirty unmerged " ]]; then
+  ok "the age-based default keeps unmerged work as well"
+else
+  bad "the age-based default keeps unmerged work as well" "left: ${left:-<empty>}; output: $out"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

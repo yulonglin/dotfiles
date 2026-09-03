@@ -22,8 +22,14 @@ a terminal state. That is how the `claude()` wrapper hides finished rows from
 the agents view before it opens: `--finished --hours 0 --archive-to DIR`. The
 view itself is compiled into the CLI and has no hide toggle, so removing the
 job dir is the only lever. `blocked` (the "Needs you" row) is not a terminal
-state and survives that filter whatever the grace. A pinned job is never
-reaped in any mode. Worktrees a job created are left in place; the view's own
+state and survives that filter whatever the grace.
+
+`done` means the job's last turn ended, not that its work landed. So in every
+mode a job is kept while its worktree branch (state.json worktreeBranch) is not
+an ancestor of the repo's default branch, or its worktree has uncommitted
+changes — the row is the reminder to merge. A branch or repo that no longer
+exists has nothing left to merge and is not protected. A pinned job is never
+reaped either. Worktrees a job created are left in place; the view's own
 delete key is what reaps those.
 """
 
@@ -71,6 +77,58 @@ def dir_size_mb(path: Path) -> float:
         except OSError:
             continue
     return total / 1_000_000
+
+
+def git(cwd: str, *args: str) -> tuple[int, str]:
+    """Return (exit code, stdout). Any failure to run git at all reads as an error code."""
+    try:
+        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return 255, ""
+    return r.returncode, r.stdout.strip()
+
+
+def default_branch(repo: str) -> str:
+    rc, ref = git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    if rc == 0 and ref.startswith("origin/"):
+        return ref[len("origin/"):]
+    for name in ("main", "master"):
+        if git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{name}")[0] == 0:
+            return name
+    return "main"
+
+
+def unmerged_reason(data: dict) -> str | None:
+    """Why a job's work is still open on disk, or None when nothing is pending.
+
+    A job's `done` state means its last turn ended, not that its work landed:
+    the branch it worked on can still be unmerged, and its worktree can still
+    hold uncommitted changes. Either is a reminder the agents view should keep
+    showing, so such a job is never reaped. A repo or branch that no longer
+    exists has nothing left to merge.
+    """
+    branch = data.get("worktreeBranch")
+    worktree = data.get("worktreePath")
+    if worktree and Path(worktree).is_dir():
+        rc, out = git(worktree, "status", "--porcelain")
+        if rc != 0:
+            return f"git status failed in {worktree}"
+        if out:
+            return f"worktree {worktree} has uncommitted changes"
+    if not branch:
+        return None
+    repo = data.get("originCwd") or data.get("cwd")
+    if not repo or not Path(repo).is_dir():
+        return None
+    if git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}")[0] != 0:
+        return None
+    base = default_branch(repo)
+    rc, _ = git(repo, "merge-base", "--is-ancestor", branch, base)
+    if rc == 0:
+        return None
+    if rc == 1:
+        return f"branch {branch} not merged into {base}"
+    return f"git merge-base failed for {branch}"
 
 
 def main() -> int:
@@ -140,7 +198,7 @@ def main() -> int:
     now = time.time()
 
     reaped, reaped_mb, kept_recent, kept_active, kept_unreadable = 0, 0.0, 0, 0, 0
-    kept_other, kept_pinned, errors = 0, 0, 0
+    kept_other, kept_pinned, kept_unmerged, errors = 0, 0, 0, 0
 
     for job_dir in sorted(args.jobs_dir.iterdir()):
         if not job_dir.is_dir():
@@ -177,6 +235,13 @@ def main() -> int:
             kept_other += 1
             if args.verbose:
                 print(f"keep {job_dir.name}: state={state or '?'} not in {','.join(sorted(only_states))}")
+            continue
+
+        reason = unmerged_reason(data)
+        if reason is not None:
+            kept_unmerged += 1
+            if args.verbose:
+                print(f"keep {job_dir.name}: state={state or '?'} {reason}")
             continue
 
         age_days = (now - last_activity_epoch(job_dir)) / 86400
@@ -219,9 +284,10 @@ def main() -> int:
     if not args.quiet or reaped or errors:
         other = f", {kept_other} other-state" if only_states is not None else ""
         pinned = f", {kept_pinned} pinned" if kept_pinned else ""
+        unmerged = f", {kept_unmerged} unmerged" if kept_unmerged else ""
         print(
             f"{verb} {reaped} job(s), {reaped_mb:.0f}MB; kept {kept_recent} recent, "
-            f"{kept_active} active, {kept_unreadable} unreadable{other}{pinned}; {errors} error(s)"
+            f"{kept_active} active, {kept_unreadable} unreadable{other}{pinned}{unmerged}; {errors} error(s)"
         )
     return 1 if errors else 0
 

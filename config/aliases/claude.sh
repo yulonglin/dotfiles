@@ -322,7 +322,10 @@ claude() {
     # its dir is gone. Archived, not deleted: state.json holds the job's result
     # text and name; the transcript under ~/.claude/projects is untouched either
     # way. reap_jobs.sh purges the archive at 30 days. `blocked` ("Needs you")
-    # and working rows are never touched. CLAUDE_AGENTS_HIDE_FINISHED=0 opts
+    # and working rows are never touched, and neither is a done job whose
+    # worktree branch is unmerged or whose worktree is dirty — `done` only
+    # means the turn ended, and that row is the reminder to merge.
+    # CLAUDE_AGENTS_HIDE_FINISHED=0 opts
     # out; CLAUDE_AGENTS_FINISHED_GRACE_HOURS (default 0) keeps rows that
     # finished more recently than that.
     if [[ "$_first_positional" == "agents" && "${CLAUDE_AGENTS_HIDE_FINISHED:-1}" != "0" ]]; then
