@@ -8,7 +8,7 @@ Every header asserts a point, not a topic — in specs, plans, reports, READMEs,
 
 **Results belong in figures, not in paragraphs.** A passage carrying three or more numbers with intervals is a figure you have not drawn yet. This holds for papers, reports, artifacts, specs and slides alike: a reader compares positions on an axis far faster than they parse bracketed intervals in prose, and a comparison across conditions is nearly unreadable as sentences. Keep a number inline only when it is the single headline value, or the one figure a reader must be able to quote. Every comparison plot shows its chance line and its null. Tooling and style: `house-plots` for papers, `dataviz` for artifact pages.
 
-Links never end with a full stop — a trailing period gets copied into the URL. No checkbox checklists in specs or docs; `[ ]` belongs only in working todo lists.
+**Every figure, quote or claim taken from a source carries a link to that source** — the IRS page, the Gmail thread (`https://mail.google.com/mail/u/0/#all/<threadId>`), the Slack permalink, the arXiv abstract, the Bear note — in notes, artifacts, chat replies and tables alike, so Yulong can open it without asking. A number he cannot click is a number he cannot check, and a computed number links to the inputs it was computed from. Links never end with a full stop — a trailing period gets copied into the URL. No checkbox checklists in specs or docs; `[ ]` belongs only in working todo lists.
 
 Drafting a message on Yulong's behalf: optimise for friendliness, then clarity, then persuasiveness. "Critique and improve" means apply all three and say what changed.
 
