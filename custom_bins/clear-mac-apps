@@ -135,6 +135,12 @@ slow_quit_and_wait() {
 # is: by trying once. Keyed by app NAME, because that is all the AX API and the
 # keystroke path agree on. Lives beside the idle job's state - one system.
 AX_CAPABILITY_FILE="${HOME}/.cache/hide-idle-apps/ax-capability"
+# Every System Events call below discards stderr, so a run that failed because
+# osascript was refused Accessibility (-25211) looked exactly like an app that
+# kept a window open. Each run truncates this log and appends the AppleScript
+# error text per call, so the notification can point at the reason.
+AX_TRACE_LOG="${HOME}/.cache/hide-idle-apps/last-run.log"
+ax_trace() { print -r -- "$(date +%H:%M:%S) $1" >> "$AX_TRACE_LOG" 2>/dev/null || true; }
 
 # How long a "cannot be closed by clicking" verdict is trusted. The record used to
 # be permanent, so an app that GAINED a close button in an update was typed at for
@@ -191,7 +197,8 @@ record_ax_unsupported() {
 }
 
 count_app_windows() {
-    osascript -e "tell application \"System Events\" to tell process \"$1\" to count windows" 2>/dev/null
+    ax_trace "count $1"
+    osascript -e "tell application \"System Events\" to tell process \"$1\" to count windows" 2>>"$AX_TRACE_LOG"
 }
 
 # Close every window by clicking its close button, and print how many are left.
@@ -213,7 +220,14 @@ ax_close_app_windows() {
                 repeat while (count of windows) > 0 and attempts < 20
                     set before to count of windows
                     click (first button of window 1 whose subrole is \"AXCloseButton\")
-                    delay 0.2
+                    -- Spotify, Bear and Things were each branded keystroke-only by a manual
+                    -- run on three separate days with only a 0.6s window to show progress;
+                    -- poll up to 1s per click before calling it a stall.
+                    set pollAttempts to 0
+                    repeat while (count of windows) >= before and pollAttempts < 5
+                        delay 0.2
+                        set pollAttempts to pollAttempts + 1
+                    end repeat
                     set attempts to attempts + 1
                     if (count of windows) < before then
                         set stalls to 0
@@ -224,7 +238,7 @@ ax_close_app_windows() {
                 end repeat
                 return (count of windows) as text
             end tell
-        end tell" 2>/dev/null
+        end tell" 2>>"$AX_TRACE_LOG"
 }
 
 # Usage: close_app_windows "AppName" [patience]
@@ -274,6 +288,15 @@ close_app_windows_keystroke() {
         tell application \"System Events\"
             tell process \"$app\"
                 set frontmost to true
+                -- Activation from a Shortcuts-spawned process can lag; a keystroke
+                -- fired before frontmost actually flips is dropped (no other window
+                -- closes either), so the run fails and only a rerun lands. Poll up to 3s;
+                -- the loop exits the moment frontmost flips, so success pays nothing.
+                set activateAttempts to 0
+                repeat while not frontmost and activateAttempts < 30
+                    delay 0.1
+                    set activateAttempts to activateAttempts + 1
+                end repeat
                 set maxAttempts to 20
                 set attempts to 0
                 set lastCount to count of windows
@@ -304,7 +327,7 @@ close_app_windows_keystroke() {
                 return (count of windows) as text
             end tell
         end tell
-    " 2>/dev/null) || return 1
+    " 2>>"$AX_TRACE_LOG") || return 1
     # An empty reply means osascript succeeded but told us nothing, which is not
     # evidence the windows went away - treat it as failure, like every other
     # unreadable signal in this pair of scripts.
@@ -801,6 +824,7 @@ main() {
     # to. Reset here rather than at declaration so a re-entrant call cannot
     # inherit a previous run's failures.
     FAILED_ACTIONS=()
+    mkdir -p "${AX_TRACE_LOG:h}" && : > "$AX_TRACE_LOG" 2>/dev/null || true
 
     # Quit apps in parallel (don't need focus).
     #
@@ -874,7 +898,7 @@ notify_failures() {
     # Quotes would end the AppleScript string early; app names should not
     # contain them, but a config typo must not turn into a syntax error.
     local body="${${(j:, :)FAILED_ACTIONS}//\"/}"
-    osascript -e "display notification \"$body\" with title \"clear-mac-apps\" subtitle \"action did not complete\"" 2>/dev/null || true
+    osascript -e "display notification \"$body\" with title \"clear-mac-apps\" subtitle \"action did not complete - see ${AX_TRACE_LOG/#$HOME/~}\"" 2>/dev/null || true
 }
 
 if main "$@"; then
