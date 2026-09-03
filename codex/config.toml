@@ -180,7 +180,7 @@ enabled = true
 "gpt-5.6-sol" = 2
 
 [marketplaces.openai-bundled]
-last_updated = "2026-08-29T00:44:30Z"
+last_updated = "2026-09-03T04:37:38Z"
 source_type = "local"
 source = "/home/yulong/code/dotfiles/codex/.tmp/bundled-marketplaces/openai-bundled"
 
@@ -190,8 +190,8 @@ source_type = "local"
 source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
 
 [marketplaces.claude-plugins-official]
-last_updated = "2026-08-28T09:06:34Z"
-last_revision = "0620a687ddd518871772eefd78573baff2dcb8cb"
+last_updated = "2026-08-29T01:09:43Z"
+last_revision = "ed404106fcd80ba98ecb7c851e531dcb626d13b7"
 source_type = "git"
 source = "https://github.com/anthropics/claude-plugins-official.git"
 
