@@ -21,6 +21,15 @@ The claude.ai Gmail connector (`mcp__claude_ai_Gmail__*`) can read every message
 | Read | `get_thread` / `get_message` with `messageFormat: PLAIN_TEXT` | Body as text or markdown, plus `attachment_ids` and attachment names. Enough for HTML-only receipts (Stripe, Google Play, Uber, Booking.com). |
 | Fetch attachment | `get_message` with `messageFormat: RAW` | Returns `{"id": ..., "raw": <base64url MIME>}`. Large results are spilled to a file under `~/.claude/projects/<project>/<session>/tool-results/mcp-claude_ai_Gmail-get_message-*.txt` and the tool result gives the path; small ones arrive inline, so write them to `work/raw/<id>.json` yourself. |
 
+## Keep the mailbox out of main context
+
+An MCP result cannot be piped; whatever the connector returns lands in the calling agent's context. Two facts bound the damage:
+
+- The harness spills any tool result of roughly 50 KB or more to `~/.claude/projects/<slug>/<session>/tool-results/mcp-claude_ai_Gmail-get_message-<ts>.txt` and shows the model only the path. A RAW message with a PDF attached is almost always over that line, so it costs a path, not the payload. Small RAW results (a text-only email) arrive inline in full.
+- Everything under that threshold is still written verbatim to the session `.jsonl`, so nothing has to be retyped to reach disk.
+
+So: **always run a sweep as a subagent** (its context is discarded; the lead gets a summary and the files). Inside the sweep, read with `PLAIN_TEXT` first and call `RAW` only for messages whose `attachments` field is non-empty; HTML-only receipts need no RAW at all. Never `Read` or `cat` a spilled result; pass its path to the script below. Decode in one batch at the end rather than per message.
+
 ## Decoding RAW
 
 `raw` is base64url (the Gmail API convention), not the readable MIME text — decode it first, then hand the bytes to Python's `email` module. The promoted script does all of it:
