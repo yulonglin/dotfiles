@@ -14,8 +14,9 @@ Audit of this Mac against `config/apps.conf` on 2026-09-03, revised after Yulong
 | Visual Studio Code | intend to use | `default=true` |
 | LibreOffice | is anything using it? | no: `any2md` converts docx, pptx and xlsx through markitdown, and nothing in the repo shells out to soffice. Left at `default=false` |
 | Codex cask | was this ChatGPT.app renamed? | yes in effect, see below. `brew uninstall --cask codex-app` only targets a `Codex.app` that no longer exists and leaves ChatGPT.app alone; do not add `--zap`, which would clear the shared `com.openai.codex` preferences |
-| LuLu | what is it? | Objective-See's free outbound firewall: it prompts before an app first phones home. Never opened here, not running, registry default already off. Safe to uninstall |
-| abseil, brotli, icu4c, jemalloc and the rest | are they useful? | all dependencies of requested tools, table at the end; none is orphaned |
+| LuLu | what is it? is it useful? | Objective-See's free outbound firewall: it prompts before an app first phones home. Useful when you want to see which apps call out, at the cost of a prompt per new app. It has never been opened here in three months, is not running, and Tailscale plus NordVPN already control the network path, so it is not doing anything for you. Lean: uninstall |
+| abseil, brotli, icu4c, jemalloc and the rest | are they useful? document it, without bloating agent context; auto-update | all dependencies of requested tools, none orphaned. Now a generated doc, `docs/brew-formulae.md`, rewritten on every `app-picker` write or `--audit` and printable with `app-picker --deps`; CLAUDE.md links it in one clause under Where To Look and nothing loads it into context |
+| tlrc | is it the newer version? | yes: the `tldr` formula is deprecated in Homebrew and tlrc is the official Rust client. `config.sh` now installs tlrc in the two brew arrays and drops `tldr` from `PACKAGES_CORE`, which also feeds apt where tlrc does not exist |
 
 ## The registry now knows everything installed, and `exclude` keeps rejected apps out
 
@@ -117,13 +118,13 @@ Cross-platform CLI tools are the `PACKAGES_*` arrays in `config.sh`, not the Bre
 | marp-cli | 2026-07-19 | 5 | removed |
 | graphite | 2026-07-27 | 3 | removed, tap untapped |
 | age, sops | 2026-09-03, 2026-08-05 | n/a | removed. `install_age` and `install_sops` exist in helpers.sh but nothing calls them, and the secrets engine never used either |
-| tlrc | 2026-06-27 | n/a | still undeclared: `config.sh` installs `tldr`, the older client. Replace `tldr` with `tlrc` in `PACKAGES_CORE`, or uninstall tlrc |
+| tlrc | 2026-06-27 | n/a | now declared: `config.sh` installs tlrc in `PACKAGES_MACOS` and `PACKAGES_LINUX_BREW`; the deprecated `tldr` left `PACKAGES_CORE` |
 
 **simdjson** was never requested. It is a dependency of `node`, which `opencode` pulls in (and marp-cli did, until it was removed), and its install receipt says `installed_on_request: false`. It disappears on its own when nothing needs node.
 
-## Every library formula is a dependency of something requested
+## Every library formula is a dependency of something requested, and the doc now regenerates itself
 
-Of 79 formulae installed after the review, 39 were requested and 40 came in as dependencies; none is orphaned. The ones Yulong asked about, traced to the requested tool that needs them:
+Of 79 formulae installed after the review, 39 were requested and 40 came in as dependencies; none is orphaned. The full table lives in `docs/brew-formulae.md`, a generated file: `app-picker` rewrites it after every Brewfile write and every `--audit`, and `app-picker --deps` prints it. That is the auto-update: it refreshes whenever the machine's package state is being looked at. A timer was rejected because this repo deploys no user-level launchd jobs and a scheduled rewrite would leave uncommitted drift with nobody to commit it. The doc is linked from CLAUDE.md in one clause and is never loaded into agent context on its own. The ones Yulong asked about, traced to the requested tool that needs them:
 
 | Formula | Needed by |
 |---|---|
@@ -144,7 +145,6 @@ Of 79 formulae installed after the review, 39 were requested and 40 came in as d
 
 - Run the seven cask uninstalls above. The registry already says they are gone; the audit will nag until the Mac agrees.
 - Pick from the never-opened table; the fastest way is `app-picker --installed` in a terminal, deselect, then run the commands the audit prints.
-- `tldr` versus `tlrc` in `config.sh`. Not changed here.
 - `mas-get` and the post-install check in `install.sh` still shell out to `mas list` and will hang the same way on this machine. They need a `timeout` or the receipt scan the audit uses. Not changed here.
 - The `CLAUDE.md` learning from 2026-08-30 says this box has no Zotero installed; it does, via brew, never opened. Fix the line or remove the app.
 - The keyboard-navigable verdicts and per-item comment boxes Yulong asked for in artifacts are filed as [issue 90](https://github.com/yulonglin/dotfiles/issues/90).
