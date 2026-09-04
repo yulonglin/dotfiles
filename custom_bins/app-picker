@@ -329,10 +329,25 @@ audit() {
     done
     [[ -n "$out" ]] && { section "Requested formulae named nowhere (registry, config.sh, helpers.sh) → add to config.sh PACKAGES_*, or brew uninstall:"; print -rn -- "$out"; }
 
-    # F. third-party taps
-    if (( ${#INST_TAPS} > 0 )); then
+    # F. third-party taps — a tap whose every installed formula is declared in config.sh
+    #    (e.g. PACKAGES_TRIAL_MACOS) is an exception on record, not a policy breach.
+    typeset -a bad_taps ok_taps
+    local tap full undeclared
+    for tap in "${INST_TAPS[@]}"; do
+        undeclared=false
+        for full in "${INST_FORMULA[@]}"; do
+            [[ "$full" == "$tap"/* ]] || continue
+            declared_elsewhere "$full" || declared_elsewhere "${full:t}" || undeclared=true
+        done
+        if [[ "$undeclared" == "true" ]]; then bad_taps+=("$tap"); else ok_taps+=("$tap"); fi
+    done
+    if (( ${#bad_taps} > 0 )); then
         section "Third-party taps (policy: none — rules/safety.md § Supply chain) → brew untap after uninstalling their formulae:"
-        print -rl -- "${INST_TAPS[@]/#/  }"
+        print -rl -- "${bad_taps[@]/#/  }"
+    fi
+    if (( ${#ok_taps} > 0 )); then
+        section "Third-party taps whose formulae config.sh declares (exception on record):"
+        print -rl -- "${ok_taps[@]/#/  }"
     fi
 }
 

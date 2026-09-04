@@ -38,16 +38,18 @@ mas|111|text|2|true|Notes App|Installed as "Notes App.app"|none
 mas|222|text|2|true|Things 3|Installed as "Things.app" — first-word match|none
 mas|333|text|2|exclude|OldMas|Excluded; installed|none
 EOF
-# config.sh names `declared-cli`, so the audit must not flag that cask or formula.
+# config.sh names `declared-cli`, so the audit must not flag that cask or formula;
+# it also declares ok/tap/keeper, which makes ok/tap a sanctioned tap.
 print -r -- 'PACKAGES_MACOS=("declared-cli")' > "$DOT/config.sh"
+print -r -- 'PACKAGES_TRIAL_MACOS=("ok/tap/keeper")' >> "$DOT/config.sh"
 : > "$DOT/scripts/shared/helpers.sh"
 
 cat > "$WORK/bin/brew" <<'EOF'
 #!/usr/bin/env zsh
 case "$1 $2" in
     "list --cask")  print -l alpha beta omega declared-cli stray-cask ;;
-    "leaves --installed-on-request") print -l toolx declared-cli acme/tap/orphan ;;
-    "tap ")         print -l homebrew/core homebrew/cask acme/tap ;;
+    "leaves --installed-on-request") print -l toolx declared-cli acme/tap/orphan ok/tap/keeper ;;
+    "tap ")         print -l homebrew/core homebrew/cask acme/tap ok/tap ;;
     "desc --cask")  shift 2; for t in "$@"; do print -r -- "$t: (Desc) fake"; done ;;
     *) exit 0 ;;
 esac
@@ -103,7 +105,10 @@ check_not "cask declared in config.sh not reported" "$out" "declared-cli:"
 check    "unregistered App Store app → row template" "$out" "mas|?|<category>|2|false|Mystery|"
 check_not "non-store app ignored"           "$out" "NotFromStore"
 check    "orphan formula reported with tap prefix" "$out" "acme/tap/orphan"
-check    "third-party tap reported"         "$out" "acme/tap"
+check    "third-party tap reported"         "$out" $'\n  acme/tap'
+check    "sanctioned tap listed as exception" "$out" "exception on record"
+check_not "sanctioned tap not under policy breach" "$out" $'policy: none'$'\n  ok/tap'
+check_not "declared tap formula not an orphan" "$out" "ok/tap/keeper"$'\n'
 check_not "core taps not reported"          "$out" "homebrew/core"
 check_not "no cleanup advice"               "$out" "bundle cleanup"
 check_not "no stray zsh 'local' echo"       "$out" $'\ns='

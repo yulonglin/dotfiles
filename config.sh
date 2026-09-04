@@ -223,6 +223,16 @@ PACKAGES_EXTRAS_LINUX=(
     "code2prompt"
 )
 
+# Trial packages — installed by hand while being evaluated, NOT installed by
+# install.sh. Listing one here is what tells `app-picker --audit` it is declared
+# (and sanctions its tap). Promote to an array above or `brew uninstall` it once
+# the trial is over; date each entry so the audit's reader can tell how long it has run.
+PACKAGES_TRIAL_MACOS=(
+    "hunk"                  # review-first terminal diff viewer for agent-authored changes (trial from 2026-09-03)
+    "codersauce/tap/red"    # modal Rust editor — third-party tap, Yulong's exception 2026-09-03
+    # "micro"               # candidate terminal editor, not installed yet
+)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Profile Presets
 # ═══════════════════════════════════════════════════════════════════════════════
