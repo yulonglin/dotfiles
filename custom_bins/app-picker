@@ -1,20 +1,32 @@
 #!/usr/bin/env zsh
 # ═══════════════════════════════════════════════════════════════════════════════
-# app-picker — browse the app registry, toggle apps, generate a Brewfile
+# app-picker — browse the app registry, toggle apps, generate a Brewfile, audit the Mac
 # ═══════════════════════════════════════════════════════════════════════════════
 # Reads:  config/apps.conf   (method|id|category|tier|default|name|description|auth)
 # Writes: config/Brewfile    (brew/cask/mas entries for `brew bundle`)
 #
 # Usage:
-#   app-picker                 # gum TUI: space=toggle, enter=confirm → writes Brewfile
-#   app-picker --defaults      # no TUI; select registry defaults, write Brewfile
-#   app-picker --dry-run       # print the Brewfile to stdout, don't write
+#   app-picker                 # gum TUI preselected from registry defaults → writes Brewfile, then audits
+#   app-picker --installed     # preselect from what THIS Mac has installed (TUI in a terminal, else just write)
+#   app-picker --defaults      # no TUI; registry defaults → Brewfile
+#   app-picker --audit         # no writes; compare this Mac against the current Brewfile and registry
+#   app-picker --dry-run       # print the Brewfile to stdout; no write, no audit
+#   app-picker --no-audit      # skip the audit after writing
 #   app-picker --conf PATH     # registry path (default: <dotfiles>/config/apps.conf)
-#   app-picker --file PATH      # Brewfile output path (default: <dotfiles>/config/Brewfile)
+#   app-picker --file PATH     # Brewfile path (default: <dotfiles>/config/Brewfile)
+#
+# Registry `default` column: true | false | exclude. An `exclude` row never reaches the
+# TUI or the Brewfile; the audit lists it with an uninstall command while it is installed.
+#
+# The audit prints commands and never runs them. It never suggests `brew bundle cleanup`:
+# that would remove every CLI formula config.sh installs, since those are not in the Brewfile.
+# App Store apps are detected from _MASReceipt files under /Applications, not `mas list`,
+# which hangs on this machine (mas 7.0.0, macOS 26).
 #
 # Trust policy: registry is official casks + Mac App Store only (no third-party taps).
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
+export HOMEBREW_NO_AUTO_UPDATE=1
 
 # Resolve dotfiles dir (this script lives in custom_bins/)
 SCRIPT_DIR="${0:A:h}"
@@ -22,16 +34,21 @@ DOT_DIR="${DOT_DIR:-${SCRIPT_DIR:h}}"
 
 CONF="$DOT_DIR/config/apps.conf"
 BREWFILE="$DOT_DIR/config/Brewfile"
-MODE="tui"          # tui | defaults
+APPS_DIR="${APP_PICKER_APPS_DIR:-/Applications}"   # overridable for tests
+MODE="tui"          # tui | defaults | installed | audit
 DRY_RUN=false
+DO_AUDIT=true
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --defaults)      MODE="defaults"; shift ;;
+        --installed)     MODE="installed"; shift ;;
+        --audit)         MODE="audit"; shift ;;
         --dry-run)       DRY_RUN=true; shift ;;
+        --no-audit)      DO_AUDIT=false; shift ;;
         --conf)          CONF="$2"; shift 2 ;;
         --file)          BREWFILE="$2"; shift 2 ;;
-        -h|--help)       sed -n '2,18p' "$0"; exit 0 ;;
+        -h|--help)       sed -n '2,26p' "$0"; exit 0 ;;
         *) echo "app-picker: unknown arg '$1'" >&2; exit 2 ;;
     esac
 done
@@ -43,19 +60,81 @@ done
 typeset -a A_METHOD A_ID A_CAT A_TIER A_DEFAULT A_NAME A_DESC A_AUTH
 while IFS='|' read -r method id cat tier def name desc auth; do
     [[ -z "${method// }" || "${method[1]}" == "#" ]] && continue
-    A_METHOD+=("${method// }"); A_ID+=("$id"); A_CAT+=("${cat// }")
+    A_METHOD+=("${method// }"); A_ID+=("${id// }"); A_CAT+=("${cat// }")
     A_TIER+=("${tier// }"); A_DEFAULT+=("${def// }")
-    A_NAME+=("$name"); A_DESC+=("$desc"); A_AUTH+=("${auth// }")
+    A_NAME+=("${${name# }% }"); A_DESC+=("$desc"); A_AUTH+=("${auth// }")
 done < "$CONF"
 
 local n=${#A_METHOD}
 (( n > 0 )) || { echo "app-picker: no apps parsed from $CONF" >&2; exit 1; }
 
-# ─── Build display rows (one per app) + default-selected set ──────────────────
+# ─── Machine inventory (casks, requested formulae, App Store receipts, taps) ──
+typeset -A INST_CASK INST_FORMULA INST_MAS   # INST_MAS: app stem → bundle id
+typeset -a INST_TAPS
+INVENTORIED=false
+inventory() {
+    [[ "$INVENTORIED" == "true" ]] && return
+    INVENTORIED=true
+    command -v brew &>/dev/null || { echo "app-picker: brew not found — audit skipped" >&2; return; }
+    local t
+    for t in $(brew list --cask 2>/dev/null); do INST_CASK[$t]=1; done
+    for t in $(brew leaves --installed-on-request 2>/dev/null); do INST_FORMULA[${t:t}]=$t; done
+    for t in $(brew tap 2>/dev/null); do [[ "$t" == homebrew/* ]] || INST_TAPS+=("$t"); done
+    local app stem
+    setopt local_options null_glob
+    for app in "$APPS_DIR"/*.app; do
+        [[ -f "$app/Contents/_MASReceipt/receipt" ]] || continue
+        stem="${${app:t}%.app}"
+        INST_MAS[$stem]=$(defaults read "$app/Contents/Info.plist" CFBundleIdentifier 2>/dev/null || true)
+    done
+}
+
+# Registry mas rows carry an App Store id, receipts carry none, so match by name:
+# exact stem, else the first word (Things 3 ↔ Things.app, Userscripts ↔ Userscripts-Mac-App).
+mas_stem_for() {  # <registry name> → installed app stem, or nothing
+    local name="$1" stem key
+    [[ -n "${INST_MAS[$name]+_}" ]] && { print -r -- "$name"; return; }
+    key="${${(L)name}%%[ -]*}"
+    for stem in "${(k)INST_MAS[@]}"; do
+        [[ "${${(L)stem}%%[ -]*}" == "$key" ]] && { print -r -- "$stem"; return; }
+    done
+}
+
+is_installed() {  # <registry index> → 0 if installed on this Mac
+    local i=$1
+    case "${A_METHOD[i]}" in
+        cask) [[ -n "${INST_CASK[${A_ID[i]}]+_}" ]] ;;
+        brew) [[ -n "${INST_FORMULA[${A_ID[i]}]+_}" ]] ;;
+        mas)  [[ -n "$(mas_stem_for "${A_NAME[i]}")" ]] ;;
+        *)    return 1 ;;
+    esac
+}
+
+uninstall_cmd() {  # <registry index> → the command that removes it (printed, never run)
+    local i=$1 stem
+    case "${A_METHOD[i]}" in
+        cask) print -r -- "brew uninstall --cask ${A_ID[i]}" ;;
+        brew) print -r -- "brew uninstall ${INST_FORMULA[${A_ID[i]}]:-${A_ID[i]}}" ;;
+        mas)  stem="$(mas_stem_for "${A_NAME[i]}")"
+              print -r -- "sudo mas uninstall ${A_ID[i]}    # or Trash \"$APPS_DIR/${stem:-${A_NAME[i]}}.app\"" ;;
+    esac
+}
+
+declared_elsewhere() {  # <token> → 0 if config.sh or helpers.sh names it (CLI tools, --ai-tools casks)
+    local f
+    for f in "$DOT_DIR/config.sh" "$DOT_DIR/scripts/shared/helpers.sh"; do
+        [[ -f "$f" ]] && grep -q -w -- "$1" "$f" && return 0
+    done
+    return 1
+}
+
+# ─── Build display rows (one per offered app) + preselected set ───────────────
 # Row format the TUI shows / we parse back:  "<i>\t[cat·Tn] name — desc"
 typeset -a rows selected
 local i
+if [[ "$MODE" == "installed" ]]; then inventory; fi
 for (( i=1; i<=n; i++ )); do
+    [[ "${A_DEFAULT[i]}" == "exclude" ]] && continue
     local label="${i}	[${A_CAT[i]}·T${A_TIER[i]}] ${A_NAME[i]} — ${A_DESC[i]}"
     # gum --selected takes a comma-separated list, so a label containing a comma
     # (e.g. a description like "Notes, docs, and wiki") would be mis-split and fail
@@ -63,34 +142,63 @@ for (( i=1; i<=n; i++ )); do
     # selected derive from the same label, so option↔selected matching still holds.
     label="${label//,/;}"
     rows+=("$label")
-    [[ "${A_DEFAULT[i]}" == "true" ]] && selected+=("$label")
+    if [[ "$MODE" == "installed" ]]; then
+        is_installed "$i" && selected+=("$label")
+    else
+        [[ "${A_DEFAULT[i]}" == "true" ]] && selected+=("$label")
+    fi
 done
 
-# ─── Choose: TUI (gum) or defaults ───────────────────────────────────────────
-# Result is the chosen subset of $rows, newline-separated.
-local chosen=""
-if [[ "$MODE" == "defaults" ]] || [[ "${NON_INTERACTIVE:-false}" == "true" ]] \
-   || ! [[ -t 0 ]] || ! command -v gum &>/dev/null; then
-    chosen="${(F)selected}"
-else
-    local sel_csv="${(j:,:)selected}"
-    local height=$(( n + 2 ))
-    local term_h; term_h=$(tput lines 2>/dev/null || echo 40)
-    (( height > term_h - 4 )) && height=$(( term_h - 4 ))
-    chosen=$(gum choose --no-limit --height "$height" \
-        --header "Select apps to install (space=toggle, enter=confirm):" \
-        --selected "$sel_csv" -- "$rows[@]") || { echo "Cancelled — Brewfile unchanged." >&2; exit 0; }
-fi
-
-# ─── Map chosen rows back to indices ─────────────────────────────────────────
+# ─── Selection → registry indices ────────────────────────────────────────────
 typeset -a pick_idx
-local line
-while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    pick_idx+=("${line%%	*}")     # leading field before the tab = index
-done <<< "$chosen"
 
-(( ${#pick_idx} > 0 )) || { echo "Nothing selected — Brewfile unchanged." >&2; exit 0; }
+select_apps() {
+    # Result is the chosen subset of $rows, newline-separated.
+    local chosen=""
+    if [[ "$MODE" == "defaults" ]] || [[ "${NON_INTERACTIVE:-false}" == "true" ]] \
+       || ! [[ -t 0 ]] || ! command -v gum &>/dev/null; then
+        chosen="${(F)selected}"
+    else
+        local sel_csv="${(j:,:)selected}"
+        local height=$(( ${#rows} + 2 ))
+        local term_h; term_h=$(tput lines 2>/dev/null || echo 40)
+        (( height > term_h - 4 )) && height=$(( term_h - 4 ))
+        local header="Select apps to install (space=toggle, enter=confirm):"
+        [[ "$MODE" == "installed" ]] && header="Installed apps preselected — deselect to drop from the Brewfile (space=toggle, enter=confirm):"
+        chosen=$(gum choose --no-limit --height "$height" \
+            --header "$header" \
+            --selected "$sel_csv" -- "$rows[@]") || { echo "Cancelled — Brewfile unchanged." >&2; exit 0; }
+    fi
+
+    local line
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        pick_idx+=("${line%%	*}")     # leading field before the tab = index
+    done <<< "$chosen"
+}
+
+# `--audit` compares against what the Brewfile already says, not against defaults.
+select_from_brewfile() {
+    [[ -f "$BREWFILE" ]] || { echo "app-picker: no Brewfile at $BREWFILE — run app-picker first" >&2; exit 1; }
+    typeset -A by_key
+    local i
+    for (( i=1; i<=n; i++ )); do by_key["${A_METHOD[i]}:${A_ID[i]}"]=$i; done
+    local line key
+    while IFS= read -r line; do
+        case "$line" in
+            'cask "'*) key="cask:${${line#cask \"}%%\"*}" ;;
+            'brew "'*) key="brew:${${line#brew \"}%%\"*}"; [[ "$key" == "brew:mas" ]] && continue ;;
+            'mas "'*)  key="mas:${${line##*id: }// }" ;;
+            *) continue ;;
+        esac
+        if [[ -n "${by_key[$key]+_}" ]]; then
+            pick_idx+=("${by_key[$key]}")
+        else
+            UNREGISTERED_LINES+=("$line")
+        fi
+    done < "$BREWFILE"
+}
+typeset -a UNREGISTERED_LINES
 
 # ─── Generate Brewfile ───────────────────────────────────────────────────────
 emit_brewfile() {
@@ -100,8 +208,9 @@ emit_brewfile() {
     done
 
     print -r -- "# Brewfile — GENERATED by app-picker from config/apps.conf. Do not edit by hand."
-    print -r -- "# Regenerate: app-picker   (or app-picker --defaults)"
+    print -r -- "# Regenerate: app-picker   (or app-picker --defaults / --installed)"
     print -r -- "# Install:    brew bundle --file=config/Brewfile"
+    print -r -- "# Audit:      app-picker --audit   (never 'brew bundle cleanup' — CLI tools live in config.sh)"
     print -r -- "# Policy: official casks + Mac App Store only; never --no-quarantine."
     print -r -- ""
 
@@ -134,10 +243,111 @@ emit_brewfile() {
     [[ -n "$out" ]] && { print -r -- "# ── Mac App Store (sandboxed, Apple-reviewed) ──"; print -r -- "$out"; }
 }
 
+# ─── Audit: this Mac vs the selection and the registry ───────────────────────
+section() { print -r -- ""; print -r -- "── $1"; }
+
+audit() {
+    inventory
+    [[ "${#INST_CASK}" -eq 0 && "${#INST_FORMULA}" -eq 0 && "${#INST_MAS}" -eq 0 ]] && return
+    typeset -A picked
+    local idx i s t bid sid   # declared once: a repeated `local` in zsh prints the variable
+    for idx in "${pick_idx[@]}"; do picked[$idx]=1; done
+
+    print -r -- ""
+    print -r -- "Audit: this Mac vs $BREWFILE (commands are printed, not run)"
+
+    # A. excluded but still installed
+    local out=""
+    for (( i=1; i<=n; i++ )); do
+        [[ "${A_DEFAULT[i]}" == "exclude" ]] || continue
+        is_installed "$i" || continue
+        out+="  $(uninstall_cmd "$i")"$'\n'"      ↳ ${A_DESC[i]}"$'\n'
+    done
+    [[ -n "$out" ]] && { section "Excluded in the registry, still installed → uninstall:"; print -rn -- "$out"; }
+
+    # B. registered, installed, not selected
+    out=""
+    for (( i=1; i<=n; i++ )); do
+        [[ "${A_DEFAULT[i]}" == "exclude" ]] && continue
+        [[ -n "${picked[$i]+_}" ]] && continue
+        is_installed "$i" || continue
+        out+="  $(uninstall_cmd "$i")    # ${A_NAME[i]}"$'\n'
+    done
+    [[ -n "$out" ]] && { section "Installed but not in the Brewfile → uninstall, or reselect with app-picker:"; print -rn -- "$out"; }
+
+    # C. selected, not installed
+    out=""
+    for idx in "${pick_idx[@]}"; do
+        is_installed "$idx" && continue
+        out+="  ${A_METHOD[idx]}  ${A_NAME[idx]} (${A_ID[idx]})"$'\n'
+    done
+    [[ -n "$out" ]] && { section "In the Brewfile but not installed → mas-get && brew bundle --file=$BREWFILE:"; print -rn -- "$out"; }
+
+    # D. installed casks / App Store apps the registry does not know
+    typeset -A reg_cask reg_mas_stem
+    for (( i=1; i<=n; i++ )); do
+        [[ "${A_METHOD[i]}" == "cask" ]] && reg_cask[${A_ID[i]}]=1
+        if [[ "${A_METHOD[i]}" == "mas" ]]; then
+            s="$(mas_stem_for "${A_NAME[i]}")"; [[ -n "$s" ]] && reg_mas_stem[$s]=1
+        fi
+    done
+    typeset -a unknown_casks
+    for t in "${(ko)INST_CASK[@]}"; do
+        [[ -n "${reg_cask[$t]+_}" ]] && continue
+        declared_elsewhere "$t" && continue
+        unknown_casks+=("$t")
+    done
+    if (( ${#unknown_casks} > 0 )); then
+        section "Installed casks not in the registry → add a row to $CONF, or uninstall:"
+        brew desc --cask "${unknown_casks[@]}" 2>/dev/null | sed 's/^/  /' || print -rl -- "${unknown_casks[@]/#/  }"
+    fi
+    out=""
+    for t in "${(ko)INST_MAS[@]}"; do
+        [[ -n "${reg_mas_stem[$t]+_}" ]] && continue
+        bid="${INST_MAS[$t]}"; sid="?"
+        [[ -n "$bid" ]] && sid=$(curl -s --max-time 5 "https://itunes.apple.com/lookup?bundleId=$bid&entity=macSoftware" 2>/dev/null \
+            | sed -n 's/.*"trackId":\([0-9]*\).*/\1/p' | head -1)
+        out+="  mas|${sid:-?}|<category>|2|false|$t|<description>|none    # $bid"$'\n'
+    done
+    [[ -n "$out" ]] && { section "App Store apps not in the registry → row template (id via iTunes lookup):"; print -rn -- "$out"; }
+    if (( ${#UNREGISTERED_LINES} > 0 )); then
+        section "Brewfile lines with no registry row (hand-edited?):"
+        print -rl -- "${UNREGISTERED_LINES[@]/#/  }"
+    fi
+
+    # E. requested formulae nobody declares
+    typeset -A reg_brew
+    for (( i=1; i<=n; i++ )); do [[ "${A_METHOD[i]}" == "brew" ]] && reg_brew[${A_ID[i]}]=1; done
+    out=""
+    for t in "${(ko)INST_FORMULA[@]}"; do
+        [[ "$t" == "mas" || -n "${reg_brew[$t]+_}" ]] && continue
+        declared_elsewhere "$t" && continue
+        out+="  ${INST_FORMULA[$t]}"$'\n'
+    done
+    [[ -n "$out" ]] && { section "Requested formulae named nowhere (registry, config.sh, helpers.sh) → add to config.sh PACKAGES_*, or brew uninstall:"; print -rn -- "$out"; }
+
+    # F. third-party taps
+    if (( ${#INST_TAPS} > 0 )); then
+        section "Third-party taps (policy: none — rules/safety.md § Supply chain) → brew untap after uninstalling their formulae:"
+        print -rl -- "${INST_TAPS[@]/#/  }"
+    fi
+}
+
+# ─── Main ────────────────────────────────────────────────────────────────────
+if [[ "$MODE" == "audit" ]]; then
+    select_from_brewfile
+    audit
+    exit 0
+fi
+
+select_apps
+(( ${#pick_idx} > 0 )) || { echo "Nothing selected — Brewfile unchanged." >&2; exit 0; }
+
 if [[ "$DRY_RUN" == "true" ]]; then
     emit_brewfile
 else
     emit_brewfile > "$BREWFILE"
     echo "✓ Wrote ${#pick_idx} apps to $BREWFILE"
     echo "  Install with: brew bundle --file=$BREWFILE"
+    [[ "$DO_AUDIT" == "true" ]] && audit
 fi

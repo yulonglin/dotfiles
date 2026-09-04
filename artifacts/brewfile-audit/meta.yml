@@ -1,0 +1,17 @@
+title: Six Casks Leave the Brewfile and Twenty-Seven Apps Join It
+url: https://claude.ai/code/artifact/1e36e85b-83c6-46e9-9fb7-df929387dbb4
+org: unknown   # claude.ai login from a background job; the publish result names no org
+first_published: 2026-09-03
+last_updated: 2026-09-03
+status: done
+
+source: report.md
+built: brewfile-audit.html
+builds_with: |
+  uv run --no-project --with markdown-it-py custom_bins/md2artifact report.md -o brewfile-audit.html
+
+snapshot: |
+  The inventory is a scan of one Mac on 2026-09-03 and cannot be regenerated: brew list --cask,
+  brew leaves --installed-on-request, brew tap, _MASReceipt files under /Applications, and
+  kMDItemLastUsedDate per app. The tables in report.md are that snapshot; rerun
+  `app-picker --audit` for the current state.

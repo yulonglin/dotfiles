@@ -1,0 +1,1491 @@
+<title>Six Casks Leave the Brewfile and Twenty-Seven Apps Join It</title>
+<style>
+:root {
+  --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
+  --accent:#bd5d3a; --accent-bg:#f7e9e2; --good:#2f6b4f; --good-bg:#e4f0e9;
+  --bad:#a33f2a; --bad-bg:#f9e4de; --code:#f4f2ee; --mark:#fbe6a2;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+} }
+:root[data-theme="dark"] {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);margin:0;padding:2.5rem 1rem 6rem;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;line-height:1.65}
+.shell{max-width:48rem;margin:0 auto}
+.shell.has-toc{display:grid;grid-template-columns:15rem minmax(0,1fr);gap:2.4rem;max-width:72rem}
+.toc{position:sticky;top:1.5rem;align-self:start;max-height:calc(100vh - 3rem);overflow:auto;
+ font-size:.84rem;border-right:1px solid var(--rule);padding-right:.9rem}
+.toc h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+ margin:0 0 .45rem;font-weight:700}
+.toc a{display:block;color:var(--soft);text-decoration:none;padding:.22rem .45rem;
+ border-radius:5px;border-left:2px solid transparent}
+.toc a.lvl3{padding-left:1.2rem;font-size:.8rem}
+.toc a:hover{background:var(--code);color:var(--ink)}
+.toc a.on{color:var(--ink);background:var(--code);border-left-color:var(--accent);font-weight:600}
+.doc{min-width:0}
+h1{font-size:1.75rem;line-height:1.25;margin:0 0 .8rem;letter-spacing:-.015em}
+h2{font-size:1.2rem;margin:2.4rem 0 .7rem;padding-bottom:.32rem;border-bottom:1px solid var(--rule)}
+h3{font-size:1.02rem;margin:1.7rem 0 .45rem}
+p,li{margin:0 0 .85rem}
+ul,ol{padding-left:1.35rem}
+blockquote{margin:1rem 0;padding:.1rem 1rem;border-left:3px solid var(--accent);
+ background:var(--accent-bg);border-radius:0 6px 6px 0}
+pre{background:var(--code);border:1px solid var(--rule);border-radius:7px;padding:.75rem .9rem;
+ overflow-x:auto;font-size:.83rem;line-height:1.5}
+code{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+p code,li code,td code,h2 code,h3 code{background:var(--code);padding:.06rem .32rem;border-radius:4px;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0;display:block;overflow-x:auto}
+th,td{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}
+th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
+a{color:var(--accent)}
+details{border:1px solid var(--rule);border-radius:7px;background:var(--panel);
+ margin:1rem 0;padding:.55rem .9rem}
+details>summary{cursor:pointer;font-weight:600;margin:-.55rem -.9rem;padding:.55rem .9rem;
+ border-radius:7px;list-style-position:inside}
+details>summary:hover{color:var(--accent)}
+details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 0 0;
+ margin-bottom:.8rem;background:var(--code)}
+@media (max-width:56rem){
+  .shell.has-toc{display:block}
+  .toc{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--rule);
+   padding:0 0 .8rem;margin-bottom:1.4rem}
+  .toc a{display:inline-block;margin:.15rem .3rem .15rem 0;border-left:0}
+  .toc a.lvl3{padding-left:.45rem}
+}
+</style>
+<div class="shell has-toc">
+<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#the-registry-now-knows-everything-installed-and-exclude-keeps-rejected-apps-out" class="lvl2">The registry now knows everything installed, and `exclude` keeps rejected apps out</a><a href="#uninstall-now-six-excluded-casks-and-two-third-party-taps" class="lvl2">Uninstall now: six excluded casks and two third-party taps</a><a href="#still-in-the-picker-but-never-opened-since-install" class="lvl2">Still in the picker, but never opened since install</a><a href="#added-to-the-registry-fifteen-casks-and-twelve-app-store-apps-that-were-installed-around-it" class="lvl2">Added to the registry: fifteen casks and twelve App Store apps that were installed around it</a><a href="#what-cannot-move-into-the-brewfile" class="lvl2">What cannot move into the Brewfile</a><a href="#cli-formulae-stay-in-config-sh-and-five-are-declared-nowhere" class="lvl2">CLI formulae stay in `config.sh`, and five are declared nowhere</a><a href="#decisions-for-yulong" class="lvl2">Decisions for Yulong</a><a href="#commands" class="lvl2">Commands</a></nav>
+<div class="doc">
+<h1 id="six-casks-leave-the-brewfile-and-twenty-seven-apps-join-it">Six Casks Leave the Brewfile and Twenty-Seven Apps Join It</h1>
+<p>Audit of this Mac against <code>config/apps.conf</code> on 2026-09-03. Inventory came from <code>brew list --cask</code>, <code>brew leaves --installed-on-request</code>, <code>brew tap</code>, and App Store receipts under <code>/Applications</code>; last-opened dates are Spotlight's <code>kMDItemLastUsedDate</code>, which Safari-extension hosts and daemons never set. Nothing was uninstalled: every removal below is a command for Yulong to run.</p>
+<h2 id="the-registry-now-knows-everything-installed-and-exclude-keeps-rejected-apps-out">The registry now knows everything installed, and <code>exclude</code> keeps rejected apps out</h2>
+<p>Before this pass the Brewfile listed 40 entries while the Mac carried 53 casks and 20 App Store apps, and nothing compared the two. Three changes close that gap:</p>
+<ul>
+<li><strong><code>default=exclude</code> in <code>config/apps.conf</code>.</strong> An excluded row is never offered in the picker, never written to the Brewfile, and skipped by <code>mas-get</code> and <code>auth-setup</code>. <code>app-picker --audit</code> keeps naming it with an uninstall command until it is gone. The description carries the reason and date.</li>
+<li><strong><code>app-picker --installed</code></strong> preselects the picker from what this Mac has, so deselecting a row is the UI for dropping an app. In a terminal it opens the gum toggle list; without one it writes the Brewfile directly.</li>
+<li><strong><code>app-picker --audit</code></strong> (also run after every write) prints six sections: excluded-but-installed, installed-but-deselected, selected-but-missing, unregistered casks, unregistered App Store apps with a ready row template, undeclared formulae, and third-party taps. It never proposes <code>brew bundle cleanup</code>, which would remove every CLI tool <code>config.sh</code> installs because those are not in the Brewfile.</li>
+</ul>
+<p>The Brewfile was regenerated with <code>--installed</code>, so it now states 65 entries: everything installed and registered, minus the six exclusions. <code>tests/test_app_picker.zsh</code> pins the exclude semantics, the <code>--installed</code> preselection, the name matching for App Store apps, and the audit sections with a stubbed <code>brew</code> (28 checks).</p>
+<h2 id="uninstall-now-six-excluded-casks-and-two-third-party-taps">Uninstall now: six excluded casks and two third-party taps</h2>
+<table>
+<thead>
+<tr>
+<th>Cask</th>
+<th>Last opened</th>
+<th>Why it goes</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cursor</td>
+<td>2026-08-08</td>
+<td>Yulong's call. Zed and Claude Code cover it; <code>deploy.sh --editor</code> skips Cursor when its config dir is absent</td>
+<td><code>brew uninstall --cask cursor</code></td>
+</tr>
+<tr>
+<td>codex-app</td>
+<td>never (app gone)</td>
+<td>Zombie. <code>/Applications</code> has no <code>Codex.app</code>; the <code>chatgpt</code> cask 26.901 now ships an app whose bundle id is <code>com.openai.codex</code></td>
+<td><code>brew uninstall --cask codex-app</code></td>
+</tr>
+<tr>
+<td>codexbar</td>
+<td>2026-07-21</td>
+<td>Yulong's call. Menu-bar usage monitor for Codex and Claude</td>
+<td><code>brew uninstall --cask codexbar</code></td>
+</tr>
+<tr>
+<td>conductor</td>
+<td>never</td>
+<td>Yulong's call. Claude Code parallelisation UI</td>
+<td><code>brew uninstall --cask conductor</code></td>
+</tr>
+<tr>
+<td>espanso</td>
+<td>2026-08-11</td>
+<td>Yulong's call. Its match and config dir stays in <code>~/Library/Application Support/espanso</code> unless you add <code>--zap</code></td>
+<td><code>brew uninstall --cask espanso</code></td>
+</tr>
+<tr>
+<td>aqua-voice</td>
+<td>never</td>
+<td>Superseded by VoiceInk</td>
+<td><code>brew uninstall --cask aqua-voice</code></td>
+</tr>
+</tbody>
+</table>
+<p>The two taps violate the repo's own policy in <code>claude/rules/safety.md</code>, which allows no third-party Homebrew taps without approval. Shell history shows <code>red</code> used twice and <code>gt</code> three times.</p>
+<table>
+<thead>
+<tr>
+<th>Tap</th>
+<th>Formula</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>codersauce/tap</td>
+<td>red (modal Rust editor)</td>
+<td><code>brew uninstall red &amp;&amp; brew untap codersauce/tap</code></td>
+</tr>
+<tr>
+<td>withgraphite/tap</td>
+<td>graphite (<code>gt</code>, stacked PRs)</td>
+<td><code>brew uninstall graphite &amp;&amp; brew untap withgraphite/tap</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>ChatGPT Classic.app</code> (1.2026.183, the pre-merge ChatGPT, last opened 2026-08-13) is not owned by brew and stays behind after the cask upgrade. Remove it with AppCleaner if the new ChatGPT covers it.</p>
+<h2 id="still-in-the-picker-but-never-opened-since-install">Still in the picker, but never opened since install</h2>
+<p>These stay registered with <code>default=false</code> so the picker keeps offering them. Each is one toggle in <code>app-picker --installed</code>, or the command shown.</p>
+<table>
+<thead>
+<tr>
+<th>App</th>
+<th>Source</th>
+<th>Last opened</th>
+<th>Note</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LibreOffice</td>
+<td>cask</td>
+<td>never</td>
+<td>804 MB office suite</td>
+<td><code>brew uninstall --cask libreoffice</code></td>
+</tr>
+<tr>
+<td>Visual Studio Code</td>
+<td>cask</td>
+<td>never</td>
+<td>945 MB; <code>deploy.sh --editor</code> merges settings into it if present; Zed and Cursor were the editors in use</td>
+<td><code>brew uninstall --cask visual-studio-code</code></td>
+</tr>
+<tr>
+<td>Zotero</td>
+<td>cask</td>
+<td>never</td>
+<td>396 MB; installed 2026-08-27; <code>zotero-mcp</code> is gated behind <code>install.sh --experimental</code></td>
+<td><code>brew uninstall --cask zotero</code></td>
+</tr>
+<tr>
+<td>RemNote</td>
+<td>cask</td>
+<td>2026-07-23</td>
+<td>Six weeks idle</td>
+<td><code>brew uninstall --cask remnote</code></td>
+</tr>
+<tr>
+<td>LuLu</td>
+<td>cask</td>
+<td>never</td>
+<td>Registry default was already off</td>
+<td><code>brew uninstall --cask lulu</code></td>
+</tr>
+<tr>
+<td>Malwarebytes</td>
+<td>cask</td>
+<td>never</td>
+<td>Registry default was already off; Trellix is the managed AV</td>
+<td><code>brew uninstall --cask malwarebytes</code></td>
+</tr>
+<tr>
+<td>Numbers</td>
+<td>mas</td>
+<td>never</td>
+<td>Free, reinstallable</td>
+<td><code>sudo mas uninstall 361304891</code></td>
+</tr>
+<tr>
+<td>GarageBand</td>
+<td>mas</td>
+<td>never</td>
+<td>1.1 GB; free, reinstallable</td>
+<td><code>sudo mas uninstall 682658836</code></td>
+</tr>
+<tr>
+<td>iMovie</td>
+<td>mas</td>
+<td>never</td>
+<td>3.7 GB; free, reinstallable</td>
+<td><code>sudo mas uninstall 408981434</code></td>
+</tr>
+<tr>
+<td>GoodLinks</td>
+<td>mas</td>
+<td>2026-08-08</td>
+<td>Paid; keep if the iOS side is in use</td>
+<td><code>sudo mas uninstall 1474335294</code></td>
+</tr>
+<tr>
+<td>Highlights</td>
+<td>mas</td>
+<td>2026-08-15</td>
+<td>PDF annotation</td>
+<td><code>sudo mas uninstall 1498912833</code></td>
+</tr>
+<tr>
+<td>Fira Code</td>
+<td>cask</td>
+<td>n/a</td>
+<td>Only a third-choice fallback in <code>config/vscode_settings.json</code></td>
+<td><code>brew uninstall --cask font-fira-code</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="added-to-the-registry-fifteen-casks-and-twelve-app-store-apps-that-were-installed-around-it">Added to the registry: fifteen casks and twelve App Store apps that were installed around it</h2>
+<p>Default <code>true</code> means a fresh machine gets it; the choice follows whether it is running, a login item, or opened this fortnight.</p>
+<table>
+<thead>
+<tr>
+<th>App</th>
+<th>Method</th>
+<th>Category</th>
+<th>Default</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Obsidian</td>
+<td>cask</td>
+<td>text</td>
+<td>true</td>
+<td>running, login item, <code>deploy.sh</code> vault sync reads it</td>
+</tr>
+<tr>
+<td>Google Chrome</td>
+<td>cask</td>
+<td>browser</td>
+<td>true</td>
+<td>running, Finicky target</td>
+</tr>
+<tr>
+<td>Telegram</td>
+<td>cask</td>
+<td>messaging</td>
+<td>true</td>
+<td>running, opened today</td>
+</tr>
+<tr>
+<td>WhatsApp</td>
+<td>cask</td>
+<td>messaging</td>
+<td>true</td>
+<td>running, opened today</td>
+</tr>
+<tr>
+<td>Signal</td>
+<td>cask</td>
+<td>messaging</td>
+<td>true</td>
+<td>opened 2026-08-31</td>
+</tr>
+<tr>
+<td>Discord</td>
+<td>cask</td>
+<td>messaging</td>
+<td>true</td>
+<td>opened 2026-08-27</td>
+</tr>
+<tr>
+<td>Zoom</td>
+<td>cask</td>
+<td>meetings</td>
+<td>true</td>
+<td>Finicky routes zoom links to it; <code>app-lifecycle.yaml</code> spares it</td>
+</tr>
+<tr>
+<td>ActivityWatch (beta)</td>
+<td>cask</td>
+<td>time</td>
+<td>true</td>
+<td>running (<code>aw-watcher-*</code>), login item</td>
+</tr>
+<tr>
+<td>Cloudflare WARP</td>
+<td>cask</td>
+<td>vpn</td>
+<td>true</td>
+<td>daemon running; opened 2026-08-29</td>
+</tr>
+<tr>
+<td>Thaw</td>
+<td>cask</td>
+<td>misc</td>
+<td>true</td>
+<td>running, login item</td>
+</tr>
+<tr>
+<td>Dropover</td>
+<td>mas 1355679052</td>
+<td>productivity</td>
+<td>true</td>
+<td>login item, opened 2026-09-02</td>
+</tr>
+<tr>
+<td>Keynote</td>
+<td>mas 361285480</td>
+<td>productivity</td>
+<td>true</td>
+<td>opened 2026-08-18</td>
+</tr>
+<tr>
+<td>Pages</td>
+<td>mas 361309726</td>
+<td>productivity</td>
+<td>true</td>
+<td>opened 2026-08-25</td>
+</tr>
+<tr>
+<td>Noir</td>
+<td>mas 1592917505</td>
+<td>safari</td>
+<td>true</td>
+<td>paid Safari extension</td>
+</tr>
+<tr>
+<td>Speed Player</td>
+<td>mas 1521133201</td>
+<td>safari</td>
+<td>true</td>
+<td>Safari extension</td>
+</tr>
+<tr>
+<td>Flighty</td>
+<td>mas 1358823008</td>
+<td>misc</td>
+<td>true</td>
+<td>opened 2026-09-03</td>
+</tr>
+<tr>
+<td>TestFlight</td>
+<td>mas 899247664</td>
+<td>misc</td>
+<td>false</td>
+<td>opened 2026-08-26</td>
+</tr>
+<tr>
+<td>RemNote, LibreOffice, VS Code, Zotero, Fira Code</td>
+<td>cask</td>
+<td>various</td>
+<td>false</td>
+<td>table above</td>
+</tr>
+<tr>
+<td>Numbers, GarageBand, iMovie, GoodLinks, Highlights</td>
+<td>mas</td>
+<td>various</td>
+<td>false</td>
+<td>table above</td>
+</tr>
+</tbody>
+</table>
+<p>App Store ids came from Apple's lookup API by bundle id, because <code>mas list</code> hangs on this Mac (mas 7.0.0 on macOS 26; a 25 second timeout printed nothing). One App Store app has no resolvable id: <strong>Lettera</strong> (<code>net.shinyfrog.lettera</code>, Shiny Frog, opened today) returns no match on App Store search, so it is probably a TestFlight build. The audit will keep listing it with a row template until an id exists.</p>
+<h2 id="what-cannot-move-into-the-brewfile">What cannot move into the Brewfile</h2>
+<p>Ghostty is already a Brewfile cask installed by brew, as are Tailscale, NordVPN, Malwarebytes, Cold Turkey and Google Drive; their installers are <code>.pkg</code> files, so no <code>.app</code> sits in the Caskroom and a naive scan misreads them as hand-installed. The apps genuinely outside brew:</p>
+<table>
+<thead>
+<tr>
+<th>App</th>
+<th>What it is</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Google Docs, Sheets, Slides</td>
+<td>Shortcut apps Google Drive creates and owns</td>
+<td>none</td>
+</tr>
+<tr>
+<td>Cold Turkey Micromanager Pro</td>
+<td>Ships inside the Cold Turkey Blocker installer</td>
+<td>none</td>
+</tr>
+<tr>
+<td>ChatGPT Classic</td>
+<td>Displaced pre-merge ChatGPT, see above</td>
+<td>AppCleaner if unused</td>
+</tr>
+<tr>
+<td>Revealer (<code>com.apollo.revealer</code>)</td>
+<td>No cask; opened 2026-08-09</td>
+<td>keep or trash by hand</td>
+</tr>
+<tr>
+<td>Silico (<code>ai.goodfire.silico</code>)</td>
+<td>No cask; opened 2026-08-11</td>
+<td>keep or trash by hand</td>
+</tr>
+<tr>
+<td>mytello</td>
+<td>No cask, no bundle id; opened 2026-08-04</td>
+<td>keep or trash by hand</td>
+</tr>
+</tbody>
+</table>
+<h2 id="cli-formulae-stay-in-config-sh-and-five-are-declared-nowhere">CLI formulae stay in <code>config.sh</code>, and five are declared nowhere</h2>
+<p>Cross-platform CLI tools are the <code>PACKAGES_*</code> arrays in <code>config.sh</code>, not the Brewfile, because Linux installs the same list through Linuxbrew or apt; the registry's scope note now says so. The audit therefore treats anything named in <code>config.sh</code> or <code>scripts/shared/helpers.sh</code> as declared, which is also what keeps the <code>codex</code> and <code>antigravity-cli</code> casks (installed by <code>install.sh --ai-tools</code>) out of the unregistered list. Five requested formulae are named nowhere:</p>
+<table>
+<thead>
+<tr>
+<th>Formula</th>
+<th>Installed</th>
+<th>History hits</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>tlrc</td>
+<td>2026-06-27</td>
+<td>n/a</td>
+<td><code>config.sh</code> installs <code>tldr</code> instead, the older Node client, which is not what this Mac runs. Replace <code>tldr</code> with <code>tlrc</code> in <code>PACKAGES_CORE</code>, or uninstall tlrc</td>
+</tr>
+<tr>
+<td>marp-cli</td>
+<td>2026-07-19</td>
+<td>5</td>
+<td>Add to <code>PACKAGES_EXTRAS_MACOS</code> if decks still go through Marp, else <code>brew uninstall marp-cli</code> (this also drops node and simdjson)</td>
+</tr>
+<tr>
+<td>hunk</td>
+<td>2026-09-03</td>
+<td>7</td>
+<td>Installed today. Add to <code>PACKAGES_EXTRAS_MACOS</code> once it sticks</td>
+</tr>
+<tr>
+<td>red</td>
+<td>2026-08-26</td>
+<td>2</td>
+<td>Third-party tap, above</td>
+</tr>
+<tr>
+<td>graphite</td>
+<td>2026-07-27</td>
+<td>3</td>
+<td>Third-party tap, above</td>
+</tr>
+</tbody>
+</table>
+<p><strong>simdjson</strong> is the one Yulong asked about: it was never requested. It is a dependency of <code>node</code>, which <code>marp-cli</code> and <code>opencode</code> pull in (<code>brew uses --installed simdjson</code>), and its install receipt says <code>installed_on_request: false</code>. It disappears on its own when nothing needs node.</p>
+<h2 id="decisions-for-yulong">Decisions for Yulong</h2>
+<ul>
+<li>Run the six cask uninstalls and the two untaps above, or edit the <code>exclude</code> rows back if any call was wrong.</li>
+<li>Pick from the never-opened table; the fastest way is <code>app-picker --installed</code> in a terminal, deselect, then run the commands the audit prints.</li>
+<li><code>tldr</code> versus <code>tlrc</code> in <code>config.sh</code>, and whether <code>marp-cli</code> and <code>hunk</code> earn a <code>PACKAGES_EXTRAS_MACOS</code> line. Not changed here.</li>
+<li><code>mas-get</code> and the post-install check in <code>install.sh</code> still shell out to <code>mas list</code> and will hang the same way on this machine. They need a <code>timeout</code> or the receipt scan the audit uses. Not changed here.</li>
+<li>The <code>CLAUDE.md</code> learning from 2026-08-30 says this box has no Zotero installed; it does, via brew, never opened. Fix the line or remove the app.</li>
+</ul>
+<h2 id="commands">Commands</h2>
+<pre><code>app-picker --installed        # toggle what this Mac keeps; writes config/Brewfile and audits
+app-picker --audit            # audit only, no writes
+brew bundle --file=config/Brewfile
+zsh tests/test_app_picker.zsh
+</code></pre>
+
+</div>
+</div>
+
+<script>
+const tocLinks = Array.from(document.querySelectorAll(".toc a"));
+const targets = tocLinks
+  .map((a) => ({ a, el: document.getElementById(a.getAttribute("href").slice(1)) }))
+  .filter((t) => t.el);
+if ("IntersectionObserver" in window && targets.length) {
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      const hit = targets.find((t) => t.el === e.target);
+      if (!hit) return;
+      tocLinks.forEach((a) => a.classList.remove("on"));
+      hit.a.classList.add("on");
+    });
+  }, { rootMargin: "-12% 0px -75% 0px" });
+  targets.forEach((t) => io.observe(t.el));
+}
+</script>
+<!-- annotation-layer v2 -->
+<style>
+:root{--an-bg:#fff;--an-ink:#1a1a1a;--an-soft:#5d5a55;--an-rule:#d9d4cc;--an-accent:#bd5d3a;
+ --an-mark:#fbe6a2;--an-bad:#a33f2a;--an-good:#2f6b4f;--an-good-bg:#e4f0e9;--an-field:#faf9f7}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--an-bg:#1f2124;--an-ink:#eceae6;
+ --an-soft:#a9a59e;--an-rule:#3a3d42;--an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;
+ --an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}}
+:root[data-theme="dark"]{--an-bg:#1f2124;--an-ink:#eceae6;--an-soft:#a9a59e;--an-rule:#3a3d42;
+ --an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;--an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}
+mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--an-accent);cursor:pointer;border-radius:2px}
+/* A suggested edit must not read as a comment highlight: the original is
+   struck rather than filled, and the replacement carries the insert colour. */
+mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-through;
+ text-decoration-color:var(--an-bad);text-decoration-thickness:2px;cursor:pointer;border-radius:2px}
+.anins{background:var(--an-good-bg);color:var(--an-good);border-bottom:2px solid var(--an-good);
+ border-radius:2px;padding:0 .12em;cursor:pointer}
+[data-annotation-layer]{font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;color:var(--an-ink);line-height:1.5}
+[data-annotation-layer] *{box-sizing:border-box}
+#anPop{position:absolute;z-index:1050;display:none;background:var(--an-bg);border:1px solid var(--an-rule);
+ border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.18);padding:.6rem;width:min(20rem,calc(100vw - 1.5rem));
+ max-height:min(80vh,26rem);overflow:auto}
+/* A control that would overwrite unsaved words points at them instead. */
+#anPop.nudge{outline:2px solid var(--an-accent);outline-offset:2px}
+/* iOS zooms the whole page when a focused field is under 16px. */
+@media (pointer:coarse){#anPop textarea,#anExportText{font-size:16px}}
+#anPop textarea{width:100%;min-height:4.5rem;border:1px solid var(--an-rule);border-radius:5px;
+ background:var(--an-field);color:var(--an-ink);padding:.4rem;font:inherit;font-size:.86rem;resize:vertical}
+.anbtn{background:var(--an-accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
+ font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}
+.anbtn.ghost{background:transparent;color:var(--an-soft);border:1px solid var(--an-rule)}
+.anbtn.ghost.danger,.anbtn.ghost.tiny.danger{color:var(--an-bad);border-color:var(--an-bad)}
+.anbtn[disabled]{opacity:.42;cursor:default}
+/* A copied comment is marked by taking its accent AWAY, never by adding a
+   chip: after the first round most of the list is copied, so anything
+   additive becomes noise on the majority. The fresh ones keep the accent and
+   are what the eye lands on. */
+.cmt.ancopied{border-left-color:var(--an-rule)}
+/* An armed control must not look like the button that just did nothing, so it
+   fills: the second click is visibly a different act from the first. */
+.anbtn.anarmed,.anbtn.ghost.danger.anarmed,.anbtn.ghost.tiny.danger.anarmed{
+ background:var(--an-bad);color:#fff;border-color:var(--an-bad)}
+.anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
+#anPop:not(.editing) #anDelete{display:none}
+/* The mode strip is deliberately NOT in .anrow: Save has to stay the first
+   control of that row, which is also its tab order. */
+.anmodebar{display:flex;gap:.3rem;margin-bottom:.45rem}
+.anmode{flex:1;background:transparent;color:var(--an-soft);border:1px solid var(--an-rule);
+ border-radius:5px;padding:.22rem .5rem;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer}
+.anmode.ansel{background:var(--an-accent);color:#fff;border-color:var(--an-accent)}
+/* Reopening an existing note is not the place to change what it is. */
+#anPop.editing .anmodebar{display:none}
+.cmt.ansuggest{border-left-color:var(--an-good)}
+.cmt .q.struck{text-decoration:line-through}
+.cmt .ins{color:var(--an-good)}
+/* Save leads: it is the first button in the DOM, so it is also first in tab
+   order. Delete is pushed to the far end so it is never the near miss. */
+.anrow{display:flex;gap:.4rem;align-items:center;margin-top:.45rem;flex-wrap:wrap}
+#anDelete{margin-left:auto}
+.anhint{color:var(--an-soft);font-size:.72rem;margin-top:.35rem}
+.anhint kbd{font:inherit;font-size:.95em;border:1px solid var(--an-rule);border-bottom-width:2px;
+ border-radius:4px;padding:0 .25rem;background:var(--an-field)}
+#anComments{max-width:48rem;margin:3rem auto 5rem;padding:0 1rem}
+#anComments h2{font-size:1.2rem;margin:0 0 .5rem;padding-bottom:.32rem;border-bottom:1px solid var(--an-rule)}
+#anComments .anscope{color:var(--an-soft);font-size:.86rem;margin:0 0 .6rem}
+.anbar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem}
+.anacts{display:flex;gap:.4rem;margin-top:.4rem}
+.ancount{color:var(--an-soft);font-size:.87rem}
+.ancount.warn{color:var(--an-bad);font-weight:650}
+.cmt{background:var(--an-bg);border:1px solid var(--an-rule);border-left:3px solid var(--an-accent);
+ border-radius:0 7px 7px 0;padding:.6rem .8rem;margin:.5rem 0;font-size:.88rem;overflow-wrap:anywhere}
+.cmt .q{color:var(--an-soft);font-style:italic;margin-bottom:.3rem}
+.cmt .where{font-size:.72rem;color:var(--an-soft);text-transform:uppercase;letter-spacing:.06em}
+.cmt .orphan{font-size:.74rem;color:var(--an-bad)}
+#anExport{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1060;
+ background:var(--an-bg);border:1px solid var(--an-rule);border-radius:10px;padding:.9rem;
+ width:min(46rem,92vw);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+#anExport .exphead{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap}
+#anExport .exphint{color:var(--an-soft);font-size:.8rem}
+#anExport .anbtn{margin-left:auto}
+#anExportText{width:100%;height:min(24rem,55vh);border:1px solid var(--an-rule);border-radius:6px;
+ background:var(--an-field);color:var(--an-ink);padding:.6rem;font-family:ui-monospace,Menlo,monospace;
+ font-size:.82rem;resize:vertical}
+.anok{background:var(--an-good-bg);color:var(--an-good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+.anwarn{background:var(--an-bad);color:#fff;padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+#anBadge{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
+ bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;background:var(--an-bg);color:var(--an-ink);
+ border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
+ font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+#anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
+</style>
+<div data-annotation-layer="v2" data-key="review-brewfile-audit-report">
+<section id="anComments">
+<h2 id="your-comments">Your comments</h2>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
+<div class="anbar">
+  <span class="ancount" id="anCount">No comments yet</span>
+  <button class="anbtn" id="anCopy">Copy all</button>
+  <button class="anbtn ghost danger" id="anClearCopied">Delete copied</button>
+  <button class="anbtn ghost danger" id="anClear">Delete all</button>
+  <span id="anToast"></span>
+</div>
+<div id="anList"></div>
+</section>
+<div id="anPop" role="dialog" aria-label="Comment">
+  <div class="anmodebar" role="group" aria-label="Annotation mode">
+    <button class="anmode ansel" type="button" id="anModeComment" aria-pressed="true">Comment</button>
+    <button class="anmode" type="button" id="anModeEdit" aria-pressed="false">Suggest edit</button>
+  </div>
+  <textarea id="anTxt" placeholder="What do you think?"></textarea>
+  <div class="anrow">
+    <button class="anbtn" id="anSave">Save</button>
+    <button class="anbtn ghost" id="anCancel">Cancel</button>
+    <button class="anbtn ghost danger" id="anDelete">Delete</button>
+  </div>
+  <div class="anhint"><kbd>Enter</kbd> saves &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> newline &middot; <kbd>Esc</kbd> discards &middot; <kbd>Ctrl</kbd>+<kbd>E</kbd> switches mode</div>
+</div>
+<div id="anExport" role="dialog" aria-label="Export comments">
+  <div class="exphead">
+    <strong>Your comments as Markdown</strong>
+    <span class="exphint">already selected &mdash; copy with your usual shortcut</span>
+    <button class="anbtn ghost tiny" id="anExportClose">Close</button>
+  </div>
+  <textarea id="anExportText" readonly></textarea>
+</div>
+<button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
+</div>
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var root = document.querySelector("[data-annotation-layer]");
+var KEY = (root && root.dataset.key) || ("annot:" + document.title);
+// Namespaced with a PREFIX, never a suffix. With `KEY + "-draft"`, a page
+// titled "Spec-draft" owns the same key as the draft of a page titled "Spec",
+// so pressing Escape on one deletes the other's comments outright.
+var DIRTY = "an-dirty:" + KEY;
+var DRAFT = "an-draft:" + KEY;
+
+// ---- storage -------------------------------------------------------------
+// localStorage, and nothing else. An IndexedDB mirror, a backup key and a
+// scan of neighbouring keys all lived here and all came out: the mirror let a
+// save that raced its own asynchronous recovery destroy the comments it was
+// recovering; the backup key resurrected comments the user had deliberately
+// cleared; and the neighbour scan adopted a different document's comments
+// whenever one quote happened to appear on this page. The republish they were
+// meant to survive is already covered, because the generator fixes the key
+// (`data-key`) from the filename rather than the title.
+function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
+
+// Stored as a bare array, which every generation of this layer can read. An
+// older deployed page does `JSON.parse(...).reduce(...)` on this value and
+// throws on an object, and that kills its whole script: no handlers, no
+// saving, a page that looks fine and silently does nothing.
+function readComments(){
+  var d; try { d = JSON.parse(lsGet(KEY) || "[]"); } catch (e) { return []; }
+  if (Array.isArray(d)) return d;
+  if (d && Array.isArray(d.comments)) return d.comments;  // envelope from a newer layer
+  return [];
+}
+// Not a per-tab counter: two tabs on one page would both hand out id 1.
+function newId(){ return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
+
+var comments = readComments(), unsaved = false;
+comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+
+// Per-comment export state. `copiedAt` is stamped only where the page-level
+// flag was cleared before -- a clipboard write that resolved, or a real copy
+// event on the fallback textarea -- so its absence means "never left this
+// browser". The asymmetry is deliberate: an unstamped comment can never fall
+// into the delete-copied set, so a miss costs one redundant copy rather than
+// a page of lost notes. That is also why there is no "delete the uncopied"
+// action: every comment predating this key reads as uncopied, so such a
+// button would have wiped every existing page on first run.
+function isCopied(c){ return !!c.copiedAt; }
+function copiedSet(){ return comments.filter(isCopied); }
+function freshCount(){ return comments.length - copiedSet().length; }
+function isDirty(){ return freshCount() > 0; }
+// The legacy page-level key is still written, in lockstep, because a stale tab
+// running an older layer reads it and would otherwise raise or stand down its
+// unload guard against state it cannot see.
+function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
+
+// One-time migration for comments written before `copiedAt` existed. Without
+// it every upgraded page announces "N of N not yet copied out" and re-arms the
+// unload guard for someone who copied everything out yesterday: a false alarm
+// on every page in existence, which is how a warning stops being read.
+// The legacy flag is EVIDENCE, not an inference -- an explicit "0" was written
+// by a copy that actually happened. A key that is MISSING is not evidence and
+// is left alone, so absence can never manufacture a safe state.
+(function migrateFromLegacyFlag(){
+  if (lsGet(DIRTY) !== "0" || !comments.length) return;
+  var now = Date.now(), touched = false;
+  comments.forEach(function(c){ if (!c.copiedAt) { c.copiedAt = now; touched = true; } });
+  if (touched) persist();
+})();
+var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
+var pending = null, editingId = null;
+// The box has two modes and one dirty flag. `dirty` is set by the first user
+// modification and by nothing else: an edit box OPENS with the selection
+// already in its textarea, so keying the draft autosave and the "a box with
+// words in it refuses to close" invariant on non-emptiness would turn every
+// opened edit box into an unclosable phantom draft nobody typed.
+var mode = "comment", dirty = false;
+// An entry written before v2 carries no `type`, so absence means comment.
+function isEdit(c){ return c && c.type === "edit"; }
+function bodyOf(c){ return isEdit(c) ? (c.replacement || "") : (c.note || ""); }
+
+window.addEventListener("pagehide", saveDraft);
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden") saveDraft();
+});
+window.addEventListener("beforeunload", function(e){
+  saveDraft();
+  if (!isDirty() || !comments.length) return;
+  // The comments are already in localStorage; this only warns that they have
+  // not been copied anywhere outside this browser yet.
+  e.preventDefault(); e.returnValue = ""; return "";
+});
+// A second tab on the same page used to be last-writer-wins. Take its write
+// instead — unless a note is open here, because nothing may pull the DOM out
+// from under a range the user is still typing against.
+window.addEventListener("storage", function(e){
+  if (e.key !== KEY || isOpen()) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = readComments();
+  comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+  restoreHighlights(); render();
+});
+
+function inLayer(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  return !!(node && node.closest && node.closest("[data-annotation-layer]"));
+}
+function sectionOf(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  var sec = node && node.closest ? node.closest("section") : null;
+  if (sec) { var h = sec.querySelector("h1,h2,h3"); if (h) return h.textContent.trim(); }
+  while (node && node !== document.body) {
+    var p = node.previousElementSibling;
+    while (p) { if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim(); p = p.previousElementSibling; }
+    node = node.parentNode;
+  }
+  return "document";
+}
+function isOpen(){ return pop.style.display === "block"; }
+function hasText(){ return !!txt.value.trim(); }
+// `rect` is viewport-relative. Measure the box while it is laid out but not
+// yet painted, so it never appears at the wrong place for one frame — that
+// single-frame jump is itself a flicker.
+function placePop(rect){
+  pop.style.visibility = "hidden";
+  pop.style.display = "block";
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  var top = rect.bottom + 8;
+  if (top + h > vh - 8) top = rect.top - h - 8;             // no room below: flip above
+  top = Math.max(8, Math.min(top, Math.max(8, vh - h - 8))); // and keep it on screen either way
+  pop.style.left = (Math.max(8, Math.min(rect.left, vw - w - 12)) + window.scrollX) + "px";
+  pop.style.top = (top + window.scrollY) + "px";
+  pop.style.visibility = "";
+}
+// Words the user has not saved are not something another control may
+// overwrite: clicking a second highlight used to replace the text outright.
+// `focus` is false on the touch path, where focusing a field while iOS shows
+// its selection handles collapses the selection.
+function nudge(focus){
+  if (focus !== false) txt.focus();
+  pop.classList.add("nudge");
+  setTimeout(function(){ pop.classList.remove("nudge"); }, 700);
+}
+// Applies a mode WITHOUT touching the textarea. The prefill belongs to the
+// user-driven switch below; the restore paths (an existing entry, a recovered
+// draft) supply their own text and must not have it overwritten.
+function setModeState(next){
+  mode = next;
+  var isE = mode === "edit";
+  $("anModeComment").classList.toggle("ansel", !isE);
+  $("anModeEdit").classList.toggle("ansel", isE);
+  $("anModeComment").setAttribute("aria-pressed", isE ? "false" : "true");
+  $("anModeEdit").setAttribute("aria-pressed", isE ? "true" : "false");
+  txt.placeholder = isE ? "Replacement text; an empty box suggests deleting it"
+                        : "What do you think?";
+}
+// The user-driven switch rewrites the textarea, so it declines while there are
+// unsaved words and points at them instead, exactly as a second highlight
+// click does. Reopening an existing entry is not the place to change its kind,
+// so the strip is hidden then and this is a no-op.
+function switchMode(next){
+  if (mode === next || editingId !== null) return;
+  if (dirty) { nudge(); return; }
+  setModeState(next);
+  txt.value = (next === "edit" && pending) ? pending.quote : "";
+  dirty = false;
+  txt.focus();
+}
+$("anModeComment").onclick = function(){ switchMode("comment"); };
+$("anModeEdit").onclick = function(){ switchMode("edit"); };
+
+function openEdit(c, anchor, focus){
+  if (isOpen() && editingId !== c.id && dirty) { nudge(focus); return; }
+  editingId = c.id; pending = null;
+  setModeState(isEdit(c) ? "edit" : "comment");
+  txt.value = bodyOf(c);
+  dirty = false;
+  pop.classList.add("editing");
+  placePop(anchor ? anchor.getBoundingClientRect() : { left: 16, top: 100, bottom: 100 });
+  if (focus !== false) txt.focus();
+}
+// Both parts of a suggested edit carry the entry id, as a comment highlight
+// does, so clicking the strikethrough or the replacement reopens the same box.
+document.addEventListener("click", function(ev){
+  var m = ev.target.closest && ev.target.closest("[data-cid]");
+  if (!m || pop.contains(ev.target)) return;
+  var c = comments.find(function(x){ return x.id === Number(m.dataset.cid); });
+  if (!c) return;
+  ev.preventDefault(); openEdit(c, m);
+});
+
+// Wraps a range in a highlight. surroundContents refuses a range that crosses
+// element boundaries, so fall back to lifting the contents out and wrapping.
+function wrapRange(range, id, title, cls){
+  var m = document.createElement("mark");
+  m.className = cls || "note"; m.title = title; m.dataset.cid = String(id);
+  try { range.surroundContents(m); }
+  catch (e) { m.appendChild(range.extractContents()); range.insertNode(m); }
+  return m;
+}
+// The ONE place the replacement span is created, rewritten or removed. Three
+// call sites need it (save a new edit, revise one, restore one on load) and
+// they drift apart if each does its own DOM work: an edit revised to empty has
+// to lose its span and become pure strikethrough again.
+function renderEditInline(c){
+  var m = document.querySelector('mark.anedit[data-cid="' + c.id + '"]');
+  if (!m) return;
+  m.title = c.replacement ? "suggested: " + c.replacement : "suggested deletion";
+  var s = document.querySelector('span.anins[data-cid="' + c.id + '"]');
+  if (!c.replacement) { if (s) s.remove(); return; }
+  if (!s) {
+    s = document.createElement("span");
+    s.className = "anins"; s.dataset.cid = String(c.id);
+    // The marker docTextNodes() looks for. Without it the first saved edit
+    // corrupts the anchor of every comment after it, because the replacement's
+    // words join the text that quotes are searched in.
+    s.setAttribute("data-an-inserted", "1");
+    m.parentNode.insertBefore(s, m.nextSibling);
+  }
+  s.textContent = c.replacement;
+}
+// Every text node of the page, skipping the layer's own UI, existing
+// highlights, and anything the layer itself put on the page. Re-anchoring
+// matches ORIGINAL document text only.
+function docTextNodes(){
+  var host = document.querySelector(".doc") || document.querySelector("main") || document.body;
+  var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, { acceptNode: function(n){
+    var p = n.parentNode;
+    if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
+    if (p.closest("mark.note") || p.closest("mark.anedit") || p.closest("[data-an-inserted]") ||
+        p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  var out = [], n;
+  while ((n = walker.nextNode())) out.push(n);
+  return out;
+}
+// Collapses runs of whitespace to one space, and records where each kept
+// character sits in the raw text, so a match can be mapped back to real nodes.
+function collapsedIndex(nodes){
+  var norm = "", rawAt = [], raw = 0, lastWasSpace = false;
+  for (var k = 0; k < nodes.length; k++) {
+    var v = nodes[k].nodeValue;
+    for (var i = 0; i < v.length; i++, raw++) {
+      var isSpace = /\s/.test(v[i]);
+      if (isSpace && lastWasSpace) continue;
+      norm += isSpace ? " " : v[i];
+      rawAt.push(raw);
+      lastWasSpace = isSpace;
+    }
+  }
+  return { norm: norm, rawAt: rawAt };
+}
+// Finds a stored quote again after a reload. Selection.toString() gives
+// rendered text, where a newline inside a paragraph reads as a single space,
+// so the comparison has to collapse whitespace.
+function rangeForQuote(quote){
+  if (!quote) return null;
+  var nodes = docTextNodes();
+  if (!nodes.length) return null;
+  var starts = [], raw = 0;
+  for (var k = 0; k < nodes.length; k++) { starts.push(raw); raw += nodes[k].nodeValue.length; }
+  var idx = collapsedIndex(nodes);
+  var needle = quote.replace(/\s+/g, " ").trim();
+  if (!needle) return null;
+  var at = idx.norm.indexOf(needle);
+  if (at < 0) return null;
+  var rawFrom = idx.rawAt[at], rawTo = idx.rawAt[at + needle.length - 1] + 1;
+  function locate(offset, isEnd){
+    for (var j = 0; j < nodes.length; j++) {
+      var base = starts[j], end = base + nodes[j].nodeValue.length;
+      if (isEnd ? (offset > base && offset <= end) : (offset >= base && offset < end)) return [nodes[j], offset - base];
+    }
+    return null;
+  }
+  var s = locate(rawFrom, false), f = locate(rawTo, true);
+  if (!s || !f) return null;
+  var r = document.createRange(); r.setStart(s[0], s[1]); r.setEnd(f[0], f[1]);
+  return r;
+}
+// A reload rebuilds the DOM, so saved highlights are gone while the comments
+// survive in localStorage. Put the marks back, or a comment cannot be clicked
+// open to edit or delete. Quotes no longer on the page stay listed as orphans.
+function restoreHighlights(){
+  var missed = 0;
+  comments.forEach(function(c){
+    if (document.querySelector('mark[data-cid="' + c.id + '"]')) return;
+    var r = rangeForQuote(c.quote);
+    if (!r) { missed++; return; }
+    try {
+      if (isEdit(c)) { wrapRange(r, c.id, "", "anedit"); renderEditInline(c); }
+      else wrapRange(r, c.id, c.note, "note");
+    } catch (e) { missed++; }
+  });
+  return missed;
+}
+function hasMark(c){ return !!document.querySelector('mark[data-cid="' + c.id + '"]'); }
+// A selection touching an existing suggested edit, if there is one. Overlapping
+// edits cannot be exported appliably, and a quote that spans inserted text can
+// never be re-anchored, so such a selection is declined rather than annotated.
+function editOverlapping(range){
+  var els = document.querySelectorAll('mark.anedit[data-cid], span.anins[data-cid]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i], hit = false;
+    try { hit = range.intersectsNode(el); } catch (e) { hit = false; }
+    if (!hit) continue;
+    var cid = Number(el.dataset.cid);
+    var c = comments.find(function(x){ return x.id === cid; });
+    if (c) return { entry: c, el: el };
+  }
+  return null;
+}
+
+// Opens the note box for the current selection. autofocus is false on touch:
+// focusing a textarea while iOS is showing its selection handles collapses the
+// selection before the user has typed anything.
+//
+// This function only ever OPENS. Nothing about the selection closes the box —
+// that asymmetry is the whole flicker fix. Opening the box focuses the
+// textarea, focusing collapses the document selection, and the old code read
+// that collapse back as "the user deselected" and closed the box it had just
+// opened. The box now closes only on Save, Cancel/Escape, or a press outside
+// it while it is still empty.
+function openForSelection(autofocus){
+  if (editingId !== null) return false;
+  var sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  var text = sel.toString().trim();
+  if (!text) return false;
+  if (inLayer(sel.anchorNode) || inLayer(sel.focusNode)) return false;
+  // Already open on this exact selection: do not wipe a half-typed note.
+  if (pending && pending.quote === text && isOpen()) return true;
+  // Open on some other selection the user has MODIFIED: leave it be rather
+  // than throwing away work. The test is `dirty`, not non-emptiness: an
+  // untouched prefilled edit box yields to a fresh selection, and a dirty
+  // EMPTY edit box (a pending deletion) is work and must not be overwritten.
+  if (isOpen() && dirty) return true;
+  var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
+  // Overlaps an existing suggested edit: point at that edit rather than open a
+  // second box on the range.
+  var hit = editOverlapping(range);
+  if (hit) { openEdit(hit.entry, hit.el, autofocus); nudge(autofocus); return true; }
+  editingId = null; pop.classList.remove("editing");
+  // Comment is the default on every fresh selection. A mode that stayed where
+  // it was last left would silently change what select-type-Enter means.
+  setModeState("comment");
+  pending = { quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() };
+  placePop(rect);
+  txt.value = "";
+  dirty = false;
+  if (autofocus) txt.focus();
+  return true;
+}
+// Synchronous, so the focus stays inside the user gesture — Safari only
+// raises the soft keyboard for a focus() called within one.
+document.addEventListener("mouseup", function(ev){
+  if (pop.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest("[data-cid]")) return;
+  clearTimeout(selTimer);
+  openForSelection(true);
+});
+// A press outside closes a box the user has not modified. A box with words the
+// user put there stays open: no gesture the user did not mean as "save" may
+// commit anything, and plenty of ordinary ones land here — right-clicking your
+// own selection to copy it, grabbing the scrollbar to reread the passage, or
+// pressing Clear all and then cancelling the confirm.
+//
+// The test is the dirty flag, NOT emptiness, because an edit box opens with
+// the selection already in it. Keyed on emptiness, opening one and changing
+// your mind would leave a box that cannot be dismissed.
+document.addEventListener("mousedown", function(ev){
+  if (!isOpen() || pop.contains(ev.target)) return;
+  if (dirty) return;
+  closePop();
+});
+// iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
+// handler makes the page uncommentable on iPhone and iPad. selectionchange
+// fires on every platform; debounce it so it runs once the selection settles.
+var selTimer = null;
+document.addEventListener("selectionchange", function(){
+  if (document.activeElement === txt) return;
+  if (editingId !== null) return;
+  // Same test as openForSelection: modified work stays, an untouched prefill
+  // does not hold the page hostage.
+  if (isOpen() && dirty) return;
+  clearTimeout(selTimer);
+  selTimer = setTimeout(function(){ openForSelection(false); }, 250);
+});
+
+txt.addEventListener("keydown", function(ev){
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.altKey && !ev.isComposing) { ev.preventDefault(); save(); }
+  else if (ev.key === "Escape") { ev.preventDefault(); discard(); }
+  // A CHORD, never a bare letter. A single-key binding on a control that lives
+  // inside a textarea fires on the note being typed: on the context-ledger
+  // page, `d` in a comment marked the selected row dropped.
+  else if ((ev.ctrlKey || ev.metaKey) && (ev.key === "e" || ev.key === "E")) {
+    ev.preventDefault(); switchMode(mode === "edit" ? "comment" : "edit");
+  }
+});
+// The user touched the text: from here the box holds work, whether or not the
+// prefill it opened with is still in it.
+txt.addEventListener("input", function(){ dirty = true; saveDraft(); });
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape" && isOpen() && document.activeElement !== txt) discard();
+});
+
+function closePop(){
+  // #anDelete is one element reused by every entry: an arm left live here
+  // would confirm on the next opened entry's first click.
+  disarm();
+  pop.style.display = "none"; pending = null; editingId = null;
+  pop.classList.remove("editing"); pop.classList.remove("nudge");
+  setModeState("comment"); dirty = false;
+  txt.value = ""; lsDel(DRAFT);
+}
+function discard(){ closePop(); }
+// The in-progress note, saved on every keystroke, so a forced refresh reopens
+// the box where it was instead of losing what was typed into it.
+// `dirty` gates this, not emptiness: an edit box opens pre-filled with the
+// selection, and autosaving that would leave a draft nobody typed, which then
+// reopens the box on the next load for a note that was never begun.
+// In edit mode an EMPTY dirty box is meaningful: the prefill was cleared to
+// suggest a deletion, and a refresh before Enter must bring that back. In
+// comment mode an empty box is nothing to keep.
+function saveDraft(){
+  if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
+  lsSet(DRAFT, JSON.stringify({
+    note: txt.value, editingId: editingId, mode: mode,
+    quote: pending ? pending.quote : null, where: pending ? pending.where : null
+  }));
+}
+function restoreDraft(){
+  var d = unpackDraft();
+  if (!d) return;
+  if (d.editingId != null) {
+    var c = comments.find(function(x){ return x.id === d.editingId; });
+    // The comment was deleted elsewhere. Drop the draft rather than leave it
+    // to reattach itself to whichever comment is handed that id next.
+    if (!c) { lsDel(DRAFT); return; }
+    openEdit(c, document.querySelector('mark[data-cid="' + c.id + '"]'));
+    txt.value = d.note; dirty = true;
+    return;
+  }
+  var r = rangeForQuote(d.quote);
+  if (!r) return;
+  var sel = window.getSelection();
+  if (sel) { try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {} }
+  editingId = null; pop.classList.remove("editing");
+  setModeState(d.mode === "edit" ? "edit" : "comment");
+  pending = { quote: d.quote, where: d.where || sectionOf(r.startContainer), range: r.cloneRange() };
+  placePop(r.getBoundingClientRect());
+  // Restored words ARE user work, whatever they started as.
+  txt.value = d.note; dirty = true;
+}
+function unpackDraft(){
+  var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
+  if (!d || typeof d.note !== "string") return null;
+  // An empty note is a draft only for an edit that still knows its target: a
+  // pending deletion of `quote`, or a revision of an existing edit.
+  if (!d.note.trim() && !(d.mode === "edit" && (d.quote || d.editingId != null))) return null;
+  return d;
+}
+// These keep their names and every existing call site; what changed is that
+// the state lives on the comments now and the page-level key is derived from
+// it. Renaming them to say "copied out" is a separate no-behaviour commit.
+function markDirty(){ syncLegacyFlag(); }
+// A snapshot of exactly what went into the copied text, so a comment edited
+// while an async clipboard write was in flight is not stamped as copied. The
+// copy carried the OLD wording; the comment now holds new wording that has
+// never left the page, and stamping it would put unsent words in the
+// delete-copied set.
+function copySnapshot(){
+  return comments.map(function(c){
+    return { id: c.id, where: c.where, quote: c.quote, note: bodyOf(c) };
+  });
+}
+function markClean(snap){
+  var now = Date.now(), by = {};
+  (snap || copySnapshot()).forEach(function(x){ by[x.id] = x; });
+  comments.forEach(function(c){
+    var x = by[c.id];
+    if (x && x.where === c.where && x.quote === c.quote && x.note === bodyOf(c)) c.copiedAt = now;
+  });
+  persist(); syncLegacyFlag();
+}
+
+// ---- destructive controls ------------------------------------------------
+// No blocking dialog appears here, and none may be added. The Artifact viewer
+// runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
+// `window.confirm` returns false without ever asking -- the browser just logs
+// "Ignored call to ...". Every delete guarded that way returned early on a
+// refusal the reviewer never saw: a dead button in the one place these pages
+// are read, and working perfectly in a local tab, which is why it survived.
+//
+// The guard is in the page instead. A first click arms the button and makes it
+// say what a second click will destroy; it disarms after ARM_MS, on Escape, or
+// on any re-render. Buttons are focusable, so Enter and Space arm and confirm
+// exactly like the pointer does.
+var ARM_MS = 4000;
+var WARN_CHANGED = '<span class="anwarn">the comments changed \u2014 nothing deleted</span>';
+var armedBtn = null, armedLabel = "", armedTimer = 0, armedBinding = null;
+function disarm(){
+  if (!armedBtn) return;
+  // render() may already have thrown this button away; restoring a detached
+  // node is harmless but pointless.
+  if (armedBtn.isConnected) { armedBtn.textContent = armedLabel; armedBtn.classList.remove("anarmed"); }
+  clearTimeout(armedTimer);
+  armedBtn = null; armedLabel = ""; armedTimer = 0; armedBinding = null;
+}
+// What an arm was armed AGAINST: the exact comments, plus enough of their
+// content to notice a change. A second tab's write can land inside the four
+// seconds an arm is live, and the `storage` handler only rebuilds when no note
+// is open -- so the confirming click has to prove the set is still the one the
+// label described, rather than trust that nothing moved under it.
+function bindingOf(list){
+  return list.map(function(c){
+    return c.id + ":" + (c.copiedAt || 0) + ":" + bodyOf(c).length + ":" + c.quote.length;
+  }).join(",");
+}
+// True only on the confirming click, and only while the set it was armed
+// against is unchanged. On any other click it arms `btn` and the caller must
+// return without destroying anything.
+function arm(btn, label, binding){
+  if (armedBtn === btn) {
+    var stale = armedBinding !== null && armedBinding !== binding;
+    disarm();
+    if (stale) { render(); toast(WARN_CHANGED, 4000); return false; }
+    return true;
+  }
+  disarm();
+  armedBtn = btn; armedLabel = btn.textContent;
+  armedBinding = binding === undefined ? null : binding;
+  btn.textContent = label;
+  btn.classList.add("anarmed");
+  armedTimer = setTimeout(disarm, ARM_MS);
+  return false;
+}
+// Escape cancels, whether focus sits on the armed button or anywhere else.
+// Both listeners are needed: the layer root stops key events from bubbling out
+// to the host page, so the document listener never sees a keystroke aimed at
+// the button, and a listener on the root alone would miss one aimed outside.
+function escDisarm(ev){ if (ev.key === "Escape") disarm(); }
+root.addEventListener("keydown", escDisarm);
+document.addEventListener("keydown", escDisarm);
+// A refused write is the one failure the page must not hide: with the quota
+// full, the panel would otherwise count a comment that is already gone.
+function persist(){
+  unsaved = !lsSet(KEY, JSON.stringify(comments));
+}
+function unwrap(id){
+  var s = document.querySelector('span.anins[data-cid="' + id + '"]');
+  if (s) s.remove();
+  var m = document.querySelector('mark[data-cid="' + id + '"]');
+  if (m) { while (m.firstChild) m.parentNode.insertBefore(m.firstChild, m); m.remove(); }
+}
+
+function save(){
+  if (mode === "edit") { saveEdit(txt.value.trim()); return; }
+  var note = txt.value.trim();
+  if (!note) { closePop(); return; }
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    // Reopened to reread and closed unchanged: not an edit, so it must not
+    // reset the export state and re-arm the unload prompt.
+    if (c && c.note === note) { closePop(); return; }
+    // The copy that happened carried the previous wording, so the stamp no
+    // longer describes this comment. Without this, "delete copied" destroys
+    // the only copy of the edit and the next Copy all silently omits it.
+    if (c) { c.note = note; delete c.copiedAt; }
+    var m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
+    if (m) m.title = note;
+  } else if (pending) {
+    var id = newId();
+    try { wrapRange(pending.range, id, note, "note"); } catch (e) {}
+    comments.push({ id: id, type: "comment", where: pending.where, quote: pending.quote, note: note });
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+// An empty replacement is a suggested DELETION, so there is no empty-means-
+// cancel shortcut here: the comment path's `if (!note) closePop()` would throw
+// away exactly the edit the reader worked to express.
+function saveEdit(replacement){
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    if (c && c.replacement === replacement) { closePop(); return; }
+    if (c) { c.replacement = replacement; delete c.copiedAt; renderEditInline(c); }
+  } else if (pending) {
+    // The prefill is not user work: an untouched box saves nothing, so Enter
+    // on a box still holding the selection verbatim is a close, not an entry
+    // proposing to replace the text with itself.
+    if (!dirty) { closePop(); return; }
+    var id = newId();
+    var fresh = { id: id, type: "edit", where: pending.where,
+                  quote: pending.quote, replacement: replacement };
+    try { wrapRange(pending.range, id, "", "anedit"); } catch (e) {}
+    comments.push(fresh);
+    renderEditInline(fresh);
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+
+$("anCancel").onclick = discard;
+$("anDelete").onclick = function(){
+  if (editingId === null) { closePop(); return; }
+  var id = editingId;
+  var c = comments.find(function(x){ return x.id === id; });
+  // A comment's Delete stays immediate -- the popup's CSS hides it while
+  // composing, it sits at the far end of the row, and it acts on one note the
+  // reader has just opened. A suggested edit arms first: it is written
+  // replacement text plus an anchor, and one stray click takes both.
+  if (isEdit(c) && !arm(this, "click again")) return;
+  comments = comments.filter(function(x){ return x.id !== id; });
+  unwrap(id);
+  markDirty(); persist(); render(); closePop();
+};
+$("anSave").onclick = save;
+
+// Builds into a fragment and swaps once, so the list never blanks between
+// clearing and refilling.
+function render(){
+  // Any armed row button is about to be replaced, and an arm left standing on
+  // a list this rebuild has changed would confirm a different comment.
+  disarm();
+  var list = $("anList"), count = $("anCount");
+  // Kept in step with the list on every rebuild, and disabled rather than
+  // hidden: a control that vanishes and reappears is harder to aim at than one
+  // that greys out, and its count is the only place the copied total is shown.
+  var nCopied = copiedSet().length, clearCopied = $("anClearCopied");
+  clearCopied.textContent = "Delete copied (" + nCopied + ")";
+  clearCopied.disabled = !nCopied;
+  var fresh = freshCount();
+  badge.textContent = "\uD83D\uDCAC " + comments.length;
+  badge.className = unsaved || (isDirty() && comments.length) ? "warn" : "";
+  if (!comments.length) {
+    count.textContent = "No comments yet"; count.className = "ancount";
+    var empty = document.createElement("p");
+    empty.className = "anscope"; empty.textContent = "Select any text above to comment.";
+    list.replaceChildren(empty);
+    return;
+  }
+  // Once the list can be part copied and part not, a single verdict is a lie
+  // for one half of it. The split form appears only when the list is actually
+  // mixed, so the common uniform cases stay as short as they were. The same
+  // applies to the noun: "N comments" is wrong for half a mixed page, and the
+  // plain wording is kept for the comment-only page, which is most of them.
+  var nEdits = comments.filter(isEdit).length;
+  var what = nEdits
+    ? comments.length + (comments.length === 1 ? " item (" : " items (") +
+      nEdits + (nEdits === 1 ? " suggested edit)" : " suggested edits)")
+    : comments.length + (comments.length === 1 ? " comment" : " comments");
+  count.textContent = what +
+    (unsaved ? " \u2014 this browser refused to store them, copy them now"
+             : !fresh ? " \u2014 copied out"
+             : fresh === comments.length ? " \u2014 not yet copied out"
+             : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
+  count.className = "ancount" + (unsaved || isDirty() ? " warn" : "");
+  var frag = document.createDocumentFragment();
+  comments.forEach(function(c){
+    var d = document.createElement("div");
+    d.className = "cmt" + (isCopied(c) ? " ancopied" : "") + (isEdit(c) ? " ansuggest" : "");
+    var w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
+    var q = document.createElement("div");
+    q.className = isEdit(c) ? "q struck" : "q";
+    q.textContent = "\u201C" + c.quote + "\u201D";
+    var n = document.createElement("div");
+    if (isEdit(c)) {
+      n.className = "ins";
+      n.textContent = c.replacement
+        ? "\u2192 " + c.replacement
+        : "\u2192 delete this text";
+    } else n.textContent = c.note;
+    var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
+    a.onclick = function(){
+      var m = document.querySelector('mark[data-cid="' + c.id + '"]');
+      if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
+      else openEdit(c, null);
+    };
+    // Deleting one comment used to require opening its popup first, which is a
+    // detour for the commonest correction. It asks twice, because the note
+    // itself is the only copy and there is no undo.
+    var x = document.createElement("button");
+    x.className = "anbtn ghost tiny danger"; x.textContent = "delete";
+    x.onclick = function(){
+      if (!arm(x, "click again")) return;
+      comments = comments.filter(function(y){ return y.id !== c.id; });
+      unwrap(c.id);
+      if (editingId === c.id) closePop();
+      markDirty(); persist(); render();
+    };
+    d.append(w, q, n);
+    if (!hasMark(c)) { var o = document.createElement("div"); o.className = "orphan"; o.textContent = "quoted text not found on this version of the page"; d.append(o); }
+    var acts = document.createElement("div"); acts.className = "anacts";
+    acts.append(a, x);
+    d.append(acts); frag.appendChild(d);
+  });
+  list.replaceChildren(frag);
+}
+
+function markdown(list){
+  return list.map(function(c){
+    return "- **" + c.where + "** \u2014 " + c.note + "\n  > " + c.quote.replace(/\n/g, "\n  > ");
+  }).join("\n");
+}
+// Numbered, so a session applying them can say which one it could not place.
+function editMarkdown(list){
+  return list.map(function(c, i){
+    return (i + 1) + ". **" + c.where + "**" +
+      "\n   Replace:\n   > " + c.quote.replace(/\n/g, "\n   > ") +
+      "\n   With:" + (c.replacement
+        ? "\n   > " + c.replacement.replace(/\n/g, "\n   > ")
+        : " _(nothing \u2014 delete this text)_");
+  }).join("\n\n");
+}
+// The quotes are RENDERED text and the source is Markdown, so emphasis
+// markers, links and code spans differ between the two. The note below says so
+// in the export itself, because the export leaves this page and is read
+// without it. Nobody builds a sed loop over this format.
+var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markdown. " +
+  "Locate each quote in the source and adapt the markup \u2014 do not apply these " +
+  "blocks byte-for-byte.";
+// A page with no suggested edits exports exactly what it did under v1: no
+// headings appear, so every existing paste-into-a-session habit still works.
+function exportText(){
+  var edits = comments.filter(isEdit);
+  var notes = comments.filter(function(c){ return !isEdit(c); });
+  var out = "# Comments \u2014 " + document.title + "\n\n";
+  if (edits.length) {
+    out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
+    if (notes.length) out += "## Comments\n\n";
+  }
+  return out + (notes.length ? markdown(notes) + "\n" : "");
+}
+function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
+// There is deliberately no download path. The Artifact viewer never grants a
+// page download permission, so a Download button was inert exactly where these
+// pages are read, while still making every publish warn about an offered file.
+// Copy all is the one export, with the textarea below as its fallback.
+// What the textarea currently holds. The box can sit open while the page is
+// edited behind it, so the copy event stamps the snapshot the text was built
+// from, not whatever the list happens to be when the user finally hits copy.
+var exportSnap = null;
+function openExport(){
+  var ta = $("anExportText"); ta.value = exportText();
+  exportSnap = copySnapshot();
+  $("anExport").style.display = "block";
+  ta.focus(); ta.select();
+}
+
+// Only a copy that actually happened may clear the export state — otherwise
+// the panel says the comments are safely out of the browser, and the unload
+// guard stands down, when nothing left it.
+$("anCopy").onclick = async function(){
+  if (!comments.length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
+  var ok = false;
+  // Both taken before the await: the clipboard promise can resolve after an
+  // edit has landed, and the text that went out is this one.
+  var snap = copySnapshot(), text = exportText();
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (e) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  // Clipboard refused: fall back to the selectable textarea. Opening it is not
+  // exporting -- the state clears when the text is actually copied out of it.
+  if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
+  markClean(snap); render();
+  toast('<span class="anok">copied ' + comments.length + '</span>');
+};
+$("anExportText").addEventListener("copy", function(){
+  // A copy of PART of the box carried part of the Markdown, so it did not
+  // take every comment out of the browser. Stamping them all would drop
+  // comments the user never copied into the "Delete copied" set, which is now
+  // a set something deletes. The whole-blob case is the normal one: the box
+  // opens with everything already selected.
+  var ta = this;
+  if (ta.selectionStart !== 0 || ta.selectionEnd !== ta.value.length) {
+    toast('<span class="anwarn">partial copy \u2014 nothing marked copied out</span>', 4000);
+    return;
+  }
+  markClean(exportSnap); render();
+  toast('<span class="anok">copied ' + comments.length + '</span>');
+});
+$("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
+// The safe prune, and the reason the literal request was inverted: this
+// deletes only what a copy actually carried out of the browser, so the next
+// Copy all sends fresh feedback rather than re-sending an actioned list.
+$("anClearCopied").onclick = function(){
+  var set = copiedSet();
+  if (!set.length) return;
+  if (!arm(this, "Click again to delete " + set.length + " copied out", bindingOf(set))) return;
+  var doomed = {};
+  set.forEach(function(c){ doomed[c.id] = true; unwrap(c.id); });
+  comments = comments.filter(function(c){ return !doomed[c.id]; });
+  if (editingId !== null && doomed[editingId]) closePop();
+  persist(); syncLegacyFlag(); render();
+};
+$("anClear").onclick = function(){
+  if (!comments.length) return;
+  // "Not copied out yet" is the whole reason this control asks twice, so the
+  // warning goes on the armed button, where it is read, rather than into a
+  // dialog the viewer never shows.
+  // The armed label carries the warning, because the dialog that would
+  // otherwise carry it never appears in the viewer. Naming the unsent count
+  // separately from the total is the whole point: "delete all 12" and "3 of
+  // these have never left this browser" are different facts.
+  var fresh = freshCount();
+  var warn = fresh
+    ? fresh + " not yet copied out \u2014 click again to delete all " + comments.length
+    : "All copied out \u2014 click again to delete all " + comments.length;
+  if (!arm(this, warn, bindingOf(comments))) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = []; markClean(); persist(); render();
+};
+badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+// A host page may bind single-key shortcuts on document or window -- a triage
+// console where `d` means delete, a slideshow where `j` means next. Typing a
+// note would fire them: the keystroke bubbles out of this textarea and reaches
+// those listeners, so the page acts on every letter of the comment.
+//
+// Attached at the layer root in the BUBBLE phase, which is the only position
+// that separates the two. Handlers inside the layer (the textarea's own Enter
+// and Escape) sit deeper and have already run; document- and window-level
+// handlers sit higher and never see the event. A capture-phase listener on
+// window would be too early and would kill this layer's own keys as well.
+["keydown", "keypress", "keyup"].forEach(function(type){
+  root.addEventListener(type, function(ev){ ev.stopPropagation(); });
+});
+
+restoreHighlights();
+render();
+restoreDraft();
+})();
+</script>
+<!-- /annotation-layer -->
