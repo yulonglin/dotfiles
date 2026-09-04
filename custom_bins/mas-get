@@ -62,6 +62,7 @@ while IFS='|' read -r method id _cat _tier _def name _desc _auth; do
     [[ -z "${method// }" || "${method[1]}" == "#" ]] && continue
     method="${method// }"; id="${id// }"; name="${name# }"; name="${name% }"
     [[ "$method" != "mas" ]] && continue
+    [[ "${_def// }" == "exclude" ]] && continue   # rejected in the registry — never acquire
     if [[ -n "${installed_ids[$id]+_}" ]]; then
         skip_names+=("$name ($id)")
     else
