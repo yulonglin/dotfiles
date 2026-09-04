@@ -72,10 +72,12 @@ local n=${#A_METHOD}
 typeset -A INST_CASK INST_FORMULA INST_MAS   # INST_MAS: app stem → bundle id
 typeset -a INST_TAPS
 INVENTORIED=false
+BREW_OK=false
 inventory() {
     [[ "$INVENTORIED" == "true" ]] && return
     INVENTORIED=true
     command -v brew &>/dev/null || { echo "app-picker: brew not found — audit skipped" >&2; return; }
+    BREW_OK=true
     local t
     for t in $(brew list --cask 2>/dev/null); do INST_CASK[$t]=1; done
     for t in $(brew leaves --installed-on-request 2>/dev/null); do INST_FORMULA[${t:t}]=$t; done
@@ -181,9 +183,10 @@ select_apps() {
 select_from_brewfile() {
     [[ -f "$BREWFILE" ]] || { echo "app-picker: no Brewfile at $BREWFILE — run app-picker first" >&2; exit 1; }
     typeset -A by_key
-    local i
-    for (( i=1; i<=n; i++ )); do by_key["${A_METHOD[i]}:${A_ID[i]}"]=$i; done
-    local line key
+    local i line key
+    # Subscript via a variable: zsh keeps literal quotes in a quoted subscript, so
+    # by_key["cask:x"] and a later ${by_key[cask:x]} would never meet.
+    for (( i=1; i<=n; i++ )); do key="${A_METHOD[i]}:${A_ID[i]}"; by_key[$key]=$i; done
     while IFS= read -r line; do
         case "$line" in
             'cask "'*) key="cask:${${line#cask \"}%%\"*}" ;;
@@ -248,7 +251,7 @@ section() { print -r -- ""; print -r -- "── $1"; }
 
 audit() {
     inventory
-    [[ "${#INST_CASK}" -eq 0 && "${#INST_FORMULA}" -eq 0 && "${#INST_MAS}" -eq 0 ]] && return
+    [[ "$BREW_OK" == "true" ]] || return 0   # an empty inventory is a valid audit input (fresh Mac)
     typeset -A picked
     local idx i s t bid sid   # declared once: a repeated `local` in zsh prints the variable
     for idx in "${pick_idx[@]}"; do picked[$idx]=1; done

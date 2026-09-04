@@ -1,4 +1,4 @@
-# Six Casks Leave the Brewfile and Twenty-Seven Apps Join It
+# Six Casks Marked for Removal and Twenty-Seven Apps Join the Registry
 
 Audit of this Mac against `config/apps.conf` on 2026-09-03. Inventory came from `brew list --cask`, `brew leaves --installed-on-request`, `brew tap`, and App Store receipts under `/Applications`; last-opened dates are Spotlight's `kMDItemLastUsedDate`, which Safari-extension hosts and daemons never set. Nothing was uninstalled: every removal below is a command for Yulong to run.
 
@@ -7,6 +7,7 @@ Audit of this Mac against `config/apps.conf` on 2026-09-03. Inventory came from 
 Before this pass the Brewfile listed 40 entries while the Mac carried 53 casks and 20 App Store apps, and nothing compared the two. Three changes close that gap:
 
 - **`default=exclude` in `config/apps.conf`.** An excluded row is never offered in the picker, never written to the Brewfile, and skipped by `mas-get` and `auth-setup`. `app-picker --audit` keeps naming it with an uninstall command until it is gone. The description carries the reason and date.
+- **`mas-get` acquires only the Brewfile's App Store lines.** It used to walk the whole registry, which was harmless while every App Store row defaulted on; with GarageBand and iMovie now registered as off, a fresh `install.sh` would have pulled them anyway. Without a Brewfile it falls back to rows with `default=true`.
 - **`app-picker --installed`** preselects the picker from what this Mac has, so deselecting a row is the UI for dropping an app. In a terminal it opens the gum toggle list; without one it writes the Brewfile directly.
 - **`app-picker --audit`** (also run after every write) prints six sections: excluded-but-installed, installed-but-deselected, selected-but-missing, unregistered casks, unregistered App Store apps with a ready row template, undeclared formulae, and third-party taps. It never proposes `brew bundle cleanup`, which would remove every CLI tool `config.sh` installs because those are not in the Brewfile.
 
