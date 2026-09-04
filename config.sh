@@ -164,9 +164,11 @@ PACKAGES_CORE=(
     "htop"
     "rsync"
     "shellcheck"  # Shell script linter
-    "tldr"        # Simplified man pages
     "mosh"        # resilient SSH over flaky/roaming connections
 )
+# tldr pages: the `tldr` formula (C client) is deprecated in Homebrew; tlrc is the
+# official Rust client. It is a brew-only formula, so it lives in the brew arrays
+# below rather than here, where PACKAGES_CORE also feeds apt.
 
 # macOS-specific packages (via Homebrew)
 PACKAGES_MACOS=(
@@ -188,6 +190,7 @@ PACKAGES_MACOS=(
     "gum"         # interactive shell UI (app-picker TUI)
     "vivid"       # LS_COLORS theme generator (catppuccin-mocha)
     "fpart"       # parallel rsync (fpsync) for fast many-file copies
+    "tlrc"        # tldr pages, official Rust client (binary: tldr)
 )
 
 # Linux packages (via Homebrew / Linuxbrew)
@@ -208,6 +211,7 @@ PACKAGES_LINUX_BREW=(
     "duf"
     "gum"
     "vivid"
+    "tlrc"        # tldr pages, official Rust client (binary: tldr)
 )
 
 # Extra packages (--extras flag)
