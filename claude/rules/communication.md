@@ -12,6 +12,8 @@ Every header asserts a point, not a topic — in specs, plans, reports, READMEs,
 
 **Every sourced figure, quote or claim links to its source** — IRS page, Gmail thread (`https://mail.google.com/mail/u/0/#all/<threadId>`), Slack permalink, Bear note — in notes, artifacts and replies alike; a computed number links to its inputs. Links never end with a full stop — a trailing period gets copied into the URL. No checkbox checklists in specs or docs; `[ ]` belongs only in working todo lists.
 
+**Stale items are struck through, never deleted or silently rewritten.** When a plan step, draft, todo, document row or decision is superseded, dropped or cancelled, wrap it in `~~…~~` (Bear, GitHub and most Markdown render it) and add a short trailing note saying why and, where relevant, what replaced it: "~~Send the Anti Entropy request~~ dropped 3 Sep 2026: the signed variation covers the period". Completed items are ticked, not struck; struck means cancelled. This holds for Bear notes, plans, inventories, specs and checklists alike, so the reader sees the history without hunting for it.
+
 Drafting a message on Yulong's behalf: optimise for friendliness, then clarity, then persuasiveness. "Critique and improve" means apply all three and say what changed.
 
 ## Asking
