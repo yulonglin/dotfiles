@@ -11,7 +11,7 @@ Bear is Yulong's note app. Treat its notes the way you'd treat source files. **D
 
 | Claude Code tool | Bear MCP equivalent | Notes |
 |---|---|---|
-| `Read` | `mcp__Bear__get_note` (set `includeContent: true`) | Metadata always includes `contentHash` — capture it as your concurrency token |
+| `Read` | `mcp__Bear__get_note` (metadata first), then `read_note_content` | `get_note` returns `length` in bytes; over ~15 KB, `read_note_outline` then `read_note_content(address=…)` — see **Read playbook** below. Content reads return the `hash` you pass as `baseHash` |
 | `Edit` (find/replace, insert) | `mcp__Bear__edit_note` (with `edits: [...]`) | Each edit object: `find` + one of `replace`/`insertAfter`/`insertBefore`. Per-edit flags: `all`, `ignoreCase`, `word`. Atomic — any unmatched `find` aborts the whole call |
 | `Write` (full rewrite) | `mcp__Bear__overwrite_note` (with `baseHash`) | MCP **mandates** `baseHash` — you cannot silently clobber |
 | (new file) | `mcp__Bear__create_note` | Returns `id` and `contentHash` — capture both |
@@ -31,14 +31,43 @@ Reach for `bearcli` only when:
 
 When that happens, load [`references/cli.md`](references/cli.md) — full playbooks (surgical edit, full rewrite, create, tags/pins, search, attachments) + CLI-only gotchas (sandbox SIGABRT, PATH in cron, stdin/escape). The MCP tool surface maps 1:1 to CLI subcommands, so the playbooks transfer directly.
 
+## Read playbook: check size, then outline, then sections
+
+**Never open with `get_note(includeContent=true)` on a note you haven't sized.** A tool result over roughly 25k tokens is not returned — it is dumped to a file you then have to `jq`, and the content hash with it (a 57 KB daily-log note hit this on 2026-09-03). Journals, running logs and inventories are routinely that big.
+
+```
+# 1. Size — metadata only, cheap; `length` is UTF-8 bytes
+mcp__Bear__get_note(id=ID)
+  → { id, title, length: 57184, tags: [...], attachments: [...], ... }
+
+# 2a. Small note (under ~15 KB): read it whole; the hash is your baseHash
+mcp__Bear__read_note_content(id=ID)
+  → { content: "...", hash: "abc123" }
+
+# 2b. Large note: outline first — every section's address, offset and length
+mcp__Bear__read_note_outline(id=ID)
+  → { outline: [{ address: "## Thu, 3 Sep 2026", offset: 25, length: 6228 }, ...] }
+
+# 3. Read only the section you need; its hash covers that section
+mcp__Bear__read_note_content(id=ID, address="## Thu, 3 Sep 2026")
+
+# 4. Edit inside that section — `address` confines every `find` to it
+mcp__Bear__edit_note(id=ID, address="### Schedule", edits=[...])
+```
+
+"First section", "today's entry", "the top of the note" are all outline questions: answer them from step 2b, not by reading the whole note. An `address` on `edit_note` also makes short `find` strings safe in a note where the same text recurs across dated entries.
+
+**Live notes move under you.** If the user is editing in Bear while you work, a `find` that matched a minute ago can fail with `string_not_found` — that is the atomic guard working. Re-read the section (step 3), not the whole note, and retry with the current text; keep each `find` to the smallest span that is still unique, so an edit elsewhere in the section does not invalidate it.
+
 ## Surgical-edit playbook (the default workflow)
 
 This mirrors how `Edit` works on source files. Use this for almost every modification.
 
 ```
-# 1. Read — capture contentHash for later concurrency check
-mcp__Bear__get_note(id=ID, includeContent=true)
-  → { id, title, content: "...", contentHash: "abc123...", ... }
+# 1. Read — size, outline if large, then the section; capture the hash
+mcp__Bear__get_note(id=ID)                       # length, tags, attachments
+mcp__Bear__read_note_content(id=ID, address=…)   # or whole note when small
+  → { content: "...", hash: "abc123" }
 
 # 2. Edit — anchored find/replace, must match a unique location
 mcp__Bear__edit_note(
@@ -154,6 +183,7 @@ Pass `includeContent: true` on either to also pull each note's raw Markdown body
 
 ## Conventions
 
+- **Todos and separate points are bullet lists, one item per line.** A task is its own `- [ ]` line so it can be ticked; sub-points nest two spaces under their parent. Never pack several items into one line with commas, semicolons or "then" — `- [ ] 19:30 session 2 — jobs 20m; then pings: A, B, C` becomes a `session 2` line with `jobs` and `pings` nested under it and A, B, C nested under `pings`. Match the marker the note already uses (`- [ ]` in a task list, `-` in a plain list).
 - Identify a note by **ID** or title (case-insensitive). Prefer ID once you have one.
 - Tags: `#single`, nested `#parent/child`. Surrounding `#` and whitespace are stripped from args. Spaces are allowed inside tag names.
 - Timestamps: ISO 8601 UTC.
@@ -174,6 +204,8 @@ Pass `includeContent: true` on either to also pull each note's raw Markdown body
 | 7 | **Encrypted note** | Reads return metadata only; edit/overwrite refuse. Filter `locked` from list results before bulk ops |
 | 8 | **MCP tools missing from tool list** | Restart Claude Code; verify `~/.claude/settings.json` has the `bear` MCP server entry (`/Applications/Bear.app/Contents/MacOS/bearcli mcp-server`). As a one-off, you can boot manually via `bearcli mcp-server` |
 | 9 | **Full Disk Access** | Reads from a fresh terminal app fail opaquely. Grant Full Disk Access in System Settings → Privacy & Security |
+| 11 | **Large note overflows the tool result** (`get_note(includeContent=true)` on a long journal comes back as "exceeds maximum allowed tokens" plus a dump file) | Size first with `get_note` (no content), then `read_note_outline` and `read_note_content(address=…)` — the **Read playbook** above. Don't `jq` the dump file; you'd still be holding a stale hash |
+| 12 | **`find` matched a minute ago, now `string_not_found`** | The note changed under you (user editing live). Re-read only that section by `address`, retry with the current text, and shorten each `find` to the smallest unique span |
 | 10 | **Dollar amounts render as garbled math** (e.g. `$5 ... $10` becomes math in the editor) | An unescaped `$`-pair triggered MathJax (Bear 2.5+, editor/reading view). Escape literal dollar signs as `\$` |
 
 For CLI-specific failure modes (sandbox SIGABRT, PATH issues in cron, stdin/flag escaping), see [`references/cli.md`](references/cli.md).

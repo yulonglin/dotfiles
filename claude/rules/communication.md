@@ -4,6 +4,8 @@
 
 One paragraph is ONE line in `.md` files — never a hard newline inside a paragraph. Blank lines separate paragraphs; readers soft-wrap. This covers prose, bullet bodies and table cells.
 
+**Todos and separate points are bullet lists, one item per line, sub-points nested** — in notes, plans, schedules and replies alike. Several items packed into one line with commas, semicolons or "then" is a list you have not drawn yet; a todo is its own `- [ ]` line so it can be ticked on its own. Bear-specific mechanics: `bear`.
+
 Every header asserts a point, not a topic — in specs, plans, reports, READMEs, slide titles and headings alike; setup, methods and appendix sections take a plain descriptive name instead. State it plainly, with concrete referents, not a metaphor the body must decode — roughly four to seven words, qualifier below. Artifact-title version: `artifact-writing`.
 
 **Results belong in figures, not in paragraphs.** A passage carrying three or more numbers with intervals is a figure you have not drawn yet. This holds for papers, reports, artifacts, specs and slides alike: a reader compares positions on an axis far faster than they parse bracketed intervals in prose, and a comparison across conditions is nearly unreadable as sentences. Keep a number inline only when it is the single headline value, or the one figure a reader must be able to quote. Every comparison plot shows its chance line and its null. Tooling and style: `house-plots` for papers, `dataviz` for artifact pages.
