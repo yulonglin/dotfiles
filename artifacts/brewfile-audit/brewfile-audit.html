@@ -1,4 +1,4 @@
-<title>Six Casks Marked for Removal and Twenty-Seven Apps Join the Registry</title>
+<title>Seven Casks Marked for Removal and Twenty-Seven Apps Join the Registry</title>
 <style>
 :root {
   --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
@@ -62,20 +62,82 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 }
 </style>
 <div class="shell has-toc">
-<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#the-registry-now-knows-everything-installed-and-exclude-keeps-rejected-apps-out" class="lvl2">The registry now knows everything installed, and `exclude` keeps rejected apps out</a><a href="#uninstall-now-six-excluded-casks-and-two-third-party-taps" class="lvl2">Uninstall now: six excluded casks and two third-party taps</a><a href="#still-in-the-picker-but-never-opened-since-install" class="lvl2">Still in the picker, but never opened since install</a><a href="#added-to-the-registry-fifteen-casks-and-twelve-app-store-apps-that-were-installed-around-it" class="lvl2">Added to the registry: fifteen casks and twelve App Store apps that were installed around it</a><a href="#what-cannot-move-into-the-brewfile" class="lvl2">What cannot move into the Brewfile</a><a href="#cli-formulae-stay-in-config-sh-and-five-are-declared-nowhere" class="lvl2">CLI formulae stay in `config.sh`, and five are declared nowhere</a><a href="#decisions-for-yulong" class="lvl2">Decisions for Yulong</a><a href="#commands" class="lvl2">Commands</a></nav>
+<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#review-decisions-2026-09-03-21-07" class="lvl2">Review decisions, 2026-09-03 21:07</a><a href="#the-registry-now-knows-everything-installed-and-exclude-keeps-rejected-apps-out" class="lvl2">The registry now knows everything installed, and `exclude` keeps rejected apps out</a><a href="#uninstall-now-seven-excluded-casks" class="lvl2">Uninstall now: seven excluded casks</a><a href="#still-in-the-picker-but-never-opened-since-install" class="lvl2">Still in the picker, but never opened since install</a><a href="#added-to-the-registry-fifteen-casks-and-twelve-app-store-apps-that-were-installed-around-it" class="lvl2">Added to the registry: fifteen casks and twelve App Store apps that were installed around it</a><a href="#what-cannot-move-into-the-brewfile" class="lvl2">What cannot move into the Brewfile</a><a href="#cli-formulae-stay-in-config-sh-with-a-trial-list-for-the-ones-under-evaluation" class="lvl2">CLI formulae stay in `config.sh`, with a trial list for the ones under evaluation</a><a href="#every-library-formula-is-a-dependency-of-something-requested" class="lvl2">Every library formula is a dependency of something requested</a><a href="#decisions-still-open" class="lvl2">Decisions still open</a><a href="#commands" class="lvl2">Commands</a></nav>
 <div class="doc">
-<h1 id="six-casks-marked-for-removal-and-twenty-seven-apps-join-the-registry">Six Casks Marked for Removal and Twenty-Seven Apps Join the Registry</h1>
-<p>Audit of this Mac against <code>config/apps.conf</code> on 2026-09-03. Inventory came from <code>brew list --cask</code>, <code>brew leaves --installed-on-request</code>, <code>brew tap</code>, and App Store receipts under <code>/Applications</code>; last-opened dates are Spotlight's <code>kMDItemLastUsedDate</code>, which Safari-extension hosts and daemons never set. Nothing was uninstalled: every removal below is a command for Yulong to run.</p>
+<h1 id="seven-casks-marked-for-removal-and-twenty-seven-apps-join-the-registry">Seven Casks Marked for Removal and Twenty-Seven Apps Join the Registry</h1>
+<p>Audit of this Mac against <code>config/apps.conf</code> on 2026-09-03, revised after Yulong's review the same evening. Inventory came from <code>brew list --cask</code>, <code>brew leaves --installed-on-request</code>, <code>brew tap</code>, and App Store receipts under <code>/Applications</code>; last-opened dates are Spotlight's <code>kMDItemLastUsedDate</code>, which Safari-extension hosts and daemons never set. Casks are never uninstalled by this work; the formula and app removals Yulong asked for in review were run and are marked as done.</p>
+<h2 id="review-decisions-2026-09-03-21-07">Review decisions, 2026-09-03 21:07</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Yulong said</th>
+<th>Done</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>marp-cli, graphite, age, sops</td>
+<td>remove</td>
+<td>uninstalled; <code>withgraphite/tap</code> untapped; <code>brew autoremove</code> found nothing further because opencode still needs node</td>
+</tr>
+<tr>
+<td>ChatGPT Classic.app</td>
+<td>remove</td>
+<td>moved to the Trash</td>
+</tr>
+<tr>
+<td>red</td>
+<td>leave in</td>
+<td>kept; declared in the new <code>PACKAGES_TRIAL_MACOS</code> so the audit treats <code>codersauce/tap</code> as an exception on record</td>
+</tr>
+<tr>
+<td>hunk</td>
+<td>trial, alongside red, maybe micro, gitui</td>
+<td><code>PACKAGES_TRIAL_MACOS</code> holds hunk and red, with micro as a commented candidate; gitui is already in <code>PACKAGES_EXTRAS_MACOS</code></td>
+</tr>
+<tr>
+<td>Cloudflare WARP</td>
+<td>exclude for now</td>
+<td><code>default=exclude</code>; still installed, so the audit lists its uninstall command</td>
+</tr>
+<tr>
+<td>Visual Studio Code</td>
+<td>intend to use</td>
+<td><code>default=true</code></td>
+</tr>
+<tr>
+<td>LibreOffice</td>
+<td>is anything using it?</td>
+<td>no: <code>any2md</code> converts docx, pptx and xlsx through markitdown, and nothing in the repo shells out to soffice. Left at <code>default=false</code></td>
+</tr>
+<tr>
+<td>Codex cask</td>
+<td>was this ChatGPT.app renamed?</td>
+<td>yes in effect, see below. <code>brew uninstall --cask codex-app</code> only targets a <code>Codex.app</code> that no longer exists and leaves ChatGPT.app alone; do not add <code>--zap</code>, which would clear the shared <code>com.openai.codex</code> preferences</td>
+</tr>
+<tr>
+<td>LuLu</td>
+<td>what is it?</td>
+<td>Objective-See's free outbound firewall: it prompts before an app first phones home. Never opened here, not running, registry default already off. Safe to uninstall</td>
+</tr>
+<tr>
+<td>abseil, brotli, icu4c, jemalloc and the rest</td>
+<td>are they useful?</td>
+<td>all dependencies of requested tools, table at the end; none is orphaned</td>
+</tr>
+</tbody>
+</table>
 <h2 id="the-registry-now-knows-everything-installed-and-exclude-keeps-rejected-apps-out">The registry now knows everything installed, and <code>exclude</code> keeps rejected apps out</h2>
 <p>Before this pass the Brewfile listed 40 entries while the Mac carried 53 casks and 20 App Store apps, and nothing compared the two. Three changes close that gap:</p>
 <ul>
 <li><strong><code>default=exclude</code> in <code>config/apps.conf</code>.</strong> An excluded row is never offered in the picker, never written to the Brewfile, and skipped by <code>mas-get</code> and <code>auth-setup</code>. <code>app-picker --audit</code> keeps naming it with an uninstall command until it is gone. The description carries the reason and date.</li>
 <li><strong><code>mas-get</code> acquires only the Brewfile's App Store lines.</strong> It used to walk the whole registry, which was harmless while every App Store row defaulted on; with GarageBand and iMovie now registered as off, a fresh <code>install.sh</code> would have pulled them anyway. Without a Brewfile it falls back to rows with <code>default=true</code>.</li>
 <li><strong><code>app-picker --installed</code></strong> preselects the picker from what this Mac has, so deselecting a row is the UI for dropping an app. In a terminal it opens the gum toggle list; without one it writes the Brewfile directly.</li>
-<li><strong><code>app-picker --audit</code></strong> (also run after every write) prints six sections: excluded-but-installed, installed-but-deselected, selected-but-missing, unregistered casks, unregistered App Store apps with a ready row template, undeclared formulae, and third-party taps. It never proposes <code>brew bundle cleanup</code>, which would remove every CLI tool <code>config.sh</code> installs because those are not in the Brewfile.</li>
+<li><strong><code>app-picker --audit</code></strong> (also run after every write) prints: excluded-but-installed, installed-but-deselected, selected-but-missing, unregistered casks, unregistered App Store apps with a ready row template, formulae declared nowhere, and third-party taps, split into policy breaches and taps whose formulae <code>config.sh</code> declares. It never proposes <code>brew bundle cleanup</code>, which would remove every CLI tool <code>config.sh</code> installs because those are not in the Brewfile.</li>
 </ul>
-<p>The Brewfile was regenerated with <code>--installed</code>, so it now states 65 entries: everything installed and registered, minus the six exclusions. <code>tests/test_app_picker.zsh</code> pins the exclude semantics, the <code>--installed</code> preselection, the name matching for App Store apps, and the audit sections with a stubbed <code>brew</code> (28 checks).</p>
-<h2 id="uninstall-now-six-excluded-casks-and-two-third-party-taps">Uninstall now: six excluded casks and two third-party taps</h2>
+<p>The Brewfile was regenerated with <code>--installed</code> after the review and states 64 entries: everything installed and registered, minus the seven exclusions. <code>tests/test_app_picker.zsh</code> pins the exclude semantics, the <code>--installed</code> preselection, the name matching for App Store apps, the mas-get selection and the audit sections with a stubbed <code>brew</code> and <code>mas</code> (41 checks).</p>
+<h2 id="uninstall-now-seven-excluded-casks">Uninstall now: seven excluded casks</h2>
 <table>
 <thead>
 <tr>
@@ -95,7 +157,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <tr>
 <td>codex-app</td>
 <td>never (app gone)</td>
-<td>Zombie. <code>/Applications</code> has no <code>Codex.app</code>; the <code>chatgpt</code> cask 26.901 now ships an app whose bundle id is <code>com.openai.codex</code></td>
+<td>Zombie, see below</td>
 <td><code>brew uninstall --cask codex-app</code></td>
 </tr>
 <tr>
@@ -122,33 +184,18 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>Superseded by VoiceInk</td>
 <td><code>brew uninstall --cask aqua-voice</code></td>
 </tr>
-</tbody>
-</table>
-<p>The two taps violate the repo's own policy in <code>claude/rules/safety.md</code>, which allows no third-party Homebrew taps without approval. Shell history shows <code>red</code> used twice and <code>gt</code> three times.</p>
-<table>
-<thead>
 <tr>
-<th>Tap</th>
-<th>Formula</th>
-<th>Command</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>codersauce/tap</td>
-<td>red (modal Rust editor)</td>
-<td><code>brew uninstall red &amp;&amp; brew untap codersauce/tap</code></td>
-</tr>
-<tr>
-<td>withgraphite/tap</td>
-<td>graphite (<code>gt</code>, stacked PRs)</td>
-<td><code>brew uninstall graphite &amp;&amp; brew untap withgraphite/tap</code></td>
+<td>cloudflare-warp</td>
+<td>2026-08-29</td>
+<td>Yulong's call, &quot;for now&quot;. Daemon still running until removed</td>
+<td><code>brew uninstall --cask cloudflare-warp</code></td>
 </tr>
 </tbody>
 </table>
-<p><code>ChatGPT Classic.app</code> (1.2026.183, the pre-merge ChatGPT, last opened 2026-08-13) is not owned by brew and stays behind after the cask upgrade. Remove it with AppCleaner if the new ChatGPT covers it.</p>
+<p><strong>What happened to Codex.app.</strong> The <code>codex-app</code> cask installed <code>Codex.app</code> on 2026-06-17. On 2026-07-10 the old ChatGPT was renamed <code>ChatGPT Classic.app</code> (version 1.2026.183, now in the Trash), and the app at <code>/Applications/ChatGPT.app</code> today carries the bundle id <code>com.openai.codex</code> at version 26.901, installed by the <code>chatgpt</code> cask. So the Codex desktop app became ChatGPT, OpenAI's updater or the cask upgrade renamed it in place, and the <code>codex-app</code> receipt in the Caskroom points at an app directory with no readable bundle id. The registry keeps <code>chatgpt</code> and retires <code>codex-app</code>. Confidence about 75 percent; it rests on bundle ids and dates, not on a vendor note.</p>
+<p>The third-party taps after review: <code>withgraphite/tap</code> is gone with graphite. <code>codersauce/tap</code> stays for red and is listed by the audit as an exception on record, not a breach.</p>
 <h2 id="still-in-the-picker-but-never-opened-since-install">Still in the picker, but never opened since install</h2>
-<p>These stay registered with <code>default=false</code> so the picker keeps offering them. Each is one toggle in <code>app-picker --installed</code>, or the command shown.</p>
+<p>These stay registered with <code>default=false</code> so the picker keeps offering them. Each is one toggle in <code>app-picker --installed</code>, or the command shown. Visual Studio Code left this table: Yulong intends to use it.</p>
 <table>
 <thead>
 <tr>
@@ -164,15 +211,8 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>LibreOffice</td>
 <td>cask</td>
 <td>never</td>
-<td>804 MB office suite</td>
+<td>804 MB; no tool here uses it</td>
 <td><code>brew uninstall --cask libreoffice</code></td>
-</tr>
-<tr>
-<td>Visual Studio Code</td>
-<td>cask</td>
-<td>never</td>
-<td>945 MB; <code>deploy.sh --editor</code> merges settings into it if present; Zed and Cursor were the editors in use</td>
-<td><code>brew uninstall --cask visual-studio-code</code></td>
 </tr>
 <tr>
 <td>Zotero</td>
@@ -192,7 +232,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>LuLu</td>
 <td>cask</td>
 <td>never</td>
-<td>Registry default was already off</td>
+<td>Objective-See outbound firewall; not running</td>
 <td><code>brew uninstall --cask lulu</code></td>
 </tr>
 <tr>
@@ -247,7 +287,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </tbody>
 </table>
 <h2 id="added-to-the-registry-fifteen-casks-and-twelve-app-store-apps-that-were-installed-around-it">Added to the registry: fifteen casks and twelve App Store apps that were installed around it</h2>
-<p>Default <code>true</code> means a fresh machine gets it; the choice follows whether it is running, a login item, or opened this fortnight.</p>
+<p>Default <code>true</code> means a fresh machine gets it; the choice follows whether it is running, a login item, or opened this fortnight, then Yulong's review.</p>
 <table>
 <thead>
 <tr>
@@ -316,11 +356,11 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>running (<code>aw-watcher-*</code>), login item</td>
 </tr>
 <tr>
-<td>Cloudflare WARP</td>
+<td>Visual Studio Code</td>
 <td>cask</td>
-<td>vpn</td>
+<td>editor</td>
 <td>true</td>
-<td>daemon running; opened 2026-08-29</td>
+<td>Yulong's review: intends to use it</td>
 </tr>
 <tr>
 <td>Thaw</td>
@@ -328,6 +368,13 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>misc</td>
 <td>true</td>
 <td>running, login item</td>
+</tr>
+<tr>
+<td>Cloudflare WARP</td>
+<td>cask</td>
+<td>vpn</td>
+<td>exclude</td>
+<td>Yulong's review: exclude for now</td>
 </tr>
 <tr>
 <td>Dropover</td>
@@ -379,7 +426,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>opened 2026-08-26</td>
 </tr>
 <tr>
-<td>RemNote, LibreOffice, VS Code, Zotero, Fira Code</td>
+<td>RemNote, LibreOffice, Zotero, Fira Code</td>
 <td>cask</td>
 <td>various</td>
 <td>false</td>
@@ -417,11 +464,6 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>none</td>
 </tr>
 <tr>
-<td>ChatGPT Classic</td>
-<td>Displaced pre-merge ChatGPT, see above</td>
-<td>AppCleaner if unused</td>
-</tr>
-<tr>
 <td>Revealer (<code>com.apollo.revealer</code>)</td>
 <td>No cask; opened 2026-08-09</td>
 <td>keep or trash by hand</td>
@@ -438,58 +480,125 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </tr>
 </tbody>
 </table>
-<h2 id="cli-formulae-stay-in-config-sh-and-five-are-declared-nowhere">CLI formulae stay in <code>config.sh</code>, and five are declared nowhere</h2>
-<p>Cross-platform CLI tools are the <code>PACKAGES_*</code> arrays in <code>config.sh</code>, not the Brewfile, because Linux installs the same list through Linuxbrew or apt; the registry's scope note now says so. The audit therefore treats anything named in <code>config.sh</code> or <code>scripts/shared/helpers.sh</code> as declared, which is also what keeps the <code>codex</code> and <code>antigravity-cli</code> casks (installed by <code>install.sh --ai-tools</code>) out of the unregistered list. Five requested formulae are named nowhere:</p>
+<h2 id="cli-formulae-stay-in-config-sh-with-a-trial-list-for-the-ones-under-evaluation">CLI formulae stay in <code>config.sh</code>, with a trial list for the ones under evaluation</h2>
+<p>Cross-platform CLI tools are the <code>PACKAGES_*</code> arrays in <code>config.sh</code>, not the Brewfile, because Linux installs the same list through Linuxbrew or apt; the registry's scope note now says so. The audit treats anything named in <code>config.sh</code> or <code>scripts/shared/helpers.sh</code> as declared, which is also what keeps the <code>codex</code> and <code>antigravity-cli</code> casks (installed by <code>install.sh --ai-tools</code>) out of the unregistered list.</p>
+<p><code>PACKAGES_TRIAL_MACOS</code> is new: tools installed by hand while being evaluated, which <code>install.sh</code> does not install but the audit counts as declared. Date each entry; promote it to a real array or uninstall it when the trial ends.</p>
 <table>
 <thead>
 <tr>
 <th>Formula</th>
 <th>Installed</th>
 <th>History hits</th>
-<th>Recommendation</th>
+<th>After review</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>tlrc</td>
-<td>2026-06-27</td>
-<td>n/a</td>
-<td><code>config.sh</code> installs <code>tldr</code> instead, the older Node client, which is not what this Mac runs. Replace <code>tldr</code> with <code>tlrc</code> in <code>PACKAGES_CORE</code>, or uninstall tlrc</td>
-</tr>
-<tr>
-<td>marp-cli</td>
-<td>2026-07-19</td>
-<td>5</td>
-<td>Add to <code>PACKAGES_EXTRAS_MACOS</code> if decks still go through Marp, else <code>brew uninstall marp-cli</code> (this also drops node and simdjson)</td>
-</tr>
-<tr>
 <td>hunk</td>
 <td>2026-09-03</td>
 <td>7</td>
-<td>Installed today. Add to <code>PACKAGES_EXTRAS_MACOS</code> once it sticks</td>
+<td>trial list</td>
 </tr>
 <tr>
 <td>red</td>
 <td>2026-08-26</td>
 <td>2</td>
-<td>Third-party tap, above</td>
+<td>trial list; its tap is the one sanctioned exception</td>
+</tr>
+<tr>
+<td>micro</td>
+<td>not installed</td>
+<td>n/a</td>
+<td>commented candidate in the trial list</td>
+</tr>
+<tr>
+<td>marp-cli</td>
+<td>2026-07-19</td>
+<td>5</td>
+<td>removed</td>
 </tr>
 <tr>
 <td>graphite</td>
 <td>2026-07-27</td>
 <td>3</td>
-<td>Third-party tap, above</td>
+<td>removed, tap untapped</td>
+</tr>
+<tr>
+<td>age, sops</td>
+<td>2026-09-03, 2026-08-05</td>
+<td>n/a</td>
+<td>removed. <code>install_age</code> and <code>install_sops</code> exist in helpers.sh but nothing calls them, and the secrets engine never used either</td>
+</tr>
+<tr>
+<td>tlrc</td>
+<td>2026-06-27</td>
+<td>n/a</td>
+<td>still undeclared: <code>config.sh</code> installs <code>tldr</code>, the older client. Replace <code>tldr</code> with <code>tlrc</code> in <code>PACKAGES_CORE</code>, or uninstall tlrc</td>
 </tr>
 </tbody>
 </table>
-<p><strong>simdjson</strong> is the one Yulong asked about: it was never requested. It is a dependency of <code>node</code>, which <code>marp-cli</code> and <code>opencode</code> pull in (<code>brew uses --installed simdjson</code>), and its install receipt says <code>installed_on_request: false</code>. It disappears on its own when nothing needs node.</p>
-<h2 id="decisions-for-yulong">Decisions for Yulong</h2>
+<p><strong>simdjson</strong> was never requested. It is a dependency of <code>node</code>, which <code>opencode</code> pulls in (and marp-cli did, until it was removed), and its install receipt says <code>installed_on_request: false</code>. It disappears on its own when nothing needs node.</p>
+<h2 id="every-library-formula-is-a-dependency-of-something-requested">Every library formula is a dependency of something requested</h2>
+<p>Of 79 formulae installed after the review, 39 were requested and 40 came in as dependencies; none is orphaned. The ones Yulong asked about, traced to the requested tool that needs them:</p>
+<table>
+<thead>
+<tr>
+<th>Formula</th>
+<th>Needed by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>abseil</td>
+<td>mosh</td>
+</tr>
+<tr>
+<td>ada-url, brotli, c-ares, fmt, hdrhistogram_c, libffi, libnghttp2, libnghttp3, libngtcp2, libuv</td>
+<td>opencode (through node)</td>
+</tr>
+<tr>
+<td>llhttp</td>
+<td>opencode through node, and bat, eza, git-delta through libgit2</td>
+</tr>
+<tr>
+<td>libgit2, libssh2</td>
+<td>bat, eza, git-delta</td>
+</tr>
+<tr>
+<td>jemalloc, libevent</td>
+<td>tmux</td>
+</tr>
+<tr>
+<td>gmp</td>
+<td>coreutils, shellcheck</td>
+</tr>
+<tr>
+<td>gettext, libunistring</td>
+<td>direnv</td>
+</tr>
+<tr>
+<td>lz4</td>
+<td>opencode, rsync</td>
+</tr>
+<tr>
+<td>icu4c</td>
+<td>opencode through node (installed as a versioned formula)</td>
+</tr>
+<tr>
+<td>fpart, git-delta</td>
+<td>requested directly: <code>PACKAGES_MACOS</code> in <code>config.sh</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>brew autoremove</code> is the command that drops dependencies nobody needs any more; it removed nothing after the review because opencode still holds node.</p>
+<h2 id="decisions-still-open">Decisions still open</h2>
 <ul>
-<li>Run the six cask uninstalls and the two untaps above, or edit the <code>exclude</code> rows back if any call was wrong.</li>
+<li>Run the seven cask uninstalls above. The registry already says they are gone; the audit will nag until the Mac agrees.</li>
 <li>Pick from the never-opened table; the fastest way is <code>app-picker --installed</code> in a terminal, deselect, then run the commands the audit prints.</li>
-<li><code>tldr</code> versus <code>tlrc</code> in <code>config.sh</code>, and whether <code>marp-cli</code> and <code>hunk</code> earn a <code>PACKAGES_EXTRAS_MACOS</code> line. Not changed here.</li>
+<li><code>tldr</code> versus <code>tlrc</code> in <code>config.sh</code>. Not changed here.</li>
 <li><code>mas-get</code> and the post-install check in <code>install.sh</code> still shell out to <code>mas list</code> and will hang the same way on this machine. They need a <code>timeout</code> or the receipt scan the audit uses. Not changed here.</li>
 <li>The <code>CLAUDE.md</code> learning from 2026-08-30 says this box has no Zotero installed; it does, via brew, never opened. Fix the line or remove the app.</li>
+<li>The keyboard-navigable verdicts and per-item comment boxes Yulong asked for in artifacts are filed as <a href="https://github.com/yulonglin/dotfiles/issues/90">issue 90</a>.</li>
 </ul>
 <h2 id="commands">Commands</h2>
 <pre><code>app-picker --installed        # toggle what this Mac keeps; writes config/Brewfile and audits
