@@ -46,6 +46,15 @@ HTML-only receipts: `_body.txt` (or the `html_body` from `FULL_CONTENT`) is a wo
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu --print-to-pdf=out.pdf file:///abs/path/receipt.html
 ```
 
+For a whole thread the two scripts in `scripts/` do it end to end: `build.py` turns a `get_thread` result (`messageFormat: FULL_CONTENT`, so `htmlBody` is present; save the spilled JSON as `<basename>.txt`, the output takes the file stem) or the delimited `threads.txt` capture (format in its docstring) into a Gmail-print-style page — account header, subject, message count, each message boxed with From/To/Cc/Date/Attachments, tracking pixels and tokenised links stripped; `render.py` prints those pages to PDF and reports bytes and page count:
+
+```bash
+python3 ~/.claude/skills/gmail-connector/scripts/build.py work/threads.txt work/<basename>.txt --out work/html --account lin.yulong@gmail.com
+python3 ~/.claude/skills/gmail-connector/scripts/render.py work/html/*.html --out work/pdf   # sandbox off
+```
+
+Gmail's own print view cannot be pulled through the claude-in-chrome extension: its redaction fires on `a=b; c=d` shapes in the page HTML, and the auto-mode classifier blocks working around it, so the printout is built from the API body plus headers instead. Chrome 152 headless needs the sandbox off and never exits after `--print-to-pdf`; `render.py` polls until the PDF size is stable, then kills it, and flags anything under 10 KB as a blank page.
+
 ## Search lessons from the 2026-09 sweep
 
 - **`from:` fails for relayed senders.** Hetzner arrives via an iCloud relay, so `from:hetzner.com` returns nothing; search the keyword `hetzner` instead. When a monthly vendor shows zero hits, retry by keyword and by invoice-number prefix before concluding there is nothing.
