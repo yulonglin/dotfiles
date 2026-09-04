@@ -90,7 +90,12 @@ check_not "installed exclude mas still excluded" "$bf" 'id: 333'
 
 # ─── 3. --audit against that Brewfile ─────────────────────────────────────────
 print -r -- "3. --audit"
+print -r -- 'cask "gamma"' >> "$BREWFILE"     # selected by hand, not installed → must show as missing
 out="$(run --audit)"
+check_not "Brewfile lines all resolve to registry rows" "$out" "no registry row"
+check_not "selected+installed cask gets no uninstall cmd" "$out" "brew uninstall --cask alpha"
+check_not "selected+installed formula gets no uninstall cmd" "$out" "brew uninstall toolx"
+check    "selected but absent cask → install hint"  "$out" "Gamma (gamma)"
 check    "excluded+installed cask → uninstall cmd" "$out" "brew uninstall --cask omega"
 check    "excluded+installed mas → uninstall cmd"  "$out" "sudo mas uninstall 333"
 check    "unregistered cask reported"       "$out" "stray-cask"
@@ -108,6 +113,27 @@ print -r -- "4. --audit after dropping beta from the Brewfile"
 grep -v 'cask "beta"' "$BREWFILE" > "$BREWFILE.tmp" && mv "$BREWFILE.tmp" "$BREWFILE"
 out="$(run --audit)"
 check    "installed-but-unselected → uninstall cmd" "$out" "brew uninstall --cask beta"
+
+# ─── 5. mas-get acquires only what the Brewfile selects (macOS: mas-get refuses elsewhere) ──
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    print -r -- "5. mas-get --dry-run against the Brewfile"
+    cat > "$WORK/bin/mas" <<'EOF'
+#!/usr/bin/env zsh
+case "$1" in list) exit 0 ;; *) exit 0 ;; esac
+EOF
+    chmod +x "$WORK/bin/mas"
+    ln "$REPO/custom_bins/mas-get" "$WORK/bin/mas-get" 2>/dev/null || cp "$REPO/custom_bins/mas-get" "$WORK/bin/mas-get"
+    # Brewfile from step 4 still selects 111 and 222; drop 222 to simulate a deselect.
+    grep -v 'id: 222' "$BREWFILE" > "$BREWFILE.tmp" && mv "$BREWFILE.tmp" "$BREWFILE"
+    out="$(PATH="$WORK/bin:$PATH" DOT_DIR="$DOT" zsh "$WORK/bin/mas-get" --conf "$CONF" --file "$BREWFILE" --dry-run 2>&1)"
+    check    "selected mas row queued"           "$out" "Notes App (111)"
+    check_not "deselected mas row not queued"    "$out" "(222)"
+    check_not "excluded mas row not queued"      "$out" "(333)"
+    out="$(PATH="$WORK/bin:$PATH" DOT_DIR="$DOT" zsh "$WORK/bin/mas-get" --conf "$CONF" --file "$WORK/no-such-brewfile" --dry-run 2>&1)"
+    check    "no Brewfile → warns"               "$out" "No Brewfile"
+    check    "no Brewfile → default=true rows"   "$out" "(222)"
+    check_not "no Brewfile → exclude still skipped" "$out" "(333)"
+fi
 
 print -r -- ""
 print -r -- "PASS=$PASS FAIL=$FAIL"

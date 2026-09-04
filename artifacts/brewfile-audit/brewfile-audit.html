@@ -1,4 +1,4 @@
-<title>Six Casks Leave the Brewfile and Twenty-Seven Apps Join It</title>
+<title>Six Casks Marked for Removal and Twenty-Seven Apps Join the Registry</title>
 <style>
 :root {
   --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
@@ -64,12 +64,13 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <div class="shell has-toc">
 <nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#the-registry-now-knows-everything-installed-and-exclude-keeps-rejected-apps-out" class="lvl2">The registry now knows everything installed, and `exclude` keeps rejected apps out</a><a href="#uninstall-now-six-excluded-casks-and-two-third-party-taps" class="lvl2">Uninstall now: six excluded casks and two third-party taps</a><a href="#still-in-the-picker-but-never-opened-since-install" class="lvl2">Still in the picker, but never opened since install</a><a href="#added-to-the-registry-fifteen-casks-and-twelve-app-store-apps-that-were-installed-around-it" class="lvl2">Added to the registry: fifteen casks and twelve App Store apps that were installed around it</a><a href="#what-cannot-move-into-the-brewfile" class="lvl2">What cannot move into the Brewfile</a><a href="#cli-formulae-stay-in-config-sh-and-five-are-declared-nowhere" class="lvl2">CLI formulae stay in `config.sh`, and five are declared nowhere</a><a href="#decisions-for-yulong" class="lvl2">Decisions for Yulong</a><a href="#commands" class="lvl2">Commands</a></nav>
 <div class="doc">
-<h1 id="six-casks-leave-the-brewfile-and-twenty-seven-apps-join-it">Six Casks Leave the Brewfile and Twenty-Seven Apps Join It</h1>
+<h1 id="six-casks-marked-for-removal-and-twenty-seven-apps-join-the-registry">Six Casks Marked for Removal and Twenty-Seven Apps Join the Registry</h1>
 <p>Audit of this Mac against <code>config/apps.conf</code> on 2026-09-03. Inventory came from <code>brew list --cask</code>, <code>brew leaves --installed-on-request</code>, <code>brew tap</code>, and App Store receipts under <code>/Applications</code>; last-opened dates are Spotlight's <code>kMDItemLastUsedDate</code>, which Safari-extension hosts and daemons never set. Nothing was uninstalled: every removal below is a command for Yulong to run.</p>
 <h2 id="the-registry-now-knows-everything-installed-and-exclude-keeps-rejected-apps-out">The registry now knows everything installed, and <code>exclude</code> keeps rejected apps out</h2>
 <p>Before this pass the Brewfile listed 40 entries while the Mac carried 53 casks and 20 App Store apps, and nothing compared the two. Three changes close that gap:</p>
 <ul>
 <li><strong><code>default=exclude</code> in <code>config/apps.conf</code>.</strong> An excluded row is never offered in the picker, never written to the Brewfile, and skipped by <code>mas-get</code> and <code>auth-setup</code>. <code>app-picker --audit</code> keeps naming it with an uninstall command until it is gone. The description carries the reason and date.</li>
+<li><strong><code>mas-get</code> acquires only the Brewfile's App Store lines.</strong> It used to walk the whole registry, which was harmless while every App Store row defaulted on; with GarageBand and iMovie now registered as off, a fresh <code>install.sh</code> would have pulled them anyway. Without a Brewfile it falls back to rows with <code>default=true</code>.</li>
 <li><strong><code>app-picker --installed</code></strong> preselects the picker from what this Mac has, so deselecting a row is the UI for dropping an app. In a terminal it opens the gum toggle list; without one it writes the Brewfile directly.</li>
 <li><strong><code>app-picker --audit</code></strong> (also run after every write) prints six sections: excluded-but-installed, installed-but-deselected, selected-but-missing, unregistered casks, unregistered App Store apps with a ready row template, undeclared formulae, and third-party taps. It never proposes <code>brew bundle cleanup</code>, which would remove every CLI tool <code>config.sh</code> installs because those are not in the Brewfile.</li>
 </ul>
