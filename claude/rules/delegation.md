@@ -4,6 +4,8 @@ Main context is for decomposition, dispatch, decisions and synthesis — not fil
 
 **Delegate**: wide sweeps over many files or unknown locations; bulk reads of logs, transcripts, long diffs, unbounded PDFs; scoped implementation chunks; verbose runs where you need only pass/fail plus failing lines; multi-page web research.
 
+An MCP search call (Gmail `search_threads`, Slack search, Drive `search_files`) is a sweep even when it reads like a single lookup: one default page spills tens of thousands of characters, and an overflowing result is dumped to a file you then have to jq. Run it in a subagent and page there; inline only with a narrowed query and a page size of at most 10 — `block_bulky_mcp_search.sh` refuses anything larger. The connector skills (`gmail-connector` and siblings) say the same and must be loaded before the first search, not after the first spill.
+
 **Keep inline**: targeted edits and reads of paths you already know; short situational awareness (`git status`, `git log -5`); factual verification of anything you are about to state (a delegated lookup is exactly the hallucination vector `verify-before-instructing.md` closes); and the decision itself.
 
 Every dispatch states TASK, CONTEXT with explicit paths (agents don't share your context), CONSTRAINTS, and an OUTPUT line capping what comes back. Launch independent agents in one message, one agent per job — never two at the same file. Use the returned result rather than grepping the `.output` file.

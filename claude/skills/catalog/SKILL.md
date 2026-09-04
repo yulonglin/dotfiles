@@ -125,6 +125,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | Skill | Use when |
 |---|---|
 | `bear` | Reading or editing Bear notes (macOS) |
+| `gmail-connector` | Pulling receipts, invoices or attachments out of Gmail via the claude.ai connector — the RAW-MIME route for attachments, search operators, read-only rules |
 | `things3` | Reading or managing Things 3 tasks, projects, areas, tags |
 | `setup-channel` | Setting up Telegram, iMessage or Things Cloud for a project |
 

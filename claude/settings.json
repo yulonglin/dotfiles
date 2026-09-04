@@ -409,6 +409,16 @@
         ]
       },
       {
+        "matcher": "mcp__claude_ai_Gmail__search_threads|mcp__claude_ai_Slack__slack_search_public|mcp__claude_ai_Slack__slack_search_public_and_private|mcp__claude_ai_Google_Drive__search_files",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/block_bulky_mcp_search.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
         "matcher": "EnterPlanMode",
         "hooks": [
           {
