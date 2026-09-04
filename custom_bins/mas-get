@@ -9,9 +9,11 @@
 #   "Redownload Unavailable with this Apple Account" for owned apps that haven't
 #   been downloaded on this machine yet.
 #   `mas get` (aka `mas purchase`) acquires-and-installs — it's what actually
-#   works. This script runs `mas get` for every mas app in the registry that
-#   isn't already installed, then `brew bundle` can run cleanly (its mas lines
-#   become no-ops once apps are installed).
+#   works. This script runs `mas get` for every mas app the Brewfile selects
+#   that isn't already installed, then `brew bundle` can run cleanly (its mas
+#   lines become no-ops once apps are installed). Without a Brewfile it falls
+#   back to the registry rows with default=true; `default=exclude` rows are
+#   never acquired.
 #
 # Ref: https://github.com/Homebrew/brew/issues/21559
 #
@@ -19,19 +21,22 @@
 #   mas-get                  # install all uninstalled mas apps from apps.conf
 #   mas-get --dry-run        # show what would be installed, don't install
 #   mas-get --conf PATH      # registry path (default: <dotfiles>/config/apps.conf)
+#   mas-get --file PATH      # Brewfile that selects the rows (default: <dotfiles>/config/Brewfile)
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 DOT_DIR="${DOT_DIR:-${SCRIPT_DIR:h}}"
 CONF="$DOT_DIR/config/apps.conf"
+BREWFILE="$DOT_DIR/config/Brewfile"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run)   DRY_RUN=true; shift ;;
         --conf)      CONF="$2"; shift 2 ;;
-        -h|--help)   sed -n '2,23p' "$0"; exit 0 ;;
+        --file)      BREWFILE="$2"; shift 2 ;;
+        -h|--help)   sed -n '2,26p' "$0"; exit 0 ;;
         *) echo "mas-get: unknown arg '$1'" >&2; exit 2 ;;
     esac
 done
@@ -54,14 +59,35 @@ while IFS=$'\t' read -r app_id _rest; do
     [[ -n "$app_id" ]] && installed_ids[$app_id]=1
 done < <(mas list 2>/dev/null)
 
+# ─── Which registry rows are selected: the Brewfile's mas lines, else default=true ──
+typeset -A selected_ids
+HAVE_BREWFILE=false
+if [[ -f "$BREWFILE" ]]; then
+    HAVE_BREWFILE=true
+    local bline bid
+    while IFS= read -r bline; do
+        [[ "$bline" == 'mas "'* ]] || continue
+        bid="${bline##*id: }"; bid="${bid// }"
+        [[ -n "$bid" ]] && selected_ids[$bid]=1
+    done < "$BREWFILE"
+else
+    print -P "%F{yellow}⚠  No Brewfile at $BREWFILE — using registry rows with default=true (run app-picker to choose).%f"
+fi
+
 # ─── Parse mas entries from registry ─────────────────────────────────────────
 typeset -a to_install_ids to_install_names skip_names
 local method id _cat _tier _def name _desc _auth
 
 while IFS='|' read -r method id _cat _tier _def name _desc _auth; do
     [[ -z "${method// }" || "${method[1]}" == "#" ]] && continue
-    method="${method// }"; id="${id// }"; name="${name# }"; name="${name% }"
+    method="${method// }"; id="${id// }"; name="${name# }"; name="${name% }"; _def="${_def// }"
     [[ "$method" != "mas" ]] && continue
+    [[ "$_def" == "exclude" ]] && continue   # rejected in the registry — never acquire
+    if [[ "$HAVE_BREWFILE" == "true" ]]; then
+        [[ -n "${selected_ids[$id]+_}" ]] || continue   # deselected in app-picker
+    else
+        [[ "$_def" == "true" ]] || continue
+    fi
     if [[ -n "${installed_ids[$id]+_}" ]]; then
         skip_names+=("$name ($id)")
     else

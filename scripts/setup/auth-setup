@@ -56,6 +56,7 @@ print_checklist() {
     local method id cat tier def name desc auth
     while IFS='|' read -r method id cat tier def name desc auth; do
         [[ -z "${method// }" || "${method[1]}" == "#" ]] && continue
+        [[ "${def// }" == "exclude" ]] && continue   # rejected in the registry — nothing to set up
         auth="${auth// }"
         [[ -z "$auth" || "$auth" == "none" ]] && continue
         printf '  [ ] %-32s %s\n' "$name" "$(auth_hint "$auth")"
