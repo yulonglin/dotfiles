@@ -77,7 +77,7 @@ run_with_progress() {
     return $rc
 }
 
-# ─── Interactive Component Menu ──────────────────────────────────────────────
+# ─── claude-tools Binary ──────────────────────────────────────────────────────
 
 # Resolve the prebuilt-binary asset name for this platform, or "" if unsupported.
 _claude_tools_asset() {
@@ -90,151 +90,105 @@ _claude_tools_asset() {
     esac
 }
 
-# Compute the SHA-256 of a file (portable: Linux sha256sum / macOS shasum).
-_sha256_of() {
-    if cmd_exists sha256sum; then sha256sum "$1" | awk '{print $1}'
-    elif cmd_exists shasum; then shasum -a 256 "$1" | awk '{print $1}'
-    else return 1; fi
+# Print the resolved component set, one line, so every run shows what it is
+# about to do before it does it. This is the visibility the interactive menu
+# used to provide; the menu itself is gone (2026-09-04): it was the installers'
+# only prompt, it needed a prebuilt per-platform binary before it could draw,
+# and when that binary lost a flag in a merge it sat black for sixty seconds on
+# every run for eleven weeks while every deadline-based check passed.
+# Sets RESOLVED_COMPONENT_COUNT for the empty-set guard and the completion line.
+# Usage: print_resolved_components install|deploy
+print_resolved_components() {
+    local mode="$1" registry_name prefix entry name rest platform var_name
+    if [[ "$mode" == "install" ]]; then
+        registry_name="INSTALL_REGISTRY"; prefix="INSTALL"
+    else
+        registry_name="DEPLOY_REGISTRY"; prefix="DEPLOY"
+    fi
+    local -a enabled=()
+    for entry in "${(@P)registry_name}"; do
+        name="${entry%%|*}"
+        rest="${entry#*|}"; rest="${rest#*|}"   # skip description
+        platform="${rest%%|*}"
+        if [[ "$platform" == "macos" ]] && ! is_macos; then continue; fi
+        if [[ "$platform" == "linux" ]] && ! is_linux; then continue; fi
+        var_name="${prefix}_${(U)name//-/_}"
+        [[ "${(P)var_name:-false}" == "true" ]] && enabled+=("$name")
+    done
+    typeset -g RESOLVED_COMPONENT_COUNT=${#enabled}
+    if (( ${#enabled} == 0 )); then
+        echo "Components: none"
+    else
+        echo "Components (${#enabled}): ${(j:, :)enabled}"
+    fi
 }
 
-# Fetch a prebuilt claude-tools from the rolling "claude-tools-bin" GitHub
-# Release and verify it against the SHA-256 committed in the repo (the trust
-# anchor — NOT a checksum from the release itself). A tampered/corrupt binary,
-# or one we cannot verify, is never moved into place or executed. Returns 1 on
-# any failure so the caller can fall back to a source build.
-_fetch_claude_tools() {
-    cmd_exists curl || return 1
-
-    local asset; asset="$(_claude_tools_asset)"
-    [[ -z "$asset" ]] && return 1  # unsupported platform
-    local bin="${DOT_DIR}/custom_bins/${asset}"
-
-    # Trust anchor: checksum committed in the repo you cloned.
-    local sums_file="${DOT_DIR}/tools/claude-tools/SHA256SUMS"
-    local expected
-    expected="$(awk -v a="$asset" '$2 == a {print $1}' "$sums_file" 2>/dev/null)"
-    # Refuse to fetch if we have no committed checksum to verify against.
-    [[ -z "$expected" ]] && return 1
-
-    # Derive owner/repo slug from DOTFILES_REPO (config.sh), override via env.
-    local slug="${DOTFILES_GH_SLUG:-}"
-    if [[ -z "$slug" ]]; then
-        slug="${DOTFILES_REPO#https://github.com/}"
-        slug="${slug%.git}"
+# Refuse an empty component set unless the caller asked for one by name.
+# Catches at one choke point what used to be spread across the menu's empty
+# selection, a malformed config.local.sh, or a future parser bug: a run that
+# would print "complete!" having done nothing.
+# Usage: guard_nonempty_components install|deploy
+guard_nonempty_components() {
+    (( ${RESOLVED_COMPONENT_COUNT:-0} > 0 )) && return 0
+    # --minimal means an empty run on purpose. --only also passes through the
+    # minimal profile, but "--only <thing this platform filters out>" is a
+    # mistake, not a request for nothing, so it is not exempt.
+    if [[ "${PROFILE:-}" == "minimal" && "${DOTFILES_ONLY_MODE:-false}" != "true" ]]; then
+        return 0
     fi
-    [[ -z "$slug" ]] && return 1
-
-    local url="https://github.com/${slug}/releases/download/claude-tools-bin/${asset}"
-    mkdir -p "${DOT_DIR}/custom_bins"
-    local tmp="${bin}.tmp.$$"
-
-    # HTTPS + TLS 1.2 only; never pipe-to-shell — download to temp, then verify.
-    # Deadlines are mandatory here: this runs at the top of both scripts, before
-    # anything is printed but one log line, so an untimed fetch reads as a hang.
-    # Wrapped in the spinner because this is the very first thing either script
-    # does: a silent pause here is what a stall looks like to whoever is
-    # watching, even when it is only a slow download.
-    if ! run_with_progress "Fetching prebuilt claude-tools (${asset})" \
-        curl --proto '=https' --tlsv1.2 -fsSL \
-        --connect-timeout 10 --max-time 120 --retry 2 --retry-max-time 120 \
-        "$url" -o "$tmp"; then
-        rm -f "$tmp"; return 1
+    if [[ "${DOTFILES_ONLY_MODE:-false}" == "true" ]]; then
+        log_error "None of the --only components apply to $1 on this platform — refusing to run an empty $1."
+        log_error "(--only validates names against both scripts' registries; a deploy-only name, or a"
+        log_error " component this OS filters out, resolves to nothing here.)"
+    else
+        log_error "No components resolved for profile '${PROFILE:-?}' — refusing to run an empty $1."
+        log_error "Pass --minimal if an empty run is what you want."
     fi
-
-    local actual; actual="$(_sha256_of "$tmp")"
-    if [[ -z "$actual" || "$actual" != "$expected" ]]; then
-        log_warning "claude-tools checksum mismatch — discarding download (expected ${expected:0:12}…, got ${actual:0:12}…)"
-        rm -f "$tmp"; return 1
-    fi
-
-    chmod +x "$tmp"
-    if ! "$tmp" --version >/dev/null 2>&1; then
-        rm -f "$tmp"; return 1
-    fi
-    mv "$tmp" "$bin"
-    return 0
+    exit 1
 }
 
-# Last-resort fallback: build claude-tools from source (needs cargo). Quiet,
-# synchronous; only attempted when the verified fetch path is unavailable.
-_build_claude_tools_from_source() {
-    cmd_exists cargo || return 1
-    [[ -f "${DOT_DIR}/tools/claude-tools/Cargo.toml" ]] || return 1
-    # A cold Rust build is minutes long. It used to run --quiet, which made the
-    # top of every install indistinguishable from a hang; cargo's own progress
-    # now shows, and a deadline bounds it. This is the stall that outlived
-    # several rounds of prompt fixes, because it is not a prompt.
-    log_info "Building claude-tools from source (fallback) — a cold build takes a few minutes..."
-    ( cd "${DOT_DIR}/tools/claude-tools" \
-        && run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release ) || {
-        log_warning "claude-tools build failed or exceeded its deadline — continuing with defaults"
-        return 1
-    }
-    local asset; asset="$(_claude_tools_asset)"
-    [[ -z "$asset" ]] && return 1
-    mkdir -p "${DOT_DIR}/custom_bins"
-    cp "${DOT_DIR}/tools/claude-tools/target/release/claude-tools" "${DOT_DIR}/custom_bins/${asset}" \
-        && chmod +x "${DOT_DIR}/custom_bins/${asset}"
-}
-
-# Bootstrap claude-tools so the component-selection TUI works on a fresh machine
-# before deploy.sh's from-source build runs. Fallback chain:
-#   1. working native binary already present  → use it
-#   2. verified prebuilt fetch from Releases   → use it
-#   3. source build (if cargo present)         → use it
-#   4. otherwise                               → return 1 (menu uses defaults)
-# Set CLAUDE_TOOLS_NO_FETCH=1 to skip the network fetch (air-gapped / paranoid).
-bootstrap_claude_tools() {
-    local wrapper="${DOT_DIR}/custom_bins/claude-tools"
-
-    # 1) Wrapper exists and the platform binary it delegates to runs? Nothing to do.
-    [[ -x "$wrapper" ]] && "$wrapper" --version >/dev/null 2>&1 && return 0
-
-    # Skip in non-interactive runs — the menu won't show anyway. deploy.sh's
-    # own (backgrounded) build still produces the runtime binary either way.
-    [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 1
-
-    # 2) Verified prebuilt fetch (downloads to custom_bins/claude-tools-{platform}).
-    if [[ "${CLAUDE_TOOLS_NO_FETCH:-0}" != "1" ]]; then
-        _fetch_claude_tools && return 0
-    fi
-
-    # 3) Source build fallback (builds to custom_bins/claude-tools-{platform}).
-    _build_claude_tools_from_source && "$wrapper" --version >/dev/null 2>&1 && return 0
-
-    # 4) Give up — caller falls back to defaults (no menu).
-    return 1
-}
-
+# ─── Interactive Component Menu ──────────────────────────────────────────────
 # Usage: show_component_menu install|deploy
-# Requires: claude-tools (graceful fallback to defaults if unavailable).
-# CI publishes prebuilt binaries; bootstrap_claude_tools fetches the right one.
 #
-# Flat toggle list by design — j/k navigate, space toggles a whole component,
-# enter confirms. Group labels (Base/AI/...) are headers only; there is no
-# drill-in / sub-component selection. The sole exception is `apps`: leaving it
-# checked later opens app-picker (gum) to choose individual GUI/App-Store apps.
+# A flat toggle list (j/k, space, Enter; q/Esc keeps the profile's set) drawn
+# by `claude-tools select`, the Rust binary committed per platform in
+# custom_bins/. Nothing is fetched or built here: a platform without a
+# committed binary gets one warning line and the profile's set, and the
+# banner right after this prints what that set is.
+#
+# The contract with the binary, and why each half exists (2026-09-04):
+#   - items go in a FILE (--items), never stdin, so fd 0 stays the terminal
+#     for keystrokes; the binary refuses to read items from a terminal and
+#     rejects any flag it does not know, so a shell/binary mismatch fails in
+#     a millisecond instead of blocking with nothing drawn (the June-to-
+#     September stall: a merge dropped --items, the binary ignored it, and
+#     read the keyboard as its item list).
+#   - the binary draws before it reads, and carries its own idle deadline
+#     (exit 3); the run_with_timeout wrapper is only a backstop, because a
+#     fresh Mac has no timeout(1) until install.sh has installed coreutils.
+#   - stdout carries only the selected names; the UI is on stderr.
+#   - every non-zero outcome is said out loud and keeps the profile's set.
+#     Silently skipping is how a broken menu hid for eleven weeks.
 show_component_menu() {
     local mode="$1"
 
-    # Skip if non-interactive, no TTY, binary missing, or binary won't run on
-    # this platform (wrong-arch leftover → --version fails cleanly, no noise).
-    if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]] \
-        || ! cmd_exists claude-tools || ! claude-tools --version >/dev/null 2>&1; then
+    [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 0
+    # No terminal on both fd 0 (keys) and fd 2 (drawing): nobody to ask.
+    [[ -t 0 && -t 2 ]] || return 0
+    if ! cmd_exists claude-tools || ! claude-tools --version >/dev/null 2>&1; then
+        log_warning "Component menu unavailable: no claude-tools binary for $(uname -s)-$(uname -m) — using the profile's set (adjust with --<component> / --no-<component>)"
         return 0
     fi
 
     local registry_name prefix
     if [[ "$mode" == "install" ]]; then
-        registry_name="INSTALL_REGISTRY"
-        prefix="INSTALL"
-    elif [[ "$mode" == "deploy" ]]; then
-        registry_name="DEPLOY_REGISTRY"
-        prefix="DEPLOY"
+        registry_name="INSTALL_REGISTRY"; prefix="INSTALL"
+    else
+        registry_name="DEPLOY_REGISTRY"; prefix="DEPLOY"
     fi
 
-    # Build input for claude-tools select: group|name|description|checked
-    # Format: name|desc|platform|default[|group]
+    # Build the item list: group|name|description|checked
+    # Registry format: name|desc|platform|default[|group]
     typeset -a all_names
     local stdin_input=""
     local entry name rest desc platform default group var_name current_val
@@ -248,69 +202,50 @@ show_component_menu() {
         default="${rest%%|*}"
         rest="${rest#*|}"
         group="${rest:-Uncategorized}"
-        # If no 5th field, rest equals default (no pipe was consumed), treat as Uncategorized
-        [[ "$group" == "$default" ]] && group="Uncategorized"
-
-        # Platform filter
+        [[ "$group" == "$default" ]] && group="Uncategorized"   # no 5th field
         if [[ "$platform" == "macos" ]] && ! is_macos; then continue; fi
         if [[ "$platform" == "linux" ]] && ! is_linux; then continue; fi
-
         var_name="${prefix}_${(U)name//-/_}"
         current_val="${(P)var_name:-$default}"
         all_names+=("$name")
         stdin_input+="${group}|${name}|${desc}|${current_val}"$'\n'
     done
 
-    # Run TUI; on cancel (exit 1) keep current values.
-    #
-    # Pass options via a temp file, NOT a stdin pipe: piping makes fd 0 a pipe,
-    # which forces crossterm onto a fragile /dev/tty fallback for keyboard input
-    # that fails on some terminals ("Failed to initialize input reader") and
-    # silently drops the menu. Keeping stdin on the terminal is the reliable path.
     local items_file result
     items_file=$(mktemp "${TMPDIR:-/tmp}/claude-tools-select.XXXXXX")
     printf '%s' "$stdin_input" > "$items_file"
-    # A TTY is not proof a human is watching it: launched in tmux, from an agent
-    # pty, or simply walked away from, this menu would wait forever at the very
-    # top of the run. The deadline makes an unattended run proceed with whatever
-    # is pre-checked (the profile's set, plus any config.local.sh delta), which
-    # is exactly what --non-interactive would have installed.
-    #
-    # `|| rc=$?` is load-bearing, not decoration: both scripts run under
-    # `set -euo pipefail`, and in zsh a failing command substitution in a plain
-    # assignment aborts the script THERE — verified, exit 124 with nothing
-    # printed. Without this, the 124 branch below was unreachable and an
-    # unattended TTY run died silently after the timeout having installed
-    # nothing, which is the exact scenario the deadline was added to rescue.
-    local rc=0
-    result=$(run_with_timeout "${DOTFILES_MENU_TIMEOUT:-60}" \
-        claude-tools select --title "Select ${mode} components" --items "$items_file") || rc=$?
-    if (( rc == 124 )); then
-        log_warning "Component menu unanswered for ${DOTFILES_MENU_TIMEOUT:-60}s — continuing with the default selection"
-        rm -f "$items_file"
+
+    # `|| rc=$?` is load-bearing: under `set -euo pipefail` a failing command
+    # substitution in a plain assignment aborts the script THERE, and every
+    # branch below would be unreachable.
+    local idle="${DOTFILES_MENU_TIMEOUT:-60}" rc=0
+    result=$(run_with_timeout $(( idle + 15 )) \
+        claude-tools select --title "Select ${mode} components" \
+        --items "$items_file" --idle-timeout "$idle") || rc=$?
+    rm -f "$items_file"
+
+    case "$rc" in
+        0) ;;
+        1)   log_info "Component menu cancelled — keeping the profile's set"; return 0 ;;
+        3)   log_warning "Component menu unanswered for ${idle}s — continuing with the profile's set"; return 0 ;;
+        124) log_warning "Component menu did not return within $(( idle + 15 ))s — continuing with the profile's set"; return 0 ;;
+        *)   log_warning "Component menu failed (claude-tools select exit $rc, see above) — continuing with the profile's set"; return 0 ;;
+    esac
+
+    # An empty confirmation is not a request to deploy nothing: keep the set.
+    if [[ -z "${result//[[:space:]]/}" ]]; then
+        log_warning "Component menu returned no selection — continuing with the profile's set"
         return 0
     fi
-    rm -f "$items_file"
-    [[ $rc -ne 0 ]] && return 0
 
-    # Disable all filtered components, then re-enable selected ones
+    # Disable all filtered components, then re-enable the selected ones.
     for name in "${all_names[@]}"; do
-        local var_name="${(U)name//-/_}"
-        if [[ "$mode" == "install" ]]; then
-            typeset -g "INSTALL_${var_name}=false"
-        else
-            typeset -g "DEPLOY_${var_name}=false"
-        fi
+        typeset -g "${prefix}_${(U)name//-/_}=false"
     done
-
+    local line
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
-        local var_name="${(U)line//-/_}"
-        if [[ "$mode" == "install" ]]; then
-            typeset -g "INSTALL_${var_name}=true"
-        else
-            typeset -g "DEPLOY_${var_name}=true"
-        fi
+        typeset -g "${prefix}_${(U)line//-/_}=true"
     done <<< "$result"
 }
 
@@ -367,8 +302,8 @@ run_with_timeout() {
 
 # Deadline without coreutils. This exists for exactly one situation, and it is
 # not a rare one: a FRESH Mac. macOS ships no `timeout`, and `gtimeout` arrives
-# only with coreutils — which install.sh installs *after* the component menu and
-# the sudo prompt have already run. Falling back to running unbounded there
+# only with coreutils — which install.sh installs *after* the sudo prompt and
+# the Homebrew bootstrap have already run. Falling back to running unbounded there
 # would leave the first run on every new Mac, the run most likely to be watched
 # by nobody, with no deadline at all.
 #
@@ -385,9 +320,9 @@ _watchdog_run() {
     # zsh points a BACKGROUNDED job's stdin at /dev/null even when the shell's
     # own stdin is a terminal, and `<&0` does not undo it (both measured under
     # a pty). The process-group reasoning above is correct but says nothing
-    # about stdin, so the fresh-Mac fallback was handing the component menu and
-    # chsh's PAM prompt an instant EOF — the two things on this path that must
-    # read the user. Re-attach the controlling terminal explicitly.
+    # about stdin, so the fresh-Mac fallback was handing the component menu
+    # and chsh's PAM prompt an instant EOF — both must read the user.
+    # Re-attach the controlling terminal explicitly.
     if [[ -t 0 ]]; then
         "$@" </dev/tty &
     else
@@ -414,7 +349,7 @@ _watchdog_run() {
 # the timestamp until the calling script exits. No-op if sudo is already cached,
 # unavailable, or there's no TTY to prompt on. (sudo's password is the one prompt
 # with no software default, so it's the only interaction we cache rather than
-# skip — the component menu aside.)
+# skip.)
 front_load_sudo() {
     cmd_exists sudo || return 0
     [[ -t 0 ]] || return 0
@@ -1107,7 +1042,7 @@ install_gh_cli() {
     fi
 
     # GitHub auth is deferred, never blocking the install on browser OAuth. The
-    # component menu is the only interactive step; finish auth afterwards via
+    # installers never prompt for it; finish auth afterwards via
     # auth-setup (or `gh auth login`), which gist/secrets sync needs.
     if cmd_exists gh && ! gh auth status &>/dev/null; then
         log_warning "gh not authenticated — run 'auth-setup' (or 'gh auth login') for gist/secrets sync"
@@ -1221,7 +1156,7 @@ install_linuxbrew() {
         fi
         log_info "Installing Homebrew (Linuxbrew)..."
         # NONINTERACTIVE=1 skips the installer's "Press RETURN to continue"
-        # prompt; install.sh keeps stdin on the TTY for the component menu, so
+        # prompt; install.sh keeps stdin on the TTY (sudo and chsh read it), so
         # the installer cannot auto-detect non-interactive mode on its own.
         # Both halves need a deadline: the fetch, and the installer it feeds.
         # An installer that stalls hangs the run exactly as hard as a stalled
@@ -1772,9 +1707,9 @@ deploy_git_config() {
     done
 
     # Handle conflicts without prompting: keep existing values (your machine's
-    # settings win) and apply only the non-conflicting ones. The component menu
-    # is the script's only interactive step; override conflicting keys by hand
-    # afterwards if you want the dotfiles values instead.
+    # settings win) and apply only the non-conflicting ones. Override
+    # conflicting keys by hand afterwards if you want the dotfiles values
+    # instead.
     if [[ ${#conflicts[@]} -gt 0 ]]; then
         echo ""
         log_warning "Git config conflicts — keeping your existing values:"
@@ -2026,7 +1961,10 @@ guard_not_worktree() {
     local arg
     for arg in "$@"; do
         case "$arg" in
-            --allow-worktree|-h|--help) return 0 ;;
+            # --allow-worktree-deploy is what CI and deploy.sh's parser spell
+            # it; the guard runs before parse_args, so it must recognise both
+            # or the CI flag silently means nothing on a real worktree.
+            --allow-worktree|--allow-worktree-deploy|-h|--help) return 0 ;;
         esac
     done
 
@@ -2143,8 +2081,12 @@ parse_args() {
                 FORCE_REINSTALL=true
                 ;;
             --allow-worktree)
-                # Consumed by guard_not_worktree before parse_args runs.
-                # Accepted here as a no-op so it composes with --only.
+                # Consumed by guard_not_worktree before parse_args runs. Also
+                # satisfies deploy.sh's own inline guard, so the spelling the
+                # guard's message names works end to end (it used to clear the
+                # first guard and be refused by the second).
+                ALLOW_WORKTREE_DEPLOY=true
+                export ALLOW_WORKTREE_DEPLOY
                 ;;
             --append)
                 DEPLOY_APPEND=true
@@ -2222,10 +2164,11 @@ parse_args() {
                 continue  # skip outer shift — args already consumed
                 ;;
             --non-interactive)
-                # Skip the component menu and install the default component set.
-                # The menu is the script's only prompt — everything after it
-                # already runs with safe defaults — so this is the sole knob.
-                # Exported so child processes (e.g. app-picker) honor it.
+                # Skip every optional prompt: the component menu (the profile's
+                # set is used as-is), app-picker (install.sh) and the htop
+                # conflict choice (deploy.sh). Everything else already runs
+                # with safe defaults. Exported so child processes (app-picker,
+                # scripts/cleanup/*.sh) honor it.
                 NON_INTERACTIVE=true
                 export NON_INTERACTIVE
                 ;;
@@ -2294,6 +2237,7 @@ parse_args() {
         done
 
         apply_profile "minimal"
+        typeset -g DOTFILES_ONLY_MODE=true   # guard_nonempty_components: --only is never "nothing on purpose"
         for _comp in "${_only_components[@]}"; do
             _comp="${_comp// /}"
             [[ -z "$_comp" ]] && continue

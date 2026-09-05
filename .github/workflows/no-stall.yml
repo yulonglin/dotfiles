@@ -21,6 +21,10 @@ on:
       - 'scripts/shared/helpers.sh'
       - 'scripts/cloud/**'
       - 'tests/test_no_stall.sh'
+      - 'tests/test_installers_silent_pty.sh'
+      - 'tests/test_claude_tools_select.sh'
+      - 'tests/pty_drive.py'
+      - 'tools/claude-tools/src/**'
       - 'tests/test_profile_defaults.sh'
       - 'tests/dump_components.zsh'
       - 'tests/dump_components_cli.zsh'
@@ -35,6 +39,10 @@ on:
       - 'scripts/shared/helpers.sh'
       - 'scripts/cloud/**'
       - 'tests/test_no_stall.sh'
+      - 'tests/test_installers_silent_pty.sh'
+      - 'tests/test_claude_tools_select.sh'
+      - 'tests/pty_drive.py'
+      - 'tools/claude-tools/src/**'
       - 'tests/test_profile_defaults.sh'
       - 'tests/dump_components.zsh'
       - 'tests/dump_components_cli.zsh'
@@ -76,25 +84,27 @@ jobs:
         # build (the stall that outlived several prompt fixes) and require the
         # canary to catch it. Runs on a scratch copy so the checkout stays clean.
         run: |
-          cp scripts/shared/helpers.sh "$RUNNER_TEMP/helpers.bak"
+          cp deploy.sh "$RUNNER_TEMP/deploy.bak"
           sed -i 's|run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release|cargo build --release --quiet|' \
-            scripts/shared/helpers.sh
+            deploy.sh
           if bash tests/test_no_stall.sh >/dev/null 2>&1; then
             echo "::error::The stall canary passed against a deliberately broken guard — it is vacuous."
-            cp "$RUNNER_TEMP/helpers.bak" scripts/shared/helpers.sh
+            cp "$RUNNER_TEMP/deploy.bak" deploy.sh
             exit 1
           fi
           echo "Canary correctly caught the reintroduced silent build."
-          cp "$RUNNER_TEMP/helpers.bak" scripts/shared/helpers.sh
+          cp "$RUNNER_TEMP/deploy.bak" deploy.sh
 
   unattended:
     name: Real unattended runs (disposable container)
     runs-on: ubuntu-latest
-    # Must exceed the sum of this job's own step deadlines (4x300s + 7x180s =
-    # 41min), or the outer cap fires first and a slow-but-honest run is
-    # reported as a stall. In a workflow about deadlines, the inner ones have
-    # to be the binding constraint.
-    timeout-minutes: 50
+    # Must exceed the sum of this job's own step deadlines (a cold cargo
+    # build ~5min + 2x300s closed-stdin runs + the silent-pty suite and its
+    # two mutation runs at up to 4x60s each + 7x180s profiles ≈ 48min), or
+    # the outer cap fires first and a slow-but-honest run is reported as a
+    # stall. In a workflow about deadlines, the inner ones have to be the
+    # binding constraint.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -110,17 +120,50 @@ jobs:
       - name: install.sh --minimal, stdin closed
         run: timeout 300 zsh ./install.sh --allow-worktree --minimal < /dev/null
 
-      # The real failure mode is not "no TTY" — it is a TTY with nobody
-      # watching it (tmux pane, agent pty, a run you walked away from). `script`
-      # allocates a pty, so [[ -t 0 ]] is true and every prompt is reachable,
-      # yet no one ever types. Anything without a deadline hangs here.
-      - name: deploy.sh under an unattended PTY
+      # The menu binary, built from THIS commit's source. The committed
+      # linux binary lags the source by one build-workflow round trip, and a
+      # test against a stale binary is the vacuous pass this job exists to
+      # end. Cached on Cargo.lock so a no-change build is seconds.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/claude-tools/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('tools/claude-tools/Cargo.lock') }}
+      - name: Build claude-tools from source for the menu tests
+        working-directory: tools/claude-tools
         run: |
-          script -qec 'timeout 300 zsh ./deploy.sh --allow-worktree-deploy --minimal' /dev/null
+          cargo build --release --locked
+          cp target/release/claude-tools ../../custom_bins/claude-tools-linux-x86_64
 
-      - name: install.sh under an unattended PTY
-        run: |
-          script -qec 'timeout 300 zsh ./install.sh --allow-worktree --minimal' /dev/null
+      - name: select honours its contract on a silent pty
+        run: bash tests/test_claude_tools_select.sh custom_bins/claude-tools-linux-x86_64
+
+      # The real failure mode is not "no TTY" — it is a TTY with nobody
+      # watching it (tmux pane, agent pty, a run you walked away from): every
+      # [[ -t 0 ]] guard is bypassed, yet no one ever types.
+      #
+      # This used to be `script -qec '...' /dev/null`, which passed in 0.1 s
+      # for eleven weeks while the menu sat black on every real terminal:
+      # util-linux `script` forwards EOF from its closed stdin into the pty, so
+      # the blocking read returned empty at once, and --minimal made "deployed
+      # nothing" look identical to success. tests/pty_drive.py holds stdin
+      # OPEN and silent instead, the profile is non-minimal so an empty run is
+      # distinguishable, and the suite asserts the menu DREW, the run finished
+      # inside a tight wall-clock bound, and the profile's components were
+      # deployed — not merely "finished in time", which a 60 s internal
+      # fallback satisfies on its own (2026-09-04).
+      - name: Installers on a silent PTY — menu draws, run finishes
+        run: bash tests/test_installers_silent_pty.sh
+
+      - name: Mutation check — a menu binary that reads stdin must turn that suite red
+        run: bash tests/test_installers_silent_pty.sh --mutate
+
+      # A wait that gives up eventually is still a stall from the chair; the
+      # suite bounds wall-clock too, and this proves that bound has teeth.
+      - name: Mutation check — a planted bounded wait must turn it red too
+        run: bash tests/test_installers_silent_pty.sh --mutate=bounded
 
       # Each profile must resolve and run without prompting. bare/agent/standard
       # are the ephemeral-box profiles, which is exactly where nobody is watching.
