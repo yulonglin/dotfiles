@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# aw-screentime-import: pull iPhone/iPad Screen Time into ActivityWatch, on demand.
+#
+# Runs the official importer (github.com/ActivityWatch/aw-import-screentime) as a
+# one-shot, idempotent import: it dedupes against events already in the bucket, so
+# rerunning is safe. Run it from a terminal that has Full Disk Access (Ghostty does);
+# it is deliberately NOT a LaunchAgent, which would need Full Disk Access on a shared
+# Python interpreter (decided 2026-09-04).
+#
+# Usage: aw-screentime-import [--since 7d] [--port 5600]
+set -euo pipefail
+
+REPO="${AW_IMPORT_SCREENTIME_DIR:-$HOME/code/aw-import-screentime}"
+SINCE="7d"
+PORT="5600"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0 ;;
+        --since) SINCE="$2"; shift 2 ;;
+        --port) PORT="$2"; shift 2 ;;
+        *) echo "unknown argument: $1" >&2; exit 2 ;;
+    esac
+done
+
+[[ -d "$REPO/.venv" ]] || {
+    echo "importer not set up at $REPO; run: ~/code/dotfiles/deploy.sh --activitywatch" >&2
+    exit 1
+}
+
+exec uv run --no-sync --project "$REPO" aw-import-screentime events import --since "$SINCE" --limit 0 --port "$PORT"

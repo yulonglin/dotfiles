@@ -93,7 +93,7 @@ COMPONENTS:
     --alfred          Repair Dropbox-synced Alfred prefs: de-quarantine, +x, hotkey (macOS only)
     --ghostty         Deploy Ghostty terminal config
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
-    --activitywatch   Deploy ActivityWatch launcher config (symlinked) + iPhone Screen Time import agent (macOS only)
+    --activitywatch   Deploy ActivityWatch launcher config (symlinked) + iPhone Screen Time importer (macOS only)
     --htop            Deploy htop configuration
     --gitui           Deploy gitui theme (theme-reactive, symlinked)
     --pdb             Deploy pdb++ debugger config
@@ -585,9 +585,11 @@ if [[ "$DEPLOY_ACTIVITYWATCH" == "true" ]]; then
             log_warning "ActivityWatch config not found at $DOT_DIR/config/activitywatch/"
         fi
 
-        # iPhone/iPad Screen Time → ActivityWatch, as a LaunchAgent (needs Full Disk Access once).
+        # iPhone/iPad Screen Time → ActivityWatch: clone + sync the importer only.
+        # Imports run on demand via `aw-screentime-import` from a terminal with Full Disk
+        # Access; no LaunchAgent, which would need that grant on the shared Python.
         if [[ -x "$DOT_DIR/scripts/setup/setup_activitywatch_screentime.sh" ]]; then
-            "$DOT_DIR/scripts/setup/setup_activitywatch_screentime.sh" || log_warning "Screen Time import agent not installed"
+            "$DOT_DIR/scripts/setup/setup_activitywatch_screentime.sh" || log_warning "Screen Time importer not set up"
         fi
     else
         log_info "ActivityWatch config is macOS-only; skipping"
