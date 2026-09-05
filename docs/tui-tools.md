@@ -21,7 +21,7 @@ This repo uses **three** tools from the landscape above. Each has a clear lane â
 | Tool | Lane | Where used |
 |------|------|-----------|
 | **fzf** | Pipe-through pickers in shell scripts | `secrets envrc`, `secrets edit`, `secrets use`, `tmux-restore`, `modern_tools.sh` (git/history/cd helpers) |
-| **gum** | Guided script UI (menus, confirms, inputs, spinners) | `app-picker` (the installers themselves never prompt â€” 2026-09-04) |
+| **gum** | Guided script UI (menus, confirms, inputs, spinners) | `app-picker` (the component menu itself is `claude-tools select`, not gum) |
 | **ratatui** | Full TUI in compiled Rust binaries | `claude-tools` (context TUI, ignore TUI) |
 
 ### Decision Tree
