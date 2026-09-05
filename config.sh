@@ -61,6 +61,7 @@ DEPLOY_REGISTRY=(
     "editor|VSCode/Cursor settings + extensions (merges)|all|true|Shell & Editors"
     "zed|Zed editor config (symlinked)|all|true|Shell & Editors"
     "ghostty|Ghostty terminal config (symlinked)|all|true|Shell & Editors"
+    "activitywatch|ActivityWatch launcher config (symlinked) + iPhone Screen Time import agent|macos|true|AI & Apps"
     "htop|htop config with dynamic CPU meters|all|true|Shell & Editors"
     "gitui|gitui theme (theme-reactive, symlinked)|all|true|Shell & Editors"
     "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"

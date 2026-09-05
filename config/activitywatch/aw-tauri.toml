@@ -1,0 +1,22 @@
+# ActivityWatch (aw-tauri 0.13.x) launcher config.
+# Deployed via: ./deploy.sh --activitywatch
+#   symlinked to ~/Library/Application Support/activitywatch/aw-tauri/config.toml
+# Changes take effect after quitting and reopening ActivityWatch.
+port = 5600
+discovery_paths = [
+  "/Users/yulong/aw-modules",
+  "/Applications/ActivityWatch.app/Contents/MacOS",
+  "/Applications/ActivityWatch.app/Contents/Resources",
+]
+
+[autostart]
+enabled = true
+minimized = true
+modules = [
+  "aw-watcher-afk",
+  "aw-watcher-window",
+  # Keypress/click/mouse-distance counts every 5 s, no key contents. Bundled in
+  # Contents/Resources; enabled 2026-09-04 to separate typing from reading.
+  "aw-watcher-input",
+  { name = "aw-sync", args = "daemon" }
+]

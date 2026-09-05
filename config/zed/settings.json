@@ -107,7 +107,10 @@
     "latex": true,
     "mermaid": true,
     "markdownlint": true,
-    "env": true
+    "env": true,
+    // ActivityWatch editor watcher (sachk/aw-watcher-zed): file, project, language
+    // into bucket aw-watcher-zed; raises project attribution in attention-analyser.
+    "activitywatch": true
   },
 
   // === Language servers ===

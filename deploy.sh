@@ -93,6 +93,7 @@ COMPONENTS:
     --alfred          Repair Dropbox-synced Alfred prefs: de-quarantine, +x, hotkey (macOS only)
     --ghostty         Deploy Ghostty terminal config
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
+    --activitywatch   Deploy ActivityWatch launcher config (symlinked) + iPhone Screen Time import agent (macOS only)
     --htop            Deploy htop configuration
     --gitui           Deploy gitui theme (theme-reactive, symlinked)
     --pdb             Deploy pdb++ debugger config
@@ -565,6 +566,31 @@ if [[ "$DEPLOY_ZED" == "true" ]]; then
         log_info "  SSH: reads hosts from ~/.ssh/config"
     else
         log_warning "Zed config not found at $DOT_DIR/config/zed/"
+    fi
+fi
+
+# ─── ActivityWatch ────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_ACTIVITYWATCH" == "true" ]]; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        log_info "Deploying ActivityWatch configuration..."
+
+        AW_TAURI_DIR="$HOME/Library/Application Support/activitywatch/aw-tauri"
+        if [[ -f "$DOT_DIR/config/activitywatch/aw-tauri.toml" ]]; then
+            mkdir -p "$AW_TAURI_DIR"
+            # Launcher config: which watchers autostart. Read once at ActivityWatch launch.
+            safe_symlink "$DOT_DIR/config/activitywatch/aw-tauri.toml" "$AW_TAURI_DIR/config.toml"
+            log_info "  Watchers: afk, window, input, aw-sync (restart ActivityWatch to apply)"
+        else
+            log_warning "ActivityWatch config not found at $DOT_DIR/config/activitywatch/"
+        fi
+
+        # iPhone/iPad Screen Time → ActivityWatch, as a LaunchAgent (needs Full Disk Access once).
+        if [[ -x "$DOT_DIR/scripts/setup/setup_activitywatch_screentime.sh" ]]; then
+            "$DOT_DIR/scripts/setup/setup_activitywatch_screentime.sh" || log_warning "Screen Time import agent not installed"
+        fi
+    else
+        log_info "ActivityWatch config is macOS-only; skipping"
     fi
 fi
 
