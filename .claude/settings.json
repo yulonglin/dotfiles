@@ -1,5 +1,4 @@
 {
-  "//": "baseRef=head: a background job's worktree forks from the local HEAD, not origin/main. Measured 2026-09-04: local main was 4 ahead of origin, so every isolated job here started without those commits and merged back against stale code. bgIsolation stays at its default (worktree).",
   "worktree": {
     "baseRef": "head"
   }

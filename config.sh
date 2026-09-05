@@ -407,6 +407,7 @@ apply_profile() {
             INSTALL_EXPERIMENTAL=false   # zotero MCP — slow
             INSTALL_PUEUE=false          # cargo install pueue pueued — Rust compile
             DEPLOY_PUEUE=false           # systemd resource slices
+            DEPLOY_DOTFILES_SYNC=false   # ephemeral box: nothing worth pushing, no SSH deploy key
             ;;
         minimal)
             # Nothing enabled — derived from registry (no manual list to drift)
