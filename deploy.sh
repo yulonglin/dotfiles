@@ -122,7 +122,7 @@ COMPONENTS:
     --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
-    --ascii=NAME      Shell-startup art from config/ascii_arts/ (cat, dog, paw, stars);
+    --ascii=NAME      Shell-startup art from config/ascii_arts/ (balloon_girl, cat, dog, paw, stars);
                       none removes it. Off by default; the choice persists across deploys
     --no-<component>  Disable a component (e.g., --no-editor)
     --allow-worktree  Deploy even though DOT_DIR is a git worktree. Refused by
