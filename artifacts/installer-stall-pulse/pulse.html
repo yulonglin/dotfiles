@@ -70,7 +70,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <ul>
 <li><strong>Fixed and verified on macOS.</strong> On a terminal nobody types at, the menu draws in about 0.1 s, times out to the profile's set, and the run completes. Enter confirms the pre-checked set; Esc keeps it. Both installers print the resolved component list in their banner and refuse to run an empty set.</li>
 <li><strong>Not yet in your main checkout.</strong> Running <code>./deploy.sh</code> from <code>/Users/yulong/code/dotfiles</code> still shows the 60-second black screen until PR #95 is merged and main is pulled.</li>
-<li><strong>CI on the branch:</strong> the Linux runs pass end to end, including the cargo build, the contract test, the silent-pty suite and both mutation checks. The macOS build job failed once on a bash 3.2 quirk in the test harness; the fix is pushed and the rerun is in progress.</li>
+<li><strong>CI on the branch: all six checks green</strong> on the final push, including the Linux cargo build, the contract test, the silent-pty suite, both mutation checks, and the macOS build. The macOS job had failed once on a bash 3.2 quirk in the test harness, fixed in the same PR.</li>
 </ul>
 <h2 id="what-went-wrong-was-a-contract-not-a-flag">What went wrong was a contract, not a flag</h2>
 <pre class="mermaid">
@@ -120,21 +120,27 @@ flowchart TD
 </tr>
 <tr>
 <td>Installers must never stall</td>
-<td>Real unattended runs</td>
+<td>Real unattended runs, before the trim</td>
 <td>265 s</td>
 <td>cold cargo build 75 s, two mutation runs 136 s, zsh install 25 s</td>
 </tr>
 <tr>
+<td>Installers must never stall</td>
+<td>Real unattended runs, final push</td>
+<td>120 s</td>
+<td>cached cargo build 17 s, mutation runs 22 s and 32 s, zsh install 25 s</td>
+</tr>
+<tr>
 <td>Build claude-tools binaries</td>
 <td>build ×3 platforms, in parallel</td>
-<td>64 to 98 s</td>
-<td>cargo build 53 to 88 s, contract test 2 to 5 s</td>
+<td>69 to 105 s</td>
+<td>cargo build 58 to 87 s, contract test 4 to 5 s</td>
 </tr>
 </tbody>
 </table>
 <ul>
 <li><strong>The canary job is already small and fast.</strong> Static greps plus a two-second stall probe. Nothing to do there.</li>
-<li><strong>The unattended job is what you were asking about.</strong> Three changes bring it from 265 s to roughly 90 s: the cargo cache added in this PR makes the build a few seconds on a lockfile hit; the mutation runs now execute only the one case that must go red instead of all four, which was measured at 136 s of pure waiting and is already trimmed on the branch; and the two 300-second closed-stdin runs finish in under a second each, so they cost nothing.</li>
+<li><strong>The unattended job is what you were asking about, and it is now 120 s.</strong> Two changes on this branch did it: the cargo cache turns the 75 s cold build into 17 s on a lockfile hit, and the mutation runs execute only the one case that must go red instead of all four, which had been 136 s of pure waiting. The two 300-second closed-stdin runs finish in under a second each, so they cost nothing.</li>
 <li><strong>Splitting further is possible but buys little.</strong> The pty suite itself is 8 s. The floor is the 25 s zsh install, which the runner image lacks; avoiding it would mean a third-party container image, which this repo's supply-chain posture rules out.</li>
 </ul>
 <h2 id="things-i-assumed-rather-than-asked">Things I assumed rather than asked</h2>
@@ -146,7 +152,7 @@ flowchart TD
 </ul>
 <h2 id="decisions-that-are-yours">Decisions that are yours</h2>
 <ul>
-<li><strong>Merge PR #95.</strong> 25 files including two workflows and a binary, so not the self-merge case. When the checks are green: <code>gh pr merge 95 --squash --delete-branch</code>, then <code>git pull</code> in the main checkout before running <code>./deploy.sh</code>.</li>
+<li><strong>Merge PR #95.</strong> 25 files including two workflows and a binary, so not the self-merge case. Checks are green: <code>gh pr merge 95 --squash --delete-branch</code>, then <code>git pull</code> in the main checkout before running <code>./deploy.sh</code>.</li>
 <li><strong>Know the Linux window.</strong> The committed Linux binaries are the 30 August build until the build workflow commits new ones a few minutes after merge. In that window a Linux terminal run hits the old read-the-keyboard path with only the shell's wrapper as the guard. It self-heals; macOS is fixed in the PR itself.</li>
 <li><strong>Whether to apply the same rule to the remaining prompts</strong> in a follow-up. My lean: yes, one pass, same pty suite as the gate.</li>
 </ul>

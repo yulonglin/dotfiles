@@ -6,7 +6,7 @@ Status of the `./install.sh` / `./deploy.sh` stall fix as of 2026-09-04 20:15 PD
 
 - **Fixed and verified on macOS.** On a terminal nobody types at, the menu draws in about 0.1 s, times out to the profile's set, and the run completes. Enter confirms the pre-checked set; Esc keeps it. Both installers print the resolved component list in their banner and refuse to run an empty set.
 - **Not yet in your main checkout.** Running `./deploy.sh` from `/Users/yulong/code/dotfiles` still shows the 60-second black screen until PR #95 is merged and main is pulled.
-- **CI on the branch:** the Linux runs pass end to end, including the cargo build, the contract test, the silent-pty suite and both mutation checks. The macOS build job failed once on a bash 3.2 quirk in the test harness; the fix is pushed and the rerun is in progress.
+- **CI on the branch: all six checks green** on the final push, including the Linux cargo build, the contract test, the silent-pty suite, both mutation checks, and the macOS build. The macOS job had failed once on a bash 3.2 quirk in the test harness, fixed in the same PR.
 
 ## What went wrong was a contract, not a flag
 
@@ -43,11 +43,12 @@ flowchart TD
 | Workflow | Job | Last run | What dominates |
 |---|---|---|---|
 | Installers must never stall | Stall canary + profile defaults | 42 s | apt-get install zsh 12 s, canary 11 s, mutation 11 s |
-| Installers must never stall | Real unattended runs | 265 s | cold cargo build 75 s, two mutation runs 136 s, zsh install 25 s |
-| Build claude-tools binaries | build ×3 platforms, in parallel | 64 to 98 s | cargo build 53 to 88 s, contract test 2 to 5 s |
+| Installers must never stall | Real unattended runs, before the trim | 265 s | cold cargo build 75 s, two mutation runs 136 s, zsh install 25 s |
+| Installers must never stall | Real unattended runs, final push | 120 s | cached cargo build 17 s, mutation runs 22 s and 32 s, zsh install 25 s |
+| Build claude-tools binaries | build ×3 platforms, in parallel | 69 to 105 s | cargo build 58 to 87 s, contract test 4 to 5 s |
 
 - **The canary job is already small and fast.** Static greps plus a two-second stall probe. Nothing to do there.
-- **The unattended job is what you were asking about.** Three changes bring it from 265 s to roughly 90 s: the cargo cache added in this PR makes the build a few seconds on a lockfile hit; the mutation runs now execute only the one case that must go red instead of all four, which was measured at 136 s of pure waiting and is already trimmed on the branch; and the two 300-second closed-stdin runs finish in under a second each, so they cost nothing.
+- **The unattended job is what you were asking about, and it is now 120 s.** Two changes on this branch did it: the cargo cache turns the 75 s cold build into 17 s on a lockfile hit, and the mutation runs execute only the one case that must go red instead of all four, which had been 136 s of pure waiting. The two 300-second closed-stdin runs finish in under a second each, so they cost nothing.
 - **Splitting further is possible but buys little.** The pty suite itself is 8 s. The floor is the 25 s zsh install, which the runner image lacks; avoiding it would mean a third-party container image, which this repo's supply-chain posture rules out.
 
 ## Things I assumed rather than asked
@@ -59,6 +60,6 @@ flowchart TD
 
 ## Decisions that are yours
 
-- **Merge PR #95.** 25 files including two workflows and a binary, so not the self-merge case. When the checks are green: `gh pr merge 95 --squash --delete-branch`, then `git pull` in the main checkout before running `./deploy.sh`.
+- **Merge PR #95.** 25 files including two workflows and a binary, so not the self-merge case. Checks are green: `gh pr merge 95 --squash --delete-branch`, then `git pull` in the main checkout before running `./deploy.sh`.
 - **Know the Linux window.** The committed Linux binaries are the 30 August build until the build workflow commits new ones a few minutes after merge. In that window a Linux terminal run hits the old read-the-keyboard path with only the shell's wrapper as the guard. It self-heals; macOS is fixed in the PR itself.
 - **Whether to apply the same rule to the remaining prompts** in a follow-up. My lean: yes, one pass, same pty suite as the gate.
