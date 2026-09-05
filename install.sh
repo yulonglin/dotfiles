@@ -94,43 +94,50 @@ COMPONENTS:
                       default: scheduled jobs would bake in a path that
                       cwrm/cwclean will delete.
     --force-reinstall Reinstall tools even if present
-    --non-interactive Skip the component menu and install the default set. The
-                      menu is the script's only prompt; everything after it
-                      already runs with safe defaults (gh auth deferred, git
-                      conflicts keep existing values, sudo cached once up front).
+    --non-interactive Skip the component menu (the profile's set is used as-is)
+                      and app-picker (the committed Brewfile is used). Everything
+                      else already runs with safe defaults (gh auth deferred,
+                      git conflicts keep existing values, sudo cached once up
+                      front). On a terminal nobody types at, the menu times out
+                      to the same result by itself.
 
 EXAMPLES:
-    ./install.sh                        # Menu picks components; rest is hands-off
+    ./install.sh                        # Profile picks components; rest is hands-off
     ./install.sh --default              # Safe base for shared machines
     ./install.sh --only zsh tmux        # Only zsh and tmux, nothing else
     ./install.sh --extras --no-cleanup  # Add extras, skip cleanup
-    ./install.sh --non-interactive      # No menu either — default set, fully hands-off
+    ./install.sh --non-interactive      # No app-picker either — default set, fully hands-off
 EOF
 }
 
 # Parse CLI arguments (overrides config.sh)
 parse_args "$@"
 
-# Make custom_bins (claude-tools) discoverable, then fetch a prebuilt
-# claude-tools matching this platform so the component menu works on a fresh
-# machine before the from-source build in deploy.sh has run.
+# custom_bins (claude-tools, app-picker) must be discoverable for later steps.
 export PATH="$DOT_DIR/custom_bins:$PATH"
-bootstrap_claude_tools || true
 
+# The component menu: profiles, flags and config.local.sh pre-check the set,
+# the menu (attended terminals only) adjusts it, and the banner below prints
+# what was resolved. Every way the menu can fail says so and keeps the set —
+# see show_component_menu for the contract with the binary.
 show_component_menu install
-
-# Cache sudo once, now, so no later step blocks mid-run on a password prompt —
-# the one OS interaction with no software default. Linux package installs use
-# `sudo apt`; macOS needs it for Homebrew's chown and `mas` App Store installs.
-# (Homebrew itself must NOT run as root — only its privileged sub-steps use sudo.)
-front_load_sudo
 
 # ─── Main Installation ────────────────────────────────────────────────────────
 
 log_section "INSTALLING DOTFILES DEPENDENCIES"
 echo "Platform: $PLATFORM"
 echo "Profile: $PROFILE"
+print_resolved_components install
+guard_nonempty_components install
 echo ""
+
+# Cache sudo once, now, so no later step blocks mid-run on a password prompt —
+# the one OS interaction with no software default. Linux package installs use
+# `sudo apt`; macOS needs it for Homebrew's chown and `mas` App Store installs.
+# (Homebrew itself must NOT run as root — only its privileged sub-steps use sudo.)
+# After the banner and the empty-set guard, so a refused run never asks for a
+# password first.
+front_load_sudo
 
 # ─── Core Packages & Tools ────────────────────────────────────────────────────
 
@@ -141,9 +148,10 @@ if is_macos; then
     if ! cmd_exists brew; then
         log_info "Installing Homebrew..."
         # NONINTERACTIVE=1 skips the installer's "Press RETURN to continue"
-        # prompt. This script keeps stdin on the TTY (for the component menu), so
-        # Homebrew never auto-detects non-interactive mode and would otherwise
-        # block there — a silent-looking stall on a fresh Mac. sudo is already
+        # prompt. This script keeps stdin on the TTY (sudo, chsh and app-picker
+        # still read it), so Homebrew never auto-detects non-interactive mode
+        # and would otherwise block there — a silent-looking stall on a fresh
+        # Mac. sudo is already
         # cached above, so brew's privileged steps don't re-prompt either.
         # Checked, not interpolated: a failed fetch in argument position runs
         # bash with an empty script and exits 0, after which every later
@@ -503,7 +511,6 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
         log_warning "Homebrew required for apps — skipping"
     else
         # gum drives app-picker; bootstrap it (tiny formula) if missing.
-        # Note: the component selection menu uses claude-tools select, not gum.
         cmd_exists gum || brew_install gum
 
         brewfile="$DOT_DIR/config/Brewfile"
@@ -511,10 +518,11 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             log_info "Non-interactive: using committed Brewfile (run 'app-picker' to customise)"
         else
             # Interactive: let the user toggle apps, regenerating the Brewfile.
-            # Bounded for the same reason as the component menu: this is a
-            # full-screen TUI that waits for a human, and a TTY nobody is
-            # watching would sit here forever. On expiry the committed Brewfile
-            # is used, exactly as in the non-interactive branch above.
+            # Bounded because this is a full-screen TUI that waits for a
+            # human, and a TTY nobody is watching would sit here forever.
+            # DOTFILES_MENU_TIMEOUT is the app-picker deadline (the name
+            # predates the component menu's removal). On expiry the committed
+            # Brewfile is used, exactly as in the non-interactive branch above.
             run_with_timeout "${DOTFILES_MENU_TIMEOUT:-60}" "$DOT_DIR/custom_bins/app-picker" \
                 || log_warning "app-picker cancelled or unanswered — using existing Brewfile"
         fi
@@ -601,7 +609,7 @@ fi
 # ─── Done ─────────────────────────────────────────────────────────────────────
 
 echo ""
-log_success "Installation complete!"
+log_success "Installation complete! (${RESOLVED_COMPONENT_COUNT:-0} components)"
 echo ""
 echo "Next steps:"
 echo "  1. Run ./deploy.sh to deploy configurations"

@@ -81,15 +81,14 @@ elif [[ "$(head -c2 "$WRAPPER" 2>/dev/null)" != '#!' ]]; then
     wrapper_problem="a raw binary, not the dispatch wrapper"
 fi
 
-# SHA256SUMS is the trust anchor bootstrap_claude_tools verifies prebuilt
-# downloads against. A rebuilt-but-unrecorded asset makes a fresh machine
-# reject the very binary this repo ships.
+# SHA256SUMS records the committed binaries; this check is now its only
+# consumer (the installers' download-and-verify bootstrap was removed on
+# 2026-09-04). A rebuilt-but-unrecorded asset is a binary nobody signed off on.
 # Portable hashing: macOS ships `shasum`, not `sha256sum`. Without this, every
 # asset hashes to the empty string on a Mac and the check cries wolf about all of
 # them — a guard nobody trusts is a guard nobody reads.
-# scripts/shared/helpers.sh has _sha256_of, but it cannot be reused here: it is
-# zsh and exits unless config.sh was sourced first. This stays standalone so it
-# is safe to call from a hook.
+# This stays standalone (no helpers.sh, which is zsh and exits unless config.sh
+# was sourced first) so it is safe to call from a hook.
 sha256_of() {
     if command -v sha256sum >/dev/null 2>&1; then
         sha256sum "$1" 2>/dev/null | awk '{print $1}'

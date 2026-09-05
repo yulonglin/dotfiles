@@ -127,10 +127,11 @@ COMPONENTS:
     --allow-worktree  Deploy even though DOT_DIR is a git worktree. Refused by
                       default: it repoints ~/.claude and ~20 other user symlinks
                       at a directory cwrm/cwclean will delete.
-    --non-interactive Skip the component menu and deploy the default set. The
-                      menu is the script's only prompt; everything after it
+    --non-interactive Skip the component menu (the profile's set is used as-is)
+                      and the htop config-conflict question. Everything else
                       already runs with safe defaults (git conflicts keep
-                      existing values).
+                      existing values). On a terminal nobody types at, the menu
+                      times out to the same result by itself.
     --allow-worktree-deploy
                       Deploy even though this copy of the script lives in a git
                       worktree. Refused by default: DOT_DIR follows the script,
@@ -192,12 +193,13 @@ EOF
     fi
 fi
 
-# Make custom_bins (claude-tools) discoverable, then fetch a prebuilt
-# claude-tools matching this platform so the component menu works before the
-# from-source build below has run.
+# custom_bins (claude-tools, app-picker) must be discoverable for later steps.
 export PATH="$DOT_DIR/custom_bins:$PATH"
-bootstrap_claude_tools || true
 
+# The component menu: profiles, flags and config.local.sh pre-check the set,
+# the menu (attended terminals only) adjusts it, and the banner below prints
+# what was resolved. Every way the menu can fail says so and keeps the set —
+# see show_component_menu for the contract with the binary.
 show_component_menu deploy
 
 # Cache sudo once up front if a privileged component is selected (VPN daemon,
@@ -213,6 +215,8 @@ fi
 log_section "DEPLOYING DOTFILES"
 echo "Platform: $PLATFORM"
 echo "Profile: $PROFILE"
+print_resolved_components deploy
+guard_nonempty_components deploy
 echo "Append mode: $DEPLOY_APPEND"
 echo ""
 
@@ -773,8 +777,8 @@ if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/
         # on failure. The deadline is what matters — a bare `wait` below has no
         # timeout of its own, so an unbounded cargo build here hangs the whole
         # deploy at the very last step, silently. This is the same stall class
-        # the canary is named for; it just lived in deploy.sh rather than in
-        # _build_claude_tools_from_source.
+        # the canary is named for, and this is now the only cargo build on the
+        # install path (the fetch-or-build fallback for the menu is gone).
         cd "$DOT_DIR/tools/claude-tools" \
         && run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release 2>&1 && \
         cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET" && \
@@ -1623,7 +1627,7 @@ fi
 # ─── Done ─────────────────────────────────────────────────────────────────────
 
 echo ""
-log_success "Deployment complete!"
+log_success "Deployment complete! (${RESOLVED_COMPONENT_COUNT:-0} components)"
 echo ""
 echo "Next steps:"
 echo "  Restart your terminal or run: source $RC_FILE"

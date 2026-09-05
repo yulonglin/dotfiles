@@ -12,9 +12,9 @@ mod util;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    // Version probe — also used by install.sh/deploy.sh as a liveness check to
-    // confirm the binary actually runs on this platform (arch match) before
-    // invoking the component-selection TUI.
+    // Version probe: a cheap liveness check that the binary actually runs on
+    // this platform (arch match). The installers run it before opening the
+    // component menu (`select`), and skip the menu with a warning if it fails.
     if args.len() >= 2 && (args[1] == "--version" || args[1] == "-V") {
         println!("claude-tools {}", env!("CARGO_PKG_VERSION"));
         std::process::exit(0);
