@@ -108,6 +108,7 @@ COMPONENTS:
     --claude-cleanup  Install Claude Code session cleanup (both platforms)
     --ai-update       Install AI tools auto-update (daily, both platforms)
     --mcp-sync        Install daily shared MCP sync for Claude and Codex
+    --dotfiles-sync   Install daily commit + rebase + push of this repo (08:05, both platforms)
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
     --hide-idle-apps  Hide, then close, then quit apps left covered up, per config/app-lifecycle.yaml (macOS only, off by default)
@@ -1252,6 +1253,10 @@ queue_scheduled_job() {
 
     if [[ "$DEPLOY_MCP_SYNC" == "true" ]]; then
         queue_scheduled_job mcp-sync "$DOT_DIR/scripts/cleanup/setup_mcp_sync.sh"
+    fi
+
+    if [[ "$DEPLOY_DOTFILES_SYNC" == "true" ]]; then
+        queue_scheduled_job dotfiles-sync "$DOT_DIR/scripts/cleanup/setup_dotfiles_sync.sh"
     fi
 
     if [[ "$DEPLOY_USAGE_PING" == "true" ]]; then

@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+# dotfiles-sync: commit, rebase and push a checkout so every machine converges.
+#
+# Installed as a daily job by scripts/cleanup/setup_dotfiles_sync.sh (launchd on
+# macOS, cron on Linux), and runnable by hand. For each repo, in order:
+#
+#   1. fetch the branch's upstream
+#   2. commit the dirty tree as "sync: <host> <utc>" -- THROUGH the pre-commit
+#      hook, never --no-verify, so the settings.json key guard and gitleaks stay
+#      live. If the hook rejects and claude/settings.json is staged, that one
+#      file is held back and the commit retried once: the working copy of that
+#      file carries a deliberate per-machine diff (gateway env) that the guard
+#      exists to keep out of the public repo.
+#   3. rebase onto the upstream. A conflict is aborted, never resolved here.
+#   4. push. Never --force.
+#
+# Every outcome lands in $DOTFILES_SYNC_STATE_DIR/<repo>.json, which the
+# nudge_dotfiles_sync.sh session-start hook reads, because a log file nobody
+# opens is not a notification. A failure also raises a macOS notification.
+#
+# Exit codes: 0 every repo synced, 1 at least one repo failed, 2 usage error.
+set -uo pipefail
+
+# Scheduled jobs inherit a minimal PATH: launchd has no /opt/homebrew/bin, cron
+# has no ~/.local/bin. gitleaks lives in one of these; without it the pre-commit
+# hook falls back to a weaker grep.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:$PATH"
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_PATH" ]]; do
+    _dir="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$_dir/$SCRIPT_PATH"
+done
+DOT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+
+STATE_DIR="${DOTFILES_SYNC_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-sync}"
+NOTIFY="${DOTFILES_SYNC_NOTIFY:-1}"
+# Pathspec held back from the sync commit when the pre-commit hook rejects it.
+HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json}"
+DRY_RUN=0
+LOCK_DIR=""
+
+usage() {
+    cat <<EOF
+Usage: dotfiles-sync [--dry-run] [--help] [REPO ...]
+
+Commit, rebase and push each REPO (default: this dotfiles checkout, plus
+~/code/dotfiles-personal when it exists, or \$DOTFILES_SYNC_REPOS, colon-separated).
+
+  --dry-run   Fetch and report what would be committed, rebased and pushed.
+  --help      This text.
+
+Environment:
+  DOTFILES_SYNC_STATE_DIR   Where <repo>.json outcome files go
+                            (default \$XDG_STATE_HOME/dotfiles-sync).
+  DOTFILES_SYNC_NOTIFY=0    Suppress the macOS notification on failure.
+  DOTFILES_SYNC_HOLD_BACK   Pathspec unstaged and retried without when the
+                            pre-commit hook rejects (default claude/settings.json).
+EOF
+}
+
+log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
+
+run_with_timeout() {
+    local secs="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then timeout "$secs" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$secs" "$@"
+    else "$@"
+    fi
+}
+
+notify() {
+    [[ "$NOTIFY" == "1" ]] || return 0
+    [[ "$(uname -s)" == "Darwin" ]] || return 0
+    osascript -e "display notification \"$1\" with title \"dotfiles-sync\"" >/dev/null 2>&1 || true
+}
+
+# write_state NAME STATUS MESSAGE PULLED PUSHED HELD
+write_state() {
+    mkdir -p "$STATE_DIR"
+    python3 - "$STATE_DIR/$1.json" "$@" <<'PY'
+import json, sys, datetime, socket
+out, name, status, message, pulled, pushed, held = sys.argv[1:8]
+json.dump({
+    "repo": name, "status": status, "message": message,
+    "pulled": int(pulled), "pushed": int(pushed), "held_back": held,
+    "host": socket.gethostname().split(".")[0],
+    "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+}, open(out, "w"), indent=2)
+PY
+}
+
+# stage_dirty: tracked modifications and deletions, then untracked files that
+# are regular files or symlinks. Not `git add -A`: inside the Claude sandbox on
+# Linux, denied paths show up as phantom character devices that -A would stage.
+stage_dirty() {
+    git add -u -- . || return 1
+    local f
+    while IFS= read -r -d '' f; do
+        [[ -f "$f" || -L "$f" ]] && git add -- "$f"
+    done < <(git ls-files --others --exclude-standard -z)
+    return 0
+}
+
+fail_repo() {
+    # fail_repo NAME MESSAGE PULLED PUSHED HELD
+    log "$1: FAILED: $2"
+    write_state "$1" failed "$2" "${3:-0}" "${4:-0}" "${5:-}"
+    notify "$1: $2"
+    return 1
+}
+
+sync_repo() {
+    local repo="$1" name
+    name="$(basename "$repo")"
+    if ! git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        log "$name: not a git checkout, skipped"
+        return 0
+    fi
+    cd "$repo" || return 1
+
+    local git_dir s
+    git_dir="$(git rev-parse --git-dir)"
+    for s in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply BISECT_LOG index.lock; do
+        [[ -e "$git_dir/$s" ]] && { fail_repo "$name" "$s present: an operation is in progress, skipped"; return 1; }
+    done
+
+    local branch remote upstream
+    branch="$(git symbolic-ref --short -q HEAD)" || { fail_repo "$name" "detached HEAD, skipped"; return 1; }
+    remote="$(git config "branch.$branch.remote" 2>/dev/null || true)"
+    remote="${remote:-origin}"
+    upstream="refs/remotes/$remote/$branch"
+
+    if ! run_with_timeout 120 git fetch --quiet "$remote" 2>/dev/null; then
+        fail_repo "$name" "fetch from $remote failed (offline?)"; return 1
+    fi
+    git rev-parse -q --verify "$upstream" >/dev/null || { fail_repo "$name" "no $remote/$branch to sync with"; return 1; }
+
+    # ── 1. commit ────────────────────────────────────────────────────────────
+    local held="" dirty_after=0 committed=0 msg
+    msg="sync: $(hostname -s 2>/dev/null || hostname) $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+        if (( DRY_RUN )); then
+            log "$name: would commit:"; git status --short | sed 's/^/    /'
+        else
+            stage_dirty
+            if git diff --cached --quiet; then
+                log "$name: dirty tree but nothing stageable"
+            elif git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
+                committed=1
+            elif [[ -n "$HOLD_BACK" ]] && git diff --cached --name-only | grep -qxF "$HOLD_BACK"; then
+                # The hook said no. Hold the known per-machine file back once.
+                git reset -q -- "$HOLD_BACK"
+                held="$HOLD_BACK"
+                if git diff --cached --quiet; then
+                    log "$name: only $HOLD_BACK was dirty and the pre-commit hook rejected it; held back"
+                elif git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
+                    committed=1
+                    log "$name: committed without $HOLD_BACK (pre-commit rejected it)"
+                else
+                    git reset -q
+                    fail_repo "$name" "pre-commit rejected the sync commit: $(tail -1 "$STATE_DIR/$name.commit.err" 2>/dev/null)"; return 1
+                fi
+            else
+                git reset -q
+                fail_repo "$name" "pre-commit rejected the sync commit: $(tail -1 "$STATE_DIR/$name.commit.err" 2>/dev/null)"; return 1
+            fi
+            rm -f "$STATE_DIR/$name.commit.err"
+            (( committed )) && log "$name: committed '$msg'"
+        fi
+    fi
+    [[ -n "$(git status --porcelain --untracked-files=no)" ]] && dirty_after=1
+
+    # ── 2. rebase ────────────────────────────────────────────────────────────
+    local behind ahead pulled=0
+    behind="$(git rev-list --count "HEAD..$upstream")"
+    ahead="$(git rev-list --count "$upstream..HEAD")"
+    if (( behind > 0 )); then
+        if (( DRY_RUN )); then
+            log "$name: would rebase $ahead local commit(s) onto $behind from $remote/$branch"
+        else
+            local -a rb=(git rebase --quiet)
+            # A held-back file leaves the tree dirty; autostash carries it over
+            # and, if re-applying conflicts, keeps it in the stash rather than
+            # dropping it.
+            (( dirty_after )) && rb+=(--autostash)
+            if ! "${rb[@]}" "$upstream" >/dev/null 2>"$STATE_DIR/$name.rebase.err"; then
+                git rebase --abort >/dev/null 2>&1 || true
+                fail_repo "$name" "rebase onto $remote/$branch conflicted; aborted, tree untouched ($ahead local vs $behind remote commits)" 0 0 "$held"
+                return 1
+            fi
+            rm -f "$STATE_DIR/$name.rebase.err"
+            pulled="$behind"
+            log "$name: rebased onto $remote/$branch (+$behind)"
+        fi
+    fi
+
+    # ── 3. push ──────────────────────────────────────────────────────────────
+    ahead="$(git rev-list --count "$upstream..HEAD")"
+    local pushed=0
+    if (( ahead > 0 )); then
+        if (( DRY_RUN )); then
+            log "$name: would push $ahead commit(s) to $remote/$branch"
+        elif run_with_timeout 120 git push --quiet "$remote" "HEAD:refs/heads/$branch" 2>"$STATE_DIR/$name.push.err"; then
+            pushed="$ahead"
+            rm -f "$STATE_DIR/$name.push.err"
+            log "$name: pushed $ahead commit(s)"
+        else
+            fail_repo "$name" "push to $remote/$branch failed: $(tail -1 "$STATE_DIR/$name.push.err" 2>/dev/null)" "$pulled" 0 "$held"
+            return 1
+        fi
+    fi
+
+    (( DRY_RUN )) && return 0
+    local summary="in sync"
+    (( pulled > 0 || pushed > 0 )) && summary="pulled $pulled, pushed $pushed"
+    [[ -n "$held" ]] && summary="$summary; $held held back (pre-commit rejected it)"
+    log "$name: $summary"
+    write_state "$name" ok "$summary" "$pulled" "$pushed" "$held"
+    return 0
+}
+
+main() {
+    local -a repos=()
+    while (( $# )); do
+        case "$1" in
+            --dry-run) DRY_RUN=1 ;;
+            -h|--help) usage; return 0 ;;
+            --) shift; repos+=("$@"); break ;;
+            -*) echo "dotfiles-sync: unknown option $1" >&2; usage >&2; return 2 ;;
+            *) repos+=("$1") ;;
+        esac
+        shift
+    done
+    if (( ${#repos[@]} == 0 )); then
+        if [[ -n "${DOTFILES_SYNC_REPOS:-}" ]]; then
+            IFS=: read -r -a repos <<<"$DOTFILES_SYNC_REPOS"
+        else
+            repos=("$DOT_DIR")
+            [[ -d "$HOME/code/dotfiles-personal/.git" ]] && repos+=("$HOME/code/dotfiles-personal")
+        fi
+    fi
+
+    mkdir -p "$STATE_DIR"
+    # One run at a time: a 08:00 run still waiting on a slow push must not race
+    # a manual one. The lock dir carries the pid so a stale lock is detectable.
+    LOCK_DIR="$STATE_DIR/lock.d"
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        local pid; pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            log "another dotfiles-sync (pid $pid) is running; exiting"; return 1
+        fi
+        rm -rf "$LOCK_DIR"; mkdir "$LOCK_DIR" || return 1
+    fi
+    echo $$ >"$LOCK_DIR/pid"
+    trap 'rm -rf "$LOCK_DIR"' EXIT
+
+    local rc=0 r
+    for r in "${repos[@]}"; do
+        sync_repo "$r" || rc=1
+    done
+    return "$rc"
+}
+
+main "$@"
