@@ -55,7 +55,11 @@ except ImportError:  # Python < 3.11
 OR_BASE = "https://openrouter.ai/api/v1"
 AA_URL = "https://artificialanalysis.ai/api/v2/data/llms/models"
 EPOCH_ZIP = "https://epoch.ai/data/benchmark_data.zip"
-ECI_CSV = "epoch_capabilities_index.csv"
+# Epoch moved the file into a subfolder and renamed the columns on 2026-09-05
+# (was a top-level epoch_capabilities_index.csv with "Model name"/"ECI Score");
+# fetch_eci() accepts either layout.
+ECI_CSV = "epoch_capabilities_index/eci_scores.csv"
+ECI_CSV_LEGACY = "epoch_capabilities_index.csv"
 
 # Resolved relative to this script so the tool works from any cwd.
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "openrouter-models.toml"
@@ -389,11 +393,12 @@ def fetch_eci() -> dict[str, float]:
     with urllib.request.urlopen(req, timeout=120) as r:
         blob = r.read()
     z = zipfile.ZipFile(io.BytesIO(blob))
-    rows = csv.DictReader(io.StringIO(z.read(ECI_CSV).decode("utf-8", "replace")))
+    member = ECI_CSV if ECI_CSV in z.namelist() else ECI_CSV_LEGACY
+    rows = csv.DictReader(io.StringIO(z.read(member).decode("utf-8", "replace")))
     out: dict[str, float] = {}
     for row in rows:
-        score = (row.get("ECI Score") or "").strip()
-        name = (row.get("Model name") or "").strip()
+        score = (row.get("eci") or row.get("ECI Score") or "").strip()
+        name = (row.get("Model") or row.get("Model name") or "").strip()
         if not score or not name:
             continue  # unscored entries exist (Confidence == Unverified)
         try:
