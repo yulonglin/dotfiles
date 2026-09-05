@@ -79,6 +79,7 @@ DEPLOY_REGISTRY=(
     "claude-cleanup|Remove idle Claude sessions after 24h|all|true|Automation"
     "ai-update|Daily auto-update: Claude, Codex, OpenCode|all|true|Automation"
     "mcp-sync|Daily shared MCP sync for Claude and Codex|all|true|Automation"
+    "dotfiles-sync|Daily commit + rebase + push of this repo so every machine converges|all|true|Automation"
     "usage-ping|Hourly Haiku ping to keep the 5-hour subscription window warm|all|true|Automation"
     "tmux-resume|Hourly auto-resume of rate-limited tmux Claude/Codex sessions|all|true|Automation"
     "hide-idle-apps|Hide, then close, then quit apps left covered up (per app-lifecycle.yaml)|macos|false|Automation"
@@ -406,6 +407,7 @@ apply_profile() {
             INSTALL_EXPERIMENTAL=false   # zotero MCP — slow
             INSTALL_PUEUE=false          # cargo install pueue pueued — Rust compile
             DEPLOY_PUEUE=false           # systemd resource slices
+            DEPLOY_DOTFILES_SYNC=false   # ephemeral box: nothing worth pushing, no SSH deploy key
             ;;
         minimal)
             # Nothing enabled — derived from registry (no manual list to drift)

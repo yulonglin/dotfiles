@@ -1,1 +1,5 @@
-{}
+{
+  "worktree": {
+    "baseRef": "head"
+  }
+}
