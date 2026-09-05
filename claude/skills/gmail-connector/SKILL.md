@@ -40,11 +40,20 @@ python3 ~/.claude/skills/gmail-connector/scripts/extract_raw_mime.py work/raw/*.
 
 Per message it writes `<out>/<id>/<attachment>`, `_body.txt` (HTML flattened to text) and `_meta.json` (date, from, subject, attachment list), and prints one summary line. Any `.pdf` whose bytes do not start with `%PDF-` is flagged `!! NOT A PDF` and the exit code is 1 — that is the truncation check. Then `cp` (never `mv`) the attachment into its final home under the project's filename convention.
 
-HTML-only receipts: save `_body.txt` (or the `html_body` from `FULL_CONTENT`) next to the PDFs. If a funder insists on PDF, print it with headless Chrome:
+HTML-only receipts: `_body.txt` (or the `html_body` from `FULL_CONTENT`) is a working note under `work/raw/`, never an attachment — a text file proves nothing (`rules/evidence.md`). What goes in the pack is a printout: render the HTML with headless Chrome, or list the Gmail link next to a "print to PDF" step for the user when the render is not faithful:
 
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu --print-to-pdf=out.pdf file:///abs/path/receipt.html
 ```
+
+For a whole thread the two scripts in `scripts/` do it end to end: `build.py` turns a `get_thread` result (`messageFormat: FULL_CONTENT`, so `htmlBody` is present; save the spilled JSON as `<basename>.txt`, the output takes the file stem) or the delimited `threads.txt` capture (format in its docstring) into a Gmail-print-style page — account header, subject, message count, each message boxed with From/To/Cc/Date/Attachments, tracking pixels and tokenised links stripped; `render.py` prints those pages to PDF and reports bytes and page count:
+
+```bash
+python3 ~/.claude/skills/gmail-connector/scripts/build.py work/threads.txt work/<basename>.txt --out work/html --account lin.yulong@gmail.com
+python3 ~/.claude/skills/gmail-connector/scripts/render.py work/html/*.html --out work/pdf   # sandbox off
+```
+
+Gmail's own print view cannot be pulled through the claude-in-chrome extension: its redaction fires on `a=b; c=d` shapes in the page HTML, and the auto-mode classifier blocks working around it, so the printout is built from the API body plus headers instead. Chrome 152 headless needs the sandbox off and never exits after `--print-to-pdf`; `render.py` polls until the PDF size is stable, then kills it, and flags anything under 10 KB as a blank page.
 
 ## Search lessons from the 2026-09 sweep
 
@@ -68,4 +77,4 @@ If the user asks for a plain download with no parsing, a Chrome tab at `https://
 
 ## Rules
 
-Read-only by default: never `send_message`, `reply`, `forward`, label, archive, mark spam or trash. `create_draft` only when the user asks for a draft — never send, even when told to (see `rules/safety.md`, Google Workspace). Never invent an invoice number or amount; write "unreadable" and keep the file. Personal-versus-work charges are the user's call: list them under `AMBIGUOUS:` with a recommendation instead of deciding.
+Read-only by default: never `send_message`, `reply`, `forward`, label, archive, mark spam or trash. `create_draft` only when the user asks for a draft — never send, even when told to (see `rules/safety.md`, Google Workspace). Never invent an invoice number or amount; write "unreadable" and keep the file. Saved message bodies are notes, not evidence: an attachment list carries only PDFs and images from the source system, and the inventory names each file's format — `rules/evidence.md`. Personal-versus-work charges are the user's call: list them under `AMBIGUOUS:` with a recommendation instead of deciding.

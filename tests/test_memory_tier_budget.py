@@ -43,6 +43,9 @@ ALWAYS_ON = [
     ("claude/rules/communication.md", 3100),
     ("claude/rules/delegation.md", 2600),
     ("claude/rules/experiments.md", 3050),
+    # Added 2026-09-03: evidence packs attach source printouts, never text
+    # transcriptions. Four short paragraphs; the how lives in gmail-connector.
+    ("claude/rules/evidence.md", 1550),
     # pointers.md was deleted on 2026-08-30. Its whole job was indexing skills,
     # and four of the skills it indexed had never been invoked in 4,100 sessions
     # -- the index cost more every session than the things it indexed returned.
