@@ -137,7 +137,9 @@ drive() {
     local -a extra=()
     [[ -n "$send" ]] && extra=(--send-on-expect "$send")
     local json
-    json="$(python3 "$DRIVE" --deadline "$deadline" --expect "$ALT_SCREEN" "${extra[@]}" \
+    # ${extra[@]+"${extra[@]}"}: bash 3.2 (macOS /bin/bash) counts an empty
+    # array expansion as unbound under set -u; this spelling is safe on both.
+    json="$(python3 "$DRIVE" --deadline "$deadline" --expect "$ALT_SCREEN" ${extra[@]+"${extra[@]}"} \
         --env "HOME=$SCRATCH/home" --env "DOTFILES_PROMPT_TIMEOUT=5" \
         --env "DOTFILES_MENU_TIMEOUT=$MENU_IDLE" --env "DOTFILES_SKIP_LOCAL_CONFIG=1" -- "$@")"
     DRIVE_EXIT="$(printf '%s' "$json" | python3 -c 'import json,sys; v=json.load(sys.stdin)["exit"]; print("none" if v is None else v)')"

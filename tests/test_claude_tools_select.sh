@@ -38,7 +38,9 @@ drive() {
     local -a extra=()
     [[ -n "$send" ]] && extra=(--send-on-expect "$send")
     local json
-    json="$(python3 "$DOT_DIR/tests/pty_drive.py" --deadline "$deadline" --expect "$ALT_SCREEN" "${extra[@]}" -- "$@")"
+    # ${extra[@]+"${extra[@]}"}: bash 3.2 (macOS /bin/bash) counts an empty
+    # array expansion as unbound under set -u; this spelling is safe on both.
+    json="$(python3 "$DOT_DIR/tests/pty_drive.py" --deadline "$deadline" --expect "$ALT_SCREEN" ${extra[@]+"${extra[@]}"} -- "$@")"
     J_EXIT="$(printf '%s' "$json" | python3 -c 'import json,sys; v=json.load(sys.stdin)["exit"]; print("none" if v is None else v)')"
     J_AT="$(printf '%s' "$json" | python3 -c 'import json,sys; v=json.load(sys.stdin)["expect_at"]; print("none" if v is None else v)')"
     J_ELAPSED="$(printf '%s' "$json" | python3 -c 'import json,sys; print(int(json.load(sys.stdin)["elapsed"]))')"
