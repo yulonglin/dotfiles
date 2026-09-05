@@ -233,9 +233,9 @@ add-zsh-hook precmd _reset_terminal_modes_soft
 # mid-session kill -9 of alt-screen apps needs manual fix-term)
 _reset_terminal_modes
 
-# Only display ASCII art in interactive shells
-if [[ -o interactive ]]; then
-  cat $CONFIG_DIR/start.txt
+# Shell-startup art, only if deploy.sh --ascii=NAME chose one (off by default)
+if [[ -o interactive && -f $CONFIG_DIR/start.txt ]]; then
+  cat "$CONFIG_DIR/start.txt"
 fi
 
 fs() {

@@ -122,7 +122,8 @@ COMPONENTS:
     --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
-    --ascii=FILE      ASCII art file for shell startup
+    --ascii=NAME      Shell-startup art from config/ascii_arts/ (cat, dog, paw, stars);
+                      none removes it. Off by default; the choice persists across deploys
     --no-<component>  Disable a component (e.g., --no-editor)
     --allow-worktree  Deploy even though DOT_DIR is a git worktree. Refused by
                       default: it repoints ~/.claude and ~20 other user symlinks
@@ -335,10 +336,18 @@ PROFILE
         done
     fi
 
-    # Custom ASCII art
-    if [[ "$DEPLOY_ASCII_FILE" != "start.txt" ]]; then
-        log_info "Using custom ASCII art: $DEPLOY_ASCII_FILE"
-        cp "$DOT_DIR/config/ascii_arts/$DEPLOY_ASCII_FILE" "$DOT_DIR/config/start.txt"
+    # Shell-startup art: config/start.txt is untracked and per machine; only --ascii touches it
+    if [[ "$DEPLOY_ASCII_FILE" == "none" ]]; then
+        rm -f "$DOT_DIR/config/start.txt"
+        log_info "Removed shell-startup art"
+    elif [[ -n "$DEPLOY_ASCII_FILE" ]]; then
+        ascii_src="$DOT_DIR/config/ascii_arts/${DEPLOY_ASCII_FILE%.txt}.txt"
+        if [[ -f "$ascii_src" ]]; then
+            command cp -f "$ascii_src" "$DOT_DIR/config/start.txt"
+            log_info "Using shell-startup art: ${DEPLOY_ASCII_FILE%.txt}"
+        else
+            log_warning "No such art '$DEPLOY_ASCII_FILE' — available: $(ls "$DOT_DIR/config/ascii_arts" | sed 's/\.txt$//' | tr '\n' ' ')"
+        fi
     fi
 fi
 
