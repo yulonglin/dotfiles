@@ -228,9 +228,13 @@ test_empty_resolved_set_is_refused() {
 echo "Installers on a silent pty — the menu draws, and the run still finishes"
 echo
 test_deploy_menu_draws_then_deadline_keeps_profile
-test_deploy_enter_confirms_profile
-test_install_menu_draws_and_esc_keeps_profile
-test_empty_resolved_set_is_refused
+# Under mutation only the case that must go red runs: each extra case waits
+# out the planted regression's full deadline for no additional signal.
+if [[ "$MUTATE" != true ]]; then
+    test_deploy_enter_confirms_profile
+    test_install_menu_draws_and_esc_keeps_profile
+    test_empty_resolved_set_is_refused
+fi
 
 echo
 echo "─────────────────────────────────────────"
