@@ -26,6 +26,10 @@ export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 # The user's global hooks (core.hooksPath) must not fire on these throwaway repos.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+# An empty template: `git init`/`clone` otherwise copy sample hooks into .git/hooks,
+# and the Claude Code sandbox refuses every write under a .git/hooks directory.
+mkdir -p "$WORK/template"
+export GIT_TEMPLATE_DIR="$WORK/template"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "ok - $*"; }
