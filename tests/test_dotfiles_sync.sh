@@ -131,13 +131,51 @@ echo two >"$WORK/dry/file.txt"
 [ ! -e "$DOTFILES_SYNC_STATE_DIR/dry.json" ] || fail "dry-run wrote state"
 pass "dry-run is inert"
 
+# 7. --prune: merged clean worktrees go, everything else stays and is reported
+fresh_remote prune
+P="$WORK/prune"; WT="$P/.claude/worktrees"; mkdir -p "$WT"
+add_wt() {  # name, then optional commit subject on its branch
+    git -C "$P" worktree add -q -b "worktree-$1" "$WT/$1" main 2>/dev/null
+    if [ -n "${2:-}" ]; then
+        echo "$2" >"$WT/$1/$1.txt"; git -C "$WT/$1" add "$1.txt"; git -C "$WT/$1" commit -q -m "$2"
+    fi
+}
+add_wt merged                              # 0 ahead, clean         -> removed, branch deleted
+add_wt dirty;    echo junk >"$WT/dirty/untracked.txt"   # 0 ahead, dirty -> kept
+add_wt locked;   git -C "$P" worktree lock "$WT/locked" # 0 ahead, locked -> kept
+add_wt fresh "fresh work"                  # unmerged, recent       -> kept, not stale
+GIT_COMMITTER_DATE="$(date -u -v-30d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
+    add_wt old "old work"                  # unmerged, 30 days      -> kept, stale
+git -C "$P" branch orphan-merged main      # merged, no worktree    -> branch deleted
+git -C "$P" branch orphan-unmerged worktree-old   # unmerged, no worktree -> untouched
+"$SYNC" --prune "$P" >"$WORK/prune.log" 2>&1 || fail "prune exited non-zero: $(cat "$WORK/prune.log")"
+[ ! -d "$WT/merged" ] || fail "merged worktree not removed"
+git -C "$P" rev-parse -q --verify worktree-merged >/dev/null && fail "merged branch not deleted"
+git -C "$P" rev-parse -q --verify orphan-merged >/dev/null && fail "orphan merged branch not deleted"
+for k in dirty locked fresh old; do [ -d "$WT/$k" ] || fail "$k worktree was removed"; done
+git -C "$P" rev-parse -q --verify orphan-unmerged >/dev/null || fail "unmerged orphan branch deleted"
+[ "$(git -C "$WT/old" log -1 --format=%s)" = "old work" ] || fail "old worktree lost its commit"
+[ "$(state_field prune.prune status)" = ok ] || fail "prune state not ok"
+python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["removed"]==["merged","branch orphan-merged"], s["removed"]; assert len(s["stale"])==1 and s["stale"][0].startswith("old ("), s["stale"]; assert not any(k.startswith("fresh") for k in s["stale"]); assert any(k.startswith("locked: locked") for k in s["kept"]) and any(k.startswith("dirty: dirty") for k in s["kept"]), s["kept"]' "$DOTFILES_SYNC_STATE_DIR/prune.prune.json" || fail "prune state contents wrong"
+pass "prune removes only merged clean worktrees and lists the stale unmerged one"
+
+# 8. --prune --dry-run touches nothing
+fresh_remote prunedry
+mkdir -p "$WORK/prunedry/.claude/worktrees"
+git -C "$WORK/prunedry" worktree add -q -b worktree-m "$WORK/prunedry/.claude/worktrees/m" main 2>/dev/null
+"$SYNC" --prune --dry-run "$WORK/prunedry" >/dev/null || fail "prune dry-run exited non-zero"
+[ -d "$WORK/prunedry/.claude/worktrees/m" ] || fail "prune dry-run removed a worktree"
+[ ! -e "$DOTFILES_SYNC_STATE_DIR/prunedry.prune.json" ] || fail "prune dry-run wrote state"
+pass "prune dry-run is inert"
+
 # The nudge hook reads the state files written above: conflict must surface, noop must not.
 NUDGE="$REPO_ROOT/claude/hooks/nudge_dotfiles_sync.sh"
 out="$(CLAUDE_HOOK_FEATURES_FILE=/dev/null bash "$NUDGE" </dev/null)"
 echo "$out" | grep -q 'conflict: last dotfiles-sync FAILED' || fail "nudge did not report the failed repo: $out"
 echo "$out" | grep -q 'held: claude/settings.json was held back' || fail "nudge did not report the held-back file"
+echo "$out" | grep -q 'prune: 1 worktree(s) with unmerged commits older than' || fail "nudge did not report the stale worktree: $out"
 echo "$out" | grep -q '"hookEventName": "SessionStart"' || fail "nudge output is not a SessionStart payload"
 echo "$out" | grep -q 'noop:' && fail "nudge mentioned the healthy repo"
-pass "nudge surfaces failures and held-back files only"
+pass "nudge surfaces failures, held-back files and stale worktrees only"
 
 echo "all dotfiles-sync tests passed"

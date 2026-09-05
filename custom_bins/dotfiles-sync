@@ -39,16 +39,25 @@ NOTIFY="${DOTFILES_SYNC_NOTIFY:-1}"
 # Pathspec held back from the sync commit when the pre-commit hook rejects it.
 HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json}"
 DRY_RUN=0
+PRUNE=0
+STALE_DAYS="${DOTFILES_SYNC_STALE_DAYS:-14}"
 LOCK_DIR=""
 
 usage() {
     cat <<EOF
-Usage: dotfiles-sync [--dry-run] [--help] [REPO ...]
+Usage: dotfiles-sync [--dry-run] [--prune] [--help] [REPO ...]
 
 Commit, rebase and push each REPO (default: this dotfiles checkout, plus
 ~/code/dotfiles-personal when it exists, or \$DOTFILES_SYNC_REPOS, colon-separated).
 
   --dry-run   Fetch and report what would be committed, rebased and pushed.
+  --prune     Instead of syncing: remove each REPO's Claude worktrees
+              (<repo>/.claude/worktrees/*) whose branch has no commits beyond
+              the checked-out branch, delete those branches with \`branch -d\`,
+              and \`remote prune\`. Never --force, never -D: dirty, locked,
+              tmux-attached and unmerged worktrees are kept and reported, and
+              an unmerged one older than \$DOTFILES_SYNC_STALE_DAYS is listed
+              as stale for the session-start nudge.
   --help      This text.
 
 Environment:
@@ -57,6 +66,8 @@ Environment:
   DOTFILES_SYNC_NOTIFY=0    Suppress the macOS notification on failure.
   DOTFILES_SYNC_HOLD_BACK   Pathspec unstaged and retried without when the
                             pre-commit hook rejects (default claude/settings.json).
+  DOTFILES_SYNC_STALE_DAYS  Age (last commit) after which an unmerged worktree
+                            is reported as stale by --prune (default 14).
 EOF
 }
 
@@ -221,11 +232,109 @@ sync_repo() {
     return 0
 }
 
+# write_prune_state NAME STATUS REMOVED KEPT STALE  (lists are newline-separated)
+write_prune_state() {
+    mkdir -p "$STATE_DIR"
+    python3 - "$STATE_DIR/$1.prune.json" "$@" <<'PY'
+import json, sys, datetime, socket
+out, name, status, removed, kept, stale = sys.argv[1:7]
+split = lambda s: [l for l in s.split("\n") if l]
+json.dump({
+    "repo": name, "status": status,
+    "removed": split(removed), "kept": split(kept), "stale": split(stale),
+    "host": socket.gethostname().split(".")[0],
+    "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+}, open(out, "w"), indent=2)
+PY
+}
+
+# prune_repo REPO: the weekly housekeeping cwclean does by hand, minus anything
+# that needs judgment. Only worktrees under <repo>/.claude/worktrees are
+# considered; a worktree is removed only when it is clean, unlocked, has no live
+# tmux session, and its branch has zero commits beyond the checked-out branch.
+# Deletion is `git worktree remove` (no --force) and `git branch -d` (no -D),
+# so git itself refuses anything the checks missed.
+prune_repo() {
+    local repo="$1" name
+    name="$(basename "$repo")"
+    git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { log "$name: not a git checkout, skipped"; return 0; }
+    cd "$repo" || return 1
+    local base remote
+    base="$(git symbolic-ref --short -q HEAD)" || { log "$name: detached HEAD, prune skipped"; return 0; }
+    remote="$(git config "branch.$base.remote" 2>/dev/null || true)"; remote="${remote:-origin}"
+    local wt_root
+    wt_root="$(cd -P . && pwd)/.claude/worktrees"
+
+    (( DRY_RUN )) || git worktree prune
+    (( DRY_RUN )) || run_with_timeout 120 git remote prune "$remote" >/dev/null 2>&1 || true
+
+    local removed="" kept="" stale="" failed=0 now
+    now="$(date +%s)"
+    local path="" branch="" locked=0 wt_branches=""
+    # Parse `worktree list --porcelain`; a blank line ends each block.
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+            "worktree "*) path="${line#worktree }"; branch=""; locked=0 ;;
+            "branch refs/heads/"*) branch="${line#branch refs/heads/}" ;;
+            locked*) locked=1 ;;
+            "")
+                [[ -n "$path" && "$path" == "$wt_root/"* ]] || { path=""; continue; }
+                local wname reason="" ahead age
+                wname="$(basename "$path")"
+                [[ -n "$branch" ]] && wt_branches+="$branch"$'\n'
+                if (( locked )); then reason="locked"
+                elif [[ -z "$branch" ]]; then reason="detached HEAD"
+                elif [[ "$branch" == "$base" ]]; then reason="checked-out branch"
+                elif command -v tmux >/dev/null 2>&1 && tmux has-session -t "=worktree-$wname" 2>/dev/null; then reason="tmux session alive"
+                elif [[ -n "$(git -C "$path" status --porcelain 2>/dev/null)" ]]; then reason="dirty"
+                else
+                    ahead="$(git rev-list --count "$base..$branch")"
+                    if (( ahead == 0 )); then
+                        if (( DRY_RUN )); then
+                            log "$name: would remove $wname ($branch, merged)"; removed+="$wname"$'\n'
+                        elif git worktree remove "$path" >/dev/null 2>&1 && git branch -d "$branch" >/dev/null 2>&1; then
+                            log "$name: removed $wname and deleted $branch (merged)"; removed+="$wname"$'\n'
+                        else
+                            reason="git refused removal"; failed=1
+                        fi
+                    else
+                        age=$(( (now - $(git log -1 --format=%ct "$branch")) / 86400 ))
+                        reason="$ahead unmerged commit(s), last commit ${age}d ago"
+                        (( age >= STALE_DAYS )) && stale+="$wname ($reason)"$'\n'
+                    fi
+                fi
+                [[ -n "$reason" ]] && { kept+="$wname: $reason"$'\n'; log "$name: kept $wname ($reason)"; }
+                path=""
+                ;;
+        esac
+    done < <(git worktree list --porcelain; echo)
+
+    # Branches with no worktree and nothing beyond the base branch: -d refuses
+    # anything unmerged, so this cannot lose a commit.
+    local b
+    for b in $(git for-each-ref --format='%(refname:short)' refs/heads); do
+        [[ "$b" == "$base" ]] && continue
+        grep -qxF "$b" <<<"$wt_branches" && continue
+        (( $(git rev-list --count "$base..$b") == 0 )) || continue
+        if (( DRY_RUN )); then log "$name: would delete branch $b (merged)"; removed+="branch $b"$'\n'
+        elif git branch -d "$b" >/dev/null 2>&1; then log "$name: deleted branch $b (merged)"; removed+="branch $b"$'\n'
+        fi
+    done
+
+    local n_rm n_kept n_stale
+    n_rm=$(grep -c . <<<"$removed" || true); n_kept=$(grep -c . <<<"$kept" || true); n_stale=$(grep -c . <<<"$stale" || true)
+    log "$name: prune done: removed $n_rm, kept $n_kept, stale $n_stale"
+    (( DRY_RUN )) && return 0
+    write_prune_state "$name" "$( (( failed )) && echo failed || echo ok)" "$removed" "$kept" "$stale"
+    return "$failed"
+}
+
 main() {
     local -a repos=()
     while (( $# )); do
         case "$1" in
             --dry-run) DRY_RUN=1 ;;
+            --prune) PRUNE=1 ;;
             -h|--help) usage; return 0 ;;
             --) shift; repos+=("$@"); break ;;
             -*) echo "dotfiles-sync: unknown option $1" >&2; usage >&2; return 2 ;;
@@ -258,7 +367,9 @@ main() {
 
     local rc=0 r
     for r in "${repos[@]}"; do
-        sync_repo "$r" || rc=1
+        if (( PRUNE )); then prune_repo "$r" || rc=1
+        else sync_repo "$r" || rc=1
+        fi
     done
     return "$rc"
 }

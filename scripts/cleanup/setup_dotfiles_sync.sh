@@ -13,11 +13,14 @@ SYNC_BIN="$DOT_DIR/custom_bins/dotfiles-sync"
 source "$DOT_DIR/scripts/scheduler/scheduler.sh"
 
 JOB_ID="dotfiles-sync"
+PRUNE_JOB_ID="dotfiles-prune"
+PRUNE_BIN="$DOT_DIR/custom_bins/dotfiles-prune"
 
 log_step() { echo -e "${BLUE}==>${NC} $1"; }
 
 uninstall() {
     unschedule "$JOB_ID" 2>/dev/null || true
+    unschedule "$PRUNE_JOB_ID" 2>/dev/null || true
 }
 
 install() {
@@ -29,6 +32,15 @@ install() {
     fi
 
     schedule_daily "$JOB_ID" "$SYNC_BIN" 8 5
+
+    # Weekly worktree housekeeping: Sunday 08:15, after that day's sync has
+    # pushed, so "merged" is judged against a branch the remote already has.
+    log_step "Setting up weekly worktree prune..."
+    if [[ -x "$PRUNE_BIN" ]]; then
+        schedule_weekly "$PRUNE_JOB_ID" "$PRUNE_BIN" 0 8 15
+    else
+        _sched_log_warn "Binary not found or not executable at $PRUNE_BIN. Prune not scheduled."
+    fi
 }
 
 # Always uninstall first to ensure clean state
