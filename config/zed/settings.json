@@ -1,187 +1,108 @@
-// Zed editor settings — feature parity with Cursor config
+// Zed editor settings — an overlay on Zed's defaults, not a Cursor port.
 // Deployed via: ./deploy.sh --zed (symlinked to ~/.config/zed/settings.json)
 //
-// Only non-default settings are listed. For all defaults, run:
-//   zed: open default settings (from command palette)
+// Rule: a line exists here only if it changes a Zed 1.17.2 default. Redundant
+// lines were removed on 2026-09-03 after a key-by-key diff against upstream
+// assets/settings/default.json for that tag. Community rates below are from
+// 87 public zed/settings.json files on GitHub, same day.
+// To see every default: "zed: open default settings" in the command palette.
 {
-  // === Privacy & Security ===
-  "cli_default_open_behavior": "existing_window",
-  "context_servers": {
-    "mcp-server-markitdown": {
-      "enabled": true,
-      "remote": false,
-      "settings": {
-        "package_version": "latest"
-      }
-    }
-  },
-  "project_panel": {
-    "hide_gitignore": false,
-    "dock": "left"
-  },
-  "git_panel": {
-    "dock": "left"
-  },
-  "redact_private_values": true,
+  // === Keymap & editing ===
+  "base_keymap": "VSCode",
+  "autosave": "on_focus_change", // 31% of community configs set this
+  "remove_trailing_whitespace_on_save": false,
+  "soft_wrap": "editor_width",
+  "wrap_guides": [100],
+  "use_smartcase_search": true,
 
-  // === Theme & Appearance ===
+  // === Theme & fonts ===
+  // theme is a whole-object field: keep all three keys, do not partially override
   "theme": {
     "mode": "system",
-    "dark": "High Contrast One Dark",
-    "light": "One Light"
+    "light": "One Light",
+    "dark": "High Contrast One Dark"
   },
   "icon_theme": "Material Icon Theme",
-  "ui_font_size": 16,
   "buffer_font_family": "Menlo",
   "buffer_font_size": 16,
 
-  // === Editor Behavior (non-default only) ===
-  "base_keymap": "VSCode",
-  "autosave": "on_focus_change",
-  "format_on_save": "off", // globally off; enabled per-language for TS/JS/Rust
-  "remove_trailing_whitespace_on_save": false,
-  "multi_cursor_modifier": "alt", // alt-click adds a cursor; cmd-click = go to definition (Cursor parity)
-  "soft_wrap": "editor_width",
-
-  // === Display (non-default only) ===
-  "minimap": {
-    "show": "auto"
-  },
-  "indent_guides": {
-    "enabled": true,
-    "coloring": "indent_aware"
-  },
-  "inlay_hints": {
-    "enabled": true
-  },
+  // === Display ===
+  "minimap": { "show": "auto" },
+  "indent_guides": { "coloring": "indent_aware" },
+  "inlay_hints": { "enabled": true },
+  "diagnostics": { "inline": { "enabled": true } }, // native errorlens
   "tabs": {
-    "show_diagnostics": "errors"
+    "show_diagnostics": "errors",
+    "git_status": true,
+    "file_icons": true
   },
-  // Native replacement for the errorlens extension (Zed default is false)
-  "diagnostics": {
-    "inline": {
-      "enabled": true
-    }
-  },
-  // show_wrap_guides is true by default but the guide list is empty,
-  // so nothing is drawn until a column is named here
-  "wrap_guides": [100],
-  "toolbar": {
-    "breadcrumbs": false
+  "toolbar": { "breadcrumbs": false },
+
+  // === Panels (Zed default is right for all of these) ===
+  "project_panel": { "dock": "left" },
+  "git_panel": { "dock": "left" },
+  "collaboration_panel": { "dock": "left", "button": false },
+  "agent": {
+    "dock": "right",
+    "default_model": { "provider": "anthropic", "model": "claude-sonnet-4-6-latest" }
   },
 
-  // === Search (CRITICAL: include gitignored files) ===
+  // === Search: include gitignored files ===
   // Two separate keys. `search` governs project search (cmd-shift-f);
-  // `file_finder` governs the command-palette file finder (cmd-p).
-  // file_finder default is "smart", which only looks at ignored files when the
-  // worktree itself is gitignored — hence cmd-p missing tmp/ and .remember/.
-  // "all" = use all gitignored files. file_scan_exclusions below still applies,
-  // so .venv/node_modules/__pycache__ stay out of results.
-  "search": {
-    "include_ignored": true
-  },
-  "file_finder": {
-    "include_ignored": "all"
-  },
-  "use_smartcase_search": true,
+  // `file_finder` governs cmd-p, whose default "smart" only looks at ignored
+  // files when the worktree itself is gitignored.
+  "search": { "include_ignored": true },
+  "file_finder": { "include_ignored": "all" },
 
-  // === File Scanning (extends defaults with project-specific exclusions) ===
+  // === File scanning (Zed's 11 defaults + project-specific) ===
   "file_scan_exclusions": [
-    "**/.git",
-    "**/.svn",
-    "**/.hg",
-    "**/.jj",
-    "**/.sl",
-    "**/.repo",
-    "**/CVS",
-    "**/.classpath",
-    "**/.settings",
-    "**/.DS_Store",
-    "**/Thumbs.db",
-    "**/.cache",
-    "**/.venv",
-    "**/node_modules",
-    "**/__pycache__",
-    "**/*.pyc",
+    "**/.git", "**/.svn", "**/.hg", "**/.jj", "**/.sl", "**/.repo", "**/CVS",
+    "**/.DS_Store", "**/Thumbs.db", "**/.classpath", "**/.settings",
+    "**/.cache", "**/.venv", "**/node_modules", "**/__pycache__", "**/*.pyc",
     "**/prompt_history",
-    // Hides secret files from cmd-p. Zed's default file_scan_inclusions is
-    // [".env*"], which force-indexes them even though they are gitignored,
-    // and file_finder.include_ignored: "all" then surfaces them.
-    // Deliberately NOT "**/.env*" — that glob also matches .envrc, which is
-    // direnv config you edit by hand and want to keep reachable.
+    // Hide secrets from cmd-p: default file_scan_inclusions is [".env*"], which
+    // force-indexes them, and file_finder "all" then surfaces them.
+    // Deliberately NOT "**/.env*" — that also matches .envrc (direnv config).
     "**/.env",
     "**/.env.*"
   ],
 
-  // === Git (inline blame = built-in GitLens) ===
-  "git": {
-    "inline_blame": {
-      "enabled": true,
-      "delay_ms": 600,
-      "show_commit_summary": true,
-      "min_column": 40
-    }
-  },
-
-  // === Edit Predictions (Zeta — Zed's native AI completion) ===
+  // === Privacy ===
+  "redact_private_values": true,
+  "telemetry": { "diagnostics": false, "metrics": false }, // 53% of community
   "edit_predictions": {
-    "provider": "zed",
+    // Zed's default list plus **/secrets* — this key REPLACES the default, so
+    // the defaults are restated here rather than lost.
     "disabled_globs": [
-      "**/.env*",
+      "**/.env*", "**/*.pem", "**/*.key", "**/*.cert", "**/*.crt",
+      "**/.dev.vars", "**/secrets.yml", "**/.zed/settings.json",
+      "/**/zed/settings.json", "/**/zed/keymap.json",
       "**/secrets*"
     ]
   },
 
-  // === AI / Agent ===
-  "agent": {
-    "dock": "right",
-    "default_model": {
-      "provider": "anthropic",
-      "model": "claude-sonnet-4-6-latest"
-    }
+  // === Git ===
+  "git": {
+    "inline_blame": { "delay_ms": 600, "show_commit_summary": true, "min_column": 40 }
   },
 
-  // === Telemetry (disabled) ===
-  "telemetry": {
-    "diagnostics": false,
-    "metrics": false
-  },
-
-  // === Terminal (non-default only) ===
+  // === Terminal ===
   "terminal": {
     "option_as_meta": true,
     "font_family": "Menlo",
-    "font_size": 14,
-    "detect_venv": {
-      "on": {
-        "directories": [".venv", "venv", ".env", "env"],
-        "activate_script": "default"
-      }
-    }
+    "font_size": 14
   },
 
-  // === Panels (non-default only) ===
-  "outline_panel": {
-    "dock": "right"
-  },
-  "notification_panel": {
-    "button": false
-  },
-  "collaboration_panel": {
-    "dock": "left",
-    "button": false
-  },
-
-  // === Auto-install Extensions ===
+  // === Extensions ===
   "auto_install_extensions": {
     "one-dark-pro": true,
     "ruff": true,
+    "biome": true,
     "toml": true,
     "dockerfile": true,
     "git-firefly": true,
     "rainbow-csv": true,
     "just": true,
-    "html": true,
     "xml": true,
     "latex": true,
     "mermaid": true,
@@ -189,65 +110,60 @@
     "env": true
   },
 
-  // === Language Overrides ===
+  // === Language servers ===
+  "lsp": {
+    // Biome (extension above) only runs in projects that ship a biome.json.
+    // It is NOT set as a global formatter: put that in the project's
+    // .zed/settings.json per https://biomejs.dev/reference/zed
+    "biome": { "settings": { "require_config_file": true } }
+  },
+
+  // === Language overrides (only non-default keys) ===
   "languages": {
     "Python": {
-      "tab_size": 4,
-      "format_on_save": "off",
       "preferred_line_length": 100,
       "soft_wrap": "bounded",
-      "use_on_type_format": true,
-      "formatter": {
-        "language_server": {
-          "name": "ruff"
-        }
-      },
-      // ty, pyright, basedpyright and pylsp are all BUILT INTO Zed — no extension needed.
-      // Only ONE type checker can run at a time: two both publish diagnostics for the
-      // same lines, which is why Zed's own default disables all but one.
-      // To flip back to Zed's default, swap "ty" and "!basedpyright".
+      // ty, pyright, basedpyright and pylsp are all built in. Only ONE type
+      // checker can run: two both publish diagnostics for the same lines.
+      // Zed's default is basedpyright; swap "ty" and "!basedpyright" to revert.
       "language_servers": ["ty", "ruff", "!basedpyright", "!pyright", "!pylsp"]
     },
     "TypeScript": {
       "tab_size": 2,
       "format_on_save": "on",
-      "formatter": "language_server"
+      "formatter": "language_server" // default "auto" would prefer prettier when a project has it
+    },
+    "TSX": {
+      "tab_size": 2,
+      "format_on_save": "on"
     },
     "JavaScript": {
       "tab_size": 2,
       "format_on_save": "on"
     },
-    "JSON": {
-      "tab_size": 2
-    },
-    "JSONC": {
-      "tab_size": 2
-    },
-    "YAML": {
-      "tab_size": 2
-    },
-    "Markdown": {
-      "soft_wrap": "editor_width",
-      "show_edit_predictions": false
-    },
-    "Rust": {
-      "tab_size": 4,
-      "format_on_save": "on",
-      "formatter": "language_server",
-      "preferred_line_length": 100
-    }
+    "JSON": { "tab_size": 2 },
+    "JSONC": { "tab_size": 2 },
+    "YAML": { "tab_size": 2 },
+    "Markdown": { "show_edit_predictions": false },
+    "Rust": { "preferred_line_length": 100 }
   },
 
-  // === File Type Associations ===
+  // === File type associations ===
   "file_types": {
-    "JSONC": ["**/.zed/**/*.json", "tsconfig.json", "tsconfig.*.json"],
     "XML": ["*.strings", "*.plist"]
   },
 
-  // === SSH Connections ===
-  // Zed reads hosts from ~/.ssh/config (managed by gist sync).
-  // This array stores recently-used connections with project paths.
-  // Machine-specific — added via Zed UI, not hardcoded.
+  // === MCP ===
+  "context_servers": {
+    "mcp-server-markitdown": {
+      "enabled": true,
+      "remote": false,
+      "settings": { "package_version": "latest" }
+    }
+  },
+
+  // === SSH connections ===
+  // Machine state Zed rewrites itself when you connect from the UI. Keep last.
   "ssh_connections": [
     {
       "host": "hn",
