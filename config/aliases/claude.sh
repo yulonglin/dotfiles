@@ -220,8 +220,12 @@ claude() {
     # (no RC there), when the caller brought their own --settings, for
     # --version/--help (the subcommand probe above calls `claude --version`
     # recursively, and a prepended flag must not shift what that probe's stub
-    # or binary sees first), and when the file is not deployed. Under the
-    # override, routed models are unavailable — main model and subagents.
+    # or binary sees first), and when the file is not deployed — which is
+    # now the normal state: the file lives in archive/2026-09-06_rc-direct-
+    # settings/ and is copied back only for the Remote Control experiment.
+    # Archiving it (not just flipping this default) is what stopped shells
+    # started before the flip from un-gating sessions. Under the override,
+    # routed models are unavailable — main model and subagents.
     # PREPENDED, never appended: a caller-supplied `--` terminator would
     # strand an appended option as prompt text — the same trap --channels
     # fell into.

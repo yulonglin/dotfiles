@@ -374,7 +374,8 @@ if [[ "$remote_control" == true ]]; then
   # simply does not connect. Emitted as ONE `--opt=value` token for the same
   # reason as --remote-control= above, with $HOME expanded by the pane's zsh
   # so the path never passes through this script's quoting. Guarded so a
-  # machine without the deployed file spawns exactly as before.
+  # machine without the deployed file spawns exactly as before — the normal
+  # state since the file moved to archive/2026-09-06_rc-direct-settings/.
   if [[ -f "$HOME/.claude/rc-direct-settings.json" && "${CLAUDE_RC_OVERRIDE:-0}" == "1" ]]; then
     # shellcheck disable=SC2016
     inner+=' --settings="$HOME/.claude/rc-direct-settings.json"'
