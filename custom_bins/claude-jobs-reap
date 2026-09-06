@@ -1,21 +1,33 @@
 #!/usr/bin/env python3
-"""Reap stale Claude Code background-session job dirs under ~/.claude/jobs.
+"""Unpin idle and reap stale Claude Code background-session jobs under ~/.claude/jobs.
 
 Each `claude agents` background session leaves a directory ~/.claude/jobs/<id>/
 holding daemon state (state.json, timeline.jsonl) and scratch space (tmp/).
 Nothing built into Claude Code cleans these up (cleanupPeriodDays covers
 ~/.claude/projects transcripts only), so they accumulate indefinitely.
 
-Deleting a job dir removes the entry from the `claude agents` list and its
-scratch files. The session transcript lives in ~/.claude/projects/ and is NOT
-touched, so history and --resume are unaffected.
+Two passes, both keyed on last activity (state.json updatedAt, falling back to
+directory mtime):
 
-A job is reaped when its last activity (state.json updatedAt, falling back to
-directory mtime) is older than --days AND its recorded state is not active.
-Active-looking states (running/working/starting) get a 30-day grace period
-instead, since a state.json that hasn't been touched in a month belongs to a
-dead daemon, not a live one. The job dir of the invoking session
-($CLAUDE_JOB_DIR) and dirs without state.json are never reaped.
+1. Unpin (--unpin-days, default 3). Pins live in ~/.claude/jobs/pins.json, a
+   JSON array of job ids that the agents view merges into each row on read.
+   A pinned job idle past the threshold is unpinned; so is a dangling pin whose
+   job dir is gone (the view's ctrl+x unpins on delete, but a reaped dir does
+   not). Unpinning is reversible, so no active-state grace applies. This
+   mirrors the CLI's own unpin: drop the id, delete that job's `order` sidecar,
+   and hold the same proper-lockfile lock (pins.json.lock, stale after 5s).
+
+2. Reap (--days, default 7), the equivalent of ctrl+x in the agents view.
+   Deleting a job dir removes the entry from the `claude agents` list and its
+   scratch files. The session transcript lives in ~/.claude/projects/ and is
+   NOT touched, so history and --resume are unaffected. Active-looking states
+   (running/working/starting) get a 30-day grace period instead, since a
+   state.json that hasn't been touched in a month belongs to a dead daemon,
+   not a live one. Jobs still pinned after pass 1, the job dir of the invoking
+   session ($CLAUDE_JOB_DIR) and dirs without state.json are never reaped.
+
+Both thresholds default from CLAUDE_JOBS_REAP_UNPIN_DAYS / CLAUDE_JOBS_REAP_DAYS
+so a machine can override them without editing the hook that runs this.
 """
 
 import argparse
@@ -26,11 +38,25 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 ACTIVE_STATES = {"running", "working", "starting"}
 ACTIVE_GRACE_DAYS = 30.0
+# Claude Code locks pins.json with proper-lockfile: a `pins.json.lock` directory
+# whose mtime older than this is treated as stale and removed (CLI 2.1.261).
+PIN_LOCK_STALE_SECONDS = 5.0
+
+
+def env_days(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"ignoring {name}={raw!r}: not a number", file=sys.stderr)
+        return default
 
 
 def last_activity_epoch(job_dir: Path) -> float:
@@ -61,22 +87,138 @@ def dir_size_mb(path: Path) -> float:
     return total / 1_000_000
 
 
+def read_pins(pins_file: Path) -> list[str]:
+    if not pins_file.is_file():
+        return []
+    try:
+        data = json.loads(pins_file.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"cannot read {pins_file}: {exc}", file=sys.stderr)
+        return []
+    return [p for p in data if isinstance(p, str)] if isinstance(data, list) else []
+
+
+def acquire_pin_lock(pins_file: Path, retries: int = 5, wait: float = 0.02) -> Path | None:
+    """Take the CLI's proper-lockfile lock on pins.json; None if it is live-held."""
+    lock_dir = pins_file.with_name(pins_file.name + ".lock")
+    for _ in range(retries):
+        try:
+            lock_dir.mkdir()
+            return lock_dir
+        except FileExistsError:
+            try:
+                stale = time.time() - lock_dir.stat().st_mtime > PIN_LOCK_STALE_SECONDS
+            except FileNotFoundError:
+                continue
+            if stale:
+                try:
+                    lock_dir.rmdir()
+                except OSError:
+                    pass
+                continue
+            time.sleep(wait)
+    return None
+
+
+def write_pins(pins_file: Path, pins: list[str]) -> None:
+    tmp = pins_file.with_name(pins_file.name + ".tmp")
+    tmp.write_text(json.dumps(pins, indent=2))
+    os.replace(tmp, pins_file)
+
+
+def unpin_idle(
+    jobs_dir: Path,
+    unpin_days: float,
+    protected_dir: Path | None,
+    now: float,
+    dry_run: bool,
+    verbose: bool,
+) -> tuple[int, set[str], bool]:
+    """Drop idle and dangling pins. Returns (unpinned, ids still pinned, lock_skipped)."""
+    pins_file = jobs_dir / "pins.json"
+    pins = read_pins(pins_file)
+    if not pins:
+        return 0, set(), False
+
+    keep: list[str] = []
+    drop: list[str] = []
+    for pin in pins:
+        job_dir = jobs_dir / pin
+        if protected_dir and job_dir.exists() and job_dir.resolve() == protected_dir:
+            keep.append(pin)
+            continue
+        if not job_dir.is_dir() or not (job_dir / "state.json").exists():
+            drop.append(pin)
+            if verbose or dry_run:
+                print(f"{'would unpin' if dry_run else 'unpin'} {pin}: job dir gone")
+            continue
+        age_days = (now - last_activity_epoch(job_dir)) / 86400
+        if age_days < unpin_days:
+            keep.append(pin)
+            if verbose:
+                print(f"keep pin {pin}: age={age_days:.1f}d < {unpin_days:g}d")
+            continue
+        drop.append(pin)
+        if verbose or dry_run:
+            print(f"{'would unpin' if dry_run else 'unpin'} {pin}: age={age_days:.1f}d")
+
+    if not drop or dry_run:
+        return len(drop), set(keep), False
+
+    lock_dir = acquire_pin_lock(pins_file)
+    if lock_dir is None:
+        print("pins.json is locked by a live Claude Code process; skipping unpin", file=sys.stderr)
+        return 0, set(pins), True
+    try:
+        # Re-read under the lock: the view may have (un)pinned since our scan.
+        current = read_pins(pins_file)
+        dropped = [p for p in current if p in drop]
+        write_pins(pins_file, [p for p in current if p not in drop])
+        for pin in dropped:
+            order = jobs_dir / pin / "order"
+            try:
+                order.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                print(f"could not remove {order}: {exc}", file=sys.stderr)
+    finally:
+        try:
+            lock_dir.rmdir()
+        except OSError:
+            pass
+    return len(dropped), {p for p in current if p not in drop}, False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Reap stale Claude Code background-session job dirs.",
+        description="Unpin idle and reap stale Claude Code background-session jobs.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--days", type=float, default=7.0, help="reap jobs inactive longer than this")
+    parser.add_argument(
+        "--days",
+        type=float,
+        default=env_days("CLAUDE_JOBS_REAP_DAYS", 7.0),
+        help="reap jobs inactive longer than this (env CLAUDE_JOBS_REAP_DAYS)",
+    )
+    parser.add_argument(
+        "--unpin-days",
+        type=float,
+        default=env_days("CLAUDE_JOBS_REAP_UNPIN_DAYS", 3.0),
+        help="unpin jobs inactive longer than this (env CLAUDE_JOBS_REAP_UNPIN_DAYS)",
+    )
+    parser.add_argument("--keep-pins", action="store_true", help="skip the unpin pass entirely")
     parser.add_argument("--jobs-dir", type=Path, default=Path.home() / ".claude" / "jobs")
-    parser.add_argument("--dry-run", action="store_true", help="report what would be reaped, delete nothing")
+    parser.add_argument("--dry-run", action="store_true", help="report what would be done, change nothing")
     parser.add_argument("--trash", action="store_true", help="move to system trash (via `trash` CLI) instead of deleting")
     parser.add_argument("--archive-to", type=Path, metavar="DIR", help="move reaped dirs into DIR instead of deleting")
     parser.add_argument("-v", "--verbose", action="store_true", help="list each job and the decision made")
     args = parser.parse_args()
 
-    if not math.isfinite(args.days) or args.days < 0:
-        print(f"--days must be a non-negative finite number, got {args.days}", file=sys.stderr)
-        return 2
+    for name, value in (("--days", args.days), ("--unpin-days", args.unpin_days)):
+        if not math.isfinite(value) or value < 0:
+            print(f"{name} must be a non-negative finite number, got {value}", file=sys.stderr)
+            return 2
     if not args.jobs_dir.is_dir():
         print(f"jobs dir not found: {args.jobs_dir}", file=sys.stderr)
         return 1
@@ -93,15 +235,28 @@ def main() -> int:
     protected_dir = Path(protected).resolve() if protected else None
     now = time.time()
 
-    reaped, reaped_mb, kept_recent, kept_active, kept_unreadable = 0, 0.0, 0, 0, 0
+    unpinned, still_pinned, lock_skipped = 0, set(), False
+    if args.keep_pins:
+        still_pinned = set(read_pins(args.jobs_dir / "pins.json"))
+    else:
+        unpinned, still_pinned, lock_skipped = unpin_idle(
+            args.jobs_dir, args.unpin_days, protected_dir, now, args.dry_run, args.verbose
+        )
+
+    reaped, reaped_mb, kept_recent, kept_active, kept_unreadable, kept_pinned = 0, 0.0, 0, 0, 0, 0
     errors = 0
 
     for job_dir in sorted(args.jobs_dir.iterdir()):
-        if not job_dir.is_dir():
+        if not job_dir.is_dir() or job_dir.name.endswith(".lock"):
             continue
         if protected_dir and job_dir.resolve() == protected_dir:
             if args.verbose:
                 print(f"keep {job_dir.name}: current session")
+            continue
+        if job_dir.name in still_pinned:
+            kept_pinned += 1
+            if args.verbose:
+                print(f"keep {job_dir.name}: pinned")
             continue
 
         state_file = job_dir / "state.json"
@@ -153,10 +308,12 @@ def main() -> int:
         reaped += 1
         reaped_mb += size_mb
 
-    verb = "would reap" if args.dry_run else "reaped"
+    unpin_verb, reap_verb = ("would unpin", "would reap") if args.dry_run else ("unpinned", "reaped")
+    unpin_note = "unpin skipped (locked)" if lock_skipped else f"{unpin_verb} {unpinned}"
     print(
-        f"{verb} {reaped} job(s), {reaped_mb:.0f}MB; kept {kept_recent} recent, "
-        f"{kept_active} active, {kept_unreadable} unreadable; {errors} error(s)"
+        f"{unpin_note}; {reap_verb} {reaped} job(s), {reaped_mb:.0f}MB; "
+        f"kept {kept_recent} recent, {kept_active} active, {kept_pinned} pinned, "
+        f"{kept_unreadable} unreadable; {errors} error(s)"
     )
     return 1 if errors else 0
 

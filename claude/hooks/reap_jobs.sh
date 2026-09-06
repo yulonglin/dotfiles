@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-# SessionStart hook: reap background-session job dirs (~/.claude/jobs) older
-# than 7 days, at most once per day. Claude Code has no built-in retention for
-# these (cleanupPeriodDays covers ~/.claude/projects transcripts only), so
+# SessionStart hook: unpin idle and reap stale background-session job dirs
+# (~/.claude/jobs), at most once per day. Claude Code has no built-in retention
+# for these (cleanupPeriodDays covers ~/.claude/projects transcripts only), so
 # without this they accumulate indefinitely. Transcripts are untouched.
+#
+# Thresholds are the reaper's defaults (unpin after 3 idle days, reap after 7);
+# override per machine with CLAUDE_JOBS_REAP_UNPIN_DAYS / CLAUDE_JOBS_REAP_DAYS
+# in the environment, or run `claude-jobs-reap --help` for the flags.
 set -u
 
 STAMP="$HOME/.cache/claude-jobs-reap.stamp"
@@ -26,5 +30,5 @@ else
   [ -x "$REAPER" ] || exit 0
 fi
 
-"$REAPER" --days 7 >/dev/null 2>&1 || true
+"$REAPER" >/dev/null 2>&1 || true
 exit 0
