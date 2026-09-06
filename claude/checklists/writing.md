@@ -15,7 +15,7 @@ The first-sentence test catches the failure that is invisible one paragraph at a
 
 Open by making something the reader cares about visibly unstable, then name what that instability costs *them*. [McEnerney](https://singjupost.com/the-craft-of-writing-effectively-larry-mcenerney-transcript/): *"you have to generate a sense of instability. Words like, but, however, inconsistent, although, anomaly, show the situation to be unstable"* — and then *"show them that the instability imposes a cost on them. Not on you. On them."*
 
-Locate the problem in the reader's world, never in your own curiosity. *"You open with: What I show you on page 8 is a problem. Whose problem? Readers. Not... your problem."* Value, [McEnerney](https://singjupost.com/the-craft-of-writing-effectively-larry-mcenerney-transcript/) says, *"lies in readers, not in the thing"*. An opening that explains why you found something interesting has not started yet.
+Locate the problem in the reader's world, never in your own curiosity. *"You open with: What I show you on page 8 is a problem. Whose problem? Readers. Not... your problem."* [McEnerney](https://singjupost.com/the-craft-of-writing-effectively-larry-mcenerney-transcript/) again: value *"lies in readers, not in the thing"*. An opening that explains why you found something interesting has not started yet.
 
 ## Sentence position carries more meaning than word choice
 
@@ -25,7 +25,7 @@ Readers expect particular kinds of information in particular places, so the high
 
 **Follow a grammatical subject as soon as possible with its verb.** Anything long wedged between them *"is read as an interruption"*, and the reader *"resists recognizing anything in the interrupting material as being of primary importance"*.
 
-**Put the action in the verb, not in a noun made from a verb.** *"Articulate the action of every clause or sentence in its verb."* [Williams](https://www.antoinebuteau.com/lessons-from-joseph-m-williams-joseph-bizup/) (*Style*, via a summary — secondary source) names the failure, nominalisations, and the fix: turn them back into verbs, so the subjects name the characters and the verbs name what those characters do.
+**Put the action in the verb, not in a noun made from a verb.** *"Articulate the action of every clause or sentence in its verb."* [Williams](https://www.antoinebuteau.com/lessons-from-joseph-m-williams-joseph-bizup/) names the failure — nominalisations — and the fix: turn them back into verbs, so the subjects name the characters and the verbs name what those characters do (*Style*, via a summary — secondary source).
 
 **One unit, one job.** *"Any unit of discourse, no matter what its size, is expected to serve a single function, to make a single point."* The rule is PEEL applied to sentences and sections as well as paragraphs.
 
@@ -51,9 +51,9 @@ Most readers stop early: many read the abstract, some read the intro or skim the
 
 [Foerster's](https://www.jakobfoerster.com/how-to-ml-paper) rule of thumb is that a draft carries about a third fluff, cut on the final pass. Check what is left rather than what was deleted: **no sentence only restates its neighbour, no paragraph opens by announcing what it is about to do, and the conclusion says something the introduction did not.**
 
-## Reread cold, because you cannot imagine a naive reader
+## Reread cold; you cannot imagine a naive reader
 
-The curse of knowledge is *"a difficulty in imagining what it is like for someone else not to know something that you know"*, and the remedy [Pinker](https://sive.rs/book/SenseOfStyle) gives (*The Sense of Style*, via a summary — secondary source) is mechanical rather than imaginative: *"Show a draft to yourself, ideally after enough time has passed that the text is no longer familiar."* The reread itself is a working habit no reader can check. What it looks for is checkable: **every abstraction on the page is either defined there or replaced by something a reader could see**, because classic style *"minimizes abstractions, which cannot be seen with the naked eye"*.
+The curse of knowledge is *"a difficulty in imagining what it is like for someone else not to know something that you know"*, and in *The Sense of Style* (via a [summary](https://sive.rs/book/SenseOfStyle) — secondary source) Pinker gives a remedy that is mechanical rather than imaginative: *"Show a draft to yourself, ideally after enough time has passed that the text is no longer familiar."* The reread itself is a working habit no reader can check. What it looks for is checkable: **every abstraction on the page is either defined there or replaced by something a reader could see**, because classic style *"minimizes abstractions, which cannot be seen with the naked eye"*.
 
 **McEnerney and Pinker disagree about explaining because they address different readers.** [McEnerney](https://singjupost.com/the-craft-of-writing-effectively-larry-mcenerney-transcript/) says do not explain — *"you explain stuff under the model of demonstrating to somebody that you understand it"*. Pinker says the curse of knowledge is fixed precisely by explaining: spell out the logic, supply the detail. McEnerney is talking to experts writing for their own field, where explanation reads as a competence display; Pinker is talking to writers whose readers genuinely lack the background. For a mixed AI-safety readership: **Pinker governs mechanisms, McEnerney governs motivation.** Explain how the thing works; do not explain why you find it interesting.
 
