@@ -230,7 +230,12 @@ def cmd_apply(args: argparse.Namespace) -> int:
     drift: list[str] = []
     if not ROUTER_CONFIG.exists() or ROUTER_CONFIG.read_text() != want_router:
         drift.append(str(ROUTER_CONFIG))
-    if SETTINGS.read_text() != want_settings:
+    # Claude Code rewrites the settings file with its own serializer, so compare
+    # only the keys this command owns, not the bytes.
+    wanted = json.loads(want_settings)
+    owned_env = ("ANTHROPIC_BASE_URL", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL", "ENABLE_TOOL_SEARCH", "CLAUDE_CODE_MAX_CONTEXT_TOKENS")
+    live_env, want_env = settings.get("env", {}), wanted.get("env", {})
+    if any(live_env.get(k) != want_env.get(k) for k in owned_env) or settings.get("modelPicker") != wanted.get("modelPicker"):
         drift.append(f"{SETTINGS} (env keys or modelPicker rows)")
     for p, text in want_agents.items():
         if not p.exists() or p.read_text() != text:
