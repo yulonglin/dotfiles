@@ -2,7 +2,7 @@
 //!
 //! Fetches 5-hour and 7-day rate limit utilization, plus any model-scoped
 //! weekly limits (e.g. Fable), from the Anthropic OAuth usage endpoint, with
-//! file-based caching (60s TTL) and graceful degradation.
+//! file-based caching (300s TTL) and graceful degradation.
 //!
 //! Fetch strategy: ureq (native Rust) → curl fallback → stale cache → error.
 
@@ -157,6 +157,27 @@ fn format_usage_line(output: &mut String, usage: &UsageResponse) {
 /// Falls back to absolute-usage color when the reset time is unavailable.
 fn render_bucket(output: &mut String, label: &str, pct: u8, resets_at: Option<&str>, window_secs: f64) {
     let pace = compute_pace(pct, resets_at, window_secs);
+    render_bucket_with_pace(output, label, pct, pace);
+}
+
+/// Codex already supplies epoch seconds; share the renderer without spawning date.
+pub(super) fn render_epoch_bucket(
+    output: &mut String,
+    label: &str,
+    pct: u8,
+    resets_at: Option<i64>,
+    window_secs: Option<f64>,
+    now: i64,
+) {
+    let pace = resets_at.zip(window_secs).map(|(reset, window)| {
+        let remaining = reset.saturating_sub(now).max(0) as f64;
+        let elapsed = ((window - remaining) / window).clamp(0.0, 1.0);
+        (pct as i16 - (elapsed * 100.0).round() as i16, remaining)
+    });
+    render_bucket_with_pace(output, label, pct, pace);
+}
+
+fn render_bucket_with_pace(output: &mut String, label: &str, pct: u8, pace: Option<(i16, f64)>) {
     let color = match pace {
         Some((delta, _)) => color_for_pace(delta),
         None => color_for_pct(pct),

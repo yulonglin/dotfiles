@@ -123,6 +123,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Line 3: API usage (5h + 7d rate limits)
     crate::usage::format_usage(&mut output);
 
+    // Separate provider line; Codex window durations come from its API.
+    crate::codex_usage::format_usage(&mut output);
+
     print!("{}", output);
     Ok(())
 }
