@@ -204,33 +204,38 @@ claude() {
     # Remote Control requires api.anthropic.com: the model-router's global
     # ANTHROPIC_BASE_URL redirect disables it, and Claude Code exempts
     # _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL from Remote Control. A CLI
-    # --settings file outranks the user-settings env block, so interactive
-    # sessions get rc-direct-settings.json, which blanks the redirect. Skipped
-    # for print mode and subcommands (no RC there), when the caller brought
-    # their own --settings, when GPT is the MAIN model (that needs the router;
-    # GPT subagents are likewise unavailable under the override — use
-    # `claude -p --model gpt-5.6-sol` for those), for --version/--help (the
-    # subcommand probe above calls `claude --version` recursively, and a
-    # prepended flag must not shift what that probe's stub or binary sees
-    # first), and under CLAUDE_RC_OVERRIDE=0 (documented opt-out). Three
-    # subcommands DO get it: `remote-control`/`rc` (that launcher cannot work
-    # on a redirected base URL) and `agents` (its --settings applies to the
-    # agent view AND to the sessions it dispatches — per `claude agents
-    # --help` — so this is what gives dispatched sessions RC; dispatch runs
-    # via the daemon, outside this wrapper, and can't be fixed there). For
-    # these the override applies regardless of flags — `remote-control
-    # --help` keeps it; only a caller-supplied --settings (which `agents`
-    # legitimately takes), the opt-out, or a missing file skip it.
+    # --settings file outranks the user-settings env block, so
+    # rc-direct-settings.json blanks the redirect for a session that wants
+    # Remote Control instead of the gateway. Since 2026-09-06 (Option C of the
+    # model-routing decision spec) the gateway is the default and Remote
+    # Control is off by design, so the override is OPT-IN: a session gets it
+    # only under CLAUDE_RC_OVERRIDE=1, or when the subcommand is
+    # `remote-control`/`rc` (that launcher cannot work on a redirected base
+    # URL; CLAUDE_RC_OVERRIDE=0 still opts it out). It was the default before,
+    # which un-gated every interactive session and made a routed model such
+    # as gpt-6-astra fail on its first turn with "issue with the selected
+    # model". `agents` no longer gets it either: its --settings reaches the
+    # sessions it dispatches, which must go through the gateway too.
+    # Even when opted in it is skipped for print mode and other subcommands
+    # (no RC there), when the caller brought their own --settings, for
+    # --version/--help (the subcommand probe above calls `claude --version`
+    # recursively, and a prepended flag must not shift what that probe's stub
+    # or binary sees first), and when the file is not deployed. Under the
+    # override, routed models are unavailable — main model and subagents.
     # PREPENDED, never appended: a caller-supplied `--` terminator would
     # strand an appended option as prompt text — the same trap --channels
     # fell into.
     local _rc_subcmd=false
-    if [[ "$_first_positional" == "remote-control" || "$_first_positional" == "rc" \
-          || "$_first_positional" == "agents" ]]; then
+    if [[ "$_first_positional" == "remote-control" || "$_first_positional" == "rc" ]]; then
         _rc_subcmd=true
     fi
-    if [[ ( "$_is_session" == true || "$_rc_subcmd" == true ) \
-          && "${CLAUDE_RC_OVERRIDE:-1}" != "0" ]]; then
+    local _rc_wanted=false
+    if [[ "$_rc_subcmd" == true && "${CLAUDE_RC_OVERRIDE:-1}" != "0" ]]; then
+        _rc_wanted=true
+    elif [[ "$_is_session" == true && "${CLAUDE_RC_OVERRIDE:-0}" == "1" ]]; then
+        _rc_wanted=true
+    fi
+    if [[ "$_rc_wanted" == true ]]; then
         local _rc_settings="$HOME/.claude/rc-direct-settings.json"
         # Missing file → skip silently: non-deployed machines must not break.
         if [[ -f "$_rc_settings" ]]; then
@@ -238,7 +243,6 @@ claude() {
             for _b in "${args[@]}"; do
                 if [[ "$_rc_prev" == "--model" ]]; then
                     _rc_prev=""
-                    if [[ "$_b" == gpt-5.6* ]]; then _add_rc=false; break; fi
                     continue
                 fi
                 case "$_b" in
@@ -247,7 +251,6 @@ claude() {
                     -v|--version|-h|--help)
                         if [[ "$_rc_subcmd" == false ]]; then _add_rc=false; break; fi ;;
                     --settings|--settings=*) _add_rc=false; break ;;
-                    --model=gpt-5.6*) _add_rc=false; break ;;
                     --model) _rc_prev="--model" ;;
                 esac
             done

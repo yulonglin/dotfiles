@@ -836,7 +836,7 @@
   "theme": "auto",
   "verbose": true,
   "teammateMode": "in-process",
-  "remoteControlAtStartup": true,
+  "remoteControlAtStartup": false,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,

@@ -59,9 +59,15 @@ def load_source() -> dict:
         for key in ("id", "name", "provider", "context-window"):
             if key not in m:
                 sys.exit(f"{SOURCE}: model {m.get('id', '?')} lacks {key!r}")
-        if m["id"] in seen:
-            sys.exit(f"{SOURCE}: duplicate id {m['id']!r}")
-        seen.add(m["id"])
+        aliases = m.get("aliases", [])
+        if not isinstance(aliases, list) or not all(isinstance(a, str) and a for a in aliases):
+            sys.exit(f"{SOURCE}: model {m['id']}: aliases must be a list of non-empty strings")
+        for name in ids(m):
+            if name in seen:
+                sys.exit(f"{SOURCE}: {name!r} is declared twice (an id or alias must be unique)")
+            if name in CLAUDE_ALIASES or name.startswith("claude-"):
+                sys.exit(f"{SOURCE}: {name!r} would shadow a Claude model name")
+            seen.add(name)
         if m["provider"] != "codex" and m["provider"] not in providers:
             sys.exit(f"{SOURCE}: model {m['id']} names provider {m['provider']!r} with no [providers.{m['provider']}] block")
         if m["provider"] != "codex" and "base-url" not in providers[m["provider"]]:
@@ -71,6 +77,17 @@ def load_source() -> dict:
 
 def enabled(src: dict) -> list[dict]:
     return [m for m in src["models"] if m.get("enabled", True)]
+
+
+def ids(m: dict) -> list[str]:
+    """Every routing ID the router serves for this model: the id plus its aliases."""
+    return [m["id"], *m.get("aliases", [])]
+
+
+def canonical(m: dict) -> str:
+    """The name a person types: the first alias when there is one, else the id."""
+    aliases = m.get("aliases", [])
+    return aliases[0] if aliases else m["id"]
 
 
 def effort_of(m: dict) -> str | None:
@@ -94,42 +111,45 @@ def render_router_config(src: dict) -> str:
     for m in enabled(src):
         if m["provider"] != "codex":
             continue
-        out += [
-            "[[models]]",
-            f'routing-id = "{m["id"]}"',
-            'upstream = "cliproxy"',
-            f'upstream-model = "{m.get("slug", m["id"])}"',
-            f'display-name = "{m["name"]}"',
-            f"context-window = {m['context-window']}",
-            "",
-        ]
+        for rid in ids(m):
+            out += [
+                "[[models]]",
+                f'routing-id = "{rid}"',
+                'upstream = "cliproxy"',
+                f'upstream-model = "{m.get("slug", m["id"])}"',
+                f'display-name = "{m["name"]}"',
+                f"context-window = {m['context-window']}",
+                "",
+            ]
     for name, block in src.get("providers", {}).items():
         members = [m for m in enabled(src) if m["provider"] == name]
         if not members:
             continue
         out += ["[[openai-providers]]", f'name = "{name}"', f'base-url = "{block["base-url"]}"', ""]
         for m in members:
-            out += [
-                "[[openai-providers.models]]",
-                f'name = "{m.get("slug", m["id"])}"',
-                f'routing-id = "{m["id"]}"',
-                f'display-name = "{m["name"]}"',
-                "context-window-scaling = true",
-                f"context-window = {m['context-window']}",
-                "",
-            ]
+            for rid in ids(m):
+                out += [
+                    "[[openai-providers.models]]",
+                    f'name = "{m.get("slug", m["id"])}"',
+                    f'routing-id = "{rid}"',
+                    f'display-name = "{m["name"]}"',
+                    "context-window-scaling = true",
+                    f"context-window = {m['context-window']}",
+                    "",
+                ]
     return "\n".join(out).rstrip("\n") + "\n"
 
 
 def render_agent(m: dict) -> str:
     effort = effort_of(m)
-    name = f"{m['id']}({effort})" if effort else m["id"]
+    short = canonical(m)
+    name = f"{short}({effort})" if effort else short
     via = "the OpenAI account (Codex OAuth)" if m["provider"] == "codex" else m["provider"]
     lines = [
         "---",
         f"name: {name}",
         f"description: General-purpose agent driven by {m['name']}{' at ' + effort + ' reasoning effort' if effort else ''} through the model-router gateway via {via}. Use for a task that should be done by this model inside the Claude Code loop with repo tools.",
-        f"model: {m['id']}",
+        f"model: {short}",
     ]
     if effort:
         lines.append(f"effort: {effort}")
@@ -139,7 +159,8 @@ def render_agent(m: dict) -> str:
 
 def agent_path(m: dict) -> Path:
     effort = effort_of(m)
-    return AGENTS_DIR / (f"{m['id']}-{effort}.md" if effort else f"{m['id']}.md")
+    short = canonical(m)
+    return AGENTS_DIR / (f"{short}-{effort}.md" if effort else f"{short}.md")
 
 
 def generated_agent_files() -> list[Path]:
@@ -157,7 +178,7 @@ def render_settings(src: dict, settings: dict, base_url: str) -> dict:
         env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = str(declared)
     for k in ("ANTHROPIC_CUSTOM_MODEL_OPTION", "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME"):
         env.pop(k, None)
-    new["modelPicker"] = {"options": [{"model": m["id"], "label": m["name"]} for m in enabled(src) if m.get("picker", True)]}
+    new["modelPicker"] = {"options": [{"model": canonical(m), "label": m["name"]} for m in enabled(src) if m.get("picker", True)]}
     return new
 
 
@@ -259,8 +280,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
         p.write_text(text)
     for p in stale_agents:
         p.unlink()
-    rows = [m["id"] for m in enabled(src) if m.get("picker", True)]
-    print(f"routes:  {', '.join(m['id'] for m in enabled(src))}")
+    rows = [canonical(m) for m in enabled(src) if m.get("picker", True)]
+    print(f"routes:  {', '.join(rid for m in enabled(src) for rid in ids(m))}")
     print(f"picker:  {', '.join(rows) or 'none'}")
     print(f"agents:  {', '.join(p.name for p in want_agents) or 'none'}" + (f"; removed {', '.join(p.name for p in stale_agents)}" if stale_agents else ""))
     print(f"wrote {ROUTER_CONFIG}, {SETTINGS}; restart Claude Code sessions to see the rows")
@@ -274,7 +295,7 @@ def cmd_off(_: argparse.Namespace) -> int:
     env = settings.get("env", {})
     removed = [k for k in ENV_REMOVE_ON_OFF if env.pop(k, None) is not None]
     had_picker = settings.pop("modelPicker", None) is not None
-    routed = {m["id"] for m in load_source()["models"]} if SOURCE.exists() else set()
+    routed = {rid for m in load_source()["models"] for rid in ids(m)} if SOURCE.exists() else set()
     if settings.get("model") in routed:
         print(f"dropped default model {settings.pop('model')!r}: Anthropic does not serve it")
     SETTINGS.write_text(dump_settings(settings))
@@ -293,7 +314,7 @@ def cmd_status(_: argparse.Namespace) -> int:
     print(f"picker:   {', '.join(rows) if rows else 'no modelPicker rows'}")
     if SOURCE.exists():
         src = load_source()
-        print(f"routes:   {', '.join(m['id'] for m in enabled(src))}")
+        print(f"routes:   {', '.join(rid for m in enabled(src) for rid in ids(m))}")
         off = [m["id"] for m in src["models"] if not m.get("enabled", True)]
         if off:
             print(f"disabled: {', '.join(off)}")
