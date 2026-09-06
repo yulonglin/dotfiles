@@ -9,6 +9,7 @@
 # so no zsh here parses YAML:
 #   manual: skip   - leave the app completely alone
 #   manual: hide   - hide it as Cmd+H does; no window is touched
+#   manual: minimise - send its windows to the Dock; hidden state untouched
 #   manual: close  - close its windows but never quit it
 #   manual: quit   - quit it (the default for unlisted apps)
 #   slow: true     - ignores keystrokes; quit then poll for exit
@@ -363,6 +364,25 @@ hide_app() {
     osascript -e "tell application \"System Events\" to set visible of process \"$1\" to false" 2>/dev/null
 }
 
+# Minimise every window of an app to the Dock, over the same System Events AX
+# route the close path uses - no focus needed, so it runs in parallel like
+# hide_app. `manual: minimise` is the alternative to hide for an app whose
+# windows you want in the Dock rather than off screen. It never changes the
+# process's hidden state: an app the idle job (or Cmd+H) already hid stays
+# hidden, with its windows minimised for when it is next shown - un-hiding it
+# here would flash every window back onto the screen first, and a hidden app
+# is already cleared. A window with no
+# minimise button (a sheet, a panel) makes System Events error out and the loop
+# stop there; the non-zero status is then reported as a failed action rather
+# than a clean run, mirroring hide_app, which has no `try` either.
+minimise_app() {
+    osascript -e "tell application \"System Events\" to tell process \"$1\"
+        repeat with w in windows
+            set value of attribute \"AXMinimized\" of w to true
+        end repeat
+    end tell" 2>/dev/null
+}
+
 # A quit that the close rung is allowed to veto. close_app_selectively decides
 # on its own, from a rescan, that an app with no protected windows left should
 # be quit - and that decision happens after main() has already capped the run,
@@ -546,19 +566,22 @@ main() {
     # each app's `manual:` value; `manual: quit` needs no set, it's the default.
     typeset -A no_touch_set
     typeset -A hide_only_set
+    typeset -A minimise_set
     typeset -A close_windows_set
     typeset -A slow_quit_set
 
     # One bucket per value on the scale, `quit` being the default and so needing
     # none. `hide` needs its own: it is a valid `manual:` value, and without a
     # bucket it fell through to the default and QUIT the app - the config asking
-    # for the gentlest action and getting the harshest.
+    # for the gentlest action and getting the harshest. `minimise` is the same
+    # shape: a gentle value that must not fall through.
     local key
     for key in "${ALC_APP_KEYS[@]}"; do
         case "${ALC_MANUAL[$key]}" in
-            skip)  no_touch_set[$key]=1 ;;
-            hide)  hide_only_set[$key]=1 ;;
-            close) close_windows_set[$key]=1 ;;
+            skip)     no_touch_set[$key]=1 ;;
+            hide)     hide_only_set[$key]=1 ;;
+            minimise) minimise_set[$key]=1 ;;
+            close)    close_windows_set[$key]=1 ;;
         esac
         # NOT a bucket: `slow:` says how a quit is AWAITED, so it only means
         # anything once an app has been classified as a quit. As a bucket it
@@ -572,6 +595,7 @@ main() {
     # Build bundle ID sets for fallback matching (from registry)
     typeset -A no_touch_bids
     typeset -A hide_only_bids
+    typeset -A minimise_bids
     typeset -A close_windows_bids
     typeset -A slow_quit_bids
 
@@ -580,6 +604,9 @@ main() {
     done
     for name in ${(k)hide_only_set}; do
         [[ -n "${registry[$name]:-}" ]] && hide_only_bids[${registry[$name]}]=1
+    done
+    for name in ${(k)minimise_set}; do
+        [[ -n "${registry[$name]:-}" ]] && minimise_bids[${registry[$name]}]=1
     done
     for name in ${(k)close_windows_set}; do
         [[ -n "${registry[$name]:-}" ]] && close_windows_bids[${registry[$name]}]=1
@@ -634,6 +661,7 @@ main() {
     local _title
     local -a apps_to_quit=()
     local -a apps_hide=()
+    local -a apps_minimise=()
     local -a apps_close_windows=()
     local -a apps_slow_quit=()
     local -a apps_selective_close=()
@@ -655,7 +683,7 @@ main() {
     # gets its own value. Falling straight through to a quit made the default a
     # lie in the safe direction - `defaults.manual: close` still quit every
     # unlisted app - but reading the default unconditionally is the mirror bug.
-    # The three sets above hold only the skip/hide/close apps, so a listed app
+    # The sets above hold only the skip/hide/minimise/close apps, so a listed app
     # whose `manual:` is an explicit `quit` also lands here, and a gentler
     # default would silently overrule it. The app's own value wins; the default
     # applies only where the config genuinely never named it. Only `quit` needs
@@ -663,10 +691,11 @@ main() {
     push_default() {
         local action="${ALC_MANUAL[${(L)1}]:-$ALC_DEFAULT_MANUAL}"
         case "$action" in
-            skip)  apps_skipped+=("$1") ;;
-            hide)  apps_hide+=("$1") ;;
-            close) apps_close_windows+=("$1") ;;
-            *)     push_quit "$1" "$2" ;;
+            skip)     apps_skipped+=("$1") ;;
+            hide)     apps_hide+=("$1") ;;
+            minimise) apps_minimise+=("$1") ;;
+            close)    apps_close_windows+=("$1") ;;
+            *)        push_quit "$1" "$2" ;;
         esac
     }
 
@@ -679,11 +708,13 @@ main() {
             apps_skipped+=("$app")
         elif (( ${+hide_only_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+hide_only_bids[$bid]} )) }; then
             apps_hide+=("$app")
+        elif (( ${+minimise_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+minimise_bids[$bid]} )) }; then
+            apps_minimise+=("$app")
         elif (( ${+close_windows_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+close_windows_bids[$bid]} )) }; then
             apps_close_windows+=("$app")
         elif (( ${#protected_patterns} > 0 )) && [[ "$ALC_DEFAULT_MANUAL" == (close|quit) ]]; then
             # Check if this app has any protected windows. Skipped entirely for
-            # a skip/hide default, which touches no window and so has nothing to
+            # a skip/hide/minimise default, which closes no window and so has nothing to
             # protect - the check costs an AppleScript round-trip per app.
             local has_protected=false
             if [[ "$app" == "Google Chrome" ]]; then
@@ -791,6 +822,13 @@ main() {
                 echo "  - $app"
             done
         fi
+        if (( ${#apps_minimise} > 0 )); then
+            echo ""
+            echo "Would MINIMISE (${#apps_minimise}):"
+            for app in "${apps_minimise[@]}"; do
+                echo "  - $app"
+            done
+        fi
         echo ""
         echo "Would CLOSE WINDOWS (${#apps_close_windows}):"
         for app in "${apps_close_windows[@]}"; do
@@ -850,6 +888,10 @@ main() {
         echo "Hiding ${#apps_hide} apps in parallel..."
         run_parallel hide hide_app "${apps_hide[@]}"
     fi
+    if (( ${#apps_minimise} > 0 )); then
+        echo "Minimising ${#apps_minimise} apps in parallel..."
+        run_parallel minimise minimise_app "${apps_minimise[@]}"
+    fi
 
     # Sequential, because the keystroke fallback needs focus and two of those in
     # parallel would fight over it. The AX path itself needs no focus.
@@ -875,10 +917,11 @@ main() {
     echo "Done."
     (( ${#no_touch_set} > 0 )) && echo "  No-touch: ${(k)no_touch_set}"
     (( ${#hide_only_set} > 0 )) && echo "  Hide-only: ${(k)hide_only_set}"
+    (( ${#minimise_set} > 0 )) && echo "  Minimise: ${(k)minimise_set}"
     (( ${#close_windows_set} > 0 )) && echo "  Close-windows: ${(k)close_windows_set}"
     (( ${#slow_quit_set} > 0 )) && echo "  Slow-quit: ${(k)slow_quit_set}"
 
-    # Explicit, because the four lines above are `(( cond )) && echo` and the
+    # Explicit, because the five lines above are `(( cond )) && echo` and the
     # last one's condition would otherwise become this script's exit status -
     # i.e. "does the config list a slow: true app", which is not a result.
     (( ${#FAILED_ACTIONS} > 0 )) && echo "  Failed actions: ${(j:, :)FAILED_ACTIONS}"

@@ -1,6 +1,18 @@
 # What each trigger may do to each app. `manual:` is the macOS Shortcut's action
 # and the ceiling for the idle job's destructive rungs; `auto:` governs hiding
-# alone. Scale: skip < hide < close < quit.
+# alone. Scale: skip < hide = minimise < close < quit.
+#
+# Allowed values - anything else is rejected (exit 78), never guessed:
+#   manual:   skip | hide | minimise | close | quit
+#     skip      leave the app alone
+#     hide      Cmd+H: off screen, every window untouched
+#     minimise  every window to the Dock; hidden state is left as it is
+#     close     close its windows, keep it running
+#     quit      quit it
+#   auto:     skip | hide | close | quit   (no minimise: the idle job only hides)
+#   hide_after, close_after, quit_after, user_idle:  whole minutes
+#   min_visible_percent:  0-100, under defaults: only
+#   slow: true | false    per app only - ignores keystrokes, so poll for exit
 #
 # Started as `clear-mac-apps --migrate-config` output from the old sectioned
 # config, then five apps were deliberately moved to the `quit` default:

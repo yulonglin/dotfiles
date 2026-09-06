@@ -71,6 +71,11 @@ case "$script" in
         [[ -n "${STUB_AX_LOG:-}" ]] && print -r -- "$script" >> "$STUB_AX_LOG"
         (( ${STUB_AX_RC:-0} != 0 )) && exit "${STUB_AX_RC}"
         print -r -- 0 ;;
+    *AXMinimized*)
+        # minimise_app. Settable for the same reason as STUB_HIDE_RC below: it
+        # runs in a background job whose status is the thing under test.
+        (( ${STUB_MINIMISE_RC:-0} != 0 )) && exit "${STUB_MINIMISE_RC}"
+        : ;;
     *keystroke*)
         [[ -n "${STUB_KEY_LOG:-}" ]] && print -r -- "$script" >> "$STUB_KEY_LOG" ;;
     *"display notification"*)
@@ -421,6 +426,51 @@ export STUB_HIDE_RC=1
 run --only Bear
 check     "a hide that failed exits non-zero"    "$(( RC != 0 ))" "1"
 unset STUB_HIDE_RC
+
+# `minimise` sits beside `hide` on the scale and has the same failure shape: a
+# gentle value that must not fall through to quit, run as a background job
+# whose status has to be collected. Same two checks as 13 and 17, on its bucket.
+print -r -- "17b. a minimise app has its windows minimised, not hidden or quit"
+export STUB_APP_LIST="Bear|net.shinyfrog.bear
+Safari|com.apple.Safari
+"
+print -r -- "defaults:
+  manual: quit
+  auto: quit
+apps:
+  Bear: {manual: minimise}" > "$ROOT/config/app-lifecycle.yaml"
+run --dry-run
+check     "Bear is minimised"                    "$OUT" "Would MINIMISE (1):
+  - Bear"
+check_not "and not hidden"                       "$OUT" "Would HIDE"
+check_not "and never quit"                       "$OUT" "- Bear
+  - Safari"
+check     "the default app still quits"          "$OUT" "Would QUIT (1):
+  - Safari"
+
+export STUB_MINIMISE_RC=0
+run --only Bear
+check     "the minimise bucket is the one that ran" "$OUT" "Minimising 1 apps in parallel"
+check     "a minimise that worked exits 0"          "$(( RC == 0 ))" "1"
+export STUB_MINIMISE_RC=1
+run --only Bear
+check     "a minimise that failed exits non-zero"   "$(( RC != 0 ))" "1"
+unset STUB_MINIMISE_RC
+export STUB_APP_LIST="Bear|net.shinyfrog.bear
+"
+
+# The idle job has no minimise rung, so `auto: minimise` would have to mean
+# either "hide" or "skip" - and the helper's rule is to reject, not guess.
+print -r -- "17c. auto: minimise is rejected by name, not as a typo"
+print -r -- "defaults:
+  manual: quit
+  auto: quit
+apps:
+  Bear: {auto: minimise}" > "$ROOT/config/app-lifecycle.yaml"
+run --dry-run
+check     "exits non-zero"                       "$(( RC != 0 ))" "1"
+check     "says why"                             "$ERR" "auto: minimise is not supported"
+check_not "acts on nothing"                      "$OUT" "Would QUIT"
 
 # Codex, this round: with the run capped at close and the protected tab gone by
 # the rescan, close_app_selectively called quit_app_capped, which refuses the

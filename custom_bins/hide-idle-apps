@@ -200,14 +200,18 @@ hide_pid() {
 }
 
 # Ordered action scale, so `min(manual:, auto:)` is arithmetic rather than a
-# nest of cases. Anything unrecognised ranks lowest - the config helper already
-# rejects those, so this only ever fires on a value we never emitted.
+# nest of cases. `minimise` shares hide's rank: it is a `manual:`-only value
+# (the helper rejects it under `auto:`), and as a ceiling it means the same
+# thing as hide - the idle job may hide, and nothing more. Anything
+# unrecognised ranks lowest - the config helper already rejects those, so this
+# only ever fires on a value we never emitted.
 rank_action() {
     case "$1" in
-        quit)  print -r -- 3 ;;
-        close) print -r -- 2 ;;
-        hide)  print -r -- 1 ;;
-        *)     print -r -- 0 ;;
+        quit)     print -r -- 3 ;;
+        close)    print -r -- 2 ;;
+        hide)     print -r -- 1 ;;
+        minimise) print -r -- 1 ;;
+        *)        print -r -- 0 ;;
     esac
 }
 

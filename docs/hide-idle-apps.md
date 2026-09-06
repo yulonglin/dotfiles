@@ -10,7 +10,7 @@ Escalation is not reimplemented in the idle job: it calls `clear-mac-apps --only
 
 ## Policy
 
-Each app in `config/app-lifecycle.yaml` carries `manual:` (what the Shortcut does to it right now) and `auto:` (what the idle job may do), on the ordered scale `skip` < `hide` < `close` < `quit`.
+Each app in `config/app-lifecycle.yaml` carries `manual:` (what the Shortcut does to it right now) and `auto:` (what the idle job may do), on the ordered scale `skip` < `hide` = `minimise` < `close` < `quit`. `minimise` is a `manual:` value only: the Shortcut sends the app's windows to the Dock instead of hiding it, and as a ceiling it means the same as `hide`. Under `auto:` it is rejected by name, because the idle job has no minimise rung.
 
 The ladder stops at `min(manual:, auto:)`, but that ceiling binds **only the destructive rungs**. Hiding is governed by `auto:` alone, and `auto: skip` is the only exemption from being hidden — it is what the old `[hide-idle-exclude]` section became.
 
@@ -19,10 +19,11 @@ The ladder stops at `min(manual:, auto:)`, but that ceiling binds **only the des
 | `{auto: skip}` | no | no | no |
 | `{manual: skip}` (Lettera, zoom.us) | yes | no | no |
 | `{manual: hide}` (Obsidian, Focusmate) | yes | no | no |
+| `{manual: minimise}` | yes | no | no |
 | `{manual: close}` (Spotify, Things) | yes | yes | no |
 | unlisted (defaults) | yes | yes | yes |
 
-The `skip` and `hide` rows are identical here because this table is about the idle ladder, and the two differ only in the manual trigger: the Shortcut leaves a `skip` app untouched and hides a `hide` one. Neither ever has a window closed.
+The `skip`, `hide` and `minimise` rows are identical here because this table is about the idle ladder, and the three differ only in the manual trigger: the Shortcut leaves a `skip` app untouched, hides a `hide` one, and sends a `minimise` one's windows to the Dock. None of them ever has a window closed.
 
 Both scripts read the YAML through `custom_bins/app-lifecycle-config`, so no zsh parses YAML. Only the poll interval lives elsewhere, in `config/hide-idle.conf`: it is not a policy about apps, and it has to match the launchd `StartInterval` or gap detection means nothing.
 
