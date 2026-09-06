@@ -2,7 +2,7 @@
 """openrouter-cli - reach non-Anthropic models from a Claude Code session.
 
 Inside a session, a foreign model is reached only through the model-router
-gateway (wired globally since 2026-09-06; `model-router-wire status` lists the
+gateway (wired globally since 2026-09-06; config/model-router.toml declares the
 routes, and only those names work in agent frontmatter or `/model`). This CLI
 is the shell-out path for panels and one-off questions: it needs no gateway,
 logs provenance (echoed slug, generation id, usage) per call, and reaches any

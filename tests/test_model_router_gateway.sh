@@ -61,10 +61,13 @@ deployed_url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).
 committed_url="$(git -C "$REPO" show HEAD:claude/settings.json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("env",{}).get("ANTHROPIC_BASE_URL",""))' 2>/dev/null)"
 case "$deployed_url" in
   http://127.0.0.1:*) ok "settings  deployed file wired to loopback" ;;
-  "") fail "settings  deployed file has no ANTHROPIC_BASE_URL (run: model-router-wire on)" ;;
+  "") fail "settings  deployed file has no ANTHROPIC_BASE_URL (run: model-router-wire apply)" ;;
   *) fail "settings  deployed ANTHROPIC_BASE_URL is not loopback: $deployed_url" ;;
 esac
 if [ -n "$committed_url" ]; then fail "settings  HEAD's claude/settings.json carries ANTHROPIC_BASE_URL"; else ok "settings  committed copy carries no base URL"; fi
+
+# source: everything rendered from config/model-router.toml is current
+if drift="$("$REPO/custom_bins/model-router-wire" apply --check 2>&1)"; then ok "source    rendered files match config/model-router.toml"; else fail "source    $(printf '%s' "$drift" | tr '\n' ' ' | cut -c1-200)"; fi
 
 # route probes
 if [ "$skip_probes" -eq 0 ]; then
