@@ -11,9 +11,9 @@ Verify:
 python3 -c "import json; d=json.load(open('claude/settings.json')); assert all(k in d for k in ['statusLine','hooks','permissions'])"
 ```
 
-## If the gateway is ever re-enabled, it lives only in the working copy
+## The gateway is ON and lives only in the working copy
 
-**The gateway is currently OFF** (unwired 2026-08-18): neither the committed `claude/settings.json` nor the deployed `~/.claude/settings.json` carries any `ANTHROPIC_*` env key, so today there is no permanent diff on this file. The rest of this section describes the state to return to if it is re-enabled — and note that a non-Anthropic `ANTHROPIC_BASE_URL` hard-disables Remote Control, which is why it was unwired (`docs/remote-control-and-foreign-models.md`, 2026-09-01).
+**The model-router gateway is wired** (re-enabled 2026-09-06 under Option C of the model-routing decision spec, after being unwired 2026-08-18): the deployed `~/.claude/settings.json`, which is this file through the `~/.claude` symlink, carries `env.ANTHROPIC_BASE_URL` pointing at the loopback router plus `_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL`, `ENABLE_TOOL_SEARCH`, `CLAUDE_CODE_MAX_CONTEXT_TOKENS` and a `modelPicker` block, and the committed copy carries none of them. `model-router-wire on|off|status` (in `custom_bins/`) owns that set of keys; never hand-edit them. A non-Anthropic `ANTHROPIC_BASE_URL` hard-disables Remote Control, which is the accepted cost: romp over Tailscale is the remote path (`docs/romp-tailnet-access.md`). `tests/test_model_router_gateway.sh` is the one-command smoke test to run after every Claude Code upgrade.
 
 `claude/settings.json` is public, but it is also the **only** place Claude Code reads `ANTHROPIC_BASE_URL` from — model-router's own measurements (2.1.222) found an ambient shell `ANTHROPIC_BASE_URL`, a project-level `settings.local.json`, and `CLAUDE_CONFIG_DIR` were all ignored for the base URL, and a user-level `settings.local.json` does not exist at all. So model-router's `http://127.0.0.1:<port>/t/<token>` endpoint cannot be relocated — it can only be kept out of commits.
 

@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""Wire or unwire the model-router gateway in the deployed ~/.claude/settings.json.
+
+The router's base URL embeds a per-install ingress token, so the wired file is
+a permanent working-copy diff that the pre-commit guard refuses to commit; the
+committed copy of claude/settings.json never carries it. This command owns the
+set of keys the plugin's setup skill (step 5) asks for, so flipping the gateway
+is one command rather than a hand edit of a file the sandbox will not touch:
+
+  model-router-wire on [--only id,id,...]   env keys + one modelPicker row per route
+  model-router-wire off                     remove them all (direct Anthropic again)
+  model-router-wire status                  what is wired, and what the router serves
+
+Rows come from the routes in ~/.config/model-router/config.toml (routing-id and
+display-name); --only keeps a subset in the picker while every route stays
+reachable by name from agent files and --model. Requires the model-router
+plugin: the base URL is read from `bootstrap.sh doctor --json`.
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import os
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+SETTINGS = Path(os.environ.get("CLAUDE_SETTINGS", Path.home() / ".claude" / "settings.json"))
+CONFIG = Path(os.environ.get("MODEL_ROUTER_CONFIG", Path.home() / ".config" / "model-router" / "config.toml"))
+ENV_KEYS = ("ANTHROPIC_BASE_URL", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL", "ENABLE_TOOL_SEARCH", "CLAUDE_CODE_MAX_CONTEXT_TOKENS")
+LEGACY_KEYS = ("ANTHROPIC_CUSTOM_MODEL_OPTION", "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME")
+DECLARED_WINDOW = "258400"  # the Codex backend's effective input limit; only applies to non-claude IDs
+
+
+def bootstrap() -> str:
+    override = os.environ.get("MODEL_ROUTER_BOOTSTRAP")
+    if override:
+        return override
+    hits = sorted(glob.glob(str(Path.home() / ".claude/plugins/cache/alignment-hive/model-router/*/scripts/bootstrap.sh")))
+    if not hits:
+        sys.exit("model-router plugin not installed: claude plugin install model-router@alignment-hive --scope user")
+    return hits[-1]
+
+
+def doctor_base_url() -> str:
+    out = subprocess.run([bootstrap(), "doctor", "--json"], capture_output=True, text=True, check=False)
+    try:
+        data = json.loads(out.stdout)
+    except json.JSONDecodeError:
+        sys.exit(f"doctor --json did not return JSON:\n{out.stdout[-800:]}\n{out.stderr[-800:]}")
+    failing = [c["name"] for c in data.get("checks", []) if not c.get("ok") and c["name"] != "fallback-model"]
+    if failing:
+        sys.exit(f"doctor is not green ({', '.join(failing)}); fix the router before wiring it")
+    url = data.get("base_url")
+    if not url or not url.startswith("http://127.0.0.1"):
+        sys.exit(f"doctor returned no loopback base URL: {url!r}")
+    return url
+
+
+def routes() -> list[tuple[str, str]]:
+    cfg = tomllib.loads(CONFIG.read_text())
+    found: list[tuple[str, str]] = []
+    for m in cfg.get("models", []):
+        found.append((m["routing-id"], m.get("display-name", m["routing-id"])))
+    for provider in cfg.get("openai-providers", []):
+        for m in provider.get("models", []):
+            found.append((m["routing-id"], m.get("display-name", m["routing-id"])))
+    if not found:
+        sys.exit(f"no routes in {CONFIG}")
+    return found
+
+
+def load() -> dict:
+    return json.loads(SETTINGS.read_text())
+
+
+def save(settings: dict) -> None:
+    SETTINGS.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+
+
+def wired(settings: dict) -> str | None:
+    return settings.get("env", {}).get("ANTHROPIC_BASE_URL")
+
+
+def cmd_on(args: argparse.Namespace) -> int:
+    url = doctor_base_url()
+    all_routes = routes()
+    keep = set(args.only.split(",")) if args.only else {r for r, _ in all_routes}
+    unknown = keep - {r for r, _ in all_routes}
+    if unknown:
+        sys.exit(f"--only names routes the router does not serve: {', '.join(sorted(unknown))}")
+    settings = load()
+    env = settings.setdefault("env", {})
+    env["ANTHROPIC_BASE_URL"] = url
+    env["_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL"] = "1"
+    env.setdefault("ENABLE_TOOL_SEARCH", "true")
+    env.setdefault("CLAUDE_CODE_MAX_CONTEXT_TOKENS", DECLARED_WINDOW)
+    for k in LEGACY_KEYS:
+        env.pop(k, None)
+    settings["modelPicker"] = {"options": [{"model": r, "label": label} for r, label in all_routes if r in keep]}
+    save(settings)
+    print(f"wired {SETTINGS} to the router; picker rows: {', '.join(r for r, _ in all_routes if r in keep)}")
+    print("restart Claude Code sessions to pick it up; the committed copy must not carry ANTHROPIC_BASE_URL")
+    return 0
+
+
+def cmd_off(_: argparse.Namespace) -> int:
+    settings = load()
+    env = settings.get("env", {})
+    removed = [k for k in ENV_KEYS + LEGACY_KEYS if k in env and k not in ("ENABLE_TOOL_SEARCH", "CLAUDE_CODE_MAX_CONTEXT_TOKENS")]
+    for k in removed:
+        env.pop(k)
+    had_picker = settings.pop("modelPicker", None) is not None
+    served = {r for r, _ in routes()} if CONFIG.exists() else set()
+    model = settings.get("model")
+    if model in served:
+        settings.pop("model")
+        print(f"dropped default model {model!r}: Anthropic does not serve it")
+    save(settings)
+    print(f"unwired: removed {', '.join(removed) or 'nothing'}; modelPicker {'removed' if had_picker else 'absent'}")
+    print("ENABLE_TOOL_SEARCH and CLAUDE_CODE_MAX_CONTEXT_TOKENS were left in place; they are harmless without a gateway")
+    return 0
+
+
+def cmd_status(_: argparse.Namespace) -> int:
+    settings = load()
+    url = wired(settings)
+    rows = [o["model"] for o in settings.get("modelPicker", {}).get("options", [])]
+    print(f"settings: {SETTINGS}")
+    print(f"gateway:  {'wired to ' + url.split('/t/')[0] + '/t/<token>' if url else 'not wired (direct Anthropic)'}")
+    print(f"picker:   {', '.join(rows) if rows else 'no modelPicker rows'}")
+    if CONFIG.exists():
+        print(f"routes:   {', '.join(r for r, _ in routes())}")
+    stale = [r for r in rows if CONFIG.exists() and r not in {x for x, _ in routes()}]
+    if stale:
+        print(f"WARNING picker rows with no route (fail on first turn): {', '.join(stale)}")
+        return 1
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    on = sub.add_parser("on", help="write the env keys and picker rows")
+    on.add_argument("--only", help="comma-separated routing IDs to show in the picker (default: every route)")
+    on.set_defaults(fn=cmd_on)
+    sub.add_parser("off", help="remove the env keys and picker rows").set_defaults(fn=cmd_off)
+    sub.add_parser("status", help="show what is wired").set_defaults(fn=cmd_status)
+    args = parser.parse_args()
+    if not SETTINGS.exists():
+        sys.exit(f"no settings file at {SETTINGS}")
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

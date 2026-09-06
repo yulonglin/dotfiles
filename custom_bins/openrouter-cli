@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """openrouter-cli - reach non-Anthropic models from a Claude Code session.
 
-Claude Code resolves a `model:` name against api.anthropic.com, so there is no
-frontmatter route to another vendor. model-router used to supply one by
-redirecting ANTHROPIC_BASE_URL, but that redirect hard-disables Remote Control.
-This CLI is the shell-out alternative: Remote Control keeps working, and the
-OpenRouter families stay reachable.
+Inside a session, a foreign model is reached only through the model-router
+gateway (wired globally since 2026-09-06; `model-router-wire status` lists the
+routes, and only those names work in agent frontmatter or `/model`). This CLI
+is the shell-out path for panels and one-off questions: it needs no gateway,
+logs provenance (echoed slug, generation id, usage) per call, and reaches any
+OpenRouter slug, not only the routed ones.
 
     openrouter-cli models                 # configured models
     openrouter-cli models --check         # ...cross-checked against the catalogue
