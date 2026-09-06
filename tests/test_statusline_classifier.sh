@@ -77,7 +77,7 @@ strip_ansi() { sed -e "s/${ESC}\[[0-9;]*m//g"; }
 # shared /tmp/claude when the var is unset, which is another machine's state.
 render_rust() {
     printf '%s' "$STATUS_INPUT" | \
-        env HOME="$FAKE" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
+        env HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
         CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null
 }
 
@@ -257,7 +257,7 @@ check "fresh dead is red" "$(render_rust | classifier_segment_raw)" \
 # fixtures rather than by files on disk.
 
 render_rust_with() {
-    printf '%s' "$1" | env HOME="$FAKE" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
+    printf '%s' "$1" | env HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
         CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null
 }
 
