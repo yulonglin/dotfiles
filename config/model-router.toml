@@ -15,7 +15,11 @@
 # whether the rendered files have drifted from this one.
 #
 # Keys per [[models]] entry:
-#   id              routing ID Claude Code requests (agent `model:`, `--model`, /model row)
+#   id              the provider-facing routing ID; always served as a route
+#   aliases         short names, e.g. ["astra"]; every alias is served as a route
+#                   too, and the FIRST alias is the name used everywhere you type
+#                   one: the /model row, `--model`, the generated agent's name and
+#                   `subagent_type`. Without aliases the id plays that part.
 #   name            label in the picker and agent description
 #   provider        "codex"      = the OpenAI account through the Codex OAuth login
 #                                  held by the managed CLIProxyAPI child (no key)
@@ -43,6 +47,7 @@ base-url = "https://openrouter.ai/api/v1"
 
 [[models]]
 id = "gpt-6-astra"
+aliases = ["astra"]
 name = "GPT-6 Astra"
 provider = "codex"
 context-window = 258400
@@ -50,10 +55,11 @@ agent = "high"
 
 [[models]]
 id = "gpt-5.6-sol"
+aliases = ["sol"]
 name = "GPT-5.6 Sol"
 provider = "codex"
 context-window = 258400
-agent = false            # the plugin ships gpt-5.6-sol(medium|high) agents itself
+agent = "high"           # the plugin also ships gpt-5.6-sol(medium|high) on the long id
 
 # The plugin ships agents for these two; keeping the routes stops those agents
 # failing on first use. Off the picker until wanted.
@@ -79,6 +85,7 @@ agent = false
 
 [[models]]
 id = "kimi-k3"
+aliases = ["kimi"]
 name = "Kimi K3"
 provider = "openrouter"
 slug = "moonshotai/kimi-k3"
@@ -86,6 +93,7 @@ context-window = 1048576
 
 [[models]]
 id = "glm-5.3"
+aliases = ["glm"]
 name = "GLM 5.3"
 provider = "openrouter"
 slug = "z-ai/glm-5.3"
@@ -93,6 +101,7 @@ context-window = 262144
 
 [[models]]
 id = "muse-spark-1.3"
+aliases = ["muse-spark", "muse"]
 name = "Muse Spark 1.3"
 provider = "openrouter"
 slug = "meta/muse-spark-1.3"
@@ -100,6 +109,7 @@ context-window = 1048576
 
 [[models]]
 id = "grok-4.6"
+aliases = ["grok"]
 name = "Grok 4.6"
 provider = "openrouter"
 slug = "x-ai/grok-4.6"
