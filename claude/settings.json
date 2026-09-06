@@ -147,10 +147,6 @@
     "defaultMode": "auto"
   },
   "model": "fable",
-  "fallbackModel": [
-    "claude-opus-5",
-    "opus"
-  ],
   "skillOverrides": {
     "claude-api": "off"
   },
