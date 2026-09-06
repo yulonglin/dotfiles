@@ -2,19 +2,20 @@
 # Smoke test for the model-router gateway (Option C, decision spec 2026-09-06).
 # One command, run after every Claude Code upgrade and every router refresh.
 # Legs, each printed as [ok]/[FAIL] and named on failure:
-#   unit       model-router.service is active
+#   unit       the OS user service is running (launchd on macOS, systemd elsewhere)
 #   doctor     `bootstrap.sh doctor --json` reports every check ok
 #   providers  `verify-providers` finds every configured model at its host
 #   settings   the deployed settings carry the loopback base URL; HEAD's copy does not
 #   route:<id> `claude -p --model <id>` answers through the router: the router log
 #              gains a request for that routing ID and the answer does not claim
 #              to be Claude (routed IDs get an honest-identity block)
-#   romp       the dashboard answers on the tailnet IP forwarder
+#   romp       the dashboard answers on the tailnet IP forwarder (skipped where ~/romp is absent)
 #
 # Options: --skip-probes (no claude -p calls), --routes id,id (probe a subset;
 # default is every modelPicker row in the deployed settings).
 # Loopback is blocked inside the Claude Code Bash sandbox, so run this with the
 # sandbox off or from a plain shell; a healthy router reads as down otherwise.
+# macOS ships Python 3.9 (no tomllib); the tomllib leg falls back to uv's interpreter.
 set -u
 
 SETTINGS="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
@@ -27,7 +28,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --skip-probes) skip_probes=1 ;;
     --routes) shift; routes_arg="$1" ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -36,6 +37,9 @@ done
 failed=()
 ok()   { printf '[ok]   %s\n' "$1"; }
 fail() { printf '[FAIL] %s\n' "$1"; failed+=("${1%% *}"); }
+skip() { printf '[skip] %s\n' "$1"; }
+# tomllib needs Python 3.11+; macOS ships 3.9, so fall back to uv's managed interpreter.
+py311() { if python3 -c 'import tomllib' 2>/dev/null; then python3 "$@"; else uv run --quiet --no-project --python '>=3.11' python "$@"; fi; }
 
 bootstrap="$(find "$HOME"/.claude/plugins/cache/alignment-hive/model-router -path '*/scripts/bootstrap.sh' 2>/dev/null | sort | tail -n1)"
 if [ -z "$bootstrap" ]; then
@@ -43,8 +47,10 @@ if [ -z "$bootstrap" ]; then
   echo "failed: ${failed[*]}"; exit 1
 fi
 
-# unit
-if systemctl --user is-active --quiet model-router.service; then ok "unit      model-router.service active"; else fail "unit      model-router.service not active"; fi
+# unit: launchd on macOS, systemd user unit elsewhere
+if [ "$(uname -s)" = "Darwin" ]; then
+  if launchctl print "gui/$(id -u)/com.alignment-hive.model-router" 2>/dev/null | grep -q 'state = running'; then ok "unit      com.alignment-hive.model-router running"; else fail "unit      com.alignment-hive.model-router not running (launchctl)"; fi
+elif systemctl --user is-active --quiet model-router.service; then ok "unit      model-router.service active"; else fail "unit      model-router.service not active"; fi
 
 # doctor
 doctor_json="$("$bootstrap" doctor --json 2>/dev/null)"
@@ -99,7 +105,7 @@ print("ERROR " + str(d.get("result") or d.get("error") or "")[:120] if d.get("is
       NO-JSON*|ERROR*|EMPTY|"") fail "route:$id no answer (${answer:-empty output})"; continue ;;
     esac
     if [ "$hop" -eq 0 ]; then fail "route:$id answered but the router log shows no request for it: $answer"; continue; fi
-    if printf '%s' "$answer" | grep -qi claude; then fail "route:$id answered as Claude: $answer"; continue; fi
+    if printf '%s' "$answer" | sed -E 's/[Cc]laude [Cc]ode//g' | grep -qi claude; then fail "route:$id answered as Claude: $answer"; continue; fi
     ok "route:$id $answer"
   done
 
@@ -129,7 +135,7 @@ print(("ERROR " if d.get("is_error") else "") + str(d.get("result") or "EMPTY").
     answer="$(agent_probe "$served")"
     hop="$(tail -n +"$((before + 1))" "$LOG" 2>/dev/null | grep -c -- "$served")"
     if infra_error "$answer"; then fail "agent:$served probe could not run (harness, not routing): $answer"
-    elif printf '%s' "$answer" | grep -qiE 'claude|opus|sonnet|fable|haiku'; then fail "agent:$served answered as Claude: $answer"
+    elif printf '%s' "$answer" | sed -E 's/[Cc]laude [Cc]ode//g' | grep -qiE 'claude|opus|sonnet|fable|haiku'; then fail "agent:$served answered as Claude: $answer"
     elif [ "$hop" -eq 0 ]; then fail "agent:$served no router request for it: $answer"
     else ok "agent:$served $answer"; fi
   fi
@@ -142,7 +148,7 @@ print(("ERROR " if d.get("is_error") else "") + str(d.get("result") or "EMPTY").
 fi
 
 # every agent file names a Claude alias, a Claude ID or a routing ID the router serves
-offenders="$(python3 - "$REPO/claude/agents" "$HOME/.config/model-router/config.toml" <<'PY'
+offenders="$(py311 - "$REPO/claude/agents" "$HOME/.config/model-router/config.toml" <<'PY'
 import re, sys, glob, tomllib, pathlib
 agents_dir, config = sys.argv[1], sys.argv[2]
 served = set()
@@ -169,13 +175,17 @@ PY
 )"
 if [ -n "$offenders" ]; then fail "agents    unserved model in agent files: $offenders"; else ok "agents    every agent file names a Claude model or a served route"; fi
 
-# romp over the tailnet
-ts_ip="$(tailscale ip -4 2>/dev/null | head -n1)"
-if [ -z "$ts_ip" ]; then
-  fail "romp      tailscale ip -4 returned nothing"
+# romp over the tailnet (hetzner only: skipped where ~/romp is absent)
+if [ ! -d "$HOME/romp" ]; then
+  skip "romp      ~/romp not on this machine"
 else
-  code="$(curl -s -m 8 -o /dev/null -w '%{http_code}' "http://$ts_ip:8080/" 2>/dev/null)"
-  if [ "$code" = "200" ]; then ok "romp      http://$ts_ip:8080/ answers 200"; else fail "romp      http://$ts_ip:8080/ returned ${code:-nothing}"; fi
+  ts_ip="$(tailscale ip -4 2>/dev/null | head -n1)"
+  if [ -z "$ts_ip" ]; then
+    fail "romp      tailscale ip -4 returned nothing"
+  else
+    code="$(curl -s -m 8 -o /dev/null -w '%{http_code}' "http://$ts_ip:8080/" 2>/dev/null)"
+    if [ "$code" = "200" ]; then ok "romp      http://$ts_ip:8080/ answers 200"; else fail "romp      http://$ts_ip:8080/ returned ${code:-nothing}"; fi
+  fi
 fi
 
 echo "run: $(date -u +%Y-%m-%dT%H:%M:%SZ) claude $("$CLAUDE_BIN" --version 2>/dev/null | head -n1) router $(printf '%s' "$doctor_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null)"
