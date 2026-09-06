@@ -147,10 +147,6 @@
     "defaultMode": "auto"
   },
   "model": "fable",
-  "fallbackModel": [
-    "claude-opus-5",
-    "opus"
-  ],
   "skillOverrides": {
     "claude-api": "off"
   },
@@ -624,6 +620,7 @@
     "dev-browser@dev-browser-marketplace": false,
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
+    "model-router@alignment-hive": true,
     "playground@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
