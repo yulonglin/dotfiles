@@ -1301,7 +1301,7 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, trust_secti
         raise ApprovalClassifierWarning(
             "ANTHROPIC_API_KEY is not set for the approval classifier hook.",
             "The hook cannot call Anthropic, so it is falling back to the normal permission prompt.",
-            "Run `secrets-edit` / `setup-envrc`, or fix `with-anthropic-key.sh` so the hook gets a key.",
+            "Run `secrets use ANTHROPIC_API_KEY <key>` (not `secrets envrc` — a repo .envrc binding leaks the key into every session launched there), or fix `with-anthropic-key.sh` so the hook gets a key.",
         )
 
     user_msg = build_classify_user_msg(tool_name, tool_input, cwd, user_message)
