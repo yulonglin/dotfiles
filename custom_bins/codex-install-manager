@@ -1,0 +1,297 @@
+#!/bin/bash
+
+set -euo pipefail
+
+MODE=ensure
+DRY_RUN=false
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODEX_INSTALL_CONFIG="${CODEX_INSTALL_CONFIG:-$SCRIPT_DIR/../config/codex-install.conf}"
+CODEX_DOCTOR="${CODEX_DOCTOR:-$SCRIPT_DIR/codex-install-doctor}"
+CODEX_STANDALONE_INSTALLER_URL="${CODEX_STANDALONE_INSTALLER_URL:-https://chatgpt.com/codex/install.sh}"
+
+if [[ -r "$CODEX_INSTALL_CONFIG" ]]; then
+    # shellcheck source=../config/codex-install.conf
+    source "$CODEX_INSTALL_CONFIG"
+fi
+
+CODEX_INSTALL_METHOD="${CODEX_INSTALL_METHOD:-homebrew}"
+CODEX_REQUIRED_SUBCOMMANDS="${CODEX_REQUIRED_SUBCOMMANDS:-agents}"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --ensure) MODE=ensure; shift ;;
+        --update) MODE=update; shift ;;
+        --dry-run) DRY_RUN=true; shift ;;
+        -h|--help)
+            echo "Usage: codex-install-manager [--ensure|--update] [--dry-run]"
+            exit 0
+            ;;
+        *) echo "Unknown option: $1" >&2; exit 64 ;;
+    esac
+done
+
+case "$CODEX_INSTALL_METHOD" in
+    homebrew|standalone) ;;
+    *)
+        echo "Invalid CODEX_INSTALL_METHOD: $CODEX_INSTALL_METHOD" >&2
+        exit 64
+        ;;
+esac
+
+doctor() {
+    CODEX_INSTALL_METHOD="$CODEX_INSTALL_METHOD" \
+    CODEX_REQUIRED_SUBCOMMANDS="$CODEX_REQUIRED_SUBCOMMANDS" \
+        "$CODEX_DOCTOR" "$@"
+}
+
+doctor_status() {
+    local status=0
+    doctor --quiet || status=$?
+    return "$status"
+}
+
+print_command() {
+    local description="$1"
+    shift
+    printf '[DRY RUN] %s:' "$description"
+    printf ' %q' "$@"
+    printf '\n'
+}
+
+run_command() {
+    local description="$1"
+    shift
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_command "$description" "$@"
+        return 0
+    fi
+    echo "==> $description"
+    "$@"
+}
+
+install_homebrew() {
+    [[ "$DRY_RUN" == "true" ]] || command -v brew &>/dev/null || {
+        echo "Homebrew is required by CODEX_INSTALL_METHOD=homebrew." >&2
+        return 1
+    }
+    run_command "install configured homebrew Codex" \
+        env HOMEBREW_ASK= HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 \
+        HOMEBREW_NO_INSTALL_CLEANUP=1 brew install --cask codex
+}
+
+update_homebrew() {
+    [[ "$DRY_RUN" == "true" ]] || command -v brew &>/dev/null || {
+        echo "Homebrew is required by CODEX_INSTALL_METHOD=homebrew." >&2
+        return 1
+    }
+    run_command "update configured homebrew Codex" \
+        env HOMEBREW_ASK= HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 \
+        HOMEBREW_NO_INSTALL_CLEANUP=1 brew upgrade --cask codex
+}
+
+run_standalone_installer() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_command "install or update configured standalone Codex" \
+            curl -fsSL "$CODEX_STANDALONE_INSTALLER_URL"
+        return 0
+    fi
+
+    command -v curl &>/dev/null || {
+        echo "curl is required by CODEX_INSTALL_METHOD=standalone." >&2
+        return 1
+    }
+
+    local installer
+    installer="$(mktemp "${TMPDIR:-/tmp}/codex-install.XXXXXX")"
+    if ! curl -fsSL --connect-timeout 10 --max-time 60 \
+        "$CODEX_STANDALONE_INSTALLER_URL" -o "$installer"; then
+        rm -f "$installer"
+        return 1
+    fi
+    if ! CODEX_NON_INTERACTIVE=1 sh "$installer"; then
+        rm -f "$installer"
+        return 1
+    fi
+    rm -f "$installer"
+}
+
+install_configured_owner() {
+    case "$CODEX_INSTALL_METHOD" in
+        homebrew) install_homebrew ;;
+        standalone) run_standalone_installer ;;
+    esac
+}
+
+update_configured_owner() {
+    case "$CODEX_INSTALL_METHOD" in
+        homebrew) update_homebrew ;;
+        standalone) run_standalone_installer ;;
+    esac
+}
+
+resolve_path() {
+    local candidate="$1"
+    local target
+    while [[ -L "$candidate" ]]; do
+        target="$(readlink "$candidate")"
+        if [[ "$target" == /* ]]; then
+            candidate="$target"
+        else
+            candidate="$(dirname "$candidate")/$target"
+        fi
+    done
+    local directory
+    directory="$(cd -P "$(dirname "$candidate")" 2>/dev/null && pwd)" || return 1
+    printf '%s/%s\n' "$directory" "$(basename "$candidate")"
+}
+
+remove_standalone() {
+    local standalone_root="${CODEX_HOME:-$HOME/.codex}/packages/standalone"
+    local bin_dir="${CODEX_INSTALL_DIR:-$HOME/.local/bin}"
+    local launcher canonical
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_command "remove standalone Codex" rm -rf "$standalone_root"
+        return 0
+    fi
+
+    for launcher in "$bin_dir/codex" "$bin_dir/codex-code-mode-host"; do
+        if [[ -L "$launcher" ]]; then
+            canonical="$(resolve_path "$launcher" 2>/dev/null || true)"
+            [[ "$canonical" == "$standalone_root/"* ]] && rm -f "$launcher"
+        fi
+    done
+    rm -rf "$standalone_root"
+}
+
+remove_owner() {
+    local owner="$1"
+    case "$owner" in
+        homebrew)
+            command -v brew &>/dev/null || return 1
+            run_command "remove Homebrew Codex" brew uninstall --cask codex
+            ;;
+        standalone) remove_standalone ;;
+        bun)
+            command -v bun &>/dev/null || return 1
+            run_command "remove Bun Codex" bun remove -g @openai/codex
+            ;;
+        npm)
+            command -v npm &>/dev/null || return 1
+            run_command "remove npm Codex" npm uninstall -g @openai/codex
+            ;;
+        *)
+            echo "Cannot safely remove Codex owner: $owner" >&2
+            return 1
+            ;;
+    esac
+}
+
+read_owners() {
+    local owner_output status=0
+    owner_output="$(doctor --owner-only)" || status=$?
+    if ((status != 0 && status != 2)); then
+        return "$status"
+    fi
+    printf '%s\n' "$owner_output"
+}
+
+contains_owner() {
+    local wanted="$1"
+    shift
+    local owner
+    for owner in "$@"; do
+        [[ "$owner" == "$wanted" ]] && return 0
+    done
+    return 1
+}
+
+verify_installation() {
+    [[ "$DRY_RUN" == "true" ]] && return 0
+    local status=0
+    doctor || status=$?
+    if ((status == 4)) && [[ "$CODEX_INSTALL_METHOD" == "homebrew" ]]; then
+        echo "Homebrew Codex still lacks: $CODEX_REQUIRED_SUBCOMMANDS" >&2
+        echo "Set CODEX_INSTALL_METHOD=standalone in config/codex-install.conf, then rerun install.sh." >&2
+    fi
+    return "$status"
+}
+
+status=0
+doctor_status || status=$?
+
+if [[ "$MODE" == "update" ]]; then
+    case "$status" in
+        0|4)
+            update_configured_owner
+            if ((status == 4)) && [[ "$CODEX_INSTALL_METHOD" == "homebrew" ]]; then
+                echo "If Homebrew still lacks agents, set CODEX_INSTALL_METHOD=standalone and rerun install.sh." >&2
+            fi
+            verify_installation
+            ;;
+        1)
+            echo "Codex is not installed; skipping update."
+            ;;
+        2|3)
+            echo "Codex ownership does not match config; scheduled updates never switch owners." >&2
+            echo "Exit Codex and rerun install.sh --minimal --ai-tools." >&2
+            exit "$status"
+            ;;
+        *) exit "$status" ;;
+    esac
+    exit 0
+fi
+
+case "$status" in
+    0) exit 0 ;;
+    1)
+        install_configured_owner
+        verify_installation
+        exit $?
+        ;;
+    4)
+        update_configured_owner
+        if [[ "$CODEX_INSTALL_METHOD" == "homebrew" ]]; then
+            echo "If Homebrew still lacks agents, set CODEX_INSTALL_METHOD=standalone and rerun install.sh." >&2
+        fi
+        verify_installation
+        exit $?
+        ;;
+    2|3) ;;
+    *) exit "$status" ;;
+esac
+
+if [[ -n "${CODEX_THREAD_ID:-}" ]]; then
+    echo "Exit Codex before switching its installation owner, then rerun install.sh." >&2
+    exit 5
+fi
+
+installed_owners=()
+while IFS= read -r owner; do
+    [[ -n "$owner" ]] && installed_owners+=("$owner")
+done < <(read_owners)
+for owner in "${installed_owners[@]}"; do
+    case "$owner" in
+        homebrew|standalone|bun|npm) ;;
+        *) echo "Cannot reconcile unknown Codex installation owner: $owner" >&2; exit 2 ;;
+    esac
+done
+
+if ! contains_owner "$CODEX_INSTALL_METHOD" "${installed_owners[@]}"; then
+    install_configured_owner
+fi
+
+removed_owner=false
+for owner in "${installed_owners[@]}"; do
+    if [[ "$owner" != "$CODEX_INSTALL_METHOD" ]]; then
+        remove_owner "$owner"
+        removed_owner=true
+    fi
+done
+
+if [[ "$removed_owner" == "false" && "$status" -eq 2 ]]; then
+    echo "Multiple $CODEX_INSTALL_METHOD Codex copies remain; refusing ambiguous cleanup." >&2
+    exit 2
+fi
+
+verify_installation

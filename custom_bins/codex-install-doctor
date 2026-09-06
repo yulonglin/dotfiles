@@ -1,0 +1,154 @@
+#!/bin/bash
+
+set -euo pipefail
+
+QUIET=false
+OWNER_ONLY=false
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODEX_INSTALL_CONFIG="${CODEX_INSTALL_CONFIG:-$SCRIPT_DIR/../config/codex-install.conf}"
+
+if [[ -r "$CODEX_INSTALL_CONFIG" ]]; then
+    # shellcheck source=../config/codex-install.conf
+    source "$CODEX_INSTALL_CONFIG"
+fi
+
+CODEX_INSTALL_METHOD="${CODEX_INSTALL_METHOD:-homebrew}"
+CODEX_REQUIRED_SUBCOMMANDS="${CODEX_REQUIRED_SUBCOMMANDS:-agents}"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --quiet) QUIET=true; shift ;;
+        --owner-only) OWNER_ONLY=true; shift ;;
+        -h|--help)
+            echo "Usage: codex-install-doctor [--quiet] [--owner-only]"
+            echo "Exit 0: healthy; 1: none; 2: multiple; 3: wrong owner; 4: missing capability."
+            exit 0
+            ;;
+        *) echo "Unknown option: $1" >&2; exit 64 ;;
+    esac
+done
+
+case "$CODEX_INSTALL_METHOD" in
+    homebrew|standalone) ;;
+    *)
+        echo "Invalid CODEX_INSTALL_METHOD: $CODEX_INSTALL_METHOD (expected homebrew or standalone)" >&2
+        exit 64
+        ;;
+esac
+
+resolve_path() {
+    local candidate="$1"
+    local target
+
+    while [[ -L "$candidate" ]]; do
+        target="$(readlink "$candidate")"
+        if [[ "$target" == /* ]]; then
+            candidate="$target"
+        else
+            candidate="$(dirname "$candidate")/$target"
+        fi
+    done
+
+    local directory
+    directory="$(cd -P "$(dirname "$candidate")" 2>/dev/null && pwd)" || return 1
+    printf '%s/%s\n' "$directory" "$(basename "$candidate")"
+}
+
+installation_owner() {
+    local canonical_path="$1"
+    case "$canonical_path" in
+        */Caskroom/codex/*|*/Cellar/codex/*) echo "homebrew" ;;
+        */packages/standalone/*) echo "standalone" ;;
+        */.bun/*|*/bun/install/global/node_modules/@openai/codex/*) echo "bun" ;;
+        */node_modules/@openai/codex/*) echo "npm" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+canonical_paths=()
+owners=()
+versions=()
+
+add_candidate() {
+    local candidate="$1"
+    [[ -x "$candidate" ]] || return 0
+
+    local canonical_path
+    canonical_path="$(resolve_path "$candidate")" || return 0
+
+    local existing_path
+    for existing_path in "${canonical_paths[@]}"; do
+        [[ "$existing_path" == "$canonical_path" ]] && return 0
+    done
+
+    local version
+    version="$("$canonical_path" --version 2>/dev/null | head -n 1 || true)"
+    canonical_paths+=("$canonical_path")
+    owners+=("$(installation_owner "$canonical_path")")
+    versions+=("${version:-version unavailable}")
+}
+
+IFS=: read -r -a path_entries <<< "${PATH:-}"
+for path_entry in "${path_entries[@]}"; do
+    [[ -n "$path_entry" ]] && add_candidate "$path_entry/codex"
+done
+
+system_prefixes="${CODEX_DOCTOR_SYSTEM_PREFIXES-/opt/homebrew:/home/linuxbrew/.linuxbrew:/usr/local}"
+IFS=: read -r -a system_prefix_entries <<< "$system_prefixes"
+for system_prefix in "${system_prefix_entries[@]}"; do
+    [[ -n "$system_prefix" ]] && add_candidate "$system_prefix/bin/codex"
+done
+
+add_candidate "$HOME/.local/bin/codex"
+add_candidate "$HOME/.bun/bin/codex"
+add_candidate "$HOME/.npm-global/bin/codex"
+add_candidate "${CODEX_HOME:-$HOME/.codex}/packages/standalone/current/bin/codex"
+
+installation_count=${#canonical_paths[@]}
+
+if ((installation_count == 0)); then
+    [[ "$QUIET" == "true" || "$OWNER_ONLY" == "true" ]] && exit 1
+    echo "No Codex installation found." >&2
+    exit 1
+fi
+
+if [[ "$OWNER_ONLY" == "true" ]]; then
+    if ((installation_count > 1)); then
+        printf '%s\n' "${owners[@]}" | sort -u
+        exit 2
+    fi
+    printf '%s\n' "${owners[0]}"
+    exit 0
+fi
+
+if [[ "$QUIET" != "true" || "$installation_count" -gt 1 ]]; then
+    printf '%d distinct Codex installation%s found:\n' \
+        "$installation_count" "$([[ "$installation_count" -eq 1 ]] || echo s)"
+
+    for ((index = 0; index < installation_count; index++)); do
+        printf '  %-10s %-20s %s\n' \
+            "${owners[$index]}" "${versions[$index]}" "${canonical_paths[$index]}"
+    done
+fi
+
+if ((installation_count > 1)); then
+    echo "Remove redundant Codex installations before installing or updating." >&2
+    exit 2
+fi
+
+if [[ "${owners[0]}" != "$CODEX_INSTALL_METHOD" ]]; then
+    echo "Codex owner is ${owners[0]}, but configured owner is $CODEX_INSTALL_METHOD." >&2
+    exit 3
+fi
+
+read -r -a required_subcommands <<< "$CODEX_REQUIRED_SUBCOMMANDS"
+for subcommand in "${required_subcommands[@]}"; do
+    [[ -n "$subcommand" ]] || continue
+    if ! "${canonical_paths[0]}" "$subcommand" --help &>/dev/null; then
+        echo "Codex ${versions[0]} is missing required subcommand: $subcommand" >&2
+        if [[ "$CODEX_INSTALL_METHOD" == "homebrew" ]]; then
+            echo "Set CODEX_INSTALL_METHOD=standalone in config/codex-install.conf, then rerun install.sh." >&2
+        fi
+        exit 4
+    fi
+done

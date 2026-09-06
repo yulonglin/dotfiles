@@ -30,15 +30,14 @@ JOB_ID="update-ai-tools"
 # Logging (uses scheduler's internal prefix to avoid conflicts)
 log_step() { echo -e "${BLUE}==>${NC} $1"; }
 
-# macOS updates Codex/OpenCode through brew, so bun is only a hard requirement
-# on Linux. The install itself is install_bun in scripts/shared/helpers.sh —
-# this wrapper keeps the Darwin gate and the "skipping setup" contract.
+# Homebrew-owned tools do not need bun. When Linux has neither manager, install
+# bun so the updater can still manage JS CLI packages.
 ensure_bun_for_linux() {
     if [[ "$(uname -s)" == "Darwin" ]]; then
         return 0
     fi
 
-    if command -v bun &>/dev/null; then
+    if command -v brew &>/dev/null || command -v bun &>/dev/null; then
         return 0
     fi
 

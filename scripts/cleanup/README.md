@@ -248,7 +248,7 @@ Daily scheduled job (6:00 AM) that updates Claude Code, Gemini CLI, and Codex CL
 
 ### Features
 
-- **Manager selection**: Uses brew on macOS and bun on Linux for Gemini/Codex updates
+- **Codex ownership**: Enforces `config/codex-install.conf`; unattended updates never switch owners
 - **`claude update`**: Works universally regardless of Claude Code install method
 - **Lock file**: Prevents concurrent runs with PID-based stale lock detection
 - **`--dry-run`**: Preview what would be updated without executing
