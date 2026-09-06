@@ -267,16 +267,30 @@ fn format_git_info(output: &mut String, cwd: &str) {
 
 /// Model display name in brackets, with the reasoning effort folded in when the
 /// model reports one: "[Opus 5 (high)]". Effort keeps its own colour inside the
-/// blue bracket, so the bracket colour is re-opened after the suffix — at normal
-/// intensity (SGR 22), since a bare SGR 34 would leave the dim levels' SGR 2 set
-/// and render the closing bracket dimmer than the opening one.
+/// bracket, so the bracket colour is re-opened after the suffix — at normal
+/// intensity (SGR 22), since a bare colour code would leave the dim levels' SGR 2
+/// set and render the closing bracket dimmer than the opening one.
 /// Effort has no segment of its own — a payload with an effort but no model
 /// display name renders neither, which Claude Code never sends.
+///
+/// The bracket is normally blue. Opus 4.8 is the one exception: nothing selects
+/// it deliberately (the `opus` alias resolves to Opus 5, and the overload
+/// `fallbackModel` lands on Opus 5 too), so seeing it means a cyber-safeguard
+/// refusal downgraded the session — a `model_refusal_fallback` that latches for
+/// the whole session until the model is re-selected. It renders red with a ⚠ so
+/// the silent latch is visible; `/model fable` (or your primary) restores it.
+/// See claude/rules/sensitive-content.md.
 fn format_model_str(model: Option<&Model>, effort: Option<&Effort>) -> Option<String> {
     let name = model.and_then(|m| m.display_name.as_deref()).filter(|n| !n.is_empty())?;
+    // 34 = blue (normal); 31 = red for the cyber-downgrade sentinel model.
+    let (colour, label) = if name.starts_with("Opus 4.8") {
+        ("31", format!("⚠ {name}"))
+    } else {
+        ("34", name.to_string())
+    };
     match format_effort_suffix(effort) {
-        Some(suffix) => Some(format!("\x1b[34m[{} {}\x1b[22;34m]\x1b[0m", name, suffix)),
-        None => Some(format!("\x1b[34m[{}]\x1b[0m", name)),
+        Some(suffix) => Some(format!("\x1b[{colour}m[{label} {suffix}\x1b[22;{colour}m]\x1b[0m")),
+        None => Some(format!("\x1b[{colour}m[{label}]\x1b[0m")),
     }
 }
 
