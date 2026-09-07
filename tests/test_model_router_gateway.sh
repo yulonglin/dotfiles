@@ -5,7 +5,8 @@
 #   unit       the OS user service is running (launchd on macOS, systemd elsewhere)
 #   doctor     `bootstrap.sh doctor --json` reports every check ok
 #   providers  `verify-providers` finds every configured model at its host
-#   settings   the deployed settings carry the loopback base URL; HEAD's copy does not
+#   settings   the managed drop-in carries the loopback base URL; neither the
+#              deployed ~/.claude/settings.json nor HEAD's copy does
 #   route:<id> `claude -p --model <id>` answers through the router: the router log
 #              gains a request for that routing ID and the answer does not claim
 #              to be Claude (routed IDs get an honest-identity block)
@@ -14,13 +15,15 @@
 #   romp       the dashboard answers on the tailnet IP forwarder (skipped where ~/romp is absent)
 #
 # Options: --skip-probes (no claude -p calls), --routes id,id (probe a subset;
-# default is every modelPicker row in the deployed settings).
+# default is every modelPicker row in the managed drop-in).
 # Loopback is blocked inside the Claude Code Bash sandbox, so run this with the
 # sandbox off or from a plain shell; a healthy router reads as down otherwise.
 # macOS ships Python 3.9 (no tomllib); the tomllib leg falls back to uv's interpreter.
 set -u
 
 SETTINGS="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
+if [ "$(uname -s)" = "Darwin" ]; then managed_default="/Library/Application Support/ClaudeCode/managed-settings.d/50-model-router.json"; else managed_default="/etc/claude-code/managed-settings.d/50-model-router.json"; fi
+MANAGED="${MODEL_ROUTER_MANAGED:-$managed_default}"
 LOG="$HOME/.local/state/model-router/logs/router.log"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
@@ -75,14 +78,16 @@ base_url="$(printf '%s' "$doctor_json" | python3 -c 'import json,sys; print(json
 # providers
 if "$bootstrap" verify-providers >/dev/null 2>&1; then ok "providers verify-providers passed"; else fail "providers verify-providers failed: $("$bootstrap" verify-providers 2>&1 | head -n1)"; fi
 
-# settings: deployed carries the loopback URL, committed does not
+# settings: the managed drop-in carries the loopback URL; the deployed user file and HEAD's copy do not
+managed_url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("env",{}).get("ANTHROPIC_BASE_URL",""))' "$MANAGED" 2>/dev/null)"
 deployed_url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("env",{}).get("ANTHROPIC_BASE_URL",""))' "$SETTINGS" 2>/dev/null)"
 committed_url="$(git -C "$REPO" show HEAD:claude/settings.json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("env",{}).get("ANTHROPIC_BASE_URL",""))' 2>/dev/null)"
-case "$deployed_url" in
-  http://127.0.0.1:*) ok "settings  deployed file wired to loopback" ;;
-  "") fail "settings  deployed file has no ANTHROPIC_BASE_URL (run: model-router-wire apply)" ;;
-  *) fail "settings  deployed ANTHROPIC_BASE_URL is not loopback: $deployed_url" ;;
+case "$managed_url" in
+  http://127.0.0.1:*) ok "settings  managed drop-in wired to loopback" ;;
+  "") fail "settings  no managed drop-in at $MANAGED (run: model-router-wire apply, then its sudo line)" ;;
+  *) fail "settings  managed ANTHROPIC_BASE_URL is not loopback: $managed_url" ;;
 esac
+if [ -n "$deployed_url" ]; then fail "settings  deployed $SETTINGS still carries ANTHROPIC_BASE_URL (run: model-router-wire apply)"; else ok "settings  deployed user file carries no base URL"; fi
 if [ -n "$committed_url" ]; then fail "settings  HEAD's claude/settings.json carries ANTHROPIC_BASE_URL"; else ok "settings  committed copy carries no base URL"; fi
 
 # source: everything rendered from config/model-router.toml is current
@@ -93,12 +98,12 @@ if [ "$skip_probes" -eq 0 ]; then
   if [ -n "$routes_arg" ]; then
     routes="${routes_arg//,/ }"
   else
-    routes="$(python3 -c 'import json,sys; print(" ".join(o["model"] for o in json.load(open(sys.argv[1])).get("modelPicker",{}).get("options",[])))' "$SETTINGS" 2>/dev/null)"
+    routes="$(python3 -c 'import json,sys; print(" ".join(o["model"] for o in json.load(open(sys.argv[1])).get("modelPicker",{}).get("options",[])))' "$MANAGED" 2>/dev/null)"
   fi
   if [ -z "$routes" ]; then
     fail "routes    no modelPicker rows to probe and no --routes given"
   fi
-  probe_url="${deployed_url:-$base_url}"
+  probe_url="${managed_url:-$base_url}"
   # a claude-* picker row is a passthrough (provider = "anthropic" in the source):
   # the router forwards it to Anthropic, so it must answer as Claude, not as a route
   passthrough=""; routed=""
