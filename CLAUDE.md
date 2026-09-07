@@ -25,7 +25,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 | Add a custom binary | Drop it in `custom_bins/` (already on PATH); `chmod +x` |
 | Install/manage Mac apps | Add a line to `config/apps.conf` → run `app-picker` (gum TUI) → `brew bundle --file=config/Brewfile`. Official casks + `mas` only, **no third-party taps**. Then `scripts/setup/auth-setup` |
 | Add an encrypted secret | `secrets edit` (interactive fzf editor) |
-| Add, remove or switch off a foreign model (picker row, agent, route) | Edit `config/model-router.toml` → `model-router-wire apply` (renders router config, picker rows and `claude/agents/` files; `status` shows drift) → `tests/test_model_router_gateway.sh` |
+| Add, remove or switch off a foreign model (picker row, agent, route), or put an older Claude model in `/model` (`provider = "anthropic"`) | Edit `config/model-router.toml` → `model-router-wire apply` (renders router config, picker rows and `claude/agents/` files; `status` shows drift) → `tests/test_model_router_gateway.sh` |
 | Run an experiment with resource caps | `jexp uv run python -m ...` (Linux: needs pueue + systemd user session) |
 | Commit / commit + push + PR | `/commit` skill or `/commit-push-sync` |
 | Merge worktree → parent branch | `cwmerge` (or `git merge <branch>` from the parent if the branch isn't `worktree-` prefixed) |

@@ -25,6 +25,11 @@
 #                                  held by the managed CLIProxyAPI child (no key)
 #                   "openrouter" = OpenRouter with the key in
 #                                  ~/.config/model-router/secrets.toml
+#                   "anthropic"  = a Claude model the router forwards unchanged:
+#                                  a picker row only, since Claude Code hides its
+#                                  own legacy rows on the first-party provider.
+#                                  id must be a claude-* ID; no aliases, no agent,
+#                                  context-window optional
 #                   another name = an [providers.<name>] block below (OpenAI-
 #                                  compatible host; key under that name in secrets.toml)
 #   slug            the provider's exact model ID (defaults to id)
@@ -42,6 +47,15 @@ declared-context-window = 258400
 
 [providers.openrouter]
 base-url = "https://openrouter.ai/api/v1"
+
+# ---- Older Claude models, passed straight through to Anthropic -----------
+# Active until at least 2027-02-05 (deprecations page, 2026-09-07). Opus 3 is
+# not addable: retired on the API 2026-01-05 and gone from OpenRouter too.
+
+[[models]]
+id = "claude-opus-4-6"
+name = "Opus 4.6"
+provider = "anthropic"
 
 # ---- OpenAI, from the account (never through OpenRouter) ----------------
 

@@ -9,6 +9,8 @@
 #   route:<id> `claude -p --model <id>` answers through the router: the router log
 #              gains a request for that routing ID and the answer does not claim
 #              to be Claude (routed IDs get an honest-identity block)
+#   passthru:<id> a claude-* picker row (provider = "anthropic") reaches the router
+#              and answers as Claude: the gateway forwards Claude IDs unchanged
 #   romp       the dashboard answers on the tailnet IP forwarder
 #
 # Options: --skip-probes (no claude -p calls), --routes id,id (probe a subset;
@@ -80,11 +82,17 @@ if [ "$skip_probes" -eq 0 ]; then
     fail "routes    no modelPicker rows to probe and no --routes given"
   fi
   probe_url="${deployed_url:-$base_url}"
+  # a claude-* picker row is a passthrough (provider = "anthropic" in the source):
+  # the router forwards it to Anthropic, so it must answer as Claude, not as a route
+  passthrough=""; routed=""
   for id in $routes; do
-    before="$(wc -l < "$LOG" 2>/dev/null || echo 0)"
-    answer="$(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDECODE ANTHROPIC_BASE_URL="$probe_url" \
+    case "$id" in claude-*) passthrough="$passthrough $id" ;; *) routed="$routed $id" ;; esac
+  done
+  routes="${routed# }"; passthrough="${passthrough# }"
+  model_probe() {
+    env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDECODE ANTHROPIC_BASE_URL="$probe_url" \
       timeout 150 "$CLAUDE_BIN" -p 'Which model are you? Reply with your model family and version in at most six words.' \
-      --model "$id" --max-budget-usd 0.5 --output-format json 2>/dev/null \
+      --model "$1" --max-budget-usd 0.5 --output-format json 2>/dev/null \
       | python3 -c 'import json,sys
 t=sys.stdin.read().strip()
 try:
@@ -93,7 +101,11 @@ except Exception:
     print("NO-JSON " + t[:160].replace("\n"," ")); sys.exit()
 if isinstance(d, list):  # some versions emit the message stream as an array
     d=next((m for m in d if isinstance(m, dict) and m.get("type")=="result"), d[-1] if d else {})
-print("ERROR " + str(d.get("result") or d.get("error") or "")[:120] if d.get("is_error") else (d.get("result") or "EMPTY").replace("\n"," ")[:120])')"
+print("ERROR " + str(d.get("result") or d.get("error") or "")[:120] if d.get("is_error") else (d.get("result") or "EMPTY").replace("\n"," ")[:120])'
+  }
+  for id in $routes; do
+    before="$(wc -l < "$LOG" 2>/dev/null || echo 0)"
+    answer="$(model_probe "$id")"
     hop="$(tail -n +"$((before + 1))" "$LOG" 2>/dev/null | grep -c -- "$id")"
     case "$answer" in
       NO-JSON*|ERROR*|EMPTY|"") fail "route:$id no answer (${answer:-empty output})"; continue ;;
@@ -101,6 +113,17 @@ print("ERROR " + str(d.get("result") or d.get("error") or "")[:120] if d.get("is
     if [ "$hop" -eq 0 ]; then fail "route:$id answered but the router log shows no request for it: $answer"; continue; fi
     if printf '%s' "$answer" | grep -qi claude; then fail "route:$id answered as Claude: $answer"; continue; fi
     ok "route:$id $answer"
+  done
+  for id in $passthrough; do
+    before="$(wc -l < "$LOG" 2>/dev/null || echo 0)"
+    answer="$(model_probe "$id")"
+    hop="$(tail -n +"$((before + 1))" "$LOG" 2>/dev/null | grep -c -- "$id")"
+    case "$answer" in
+      NO-JSON*|ERROR*|EMPTY|"") fail "passthru:$id no answer (${answer:-empty output})"; continue ;;
+    esac
+    if [ "$hop" -eq 0 ]; then fail "passthru:$id answered but the router log shows no request for it: $answer"; continue; fi
+    if ! printf '%s' "$answer" | grep -qiE 'claude|opus|sonnet|haiku'; then fail "passthru:$id did not answer as Claude: $answer"; continue; fi
+    ok "passthru:$id $answer"
   done
 
   # agent-file probes (the F3 re-measurement): an agent whose model is a served
