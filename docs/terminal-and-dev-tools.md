@@ -88,6 +88,12 @@ Context % is color-coded: green <70%, yellow 70–89%, red 90%+. Machine name us
 
 `ccusage statusline` is deliberately not wired into the live Claude hook path because it can OOM on large local histories; guard logic still uses lightweight `ccusage blocks --active --json` where available.
 
+### Model usage is reported from existing records
+
+`claude-usage-audit --model-usage [--days N] [--json]` reports deduplicated token usage from local transcripts, separate direct API usage from the rotating approval-classifier `USAGE:` log lines, and quota snapshots sampled from the existing statusline cache when the command runs. The JSON schema retains the legacy `requests` key, where each count is one persisted response. `--project` filters transcript usage only; approval and quota data remain host-wide. The approval section does not observe CLI subscription fallback calls. The report stores no transcript content, account identity, project path or session identifier; successful native auto-mode classifier calls are unobserved, non-persisted calls are absent, and token counts are not subscription quota.
+
+Quota history is stored at `~/.claude/usage-data/quota-history.jsonl` without account attribution. Samples can interleave accounts because no identity is recorded. Each row contains only the cache observation time and allowlisted quota bucket utilization/reset fields; the current-cache report states its age and whether it exceeds the statusline cache's five-minute freshness window.
+
 ## Ignore Pattern Management
 
 `claude-tools ignore` manages per-repo `.gitignore` and `.ignore` patterns interactively.
