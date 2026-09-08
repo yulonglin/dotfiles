@@ -1096,12 +1096,21 @@ def _is_human_turn(entry: dict) -> bool:
     filter looked for one and matched nothing, so from whenever that landed
     until 2026-09-08 the classifier saw zero user messages.
     """
-    if entry.get("isMeta"):
+    if entry.get("isMeta") or entry.get("isCompactSummary"):
         return False
     origin = entry.get("origin")
     if isinstance(origin, dict) and origin.get("kind") not in (None, "human"):
         return False
     return True
+
+
+def _is_injected_text(text: str) -> bool:
+    """Claude Code wraps content it injects into a user turn — command output,
+    compaction summaries, teammate messages, system reminders — in a tag such
+    as <local-command-stdout>, <bash-stdout>, <system-reminder>. A person does
+    not open a message with a tag. Reviewed 2026-09-08: these were reaching the
+    prompt as if the user had typed them."""
+    return text.lstrip().startswith("<")
 
 
 def _scan_transcript_tail(
@@ -1114,7 +1123,6 @@ def _scan_transcript_tail(
     users: list[str] = []
     tools: list[str] = []
     results: dict[str, bool] = {}  # tool_use_id -> is_error
-    newest_tool_seen = False
     for line in reversed(tail.strip().splitlines()):
         try:
             entry = json.loads(line)
@@ -1136,7 +1144,7 @@ def _scan_transcript_tail(
                 continue
             if len(users) < user_count and _is_human_turn(entry):
                 text = _extract_text(content)
-                if text:
+                if text and not _is_injected_text(text):
                     users.append(_truncate(text, MAX_USER_MSG_CHARS))
         elif kind == "assistant" and isinstance(content, list):
             for b in reversed(content):
@@ -1145,16 +1153,16 @@ def _scan_transcript_tail(
                 if b.get("name") in READ_ONLY_LOOKUP_TOOLS:
                     continue
                 is_error = results.get(str(b.get("id", "")))
-                if not newest_tool_seen:
-                    newest_tool_seen = True
-                    # PermissionRequest fires after the assistant turn is
-                    # written and before the tool runs, so the newest
-                    # unanswered call is usually the one being judged. It is
-                    # already the prompt's subject; listing it as history too
-                    # would let the model read it as precedent for itself.
-                    if (is_error is None and current is not None
-                            and b.get("name") == current[0] and b.get("input") == current[1]):
-                        continue
+                # PermissionRequest fires after the assistant turn is written
+                # and before the tool runs, so the call being judged is already
+                # in the file, unanswered. It is the prompt's subject; listing
+                # it as history too would let the model read it as precedent
+                # for itself. Any unanswered match is skipped, not only the
+                # newest block: with parallel calls the pending one can sit
+                # behind its siblings (found in review, 2026-09-08).
+                if (is_error is None and current is not None
+                        and b.get("name") == current[0] and b.get("input") == current[1]):
+                    continue
                 if len(tools) < tool_count:
                     tools.append(_render_tool_call(b, is_error))
         if len(users) >= user_count and len(tools) >= tool_count:
@@ -1194,6 +1202,15 @@ def extract_session_context(
     return ctx
 
 
+# A repo-dir path in command position: start of line, after ; & | or $( , or
+# after a `do`/`then`/`else` keyword — the same positions _CMD_NAME_RE accepts.
+_KEYWORD_CMD_RE = re.compile(r"\b(?:do|then|else)\s+([a-zA-Z_][\w.-]*)")
+_REPO_PATH_CMD_RE = re.compile(
+    r"(?:^|[;&|(]\s*|\bdo\s+|\bthen\s+|\belse\s+)(?:\./)?(?:%s)/([\w.-]+)" % "|".join(REPO_EXEC_DIRS),
+    re.MULTILINE,
+)
+
+
 def repo_local_executables(tool_name: str, tool_input: dict, cwd: str, trust: dict) -> list[str]:
     """Names in a Bash command that resolve to executables committed in the
     trusted repo (REPO_EXEC_DIRS). Established by code so the model does not
@@ -1204,8 +1221,15 @@ def repo_local_executables(tool_name: str, tool_input: dict, cwd: str, trust: di
     toplevel = _git_toplevel_for(cwd) if cwd else ""
     if not toplevel:
         return []
-    names = {c for c in _CMD_NAME_RE.findall(command) if c not in _SHELL_KEYWORDS}
-    names |= set(re.findall(r"(?:^|[\s;&|])(?:\./)?(?:%s)/([\w.-]+)" % "|".join(REPO_EXEC_DIRS), command))
+    # Command position only. `rm custom_bins/foo`, `cat custom_bins/foo | sh`
+    # and `foo=1 ls` all mention a script without running it, and a trust line
+    # naming it there would vouch for an action that never executes the script
+    # (found in review, 2026-09-08).
+    # _CMD_NAME_RE consumes `; do` as one separator and captures `do` itself,
+    # so the word after a keyword needs its own pass.
+    raw = _CMD_NAME_RE.findall(command) + _KEYWORD_CMD_RE.findall(command)
+    names = {c for c in raw if c not in _SHELL_KEYWORDS and f"{c}=" not in command}
+    names |= set(_REPO_PATH_CMD_RE.findall(command))
     found: list[str] = []
     for name in sorted(names):
         for d in REPO_EXEC_DIRS:

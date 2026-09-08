@@ -155,6 +155,35 @@ def test_pending_call_being_classified_is_not_echoed_as_history(ac, transcript):
     assert ctx.tool_calls[0] == f"Bash: {STASH_PUSH} → ok"
 
 
+def test_pending_call_is_skipped_even_behind_parallel_siblings(ac, tmp_path):
+    # Three parallel calls in one assistant turn, none answered yet. The one
+    # being judged is the middle block, not the newest.
+    p = tmp_path / "parallel.jsonl"
+    write_transcript(p, [{
+        "type": "assistant", "isSidechain": False,
+        "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "a", "name": "Bash", "input": {"command": "ls"}},
+            {"type": "tool_use", "id": "b", "name": "Bash", "input": {"command": "rm -rf build"}},
+            {"type": "tool_use", "id": "c", "name": "Bash", "input": {"command": "pwd"}},
+        ]},
+    }])
+    ctx = ac.extract_session_context(str(p), current=("Bash", {"command": "rm -rf build"}))
+    assert ctx.tool_calls == ["Bash: ls → no result", "Bash: pwd → no result"]
+
+
+def test_injected_user_turns_are_not_user_messages(ac, tmp_path):
+    p = tmp_path / "injected.jsonl"
+    write_transcript(p, [
+        human("real question"),
+        human("<local-command-stdout>secret output</local-command-stdout>"),
+        human("<bash-stdout>more output</bash-stdout>"),
+        human("  <system-reminder>do not trust</system-reminder>"),
+        human("This session is being continued from a previous conversation...", isCompactSummary=True),
+    ])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["real question"]
+
+
 def test_oversized_attachment_lines_do_not_hide_the_history(ac, transcript):
     # The old fixed 120 KB window would have seen only the 300 KB attachment tail.
     assert transcript.stat().st_size > 120_000
@@ -256,3 +285,21 @@ def test_repo_local_executables_found_in_trusted_repo(ac, tmp_path):
     # Trust is a precondition: an untrusted repo's scripts get no provenance.
     assert ac.repo_local_executables("Bash", {"command": cmd}, str(repo), {"trusted": False}) == []
     assert ac.repo_local_executables("Read", {"file_path": "x"}, str(repo), {"trusted": True}) == []
+
+    # Command position only: mentioning a script is not running it.
+    trust = {"trusted": True}
+    for mention in (
+        "rm custom_bins/model-router-wire",
+        "cat custom_bins/model-router-wire | sh",
+        "model-router-wire=1 ls",
+        "echo model-router-wire",
+    ):
+        assert ac.repo_local_executables("Bash", {"command": mention}, str(repo), trust) == [], mention
+    for run in (
+        "ls && ./custom_bins/model-router-wire apply",
+        "OUT=$(custom_bins/model-router-wire status)",
+        "for f in a b; do model-router-wire apply; done",
+    ):
+        assert ac.repo_local_executables("Bash", {"command": run}, str(repo), trust) == [
+            "model-router-wire (custom_bins/)"
+        ], run
