@@ -35,7 +35,11 @@ PRE_RESTRUCTURE_BYTES = 76512
 # is only 93 bytes), rounded up to the next 50. Tight enough that regrowth trips
 # the guard, loose enough that an ordinary edit does not.
 ALWAYS_ON = [
-    ("claude/rules/background-jobs.md", 950),
+    # Raised from 950 on 2026-09-08: the file gained one sentence on the CLI's
+    # worktree-isolation git guard (`git -C` and variable-named commands are
+    # refused), a rule no other always-on file states. 12% of 776 bytes was
+    # 93 bytes, too small for one sentence.
+    ("claude/rules/background-jobs.md", 1150),
     # Raised from the old 1300: this file legitimately grew when it absorbed the
     # scratch-script promotion rules from the deleted
     # reusable-component-promotion.md. The content moved here, it was not added.
