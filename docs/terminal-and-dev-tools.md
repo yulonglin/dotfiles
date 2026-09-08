@@ -154,6 +154,10 @@ Detail missing from the per-component docs:
 
 `codex/` (symlinked to `~/.codex` by `./deploy.sh --codex`): `AGENTS.md` (global instructions, references CLAUDE.md as source of truth), `config.toml` (model settings, status line, per-project trust levels), `rules/` (synced from Claude Code's `rules/`), and `skills/` → symlink to `claude/skills/` so both CLIs share one skill set. Sync mechanics: [`cross-tool-extensibility.md`](./cross-tool-extensibility.md).
 
+The default is **Approve for me**: `approval_policy = "on-request"`, `approvals_reviewer = "auto_review"`, and `sandbox_mode = "workspace-write"` in `codex/config.toml`. Eligible approval requests go to Codex's automatic reviewer, which can approve or reject them; the workspace sandbox stays enabled. See the [OpenAI configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference). The CLI also exposes this mode as `codex --approve-for-me`.
+
+Check the live `~/.codex/config.toml` when diagnosing defaults: it may be a separate file, and deployment preserves an existing config during the directory merge.
+
 ## Shell Utility Functions & Aliases
 
 - **`config/modern_tools.sh`**: `mkd` (mkdir+cd), `cdf` (cd to Finder window, macOS), `targz` (smart compression), `dataurl`, `digga` (DNS lookup), `getcertnames` (SSL certs), `o` (cross-platform open), `server` (quick HTTP server)
