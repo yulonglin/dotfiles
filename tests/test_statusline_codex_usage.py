@@ -202,7 +202,8 @@ class CodexUsageTests(unittest.TestCase):
         self.set_response(response(bucket(window(80, 10080), window(25, 300))))
         self.assertEqual(self.render()[0], "Codex 7d ◕ 80% · 5h ◔ 25%")
 
-    def test_named_model_quotas_stay_separate(self) -> None:
+    def test_named_model_quotas_are_hidden(self) -> None:
+        # Spark is a separate per-model allowance; only the aggregate is shown.
         self.set_response(
             response(
                 bucket(window(64, 10080)),
@@ -213,16 +214,14 @@ class CodexUsageTests(unittest.TestCase):
                 },
             )
         )
-        self.assertEqual(
-            self.render()[0], "Codex 7d ◕ 64% · Spark 5h ○ 0% · Spark 7d ○ 0%"
-        )
+        self.assertEqual(self.render()[0], "Codex 7d ◕ 64%")
 
     def test_model_only_map_is_not_aggregate(self) -> None:
         spark = bucket(window(30, 300), name="Spark", limit_id="codex_bengalfox")
         self.set_response(
             {"rateLimits": spark, "rateLimitsByLimitId": {"codex_bengalfox": spark}}
         )
-        self.assertEqual(self.render()[0], "Codex Spark 5h ◔ 30%")
+        self.assertEqual(self.render()[0], "Codex usage unavailable")
 
     def test_legacy_aggregate_fallback(self) -> None:
         self.set_response(
@@ -230,7 +229,7 @@ class CodexUsageTests(unittest.TestCase):
         )
         self.assertEqual(self.render()[0], "Codex 5h ◑ 40%")
 
-    def test_legacy_model_fallback_keeps_its_scope(self) -> None:
+    def test_legacy_model_fallback_is_not_aggregate(self) -> None:
         self.set_response(
             {
                 "rateLimits": bucket(
@@ -238,7 +237,11 @@ class CodexUsageTests(unittest.TestCase):
                 )
             }
         )
-        self.assertEqual(self.render()[0], "Codex Spark 5h ◑ 40%")
+        self.assertEqual(self.render()[0], "Codex usage unavailable")
+
+    def test_legacy_fallback_without_limit_id_is_aggregate(self) -> None:
+        self.set_response({"rateLimits": bucket(window(40, 300), limit_id=None)})
+        self.assertEqual(self.render()[0], "Codex 5h ◑ 40%")
 
     def test_unknown_duration_not_invented(self) -> None:
         self.set_response(response(bucket(window(20, None), window(45, 90))))
@@ -327,19 +330,18 @@ class CodexUsageTests(unittest.TestCase):
         self.env["PATH"] = str(self.bin)  # no real Codex fallback
         self.assertEqual(self.render()[0], "")
 
-    def test_display_name_cannot_inject_terminal_controls(self) -> None:
+    def test_display_names_never_reach_the_terminal(self) -> None:
+        # Neither a named scope nor the aggregate's own name is rendered, so a
+        # server-supplied name cannot inject control sequences or line breaks.
+        hostile = "Bad\x1b[31m\nName"
         self.set_response(
             response(
-                None,
-                {
-                    "custom": bucket(
-                        window(5, 300), name="Bad\x1b[31m\nName", limit_id="custom"
-                    )
-                },
+                bucket(window(5, 300), name=hostile),
+                {"custom": bucket(window(9, 300), name=hostile, limit_id="custom")},
             )
         )
         line, raw = self.render()
-        self.assertEqual(line, "Codex Bad[31mName 5h ○ 5%")
+        self.assertEqual(line, "Codex 5h ○ 5%")
         self.assertEqual(len(raw.splitlines()), 4)
 
     def test_process_errors_are_bounded_and_reaped(self) -> None:

@@ -76,7 +76,7 @@ Configured in `claude/settings.json` (`statusLine.command = "claude-tools status
 - The first line shows the machine (SSH only), active context profiles, directory, and Git branch.
 - The session line shows the model, effort, context usage, duration, and classifier state when available.
 - The Claude usage line shows subscription quota gauges and reset pacing, including model-specific limits when reported.
-- The Codex usage line shows Codex subscription quotas for the signed-in ChatGPT account. These are Codex limits, not ChatGPT conversation counts or OpenAI API spend. Window labels come from the reported durations; the primary window is not assumed to be five hours.
+- The Codex usage line shows Codex subscription quotas for the signed-in ChatGPT account. These are Codex limits, not ChatGPT conversation counts or OpenAI API spend. Window labels come from the reported durations; the primary window is not assumed to be five hours. Only the aggregate Codex quota is rendered: per-model allowances that Codex reports beside it (Spark) are separate limits and are not shown.
 
 Context usage is color-coded. Quota gauges show the percentage **used**, not remaining; their pace indicator compares usage with elapsed time in the quota window.
 
