@@ -148,6 +148,25 @@ MAX_INPUT_CHARS = 2000
 MAX_LOG_BYTES = 1_000_000  # 1MB
 MAX_USER_MSG_CHARS = 200  # Truncation limit per user message
 MAX_USER_MESSAGES = 7  # Number of recent user messages to include
+# The agent's own recent tool calls, shown alongside the user's messages. The
+# rules file has always referred to "the transcript" (scouting for a blocked
+# action, repos cloned earlier, processes the agent started, files it created
+# this session) but until 2026-09-08 the prompt carried none of it, so every
+# rule of that shape was unenforceable in both directions. Inputs only: tool
+# RESULTS are the attacker-influenced channel (file contents, web pages) and
+# stay out of the prompt.
+MAX_TOOL_CALLS = 12
+MAX_TOOL_CALL_CHARS = 200  # per rendered call
+MAX_TOOL_HISTORY_CHARS = 3000  # whole block; oldest entries drop first
+# Transcript tail windows, tried smallest-first until both caps are met or the
+# file is exhausted. A single hook attachment line can exceed 14 KB, so a fixed
+# 120 KB window (the old value) could hold zero user messages.
+TRANSCRIPT_TAIL_BYTES = (256_000, 1_000_000, 4_000_000)
+# Directories inside the trusted repo whose executables count as the user's own
+# scripts. Checked by code, not by the model: "unfamiliar command" was the
+# classifier's stated reason for an UNSURE on `model-router-wire` (custom_bins/)
+# eleven seconds after it had allowed the same binary.
+REPO_EXEC_DIRS = ("custom_bins", "scripts", "bin")
 
 # GitHub owners (users + orgs) whose repos are trusted for relaxed permissions.
 # Add orgs you work with regularly. Personal repos get extra relaxations.
@@ -1011,43 +1030,179 @@ def post_anthropic(body: bytes, timeout: float, remaining) -> bytes:
             return resp.read()
 
 
-def extract_recent_user_messages(transcript_path: str, count: int = MAX_USER_MESSAGES) -> str:
-    """Extract the N most recent user messages from the transcript JSONL.
+class SessionContext:
+    """What the classifier gets to see of the session so far: the user's recent
+    messages and the agent's recent tool calls, both oldest-first."""
 
-    Returns them oldest-first so the LLM sees conversational flow.
-    Only includes human messages (not assistant, tool_use, or tool_result).
-    Fails silently — returns empty string on any error.
+    def __init__(self) -> None:
+        self.user_messages: list[str] = []
+        self.tool_calls: list[str] = []
+
+    def render_users(self) -> str:
+        msgs = self.user_messages
+        if len(msgs) == 1:
+            return msgs[0]
+        return "\n---\n".join(f"[{i+1}/{len(msgs)}] {m}" for i, m in enumerate(msgs))
+
+    def render_tools(self) -> str:
+        calls = list(self.tool_calls)
+        # Drop the oldest until the block fits; the newest calls are the ones
+        # that establish what the current action is about to touch.
+        while calls and sum(len(c) + 12 for c in calls) > MAX_TOOL_HISTORY_CHARS:
+            calls.pop(0)
+        return "\n".join(f"[{i+1}/{len(calls)}] {c}" for i, c in enumerate(calls))
+
+
+def _truncate(text: str, limit: int) -> str:
+    return text[:limit] + "..." if len(text) > limit else text
+
+
+def _render_tool_call(block: dict, is_error: bool | None) -> str:
+    """One line per call: tool name, a compact view of its INPUT, and whether it
+    errored. Result bodies are never included."""
+    name = str(block.get("name", "?"))
+    inp = block.get("input") or {}
+    if not isinstance(inp, dict):
+        inp = {"input": inp}
+    if name == "Bash":
+        summary = _simplify_bash_for_classify(str(inp.get("command", "")))
+    elif "file_path" in inp or "notebook_path" in inp:
+        summary = str(inp.get("file_path") or inp.get("notebook_path"))
+    elif name in ("Agent", "Task"):
+        summary = str(inp.get("description") or inp.get("prompt", ""))
+    else:
+        summary = json.dumps(inp, separators=(",", ":"), ensure_ascii=False)
+    summary = " ".join(summary.split())
+    status = "no result" if is_error is None else ("error" if is_error else "ok")
+    return f"{name}: {_truncate(summary, MAX_TOOL_CALL_CHARS)} → {status}"
+
+
+def _is_human_turn(entry: dict) -> bool:
+    """A user line typed by the person, as opposed to a tool_result carrier,
+    a meta line (slash-command expansion) or an older-format line.
+
+    Claude Code (measured on 2.1.263) writes typed messages as `type: "user"`
+    with `origin: {"kind": "human"}`; tool results are also `type: "user"` but
+    carry `tool_result` blocks. There is no `type: "human"` — the previous
+    filter looked for one and matched nothing, so from whenever that landed
+    until 2026-09-08 the classifier saw zero user messages.
     """
+    if entry.get("isMeta"):
+        return False
+    origin = entry.get("origin")
+    if isinstance(origin, dict) and origin.get("kind") not in (None, "human"):
+        return False
+    return True
+
+
+def _scan_transcript_tail(
+    tail: str,
+    current: tuple[str, dict] | None,
+    user_count: int,
+    tool_count: int,
+) -> tuple[list[str], list[str]]:
+    """Walk `tail` newest-first. Returns (users, tools), both newest-first."""
+    users: list[str] = []
+    tools: list[str] = []
+    results: dict[str, bool] = {}  # tool_use_id -> is_error
+    newest_tool_seen = False
+    for line in reversed(tail.strip().splitlines()):
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict) or entry.get("isSidechain"):
+            continue
+        msg = entry.get("message")
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", "")
+        kind = entry.get("type")
+        if kind == "user":
+            blocks = content if isinstance(content, list) else []
+            result_blocks = [b for b in blocks if isinstance(b, dict) and b.get("type") == "tool_result"]
+            if result_blocks:
+                for b in result_blocks:
+                    results[str(b.get("tool_use_id", ""))] = bool(b.get("is_error"))
+                continue
+            if len(users) < user_count and _is_human_turn(entry):
+                text = _extract_text(content)
+                if text:
+                    users.append(_truncate(text, MAX_USER_MSG_CHARS))
+        elif kind == "assistant" and isinstance(content, list):
+            for b in reversed(content):
+                if not isinstance(b, dict) or b.get("type") != "tool_use":
+                    continue
+                is_error = results.get(str(b.get("id", "")))
+                if not newest_tool_seen:
+                    newest_tool_seen = True
+                    # PermissionRequest fires after the assistant turn is
+                    # written and before the tool runs, so the newest
+                    # unanswered call is usually the one being judged. It is
+                    # already the prompt's subject; listing it as history too
+                    # would let the model read it as precedent for itself.
+                    if (is_error is None and current is not None
+                            and b.get("name") == current[0] and b.get("input") == current[1]):
+                        continue
+                if len(tools) < tool_count:
+                    tools.append(_render_tool_call(b, is_error))
+        if len(users) >= user_count and len(tools) >= tool_count:
+            break
+    return users, tools
+
+
+def extract_session_context(
+    transcript_path: str,
+    current: tuple[str, dict] | None = None,
+    user_count: int = MAX_USER_MESSAGES,
+    tool_count: int = MAX_TOOL_CALLS,
+) -> SessionContext:
+    """Recent user messages and agent tool calls from the transcript JSONL.
+
+    Reads a growing tail (TRANSCRIPT_TAIL_BYTES) until both caps are met or the
+    whole file has been scanned. `current` is the (tool_name, tool_input) being
+    classified, so its own pending transcript line is not echoed as history.
+    Fails silently — an empty context on any error, never a crash: this runs
+    inside a hook with a deadline.
+    """
+    ctx = SessionContext()
     try:
         with open(transcript_path, "rb") as f:
             f.seek(0, 2)
-            # Read more tail to find enough user messages (they're sparse in JSONL)
-            f.seek(max(0, f.tell() - 120_000))
-            tail = f.read().decode("utf-8", errors="replace")
-
-        messages: list[str] = []
-        for line in reversed(tail.strip().splitlines()):
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("type") != "human":
-                continue
-            text = _extract_text(entry.get("message", ""))
-            if text:
-                truncated = text[:MAX_USER_MSG_CHARS] + "..." if len(text) > MAX_USER_MSG_CHARS else text
-                messages.append(truncated)
-                if len(messages) >= count:
+            size = f.tell()
+            for window in TRANSCRIPT_TAIL_BYTES:
+                f.seek(max(0, size - window))
+                tail = f.read().decode("utf-8", errors="replace")
+                users, tools = _scan_transcript_tail(tail, current, user_count, tool_count)
+                if window >= size or (len(users) >= user_count and len(tools) >= tool_count):
                     break
-
-        # Reverse to oldest-first order
-        messages.reverse()
-        if len(messages) == 1:
-            return messages[0]
-        return "\n---\n".join(f"[{i+1}/{len(messages)}] {m}" for i, m in enumerate(messages))
+        ctx.user_messages = list(reversed(users))
+        ctx.tool_calls = list(reversed(tools))
     except Exception:
         pass
-    return ""
+    return ctx
+
+
+def repo_local_executables(tool_name: str, tool_input: dict, cwd: str, trust: dict) -> list[str]:
+    """Names in a Bash command that resolve to executables committed in the
+    trusted repo (REPO_EXEC_DIRS). Established by code so the model does not
+    have to recognise a script by name."""
+    if tool_name != "Bash" or not trust.get("trusted"):
+        return []
+    command = str(tool_input.get("command", ""))
+    toplevel = _git_toplevel_for(cwd) if cwd else ""
+    if not toplevel:
+        return []
+    names = {c for c in _CMD_NAME_RE.findall(command) if c not in _SHELL_KEYWORDS}
+    names |= set(re.findall(r"(?:^|[\s;&|])(?:\./)?(?:%s)/([\w.-]+)" % "|".join(REPO_EXEC_DIRS), command))
+    found: list[str] = []
+    for name in sorted(names):
+        for d in REPO_EXEC_DIRS:
+            path = os.path.join(toplevel, d, name)
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                found.append(f"{name} ({d}/)")
+                break
+    return found
 
 
 def _extract_text(msg: str | dict | list) -> str:
@@ -1063,7 +1218,9 @@ def _extract_text(msg: str | dict | list) -> str:
     return ""
 
 
-def build_classify_user_msg(tool_name: str, tool_input: dict, cwd: str, user_message: str = "") -> str:
+def build_classify_user_msg(
+    tool_name: str, tool_input: dict, cwd: str, user_message: str = "", tool_history: str = "",
+) -> str:
     """The per-request half of the classifier prompt.
 
     Shared by both backends on purpose: the API and subscription paths must
@@ -1081,6 +1238,11 @@ def build_classify_user_msg(tool_name: str, tool_input: dict, cwd: str, user_mes
         input_str = input_str[:MAX_INPUT_CHARS] + "\n... (truncated)"
 
     user_msg = f"Tool: {tool_name}\nInput: {input_str}\nWorking directory: {cwd}"
+    if tool_history:
+        user_msg += (
+            "\nAgent's recent tool calls this session (oldest first; inputs only, "
+            f"results omitted):\n{tool_history}"
+        )
     if user_message:
         user_msg += f"\nUser's recent messages:\n{user_message}"
     return user_msg
@@ -1140,6 +1302,7 @@ def classify_via_subscription(
     rules: str,
     trust_section: str = "",
     user_message: str = "",
+    tool_history: str = "",
     timeout: float = SUBSCRIPTION_TIMEOUT_SECONDS,
 ) -> dict:
     """Second backend: classify through the Claude CLI's OAuth subscription.
@@ -1196,7 +1359,7 @@ def classify_via_subscription(
     and NESTED_ENV is what stops the recursion if `--safe-mode` ever stops
     disabling hooks.
     """
-    user_msg = build_classify_user_msg(tool_name, tool_input, cwd, user_message)
+    user_msg = build_classify_user_msg(tool_name, tool_input, cwd, user_message, tool_history)
     system_prompt = (
         f"{rules}\n{trust_section}\n\n"
         "Respond with ONLY the JSON object described above. No prose, no code fences."
@@ -1294,7 +1457,10 @@ def classify_via_subscription(
     return extract_json_object(result_text)
 
 
-def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, trust_section: str = "", user_message: str = "") -> dict | None:
+def classify(
+    tool_name: str, tool_input: dict, cwd: str, rules: str,
+    trust_section: str = "", user_message: str = "", tool_history: str = "",
+) -> dict | None:
     """Call the classifier model to classify the action. Returns parsed response or None."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -1304,7 +1470,7 @@ def classify(tool_name: str, tool_input: dict, cwd: str, rules: str, trust_secti
             "Run `secrets use ANTHROPIC_API_KEY <key>` (not `secrets envrc` — a repo .envrc binding leaks the key into every session launched there), or fix `with-anthropic-key.sh` so the hook gets a key.",
         )
 
-    user_msg = build_classify_user_msg(tool_name, tool_input, cwd, user_message)
+    user_msg = build_classify_user_msg(tool_name, tool_input, cwd, user_message, tool_history)
 
     # Cache the static rules block — Anthropic prompt caching charges ~10%
     # of base input rate on cache hits. Per-repo trust context goes in a
@@ -1485,16 +1651,32 @@ def main() -> None:
 - **Trusted repo**: {trust['trusted']}
 - **Personal repo**: {trust['personal']}
 """
+    local_execs = repo_local_executables(tool_name, tool_input, cwd, trust)
+    if local_execs:
+        trust_section += (
+            f"- **Repo-local executables in this command** (verified on disk: scripts "
+            f"committed in the trusted repo, not unknown binaries): "
+            f"{', '.join(local_execs)}\n"
+        )
 
     user_message = ""
+    tool_history = ""
     if INCLUDE_USER_MESSAGE and transcript_path:
-        user_message = extract_recent_user_messages(transcript_path)
+        context = extract_session_context(transcript_path, current=(tool_name, tool_input))
+        user_message = context.render_users()
+        tool_history = context.render_tools()
+        # Recorded so an extractor that silently finds nothing (the "human"
+        # type filter did exactly that) shows up in the log as users=0.
+        log(f"CONTEXT: users={len(context.user_messages)} tools={len(context.tool_calls)}")
 
     # Backend order: API key first (fast), subscription second (slower but
     # independent of the key). Only if BOTH fail does the user get the manual
     # prompt plus the loud warning.
     try:
-        result = classify(tool_name, tool_input, cwd, rules, trust_section=trust_section, user_message=user_message)
+        result = classify(
+            tool_name, tool_input, cwd, rules,
+            trust_section=trust_section, user_message=user_message, tool_history=tool_history,
+        )
         write_health(HEALTH_BACKEND_API)
     except ApprovalClassifierWarning as api_warning:
         log(f"API BACKEND FAILED: {api_warning.headline} — {api_warning.details}")
@@ -1515,7 +1697,7 @@ def main() -> None:
         try:
             result = classify_via_subscription(
                 tool_name, tool_input, cwd, rules,
-                trust_section=trust_section, user_message=user_message,
+                trust_section=trust_section, user_message=user_message, tool_history=tool_history,
                 timeout=min(SUBSCRIPTION_TIMEOUT_SECONDS, budget),
             )
             write_health(HEALTH_BACKEND_SUBSCRIPTION, api_warning.headline)
