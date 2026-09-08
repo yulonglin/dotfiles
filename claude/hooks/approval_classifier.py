@@ -157,6 +157,15 @@ MAX_USER_MESSAGES = 7  # Number of recent user messages to include
 # stay out of the prompt.
 MAX_TOOL_CALLS = 12
 MAX_TOOL_CALL_CHARS = 200  # per rendered call
+# Read-only lookups are left out of the history, matching Claude Code's own
+# auto-mode classifier ("tool calls other than read-only lookups such as file
+# reads and searches", permission-modes docs, 2.1.263). With a 12-call cap a
+# burst of Reads would push out the stash push or the process start that the
+# verdict actually turns on; a Read of a sensitive path is denied by code
+# before any of this runs (fast_deny_sensitive_path).
+READ_ONLY_LOOKUP_TOOLS = frozenset({
+    "Read", "Glob", "Grep", "LS", "ToolSearch", "WebSearch", "TaskList", "TaskGet",
+})
 MAX_TOOL_HISTORY_CHARS = 3000  # whole block; oldest entries drop first
 # Transcript tail windows, tried smallest-first until both caps are met or the
 # file is exhausted. A single hook attachment line can exceed 14 KB, so a fixed
@@ -1132,6 +1141,8 @@ def _scan_transcript_tail(
         elif kind == "assistant" and isinstance(content, list):
             for b in reversed(content):
                 if not isinstance(b, dict) or b.get("type") != "tool_use":
+                    continue
+                if b.get("name") in READ_ONLY_LOOKUP_TOOLS:
                     continue
                 is_error = results.get(str(b.get("id", "")))
                 if not newest_tool_seen:

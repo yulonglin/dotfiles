@@ -124,12 +124,26 @@ def test_tool_calls_oldest_first_with_status_and_no_result_bodies(ac, transcript
     assert ctx.tool_calls == [
         f"Bash: {STASH_PUSH} → ok",
         "Bash: git rebase origin/main → error",
-        "Read: /repo/README.md → ok",
         f"Bash: {STASH_DROP} → no result",
     ]
-    assert INJECTION not in "\n".join(ctx.tool_calls), (
+    joined = "\n".join(ctx.tool_calls)
+    assert INJECTION not in joined, (
         "tool RESULTS are the attacker-influenced channel and must stay out"
     )
+    # Read-only lookups are left out, as in Claude Code's own auto-mode
+    # classifier, so they cannot crowd the load-bearing calls out of the cap.
+    assert "README.md" not in joined
+
+
+def test_read_only_lookups_do_not_consume_the_cap(ac, tmp_path):
+    p = tmp_path / "reads.jsonl"
+    entries = [tool_use("push", "Bash", {"command": STASH_PUSH}), tool_result("push", "ok")]
+    for i in range(40):
+        entries.append(tool_use(f"r{i}", "Read", {"file_path": f"/repo/f{i}.py"}))
+        entries.append(tool_result(f"r{i}", "contents"))
+    write_transcript(p, entries)
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.tool_calls == [f"Bash: {STASH_PUSH} → ok"]
 
 
 def test_pending_call_being_classified_is_not_echoed_as_history(ac, transcript):
@@ -145,7 +159,7 @@ def test_oversized_attachment_lines_do_not_hide_the_history(ac, transcript):
     # The old fixed 120 KB window would have seen only the 300 KB attachment tail.
     assert transcript.stat().st_size > 120_000
     ctx = ac.extract_session_context(str(transcript))
-    assert len(ctx.tool_calls) == 4
+    assert len(ctx.tool_calls) == 3
     assert len(ctx.user_messages) == 2
 
 
