@@ -292,7 +292,7 @@ Everything else this repo does is documented next to the code it configures:
 
 - **Deploy components** (every component, mechanisms, gotchas, how to extend) → [`docs/deploy-components.md`](./docs/deploy-components.md)
 - **Terminal, shell & dev tools** (Ghostty themes + SSH colors, Powerlevel10k machine ID, Claude Code statusline, `claude-tools ignore`, SSH keys, pdb++, htop, media recovery) → [`docs/terminal-and-dev-tools.md`](./docs/terminal-and-dev-tools.md)
-- **Claude Code setup** (rules/skills/hooks layout, smart-merge restore) → [`CLAUDE.md`](./CLAUDE.md) + [`docs/deploy-components.md`](./docs/deploy-components.md)
+- **Claude Code setup** (rules/skills/hooks layout, smart-merge restore, automatic local-router recovery on macOS) → [`CLAUDE.md`](./CLAUDE.md) + [`docs/deploy-components.md`](./docs/deploy-components.md)
 - **Plugin marketplaces & management** → [`docs/plugin-management.md`](./docs/plugin-management.md)
 - **Codex / Antigravity / OpenCode integration** → [`docs/cross-tool-extensibility.md`](./docs/cross-tool-extensibility.md)
 - **Automation schedules** (cleanup, auto-updates, uninstall commands) → [`scripts/cleanup/README.md`](./scripts/cleanup/README.md)
