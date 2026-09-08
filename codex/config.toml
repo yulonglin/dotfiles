@@ -1,5 +1,6 @@
 model = "gpt-6-astra"
 model_reasoning_effort = "ultra"
+# Default to "Approve for me": automatically review requests, keeping the sandbox.
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 sandbox_mode = "workspace-write"
