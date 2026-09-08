@@ -252,10 +252,6 @@ fn read_response(
     }
 }
 
-fn safe_label(name: &str) -> String {
-    name.chars().filter(|c| !c.is_control()).take(48).collect()
-}
-
 fn duration_label(minutes: Option<i64>) -> String {
     match minutes {
         Some(m) if m > 0 && m % 1440 == 0 => format!("{}d", m / 1440),
@@ -265,36 +261,26 @@ fn duration_label(minutes: Option<i64>) -> String {
     }
 }
 
-fn render(output: &mut String, quotas: &Quotas, timestamp: i64, stale: bool) {
-    let mut buckets: Vec<(&str, &Bucket)> = Vec::new();
-    if let Some(map) = quotas
+/// Only the aggregate `codex` quota is shown. Per-model scopes in the same map
+/// (Spark, keyed by an opaque `codex_*` id) are separate allowances that do
+/// not gate ordinary Codex use, so they are not rendered.
+fn aggregate_bucket(quotas: &Quotas) -> Option<&Bucket> {
+    match quotas
         .rate_limits_by_limit_id
         .as_ref()
         .filter(|m| !m.is_empty())
     {
-        if let Some(aggregate) = map.get("codex") {
-            buckets.push(("codex", aggregate));
-        }
-        buckets.extend(
-            map.iter()
-                .filter(|(id, _)| id.as_str() != "codex")
-                .map(|(id, b)| (id.as_str(), b)),
-        );
-    } else if let Some(legacy) = quotas.rate_limits.as_ref() {
-        buckets.push((legacy.limit_id.as_deref().unwrap_or("codex"), legacy));
+        Some(map) => map.get("codex"),
+        None => quotas
+            .rate_limits
+            .as_ref()
+            .filter(|b| b.limit_id.as_deref().is_none_or(|id| id == "codex")),
     }
+}
+
+fn render(output: &mut String, quotas: &Quotas, timestamp: i64, stale: bool) {
     let mut count = 0;
-    for (id, bucket) in buckets {
-        let scope = if id == "codex" {
-            String::new()
-        } else {
-            let name = bucket
-                .limit_name
-                .as_deref()
-                .filter(|n| !n.trim().is_empty())
-                .unwrap_or(id);
-            format!("{} ", safe_label(name))
-        };
+    if let Some(bucket) = aggregate_bucket(quotas) {
         for window in [bucket.primary.as_ref(), bucket.secondary.as_ref()]
             .into_iter()
             .flatten()
@@ -303,7 +289,7 @@ fn render(output: &mut String, quotas: &Quotas, timestamp: i64, stale: bool) {
                 output.push_str(" · ");
             }
             count += 1;
-            let label = format!("{}{}", scope, duration_label(window.window_duration_mins));
+            let label = duration_label(window.window_duration_mins);
             let pct = window.used_percent.clamp(0, 100) as u8;
             let expired = window.resets_at.is_some_and(|reset| reset <= timestamp);
             // Historical values do not have a current burn pace. Do not turn a
