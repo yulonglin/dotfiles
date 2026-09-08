@@ -5,6 +5,7 @@ existing quota cache only when the command runs. Fixtures contain no real transc
 content, account identity, project path, or provider request.
 """
 
+import argparse
 import importlib.machinery
 import importlib.util
 import json
@@ -73,7 +74,7 @@ def write_jsonl(path: Path, rows: list[object], malformed: str | None = None) ->
 
 def read_jsonl(path: Path) -> list[dict]:
     records = []
-    for line in path.read_text().splitlines():
+    for line in path.read_bytes().decode("utf-8", "replace").splitlines():
         try:
             record = json.loads(line)
         except json.JSONDecodeError:
@@ -252,15 +253,15 @@ def test_quota_snapshot_uses_cache_mtime_allowlist_and_deduplicates(tmp_path):
     os.utime(cache, (observed.timestamp(), observed.timestamp()))
     now = observed + timedelta(seconds=120)
 
-    first = audit.snapshot_quota_cache(cache, history, now_epoch=now.timestamp())
-    second = audit.snapshot_quota_cache(cache, history, now_epoch=now.timestamp())
+    first = audit.quota_report(cache, history, now_epoch=now.timestamp())
+    second = audit.quota_report(cache, history, now_epoch=now.timestamp())
 
     expected_buckets = [
         {"name": "five_hour", "utilization": 12.5, "resets_at": "2026-09-07T12:00:00Z"},
         {"name": "seven_day", "utilization": 44, "resets_at": None},
         {"name": "weekly_scoped:Fable", "utilization": 33, "resets_at": "2026-09-13T12:00:00Z"},
     ]
-    assert first == {
+    assert first["current"] == {
         "available": True,
         "observed_at": "2026-09-07T10:00:00Z",
         "age_seconds": 120,
@@ -268,12 +269,14 @@ def test_quota_snapshot_uses_cache_mtime_allowlist_and_deduplicates(tmp_path):
         "snapshot_added": True,
         "buckets": expected_buckets,
     }
-    assert second["snapshot_added"] is False
+    assert second["current"]["snapshot_added"] is False
+    expected_row = {"observed_at": "2026-09-07T10:00:00Z", "buckets": expected_buckets}
     rows = read_jsonl(history)
-    assert rows == [{
-        "observed_at": "2026-09-07T10:00:00Z",
-        "buckets": expected_buckets,
-    }]
+    assert rows == [expected_row]
+    # The just-appended observation must still reach the same run's history section.
+    assert first["history"]["samples"] == [expected_row]
+    assert first["history"]["coverage"]["samples_in_period"] == 1
+    assert second["history"]["samples"] == [expected_row]
     stored = history.read_text()
     assert "private@example.test" not in stored
     assert "not-a-real-token" not in stored
@@ -290,16 +293,19 @@ def test_quota_snapshot_keeps_current_buckets_when_history_write_fails(tmp_path)
     observed = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
     os.utime(cache, (observed.timestamp(), observed.timestamp()))
 
-    status = audit.snapshot_quota_cache(
+    report = audit.quota_report(
         cache,
         blocked_parent / "quota-history.jsonl",
         now_epoch=observed.timestamp(),
     )
 
-    assert status["history_write"] == "failed"
-    assert status["buckets"] == [
+    assert report["current"]["history_write"] == "failed"
+    assert report["current"]["snapshot_added"] is False
+    assert report["current"]["buckets"] == [
         {"name": "five_hour", "utilization": 50, "resets_at": None}
     ]
+    assert report["history"]["samples"] == []
+    assert report["history"]["coverage"]["available"] is False
 
 
 def test_quota_append_separates_a_truncated_tail_and_missing_cache_is_explicit(tmp_path):
@@ -312,16 +318,19 @@ def test_quota_append_separates_a_truncated_tail_and_missing_cache_is_explicit(t
     observed = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
     os.utime(cache, (observed.timestamp(), observed.timestamp()))
 
-    status = audit.snapshot_quota_cache(cache, history, now_epoch=observed.timestamp() + 300)
+    report = audit.quota_report(cache, history, now_epoch=observed.timestamp() + 300)
 
-    assert status["stale"] is True
+    assert report["current"]["stale"] is True
     assert len(read_jsonl(history)) == 1
     assert "\n{" in history.read_text()
-    missing = audit.snapshot_quota_cache(tmp_path / "absent.json", history, now_epoch=observed.timestamp())
-    assert missing == {"available": False, "reason": "cache_missing"}
+    assert report["history"]["coverage"]["malformed_rows"] == 1
+    missing = audit.quota_report(tmp_path / "absent.json", history, now_epoch=observed.timestamp())
+    assert missing["current"] == {"available": False, "reason": "cache_missing"}
+    # A missing cache must still not suppress the retained history.
+    assert missing["history"]["coverage"]["samples_in_period"] == 1
     invalid = tmp_path / "invalid-cache.json"
     invalid.write_bytes(b"\xff")
-    assert audit.snapshot_quota_cache(invalid, history) == {
+    assert audit.quota_report(invalid, history)["current"] == {
         "available": False,
         "reason": "cache_invalid",
     }
@@ -336,10 +345,11 @@ def test_quota_history_days_filter_keeps_all_time_coverage(tmp_path):
     ]
     write_jsonl(history, rows, malformed="not-json")
 
-    result = audit.read_quota_history(
+    result = audit.quota_report(
+        tmp_path / "absent-cache.json",
         history,
         cutoff_epoch=datetime(2026, 9, 5, tzinfo=timezone.utc).timestamp(),
-    )
+    )["history"]
 
     assert result["samples"] == [rows[1]]
     assert result["coverage"] == {
@@ -403,13 +413,14 @@ def test_model_usage_cli_is_metadata_only_and_legacy_json_mode_survives(tmp_path
     ]
     assert model_report["coverage"]["native_auto_mode_classifier"] == "successful calls unobserved"
     assert model_report["coverage"]["approval_classifier"] == (
-        "direct API USAGE log only; CLI subscription fallback unobserved"
+        "direct API USAGE log only; CLI subscription fallback is unobserved"
     )
     assert model_report["coverage"]["project_filter_scope"] == (
-        "transcript only; approval and quota host-wide"
+        "--project filters transcript usage only; approval and quota are host-wide"
     )
     assert model_report["coverage"]["quota_history"] == (
-        "unattributed; samples may interleave accounts; no identity recorded"
+        "sampled only when --model-usage runs, without account attribution; "
+        "samples may interleave accounts and no identity is recorded"
     )
     assert model_report["coverage"]["non_persisted_calls"] == "absent"
     assert "tokens are not subscription quota" in model_report["notes"]
@@ -539,7 +550,7 @@ def test_the_other_parse_timestamp_callers_reject_naive_stamps_the_same_way(tmp_
             {"observed_at": "2026-09-06T10:00:00Z", "buckets": bucket},
         ],
     )
-    quota_history = audit.read_quota_history(history)
+    quota_history = audit.quota_report(tmp_path / "absent-cache.json", history)["history"]
     assert quota_history["coverage"]["malformed_rows"] == 2
     assert quota_history["coverage"]["earliest_retained_at"] == "2026-09-06T10:00:00Z"
 
@@ -580,3 +591,410 @@ def test_model_usage_cli_output_does_not_depend_on_the_host_timezone(tmp_path):
     assert transcript["coverage"]["earliest_in_period"] == "2026-09-06T10:00:00Z"
     assert transcript["coverage"]["latest_in_period"] == "2026-09-06T10:00:00Z"
     assert list(transcript["by_day"]) == ["2026-09-06"]
+
+
+STAMP = "2026-09-06T10:00:00Z"
+
+
+def test_streamed_rows_sharing_a_message_id_are_one_response(tmp_path):
+    """Content blocks of one streamed response carry distinct row UUIDs and no requestId."""
+    projects = tmp_path / "projects"
+    write_jsonl(
+        projects / "one" / "session.jsonl",
+        [
+            assistant_row(STAMP, message_id="m1", uuid="u1", output_tokens=1, input_tokens=999),
+            assistant_row(STAMP, message_id="m1", uuid="u2", output_tokens=4, input_tokens=10),
+            assistant_row(
+                STAMP, message_id="m1", request_id="r1", uuid="u3", output_tokens=3, input_tokens=50
+            ),
+        ],
+    )
+
+    result = audit.scan_transcript_model_usage(projects)
+
+    assert result["requests"] == 1
+    # The whole highest-output snapshot wins; token fields are never maxed separately.
+    assert result["tokens"]["output_tokens"] == 4
+    assert result["tokens"]["input_tokens"] == 10
+
+
+def test_request_id_keys_a_response_only_when_the_message_id_is_missing(tmp_path):
+    projects = tmp_path / "projects"
+    write_jsonl(
+        projects / "one" / "session.jsonl",
+        [
+            assistant_row(STAMP, message_id="m1", request_id="shared", uuid="a", output_tokens=2),
+            assistant_row(STAMP, message_id="m2", request_id="shared", uuid="b", output_tokens=3),
+            assistant_row(STAMP, request_id="r9", uuid="c", output_tokens=5),
+            assistant_row(STAMP, request_id="r9", uuid="d", output_tokens=7),
+            assistant_row(STAMP, message_id="", request_id="r9", uuid="f", output_tokens=1),
+            assistant_row(STAMP, uuid="e", output_tokens=11),
+            assistant_row(STAMP, output_tokens=13),
+        ],
+    )
+
+    result = audit.scan_transcript_model_usage(projects)
+
+    assert result["requests"] == 4
+    assert result["tokens"]["output_tokens"] == 23
+    assert result["coverage"]["unkeyed_rows"] == 1
+
+
+def test_model_usage_cli_survives_a_history_file_with_undecodable_bytes(tmp_path):
+    """A damaged history must not abort the report, be rewritten, or be resampled."""
+    home = tmp_path / "home"
+    tmpdir = tmp_path / "tmp"
+    cache = tmpdir / "claude-statusline-usage.json"
+    cache.parent.mkdir(parents=True)
+    cache.write_text('{"five_hour":{"utilization":50,"resets_at":null}}')
+    observed = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
+    os.utime(cache, (observed.timestamp(), observed.timestamp()))
+    write_jsonl(
+        home / ".claude" / "projects" / "fixture" / "session.jsonl",
+        [assistant_row(STAMP, uuid="only", input_tokens=4, output_tokens=6)],
+    )
+    history = home / ".claude" / "usage-data" / "quota-history.jsonl"
+    history.parent.mkdir(parents=True)
+    seed = b"\xff\xfe{not json"
+    history.write_bytes(seed)
+
+    first = run_cli(home, tmpdir, "--model-usage", "--json")
+    second = run_cli(home, tmpdir, "--model-usage", "--json")
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    first_report = json.loads(first.stdout)
+    second_report = json.loads(second.stdout)
+    assert first_report["quota"]["current"]["snapshot_added"] is True
+    assert second_report["quota"]["current"]["snapshot_added"] is False
+    assert history.read_bytes().startswith(seed)
+    assert len(read_jsonl(history)) == 1
+    for report in (first_report, second_report):
+        assert report["quota"]["history"]["coverage"]["malformed_rows"] == 1
+        assert report["quota"]["history"]["coverage"]["samples_in_period"] == 1
+        assert report["transcript_usage"]["requests"] == 1
+        assert report["transcript_usage"]["tokens"]["total_tokens"] == 10
+
+
+def test_quota_report_reads_the_history_once_per_run(tmp_path, monkeypatch):
+    cache = tmp_path / "claude-statusline-usage.json"
+    history = tmp_path / "quota-history.jsonl"
+    cache.write_text('{"five_hour":{"utilization":50,"resets_at":null}}')
+    observed = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
+    os.utime(cache, (observed.timestamp(), observed.timestamp()))
+    opened = []
+    real_open = Path.open
+
+    def spy(self, *args, **kwargs):
+        if self == history:
+            opened.append(args[0] if args else kwargs.get("mode", "r"))
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", spy)
+
+    report = audit.quota_report(cache, history, now_epoch=observed.timestamp())
+
+    assert opened == ["a+b"]
+    assert report["current"]["snapshot_added"] is True
+    assert report["history"]["coverage"]["samples_in_period"] == 1
+    assert report["history"]["samples"][0]["observed_at"] == report["current"]["observed_at"]
+
+
+def test_a_damaged_row_does_not_suppress_the_sample_it_shares_a_timestamp_with(tmp_path):
+    """Only a usable row proves an observation was already recorded."""
+    cache = tmp_path / "claude-statusline-usage.json"
+    history = tmp_path / "quota-history.jsonl"
+    cache.write_text('{"five_hour":{"utilization":50,"resets_at":null}}')
+    observed = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
+    os.utime(cache, (observed.timestamp(), observed.timestamp()))
+    damaged = b'{"observed_at":"2026-09-07T10:00:00Z"}\n'
+    history.write_bytes(damaged)
+
+    first = audit.quota_report(cache, history, now_epoch=observed.timestamp())
+    second = audit.quota_report(cache, history, now_epoch=observed.timestamp())
+
+    assert first["current"]["snapshot_added"] is True
+    assert second["current"]["snapshot_added"] is False
+    assert history.read_bytes().startswith(damaged)
+    assert len(read_jsonl(history)) == 2
+    for report in (first, second):
+        assert report["history"]["coverage"]["malformed_rows"] == 1
+        assert report["history"]["coverage"]["samples_in_period"] == 1
+        assert report["history"]["samples"][0]["buckets"] == [
+            {"name": "five_hour", "utilization": 50, "resets_at": None}
+        ]
+
+
+def test_an_equivalent_offset_counts_as_the_same_recorded_observation(tmp_path):
+    """Dedup is about instants, so a differently written same instant is not new."""
+    cache = tmp_path / "claude-statusline-usage.json"
+    history = tmp_path / "quota-history.jsonl"
+    cache.write_text('{"five_hour":{"utilization":50,"resets_at":null}}')
+    observed = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
+    os.utime(cache, (observed.timestamp(), observed.timestamp()))
+    bucket = [{"name": "five_hour", "utilization": 50, "resets_at": None}]
+    write_jsonl(
+        history,
+        [
+            {"observed_at": "2026-09-07T10:00:00+00:00", "buckets": bucket},
+            {"observed_at": "2026-09-07T05:00:00-05:00", "buckets": bucket},
+        ],
+    )
+    seeded = history.read_bytes()
+
+    first = audit.quota_report(cache, history, now_epoch=observed.timestamp())
+    second = audit.quota_report(cache, history, now_epoch=observed.timestamp())
+
+    assert first["current"]["observed_at"] == "2026-09-07T10:00:00Z"
+    assert first["current"]["snapshot_added"] is False
+    assert second["current"]["snapshot_added"] is False
+    assert history.read_bytes() == seeded
+    assert len(read_jsonl(history)) == 2
+    assert first["history"]["coverage"]["samples_in_period"] == 2
+    assert first["history"]["coverage"]["malformed_rows"] == 0
+
+
+def test_history_samples_are_ordered_by_instant_not_by_timestamp_text(tmp_path):
+    """Mixed precision and mixed offsets sort differently as text than as instants."""
+    history = tmp_path / "quota-history.jsonl"
+    absent_cache = tmp_path / "absent-cache.json"
+    bucket = [{"name": "five_hour", "utilization": 10, "resets_at": None}]
+    stamps = [
+        "2026-09-06T10:00:00.500000Z",
+        "2026-09-06T10:00:00Z",
+        "2026-09-06T06:00:00-05:00",
+        "2026-09-06T11:00:00+02:00",
+    ]
+    write_jsonl(history, [{"observed_at": stamp, "buckets": bucket} for stamp in stamps])
+
+    result = audit.quota_report(absent_cache, history)["history"]
+
+    assert [sample["observed_at"] for sample in result["samples"]] == [
+        "2026-09-06T11:00:00+02:00",
+        "2026-09-06T10:00:00Z",
+        "2026-09-06T10:00:00.500000Z",
+        "2026-09-06T06:00:00-05:00",
+    ]
+    assert result["coverage"]["earliest_retained_at"] == "2026-09-06T11:00:00+02:00"
+    assert result["coverage"]["latest_retained_at"] == "2026-09-06T06:00:00-05:00"
+
+    cutoff = datetime(2026, 9, 6, 10, 0, 0, 250000, tzinfo=timezone.utc)
+    filtered = audit.quota_report(
+        absent_cache, history, cutoff_epoch=cutoff.timestamp()
+    )["history"]
+
+    assert [sample["observed_at"] for sample in filtered["samples"]] == [
+        "2026-09-06T10:00:00.500000Z",
+        "2026-09-06T06:00:00-05:00",
+    ]
+    assert filtered["coverage"]["samples_in_period"] == 2
+    # Period filtering must not shrink the retained boundary.
+    assert filtered["coverage"]["earliest_retained_at"] == "2026-09-06T11:00:00+02:00"
+
+
+def test_a_failed_append_still_reports_the_history_it_could_read(tmp_path, monkeypatch):
+    """Losing the write must not also blank the retained history the reader can see."""
+    cache = tmp_path / "claude-statusline-usage.json"
+    history = tmp_path / "quota-history.jsonl"
+    cache.write_text('{"five_hour":{"utilization":50,"resets_at":null}}')
+    observed = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
+    os.utime(cache, (observed.timestamp(), observed.timestamp()))
+    bucket = [{"name": "five_hour", "utilization": 10, "resets_at": None}]
+    write_jsonl(history, [{"observed_at": "2026-09-01T00:00:00Z", "buckets": bucket}])
+    real_open = Path.open
+
+    def refuse_append(self, *args, **kwargs):
+        # Fail only the append handle, so the file stays genuinely readable.
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if self == history and "a" in mode:
+            raise PermissionError(13, "simulated append refusal")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", refuse_append)
+
+    report = audit.quota_report(cache, history, now_epoch=observed.timestamp())
+
+    assert report["current"]["history_write"] == "failed"
+    assert report["current"]["snapshot_added"] is False
+    assert report["history"]["coverage"]["samples_in_period"] == 1
+    assert report["history"]["coverage"]["earliest_retained_at"] == "2026-09-01T00:00:00Z"
+    assert len(read_jsonl(history)) == 1
+
+
+def test_project_filter_never_reads_an_excluded_project_directory(tmp_path, monkeypatch):
+    """Excluding a project must skip its subtree, not read and then discard it."""
+    projects = tmp_path / "projects"
+    write_jsonl(projects / "keep-me" / "s.jsonl", [assistant_row(STAMP, uuid="k", output_tokens=5)])
+    write_jsonl(
+        projects / "skip-me" / "nested" / "s.jsonl",
+        [assistant_row(STAMP, uuid="s", output_tokens=99)],
+    )
+    write_jsonl(projects / "root.jsonl", [assistant_row(STAMP, uuid="r", output_tokens=1)])
+    excluded = str(projects / "skip-me")
+    scanned = []
+    real_scandir = os.scandir
+
+    def spy(path=".", *args, **kwargs):
+        scanned.append(os.path.normpath(os.fspath(path)))
+        return real_scandir(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "scandir", spy)
+
+    filtered = audit.scan_transcript_model_usage(projects, project_filter="keep")
+
+    assert filtered["requests"] == 1
+    assert filtered["tokens"]["output_tokens"] == 5
+    assert [path for path in scanned if path.startswith(excluded)] == []
+
+    monkeypatch.undo()
+    unfiltered = audit.scan_transcript_model_usage(projects)
+    assert unfiltered["requests"] == 3
+    assert unfiltered["tokens"]["output_tokens"] == 105
+
+
+def test_a_project_filter_stays_fail_soft_on_an_unreadable_projects_root(tmp_path, monkeypatch):
+    """Selecting projects must fail soft exactly as the unfiltered glob always did."""
+    projects = tmp_path / "projects"
+    write_jsonl(projects / "keep-me" / "s.jsonl", [assistant_row(STAMP, uuid="k", output_tokens=5)])
+    root = os.path.normpath(str(projects))
+    real_scandir = os.scandir
+
+    def refuse_root(path=".", *args, **kwargs):
+        if os.path.normpath(os.fspath(path)) == root:
+            raise PermissionError(13, "simulated unreadable projects root")
+        return real_scandir(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "scandir", refuse_root)
+
+    result = audit.scan_transcript_model_usage(projects, project_filter="keep")
+
+    assert result["requests"] == 0
+    assert result["coverage"]["earliest_in_period"] is None
+
+
+def test_coverage_endpoints_do_not_depend_on_the_order_rows_are_read(tmp_path):
+    """Only the extreme instants are reported, so aggregation needs no global sort."""
+    projects = tmp_path / "projects"
+    write_jsonl(
+        projects / "one" / "session.jsonl",
+        [
+            assistant_row("2026-09-06T12:00:00Z", uuid="late", output_tokens=1),
+            assistant_row("2026-09-06T08:00:00Z", uuid="early", output_tokens=1),
+            assistant_row("2026-09-06T10:00:00Z", uuid="middle", output_tokens=1),
+        ],
+    )
+    transcript = audit.scan_transcript_model_usage(projects)
+    assert transcript["coverage"]["earliest_in_period"] == "2026-09-06T08:00:00Z"
+    assert transcript["coverage"]["latest_in_period"] == "2026-09-06T12:00:00Z"
+
+    log = tmp_path / "approval.log"
+    log.write_text(
+        "2026-09-06T12:00:00Z USAGE: model=a input=1 output=1 cache_read=0 cache_create=0\n"
+        "2026-09-06T08:00:00Z USAGE: model=a input=1 output=1 cache_read=0 cache_create=0\n"
+        "2026-09-06T10:00:00Z USAGE: model=a input=1 output=1 cache_read=0 cache_create=0\n"
+    )
+    approval = audit.scan_approval_usage(log)
+    assert approval["coverage"]["earliest_retained_at"] == "2026-09-06T08:00:00Z"
+    assert approval["coverage"]["latest_retained_at"] == "2026-09-06T12:00:00Z"
+
+    history = tmp_path / "quota-history.jsonl"
+    bucket = [{"name": "five_hour", "utilization": 10, "resets_at": None}]
+    write_jsonl(
+        history,
+        [
+            {"observed_at": "2026-09-06T12:00:00Z", "buckets": bucket},
+            {"observed_at": "2026-09-06T08:00:00Z", "buckets": bucket},
+            {"observed_at": "2026-09-06T10:00:00Z", "buckets": bucket},
+        ],
+    )
+    quota = audit.quota_report(tmp_path / "absent-cache.json", history)["history"]
+    assert quota["coverage"]["earliest_retained_at"] == "2026-09-06T08:00:00Z"
+    assert quota["coverage"]["latest_retained_at"] == "2026-09-06T12:00:00Z"
+    assert [sample["observed_at"] for sample in quota["samples"]] == [
+        "2026-09-06T08:00:00Z",
+        "2026-09-06T10:00:00Z",
+        "2026-09-06T12:00:00Z",
+    ]
+
+
+def test_human_output_is_rendered_from_the_report_coverage_and_notes(tmp_path, capsys):
+    """Editing an explanation in the report data must change the printed report too."""
+    home = tmp_path / "home"
+    tmpdir = tmp_path / "tmp"
+    tmpdir.mkdir(parents=True)
+    home.mkdir(parents=True)
+
+    result = run_cli(home, tmpdir, "--model-usage", "--json")
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    sentinels = {key: f"sentinel-for-{key}" for key in data["coverage"]}
+    assert set(sentinels) == {
+        "native_auto_mode_classifier",
+        "approval_classifier",
+        "project_filter_scope",
+        "quota_history",
+        "non_persisted_calls",
+    }
+    data["coverage"] = sentinels
+    data["notes"] = ["sentinel-for-notes"]
+
+    audit.print_model_usage_report(
+        data, argparse.Namespace(json=False, days=0, project="fixture")
+    )
+
+    printed = capsys.readouterr().out
+    for sentinel in sentinels.values():
+        assert sentinel in printed
+    assert "sentinel-for-notes" in printed
+
+
+@pytest.mark.parametrize(
+    "value,accepted",
+    [
+        (0, True),
+        (5, True),
+        (12.5, True),
+        (-3, True),
+        (True, False),
+        (False, False),
+        ("5", False),
+        (None, False),
+        (float("inf"), False),
+        (float("nan"), False),
+        ([], False),
+        ({}, False),
+    ],
+)
+def test_plain_and_scoped_buckets_accept_the_same_utilization_values(value, accepted):
+    payload = {
+        "five_hour": {"utilization": value, "resets_at": "2026-09-07T12:00:00Z"},
+        "limits": [
+            {
+                "kind": "weekly_scoped",
+                "percent": value,
+                "resets_at": "2026-09-07T07:00:00-05:00",
+                "scope": {"model": {"display_name": "Fable"}},
+            }
+        ],
+    }
+
+    buckets = audit.quota_buckets(payload)
+
+    assert [bucket["name"] for bucket in buckets] == (
+        ["five_hour", "weekly_scoped:Fable"] if accepted else []
+    )
+    for bucket in buckets:
+        assert list(bucket) == ["name", "utilization", "resets_at"]
+        assert bucket["resets_at"] == "2026-09-07T12:00:00Z"
+
+
+def test_quota_bucket_builds_the_canonical_shape_or_rejects_the_value():
+    assert audit.quota_bucket("five_hour", 12.5, "2026-09-07T07:00:00-05:00") == {
+        "name": "five_hour",
+        "utilization": 12.5,
+        "resets_at": "2026-09-07T12:00:00Z",
+    }
+    assert audit.quota_bucket("five_hour", 0, "2026-09-07T12:00:00")["resets_at"] is None
+    assert audit.quota_bucket("five_hour", True, None) is None
+    assert audit.quota_bucket("five_hour", "50", None) is None
+    assert audit.quota_bucket("five_hour", float("nan"), None) is None

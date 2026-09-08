@@ -36,6 +36,23 @@ TOKEN_FIELDS = (
     "cache_read_input_tokens",
     "cache_creation_input_tokens",
 )
+# The one definition of every limit the report states, so the JSON and the human
+# report cannot drift apart. Both renderers read these through the report data.
+REPORT_COVERAGE = {
+    "native_auto_mode_classifier": "successful calls unobserved",
+    "approval_classifier": (
+        "direct API USAGE log only; CLI subscription fallback is unobserved"
+    ),
+    "project_filter_scope": (
+        "--project filters transcript usage only; approval and quota are host-wide"
+    ),
+    "quota_history": (
+        "sampled only when --model-usage runs, without account attribution; "
+        "samples may interleave accounts and no identity is recorded"
+    ),
+    "non_persisted_calls": "absent",
+}
+REPORT_NOTES = ("tokens are not subscription quota",)
 
 
 def parse_args():
@@ -181,6 +198,23 @@ def aggregate_usage_records(records, coverage):
     return summary
 
 
+def transcript_paths(projects_dir, project_filter=""):
+    """Session files to scan, skipping the subtrees of non-matching projects entirely."""
+    if not project_filter:
+        return sorted(projects_dir.rglob("*.jsonl"))
+    try:
+        entries = list(projects_dir.iterdir())
+    except OSError:
+        # An unreadable root yields nothing, as the unfiltered glob has always done.
+        return []
+    selected = [
+        entry
+        for entry in entries
+        if entry.is_dir() and project_filter.lower() in entry.name.lower()
+    ]
+    return sorted(path for entry in selected for path in entry.rglob("*.jsonl"))
+
+
 def scan_transcript_model_usage(projects_dir, cutoff_epoch=0, project_filter=""):
     coverage = {
         "earliest_in_period": None,
@@ -195,13 +229,7 @@ def scan_transcript_model_usage(projects_dir, cutoff_epoch=0, project_filter="")
     if not projects_dir.is_dir():
         return aggregate_usage_records([], coverage)
 
-    for path in sorted(projects_dir.rglob("*.jsonl")):
-        relative = path.relative_to(projects_dir)
-        if project_filter and (
-            not relative.parts
-            or project_filter.lower() not in relative.parts[0].lower()
-        ):
-            continue
+    for path in transcript_paths(projects_dir, project_filter):
         try:
             lines = path.open(errors="replace")
         except OSError:
@@ -230,16 +258,24 @@ def scan_transcript_model_usage(projects_dir, cutoff_epoch=0, project_filter="")
                     continue
                 if cutoff_epoch and epoch < cutoff_epoch:
                     continue
-                message_id = message.get("id")
-                request_id = entry.get("requestId")
-                if isinstance(message_id, str) and message_id and isinstance(request_id, str) and request_id:
-                    key = ("request", message_id, request_id)
-                else:
-                    uuid = entry.get("uuid")
-                    if not isinstance(uuid, str) or not uuid:
-                        coverage["unkeyed_rows"] += 1
-                        continue
-                    key = ("uuid", uuid)
+                # One streamed response spans many rows that share a response identity
+                # but carry distinct row UUIDs, so the UUID is the last resort only.
+                identity = (
+                    ("message", message.get("id")),
+                    ("request", entry.get("requestId")),
+                    ("uuid", entry.get("uuid")),
+                )
+                key = next(
+                    (
+                        (kind, value)
+                        for kind, value in identity
+                        if isinstance(value, str) and value
+                    ),
+                    None,
+                )
+                if key is None:
+                    coverage["unkeyed_rows"] += 1
+                    continue
                 model = message.get("model")
                 if not isinstance(model, str) or not model:
                     model = "unknown"
@@ -260,10 +296,10 @@ def scan_transcript_model_usage(projects_dir, cutoff_epoch=0, project_filter="")
                     snapshots[key] = (rank, record)
 
     records = [item[1] for item in snapshots.values()]
-    records.sort(key=lambda record: record["epoch"])
     if records:
-        coverage["earliest_in_period"] = records[0]["timestamp"]
-        coverage["latest_in_period"] = records[-1]["timestamp"]
+        # Aggregation groups by model and day, so only the endpoints need an order.
+        coverage["earliest_in_period"] = min(records, key=lambda r: r["epoch"])["timestamp"]
+        coverage["latest_in_period"] = max(records, key=lambda r: r["epoch"])["timestamp"]
     return aggregate_usage_records(records, coverage)
 
 
@@ -317,10 +353,22 @@ def scan_approval_usage(log_path, cutoff_epoch=0):
             },
         })
     if retained:
-        retained.sort()
-        coverage["earliest_retained_at"] = retained[0][1]
-        coverage["latest_retained_at"] = retained[-1][1]
+        coverage["earliest_retained_at"] = min(retained)[1]
+        coverage["latest_retained_at"] = max(retained)[1]
     return aggregate_usage_records(records, coverage)
+
+
+def quota_bucket(name, utilization, resets_at):
+    """Build one canonical bucket, or None when the utilization is unusable."""
+    if isinstance(utilization, bool) or not isinstance(utilization, (int, float)):
+        return None
+    if not math.isfinite(utilization):
+        return None
+    return {
+        "name": name,
+        "utilization": utilization,
+        "resets_at": canonical_timestamp(resets_at),
+    }
 
 
 def quota_buckets(payload):
@@ -329,26 +377,14 @@ def quota_buckets(payload):
         bucket = payload.get(name)
         if not isinstance(bucket, dict):
             continue
-        utilization = bucket.get("utilization")
-        if isinstance(utilization, bool) or not isinstance(utilization, (int, float)):
-            continue
-        if not math.isfinite(utilization):
-            continue
-        buckets.append({
-            "name": name,
-            "utilization": utilization,
-            "resets_at": canonical_timestamp(bucket.get("resets_at")),
-        })
+        built = quota_bucket(name, bucket.get("utilization"), bucket.get("resets_at"))
+        if built is not None:
+            buckets.append(built)
     limits = payload.get("limits")
     if not isinstance(limits, list):
         return buckets
     for limit in limits:
         if not isinstance(limit, dict) or limit.get("kind") != "weekly_scoped":
-            continue
-        utilization = limit.get("percent")
-        if isinstance(utilization, bool) or not isinstance(utilization, (int, float)):
-            continue
-        if not math.isfinite(utilization):
             continue
         scope = limit.get("scope")
         model = scope.get("model") if isinstance(scope, dict) else None
@@ -358,121 +394,149 @@ def quota_buckets(payload):
         display_name = re.sub(r"[^A-Za-z0-9._ -]", "", display_name).strip()[:80]
         if not display_name:
             continue
-        buckets.append({
-            "name": f"weekly_scoped:{display_name}",
-            "utilization": utilization,
-            "resets_at": canonical_timestamp(limit.get("resets_at")),
-        })
+        built = quota_bucket(
+            f"weekly_scoped:{display_name}", limit.get("percent"), limit.get("resets_at")
+        )
+        if built is not None:
+            buckets.append(built)
     return buckets
 
 
-def snapshot_quota_cache(cache_path, history_path, now_epoch=None):
+def read_quota_cache(cache_path, now_epoch=None):
+    """Read the statusline quota cache; returns (status, the new observation or None)."""
     cache_path = Path(cache_path)
-    history_path = Path(history_path)
     try:
         stat = cache_path.stat()
         payload = json.loads(cache_path.read_text())
     except FileNotFoundError:
-        return {"available": False, "reason": "cache_missing"}
+        return {"available": False, "reason": "cache_missing"}, None
     except (OSError, UnicodeError, json.JSONDecodeError, TypeError):
-        return {"available": False, "reason": "cache_invalid"}
+        return {"available": False, "reason": "cache_invalid"}, None
     if not isinstance(payload, dict):
-        return {"available": False, "reason": "cache_invalid"}
+        return {"available": False, "reason": "cache_invalid"}, None
     buckets = quota_buckets(payload)
     if not buckets:
-        return {"available": False, "reason": "cache_has_no_usage"}
+        return {"available": False, "reason": "cache_has_no_usage"}, None
 
     observed_at = format_timestamp(stat.st_mtime)
     now_epoch = time.time() if now_epoch is None else now_epoch
     age = max(0, int(now_epoch - stat.st_mtime))
-    record = {"observed_at": observed_at, "buckets": buckets}
-    added = False
-    try:
-        history_path.parent.mkdir(parents=True, exist_ok=True)
-        with history_path.open("a+") as fh:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-            fh.seek(0)
-            existing = fh.read()
-            seen = set()
-            for line in existing.splitlines():
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(row, dict) and isinstance(row.get("observed_at"), str):
-                    seen.add(row["observed_at"])
-            if observed_at not in seen:
-                fh.seek(0, os.SEEK_END)
-                if existing and not existing.endswith("\n"):
-                    fh.write("\n")
-                fh.write(json.dumps(record, separators=(",", ":")) + "\n")
-                fh.flush()
-                added = True
-            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-    except OSError:
-        return {
-            "available": True,
-            "observed_at": observed_at,
-            "age_seconds": age,
-            "stale": age >= QUOTA_CACHE_TTL_SECONDS,
-            "snapshot_added": False,
-            "buckets": buckets,
-            "history_write": "failed",
-        }
-    return {
+    status = {
         "available": True,
         "observed_at": observed_at,
         "age_seconds": age,
         "stale": age >= QUOTA_CACHE_TTL_SECONDS,
-        "snapshot_added": added,
+        "snapshot_added": False,
         "buckets": buckets,
     }
+    return status, {"observed_at": observed_at, "buckets": buckets}
 
 
-def read_quota_history(history_path, cutoff_epoch=0):
-    coverage = {
-        "available": Path(history_path).is_file(),
-        "earliest_retained_at": None,
-        "latest_retained_at": None,
-        "samples_in_period": 0,
-        "malformed_rows": 0,
-    }
-    try:
-        lines = Path(history_path).read_text(errors="replace").splitlines()
-    except OSError:
-        return {"samples": [], "coverage": coverage}
+def parse_quota_history(raw, coverage):
+    """Decode history bytes tolerantly; returns (usable (epoch, row) pairs, instants seen).
 
-    retained = []
-    samples = []
-    for line in lines:
+    Undecodable bytes are replaced for parsing only, so a damaged file is read rather
+    than rewritten. Only a usable row proves an observation was already recorded, so
+    `seen` is filled after validation, and it holds instants rather than the text they
+    were written as: the same instant can be stored under any offset or precision.
+    """
+    rows = []
+    seen = set()
+    for line in raw.decode("utf-8", "replace").splitlines():
         try:
             record = json.loads(line)
         except (json.JSONDecodeError, TypeError):
             coverage["malformed_rows"] += 1
             continue
-        if not isinstance(record, dict) or not isinstance(record.get("buckets"), list):
+        if not isinstance(record, dict):
             coverage["malformed_rows"] += 1
             continue
         epoch = parse_timestamp(record.get("observed_at"))
-        if epoch is None:
+        if epoch is None or not isinstance(record.get("buckets"), list):
             coverage["malformed_rows"] += 1
             continue
-        retained.append((epoch, record["observed_at"]))
-        if not cutoff_epoch or epoch >= cutoff_epoch:
-            samples.append(record)
-    retained.sort()
-    samples.sort(key=lambda record: record["observed_at"])
-    if retained:
-        coverage["earliest_retained_at"] = retained[0][1]
-        coverage["latest_retained_at"] = retained[-1][1]
+        seen.add(epoch)
+        rows.append((epoch, record))
+    return rows, seen
+
+
+def load_quota_history(history_path, record=None, cutoff_epoch=0):
+    """Read the history once, appending `record` under the same lock when it is new.
+
+    Returns (history section, write outcome).
+    """
+    history_path = Path(history_path)
+    coverage = {
+        "available": False,
+        "earliest_retained_at": None,
+        "latest_retained_at": None,
+        "samples_in_period": 0,
+        "malformed_rows": 0,
+    }
+    rows = []
+    write = "skipped"
+    try:
+        if record is None:
+            rows, _ = parse_quota_history(history_path.read_bytes(), coverage)
+        else:
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+            with history_path.open("a+b") as fh:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+                try:
+                    fh.seek(0)
+                    raw = fh.read()
+                    rows, seen = parse_quota_history(raw, coverage)
+                    observed_epoch = parse_timestamp(record["observed_at"])
+                    if observed_epoch in seen:
+                        write = "duplicate"
+                    else:
+                        fh.seek(0, os.SEEK_END)
+                        if raw and not raw.endswith(b"\n"):
+                            fh.write(b"\n")
+                        fh.write(json.dumps(record, separators=(",", ":")).encode() + b"\n")
+                        fh.flush()
+                        rows.append((observed_epoch, record))
+                        write = "added"
+                finally:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        # A failed append must not also hide a history the reader can still read.
+        coverage = dict(coverage, malformed_rows=0)
+        try:
+            rows, _ = parse_quota_history(history_path.read_bytes(), coverage)
+        except OSError:
+            return {"samples": [], "coverage": coverage}, "failed"
+        write = "failed"
+
+    # Filter to the period first, then order by instant: timestamp text sorts wrongly
+    # across mixed offsets and mixed sub-second precision.
+    in_period = [pair for pair in rows if not cutoff_epoch or pair[0] >= cutoff_epoch]
+    in_period.sort(key=lambda pair: pair[0])
+    samples = [row for _, row in in_period]
+    if rows:
+        coverage["earliest_retained_at"] = min(rows, key=lambda item: item[0])[1]["observed_at"]
+        coverage["latest_retained_at"] = max(rows, key=lambda item: item[0])[1]["observed_at"]
     coverage["samples_in_period"] = len(samples)
-    return {"samples": samples, "coverage": coverage}
+    coverage["available"] = history_path.is_file()
+    return {"samples": samples, "coverage": coverage}, write
+
+
+def quota_report(cache_path, history_path, cutoff_epoch=0, now_epoch=None):
+    """Snapshot the quota cache and load its history in one locked pass."""
+    current, record = read_quota_cache(cache_path, now_epoch=now_epoch)
+    history, write = load_quota_history(
+        history_path, record=record, cutoff_epoch=cutoff_epoch
+    )
+    if record is not None:
+        current["snapshot_added"] = write == "added"
+        if write == "failed":
+            current["history_write"] = "failed"
+    return {"current": current, "history": history}
 
 
 def model_usage_report(args):
     cutoff_epoch = time.time() - args.days * 86400 if args.days else 0
     cache_path = Path(os.environ.get("TMPDIR", "/tmp/claude")) / QUOTA_CACHE_NAME
-    current_quota = snapshot_quota_cache(cache_path, QUOTA_HISTORY)
     return {
         "period_days": args.days or None,
         "transcript_usage": scan_transcript_model_usage(
@@ -484,22 +548,9 @@ def model_usage_report(args):
             APPROVAL_LOG,
             cutoff_epoch=cutoff_epoch,
         ),
-        "quota": {
-            "current": current_quota,
-            "history": read_quota_history(QUOTA_HISTORY, cutoff_epoch=cutoff_epoch),
-        },
-        "coverage": {
-            "native_auto_mode_classifier": "successful calls unobserved",
-            "approval_classifier": (
-                "direct API USAGE log only; CLI subscription fallback unobserved"
-            ),
-            "project_filter_scope": "transcript only; approval and quota host-wide",
-            "quota_history": (
-                "unattributed; samples may interleave accounts; no identity recorded"
-            ),
-            "non_persisted_calls": "absent",
-        },
-        "notes": ["tokens are not subscription quota"],
+        "quota": quota_report(cache_path, QUOTA_HISTORY, cutoff_epoch=cutoff_epoch),
+        "coverage": dict(REPORT_COVERAGE),
+        "notes": list(REPORT_NOTES),
     }
 
 
@@ -531,6 +582,7 @@ def print_model_usage_report(data, args):
                 f"  {day}: {summary['requests']} responses, "
                 f"{summary['tokens']['total_tokens']} tokens"
             )
+    coverage = data["coverage"]
     approval_coverage = data["approval_classifier_usage"]["coverage"]
     if approval_coverage["earliest_retained_at"]:
         print(
@@ -539,10 +591,7 @@ def print_model_usage_report(data, args):
         )
     else:
         print("Approval log has no retained usage rows (rotating 1 MB log)")
-    print(
-        "Approval coverage is the direct API USAGE log only; "
-        "CLI subscription fallback is unobserved"
-    )
+    print(f"Approval coverage is the {coverage['approval_classifier']}")
     current = data["quota"]["current"]
     if current.get("available"):
         stale = "stale" if current["stale"] else "fresh"
@@ -564,14 +613,17 @@ def print_model_usage_report(data, args):
     history = data["quota"]["history"]
     print(
         f"Quota history: {history['coverage']['samples_in_period']} sampled "
-        "observations in period; sampled only when --model-usage runs, without "
-        "account attribution; samples may interleave accounts and no identity is recorded"
+        f"observations in period; {coverage['quota_history']}"
     )
     if args.project:
-        print("Scope: --project filters transcript usage only; approval and quota are host-wide")
-    print("Coverage: native auto-mode classifier successful calls are unobserved")
-    print("Coverage: non-persisted calls are absent")
-    print("Note: tokens are not subscription quota")
+        print(f"Scope: {coverage['project_filter_scope']}")
+    print(
+        "Coverage: native auto-mode classifier "
+        f"{coverage['native_auto_mode_classifier']}"
+    )
+    print(f"Coverage: non-persisted calls are {coverage['non_persisted_calls']}")
+    for note in data["notes"]:
+        print(f"Note: {note}")
 
 
 def scan_session(filepath, cutoff_ts=0):
