@@ -463,6 +463,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/ensure_model_router.py\"",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_start.sh",
             "timeout": 5,
             "async": true
@@ -588,6 +597,15 @@
       }
     ],
     "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/ensure_model_router.py\"",
+            "timeout": 20
+          }
+        ]
+      },
       {
         "hooks": [
           {
