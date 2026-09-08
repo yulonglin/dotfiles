@@ -558,6 +558,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/check_model_router_update.py\"",
+            "timeout": 75,
+            "async": true
+          }
+        ]
       }
     ],
     "Stop": [

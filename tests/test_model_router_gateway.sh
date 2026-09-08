@@ -43,9 +43,10 @@ skip() { printf '[skip] %s\n' "$1"; }
 # tomllib needs Python 3.11+; macOS ships 3.9, so fall back to uv's managed interpreter.
 py311() { if python3 -c 'import tomllib' 2>/dev/null; then python3 "$@"; else uv run --quiet --no-project --python '>=3.11' python "$@"; fi; }
 
-bootstrap="$(find "$HOME"/.claude/plugins/cache/alignment-hive/model-router -path '*/scripts/bootstrap.sh' 2>/dev/null | sort | tail -n1)"
-if [ -z "$bootstrap" ]; then
-  fail "plugin  model-router plugin not installed"
+# Exercise the installed runtime, not an arbitrary lexically last cache entry.
+bootstrap="$HOME/.local/state/model-router/launcher/bootstrap.sh"
+if [ ! -x "$bootstrap" ]; then
+  fail "launcher  installed model-router launcher missing"
   echo "failed: ${failed[*]}"; exit 1
 fi
 
@@ -55,10 +56,20 @@ if [ "$(uname -s)" = "Darwin" ]; then
 elif systemctl --user is-active --quiet model-router.service; then ok "unit      model-router.service active"; else fail "unit      model-router.service not active"; fi
 
 # doctor
-doctor_json="$("$bootstrap" doctor --json 2>/dev/null)"
+doctor_exit=0
+doctor_json="$("$bootstrap" doctor --json 2>/dev/null)" || doctor_exit=$?
 doctor_bad="$(printf '%s' "$doctor_json" | python3 -c 'import json,sys
-d=json.load(sys.stdin); print(", ".join(c["name"] for c in d.get("checks",[]) if not c.get("ok")))' 2>/dev/null)"
-if [ -n "$doctor_json" ] && [ -z "$doctor_bad" ]; then ok "doctor    every check green"; else fail "doctor    failing checks: ${doctor_bad:-no JSON}"; fi
+try:
+    d=json.load(sys.stdin)
+    checks=d.get("checks") if isinstance(d,dict) else None
+    if not isinstance(checks,list) or not checks or not all(isinstance(c,dict) and isinstance(c.get("name"),str) and isinstance(c.get("ok"),bool) for c in checks):
+        raise ValueError()
+    if not any(c["name"] == "router" for c in checks):
+        raise ValueError()
+    print(", ".join(c["name"] for c in checks if c["ok"] is not True))
+except (ValueError,TypeError):
+    print("invalid doctor response")' 2>/dev/null)"
+if [ "$doctor_exit" -eq 0 ] && [ -n "$doctor_json" ] && [ -z "$doctor_bad" ]; then ok "doctor    every check green"; else fail "doctor    failing checks: ${doctor_bad:-doctor command failed}"; fi
 base_url="$(printf '%s' "$doctor_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("base_url",""))' 2>/dev/null)"
 
 # providers

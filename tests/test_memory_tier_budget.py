@@ -43,7 +43,8 @@ ALWAYS_ON = [
     # Raised from the old 1300: this file legitimately grew when it absorbed the
     # scratch-script promotion rules from the deleted
     # reusable-component-promotion.md. The content moved here, it was not added.
-    ("claude/rules/coding-conventions.md", 2200),
+    # 2026-09-08: add a short pointer to the on-demand service lifecycle checklist.
+    ("claude/rules/coding-conventions.md", 2400),
     ("claude/rules/communication.md", 3100),
     ("claude/rules/delegation.md", 2600),
     ("claude/rules/experiments.md", 3050),

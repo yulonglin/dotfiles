@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from unittest.mock import patch
 
@@ -20,7 +21,7 @@ from unittest.mock import patch
 @unittest.skipUnless(sys.platform == "darwin" and os.environ.get("MODEL_ROUTER_LAUNCHD_TEST") == "1",
                      "opt-in real macOS launchd integration")
 class LaunchdRecoveryTest(unittest.TestCase):
-    def test_unloaded_service_recovers_and_healthy_check_is_silent(self):
+    def test_unloaded_and_stopped_service_recover_with_private_evidence(self):
         spec = importlib.util.spec_from_file_location(
             "ensure_model_router", Path(__file__).parents[1] / "claude/hooks/ensure_model_router.py")
         guard = importlib.util.module_from_spec(spec)
@@ -75,6 +76,23 @@ class LaunchdRecoveryTest(unittest.TestCase):
                     state_check = subprocess.run(["launchctl", "print", target], capture_output=True, text=True)
                     self.assertEqual(state_check.returncode, 0, state_check.stderr)
                     self.assertIn("state = running", state_check.stdout)
+                    self.assertIsNone(guard.ensure_router("UserPromptSubmit", home=root, env=env, system="Darwin"))
+                    incidents = list((state / "diagnostics").glob("*.json"))
+                    self.assertTrue(incidents, "recovery must preserve diagnostic evidence")
+                    for incident in incidents:
+                        self.assertEqual(incident.stat().st_mode & 0o777, 0o600)
+                        self.assertNotIn("synthetic-test-token", incident.read_text())
+                    subprocess.run(["launchctl", "kill", "SIGTERM", target], check=True, capture_output=True)
+                    deadline = time.monotonic() + 8
+                    while time.monotonic() < deadline:
+                        stopped = subprocess.run(["launchctl", "print", target], capture_output=True, text=True)
+                        if "state = running" not in stopped.stdout:
+                            break
+                        time.sleep(0.05)
+                    self.assertNotIn("state = running", stopped.stdout)
+                    recovered_again = guard.ensure_router("UserPromptSubmit", home=root, env=env, system="Darwin")
+                    self.assertIsNotNone(recovered_again)
+                    self.assertNotEqual(recovered_again.get("decision"), "block", (recovered_again, stopped.stdout[:700]))
                     self.assertIsNone(guard.ensure_router("UserPromptSubmit", home=root, env=env, system="Darwin"))
             finally:
                 subprocess.run(["launchctl", "bootout", target], capture_output=True, timeout=10)

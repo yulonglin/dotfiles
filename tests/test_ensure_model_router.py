@@ -6,6 +6,7 @@ import json
 import plistlib
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -68,7 +69,7 @@ class RouterGuardTests(unittest.TestCase):
                 self.guard.LABEL, (str(self.disabled).lower() if isinstance(self.disabled, bool) else self.disabled))
         elif action == "print":
             code = 113 if self.state == "unloaded" else 0
-            output = ("state = " + self.state + "\n\tpath = " + str(self.plist)
+            output = ("\tstate = " + self.state + "\n\tpath = " + str(self.plist)
                       + "\n\tprogram = /bin/bash\n\targuments = {\n\t\t/bin/bash\n\t\t"
                       + str(self.loaded_launcher) + "\n\t\tserve\n\t}\n")
         elif action == "bootstrap":
@@ -80,6 +81,103 @@ class RouterGuardTests(unittest.TestCase):
 
     def actions(self):
         return [args[1] for args in self.calls]
+
+    def incidents(self):
+        return sorted((self.home / ".local/state/model-router/diagnostics").glob("incident-*.json"))
+
+    def test_incident_written_before_mutation_and_completed_after(self):
+        original = self.process
+        def inspect(args, **kwargs):
+            if args[1] == "bootstrap":
+                paths = self.incidents()
+                self.assertEqual(len(paths), 1)
+                evidence = json.loads(paths[0].read_text())
+                self.assertEqual(evidence["outcome"], "pending")
+                self.assertEqual(evidence["action"], "bootstrap")
+                self.assertEqual(evidence["launchctl"]["print"]["returncode"], 113)
+            return original(args, **kwargs)
+        self.guard.subprocess.run.side_effect = inspect
+        self.health.side_effect = [False, True]
+        result = self.run_guard()
+        evidence = json.loads(self.incidents()[0].read_text())
+        self.assertEqual(evidence["outcome"], "recovered")
+        self.assertEqual(evidence["event"], "UserPromptSubmit")
+        self.assertIn(str(self.incidents()[0]), result["systemMessage"])
+
+    def test_incident_failure_preserved_with_no_secret_log_content(self):
+        state = self.home / ".local/state/model-router"
+        (state / "logs").mkdir()
+        (state / "logs/router.log").write_text("ERROR token=" + self.token + " sk-sensitive-key\nStarted server\n")
+        (state / "launcher/binary-version").write_text("0.8.1\n")
+        self.state = "running"
+        original = self.process
+        def inspect(args, **kwargs):
+            result = original(args, **kwargs)
+            if args[1] == "print":
+                result.stdout += "\tpid = 42\n\truns = 3\n\tlast exit code = 9\n\tlast terminating signal = Terminated: 15\n\tenvironment = {\n\t\tSECRET = " + self.token + "\n\t}\n"
+            return result
+        self.guard.subprocess.run.side_effect = inspect
+        result = self.run_guard(budget=1)
+        path = self.incidents()[0]
+        text = path.read_text()
+        evidence = json.loads(text)
+        self.assertEqual(evidence["outcome"], "failed")
+        self.assertEqual(evidence["launchctl"]["print"]["pid"], 42)
+        self.assertEqual(evidence["launchctl"]["print"]["last_exit_signal"], 15)
+        self.assertEqual(evidence["launchctl"]["print"]["last_exit_code"], 9)
+        self.assertEqual(evidence["launchctl"]["print"]["runs"], 3)
+        self.assertEqual(evidence["versions"]["stable"], "0.8.1")
+        self.assertEqual(evidence["log"]["markers"]["error"], 1)
+        self.assertNotIn(self.token, text)
+        self.assertNotIn("sk-sensitive-key", text)
+        self.assertNotIn("SECRET", text)
+        self.assertIn(str(path), result["reason"])
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+
+    def test_healthy_router_does_not_write_diagnostics(self):
+        self.health.return_value = True
+        self.assertIsNone(self.run_guard())
+        self.assertFalse((self.home / ".local/state/model-router/diagnostics").exists())
+
+    def test_incident_storage_failure_does_not_break_recovery(self):
+        path = self.home / ".local/state/model-router/diagnostics"
+        path.write_text("not a directory")
+        self.health.side_effect = [False, True]
+        result = self.run_guard()
+        self.assertIn("recovered", result["systemMessage"].lower())
+        self.assertIn("diagnostic capture failed", result["systemMessage"].lower())
+        self.assertNotIn("decision", result)
+
+    def test_log_tail_capture_is_bounded_and_version_text_is_allowlisted(self):
+        state = self.home / ".local/state/model-router"
+        (state / "logs").mkdir()
+        (state / "logs/router.log").write_text("ERROR old\n" + "x" * 20000 + "\nStarted server\n")
+        (state / "launcher/binary-version").write_text("0.8.1 sk-do-not-save")
+        installed = self.home / ".claude/plugins/cache/alignment-hive/model-router/1.0"
+        installed.mkdir(parents=True)
+        (installed / "binary-version").write_text("0.8.2\n")
+        self.health.side_effect = [False, True]
+        self.run_guard()
+        evidence = json.loads(self.incidents()[0].read_text())
+        self.assertEqual(evidence["log"]["tail_bytes"], 16384)
+        self.assertEqual(evidence["log"]["markers"]["error"], 0)
+        self.assertEqual(evidence["versions"], {"stable": None, "cached_pins": ["0.8.2"]})
+        self.assertNotIn("sk-do-not-save", self.incidents()[0].read_text())
+
+    def test_private_incident_retention_and_concurrent_unique_paths(self):
+        self.assertTrue(hasattr(self.guard, "Incident"), "incident capture is missing")
+        def capture(_):
+            incident = self.guard.Incident(self.home, "SessionStart")
+            incident.update(outcome="failed")
+            return incident.path
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            paths = list(pool.map(capture, range(24)))
+        self.assertEqual(len(set(paths)), 24)
+        self.assertEqual(len(self.incidents()), 10)
+        for path in self.incidents():
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            json.loads(path.read_text())
 
     def test_missing_settings_and_explicit_off_skip(self):
         result = self.guard.ensure_router("SessionStart", home=self.home,
@@ -117,6 +215,16 @@ class RouterGuardTests(unittest.TestCase):
         self.assertIn("recovered", self.run_guard()["systemMessage"].lower())
         self.assertIn("kickstart", self.actions())
         self.assertFalse(any("-k" in args for args in self.calls))
+
+    def test_loaded_stopped_accepts_canonical_path_to_same_plist(self):
+        alias = self.home / "launchagents-alias"
+        alias.symlink_to(self.plist.parent, target_is_directory=True)
+        output = ("\tpath = " + str(self.plist)
+                  + "\n\tprogram = /bin/bash\n\targuments = {\n\t\t/bin/bash\n\t\t"
+                  + str(self.launcher) + "\n\t\tserve\n\t}\n")
+        expected = ["/bin/bash", str(self.launcher), "serve"]
+        self.assertTrue(self.guard.loaded_definition_matches(output, alias / self.plist.name, expected))
+        self.assertFalse(self.guard.loaded_definition_matches(output, self.home / "missing.plist", expected))
 
     def test_loaded_stopped_foreign_definition_is_not_started(self):
         self.state = "waiting"
@@ -165,6 +273,35 @@ class RouterGuardTests(unittest.TestCase):
         self.bootstrap_code = 5
         self.health.side_effect = [False, True]
         self.assertIn("recovered", self.run_guard()["systemMessage"].lower())
+
+    def test_mutation_timeout_still_polls_without_repeating_action(self):
+        for action, healthy_after in [("bootstrap", True), ("kickstart", True),
+                                      ("bootstrap", False), ("kickstart", False)]:
+            with self.subTest(action=action, healthy_after=healthy_after):
+                self.calls.clear()
+                self.now = 0.0
+                self.state = "unloaded" if action == "bootstrap" else "waiting"
+                original = self.process
+                def inspect(args, **kwargs):
+                    result = original(args, **kwargs)
+                    if args[1] == action:
+                        self.now += 3
+                        raise subprocess.TimeoutExpired(self.base, 3)
+                    return result
+                self.guard.subprocess.run.side_effect = inspect
+                self.health.side_effect = [False, True] if healthy_after else None
+                self.health.return_value = False
+                result = self.run_guard(budget=4)
+                if healthy_after:
+                    self.assertIn("recovered", result["systemMessage"].lower())
+                    self.assertNotIn("decision", result)
+                else:
+                    self.assertEqual(result["decision"], "block")
+                    self.assertEqual(self.now, 4)
+                self.assertEqual(self.actions().count(action), 1)
+                evidence = json.loads(self.incidents()[-1].read_text())
+                self.assertTrue(evidence["launchctl"][action]["timed_out"])
+                self.assertNotIn(self.token, json.dumps(evidence))
 
     def test_session_start_timeout_warns_without_block(self):
         result = self.run_guard("SessionStart", budget=1)
