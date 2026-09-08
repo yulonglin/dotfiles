@@ -39,9 +39,15 @@ TOKEN_FIELDS = (
 # The one definition of every limit the report states, so the JSON and the human
 # report cannot drift apart. Both renderers read these through the report data.
 REPORT_COVERAGE = {
-    "native_auto_mode_classifier": "successful calls unobserved",
+    # This report reads the custom PermissionRequest hook's own log. Anthropic's
+    # built-in auto-mode classifier is a different path that writes nothing here,
+    # so none of its calls, failures, retries or goal state can be inferred.
+    "native_auto_mode_classifier": "calls, failures, retries and goal state unobserved",
     "approval_classifier": (
         "direct API USAGE log only; CLI subscription fallback is unobserved"
+    ),
+    "approval_classifier_failures": (
+        "custom PermissionRequest hook only; legacy log lines are unattributed to an action"
     ),
     "project_filter_scope": (
         "--project filters transcript usage only; approval and quota are host-wide"
@@ -358,6 +364,261 @@ def scan_approval_usage(log_path, cutoff_epoch=0):
     return aggregate_usage_records(records, coverage)
 
 
+# --- backend failure accounting ----------------------------------------------
+#
+# The approval log carries two mutually exclusive record formats. A line written
+# before the hook gained structured events starts with the human sentence
+# ("API BACKEND FAILED: …") and carries no action id, so its failures can be
+# counted but never attributed to one classification attempt. A line written
+# after starts with BACKEND-EVENT and a versioned JSON payload, which carries an
+# opaque action id — so two backend failures on one action read as one failed
+# action, and a fallback that recovered an API failure is not a failed action at
+# all. Nothing needs de-duplicating: one outcome is always exactly one line.
+BACKEND_EVENT_PREFIX = "BACKEND-EVENT"
+SUPPORTED_EVENT_VERSION = 1
+BACKEND_EVENT_RE = re.compile(rf"^(\S+) {BACKEND_EVENT_PREFIX} (.+)$")
+LEGACY_API_FAILURE_RE = re.compile(r"^(\S+) API BACKEND FAILED: (.*)$")
+LEGACY_SUB_SKIPPED_RE = re.compile(r"^(\S+) SUBSCRIPTION BACKEND SKIPPED: ")
+LEGACY_SUB_SUCCESS_RE = re.compile(r"^(\S+) SUBSCRIPTION BACKEND: classified after")
+LEGACY_SUB_FAILURE_RE = re.compile(
+    r"^(\S+) WARNING: .* — subscription fallback also failed: (.*)$"
+)
+BACKENDS = ("api", "subscription")
+
+# A frozen copy of approval_classifier.FAILURE_CATEGORY_RULES. It exists only to
+# read log lines written before the hook categorized its own failures, so it
+# never has to follow the hook forward; the hook's tests pin the two to agree on
+# every warning the hook can raise today.
+LEGACY_FAILURE_CATEGORY_RULES = (
+    ("credits", ("out of credits", "credit balance", "billing", "payment")),
+    ("usage_limit", ("usage limit", "spend limit")),
+    ("rate_limit", ("rate limit",)),
+    ("auth", ("rejected", "authentication", "invalid x-api-key", "is not set", "not logged in")),
+    ("timeout", ("timed out", "timeout")),
+    ("overloaded", ("overloaded", "http 529")),
+    ("network", ("could not reach", "errno", "connection")),
+)
+FAILURE_CATEGORIES = tuple(name for name, _ in LEGACY_FAILURE_CATEGORY_RULES) + ("other",)
+
+
+def legacy_failure_category(headline, details=""):
+    combined = f"{headline} {details}".lower()
+    for category, tokens in LEGACY_FAILURE_CATEGORY_RULES:
+        if any(token in combined for token in tokens):
+            return category
+    return "other"
+
+
+def empty_failure_counts():
+    return {
+        "total": 0,
+        "by_backend": {backend: 0 for backend in BACKENDS},
+        "by_category": {},
+    }
+
+
+def empty_failure_section(with_actions):
+    section = {
+        "backend_failures": empty_failure_counts(),
+        "fallback": {"succeeded": 0, "failed": 0, "skipped_no_budget": 0},
+        "by_day": {},
+    }
+    if with_actions:
+        section["actions"] = {
+            "observed": 0,
+            "recovered": 0,
+            "unresolved": 0,
+            "incomplete": 0,
+        }
+    return section
+
+
+def add_backend_failure(section, backend, category, timestamp):
+    counts = section["backend_failures"]
+    counts["total"] += 1
+    counts["by_backend"][backend] += 1
+    counts["by_category"][category] = counts["by_category"].get(category, 0) + 1
+    day = timestamp[:10]
+    section["by_day"][day] = section["by_day"].get(day, 0) + 1
+
+
+def parse_backend_event(payload_text):
+    """Decode the JSON payload that opens a structured line, ignoring its tail.
+
+    The human sentence after the object is for a person reading the log; it is
+    never a second record.
+    """
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(payload_text)
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def scan_approval_failures(log_path, cutoff_epoch=0):
+    coverage = {
+        "available": False,
+        "earliest_record_at": None,
+        "latest_record_at": None,
+        "structured_first_at": None,
+        "legacy_records": 0,
+        "structured_records": 0,
+        "malformed_events": 0,
+        "unsupported_event_versions": 0,
+        "retention": "rotating_1mb_log",
+        "scope": (
+            "custom PermissionRequest hook only; the built-in auto-mode "
+            "classifier's calls, failures, retries and goal state are unobserved"
+        ),
+        "actions_scope": (
+            "failure-path hook attempts only: a successful API classification "
+            "writes no event, and a retry in a new hook process counts as a "
+            "separate attempt"
+        ),
+    }
+    structured = empty_failure_section(with_actions=True)
+    legacy = empty_failure_section(with_actions=False)
+    report = {
+        "structured": structured,
+        "legacy_unattributed": legacy,
+        "coverage": coverage,
+    }
+
+    try:
+        lines = Path(log_path).read_text(errors="replace").splitlines()
+    except OSError:
+        return report
+
+    coverage["available"] = True
+    retained = []
+    actions = defaultdict(set)
+
+    def record(epoch, timestamp):
+        """Note the retained boundary, then say whether the period includes it."""
+        retained.append((epoch, timestamp))
+        return not (cutoff_epoch and epoch < cutoff_epoch)
+
+    for line in lines:
+        event_match = BACKEND_EVENT_RE.match(line)
+        if event_match is not None:
+            epoch = parse_timestamp(event_match.group(1))
+            payload = parse_backend_event(event_match.group(2))
+            if epoch is None or payload is None:
+                coverage["malformed_events"] += 1
+                continue
+            version = payload.get("v")
+            if not isinstance(version, int) or isinstance(version, bool):
+                coverage["malformed_events"] += 1
+                continue
+            if version != SUPPORTED_EVENT_VERSION:
+                coverage["unsupported_event_versions"] += 1
+                continue
+            backend = payload.get("backend")
+            outcome = payload.get("outcome")
+            action = payload.get("action")
+            if (
+                backend not in BACKENDS
+                or outcome not in ("failure", "success", "skipped")
+                or (backend == "api" and outcome != "failure")
+                or not isinstance(action, str)
+                or not action
+                or (
+                    outcome == "skipped"
+                    and (backend != "subscription" or payload.get("reason") != "no_budget")
+                )
+            ):
+                coverage["malformed_events"] += 1
+                continue
+            timestamp = format_timestamp(epoch)
+            if coverage["structured_first_at"] is None:
+                coverage["structured_first_at"] = timestamp
+            if not record(epoch, timestamp):
+                continue
+            coverage["structured_records"] += 1
+            actions[action].add((backend, outcome))
+            if outcome == "failure":
+                category = payload.get("failure_category")
+                if category not in FAILURE_CATEGORIES:
+                    category = "other"
+                add_backend_failure(structured, backend, category, timestamp)
+                if backend == "subscription":
+                    structured["fallback"]["failed"] += 1
+            elif backend == "subscription" and outcome == "success":
+                structured["fallback"]["succeeded"] += 1
+            elif backend == "subscription" and outcome == "skipped":
+                structured["fallback"]["skipped_no_budget"] += 1
+            continue
+
+        api_match = LEGACY_API_FAILURE_RE.match(line)
+        if api_match is not None:
+            epoch = parse_timestamp(api_match.group(1))
+            if epoch is None:
+                continue
+            timestamp = format_timestamp(epoch)
+            if not record(epoch, timestamp):
+                continue
+            coverage["legacy_records"] += 1
+            headline, _, details = api_match.group(2).partition(" — ")
+            add_backend_failure(
+                legacy, "api", legacy_failure_category(headline, details), timestamp
+            )
+            continue
+
+        sub_failure_match = LEGACY_SUB_FAILURE_RE.match(line)
+        if sub_failure_match is not None:
+            epoch = parse_timestamp(sub_failure_match.group(1))
+            if epoch is None:
+                continue
+            timestamp = format_timestamp(epoch)
+            if not record(epoch, timestamp):
+                continue
+            coverage["legacy_records"] += 1
+            # Only the fallback's own headline: the API failure this warning
+            # restates already has its own line.
+            add_backend_failure(
+                legacy,
+                "subscription",
+                legacy_failure_category(sub_failure_match.group(2)),
+                timestamp,
+            )
+            legacy["fallback"]["failed"] += 1
+            continue
+
+        for pattern, key in (
+            (LEGACY_SUB_SUCCESS_RE, "succeeded"),
+            (LEGACY_SUB_SKIPPED_RE, "skipped_no_budget"),
+        ):
+            other_match = pattern.match(line)
+            if other_match is None:
+                continue
+            epoch = parse_timestamp(other_match.group(1))
+            if epoch is None:
+                break
+            timestamp = format_timestamp(epoch)
+            if not record(epoch, timestamp):
+                break
+            coverage["legacy_records"] += 1
+            legacy["fallback"][key] += 1
+            break
+
+    for outcomes in actions.values():
+        structured["actions"]["observed"] += 1
+        if ("subscription", "success") in outcomes:
+            structured["actions"]["recovered"] += 1
+        elif ("subscription", "failure") in outcomes or ("subscription", "skipped") in outcomes:
+            structured["actions"]["unresolved"] += 1
+        else:
+            # No fallback outcome is retained at scan time. Rotation, a call
+            # still in flight, and a failed log write all look like this, so it
+            # is never read as resolved and never as a dead process.
+            structured["actions"]["incomplete"] += 1
+
+    if retained:
+        coverage["earliest_record_at"] = min(retained)[1]
+        coverage["latest_record_at"] = max(retained)[1]
+    return report
+
+
 def quota_bucket(name, utilization, resets_at):
     """Build one canonical bucket, or None when the utilization is unusable."""
     if isinstance(utilization, bool) or not isinstance(utilization, (int, float)):
@@ -548,10 +809,57 @@ def model_usage_report(args):
             APPROVAL_LOG,
             cutoff_epoch=cutoff_epoch,
         ),
+        "approval_classifier_failures": scan_approval_failures(
+            APPROVAL_LOG,
+            cutoff_epoch=cutoff_epoch,
+        ),
         "quota": quota_report(cache_path, QUOTA_HISTORY, cutoff_epoch=cutoff_epoch),
         "coverage": dict(REPORT_COVERAGE),
         "notes": list(REPORT_NOTES),
     }
+
+
+def format_failure_counts(counts):
+    backends = ", ".join(f"{name} {counts['by_backend'][name]}" for name in BACKENDS)
+    categories = ", ".join(
+        f"{name} {count}" for name, count in sorted(counts["by_category"].items())
+    )
+    line = f"{counts['total']} ({backends})"
+    return f"{line}; categories {categories}" if categories else line
+
+
+def print_approval_failures(failures, coverage):
+    structured = failures["structured"]
+    legacy = failures["legacy_unattributed"]
+    actions = structured["actions"]
+    if not failures["coverage"]["available"]:
+        print("Approval backend failures: the approval log is unavailable")
+        print(
+            "Coverage: approval failure accounting is the "
+            f"{coverage['approval_classifier_failures']}"
+        )
+        return
+    print(
+        "Approval backend failures (structured): "
+        f"{format_failure_counts(structured['backend_failures'])}"
+    )
+    print(
+        "Approval classifier failure-path attempts (structured): "
+        f"{actions['observed']} observed, {actions['recovered']} recovered by fallback, "
+        f"{actions['unresolved']} unresolved, "
+        f"{actions['incomplete']} with no fallback outcome retained"
+    )
+    print(
+        "Approval backend failures (legacy, unattributed): "
+        f"{format_failure_counts(legacy['backend_failures'])}"
+    )
+    for label, section in (("structured", structured), ("legacy", legacy)):
+        fallback = section["fallback"]
+        print(
+            f"Approval fallback ({label}): {fallback['succeeded']} succeeded, "
+            f"{fallback['failed']} failed, {fallback['skipped_no_budget']} skipped for no budget"
+        )
+    print(f"Coverage: approval failure accounting is the {coverage['approval_classifier_failures']}")
 
 
 def print_model_usage_report(data, args):
@@ -592,6 +900,7 @@ def print_model_usage_report(data, args):
     else:
         print("Approval log has no retained usage rows (rotating 1 MB log)")
     print(f"Approval coverage is the {coverage['approval_classifier']}")
+    print_approval_failures(data["approval_classifier_failures"], coverage)
     current = data["quota"]["current"]
     if current.get("available"):
         stale = "stale" if current["stale"] else "fresh"

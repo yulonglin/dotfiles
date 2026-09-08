@@ -411,7 +411,9 @@ def test_model_usage_cli_is_metadata_only_and_legacy_json_mode_survives(tmp_path
             "resets_at": iso(now + timedelta(hours=2)),
         }
     ]
-    assert model_report["coverage"]["native_auto_mode_classifier"] == "successful calls unobserved"
+    assert model_report["coverage"]["native_auto_mode_classifier"] == (
+        "calls, failures, retries and goal state unobserved"
+    )
     assert model_report["coverage"]["approval_classifier"] == (
         "direct API USAGE log only; CLI subscription fallback is unobserved"
     )
@@ -931,6 +933,7 @@ def test_human_output_is_rendered_from_the_report_coverage_and_notes(tmp_path, c
     assert set(sentinels) == {
         "native_auto_mode_classifier",
         "approval_classifier",
+        "approval_classifier_failures",
         "project_filter_scope",
         "quota_history",
         "non_persisted_calls",
@@ -998,3 +1001,329 @@ def test_quota_bucket_builds_the_canonical_shape_or_rejects_the_value():
     assert audit.quota_bucket("five_hour", True, None) is None
     assert audit.quota_bucket("five_hour", "50", None) is None
     assert audit.quota_bucket("five_hour", float("nan"), None) is None
+
+
+# --- backend failure accounting for the custom PermissionRequest hook ---------
+#
+# Two log formats live in one rotating file, and they are mutually exclusive:
+# a line written before this change starts with the human sentence, a line
+# written after starts with BACKEND-EVENT and a versioned JSON payload. Old
+# lines are counted but cannot be attributed to an action; new lines can.
+
+
+def legacy_log() -> str:
+    return (
+        "2026-09-04T10:00:00Z API BACKEND FAILED: The approval classifier is rate limited. "
+        "— HTTP 429: rate limit exceeded\n"
+        "2026-09-04T10:00:01Z SUBSCRIPTION BACKEND: classified after the API backend failed\n"
+        "2026-09-05T11:00:00Z API BACKEND FAILED: Anthropic API key appears to be out of credits. "
+        "— HTTP 400: your credit balance is too low\n"
+        "2026-09-05T11:00:01Z SUBSCRIPTION BACKEND SKIPPED: only 2.0s of budget left\n"
+        "2026-09-05T12:00:00Z API BACKEND FAILED: The approval classifier could not reach the API. "
+        "— timed out\n"
+        "2026-09-05T12:00:30Z WARNING: The approval classifier could not reach the API. — timed out "
+        "— subscription fallback also failed: The subscription classifier timed out after 18s.\n"
+        "2026-09-05T13:00:00Z WARNING: The approval classifier's rules file could not be read. — /x/y\n"
+        "2026-09-05T13:30:00Z ALLOW (fast-path): Bash — read-only lookup\n"
+        "2026-09-05T14:00:00Z USAGE: model=claude-a input=1 output=1 cache_read=0 cache_create=0\n"
+    )
+
+
+def event_line(timestamp: str, payload: dict, human: str = "") -> str:
+    tail = f" {human}" if human else ""
+    return f"{timestamp} BACKEND-EVENT {json.dumps(payload)}{tail}\n"
+
+
+def event(backend, outcome, *, action, category=None, **extra) -> dict:
+    payload = {
+        "v": 1,
+        "backend": backend,
+        "outcome": outcome,
+        "failure_category": category,
+        "action": action,
+        "session": "0123456789abcdef",
+        "tool": "Bash",
+        "permission_mode": "default",
+        "permission_mode_observed": True,
+    }
+    payload.update(extra)
+    return payload
+
+
+def test_legacy_failure_lines_are_counted_by_backend_and_category_but_unattributed(tmp_path):
+    """Old human lines carry no action id, so they may be counted and never attributed."""
+    log = tmp_path / "approval-classifier.log"
+    log.write_text(legacy_log())
+
+    result = audit.scan_approval_failures(log)
+
+    legacy = result["legacy_unattributed"]
+    assert legacy["backend_failures"]["total"] == 4
+    assert legacy["backend_failures"]["by_backend"] == {"api": 3, "subscription": 1}
+    assert legacy["backend_failures"]["by_category"] == {
+        "credits": 1,
+        "rate_limit": 1,
+        "timeout": 2,
+    }
+    assert legacy["fallback"] == {"succeeded": 1, "failed": 1, "skipped_no_budget": 1}
+    assert legacy["by_day"] == {"2026-09-04": 1, "2026-09-05": 3}
+    # No per-action attribution is claimed for the legacy era.
+    assert "actions" not in legacy
+    assert result["structured"]["backend_failures"]["total"] == 0
+    assert result["structured"]["actions"]["observed"] == 0
+    # Four failures plus the fallback's success and its skip; the rules-file
+    # warning, the fast-path allow and the USAGE row are not backend outcomes.
+    assert result["coverage"]["legacy_records"] == 6
+    assert result["coverage"]["structured_records"] == 0
+    assert result["coverage"]["structured_first_at"] is None
+    assert result["coverage"]["earliest_record_at"] == "2026-09-04T10:00:00Z"
+    assert result["coverage"]["latest_record_at"] == "2026-09-05T12:00:30Z"
+
+
+def test_cutoff_filters_failure_counts_but_keeps_the_retained_boundary(tmp_path):
+    log = tmp_path / "approval-classifier.log"
+    log.write_text(legacy_log())
+
+    result = audit.scan_approval_failures(
+        log, cutoff_epoch=datetime(2026, 9, 5, tzinfo=timezone.utc).timestamp()
+    )
+
+    assert result["legacy_unattributed"]["backend_failures"]["total"] == 3
+    assert result["legacy_unattributed"]["fallback"] == {
+        "succeeded": 0,
+        "failed": 1,
+        "skipped_no_budget": 1,
+    }
+    assert result["coverage"]["earliest_record_at"] == "2026-09-04T10:00:00Z"
+
+
+def test_structured_events_attribute_actions_and_split_failures_from_failed_actions(tmp_path):
+    """Two backend failures on one action are one failed action, not two."""
+    log = tmp_path / "approval-classifier.log"
+    log.write_text(
+        # Recovered action: API failed, fallback succeeded.
+        event_line(
+            "2026-09-06T10:00:00Z",
+            event("api", "failure", action="a1", category="rate_limit"),
+            "API BACKEND FAILED: The approval classifier is rate limited. — HTTP 429",
+        )
+        + event_line(
+            "2026-09-06T10:00:05Z",
+            event("subscription", "success", action="a1"),
+            "SUBSCRIPTION BACKEND: classified after the API backend failed",
+        )
+        # Unresolved action: both backends failed.
+        + event_line(
+            "2026-09-06T11:00:00Z",
+            event("api", "failure", action="a2", category="overloaded"),
+        )
+        + event_line(
+            "2026-09-06T11:00:20Z",
+            event("subscription", "failure", action="a2", category="timeout"),
+        )
+        # Unresolved action: no budget left for the fallback.
+        + event_line(
+            "2026-09-07T09:00:00Z",
+            event("api", "failure", action="a3", category="auth"),
+        )
+        + event_line(
+            "2026-09-07T09:00:01Z",
+            event("subscription", "skipped", action="a3", reason="no_budget"),
+        )
+        # Truncated by rotation: the fallback outcome is gone.
+        + event_line(
+            "2026-09-07T10:00:00Z",
+            event("api", "failure", action="a4", category="network"),
+        )
+    )
+
+    result = audit.scan_approval_failures(log)
+
+    structured = result["structured"]
+    assert structured["backend_failures"]["total"] == 5
+    assert structured["backend_failures"]["by_backend"] == {"api": 4, "subscription": 1}
+    assert structured["backend_failures"]["by_category"] == {
+        "auth": 1,
+        "network": 1,
+        "overloaded": 1,
+        "rate_limit": 1,
+        "timeout": 1,
+    }
+    assert structured["fallback"] == {"succeeded": 1, "failed": 1, "skipped_no_budget": 1}
+    assert structured["actions"] == {
+        "observed": 4,
+        "recovered": 1,
+        "unresolved": 2,
+        "incomplete": 1,
+    }
+    assert structured["by_day"] == {"2026-09-06": 3, "2026-09-07": 2}
+    # The human sentence trailing a structured payload is not a second record.
+    assert result["legacy_unattributed"]["backend_failures"]["total"] == 0
+    assert result["coverage"]["structured_first_at"] == "2026-09-06T10:00:00Z"
+    assert result["coverage"]["structured_records"] == 7
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"action": None},
+        {"action": ""},
+        {"v": True},
+        {"v": 1.0},
+        {"backend": "api", "outcome": "success"},
+        {"backend": "subscription", "outcome": "skipped"},
+        {"backend": "subscription", "outcome": "skipped", "reason": "other"},
+    ],
+)
+def test_invalid_event_identity_or_skip_reason_is_not_counted(tmp_path, overrides):
+    payload = event("api", "failure", action="attempt", category="rate_limit")
+    payload.update(overrides)
+    log = tmp_path / "approval-classifier.log"
+    log.write_text(event_line("2026-09-06T10:00:00Z", payload))
+
+    result = audit.scan_approval_failures(log)
+
+    assert result["coverage"]["malformed_events"] == 1
+    assert result["coverage"]["structured_records"] == 0
+    assert result["structured"]["backend_failures"]["total"] == 0
+    assert result["structured"]["fallback"]["skipped_no_budget"] == 0
+    assert result["structured"]["actions"]["observed"] == 0
+
+
+def test_damaged_rotated_and_unsupported_event_lines_never_abort_the_scan(tmp_path):
+    log = tmp_path / "approval-classifier.log"
+    log.write_text(
+        'T10:00:00Z BACKEND-EVENT {"v": 1, "backend": "api"}\n'
+        "2026-09-06T10:00:00 BACKEND-EVENT "
+        + json.dumps(event("api", "failure", action="naive", category="auth"))
+        + "\n"
+        '2026-09-06T10:01:00Z BACKEND-EVENT {"v": 1, "backend": "api", "outcome"\n'
+        "2026-09-06T10:02:00Z BACKEND-EVENT not-json-at-all\n"
+        '2026-09-06T10:03:00Z BACKEND-EVENT ["not", "an", "object"]\n'
+        "2026-09-06T10:04:00Z BACKEND-EVENT "
+        + json.dumps(event("api", "failure", action="future", category="auth", v=2))
+        + "\n"
+        "2026-09-06T10:05:00Z BACKEND-EVENT "
+        + json.dumps(event("api", "failure", action="ok", category="rate_limit"))
+        + "\n"
+        "2026-09-06T10:06:00Z BACKEND-EVENT "
+        + json.dumps(event("api", "failure", action="oddcat", category="not-a-category"))
+        + "\n"
+    )
+
+    result = audit.scan_approval_failures(log)
+
+    assert result["structured"]["backend_failures"]["total"] == 2
+    assert result["structured"]["backend_failures"]["by_category"] == {
+        "other": 1,
+        "rate_limit": 1,
+    }
+    assert result["coverage"]["malformed_events"] == 5
+    assert result["coverage"]["unsupported_event_versions"] == 1
+
+
+TOTAL_FAILURE_WARNING = (
+    "WARNING: Anthropic API key was rejected. — HTTP 401 "
+    "— subscription fallback also failed: The subscription classifier timed out after 18s.\n"
+)
+
+
+def test_a_genuine_legacy_total_failure_warning_counts_whenever_it_was_written(tmp_path):
+    """Old and new writers can interleave; a legacy record is read on its own terms.
+
+    The current hook does not log this warning at all — its structured events
+    carry both headlines — so a line of this shape was written by an older hook,
+    whatever else is in the file. Nothing about it depends on when structured
+    events start.
+    """
+    log = tmp_path / "approval-classifier.log"
+    log.write_text(
+        "2026-09-01T09:00:00Z " + TOTAL_FAILURE_WARNING
+        + event_line(
+            "2026-09-06T10:00:00Z", event("api", "failure", action="a1", category="auth")
+        )
+        # An older hook still running after the new one first wrote an event.
+        + "2026-09-06T11:00:00Z " + TOTAL_FAILURE_WARNING
+    )
+
+    result = audit.scan_approval_failures(log)
+
+    assert result["legacy_unattributed"]["backend_failures"] == {
+        "total": 2,
+        "by_backend": {"api": 0, "subscription": 2},
+        "by_category": {"timeout": 2},
+    }
+    assert result["legacy_unattributed"]["fallback"]["failed"] == 2
+    assert result["structured"]["backend_failures"]["total"] == 1
+    assert result["coverage"]["earliest_record_at"] == "2026-09-01T09:00:00Z"
+    assert result["coverage"]["latest_record_at"] == "2026-09-06T11:00:00Z"
+
+
+def test_a_damaged_or_future_event_never_suppresses_a_genuine_legacy_warning(tmp_path):
+    """A record the scan cannot read must not silence records it can."""
+    log = tmp_path / "approval-classifier.log"
+    log.write_text(
+        "2026-09-06T09:00:00Z BACKEND-EVENT not-json-at-all\n"
+        + event_line(
+            "2026-09-06T09:30:00Z", event("api", "failure", action="future", v=2, category="auth")
+        )
+        + "2026-09-06T10:00:00Z " + TOTAL_FAILURE_WARNING
+    )
+
+    result = audit.scan_approval_failures(log)
+
+    assert result["legacy_unattributed"]["fallback"]["failed"] == 1
+    assert result["legacy_unattributed"]["backend_failures"]["total"] == 1
+    assert result["coverage"]["malformed_events"] == 1
+    assert result["coverage"]["unsupported_event_versions"] == 1
+
+
+def test_a_missing_log_reports_unavailable_rather_than_zero_failures(tmp_path):
+    result = audit.scan_approval_failures(tmp_path / "absent.log")
+
+    assert result["coverage"]["available"] is False
+    assert result["structured"]["actions"]["observed"] == 0
+    assert result["legacy_unattributed"]["backend_failures"]["total"] == 0
+
+
+def test_model_usage_report_states_the_failure_counts_and_what_stays_unobserved(tmp_path):
+    home = tmp_path / "home"
+    tmpdir = tmp_path / "tmp"
+    tmpdir.mkdir(parents=True)
+    log = home / ".cache" / "claude" / "approval-classifier.log"
+    log.parent.mkdir(parents=True)
+    log.write_text(
+        legacy_log()
+        + event_line(
+            "2026-09-06T10:00:00Z",
+            event("api", "failure", action="a1", category="rate_limit"),
+        )
+        + event_line("2026-09-06T10:00:05Z", event("subscription", "success", action="a1"))
+    )
+
+    report = run_cli(home, tmpdir, "--model-usage", "--json")
+    text = run_cli(home, tmpdir, "--model-usage")
+
+    assert report.returncode == 0, report.stderr
+    data = json.loads(report.stdout)
+    failures = data["approval_classifier_failures"]
+    assert failures["structured"]["actions"] == {
+        "observed": 1,
+        "recovered": 1,
+        "unresolved": 0,
+        "incomplete": 0,
+    }
+    assert failures["legacy_unattributed"]["backend_failures"]["total"] == 4
+    assert data["coverage"]["approval_classifier_failures"] == (
+        "custom PermissionRequest hook only; legacy log lines are unattributed to an action"
+    )
+    assert data["coverage"]["native_auto_mode_classifier"] == (
+        "calls, failures, retries and goal state unobserved"
+    )
+
+    assert text.returncode == 0, text.stderr
+    assert "Approval backend failures (structured): 1" in text.stdout
+    assert "Approval backend failures (legacy, unattributed): 4" in text.stdout
+    assert "1 recovered by fallback" in text.stdout
+    assert "custom PermissionRequest hook only" in text.stdout
+    assert "calls, failures, retries and goal state unobserved" in text.stdout
