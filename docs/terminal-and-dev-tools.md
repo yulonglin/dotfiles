@@ -69,22 +69,18 @@ How it works: (1) looks up your public IP against `~/.ssh/config` `HostName` ent
 
 Customization: `SERVER_NAME` env var overrides everything; `MACHINE_EMOJI` overrides the auto-assigned emoji.
 
-## Claude Code Statusline
+## Statusline separates session and provider usage
 
-Configured in `claude/settings.json` (`statusLine.command = "claude-tools statusline"`).
+Configured in `claude/settings.json` (`statusLine.command = "claude-tools statusline"`), with the renderer in [`tools/claude-tools/src/statusline.rs`](../tools/claude-tools/src/statusline.rs).
 
-```
-🌊 mats [code python] ~/code/project (main*) · 📊 45% · $0.23 · 12m
-│        │             │              │      │        │        └─ Session duration
-│        │             │              │      │        └─ Session cost
-│        │             │              │      └─ Context usage (color-coded)
-│        │             │              └─ Branch (* = dirty)
-│        │             └─ Active Claude context profiles
-│        └─ Directory
-└─ Machine name (SSH only, same as p10k)
-```
+- The first line shows the machine (SSH only), active context profiles, directory, and Git branch.
+- The session line shows the model, effort, context usage, duration, and classifier state when available.
+- The Claude usage line shows subscription quota gauges and reset pacing, including model-specific limits when reported.
+- The Codex usage line shows Codex subscription quotas for the signed-in ChatGPT account. These are Codex limits, not ChatGPT conversation counts or OpenAI API spend. Window labels come from the reported durations; the primary window is not assumed to be five hours.
 
-Context % is color-coded: green <70%, yellow 70–89%, red 90%+. Machine name uses the same `machine-name` script as Powerlevel10k, so identification is consistent across tools.
+Context usage is color-coded. Quota gauges show the percentage **used**, not remaining; their pace indicator compares usage with elapsed time in the quota window.
+
+Codex usage comes from the installed CLI's read-only `account/rateLimits/read` app-server method, implemented in [`codex_usage.rs`](../tools/claude-tools/src/codex_usage.rs). Successful snapshots are cached for five minutes; failed refreshes back off for one minute and keep old data visibly marked as stale. The collector honors `CODEX_HOME` (default `~/.codex`) and invalidates the cache when login-file metadata changes. It requires an `auth.json` file: keyring-only logins are not detected, and no Codex line is shown when that file is absent. API-key authentication does not expose ChatGPT subscription quotas; it shows `Codex usage unavailable` with the same one-minute retry backoff.
 
 `ccusage statusline` is deliberately not wired into the live Claude hook path because it can OOM on large local histories; guard logic still uses lightweight `ccusage blocks --active --json` where available.
 
