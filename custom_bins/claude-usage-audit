@@ -108,9 +108,13 @@ def parse_timestamp(value):
     if not isinstance(value, str) or not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+    if parsed.utcoffset() is None:
+        # Reject ambiguous timestamps instead of assuming the host timezone.
+        return None
+    return parsed.timestamp()
 
 
 def format_timestamp(epoch):
@@ -217,7 +221,7 @@ def scan_transcript_model_usage(projects_dir, cutoff_epoch=0, project_filter="")
                 usage = message.get("usage")
                 tokens = numeric_tokens(usage)
                 if tokens is None:
-                    if isinstance(usage, dict):
+                    if "usage" in message:
                         coverage["unusable_usage_rows"] += 1
                     continue
                 epoch = parse_timestamp(entry.get("timestamp"))

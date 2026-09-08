@@ -83,9 +83,13 @@ def read_jsonl(path: Path) -> list[dict]:
     return records
 
 
-def run_cli(home: Path, tmpdir: Path, *args: str) -> subprocess.CompletedProcess:
+def run_cli(
+    home: Path, tmpdir: Path, *args: str, tz: str | None = None
+) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env.update({"HOME": str(home), "TMPDIR": str(tmpdir)})
+    if tz is not None:
+        env["TZ"] = tz
     return subprocess.run(
         [sys.executable, str(AUDIT), *args],
         capture_output=True,
@@ -131,6 +135,7 @@ def test_transcript_usage_deduplicates_whole_snapshots_globally(tmp_path):
     assert result["by_model"]["claude-test"]["requests"] == 2
     assert result["by_day"]["2026-09-06"]["tokens"]["input_tokens"] == 25
     assert result["coverage"]["malformed_rows"] == 1
+    assert result["coverage"]["unusable_usage_rows"] == 1
 
 
 def test_transcript_usage_tolerates_bad_utf8(tmp_path):
@@ -435,3 +440,143 @@ def test_model_usage_cli_is_metadata_only_and_legacy_json_mode_survives(tmp_path
     legacy_report = json.loads(legacy_result.stdout)
     assert legacy_report["skills"] == {"fixture-skill": 1}
     assert "transcript_usage" not in legacy_report
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-09-06T10:00:00",
+        "2026-09-06T10:00:00.500000",
+        "2026-09-06 10:00:00",
+        "2026-09-06",
+    ],
+)
+def test_parse_timestamp_rejects_a_timestamp_without_an_explicit_offset(value):
+    """A naive stamp has no instant, so neither UTC nor local time may be assumed."""
+    assert audit.parse_timestamp(value) is None
+    assert audit.canonical_timestamp(value) is None
+
+
+def test_parse_timestamp_keeps_offset_aware_stamps_and_canonicalizes_to_utc():
+    assert audit.parse_timestamp("2026-09-06T10:00:00Z") == audit.parse_timestamp(
+        "2026-09-06T05:00:00-05:00"
+    )
+    assert audit.canonical_timestamp("2026-09-06T05:00:00-05:00") == "2026-09-06T10:00:00Z"
+    assert audit.canonical_timestamp("2026-09-06T12:00:00+02:00") == "2026-09-06T10:00:00Z"
+    assert audit.canonical_timestamp("2026-09-06T10:00:00+00:00") == "2026-09-06T10:00:00Z"
+
+
+def usage_row(uuid: str, message: dict) -> dict:
+    return {
+        "type": "assistant",
+        "timestamp": "2026-09-06T10:00:00Z",
+        "uuid": uuid,
+        "message": dict(message),
+    }
+
+
+def test_a_present_but_unusable_usage_field_is_counted_and_an_absent_one_is_not(tmp_path):
+    """Only a usage field that is there but unreadable makes the row corrupt."""
+    projects = tmp_path / "projects"
+    unusable_values = [None, "n/a", [], 5, True, {}, {"input_tokens": "x", "output_tokens": 1}]
+    rows = [
+        usage_row(f"unusable-{index}", {"model": "claude-test", "usage": value})
+        for index, value in enumerate(unusable_values)
+    ]
+    rows.append(usage_row("no-usage-field", {"model": "claude-test"}))
+    rows.append(assistant_row("2026-09-06T10:00:00Z", uuid="good", output_tokens=3))
+    write_jsonl(projects / "one" / "session.jsonl", rows)
+
+    result = audit.scan_transcript_model_usage(projects)
+
+    assert result["requests"] == 1
+    assert result["tokens"]["output_tokens"] == 3
+    assert result["coverage"]["unusable_usage_rows"] == len(unusable_values)
+    assert result["coverage"]["malformed_rows"] == 0
+    assert result["coverage"]["invalid_timestamp_rows"] == 0
+    assert result["coverage"]["unkeyed_rows"] == 0
+
+
+def test_transcript_counts_a_naive_timestamp_as_invalid_and_keeps_the_offset_row(tmp_path):
+    projects = tmp_path / "projects"
+    write_jsonl(
+        projects / "one" / "session.jsonl",
+        [
+            assistant_row("2026-09-06T10:00:00", uuid="naive", output_tokens=100),
+            assistant_row("2026-09-06", uuid="date-only", output_tokens=200),
+            assistant_row("2026-09-06T05:00:00-05:00", uuid="offset", output_tokens=7),
+        ],
+    )
+
+    result = audit.scan_transcript_model_usage(projects)
+
+    assert result["requests"] == 1
+    assert result["tokens"]["output_tokens"] == 7
+    assert result["coverage"]["invalid_timestamp_rows"] == 2
+    assert result["coverage"]["earliest_in_period"] == "2026-09-06T10:00:00Z"
+
+
+def test_the_other_parse_timestamp_callers_reject_naive_stamps_the_same_way(tmp_path):
+    """Approval, quota history and reset times must not disagree about what parses."""
+    log = tmp_path / "approval-classifier.log"
+    log.write_text(
+        "2026-09-06T10:00:00 USAGE: model=claude-a input=1 output=1 cache_read=0 cache_create=0\n"
+        "2026-09-06 USAGE: model=claude-a input=1 output=1 cache_read=0 cache_create=0\n"
+        "2026-09-06T05:00:00-05:00 USAGE: model=claude-a input=2 output=3 cache_read=0 cache_create=0\n"
+    )
+    approval = audit.scan_approval_usage(log)
+    assert approval["requests"] == 1
+    assert approval["coverage"]["malformed_usage_lines"] == 2
+    assert approval["coverage"]["earliest_retained_at"] == "2026-09-06T05:00:00-05:00"
+
+    history = tmp_path / "quota-history.jsonl"
+    bucket = [{"name": "five_hour", "utilization": 10, "resets_at": None}]
+    write_jsonl(
+        history,
+        [
+            {"observed_at": "2026-09-06T10:00:00", "buckets": bucket},
+            {"observed_at": "2026-09-06", "buckets": bucket},
+            {"observed_at": "2026-09-06T10:00:00Z", "buckets": bucket},
+        ],
+    )
+    quota_history = audit.read_quota_history(history)
+    assert quota_history["coverage"]["malformed_rows"] == 2
+    assert quota_history["coverage"]["earliest_retained_at"] == "2026-09-06T10:00:00Z"
+
+    assert audit.quota_buckets({
+        "five_hour": {"utilization": 10, "resets_at": "2026-09-07T12:00:00"},
+        "seven_day": {"utilization": 20, "resets_at": "2026-09-07T07:00:00-05:00"},
+    }) == [
+        {"name": "five_hour", "utilization": 10, "resets_at": None},
+        {"name": "seven_day", "utilization": 20, "resets_at": "2026-09-07T12:00:00Z"},
+    ]
+
+
+def test_model_usage_cli_output_does_not_depend_on_the_host_timezone(tmp_path):
+    """Two hosts in different zones must report the same instants from the same records."""
+    home = tmp_path / "home"
+    tmpdir = tmp_path / "tmp"
+    tmpdir.mkdir(parents=True)
+    write_jsonl(
+        home / ".claude" / "projects" / "fixture" / "session.jsonl",
+        [
+            assistant_row("2026-09-06T10:00:00Z", uuid="zulu", output_tokens=5),
+            assistant_row("2026-09-06T05:00:00-05:00", uuid="offset", output_tokens=7),
+            assistant_row("2026-09-06T10:00:00", uuid="naive", output_tokens=900),
+            assistant_row("2026-09-06", uuid="date-only", output_tokens=900),
+        ],
+    )
+
+    utc = run_cli(home, tmpdir, "--model-usage", "--json", tz="UTC0")
+    est = run_cli(home, tmpdir, "--model-usage", "--json", tz="EST5EDT")
+
+    assert utc.returncode == 0, utc.stderr
+    assert est.returncode == 0, est.stderr
+    assert utc.stdout == est.stdout
+    transcript = json.loads(utc.stdout)["transcript_usage"]
+    assert transcript["requests"] == 2
+    assert transcript["tokens"]["output_tokens"] == 12
+    assert transcript["coverage"]["invalid_timestamp_rows"] == 2
+    assert transcript["coverage"]["earliest_in_period"] == "2026-09-06T10:00:00Z"
+    assert transcript["coverage"]["latest_in_period"] == "2026-09-06T10:00:00Z"
+    assert list(transcript["by_day"]) == ["2026-09-06"]
