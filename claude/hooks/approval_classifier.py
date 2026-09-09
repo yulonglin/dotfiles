@@ -309,6 +309,8 @@ _INTERACTIVE_BASH_PATTERNS: list[tuple[re.Pattern[str], str]] = [
      "`read -p` prompts inside Bash; stdin isn't wired to the user in Claude Code."),
     (re.compile(r"\bgum\s+(?:confirm|input|choose|filter|file|write|spin)\b"),
      "`gum` interactive commands won't reach the user from a Claude Code Bash call."),
+    (re.compile(r"\bclaude-tools\s+select\b"),
+     "`claude-tools select` is a full-screen menu; it reads keys from /dev/tty, which a Claude Code Bash call has no user behind."),
     (re.compile(r"\bgh\s+auth\s+login\b(?!.*--with-token)"),
      "`gh auth login` is interactive; the user should run it themselves (`!gh auth login`)."),
     (re.compile(r"\bgcloud\s+auth\s+login\b(?!.*--no-browser)"),
