@@ -412,13 +412,13 @@ def test_model_usage_cli_is_metadata_only_and_legacy_json_mode_survives(tmp_path
         }
     ]
     assert model_report["coverage"]["native_auto_mode_classifier"] == (
-        "calls, failures, retries and goal state unobserved"
+        "persisted unavailability failures only; successful calls, retries, tokens and goal state unobserved"
     )
     assert model_report["coverage"]["approval_classifier"] == (
         "direct API USAGE log only; CLI subscription fallback is unobserved"
     )
     assert model_report["coverage"]["project_filter_scope"] == (
-        "--project filters transcript usage only; approval and quota are host-wide"
+        "--project filters transcript usage and native failures only; approval and quota are host-wide"
     )
     assert model_report["coverage"]["quota_history"] == (
         "sampled only when --model-usage runs, without account attribution; "
@@ -447,7 +447,7 @@ def test_model_usage_cli_is_metadata_only_and_legacy_json_mode_survives(tmp_path
     assert "without account attribution" in text_result.stdout
     assert "may interleave accounts" in text_result.stdout
     assert "no identity is recorded" in text_result.stdout
-    assert "--project filters transcript usage only" in text_result.stdout
+    assert "--project filters transcript usage and native failures only" in text_result.stdout
 
     assert legacy_result.returncode == 0, legacy_result.stderr
     legacy_report = json.loads(legacy_result.stdout)
@@ -1318,7 +1318,7 @@ def test_model_usage_report_states_the_failure_counts_and_what_stays_unobserved(
         "custom PermissionRequest hook only; legacy log lines are unattributed to an action"
     )
     assert data["coverage"]["native_auto_mode_classifier"] == (
-        "calls, failures, retries and goal state unobserved"
+        "persisted unavailability failures only; successful calls, retries, tokens and goal state unobserved"
     )
 
     assert text.returncode == 0, text.stderr
@@ -1326,4 +1326,405 @@ def test_model_usage_report_states_the_failure_counts_and_what_stays_unobserved(
     assert "Approval backend failures (legacy, unattributed): 4" in text.stdout
     assert "1 recovered by fallback" in text.stdout
     assert "custom PermissionRequest hook only" in text.stdout
-    assert "calls, failures, retries and goal state unobserved" in text.stdout
+    assert "successful calls, retries, tokens and goal state unobserved" in text.stdout
+
+
+# Native fixtures are synthetic; unfamiliar reasons test compatibility, not prevalence.
+NATIVE_PREFIX = (
+    "claude-fable-5 is temporarily unavailable (rate-limited), "
+    "so auto mode cannot determine the safety of FixtureTool right now."
+)
+
+
+def native_row(timestamp=STAMP, tool_use_id="native-attempt", content=NATIVE_PREFIX):
+    return {
+        "type": "user",
+        "timestamp": timestamp,
+        "sessionId": "private-session-sentinel",
+        "uuid": "private-row-sentinel",
+        "message": {
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "is_error": True,
+                "content": content,
+            }],
+        },
+    }
+
+
+def test_native_typed_failures_are_separate_from_conversation_usage(tmp_path):
+    projects = tmp_path / "projects"
+    write_jsonl(projects / "one" / "session.jsonl", [
+        assistant_row(STAMP, message_id="response", model="conversation-model", output_tokens=9),
+        native_row(content=NATIVE_PREFIX + "\nprivate-command-sentinel"),
+        native_row(tool_use_id="another", content=NATIVE_PREFIX.replace("rate-limited", "synthetic-reason")),
+    ])
+
+    usage, native = audit.scan_transcripts(projects)
+
+    assert usage == audit.scan_transcript_model_usage(projects)
+    assert usage["requests"] == 1
+    assert usage["tokens"]["total_tokens"] == 9
+    assert list(usage["by_model"]) == ["conversation-model"]
+    assert native["total"] == 2
+    assert native["by_category"] == {"rate_limit": 1, "other": 1}
+    assert native["by_model"] == {"claude-fable-5": 2}
+    assert native["by_day"] == {"2026-09-06": 2}
+    assert native["by_hour"] == {"2026-09-06T10:00:00Z": 2}
+    assert set(native) == {"total", "by_category", "by_model", "by_day", "by_hour", "coverage"}
+    assert native["coverage"]["raw_matching_observations"] == 2
+    for sentinel in ("private-command-sentinel", "private-session-sentinel", "private-row-sentinel",
+                     "native-attempt", "another", "FixtureTool", "synthetic-reason", str(projects)):
+        assert sentinel not in json.dumps(native)
+
+
+@pytest.mark.parametrize("change", [
+    "assistant_type", "human_type", "missing_role", "assistant_role", "missing_message",
+    "message_list", "content_string", "content_dict", "text_block", "tool_use", "missing_error",
+    "false_error", "integer_error", "string_error", "nested_content", "null_content", "input",
+    "quoted", "embedded", "indented", "newline", "generic_error", "safety_denial", "truncated",
+    "spaced_model", "oversized_model", "model_path", "missing_tool", "empty_reason",
+])
+def test_native_ignores_unsupported_shapes_and_non_native_errors(tmp_path, change):
+    row = native_row()
+    message = row["message"]
+    block = message["content"][0]
+    if change == "assistant_type":
+        row["type"] = "assistant"
+    elif change == "human_type":
+        row["type"] = "human"
+    elif change == "missing_role":
+        message.pop("role")
+    elif change == "assistant_role":
+        message["role"] = "assistant"
+    elif change == "missing_message":
+        row.pop("message")
+    elif change == "message_list":
+        row["message"] = [message]
+    elif change == "content_string":
+        message["content"] = NATIVE_PREFIX
+    elif change == "content_dict":
+        message["content"] = block
+    elif change == "text_block":
+        block.update(type="text", text=NATIVE_PREFIX)
+    elif change == "tool_use":
+        block["type"] = "tool_use"
+    elif change == "missing_error":
+        block.pop("is_error")
+    elif change in ("false_error", "integer_error", "string_error"):
+        block["is_error"] = {"false_error": False, "integer_error": 1, "string_error": "true"}[change]
+    elif change == "nested_content":
+        block["content"] = [{"type": "text", "text": NATIVE_PREFIX}]
+    elif change == "null_content":
+        block["content"] = None
+    elif change == "input":
+        block.update(content="ordinary tool failure", input={"command": NATIVE_PREFIX})
+    else:
+        block["content"] = {
+            "quoted": f'"{NATIVE_PREFIX}"',
+            "embedded": f"Reported error: {NATIVE_PREFIX}",
+            "indented": f" {NATIVE_PREFIX}",
+            "newline": f"\n{NATIVE_PREFIX}",
+            "generic_error": "HTTP 429 rate limit exceeded",
+            "safety_denial": "Auto mode denied this tool because it is not safe.",
+            "truncated": NATIVE_PREFIX.removesuffix(" right now."),
+            "spaced_model": NATIVE_PREFIX.replace("claude-fable-5", "the classifier"),
+            "oversized_model": NATIVE_PREFIX.replace("claude-fable-5", "claude-" + "x" * 200),
+            "model_path": NATIVE_PREFIX.replace("claude-fable-5", "claude-/private/model"),
+            "missing_tool": NATIVE_PREFIX.replace("FixtureTool", ""),
+            "empty_reason": NATIVE_PREFIX.replace("rate-limited", ""),
+        }[change]
+    projects = tmp_path / "projects"
+    write_jsonl(projects / "one" / "s.jsonl", [row, None, [], 4])
+
+    _, native = audit.scan_transcripts(projects)
+
+    assert native["total"] == 0
+    assert native["coverage"]["raw_matching_observations"] == 0
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_native_dedup_is_global_earliest_before_cutoff_and_order_independent(tmp_path, monkeypatch, reverse):
+    projects = tmp_path / "projects"
+    first = projects / "one" / "a.jsonl"
+    second = projects / "two" / "b.jsonl"
+    rows = [
+        native_row("2026-09-05T23:59:59Z", "mirrored"),
+        native_row("2026-09-06T08:00:00Z", "same-instant", NATIVE_PREFIX),
+        native_row("2026-09-06T08:00:00Z", "tie-category", NATIVE_PREFIX),
+    ]
+    mirrors = [
+        native_row("2026-09-07T12:00:00Z", "mirrored"),
+        native_row("2026-09-06T10:00:00+02:00", "same-instant", NATIVE_PREFIX.replace("fable", "opus")),
+        native_row("2026-09-06T08:00:00Z", "tie-category", NATIVE_PREFIX.replace("rate-limited", "synthetic")),
+        native_row("2026-09-06T09:45:00Z", "distinct"),
+        native_row("2026-09-06T09:46:00Z", "distinct"),
+    ]
+    for row in mirrors:
+        row["sessionId"] = "another-private-session"
+    write_jsonl(first, rows[::-1] if reverse else rows)
+    write_jsonl(second, mirrors[::-1] if reverse else mirrors)
+    monkeypatch.setattr(audit, "transcript_paths", lambda *_: [second, first] if reverse else [first, second])
+
+    _, native = audit.scan_transcripts(projects, audit.parse_timestamp("2026-09-06T00:00:00Z"))
+
+    assert native["total"] == 3
+    assert native["by_category"] == {"other": 1, "rate_limit": 2}
+    assert native["by_model"] == {"claude-fable-5": 3}
+    assert native["by_day"] == {"2026-09-06": 3}
+    assert native["by_hour"] == {"2026-09-06T08:00:00Z": 2, "2026-09-06T09:00:00Z": 1}
+    assert native["coverage"]["raw_matching_observations"] == 8
+    assert native["coverage"]["duplicate_observations"] == 4
+    assert native["coverage"]["earliest_in_period"] == "2026-09-06T08:00:00Z"
+    assert native["coverage"]["latest_in_period"] == "2026-09-06T09:45:00Z"
+
+
+@pytest.mark.parametrize("bad_id", [None, "", 3, False, [], {}])
+def test_native_missing_identity_is_coverage_only_never_uuid_fallback(tmp_path, bad_id):
+    projects = tmp_path / "projects"
+    row = native_row(tool_use_id=bad_id)
+    write_jsonl(projects / "one" / "s.jsonl", [row, row])
+
+    _, native = audit.scan_transcripts(projects)
+
+    assert native["total"] == 0
+    assert native["coverage"]["raw_matching_observations"] == 2
+    assert native["coverage"]["missing_id_observations"] == 2
+    assert native["coverage"]["duplicate_observations"] == 0
+
+
+def test_native_invalid_timestamps_do_not_poison_identity_and_coverage_is_unfiltered(tmp_path):
+    projects = tmp_path / "projects"
+    rows = [native_row(stamp) for stamp in (None, 42, "not-a-date", "2026-09-06", "2026-09-06T10:00:00")]
+    rows += [native_row(STAMP), native_row("2026-09-01T00:00:00Z", None)]
+    rows += [native_row(None, None)]
+    write_jsonl(projects / "one" / "s.jsonl", rows, malformed="broken-json\n")
+
+    _, native = audit.scan_transcripts(projects, audit.parse_timestamp("2026-09-06T10:00:00Z"))
+
+    assert native["total"] == 1
+    assert native["coverage"]["raw_matching_observations"] == 8
+    assert native["coverage"]["invalid_timestamp_observations"] == 6
+    assert native["coverage"]["missing_id_observations"] == 2
+    assert native["coverage"]["duplicate_observations"] == 5
+    assert native["coverage"]["malformed_rows"] == 1
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_native_duplicate_coverage_includes_invalid_timestamp_mirrors(tmp_path, reverse):
+    projects = tmp_path / "projects"
+    rows = [native_row(None), native_row("bad"), native_row(STAMP)]
+    write_jsonl(projects / "one" / "s.jsonl", rows[::-1] if reverse else rows)
+
+    _, native = audit.scan_transcripts(projects)
+
+    assert native["total"] == 1
+    assert native["coverage"]["duplicate_observations"] == 2
+    assert native["coverage"]["invalid_timestamp_observations"] == 2
+    assert native["coverage"]["earliest_in_period"] == STAMP
+
+
+def test_native_mid_read_failure_keeps_prefix_and_continues_other_files(tmp_path, monkeypatch):
+    projects = tmp_path / "projects"
+    damaged = projects / "one" / "a.jsonl"
+    good = projects / "two" / "b.jsonl"
+    write_jsonl(damaged, [native_row(), assistant_row(STAMP, uuid="prefix-usage", output_tokens=3)])
+    write_jsonl(good, [native_row(tool_use_id="after-error")])
+    real_open = Path.open
+
+    class InterruptedFile:
+        def __init__(self, lines):
+            self.lines = lines
+            self.reads = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.lines.close()
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self.reads == 2:
+                raise OSError("synthetic read failure after a valid prefix")
+            self.reads += 1
+            return next(self.lines)
+
+    def interrupted_open(self, *args, **kwargs):
+        lines = real_open(self, *args, **kwargs)
+        return InterruptedFile(lines) if self == damaged else lines
+
+    monkeypatch.setattr(Path, "open", interrupted_open)
+    usage, native = audit.scan_transcripts(projects)
+
+    assert usage["tokens"]["total_tokens"] == 3
+    assert native["total"] == 2
+    assert native["coverage"]["scanned_files"] == 2
+    assert native["coverage"]["unreadable_files"] == 1
+    assert native["coverage"]["raw_matching_observations"] == 2
+    assert "read failures" in native["coverage"]["limits"]
+
+
+def test_native_scan_counts_unreadable_files_and_never_reads_snapshot_text(tmp_path, monkeypatch):
+    projects = tmp_path / "projects"
+    readable = projects / "one" / "good.jsonl"
+    blocked = projects / "one" / "blocked.jsonl"
+    write_jsonl(readable, [native_row()], malformed="broken-json\n")
+    write_jsonl(blocked, [native_row(tool_use_id="blocked")])
+    (projects / "one" / "snapshot.txt").write_text(json.dumps(native_row(tool_use_id="snapshot")))
+    real_open = Path.open
+
+    def refuse(self, *args, **kwargs):
+        if self == blocked:
+            raise PermissionError("synthetic unreadable file")
+        assert self.suffix != ".txt"
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", refuse)
+    usage, native = audit.scan_transcripts(projects)
+
+    assert native["total"] == 1
+    assert native["coverage"]["scanned_files"] == 1
+    assert native["coverage"]["unreadable_files"] == 1
+    assert native["coverage"]["malformed_rows"] == usage["coverage"]["malformed_rows"] == 1
+    assert "limits" in native["coverage"]
+    assert "successful calls" in native["coverage"]["limits"]
+
+
+def test_native_cli_uses_utc_project_date_scope_and_exports_aggregates_only(tmp_path):
+    home, tmpdir = tmp_path / "home", tmp_path / "tmp"
+    tmpdir.mkdir()
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    projects = home / ".claude" / "projects"
+    write_jsonl(projects / "KEEP-fixture" / "s.jsonl", [
+        native_row(iso(now), "private-attempt-sentinel", NATIVE_PREFIX + "\nprivate-suffix-sentinel"),
+        native_row(iso(now - timedelta(days=5)), "old"),
+    ])
+    write_jsonl(projects / "excluded" / "s.jsonl", [native_row(iso(now), "excluded")])
+    log = home / ".cache" / "claude" / "approval-classifier.log"
+    log.parent.mkdir(parents=True)
+    log.write_text(f"{iso(now)} USAGE: model=hook-model input=1 output=1 cache_read=0 cache_create=0\n")
+    (tmpdir / "claude-statusline-usage.json").write_text('{"five_hour":{"utilization":5}}')
+    args = ("--model-usage", "--project", "keep", "--days", "1")
+    utc = run_cli(home, tmpdir, *args, "--json", tz="UTC0")
+    other_zone = run_cli(home, tmpdir, *args, "--json", tz="EST5EDT")
+    text = run_cli(home, tmpdir, *args)
+    assert utc.returncode == other_zone.returncode == text.returncode == 0
+    data = json.loads(utc.stdout)
+    native = data["native_auto_mode_classifier_failures"]
+    assert native == json.loads(other_zone.stdout)["native_auto_mode_classifier_failures"]
+    assert native["total"] == 1
+    assert native["coverage"]["scanned_files"] == 1
+    assert native["coverage"]["raw_matching_observations"] == 2
+    assert native["by_hour"] == {iso(now.replace(minute=0, second=0)): 1}
+    assert data["approval_classifier_usage"]["requests"] == 1
+    assert data["quota"]["current"]["available"] is True
+    for value in ("private-attempt-sentinel", "private-suffix-sentinel", "private-session-sentinel",
+                  "private-row-sentinel", "FixtureTool", str(projects), "s.jsonl"):
+        assert value not in utc.stdout + text.stdout
+    assert "Native auto-mode failures: 1" in text.stdout
+    assert "rate_limit 1" in text.stdout
+    assert "claude-fable-5: 1" in text.stdout
+    assert f"{now.date().isoformat()}: 1" in text.stdout
+    assert f"Peak UTC hour: {iso(now.replace(minute=0, second=0))} (1)" in text.stdout
+    assert "Native coverage: 1 scanned files, 0 unreadable" in text.stdout
+    assert "calls, failures, retries and goal state unobserved" not in utc.stdout + text.stdout
+
+
+def test_model_usage_report_scans_each_transcript_once(tmp_path, monkeypatch):
+    projects = tmp_path / "projects"
+    transcript = projects / "one" / "s.jsonl"
+    write_jsonl(transcript, [native_row(), assistant_row(STAMP, uuid="response", output_tokens=3)])
+    monkeypatch.setattr(audit, "PROJECTS_DIR", projects)
+    monkeypatch.setattr(audit, "APPROVAL_LOG", tmp_path / "absent.log")
+    monkeypatch.setattr(audit, "QUOTA_HISTORY", tmp_path / "absent-history.jsonl")
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    real_open = Path.open
+    reads = []
+
+    def spy(self, *args, **kwargs):
+        if self == transcript:
+            reads.append(self)
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", spy)
+    result = audit.model_usage_report(argparse.Namespace(days=0, project=""))
+
+    assert reads == [transcript]
+    assert result["native_auto_mode_classifier_failures"]["total"] == 1
+    assert result["transcript_usage"]["tokens"]["total_tokens"] == 3
+
+
+# `astra` was observed (2026-09-08) on a session routed to a foreign model, beside
+# `claude-opus-5[1m]` on Claude-model sessions: the token names whatever served the
+# classifier call, so it is not always an Anthropic catalogue ID.
+@pytest.mark.parametrize("model", [
+    "claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-5-20250929", "claude-fable-5.1",
+    "astra", "gpt-6-astra",
+])
+def test_native_accepts_bounded_model_tokens_and_multiple_result_blocks(tmp_path, model):
+    projects = tmp_path / "projects"
+    row = native_row("1969-12-31T23:59:59Z", content=NATIVE_PREFIX.replace("claude-fable-5", model))
+    row["message"]["content"].extend([None, "ignored", native_row(tool_use_id="second")["message"]["content"][0]])
+    write_jsonl(projects / "one" / "s.jsonl", [row])
+
+    _, native = audit.scan_transcripts(projects)
+
+    assert native["total"] == 2
+    assert native["by_model"][model] == (2 if model == "claude-fable-5" else 1)
+    assert native["by_hour"] == {"1969-12-31T23:00:00Z": 2}
+
+
+@pytest.mark.parametrize("reason,tool", [
+    ("synthetic-compatibility-" * 20, "FixtureTool"),
+    ("synthetic-reason", "private-tool-sentinel " * 20),
+    ("synthetic-reason", "Fixture tool (compatibility)"),
+])
+def test_native_reason_and_tool_compatibility_has_no_arbitrary_length_cap(tmp_path, reason, tool):
+    projects = tmp_path / "projects"
+    content = NATIVE_PREFIX.replace("rate-limited", reason).replace("FixtureTool", tool)
+    write_jsonl(projects / "one" / "s.jsonl", [native_row(content=content)])
+
+    _, native = audit.scan_transcripts(projects)
+
+    assert native["total"] == 1
+    assert native["by_category"] == {"other": 1}
+    assert reason not in json.dumps(native)
+    assert tool not in json.dumps(native)
+
+
+@pytest.mark.parametrize("suffix,accepted", [("[1m]", True), ("[2m]", False), ("[1m][1m]", False), ("[private]", False)])
+def test_native_context_suffix_retains_verified_classifier_identity(tmp_path, suffix, accepted):
+    projects = tmp_path / "projects"
+    model = "claude-opus-5" + suffix
+    write_jsonl(projects / "one" / "s.jsonl", [
+        native_row(content=NATIVE_PREFIX.replace("claude-fable-5", model)),
+    ])
+
+    _, native = audit.scan_transcripts(projects)
+
+    assert native["total"] == int(accepted)
+    assert native["by_model"] == ({model: 1} if accepted else {})
+
+
+def test_native_limits_do_not_claim_attempt_rates_or_complete_history(tmp_path):
+    _, native = audit.scan_transcripts(tmp_path / "missing")
+
+    for limit in (
+        "failure-rate denominator", "hidden HTTP attempts", "complete historical coverage",
+        "CLI wording changes", "not proof", "identical-command", "missing evidence",
+    ):
+        assert limit in native["coverage"]["limits"]
+
+
+def test_native_empty_root_is_an_explicit_empty_summary(tmp_path):
+    usage, native = audit.scan_transcripts(tmp_path / "missing")
+    assert usage["requests"] == native["total"] == 0
+    assert native["by_hour"] == {}
+    assert native["coverage"]["scanned_files"] == 0
+    assert native["coverage"]["earliest_in_period"] is None
+    assert native["coverage"]["latest_in_period"] is None
