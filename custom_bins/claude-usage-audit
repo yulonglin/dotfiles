@@ -234,7 +234,8 @@ NATIVE_FAILURE_RE = re.compile(
 NATIVE_FAILURE_LIMITS = (
     "selected JSONL files only; supported typed unavailability prefix only; "
     "by_model is the bounded classifier token in that prefix (not always an Anthropic "
-    "catalogue ID), never the conversation model; "
+    "catalogue ID), never the conversation model; any token that completes the full "
+    "template counts, model-shaped or not; "
     "coverage counters span the entire selected scan, not just the period; "
     "scanned_files counts opened files; unreadable_files counts failed opens or read failures "
     "(opened files with read failures appear in both counts; readable prefixes are retained); "
