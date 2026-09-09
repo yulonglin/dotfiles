@@ -39,6 +39,8 @@
       "Artifact",
       "Read",
       "Read(**/.envrc)",
+      "Bash(model-router-wire *)",
+      "Bash(mutool draw *)",
       "mcp__claude_ai_Notion__notion-fetch",
       "mcp__claude_ai_Notion__notion-search",
       "mcp__claude_ai_Notion__notion-get-comments",
@@ -134,15 +136,6 @@
       "Bash(chmod -R *)",
       "Bash(* | bash*)",
       "Bash(* | zsh*)"
-    ],
-    "ask": [
-      "Bash(curl * | *)",
-      "Bash(wget * | *)",
-      "ExitPlanMode",
-      "Bash(sudo *)",
-      "Bash(kubectl delete *)",
-      "Read(**/.env)",
-      "Read(**/.env.*)"
     ],
     "defaultMode": "auto"
   },
@@ -760,7 +753,8 @@
         "api.zotero.org",
         "osv.dev",
         "api.osv.dev",
-        "openreview.net"
+        "openreview.net",
+        "golong.org"
       ],
       "allowLocalBinding": true
     },
@@ -849,6 +843,7 @@
   "effortLevel": "high",
   "advisorModel": "fable",
   "showClearContextOnPlanAccept": true,
+  "dialogExpiry": "never",
   "plansDirectory": "~/vault/specs",
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,

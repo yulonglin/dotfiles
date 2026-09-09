@@ -48,6 +48,14 @@ declared-context-window = 258400
 [providers.openrouter]
 base-url = "https://openrouter.ai/api/v1"
 
+# OpenAI API with the "OPENAI_API_KEY - tomek" key (secrets.toml [openai-providers].openai).
+# Tried 2026-09-06 as a fallback while both astra and sol sat in the router's 429
+# cooldown: NOT usable yet, because the openai-providers path sends Chat Completions
+# `max_tokens`, which api.openai.com rejects for these models ("use
+# max_completion_tokens"). Kept for when the router translates that parameter.
+[providers.openai]
+base-url = "https://api.openai.com/v1"
+
 # ---- Older Claude models, passed straight through to Anthropic -----------
 # Active until at least 2027-02-05 (deprecations page, 2026-09-07). Opus 3 is
 # not addable: retired on the API 2026-01-05 and gone from OpenRouter too.

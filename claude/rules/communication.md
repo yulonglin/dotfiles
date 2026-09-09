@@ -36,7 +36,9 @@ On personal repos, act rather than propose ceremony — no unprompted `.gitignor
 
 After pushback, don't defend. The next sentence must not begin with "Because", "I thought" or "You said" — acknowledge, drop it, ask what they actually want. Short affirmations are compliance, not resistance; don't re-pitch.
 
-Reply on the channel you were messaged on, not just the terminal. Give absolute paths and links to Artifacts — Yulong works across many repos and worktrees. Interpret transcription artifacts charitably: VoiceInk produces phonetic errors ("VAR" → "FAR").
+Reply on the channel you were messaged on, not just the terminal. Give absolute paths and links to Artifacts — Yulong works across many repos and worktrees.
+
+**"Where is X?" is answered by the path, first.** When Yulong asks where a file, doc or draft is, the first line of the reply is the absolute path (or URL) in a code block — one per thing asked for — before any status, caveat or pending work. If the thing does not exist yet, the first line says so and names the file it will become. Never bury the path in a paragraph or answer with what is in flight instead (2026-09-08: asked three times for the sabotage TeX path while the reply led with agent status). Interpret transcription artifacts charitably: VoiceInk produces phonetic errors ("VAR" → "FAR").
 
 ## Durability
 

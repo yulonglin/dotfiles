@@ -38,6 +38,10 @@ Create publication-quality TikZ diagrams in Anthropic's pastel minimalist style 
 - `references/anthropic-tikz-v3.tex` — 8 working examples
 - `reference-images/` — 16 real Anthropic/OAI blog figures as visual targets
 
+## Check Before Shipping
+
+Every TikZ figure is test-compiled in a scratch document that loads the paper's class and `.sty` files (fonts and `\linewidth` must match), then checked two ways before it goes into the paper. `figcheck-pdf test.pdf` fails on overlapping or clipped text and must print 0 problems. Then render the page (`mutool draw -r 150 -o page.png test.pdf 1`) and look for: arrow heads that miss their box or arrows with no visible length (keep at least 6 pt clear between source and target edges); a label word wrapped or hyphenated onto a second line (widen the box or shorten the label; two-line labels are two deliberate phrases, never a broken word); text touching its own box border or another label (2 pt clearance); stacks whose offsets read as a rendering smudge (use about 0.09 cm, three layers, opaque). One vocabulary per role across the figure, matching the paper's terms (a diagram that says judge, evaluator and monitor for one model is three names for one box), and one shape or glyph per role so colour is not the only code.
+
 ## Known Issues
 
 - Examples 2 and 4 in the compiled PDF have rendering issues (see catalog for details)
