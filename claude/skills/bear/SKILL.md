@@ -219,7 +219,7 @@ For CLI-specific failure modes (sandbox SIGABRT, PATH issues in cron, stdin/flag
 
 ## Bear-flavoured Markdown
 
-Bear's own FAQ omits the colour encoding, so Yulong's copied-from-Bear examples are the source of truth: highlight is `==text==`, a coloured highlight is a coloured-dot emoji at the START of the span (`==🔴text==`, where 🔴 means flag this / verify before shipping), strikethrough is `~~text~~`, and underline is `~text~`. Don't use `==` or `~text~` in files that render as plain GitHub Markdown.
+Bear's own FAQ omits the colour encoding, so Yulong's copied-from-Bear examples are the source of truth: highlight is `==text==`, a coloured highlight is a coloured-dot emoji at the START of the span (`==🔴text==`, where 🔴 means flag this / verify before shipping; `==🟢proofread by Claude Fable 5.1, 8 Sep==`, where 🟢 means checked and clear), strikethrough is `~~text~~`, and underline is `~text~`. Don't use `==` or `~text~` in files that render as plain GitHub Markdown.
 
 **Nothing separates the colour emoji from the text it marks** — `==🔴not recorded==`, never `==🔴 not recorded==`. The dot is a marker glued to the front of the span, not a word inside it, and a stray space renders as a gap in the highlight. This holds for every colour, not only 🔴.
 
