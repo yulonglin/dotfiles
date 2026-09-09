@@ -336,12 +336,19 @@ _check_markdown_hard_wrap() {
 
 _is_staged_zsh() {
     local file="$1"
+    # `|| true`: under pipefail, `head` closing the pipe early makes `git show`
+    # exit 141 on any file past the pipe buffer, which would misclassify it.
+    local first
+    first=$(git show ":${file}" 2>/dev/null | head -n 1 || true)
+    case "${first}" in
+        "#!"*zsh*)  return 0 ;;
+        "#!"*)      return 1 ;;   # any other interpreter, e.g. a bash shebang under config/
+    esac
+    # Shebang-less: zsh if it lives where zsh sources it.
     case "${file}" in
         config/aliases/*.sh|config/*.sh) return 0 ;;
     esac
-    local first
-    first=$(git show ":${file}" 2>/dev/null | head -n 1) || return 1
-    [[ "${first}" == "#!"*zsh* ]]
+    return 1
 }
 
 if command -v zsh &>/dev/null; then

@@ -100,7 +100,7 @@ Source: `tools/claude-tools/src/select/`. Contract:
 - **Output** on stdout: the chosen *names*, one per line, nothing else. The TUI paints on stderr and reads keys from `/dev/tty`, so `result=$(rows | claude-tools select)` is safe.
 - **Flags**: `--title <text>` for the header; `--single` makes Enter pick the row under the cursor (space is an alias), hides the checkboxes, and prints exactly one name.
 - **Keys**: `j`/`k` or arrows, `space` toggle, `enter` confirm, `q`/`Esc` cancel (**exit 1**), `ctrl-l` repaint.
-- **Rebuild on every platform after a change**: `cargo build --release` in `tools/claude-tools/` on each target and copy to `custom_bins/claude-tools-<target>`. An old binary ignores flags it does not know — `--single` degrades to space-then-Enter — so callers take `head -n 1` and never assume the flag landed.
+- **Binaries rebuild in CI**: `.github/workflows/build-claude-tools.yml` builds all three targets on any merge to main touching `tools/claude-tools/src/` and commits them with `SHA256SUMS`. A local `cargo build --release` copied to `custom_bins/claude-tools-<host>` covers the host until then. An old binary ignores flags it does not know — `--single` degrades to space-then-Enter — so callers take `head -n 1` and never assume the flag landed.
 
 ```bash
 # One pick from a short menu
