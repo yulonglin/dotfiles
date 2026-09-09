@@ -213,7 +213,7 @@ bootstrap_claude_tools() {
 # Flat toggle list by design — j/k navigate, space toggles a whole component,
 # enter confirms. Group labels (Base/AI/...) are headers only; there is no
 # drill-in / sub-component selection. The sole exception is `apps`: leaving it
-# checked later opens app-picker (gum) to choose individual GUI/App-Store apps.
+# checked later opens app-picker (the same `claude-tools select` TUI) to choose individual GUI/App-Store apps.
 show_component_menu() {
     local mode="$1"
 

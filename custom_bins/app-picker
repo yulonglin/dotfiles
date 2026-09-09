@@ -6,7 +6,7 @@
 # Writes: config/Brewfile    (brew/cask/mas entries for `brew bundle`)
 #
 # Usage:
-#   app-picker                 # gum TUI: space=toggle, enter=confirm → writes Brewfile
+#   app-picker                 # TUI (claude-tools select): space=toggle, enter=confirm → writes Brewfile
 #   app-picker --defaults      # no TUI; select registry defaults, write Brewfile
 #   app-picker --dry-run       # print the Brewfile to stdout, don't write
 #   app-picker --conf PATH     # registry path (default: <dotfiles>/config/apps.conf)
@@ -51,43 +51,45 @@ done < "$CONF"
 local n=${#A_METHOD}
 (( n > 0 )) || { echo "app-picker: no apps parsed from $CONF" >&2; exit 1; }
 
-# ─── Build display rows (one per app) + default-selected set ──────────────────
-# Row format the TUI shows / we parse back:  "<i>\t[cat·Tn] name — desc"
-typeset -a rows selected
+# ─── Build TUI rows: group|name|description|checked ──────────────────────────
+# `claude-tools select` opens a header whenever the group field changes, so rows
+# are sorted by category (then tier) first. It hands back the chosen *names* on
+# stdout, so names map to registry indices through idx_of; a duplicate display
+# name gets its id appended so the map stays one-to-one. '|' is the field
+# separator, so it is normalised to '/' in the display fields.
+typeset -a order rows selected
+typeset -A idx_of
 local i
-for (( i=1; i<=n; i++ )); do
-    local label="${i}	[${A_CAT[i]}·T${A_TIER[i]}] ${A_NAME[i]} — ${A_DESC[i]}"
-    # gum --selected takes a comma-separated list, so a label containing a comma
-    # (e.g. a description like "Notes, docs, and wiki") would be mis-split and fail
-    # to pre-select. Normalise commas → ';' so the CSV is unambiguous; rows and
-    # selected derive from the same label, so option↔selected matching still holds.
-    label="${label//,/;}"
-    rows+=("$label")
-    [[ "${A_DEFAULT[i]}" == "true" ]] && selected+=("$label")
+order=("${(@f)$(for (( i=1; i<=n; i++ )); do
+    print -r -- "${A_CAT[i]}	${A_TIER[i]}	${i}"
+done | sort -s -t $'\t' -k1,1 -k2,2n | cut -f3)}")
+for i in "${order[@]}"; do
+    local name="${A_NAME[i]//\|//}" desc="${A_DESC[i]//\|//}"
+    [[ -n "${idx_of[$name]:-}" ]] && name="${name} (${A_ID[i]})"
+    idx_of[$name]="$i"
+    rows+=("${A_CAT[i]} · tier ${A_TIER[i]}|${name}|${desc}|${A_DEFAULT[i]}")
+    [[ "${A_DEFAULT[i]}" == "true" ]] && selected+=("$name")
 done
 
-# ─── Choose: TUI (gum) or defaults ───────────────────────────────────────────
-# Result is the chosen subset of $rows, newline-separated.
+# ─── Choose: TUI (claude-tools select) or defaults ───────────────────────────
+# Result is the chosen names, newline-separated. The TUI is a committed Rust
+# binary, so it exists before Homebrew does; it paints on stderr, reads keys
+# from /dev/tty, and exits 1 on Esc/q.
 local chosen=""
 if [[ "$MODE" == "defaults" ]] || [[ "${NON_INTERACTIVE:-false}" == "true" ]] \
-   || ! [[ -t 0 ]] || ! command -v gum &>/dev/null; then
+   || ! [[ -t 0 ]] || ! command -v claude-tools &>/dev/null; then
     chosen="${(F)selected}"
 else
-    local sel_csv="${(j:,:)selected}"
-    local height=$(( n + 2 ))
-    local term_h; term_h=$(tput lines 2>/dev/null || echo 40)
-    (( height > term_h - 4 )) && height=$(( term_h - 4 ))
-    chosen=$(gum choose --no-limit --height "$height" \
-        --header "Select apps to install (space=toggle, enter=confirm):" \
-        --selected "$sel_csv" -- "$rows[@]") || { echo "Cancelled — Brewfile unchanged." >&2; exit 0; }
+    chosen=$(print -rl -- "$rows[@]" | claude-tools select --title "Select apps to install") \
+        || { echo "Cancelled — Brewfile unchanged." >&2; exit 0; }
 fi
 
-# ─── Map chosen rows back to indices ─────────────────────────────────────────
+# ─── Map chosen names back to indices ────────────────────────────────────────
 typeset -a pick_idx
 local line
 while IFS= read -r line; do
     [[ -z "$line" ]] && continue
-    pick_idx+=("${line%%	*}")     # leading field before the tab = index
+    [[ -n "${idx_of[$line]:-}" ]] && pick_idx+=("${idx_of[$line]}")
 done <<< "$chosen"
 
 (( ${#pick_idx} > 0 )) || { echo "Nothing selected — Brewfile unchanged." >&2; exit 0; }

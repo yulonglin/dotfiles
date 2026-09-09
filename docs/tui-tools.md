@@ -14,43 +14,38 @@ When to use which tool for interactive terminal interfaces.
 | **Full TUI framework** | [bubbletea](https://github.com/charmbracelet/bubbletea) | Go | Elm-architecture TUI apps | `go get github.com/charmbracelet/bubbletea` |
 | **Full TUI framework** | [textual](https://github.com/Textualize/textual) | Python | Rich TUI apps, CSS-like styling | `uv add textual` |
 
-## Repo Standard
+## Repo Standard: A Menu Is Not A Search Box
 
-This repo uses **three** tools from the landscape above. Each has a clear lane — don't cross them.
+Two tools, one each for the two jobs a script actually has. A **menu** is a short, known list that fits on screen — arrow to a row, pick or toggle, no typing. A **search box** is a long list you narrow by typing. They are different products, and neither replaces the other.
 
 | Tool | Lane | Where used |
 |------|------|-----------|
-| **fzf** | Pipe-through pickers in shell scripts | `secrets envrc`, `secrets edit`, `secrets use`, `tmux-restore`, `modern_tools.sh` (git/history/cd helpers) |
-| **gum** | Guided script UI (menus, confirms, inputs, spinners) | `install.sh`/`deploy.sh` component toggle menu |
-| **ratatui** | Full TUI in compiled Rust binaries | `claude-tools` (context TUI, ignore TUI) |
+| **`claude-tools select`** (ratatui, ours) | Menus: pick one row (`--single`) or toggle several | `install.sh`/`deploy.sh` component menu, `app-picker`, the bare `secrets` menu |
+| **fzf** | Search: type to narrow a long list, with a preview pane | `secrets envrc`, `secrets edit`, `secrets use`, `tmux-restore`, `modern_tools.sh` (git/history/cd helpers), the `ctrl-r`/`ctrl-t` shell widgets |
+
+`claude-tools select` is a committed binary for darwin-arm64, linux-x86_64 and linux-aarch64, so it exists before Homebrew does — on a fresh Mac, in `install.sh` before brew runs, and on a RunPod box where `scripts/cloud/setup.sh` never installs brew at all. That is why the menus use it and not a brew-installed tool. fzf is brew-only, which is acceptable because every fzf use is either a shell widget in an interactive login shell or a picker that degrades to defaults when fzf is absent.
 
 ### Decision Tree
 
 ```
 Need interactive terminal UI?
-├─ Shell script filtering/selecting data? → fzf
+├─ Short known list, arrow and pick/toggle? → claude-tools select
+│   (stdin rows, works pre-brew, --single for one pick)
+│
+├─ Long list the user types to narrow? → fzf
 │   (pipe stdin, get selections out, preview pane)
 │
-├─ Shell script guided flow? → gum
-│   (confirm, choose, input, spin — no piping needed)
+├─ A yes/no in a cleanup or uninstall script? → plain `read`
+│   (a confirm prompt does not need a TUI)
 │
-├─ Compiled Rust tool needs a TUI? → ratatui
-│   (stateful panels, keyboard navigation, themes)
-│
-└─ Standalone workspace finder? → television (optional)
-    (file/text/repo finding, like telescope.nvim)
+└─ Compiled Rust tool needs stateful panels? → ratatui in claude-tools
 ```
 
-### Why These Three
+### Retired: gum
 
-Both Codex and Gemini independently recommended keeping fzf + gum as complementary tools:
+gum (Go, brew-only) was used in two files, both only `gum choose`, which `claude-tools select` already did. It never reached a cloud box. Retired 2026-09-08; the landscape table above keeps it for reference in other projects. The earlier claim on this page that gum drove the component menu was wrong — `install.sh` always used `claude-tools select` there.
 
-- **fzf** is unbeatable for pipe-through data filtering with preview panes. Replacing with gum would lose streaming input and preview.
-- **gum** is purpose-built for scripted UX flows — styled prompts, spinners, confirms. Replacing with fzf would make install scripts feel raw.
-- **ratatui** is already in `claude-tools` for complex stateful TUIs that exceed what shell tools can do. Standard Rust TUI choice (superseded tui-rs, most active community).
-- Both fzf and gum are single binaries, already installed. Near-zero dependency cost.
-
-**Not currently used:** skim (unnecessary alongside fzf), bubbletea (no Go TUI apps), textual (no Python TUI apps). Documented above for reference when choosing tools in other projects.
+**Not used:** skim (unnecessary alongside fzf), bubbletea (no Go TUI apps), textual (no Python TUI apps), television (optional, see below).
 
 ## fzf Conventions
 
@@ -97,38 +92,33 @@ selections=$(printf '%s\n' "${items[@]}" | fzf --multi \
     --preview-window=right:40%:wrap) || return 0
 ```
 
-## gum Conventions
+## claude-tools select Conventions
 
-### Keybindings
+Source: `tools/claude-tools/src/select/`. Contract:
 
-- Space to toggle is gum's default for `--no-limit` — no extra config needed
-- Header pattern: `--header "Select components (space=toggle, enter=confirm):"`
-
-### Patterns
+- **Input** on stdin, one row per line: `group|name|description|checked`. `checked` is the literal `true` to pre-select. A new group value opens a header; sort rows by group first or headers repeat. `|` is the separator, so normalise it out of display fields.
+- **Output** on stdout: the chosen *names*, one per line, nothing else. The TUI paints on stderr and reads keys from `/dev/tty`, so `result=$(rows | claude-tools select)` is safe.
+- **Flags**: `--title <text>` for the header; `--single` makes Enter pick the row under the cursor (space is an alias), hides the checkboxes, and prints exactly one name.
+- **Keys**: `j`/`k` or arrows, `space` toggle, `enter` confirm, `q`/`Esc` cancel (**exit 1**), `ctrl-l` repaint.
+- **Rebuild on every platform after a change**: `cargo build --release` in `tools/claude-tools/` on each target and copy to `custom_bins/claude-tools-<target>`. An old binary ignores flags it does not know — `--single` degrades to space-then-Enter — so callers take `head -n 1` and never assume the flag landed.
 
 ```bash
-# Confirmation
-gum confirm "Delete these files?" || exit 0
+# One pick from a short menu
+choice=$(printf '%s\n' \
+    "What next?|Edit keys|fzf editor over every key|false" \
+    "What next?|Wire this repo|write .envrc bindings|false" \
+    | claude-tools select --single --title "secrets" | head -n 1) || return 0
 
-# Text input with placeholder
-name=$(gum input --placeholder "Enter project name")
-
-# Choose from list (single select)
-choice=$(gum choose "option1" "option2" "option3")
-
-# Multi-select (uses space to toggle by default)
-selected=$(gum choose --no-limit "item1" "item2" "item3")
-
-# Spinner while running command
-gum spin --spinner dot --title "Deploying..." -- ./deploy.sh
+# Toggle several, pre-selecting defaults
+chosen=$(print -rl -- "$rows[@]" | claude-tools select --title "Select apps") || exit 0
 ```
 
 ### Graceful Fallback
 
-Always check for gum availability and fall back to defaults in non-interactive mode:
+Gate on the mode, the TTY and the binary, and fall through to defaults. A menu that dispatches into mutating commands (the bare `secrets` menu) also requires stdout to be a terminal, so `secrets | cat` stays inert:
 
 ```bash
-if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]] || ! command -v gum &>/dev/null; then
+if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]] || ! command -v claude-tools &>/dev/null; then
     return 0  # proceed with defaults
 fi
 ```
@@ -136,6 +126,7 @@ fi
 ## ratatui Conventions
 
 Used only in `tools/claude-tools/` (Rust binary). See existing TUI modules:
+- `src/select/` — the menu described above
 - `src/context/tui/` — context profile selector
 - `src/ignore/tui/` — ignore pattern manager
 

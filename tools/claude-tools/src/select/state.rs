@@ -8,10 +8,12 @@ pub struct AppState {
     pub cursor: usize,
     pub confirmed: bool,
     pub cancelled: bool,
+    /// `--single`: Enter picks the row under the cursor and nothing else.
+    pub single: bool,
 }
 
 impl AppState {
-    pub fn new(items: Vec<ListItem>) -> Self {
+    pub fn new(items: Vec<ListItem>, single: bool) -> Self {
         let first_component = items.iter()
             .position(|i| matches!(i, ListItem::Component { .. }))
             .unwrap_or(0);
@@ -21,12 +23,23 @@ impl AppState {
             cursor: first_component,
             confirmed: false,
             cancelled: false,
+            single,
         }
     }
 
     pub fn toggle(&mut self) {
         if let Some(ListItem::Component { selected, .. }) = self.items.get_mut(self.cursor) {
             *selected = !*selected;
+        }
+    }
+
+    /// Single-select: the cursor row becomes the only selected item.
+    pub fn select_cursor_only(&mut self) {
+        let cursor = self.cursor;
+        for (i, item) in self.items.iter_mut().enumerate() {
+            if let ListItem::Component { selected, .. } = item {
+                *selected = i == cursor;
+            }
         }
     }
 

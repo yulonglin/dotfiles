@@ -15,8 +15,9 @@ use state::{AppState, ListItem};
 use crate::context::tui::theme;
 
 pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
-    // Parse optional --title flag
+    // Flags: --title <text>, --single (Enter picks the cursor row; no toggling)
     let mut title = "Select components".to_string();
+    let mut single = false;
     let mut i = 1; // args[0] is "claude-tools-select"
     while i < args.len() {
         if args[i] == "--title" {
@@ -26,6 +27,9 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 i += 1;
             }
+        } else if args[i] == "--single" {
+            single = true;
+            i += 1;
         } else {
             i += 1;
         }
@@ -62,7 +66,7 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let mut state = AppState::new(items);
+    let mut state = AppState::new(items, single);
 
     // Render TUI to stderr so stdout stays clean for selected-names output.
     // This is critical: deploy.sh captures our stdout in result=$(...) and
@@ -108,7 +112,17 @@ fn run_loop(state: &mut AppState, title: &str) -> Result<(), Box<dyn std::error:
                     if key.kind != KeyEventKind::Press { continue; }
                     match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => { state.cancelled = true; break; }
-                        KeyCode::Enter => { state.confirmed = true; break; }
+                        KeyCode::Enter => {
+                            if state.single { state.select_cursor_only(); }
+                            state.confirmed = true;
+                            break;
+                        }
+                        // Single mode: space is a forgiving alias for Enter.
+                        KeyCode::Char(' ') if state.single => {
+                            state.select_cursor_only();
+                            state.confirmed = true;
+                            break;
+                        }
                         KeyCode::Char(' ') => state.toggle(),
                         KeyCode::Down | KeyCode::Char('j') => state.move_down(),
                         KeyCode::Up | KeyCode::Char('k') => state.move_up(),
@@ -145,11 +159,19 @@ fn render(f: &mut ratatui::Frame, state: &AppState, title: &str) {
         .split(area);
 
     // Header
-    let header = Paragraph::new(vec![
-        Line::from(vec![
-            Span::styled(format!(" {} ", title), theme::header()),
-        ]),
-        Line::from(vec![
+    let hints = if state.single {
+        vec![
+            Span::styled(" j/k ", theme::hint()),
+            Span::raw("navigate  "),
+            Span::styled("enter ", theme::hint()),
+            Span::raw("select  "),
+            Span::styled("q ", theme::hint()),
+            Span::raw("cancel  "),
+            Span::styled("ctrl-l ", theme::hint()),
+            Span::raw("repaint"),
+        ]
+    } else {
+        vec![
             Span::styled(" j/k ", theme::hint()),
             Span::raw("navigate  "),
             Span::styled("space ", theme::hint()),
@@ -160,7 +182,13 @@ fn render(f: &mut ratatui::Frame, state: &AppState, title: &str) {
             Span::raw("cancel  "),
             Span::styled("ctrl-l ", theme::hint()),
             Span::raw("repaint"),
+        ]
+    };
+    let header = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled(format!(" {} ", title), theme::header()),
         ]),
+        Line::from(hints),
     ]).block(Block::default().borders(Borders::BOTTOM));
     f.render_widget(header, chunks[0]);
 
@@ -194,14 +222,16 @@ fn render(f: &mut ratatui::Frame, state: &AppState, title: &str) {
                 let cursor_style = if is_cursor { theme::cursor() } else { Style::default() };
                 let name_style = if is_cursor { theme::cursor() } else { theme::unselected() };
 
-                lines.push(Line::from(vec![
-                    Span::styled(format!(" {} ", cursor_char), cursor_style),
-                    Span::styled("[", check_style),
-                    Span::styled(check_char, check_style),
-                    Span::styled("] ", check_style),
-                    Span::styled(format!("{:<24}", name), name_style),
-                    Span::styled(description.to_string(), theme::hint()),
-                ]));
+                let mut spans = vec![Span::styled(format!(" {} ", cursor_char), cursor_style)];
+                // Single mode has no checkbox: the cursor is the selection.
+                if !state.single {
+                    spans.push(Span::styled("[", check_style));
+                    spans.push(Span::styled(check_char, check_style));
+                    spans.push(Span::styled("] ", check_style));
+                }
+                spans.push(Span::styled(format!("{:<24}", name), name_style));
+                spans.push(Span::styled(description.to_string(), theme::hint()));
+                lines.push(Line::from(spans));
             }
         }
     }
@@ -210,12 +240,13 @@ fn render(f: &mut ratatui::Frame, state: &AppState, title: &str) {
     f.render_widget(list, list_area);
 
     // Footer
-    let selected_count = state.selected_count();
+    let footer_text = if state.single {
+        "  enter picks the highlighted row".to_string()
+    } else {
+        format!("  {} selected", state.selected_count())
+    };
     let footer = Paragraph::new(Line::from(vec![
-        Span::styled(
-            format!("  {} selected", selected_count),
-            Style::default().fg(theme::GREEN),
-        ),
+        Span::styled(footer_text, Style::default().fg(theme::GREEN)),
     ])).block(Block::default().borders(Borders::TOP));
     f.render_widget(footer, chunks[2]);
 }

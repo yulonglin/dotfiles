@@ -38,7 +38,6 @@ MIGRATED_TOOLS=(
     "just:just"
     "sd:sd"
     "duf:duf"
-    "gum:gum"
     "vivid:vivid"
     "hyperfine:hyperfine"
     "gitui:gitui"
@@ -371,7 +370,7 @@ info "brew --version: $("$BREW_BIN_DIR/brew" --version 2>/dev/null | head -1 || 
 # Step 7 has just taken mise's installs dirs away, so this shell can be left
 # with none of the 17. Say so rather than letting the operator discover it.
 unresolved=()
-for _probe in rg gum; do
+for _probe in rg fzf; do
     command -v "$_probe" &>/dev/null || unresolved+=("$_probe")
 done
 unset _probe
@@ -380,7 +379,7 @@ if [[ ${#unresolved[@]} -gt 0 ]]; then
     info "  The migrated tools live in $BREW_BIN_DIR, which this shell's PATH predates."
     info "  They come back after the two steps below; nothing is missing on disk."
 else
-    info "PATH check: rg and gum resolve in this shell"
+    info "PATH check: rg and fzf resolve in this shell"
 fi
 
 echo ""

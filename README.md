@@ -170,7 +170,7 @@ All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTF
 
 API keys are stored in [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) (BWS) — a hosted, team-shareable secrets vault. The CLI (`bws`) fetches secrets on demand; nothing is written to disk except a machine access token (at `~/.config/bws/token`).
 
-**One command, `secrets`.** Typing it bare prints a status header — backend, token path, this repo's bindings, ambiguous env names, permission problems — and then offers a menu, but only at an interactive terminal with `gum` installed. Piped or scripted (`secrets | cat`), it prints the header and exits 0, so a hook or CI job can call it unconditionally.
+**One command, `secrets`.** Typing it bare prints a status header — backend, token path, this repo's bindings, ambiguous env names, permission problems — and then offers a menu (`claude-tools select`, a committed binary, so nothing to install), but only at an interactive terminal. Piped or scripted (`secrets | cat`), it prints the header and exits 0, so a hook or CI job can call it unconditionally.
 
 ```bash
 secrets                  # Status header, plus a menu at an interactive terminal
