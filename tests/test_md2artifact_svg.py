@@ -187,6 +187,23 @@ REJECTED = {
         '<svg xmlns="http://www.w3.org/2000/svg">'
         '<a href="https://example.invalid/"><text>go</text></a></svg>'
     ),
+    # The element check is an ALLOWLIST, so the HTML elements that break out of
+    # SVG foreign content in a browser — and would then carry HTML's own
+    # resource-loading attributes — refuse by construction, as does a name
+    # nobody has thought of.
+    "html_p": '<svg xmlns="http://www.w3.org/2000/svg"><p>text</p></svg>',
+    "html_img": '<svg xmlns="http://www.w3.org/2000/svg"><img src="https://example.invalid/t.gif"/></svg>',
+    "html_div": '<svg xmlns="http://www.w3.org/2000/svg"><div>text</div></svg>',
+    "unrecognised_element": '<svg xmlns="http://www.w3.org/2000/svg"><sparkline r="4"/></svg>',
+    # SMIL can rewrite an attribute after the check has read it.
+    "animation": (
+        '<svg xmlns="http://www.w3.org/2000/svg"><a href="#x">'
+        '<set attributeName="href" to="javascript:alert(1)"/></a></svg>'
+    ),
+    # <image> and <feImage> fetch a resource.
+    "raster_image": (
+        '<svg xmlns="http://www.w3.org/2000/svg"><image href="#local" width="9"/></svg>'
+    ),
     "malformed": '<svg xmlns="http://www.w3.org/2000/svg"><rect width="9"></svg>',
     "two_roots": '<svg xmlns="http://www.w3.org/2000/svg"/><svg xmlns="http://www.w3.org/2000/svg"/>',
     "not_an_svg_root": '<div><svg xmlns="http://www.w3.org/2000/svg"/></div>',
@@ -227,6 +244,70 @@ def test_data_image_values_are_accepted(tmp_path: Path) -> None:
     html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
     assert body in html
     assert NOTE not in html
+
+
+# Every element the allowlist names, in one chart: structure, shapes, text,
+# gradients, patterns, clipping, markers, links and the filter primitives. If
+# adding a name to SVG_ALLOWED_ELEMENTS, add it here too.
+VOCABULARY = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+  <title>Everything</title>
+  <desc>One chart using the whole vocabulary</desc>
+  <defs>
+    <linearGradient id="lg"><stop offset="0" stop-color="#8fb8b0"/></linearGradient>
+    <radialGradient id="rg"><stop offset="1" stop-color="#bd5d3a"/></radialGradient>
+    <pattern id="pat" width="4" height="4"><rect width="2" height="2"/></pattern>
+    <clipPath id="clip"><rect width="90" height="90"/></clipPath>
+    <mask id="mk"><rect width="90" height="90" fill="#fff"/></mask>
+    <marker id="arrow" markerWidth="4" markerHeight="4"><path d="M0,0 L4,2 L0,4 z"/></marker>
+    <symbol id="dot"><circle cx="2" cy="2" r="2"/></symbol>
+    <path id="curve" d="M10,80 Q60,10 110,80"/>
+    <filter id="shadow">
+      <feGaussianBlur stdDeviation="1"/>
+      <feOffset dx="1" dy="1"/>
+      <feFlood flood-color="#333"/>
+      <feColorMatrix type="saturate" values="0.6"/>
+      <feComposite operator="over"/>
+      <feBlend mode="multiply"/>
+      <feMorphology radius="1"/>
+      <feDropShadow dx="1" dy="1"/>
+      <feMerge><feMergeNode/></feMerge>
+    </filter>
+  </defs>
+  <style>.bar{stroke:#5d5a55}</style>
+  <g clip-path="url(#clip)" mask="url(#mk)" filter="url(#shadow)" transform="translate(2,2)">
+    <rect class="bar" x="1" y="1" width="8" height="8" fill="url(#lg)"/>
+    <circle cx="20" cy="20" r="5" fill="url(#rg)"/>
+    <ellipse cx="40" cy="20" rx="6" ry="3" fill="url(#pat)"/>
+    <line x1="0" y1="0" x2="10" y2="10" marker-end="url(#arrow)"/>
+    <polyline points="0,0 5,5 10,0" fill="none"/>
+    <polygon points="0,0 5,0 5,5"/>
+    <use href="#dot" x="60" y="10"/>
+    <text x="10" y="95">label<tspan dx="2">more</tspan></text>
+    <text><textPath href="#curve">along the curve</textPath></text>
+    <a href="#results"><text x="150" y="95">jump</text></a>
+  </g>
+</svg>"""
+
+
+def test_the_whole_chart_vocabulary_renders(tmp_path: Path) -> None:
+    """Every allowlisted element, in one chart, inlined verbatim.
+
+    Note where the gradient is referenced: a <style> element may not contain
+    `url(` at all, not even an internal `url(#lg)`, so paint servers, clips,
+    masks, markers and filters are referenced from presentation attributes.
+    """
+    html = _render(f"# Page\n\n```svg\n{VOCABULARY}\n```\n", tmp_path)
+    assert VOCABULARY in html
+    assert NOTE not in html
+
+
+def test_the_note_names_the_element_that_refused(tmp_path: Path) -> None:
+    """The fix is 'add this name', so the reader has to be told which name."""
+    html = _render(
+        '# Page\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg"><sparkline/></svg>\n```\n',
+        tmp_path,
+    )
+    assert "&lt;sparkline&gt; element, which is not in the chart vocabulary" in html
 
 
 def test_an_svg_fence_with_extra_info_words_stays_escaped(tmp_path: Path) -> None:
