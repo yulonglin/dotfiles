@@ -281,6 +281,30 @@ def _local(name: str) -> str:
     return name.rpartition("}")[2].lower()
 
 
+def css_fault(text: str) -> str | None:
+    """Why this CSS may not be inlined, or None if it may.
+
+    Guards a fetch, not the `url()` syntax: `url(#lg)` is how a chart reaches
+    its OWN gradient, clip path, mask, marker or filter, and a fragment cannot
+    fetch anything, so it is allowed and every other `url(` is refused. The
+    delimiter is matched with optional whitespace and an optional quote, so
+    `url( '#lg' )` reads the same as `url(#lg)`. `@import` fetches by
+    definition and is refused outright.
+
+    Applied to the <style> element AND to every attribute value, because
+    `style="fill:url(https://…)"` and `fill="url(https://…)"` fetch exactly as
+    a <style> block does — an asymmetry between the two would be a gap that
+    survives review by looking as if it were already covered.
+    """
+    flat = re.sub(r"\s+", "", text).lower()
+    if "@import" in flat:
+        return "uses @import"
+    for m in re.finditer(r"url\(", flat):
+        if not re.match(r"url\(['\"]?#", flat[m.start() :]):
+            return "has a url() that is not a same-document #reference"
+    return None
+
+
 def svg_rejection(source: str) -> str | None:
     """Why this ```svg fence may not be inlined, or None if it may.
 
@@ -300,7 +324,9 @@ def svg_rejection(source: str) -> str | None:
     aria-*, data-* and per-element geometry — so an attribute allowlist would
     refuse legitimate charts every time someone reached for a property nobody
     had listed. The value rules below carry that half instead: no on* handler,
-    no href that leaves the document, no javascript: and no non-image data:.
+    no href that leaves the document, no javascript:, no non-image data:, and
+    no url() that is not a same-document #reference (see css_fault, which the
+    <style> element and every attribute value go through alike).
     They are enough because the element allowlist has already ensured those
     attributes sit on elements that cannot execute or fetch on their own.
     Values are compared with all whitespace removed and case folded, because
@@ -323,15 +349,15 @@ def svg_rejection(source: str) -> str | None:
         name = _local(elem.tag)
         if name not in SVG_ALLOWED_ELEMENTS:
             return f"it contains a <{name}> element, which is not in the chart vocabulary"
-        if name == "style":
-            css = "".join(elem.itertext()).lower()
-            if "url(" in css or "@import" in css:
-                return "its <style> element pulls in an external resource"
+        if name == "style" and (fault := css_fault("".join(elem.itertext()))):
+            return f"its <style> element {fault}"
         for attr, value in elem.attrib.items():
             aname = _local(attr)
             flat = re.sub(r"\s+", "", value).lower()
             if aname.startswith("on"):
                 return f"it carries an event-handler attribute ({aname})"
+            if fault := css_fault(value):
+                return f"its {aname} attribute {fault}"
             if aname == "href" and not flat.startswith("#"):
                 return f"its {name} element has an {aname} that is not a same-document reference"
             if "javascript:" in flat:
@@ -384,11 +410,13 @@ def svg_passthrough(tokens: list[Token]) -> list[Token]:
     and nothing else. Every other element name refuses, whether it executes
     (<script>), embeds (<foreignObject>, <iframe>), fetches (<image>), rewrites
     an attribute after this check has read it (<animate>, <set>), or is simply
-    unknown. Also rejected: a DOCTYPE; a <style> carrying url( or @import; any
-    on* attribute; any href/xlink:href that is not a same-document `#`
-    reference (which is also what stops a <use> pulling in an external
-    document); and any attribute value carrying javascript: or a data: that is
-    not data:image/. A rejected fence falls back to today's behavior — an
+    unknown. Also rejected: a DOCTYPE; any on* attribute; any href/xlink:href
+    that is not a same-document `#` reference (which is also what stops a <use>
+    pulling in an external document); any attribute value carrying javascript:
+    or a data: that is not data:image/; and, in the <style> element or any
+    attribute alike, @import or a url() that is not a same-document
+    #reference — `url(#lg)` is how a chart reaches its own gradient, so it
+    passes. A rejected fence falls back to today's behavior — an
     escaped code block — with a visible note saying why, so a chart never fails
     silently, and the note names the element so the fix is obvious.
 
@@ -422,10 +450,11 @@ def svg_passthrough(tokens: list[Token]) -> list[Token]:
 # ```svg is the one entry that emits user text UNESCAPED, so it pays for that
 # with a check instead: the body must parse as one well-formed <svg> element
 # whose every element name is in SVG_ALLOWED_ELEMENTS — an allowlist, so an
-# element nobody anticipated refuses by default — carrying no DOCTYPE, no
-# <style> with url( or @import, no on* attribute, no href/xlink:href that is
-# not a same-document `#` reference, and no javascript: or non-image data:
-# value anywhere. Judged on a parsed tree, emitted verbatim — never
+# element nobody anticipated refuses by default — carrying no DOCTYPE, no on*
+# attribute, no href/xlink:href that is not a same-document `#` reference, no
+# javascript: or non-image data: value anywhere, and no @import or fetching
+# url() in either a <style> element or an attribute value. Judged on a parsed
+# tree, emitted verbatim — never
 # re-serialised, or `viewBox` casing and namespace prefixes would not survive.
 # Anything rejected renders as an escaped code block with a note saying why,
 # which is exactly what a plain fence did before. So the property the whole

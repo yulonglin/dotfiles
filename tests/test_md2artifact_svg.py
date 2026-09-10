@@ -158,13 +158,27 @@ REJECTED = {
         '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">'
         '<use xlink:href="https://example.invalid/sprite.svg#icon"/></svg>'
     ),
-    "style_url": (
+    # A url() that can fetch is refused wherever it appears — the <style>
+    # element, a style= attribute and any other attribute value alike.
+    "style_element_external_url": (
         '<svg xmlns="http://www.w3.org/2000/svg">'
         "<style>.bar { fill: url(https://example.invalid/p.png); }</style></svg>"
     ),
-    "style_import": (
+    "style_attribute_external_url": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect style="fill:url(https://example.invalid/p.png)" width="9"/></svg>'
+    ),
+    "presentation_attribute_external_url": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect fill="url(https://example.invalid/p.png)" width="9"/></svg>'
+    ),
+    "style_element_import": (
         '<svg xmlns="http://www.w3.org/2000/svg">'
         '<style>@import "https://example.invalid/p.css";</style></svg>'
+    ),
+    "style_attribute_import": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect style="@import &#34;https://example.invalid/p.css&#34;" width="9"/></svg>'
     ),
     "event_handler": (
         '<svg xmlns="http://www.w3.org/2000/svg"><rect onload="alert(1)" width="9"/></svg>'
@@ -235,15 +249,24 @@ def test_a_rejection_reason_cannot_itself_inject_markup(tmp_path: Path) -> None:
     assert "&lt;script&gt;" in html
 
 
-def test_data_image_values_are_accepted(tmp_path: Path) -> None:
-    """data:image/ is the one data: form a chart legitimately carries."""
+def test_a_data_image_inside_url_is_still_refused(tmp_path: Path) -> None:
+    """The url() rule is stricter than the data: rule, and wins.
+
+    `data:image/` is carved out of the value rule that refuses javascript: and
+    other data: URLs, but a url() may only be a `#` fragment — so wrapping a
+    data:image in url() refuses. Nothing is lost: url() in `fill` names a paint
+    server element, not an image, and <image> is outside the vocabulary, so a
+    raster cannot reach an accepted chart by any route. Charts here are vector.
+    The carve-out stays in the value rule as defence in depth, and would matter
+    again the day <image> were allowlisted.
+    """
     body = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8">'
         '<rect fill="url(data:image/png;base64,iVBORw0KGgo=)" width="8" height="8"/></svg>'
     )
     html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
-    assert body in html
-    assert NOTE not in html
+    assert NOTE in html
+    assert "<svg" not in html
 
 
 # Every element the allowlist names, in one chart: structure, shapes, text,
@@ -273,9 +296,9 @@ VOCABULARY = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
       <feMerge><feMergeNode/></feMerge>
     </filter>
   </defs>
-  <style>.bar{stroke:#5d5a55}</style>
+  <style>.bar{fill:url(#lg);stroke:#5d5a55}</style>
   <g clip-path="url(#clip)" mask="url(#mk)" filter="url(#shadow)" transform="translate(2,2)">
-    <rect class="bar" x="1" y="1" width="8" height="8" fill="url(#lg)"/>
+    <rect class="bar" x="1" y="1" width="8" height="8" style="fill:url(#lg)"/>
     <circle cx="20" cy="20" r="5" fill="url(#rg)"/>
     <ellipse cx="40" cy="20" rx="6" ry="3" fill="url(#pat)"/>
     <line x1="0" y1="0" x2="10" y2="10" marker-end="url(#arrow)"/>
@@ -292,12 +315,30 @@ VOCABULARY = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
 def test_the_whole_chart_vocabulary_renders(tmp_path: Path) -> None:
     """Every allowlisted element, in one chart, inlined verbatim.
 
-    Note where the gradient is referenced: a <style> element may not contain
-    `url(` at all, not even an internal `url(#lg)`, so paint servers, clips,
-    masks, markers and filters are referenced from presentation attributes.
+    The chart reaches its own gradient three ways on purpose — from the <style>
+    element, from a style= attribute and from presentation attributes — because
+    `url(#id)` is refused nowhere. Only a url() that could FETCH is.
     """
     html = _render(f"# Page\n\n```svg\n{VOCABULARY}\n```\n", tmp_path)
     assert VOCABULARY in html
+    assert NOTE not in html
+
+
+def test_an_internal_url_reference_is_accepted_everywhere(tmp_path: Path) -> None:
+    """`url(#id)` cannot fetch, and it is how a chart reaches its own paint.
+
+    Quotes and whitespace inside the delimiter are the same reference, so
+    `url( '#lg' )` is read exactly as `url(#lg)` — a browser would.
+    """
+    body = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9">'
+        '<defs><linearGradient id="lg"><stop offset="0" stop-color="#8fb8b0"/></linearGradient>'
+        '<filter id="f"><feGaussianBlur stdDeviation="1"/></filter></defs>'
+        "<style>.bar{fill:url( '#lg' )}</style>"
+        '<rect class="bar" style="filter:url(#f)" fill="url(#lg)" width="9" height="9"/></svg>'
+    )
+    html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
+    assert body in html
     assert NOTE not in html
 
 
