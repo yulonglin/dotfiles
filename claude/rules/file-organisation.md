@@ -1,0 +1,11 @@
+# File Organisation
+
+**Organise by issue, then by kind; never by session.** A dispute, claim, application or project is one directory named for the thing (`rentalcover/`, `ns-exit-permit/`), and under it files are grouped by what they are: `emails/` (printed threads), `documents/` (vendor originals, letters, forms), `drafts/` (text to be sent or pasted), `bundles/` or `attachments/` (the assembled submission set), `raw/` (unprocessed captures), `archive/` (superseded). A date-named folder (`2026-09-04/`) records when an agent worked, which nobody needs later; put the date in the filename instead.
+
+**One entry document per directory, and it is `README.md`.** It carries status, deadlines, the ordered steps and the paste blocks, and it names every subdirectory and what lives there. Invented names for the entry doc — `run-sheet.md`, `notes.md`, `summary.md`, `handoff.md` — are not discoverable next week; if a second working file is wanted for open items, it is `TODO.md`. When a new entry doc supersedes an old one, merge what is still live and move the old file to `archive/`, so the directory never has two documents claiming to be the front door.
+
+**Filenames sort and self-describe: `YYYY-MM-DD_source-description.ext`**, lowercase, hyphens inside words, underscore between date and name (`2026-03-27_rentalcover-denial-email.pdf`, `2025-12-22_fox-demand-letter.pdf`). The date is the document's own date, not the download date. Keep vendor filenames only when the exact name is itself evidence (an invoice number).
+
+**Ask "what is this for" before creating a file.** Working notes, extracted `.txt` bodies and scratch scripts go under `raw/` or `work/`, labelled as notes; evidence is the source system's PDF or image (`evidence.md`); a numbered upload set is copies, never the only copy.
+
+**Why:** on 2026-09-09 a complaint pack had its sources, drafts and entry doc mixed in one date-named folder with an invented `run-sheet.md` as the front door, and the evidence list pointed at Gmail links instead of files on disk. Yulong had to reorganise by hand before he could work from it. Grouping by kind, one `README.md`, and dated self-describing filenames are what made the sibling `ns-exit-permit/` pack usable at a glance.
