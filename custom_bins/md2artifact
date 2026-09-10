@@ -242,7 +242,33 @@ def details_passthrough(tokens: list[Token]) -> list[Token]:
     return out
 
 
-SVG_FORBIDDEN_ELEMENTS = frozenset({"script", "foreignobject", "iframe", "object", "embed"})
+# The chart vocabulary, lower-cased because the check case-folds (the HTML
+# parser does too, restoring `clipPath` from `clippath` via its own adjustment
+# table). This is an ALLOWLIST: anything not named here is refused, including
+# names nobody has thought of yet. Extend it by adding a name — that is the
+# supported way to draw something this list cannot express.
+#
+# Deliberately absent, each for a reason: <foreignObject>, <script>, <iframe>,
+# <object> and <embed> execute or embed; <image> and <feImage> fetch a resource;
+# <animate>, <animateTransform>, <animateMotion> and <set> can rewrite an
+# attribute — including href — AFTER this check has read it, which is the whole
+# hole an allowlist exists to close; <switch> exists to select a <foreignObject>
+# branch; <metadata> holds arbitrary foreign-namespace XML, so allowing it would
+# mean allowing its unbounded subtree. Tool-generated SVG often carries
+# <metadata> and must have it stripped before it goes in a fence.
+SVG_ALLOWED_ELEMENTS = frozenset(
+    {
+        "svg", "g", "defs", "symbol", "use", "a", "style",
+        "title", "desc",
+        "path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
+        "text", "tspan", "textpath",
+        "marker", "clippath", "mask", "pattern",
+        "lineargradient", "radialgradient", "stop",
+        "filter", "fegaussianblur", "feoffset", "feblend", "fecolormatrix",
+        "fecomposite", "feflood", "femerge", "femergenode", "fedropshadow",
+        "femorphology",
+    }
+)
 
 
 def _local(name: str) -> str:
@@ -258,12 +284,27 @@ def _local(name: str) -> str:
 def svg_rejection(source: str) -> str | None:
     """Why this ```svg fence may not be inlined, or None if it may.
 
-    The allowlist is deliberately small and phrased as a denylist over a
+    Elements are checked against an ALLOWLIST (SVG_ALLOWED_ELEMENTS) over a
     *parsed* tree, not a regex over text: anything that does not parse as one
     well-formed <svg> element is refused outright, so there is no half-parsed
-    input for the checks below to disagree with the browser about. Values are
-    compared with all whitespace removed and case folded, because `java\\nscript:`
-    and `JavaScript:` both work in a browser.
+    input for the checks below to disagree with the browser about. A denylist
+    here would be a bet that every dangerous element name has been enumerated,
+    and that bet has already lost once — the page is finally read by an HTML
+    parser, where <p>, <img> and <div> break OUT of SVG foreign content and are
+    parsed as HTML, bringing HTML's own resource-loading attributes with them.
+    An allowlist refuses them by construction, along with every name nobody has
+    thought of yet, and the cost is small because a chart's vocabulary is small.
+
+    Attributes are NOT allowlisted, on purpose. Presentation attributes are
+    open-ended — every CSS property is also an attribute, alongside transform,
+    aria-*, data-* and per-element geometry — so an attribute allowlist would
+    refuse legitimate charts every time someone reached for a property nobody
+    had listed. The value rules below carry that half instead: no on* handler,
+    no href that leaves the document, no javascript: and no non-image data:.
+    They are enough because the element allowlist has already ensured those
+    attributes sit on elements that cannot execute or fetch on their own.
+    Values are compared with all whitespace removed and case folded, because
+    `java\\nscript:` and `JavaScript:` both work in a browser.
 
     A DOCTYPE is refused before the parser sees it: ElementTree resolves no
     external entities, but it does expand internal ones, so an internal DTD
@@ -280,8 +321,8 @@ def svg_rejection(source: str) -> str | None:
         return f"its root element is <{_local(root.tag)}>, not <svg>"
     for elem in root.iter():
         name = _local(elem.tag)
-        if name in SVG_FORBIDDEN_ELEMENTS:
-            return f"it contains a <{name}> element"
+        if name not in SVG_ALLOWED_ELEMENTS:
+            return f"it contains a <{name}> element, which is not in the chart vocabulary"
         if name == "style":
             css = "".join(elem.itertext()).lower()
             if "url(" in css or "@import" in css:
@@ -338,21 +379,18 @@ def svg_passthrough(tokens: list[Token]) -> list[Token]:
     without this a chart page cannot go through this pipeline at all and has to
     be hand-written HTML instead.
 
-    Rejected: anything that is not one well-formed <svg> element; a <script>,
-    <foreignObject>, <iframe>, <object> or <embed> anywhere in the tree; a
-    <style> carrying url( or @import; any on* attribute; any href/xlink:href
-    that is not a same-document `#` reference (which is also what stops a <use>
-    pulling in an external document); and any attribute value carrying
-    javascript: or a data: that is not data:image/. A rejected fence falls back
-    to today's behavior — an escaped code block — with a visible note saying
-    why, so a chart never fails silently.
-
-    Known limit, accepted: the page is finally read by an HTML parser, where
-    certain tags (<p>, <div>, <img>, …) break out of SVG foreign content and
-    are parsed as HTML. The denylist above still applies to them, because
-    ElementTree saw them; what it does not cover is a resource-loading
-    attribute those HTML elements have and SVG does not, such as <img src>.
-    The viewer's CSP blocks the fetch, and the residue is cosmetic.
+    Accepted: one well-formed <svg> element built from SVG_ALLOWED_ELEMENTS —
+    the shapes, text, gradients, filters and structure a chart is drawn from —
+    and nothing else. Every other element name refuses, whether it executes
+    (<script>), embeds (<foreignObject>, <iframe>), fetches (<image>), rewrites
+    an attribute after this check has read it (<animate>, <set>), or is simply
+    unknown. Also rejected: a DOCTYPE; a <style> carrying url( or @import; any
+    on* attribute; any href/xlink:href that is not a same-document `#`
+    reference (which is also what stops a <use> pulling in an external
+    document); and any attribute value carrying javascript: or a data: that is
+    not data:image/. A rejected fence falls back to today's behavior — an
+    escaped code block — with a visible note saying why, so a chart never fails
+    silently, and the note names the element so the fix is obvious.
 
     An ```svg example nested inside an ordinary code fence stays escaped: the
     outer fence swallows it, so no fence token is ever produced for it. Same as
@@ -383,9 +421,10 @@ def svg_passthrough(tokens: list[Token]) -> list[Token]:
 #
 # ```svg is the one entry that emits user text UNESCAPED, so it pays for that
 # with a check instead: the body must parse as one well-formed <svg> element
-# carrying no DOCTYPE, no <script>/<foreignObject>/<iframe>/<object>/<embed>,
-# no <style> with url( or @import, no on* attribute, no href/xlink:href that
-# is not a same-document `#` reference, and no javascript: or non-image data:
+# whose every element name is in SVG_ALLOWED_ELEMENTS — an allowlist, so an
+# element nobody anticipated refuses by default — carrying no DOCTYPE, no
+# <style> with url( or @import, no on* attribute, no href/xlink:href that is
+# not a same-document `#` reference, and no javascript: or non-image data:
 # value anywhere. Judged on a parsed tree, emitted verbatim — never
 # re-serialised, or `viewBox` casing and namespace prefixes would not survive.
 # Anything rejected renders as an escaped code block with a note saying why,
