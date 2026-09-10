@@ -1790,8 +1790,10 @@ def test_native_exposure_counts_classifier_bound_calls_once_per_id_by_day(tmp_pa
     rows = [
         tool_use_row("2026-09-05T23:00:00Z", [("c1", "Bash"), ("c2", "Read"), ("c3", "Agent")], "2.1.262"),
         tool_use_row("2026-09-06T09:00:00Z", [("c4", "Bash"), ("c5", "Monitor"), ("c6", "Edit")], "2.1.263"),
-        native_row("2026-09-06T09:30:00Z", "f1"),
-        native_row("2026-09-06T09:31:00Z", "f2"),
+        native_row("2026-09-06T09:30:00Z", "f1", NATIVE_PREFIX.replace("FixtureTool", "Bash")),
+        native_row("2026-09-06T09:31:00Z", "f2", NATIVE_PREFIX.replace("FixtureTool", "SendMessage")),
+        # A tool the denominator does not count: real, but no call count to divide by.
+        native_row("2026-09-06T09:32:00Z", "f3"),
         tool_use_row("2026-09-06T10:00:00Z", [("c4", "Bash"), ("c7", "Task")], "2.1.263"),
         {"type": "assistant", "timestamp": "bad", "message": {"content": [{"type": "tool_use", "id": "c8", "name": "Bash"}]}},
     ]
@@ -1810,6 +1812,18 @@ def test_native_exposure_counts_classifier_bound_calls_once_per_id_by_day(tmp_pa
         "2026-09-05": {"2.1.262": 2},
         "2026-09-06": {"2.1.263": 3},
     }
+    # Three failures, but only the two on tools the denominator counts may be divided
+    # by it: 2 of 3 bound calls on 09-06.
+    assert native["total"] == 3
+    assert exposure["failures_in_denominator"] == 2
+    assert exposure["failures_outside_denominator"] == {
+        "total": 1,
+        "by_tool": {"FixtureTool": 1},
+        "note": (
+            "counted in total and every by_* slice, excluded from every rate: "
+            "the denominator counts only CLASSIFIER_BOUND_TOOLS"
+        ),
+    }
     assert exposure["failures_per_100_bound_calls_by_day"] == {"2026-09-06": pytest.approx(66.67)}
     # The failures' session model is the newest assistant model before the row in the
     # same file (claude-test here); a day's bound calls are split by the same field.
@@ -1818,6 +1832,33 @@ def test_native_exposure_counts_classifier_bound_calls_once_per_id_by_day(tmp_pa
         "2026-09-06": {"claude-test": {"bound_calls": 3, "failures": 2, "per_100_bound_calls": pytest.approx(66.67)}},
     }
     assert "upper bound on classifier calls" in native["coverage"]["limits"]
+    assert "failures_outside_denominator" in native["coverage"]["limits"]
+
+
+def test_a_rate_never_divides_a_failure_the_denominator_does_not_count(tmp_path):
+    """Numerator and denominator must span the same tool set.
+
+    Found by the 2026-09-10 council review: 107 real failures on SendMessage, Edit
+    and an MCP tool were being divided by a denominator built only from Bash,
+    PowerShell, Monitor, Agent and Task.
+    """
+    projects = tmp_path / "projects"
+    write_jsonl(projects / "one" / "s.jsonl", [
+        tool_use_row("2026-09-06T09:00:00Z", [("c1", "Bash")], "2.1.263"),
+        native_row("2026-09-06T09:30:00Z", "edit", NATIVE_PREFIX.replace("FixtureTool", "Edit")),
+        native_row("2026-09-06T09:31:00Z", "mcp", NATIVE_PREFIX.replace("FixtureTool", "mcp__x__y")),
+    ])
+
+    _, native = audit.scan_transcripts(projects)
+    exposure = native["exposure"]
+
+    assert native["total"] == 2
+    assert native["by_day"] == {"2026-09-06": 2}
+    # Both failures are real and counted, and neither inflates a rate.
+    assert exposure["failures_in_denominator"] == 0
+    assert exposure["failures_outside_denominator"]["by_tool"] == {"Edit": 1, "mcp__x__y": 1}
+    assert exposure["failures_per_100_bound_calls_by_day"] == {}
+    assert exposure["by_day_and_session_model"]["2026-09-06"]["claude-test"]["failures"] == 0
 
     _, in_period = audit.scan_transcripts(projects, audit.parse_timestamp("2026-09-06T00:00:00Z"))
     assert list(in_period["exposure"]["classifier_bound_calls_by_day"]) == ["2026-09-06"]

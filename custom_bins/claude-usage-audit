@@ -240,9 +240,19 @@ NATIVE_REASON_CATEGORIES = {
 NATIVE_TEXT_CAP = 200
 # Tool calls that reach the auto-mode classifier in auto mode (permission-modes
 # docs, 2026-09-09: reads and working-directory edits skip it; shell, Monitor and
-# Agent spawns do not). Counted per day as the exposure a failure count is read
-# against — an approximation, since allow rules and cached verdicts skip it too.
-CLASSIFIER_BOUND_TOOLS = frozenset({"Bash", "PowerShell", "Monitor", "Agent", "Task"})
+# Agent spawns do not, and "the classifier also reviews each message Claude sends
+# to another agent with SendMessage"). Counted per day as the exposure a failure
+# count is read against — an approximation, since allow rules and cached verdicts
+# skip it too.
+#
+# A failure whose tool is NOT in this set (an Edit to a protected path, an MCP
+# tool) is real but has no denominator here, so it is counted separately rather
+# than divided by a denominator that never contained it. Reported by the council
+# review of 2026-09-10, which found 107 such failures being divided by a
+# denominator built from a different tool set.
+CLASSIFIER_BOUND_TOOLS = frozenset({
+    "Bash", "PowerShell", "Monitor", "Agent", "Task", "SendMessage",
+})
 # Every row of a Claude Code transcript is stamped with these; copied onto each
 # failure record so it can be sliced by where and on what CLI it happened.
 NATIVE_ROW_ATTRIBUTES = ("cwd", "version", "gitBranch", "sessionId")
@@ -267,9 +277,14 @@ NATIVE_FAILURE_LIMITS = (
     "rate-limited, overloaded and server-error map to their own categories, other "
     "reasons map to other with the reason text retained; "
     "exposure counts assistant tool_use blocks for classifier-bound tools "
-    "(Bash, PowerShell, Monitor, Agent, Task) once per tool_use id, whether or not the "
-    "call was classified: allow rules, cached verdicts and non-auto modes are unobserved, "
-    "so it is an upper bound on classifier calls, not a count of them; "
+    "(Bash, PowerShell, Monitor, Agent, Task, SendMessage) once per tool_use id, whether "
+    "or not the call was classified: allow rules, cached verdicts and non-auto modes are "
+    "unobserved, so it is an upper bound on classifier calls, not a count of them; "
+    "every rate divides only failures whose tool is in that set, and failures on any other "
+    "tool are reported under exposure.failures_outside_denominator instead of being divided "
+    "by a denominator that never contained them; "
+    "a day whose bound calls are a partial day (the scan's newest day, or one bounded by "
+    "--days) yields a rate over that part only and is not comparable with a whole day; "
     "no snapshot text files; absent roots and unreadable directories may be omitted by discovery; "
     "missing evidence is not evidence of no failures; no "
     "hidden HTTP attempts or complete historical coverage; "
@@ -365,10 +380,14 @@ def aggregate_native_failures(observations, coverage, cutoff_epoch, exposure):
         {key: value for key, value in record.items() if key not in ("epoch", "day", "hour")}
         for record in records
     ]
+    # Only failures whose tool is in the denominator may be divided by it.
+    in_denominator = [r for r in records if r["tool"] in CLASSIFIER_BOUND_TOOLS]
+    outside = Counter(r["tool"] for r in records if r["tool"] not in CLASSIFIER_BOUND_TOOLS)
+    failures_by_day = Counter(r["day"] for r in in_denominator)
     by_day_model = defaultdict(lambda: defaultdict(lambda: {"bound_calls": 0, "failures": 0}))
     for (day, model), n in exposure["calls_by_day_model"].items():
         by_day_model[day][str(model)]["bound_calls"] = n
-    for record in records:
+    for record in in_denominator:
         by_day_model[record["day"]][str(record["session_model"])]["failures"] += 1
     for day in by_day_model:
         for cell in by_day_model[day].values():
@@ -390,10 +409,21 @@ def aggregate_native_failures(observations, coverage, cutoff_epoch, exposure):
             for day, versions in sorted(exposure["versions_by_day"].items())
         },
         "failures_per_100_bound_calls_by_day": {
-            day: round(100 * summary["by_day"][day] / total, 2)
+            day: round(100 * failures_by_day[day] / total, 2)
             for day, tools in sorted(exposure["calls_by_day"].items())
-            if day in summary["by_day"] and (total := sum(tools.values()))
+            if day in failures_by_day and (total := sum(tools.values()))
         },
+        # Real failures the denominator cannot measure, kept visible rather than
+        # divided by a call count that never included their tool.
+        "failures_outside_denominator": {
+            "total": sum(outside.values()),
+            "by_tool": dict(sorted(outside.items())),
+            "note": (
+                "counted in total and every by_* slice, excluded from every rate: "
+                "the denominator counts only CLASSIFIER_BOUND_TOOLS"
+            ),
+        },
+        "failures_in_denominator": len(in_denominator),
     }
     if records:
         coverage["earliest_in_period"] = records[0]["timestamp"]
@@ -1167,7 +1197,14 @@ def print_native_failures(failures):
         for name, count in failures[key].items():
             print(f"  {name}: {count}")
     exposure = failures["exposure"]
-    print("Native failures by day (failures / classifier-bound calls, CLI versions seen):")
+    outside = exposure["failures_outside_denominator"]
+    if outside["total"]:
+        tools = ", ".join(f"{name} {n}" for name, n in outside["by_tool"].items())
+        print(
+            f"Failures outside the denominator: {outside['total']} ({tools}) — "
+            "counted in the total, excluded from every rate"
+        )
+    print("Native failures by day (in-denominator failures / classifier-bound calls, CLI versions):")
     days = sorted(set(failures["by_day"]) | set(exposure["classifier_bound_calls_by_day"]))
     for day in days:
         calls = sum(exposure["classifier_bound_calls_by_day"].get(day, {}).values())
