@@ -19,13 +19,17 @@ from pathlib import Path
 
 RE = re.compile(
     r"([A-Za-z0-9][A-Za-z0-9._-]{0,120}(?:\[1m\])?) is temporarily unavailable "
-    r"\(([^()\r\n]+)\), so auto mode"
+    r"\(([^()\r\n]+)\), so auto mode cannot determine the safety of ([^\r\n]+?) right now\."
 )
-BOUND = {"Bash", "PowerShell", "Monitor", "Agent", "Task"}
+# SendMessage is classifier-reviewed too (permission-modes docs), so it belongs in
+# the denominator. A failure on any other tool has no denominator here and is
+# counted separately rather than divided by a call count that never held it.
+BOUND = {"Bash", "PowerShell", "Monitor", "Agent", "Task", "SendMessage"}
 DAYS = {"2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10"}
 
 calls = Counter()   # (day, version, model) -> n
 fails = Counter()   # (day, version, model) -> n
+outside = Counter() # tool -> n, failures with no denominator
 hours = {}          # (day, version) -> [hour, ...] of bound calls
 seen_calls, seen_fails = set(), set()
 
@@ -67,9 +71,13 @@ for path in Path.home().joinpath(".claude/projects").rglob("*.jsonl"):
                 for b in msg.get("content") or []:
                     if (isinstance(b, dict) and b.get("type") == "tool_result"
                             and b.get("is_error") is True and isinstance(b.get("content"), str)):
-                        if RE.match(b["content"]) and b.get("tool_use_id") not in seen_fails:
+                        hit = RE.match(b["content"])
+                        if hit and b.get("tool_use_id") not in seen_fails:
                             seen_fails.add(b.get("tool_use_id"))
-                            fails[(day, version, model)] += 1
+                            if hit.group(3) in BOUND:
+                                fails[(day, version, model)] += 1
+                            else:
+                                outside[hit.group(3)] += 1
 
 print(f"{'day':<12}{'cli':<10}{'session model':<26}{'bound':>7}{'fails':>7}{'per100':>8}")
 for key in sorted(set(calls) | set(fails), key=lambda k: (k[0], str(k[1]), str(k[2]))):

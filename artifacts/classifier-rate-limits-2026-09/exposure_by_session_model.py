@@ -10,8 +10,13 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
-RE = re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]{0,120}(?:\[1m\])?) is temporarily unavailable \(([^()\r\n]+)\), so auto mode")
-BOUND = {"Bash", "PowerShell", "Monitor", "Agent", "Task"}
+RE = re.compile(
+    r"([A-Za-z0-9][A-Za-z0-9._-]{0,120}(?:\[1m\])?) is temporarily unavailable "
+    r"\(([^()\r\n]+)\), so auto mode cannot determine the safety of ([^\r\n]+?) right now\."
+)
+# SendMessage is classifier-reviewed too, so it belongs in the denominator; a
+# failure on any other tool is excluded from the rate rather than inflating it.
+BOUND = {"Bash", "PowerShell", "Monitor", "Agent", "Task", "SendMessage"}
 import sys
 from datetime import date, timedelta
 
@@ -62,7 +67,8 @@ for path in Path.home().joinpath(".claude/projects").rglob("*.jsonl"):
                         m = RE.match(b["content"])
                         if m and b.get("tool_use_id") not in seen_fails:
                             seen_fails.add(b.get("tool_use_id"))
-                            fails[(day, model)][m.group(1)] += 1
+                            if m.group(3) in BOUND:
+                                fails[(day, model)][m.group(1)] += 1
 
 print(f"{'day':<11}{'session model':<24}{'bound':>7}{'fails':>7}{'per100':>8}  classifier")
 for key in sorted(set(calls) | set(fails), key=lambda k: (k[0], str(k[1]))):
