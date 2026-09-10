@@ -1,0 +1,56 @@
+title: Why Auto Mode Broke Behind the Gateway
+url: https://claude.ai/code/artifact/26263dc9-8fda-4e1e-8d37-9161665d5b12
+org: personal Max account   # claude auth status, 2026-09-10; orgName is the account's own default org, not MATS Program
+first_published: 2026-09-09
+last_updated: 2026-09-10
+status: live   # the gateway's causal role is settled by the 2026-09-06 within-day split; why the Opus classifier lane refuses and the Sonnet lane does not is open
+favicon: "🚦"
+annotation_key: review-auto-mode-classifier-429-report
+
+source: |
+  None. The page is authored directly as HTML — there is no markdown or build
+  script behind it — so why-auto-mode-broke-behind-the-gateway.html IS the
+  source and every edit is made in it. It was written on 2026-09-09 by another
+  session that published from a job-local path and kept no repo copy; this
+  directory was created on 2026-09-10 when the page was next edited, by
+  reading the live artifact back and stripping the platform's publish-time
+  skeleton and its injected highlight.js runtime. Those two are re-added on
+  publish and must never be committed.
+built: why-auto-mode-broke-behind-the-gateway.html
+
+republishes_with: |
+  # the Artifact tool refuses a publish to an artifact this conversation has
+  # not read, so read first, then publish with the same url
+  Artifact action=read url=<url>
+  Artifact file_path=artifacts/why-auto-mode-broke-behind-the-gateway/why-auto-mode-broke-behind-the-gateway.html url=<url>
+  # omit favicon on a redeploy; the artifact keeps the one it has
+
+evidence: |
+  Two measurement passes, both over data that moves on and cannot be
+  regenerated.
+
+  2026-09-09, by Claude Fable 5.1: request captures, the before/after headless
+  auto-mode probes, the router log and the eight-seat council result, all in
+  ~/.claude/jobs/49656f9b/tmp/ (job-local, reaped with the job). The code-level
+  guard reading came from the Claude Code 2.1.263 bundle.
+
+  2026-09-10, by Claude Opus 5: the 2026-09-06 within-day split and the
+  per-session-model rows, from onset_0906.py and split_gateway_vs_cli.py in
+  this directory, run over every local Claude Code transcript. The same two
+  scripts are vendored under artifacts/classifier-rate-limits-2026-09/
+  alongside data-snapshot-2026-09-10.md, which transcribes their output; that
+  snapshot is the citable record, because the transcripts have since moved on.
+
+related: |
+  https://github.com/anthropics/claude-code/issues/64585
+  https://github.com/anthropics/claude-code/issues/60438
+  artifacts/classifier-rate-limits-2026-09/ — the sibling page on the same
+  incident, published to the MATS Program org, which reports the failure rates
+  by session model over the whole window rather than the within-day split
+
+open: |
+  The page's day-by-day table gives 04:33 on the local clock for the 6
+  September rewire. The wiring commit 43088ef is stamped 09:25 UTC, which is
+  02:25 local, so the two do not reconcile. The within-day section splits on
+  the commit timestamp and says so; the table's figure is left as its author
+  wrote it and needs checking against whatever source produced it.
