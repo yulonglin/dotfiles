@@ -1833,6 +1833,8 @@ def test_native_exposure_counts_classifier_bound_calls_once_per_id_by_day(tmp_pa
     }
     assert "upper bound on classifier calls" in native["coverage"]["limits"]
     assert "failures_outside_denominator" in native["coverage"]["limits"]
+    # The bias is not constant across days, so the day series is not a trend.
+    assert "must not be read as a trend" in native["coverage"]["limits"]
 
 
 def test_a_rate_never_divides_a_failure_the_denominator_does_not_count(tmp_path):
