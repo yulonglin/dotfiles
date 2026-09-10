@@ -3,7 +3,7 @@ url: https://claude.ai/code/artifact/e57cd906-4950-49a2-8a01-8b8f29234843
 org: MATS Program   # claude auth status, 2026-09-10 (orgName populated; subscriptionType team)
 first_published: 2026-09-10
 last_updated: 2026-09-10
-status: live   # the open question (who adds the 1M-context variant) is untested; flip to done when the one-hour test lands
+status: live   # the gateway's causal role is settled by the 09-06 within-day split; the mechanism (who asks for the 1M-context variant) is untested — flip to done when the declared-context-window test lands
 
 source: build.py + data.json
 built: classifier-rate-limits-2026-09.html
@@ -16,9 +16,11 @@ builds_with: |
 
 evidence: |
   data-snapshot-2026-09-10.md is the measured input, copied verbatim from the
-  session's tmp/artifact-data.md on 2026-09-10: counts from
+  session's tmp/artifact-data.md on 2026-09-10, then extended the same day with
+  the 2026-09-06 within-day split and the 2026-09-10 reading: counts from
   `claude-usage-audit --model-usage --days 21` (commit 3a1cdaf) and
-  `exposure_by_session_model.py` (copied here) over every local Claude Code
+  `exposure_by_session_model.py`, `onset_0906.py` and `split_gateway_vs_cli.py`
+  (all three copied here) over every local Claude Code
   transcript, the router log tallies, the statusline quota cache at
   2026-09-09 09:07Z, and the docs sentences quoted on the page (code.claude.com,
   fetched 2026-09-09 and re-verified 2026-09-10 against permission-modes,

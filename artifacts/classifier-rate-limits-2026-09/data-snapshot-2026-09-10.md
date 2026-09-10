@@ -46,6 +46,53 @@ Source commands: `./custom_bins/claude-usage-audit --model-usage --days 21` (wor
 
 Totals 09-06..09-09: Fable 5.1 672/2943 (22.8%); Opus 5 5/627; Sonnet 5 0/176; GPT sessions 42/2538.
 
+## 2026-09-06 split at 09:00 — the natural experiment (added 2026-09-10, `onset_0906.py`)
+
+The router began listening at 09:07 UTC and the wiring commit landed at 09:25, while CLI 2.1.263 sessions had been running since 03:00. Splitting the single day at 09:00 holds CLI version, session model, machine and account fixed and varies only the gateway.
+
+Restricted to CLI 2.1.263, failures / bound calls:
+
+| session model | before 09:00 | from 09:00 |
+|---|---|---|
+| Fable 5.1 | 0/711 | 175/637 (27.5%) |
+| Opus 5 | 0/198 | 0/101 |
+| Sonnet 5 | 0/87 | 0/9 |
+| Opus 4.8 | 0/1 | 0/36 |
+| GPT-5.6 Sol | 0/0 | 22/154 (14.3%) |
+| GPT-6 Astra | 0/0 | 10/426 (2.3%) |
+| Kimi K3 | 0/0 | 0/16 |
+| Haiku 4.5 | 0/0 | 0/3 |
+| **all models, 2.1.263** | **0/997** | **212/1382** |
+
+Context rows, not part of the held-fixed comparison: CLI 2.1.261 sessions 0/190 before and 0/40 after; CLI 2.1.260 sessions 0/7 and 0/2; all sessions on every version 0/1194 before and 212/1424 after.
+
+Hourly onset (failures / bound calls; a call is counted in the hour of its tool use, a failure in the hour of its tool result, so a late cell can exceed 100%):
+
+| hour UTC | 2.1.260 | 2.1.261 | 2.1.263 |
+|---|---|---|---|
+| 00 | — | 0/6 | — |
+| 01 | — | 0/65 | — |
+| 02 | — | 0/37 | — |
+| 03 | — | 0/53 | 0/123 |
+| 04 | — | 0/1 | 0/107 |
+| 05 | — | 0/1 | 0/195 |
+| 06 | — | — | 0/39 |
+| 07 | — | — | 0/154 |
+| 08 | 0/7 | 0/27 | 0/379 |
+| 09 | — | 0/37 | 2/279 |
+| 10 | — | 0/3 | 0/139 |
+| 11 | — | — | 15/340 |
+| 12 | — | — | 13/210 |
+| 13 | 0/2 | — | 100/235 |
+| 14 | — | — | 43/171 |
+| 15 | — | — | 39/8 |
+
+Cautions. A session fixes its base URL at launch, so sessions started before the rewire but still running after it sit in the "after" column without the gateway; that dilutes the after column toward zero. The 2.1.261 row is not a control — its calls sit on the same machine-wide setting. Per-model rows on 2.1.263 sum to 207 of the 212 failures; the other five carry no session model in this counter and `exposure_by_session_model.py` attributes them to Opus 5 sessions naming `astra`. Across every version this counter records 2,618 bound calls for the day against the audit's 2,604; the failure counts agree exactly at 212.
+
+## 2026-09-10 with CLI 2.1.267 (added 2026-09-10)
+
+Fable 5.1 sessions: 0 failures in 78 classifier-bound calls, gateway still on. Not evidence of a fix — the CLI version, the signed-in account and the default model all changed the same morning, and 78 calls is thin against the 637 that produced 175 failures on 6 September.
+
 ## Router log (requests routed per day, model as requested; the log has no status codes)
 
 | day | claude-opus-5 | claude-fable-5-1 | claude-sonnet-5 | haiku-4-5 | sol/astra |
@@ -72,13 +119,17 @@ five-hour 30%; seven-day all models 59%; seven-day Fable-scoped 100% (critical),
 ## Fixes, with the evidence for each
 
 1. Session model off Fable (Opus 5 or Sonnet 5): 0/627 and 0/176 through the gateway on the bad days. Default `model` is `opus` since 2026-09-10 05:08Z. Background jobs inherit the default (`claude --bg --model` overrides per job). Cost: lose Fable as the default.
-2. Gateway off for Fable sessions: 0/6194 Fable 5 and 0/517 Fable 5.1 in the fine period. Per-session: `CLAUDE_RC_OVERRIDE=1` wrapper; global: `model-router-wire off`. Cost: lose the foreign-model picker rows and agents.
+2. Gateway off for Fable sessions: 0/711 Fable 5.1 bound calls before the 09:00 split on 09-06 against 175/637 after it, same CLI and account; the fine period corroborates at 0/6194 Fable 5 and 0/517 Fable 5.1. Per-session: `CLAUDE_RC_OVERRIDE=1` wrapper; global: `model-router-wire off`. Cost: lose the foreign-model picker rows and agents.
 3. Narrow `Bash(<cmd> <sub> *)` allow rules in global settings: fewer bound calls reach the classifier. Partial; each rule is a command class that runs unclassified. Candidates being mined (allow-rule-miner subagent).
 4. Not available: choosing the classifier model (docs); client-side retry (does not exist); `permissions.allow` broad rules (dropped in auto mode).
 
 ## Open question and the test that settles it
 
-Why does the gateway make the Fable sessions' Opus classifier fail? Every failure names `claude-opus-5[1m]`, the 1M-context variant, while the router log shows the request as `claude-opus-5` (it does not log beta headers). Test: one Fable session with the gateway off for an hour of shell work; if a failure occurs, read the classifier name in its diagnostic. `[1m]` absent ⇒ the gateway adds the 1M variant; present ⇒ another cause. Zero failures reproduces the fine period.
+Why does the gateway make the Fable sessions' Opus classifier fail? Every failure names `claude-opus-5[1m]`, the 1M-context variant, while the router log shows the request as `claude-opus-5` (it records no beta header and no upstream status).
+
+~~Test: one Fable session with the gateway off for an hour of shell work; if a failure occurs, read the classifier name in its diagnostic.~~ Superseded 2026-09-10 by the within-day split above, which establishes the gateway's causal role and leaves only the mechanism open; with the gateway off there is no failure and so no diagnostic to read.
+
+Next test: one Fable 5.1 session with the gateway on and `CLAUDE_CODE_MAX_CONTEXT_TOKENS` removed or lowered to a standard window. `config/model-router.toml` sets `declared-context-window = 258400` and `model-router-wire apply` renders it into that settings key; a client that believes its window is 258,400 tokens has a reason to request the 1M-context beta. If the classifier named in a failure loses the `[1m]` suffix, the declared window is the mechanism; if it survives, the router adds the beta itself and its outbound headers are the next place to log.
 
 ## Limits
 

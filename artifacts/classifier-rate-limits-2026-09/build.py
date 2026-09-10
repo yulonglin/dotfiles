@@ -169,11 +169,10 @@ def chart_by_day() -> str:
 
 
 # --------------------------------------------------------------------------
-# Chart 2: failures / bound calls by session model, faceted, three periods.
+# Faceted chart: failures / bound calls by session model, one row per period.
+# Chart 2 (three periods, cross-period) and chart 3 (6 Sep split at 09:00).
 # --------------------------------------------------------------------------
-def chart_by_model() -> str:
-    periods = DATA["periods"]
-    models = DATA["by_model"]
+def facet_chart(models, periods, xmax, ids, title, desc, ticks) -> str:
     W = 680
     L_LAB = 128           # left label column
     R_LAB = 150           # right value column
@@ -182,7 +181,6 @@ def chart_by_model() -> str:
     HEAD = 20
     FGAP = 16
     TOP = 26
-    xmax = 40.0
     facet_h = HEAD + ROW * len(periods)
     H = TOP + len(models) * (facet_h + FGAP) + 24
 
@@ -192,12 +190,12 @@ def chart_by_model() -> str:
     out: list[str] = []
     out.append(
         f'<svg class="chart" viewBox="0 0 {W} {H}" role="img" '
-        f'aria-labelledby="c2-title c2-desc" xmlns="http://www.w3.org/2000/svg">'
+        f'aria-labelledby="{ids}-title {ids}-desc" xmlns="http://www.w3.org/2000/svg">'
     )
-    out.append('<title id="c2-title">Failures per 100 bound calls by session model and period, with 95% Wilson intervals</title>')
-    out.append('<desc id="c2-desc">Fable 5.1 sessions through the gateway fail on 22.8 per 100 bound calls; Opus 5, Sonnet 5 and GPT sessions on the same days stay under 2, and every model is at zero in the gateway-off period.</desc>')
+    out.append(f'<title id="{ids}-title">{esc(title)}</title>')
+    out.append(f'<desc id="{ids}-desc">{esc(desc)}</desc>')
     # x grid + ticks (top)
-    for v in (0, 10, 20, 30, 40):
+    for v in ticks:
         x = x_of(v)
         out.append(f'<line x1="{x:.1f}" x2="{x:.1f}" y1="{TOP - 6}" y2="{H - 20}" class="grid"/>')
         out.append(f'<text x="{x:.1f}" y="{TOP - 10}" class="tick" text-anchor="middle">{v}</text>')
@@ -236,6 +234,29 @@ def chart_by_model() -> str:
         y += facet_h + FGAP
     out.append("</svg>")
     return "\n".join(out)
+
+
+def chart_by_model() -> str:
+    return facet_chart(
+        DATA["by_model"], DATA["periods"], 40.0, "c2",
+        "Failures per 100 bound calls by session model and period, with 95% Wilson intervals",
+        "Fable 5.1 sessions through the gateway fail on 22.8 per 100 bound calls; Opus 5, Sonnet 5 "
+        "and GPT sessions on the same days stay under 2, and every model is at zero in the "
+        "gateway-off period.",
+        (0, 10, 20, 30, 40),
+    )
+
+
+def chart_split() -> str:
+    S = DATA["split_0906"]
+    return facet_chart(
+        S["by_model"], S["periods"], 32.0, "c3",
+        "Failures per 100 bound calls on 6 September 2026, before and from 09:00, CLI 2.1.263 only",
+        "On one day, one CLI version, one machine and one account: no failure in any of the 997 "
+        "bound calls before 09:00, and 212 failures in 1,382 calls afterwards. Fable 5.1 sessions "
+        "go from 0 of 711 to 175 of 637; Opus 5 and Sonnet 5 sessions stay at zero on both sides.",
+        (0, 10, 20, 30),
+    )
 
 
 # --------------------------------------------------------------------------
@@ -283,6 +304,44 @@ def table_by_model() -> str:
             + '</tbody></table><p class="note">Cells are failures/bound calls (per 100; 95% Wilson interval).</p>')
 
 
+def table_split() -> str:
+    def cell(v):
+        if v is None or v[1] == 0:
+            return '<td class="num">0 / 0</td>' if v else '<td class="num">—</td>'
+        lo, hi = (100 * x for x in wilson(*v))
+        return f'<td class="num">{v[0]} / {fmt_int(v[1])} ({100 * v[0] / v[1]:.1f}; {lo:.1f}–{hi:.1f})</td>'
+
+    rows = []
+    for r in DATA["split_0906"]["table_rows"]:
+        lab = esc(r["row"])
+        if r["kind"] == "context":
+            lab = f'<span class="muted">{lab}</span>'
+        rows.append(f'<tr><td>{lab}</td>{cell(r["before"])}{cell(r["after"])}</tr>')
+    return ('<table><thead><tr><th>session model (CLI 2.1.263 unless noted)</th>'
+            '<th class="num">before 09:00<br><span class="muted">gateway off</span></th>'
+            '<th class="num">from 09:00<br><span class="muted">gateway on</span></th>'
+            '</tr></thead><tbody>' + "".join(rows) + '</tbody></table>'
+            '<p class="note">Cells are failures / bound calls (per 100; 95% Wilson interval). '
+            'The four greyed rows are context, not part of the held-fixed comparison: they pool CLI '
+            'versions or sit on a version whose sessions all predate the rewire.</p>')
+
+
+def table_split_hours() -> str:
+    cols = ["2.1.260", "2.1.261", "2.1.263"]
+    rows = []
+    for r in DATA["split_0906"]["hours"]:
+        cells = "".join(
+            '<td class="num">—</td>' if r[c] is None else f'<td class="num">{r[c][0]} / {fmt_int(r[c][1])}</td>'
+            for c in cols
+        )
+        rows.append(f'<tr><td>{r["hour"]}:00</td>{cells}</tr>')
+    head = "".join(f'<th class="num">CLI {c}</th>' for c in cols)
+    return (f'<table><thead><tr><th>hour (UTC)</th>{head}</tr></thead><tbody>' + "".join(rows)
+            + '</tbody></table><p class="note">Cells are failures / bound calls. A bound call is '
+            'counted in the hour of its tool use and a failure in the hour of its tool result, so a '
+            'late cell can hold more failures than calls; the day totals are unaffected.</p>')
+
+
 def table_router() -> str:
     rows = []
     for r in DATA["router_log"]:
@@ -307,6 +366,12 @@ def page() -> str:
     on_bound = sum(r["bound"] for r in on_days)
     fable = next(m for m in DATA["by_model"] if m["model"] == "Fable 5.1")["bad"]
     fable_share = 100 * fable[0] / on_fail
+    SP = DATA["split_0906"]
+    sp_fable = next(m for m in SP["by_model"] if m["model"] == "Fable 5.1")
+    sp_rate = 100 * sp_fable["after"][0] / sp_fable["after"][1]
+    sp_all = next(r for r in SP["table_rows"] if r["row"] == "CLI 2.1.263, all models")
+    sp_every = next(r for r in SP["table_rows"] if r["row"] == "All sessions, every CLI")
+    s10 = DATA["sep10"]
 
     css = f"""
 <title>Fable sessions through the gateway trip the classifier</title>
@@ -365,9 +430,9 @@ footer{{margin-top:56px;padding-top:14px;border-top:1px solid var(--hair);font-s
     body = f"""
 <main>
 <h1>Fable sessions through the gateway trip the classifier</h1>
-<p class="sub">Why Claude Code's auto-mode classifier started returning <code>rate-limited</code> on this machine on 6 September 2026, what fixes it, and the one test still owed. Measured from local transcripts, 2026-09-09/10.</p>
+<p class="sub">Why Claude Code's auto-mode classifier started returning <code>rate-limited</code> on this machine on 6 September 2026, what fixes it, and which mechanism is still unknown. Measured from local transcripts, 2026-09-09/10.</p>
 
-<p>Auto mode approves each shell or agent call with a separate classifier model. From 19 August to 5 September the model-router gateway was off and the classifier never failed once in {fmt_int(off_bound)} classifier-bound calls. The gateway was rewired on 6 September and failures began the same day; over 6 to 9 September, {fable_share:.0f}% of the {fmt_int(on_fail)} failures came from sessions running Fable 5.1, while Opus 5 and Sonnet 5 sessions through the same gateway on the same days stayed at zero. Every failure from a Fable 5.1 session names the 1M-context Opus variant as the classifier that was rate-limited. The cheapest fix is a non-Fable default model, and it is already in place; the open question is why the gateway makes the Fable sessions' Opus classifier hit its limit, and one hour of Fable work with the gateway off settles it.</p>
+<p>Auto mode approves each shell or agent call with a separate classifier model. The gateway is the model-router loopback proxy that Claude Code talks to instead of the API. It came back up mid-morning on 6 September, and that single day settles what caused the failures: on one CLI version, one machine and one account, {fmt_int(sp_all["before"][1])} classifier-bound calls before 09:00 produced no failure at all, and {fmt_int(sp_all["after"][1])} calls afterwards produced {fmt_int(sp_all["after"][0])}. Sessions running Fable 5.1 went from 0 of {fmt_int(sp_fable["before"][1])} to {sp_fable["after"][0]} of {fmt_int(sp_fable["after"][1])}; Opus 5 and Sonnet 5 sessions stayed at zero on both sides of the split. Over the four days that follow, {fable_share:.0f}% of the {fmt_int(on_fail)} failures come from Fable 5.1 sessions, and every one of them names the 1M-context Opus variant as the classifier that was rate-limited. The cheapest fix is a non-Fable default model, and it is already in place. What remains open is the mechanism: why a loopback proxy makes a Fable session's Opus classifier return 429 while that same session's own calls go through.</p>
 
 <div class="term">
 <p><b>Native failure</b> — a tool result that reads <code>&lt;model&gt; is temporarily unavailable (rate-limited), so auto mode cannot determine the safety of &lt;tool&gt; right now</code>; counted once per tool call. The <a href="{S["docs_errors"]}">errors reference</a> lists it: Claude Code blocked the call without a verdict.</p>
@@ -375,11 +440,21 @@ footer{{margin-top:56px;padding-top:14px;border-top:1px solid var(--hair);font-s
 <p><b>Gateway</b> — the model-router loopback proxy set as the API base URL. On before 18 August, off 18 August to 6 September, on since.</p>
 </div>
 
-<h2>Failures began the day the gateway was rewired</h2>
+<h2>Splitting one day at 09:00 isolates the gateway</h2>
+<p>Two things changed on 6 September: the gateway was rewired and CLI 2.1.263 arrived. They did not change at the same hour. The router began listening at 09:07 UTC and the wiring commit landed at 09:25, while 2.1.263 sessions had been running since 03:00. Splitting the day at 09:00 therefore holds the CLI version, the session model, the machine and the signed-in account fixed, and varies only the gateway.</p>
+<figure>
+{chart_split()}
+<div class="legend"><span style="--sw:var(--off)">before 09:00, gateway off</span><span style="--sw:var(--on)">from 09:00, gateway on</span></div>
+<figcaption><b>Zero failures in {fmt_int(sp_all["before"][1])} bound calls before the router came up, {fmt_int(sp_all["after"][0])} in {fmt_int(sp_all["after"][1])} after it.</b> CLI 2.1.263 sessions only, so the CLI upgrade cannot be the trigger. Nor can the Fable weekly-scoped quota, the account or capacity drift: none of them moved at 09:00 that day, and the same account's Opus 5 and Sonnet 5 sessions stayed at zero on both sides. Dots at zero are measured zeros; whiskers are 95% Wilson intervals, so 0 of {fmt_int(sp_fable["before"][1])} Fable calls means a true rate under 0.5 per 100. GPT sessions ran only after the split, which is why their &ldquo;before&rdquo; row reads no sessions. Source: <a href="{S["onset"]["url"]}"><code>onset_0906.py</code></a> over the same transcripts.</figcaption>
+</figure>
+<details><summary>Table view: every session model, plus the hour-by-hour onset</summary><div class="tablewrap">{table_split()}</div><div class="tablewrap">{table_split_hours()}</div>
+<p class="note">The onset is sharp: no failure in any hour up to 08:59, and the first two in the 09:00 hour, which is the hour the router began listening. Two cautions on the &ldquo;after&rdquo; side. A session fixes its base URL when it launches, so sessions started before the rewire but still running after it sit in the after column without the gateway, which pulls that column toward zero rather than away from it. And the 2.1.261 row is not a control: all of its calls that day are on the same machine-wide setting, so it cannot separate an old CLI from no gateway. Per-model rows on 2.1.263 sum to 207 of the 212 failures; the remaining five carry no session model in this counter, and the by-model script attributes them to Opus 5 sessions naming <code>astra</code> as the classifier. Across every CLI version this counter records {fmt_int(sp_every["before"][1] + sp_every["after"][1])} bound calls for the day where the audit below records 2,604, a difference of 14 in the exposure; the failure counts agree exactly at 212.</p></details>
+
+<h2>The wider picture: zero on every gateway-off day</h2>
 <figure>
 {chart_by_day()}
 <div class="legend"><span style="--sw:var(--off)">gateway off</span><span style="--sw:var(--on)">gateway on</span><span style="--sw:var(--muted);opacity:.6">bound calls</span></div>
-<figcaption><b>Zero on all 16 gateway-off days, then 8.1 to 25.5 per 100 on the four gateway-on days.</b> Dots at the baseline are days with zero failures; bars are failures per 100 bound calls. The dashed lines mark the default model changing to Fable 5.1 on 3 September, three days before any failure, and the gateway rewire on 6 September. The lower strip is exposure: 22 and 23 August recorded no bound calls, and 4 and 5 September carried only 23 and 24, so their zeros are weak evidence. Source: <a href="{S["audit"]["url"]}"><code>claude-usage-audit --model-usage --days 21</code></a> at commit 3a1cdaf.</figcaption>
+<figcaption><b>Zero on all 16 gateway-off days, then 8.1 to 25.5 per 100 on the four gateway-on days.</b> Dots at the baseline are days with zero failures; bars are failures per 100 bound calls. The dashed lines mark the default model changing to Fable 5.1 on 3 September, three days before any failure, and the gateway rewire on 6 September. The lower strip is exposure: 22 and 23 August recorded no bound calls, and 4 and 5 September carried only 23 and 24, so their zeros are weak evidence. This cross-period view corroborates the within-day split above; it no longer has to carry the causal claim on its own, which is what the CLI upgrade landing on 6 September used to confound. Source: <a href="{S["audit"]["url"]}"><code>claude-usage-audit --model-usage --days 21</code></a> at commit 3a1cdaf.</figcaption>
 </figure>
 <details><summary>Table view</summary><div class="tablewrap">{table_by_day()}</div></details>
 
@@ -392,20 +467,20 @@ footer{{margin-top:56px;padding-top:14px;border-top:1px solid var(--hair);font-s
 <details><summary>Table view: by model and period, and by model and day</summary><div class="tablewrap">{table_by_model()}</div><div class="tablewrap">{table_by_model_day()}</div>
 <p class="note">On 6 September the five Opus 5 failures named <code>astra</code> as the classifier, which is a GPT route: the session-model label is the newest assistant model earlier in the same transcript, so a mid-session model switch can misattribute a row. Failures from GPT-6 Astra sessions on 6 September also named <code>astra</code>; every Fable 5.1 failure named the Opus 1M variant.</p></details>
 
-<h2>The chain from session model to 429 has one open link</h2>
-<p>The <a href="{S["docs_permission_modes"]}">permission-modes docs</a> say the classifier "runs on Claude Sonnet 5 by default rather than on your <code>/model</code> selection … or on an Opus model when the session runs on a Fable model", and that after the session's first auto-mode request "the classifier's model doesn't change for the session". The router log agrees: on 8 September Opus 5 sessions made 144 bound calls while the router carried 2,341 Opus 5 requests, so most Opus traffic through the gateway is the Fable sessions' classifier. What is not established is who turns that Opus request into the 1M-context variant the failures name.</p>
+<h2>Only the last link in the chain is open</h2>
+<p>The <a href="{S["docs_permission_modes"]}">permission-modes docs</a> say the classifier "runs on Claude Sonnet 5 by default rather than on your <code>/model</code> selection … or on an Opus model when the session runs on a Fable model", and that after the session's first auto-mode request "the classifier's model doesn't change for the session". The router log agrees: on 8 September Opus 5 sessions made 144 bound calls while the router carried 2,341 Opus 5 requests, so most Opus traffic through the gateway is the Fable sessions' classifier. The gateway's causal role is settled by the before-and-after inside 6 September. What is not settled is the mechanism: who turns that Opus request into the 1M-context variant the failures name, and why that variant is the one that runs out of headroom.</p>
 <pre class="mermaid">
 flowchart TD
   A["Session model: Fable 5.1"] --> B["Classifier model per the docs:<br/>an Opus model for Fable sessions,<br/>Sonnet 5 for every other session"]
-  B --> C{{"Gateway"}}
-  C -->|"off, 19 Aug to 5 Sep"| D["0 failures in 6,711<br/>Fable bound calls"]
-  C -->|"on, 6 to 9 Sep"| E["Router log shows the request<br/>as claude-opus-5<br/>(beta headers are not logged)"]
-  E -.->|"OPEN: which side adds<br/>the 1M-context variant?"| F["Failure text names<br/>claude-opus-5 with the 1m suffix"]
+  B --> C{{"Gateway, within 6 Sep"}}
+  C -->|"off, before 09:00<br/>0 failures in 711 calls"| D["No failure"]
+  C -->|"on, from 09:07<br/>175 failures in 637 calls"| E["Router records the request<br/>as claude-opus-5<br/>(it records no beta header<br/>and no upstream status)"]
+  E -.->|"OPEN: which side asks for<br/>the 1M-context variant?"| F["Failure text names<br/>claude-opus-5 with the 1m suffix"]
   F --> G["429 rate-limited on that model<br/>call blocked, no verdict, no client retry"]
   classDef open stroke-dasharray:5 4;
   class F open;
 </pre>
-<p class="note">Solid arrows are measured or quoted from the docs; the dashed arrow is the open link. Quota alone does not explain the pattern: the gateway-off period spanned three Fable weekly resets with Fable sessions active and zero failures, and on 9 September the Fable-scoped seven-day quota read 100% while the all-models quota read 59%. Router log: <a href="#router-log">table</a>.</p>
+<p class="note">Solid arrows are measured or quoted from the docs; the dashed arrow is the one open link. The split rules the CLI upgrade out as the <em>trigger</em>, not as a contributing factor: Fable 5 sessions through the gateway in August failed at 1.7 per 100 against Fable 5.1's 27 on 6 September, and what amplifies the rate is not settled by a one-day split. Quota alone does not explain the pattern either: the gateway-off period spanned three Fable weekly resets with Fable sessions active and zero failures, and on 9 September the Fable-scoped seven-day quota read 100% while the all-models quota read 59%. Router log: <a href="#router-log">table</a>.</p>
 <details id="router-log"><summary>Router log: requests routed per day, model as requested (no status codes in the log)</summary><div class="tablewrap">{table_router()}</div></details>
 
 <h2>Switching the session model is the cheapest fix</h2>
@@ -413,18 +488,22 @@ flowchart TD
 <thead><tr><th>rank</th><th>fix</th><th>evidence</th><th>cost</th><th>state</th></tr></thead>
 <tbody>
 <tr><td>1</td><td><b>Session model off Fable</b> (Opus 5 or Sonnet 5), so the classifier runs on Sonnet 5.</td><td>0 / 627 Opus 5 and 0 / 176 Sonnet 5 bound calls through the gateway on the bad days.</td><td>Fable stops being the default. Background jobs inherit the default; <code>claude --bg --model</code> overrides per job.</td><td>Done: default <code>model</code> is <code>opus</code> since 2026-09-10 05:08Z.</td></tr>
-<tr><td>2</td><td><b>Gateway off for Fable sessions</b>, per session with the <code>CLAUDE_RC_OVERRIDE=1</code> wrapper or globally with <code>model-router-wire off</code>.</td><td>0 / 6,194 Fable 5 and 0 / 517 Fable 5.1 bound calls in the gateway-off period.</td><td>The foreign-model picker rows and agents go with it (globally), or Remote Control comes back for that one session (per session).</td><td>Available.</td></tr>
+<tr><td>2</td><td><b>Gateway off for Fable sessions</b>, per session with the <code>CLAUDE_RC_OVERRIDE=1</code> wrapper or globally with <code>model-router-wire off</code>.</td><td>0 / {fmt_int(sp_fable["before"][1])} Fable 5.1 bound calls in the hours before the rewire on 6 September, against {sp_fable["after"][0]} / {fmt_int(sp_fable["after"][1])} in the hours after it, same CLI and same account. The gateway-off period corroborates: 0 / 6,194 Fable 5 and 0 / 517 Fable 5.1.</td><td>The foreign-model picker rows and agents go with it (globally), or Remote Control comes back for that one session (per session).</td><td>Available.</td></tr>
 <tr><td>3</td><td><b>Narrow allow rules</b> of the form <code>Bash(&lt;cmd&gt; &lt;sub&gt; *)</code> in global settings, so fewer calls reach the classifier at all.</td><td>The <a href="{S["docs_auto_mode_config"]}">auto-mode config docs</a>: narrow rules "stay in effect in auto mode, and Claude Code resolves them before the classifier runs"; broad rules such as <code>Bash(*)</code>, interpreters and Monitor are suspended.</td><td>Partial, and each rule is a command class that runs unclassified.</td><td>Candidates being mined.</td></tr>
 <tr><td>—</td><td><b>Not available</b>: choosing the classifier model; a client-side retry of the classifier call; broad <code>permissions.allow</code> rules.</td><td>Docs: "Claude Code selects the classifier model, so which reason you see isn't something you configure." Claude Code does not retry the classifier request itself; the model may re-issue the tool call (<a href="{S["issue_74248"]}">issue 74248</a> reports the same shape on an earlier Opus 1M classifier). Broad rules are dropped in auto mode.</td><td>—</td><td>—</td></tr>
 </tbody></table></div>
 
-<h2>One hour off the gateway settles the open question</h2>
-<p>Run one Fable 5.1 session with the gateway off for an hour of shell work. Zero failures reproduces the gateway-off period. If a failure occurs, read the classifier name in its diagnostic: the 1M suffix absent means the gateway adds the 1M-context variant; present means the cause lies elsewhere. Either outcome is decisive, and fix 1 holds in the meantime.</p>
+<h2>Today's zero is not yet evidence of a fix</h2>
+<p>On 10 September, Fable 5.1 sessions made {s10["bound"]} classifier-bound calls with the gateway still on and no failure at all. Read nothing into it yet. Three things moved at once that morning: the CLI went to {esc(s10["cli"])}, the signed-in account changed, and the default model became Opus 5. Any of them could account for the zero, and {s10["bound"]} calls is in any case thin next to the 637 that produced 175 failures on 6 September. Watch it for a few days before calling anything fixed.</p>
+
+<h2>Where to look next for the mechanism</h2>
+<p>The unexplained step is narrow. A Fable 5.1 session's own calls go through the gateway and succeed, while the Opus classifier call it triggers comes back 429. The router logs that request as <code>claude-opus-5</code> and records neither a beta header nor an upstream status, yet every failure names <code>claude-opus-5[1m]</code>, the 1M-context variant. So the first thing to establish is who asks for the 1M variant.</p>
+<p>The most testable candidate is the context window the gateway declares. <code>config/model-router.toml</code> sets <code>declared-context-window = 258400</code>, and <code>model-router-wire apply</code> renders that into the settings as <code>CLAUDE_CODE_MAX_CONTEXT_TOKENS</code>. That number is larger than a standard Opus window, and a client that believes its window is 258,400 tokens has a reason to request the 1M-context beta. Whether it does so for the classifier call, which is a separate request the CLI issues on its own, is exactly what is untested. The test is one Fable 5.1 session with the gateway on and that value removed or lowered to a standard window: if the classifier named in a failure loses the 1M suffix, the declared window is the mechanism; if the suffix survives, the router adds the beta itself and the router's own outbound headers are the next place to log. Fix 1 holds either way.</p>
 
 <h2>Limits</h2>
-<p>Failures are counted from retained tool-result rows only; the CLI records no successful classifier call, so every rate is failures over an upper bound on calls, and the true per-call rate is higher than shown. The session model behind a failure is the newest assistant model earlier in the same transcript, which a mid-session model switch blurs. The failure parser is locked to the wording of CLI 2.1.263 and 2.1.266. The router log carries no status codes and no beta headers. Both charts are read against a null of zero: the gateway-off period is the control, not a modelled baseline. Comparisons here were not pre-registered; the by-model split was run after the by-day pattern was seen, on the same transcripts, so it is a finding to confirm with the test above rather than an independent replication.</p>
+<p>Failures are counted from retained tool-result rows only; the CLI records no successful classifier call, so every rate is failures over an upper bound on calls, and the true per-call rate is higher than shown. The session model behind a failure is the newest assistant model earlier in the same transcript, which a mid-session model switch blurs. The failure parser is locked to the wording of CLI 2.1.263 and 2.1.266. The router log carries no status codes and records no beta headers, which is not the same as no beta header having been sent. Every chart is read against a null of zero: the gateway-off hours and days are the control, not a modelled baseline. None of these comparisons was pre-registered. The by-model split and the within-day split were both run after the by-day pattern was seen, on the same transcripts, so 6 September is the slice that produced the hypothesis and tests it at once. That is the honest weakness of the strongest figure on this page, and the remedy is a fresh day rather than a further cut of this one.</p>
 
-<footer>Built by Claude Fable 5.1 on 2026-09-10 from <code>data.json</code> (a transcription of the measured snapshot <code>{esc(S["snapshot"])}</code>) in <code>artifacts/classifier-rate-limits-2026-09/</code>; accounting change under review in <a href="{S["pr"]}">PR #110</a>. Select any text to leave a comment or suggest an edit.</footer>
+<footer>Built by Claude Fable 5.1 on 2026-09-10; the 6 September within-day split, and the revisions that follow from it, added by Claude Opus 5 the same day. Numbers from <code>data.json</code> (a transcription of the measured snapshot <code>{esc(S["snapshot"])}</code>) in <code>artifacts/classifier-rate-limits-2026-09/</code>; accounting change under review in <a href="{S["pr"]}">PR #110</a>. Select any text to leave a comment or suggest an edit.</footer>
 </main>
 """
     return css + body
