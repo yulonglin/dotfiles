@@ -229,13 +229,32 @@ def transcript_paths(projects_dir, project_filter=""):
 NATIVE_FAILURE_RE = re.compile(
     r"([A-Za-z0-9][A-Za-z0-9._-]{0,120}(?:\[1m\])?) is temporarily unavailable "
     r"\(([^()\r\n]+)\), so auto mode cannot determine the safety of "
-    r"[^\r\n]+? right now\."
+    r"([^\r\n]+?) right now\."
 )
+# The reasons the CLI documents (errors reference, 2026-09-09): a 429, a 529, a 5xx.
+NATIVE_REASON_CATEGORIES = {
+    "rate-limited": "rate_limit",
+    "overloaded": "overloaded",
+    "server-error": "server_error",
+}
+NATIVE_TEXT_CAP = 200
+# Tool calls that reach the auto-mode classifier in auto mode (permission-modes
+# docs, 2026-09-09: reads and working-directory edits skip it; shell, Monitor and
+# Agent spawns do not). Counted per day as the exposure a failure count is read
+# against — an approximation, since allow rules and cached verdicts skip it too.
+CLASSIFIER_BOUND_TOOLS = frozenset({"Bash", "PowerShell", "Monitor", "Agent", "Task"})
+# Every row of a Claude Code transcript is stamped with these; copied onto each
+# failure record so it can be sliced by where and on what CLI it happened.
+NATIVE_ROW_ATTRIBUTES = ("cwd", "version", "gitBranch", "sessionId")
 NATIVE_FAILURE_LIMITS = (
     "selected JSONL files only; supported typed unavailability prefix only; "
     "by_model is the bounded classifier token in that prefix (not always an Anthropic "
     "catalogue ID), never the conversation model; any token that completes the full "
     "template counts, model-shaped or not; "
+    "session_model is the newest assistant model seen earlier in the same file, "
+    "so it is absent when the failure precedes any assistant row; "
+    "cwd, cli_version, branch and session_id are copied from the failing row as the "
+    "CLI stamped them; "
     "coverage counters span the entire selected scan, not just the period; "
     "scanned_files counts opened files; unreadable_files counts failed opens or read failures "
     "(opened files with read failures appear in both counts; readable prefixes are retained); "
@@ -245,9 +264,14 @@ NATIVE_FAILURE_LIMITS = (
     "one failure per nonempty string tool_use_id globally, earliest valid timestamp "
     "before cutoff, ties by model then category; missing IDs excluded, no UUID fallback; "
     "earliest/latest and buckets describe counted in-period failures in UTC; "
-    "only rate-limited maps to rate_limit, other reasons map to other; "
+    "rate-limited, overloaded and server-error map to their own categories, other "
+    "reasons map to other with the reason text retained; "
+    "exposure counts assistant tool_use blocks for classifier-bound tools "
+    "(Bash, PowerShell, Monitor, Agent, Task) once per tool_use id, whether or not the "
+    "call was classified: allow rules, cached verdicts and non-auto modes are unobserved, "
+    "so it is an upper bound on classifier calls, not a count of them; "
     "no snapshot text files; absent roots and unreadable directories may be omitted by discovery; "
-    "missing evidence is not evidence of no failures; no failure-rate denominator, "
+    "missing evidence is not evidence of no failures; no "
     "hidden HTTP attempts or complete historical coverage; "
     "CLI wording changes require a parser update; "
     "failures are not proof of goal changes or identical-command retry causation; "
@@ -256,7 +280,7 @@ NATIVE_FAILURE_LIMITS = (
 
 
 def native_failure_observations(entry):
-    """Yield only identity, classifier model and category; never retain error tails."""
+    """Yield (tool_use_id, classifier model, category, reason, tool) per failing block."""
     if entry.get("type") != "user":
         return
     message = entry.get("message")
@@ -275,33 +299,105 @@ def native_failure_observations(entry):
             continue
         match = NATIVE_FAILURE_RE.match(block["content"])
         if match is not None:
+            reason = match.group(2)
             yield (
                 block.get("tool_use_id"),
                 match.group(1),
-                "rate_limit" if match.group(2) == "rate-limited" else "other",
+                NATIVE_REASON_CATEGORIES.get(reason, "other"),
+                reason[:NATIVE_TEXT_CAP],
+                match.group(3)[:NATIVE_TEXT_CAP],
             )
 
 
-def aggregate_native_failures(observations, coverage, cutoff_epoch):
+def _row_attribute(entry, key):
+    value = entry.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def native_failure_record(entry, epoch, identity, model, category, reason, tool, session_model):
+    return {
+        "timestamp": format_timestamp(epoch),
+        "epoch": epoch,
+        "tool_use_id": identity,
+        "model": model,
+        "category": category,
+        "reason": reason,
+        "tool": tool,
+        "cwd": _row_attribute(entry, "cwd"),
+        "cli_version": _row_attribute(entry, "version"),
+        "branch": _row_attribute(entry, "gitBranch"),
+        "session_id": _row_attribute(entry, "sessionId"),
+        "session_model": session_model,
+    }
+
+
+def _native_sort_key(record):
+    return (record["epoch"], record["model"], record["category"])
+
+
+NATIVE_SLICES = (
+    "category", "model", "reason", "tool", "day", "hour",
+    "cwd", "cli_version", "branch", "session_model", "session_id",
+)
+
+
+def aggregate_native_failures(observations, coverage, cutoff_epoch, exposure):
     # Resolve mirrors over the complete selected scan BEFORE applying the period.
-    records = [
-        record for record in observations.values()
-        if not cutoff_epoch or record[0] >= cutoff_epoch
-    ]
+    records = sorted(
+        (
+            record for record in observations.values()
+            if not cutoff_epoch or record["epoch"] >= cutoff_epoch
+        ),
+        key=_native_sort_key,
+    )
     summary = {"total": len(records)}
-    for name in ("category", "model", "day", "hour"):
-        summary[f"by_{name}"] = Counter()
-    for epoch, model, category in records:
-        timestamp = format_timestamp(epoch)
-        summary["by_category"][category] += 1
-        summary["by_model"][model] += 1
-        summary["by_day"][timestamp[:10]] += 1
-        summary["by_hour"][timestamp[:13] + ":00:00Z"] += 1
-    for name in ("category", "model", "day", "hour"):
-        summary[f"by_{name}"] = dict(sorted(summary[f"by_{name}"].items()))
+    counters = {name: Counter() for name in NATIVE_SLICES}
+    for record in records:
+        timestamp = record["timestamp"]
+        record["day"] = timestamp[:10]
+        record["hour"] = timestamp[:13] + ":00:00Z"
+        for name in NATIVE_SLICES:
+            counters[name][str(record[name])] += 1
+    for name in NATIVE_SLICES:
+        summary[f"by_{name}"] = dict(sorted(counters[name].items()))
+    summary["sessions"] = len(counters["session_id"])
+    summary["records"] = [
+        {key: value for key, value in record.items() if key not in ("epoch", "day", "hour")}
+        for record in records
+    ]
+    by_day_model = defaultdict(lambda: defaultdict(lambda: {"bound_calls": 0, "failures": 0}))
+    for (day, model), n in exposure["calls_by_day_model"].items():
+        by_day_model[day][str(model)]["bound_calls"] = n
+    for record in records:
+        by_day_model[record["day"]][str(record["session_model"])]["failures"] += 1
+    for day in by_day_model:
+        for cell in by_day_model[day].values():
+            cell["per_100_bound_calls"] = (
+                round(100 * cell["failures"] / cell["bound_calls"], 2) if cell["bound_calls"] else None
+            )
+    summary["exposure"] = {
+        "classifier_bound_calls_by_day": {
+            day: dict(sorted(tools.items()))
+            for day, tools in sorted(exposure["calls_by_day"].items())
+        },
+        # The slice that separates "the gateway/day is bad" from "sessions on this
+        # model fail": the same day's calls, split by the conversation model.
+        "by_day_and_session_model": {
+            day: dict(sorted(models.items())) for day, models in sorted(by_day_model.items())
+        },
+        "cli_versions_by_day": {
+            day: dict(sorted(versions.items()))
+            for day, versions in sorted(exposure["versions_by_day"].items())
+        },
+        "failures_per_100_bound_calls_by_day": {
+            day: round(100 * summary["by_day"][day] / total, 2)
+            for day, tools in sorted(exposure["calls_by_day"].items())
+            if day in summary["by_day"] and (total := sum(tools.values()))
+        },
+    }
     if records:
-        coverage["earliest_in_period"] = format_timestamp(min(records)[0])
-        coverage["latest_in_period"] = format_timestamp(max(records)[0])
+        coverage["earliest_in_period"] = records[0]["timestamp"]
+        coverage["latest_in_period"] = records[-1]["timestamp"]
     summary["coverage"] = coverage
     return summary
 
@@ -330,6 +426,12 @@ def scan_transcripts(projects_dir, cutoff_epoch=0, project_filter=""):
     }
     native_observations = {}
     native_seen_ids = set()
+    exposure = {
+        "calls_by_day": defaultdict(Counter),
+        "calls_by_day_model": Counter(),
+        "versions_by_day": defaultdict(Counter),
+        "seen_call_ids": set(),
+    }
     coverage = {
         "earliest_in_period": None,
         "latest_in_period": None,
@@ -348,6 +450,7 @@ def scan_transcripts(projects_dir, cutoff_epoch=0, project_filter=""):
             native_coverage["unreadable_files"] += 1
             continue
         native_coverage["scanned_files"] += 1
+        session_model = None
         with lines:
             for line in readable_transcript_lines(lines, native_coverage):
                 try:
@@ -358,7 +461,7 @@ def scan_transcripts(projects_dir, cutoff_epoch=0, project_filter=""):
                     continue
                 if not isinstance(entry, dict):
                     continue
-                for identity, model, category in native_failure_observations(entry):
+                for identity, model, category, reason, tool in native_failure_observations(entry):
                     native_coverage["raw_matching_observations"] += 1
                     epoch = parse_timestamp(entry.get("timestamp"))
                     valid_id = isinstance(identity, str) and bool(identity)
@@ -372,15 +475,20 @@ def scan_transcripts(projects_dir, cutoff_epoch=0, project_filter=""):
                         native_seen_ids.add(identity)
                     if epoch is None or not valid_id:
                         continue
-                    record = (epoch, model, category)
+                    record = native_failure_record(
+                        entry, epoch, identity, model, category, reason, tool, session_model
+                    )
                     previous = native_observations.get(identity)
-                    if previous is None or record < previous:
+                    if previous is None or _native_sort_key(record) < _native_sort_key(previous):
                         native_observations[identity] = record
                 if entry.get("type") != "assistant":
                     continue
                 message = entry.get("message")
                 if not isinstance(message, dict):
                     continue
+                if isinstance(message.get("model"), str) and message["model"]:
+                    session_model = message["model"]
+                record_exposure(entry, message, exposure, cutoff_epoch)
                 usage = message.get("usage")
                 tokens = numeric_tokens(usage)
                 if tokens is None:
@@ -437,8 +545,35 @@ def scan_transcripts(projects_dir, cutoff_epoch=0, project_filter=""):
         coverage["latest_in_period"] = max(records, key=lambda r: r["epoch"])["timestamp"]
     return (
         aggregate_usage_records(records, coverage),
-        aggregate_native_failures(native_observations, native_coverage, cutoff_epoch),
+        aggregate_native_failures(native_observations, native_coverage, cutoff_epoch, exposure),
     )
+
+
+def record_exposure(entry, message, exposure, cutoff_epoch):
+    """Count this assistant row's classifier-bound tool calls and its CLI version by UTC day."""
+    epoch = parse_timestamp(entry.get("timestamp"))
+    if epoch is None or (cutoff_epoch and epoch < cutoff_epoch):
+        return
+    day = format_timestamp(epoch)[:10]
+    version = _row_attribute(entry, "version")
+    if version:
+        exposure["versions_by_day"][day][version] += 1
+    content = message.get("content")
+    if not isinstance(content, list):
+        return
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_use":
+            continue
+        name = block.get("name")
+        call_id = block.get("id")
+        if name not in CLASSIFIER_BOUND_TOOLS or not isinstance(call_id, str) or not call_id:
+            continue
+        if call_id in exposure["seen_call_ids"]:
+            continue
+        exposure["seen_call_ids"].add(call_id)
+        exposure["calls_by_day"][day][name] += 1
+        model = message.get("model")
+        exposure["calls_by_day_model"][(day, model if isinstance(model, str) and model else None)] += 1
 
 
 def scan_transcript_model_usage(projects_dir, cutoff_epoch=0, project_filter=""):
@@ -513,7 +648,12 @@ def scan_approval_usage(log_path, cutoff_epoch=0):
 # action, and a fallback that recovered an API failure is not a failed action at
 # all. Nothing needs de-duplicating: one outcome is always exactly one line.
 BACKEND_EVENT_PREFIX = "BACKEND-EVENT"
-SUPPORTED_EVENT_VERSION = 1
+# v1 carried a hashed session; v2 carries the session id in the clear plus the
+# backend's model and where it ran (host, cwd, repo, remote, commit, branch,
+# cli_version, session_model, account). Both count the same way; v2 fields feed
+# the by_* slices and read as "unknown" on a v1 line.
+SUPPORTED_EVENT_VERSIONS = (1, 2)
+EVENT_SLICES = ("model", "host", "repo", "commit", "cli_version", "session_model", "account")
 BACKEND_EVENT_RE = re.compile(rf"^(\S+) {BACKEND_EVENT_PREFIX} (.+)$")
 LEGACY_API_FAILURE_RE = re.compile(r"^(\S+) API BACKEND FAILED: (.*)$")
 LEGACY_SUB_SKIPPED_RE = re.compile(r"^(\S+) SUBSCRIPTION BACKEND SKIPPED: ")
@@ -568,16 +708,26 @@ def empty_failure_section(with_actions):
             "unresolved": 0,
             "incomplete": 0,
         }
+        for name in EVENT_SLICES:
+            section[f"by_{name}"] = {}
+        section["records"] = []
     return section
 
 
-def add_backend_failure(section, backend, category, timestamp):
+def add_backend_failure(section, backend, category, timestamp, payload=None):
     counts = section["backend_failures"]
     counts["total"] += 1
     counts["by_backend"][backend] += 1
     counts["by_category"][category] = counts["by_category"].get(category, 0) + 1
     day = timestamp[:10]
     section["by_day"][day] = section["by_day"].get(day, 0) + 1
+    if payload is None:
+        return
+    for name in EVENT_SLICES:
+        value = payload.get(name)
+        key = value if isinstance(value, str) and value else "unknown"
+        section[f"by_{name}"][key] = section[f"by_{name}"].get(key, 0) + 1
+    section["records"].append({"timestamp": timestamp, **payload})
 
 
 def parse_backend_event(payload_text):
@@ -648,7 +798,7 @@ def scan_approval_failures(log_path, cutoff_epoch=0):
             if not isinstance(version, int) or isinstance(version, bool):
                 coverage["malformed_events"] += 1
                 continue
-            if version != SUPPORTED_EVENT_VERSION:
+            if version not in SUPPORTED_EVENT_VERSIONS:
                 coverage["unsupported_event_versions"] += 1
                 continue
             backend = payload.get("backend")
@@ -678,7 +828,7 @@ def scan_approval_failures(log_path, cutoff_epoch=0):
                 category = payload.get("failure_category")
                 if category not in FAILURE_CATEGORIES:
                     category = "other"
-                add_backend_failure(structured, backend, category, timestamp)
+                add_backend_failure(structured, backend, category, timestamp, payload)
                 if backend == "subscription":
                     structured["fallback"]["failed"] += 1
             elif backend == "subscription" and outcome == "success":
@@ -1001,15 +1151,39 @@ def print_approval_failures(failures, coverage):
 
 
 def print_native_failures(failures):
-    print(f"Native auto-mode failures: {failures['total']}")
+    print(f"Native auto-mode failures: {failures['total']} across {failures['sessions']} sessions")
     categories = ", ".join(
         f"{name} {count}" for name, count in failures["by_category"].items()
     )
     print(f"  Categories: {categories or 'none recorded'}")
-    for label, key in (("classifier model", "by_model"), ("day", "by_day")):
+    for label, key in (
+        ("classifier model", "by_model"),
+        ("session model", "by_session_model"),
+        ("CLI version", "by_cli_version"),
+        ("tool", "by_tool"),
+        ("cwd", "by_cwd"),
+    ):
         print(f"Native failures by {label}:")
         for name, count in failures[key].items():
             print(f"  {name}: {count}")
+    exposure = failures["exposure"]
+    print("Native failures by day (failures / classifier-bound calls, CLI versions seen):")
+    days = sorted(set(failures["by_day"]) | set(exposure["classifier_bound_calls_by_day"]))
+    for day in days:
+        calls = sum(exposure["classifier_bound_calls_by_day"].get(day, {}).values())
+        rate = exposure["failures_per_100_bound_calls_by_day"].get(day)
+        rate_text = f", {rate:g} per 100 calls" if rate is not None else ""
+        versions = ", ".join(sorted(exposure["cli_versions_by_day"].get(day, {})))
+        print(
+            f"  {day}: {failures['by_day'].get(day, 0)} / {calls}{rate_text}"
+            f"{'; ' + versions if versions else ''}"
+        )
+    print("Native failures by day and session model (failures / bound calls):")
+    for day, models in exposure["by_day_and_session_model"].items():
+        cells = ", ".join(
+            f"{model} {cell['failures']}/{cell['bound_calls']}" for model, cell in models.items()
+        )
+        print(f"  {day}: {cells}")
     hours = failures["by_hour"]
     if hours:
         peak = min(hours, key=lambda hour: (-hours[hour], hour))

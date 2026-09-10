@@ -9,7 +9,6 @@ Always active — no env var gate.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -810,12 +809,17 @@ def log(msg: str) -> None:
 # records of one event; a line written before this change starts with the human
 # sentence instead, and the two formats never overlap.
 #
-# The payload is METADATA ONLY — no command, tool input, prompt, or provider
-# error text. It exists so `claude-usage-audit --model-usage` can separate
-# backend failures from failed actions: one action can lose both backends, and a
-# successful fallback can follow a failed API call.
+# The payload carries no command, tool input, prompt, or provider error text —
+# it does carry the session id, cwd and account, so the log is private to this
+# machine (it already was: ~/.cache). It exists so `claude-usage-audit
+# --model-usage` can separate backend failures from failed actions (one action
+# can lose both backends, and a successful fallback can follow a failed API
+# call) and slice them by where and on what they happened.
 BACKEND_EVENT_PREFIX = "BACKEND-EVENT"
-BACKEND_EVENT_VERSION = 1
+# v2 (2026-09-09): the session id is carried in the clear, and the event names
+# the backend's model plus where it ran (host, cwd, repo, remote, commit,
+# branch, CLI version, session model, account) — see collect_diagnostics.
+BACKEND_EVENT_VERSION = 2
 
 # Ordered; first match wins. claude-usage-audit keeps a frozen copy of these
 # rules for the pre-event log lines it can only read as text, and
@@ -852,11 +856,150 @@ def new_action_id() -> str:
     return uuid.uuid4().hex[:16]
 
 
-def session_fingerprint(session_id) -> str | None:
-    """Opaque, stable-within-a-session id. None when the harness sent none."""
-    if not isinstance(session_id, str) or not session_id:
+# --- Diagnostics carried on every backend event -------------------------------
+#
+# Where an outcome happened, so a failure can be sliced by machine, repo, commit,
+# CLI version, session model and account when it is investigated later. Every
+# field is read from a file that is already on disk (the repo's .git, the
+# session transcript's tail, a cache the SessionStart hook writes) — never from
+# a subprocess, because this runs inside the 30 s hook budget on the failure
+# path. Every reader fails to None; a missing field is recorded as absent.
+DIAGNOSTICS_TAIL_BYTES = 65_536
+# Written by show_auth_account.sh at session start from `claude auth status`,
+# which is too slow (a CLI start) to call from a per-action hook.
+ACCOUNT_CACHE = os.path.expanduser("~/.cache/claude/auth-account.json")
+
+
+def _read_text(path: str, limit: int = 4096) -> str | None:
+    try:
+        with open(path, "rb") as f:
+            return f.read(limit).decode("utf-8", errors="replace")
+    except OSError:
         return None
-    return hashlib.sha256(session_id.encode()).hexdigest()[:16]
+
+
+def git_head(cwd: str) -> dict:
+    """{'commit': short sha | None, 'branch': name | None} for the repo holding cwd.
+
+    Reads .git/HEAD and at most one ref file, resolving a worktree's `gitdir:`
+    pointer and the common dir's packed-refs. No git subprocess.
+    """
+    out: dict = {"commit": None, "branch": None}
+    if not cwd:
+        return out
+    probe = os.path.abspath(cwd)
+    gitdir = None
+    for _ in range(64):
+        candidate = os.path.join(probe, ".git")
+        if os.path.isdir(candidate):
+            gitdir = candidate
+            break
+        if os.path.isfile(candidate):
+            pointer = _read_text(candidate) or ""
+            if pointer.startswith("gitdir:"):
+                gitdir = os.path.normpath(os.path.join(probe, pointer[7:].strip()))
+            break
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    if not gitdir:
+        return out
+    head = (_read_text(os.path.join(gitdir, "HEAD")) or "").strip()
+    if not head:
+        return out
+    if not head.startswith("ref:"):
+        out["commit"] = head[:12]
+        return out
+    ref = head[4:].strip()
+    if ref.startswith("refs/heads/"):
+        out["branch"] = ref[len("refs/heads/"):]
+    commondir = (_read_text(os.path.join(gitdir, "commondir")) or "").strip()
+    common = os.path.normpath(os.path.join(gitdir, commondir)) if commondir else gitdir
+    sha = (_read_text(os.path.join(common, ref)) or "").strip()
+    if not sha:
+        packed = _read_text(os.path.join(common, "packed-refs"), limit=1_048_576) or ""
+        for line in packed.splitlines():
+            if line.endswith(" " + ref):
+                sha = line.split(" ", 1)[0]
+                break
+    out["commit"] = sha[:12] or None
+    return out
+
+
+def transcript_metadata(transcript_path: str) -> dict:
+    """CLI version, session model and branch as the transcript's newest rows record them.
+
+    Claude Code stamps `version`, `gitBranch`, `cwd` on every row and the
+    conversation model on assistant rows. Only the tail is read.
+    """
+    out: dict = {"cli_version": None, "session_model": None, "transcript_branch": None}
+    if not transcript_path:
+        return out
+    try:
+        with open(transcript_path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - DIAGNOSTICS_TAIL_BYTES))
+            tail = f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return out
+    for line in reversed(tail.splitlines()):
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        if out["cli_version"] is None and isinstance(entry.get("version"), str):
+            out["cli_version"] = entry["version"]
+        if out["transcript_branch"] is None and isinstance(entry.get("gitBranch"), str):
+            out["transcript_branch"] = entry["gitBranch"]
+        msg = entry.get("message")
+        if (out["session_model"] is None and entry.get("type") == "assistant"
+                and isinstance(msg, dict) and isinstance(msg.get("model"), str)):
+            out["session_model"] = msg["model"]
+        if all(v is not None for v in out.values()):
+            break
+    return out
+
+
+def account_identity() -> str | None:
+    """The signed-in account as cached at session start; None when uncached."""
+    raw = _read_text(ACCOUNT_CACHE)
+    if not raw:
+        return None
+    try:
+        cached = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(cached, dict):
+        return None
+    email = cached.get("email")
+    method = cached.get("method")
+    if isinstance(email, str) and email:
+        return email
+    return method if isinstance(method, str) and method else None
+
+
+def collect_diagnostics(cwd: str, transcript_path: str, trust: dict) -> dict:
+    head = git_head(cwd)
+    meta = transcript_metadata(transcript_path)
+    toplevel = trust.get("toplevel") or ""
+    try:
+        host = os.uname().nodename
+    except (AttributeError, OSError):
+        host = None
+    return {
+        "host": host,
+        "cwd": cwd or None,
+        "repo": os.path.basename(toplevel) if toplevel else None,
+        "remote": trust.get("remote_url") or None,
+        "commit": head["commit"],
+        "branch": head["branch"] or meta["transcript_branch"],
+        "cli_version": meta["cli_version"],
+        "session_model": meta["session_model"],
+        "account": account_identity(),
+    }
 
 
 def log_backend_event(
@@ -866,7 +1009,9 @@ def log_backend_event(
     action,
     tool,
     permission_mode,
-    session,
+    session_id,
+    model: str | None = None,
+    diagnostics: dict | None = None,
     category: str | None = None,
     reason: str = "",
     human: str = "",
@@ -878,13 +1023,16 @@ def log_backend_event(
         "outcome": outcome,
         "failure_category": category,
         "action": action,
-        "session": session,
+        "session_id": session_id if isinstance(session_id, str) and session_id else None,
         "tool": tool if isinstance(tool, str) and tool else "unknown",
         # Absent stays distinguishable from observed: a harness that stops
         # sending the field must not read as a session in "unknown" mode.
         "permission_mode": permission_mode if observed else "unknown",
         "permission_mode_observed": observed,
+        # The model this backend classified with — never the conversation model.
+        "model": model,
     }
+    payload.update(diagnostics or {})
     if reason:
         payload["reason"] = reason
     line = f"{BACKEND_EVENT_PREFIX} {json.dumps(payload, separators=(',', ':'))}"
@@ -1691,7 +1839,7 @@ def main() -> None:
     # Backend-outcome metadata only. Both may be absent, and absent is recorded
     # as absent rather than guessed.
     permission_mode = hook_input.get("permission_mode")
-    session = session_fingerprint(hook_input.get("session_id"))
+    session_id = hook_input.get("session_id")
 
     # A missing API key used to warn loudly and return here, which meant no
     # auto-approval at all — the failure mode behind the ~349-denial incident.
@@ -1807,11 +1955,14 @@ def main() -> None:
         log(f"CONTEXT: users={len(context.user_messages)} tools={len(context.tool_calls)}")
 
     action = new_action_id()
+    diagnostics = collect_diagnostics(cwd, transcript_path, trust)
 
     def backend_event(backend, outcome, **kwargs):
         log_backend_event(
             backend, outcome,
-            action=action, tool=tool_name, permission_mode=permission_mode, session=session,
+            action=action, tool=tool_name, permission_mode=permission_mode,
+            session_id=session_id, diagnostics=diagnostics,
+            model=MODEL if backend == "api" else SUBSCRIPTION_MODEL,
             **kwargs,
         )
 

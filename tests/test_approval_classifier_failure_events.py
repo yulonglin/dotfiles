@@ -151,9 +151,11 @@ def test_api_failure_then_fallback_success_shares_one_action_id(ac, monkeypatch,
     assert all(e["tool"] == "Bash" for e in events)
     assert all(e["permission_mode"] == "acceptEdits" for e in events)
     assert all(e["permission_mode_observed"] is True for e in events)
-    # Session is fingerprinted, never carried through in the clear.
-    assert events[0]["session"] and events[0]["session"] != "session-uuid-fixture"
-    assert events[0]["session"] == events[1]["session"]
+    # v2: the session id is carried in the clear so a failure can be joined to
+    # its transcript; each backend names the model it classified with.
+    assert all(e["session_id"] == "session-uuid-fixture" for e in events)
+    assert events[0]["model"] == ac.MODEL
+    assert events[1]["model"] == ac.SUBSCRIPTION_MODEL
 
     text = log_path.read_text()
     assert SENTINEL not in text
@@ -187,7 +189,7 @@ def test_skipped_fallback_records_a_skip_and_an_absent_permission_mode(ac, monke
     # Absent is distinguishable from observed.
     assert events[0]["permission_mode"] == "unknown"
     assert events[0]["permission_mode_observed"] is False
-    assert events[0]["session"] is None
+    assert events[0]["session_id"] is None
 
 
 def test_both_backends_failing_records_two_categorized_failures(
@@ -275,6 +277,123 @@ def test_what_the_hook_writes_is_what_the_audit_counts(
         "skipped_no_budget": 0,
     }
     assert result["coverage"]["legacy_records"] == 0
+
+
+def make_repo(root, *, worktree=False):
+    """A minimal .git layout: HEAD -> refs/heads/<branch>, the ref in a loose file
+    for the main checkout, in packed-refs for the worktree's common dir."""
+    root.mkdir(parents=True)
+    if not worktree:
+        gitdir = root / ".git"
+        (gitdir / "refs" / "heads").mkdir(parents=True)
+        (gitdir / "HEAD").write_text("ref: refs/heads/fixture-branch\n")
+        (gitdir / "refs" / "heads" / "fixture-branch").write_text("0123456789abcdef0123456789abcdef01234567\n")
+        return
+    common = root.parent / "common.git"
+    gitdir = common / "worktrees" / "wt"
+    gitdir.mkdir(parents=True)
+    (root / ".git").write_text(f"gitdir: {gitdir}\n")
+    (gitdir / "HEAD").write_text("ref: refs/heads/wt-branch\n")
+    (gitdir / "commondir").write_text("../..\n")
+    (common / "packed-refs").write_text(
+        "# pack-refs with: peeled fully-peeled sorted\n"
+        "fedcba9876543210fedcba9876543210fedcba98 refs/heads/main\n"
+        "89abcdef0123456789abcdef0123456789abcdef refs/heads/wt-branch\n"
+    )
+
+
+@pytest.mark.parametrize("worktree", [False, True])
+def test_git_head_reads_branch_and_commit_without_a_subprocess(ac, tmp_path, worktree):
+    repo = tmp_path / "repo"
+    make_repo(repo, worktree=worktree)
+    (repo / "deep" / "dir").mkdir(parents=True)
+
+    head = ac.git_head(str(repo / "deep" / "dir"))
+
+    if worktree:
+        assert head == {"commit": "89abcdef0123", "branch": "wt-branch"}
+    else:
+        assert head == {"commit": "0123456789ab", "branch": "fixture-branch"}
+    assert ac.git_head(str(tmp_path / "nowhere")) == {"commit": None, "branch": None}
+    assert ac.git_head("") == {"commit": None, "branch": None}
+
+
+def test_backend_events_carry_where_they_happened(ac, monkeypatch, tmp_path):
+    """Host, repo, commit, branch, CLI version, session model and account ride on
+    every event, all read from files already on disk."""
+    repo = tmp_path / "repo"
+    make_repo(repo)
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps({"type": "assistant", "version": "2.1.263", "gitBranch": "fixture-branch",
+                    "message": {"model": "claude-fable-5-1", "content": []}}) + "\n"
+        + json.dumps({"type": "user", "version": "2.1.263", "message": {"content": "hi"}}) + "\n"
+    )
+    account = tmp_path / "auth-account.json"
+    account.write_text(json.dumps({"email": "person@example.test", "method": "claude.ai"}))
+    monkeypatch.setattr(ac, "ACCOUNT_CACHE", str(account))
+    # Not run_hook: that helper stubs detect_repo_trust with no toplevel.
+    monkeypatch.setattr(ac, "detect_repo_trust", lambda cwd: {
+        "remote_url": "git@github.test:owner/repo.git", "owner": "owner",
+        "trusted": False, "personal": False, "toplevel": str(repo), "cwd": cwd,
+    })
+    log_path = tmp_path / "approval-classifier.log"
+    monkeypatch.setattr(ac, "LOG_PATH", str(log_path))
+    monkeypatch.setattr(ac, "HEALTH_PATH", str(tmp_path / "health.json"))
+    monkeypatch.setattr(ac, "repo_local_executables", lambda *a, **k: [])
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+    monkeypatch.delenv(ac.NESTED_ENV, raising=False)
+
+    def api_rate_limited(req, timeout=None):
+        raise http_error(429, "rate_limit_error", "rate limit exceeded")
+
+    monkeypatch.setattr(ac.urllib.request, "urlopen", api_rate_limited)
+    monkeypatch.setattr(ac.subprocess, "run", sub_ok)
+    monkeypatch.setattr(ac.sys, "stdin", io.StringIO(json.dumps(hook_input(
+        cwd=str(repo), transcript_path=str(transcript), session_id="session-uuid-fixture",
+    ))))
+    ac.main()
+
+    events = read_events(log_path)
+    assert len(events) == 2
+    for e in events:
+        assert e["v"] == 2
+        assert e["host"] == os.uname().nodename
+        assert e["cwd"] == str(repo)
+        assert e["repo"] == "repo"
+        assert e["remote"] == "git@github.test:owner/repo.git"
+        assert e["commit"] == "0123456789ab"
+        assert e["branch"] == "fixture-branch"
+        assert e["cli_version"] == "2.1.263"
+        assert e["session_model"] == "claude-fable-5-1"
+        assert e["account"] == "person@example.test"
+        assert e["session_id"] == "session-uuid-fixture"
+    assert SENTINEL not in log_path.read_text()
+
+
+def test_diagnostics_are_absent_not_guessed_when_nothing_is_on_disk(ac, monkeypatch, tmp_path):
+    monkeypatch.setattr(ac, "ACCOUNT_CACHE", str(tmp_path / "missing.json"))
+    diagnostics = ac.collect_diagnostics(
+        str(tmp_path / "no-repo"), str(tmp_path / "no-transcript.jsonl"),
+        {"remote_url": "", "toplevel": ""},
+    )
+    assert diagnostics["cwd"] == str(tmp_path / "no-repo")
+    for key in ("repo", "remote", "commit", "branch", "cli_version", "session_model", "account"):
+        assert diagnostics[key] is None, key
+
+
+def test_v2_hook_events_round_trip_into_the_audit_slices(ac, audit, monkeypatch, tmp_path):
+    log_path = run_hook(
+        ac, monkeypatch, tmp_path, hook_input(session_id="s1"),
+        api_raises=http_error(429, "rate_limit_error", "rate limit exceeded"), sub_run=sub_ok,
+    )
+    result = audit.scan_approval_failures(log_path)
+    structured = result["structured"]
+    assert result["coverage"]["unsupported_event_versions"] == 0
+    assert structured["by_model"] == {ac.MODEL: 1}
+    assert structured["by_host"] == {os.uname().nodename: 1}
+    assert structured["by_repo"] == {"unknown": 1}
+    assert structured["records"][0]["session_id"] == "s1"
 
 
 CATEGORY_CASES = [

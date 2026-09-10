@@ -1201,7 +1201,7 @@ def test_damaged_rotated_and_unsupported_event_lines_never_abort_the_scan(tmp_pa
         "2026-09-06T10:02:00Z BACKEND-EVENT not-json-at-all\n"
         '2026-09-06T10:03:00Z BACKEND-EVENT ["not", "an", "object"]\n'
         "2026-09-06T10:04:00Z BACKEND-EVENT "
-        + json.dumps(event("api", "failure", action="future", category="auth", v=2))
+        + json.dumps(event("api", "failure", action="future", category="auth", v=3))
         + "\n"
         "2026-09-06T10:05:00Z BACKEND-EVENT "
         + json.dumps(event("api", "failure", action="ok", category="rate_limit"))
@@ -1265,7 +1265,7 @@ def test_a_damaged_or_future_event_never_suppresses_a_genuine_legacy_warning(tmp
     log.write_text(
         "2026-09-06T09:00:00Z BACKEND-EVENT not-json-at-all\n"
         + event_line(
-            "2026-09-06T09:30:00Z", event("api", "failure", action="future", v=2, category="auth")
+            "2026-09-06T09:30:00Z", event("api", "failure", action="future", v=3, category="auth")
         )
         + "2026-09-06T10:00:00Z " + TOTAL_FAILURE_WARNING
     )
@@ -1373,10 +1373,21 @@ def test_native_typed_failures_are_separate_from_conversation_usage(tmp_path):
     assert native["by_model"] == {"claude-fable-5": 2}
     assert native["by_day"] == {"2026-09-06": 2}
     assert native["by_hour"] == {"2026-09-06T10:00:00Z": 2}
-    assert set(native) == {"total", "by_category", "by_model", "by_day", "by_hour", "coverage"}
+    assert set(native) == {
+        "total", "sessions", "records", "exposure", "coverage",
+        *(f"by_{name}" for name in audit.NATIVE_SLICES),
+    }
     assert native["coverage"]["raw_matching_observations"] == 2
-    for sentinel in ("private-command-sentinel", "private-session-sentinel", "private-row-sentinel",
-                     "native-attempt", "another", "FixtureTool", "synthetic-reason", str(projects)):
+    # Attribution is exported in the clear (2026-09-09 boundary): the failing
+    # call's id, tool, reason and session, and the conversation model that
+    # preceded it in the same file.
+    assert native["by_session_id"] == {"private-session-sentinel": 2}
+    assert native["by_session_model"] == {"conversation-model": 2}
+    assert native["by_tool"] == {"FixtureTool": 2}
+    assert native["by_reason"] == {"rate-limited": 1, "synthetic-reason": 1}
+    assert [r["tool_use_id"] for r in native["records"]] == ["another", "native-attempt"]
+    # What stays out: the text after the recognised sentence, row UUIDs, file paths.
+    for sentinel in ("private-command-sentinel", "private-row-sentinel", str(projects)):
         assert sentinel not in json.dumps(native)
 
 
@@ -1623,10 +1634,12 @@ def test_native_cli_uses_utc_project_date_scope_and_exports_aggregates_only(tmp_
     assert native["by_hour"] == {iso(now.replace(minute=0, second=0)): 1}
     assert data["approval_classifier_usage"]["requests"] == 1
     assert data["quota"]["current"]["available"] is True
-    for value in ("private-attempt-sentinel", "private-suffix-sentinel", "private-session-sentinel",
-                  "private-row-sentinel", "FixtureTool", str(projects), "s.jsonl"):
+    for value in ("private-suffix-sentinel", "private-row-sentinel", str(projects), "s.jsonl"):
         assert value not in utc.stdout + text.stdout
-    assert "Native auto-mode failures: 1" in text.stdout
+    assert native["records"][0]["tool_use_id"] == "private-attempt-sentinel"
+    assert native["records"][0]["session_id"] == "private-session-sentinel"
+    assert "Native auto-mode failures: 1 across 1 sessions" in text.stdout
+    assert "FixtureTool: 1" in text.stdout
     assert "rate_limit 1" in text.stdout
     assert "claude-fable-5: 1" in text.stdout
     assert f"{now.date().isoformat()}: 1" in text.stdout
@@ -1693,8 +1706,166 @@ def test_native_reason_and_tool_compatibility_has_no_arbitrary_length_cap(tmp_pa
 
     assert native["total"] == 1
     assert native["by_category"] == {"other": 1}
-    assert reason not in json.dumps(native)
-    assert tool not in json.dumps(native)
+    # Retained in the clear, but bounded: the template's free text is capped.
+    assert native["by_reason"] == {reason[:audit.NATIVE_TEXT_CAP]: 1}
+    assert native["by_tool"] == {tool.strip()[:audit.NATIVE_TEXT_CAP]: 1}
+
+
+@pytest.mark.parametrize("reason,category", [
+    ("rate-limited", "rate_limit"), ("overloaded", "overloaded"),
+    ("server-error", "server_error"), ("synthetic", "other"),
+])
+def test_native_documented_reasons_get_their_own_category(tmp_path, reason, category):
+    projects = tmp_path / "projects"
+    write_jsonl(projects / "one" / "s.jsonl", [
+        native_row(content=NATIVE_PREFIX.replace("rate-limited", reason)),
+    ])
+
+    _, native = audit.scan_transcripts(projects)
+
+    assert native["by_category"] == {category: 1}
+    assert native["by_reason"] == {reason: 1}
+
+
+def test_native_records_carry_the_row_attributes_and_the_preceding_session_model(tmp_path):
+    """Every transcript row is stamped with cwd, version, gitBranch and sessionId;
+    the conversation model is on the assistant rows before the failure."""
+    projects = tmp_path / "projects"
+    stamped = native_row("2026-09-06T10:05:00Z", "stamped")
+    stamped.update(cwd="/fixture/repo", version="2.1.263", gitBranch="fixture-branch")
+    later = native_row("2026-09-06T10:06:00Z", "later")
+    later.update(cwd="/fixture/repo", version="2.1.264", gitBranch="fixture-branch")
+    write_jsonl(projects / "one" / "s.jsonl", [
+        native_row("2026-09-06T10:00:00Z", "before-any-assistant"),
+        assistant_row("2026-09-06T10:01:00Z", uuid="a1", model="first-model"),
+        assistant_row("2026-09-06T10:02:00Z", uuid="a2", model="second-model"),
+        stamped,
+        later,
+    ])
+
+    _, native = audit.scan_transcripts(projects)
+
+    assert native["total"] == 3
+    assert native["sessions"] == 1
+    assert native["by_session_model"] == {"None": 1, "second-model": 2}
+    assert native["by_cli_version"] == {"2.1.263": 1, "2.1.264": 1, "None": 1}
+    assert native["by_cwd"] == {"/fixture/repo": 2, "None": 1}
+    assert native["by_branch"] == {"fixture-branch": 2, "None": 1}
+    record = native["records"][1]
+    assert record == {
+        "timestamp": "2026-09-06T10:05:00Z",
+        "tool_use_id": "stamped",
+        "model": "claude-fable-5",
+        "category": "rate_limit",
+        "reason": "rate-limited",
+        "tool": "FixtureTool",
+        "cwd": "/fixture/repo",
+        "cli_version": "2.1.263",
+        "branch": "fixture-branch",
+        "session_id": "private-session-sentinel",
+        "session_model": "second-model",
+    }
+    assert native["records"][0]["session_model"] is None
+
+
+def tool_use_row(timestamp, calls, version=None):
+    row = {
+        "type": "assistant",
+        "timestamp": timestamp,
+        "message": {
+            "model": "claude-test",
+            "content": [
+                {"type": "tool_use", "id": call_id, "name": name, "input": {}}
+                for call_id, name in calls
+            ],
+        },
+    }
+    if version is not None:
+        row["version"] = version
+    return row
+
+
+def test_native_exposure_counts_classifier_bound_calls_once_per_id_by_day(tmp_path):
+    projects = tmp_path / "projects"
+    rows = [
+        tool_use_row("2026-09-05T23:00:00Z", [("c1", "Bash"), ("c2", "Read"), ("c3", "Agent")], "2.1.262"),
+        tool_use_row("2026-09-06T09:00:00Z", [("c4", "Bash"), ("c5", "Monitor"), ("c6", "Edit")], "2.1.263"),
+        native_row("2026-09-06T09:30:00Z", "f1"),
+        native_row("2026-09-06T09:31:00Z", "f2"),
+        tool_use_row("2026-09-06T10:00:00Z", [("c4", "Bash"), ("c7", "Task")], "2.1.263"),
+        {"type": "assistant", "timestamp": "bad", "message": {"content": [{"type": "tool_use", "id": "c8", "name": "Bash"}]}},
+    ]
+    write_jsonl(projects / "one" / "a.jsonl", rows)
+    # A mirrored copy of the same session must not double the exposure.
+    write_jsonl(projects / "two" / "b.jsonl", rows[:2])
+
+    _, native = audit.scan_transcripts(projects)
+    exposure = native["exposure"]
+
+    assert exposure["classifier_bound_calls_by_day"] == {
+        "2026-09-05": {"Agent": 1, "Bash": 1},
+        "2026-09-06": {"Bash": 1, "Monitor": 1, "Task": 1},
+    }
+    assert exposure["cli_versions_by_day"] == {
+        "2026-09-05": {"2.1.262": 2},
+        "2026-09-06": {"2.1.263": 3},
+    }
+    assert exposure["failures_per_100_bound_calls_by_day"] == {"2026-09-06": pytest.approx(66.67)}
+    # The failures' session model is the newest assistant model before the row in the
+    # same file (claude-test here); a day's bound calls are split by the same field.
+    assert exposure["by_day_and_session_model"] == {
+        "2026-09-05": {"claude-test": {"bound_calls": 2, "failures": 0, "per_100_bound_calls": 0.0}},
+        "2026-09-06": {"claude-test": {"bound_calls": 3, "failures": 2, "per_100_bound_calls": pytest.approx(66.67)}},
+    }
+    assert "upper bound on classifier calls" in native["coverage"]["limits"]
+
+    _, in_period = audit.scan_transcripts(projects, audit.parse_timestamp("2026-09-06T00:00:00Z"))
+    assert list(in_period["exposure"]["classifier_bound_calls_by_day"]) == ["2026-09-06"]
+
+
+def v2_event(backend, outcome, *, action, category=None, **extra):
+    payload = event(backend, outcome, action=action, category=category, v=2)
+    payload.pop("session")
+    payload.update({
+        "session_id": "session-in-the-clear",
+        "model": "claude-sonnet-5" if backend == "api" else "sonnet",
+        "host": "fixture-host",
+        "cwd": "/fixture/repo/sub",
+        "repo": "repo",
+        "remote": "git@github.test:owner/repo.git",
+        "commit": "abc123def456",
+        "branch": "fixture-branch",
+        "cli_version": "2.1.263",
+        "session_model": "claude-fable-5-1",
+        "account": "person@example.test",
+    })
+    payload.update(extra)
+    return payload
+
+
+def test_v2_events_are_counted_like_v1_and_sliced_by_where_they_happened(tmp_path):
+    log = tmp_path / "approval-classifier.log"
+    log.write_text(
+        event_line("2026-09-06T10:00:00Z", v2_event("api", "failure", action="a1", category="rate_limit"))
+        + event_line("2026-09-06T10:00:05Z", v2_event("subscription", "success", action="a1"))
+        + event_line("2026-09-06T11:00:00Z", v2_event("api", "failure", action="a2", category="auth", cli_version="2.1.264"))
+        + event_line("2026-09-06T12:00:00Z", event("api", "failure", action="a3", category="auth"))
+    )
+
+    result = audit.scan_approval_failures(log)
+    structured = result["structured"]
+
+    assert result["coverage"]["unsupported_event_versions"] == 0
+    assert structured["backend_failures"]["total"] == 3
+    assert structured["actions"] == {"observed": 3, "recovered": 1, "unresolved": 0, "incomplete": 2}
+    assert structured["by_model"] == {"claude-sonnet-5": 2, "unknown": 1}
+    assert structured["by_cli_version"] == {"2.1.263": 1, "2.1.264": 1, "unknown": 1}
+    assert structured["by_repo"] == {"repo": 2, "unknown": 1}
+    assert structured["by_account"] == {"person@example.test": 2, "unknown": 1}
+    assert structured["by_commit"] == {"abc123def456": 2, "unknown": 1}
+    assert [r["action"] for r in structured["records"]] == ["a1", "a2", "a3"]
+    assert structured["records"][0]["timestamp"] == "2026-09-06T10:00:00Z"
+    assert structured["records"][0]["session_id"] == "session-in-the-clear"
 
 
 @pytest.mark.parametrize("suffix,accepted", [("[1m]", True), ("[2m]", False), ("[1m][1m]", False), ("[private]", False)])
@@ -1715,7 +1886,7 @@ def test_native_limits_do_not_claim_attempt_rates_or_complete_history(tmp_path):
     _, native = audit.scan_transcripts(tmp_path / "missing")
 
     for limit in (
-        "failure-rate denominator", "hidden HTTP attempts", "complete historical coverage",
+        "upper bound on classifier calls", "hidden HTTP attempts", "complete historical coverage",
         "CLI wording changes", "not proof", "identical-command", "missing evidence",
     ):
         assert limit in native["coverage"]["limits"]
