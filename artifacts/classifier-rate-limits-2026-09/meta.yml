@@ -4,8 +4,9 @@ org: MATS Program   # claude auth status, 2026-09-10 (orgName populated; subscri
 first_published: 2026-09-10
 last_updated: 2026-09-10
 republish_pending: |
-  The committed HTML is ahead of the live page as of commit 5057a63 (the
-  2026-09-06 within-day split). The republish was refused: this page lives in
+  The committed HTML is ahead of the live page from commit 5057a63 (the
+  2026-09-06 within-day split) through 5224783 and later; publish the latest
+  build on the branch, not 5057a63. The republish was refused: this page lives in
   the MATS Program org and the machine is now signed in to the personal account.
   To land it, sign back in to MATS Program, read the url, then publish the
   committed HTML with that url. No rebuild is needed.

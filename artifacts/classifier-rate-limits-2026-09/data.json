@@ -15,6 +15,9 @@
     "docs_auto_mode_config": "https://code.claude.com/docs/en/auto-mode-config",
     "docs_errors": "https://code.claude.com/docs/en/errors#auto-mode-cannot-determine-the-safety-of-an-action",
     "issue_74248": "https://github.com/anthropics/claude-code/issues/74248",
+    "issue_64585": "https://github.com/anthropics/claude-code/issues/64585",
+    "issue_60438": "https://github.com/anthropics/claude-code/issues/60438",
+    "sibling_artifact": "https://claude.ai/code/artifact/26263dc9-8fda-4e1e-8d37-9161665d5b12",
     "onset": {
       "command": "python3 onset_0906.py",
       "url": "https://github.com/yulonglin/dotfiles/blob/worktree-classifier-failure-accounting/artifacts/classifier-rate-limits-2026-09/onset_0906.py"
