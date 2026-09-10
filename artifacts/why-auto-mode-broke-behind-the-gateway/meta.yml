@@ -49,8 +49,19 @@ related: |
   by session model over the whole window rather than the within-day split
 
 open: |
-  The page's day-by-day table gives 04:33 on the local clock for the 6
-  September rewire. The wiring commit 43088ef is stamped 09:25 UTC, which is
-  02:25 local, so the two do not reconcile. The within-day section splits on
-  the commit timestamp and says so; the table's figure is left as its author
-  wrote it and needs checking against whatever source produced it.
+  Two seams between the 2026-09-09 pass and the 2026-09-10 one, both stated on
+  the page rather than smoothed over.
+
+  Clocks. The day-by-day table gives 04:33 for the 6 September rewire on the
+  local PDT clock, which is 11:33 UTC. The router log on the machine whose
+  transcripts the split reads (hostname ubuntu-32gb-nbg1-1, TZ UTC) has its
+  first entry that day at 09:07:31 UTC and no entry on 09-05, and the wiring
+  commit 43088ef is stamped 09:25 UTC. The earlier page was written from a
+  background job reporting itself on binky, a Mac, and quotes PDT throughout,
+  so the two figures may be two machines' routers rather than one clock error.
+  Unresolved. The split boundary is taken from the router log, not from either
+  quoted time.
+
+  Counts. The same day totals 124 in the table and 209 in the split. The split
+  counts on a UTC day with SendMessage in numerator and denominator; the table
+  counts on a local day without it. Neither corrects the other.
