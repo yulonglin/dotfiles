@@ -1,0 +1,69 @@
+{
+  "measured": "2026-09-09/10, all local Claude Code transcripts on this machine",
+  "sources": {
+    "audit": {
+      "command": "./custom_bins/claude-usage-audit --model-usage --days 21",
+      "url": "https://github.com/yulonglin/dotfiles/blob/3a1cdaf/custom_bins/claude-usage-audit"
+    },
+    "exposure": {
+      "command": "python3 exposure_by_session_model.py [start end]",
+      "url": "https://github.com/yulonglin/dotfiles/blob/worktree-classifier-failure-accounting/artifacts/classifier-rate-limits-2026-09/exposure_by_session_model.py"
+    },
+    "snapshot": "data-snapshot-2026-09-10.md",
+    "pr": "https://github.com/yulonglin/dotfiles/pull/110",
+    "docs_permission_modes": "https://code.claude.com/docs/en/permission-modes",
+    "docs_auto_mode_config": "https://code.claude.com/docs/en/auto-mode-config",
+    "docs_errors": "https://code.claude.com/docs/en/errors#auto-mode-cannot-determine-the-safety-of-an-action",
+    "issue_74248": "https://github.com/anthropics/claude-code/issues/74248"
+  },
+  "by_day": [
+    {"day": "2026-08-19", "failures": 0, "bound": 1169, "cli": "2.1.234-236", "gateway": "off"},
+    {"day": "2026-08-20", "failures": 0, "bound": 502, "cli": "2.1.235-238", "gateway": "off"},
+    {"day": "2026-08-21", "failures": 0, "bound": 688, "cli": "2.1.238", "gateway": "off"},
+    {"day": "2026-08-24", "failures": 0, "bound": 660, "cli": "2.1.235, 241", "gateway": "off"},
+    {"day": "2026-08-25", "failures": 0, "bound": 76, "cli": "2.1.245-246", "gateway": "off"},
+    {"day": "2026-08-26", "failures": 0, "bound": 958, "cli": "2.1.245-246", "gateway": "off"},
+    {"day": "2026-08-27", "failures": 0, "bound": 2741, "cli": "2.1.246-248", "gateway": "off"},
+    {"day": "2026-08-28", "failures": 0, "bound": 3998, "cli": "2.1.247-251", "gateway": "off"},
+    {"day": "2026-08-29", "failures": 0, "bound": 3451, "cli": "2.1.250-251", "gateway": "off"},
+    {"day": "2026-08-30", "failures": 0, "bound": 1978, "cli": "2.1.251", "gateway": "off"},
+    {"day": "2026-08-31", "failures": 0, "bound": 2605, "cli": "2.1.251", "gateway": "off"},
+    {"day": "2026-09-01", "failures": 0, "bound": 3635, "cli": "2.1.251-258", "gateway": "off"},
+    {"day": "2026-09-02", "failures": 0, "bound": 503, "cli": "2.1.252-258", "gateway": "off"},
+    {"day": "2026-09-03", "failures": 0, "bound": 155, "cli": "2.1.258-259", "gateway": "off"},
+    {"day": "2026-09-04", "failures": 0, "bound": 23, "cli": "2.1.260", "gateway": "off"},
+    {"day": "2026-09-05", "failures": 0, "bound": 24, "cli": "2.1.260-261", "gateway": "off"},
+    {"day": "2026-09-06", "failures": 212, "bound": 2604, "cli": "2.1.260-263", "gateway": "on"},
+    {"day": "2026-09-07", "failures": 23, "bound": 1003, "cli": "2.1.263", "gateway": "on"},
+    {"day": "2026-09-08", "failures": 391, "bound": 2415, "cli": "2.1.263", "gateway": "on"},
+    {"day": "2026-09-09", "failures": 93, "bound": 365, "cli": "2.1.263, 266", "gateway": "on"}
+  ],
+  "events": [
+    {"day": "2026-09-03", "label": "default model set to Fable 5.1"},
+    {"day": "2026-09-06", "label": "gateway rewired"}
+  ],
+  "periods": [
+    {"id": "aug_on", "label": "Aug 1-18", "gateway": "on"},
+    {"id": "fine", "label": "Aug 19-Sep 5", "gateway": "off"},
+    {"id": "bad", "label": "Sep 6-9", "gateway": "on"}
+  ],
+  "by_model": [
+    {"model": "Fable 5.1", "aug_on": null, "fine": [0, 517], "bad": [672, 2943]},
+    {"model": "Fable 5", "aug_on": [62, 3606], "fine": [0, 6194], "bad": null},
+    {"model": "Opus 5", "aug_on": [91, 14007], "fine": [0, 16737], "bad": [5, 627]},
+    {"model": "Sonnet 5", "aug_on": [0, 1083], "fine": [0, 540], "bad": [0, 176]},
+    {"model": "GPT (Sol + Astra)", "aug_on": [0, 4652], "fine": null, "bad": [42, 2538]}
+  ],
+  "by_model_by_day": [
+    {"day": "2026-09-06", "Fable 5.1": [175, 1529], "Opus 5": [5, 345], "Sonnet 5": [0, 96], "GPT-5.6 Sol": [22, 154], "GPT-6 Astra": [10, 426], "classifier": "claude-opus-5[1m]; astra for the Opus 5 failures"},
+    {"day": "2026-09-07", "Fable 5.1": [22, 82], "Opus 5": [0, 67], "Sonnet 5": [0, 19], "GPT-5.6 Sol": [0, 583], "GPT-6 Astra": [1, 252], "classifier": "claude-opus-5[1m]"},
+    {"day": "2026-09-08", "Fable 5.1": [382, 1087], "Opus 5": [0, 144], "Sonnet 5": [0, 61], "GPT-5.6 Sol": [6, 789], "GPT-6 Astra": [3, 334], "classifier": "claude-opus-5[1m]"},
+    {"day": "2026-09-09", "Fable 5.1": [93, 245], "Opus 5": [0, 71], "Sonnet 5": null, "GPT-5.6 Sol": null, "GPT-6 Astra": null, "classifier": "claude-opus-5[1m]"}
+  ],
+  "router_log": [
+    {"day": "2026-09-06", "claude-opus-5": 1205, "claude-fable-5-1": 763, "claude-sonnet-5": 45, "haiku-4-5": 451, "sol": 343, "astra": 1970},
+    {"day": "2026-09-07", "claude-opus-5": 213, "claude-fable-5-1": 140, "claude-sonnet-5": 46, "haiku-4-5": 333, "sol": 931, "astra": 1646},
+    {"day": "2026-09-08", "claude-opus-5": 2341, "claude-fable-5-1": 1755, "claude-sonnet-5": 249, "haiku-4-5": 676, "sol": 2357, "astra": 1371},
+    {"day": "2026-09-09", "claude-opus-5": 525, "claude-fable-5-1": 343, "claude-sonnet-5": 30, "haiku-4-5": 823, "sol": 3, "astra": 2}
+  ]
+}

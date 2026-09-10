@@ -1,0 +1,28 @@
+title: Fable sessions through the gateway trip the classifier
+url: unpublished   # stamped by the publishing session
+org: MATS Program   # claude auth status, 2026-09-10 (orgName populated; subscriptionType team)
+first_published: 2026-09-10
+last_updated: 2026-09-10
+status: live   # the open question (who adds the 1M-context variant) is untested; flip to done when the one-hour test lands
+
+source: build.py + data.json
+built: classifier-rate-limits-2026-09.html
+builds_with: |
+  python3 build.py
+  annotate-html classifier-rate-limits-2026-09.html --key review-classifier-rate-limits-2026-09
+  # md2artifact cannot carry the inline SVG charts (it parses with html off), so
+  # the page is built directly and annotate-html supplies the layer the
+  # PreToolUse hook requires. Same pattern as context-ledger/.
+
+evidence: |
+  data-snapshot-2026-09-10.md is the measured input, copied verbatim from the
+  session's tmp/artifact-data.md on 2026-09-10: counts from
+  `claude-usage-audit --model-usage --days 21` (commit 3a1cdaf) and
+  `exposure_by_session_model.py` (copied here) over every local Claude Code
+  transcript, the router log tallies, the statusline quota cache at
+  2026-09-09 09:07Z, and the docs sentences quoted on the page (code.claude.com,
+  fetched 2026-09-09 and re-verified 2026-09-10 against permission-modes,
+  auto-mode-config and errors). The transcripts and the router log move on, so
+  the snapshot cannot be regenerated; data.json is its transcription.
+
+related: https://github.com/yulonglin/dotfiles/pull/110
