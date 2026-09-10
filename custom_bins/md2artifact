@@ -24,6 +24,7 @@ import argparse
 import html
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 try:
@@ -241,17 +242,157 @@ def details_passthrough(tokens: list[Token]) -> list[Token]:
     return out
 
 
+SVG_FORBIDDEN_ELEMENTS = frozenset({"script", "foreignobject", "iframe", "object", "embed"})
+
+
+def _local(name: str) -> str:
+    """The lowercased local part of an element or attribute name.
+
+    ElementTree reports a namespaced name as `{uri}local`, and the browser
+    that finally parses the page is an HTML parser, which case-folds names
+    inside <svg> — so <SCRIPT> and ONCLICK have to be recognised too.
+    """
+    return name.rpartition("}")[2].lower()
+
+
+def svg_rejection(source: str) -> str | None:
+    """Why this ```svg fence may not be inlined, or None if it may.
+
+    The allowlist is deliberately small and phrased as a denylist over a
+    *parsed* tree, not a regex over text: anything that does not parse as one
+    well-formed <svg> element is refused outright, so there is no half-parsed
+    input for the checks below to disagree with the browser about. Values are
+    compared with all whitespace removed and case folded, because `java\\nscript:`
+    and `JavaScript:` both work in a browser.
+
+    A DOCTYPE is refused before the parser sees it: ElementTree resolves no
+    external entities, but it does expand internal ones, so an internal DTD
+    subset is a billion-laughs denial of service against whoever builds the
+    page. An element is not a document and has no business carrying one.
+    """
+    if re.search(r"<!\s*(doctype|entity)", source, re.IGNORECASE):
+        return "it carries a DOCTYPE or entity declaration"
+    try:
+        root = ET.fromstring(source)
+    except ET.ParseError as exc:
+        return f"it does not parse as one well-formed XML element ({exc})"
+    if _local(root.tag) != "svg":
+        return f"its root element is <{_local(root.tag)}>, not <svg>"
+    for elem in root.iter():
+        name = _local(elem.tag)
+        if name in SVG_FORBIDDEN_ELEMENTS:
+            return f"it contains a <{name}> element"
+        if name == "style":
+            css = "".join(elem.itertext()).lower()
+            if "url(" in css or "@import" in css:
+                return "its <style> element pulls in an external resource"
+        for attr, value in elem.attrib.items():
+            aname = _local(attr)
+            flat = re.sub(r"\s+", "", value).lower()
+            if aname.startswith("on"):
+                return f"it carries an event-handler attribute ({aname})"
+            if aname == "href" and not flat.startswith("#"):
+                return f"its {name} element has an {aname} that is not a same-document reference"
+            if "javascript:" in flat:
+                return f"its {aname} attribute carries a javascript: URL"
+            if re.search(r"data:(?!image/)", flat):
+                return f"its {aname} attribute carries a non-image data: URL"
+    return None
+
+
+def _svg_token(source: str) -> Token:
+    """The fence body, byte for byte, as a real element.
+
+    Verbatim and not re-serialised on purpose: ElementTree would normalise
+    `viewBox` to lower case, drop namespace prefixes and reorder attributes,
+    each of which silently breaks a chart. The tree is used to JUDGE the
+    source, never to rewrite it.
+    """
+    return Token(
+        "html_block",
+        "",
+        0,
+        content=source if source.endswith("\n") else source + "\n",
+        block=True,
+    )
+
+
+def _svg_note_token(reason: str) -> Token:
+    return Token(
+        "html_block",
+        "",
+        0,
+        content=(
+            '<p class="svg-note">This <code>svg</code> block was not inlined because '
+            f"{html.escape(reason)}. Its source is shown below.</p>\n"
+        ),
+        block=True,
+    )
+
+
+def svg_passthrough(tokens: list[Token]) -> list[Token]:
+    """Inline a ```svg fence whose body survives the sanitising check.
+
+    The third deliberate exception to html-off, and the reason it exists:
+    charts on an artifact page are native SVG drawn from the house tokens, so
+    without this a chart page cannot go through this pipeline at all and has to
+    be hand-written HTML instead.
+
+    Rejected: anything that is not one well-formed <svg> element; a <script>,
+    <foreignObject>, <iframe>, <object> or <embed> anywhere in the tree; a
+    <style> carrying url( or @import; any on* attribute; any href/xlink:href
+    that is not a same-document `#` reference (which is also what stops a <use>
+    pulling in an external document); and any attribute value carrying
+    javascript: or a data: that is not data:image/. A rejected fence falls back
+    to today's behavior — an escaped code block — with a visible note saying
+    why, so a chart never fails silently.
+
+    Known limit, accepted: the page is finally read by an HTML parser, where
+    certain tags (<p>, <div>, <img>, …) break out of SVG foreign content and
+    are parsed as HTML. The denylist above still applies to them, because
+    ElementTree saw them; what it does not cover is a resource-loading
+    attribute those HTML elements have and SVG does not, such as <img src>.
+    The viewer's CSP blocks the fetch, and the residue is cosmetic.
+
+    An ```svg example nested inside an ordinary code fence stays escaped: the
+    outer fence swallows it, so no fence token is ever produced for it. Same as
+    mermaid.
+    """
+    out: list[Token] = []
+    for tok in tokens:
+        if tok.type == "fence" and tok.info.strip().split() == ["svg"]:
+            reason = svg_rejection(tok.content)
+            if reason is None:
+                out.append(_svg_token(tok.content))
+                continue
+            out.append(_svg_note_token(reason))
+        out.append(tok)
+    return out
+
+
 # ─── Sanctioned passthroughs ──────────────────────────────────────────────────
 # The parser keeps html OFF so a reviewed document can never inject markup into
 # the published page. Anything the Artifact viewer renders natively (mermaid
 # today) or that reviewed documents legitimately need as real elements
-# (<details> collapsibles) gets its own narrow passthrough here instead of
-# flipping html on globally. When Anthropic ships a new viewer-native construct,
-# preserve it by adding one entry to this list: a token pass that rebuilds ONLY
-# that construct's exact spelling as an html_block, escapes any user text it
-# carries, and leaves every other spelling escaped. Each entry ships with a
-# guard test (tests/test_md2artifact_<name>.py).
-PASSTHROUGHS = [mermaid_passthrough, details_passthrough]
+# (<details> collapsibles, ```svg charts) gets its own narrow passthrough here
+# instead of flipping html on globally. When Anthropic ships a new viewer-native
+# construct, preserve it by adding one entry to this list: a token pass that
+# rebuilds ONLY that construct's exact spelling as an html_block, escapes any
+# user text it carries, and leaves every other spelling escaped. Each entry
+# ships with a guard test (tests/test_md2artifact_<name>.py).
+#
+# ```svg is the one entry that emits user text UNESCAPED, so it pays for that
+# with a check instead: the body must parse as one well-formed <svg> element
+# carrying no DOCTYPE, no <script>/<foreignObject>/<iframe>/<object>/<embed>,
+# no <style> with url( or @import, no on* attribute, no href/xlink:href that
+# is not a same-document `#` reference, and no javascript: or non-image data:
+# value anywhere. Judged on a parsed tree, emitted verbatim — never
+# re-serialised, or `viewBox` casing and namespace prefixes would not survive.
+# Anything rejected renders as an escaped code block with a note saying why,
+# which is exactly what a plain fence did before. So the property the whole
+# registry exists to hold — a Markdown document you did not write cannot put
+# script into your published page — is unchanged.
+PASSTHROUGHS = [mermaid_passthrough, details_passthrough, svg_passthrough]
 
 
 def render(md_text: str) -> tuple[str, list[tuple[int, str, str]]]:
@@ -355,6 +496,9 @@ table{{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0;display
 th,td{{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}}
 th{{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}}
 hr{{border:0;border-top:1px solid var(--rule);margin:2rem 0}}
+.doc svg{{max-width:100%;height:auto}}
+p.svg-note{{color:var(--bad);background:var(--bad-bg);border-radius:6px;
+ padding:.4rem .7rem;font-size:.85rem}}
 a{{color:var(--accent)}}
 details{{border:1px solid var(--rule);border-radius:7px;background:var(--panel);
  margin:1rem 0;padding:.55rem .9rem}}
