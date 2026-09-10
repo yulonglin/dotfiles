@@ -25,6 +25,14 @@ For a repo whose artifacts are personal rather than about the code, the same lay
 
 The moment an `Artifact` publish returns a URL, add or update its row in the same turn, before reporting back. Two facts are available then and never again: which repo the page belongs to, and which org published it. `Artifact action: list` carries neither.
 
+**Then republish the hosted index, in that same turn, after every artifact publish** (Yulong, 2026-09-10 — this replaced the earlier "republish the index only when someone asks for a hosted copy"). Rebuild it from the Markdown and publish that HTML with the index's own `url`, so the page updates in place and the Markdown never gets ahead of it:
+
+```bash
+md2artifact ARTIFACTS.md -o artifacts/index/index.html --title "<Repo> Artifacts"
+```
+
+The URL to pass is the one on the `**Live index page:**` line of the `ARTIFACTS.md` header. That line is the single machine-readable record of where the index lives — `claude/hooks/nudge_artifact_index.sh` reads it from there to name the URL in its reminder — so keep it one line carrying exactly one artifact URL, and re-stamp it whenever the index moves. The hook only reminds; publishing stays the session's job. Never build to `$TMPDIR` or any gitignored path: `block_throwaway_artifact_path.sh` refuses the publish, and the built page belongs in git beside every other artifact.
+
 | Column | Content |
 |---|---|
 | Artifact | The linked title. It already asserts the finding, so it doubles as the summary; give a legacy topic-titled page a one-line gloss until it is renamed |
@@ -95,13 +103,7 @@ Check each row's Source path still exists, and that the committed built HTML sit
 
 Two consequences. A page showing behaviour the current tooling no longer produces needs a **rebuild and republish**, not a bug report. And a row whose Source is `—` can never get that rebuild, which is why the column is a durability requirement rather than bookkeeping — it is the difference between a page that can be repaired and one that is stuck forever. When a tooling fix matters (data loss, a broken export, an unusable comment box), rebuild the rows that have sources and list the ones that cannot be fixed.
 
-Republish the index in the same pass — a sync that updates only the Markdown leaves the page stale, which is the drift this skill exists to remove:
-
-```bash
-md2artifact ARTIFACTS.md -o "$TMPDIR/artifacts-index.html"
-```
-
-Publish with the index's own `url` from its row so it updates in place. On `org_mismatch`, follow `artifact-writing` § in-place update refused: new file path, publish without `url`, supersedes note, then record it here as one `superseded` row plus one new row. Warn before republishing over annotations the user may have added.
+Republish the index at the end of the pass, the same way as after any other publish (§ *Write the row at publish time*) — a sync that updates only the Markdown leaves the page stale, which is the drift this skill exists to remove. On `org_mismatch`, follow `artifact-writing` § in-place update refused: new file path, publish without `url`, supersedes note, then record it here as one `superseded` row plus one new row, and re-stamp the `**Live index page:**` line with the new URL. Warn before republishing over annotations the user may have added.
 
 Close by reporting counts per verdict, ambiguous rows named individually, and missing sources. Say plainly when nothing changed — a clean sync is a result.
 
