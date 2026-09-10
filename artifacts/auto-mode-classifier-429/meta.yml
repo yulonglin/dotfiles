@@ -1,0 +1,12 @@
+title: Why Auto Mode Broke Behind the Gateway
+url: https://claude.ai/code/artifact/959f403c-5343-40c6-ad4b-8d68f9a066e6
+org: MATS Program   # claude auth status, 2026-09-09
+first_published: 2026-09-09
+last_updated: 2026-09-09
+status: live
+
+source: report.md
+built: report.html
+builds_with: |
+  uv run --with markdown-it-py --python 3.14 --no-project python custom_bins/md2artifact report.md -o report.html
+evidence: ~/vault/tooling/dotfiles/docs/2026-09-09_handover-auto-mode-classifier-429.md   # captures and council result are job-local under ~/.claude/jobs/49656f9b/tmp/
