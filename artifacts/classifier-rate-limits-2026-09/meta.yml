@@ -3,6 +3,12 @@ url: https://claude.ai/code/artifact/e57cd906-4950-49a2-8a01-8b8f29234843
 org: MATS Program   # claude auth status, 2026-09-10 (orgName populated; subscriptionType team)
 first_published: 2026-09-10
 last_updated: 2026-09-10
+republish_pending: |
+  The committed HTML is ahead of the live page as of commit 5057a63 (the
+  2026-09-06 within-day split). The republish was refused: this page lives in
+  the MATS Program org and the machine is now signed in to the personal account.
+  To land it, sign back in to MATS Program, read the url, then publish the
+  committed HTML with that url. No rebuild is needed.
 status: live   # the gateway's causal role is settled by the 09-06 within-day split; the mechanism (who asks for the 1M-context variant) is untested — flip to done when the declared-context-window test lands
 
 source: build.py + data.json
