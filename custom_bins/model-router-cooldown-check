@@ -1,0 +1,328 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""Detect and clear a stale Codex credential cooldown in the model-router upstream.
+
+CLIProxyAPI reads `resets_at` out of an upstream 429 and locks the credential
+until then -- up to several days -- without ever re-probing. When the real quota
+window rolls early, every Codex route keeps returning 429 from a local cooldown
+table while the subscription is in fact fine. The router still reports healthy,
+so nothing else notices. Observed 2026-09-09 to 2026-09-11: a 96h lockout held
+while the ChatGPT plan showed full quota.
+
+The cooldown lives in the upstream child process only, so bouncing the service
+clears it. That is safe to do blindly *only* if we can tell a stale cooldown
+from a real one, which we can:
+
+  stale  -> refused locally, ~1ms, message says "are in cooldown"/"cooling down"
+  real   -> round-trips upstream, ~1s, message says "usage_limit_reached"
+
+So: probe, and restart only on the local-refusal shape. After the restart the
+probe is repeated, which settles it -- 200 means it was stale, a genuine
+usage_limit_reached means the quota really is spent and we record that so the
+next run does not bounce the service again.
+
+  model-router-cooldown-check            # probe and report; never restarts
+  model-router-cooldown-check --fix      # restart when the cooldown looks stale
+  model-router-cooldown-check --json     # machine-readable result
+
+Exit codes: 0 routes are usable, 1 stale cooldown found (or cleared with --fix),
+2 quota genuinely exhausted upstream, 3 could not determine.
+"""
+
+import argparse
+import datetime
+import json
+import os
+import platform
+import re
+import subprocess
+import sys
+import time
+import tomllib
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+LABEL = "com.alignment-hive.model-router"
+UNIT = "model-router.service"
+PORT = 8787
+HEALTH_PATH = "/__model-router/health"
+# A cooldown this long is never worth trusting: the upstream hint is a worst
+# case, and the window it names can roll early. Anything shorter is ordinary
+# backoff and is left alone.
+STALE_AFTER_SECONDS = 30 * 60
+# Never bounce the service more often than this, whatever the probe says.
+RESTART_COOLDOWN_SECONDS = 10 * 60
+RESTART_WAIT_SECONDS = 20.0
+
+OK, STALE, EXHAUSTED, UNKNOWN = 0, 1, 2, 3
+
+
+class CheckError(Exception):
+    """A diagnostic safe to print: never carries a token, URL or response body."""
+
+
+def state_dir() -> Path:
+    return Path.home() / ".local/state/model-router"
+
+
+def load_endpoint() -> tuple[str, str]:
+    """Return (base_url, token) for the locally owned router, or raise."""
+    token_path = state_dir() / "ingress-token"
+    try:
+        token = token_path.read_text().strip()
+    except OSError as exc:
+        raise CheckError("no ingress token; is model-router installed?") from exc
+    if not token:
+        raise CheckError("ingress token is empty.")
+    return "http://127.0.0.1:%d/t/%s" % (PORT, token), token
+
+
+def codex_routes() -> list[str]:
+    """Routing ids served by the Codex provider, most specific first.
+
+    The generated config puts Codex routes in top-level [[models]]; the
+    openai-providers block is OpenRouter and is unaffected by this failure.
+    """
+    config = Path(
+        os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+    ) / "model-router/config.toml"
+    try:
+        with config.open("rb") as handle:
+            data = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise CheckError("could not read the router config.") from exc
+    routes = [m["routing-id"] for m in data.get("models", []) if m.get("routing-id")]
+    if not routes:
+        raise CheckError("no Codex routes configured; nothing to check.")
+    return routes
+
+
+def probe(base_url: str, token: str, model: str, timeout: float) -> dict:
+    """One minimal generation. Returns {status, elapsed_ms, kind}."""
+    body = json.dumps({
+        "model": model,
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "."}],
+    }).encode()
+    request = urllib.request.Request(
+        base_url + "/v1/messages",
+        data=body,
+        headers={
+            "x-api-key": token,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    started = time.monotonic()
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            response.read(4096)
+            status, payload = response.status, ""
+    except urllib.error.HTTPError as error:
+        status = error.code
+        try:
+            payload = error.read(4096).decode("utf-8", errors="replace")
+        except OSError:
+            payload = ""
+    except (OSError, urllib.error.URLError) as exc:
+        raise CheckError("the router did not answer; is the service running?") from exc
+    elapsed_ms = (time.monotonic() - started) * 1000
+
+    return {
+        "status": status,
+        "elapsed_ms": round(elapsed_ms, 1),
+        "kind": classify(status, payload),
+        "resets_at": resets_at(payload),
+        "cooldown_remaining_s": cooldown_remaining(payload),
+    }
+
+
+def classify(status: int, payload: str) -> str:
+    """Name the failure shape behind a probe response.
+
+    Order matters. A local cooldown refusal quotes the upstream error that
+    caused it, so its body contains "usage_limit_reached" too:
+
+        All credentials for model X are cooling down via provider codex
+        (last error: usage_limit_reached: The usage limit has been reached)
+
+    Matching on usage_limit_reached first would read every stale cooldown as a
+    genuine one and never clear it -- the exact bug this tool exists to catch.
+    """
+    if status == 200:
+        return "ok"
+    if status != 429:
+        return "error"
+    if re.search(r"cool(?:ing|down)", payload, re.IGNORECASE):
+        # Refused from the local table; the request never left the machine.
+        return "local_cooldown"
+    if "usage_limit_reached" in payload:
+        return "upstream_limit"
+    return "rate_limited"
+
+
+def resets_at(payload: str) -> int | None:
+    found = re.search(r'"resets_at"\s*:\s*(\d{9,12})', payload)
+    return int(found.group(1)) if found else None
+
+
+def cooldown_remaining(payload: str) -> int | None:
+    """Parse `remaining=96h32m3s` out of a local cooldown refusal."""
+    found = re.search(r"remaining=(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?", payload)
+    if not found or not any(found.groups()):
+        return None
+    hours, minutes, seconds = (int(g or 0) for g in found.groups())
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def read_state() -> dict:
+    try:
+        return json.loads((state_dir() / "cooldown-check.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def write_state(**fields) -> None:
+    path = state_dir() / "cooldown-check.json"
+    data = read_state()
+    data.update(fields)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, sort_keys=True))
+    except OSError:
+        pass  # Best effort: losing the guard must not block recovery.
+
+
+def restart_blocked(now: float) -> str | None:
+    """Reasons not to bounce the service, checked before touching it."""
+    state = read_state()
+    last = state.get("last_restart_unix")
+    if isinstance(last, (int, float)) and now - last < RESTART_COOLDOWN_SECONDS:
+        return "a restart %d s ago is still settling" % int(now - last)
+    limit = state.get("upstream_limit_resets_at")
+    if isinstance(limit, int) and now < limit:
+        left = datetime.timedelta(seconds=int(limit - now))
+        return "upstream reported a genuine quota limit; %s left on that window" % left
+    return None
+
+
+def restart_service(timeout: float) -> None:
+    if platform.system() == "Darwin":
+        command = ["/bin/launchctl", "kickstart", "-k", "gui/%d/%s" % (os.getuid(), LABEL)]
+    else:
+        command = ["systemctl", "--user", "restart", UNIT]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True,
+                                timeout=timeout, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CheckError("could not restart the router service.") from exc
+    if result.returncode:
+        raise CheckError("the router service refused to restart (exit %d)." % result.returncode)
+    write_state(last_restart_unix=time.time())
+
+
+def wait_healthy(base_url: str, deadline: float) -> bool:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    while time.monotonic() < deadline:
+        try:
+            with opener.open(base_url + HEALTH_PATH, timeout=1.0) as response:
+                data = json.loads(response.read(4096))
+                if response.status == 200 and data.get("status") in ("ok", "degraded"):
+                    return True
+        except (OSError, ValueError, urllib.error.URLError):
+            pass
+        time.sleep(0.25)
+    return False
+
+
+def run(fix: bool) -> tuple[int, dict]:
+    base_url, token = load_endpoint()
+    model = codex_routes()[0]
+    result = {"model": model, "fixed": False}
+
+    first = probe(base_url, token, model, timeout=90.0)
+    result["probe"] = first
+
+    if first["kind"] == "ok":
+        write_state(upstream_limit_resets_at=None)
+        return OK, result | {"summary": "Codex routes are serving normally."}
+
+    if first["kind"] == "upstream_limit":
+        if first["resets_at"]:
+            write_state(upstream_limit_resets_at=first["resets_at"])
+        return EXHAUSTED, result | {
+            "summary": "Quota is genuinely exhausted upstream; the cooldown is correct."
+        }
+
+    if first["kind"] != "local_cooldown":
+        return UNKNOWN, result | {
+            "summary": "Unexpected response (HTTP %s); not touching the service." % first["status"]
+        }
+
+    remaining = first["cooldown_remaining_s"]
+    result["summary"] = (
+        "Local cooldown is holding every Codex route"
+        + (" for another %s" % datetime.timedelta(seconds=remaining) if remaining else "")
+        + "; the request never reached upstream."
+    )
+    if remaining is not None and remaining < STALE_AFTER_SECONDS:
+        return OK, result | {
+            "summary": result["summary"] + " Short enough to be ordinary backoff; leaving it."
+        }
+    if not fix:
+        return STALE, result | {"summary": result["summary"] + " Re-run with --fix to clear it."}
+
+    blocked = restart_blocked(time.time())
+    if blocked:
+        return STALE, result | {"summary": result["summary"] + " Not restarting: " + blocked + "."}
+
+    restart_service(timeout=15.0)
+    if not wait_healthy(base_url, time.monotonic() + RESTART_WAIT_SECONDS):
+        return UNKNOWN, result | {"summary": "Restarted, but the router did not come back healthy."}
+
+    second = probe(base_url, token, model, timeout=90.0)
+    result["probe_after_restart"] = second
+    if second["kind"] == "ok":
+        write_state(upstream_limit_resets_at=None)
+        return OK, result | {"fixed": True, "summary": "Stale cooldown cleared; Codex routes serve again."}
+    if second["kind"] == "upstream_limit":
+        if second["resets_at"]:
+            write_state(upstream_limit_resets_at=second["resets_at"])
+        return EXHAUSTED, result | {
+            "summary": "Cooldown was real: upstream still reports the quota spent."
+        }
+    return UNKNOWN, result | {
+        "summary": "Still refusing after a restart (HTTP %s); inspect the router logs." % second["status"]
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Detect, and optionally clear, a stale Codex cooldown in model-router.")
+    parser.add_argument("--fix", action="store_true",
+                        help="restart the router service when the cooldown looks stale")
+    parser.add_argument("--json", action="store_true", help="print the result as JSON")
+    args = parser.parse_args()
+
+    try:
+        code, result = run(fix=args.fix)
+    except CheckError as error:
+        if args.json:
+            print(json.dumps({"summary": str(error), "error": True}, indent=2))
+        else:
+            print("model-router cooldown check: %s" % error, file=sys.stderr)
+        return UNKNOWN
+
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(result["summary"])
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
