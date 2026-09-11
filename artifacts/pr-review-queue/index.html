@@ -134,7 +134,7 @@
 <div class="wrap">
   <header>
     <h1>Dotfiles Review Queue</h1>
-    <p class="sub">Thirty-six open, eleven of them opened today by this session with one concern each. Tick as you go — the state is stored server-side, so it follows you between devices, and it travels with any comments you copy out.</p>
+    <p class="sub">Thirty-six open, eleven of them opened today by this session with one concern each. Tick as you go — the state is stored server-side at a shared org path, so it follows every reviewer between devices, and it travels with any comments you copy out.</p>
     <div class="counts">
       <div class="count"><b id="c-ready">11</b><span>ready today</span></div>
       <div class="count"><b>2</b><span>needs you</span></div>
@@ -201,6 +201,8 @@
   const URL_FOR = (n) => "https://github.com/yulonglin/dotfiles/pull/" + n;
   const state = { checked: {} };
   let store = null;
+  let unsaved = false;      // a tick made before the handle resolved
+  let firstDelivery = true;
 
   function row(pr) {
     const li = document.createElement("li");
@@ -282,14 +284,22 @@
     document.getElementById("c-done").textContent = String(done);
   }
 
+  // Every write replaces the whole document, which is what makes an untick
+  // expressible: a key dropped from the map turns that row off for everyone.
+  // With no handle yet there is nowhere to write, so the tick is only marked
+  // unsaved and the first delivery flushes it.
+  function save() {
+    if (!store) { unsaved = true; return; }
+    unsaved = false;
+    store.doc("review/checklist").set({ checked: state.checked, updatedAt: Date.now() })
+      .catch(() => { document.getElementById("sync").textContent = "checklist: save failed, this device only"; });
+  }
+
   function toggle(n, on) {
     if (on) state.checked[n] = true;
     else delete state.checked[n];
     paint();
-    if (store) {
-      store.doc("review/checklist").set({ checked: state.checked, updatedAt: Date.now() })
-        .catch(() => { document.getElementById("sync").textContent = "checklist: save failed, this device only"; });
-    }
+    save();
   }
 
   // What the copy carries besides the comments. Returns "" when nothing is
@@ -325,13 +335,26 @@
         // stored fields only come out of snap.data(). Reading snap.checked
         // gave undefined on every delivery, so a reload painted nothing and
         // the ticks looked lost even though the write had landed.
-        sync.textContent = "checklist: synced across your devices";
+        sync.textContent = "checklist: synced across the org";
         const body = snap && snap.exists ? snap.data() : null;
-        // Nothing stored yet: keep whatever this device has rather than
-        // clearing a tick made between subscribing and the first delivery.
-        if (!body) return;
-        const next = body.checked;
-        state.checked = (next && typeof next === "object") ? { ...next } : {};
+        const next = body && body.checked;
+        const incoming = (next && typeof next === "object") ? next : null;
+        if (firstDelivery) {
+          firstDelivery = false;
+          // The handle resolves over the network, so a tick can land while
+          // store is still null, and that tick exists only in memory. Merge
+          // the two states once, here: replacing would drop the local tick,
+          // and flushing any earlier would replace a stored document nobody
+          // had read yet. Later deliveries replace, so an untick still lands.
+          if (incoming) state.checked = { ...incoming, ...state.checked };
+          paint();
+          if (unsaved) save();
+          return;
+        }
+        // A document that is not there is not an untick: only a stored map
+        // replaces what this device holds.
+        if (!incoming) return;
+        state.checked = { ...incoming };
         paint();
       }, (err) => {
         sync.textContent = "checklist: this device only (" + (err && err.code) + ")";
