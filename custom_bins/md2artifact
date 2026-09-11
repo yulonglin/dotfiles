@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import re
 import sys
 from pathlib import Path
@@ -241,6 +242,91 @@ def details_passthrough(tokens: list[Token]) -> list[Token]:
     return out
 
 
+TASK_RE = re.compile(r"^\[([ xX])\]\s+")
+
+
+def _inline_plain(children: list[Token]) -> str:
+    """The item's visible text, used only to derive a stable control id."""
+    return "".join(
+        c.content for c in children if c.type in {"text", "code_inline"}
+    ).strip()
+
+
+def _state_control(sid: str, checked: bool, states: list[str] | None) -> str:
+    """The opening markup of one toggle control, up to the label span.
+
+    Two shapes, one contract. With no declared state set the control is a real
+    `<input type="checkbox">`, so Space toggles it and the browser supplies the
+    role; the page a reader already knows is unchanged. With a set declared it
+    is a `<button>` cycling through that set, which is keyboard-operable for
+    the same reason. Either way the wrapper carries `data-an-state-id`, which
+    is the only thing the annotation layer looks for — a hand-written page can
+    emit the same markup and get persistence and export for free.
+
+    `[ ]` selects the first declared state and `[x]` the last, which is exactly
+    checkbox semantics when the set has two members.
+    """
+    wrap_attrs = f' data-an-state-id="{html.escape(sid, quote=True)}"'
+    if states:
+        value = states[-1] if checked else states[0]
+        wrap_attrs += (
+            ' data-an-states="'
+            + html.escape(json.dumps(states), quote=True)
+            + '"'
+        )
+        control = (
+            '<button type="button" class="anstatebtn" data-an-state="'
+            + html.escape(value, quote=True)
+            + '">'
+            + html.escape(value)
+            + "</button>"
+        )
+    else:
+        control = '<input type="checkbox" class="anstatebox"' + (
+            " checked>" if checked else ">"
+        )
+    return f'<span class="anstate"{wrap_attrs}>{control}<span class="anstatelabel">'
+
+
+def task_list_controls(tokens: list[Token], states: list[str] | None) -> list[Token]:
+    """Turn `- [ ] item` into a real toggle control, keeping the text quotable.
+
+    Only the FIRST paragraph of a list item is rewritten, and only when its
+    first text child starts with a task marker, so an ordinary list item and a
+    `[ ]` appearing mid-sentence are both left alone. The label text stays
+    ordinary escaped Markdown output — the annotation layer can still quote it
+    — while the control's own text sits in an element the layer skips.
+    """
+    seen: dict[str, int] = {}
+    for i, tok in enumerate(tokens):
+        if tok.type != "list_item_open":
+            continue
+        if not (
+            i + 2 < len(tokens)
+            and tokens[i + 1].type == "paragraph_open"
+            and tokens[i + 2].type == "inline"
+        ):
+            continue
+        kids = tokens[i + 2].children or []
+        if not kids or kids[0].type != "text":
+            continue
+        m = TASK_RE.match(kids[0].content)
+        if not m:
+            continue
+        kids[0].content = kids[0].content[m.end() :]
+        sid = slugify(_inline_plain(kids))[:48] or "item"
+        if sid in seen:
+            seen[sid] += 1
+            sid = f"{sid}-{seen[sid]}"
+        else:
+            seen[sid] = 0
+        opener = _state_control(sid, m.group(1).lower() == "x", states)
+        kids.insert(0, Token("html_inline", "", 0, content=opener))
+        kids.append(Token("html_inline", "", 0, content="</span></span>"))
+        tok.attrJoin("class", "antask")
+    return tokens
+
+
 # ─── Sanctioned passthroughs ──────────────────────────────────────────────────
 # The parser keeps html OFF so a reviewed document can never inject markup into
 # the published page. Anything the Artifact viewer renders natively (mermaid
@@ -254,12 +340,17 @@ def details_passthrough(tokens: list[Token]) -> list[Token]:
 PASSTHROUGHS = [mermaid_passthrough, details_passthrough]
 
 
-def render(md_text: str) -> tuple[str, list[tuple[int, str, str]]]:
+def render(
+    md_text: str, states: list[str] | None = None
+) -> tuple[str, list[tuple[int, str, str]]]:
     """Return (html, headings) where headings are (level, slug, text)."""
     md = MarkdownIt("commonmark", {"html": False, "linkify": True}).enable("table")
     tokens = md.parse(md_text)
     for passthrough in PASSTHROUGHS:
         tokens = passthrough(tokens)
+    # Not in PASSTHROUGHS: that list is token passes of one argument, and this
+    # one is parameterised by the document's declared state set.
+    tokens = task_list_controls(tokens, states)
 
     headings: list[tuple[int, str, str]] = []
     seen: dict[str, int] = {}
@@ -295,8 +386,10 @@ def toc_html(headings: list[tuple[int, str, str]]) -> str:
     return '<nav class="toc" aria-label="Contents"><h4>Contents</h4>' + "".join(rows) + "</nav>"
 
 
-def build(md_text: str, *, title: str, with_toc: bool, key: str) -> str:
-    body, headings = render(md_text)
+def build(
+    md_text: str, *, title: str, with_toc: bool, key: str, states: list[str] | None = None
+) -> str:
+    body, headings = render(md_text, states)
     toc = toc_html(headings) if with_toc else ""
     shell_open = '<div class="shell has-toc">' if toc else '<div class="shell">'
     page = TEMPLATE.format(
@@ -407,6 +500,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--title", help="page title (default: first H1, else the filename stem)")
     ap.add_argument("--no-toc", action="store_true", help="omit the table of contents")
     ap.add_argument(
+        "--states",
+        metavar="A,B,C",
+        help="comma-separated state set for task-list items, cycled on click "
+        "(e.g. approve,approve-pending-edits,deny). Default: a plain checkbox. "
+        "`- [ ]` starts at the first state, `- [x]` at the last",
+    )
+    ap.add_argument(
         "--key",
         help="localStorage key for comments (default: derived from the filename, "
         "qualified by the parent directory for a generic stem like spec.md, so "
@@ -416,6 +516,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.source.is_file():
         ap.error(f"no such file: {args.source}")
+
+    states: list[str] | None = None
+    if args.states is not None:
+        states = [p.strip() for p in args.states.split(",") if p.strip()]
+        if len(states) < 2:
+            ap.error("--states needs at least two comma-separated states")
+        if len(set(states)) != len(states):
+            ap.error("--states must not repeat a state")
     text = args.source.read_text(encoding="utf-8")
 
     title = args.title
@@ -433,7 +541,8 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
     out.write_text(
-        build(text, title=title, with_toc=not args.no_toc, key=key), encoding="utf-8"
+        build(text, title=title, with_toc=not args.no_toc, key=key, states=states),
+        encoding="utf-8",
     )
     print(out)
     return 0

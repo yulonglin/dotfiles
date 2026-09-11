@@ -101,6 +101,11 @@ additions, all of which the tests guard:
 - a selection overlapping an existing edit is declined -- the box points at
   that edit instead of opening a second one, because overlapping edits cannot
   be exported appliably;
+- a page may carry toggle controls in its body -- a task-list checkbox, or a
+  button cycling a declared state set such as approve / approve-pending-edits
+  / deny. Any element wearing `data-an-state-id` is wired, persisted under
+  `an-states:<key>` and exported in a `## Checklist` section of Copy all. A
+  page with no such element behaves exactly as it did;
 - entries gained `type: "comment" | "edit"`. An entry with no `type` is a
   comment, so every page's existing comments load unchanged; the key, the bare
   array and the loud `setItem` failure are all as they were. Edits store the
@@ -278,6 +283,17 @@ mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-thr
  font-size:.82rem;resize:vertical}
 .anok{background:var(--an-good-bg);color:var(--an-good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
 .anwarn{background:var(--an-bad);color:#fff;padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+/* Toggle controls. The generator emits the markup; this styles it, so a
+   hand-written page that emits the same `data-an-state-id` wrapper gets the
+   look, the persistence and the export without copying any CSS. */
+li.antask{list-style:none}
+.anstate{display:inline-flex;align-items:baseline;gap:.45em}
+.anstatebox{flex:none;align-self:center;width:1em;height:1em;accent-color:var(--an-accent);cursor:pointer}
+.anstatebtn{flex:none;background:var(--an-field);color:var(--an-ink);border:1px solid var(--an-rule);
+ border-radius:999px;padding:.05em .6em;font:inherit;font-size:.8em;font-weight:650;
+ white-space:nowrap;cursor:pointer}
+.anstatebtn:hover{border-color:var(--an-accent);color:var(--an-accent)}
+.anstatebtn:focus-visible,.anstatebox:focus-visible{outline:2px solid var(--an-accent);outline-offset:2px}
 #anBadge{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
  bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;background:var(--an-bg);color:var(--an-ink);
  border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
@@ -333,6 +349,7 @@ var KEY = (root && root.dataset.key) || ("annot:" + document.title);
 // so pressing Escape on one deletes the other's comments outright.
 var DIRTY = "an-dirty:" + KEY;
 var DRAFT = "an-draft:" + KEY;
+var STATES = "an-states:" + KEY;
 
 // ---- storage -------------------------------------------------------------
 // localStorage, and nothing else. An IndexedDB mirror, a backup key and a
@@ -554,7 +571,11 @@ function docTextNodes(){
   var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, { acceptNode: function(n){
     var p = n.parentNode;
     if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
+    // `.anstatebtn` holds the state WORD, which the layer wrote and the reader
+    // did not: letting it join the searched text anchors a quote onto the
+    // control, where the next cycle overwrites the highlight.
     if (p.closest("mark.note") || p.closest("mark.anedit") || p.closest("[data-an-inserted]") ||
+        p.closest(".anstatebtn") ||
         p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
     return NodeFilter.FILTER_ACCEPT;
   }});
@@ -811,6 +832,107 @@ function markClean(snap){
   persist(); syncLegacyFlag();
 }
 
+// ---- toggle state controls ------------------------------------------------
+// A page may carry toggle controls in its body: a task-list checkbox, or a
+// button cycling a declared state set such as approve / approve-pending-edits
+// / deny. Both wear one wrapper, `[data-an-state-id]`, so this layer needs no
+// configuration and a page with none of them is untouched.
+//
+// The states live under their OWN key, prefix-namespaced exactly as the draft
+// and dirty keys are, so nothing here can collide with the comment array --
+// which every layer generation parses as a bare array and dies on anything
+// else.
+function readStates(){
+  var d; try { d = JSON.parse(lsGet(STATES) || "{}"); } catch (e) { return {}; }
+  return (d && typeof d === "object" && !Array.isArray(d)) ? d : {};
+}
+var stateMap = readStates();
+function persistStates(){ lsSet(STATES, JSON.stringify(stateMap)); }
+function stateUnits(){ return Array.prototype.slice.call(document.querySelectorAll("[data-an-state-id]")); }
+function stateSetOf(unit){
+  var raw = unit.getAttribute("data-an-states");
+  if (!raw) return null;
+  var a; try { a = JSON.parse(raw); } catch (e) { return null; }
+  return (Array.isArray(a) && a.length) ? a : null;
+}
+// The reader-visible text of the item, which is also the control's accessible
+// name. Read from the DOM rather than written by the generator, so it is the
+// rendered text a screen reader would reach anyway.
+function stateLabel(unit){
+  var l = unit.querySelector(".anstatelabel");
+  return ((l ? l.textContent : unit.textContent) || "").trim().replace(/\s+/g, " ");
+}
+function stateValue(unit){
+  var box = unit.querySelector(".anstatebox");
+  if (box) return box.checked ? "x" : " ";
+  var b = unit.querySelector(".anstatebtn");
+  return b ? (b.dataset.anState || "") : "";
+}
+// Applies a state to the DOM and to nothing else. A value outside the declared
+// set is refused rather than shown: a rebuilt page can meet a key written
+// under a different state set, and rendering `maybe` on a control that has no
+// such state leaves a button whose next click has nowhere to go.
+function applyState(unit, value){
+  var box = unit.querySelector(".anstatebox");
+  if (box) { box.checked = value === "x"; return true; }
+  var b = unit.querySelector(".anstatebtn"), set = stateSetOf(unit);
+  if (!b || !set || set.indexOf(value) < 0) return false;
+  b.dataset.anState = value;
+  b.textContent = value;
+  b.setAttribute("aria-label", stateLabel(unit) + ": " + value);
+  return true;
+}
+function wireStates(){
+  stateUnits().forEach(function(unit){
+    var id = unit.dataset.anStateId;
+    var box = unit.querySelector(".anstatebox"), btn = unit.querySelector(".anstatebtn");
+    var saved = stateMap[id];
+    if (box) {
+      // A real checkbox: the browser supplies the role, Space toggles it, and
+      // the name is the item's own text.
+      box.setAttribute("aria-label", stateLabel(unit));
+      if (saved === "x" || saved === " ") box.checked = saved === "x";
+      box.addEventListener("change", function(){
+        stateMap[id] = box.checked ? "x" : " ";
+        persistStates();
+      });
+      return;
+    }
+    if (!btn) return;
+    var set = stateSetOf(unit) || [];
+    if (typeof saved !== "string" || !applyState(unit, saved)) {
+      applyState(unit, btn.dataset.anState || set[0] || "");
+    }
+    // A <button> is focusable and fires click on Enter and Space, so cycling
+    // works from the keyboard with no key handler here at all.
+    btn.addEventListener("click", function(){
+      if (!set.length) return;
+      var at = set.indexOf(btn.dataset.anState);
+      applyState(unit, set[(at + 1) % set.length]);
+      stateMap[id] = btn.dataset.anState;
+      persistStates();
+    });
+  });
+}
+// Plain text, one shape for both kinds of control: the state sits in the
+// brackets a Markdown task list already uses, so a two-state page exports a
+// task list that can be pasted straight back into the source.
+function stateMarkdown(){
+  return stateUnits().map(function(u){
+    return "- [" + (stateValue(u) || " ") + "] " + stateLabel(u);
+  }).join("\n");
+}
+// A second tab toggling a control is not a conflict: there is one value per
+// id and the later write wins, unlike a comment, which is written work.
+window.addEventListener("storage", function(e){
+  if (e.key !== STATES) return;
+  stateMap = readStates();
+  stateUnits().forEach(function(u){
+    var v = stateMap[u.dataset.anStateId];
+    if (typeof v === "string") applyState(u, v);
+  });
+});
+
 // ---- destructive controls ------------------------------------------------
 // No blocking dialog appears here, and none may be added. The Artifact viewer
 // runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
@@ -1052,11 +1174,12 @@ var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markd
 function exportText(){
   var edits = comments.filter(isEdit);
   var notes = comments.filter(function(c){ return !isEdit(c); });
+  var units = stateUnits();
   var out = "# Comments \u2014 " + document.title + "\n\n";
-  if (edits.length) {
-    out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
-    if (notes.length) out += "## Comments\n\n";
-  }
+  // The checklist leads: it is the verdict, and the notes explain it.
+  if (units.length) out += "## Checklist\n\n" + stateMarkdown() + "\n\n";
+  if (edits.length) out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
+  if ((units.length || edits.length) && notes.length) out += "## Comments\n\n";
   return out + (notes.length ? markdown(notes) + "\n" : "");
 }
 function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
@@ -1079,7 +1202,9 @@ function openExport(){
 // the panel says the comments are safely out of the browser, and the unload
 // guard stands down, when nothing left it.
 $("anCopy").onclick = async function(){
-  if (!comments.length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
+  // A page can be all checklist and no notes, and copying it out is the whole
+  // point of the checklist.
+  if (!comments.length && !stateUnits().length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
   var ok = false;
   // Both taken before the await: the clipboard promise can resolve after an
   // edit has landed, and the text that went out is this one.
@@ -1098,7 +1223,7 @@ $("anCopy").onclick = async function(){
   // exporting -- the state clears when the text is actually copied out of it.
   if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
   markClean(snap); render();
-  toast('<span class="anok">copied ' + comments.length + '</span>');
+  toast('<span class="anok">copied ' + (comments.length || "the checklist") + '</span>');
 };
 $("anExportText").addEventListener("copy", function(){
   // A copy of PART of the box carried part of the Markdown, so it did not
@@ -1161,6 +1286,9 @@ badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth",
   root.addEventListener(type, function(ev){ ev.stopPropagation(); });
 });
 
+// Before restoreHighlights: a restored state word changes the page text that
+// quotes are re-anchored against, so it has to be settled first.
+wireStates();
 restoreHighlights();
 render();
 restoreDraft();
