@@ -135,9 +135,10 @@ def _refusal(tokens, lines: list[str], offset: int) -> str | None:
 def _raw_html_continuations(tokens, lines: list[str], offset: int) -> set[int]:
     """Lines markdown-it cut out of a raw HTML block that CommonMark keeps in it.
 
-    Measured against cmark 0.31 on 2026-09-11: markdown-it ends an HTML block at
-    a blank line even for <pre>, <script>, <style>, <textarea> and comments,
-    which CommonMark runs to their closing delimiter. The divergence needs a
+    Measured on 2026-09-11 against reference cmark-gfm (cmarkgfm 2025.10.22):
+    markdown-it ends an HTML block at a blank line even for <pre>, <script>,
+    <style>, <textarea> and comments, which CommonMark runs to their closing
+    delimiter — measured on markdown-it-py 3.0.0 and 4.2.0. The divergence needs a
     genuinely blank line inside a LIST item — a fence, a blockquote alone, or a
     blank-terminated block type is unaffected — and it splits one block into a
     block plus a paragraph, which would then be joined.
