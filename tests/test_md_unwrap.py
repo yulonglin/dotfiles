@@ -466,6 +466,53 @@ def render_commonmark(text: str) -> str:
     return probe.stdout
 
 
+def render_cmark_gfm(documents: list[str]) -> list[str]:
+    """Render documents with reference cmark-gfm, raw HTML included.
+
+    markdown-it is the tool's own parser, so it cannot be the ground truth for a
+    question about where markdown-it is wrong. cmark-gfm is the reference
+    implementation GitHub's renderer is built on, and CMARK_OPT_UNSAFE is what
+    makes raw HTML block content visible in the output at all — with it off,
+    every block this test is about renders as the same placeholder comment.
+
+    Rendered in one batch: with cmarkgfm absent from the interpreter the
+    fallback is a single uv subprocess for the whole matrix, not one per
+    document.
+    """
+    script = ("import sys, cmarkgfm;"
+              "docs = sys.stdin.read().split('\\0');"
+              "sys.stdout.write('\\0'.join("
+              "cmarkgfm.github_flavored_markdown_to_html(d, options=cmarkgfm.Options.CMARK_OPT_UNSAFE)"
+              " for d in docs))")
+    try:
+        import cmarkgfm  # noqa: PLC0415
+    except ImportError:
+        pass
+    else:
+        unsafe = cmarkgfm.Options.CMARK_OPT_UNSAFE
+        return [cmarkgfm.github_flavored_markdown_to_html(d, options=unsafe) for d in documents]
+    probe = subprocess.run(
+        ["uv", "run", "--no-project", "--with", "cmarkgfm", "python", "-c", script],
+        capture_output=True, text=True, input="\0".join(documents),
+    )
+    if probe.returncode != 0:
+        raise unittest.SkipTest("no cmark-gfm renderer available: " + probe.stderr[-200:])
+    return probe.stdout.split("\0")
+
+
+def reflow_normalised(html: str) -> str:
+    """Rendered HTML with whitespace collapsed INSIDE PARAGRAPHS ONLY.
+
+    Joining a wrapped paragraph turns a newline inside a <p> into a space and
+    must change nothing else. Collapsing whitespace everywhere would also hide a
+    join made inside a raw HTML block — which is the corruption this matrix is
+    looking for, and is why an earlier whole-document collapse reported zero.
+    """
+    return re.sub(r"<p>(.*?)</p>",
+                  lambda m: "<p>" + re.sub(r"\s+", " ", m.group(1)).strip() + "</p>",
+                  html, flags=re.DOTALL)
+
+
 class TestBlocksNestedInsideContainers(unittest.TestCase):
     """A block start is measured from its CONTAINER's column, not from column zero.
 
@@ -698,6 +745,153 @@ class TestRefusesDocumentsItCannotFollow(unittest.TestCase):
             self.assertEqual(source, target.read_text(encoding="utf-8"))
             self.assertIn("left unchanged", result.stderr)
             self.assertIn("unterminated code fence opened at line 1", result.stderr)
+
+    def test_an_unclosed_html_block_inside_a_list_item_is_refused(self):
+        # The blank line ends markdown-it's html_block, so the token no longer
+        # reaches end-of-file and the end-of-file refusal never saw it; no
+        # terminator exists later, so the continuation helper protected nothing.
+        # Measured against cmark-gfm (cmarkgfm 2025.10.22): every line here is
+        # raw HTML block content, and the tool joined the last two of them.
+        source = "- <pre>\n  first inner line\n\n  second inner line\n  third inner line\n"
+        fixed, merged, _, refusal = md_unwrap.analyse(source)
+        self.assertEqual(source, fixed)
+        self.assertEqual([], merged)
+        self.assertIn("unterminated HTML block (</pre>)", refusal)
+
+    def test_an_unclosed_comment_inside_a_list_item_is_refused(self):
+        source = "- <!-- note\n  first inner line\n\n  second inner line\n  third inner line\n"
+        _, merged, _, refusal = md_unwrap.analyse(source)
+        self.assertEqual([], merged)
+        self.assertIn("unterminated HTML block (-->)", refusal)
+
+    def test_a_block_ending_with_its_container_is_not_refused(self):
+        # The terminator is missing here too, but markdown-it closed the
+        # container immediately after the block, and CommonMark ends a block
+        # with its container. Refusing these would be a false alarm: cmark-gfm
+        # reads the lines after the container as an ordinary paragraph.
+        for source, expected in (
+            ("> <pre>\nprose one\nprose two\n", "> <pre>\nprose one prose two\n"),
+            ("- <pre>\n  a\n\nprose one\nprose two\n", "- <pre>\n  a\n\nprose one prose two\n"),
+            ("- <pre>\n  a\n\n- prose one\n  prose two\n", "- <pre>\n  a\n\n- prose one prose two\n"),
+        ):
+            with self.subTest(source=source):
+                fixed, _, _, refusal = md_unwrap.analyse(source)
+                self.assertIsNone(refusal)
+                self.assertEqual(expected, fixed)
+
+    def test_the_cli_reports_an_unterminated_html_block_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "unclosed-html.md"
+            source = "- <pre>\n  a\n\n  prose one\n  prose two\n"
+            target.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--fix", str(target)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(source, target.read_text(encoding="utf-8"))
+            self.assertIn("left unchanged", result.stderr)
+            self.assertIn("unterminated HTML block (</pre>) opened at line 1", result.stderr)
+
+
+class TestEveryHtmlBlockTypeEndsWhereCommonMarkSaysItDoes(unittest.TestCase):
+    """CDATA, processing instructions and declarations end at their own delimiter.
+
+    markdown-it ends a list-contained HTML block at a blank line whatever its
+    type; CommonMark runs types 1-5 to their own closing delimiter. The
+    compatibility layer knew two of the five — raw tags and comments — and read
+    the other three as blank-line-terminated, so the half of the block below the
+    blank line was joined as prose. Confirmed corrupting against cmark-gfm
+    (cmarkgfm 2025.10.22), which renders every line of these documents as raw
+    HTML block content.
+
+    The end conditions are CommonMark's own: a line containing "]]>", "?>", ">"
+    for a markup declaration, "-->" for a comment, and for type 1 any of the
+    four raw closing tags.
+    """
+
+    def assert_untouched(self, source: str) -> None:
+        fixed, merged, _, refusal = md_unwrap.analyse(source)
+        self.assertIsNone(refusal, source)
+        self.assertEqual([], merged, source)
+        self.assertEqual(source, fixed, source)
+
+    def test_a_list_contained_cdata_section_with_a_blank_line(self):
+        self.assert_untouched("- <![CDATA[\n  a\n\n  inner one\n  inner two\n  ]]>\n")
+
+    def test_a_list_contained_processing_instruction_with_a_blank_line(self):
+        self.assert_untouched("- <?php\n  a\n\n  inner one\n  inner two\n  ?>\n")
+
+    def test_a_list_contained_markup_declaration_with_a_blank_line(self):
+        self.assert_untouched("- <!DOCTYPE\n  a\n\n  inner one\n  inner two\n  >\n")
+
+    def test_a_list_contained_comment_with_a_blank_line(self):
+        self.assert_untouched("- <!-- note\n  a\n\n  inner one\n  inner two\n  -->\n")
+
+    def test_a_raw_block_closed_by_a_different_raw_tag(self):
+        # CommonMark ends a type 1 block at ANY of the four raw closing tags,
+        # not only the one matching the tag that opened it.
+        self.assert_untouched("- <pre>\n  a\n\n  inner one\n  inner two\n  </script>\n")
+
+    def test_the_cli_leaves_a_cdata_document_byte_identical(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "cdata.md"
+            source = "- <![CDATA[\n  a\n\n  inner one\n  inner two\n  ]]>\n"
+            target.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--fix", str(target)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(source, target.read_text(encoding="utf-8"))
+
+
+
+class TestEveryHtmlBlockTypeInEveryContainerAgainstReferenceCmark(unittest.TestCase):
+    """The generalising check: ten openers x six containers x closed and open.
+
+    Each document holds a blank line inside the block, which is the shape that
+    splits one markdown-it html_block into a block plus a paragraph. Every case
+    must end in one of two states — refused, or rendered by cmark-gfm exactly as
+    before with only paragraph interiors reflowed. Silently rewriting a raw HTML
+    block is the third state, and it is the one that must not exist.
+
+    Measured on 2026-09-11: 33 of these 120 documents are corrupted by the tool
+    at 66eb3a9 and 0 by this one.
+    """
+
+    OPENERS = ("<pre>", "<script>", "<style>", "<textarea>", "<!-- note", "<?php",
+               "<!DOCTYPE", "<![CDATA[", '<div class="a">', "<custom-tag>")
+    CLOSERS = (("<!-- note", "-->"), ("<?php", "?>"), ("<!DOCTYPE", ">"), ("<![CDATA[", "]]>"))
+    CONTAINERS = (("", ""), ("- ", "  "), ("* ", "  "), ("1. ", "   "), ("> ", "> "), ("> - ", ">   "))
+
+    def documents(self) -> list[tuple[str, str]]:
+        built = []
+        for marker, pad in self.CONTAINERS:
+            for opener in self.OPENERS:
+                tag = opener.removeprefix("<").split()[0].rstrip(">")
+                closer = dict(self.CLOSERS).get(opener, f"</{tag}>")
+                for terminated in (True, False):
+                    body = [f"{marker}{opener}", f"{pad}first inner line", pad.rstrip(),
+                            f"{pad}second inner line", f"{pad}third inner line"]
+                    if terminated:
+                        body.append(f"{pad}{closer}")
+                    state = "closed" if terminated else "unclosed"
+                    built.append((f"{marker or 'top level'} / {opener} / {state}", "\n".join(body) + "\n"))
+        return built
+
+    def test_each_document_is_refused_or_rendered_identically(self):
+        cases = self.documents()
+        results = [md_unwrap.analyse(source) for _, source in cases]
+        considered = [(name, source, fixed)
+                      for (name, source), (fixed, _, _, refusal) in zip(cases, results)
+                      if refusal is None]
+        rendered = render_cmark_gfm([source for _, source, _ in considered]
+                                    + [fixed for _, _, fixed in considered])
+        half = len(considered)
+        for (name, _, _), before, after in zip(considered, rendered[:half], rendered[half:]):
+            with self.subTest(case=name):
+                self.assertEqual(reflow_normalised(before), reflow_normalised(after))
+        self.assertGreater(half, 60, "a refusal storm would make this check vacuous")
 
 
 class TestNoJoinInsideANestedProtectedRegion(unittest.TestCase):

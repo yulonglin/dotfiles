@@ -54,8 +54,10 @@ jobs:
       # The checker asks markdown-it-py where the paragraphs are rather than
       # re-deriving CommonMark block structure, so the dependency is real. uv is
       # what its PEP 723 shebang runs under when it is invoked as a command.
+      # cmarkgfm is the reference implementation the HTML-block matrix measures
+      # markdown-it against; without it that test falls back to a uv subprocess.
       - name: Install the checker's dependencies
-        run: python3 -m pip install --upgrade markdown-it-py uv
+        run: python3 -m pip install --upgrade markdown-it-py uv cmarkgfm
 
       - name: Unit tests for the checker
         run: python3 -m unittest tests.test_md_unwrap -v

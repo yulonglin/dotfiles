@@ -46,8 +46,9 @@ text rather than structure:
 
 A one-line paragraph is never a violation — shortness is not wrapping.
 
-If the document ends inside a code fence or a raw HTML block, its structure was
-not understood: it is reported and left untouched.
+If the document ends inside a code fence, or holds an HTML block whose closing
+delimiter is nowhere to be found, its structure was not understood: the file is
+reported and left untouched rather than rewritten around a guess.
 
 Exit codes: 0 clean (or fixed), 1 violations found under --check, 2 usage error.
 """
@@ -65,6 +66,8 @@ HARD_BREAK_RE = re.compile(r"(?:  +|\\)$")
 LABEL_RE = re.compile(r"^ {0,3}(?:\*\*|__)[^*_]+(?:\*\*|__)\s*:")
 LIST_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
 RAW_HTML_RE = re.compile(r"^<(script|pre|style|textarea)\b", re.IGNORECASE)
+DECLARATION_RE = re.compile(r"^<![A-Za-z]")
+RAW_CLOSERS = ("</script>", "</pre>", "</style>", "</textarea>")
 
 DEFAULT_EXCLUDES = (".git", "node_modules", ".venv", "__pycache__")
 
@@ -101,67 +104,101 @@ def _frontmatter_end(lines: list[str]) -> int:
     return min(index + 1, len(lines))
 
 
-def _html_terminator(content: str) -> str | None:
-    """The closing delimiter an HTML block needs, or None if a blank line ends it."""
+def _html_enders(content: str) -> tuple[str, ...] | None:
+    """The delimiters that close this HTML block, or None if a blank line does.
+
+    CommonMark gives five of its seven HTML block types an explicit end
+    condition — a line CONTAINING the delimiter — and ends the other two at a
+    blank line, which cannot go missing. All five are listed here, the block's
+    own closer first so a refusal can name it. Recognising only two of them
+    (raw tags and comments) is what let a list-contained CDATA section,
+    processing instruction or markup declaration be read as blank-line
+    terminated and have its second half joined as prose.
+    """
     opening = content.split("\n", 1)[0].lstrip()
-    if opening.startswith("<!--"):
-        return "-->"
-    raw = RAW_HTML_RE.match(opening)
-    # CommonMark HTML block type 1: <pre>, <script>, <style> and <textarea> run
-    # to their closing tag. Every other type ends at a blank line, which cannot
-    # go missing.
-    return f"</{raw.group(1).lower()}>" if raw else None
+    if opening.startswith("<!--"):                       # type 2
+        return ("-->",)
+    if opening.startswith("<![CDATA["):                   # type 5
+        return ("]]>",)
+    if opening.startswith("<?"):                          # type 3
+        return ("?>",)
+    if DECLARATION_RE.match(opening):                     # type 4
+        return (">",)
+    raw = RAW_HTML_RE.match(opening)                      # type 1
+    if raw:
+        own = f"</{raw.group(1).lower()}>"
+        return (own, *(closer for closer in RAW_CLOSERS if closer != own))
+    return None                                           # types 6 and 7
 
 
-def _refusal(tokens, lines: list[str], offset: int) -> str | None:
-    """Why the document ran off the end of a block, or None if it did not."""
+def _ends_in(text: str, enders: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return any(ender in lowered for ender in enders)
+
+
+def _closed_by_its_container(tokens, position: int) -> bool:
+    """Whether the block at `position` was the last thing inside its container.
+
+    A container ends the block it holds, so a raw HTML block whose closing
+    delimiter never appears still has a known extent when markdown-it closed
+    the list item or blockquote around it on the next token: cmark-gfm reads
+    `> <pre>` followed by unquoted prose the same way.
+    """
+    following = tokens[position + 1] if position + 1 < len(tokens) else None
+    return following is not None and following.type in (
+        "list_item_close", "bullet_list_close", "ordered_list_close", "blockquote_close",
+    )
+
+
+def _unterminated_fence(tokens, lines: list[str], offset: int) -> str | None:
+    """Why the document ran off the end of a code fence, or None if it did not."""
     total = len(lines)
     for token in tokens:
-        if token.map is None or token.map[1] + offset != total:
+        if token.type != "fence" or token.map is None or token.map[1] + offset != total:
             continue
-        opened = token.map[0] + offset + 1
-        if token.type == "fence":
-            char = re.escape(token.markup[0])
-            closer = re.compile(rf"^[ \t>]*{char}{{{len(token.markup)},}}[ \t]*$")
-            if not closer.match(lines[total - 1]):
-                return f"unterminated code fence opened at line {opened}"
-        elif token.type == "html_block":
-            end = _html_terminator(token.content)
-            if end and end not in token.content.lower():
-                return f"unterminated HTML block ({end}) opened at line {opened}"
+        char = re.escape(token.markup[0])
+        closer = re.compile(rf"^[ \t>]*{char}{{{len(token.markup)},}}[ \t]*$")
+        if not closer.match(lines[total - 1]):
+            return f"unterminated code fence opened at line {token.map[0] + offset + 1}"
     return None
 
 
-def _raw_html_continuations(tokens, lines: list[str], offset: int) -> set[int]:
-    """Lines markdown-it cut out of a raw HTML block that CommonMark keeps in it.
+def _html_block_extents(tokens, lines: list[str], offset: int) -> tuple[set[int], str | None]:
+    """(lines markdown-it cut out of an HTML block CommonMark keeps in it, refusal).
 
     Measured on 2026-09-11 against reference cmark-gfm (cmarkgfm 2025.10.22):
-    markdown-it ends an HTML block at a blank line even for <pre>, <script>,
-    <style>, <textarea> and comments, which CommonMark runs to their closing
-    delimiter — measured on markdown-it-py 3.0.0 and 4.2.0. The divergence needs a
-    genuinely blank line inside a LIST item — a fence, a blockquote alone, or a
-    blank-terminated block type is unaffected — and it splits one block into a
-    block plus a paragraph, which would then be joined.
+    markdown-it ends an HTML block at a blank line even for the five types
+    CommonMark runs to a closing delimiter — measured on markdown-it-py 3.0.0
+    and 4.2.0. The divergence needs a genuinely blank line inside a LIST item —
+    a fence, a blockquote alone, or a blank-terminated block type is unaffected
+    — and it splits one block into a block plus a paragraph, which would then be
+    joined.
 
-    So when such a token's own content lacks its terminator, and the terminator
-    does appear further down, the lines up to it are part of the block. When it
-    appears nowhere, markdown-it's reading stands: the block genuinely ended
-    with its container (`> <pre>` followed by unquoted prose).
+    So when such a token's own content lacks its closing delimiter, and the
+    delimiter does appear further down, the lines up to it are part of the
+    block and are protected. When it appears NOWHERE the extent is unknown, and
+    the file is refused rather than rewritten around a guess — unless the
+    container closed the block itself, which is an extent the parser did
+    establish.
     """
     protected: set[int] = set()
-    for token in tokens:
+    for position, token in enumerate(tokens):
         if token.type != "html_block" or token.map is None:
             continue
-        end = _html_terminator(token.content)
-        if not end or end in token.content.lower():
+        enders = _html_enders(token.content)
+        if not enders or _ends_in(token.content, enders):
             continue
         span: list[int] = []
         for index in range(token.map[1] + offset, len(lines)):
             span.append(index)
-            if end in lines[index].lower():
+            if _ends_in(lines[index], enders):
                 protected.update(span)
                 break
-    return protected
+        else:
+            if not _closed_by_its_container(tokens, position):
+                opened = token.map[0] + offset + 1
+                return set(), f"unterminated HTML block ({enders[0]}) opened at line {opened}"
+    return protected, None
 
 
 def _paragraph_ranges(tokens) -> list[tuple[int, int]]:
@@ -205,10 +242,12 @@ def scan(lines: list[str]) -> tuple[list[int], str | None]:
     offset = _frontmatter_end(lines)
     body = lines[offset:]
     tokens = PARSER.parse("\n".join(body) + "\n") if body else []
-    refusal = _refusal(tokens, lines, offset)
+    refusal = _unterminated_fence(tokens, lines, offset)
     if refusal:
         return [], refusal
-    protected = _raw_html_continuations(tokens, lines, offset)
+    protected, refusal = _html_block_extents(tokens, lines, offset)
+    if refusal:
+        return [], refusal
     merges: list[int] = []
     for start, end in _paragraph_ranges(tokens):
         start, end = start + offset, end + offset
