@@ -16,7 +16,8 @@ corrupts documentation:
   - fenced code blocks (``` and ~~~) and indented code blocks (4+ spaces)
   - raw HTML blocks for <pre>, <script>, <style> and <textarea>, protected all
     the way to their closing tag (a blank line inside one does not end it)
-  - tables (any line carrying a pipe)
+  - tables (any line carrying a pipe) — but a block start is recognised first,
+    so an opening <pre> or <!-- carrying a pipe still enters its block
   - YAML frontmatter
   - headings (ATX and setext), thematic breaks, blockquotes
   - link reference definitions and HTML blocks
@@ -123,11 +124,13 @@ def merge_indices(lines: list[str]) -> list[int]:
             index += 1
             continue
 
-        if "|" in stripped:  # table row, or prose too pipe-heavy to risk
-            prev_text = False
-            index += 1
-            continue
-
+        # An HTML block start is recognised BEFORE the pipe-and-table exclusion
+        # below, because it is the guard that installs protection STATE. While
+        # the pipe heuristic ran first, an opening tag carrying a pipe — in an
+        # attribute value, or in content on the same line — was taken by the
+        # heuristic and returned early, so the block was never entered and every
+        # line of it was joined as ordinary prose. The exclusion below only ever
+        # skips one line, so losing it to an HTML start costs nothing.
         if HTML_START_RE.match(line):
             raw = HTML_RAW_RE.match(line)
             if stripped.startswith("<!--"):
@@ -142,6 +145,11 @@ def merge_indices(lines: list[str]) -> list[int]:
                 html_end = None if closer in line.lower() else closer
             else:
                 html_end = "blank"
+            prev_text = False
+            index += 1
+            continue
+
+        if "|" in stripped:  # table row, or prose too pipe-heavy to risk
             prev_text = False
             index += 1
             continue

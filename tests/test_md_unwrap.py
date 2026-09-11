@@ -267,6 +267,157 @@ class TestRawHtmlBlocksSurvive(unittest.TestCase):
         self.assertEqual(source, fix(source))
 
 
+class TestPipeOnAnHtmlBlockOpeningLine(unittest.TestCase):
+    """A pipe on the opening line must not cancel HTML-block protection.
+
+    The pipe-and-table exclusion is a heuristic ("any line carrying a pipe might
+    be a table row"); an HTML block start is a real block-level construct that
+    installs protection state. While the heuristic ran first, an opening tag
+    carrying a pipe — in an attribute value, or in content on the same line —
+    was taken by the heuristic and returned early, so the protection was never
+    installed at all and every following line was treated as ordinary prose.
+    Inside <pre> that changes what the page renders; inside <script> it changes
+    what the code does.
+    """
+
+    RAW_TAGS = ("pre", "script", "style", "textarea")
+
+    def assert_untouched(self, source: str, message: str = "") -> None:
+        fixed, merged, _ = md_unwrap.unwrap(source)
+        self.assertEqual([], merged, message)
+        self.assertEqual(source, fixed, message)
+
+    def block(self, opening: str, tag: str) -> str:
+        return (
+            "Intro paragraph.\n"
+            "\n"
+            f"{opening}\n"
+            "\n"
+            "first inner line\n"
+            "second inner line\n"
+            f"</{tag}>\n"
+            "\n"
+            "Closing paragraph.\n"
+        )
+
+    def test_pipe_in_an_attribute_value_still_protects_the_block(self):
+        for tag in self.RAW_TAGS:
+            with self.subTest(tag=tag):
+                source = self.block(f'<{tag} class="col-a|col-b">', tag)
+                self.assert_untouched(source, f"joined inside a <{tag}> opened with a piped attribute")
+
+    def test_pipe_in_the_opening_lines_content_still_protects_the_block(self):
+        for tag in self.RAW_TAGS:
+            with self.subTest(tag=tag):
+                source = self.block(f"<{tag}>alpha | beta", tag)
+                self.assert_untouched(source, f"joined inside a <{tag}> whose opening line content has a pipe")
+
+    def test_the_rendered_preformatted_content_does_not_change(self):
+        source = (
+            '<pre class="a|b">\n'
+            "\n"
+            "first inner line\n"
+            "second inner line\n"
+            "</pre>\n"
+        )
+        self.assertEqual(render_markdown(source), render_markdown(fix(source)))
+
+    def test_html_comment_with_a_pipe_is_protected_to_its_terminator(self):
+        self.assert_untouched("<!-- columns | rows\ncomment line one\ncomment line two\n-->\n")
+
+    def test_generic_html_block_with_a_pipe_is_protected_to_the_blank_line(self):
+        self.assert_untouched('<div data-cols="a|b">\nline one\nline two\n</div>\n')
+
+    def test_a_genuine_markdown_table_is_still_excluded(self):
+        # The guard that moved must still do its job: without it the first table
+        # row would be joined onto the prose line above it.
+        self.assert_untouched(doc("""
+            Intro prose line.
+            | Want to | Command |
+            |---|---|
+            | commit | `/commit` |
+            | push | `git push` |
+            """))
+
+    def test_pipe_heavy_prose_is_still_left_alone(self):
+        self.assert_untouched("a | b | c\nd | e | f\n")
+
+
+class TestNoJoinInsideAProtectedRegion(unittest.TestCase):
+    """A property check over constructed documents, not the repo's own Markdown.
+
+    The repo contains no HTML block whose opening line carries a pipe, so a
+    corpus sweep stays green however badly the guards are ordered — which is how
+    the pipe-before-HTML defect survived the previous fix and its sweep. This
+    builds the documents instead: every state-installing construct, opened with
+    every decoration that could plausibly hijack its opening line, and asserts
+    that no line inside the resulting block is ever joined.
+
+    The region scanner below is deliberately independent of merge_indices — it
+    is the ground truth the fixer is checked against, not a copy of its logic.
+    """
+
+    RAW_TAGS = ("pre", "script", "style", "textarea")
+    DECORATIONS = ("", ' class="a|b"', ">alpha | beta", ">   ", " data-x='a|b'")
+    BODIES = (
+        ("one", "", "two", "three"),
+        ("a | b", "c", "", "d"),
+        ("x", "  y  ", "z"),
+    )
+    PREFIXES = ((), ("Lead prose line.",), ("Lead prose.", ""))
+
+    def protected_lines(self, lines: list[str]) -> set[int]:
+        """Indices strictly inside a fence or a raw/comment HTML block."""
+        inside: str | None = None
+        protected: set[int] = set()
+        for index, line in enumerate(lines):
+            stripped = line.strip().lower()
+            if inside is None:
+                if stripped.startswith(("```", "~~~")):
+                    inside = "fence"
+                elif stripped.startswith("<!--") and "-->" not in stripped:
+                    inside = "-->"
+                else:
+                    for tag in self.RAW_TAGS:
+                        if stripped.startswith("<" + tag) and f"</{tag}>" not in stripped:
+                            inside = f"</{tag}>"
+                            break
+            elif inside == "fence":
+                if stripped.startswith(("```", "~~~")):
+                    inside = None
+            elif inside in stripped:
+                inside = None
+            else:
+                protected.add(index)
+        return protected
+
+    def documents(self):
+        openers = {}
+        for tag in self.RAW_TAGS:
+            for decoration in self.DECORATIONS:
+                opener = f"<{tag}{decoration}" if decoration.startswith(">") else f"<{tag}{decoration}>"
+                openers[opener] = f"</{tag}>"
+        openers["<!-- note | here"] = "-->"
+        openers["```python"] = "```"
+        openers["~~~"] = "~~~"
+        for opener, closer in openers.items():
+            for body in self.BODIES:
+                for prefix in self.PREFIXES:
+                    lines = [*prefix, opener, *body, closer, "", "trailing one", "trailing two"]
+                    yield opener, lines
+
+    def test_no_constructed_document_is_joined_inside_its_block(self):
+        checked = 0
+        for opener, lines in self.documents():
+            checked += 1
+            clash = set(md_unwrap.merge_indices(lines)) & self.protected_lines(lines)
+            self.assertEqual(
+                set(), clash,
+                f"joined inside the block opened by {opener!r}: lines {sorted(clash)}",
+            )
+        self.assertGreater(checked, 150, "the construction matrix shrank")
+
+
 class TestHardBreaksSurviveJoining(unittest.TestCase):
     """Two trailing spaces are a hard line break and must not be stripped."""
 
@@ -306,6 +457,10 @@ ADVERSARIAL_FIXTURES = {
     "pre-block-with-a-blank-line": "<pre>\na\n\nb\nc\n</pre>\n",
     "script-block-with-a-blank-line": "<script>\nx = 1\n\ny = 2\nz = 3\n</script>\n",
     "one-line-pre-then-prose": "<pre>inline</pre>\nprose one\nprose two\n",
+    "pre-opened-with-a-piped-attribute": '<pre class="a|b">\nalpha\n\nbeta\ngamma\n</pre>\n',
+    "script-with-a-pipe-on-the-opening-line": "<script>var re = /a|b/;\nx = 1\n\ny = 2\nz = 3\n</script>\n",
+    "comment-with-a-pipe-on-the-opening-line": "<!-- cols | rows\nline one\nline two\n-->\n",
+    "table-directly-under-prose": "Intro prose line.\n| a | b |\n|---|---|\n| 1 | 2 |\n",
 }
 
 
