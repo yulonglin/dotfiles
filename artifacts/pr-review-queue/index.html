@@ -199,15 +199,26 @@
   };
 
   const URL_FOR = (n) => "https://github.com/yulonglin/dotfiles/pull/" + n;
+  // ONE ROW, ONE DOCUMENT, keyed by the pull request number. Two viewers
+  // ticking different rows write different documents, so they cannot collide
+  // at all -- and that is the whole fix. The map every row used to share made
+  // each write a read-modify-write of every other row, which this store cannot
+  // make safe because it offers no version and no compare-and-set. Two viewers
+  // ticking the SAME row still resolve last-writer-wins. That is correct and
+  // is not a bug: they disagree about one value, and the last one to speak
+  // decides.
+  const TICKS = "review/checklist/ticks";   // one document per row, below the old one
   const state = { checked: {} };
   let store = null;         // the db handle, null until window.claude.use("db") resolves
-  let seenStored = false;   // the first snapshot has been delivered, so state has been reconciled
-  // Toggles this device has made that no successful write has carried yet:
-  // pr -> true for a tick, false for an untick. An untick needs an entry of
-  // its own, because a write says untick by dropping the key, and an absent
-  // key cannot by itself say whether this device dropped it or never had it.
-  const queued = new Map();
-  let writing = false;      // a write is on the wire
+  // Rows this device has toggled and not yet stored: pr -> the value wanted.
+  // An untick is a stored `false`, not a deleted key, so nothing has to be
+  // said by removing something -- which is what forced the whole-document
+  // write in the first place. Nothing here is ever used to compute a write for
+  // a row other than the one it names, so a refusal, a stale read or an empty
+  // read cannot reach another row's stored value.
+  const pending = new Map();
+  const inflight = new Set();   // rows whose write is on the wire
+  const failed = new Set();     // rows whose last write was refused
 
   function row(pr) {
     const li = document.createElement("li");
@@ -289,63 +300,63 @@
     document.getElementById("c-done").textContent = String(done);
   }
 
-  // Every write replaces the whole document, which is what makes an untick
-  // expressible: a key dropped from the map turns that row off for everyone.
-  // The price of a whole-document write is that it may only be computed from
-  // state already reconciled with what is stored, and the handle resolving is
-  // not that -- the stored document arrives later, on the first snapshot. So
-  // there are two gates, both enforced here rather than asserted:
-  //
-  //   * nothing is written until BOTH the handle has resolved AND the first
-  //     snapshot has been delivered. Until then a toggle only lands in
-  //     `queued`, which is what makes a write-before-the-stored-document-was-
-  //     read unreachable rather than merely unlikely;
-  //   * a write clears only the queue entries it actually carried, and only if
-  //     they have not changed since. A toggle made while the write was on the
-  //     wire stays queued, and a write that failed clears nothing at all.
-  //
-  // Those two give six reachable states of (queued non-empty, stored document
-  // unseen, write in flight, last write failed) out of sixteen: idle; loading;
-  // queued; in flight; failed and waiting to retry; and retrying. The other
-  // ten cannot be built, because in flight implies both a non-empty queue and
-  // a stored document already seen, and a failure implies a non-empty queue
-  // and therefore also a stored document already seen.
-  function reconciled(incoming) {
-    const out = { ...incoming };
-    for (const [pr, on] of queued) { if (on) out[pr] = true; else delete out[pr]; }
-    return out;
+  function syncStatus() {
+    const n = failed.size;
+    document.getElementById("sync").textContent = n
+      ? "checklist: save failed for " + n + (n === 1 ? " row" : " rows") + ", kept on this device"
+      : "checklist: synced across the org";
   }
 
-  function flush() {
-    if (!store || !seenStored) return;     // gate one: nothing to reconcile against yet
-    if (writing || !queued.size) return;   // gate two: one write at a time, and only for real work
-    const sent = new Map(queued);
-    const sync = document.getElementById("sync");
-    const doc = { checked: { ...state.checked }, updatedAt: Date.now() };
-    writing = true;
+  // One row, one write, carrying that row's value and nothing else. A row
+  // already on the wire is skipped rather than queued behind a global flag:
+  // its own settle re-sends it if it was toggled again meanwhile.
+  function writeRow(pr) {
+    if (!store || inflight.has(pr) || !pending.has(pr)) return;
+    const want = pending.get(pr);
+    inflight.add(pr);
     // The executor turns a set() that throws where it should have rejected
-    // into a rejection, so the one path that would leave `writing` stuck true
-    // -- and the queue wedged behind it for the life of the page -- does not
-    // exist. The document is computed before it, not inside, so this write
-    // carries exactly what `sent` says it carries.
-    new Promise((resolve) => resolve(store.doc("review/checklist").set(doc))).then(() => {
-      writing = false;
-      for (const [pr, on] of sent) if (queued.get(pr) === on) queued.delete(pr);
-      if (!queued.size) sync.textContent = "checklist: synced across the org";
-      flush();                             // whatever queued behind this write
-    }, () => {
-      // Every entry stays queued: this write carried none of them anywhere.
-      // The retry rides on the next toggle or the next delivery rather than a
-      // timer here, which would spin against a store that is simply refusing.
-      writing = false;
-      sync.textContent = "checklist: save failed, this device only";
-    });
+    // into a rejection, so a store that throws cannot leave this row stuck.
+    new Promise((resolve) => resolve(store.doc(TICKS + "/" + pr).set({ on: want, updatedAt: Date.now() })))
+      .then(() => {
+        inflight.delete(pr);
+        failed.delete(pr);                  // cleared only by a write that carried THIS row
+        if (pending.get(pr) === want) pending.delete(pr);
+        else writeRow(pr);                  // it was toggled again while this was in flight
+        syncStatus();
+      }, () => {
+        inflight.delete(pr);
+        failed.add(pr);                     // and only this row
+        syncStatus();
+      });
+  }
+
+  // A retry rides on the next toggle or the next delivery rather than a timer,
+  // which would spin against a store that is simply refusing.
+  function flush() { for (const pr of [...pending.keys()]) writeRow(pr); }
+
+  // Rows ticked before this page stored one document per row live in ONE
+  // document, as a map. Read it once and hand each ticked row to the ordinary
+  // write path, which stores it under its own key. The old document is left
+  // exactly as it was, so a viewer served a rolled-back page still finds its
+  // ticks. Two viewers migrating at once write the same values to the same
+  // documents, so that race is a no-op.
+  function migrateLegacy() {
+    new Promise((resolve) => resolve(store.doc("review/checklist").get())).then((snap) => {
+      const body = snap && snap.exists ? snap.data() : null;
+      const checked = body && body.checked;
+      if (!checked || typeof checked !== "object") return;
+      for (const pr of Object.keys(checked)) {
+        if (checked[pr] && !pending.has(pr)) { state.checked[pr] = true; pending.set(pr, true); }
+      }
+      paint();
+      flush();
+    }, () => {});
   }
 
   function toggle(n, on) {
-    if (on) state.checked[n] = true;
-    else delete state.checked[n];
-    queued.set(String(n), on);
+    const pr = String(n);
+    state.checked[pr] = on;
+    pending.set(pr, on);
     paint();
     flush();
   }
@@ -377,36 +388,28 @@
     const db = await window.claude?.use?.("db");
     if (!db) { sync.textContent = "checklist: this device only"; return; }
     store = db;
+    flush();          // whatever was ticked while the handle was still resolving
+    let migrated = false;
     try {
-      db.doc("review/checklist").onSnapshot((snap) => {
-        // onSnapshot delivers a DocumentSnapshot, not the document body: the
-        // stored fields only come out of snap.data(). Reading snap.checked
-        // gave undefined on every delivery, so a reload painted nothing and
-        // the ticks looked lost even though the write had landed.
-        if (!queued.size) sync.textContent = "checklist: synced across the org";
-        const body = snap && snap.exists ? snap.data() : null;
-        const next = body && body.checked;
-        const incoming = (next && typeof next === "object") ? next : null;
-        if (!seenStored) {
-          // The reconciliation point, and the only one: what is stored, with
-          // this device's queued toggles on top. Before this line ran there
-          // was nothing to compute a whole-document write from, which is why
-          // flush() refused to write until now.
-          seenStored = true;
-          state.checked = reconciled(incoming || {});
-          paint();
-          flush();
-          return;
-        }
-        // A document that is not there is not an untick: only a stored map
-        // replaces what this device holds.
-        if (!incoming) return;
-        // Later deliveries replace, so an untick made elsewhere lands -- but a
-        // toggle no successful write has carried yet goes back on top, or this
-        // page's own echo, or any write racing it, would paint it away.
-        state.checked = reconciled(incoming);
+      // Subscribing to the COLLECTION is what makes a remote tick on one row
+      // land on that row alone.
+      db.collection(TICKS).onSnapshot((snap) => {
+        // Display only. No write is ever computed from this, which is why a
+        // delivery can no longer clobber anything. The snapshot is the whole
+        // collection, so it is rebuilt rather than merged, with this device's
+        // unstored toggles kept on top so an older echo cannot paint away a
+        // tick the viewer has just made.
+        const next = {};
+        for (const doc of snap.docs) if (doc.exists && doc.data().on) next[doc.id] = true;
+        for (const [pr, on] of pending) { if (on) next[pr] = true; else delete next[pr]; }
+        state.checked = next;
         paint();
-        flush();   // also the retry path after a failed write
+        syncStatus();
+        // An empty collection the SERVER has confirmed is the one moment the old
+        // shared document can still be the only copy. A cached empty snapshot
+        // will not do: migrating off one would re-tick rows since unticked.
+        if (!migrated && snap.empty && !snap.metadata?.fromCache) { migrated = true; migrateLegacy(); }
+        flush();   // the retry path after a refused write
       }, (err) => {
         sync.textContent = "checklist: this device only (" + (err && err.code) + ")";
       });

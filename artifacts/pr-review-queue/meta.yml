@@ -19,7 +19,20 @@ regression_check: |
 capabilities:
   db: {}
 db_paths:
+  review/checklist/ticks/<pull request number>: |
+    { on: <true|false>, updatedAt: <epoch ms> }
+    ONE DOCUMENT PER ROW. Two viewers ticking different rows write different
+    documents and cannot collide; two ticking the same row resolve
+    last-writer-wins, which is the correct reading of one disputed value.
+    An untick is a stored `false`, never a deleted key, so no write has to
+    replace the whole set to express one. Shared across the org's viewers by
+    design -- the queue is one shared review pass, not a private one, so it is
+    deliberately not under data/users/.
   review/checklist: |
     { checked: { "<pull request number>": true, ... }, updatedAt: <epoch ms> }
-    Shared across the org's viewers by design — the queue is one shared review
-    pass, not a private one, so it is deliberately not under data/users/.
+    SUPERSEDED, and deliberately left in place. Every row lived in this one
+    document until 2026-09-11, which made each write a read-modify-write of
+    every other row with no compare-and-set to make it safe. The page reads it
+    once, when the ticks collection is empty and the server has confirmed that,
+    and writes each ticked row out under its own key. It is never written or
+    deleted, so a viewer served a rolled-back page still finds their ticks.
