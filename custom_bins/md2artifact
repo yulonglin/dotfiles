@@ -254,6 +254,26 @@ def _inline_plain(children: list[Token]) -> str:
     ).strip()
 
 
+def _allocate_id(stem: str, used: set[str]) -> str:
+    """Hand out `stem`, suffixing until the result is genuinely unused.
+
+    `used` must hold every id ALREADY EMITTED, suffixed ones included. A
+    per-stem tally is not enough: it records only the original stem, so two
+    items labelled "ship it" emit "ship-it" and "ship-it-1" while a third item
+    labelled "ship it 1" slugifies to "ship-it-1" on its own and is handed the
+    same id. Two controls then share one persistence slot and silently
+    overwrite each other's saved state — and two headings share one DOM id, so
+    a contents link jumps to the wrong section.
+    """
+    candidate = stem
+    n = 0
+    while candidate in used:
+        n += 1
+        candidate = f"{stem}-{n}"
+    used.add(candidate)
+    return candidate
+
+
 def _state_control(sid: str, checked: bool, states: list[str] | None) -> str:
     """The opening markup of one toggle control, up to the label span.
 
@@ -299,7 +319,7 @@ def task_list_controls(tokens: list[Token], states: list[str] | None) -> list[To
     ordinary escaped Markdown output — the annotation layer can still quote it
     — while the control's own text sits in an element the layer skips.
     """
-    seen: dict[str, int] = {}
+    used: set[str] = set()
     for i, tok in enumerate(tokens):
         if tok.type != "list_item_open":
             continue
@@ -316,12 +336,7 @@ def task_list_controls(tokens: list[Token], states: list[str] | None) -> list[To
         if not m:
             continue
         kids[0].content = kids[0].content[m.end() :]
-        sid = slugify(_inline_plain(kids))[:48] or "item"
-        if sid in seen:
-            seen[sid] += 1
-            sid = f"{sid}-{seen[sid]}"
-        else:
-            seen[sid] = 0
+        sid = _allocate_id(slugify(_inline_plain(kids))[:48] or "item", used)
         opener = _state_control(sid, m.group(1).lower() == "x", states)
         kids.insert(0, Token("html_inline", "", 0, content=opener))
         kids.append(Token("html_inline", "", 0, content="</span></span>"))
@@ -355,7 +370,7 @@ def render(
     tokens = task_list_controls(tokens, states)
 
     headings: list[tuple[int, str, str]] = []
-    seen: dict[str, int] = {}
+    used: set[str] = set()
     for i, tok in enumerate(tokens):
         if tok.type != "heading_open":
             continue
@@ -363,12 +378,7 @@ def render(
         if level > 3:
             continue
         text = tokens[i + 1].content
-        slug = slugify(text)
-        if slug in seen:
-            seen[slug] += 1
-            slug = f"{slug}-{seen[slug]}"
-        else:
-            seen[slug] = 0
+        slug = _allocate_id(slugify(text), used)
         tok.attrSet("id", slug)
         headings.append((level, slug, text))
 

@@ -61,6 +61,21 @@ A document with no task list in it whatsoever, so nothing on this page should
 gain a checklist section.
 """
 
+# Three items whose ids used to collide. "ship it 1" slugifies to exactly the
+# id the duplicate-name counter hands the SECOND "ship it", because that
+# counter tallied only the original slug and never the suffixed ids it emitted.
+COLLIDING = """# Collision Sample
+
+An opening paragraph long enough to select from, so this page carries prose of
+its own as well as its checklist.
+
+## The checklist
+
+- [ ] ship it
+- [ ] ship it
+- [ ] ship it 1
+"""
+
 STATE_SET = "approve,approve-pending-edits,deny"
 
 
@@ -70,10 +85,14 @@ def site(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("md2artifact-states")
     (tmp / "sample.md").write_text(SAMPLE, encoding="utf-8")
     (tmp / "plain.md").write_text(PLAIN, encoding="utf-8")
+    (tmp / "collide.md").write_text(COLLIDING, encoding="utf-8")
     builds = (
         ("box.html", "sample.md", "review-states-box", []),
         ("cycle.html", "sample.md", "review-states-cycle", ["--states", STATE_SET]),
         ("plain.html", "plain.md", "review-states-plain", []),
+        ("collide-box.html", "collide.md", "review-states-collide-box", []),
+        ("collide-cycle.html", "collide.md", "review-states-collide-cycle",
+         ["--states", STATE_SET]),
     )
     for name, src, key, extra in builds:
         r = subprocess.run(
@@ -360,3 +379,81 @@ def test_a_quote_never_re_anchors_onto_the_state_word(ctx, site) -> None:
     assert page.evaluate(
         "() => !document.querySelector('mark.note').closest('.anstatebtn')"
     ), "the restored highlight landed inside the state control"
+
+
+# --- one item's state never lands on another ------------------------------
+# Each control persists under an id slugified from its visible label, with a
+# number appended when two labels slugify the same. The counter behind that
+# suffix used to record only the ORIGINAL slug, so the second "ship it" was
+# handed "ship-it-1" — which is also what the third item, labelled "ship it 1",
+# slugifies to on its own. The two shared one storage slot, and ticking either
+# brought the other back ticked. Reproduced in Chromium as [F, T, F] before a
+# reload and [F, T, T] after it.
+
+
+def _checked(page) -> list[bool]:
+    return [b.is_checked() for b in page.locator("input.anstatebox").all()]
+
+
+def test_ticking_one_item_does_not_tick_its_same_named_neighbour(ctx, site) -> None:
+    page = open_page(ctx, site, "collide-box.html")
+    assert _checked(page) == [False, False, False]
+    page.locator("input.anstatebox").nth(1).check()
+    assert _checked(page) == [False, True, False]
+    page.reload()
+    expect(page.locator("input.anstatebox").nth(1)).to_be_checked()
+    assert _checked(page) == [False, True, False], (
+        "a row the reader never touched came back marked complete"
+    )
+
+
+@pytest.mark.parametrize("idx", [0, 1, 2])
+def test_each_same_named_item_round_trips_on_its_own(ctx, site, idx: int) -> None:
+    """Every item in turn, because only one of the three collided each way."""
+    page = open_page(ctx, site, "collide-box.html")
+    page.locator("input.anstatebox").nth(idx).check()
+    page.reload()
+    expect(page.locator("input.anstatebox").nth(idx)).to_be_checked()
+    assert _checked(page) == [i == idx for i in range(3)]
+
+
+def test_each_item_holds_its_own_storage_slot(ctx, site) -> None:
+    """Three controls, three keys: a short dict is a collision by itself."""
+    page = open_page(ctx, site, "collide-box.html")
+    for i in range(3):
+        page.locator("input.anstatebox").nth(i).check()
+    stored = page.evaluate(
+        "() => JSON.parse(localStorage['an-states:review-states-collide-box'])"
+    )
+    assert len(stored) == 3, stored
+    ids = page.evaluate(
+        "() => [...document.querySelectorAll('[data-an-state-id]')]"
+        "        .map(e => e.dataset.anStateId)"
+    )
+    assert len(set(ids)) == 3, ids
+
+
+def test_cycling_one_item_does_not_move_its_same_named_neighbour(ctx, site) -> None:
+    """The custom states ride the same ids, so they corrupt the same way."""
+    page = open_page(ctx, site, "collide-cycle.html")
+    assert page.locator(".anstatebtn").all_text_contents() == ["approve"] * 3
+    page.locator(".anstatebtn").nth(1).click()
+    expect(page.locator(".anstatebtn").nth(1)).to_have_text("approve-pending-edits")
+    page.reload()
+    expect(page.locator(".anstatebtn").nth(1)).to_have_text("approve-pending-edits")
+    assert page.locator(".anstatebtn").all_text_contents() == [
+        "approve",
+        "approve-pending-edits",
+        "approve",
+    ]
+
+
+@pytest.mark.parametrize("idx", [0, 1, 2])
+def test_each_same_named_item_cycles_on_its_own(ctx, site, idx: int) -> None:
+    page = open_page(ctx, site, "collide-cycle.html")
+    page.locator(".anstatebtn").nth(idx).click()
+    page.reload()
+    expect(page.locator(".anstatebtn").nth(idx)).to_have_text("approve-pending-edits")
+    assert page.locator(".anstatebtn").all_text_contents() == [
+        "approve-pending-edits" if i == idx else "approve" for i in range(3)
+    ]
