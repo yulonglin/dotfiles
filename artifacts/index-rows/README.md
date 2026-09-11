@@ -26,3 +26,7 @@ A page published from now on gets `artifacts/<slug>/` with its source and built 
 | `index_source` | no | The Source cell. Defaults to `—` here and to the artifact's own directory in `artifacts/<slug>/meta.yml` |
 
 A literal `|` inside any value would split the row, so write it `\|`; the builder fails rather than emit a broken table.
+
+Each value must have the type its row above describes, and the builder checks the type before it applies any default: a key given a boolean, a number, a list or a mapping fails the build, naming the file, the key, the type and the value. Watch `url`, `public` and `status` in particular — a bare `no`, `off`, `yes` or `on` is a boolean in YAML 1.1, so quote it. Nothing is ever dropped, blanked or defaulted because the builder could not read it.
+
+The file's name and place are checked the same way. A row here is `<slug>.yml`, one level deep, and nothing else in this directory is a row: a `.yaml`, a `.json`, a nested directory or a file left in `artifacts/` itself fails the build rather than being skipped, because a row the builder cannot see is a published page missing from the index.

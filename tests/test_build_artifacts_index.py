@@ -55,6 +55,12 @@ summary: what page B established
 """
 
 
+def replace_key(body: str, key: str, literal: str) -> str:
+    """Swap one `key: value` line for `literal`, appending it if the key is absent."""
+    lines = [line for line in body.splitlines() if not line.startswith(f"{key}:")]
+    return "\n".join([*lines, literal]) + "\n"
+
+
 def run(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(BUILDER), "--repo-root", str(root), *args],
@@ -401,6 +407,221 @@ class BuilderTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("marker", result.stderr)
 
+
+    # --- helpers for the fail-open class ----------------------------------
+
+    def write(self, relpath: str, body: str) -> None:
+        p = self.root / relpath
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body, encoding="utf-8")
+
+    def two_good_rows(self) -> str:
+        """Build a healthy two-row index and return it, so a later assertion can
+        prove a rejected build left it exactly as it was."""
+        self.index_row("a", ROW_A)
+        self.index_row("b", ROW_B)
+        self.assertEqual(run(self.root).returncode, 0)
+        self.assertIn("2 rows", self.table())
+        return (self.root / "ARTIFACTS.md").read_text(encoding="utf-8")
+
+    def assert_rejected(self, before: str, *needles: str) -> str:
+        """Both entry points must fail: a rewrite that drops a row and a --check
+        that blesses the shortened index are the same harm."""
+        result = run(self.root)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        for needle in needles:
+            self.assertIn(needle, result.stderr)
+        self.assertNotIn("not published yet", result.stdout)
+        self.assertEqual(
+            (self.root / "ARTIFACTS.md").read_text(encoding="utf-8"),
+            before,
+            "a rejected build must not rewrite the index",
+        )
+        check = run(self.root, "--check")
+        self.assertNotEqual(check.returncode, 0, check.stdout)
+        return result.stderr
+
+    # --- the class: a falsey value normalised before its type is checked ---
+
+    WHOLE_DOCUMENTS = (
+        ("false", "false\n"),
+        ("zero", "0\n"),
+        ("empty string", "''\n"),
+        ("empty list", "[]\n"),
+        ("empty mapping", "{}\n"),
+        ("a bare string", "a sentence someone left here\n"),
+        ("an empty file", ""),
+        ("a list of rows", "- title: Page B\n  url: x\n"),
+        ("a bare null", "~\n"),
+    )
+
+    def test_whole_document_of_the_wrong_type_is_rejected_not_emptied(self):
+        """`yaml.safe_load(...) or {}` normalised the whole document one line
+        above the isinstance check that was supposed to catch it, so a file whose
+        entire content was `false`, `0`, `''` or `[]` became an empty mapping,
+        read as an absent url, and dropped a published page's row with exit 0.
+        Whole-document `true` and a non-empty list were rejected, which is how we
+        know the check existed and merely ran in the wrong order."""
+        for label, body in self.WHOLE_DOCUMENTS:
+            with self.subTest(label):
+                before = self.two_good_rows()
+                self.index_row("b", body)
+                self.assert_rejected(before, "b.yml")
+
+    # Every value the builder reads out of a row file, given a type it must not
+    # have. Each was reached through a truthiness fallback or a bare `str()`, so
+    # each silently became a default, a blank cell or a stringified Python repr.
+    WRONG_TYPED_FIELDS = (
+        ("title: false", ("title", "bool", "False")),
+        ("title: [Page B]", ("title", "list", "['Page B']")),
+        ("org: 0", ("org", "int", "0")),
+        ("org: {name: Example}", ("org", "dict", "{'name': 'Example'}")),
+        ("status: false", ("status", "bool", "False")),
+        ("status: [live]", ("status", "list", "['live']")),
+        ("summary: 0", ("summary", "int", "0")),
+        ("summary: []", ("summary", "list", "[]")),
+        ("last_updated: false", ("last_updated", "bool", "False")),
+        ("last_updated: []", ("last_updated", "list", "[]")),
+        ("status_note: false", ("status_note", "bool", "False")),
+        ("status_note: {}", ("status_note", "dict", "{}")),
+        ("index_source: false", ("index_source", "bool", "False")),
+        ("index_source: []", ("index_source", "list", "[]")),
+        ("public: []", ("public", "list", "[]")),
+        ("public: 0", ("public", "int", "0")),
+    )
+
+    def test_a_field_of_the_wrong_type_is_rejected_not_defaulted(self):
+        """The error has to name the file, the key, the type and the value as
+        written — the old messages named the empty string the normalisation had
+        already turned it into, or said nothing at all."""
+        for literal, needles in self.WRONG_TYPED_FIELDS:
+            key = literal.split(":", 1)[0]
+            with self.subTest(literal):
+                before = self.two_good_rows()
+                self.index_row("b", replace_key(ROW_B, key, literal))
+                self.assert_rejected(before, "b.yml", *needles)
+
+    def test_a_blank_date_or_status_is_still_reported_as_missing(self):
+        """Type-checking first must not lose the plain missing-key message."""
+        for literal in ("last_updated: ''", "status: ''", "title: ''"):
+            key = literal.split(":", 1)[0]
+            with self.subTest(literal):
+                before = self.two_good_rows()
+                self.index_row("b", replace_key(ROW_B, key, literal))
+                self.assert_rejected(before, "b.yml", "missing", key)
+
+    def test_a_date_that_is_not_a_date_is_rejected(self):
+        """The table sorts on this value, so a string that is not an ISO date
+        silently reorders the log rather than failing."""
+        before = self.two_good_rows()
+        self.index_row("b", replace_key(ROW_B, "last_updated", "last_updated: last tuesday"))
+        self.assert_rejected(before, "b.yml", "last_updated", "last tuesday")
+
+    def test_supported_values_still_round_trip_after_the_type_checks(self):
+        """The documented defaults survive: an absent public is `no`, a bool
+        public prints yes/no, a public URL prints as written, an absent
+        index_source falls back per location, and a date is formatted ISO."""
+        self.index_row("a", ROW_A)
+        self.artifact("page-b", ROW_B.replace("public: no", "public: yes"))
+        self.index_row(
+            "c",
+            ROW_B.replace("Page B", "Page C")
+            .replace("22222222-2222-2222-2222-222222222222",
+                     "33333333-3333-3333-3333-333333333333")
+            .replace("public: no", "public: https://example.com/mirror")
+            + "index_source: '`somewhere/else/`'\nstatus_note: still up\n",
+        )
+        result = run(self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        table = self.table()
+        self.assertIn("3 rows:", table)
+        rows = {
+            line.split("](")[0].lstrip("| ["): line
+            for line in table.splitlines()
+            if line.startswith("| [")
+        }
+        self.assertIn("| no |", rows["Page A"])
+        self.assertIn("| yes |", rows["Page B"])
+        self.assertIn("| https://example.com/mirror |", rows["Page C"])
+        self.assertIn("| `somewhere/else/` |", rows["Page C"])
+        self.assertIn("done — still up", rows["Page C"])
+        self.assertIn("| `artifacts/page-b/` |", rows["Page B"])
+        self.assertIn("| 2026-09-02 |", rows["Page B"])
+        self.assertEqual(run(self.root, "--check").returncode, 0)
+
+    # --- the same fail-open harm, wearing a filename ----------------------
+
+    MISFILED_ROWS = (
+        "artifacts/page-b/meta.yaml",
+        "artifacts/page-b/META.YML",
+        "artifacts/page-b/meta.yaml.txt",
+        "artifacts/page-b/sub/meta.yml",
+        "artifacts/meta.yml",
+        "artifacts/page-b.yml",
+        "artifacts/page-b.yaml",
+        "artifacts/index-rows/misfiled.yaml",
+        "artifacts/index-rows/misfiled.json",
+        "artifacts/index-rows/misfiled.yml.txt",
+        "artifacts/index-rows/nested/misfiled.yml",
+        "artifacts/page-b/row.yml",
+    )
+
+    def test_a_row_at_a_path_the_globs_miss_fails_instead_of_vanishing(self):
+        """The globs were the whole of discovery, so a row saved as `meta.yaml`
+        or dropped one directory off simply did not exist: the build succeeded
+        and the published page had no row. Silently ignoring a file a human
+        clearly filed as a row is the same fail-open bug as the falsey url."""
+        misfiled = (
+            ROW_B.replace("Page B", "Page Misfiled")
+            .replace("22222222-2222-2222-2222-222222222222",
+                     "44444444-4444-4444-4444-444444444444")
+        )
+        for relpath in self.MISFILED_ROWS:
+            with self.subTest(relpath):
+                before = self.two_good_rows()
+                self.write(relpath, misfiled)
+                try:
+                    self.assert_rejected(before, Path(relpath).name)
+                finally:
+                    (self.root / relpath).unlink()
+
+    def test_a_non_row_yaml_beside_an_artifact_source_is_left_alone(self):
+        """The rule catches a misfiled row, not YAML as such: a page's own input
+        data carries none of the row keys, and `build/` is gitignored scratch a
+        build script regenerates, so neither may fail the build."""
+        self.index_row("a", ROW_A)
+        self.artifact("page-b", ROW_B)
+        self.write("artifacts/page-b/chart-data.yml", "series:\n  - [1, 2]\nlabel: x\n")
+        self.write("artifacts/page-b/build/scratch.yml", ROW_B.replace("Page B", "Scratch"))
+        result = run(self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("2 rows", self.table())
+
+    def test_a_published_url_filed_anywhere_under_artifacts_is_caught(self):
+        """A near-miss row need not carry the whole schema to be a row: a file
+        holding a published artifact address is a page this index would lose."""
+        before = self.two_good_rows()
+        self.write(
+            "artifacts/page-b/notes.yml",
+            "note: published today\n"
+            "link: https://claude.ai/code/artifact/"
+            "44444444-4444-4444-4444-444444444444\n",
+        )
+        self.assert_rejected(before, "notes.yml")
+
+    def test_the_index_rows_readme_is_not_mistaken_for_a_row(self):
+        self.index_row("a", ROW_A)
+        self.write("artifacts/index-rows/README.md", "# how rows work\n")
+        self.assertEqual(run(self.root).returncode, 0)
+        self.assertIn("1 rows", self.table())
+
+    def test_the_misfiled_report_names_every_offender_at_once(self):
+        """One file per run would make fixing a batch a game of whack-a-mole."""
+        before = self.two_good_rows()
+        self.write("artifacts/page-b/meta.yaml", ROW_B.replace("22222222", "44444444"))
+        self.write("artifacts/stray.yml", ROW_B.replace("22222222", "55555555"))
+        stderr = self.assert_rejected(before, "meta.yaml")
+        self.assertIn("stray.yml", stderr)
 
 class RealRepoTest(unittest.TestCase):
     """The committed ARTIFACTS.md must match its own YAML files."""

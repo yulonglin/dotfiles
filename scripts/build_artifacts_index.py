@@ -43,6 +43,10 @@ HEADER = [
 STATUSES = ("live", "done", "archived", "superseded", "elsewhere")
 
 URL_RE = re.compile(r"^https://claude\.ai/code/artifact/[0-9a-fA-F-]{36}$")
+# The same address unanchored, for spotting a row filed somewhere the builder
+# does not read rows from.
+ARTIFACT_URL_RE = re.compile(r"https://claude\.ai/code/artifact/[0-9a-fA-F-]{36}")
+ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # The only values that mean "no row yet". Anything else that is not a URL is a
 # typo in a published artifact's address, and dropping its row would delete the
@@ -51,28 +55,142 @@ PLACEHOLDERS = ("", "unpublished", "pending-first-publish")
 
 REQUIRED = ("title", "url", "org", "status", "last_updated", "summary")
 
+# Where a row is allowed to live, and what it is called there.
+ARTIFACT_ROW = "meta.yml"
+INDEX_ROWS = "index-rows"
+SCRATCH = "build"
+YAML_SUFFIXES = (".yml", ".yaml")
+ROW_KEYS = frozenset(REQUIRED) | {"status_note", "index_source", "public"}
+# The only non-row file that directory holds.
+INDEX_ROWS_ALLOWED = ("README.md",)
+
+# THE ONE RULE THIS FILE KEEPS BREAKING, stated once so the next reader has it:
+# never normalise a value parsed from YAML before its type has been checked.
+# Python treats False, 0, "", [] and {} as equally falsey, so `x or default` and
+# `str(x or "")` cannot tell any of them from "absent" — and here "absent" means
+# a published page's row is left out of ARTIFACTS.md with a success exit code,
+# and ARTIFACTS.md is this repo's only record of that page. Inspect the parsed
+# value, reject the wrong type by naming the file, the key, the type and the
+# value as written, and only then apply a default the schema documents. There is
+# no `or` fallback on parsed data anywhere below, and that is deliberate.
+#
+# The rule covers files as well as values, because a row this builder cannot see
+# is a row it drops just as silently: discovery fails loudly on a near-miss
+# spelling or a misfiled row rather than ignoring it.
+#
+# So: this builder must never drop a row, and never ignore an intended row, for
+# anything it cannot read. Every skip is a path the schema explicitly designates
+# — a url that is empty or one of the two placeholders above — and everything
+# else stops the build.
+
+# The type each key is allowed to have, and what to tell a human who got it
+# wrong. Exact types, not isinstance: YAML's `true` is a bool, and a bool is an
+# int in Python, so an isinstance check on int would wave `public: true` through
+# as a number and `last_updated: false` through as a date.
+TYPES: dict[str, tuple[type, ...]] = {
+    "url": (str,),
+    "title": (str,),
+    "org": (str,),
+    "status": (str,),
+    "status_note": (str,),
+    "index_source": (str,),
+    "summary": (str,),
+    "last_updated": (str, dt.date, dt.datetime),
+    "public": (str, bool),
+}
+
+TYPE_HINT = {
+    "url": (
+        "the published address as text (https://claude.ai/code/artifact/<uuid>), "
+        "or one of the unpublished placeholders "
+        f"{', '.join(PLACEHOLDERS[1:])}"
+    ),
+    "title": "the page title as text",
+    "org": "the publishing org as text",
+    "status": f"one of {', '.join(STATUSES)}, as text",
+    "status_note": "the clause after the status, as text",
+    "index_source": "the Source cell, as text",
+    "summary": "what the page established, as text",
+    "last_updated": "an ISO date, e.g. 2026-09-01",
+    "public": "`no`, `yes`, or the public mirror URL as text",
+}
+
 
 class BuildError(Exception):
     pass
 
 
-def _iso(value) -> str:
+def _value(data: dict, key: str, rel: Path):
+    """The parsed value for `key`, type-checked and otherwise untouched.
+
+    An absent key and an explicit YAML null both come back as None, and the
+    caller decides whether that is a documented default or a missing required
+    key. Nothing is coerced or defaulted here: a default applied ahead of the
+    type check is the bug this whole file guards against.
+    """
+    if key not in data:
+        return None
+    value = data[key]
+    if value is None:
+        return None
+    if type(value) in TYPES[key]:
+        return value
+    raise BuildError(
+        f"{rel}: {key} is {type(value).__name__} {value!r}. Write {TYPE_HINT[key]}. "
+        f"A bare `no`, `off`, `yes` or `on` is a boolean in YAML 1.1 — quote it. "
+        f"No row is ever dropped, blanked or defaulted for a value the builder "
+        f"cannot read."
+    )
+
+
+def _text(data: dict, key: str, rel: Path) -> str:
+    """A string-typed value, stripped. Absent, null and blank all give ""; the
+    caller reports it as missing if the key is required."""
+    value = _value(data, key, rel)
+    return "" if value is None else value.strip()
+
+
+def _iso(data: dict, rel: Path) -> str:
+    value = _value(data, "last_updated", rel)
+    if value is None:
+        return ""
     if isinstance(value, (dt.date, dt.datetime)):
         return value.strftime("%Y-%m-%d")
-    return str(value).strip()
+    text = value.strip()
+    if not text:
+        return ""
+    # The table sorts on this string, so a date the builder cannot parse would
+    # silently reorder the log rather than fail.
+    if not ISO_DATE_RE.match(text):
+        raise BuildError(
+            f"{rel}: last_updated is '{text}', which is not an ISO date "
+            f"(YYYY-MM-DD). The table sorts on it, so an unreadable date would "
+            f"silently reorder the index."
+        )
+    try:
+        dt.date.fromisoformat(text)
+    except ValueError as exc:
+        raise BuildError(f"{rel}: last_updated '{text}' is not a real date — {exc}") from exc
+    return text
 
 
-def _public(value) -> str:
-    # YAML 1.1 turns a bare `no` into False, which is the value we want to print.
+def _public(data: dict, rel: Path) -> str:
+    value = _value(data, "public", rel)
+    # The documented default — artifacts/index-rows/README.md: `public` is `no`
+    # unless a mirror URL is given. It is applied here, after the type check,
+    # which is the whole point.
+    if value is None or value is False:
+        return "no"
     if value is True:
         return "yes"
-    if value is False or value is None:
-        return "no"
-    return str(value).strip()
+    text = value.strip()
+    return text if text else "no"
 
 
 def _cell(text: str, where: Path, column: str) -> str:
-    text = " ".join(str(text).split())
+    # Every caller passes a value _value() has already type-checked, so there is
+    # no str() coercion here to hide a list or a mapping behind its repr.
+    text = " ".join(text.split())
     if re.search(r"(?<!\\)\|", text):
         raise BuildError(
             f"{where}: the {column} value contains an unescaped '|', which would "
@@ -81,53 +199,156 @@ def _cell(text: str, where: Path, column: str) -> str:
     return text
 
 
+def _document(path: Path, rel: Path) -> dict:
+    """The parsed mapping, or a loud failure.
+
+    `yaml.safe_load(...) or {}` used to run one line above the isinstance check
+    below, so a file whose whole document was `false`, `0`, `''` or `[]` became
+    an empty mapping, read as an absent url, and dropped its row with exit 0 —
+    while whole-document `true` and a non-empty list were rejected, which is how
+    we know the check existed and merely ran in the wrong order.
+    """
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise BuildError(f"{rel}: not valid YAML — {exc}") from exc
+    if doc is None:
+        raise BuildError(
+            f"{rel}: the file is empty, or is a single YAML null. A row file with "
+            f"nothing in it is a row this index cannot print, and it will not be "
+            f"silently ignored — fill it in, or delete the file."
+        )
+    if not isinstance(doc, dict):
+        raise BuildError(
+            f"{rel}: the document is {type(doc).__name__} {doc!r}, not a mapping. "
+            f"Write the row as `key: value` lines; "
+            f"artifacts/{INDEX_ROWS}/README.md lists the keys."
+        )
+    if not doc:
+        raise BuildError(
+            f"{rel}: the document is an empty mapping. A row file with no keys is "
+            f"a row this index cannot print — fill it in, or delete the file."
+        )
+    return doc
+
+
+def _looks_like_a_row(path: Path) -> bool:
+    """True when a file carries the row schema, wherever it happens to sit."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    # A published artifact address is unambiguous: whatever else this file is,
+    # it records a page, and a page recorded outside the index is a page the
+    # index loses. Caught on the raw text so a key count cannot be gamed.
+    if ARTIFACT_URL_RE.search(text):
+        return True
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return False
+    if not isinstance(data, dict):
+        return False
+    keys = {k for k in data if isinstance(k, str)}
+    return len(keys & ROW_KEYS) >= 3 and bool(keys & {"url", "title"})
+
+
+def _misfiled(path: Path, artifacts: Path) -> str | None:
+    """Why `path` reads as an index row that the globs would never have found."""
+    parts = path.relative_to(artifacts).parts
+    depth = len(parts)
+    if path.name.lower().startswith("meta.") and path.name != ARTIFACT_ROW:
+        return f"an artifact's row file is named exactly `{ARTIFACT_ROW}`, lower case"
+    if path.name == ARTIFACT_ROW and depth != 2:
+        return f"an artifact's row lives at `artifacts/<slug>/{ARTIFACT_ROW}`"
+    if parts[0] == INDEX_ROWS and path.name not in INDEX_ROWS_ALLOWED:
+        # That directory is defined as one file per row, so anything in it that
+        # is not `<slug>.yml` is a misfile whatever its extension — a row saved
+        # as .yaml, .json or .txt is still a row somebody meant to publish.
+        return f"rows in `artifacts/{INDEX_ROWS}/` are named `<slug>.yml`, one level deep"
+    if path.suffix.lower() not in YAML_SUFFIXES:
+        return None
+    if depth == 1:
+        return f"a row with no artifact directory lives in `artifacts/{INDEX_ROWS}/`"
+    if _looks_like_a_row(path):
+        return "it carries the row keys but sits where the builder does not read rows"
+    return None
+
+
+def find_row_files(root: Path) -> list[Path]:
+    """Every row file — and a loud failure for anything filed as one but misnamed
+    or misplaced.
+
+    Two globs used to be the whole of discovery, so a row saved as `meta.yaml`,
+    or dropped at `artifacts/<slug>.yml`, simply did not exist: the build
+    succeeded and the published page had no row. That is the same fail-open harm
+    as a falsey url, wearing a filename instead of a value.
+    """
+    artifacts = root / "artifacts"
+    if not artifacts.is_dir():
+        raise BuildError(
+            f"{artifacts.relative_to(root) if artifacts.is_relative_to(root) else artifacts}"
+            f": the artifacts directory does not exist, so there is nothing to "
+            f"build from. An empty table is a dropped index, not a valid result."
+        )
+
+    rows: list[Path] = []
+    seen: set[Path] = set()
+    for path in [
+        *sorted(artifacts.glob(f"*/{ARTIFACT_ROW}")),
+        *sorted(artifacts.glob(f"{INDEX_ROWS}/*.yml")),
+    ]:
+        if path not in seen:
+            seen.add(path)
+            rows.append(path)
+
+    misfiled: list[str] = []
+    for path in sorted(artifacts.rglob("*")):
+        if path in seen or not path.is_file():
+            continue
+        if SCRATCH in path.relative_to(artifacts).parts[:-1]:
+            # artifacts/<slug>/build/ is gitignored scratch that a build script
+            # regenerates (artifacts/README.md). No row is filed there.
+            continue
+        reason = _misfiled(path, artifacts)
+        if reason:
+            misfiled.append(f"  {path.relative_to(root).as_posix()} — {reason}")
+    if misfiled:
+        raise BuildError(
+            "these files read as index rows but sit where this builder does not "
+            "look, so each would have been ignored and its published page left "
+            "out of ARTIFACTS.md with a success exit code:\n"
+            + "\n".join(misfiled)
+            + f"\nRename or move each one: `artifacts/<slug>/{ARTIFACT_ROW}` for a "
+            f"page with a directory, `artifacts/{INDEX_ROWS}/<slug>.yml` for one "
+            f"without. A file that is not a row belongs under the artifact's "
+            f"gitignored `{SCRATCH}/` directory, or outside `artifacts/`."
+        )
+    return rows
+
+
 def load_rows(root: Path) -> tuple[list[dict], list[tuple[Path, str]]]:
     """Return (rows, skipped) — skipped holds artifacts with no URL yet."""
-    paths = sorted(root.glob("artifacts/*/meta.yml"))
-    paths += sorted(root.glob("artifacts/index-rows/*.yml"))
-
     rows: list[dict] = []
     skipped: list[tuple[Path, str]] = []
     seen: dict[str, Path] = {}
 
-    for path in paths:
+    for path in find_row_files(root):
         rel = path.relative_to(root)
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError as exc:
-            raise BuildError(f"{rel}: not valid YAML — {exc}") from exc
-        if not isinstance(data, dict):
-            raise BuildError(f"{rel}: expected a YAML mapping")
+        data = _document(path, rel)
 
-        # Read the url as it was written, before any normalisation. `str(x or "")`
-        # collapses False, 0 and an empty collection into "", which is a supported
-        # "not published yet" placeholder — so a url of `no` (YAML 1.1 False) used
-        # to delete a published page's row and exit 0. This builder must NEVER drop
-        # a row for metadata it cannot read: ARTIFACTS.md is that page's only record
-        # in this repo. Every skip must be one the schema designates, and anything
-        # else fails loudly.
-        raw_url = data.get("url")
-        if raw_url is None:
-            # Absent or null. artifacts/README.md: a url that is one of the two
-            # placeholders "or empty" gets no row and is listed as a reminder.
-            url = ""
-        elif isinstance(raw_url, str):
-            url = raw_url.strip()
-        else:
-            raise BuildError(
-                f"{rel}: url is {type(raw_url).__name__} {raw_url!r}, not a string. "
-                f"Write the published address as text "
-                f"(https://claude.ai/code/artifact/<uuid>), or one of the "
-                f"unpublished placeholders {', '.join(PLACEHOLDERS[1:])}. "
-                f"Quote a bare `no`/`off`/`yes`, which YAML reads as a boolean. "
-                f"A row is never dropped for an unreadable url."
-            )
+        # Read the url as it was written. Every value below follows the same
+        # order — type first, default second — for the reason given at the top
+        # of this file.
+        url = _text(data, "url", rel)
 
         if not URL_RE.match(url):
             if url.lower() in PLACEHOLDERS:
-                # Not published yet. It has no row until it has a URL; it is
+                # Not published yet: the one skip the schema designates
+                # (artifacts/README.md — a url that is empty or one of the two
+                # placeholders). It has no row until it has a URL; it is
                 # reported, never invented.
-                skipped.append((rel, url or "(no url)"))
+                skipped.append((rel, url if url else "(no url)"))
                 continue
             raise BuildError(
                 f"{rel}: url '{url}' is neither a published artifact address "
@@ -136,16 +357,29 @@ def load_rows(root: Path) -> tuple[list[dict], list[tuple[Path, str]]]:
                 f"Fix the url — a row is never dropped for an unreadable one."
             )
 
-        missing = [k for k in REQUIRED if not str(data.get(k) or "").strip()]
+        title = _text(data, "title", rel)
+        org = _text(data, "org", rel)
+        summary = _text(data, "summary", rel)
+        status = _text(data, "status", rel)
+        note = _text(data, "status_note", rel)
+        last_updated = _iso(data, rel)
+
+        present = {
+            "title": title,
+            "url": url,
+            "org": org,
+            "status": status,
+            "last_updated": last_updated,
+            "summary": summary,
+        }
+        missing = [k for k in REQUIRED if not present[k]]
         if missing:
             raise BuildError(f"{rel}: missing required key(s): {', '.join(missing)}")
 
-        status = str(data["status"]).strip()
         if status not in STATUSES:
             raise BuildError(
                 f"{rel}: status '{status}' is not one of {', '.join(STATUSES)}"
             )
-        note = str(data.get("status_note") or "").strip()
         if status == "superseded" and "](" not in note:
             raise BuildError(
                 f"{rel}: a superseded row must link to its replacement in status_note"
@@ -155,12 +389,14 @@ def load_rows(root: Path) -> tuple[list[dict], list[tuple[Path, str]]]:
             raise BuildError(f"{rel}: duplicate url, already claimed by {seen[url]}")
         seen[url] = rel
 
-        source = str(data.get("index_source") or "").strip()
+        source = _text(data, "index_source", rel)
         if not source:
+            # The documented default: the artifact's own directory, or an em
+            # dash for a row that has none.
             parent = path.parent
             source = (
                 "—"
-                if parent.name == "index-rows"
+                if parent.name == INDEX_ROWS
                 else f"`{parent.relative_to(root).as_posix()}/`"
             )
 
@@ -168,17 +404,13 @@ def load_rows(root: Path) -> tuple[list[dict], list[tuple[Path, str]]]:
             {
                 "path": rel,
                 "url": url,
-                "last_updated": _iso(data["last_updated"]),
-                "artifact": _cell(
-                    f"[{str(data['title']).strip()}]({url}) — {str(data['summary']).strip()}",
-                    rel,
-                    "title/summary",
-                ),
-                "org": _cell(data["org"], rel, "org"),
+                "last_updated": last_updated,
+                "artifact": _cell(f"[{title}]({url}) — {summary}", rel, "title/summary"),
+                "org": _cell(org, rel, "org"),
                 "bare_status": status,
                 "status": _cell(f"{status} — {note}" if note else status, rel, "status"),
                 "source": _cell(source, rel, "index_source"),
-                "public": _cell(_public(data.get("public")), rel, "public"),
+                "public": _cell(_public(data, rel), rel, "public"),
             }
         )
 
