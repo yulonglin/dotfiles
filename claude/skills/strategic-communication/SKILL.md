@@ -79,21 +79,15 @@ After acknowledging emotions, use "How" and "What" questions:
 
 ## Key Principles From Voss
 
-**1. Label Emotions Constantly**
-Pattern: "It seems like..." / "It sounds like..." / "You're probably..."
-Then **pause** and let them respond.
+**1. Label Emotions Constantly** Pattern: "It seems like..." / "It sounds like..." / "You're probably..." Then **pause** and let them respond.
 
-**2. Accusation Audit - Name The Worst First**
-Say what they might think about you before they can: "You're going to think I'm being flaky..."
+**2. Accusation Audit - Name The Worst First** Say what they might think about you before they can: "You're going to think I'm being flaky..."
 
-**3. "I'm Sorry" Is a Tool, Not Weakness**
-Apologize for your impact on them, not for having needs.
+**3. "I'm Sorry" Is a Tool, Not Weakness** Apologize for your impact on them, not for having needs.
 
-**4. Three Types of "Yes"**
-Only Commitment Yes matters. Use no-oriented questions: "Would it be crazy to...?"
+**4. Three Types of "Yes"** Only Commitment Yes matters. Use no-oriented questions: "Would it be crazy to...?"
 
-**5. Slow Down and Smile**
-Creates trustworthiness and combats defensiveness.
+**5. Slow Down and Smile** Creates trustworthiness and combats defensiveness.
 
 ## Reference Files
 

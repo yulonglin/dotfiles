@@ -11,8 +11,22 @@
 # a PostToolUse hook cannot un-publish anything, so blocking here would buy
 # nothing and a broken nudge must never break a publish.
 #
-# Quiet when there is nothing to say: a non-publish action, a publish whose URL
-# already appears in ARTIFACTS.md, or a cwd outside a git repo all exit silently.
+# Two things are nudged for, and they are independent. The row: a URL that never
+# reached ARTIFACTS.md. The page: since 2026-09-10 the hosted index is republished
+# to its recorded URL after every OTHER artifact publish, so a publish whose row
+# is already filed still earns a reminder while the index page does not.
+#
+# That URL is read out of the ARTIFACTS.md header (the `**Live index page:**`
+# line), never hardcoded — one repo's index URL means nothing in another repo,
+# and a URL baked in here would outlive the page it names. A repo whose header
+# carries no such line simply gets no republish clause.
+#
+# The hook still publishes nothing. It is PostToolUse advisory context; the
+# session does the republish.
+#
+# Quiet when there is nothing to say: a non-publish action, a publish OF the
+# index page itself, a publish already recorded in a repo with no index URL, or
+# a cwd outside a git repo all exit silently.
 #
 # The URL is found by scanning the whole hook payload for the artifact URL
 # pattern rather than by reading a named field. The PostToolUse payload shape
@@ -107,16 +121,30 @@ ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) || exit 0
 
 INDEX="$ROOT/ARTIFACTS.md"
 
-# Already recorded — the turn did its job, so say nothing.
-#
 # An index that exists but cannot be read is treated as "say nothing" rather
 # than "not recorded": grep cannot tell those apart, and guessing "missing"
 # would nudge on every publish forever with no way for the session to satisfy
 # it. Staying quiet loses one reminder; the alternative is an unstoppable one.
+RECORDED=no
+INDEX_URL=""
 if [ -f "$INDEX" ]; then
     [ -r "$INDEX" ] || exit 0
-    grep -qF "$URL" "$INDEX" 2>/dev/null && exit 0
+    grep -qF "$URL" "$INDEX" 2>/dev/null && RECORDED=yes
+    # The header's marker line, then the URL out of it. Two greps rather than
+    # one capture, because the pattern must stay a portable BRE/ERE and the
+    # marker is the part a rewrite of the header could plausibly move.
+    MARKER=$(grep -m1 -E '^\*\*Live index page:\*\*' "$INDEX" 2>/dev/null) || MARKER=""
+    if [ -n "$MARKER" ]; then
+        INDEX_URL=$(printf '%s' "$MARKER" \
+            | grep -m1 -oE 'https://claude\.ai/code/artifact/[0-9a-fA-F-]{36}') || INDEX_URL=""
+    fi
 fi
+
+# The publish WAS the index page. Telling it to republish itself would loop.
+[ -n "$INDEX_URL" ] && [ "$URL" = "$INDEX_URL" ] && exit 0
+
+# Row filed and no hosted index to refresh: the turn did its job.
+[ "$RECORDED" = yes ] && [ -z "$INDEX_URL" ] && exit 0
 
 # No org lookup here, deliberately. An earlier version shelled out to
 # `claude auth status` and cached the result, which was dead code twice over:
@@ -131,12 +159,22 @@ fi
 
 REL="${INDEX#"$ROOT"/}"
 if [ -f "$INDEX" ]; then
-    WHAT="Add a row to $REL for it"
+    WHAT="Record it for $REL"
 else
     WHAT="Create $REL and add it"
 fi
 
-MSG="Published $URL but it is not in $REL yet. $WHAT, following the artifacts-sync skill for the row schema — record the publishing org now, because it is not recoverable later and the gallery listing carries no repo attribution. Republish the index page in the same pass so the Markdown and the artifact stay in sync."
+if [ "$RECORDED" = yes ]; then
+    MSG="Published $URL, and its row in $REL is already there."
+else
+    MSG="Published $URL but it is not in $REL yet. $WHAT, following the artifacts-sync skill for the row schema — the row is generated from the meta.yml beside the page source, so write the keys there and rebuild rather than editing the table. Record the publishing org now, because it is not recoverable later and the gallery listing carries no repo attribution."
+fi
+
+if [ -n "$INDEX_URL" ]; then
+    MSG="$MSG Now republish the index page in the same pass: rebuild it from $REL and publish that HTML with url set to $INDEX_URL, which updates the page in place. The artifacts-sync skill has the build command."
+else
+    MSG="$MSG Republish the index page in the same pass so the Markdown and the artifact stay in sync."
+fi
 
 python3 -c '
 import json, sys

@@ -1,0 +1,10 @@
+title: Task Lists Follow the Shell
+url: https://claude.ai/code/artifact/242e3dbb-600d-44b4-87ae-9a688542e132
+org: see note
+status: done
+last_updated: 2026-08-28
+public: no
+
+summary: >-
+  every session already gets its own task list, so the wrapper must never export a shared ID;
+  the daemon is the last place a stale one hides

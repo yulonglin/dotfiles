@@ -4,6 +4,12 @@ org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-09-11
 first_published: 2026-09-11
 last_updated: 2026-09-11
 status: live
+
+summary: >-
+  the open pull requests grouped by how much judgement each needs rather than by age, so the
+  table can be read instead of opened. Each row's tick is stored as its own document, so two
+  viewers ticking different rows cannot overwrite each other, and a tick made before the store
+  resolves is queued rather than lost
 published_version: 3   # the publish result reports "capabilities db", so the declaration is live
 
 source: index.html     # hand-written; there is no Markdown behind this one

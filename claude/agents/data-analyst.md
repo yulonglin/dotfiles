@@ -261,11 +261,7 @@ When engaged to analyze results:
 
 7. **Assess Practical Significance**: Beyond statistical significance, are differences meaningful? Large enough to matter?
 
-8. **Sensitivity Check** (MANDATORY for every main finding): Run at least one:
-   (a) Drop top/bottom 5% outliers — does conclusion hold?
-   (b) Alternative aggregation (median vs mean, or different grouping) — same direction?
-   (c) Subset analysis — consistent across subgroups (models, datasets, time periods)?
-   If conclusion changes under any check, flag as FRAGILE in Trust Calibration.
+8. **Sensitivity Check** (MANDATORY for every main finding): Run at least one: (a) Drop top/bottom 5% outliers — does conclusion hold? (b) Alternative aggregation (median vs mean, or different grouping) — same direction? (c) Subset analysis — consistent across subgroups (models, datasets, time periods)? If conclusion changes under any check, flag as FRAGILE in Trust Calibration.
 
 9. **Document Analysis**: Save scripts, note random seeds, document choices made.
 
@@ -325,13 +321,11 @@ Structure analysis as:
 **Key Findings**
 1. [Main result with CI and significance test]
 2. [Secondary result with CI and significance test]
-3. [Additional findings]
-[Ordered by importance]
+3. [Additional findings] [Ordered by importance]
 
 **Visualizations**
 - [Plot 1 description]
-- [Plot 2 description]
-[Attached or described]
+- [Plot 2 description] [Attached or described]
 
 **Surprising/Concerning Patterns**
 - [Pattern 1]: Why it's surprising, what to investigate

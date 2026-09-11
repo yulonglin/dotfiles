@@ -11,7 +11,7 @@ Those three names are structural and exempt from the assert-the-finding standard
 
 Everything else is opt-in. Include a section only when there is a real answer for it, otherwise delete it — never fill it with "N/A" or "TBD". A three-section spec is complete, not unfinished.
 
-No checkbox checklists: never `[ ]` markers, neither inline in prose nor as `- [ ]` sub-bullets. Use plain itemised `-` bullets. Checkbox syntax belongs only in actual working todo lists.
+No checkbox checklists: never `[ ]` markers, neither inline in prose nor as `- [ ]` sub-bullets. Use plain itemised `-` bullets. `[ ]` belongs only where something ticks it — a working todo list, or a review page's own checklist, which `md2artifact` renders as a live control the reviewer ticks and copies out.
 
 ## Each requirement that produces a number names its own variables
 

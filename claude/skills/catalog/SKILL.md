@@ -98,6 +98,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `commit-push-sync` | "commit and push", "sync changes", "update remote" |
 | `ship` | "ship this" or review, finish, merge, and push an authorized completed change |
 | `merge-worktree` | "merge this worktree", "merge my branch back", "finish this worktree" |
+| `review-pr-queue` | "address the comments on these PRs", "review and merge the queue", "clear the PR backlog" |
 | `superpowers:finishing-a-development-branch` | Implementation is done, tests pass, deciding merge/PR/cleanup |
 | `diagnosing-bugs` | "diagnose"/"debug this", something broken/throwing/failing/slow |
 | `deslop` | Before committing agent-written code — narrating comments, defensive guards, needless abstraction |
