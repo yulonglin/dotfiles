@@ -46,7 +46,9 @@ export MODEL_ROUTER_AGENTS="$WORK/agents"
 # --- Phase 1: stage, print the sudo line, leave the user file alone ----------
 out="$("$WIRE" apply --no-restart)"
 [ -f "$MODEL_ROUTER_STAGED" ] || fail "apply did not stage $MODEL_ROUTER_STAGED"
-mode="$(stat -f '%Lp' "$MODEL_ROUTER_STAGED" 2>/dev/null || stat -c '%a' "$MODEL_ROUTER_STAGED")"
+# GNU stat -f means "filesystem status" and SUCCEEDS while printing the wrong
+# thing, so the GNU form has to come first or the BSD branch always wins here
+mode="$(stat -c '%a' "$MODEL_ROUTER_STAGED" 2>/dev/null || stat -f '%Lp' "$MODEL_ROUTER_STAGED")"
 [ "$mode" = "600" ] || fail "staged file mode is $mode, expected 600"
 has_key "$MODEL_ROUTER_STAGED" ANTHROPIC_BASE_URL || fail "staged file lacks ANTHROPIC_BASE_URL"
 has_key "$MODEL_ROUTER_STAGED" _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL || fail "staged file lacks the first-party flag"
