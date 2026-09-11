@@ -369,7 +369,13 @@ var STATES = "an-states:" + KEY;
 // whenever one quote happened to appear on this page. The republish they were
 // meant to survive is already covered, because the generator fixes the key
 // (`data-key`) from the filename rather than the title.
-function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
+// `getItem` cannot say WHY it returned null: a missing key and a read the
+// browser refused look identical, and reading a refusal as "nothing stored"
+// overwrites the page with an assumed-empty value. A read that cares takes
+// lsRead and compares against FAILED.
+var FAILED = {};
+function lsRead(k){ try { return localStorage.getItem(k); } catch (e) { return FAILED; } }
+function lsGet(k){ var v = lsRead(k); return v === FAILED ? null : v; }
 function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
 function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
 
@@ -903,32 +909,29 @@ function markClean(snap){
 // step" holds WITHIN a tab and says nothing ACROSS tabs. Single-threaded stops
 // this tab's handlers interleaving; a second tab is a separate process.
 var STATE_PREFIX = "an-state:" + KEY + ":";
-// Migration marker. Without it, a control the reader deliberately cleared out
-// of the store is resurrected from the legacy document on the next load.
-var STATE_MIGRATED = "an-state-migrated:" + KEY;
 
 function stateKeyOf(id){ return STATE_PREFIX + id; }
 function stateIdOf(key){
   return (typeof key === "string" && key.indexOf(STATE_PREFIX) === 0)
     ? key.slice(STATE_PREFIX.length) : null;
 }
-function readState(id){ return lsGet(stateKeyOf(id)); }
-
-// One-time migration off the shared document, which is READ and left exactly
-// where it is: a page rolled back to the previous layer still finds every tick
-// its reader made, because nothing here deletes it.
-(function migrateSharedStateDocument(){
-  if (lsGet(STATE_MIGRATED) === "1") return;
-  var d = null;
-  try { d = JSON.parse(lsGet(STATES) || "null"); } catch (e) { d = null; }
-  if (d && typeof d === "object" && !Array.isArray(d)) {
-    for (var id in d) {
-      // Never over a per-key value: that one is newer by construction.
-      if (typeof d[id] === "string" && lsGet(stateKeyOf(id)) === null) lsSet(stateKeyOf(id), d[id]);
-    }
-  }
-  lsSet(STATE_MIGRATED, "1");
-})();
+// The control's OWN key: a write reads this back for evidence that it landed,
+// so the fallback below must not be allowed to answer for it.
+function readStateKey(id){ return lsRead(stateKeyOf(id)); }
+// State written by the shared-document layer migrates LAZILY, here, one control
+// at a time: an id with no per-item value falls back to that document, which is
+// READ where it lies and never written or deleted, so a rolled-back page still
+// finds every tick. There is no copy pass, so nothing has to answer "did every
+// item land?" -- which a store that refuses one write in three cannot be asked,
+// and the marker that answered "yes" regardless abandoned the rest for good.
+function readState(id){
+  var v = readStateKey(id);
+  if (v !== null) return v;                   // a stored value, or FAILED
+  var raw = lsRead(STATES), d = null;
+  if (raw === FAILED) return FAILED;
+  try { d = JSON.parse(raw || "null"); } catch (e) {}
+  return (d && typeof d === "object" && !Array.isArray(d) && typeof d[id] === "string") ? d[id] : null;
+}
 
 var pendingStates = {};   // id -> value this tab wrote that the store did not take
 var stateDefaults = {};   // id -> the value the document itself shipped
@@ -943,7 +946,7 @@ function hasPending(){ return Object.keys(pendingStates).length > 0; }
 function writeState(id, value){
   var was = statesUnsaved;
   lsSet(stateKeyOf(id), value);
-  if (readState(id) === value) delete pendingStates[id];
+  if (readStateKey(id) === value) delete pendingStates[id];
   else pendingStates[id] = value;
   statesUnsaved = hasPending();
   paintStateId(id);
@@ -958,6 +961,9 @@ function paintState(u){
   // touched by nobody, so what it is showing now IS the value it shipped.
   if (!stateDefaults.hasOwnProperty(id)) stateDefaults[id] = stateValue(u);
   var v = pendingStates.hasOwnProperty(id) ? pendingStates[id] : readState(id);
+  // A read that FAILED says nothing about the stored value, so what the reader
+  // is looking at stays: blanking it would show an untick nobody made.
+  if (v === FAILED) return;
   if (typeof v !== "string" || !applyState(u, v)) applyState(u, stateDefaults[id]);
 }
 function paintStateId(id){
@@ -1060,7 +1066,7 @@ window.addEventListener("storage", function(e){
   // Nothing is pending once the store holds it, whoever put it there. Only the
   // ids this event could have changed: one of them, or all on a clear.
   (id === null ? Object.keys(pendingStates) : [id]).forEach(function(k){
-    if (pendingStates.hasOwnProperty(k) && readState(k) === pendingStates[k]) {
+    if (pendingStates.hasOwnProperty(k) && readStateKey(k) === pendingStates[k]) {
       delete pendingStates[k];
     }
   });

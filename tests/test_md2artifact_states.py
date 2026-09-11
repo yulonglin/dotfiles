@@ -843,10 +843,18 @@ def test_the_same_item_in_two_tabs_resolves_last_writer_wins(ctx, site) -> None:
     assert _stored_states(a).get("first-thing") == " "
 
 
-# --- state written by the shared-document layer is picked up -----------------
-# Readers have ticks stored under the old `an-states:<key>` document. It is read
-# once, written out one key per control, and LEFT WHERE IT IS: a page rolled
-# back to the previous layer still finds every tick its reader made.
+# --- state written by the shared-document layer is read where it lies --------
+# Readers have ticks stored under the old `an-states:<key>` document. There is
+# no copy pass and no "migration done" marker: an id with no per-item value of
+# its own falls back to that document AT THE POINT OF READING, on every load,
+# and the document is never written and never deleted, so a page rolled back to
+# the previous layer still finds every tick its reader made.
+#
+# A copy pass has to answer "did every item land?" and cannot: a store refuses
+# one write out of three, so the marker recorded "done" over a copy that was
+# partial and abandoned the rest of the reader's ticks for good. Reading
+# through the fallback has no such question to get wrong, and an id that could
+# not be copied is simply read from the old document again next time.
 
 
 def _seed_legacy_document(ctx, site, doc: dict):
@@ -859,13 +867,20 @@ def _seed_legacy_document(ctx, site, doc: dict):
     return page
 
 
-def test_a_shared_document_from_the_old_layer_is_picked_up(ctx, site) -> None:
-    """Including the untick, which the old layer said by omitting the key."""
+def test_a_shared_document_from_the_old_layer_is_read_not_copied(ctx, site) -> None:
+    """Including the untick, which the old layer said by omitting the key.
+
+    Nothing is written: a load that copies nothing has no partial copy to get
+    wrong, and the same read serves every later load.
+    """
     page = _seed_legacy_document(ctx, site, {"first-thing": "x", "second-thing": " "})
     page.goto(f"{site}/box.html")
 
     assert _checked(page) == [True, False, False]
-    assert _stored_states(page) == {"first-thing": "x", "second-thing": " "}
+    assert _stored_states(page) == {}, "reading the old document wrote per-item keys"
+
+    page.reload()
+    assert _checked(page) == [True, False, False]
 
 
 def test_the_old_shared_document_is_left_in_place(ctx, site) -> None:
@@ -877,23 +892,139 @@ def test_the_old_shared_document_is_left_in_place(ctx, site) -> None:
     assert page.evaluate("k => localStorage.getItem(k)", LEGACY_STATES_KEY) is not None
 
 
-def test_migration_never_resurrects_a_state_the_reader_cleared(ctx, site) -> None:
-    """It runs once. Otherwise every load undoes what the reader did last time.
+def test_a_per_item_value_wins_over_the_old_document(ctx, site) -> None:
+    """The reader's untick is an explicit " ", and it is never undone.
 
-    The reader unticks an item the old document had ticked, which stores an
-    explicit " " -- and then clears that key outright, which is what a second
-    tab's `localStorage.clear()` does. Neither may come back ticked.
+    The fallback is for ids the per-item store says nothing about. An id it
+    does speak for -- including one the reader deliberately unticked -- is
+    answered there and the old document is not consulted at all.
     """
     page = _seed_legacy_document(ctx, site, {"first-thing": "x", "deny": "x"})
     page.goto(f"{site}/box.html")
-    # Item 2 is ticked in the source and the old document names it nowhere, so
-    # it falls back to the value the page shipped with.
     assert _checked(page) == [True, True, True]
 
     page.locator("input.anstatebox").nth(0).uncheck()
-    page.evaluate("p => localStorage.removeItem(p + 'deny')", STATE_PREFIX)
     page.reload()
 
-    assert _checked(page) == [False, True, False], (
-        "the legacy document was read a second time and undid the reader"
+    assert _checked(page) == [False, True, True], (
+        "the old document was read over a value the reader had stored"
     )
+
+
+def _fill_the_store(page) -> None:
+    """Fill localStorage until it refuses even a small write. No mocking.
+
+    Coarse chunks first, then finer ones, so the store ends within a few
+    characters of full -- the reviewer's reproduction, where what is left is
+    too small for a state key and its value.
+    """
+    page.evaluate(
+        "() => { for (const n of [65536, 4096, 256, 16, 1]) {"
+        "    const chunk = 'x'.repeat(n);"
+        "    for (let i = 0; i < 4096; i++) {"
+        "      try { localStorage.setItem('fill:' + n + ':' + i, chunk); }"
+        "      catch (e) { break; } } } }"
+    )
+    room = page.evaluate(
+        "p => { try { localStorage.setItem(p + 'probe', 'x');"
+        "  localStorage.removeItem(p + 'probe'); return true; } catch (e) { return false; } }",
+        STATE_PREFIX,
+    )
+    assert not room, "the store still had room, so nothing here was under test"
+
+
+def test_a_legacy_tick_survives_a_store_too_full_to_copy_it(ctx, site) -> None:
+    """The confirmed defect, reproduced with real quota exhaustion.
+
+    A copy pass cannot write a single per-item key here, and the marker it
+    stored afterwards said the copy was done. Reading through the fallback
+    needs no write at all, so a full store costs the reader nothing.
+    """
+    page = _seed_legacy_document(ctx, site, {"first-thing": "x", "deny": "x"})
+    _fill_the_store(page)
+    page.goto(f"{site}/box.html")
+
+    assert _checked(page) == [True, True, True], "a full store lost the reader's ticks"
+
+    page.reload()
+    assert _checked(page) == [True, True, True]
+
+
+def test_a_marker_from_the_earlier_layer_does_not_abandon_the_state(ctx, site) -> None:
+    """Readers already carry `an-state-migrated:<key>` from the copy pass.
+
+    Whatever that pass managed to copy, the ids it missed have no per-item
+    value, and the marker must not stop them being read. A marker that outranks
+    the fallback is the "abandoned for good" half of the defect.
+    """
+    page = _seed_legacy_document(ctx, site, {"first-thing": "x"})
+    page.evaluate("() => localStorage.setItem('an-state-migrated:review-states-box', '1')")
+    page.goto(f"{site}/box.html")
+
+    assert _checked(page) == [True, True, False], (
+        "a stale migration marker suppressed the legacy state"
+    )
+
+
+def test_a_refused_tick_is_not_confirmed_by_the_old_document(ctx, site) -> None:
+    """A write reads back its OWN key, never the fallback.
+
+    The old document holds "x" for this id, so a read-back that consults the
+    fallback reports a refused tick as stored and stands the warning down over
+    work that never left the page.
+    """
+    page = _seed_legacy_document(ctx, site, {"first-thing": "x"})
+    page.goto(f"{site}/box.html")
+    page.locator("input.anstatebox").nth(0).uncheck()  # stores an explicit " "
+    _block_storage(page)
+    page.locator("input.anstatebox").nth(0).check()
+
+    expect(page.locator("#anCount")).to_contain_text("refused")
+    assert _guard_armed(page), "a refused tick was confirmed by the old document"
+
+
+def _break_state_reads(page) -> None:
+    page.evaluate(
+        "() => { const real = Storage.prototype.getItem;"
+        "  Storage.prototype.getItem = function(k){"
+        "    if (String(k).indexOf('an-state') === 0) throw new Error('blocked');"
+        "    return real.call(this, k); }; }"
+    )
+
+
+def test_a_failed_state_read_leaves_the_shown_state_alone(ctx, site) -> None:
+    """A read that FAILED is not a read that returned nothing.
+
+    Both come back from `getItem` as null, and treating the refusal as "nothing
+    stored" repaints a ticked item as unticked -- the display disagreeing with
+    a store that still holds the tick.
+    """
+    page = open_page(ctx, site, "box.html")
+    page.locator("input.anstatebox").nth(0).check()
+    _break_state_reads(page)
+    page.evaluate(
+        "p => window.dispatchEvent(new StorageEvent('storage',"
+        "  {key: p + 'first-thing', newValue: 'x'}))",
+        STATE_PREFIX,
+    )
+
+    assert _checked(page) == [True, True, False], (
+        "a failed read blanked a state the store still holds"
+    )
+
+
+def test_a_failed_state_read_never_clears_a_loss_flag(ctx, site) -> None:
+    """Unknown is not stored: a refused tick goes on warning."""
+    page = open_page(ctx, site, "box.html")
+    _block_storage(page)
+    page.locator("input.anstatebox").nth(0).check()
+    assert _guard_armed(page)
+
+    _break_state_reads(page)
+    page.evaluate(
+        "p => window.dispatchEvent(new StorageEvent('storage',"
+        "  {key: p + 'first-thing', newValue: 'x'}))",
+        STATE_PREFIX,
+    )
+
+    assert _guard_armed(page), "a read that failed was read as evidence the tick landed"

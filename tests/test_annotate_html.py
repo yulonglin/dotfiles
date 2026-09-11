@@ -256,14 +256,17 @@ def test_a_failed_write_and_a_failed_copy_are_both_surfaced() -> None:
     Changed with the storage model: the read-back used to be a lookup into a
     cached copy of one shared document (`storedStates[id] === pendingStates[id]`),
     a line only that design could have. The property is the same and the
-    expression is now a read of the control's own key.
+    expression is now a read of the control's own key -- `readStateKey`, not
+    `readState`, which falls back to the legacy shared document and would
+    report a refused write as stored whenever that document happened to hold
+    the same value.
     """
     js = _layer_module().JS
     assert "notesUnsaved = !lsSet(" in js
     assert "statesUnsaved = !lsSet(" not in js, "a state write must not believe its own return value"
     assert "statesUnsaved = hasPending();" in js
-    assert "if (readState(id) === value) delete pendingStates[id];" in js
-    assert "readState(k) === pendingStates[k]" in js
+    assert "if (readStateKey(id) === value) delete pendingStates[id];" in js
+    assert "readStateKey(k) === pendingStates[k]" in js
     assert "function unsaved(){ return notesUnsaved || statesUnsaved; }" in js
     assert "refused to store them" in js
     assert "refused to store the checklist" in js
