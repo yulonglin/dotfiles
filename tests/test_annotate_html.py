@@ -246,10 +246,18 @@ def test_a_failed_write_and_a_failed_copy_are_both_surfaced() -> None:
     that is all checklist and no notes, which is what a review queue is, a
     reviewer with blocked site data ticked every row, closed the tab and was
     never told the verdict had not survived.
+
+    The two writers report differently on purpose. A comment write rewrites
+    every comment, so `setItem` not throwing does cover the whole value. A
+    state write carries a per-id pending set that a second tab can add to
+    between writes, so its flag is that set being non-empty, cleared only for
+    the ids a read-back proves are stored — never from the write's own return.
     """
     js = _layer_module().JS
     assert "notesUnsaved = !lsSet(" in js
-    assert "statesUnsaved = !lsSet(" in js
+    assert "statesUnsaved = !lsSet(" not in js, "a state write must not believe its own return value"
+    assert "statesUnsaved = hasPending();" in js
+    assert "storedStates[id] === pendingStates[id]" in js
     assert "function unsaved(){ return notesUnsaved || statesUnsaved; }" in js
     assert "refused to store them" in js
     assert "refused to store the checklist" in js

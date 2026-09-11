@@ -581,3 +581,150 @@ def test_an_ordered_item_persists_like_any_other(ctx, site) -> None:
     page.reload()
     expect(page.locator("input.anstatebox").nth(1)).to_be_checked()
     assert "- [x] second step" in export_text(page)
+
+
+# --- a second tab never discards this tab's unstored ticks -------------------
+# The layer writes the state map as a WHOLE DOCUMENT, which is the only way to
+# express an untick: removing a key is how "no longer ticked" is said, and a
+# merge-style write cannot say it. A whole-document write is safe only when the
+# document was computed from state already reconciled with what is stored. It
+# was not. Two ways that lost a verdict, both reproduced here:
+#
+# - the storage listener replaced the in-memory map with the other tab's map,
+#   dropping ticks this tab had made and the store had refused, and leaving the
+#   controls for ids the incoming map omitted untouched -- so the display went
+#   on presenting a tick that existed nowhere. The next successful write then
+#   stored the incomplete map and cleared the loss flag with it.
+# - a write derived from a map read at load time overwrites anything another
+#   tab stored since, because nothing re-read the store before serialising.
+
+STATES_KEY = "an-states:review-states-box"
+
+
+def _stored_states(page) -> dict:
+    return page.evaluate(
+        "k => JSON.parse(localStorage.getItem(k) || '{}')", STATES_KEY
+    )
+
+
+def _refuse_the_first_state_write(page) -> None:
+    """One transient refusal, the shape a full quota has: it throws, then stops.
+
+    A permanent block (`_block_storage`) cannot show this defect, because the
+    write that clears the flag has to be allowed to succeed.
+    """
+    page.evaluate(
+        "() => { const real = Storage.prototype.setItem; let refused = false;"
+        "  Storage.prototype.setItem = function(k, v){"
+        "    if (!refused && String(k).indexOf('an-states:') === 0) {"
+        "      refused = true; throw new Error('blocked'); }"
+        "    return real.call(this, k, v); }; }"
+    )
+
+
+def test_a_refused_tick_is_not_dropped_by_another_tabs_write(ctx, site) -> None:
+    """The confirmed defect, end to end.
+
+    A's first write is refused and warns. B stores a tick of its own. A's next
+    write succeeds — and used to store a map with A's own tick missing from it,
+    clearing the warning at the same time. Reloading A then showed the verdict
+    gone, which is the exact silence the loss flag exists to prevent.
+    """
+    a = open_page(ctx, site, "box.html")
+    b = open_page(ctx, site, "box.html")
+
+    _refuse_the_first_state_write(a)
+    a.locator("input.anstatebox").nth(0).check()
+    expect(a.locator("#anCount")).to_contain_text("refused")
+    assert _guard_armed(a), "a refused tick left the tab free to close"
+
+    b.locator("input.anstatebox").nth(2).check()
+    # Polls A's own DOM, so it waits for A's storage listener to have run
+    # rather than for the shared store to have changed.
+    expect(a.locator("input.anstatebox").nth(2)).to_be_checked()
+
+    a.locator("input.anstatebox").nth(1).uncheck()
+
+    stored = _stored_states(a)
+    assert stored.get("first-thing") == "x", "the refused tick never reached the store"
+    assert stored.get("second-thing") == " ", "this tab's untick was lost"
+    assert stored.get("deny") == "x", "the other tab's tick was overwritten"
+    assert not _guard_armed(a), "the guard stayed armed for a tick that did land"
+
+    a.reload()
+    expect(a.locator("input.anstatebox").nth(0)).to_be_checked()
+    expect(a.locator("input.anstatebox").nth(1)).not_to_be_checked()
+    expect(a.locator("input.anstatebox").nth(2)).to_be_checked()
+
+
+def test_a_remote_write_never_clears_a_loss_flag_it_did_not_carry(ctx, site) -> None:
+    """The other tab stored ITS tick, not this tab's. The warning stands."""
+    a = open_page(ctx, site, "box.html")
+    b = open_page(ctx, site, "box.html")
+
+    _block_storage(a)
+    a.locator("input.anstatebox").nth(0).check()
+    assert _guard_armed(a)
+
+    b.locator("input.anstatebox").nth(2).check()
+    expect(a.locator("input.anstatebox").nth(2)).to_be_checked()
+
+    assert _stored_states(a).get("first-thing") is None
+    expect(a.locator("input.anstatebox").nth(0)).to_be_checked()
+    expect(a.locator("#anCount")).to_contain_text("refused")
+    assert _guard_armed(a), "a remote write stood the guard down over lost work"
+
+
+def test_a_remote_clear_unticks_what_it_removed(ctx, site) -> None:
+    """An id the incoming map omits must stop being shown as ticked.
+
+    The listener only ever applied ids the incoming map named, so a state the
+    other tab removed went on being displayed here as current — the display
+    disagreeing with the store, which is how the lost tick above stayed
+    invisible until a reload.
+    """
+    a = open_page(ctx, site, "box.html")
+    b = open_page(ctx, site, "box.html")
+
+    b.locator("input.anstatebox").nth(2).check()
+    expect(a.locator("input.anstatebox").nth(2)).to_be_checked()
+
+    b.evaluate("k => localStorage.removeItem(k)", STATES_KEY)
+    expect(a.locator("input.anstatebox").nth(2)).not_to_be_checked()
+    # The page ships item 2 ticked. Falling back means the value the document
+    # carries, not a blanket untick.
+    expect(a.locator("input.anstatebox").nth(1)).to_be_checked()
+
+
+def test_a_write_merges_onto_a_store_this_tab_has_not_seen(ctx, site) -> None:
+    """The window between another tab's write and this tab's storage event.
+
+    A write from this same document fires no storage event here, so it leaves
+    the page in exactly the state that window leaves it in: the store has moved
+    and the listener has not run. A write computed from the map read at load
+    silently overwrites what landed in between.
+    """
+    page = open_page(ctx, site, "box.html")
+    page.evaluate(
+        "k => localStorage.setItem(k, JSON.stringify({deny: 'x'}))", STATES_KEY
+    )
+    page.locator("input.anstatebox").nth(0).check()
+
+    stored = _stored_states(page)
+    assert stored.get("deny") == "x", "a stored tick this tab had not seen was overwritten"
+    assert stored.get("first-thing") == "x"
+
+
+def test_a_write_that_silently_stores_nothing_still_warns(ctx, site) -> None:
+    """`setItem` returning without storing is a refusal too.
+
+    The flag used to come from whether `setItem` threw. It has to come from
+    what the store holds afterwards, or a browser that no-ops the write clears
+    the warning on work that never left the page.
+    """
+    page = open_page(ctx, site, "box.html")
+    page.evaluate("() => { Storage.prototype.setItem = function(){}; }")
+    page.locator("input.anstatebox").nth(0).check()
+
+    expect(page.locator("#anCount")).to_contain_text("refused")
+    assert _guard_armed(page), "a write that stored nothing let the tab close quietly"
