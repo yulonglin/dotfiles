@@ -71,7 +71,7 @@ check_file() {
             printf 'ok:   %s carries no %s\n' "$label" "$KEY" ; return ;;
         *)
             checked=$((checked + 1))
-            report_fail "$label sets $KEY=$value at $path — this breaks the auto-mode classifier behind the gateway (see artifacts/auto-mode-classifier-429/report.md). Remove the key."
+            report_fail "$label sets $KEY=$value at $path — the key must not be present at all, whatever its value. Remove it. (The value that broke auto mode behind the gateway was 0; see artifacts/auto-mode-classifier-429/report.md.)"
             return ;;
     esac
 }

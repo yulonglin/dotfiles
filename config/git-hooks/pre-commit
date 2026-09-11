@@ -238,8 +238,9 @@ _validate_no_attribution_optout() {
     guard="${repo_root}/tests/test_no_attribution_optout.sh"
     [ -n "${repo_root}" ] && [ -f "${guard}" ] || return 0
 
+    # Template ends in the X run, with no extension: BSD mktemp on macOS wants a trailing X run, and a suffix after it is a GNU extension. The guard only parses the path as JSON, so the name carries nothing.
     local staged
-    staged=$(mktemp "${TMPDIR:-/tmp}/staged-settings.XXXXXX.json") || return 0
+    staged=$(mktemp "${TMPDIR:-/tmp}/staged-settings.XXXXXX") || return 0
     if ! git show ":${file}" > "${staged}" 2>/dev/null; then
         rm -f "${staged}"
         return 0
