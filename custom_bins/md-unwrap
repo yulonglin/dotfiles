@@ -14,11 +14,14 @@ is not flowing prose is left strictly alone, because a wrong join silently
 corrupts documentation:
 
   - fenced code blocks (``` and ~~~) and indented code blocks (4+ spaces)
+  - raw HTML blocks for <pre>, <script>, <style> and <textarea>, protected all
+    the way to their closing tag (a blank line inside one does not end it)
   - tables (any line carrying a pipe)
   - YAML frontmatter
   - headings (ATX and setext), thematic breaks, blockquotes
   - link reference definitions and HTML blocks
-  - a line ending in an explicit hard break (two trailing spaces, or a backslash)
+  - a line ending in an explicit hard break (two trailing spaces, or a backslash);
+    a joined continuation keeps its own hard break, so --fix is idempotent
   - list item markers: a wrapped list body is joined, but the marker line stays a
     line of its own, so list structure survives
   - lines opening with a bolded label ("**When to use**: …"), which are one point
@@ -43,7 +46,7 @@ SETEXT_RE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
 LIST_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
 LINK_DEF_RE = re.compile(r"^ {0,3}\[[^\]]+\]:")
 HTML_START_RE = re.compile(r"^ {0,3}<")
-HTML_RAW_RE = re.compile(r"^ {0,3}<(?:script|pre|style|textarea)\b", re.IGNORECASE)
+HTML_RAW_RE = re.compile(r"^ {0,3}<(script|pre|style|textarea)\b", re.IGNORECASE)
 HARD_BREAK_RE = re.compile(r"(?:  +|\\)$")
 LABEL_RE = re.compile(r"^ {0,3}(?:\*\*|__)[^*_]+(?:\*\*|__)\s*:")
 
@@ -126,10 +129,17 @@ def merge_indices(lines: list[str]) -> list[int]:
             continue
 
         if HTML_START_RE.match(line):
+            raw = HTML_RAW_RE.match(line)
             if stripped.startswith("<!--"):
                 html_end = None if "-->" in stripped else "-->"
-            elif HTML_RAW_RE.match(line):
-                html_end = "blank"
+            elif raw:
+                # CommonMark HTML block type 1: <pre>, <script>, <style> and
+                # <textarea> run to their CLOSING TAG, and a blank line inside
+                # one does not end it. Ending protection at the blank line
+                # resumed joining inside the block, which changes what the page
+                # renders and what a script means.
+                closer = f"</{raw.group(1).lower()}>"
+                html_end = None if closer in line.lower() else closer
             else:
                 html_end = "blank"
             prev_text = False
@@ -188,7 +198,14 @@ def unwrap(text: str) -> tuple[str, list[int], int]:
     out: list[str] = []
     for index, line in enumerate(lines):
         if index in merge_set and out:
-            out[-1] = out[-1].rstrip() + " " + line.strip()
+            # Strip the continuation's LEADING indentation only. Two trailing
+            # spaces are an explicit hard break, so stripping them would delete
+            # a line break the author asked for — and would make a second --fix
+            # join the line the first one left alone.
+            body = line.lstrip()
+            if not HARD_BREAK_RE.search(body):
+                body = body.rstrip()
+            out[-1] = out[-1].rstrip() + " " + body
         else:
             out.append(line)
 

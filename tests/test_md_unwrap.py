@@ -40,6 +40,24 @@ def violations(text: str) -> list[int]:
     return md_unwrap.unwrap(text)[1]
 
 
+def render_markdown(text: str) -> str:
+    """Render with python-markdown, pulled through uv when it is not importable."""
+    try:
+        import markdown  # noqa: PLC0415
+    except ImportError:
+        pass
+    else:
+        return markdown.markdown(text)
+    probe = subprocess.run(
+        ["uv", "run", "--no-project", "--with", "markdown", "python", "-c",
+         "import sys,markdown;sys.stdout.write(markdown.markdown(sys.stdin.read()))"],
+        capture_output=True, text=True, input=text,
+    )
+    if probe.returncode != 0:
+        raise unittest.SkipTest("no markdown renderer available: " + probe.stderr[-200:])
+    return probe.stdout
+
+
 class TestLeavesStructureAlone(unittest.TestCase):
     """Everything that is not flowing prose must survive byte-identical."""
 
@@ -167,6 +185,165 @@ class TestLeavesStructureAlone(unittest.TestCase):
 
             Next paragraph.
             """))
+
+
+class TestRawHtmlBlocksSurvive(unittest.TestCase):
+    """<pre>, <script>, <style> and <textarea> are protected to their closing tag.
+
+    A blank line inside such a block does not end it (CommonMark HTML block type
+    1 runs to the closing tag), so joining must not resume part-way through: the
+    rendered page would change, and inside a script the code would change meaning.
+    """
+
+    RAW_TAGS = ("pre", "script", "style", "textarea")
+
+    def test_raw_block_with_an_internal_blank_line_is_byte_identical(self):
+        for tag in self.RAW_TAGS:
+            with self.subTest(tag=tag):
+                source = (
+                    "Intro paragraph.\n"
+                    "\n"
+                    f"<{tag}>\n"
+                    "first inner line\n"
+                    "\n"
+                    "second inner line\n"
+                    "third inner line\n"
+                    f"</{tag}>\n"
+                    "\n"
+                    "Closing paragraph.\n"
+                )
+                fixed, merged, _ = md_unwrap.unwrap(source)
+                self.assertEqual([], merged, f"joined inside a <{tag}> block")
+                self.assertEqual(source, fixed)
+
+    def test_raw_block_with_attributes_and_mixed_case_is_protected(self):
+        source = doc("""
+            <PRE class="sample">
+            one
+
+            two
+            three
+            </PRE>
+            """)
+        self.assertEqual(source, fix(source))
+
+    def test_raw_block_protects_to_the_closing_tag_not_the_next_blank_line(self):
+        source = doc("""
+            <pre>
+            alpha
+
+            beta
+            gamma
+            </pre>
+            """)
+        self.assertNotIn("beta gamma", fix(source))
+
+    def test_opening_and_closing_tag_on_one_line_ends_the_block(self):
+        # The block ends on its own line, so the prose after it is ordinary
+        # prose and is joined; protection must not run to the end of file.
+        self.assertEqual(
+            doc("""
+                <pre>inline sample</pre>
+                prose one prose two
+                """),
+            fix(doc("""
+                <pre>inline sample</pre>
+                prose one
+                prose two
+                """)),
+        )
+
+    def test_a_later_raw_block_is_still_protected_after_a_one_line_block(self):
+        source = doc("""
+            <pre>inline</pre>
+
+            <pre>
+            alpha
+
+            beta
+            gamma
+            </pre>
+            """)
+        self.assertEqual(source, fix(source))
+
+
+class TestHardBreaksSurviveJoining(unittest.TestCase):
+    """Two trailing spaces are a hard line break and must not be stripped."""
+
+    SOURCE = "alpha one\nalpha two  \nalpha three\n"
+
+    def test_a_hard_break_on_a_joined_line_is_preserved(self):
+        self.assertEqual("alpha one alpha two  \nalpha three\n", fix(self.SOURCE))
+
+    def test_the_rendered_line_break_survives(self):
+        before = render_markdown(self.SOURCE)
+        after = render_markdown(fix(self.SOURCE))
+        self.assertIn("<br", before)
+        self.assertIn("<br", after)
+
+    def test_a_backslash_hard_break_on_a_joined_line_is_preserved(self):
+        self.assertEqual(
+            "alpha one alpha two\\\nalpha three\n",
+            fix("alpha one\nalpha two\\\nalpha three\n"),
+        )
+
+    def test_joining_a_paragraph_with_a_hard_break_is_idempotent(self):
+        once = fix(self.SOURCE)
+        self.assertEqual(once, fix(once))
+
+    def test_incidental_single_trailing_space_is_still_tidied(self):
+        self.assertEqual("alpha one alpha two\n", fix("alpha one\nalpha two \n"))
+
+
+# Documents that previously moved on a second --fix. The repo's own Markdown
+# does not happen to contain these shapes, so the corpus sweep below would pass
+# on the broken fixer without them.
+ADVERSARIAL_FIXTURES = {
+    "hard-break-mid-paragraph": "alpha one\nalpha two  \nalpha three\n",
+    "hard-break-in-a-list-body": "- item one\n  item two  \n  item three\n",
+    "backslash-break-mid-paragraph": "alpha one\nalpha two\\\nalpha three\n",
+    "hard-break-after-a-label": "**Label**: one\ntwo  \nthree\n",
+    "pre-block-with-a-blank-line": "<pre>\na\n\nb\nc\n</pre>\n",
+    "script-block-with-a-blank-line": "<script>\nx = 1\n\ny = 2\nz = 3\n</script>\n",
+    "one-line-pre-then-prose": "<pre>inline</pre>\nprose one\nprose two\n",
+}
+
+
+class TestIdempotentOverTheRepoCorpus(unittest.TestCase):
+    """--fix twice must equal --fix once, over the whole corpus."""
+
+    def corpus(self) -> dict[str, str]:
+        documents = dict(ADVERSARIAL_FIXTURES)
+        for path in sorted(REPO_ROOT.rglob("*.md")):
+            if any(part in md_unwrap.DEFAULT_EXCLUDES for part in path.parts):
+                continue
+            try:
+                documents[str(path.relative_to(REPO_ROOT))] = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+        return documents
+
+    def test_every_document_reaches_a_fixed_point(self):
+        documents = self.corpus()
+        self.assertGreater(len(documents), 100, "corpus looks too small to be the repo")
+        unstable = [name for name, text in documents.items()
+                    if fix(fix(text)) != fix(text)]
+        self.assertEqual([], unstable, "--fix is not idempotent for these documents")
+
+    def test_the_cli_gives_the_same_bytes_on_a_second_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, text in ADVERSARIAL_FIXTURES.items():
+                (root / f"{name}.md").write_text(text, encoding="utf-8")
+            run = lambda: subprocess.run(  # noqa: E731
+                [sys.executable, str(SCRIPT), "--fix", "-q", str(root)],
+                capture_output=True, text=True, check=False,
+            )
+            run()
+            once = {p.name: p.read_bytes() for p in sorted(root.glob("*.md"))}
+            run()
+            twice = {p.name: p.read_bytes() for p in sorted(root.glob("*.md"))}
+            self.assertEqual(once, twice)
 
 
 class TestJoinsWrappedProse(unittest.TestCase):
