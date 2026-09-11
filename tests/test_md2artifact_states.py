@@ -3,9 +3,9 @@
 A reviewer ticks a checklist item, refreshes, and finds the tick gone — the
 state lived only in the DOM. These assert the three things that fixes:
 
-- a task-list item renders a real control whose state is written to
-  `an-states:<key>`, a key prefix-namespaced away from the comment array, and
-  read back on load;
+- a task-list item renders a real control whose state is written to a key of
+  its own, `an-state:<key>:<id>`, prefix-namespaced away from the comment
+  array, and read back on load;
 - Copy all carries the states out in a `## Checklist` section, so the state
   travels with the notes that explain it;
 - `--states a,b,c` replaces the checkbox with a button cycling that set, still
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import functools
 import http.server
+import json
 import subprocess
 import sys
 import threading
@@ -205,14 +206,21 @@ def test_state_uses_its_own_key_and_leaves_the_comments_alone(ctx, site) -> None
 
     Writing the states into it, or into a key a suffix away from it, is how
     one feature silently eats another's storage.
+
+    Changed with the storage model: this used to read the tick out of a shared
+    `an-states:<key>` document holding every control at once. Only that design
+    could put it there. The property under test -- states live under their own
+    prefix-namespaced key and never touch the comment array -- is unchanged;
+    the key is now one per control.
     """
     page = open_page(ctx, site, "box.html")
     page.locator("input.anstatebox").first.check()
     keys = page.evaluate("() => Object.keys(localStorage).sort()")
-    assert "an-states:review-states-box" in keys
+    assert "an-state:review-states-box:first-thing" in keys
     assert page.evaluate("() => localStorage.getItem('review-states-box')") is None
-    stored = page.evaluate("() => JSON.parse(localStorage['an-states:review-states-box'])")
-    assert stored["first-thing"] == "x"
+    assert page.evaluate(
+        "() => localStorage.getItem('an-state:review-states-box:first-thing')"
+    ) == "x"
 
 
 def test_a_refused_write_does_not_break_the_page(ctx, site) -> None:
@@ -314,8 +322,8 @@ def test_a_state_outside_the_declared_set_is_refused(ctx, site) -> None:
     """
     page = open_page(ctx, site, "cycle.html")
     page.evaluate(
-        "() => localStorage.setItem('an-states:review-states-cycle',"
-        " JSON.stringify({'first-thing': 'maybe'}))"
+        "() => localStorage.setItem('an-state:review-states-cycle:first-thing',"
+        " 'maybe')"
     )
     page.reload()
     expect(page.locator(".anstatebtn").first).to_have_text("approve")
@@ -433,12 +441,18 @@ def test_each_same_named_item_round_trips_on_its_own(ctx, site, idx: int) -> Non
 
 
 def test_each_item_holds_its_own_storage_slot(ctx, site) -> None:
-    """Three controls, three keys: a short dict is a collision by itself."""
+    """Three controls, three keys: two sharing one key is a collision by itself.
+
+    Changed with the storage model: the count used to be of entries in one
+    shared document. It is now of localStorage keys, which is the same property
+    read off the storage model that replaced it.
+    """
     page = open_page(ctx, site, "collide-box.html")
     for i in range(3):
         page.locator("input.anstatebox").nth(i).check()
     stored = page.evaluate(
-        "() => JSON.parse(localStorage['an-states:review-states-collide-box'])"
+        "() => Object.keys(localStorage)"
+        "        .filter(k => k.indexOf('an-state:review-states-collide-box:') === 0)"
     )
     assert len(stored) == 3, stored
     ids = page.evaluate(
@@ -584,26 +598,25 @@ def test_an_ordered_item_persists_like_any_other(ctx, site) -> None:
 
 
 # --- a second tab never discards this tab's unstored ticks -------------------
-# The layer writes the state map as a WHOLE DOCUMENT, which is the only way to
-# express an untick: removing a key is how "no longer ticked" is said, and a
-# merge-style write cannot say it. A whole-document write is safe only when the
-# document was computed from state already reconciled with what is stored. It
-# was not. Two ways that lost a verdict, both reproduced here:
-#
-# - the storage listener replaced the in-memory map with the other tab's map,
-#   dropping ticks this tab had made and the store had refused, and leaving the
-#   controls for ids the incoming map omitted untouched -- so the display went
-#   on presenting a tick that existed nowhere. The next successful write then
-#   stored the incomplete map and cleared the loss flag with it.
-# - a write derived from a map read at load time overwrites anything another
-#   tab stored since, because nothing re-read the store before serialising.
+# The layer used to write every control's state as ONE SHARED DOCUMENT, on the
+# grounds that removing a key is the only way to say "no longer ticked" and a
+# merge-style write cannot say it. It can: an untick is stored as an explicit
+# " ". Under one key per control there is no document to replace, no read a
+# write is derived from, and two tabs touching different controls write
+# different keys. These assert what is left: whose value wins, and that a loss
+# is still reported.
 
-STATES_KEY = "an-states:review-states-box"
+STATE_PREFIX = "an-state:review-states-box:"
+LEGACY_STATES_KEY = "an-states:review-states-box"
 
 
 def _stored_states(page) -> dict:
+    """Every stored control state for this page, gathered off its own keys."""
     return page.evaluate(
-        "k => JSON.parse(localStorage.getItem(k) || '{}')", STATES_KEY
+        "p => Object.fromEntries(Object.keys(localStorage)"
+        "       .filter(k => k.indexOf(p) === 0)"
+        "       .map(k => [k.slice(p.length), localStorage.getItem(k)]))",
+        STATE_PREFIX,
     )
 
 
@@ -614,21 +627,31 @@ def _refuse_the_first_state_write(page) -> None:
     write that clears the flag has to be allowed to succeed.
     """
     page.evaluate(
-        "() => { const real = Storage.prototype.setItem; let refused = false;"
+        "p => { const real = Storage.prototype.setItem; let refused = false;"
         "  Storage.prototype.setItem = function(k, v){"
-        "    if (!refused && String(k).indexOf('an-states:') === 0) {"
+        "    if (!refused && String(k).indexOf(p) === 0) {"
         "      refused = true; throw new Error('blocked'); }"
-        "    return real.call(this, k, v); }; }"
+        "    return real.call(this, k, v); }; }",
+        STATE_PREFIX,
     )
 
 
-def test_a_refused_tick_is_not_dropped_by_another_tabs_write(ctx, site) -> None:
-    """The confirmed defect, end to end.
+def test_a_refused_tick_keeps_warning_while_its_neighbours_store(ctx, site) -> None:
+    """A refused write for one control cannot reach any other control.
 
-    A's first write is refused and warns. B stores a tick of its own. A's next
-    write succeeds — and used to store a map with A's own tick missing from it,
-    clearing the warning at the same time. Reloading A then showed the verdict
-    gone, which is the exact silence the loss flag exists to prevent.
+    A's write of item 1 is refused and warns. B stores a tick of item 3. A then
+    unticks item 2, which stores. Item 1 is still not in the store, so its
+    warning and its unload guard both stand, and neither of the other two
+    controls is touched by any of it.
+
+    Changed with the storage model, and this is the one behaviour the change
+    takes away: the shared-document write used to carry every pending control
+    with it, so A's untick of item 2 opportunistically re-wrote item 1 and
+    cleared its warning. That free retry was a property of replacing the whole
+    document, and replacing the whole document is what silently dropped other
+    tabs' work. A per-control write is honest instead -- the tick that was
+    refused stays refused, and the reader is still being told so -- and adding
+    a retry back would re-couple controls that now cannot affect each other.
     """
     a = open_page(ctx, site, "box.html")
     b = open_page(ctx, site, "box.html")
@@ -646,15 +669,14 @@ def test_a_refused_tick_is_not_dropped_by_another_tabs_write(ctx, site) -> None:
     a.locator("input.anstatebox").nth(1).uncheck()
 
     stored = _stored_states(a)
-    assert stored.get("first-thing") == "x", "the refused tick never reached the store"
     assert stored.get("second-thing") == " ", "this tab's untick was lost"
     assert stored.get("deny") == "x", "the other tab's tick was overwritten"
-    assert not _guard_armed(a), "the guard stayed armed for a tick that did land"
-
-    a.reload()
+    assert stored.get("first-thing") is None, "the refused write is not retried"
+    expect(a.locator("#anCount")).to_contain_text("refused")
+    assert _guard_armed(a), "the guard stood down over a tick that never stored"
+    # On screen the refused tick still shows where the reader put it, which is
+    # what the warning is about: it is here and it is nowhere else.
     expect(a.locator("input.anstatebox").nth(0)).to_be_checked()
-    expect(a.locator("input.anstatebox").nth(1)).not_to_be_checked()
-    expect(a.locator("input.anstatebox").nth(2)).to_be_checked()
 
 
 def test_a_remote_write_never_clears_a_loss_flag_it_did_not_carry(ctx, site) -> None:
@@ -689,7 +711,7 @@ def test_a_remote_clear_unticks_what_it_removed(ctx, site) -> None:
     b.locator("input.anstatebox").nth(2).check()
     expect(a.locator("input.anstatebox").nth(2)).to_be_checked()
 
-    b.evaluate("k => localStorage.removeItem(k)", STATES_KEY)
+    b.evaluate("p => localStorage.removeItem(p + 'deny')", STATE_PREFIX)
     expect(a.locator("input.anstatebox").nth(2)).not_to_be_checked()
     # The page ships item 2 ticked. Falling back means the value the document
     # carries, not a blanket untick.
@@ -705,9 +727,7 @@ def test_a_write_merges_onto_a_store_this_tab_has_not_seen(ctx, site) -> None:
     silently overwrites what landed in between.
     """
     page = open_page(ctx, site, "box.html")
-    page.evaluate(
-        "k => localStorage.setItem(k, JSON.stringify({deny: 'x'}))", STATES_KEY
-    )
+    page.evaluate("p => localStorage.setItem(p + 'deny', 'x')", STATE_PREFIX)
     page.locator("input.anstatebox").nth(0).check()
 
     stored = _stored_states(page)
@@ -728,3 +748,152 @@ def test_a_write_that_silently_stores_nothing_still_warns(ctx, site) -> None:
 
     expect(page.locator("#anCount")).to_contain_text("refused")
     assert _guard_armed(page), "a write that stored nothing let the tab close quietly"
+
+
+# --- two tabs are not one thread -------------------------------------------
+# The enumeration the previous round wrote argued every concurrent state
+# unreachable because "localStorage is synchronous and the page is
+# single-threaded, so read -> merge -> write -> read-back is one indivisible
+# step". That is true WITHIN a tab and says nothing across tabs: being
+# single-threaded stops this tab's own handlers interleaving, it does not
+# serialise a second tab, which is a separate process writing the same origin's
+# store. Between tab A's read and tab A's write, tab B can store anything it
+# likes, and a whole-document write from A then lands on a map that never
+# contained it.
+
+
+def _freeze_the_next_state_read(page) -> None:
+    """Pin what the next state read sees, then let reads go live again.
+
+    Playwright cannot suspend a tab in the middle of a task, so the schedule is
+    produced from the value side instead: a read that returns the store as it
+    was a moment ago is indistinguishable, to the code under test, from a read
+    that happened a moment ago. One shot, so the write and the read-back that
+    follow it see the real store.
+    """
+    page.evaluate(
+        "() => { const realGet = Storage.prototype.getItem;"
+        "  const realSet = Storage.prototype.setItem, snap = {};"
+        "  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i);"
+        "    if (k.indexOf('an-state') === 0) snap[k] = realGet.call(localStorage, k); }"
+        "  Storage.prototype.getItem = function(k){"
+        "    if (String(k).indexOf('an-state') === 0)"
+        "      return snap.hasOwnProperty(k) ? snap[k] : null;"
+        "    return realGet.call(this, k); };"
+        "  Storage.prototype.setItem = function(k, v){"
+        "    if (String(k).indexOf('an-state') === 0) {"
+        "      Storage.prototype.getItem = realGet; Storage.prototype.setItem = realSet; }"
+        "    return realSet.call(this, k, v); }; }"
+    )
+
+
+def test_a_tick_from_another_tab_survives_this_tabs_next_tick(ctx, site) -> None:
+    """The confirmed defect: two tabs, two DIFFERENT items, one survivor.
+
+    Tab A reads the stored state, tab B ticks item 3 and stores it, tab A then
+    finishes ticking item 1. Under a shared document A's write replaces the
+    whole map, so B's tick is gone and both tabs' unsaved guards are false:
+    nothing anywhere says the verdict was dropped. Under one key per item the
+    two tabs write two different keys and cannot collide at all.
+    """
+    a = open_page(ctx, site, "box.html")
+    b = open_page(ctx, site, "box.html")
+
+    _freeze_the_next_state_read(a)
+    b.locator("input.anstatebox").nth(2).check()
+    a.locator("input.anstatebox").nth(0).check()
+
+    stored = _stored_states(a)
+    assert stored.get("deny") == "x", "the other tab's tick was silently overwritten"
+    assert stored.get("first-thing") == "x", "this tab's own tick did not land"
+    assert not _guard_armed(a), "this tab's tick did land, so nothing is lost here"
+    assert not _guard_armed(b), "the other tab was never told its tick went away"
+
+
+def test_two_tabs_ticking_different_items_both_survive(ctx, site) -> None:
+    """The same thing with no instrumentation at all, and a reload to prove it."""
+    a = open_page(ctx, site, "box.html")
+    b = open_page(ctx, site, "box.html")
+
+    a.locator("input.anstatebox").nth(0).check()
+    b.locator("input.anstatebox").nth(2).check()
+    expect(a.locator("input.anstatebox").nth(2)).to_be_checked()
+
+    a.reload()
+    assert _checked(a) == [True, True, True]
+
+
+def test_the_same_item_in_two_tabs_resolves_last_writer_wins(ctx, site) -> None:
+    """Two tabs disagreeing about ONE value: the last one to speak decides.
+
+    This is correct, not a defect to file. They are not two edits to merge --
+    they are two opinions about a single cell, and there is no third thing to
+    do with them. Nothing is silently lost here: the losing tab repaints to the
+    winning value the moment the storage event lands, so both tabs agree with
+    the store and with each other.
+    """
+    a = open_page(ctx, site, "box.html")
+    b = open_page(ctx, site, "box.html")
+
+    a.locator("input.anstatebox").nth(0).check()
+    expect(b.locator("input.anstatebox").nth(0)).to_be_checked()
+    b.locator("input.anstatebox").nth(0).uncheck()
+
+    expect(a.locator("input.anstatebox").nth(0)).not_to_be_checked()
+    assert _stored_states(a).get("first-thing") == " "
+
+
+# --- state written by the shared-document layer is picked up -----------------
+# Readers have ticks stored under the old `an-states:<key>` document. It is read
+# once, written out one key per control, and LEFT WHERE IT IS: a page rolled
+# back to the previous layer still finds every tick its reader made.
+
+
+def _seed_legacy_document(ctx, site, doc: dict):
+    """Write the old shared document before the page that reads it is opened."""
+    page = open_page(ctx, site, "plain.html")  # same origin, no controls of its own
+    page.evaluate(
+        "a => localStorage.setItem(a[0], a[1])",
+        [LEGACY_STATES_KEY, json.dumps(doc)],
+    )
+    return page
+
+
+def test_a_shared_document_from_the_old_layer_is_picked_up(ctx, site) -> None:
+    """Including the untick, which the old layer said by omitting the key."""
+    page = _seed_legacy_document(ctx, site, {"first-thing": "x", "second-thing": " "})
+    page.goto(f"{site}/box.html")
+
+    assert _checked(page) == [True, False, False]
+    assert _stored_states(page) == {"first-thing": "x", "second-thing": " "}
+
+
+def test_the_old_shared_document_is_left_in_place(ctx, site) -> None:
+    """A page rolled back to the previous layer must still find the ticks."""
+    page = _seed_legacy_document(ctx, site, {"first-thing": "x"})
+    page.goto(f"{site}/box.html")
+    page.locator("input.anstatebox").nth(2).check()
+
+    assert page.evaluate("k => localStorage.getItem(k)", LEGACY_STATES_KEY) is not None
+
+
+def test_migration_never_resurrects_a_state_the_reader_cleared(ctx, site) -> None:
+    """It runs once. Otherwise every load undoes what the reader did last time.
+
+    The reader unticks an item the old document had ticked, which stores an
+    explicit " " -- and then clears that key outright, which is what a second
+    tab's `localStorage.clear()` does. Neither may come back ticked.
+    """
+    page = _seed_legacy_document(ctx, site, {"first-thing": "x", "deny": "x"})
+    page.goto(f"{site}/box.html")
+    # Item 2 is ticked in the source and the old document names it nowhere, so
+    # it falls back to the value the page shipped with.
+    assert _checked(page) == [True, True, True]
+
+    page.locator("input.anstatebox").nth(0).uncheck()
+    page.evaluate("p => localStorage.removeItem(p + 'deny')", STATE_PREFIX)
+    page.reload()
+
+    assert _checked(page) == [False, True, False], (
+        "the legacy document was read a second time and undid the reader"
+    )

@@ -105,8 +105,10 @@ additions, all of which the tests guard:
 - a page may carry toggle controls in its body -- a task-list checkbox, or a
   button cycling a declared state set such as approve / approve-pending-edits
   / deny. Any element wearing `data-an-state-id` is wired, persisted under
-  `an-states:<key>` and exported in a `## Checklist` section of Copy all. A
-  page with no such element behaves exactly as it did. A refused write raises
+  one key of its own, `an-state:<key>:<id>`, and exported in a `## Checklist`
+  section of Copy all. One key per control is what makes two tabs safe: they
+  write different keys and cannot collide. A page with no such element behaves
+  exactly as it did. A refused write raises
   the same badge, panel line and unload guard a refused comment write raises:
   a review queue is all checklist and no prose, so a tick lost to blocked site
   data would otherwise be the one loss this layer never reports;
@@ -388,12 +390,12 @@ var comments = readComments(), notesUnsaved = false, statesUnsaved = false;
 // One refused-write signal for two writers. A lost tick is as lost as a lost
 // note -- on a page that is all checklist and no prose, which is what a review
 // queue is, the tick IS the work -- so both raise the same badge, the same
-// panel line and the same unload guard. Each writer clears only its own flag,
-// because each rewrites its whole value: a `persist()` that succeeded says
-// nothing about whether the states got stored. `statesUnsaved` is not set from
-// a write's return value at all -- it is `pendingStates` being non-empty, and
-// an entry leaves that set only on evidence read back out of the store. See
-// THE WRITE RULE in the toggle-state section.
+// panel line and the same unload guard. Each writer clears only its own flag:
+// a `persist()` that succeeded says nothing about whether any state got
+// stored. `statesUnsaved` is not set from a write's return value at all -- it
+// is `pendingStates` being non-empty, one entry per control, and an entry
+// leaves that set only on evidence read back out of that control's own key.
+// See THE WRITE RULE in the toggle-state section.
 function unsaved(){ return notesUnsaved || statesUnsaved; }
 comments.forEach(function(c){ if (!c.id) c.id = newId(); });
 
@@ -458,15 +460,20 @@ window.addEventListener("beforeunload", function(e){
 // instead — unless a note is open here, because nothing may pull the DOM out
 // from under a range the user is still typing against.
 //
-// NOT FIXED HERE, and stated rather than implied: this is the same wholesale
-// replace the toggle states carried, so a comment THIS tab wrote while the
-// store was refusing is dropped from `comments` when the other tab writes, and
-// the next `persist()` that succeeds clears `notesUnsaved` over its grave. The
-// states fix does not transfer as written: a state is one value per id, while
-// reconciling comments means merging an array across add, edit and delete, and
-// the `copiedAt` and delete-copied semantics ride on that array. It needs its
-// own design and its own tests, not a copy of THE WRITE RULE's implementation
-// — though rules 1 to 3 of it hold here exactly as they do there.
+// NOT FIXED HERE, and stated rather than implied: this is the wholesale
+// replace the toggle states used to carry, so a comment THIS tab wrote while
+// the store was refusing is dropped from `comments` when the other tab writes,
+// and the next `persist()` that succeeds clears `notesUnsaved` over its grave.
+// The toggle-state fix -- one localStorage key per item, so two writers
+// touching different items never touch the same key -- is the right shape here
+// too, and it does not transfer as written. A state is one value under one id
+// the document itself supplies; a comment is a member of an ordered array with
+// an id this layer mints at random, and the array is the unit that add, edit,
+// delete, `copiedAt` and delete-copied all operate on. Per-comment keys mean
+// enumerating the store by prefix to read them back, a tombstone to express a
+// delete, and a compatibility break with every deployed layer generation,
+// which reads this key as a bare array. That is its own project with its own
+// tests, not a copy of this one.
 window.addEventListener("storage", function(e){
   if (e.key !== KEY || isOpen()) return;
   comments.slice().forEach(function(c){ unwrap(c.id); });
@@ -869,111 +876,94 @@ function markClean(snap){
 // / deny. Both wear one wrapper, `[data-an-state-id]`, so this layer needs no
 // configuration and a page with none of them is untouched.
 //
-// The states live under their OWN key, prefix-namespaced exactly as the draft
-// and dirty keys are, so nothing here can collide with the comment array --
-// which every layer generation parses as a bare array and dies on anything
+// ONE KEY PER CONTROL. Each control's state lives under its own localStorage
+// key, `an-state:<page key>:<control id>`, prefix-namespaced exactly as the
+// draft and dirty keys are, so nothing here can collide with the comment array
+// -- which every layer generation parses as a bare array and dies on anything
 // else.
-function readStates(){
-  var d; try { d = JSON.parse(lsGet(STATES) || "{}"); } catch (e) { return {}; }
-  return (d && typeof d === "object" && !Array.isArray(d)) ? d : {};
-}
+//
+// This replaces a shared document holding every control at once, and with it
+// the reconciliation six rounds built on top of that document. It rested on
+// "an untick is said by REMOVING a key, and a merge-style write cannot say
+// it", which is false: an untick is an explicit " ", as a tick is an explicit
+// "x". Once a value can say not-ticked, nothing needs to replace a document,
+// and the read-modify-write -- unfixable here, because localStorage offers no
+// compare-and-set -- is gone rather than reconciled. So: two tabs touching
+// DIFFERENT controls write DIFFERENT keys and cannot collide, which is the
+// shape of every reproduction that beat the previous rounds (A ticks item 1
+// while B ticks item 3); no write is derived from a read, so a stale or failed
+// read cannot clobber; a refused write for one control cannot reach another's
+// value, so the loss flag is per control. Two tabs touching the SAME control
+// resolve last-writer-wins, which is correct and is not a bug to file: they
+// disagree about one value and the last to speak decides.
+//
+// The lesson the previous round's 16-state enumeration got wrong, recorded so
+// it is not rediscovered: "localStorage is synchronous and the page is
+// single-threaded, so read -> merge -> write -> read-back is one indivisible
+// step" holds WITHIN a tab and says nothing ACROSS tabs. Single-threaded stops
+// this tab's handlers interleaving; a second tab is a separate process.
+var STATE_PREFIX = "an-state:" + KEY + ":";
+// Migration marker. Without it, a control the reader deliberately cleared out
+// of the store is resurrected from the legacy document on the next load.
+var STATE_MIGRATED = "an-state-migrated:" + KEY;
 
-// THE WRITE RULE. This value is stored as a WHOLE DOCUMENT, deliberately: an
-// untick is said by REMOVING a key, and a merge-style write has no way to say
-// it. A whole-document write is safe only when the document was computed from
-// state that has already been reconciled with what is actually stored -- and
-// three rounds of fixes were each defeated by a document computed from local
-// state that had not been. So:
-//
-//   1. never write a document derived from local state that has not just been
-//      reconciled with the store. `writeStates` re-reads first, every time;
-//      nothing else calls `lsSet(STATES, ...)`.
-//   2. a write may only clear the loss flag for what it actually stored. The
-//      flag is `pendingStates` being non-empty, and an entry leaves that set
-//      only when a READ-BACK shows the store holding its value. `setItem`
-//      returning without throwing is not evidence: a browser that silently
-//      no-ops the write would otherwise stand the warning down over work that
-//      never left the page.
-//   3. the display shows pending-over-stored and nothing else. A control whose
-//      id neither set names goes back to the value the document shipped with,
-//      because a tick left on screen that exists nowhere is how the loss above
-//      stayed invisible until a reload.
-//
-// The combinations, so the next round need not rediscover them. Per control
-// id, at the moment anything happens: P = this tab holds an unstored change,
-// R = the store has moved since this tab last read it, W = a write is in
-// flight, F = the last write did not land (it threw, or it stored nothing --
-// one case here, because only the read-back is believed).
-//
-// W never outlives its own task, which is what makes the table finite rather
-// than a race: localStorage is synchronous and the page is single-threaded, so
-// read -> merge -> write -> read-back is one indivisible step. No click, no
-// storage event, no unload and no second write can interleave inside it, so
-// every W=1 row is unreachable from any other code in this file.
-//
-//   P R F   what happens
-//   0 0 0   the merged document is stored; nothing pending; the flag is clear
-//   0 0 1   the change joins the pending set; flag set; the guard arms
-//   0 1 0   step 1 re-read, so the unseen change is merged back out unharmed
-//   0 1 1   as above, and this tab's change joins the pending set
-//   1 0 0   the merge carries the pending change; the read-back clears it
-//   1 0 1   pending survives; the flag and the unload guard stand
-//   1 1 0   the unseen change is merged UNDER the pending one; both stored
-//   1 1 1   neither is stored; both stay pending; the panel names the loss
-//
-// R also resolves on its own, through the `storage` listener at the foot of
-// this section: it re-reads, drops the pending entries the store now
-// satisfies, keeps the rest pending, and repaints every control. It never
-// writes, so two tabs cannot ping-pong; a pending change waits for this tab's
-// next write, and until then the badge, the panel line and the unload guard
-// all say it is not stored.
-var storedStates = readStates();  // what the last read of the store actually held
-var pendingStates = {};           // id -> value this tab intends, unconfirmed by the store
-var stateDefaults = {};           // id -> the value the document itself shipped
-
-function hasPending(){
-  for (var id in pendingStates) if (pendingStates.hasOwnProperty(id)) return true;
-  return false;
+function stateKeyOf(id){ return STATE_PREFIX + id; }
+function stateIdOf(key){
+  return (typeof key === "string" && key.indexOf(STATE_PREFIX) === 0)
+    ? key.slice(STATE_PREFIX.length) : null;
 }
-// Nothing is pending once the store holds it, whoever put it there: a second
-// tab making the same change settles it as surely as a write from this one.
-function reconcilePending(){
-  for (var id in pendingStates) {
-    if (pendingStates.hasOwnProperty(id) && storedStates[id] === pendingStates[id]) {
-      delete pendingStates[id];
+function readState(id){ return lsGet(stateKeyOf(id)); }
+
+// One-time migration off the shared document, which is READ and left exactly
+// where it is: a page rolled back to the previous layer still finds every tick
+// its reader made, because nothing here deletes it.
+(function migrateSharedStateDocument(){
+  if (lsGet(STATE_MIGRATED) === "1") return;
+  var d = null;
+  try { d = JSON.parse(lsGet(STATES) || "null"); } catch (e) { d = null; }
+  if (d && typeof d === "object" && !Array.isArray(d)) {
+    for (var id in d) {
+      // Never over a per-key value: that one is newer by construction.
+      if (typeof d[id] === "string" && lsGet(stateKeyOf(id)) === null) lsSet(stateKeyOf(id), d[id]);
     }
   }
-  statesUnsaved = hasPending();
-}
-function writeStates(){
+  lsSet(STATE_MIGRATED, "1");
+})();
+
+var pendingStates = {};   // id -> value this tab wrote that the store did not take
+var stateDefaults = {};   // id -> the value the document itself shipped
+
+function hasPending(){ return Object.keys(pendingStates).length > 0; }
+// THE WRITE RULE, now one rule instead of three: write the one key this
+// control owns, then read that one key back. `setItem` returning without
+// throwing is not evidence -- a browser that silently no-ops the write would
+// stand the warning down over work that never left the page -- so the flag
+// comes from what the store holds after. No other control is touched, and the
+// render is for the refused-write line, the only place a lost tick is visible.
+function writeState(id, value){
   var was = statesUnsaved;
-  storedStates = readStates();                       // 1. reconcile before composing
-  reconcilePending();
-  var doc = {}, id;
-  for (id in storedStates) if (storedStates.hasOwnProperty(id)) doc[id] = storedStates[id];
-  for (id in pendingStates) if (pendingStates.hasOwnProperty(id)) doc[id] = pendingStates[id];
-  lsSet(STATES, JSON.stringify(doc));                // 2. write the merged whole
-  storedStates = readStates();                       // 3. evidence, not the return value
-  reconcilePending();                                // 4. clear only what the store now holds
-  syncStateDom();
-  // Repaint when the refused-write line or the badge could have changed: the
-  // panel is the only place a lost tick is visible, and nothing else rebuilds
-  // it after a tick.
+  lsSet(stateKeyOf(id), value);
+  if (readState(id) === value) delete pendingStates[id];
+  else pendingStates[id] = value;
+  statesUnsaved = hasPending();
+  paintStateId(id);
   if (statesUnsaved || was) render();
 }
 // Pending over stored over the document's own value. The last of those three
 // is what keeps an id the store has dropped from going on being displayed as
 // ticked, and a `[x]` the author wrote from being blanked when it does.
-function syncStateDom(){
-  stateUnits().forEach(function(u){
-    var id = u.dataset.anStateId;
-    // A control this tab has never wired -- one injected after load -- has been
-    // touched by nobody, so what it is showing now IS the value it shipped.
-    if (!stateDefaults.hasOwnProperty(id)) stateDefaults[id] = stateValue(u);
-    var v = pendingStates.hasOwnProperty(id) ? pendingStates[id] : storedStates[id];
-    if (typeof v !== "string" || !applyState(u, v)) applyState(u, stateDefaults[id]);
-  });
+function paintState(u){
+  var id = u.dataset.anStateId;
+  // A control this tab has never wired -- one injected after load -- has been
+  // touched by nobody, so what it is showing now IS the value it shipped.
+  if (!stateDefaults.hasOwnProperty(id)) stateDefaults[id] = stateValue(u);
+  var v = pendingStates.hasOwnProperty(id) ? pendingStates[id] : readState(id);
+  if (typeof v !== "string" || !applyState(u, v)) applyState(u, stateDefaults[id]);
 }
+function paintStateId(id){
+  stateUnits().forEach(function(u){ if (u.dataset.anStateId === id) paintState(u); });
+}
+function syncStateDom(){ stateUnits().forEach(paintState); }
 function stateUnits(){ return Array.prototype.slice.call(document.querySelectorAll("[data-an-state-id]")); }
 function stateSetOf(unit){
   var raw = unit.getAttribute("data-an-states");
@@ -1027,8 +1017,7 @@ function wireStates(){
       // the name is the item's own text.
       box.setAttribute("aria-label", stateLabel(unit));
       box.addEventListener("change", function(){
-        pendingStates[id] = box.checked ? "x" : " ";
-        writeStates();
+        writeState(id, box.checked ? "x" : " ");
       });
       return;
     }
@@ -1042,8 +1031,7 @@ function wireStates(){
       var at = set.indexOf(btn.dataset.anState);
       var next = set[(at + 1) % set.length];
       if (!applyState(unit, next)) return;
-      pendingStates[id] = next;
-      writeStates();
+      writeState(id, next);
     });
   });
   // One path paints the controls, on load and on every later change alike.
@@ -1057,23 +1045,27 @@ function stateMarkdown(){
     return "- [" + (stateValue(u) || " ") + "] " + stateLabel(u);
   }).join("\n");
 }
-// A second tab's write is authoritative for every id this tab holds no
-// unstored change of -- and for no others. The previous comment here claimed
-// the opposite property ("one value per id and the later write wins, unlike a
-// comment, which is written work"), and the code under it replaced the whole
-// in-memory map with the incoming one: a tick this tab had made and the store
-// had refused was dropped from memory, left on screen because the incoming map
-// named no id to repaint it with, and then written away by the next successful
-// write, which cleared the loss flag on its way out. A tick IS written work.
-// Reconcile instead, and repaint every control rather than only the named ones.
+// A second tab's write is authoritative for the ONE control it carried. The
+// event names a single key, so there is no incoming map to merge and no way
+// for it to speak for a control it did not change -- which is what two earlier
+// rounds got wrong, first by replacing the in-memory map wholesale and then by
+// reconciling one map against the other.
 window.addEventListener("storage", function(e){
-  // A null key is `localStorage.clear()` from the other tab, which takes this
-  // key with it; ignoring it left the controls showing a map that was gone.
-  if (e.key !== null && e.key !== STATES) return;
+  // A null key is `localStorage.clear()` from the other tab, which takes every
+  // one of these keys with it; ignoring it left controls showing values gone
+  // from the store.
+  var id = stateIdOf(e.key);
+  if (e.key !== null && id === null) return;
   var was = statesUnsaved;
-  storedStates = readStates();
-  reconcilePending();
-  syncStateDom();
+  // Nothing is pending once the store holds it, whoever put it there. Only the
+  // ids this event could have changed: one of them, or all on a clear.
+  (id === null ? Object.keys(pendingStates) : [id]).forEach(function(k){
+    if (pendingStates.hasOwnProperty(k) && readState(k) === pendingStates[k]) {
+      delete pendingStates[k];
+    }
+  });
+  statesUnsaved = hasPending();
+  if (id === null) syncStateDom(); else paintStateId(id);
   if (statesUnsaved || was) render();
 });
 
