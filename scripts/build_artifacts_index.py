@@ -43,9 +43,6 @@ HEADER = [
 STATUSES = ("live", "done", "archived", "superseded", "elsewhere")
 
 URL_RE = re.compile(r"^https://claude\.ai/code/artifact/[0-9a-fA-F-]{36}$")
-# The same address unanchored, for spotting a row filed somewhere the builder
-# does not read rows from.
-ARTIFACT_URL_RE = re.compile(r"https://claude\.ai/code/artifact/[0-9a-fA-F-]{36}")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # The only values that mean "no row yet". Anything else that is not a URL is a
@@ -55,14 +52,9 @@ PLACEHOLDERS = ("", "unpublished", "pending-first-publish")
 
 REQUIRED = ("title", "url", "org", "status", "last_updated", "summary")
 
-# Where a row is allowed to live, and what it is called there.
+# The two designated locations for a row, and nothing else.
 ARTIFACT_ROW = "meta.yml"
 INDEX_ROWS = "index-rows"
-SCRATCH = "build"
-YAML_SUFFIXES = (".yml", ".yaml")
-ROW_KEYS = frozenset(REQUIRED) | {"status_note", "index_source", "public"}
-# The only non-row file that directory holds.
-INDEX_ROWS_ALLOWED = ("README.md",)
 
 # THE ONE RULE THIS FILE KEEPS BREAKING, stated once so the next reader has it:
 # never normalise a value parsed from YAML before its type has been checked.
@@ -74,9 +66,11 @@ INDEX_ROWS_ALLOWED = ("README.md",)
 # value as written, and only then apply a default the schema documents. There is
 # no `or` fallback on parsed data anywhere below, and that is deliberate.
 #
-# The rule covers files as well as values, because a row this builder cannot see
-# is a row it drops just as silently: discovery fails loudly on a near-miss
-# spelling or a misfiled row rather than ignoring it.
+# The rule covers files as well as values, because a row this builder cannot
+# see is a row it drops just as silently. "Was this file meant to be a row?" has
+# no answer a filename can give, so discovery asks the decidable question
+# instead: every artifact directory must have a row file in one of the two
+# locations above, and one that does not is named and fails the build.
 #
 # So: this builder must never drop a row, and never ignore an intended row, for
 # anything it cannot read. Every skip is a path the schema explicitly designates
@@ -118,6 +112,31 @@ TYPE_HINT = {
 
 class BuildError(Exception):
     pass
+
+
+class DuplicateKey(Exception):
+    """A key written twice in one mapping, with the line of the second one."""
+
+    def __init__(self, key: str, line: int) -> None:
+        super().__init__(key)
+        self.key, self.line = key, line
+
+
+class UniqueKeyLoader(yaml.SafeLoader):
+    """`yaml.safe_load` keeps the last value for a repeated key and discards the
+    first without a word — this file's one rule again, a value lost before
+    anything checks it. A row holding `url:` twice indexes one address and
+    silently forgets the other, so the load fails instead."""
+
+    def construct_mapping(self, node, deep=False):
+        mapping = super().construct_mapping(node, deep=deep)
+        seen: set = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise DuplicateKey(key, key_node.start_mark.line + 1)
+            seen.add(key)
+        return mapping
 
 
 def _value(data: dict, key: str, rel: Path):
@@ -209,7 +228,14 @@ def _document(path: Path, rel: Path) -> dict:
     we know the check existed and merely ran in the wrong order.
     """
     try:
-        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        doc = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
+    except DuplicateKey as exc:
+        raise BuildError(
+            f"{rel}: the key '{exc.key}' is written twice (line {exc.line}). YAML "
+            f"keeps the last one and discards the first, so one of the two values "
+            f"would be lost before this builder ever read it. Delete the line that "
+            f"does not belong."
+        ) from exc
     except yaml.YAMLError as exc:
         raise BuildError(f"{rel}: not valid YAML — {exc}") from exc
     if doc is None:
@@ -232,57 +258,16 @@ def _document(path: Path, rel: Path) -> dict:
     return doc
 
 
-def _looks_like_a_row(path: Path) -> bool:
-    """True when a file carries the row schema, wherever it happens to sit."""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return False
-    # A published artifact address is unambiguous: whatever else this file is,
-    # it records a page, and a page recorded outside the index is a page the
-    # index loses. Caught on the raw text so a key count cannot be gamed.
-    if ARTIFACT_URL_RE.search(text):
-        return True
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return False
-    if not isinstance(data, dict):
-        return False
-    keys = {k for k in data if isinstance(k, str)}
-    return len(keys & ROW_KEYS) >= 3 and bool(keys & {"url", "title"})
-
-
-def _misfiled(path: Path, artifacts: Path) -> str | None:
-    """Why `path` reads as an index row that the globs would never have found."""
-    parts = path.relative_to(artifacts).parts
-    depth = len(parts)
-    if path.name.lower().startswith("meta.") and path.name != ARTIFACT_ROW:
-        return f"an artifact's row file is named exactly `{ARTIFACT_ROW}`, lower case"
-    if path.name == ARTIFACT_ROW and depth != 2:
-        return f"an artifact's row lives at `artifacts/<slug>/{ARTIFACT_ROW}`"
-    if parts[0] == INDEX_ROWS and path.name not in INDEX_ROWS_ALLOWED:
-        # That directory is defined as one file per row, so anything in it that
-        # is not `<slug>.yml` is a misfile whatever its extension — a row saved
-        # as .yaml, .json or .txt is still a row somebody meant to publish.
-        return f"rows in `artifacts/{INDEX_ROWS}/` are named `<slug>.yml`, one level deep"
-    if path.suffix.lower() not in YAML_SUFFIXES:
-        return None
-    if depth == 1:
-        return f"a row with no artifact directory lives in `artifacts/{INDEX_ROWS}/`"
-    if _looks_like_a_row(path):
-        return "it carries the row keys but sits where the builder does not read rows"
-    return None
-
-
 def find_row_files(root: Path) -> list[Path]:
-    """Every row file — and a loud failure for anything filed as one but misnamed
-    or misplaced.
+    """Every row file, plus a loud failure for an artifact that has none.
 
-    Two globs used to be the whole of discovery, so a row saved as `meta.yaml`,
-    or dropped at `artifacts/<slug>.yml`, simply did not exist: the build
-    succeeded and the published page had no row. That is the same fail-open harm
-    as a falsey url, wearing a filename instead of a value.
+    Discovery reads exactly two paths, so a row saved anywhere else is invisible:
+    the build succeeds and the published page has no row. Guessing from a
+    filename which strays were meant to be rows is unwinnable — a rule catching
+    `metadata.txt` must still leave a page's own data files alone — so the check
+    is inverted. Every directory under `artifacts/` must have a row file in one
+    of the two designated locations, and one that does not is named. A renamed
+    or misplaced row then reads as "this artifact has no row", which is true.
     """
     artifacts = root / "artifacts"
     if not artifacts.is_dir():
@@ -302,27 +287,28 @@ def find_row_files(root: Path) -> list[Path]:
             seen.add(path)
             rows.append(path)
 
-    misfiled: list[str] = []
-    for path in sorted(artifacts.rglob("*")):
-        if path in seen or not path.is_file():
-            continue
-        if SCRATCH in path.relative_to(artifacts).parts[:-1]:
-            # artifacts/<slug>/build/ is gitignored scratch that a build script
-            # regenerates (artifacts/README.md). No row is filed there.
-            continue
-        reason = _misfiled(path, artifacts)
-        if reason:
-            misfiled.append(f"  {path.relative_to(root).as_posix()} — {reason}")
-    if misfiled:
+    uncovered = [
+        d.name
+        for d in sorted(artifacts.iterdir())
+        if d.is_dir()
+        and d.name != INDEX_ROWS
+        and not d.name.startswith(".")
+        # A directory holding no files at all is a leftover, not an artifact —
+        # git cannot record one, so it only ever exists in a working tree.
+        and any(child.is_file() for child in d.rglob("*"))
+        and not (d / ARTIFACT_ROW).is_file()
+        and not (artifacts / INDEX_ROWS / f"{d.name}.yml").is_file()
+    ]
+    if uncovered:
         raise BuildError(
-            "these files read as index rows but sit where this builder does not "
-            "look, so each would have been ignored and its published page left "
-            "out of ARTIFACTS.md with a success exit code:\n"
-            + "\n".join(misfiled)
-            + f"\nRename or move each one: `artifacts/<slug>/{ARTIFACT_ROW}` for a "
-            f"page with a directory, `artifacts/{INDEX_ROWS}/<slug>.yml` for one "
-            f"without. A file that is not a row belongs under the artifact's "
-            f"gitignored `{SCRATCH}/` directory, or outside `artifacts/`."
+            "these artifact directories have no row file, so each is a published "
+            "page ARTIFACTS.md would silently not list:\n"
+            + "\n".join(f"  artifacts/{name}/" for name in uncovered)
+            + f"\nA row lives at `artifacts/<slug>/{ARTIFACT_ROW}`, or at "
+            f"`artifacts/{INDEX_ROWS}/<slug>.yml` when it is kept apart from the "
+            f"directory. One renamed, given another extension or moved out of "
+            f"those two paths reads as a missing row, which is what this is. A "
+            f"directory that is not an artifact does not belong under `artifacts/`."
         )
     return rows
 

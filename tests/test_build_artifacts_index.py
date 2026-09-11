@@ -11,6 +11,7 @@ duplicate URL and a raw pipe all produce a silently wrong index rather than an e
 if nobody checks, and a silently wrong index is exactly what this file exists to stop.
 """
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -550,64 +551,71 @@ class BuilderTest(unittest.TestCase):
         self.assertEqual(run(self.root, "--check").returncode, 0)
 
     # --- the same fail-open harm, wearing a filename ----------------------
+    #
+    # "Is this stray file meant to be a row?" cannot be answered from a
+    # filename: two detectors that tried were defeated, most recently by a row
+    # renamed metadata.txt, which took the real index from 18 rows to 17 with
+    # exit 0. "Does this artifact have a row?" is decidable, so that is the
+    # question now, and its answer does not depend on the stray file's name.
 
-    MISFILED_ROWS = (
-        "artifacts/page-b/meta.yaml",
-        "artifacts/page-b/META.YML",
-        "artifacts/page-b/meta.yaml.txt",
-        "artifacts/page-b/sub/meta.yml",
-        "artifacts/meta.yml",
-        "artifacts/page-b.yml",
-        "artifacts/page-b.yaml",
-        "artifacts/index-rows/misfiled.yaml",
-        "artifacts/index-rows/misfiled.json",
-        "artifacts/index-rows/misfiled.yml.txt",
-        "artifacts/index-rows/nested/misfiled.yml",
-        "artifacts/page-b/row.yml",
-    )
+    RENAMED_ROWS = ("meta.yaml", "META.YML", "metadata.txt", "metadata.json",
+                    "metadata", "meta.yml.bak", "row.yml", "sub/meta.yml")
 
-    def test_a_row_at_a_path_the_globs_miss_fails_instead_of_vanishing(self):
-        """The globs were the whole of discovery, so a row saved as `meta.yaml`
-        or dropped one directory off simply did not exist: the build succeeded
-        and the published page had no row. Silently ignoring a file a human
-        clearly filed as a row is the same fail-open bug as the falsey url."""
-        misfiled = (
-            ROW_B.replace("Page B", "Page Misfiled")
-            .replace("22222222-2222-2222-2222-222222222222",
-                     "44444444-4444-4444-4444-444444444444")
-        )
-        for relpath in self.MISFILED_ROWS:
-            with self.subTest(relpath):
+    def test_an_artifact_whose_row_was_renamed_fails_naming_the_directory(self):
+        """Whatever the row was renamed to, its artifact has no row file in
+        either designated location, so the build stops and names the directory
+        instead of printing a table quietly one page short."""
+        row = ROW_B.replace("Page B", "Renamed").replace("22222222", "44444444")
+        for name in self.RENAMED_ROWS:
+            with self.subTest(name):
                 before = self.two_good_rows()
-                self.write(relpath, misfiled)
+                self.write(f"artifacts/page-c/{name}", row)
                 try:
-                    self.assert_rejected(before, Path(relpath).name)
+                    self.assert_rejected(before, "artifacts/page-c/")
                 finally:
-                    (self.root / relpath).unlink()
+                    shutil.rmtree(self.root / "artifacts" / "page-c")
 
-    def test_a_non_row_yaml_beside_an_artifact_source_is_left_alone(self):
-        """The rule catches a misfiled row, not YAML as such: a page's own input
-        data carries none of the row keys, and `build/` is gitignored scratch a
-        build script regenerates, so neither may fail the build."""
+    def test_a_directory_covered_by_an_index_row_passes(self):
+        """The second designated location counts as coverage."""
         self.index_row("a", ROW_A)
-        self.artifact("page-b", ROW_B)
-        self.write("artifacts/page-b/chart-data.yml", "series:\n  - [1, 2]\nlabel: x\n")
-        self.write("artifacts/page-b/build/scratch.yml", ROW_B.replace("Page B", "Scratch"))
-        result = run(self.root)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.index_row("page-b", ROW_B)
+        self.write("artifacts/page-b/report.html", "<p>published</p>")
+        self.assertEqual(run(self.root).returncode, 0)
         self.assertIn("2 rows", self.table())
 
-    def test_a_published_url_filed_anywhere_under_artifacts_is_caught(self):
-        """A near-miss row need not carry the whole schema to be a row: a file
-        holding a published artifact address is a page this index would lose."""
+    def test_the_report_names_every_uncovered_directory_at_once(self):
         before = self.two_good_rows()
-        self.write(
-            "artifacts/page-b/notes.yml",
-            "note: published today\n"
-            "link: https://claude.ai/code/artifact/"
-            "44444444-4444-4444-4444-444444444444\n",
-        )
-        self.assert_rejected(before, "notes.yml")
+        self.write("artifacts/page-c/meta.yaml", ROW_B.replace("22222222", "44444444"))
+        self.write("artifacts/page-d/report.html", "<p>published</p>")
+        stderr = self.assert_rejected(before, "artifacts/page-c/")
+        self.assertIn("artifacts/page-d/", stderr)
+
+    def test_an_empty_leftover_directory_is_not_an_artifact(self):
+        """git cannot record one, so failing the build on it would be noise."""
+        self.index_row("a", ROW_A)
+        (self.root / "artifacts" / "leftover").mkdir()
+        self.assertEqual(run(self.root).returncode, 0)
+        self.assertIn("1 rows", self.table())
+
+    def test_a_row_misfiled_with_no_directory_is_a_known_gap(self):
+        """Pins the limitation rather than implying it is covered: a row for a
+        page with no artifact directory has no artifact to be missing from, so
+        one meant for index-rows/<slug>.yml and left elsewhere goes undetected.
+        Recorded in artifacts/index-rows/README.md."""
+        self.index_row("a", ROW_A)
+        self.index_row("b", ROW_B)
+        self.write("artifacts/stray.yml", ROW_B.replace("22222222", "44444444"))
+        self.assertEqual(run(self.root).returncode, 0)
+        self.assertIn("2 rows", self.table())
+
+    def test_a_non_row_yaml_beside_an_artifact_source_is_left_alone(self):
+        """A page's own data and its gitignored `build/` scratch are not rows."""
+        self.index_row("a", ROW_A)
+        self.artifact("page-b", ROW_B)
+        self.write("artifacts/page-b/chart-data.yml", "series:\n  - [1, 2]\n")
+        self.write("artifacts/page-b/build/scratch.yml", ROW_B.replace("B", "S"))
+        self.assertEqual(run(self.root).returncode, 0)
+        self.assertIn("2 rows", self.table())
 
     def test_the_index_rows_readme_is_not_mistaken_for_a_row(self):
         self.index_row("a", ROW_A)
@@ -615,13 +623,32 @@ class BuilderTest(unittest.TestCase):
         self.assertEqual(run(self.root).returncode, 0)
         self.assertIn("1 rows", self.table())
 
-    def test_the_misfiled_report_names_every_offender_at_once(self):
-        """One file per run would make fixing a batch a game of whack-a-mole."""
+    # --- a duplicate key: a value lost before anything checks it ----------
+
+    def test_a_duplicate_key_is_rejected_rather_than_last_one_winning(self):
+        """YAML keeps the last value for a repeated key and discards the first
+        without a word, so two `url:` lines index one address and forget the
+        other. The message names the file, the key and the line."""
+        for second in (
+            ("url: https://claude.ai/code/artifact/"
+             "44444444-4444-4444-4444-444444444444"),
+            "title: Page B, again",
+            "status: archived",
+            "public: https://example.com/mirror",
+        ):
+            with self.subTest(second):
+                before = self.two_good_rows()
+                self.index_row("b", ROW_B + second + "\n")
+                self.assert_rejected(before, "b.yml", second.split(":", 1)[0],
+                                     "twice", f"line {len(ROW_B.splitlines()) + 1}")
+
+    def test_a_duplicate_key_in_an_artifact_meta_is_rejected_too(self):
+        """Both locations load through the same reader."""
         before = self.two_good_rows()
-        self.write("artifacts/page-b/meta.yaml", ROW_B.replace("22222222", "44444444"))
-        self.write("artifacts/stray.yml", ROW_B.replace("22222222", "55555555"))
-        stderr = self.assert_rejected(before, "meta.yaml")
-        self.assertIn("stray.yml", stderr)
+        self.artifact("page-c", ROW_B.replace("22222222", "33333333")
+                      + "org: Another Org\n")
+        self.assert_rejected(before, "meta.yml", "org")
+
 
 class RealRepoTest(unittest.TestCase):
     """The committed ARTIFACTS.md must match its own YAML files."""
