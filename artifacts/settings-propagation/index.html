@@ -150,7 +150,7 @@
     <p>A running session applies new and changed values to its environment when you save the file, but a feature that reads its variables once at startup, such as OpenTelemetry monitoring, keeps its startup values until you relaunch.</p>
     <p>Removing a variable from the file doesn't unset it in a running session; the removal takes effect the next time you launch <code>claude</code>.</p>
   </blockquote>
-  <p>The important asymmetry is: adding or changing an <code>env</code> value reaches a running session when the file is saved, but removing an <code>env</code> value does not unset it there. Restart only when the removal must take effect, or when the consuming feature reads the value only at startup.</p>
+  <p>The important asymmetry is: adding or changing an <code>env</code> value reaches a running session when the file is saved, but removing an <code>env</code> value does not unset it there. That asymmetry is quoted from the documentation above, not measured here; the process scan below shows what it looks like on one machine, but it does not test the rule. Restart only when the removal must take effect, or when the consuming feature reads the value only at startup.</p>
 
   <h2>Most settings reload while running</h2>
   <p>Claude Code watches settings files and reloads several categories during a session, as documented under <a href="https://code.claude.com/docs/en/settings.md#when-edits-take-effect">When edits take effect</a>:</p>
@@ -181,17 +181,20 @@
   <p>Environment variables are resolved per key rather than by file level. For example, an <code>ANTHROPIC_MODEL</code> exported by the shell overrides a <code>model</code> key from any settings file.</p>
 
   <h2>Stale process environments can mislead</h2>
-  <p><code>CLAUDE_CODE_ATTRIBUTION_HEADER=0</code> was removed from <code>~/.claude/settings.json</code> because it silently broke auto mode behind a local gateway. Hours later, 16 of 33 running processes matching <code>claude</code> still carried it:</p>
+  <p><code>CLAUDE_CODE_ATTRIBUTION_HEADER=0</code> was removed from <code>~/.claude/settings.json</code> on 9 Sep 2026 because it silently broke auto mode behind a local gateway. A scan of every readable <code>/proc/&lt;pid&gt;/environ</code> on 11 Sep still found 16 processes whose command line mentions <code>claude</code> carrying the removed value. Every one of them had started before the removal:</p>
   <div class="tablewrap">
     <table>
       <thead><tr><th>Processes still carrying it</th><th>Count</th><th>Started</th></tr></thead>
       <tbody>
-        <tr><td>Orphaned <code>socat UNIX-LISTEN:/tmp/claude/claude-http-*.sock</code> forwarders</td><td class="num">14</td><td>18 Aug – 2 Sep</td></tr>
-        <tr><td><code>python3 -m http.server</code></td><td class="num">1</td><td>18 Aug</td></tr>
+        <tr><td>Orphaned <code>socat UNIX-LISTEN:/tmp/claude/claude-http-*.sock</code> forwarders</td><td class="num">13</td><td>20 Aug – 2 Sep</td></tr>
+        <tr><td><code>python3 -m http.server</code> serving a worktree</td><td class="num">1</td><td>18 Aug</td></tr>
+        <tr><td>The <code>zsh</code> shell-snapshot wrapper that launched it</td><td class="num">1</td><td>18 Aug</td></tr>
         <tr><td><code>claude agents</code> TUI</td><td class="num">1</td><td>13 Aug</td></tr>
       </tbody>
     </table>
   </div>
+  <p>The counts come from <code>scan_stale_env.py</code> in this page's source directory; its output is committed beside it as <code>scan-2026-09-11.json</code>, which lists every carrier by PID, start time and command line. A seventeenth carrier, a month-old <code>romp-postal-service</code>, is outside the table because its command line does not mention <code>claude</code>. 34 processes owned by other users could not be inspected at all, so 16 is a floor rather than a census.</p>
+  <p>No denominator is quoted here, because there is no stable one. "Processes matching <code>claude</code>" counts differently under <code>pgrep -af claude</code>, under <code>ps</code> piped to <code>grep</code>, and under a match on the whole command line, and every one of those answers moves between runs minutes apart as sessions and their helper shells come and go. The carrier count is the number that holds still.</p>
   <p>None of these processes make classifier requests. The session-spawning daemon, <code>claude daemon run</code>, did not carry the variable, so every background session it starts inherits the corrected environment.</p>
   <p>"Still in some process's environment" is not the same as "still affecting your sessions." Check what the process actually is before restarting anything.</p>
 
@@ -199,7 +202,7 @@
   <ul>
     <li><a href="https://code.claude.com/docs/en/permissions">Workspace trust</a> gates <code>permissions.allow</code>, <code>permissions.additionalDirectories</code>, <code>extraKnownMarketplaces</code> and most <code>env</code> values until the folder is trusted.</li>
     <li>A <a href="https://code.claude.com/docs/en/settings.md">broken settings file</a> raises a Settings Error at interactive session startup; a <code>-p</code> run prints the error and exits.</li>
-    <li>If <code>~/.claude.json</code> is corrupted, recovery uses a recent <code>.claude.json.backup.&lt;timestamp&gt;</code> file from <code>~/.claude/backups/</code>; that directory exists but is currently empty on this machine, so it is where backups appear, not where one is waiting.</li>
+    <li>If <code>~/.claude.json</code> is corrupted, recovery uses a recent <code>.claude.json.backup.&lt;timestamp&gt;</code> file from <code>~/.claude/backups/</code>. Its contents are dotfiles, so a plain <code>ls</code> shows nothing; use <code>ls -a</code>. On this machine, on 11 Sep 2026, it held twelve files and about 850 KB: five <code>.claude.json.backup.*</code> from 22 July, five <code>.config.json.backup.*</code> from that morning, and two zero-byte <code>.corrupted.*</code> markers. The <code>.config.json</code> set is a rolling five, rewritten about once a minute while a session runs, so a stale <code>.claude.json</code> can sit behind a directory that looks freshly written. Check the timestamp of the newest backup of the file you actually need — the newest <code>.claude.json</code> backup here is seven weeks old.</li>
     <li>Keys scoped User, local or Managed are never read from a shared <code>.claude/settings.json</code>, so a committed key might not reach a teammate.</li>
     <li>Managed settings delivered by MDM or the console reach running sessions on a refresh schedule; the interval depends on the delivery mechanism.</li>
   </ul>

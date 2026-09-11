@@ -1,0 +1,320 @@
+{
+  "var": "CLAUDE_CODE_ATTRIBUTION_HEADER",
+  "scanned_at": "2026-09-11T07:32:38Z",
+  "host": "ubuntu-32gb-nbg1-1",
+  "carriers_total": 17,
+  "carriers_claude_matching": 16,
+  "carriers_by_kind": {
+    "socat forwarder for a Claude Code HTTP socket": 13,
+    "other": 1,
+    "claude agents TUI": 1,
+    "shell-snapshot wrapper": 1,
+    "python3 -m http.server": 1
+  },
+  "claude_matching_total": 41,
+  "environ_unreadable": 34,
+  "carriers": [
+    {
+      "pid": 1274399,
+      "value": "0",
+      "started": "Wed Sep  2 00:14:37 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-cc6fc9ca02df4c66.sock,fork,reuseaddr TCP:localhost:32967,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 1304288,
+      "value": "0",
+      "started": "Wed Sep  2 00:25:29 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-bc3bf11692c44e19.sock,fork,reuseaddr TCP:localhost:34729,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 1366321,
+      "value": "0",
+      "started": "Wed Sep  2 00:46:56 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-6d9452968ff68591.sock,fork,reuseaddr TCP:localhost:45783,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 151876,
+      "value": "0",
+      "started": "Tue Sep  1 02:23:14 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-d2a0418220c52435.sock,fork,reuseaddr TCP:localhost:39515,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 1548432,
+      "value": "0",
+      "started": "Wed Sep  2 01:50:49 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-71ebccd8697270e6.sock,fork,reuseaddr TCP:localhost:40721,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 1982296,
+      "value": "0",
+      "started": "Tue Sep  1 09:20:28 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-1a3ae16a23d87269.sock,fork,reuseaddr TCP:localhost:42447,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 2858715,
+      "value": "0",
+      "started": "Sun Aug 16 02:21:33 2026",
+      "kind": "other",
+      "cmdline": "/usr/bin/python3 /home/yulong/romp/bin/romp-postal-service serve",
+      "claude_matching": false
+    },
+    {
+      "pid": 2915954,
+      "value": "0",
+      "started": "Wed Sep  2 09:45:52 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-f72302a73ca8d4bd.sock,fork,reuseaddr TCP:localhost:41457,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 2932690,
+      "value": "0",
+      "started": "Wed Sep  2 09:47:38 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-9ecf86481e826053.sock,fork,reuseaddr TCP:localhost:34883,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 300705,
+      "value": "0",
+      "started": "Tue Sep  1 02:48:01 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-7291af6725368c03.sock,fork,reuseaddr TCP:localhost:39781,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 346380,
+      "value": "0",
+      "started": "Tue Sep  1 02:58:44 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-602c89e33a245e1f.sock,fork,reuseaddr TCP:localhost:38551,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 3576048,
+      "value": "0",
+      "started": "Thu Aug 13 22:13:24 2026",
+      "kind": "claude agents TUI",
+      "cmdline": "/home/yulong/.local/bin/claude agents",
+      "claude_matching": true
+    },
+    {
+      "pid": 557306,
+      "value": "0",
+      "started": "Tue Aug 18 08:00:24 2026",
+      "kind": "shell-snapshot wrapper",
+      "cmdline": "/usr/bin/zsh -c source /home/yulong/.claude/shell-snapshots/snapshot-zsh-1787039774590-ytd2dv.sh 2>/dev/null || true && export CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\n: && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'python3 -m http.server 8731 --bind 127.0.0.1 --directory /home/yulong/projects/nla-vs-cot/monitorability-evals/.claude/worktrees/a1-stock-scale48/tmp' < /dev/null && pwd -P >| /run/user/1000/claude-da23-cwd",
+      "claude_matching": true
+    },
+    {
+      "pid": 557349,
+      "value": "0",
+      "started": "Tue Aug 18 08:00:24 2026",
+      "kind": "python3 -m http.server",
+      "cmdline": "python3 -m http.server 8731 --bind 127.0.0.1 --directory /home/yulong/projects/nla-vs-cot/monitorability-evals/.claude/worktrees/a1-stock-scale48/tmp",
+      "claude_matching": true
+    },
+    {
+      "pid": 668067,
+      "value": "0",
+      "started": "Tue Sep  1 03:24:47 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-58c051e3c266b9f1.sock,fork,reuseaddr TCP:localhost:33501,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 865389,
+      "value": "0",
+      "started": "Thu Aug 20 09:13:00 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-e49e94143885a3d5.sock,fork,reuseaddr TCP:localhost:37397,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    },
+    {
+      "pid": 973394,
+      "value": "0",
+      "started": "Thu Aug 20 09:37:49 2026",
+      "kind": "socat forwarder for a Claude Code HTTP socket",
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-c6323adcf4a9db6a.sock,fork,reuseaddr TCP:localhost:46319,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
+      "claude_matching": true
+    }
+  ],
+  "claude_matching": [
+    {
+      "pid": 1189443,
+      "cmdline": "/home/yulong/code/dotfiles/claude/remote/srv/5db5e4a12f88487e47c2c48259b69a2d630bb3f7/server --serve --socket /home/yulong/.claude/remote/run/7f5cfcec/rpc.sock --token-file <redacted>"
+    },
+    {
+      "pid": 1274399,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-cc6fc9ca02df4c66.sock,fork,reuseaddr TCP:localhost:32967,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 1304288,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-bc3bf11692c44e19.sock,fork,reuseaddr TCP:localhost:34729,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 1366321,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-6d9452968ff68591.sock,fork,reuseaddr TCP:localhost:45783,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 151876,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-d2a0418220c52435.sock,fork,reuseaddr TCP:localhost:39515,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 1548432,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-71ebccd8697270e6.sock,fork,reuseaddr TCP:localhost:40721,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 1982296,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-1a3ae16a23d87269.sock,fork,reuseaddr TCP:localhost:42447,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 2247652,
+      "cmdline": "/home/yulong/code/dotfiles/claude/remote/srv/3ef9370ec5b07a0e728ca5de4137d450e95eb2b6/server --serve --socket /home/yulong/.claude/remote/run/b6fd1825/rpc.sock --token-file <redacted>"
+    },
+    {
+      "pid": 2635287,
+      "cmdline": "claude agents --allow-dangerously-skip-permissions"
+    },
+    {
+      "pid": 2635373,
+      "cmdline": "/home/yulong/.local/bin/claude daemon run --origin transient --spawned-by {\"label\":\"claude agents\",\"cwd\":\"/home/yulong/code/dotfiles\",\"pid\":2635287}"
+    },
+    {
+      "pid": 2640023,
+      "cmdline": "claude bg-pty-host --bg-pty-host /tmp/cc-daemon-1000/4a856fb1/spare/327e80a7.pty.sock 200 50 -- /home/yulong/.local/share/claude/versions/2.1.268 --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/327e80a7.claim.sock"
+    },
+    {
+      "pid": 2640079,
+      "cmdline": "claude bg-spare --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/327e80a7.claim.sock"
+    },
+    {
+      "pid": 266671,
+      "cmdline": "/home/yulong/code/dotfiles/claude/remote/srv/7d193f89fc02cf1035a391245312e34ad419f63e/server --serve --socket /home/yulong/.claude/remote/run/c8e1d0e0/rpc.sock --token-file <redacted>"
+    },
+    {
+      "pid": 2683140,
+      "cmdline": "claude bg-pty-host --bg-pty-host /tmp/cc-daemon-1000/4a856fb1/spare/83fff928.pty.sock 200 50 -- /home/yulong/.local/share/claude/versions/2.1.268 --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/83fff928.claim.sock"
+    },
+    {
+      "pid": 2683172,
+      "cmdline": "claude bg-spare --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/83fff928.claim.sock"
+    },
+    {
+      "pid": 2856289,
+      "cmdline": "claude agents"
+    },
+    {
+      "pid": 2915954,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-f72302a73ca8d4bd.sock,fork,reuseaddr TCP:localhost:41457,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 2932690,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-9ecf86481e826053.sock,fork,reuseaddr TCP:localhost:34883,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 300705,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-7291af6725368c03.sock,fork,reuseaddr TCP:localhost:39781,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 3336584,
+      "cmdline": "claude bg-pty-host --bg-pty-host /tmp/cc-daemon-1000/4a856fb1/spare/0563995f.pty.sock 200 50 -- /home/yulong/.local/share/claude/versions/2.1.268 --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/0563995f.claim.sock"
+    },
+    {
+      "pid": 3336597,
+      "cmdline": "claude bg-spare --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/0563995f.claim.sock"
+    },
+    {
+      "pid": 3424097,
+      "cmdline": "/usr/bin/zsh -c source /home/yulong/.claude/shell-snapshots/snapshot-zsh-1789103749660-rhjulf.sh 2>/dev/null || true && export CODEX_COMPANION_SESSION_ID='067d7716-55df-4384-8c12-fb80e35266bf'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/code/dotfiles'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='067d7716-55df-4384-8c12-fb80e35266bf'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/code/dotfiles'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\n: && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'python3 - <<'\"'\"'PYEOF'\"'\"'\nimport pathlib\np = pathlib.Path(\"config/systemd-user/model-router-cooldown.service\")\nt = p.read_text()\nold = \"\"\"# deploy.sh copies this unit verbatim -- no templating -- so nothing here may\n# depend on the repo living somewhere else, and PATH is set explicitly because\n# systemd --user does not inherit the login shell'\"'\"'s. systemctl must be on it:\n# the recovery action is `systemctl --user restart model-router.service`.\nEnvironment=PATH=/usr/local/bin:/usr/bin:/bin\"\"\"\nnew = \"\"\"# deploy.sh copies this unit verbatim -- no templating -- so nothing here may\n# depend on the repo living somewhere else, and PATH is set explicitly because\n# systemd --user does not inherit the login shell'\"'\"'s. Two things must be on it:\n# systemctl, because the recovery action is `systemctl --user restart\n# model-router.service`; and uv, because the check'\"'\"'s shebang is\n# `uv run --script` (it needs tomllib, so >=3.11, which the system python3 is\n# not guaranteed to be). %h is systemd'\"'\"'s own home specifier, expanded at load\n# time, so this stays correct on a box whose home is somewhere else. Measured\n# 2026-09-11: without %h/.local/bin the unit dies `env: '\"'\"'uv'\"'\"': No such file or\n# directory`, exit 127 -- and it would have done so silently, every hour.\nEnvironment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin\"\"\"\nassert t.count(old) == 1\np.write_text(t.replace(old, new))\nprint(\"unit updated\")\nPYEOF\ncp -f config/systemd-user/model-router-cooldown.service ~/.config/systemd/user/ && systemctl --user daemon-reload\necho \"=== re-test with corrected PATH ===\"\nsystemd-run --user --wait --collect --quiet --unit=cooldown-probe-test2 \\\n  -p Type=oneshot \\\n  -p \"Environment=PATH=/home/yulong/.local/bin:/usr/local/bin:/usr/bin:/bin\" \\\n  -p \"SuccessExitStatus=0 1 2\" -p PrivateTmp=true -p NoNewPrivileges=true \\\n  /home/yulong/code/dotfiles/.claude/worktrees/router-cooldown-watchdog/custom_bins/model-router-cooldown-check --fix 2>&1 | head\necho \"systemd-run exit=$?\"\njournalctl --user -u cooldown-probe-test2 -n 6 --no-pager 2>/dev/null | tail -5' && pwd -P >| /run/user/1000/claude-9cfc-cwd"
+    },
+    {
+      "pid": 346380,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-602c89e33a245e1f.sock,fork,reuseaddr TCP:localhost:38551,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 3518265,
+      "cmdline": "bash /home/yulong/.claude/hooks/watchdog.sh 25988951-2022-48d1-ba1d-e907af1e4e94 /home/yulong/.claude/projects/-home-yulong-code-dotfiles/25988951-2022-48d1-ba1d-e907af1e4e94.jsonl /home/yulong/code/dotfiles 3336597"
+    },
+    {
+      "pid": 3519421,
+      "cmdline": "claude bg-pty-host --bg-pty-host /tmp/cc-daemon-1000/4a856fb1/spare/8bcae130.pty.sock 200 50 -- /home/yulong/.local/share/claude/versions/2.1.268 --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/8bcae130.claim.sock"
+    },
+    {
+      "pid": 3519436,
+      "cmdline": "claude bg-spare --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/8bcae130.claim.sock"
+    },
+    {
+      "pid": 3573519,
+      "cmdline": "claude agents"
+    },
+    {
+      "pid": 357472,
+      "cmdline": "/home/yulong/code/dotfiles/claude/remote/srv/7d193f89fc02cf1035a391245312e34ad419f63e/server --serve --socket /home/yulong/.claude/remote/run/7ac0850d/rpc.sock --token-file <redacted>"
+    },
+    {
+      "pid": 3576048,
+      "cmdline": "/home/yulong/.local/bin/claude agents"
+    },
+    {
+      "pid": 3917685,
+      "cmdline": "claude agents"
+    },
+    {
+      "pid": 3917740,
+      "cmdline": "claude bg-pty-host --bg-pty-host /tmp/cc-daemon-1000/4a856fb1/spare/9bd86c32.pty.sock 200 50 -- /home/yulong/.local/share/claude/versions/2.1.268 --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/9bd86c32.claim.sock"
+    },
+    {
+      "pid": 3917755,
+      "cmdline": "claude bg-spare --bg-spare /tmp/cc-daemon-1000/4a856fb1/spare/9bd86c32.claim.sock"
+    },
+    {
+      "pid": 3999235,
+      "cmdline": "/usr/bin/zsh -c source /home/yulong/.claude/shell-snapshots/snapshot-zsh-1789107013046-4o49ch.sh 2>/dev/null || true && export CODEX_COMPANION_SESSION_ID='25988951-2022-48d1-ba1d-e907af1e4e94'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/code/dotfiles'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\n: && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'cd /home/yulong/code/dotfiles/.claude/worktrees/rq-annotation-state-persistence && timeout 1200 uv run --with pytest --with playwright --with markdown-it-py pytest tests/test_md2artifact_states.py tests/test_md2artifact_ios.py tests/test_md2artifact_browser.py tests/test_md2artifact_details.py tests/test_md2artifact_key.py tests/test_md2artifact_mermaid.py tests/test_annotate_html.py -q 2>&1 | tail -5' < /dev/null && pwd -P >| /run/user/1000/claude-58dc-cwd"
+    },
+    {
+      "pid": 4000308,
+      "cmdline": "/home/yulong/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/claude/playwright_chromiumdev_profile-Kxz8Xu --remote-debugging-pipe --no-startup-window"
+    },
+    {
+      "pid": 4003218,
+      "cmdline": "/usr/bin/zsh -c source /home/yulong/.claude/shell-snapshots/snapshot-zsh-1789107013046-4o49ch.sh 2>/dev/null || true && export CODEX_COMPANION_SESSION_ID='25988951-2022-48d1-ba1d-e907af1e4e94'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/code/dotfiles'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\n: && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'cd /home/yulong/code/dotfiles/.claude/worktrees/rq-artifact-settings-propagation && python3 - <<'\"'\"'PYEOF'\"'\"'\nimport pathlib\np = pathlib.Path('\"'\"'artifacts/settings-propagation/scan_stale_env.py'\"'\"')\ns = p.read_text()\ns = s.replace('\"'\"''\"'\"''\"'\"'def classify(cmdline):'\"'\"''\"'\"''\"'\"','\"'\"''\"'\"''\"'\"'def redact(cmdline):\n    \"\"\"Blank out paths to per-session credential files before the scan is committed.\"\"\"\n    return re.sub(r\"(--token-file\\\\s+)\\\\S+\", r\"\\\\1<redacted>\", cmdline)\n\n\ndef classify(cmdline):'\"'\"''\"'\"''\"'\"')\ns = s.replace('\"'\"'import json\\nimport os'\"'\"', '\"'\"'import json\\nimport os\\nimport re'\"'\"')\ns = s.replace('\"'\"''\"'\"''\"'\"'        claude_matching.append({\"pid\": pid, \"cmdline\": cmdline})'\"'\"''\"'\"''\"'\"','\"'\"''\"'\"''\"'\"'        claude_matching.append({\"pid\": pid, \"cmdline\": redact(cmdline)})'\"'\"''\"'\"''\"'\"')\ns = s.replace('\"'\"''\"'\"''\"'\"'                \"cmdline\": cmdline,'\"'\"''\"'\"''\"'\"','\"'\"''\"'\"''\"'\"'                \"cmdline\": redact(cmdline),'\"'\"''\"'\"''\"'\"')\np.write_text(s)\nPYEOF\npython3 artifacts/settings-propagation/scan_stale_env.py > artifacts/settings-propagation/scan-2026-09-11.json && grep -c '\"'\"'redacted'\"'\"' artifacts/settings-propagation/scan-2026-09-11.json && python3 -c \"import json;d=json.load(open('\"'\"'artifacts/settings-propagation/scan-2026-09-11.json'\"'\"'));print(d['\"'\"'carriers_total'\"'\"'],d['\"'\"'carriers_claude_matching'\"'\"'],d['\"'\"'claude_matching_total'\"'\"'],d['\"'\"'environ_unreadable'\"'\"'],d['\"'\"'carriers_by_kind'\"'\"'])\"' && pwd -P >| /run/user/1000/claude-314c-cwd"
+    },
+    {
+      "pid": 484861,
+      "cmdline": "/home/yulong/code/dotfiles/claude/remote/srv/7d193f89fc02cf1035a391245312e34ad419f63e/server --serve --socket /home/yulong/.claude/remote/run/7ff005cf/rpc.sock --token-file <redacted>"
+    },
+    {
+      "pid": 557306,
+      "cmdline": "/usr/bin/zsh -c source /home/yulong/.claude/shell-snapshots/snapshot-zsh-1787039774590-ytd2dv.sh 2>/dev/null || true && export CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport CODEX_COMPANION_SESSION_ID='58bc180d-9c12-4503-a27e-c835b42c7f3a'\nexport CODEX_COMPANION_DATA_DIR='/home/yulong/.claude/plugins/data/codex-codex-plugin-cc'\nexport CLAUDE_PROJECT_DIR='/home/yulong/projects/nla-vs-cot/monitorability-evals'\nexport PATH=\"/home/yulong/code/dotfiles/claude/plugins/cache/codex-plugin-cc/codex/1.0.24/scripts:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\nexport PATH=\"/home/yulong/.claude/plugins/data/precis-precis:$PATH\"\n: && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'python3 -m http.server 8731 --bind 127.0.0.1 --directory /home/yulong/projects/nla-vs-cot/monitorability-evals/.claude/worktrees/a1-stock-scale48/tmp' < /dev/null && pwd -P >| /run/user/1000/claude-da23-cwd"
+    },
+    {
+      "pid": 557349,
+      "cmdline": "python3 -m http.server 8731 --bind 127.0.0.1 --directory /home/yulong/projects/nla-vs-cot/monitorability-evals/.claude/worktrees/a1-stock-scale48/tmp"
+    },
+    {
+      "pid": 668067,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-58c051e3c266b9f1.sock,fork,reuseaddr TCP:localhost:33501,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 865389,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-e49e94143885a3d5.sock,fork,reuseaddr TCP:localhost:37397,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    },
+    {
+      "pid": 973394,
+      "cmdline": "socat UNIX-LISTEN:/tmp/claude/claude-http-c6323adcf4a9db6a.sock,fork,reuseaddr TCP:localhost:46319,keepalive,keepidle=10,keepintvl=5,keepcnt=3"
+    }
+  ]
+}

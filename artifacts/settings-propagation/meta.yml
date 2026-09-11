@@ -1,0 +1,40 @@
+title: When Settings Reach a Session
+url: https://claude.ai/code/artifact/7338696f-f448-4751-a209-db0cd49cdca9
+org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-09-11
+first_published: 2026-09-11
+last_updated: 2026-09-11
+status: live
+
+source: index.html
+built: index.html   # hand-written HTML, no build step: the source is the page
+builds_with: |
+  Nothing to build — index.html is published directly.
+  The annotation layer is inlined in the file.
+
+snapshot:
+  file: scan-2026-09-11.json
+  taken: 2026-09-11
+  produced_by: python3 scan_stale_env.py > scan-2026-09-11.json
+  why: |
+    The stale-environment table counts running processes, which is the one
+    input that cannot be regenerated later: those processes are killed,
+    restarted or reaped, and a rerun measures a different machine. Paths
+    after --token-file are redacted by the script before the scan is
+    committed; no environment values other than the scanned variable are
+    recorded.
+
+established: |
+  Documented, not measured here: adding or changing an `env` value reaches a
+  running session when the file is saved, while removing one takes effect only
+  at the next launch. The page quotes that asymmetry from the Claude Code
+  environment-variable documentation and links it.
+
+  Measured here, on one machine on 2026-09-11, two days after
+  CLAUDE_CODE_ATTRIBUTION_HEADER=0 was deleted from ~/.claude/settings.json in
+  b2868c8: 16 still-running processes whose command line mentions `claude`
+  carried the removed value — 13 orphaned socat forwarders, one
+  `python3 -m http.server`, its zsh launcher, and a `claude agents` TUI. All
+  had started before the removal. None of them call the classifier, and
+  `claude daemon run` was clean, so no live session was affected. No
+  denominator is quoted: every way of counting "processes matching claude"
+  gives a different, drifting answer.
