@@ -1,0 +1,24 @@
+title: Dotfiles Review Queue
+url: https://claude.ai/code/artifact/9aeb2de4-1bdb-4ec7-b843-4679ea6e7ef7
+org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-09-11
+first_published: 2026-09-11
+last_updated: 2026-09-11
+status: live
+
+source: index.html     # hand-written; there is no Markdown behind this one
+built: index.html
+regression_check: |
+  node artifacts/pr-review-queue/checklist-test.js
+
+# The page is nothing but a checklist without this, and the declaration lives in
+# the publish call rather than in the HTML, so it is recorded here: a republish
+# that omits `capabilities` carries the stored declaration forward, but a first
+# publish that omits it leaves claude.use("db") resolving null and every tick
+# local to one browser.
+capabilities:
+  db: {}
+db_paths:
+  review/checklist: |
+    { checked: { "<pull request number>": true, ... }, updatedAt: <epoch ms> }
+    Shared across the org's viewers by design — the queue is one shared review
+    pass, not a private one, so it is deliberately not under data/users/.

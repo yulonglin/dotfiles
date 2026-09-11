@@ -134,11 +134,11 @@
 <div class="wrap">
   <header>
     <h1>Dotfiles Review Queue</h1>
-    <p class="sub">Eleven pull requests opened today, one concern each. Tick as you go — the state is stored server-side, so it follows you between devices.</p>
+    <p class="sub">Thirty-six open, eleven of them opened today by this session with one concern each. Tick as you go — the state is stored server-side, so it follows you between devices, and it travels with any comments you copy out.</p>
     <div class="counts">
       <div class="count"><b id="c-ready">11</b><span>ready today</span></div>
-      <div class="count"><b>1</b><span>needs you</span></div>
-      <div class="count"><b>21</b><span>older, conflicting</span></div>
+      <div class="count"><b>2</b><span>needs you</span></div>
+      <div class="count"><b>20</b><span>conflicting</span></div>
       <div class="count done"><b id="c-done">0</b><span>reviewed</span></div>
     </div>
   </header>
@@ -156,11 +156,11 @@
   <ul class="rows" id="group-call"></ul>
 
   <h2>Opened elsewhere, or still conflicting</h2>
-  <p class="note">Not from this session. #110 is now the only home of the classifier failure telemetry and its data snapshot, so it matters more than its size suggests.</p>
+  <p class="note">Not from this session. #110 is now the only home of the classifier failure telemetry and its data snapshot, so it matters more than its size suggests. #123 and #128 arrived while this page was being written.</p>
   <ul class="rows" id="group-other"></ul>
 
-  <h2>Backlog from July and August</h2>
-  <p class="note">Seventeen drafts, all conflicting, none touched today. Worth a closing pass rather than a review pass.</p>
+  <h2>A closing pass beats a review pass here</h2>
+  <p class="note">Twenty older pull requests, seventeen of them conflicting, none touched since 6 September. Only #93, #67 and #3 still merge cleanly.</p>
   <ul class="stale-list" id="group-stale"></ul>
 
   <footer>
@@ -172,16 +172,16 @@
 <script>
   const PRS = {
     quick: [
-      { n: 119, t: "State what the worktree guard can and cannot verify", why: "One paragraph, rewritten to give the principle plus four refused command shapes. Judgement call: it is now the longest paragraph in the file.", add: 1, del: 1, files: 1, chips: [] },
-      { n: 118, t: "Design a snapshot net for the destructive-git hook", why: "Design only, nothing implemented. Decide the open question inside: git stash create captures tracked files only, so clean -f would snapshot nothing.", add: 47, del: 0, files: 1, chips: [["hold", "design only"]] },
+      { n: 119, t: "State what the worktree guard can and cannot verify", why: "One paragraph, rewritten to give the principle plus four refused command shapes. Judgement call: it is now the longest paragraph in the file.", add: 6, del: 1, files: 1, chips: [] },
+      { n: 118, t: "Design a snapshot net for the destructive-git hook", why: "Design only, nothing implemented. Decide the open question inside: git stash create captures tracked files only, so clean -f would snapshot nothing.", add: 91, del: 0, files: 1, chips: [["hold", "design only"]] },
       { n: 124, t: "Fail if the attribution opt-out returns to settings", why: "Guards the setting that broke auto mode behind the gateway. Checks the committed and deployed copies, which differ by design.", add: 84, del: 0, files: 1, chips: [["tests", "mutation-tested"]] },
       { n: 116, t: "Probe for whether auto mode is deciding or failing open", why: "Rewritten by GPT-5.6 Sol against your four comments, and moved from tests/ to a skill, since nothing in tests/ executes it. Net effect on main is one new file.", add: 51, del: 0, files: 1, chips: [["tests", "rewritten"]] },
       { n: 126, t: "write-prose routes human-facing prose to the designated writer", why: "Sol first, Astra second, Kimi K3 when both OpenAI seats hit the one quota they share. The first draft broke the skill's own rule by being written in Opus 5; Astra rewrote it.", add: 45, del: 0, files: 1, chips: [] },
       { n: 127, t: "When a settings change reaches a running session", why: "The published page answering the restart question, plus its index row. Adding or changing an env value reaches a live session on save; removing one waits for the next launch.", add: 1190, del: 0, files: 2, chips: [] },
-      { n: 125, t: "This review queue, as a committed artifact", why: "Source and ARTIFACTS.md row for the page you are reading. Expect a shallow conflict with #127: both insert a row at the top of the same table.", add: 1283, del: 0, files: 2, chips: [] }
+      { n: 125, t: "This review queue, as a committed artifact", why: "Source and ARTIFACTS.md row for the page you are reading, plus the fix for its own checklist: the load path read the snapshot object where the document body was, so ticks never came back. Expect a shallow conflict with #127: both insert a row at the top of the same table.", add: 1459, del: 0, files: 4, chips: [["tests", "persistence fixed"]] }
     ],
     code: [
-      { n: 122, t: "Inline a sanitised svg fence, with an element allowlist", why: "Unescapes user text into published pages, so the allowlist is the part to read. Salvaged from #113.", add: 585, del: 8, files: 3, chips: [["tests", "41 tests pass"]] },
+      { n: 122, t: "Inline a sanitised svg fence, with an element allowlist", why: "Unescapes user text into published pages, so the allowlist is the part to read. Salvaged from #113.", add: 587, del: 8, files: 3, chips: [["tests", "41 tests pass"]] },
       { n: 121, t: "Host the artifacts index again, and republish after every publish", why: "Adds a live index URL, a hook that reads it from the header, and an after-publish rule. Salvaged from #114.", add: 1368, del: 16, files: 6, chips: [["tests", "22 assertions"]] }
     ],
     call: [
@@ -191,6 +191,7 @@
     other: [
       { n: 110, t: "Report approval-hook backend failures", why: "Holds the classifier failure telemetry and the unregenerable data snapshot; both were dropped from the salvage because they already live here. Conflicting.", add: 6748, del: 24, files: 20, chips: [["conflict", "conflicting"]] },
       { n: 123, t: "Worktree router cooldown watchdog", why: "Opened today by another session, not reviewed here.", add: 726, del: 28, files: 16, chips: [] },
+      { n: 128, t: "Worktree daemon env staleness", why: "Opened today by another session, not reviewed here. Its first commit carries the same headline as main's tip, 0f347f1, so read it against current main rather than against its own summary. Touches claude/settings.json.", add: 151, del: 28, files: 14, chips: [["call", "touches settings"]] },
       { n: 111, t: "Worktree bgjob guard rules", why: "Its rules paragraph already landed on main as 0f347f1, so that file is now redundant and will conflict.", add: 2252, del: 6, files: 24, chips: [["conflict", "conflicting"]] },
       { n: 112, t: "Retire gum for claude-tools select", why: "Stale since 9 September.", add: 202, del: 113, files: 19, chips: [["conflict", "conflicting"]] }
     ],
@@ -291,6 +292,26 @@
     }
   }
 
+  // What the copy carries besides the comments. Returns "" when nothing is
+  // ticked, which is what lets an empty Copy all still say "nothing to copy".
+  // The annotation layer calls this through window.anPageSection, so the page
+  // owns the wording and the layer stays generic.
+  function checklistMarkdown() {
+    const lines = [];
+    let done = 0;
+    for (const group of ["quick", "code", "call", "other"]) {
+      for (const pr of PRS[group]) {
+        const on = !!state.checked[pr.n];
+        if (on) done++;
+        lines.push("- [" + (on ? "x" : " ") + "] #" + pr.n + " " + pr.t);
+      }
+    }
+    if (!done) return "";
+    return "## Reviewed so far\n\n" + done + " of " + lines.length +
+      " ticked, at " + new Date().toISOString() + ".\n\n" + lines.join("\n") + "\n";
+  }
+  window.anPageSection = checklistMarkdown;
+
   paint();
 
   (async () => {
@@ -299,13 +320,21 @@
     if (!db) { sync.textContent = "checklist: this device only"; return; }
     store = db;
     try {
-      db.doc("review/checklist").onSnapshot((doc) => {
-        const next = doc && doc.checked;
-        if (next && typeof next === "object") {
-          state.checked = { ...next };
-          paint();
-        }
+      db.doc("review/checklist").onSnapshot((snap) => {
+        // onSnapshot delivers a DocumentSnapshot, not the document body: the
+        // stored fields only come out of snap.data(). Reading snap.checked
+        // gave undefined on every delivery, so a reload painted nothing and
+        // the ticks looked lost even though the write had landed.
         sync.textContent = "checklist: synced across your devices";
+        const body = snap && snap.exists ? snap.data() : null;
+        // Nothing stored yet: keep whatever this device has rather than
+        // clearing a tick made between subscribing and the first delivery.
+        if (!body) return;
+        const next = body.checked;
+        state.checked = (next && typeof next === "object") ? { ...next } : {};
+        paint();
+      }, (err) => {
+        sync.textContent = "checklist: this device only (" + (err && err.code) + ")";
       });
     } catch {
       sync.textContent = "checklist: this device only";
@@ -405,7 +434,7 @@ mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-thr
 <div data-annotation-layer="v2">
 <section id="anComments">
 <h2 id="your-comments">Your comments</h2>
-<p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else. A copy carries the ticked rows with it, so the review state travels with the notes.</p>
 <div class="anbar">
   <span class="ancount" id="anCount">No comments yet</span>
   <button class="anbtn" id="anCopy">Copy all</button>
@@ -1163,6 +1192,14 @@ function editMarkdown(list){
 var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markdown. " +
   "Locate each quote in the source and adapt the markup \u2014 do not apply these " +
   "blocks byte-for-byte.";
+// The one seam the page may add to the export. The page defines
+// window.anPageSection to return extra Markdown -- here, which rows are
+// ticked -- or "" when it has nothing to add, so state a reader can see on
+// the page leaves the page with the comments instead of being lost in the copy.
+function pageSection(){
+  try { return (typeof window.anPageSection === "function" && window.anPageSection()) || ""; }
+  catch (e) { return ""; }
+}
 // A page with no suggested edits exports exactly what it did under v1: no
 // headings appear, so every existing paste-into-a-session habit still works.
 function exportText(){
@@ -1173,8 +1210,13 @@ function exportText(){
     out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
     if (notes.length) out += "## Comments\n\n";
   }
-  return out + (notes.length ? markdown(notes) + "\n" : "");
+  out += (notes.length ? markdown(notes) + "\n" : "");
+  var extra = pageSection();
+  return extra ? out + "\n" + extra : out;
 }
+// A copy with no comments in it still took the tick list out of the browser,
+// so "copied 0" would be wrong about what left.
+function copiedLabel(){ return comments.length ? ("copied " + comments.length) : "copied the tick list"; }
 function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
 // There is deliberately no download path. The Artifact viewer never grants a
 // page download permission, so a Download button was inert exactly where these
@@ -1195,7 +1237,7 @@ function openExport(){
 // the panel says the comments are safely out of the browser, and the unload
 // guard stands down, when nothing left it.
 $("anCopy").onclick = async function(){
-  if (!comments.length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
+  if (!comments.length && !pageSection()) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
   var ok = false;
   // Both taken before the await: the clipboard promise can resolve after an
   // edit has landed, and the text that went out is this one.
@@ -1214,7 +1256,7 @@ $("anCopy").onclick = async function(){
   // exporting -- the state clears when the text is actually copied out of it.
   if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
   markClean(snap); render();
-  toast('<span class="anok">copied ' + comments.length + '</span>');
+  toast('<span class="anok">' + copiedLabel() + '</span>');
 };
 $("anExportText").addEventListener("copy", function(){
   // A copy of PART of the box carried part of the Markdown, so it did not
@@ -1228,7 +1270,7 @@ $("anExportText").addEventListener("copy", function(){
     return;
   }
   markClean(exportSnap); render();
-  toast('<span class="anok">copied ' + comments.length + '</span>');
+  toast('<span class="anok">' + copiedLabel() + '</span>');
 });
 $("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
 // The safe prune, and the reason the literal request was inverted: this
