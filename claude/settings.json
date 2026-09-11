@@ -135,7 +135,6 @@
       "Bash(* | zsh*)"
     ],
     "ask": [
-      "Bash(curl * | *)",
       "Bash(wget * | *)",
       "ExitPlanMode",
       "Bash(sudo *)",
