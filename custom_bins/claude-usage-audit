@@ -429,6 +429,7 @@ def aggregate_native_failures(observations, coverage, cutoff_epoch, exposure):
             ),
         },
         "failures_in_denominator": len(in_denominator),
+        "failures_in_denominator_by_day": dict(sorted(failures_by_day.items())),
     }
     if records:
         coverage["earliest_in_period"] = records[0]["timestamp"]
@@ -1217,8 +1218,16 @@ def print_native_failures(failures):
         rate = exposure["failures_per_100_bound_calls_by_day"].get(day)
         rate_text = f", {rate:g} per 100 calls" if rate is not None else ""
         versions = ", ".join(sorted(exposure["cli_versions_by_day"].get(day, {})))
+        # The numerator must be the one the rate divides: printing the day's total
+        # failures beside an in-denominator rate made the line contradict itself
+        # (212 / 3022 shown as 6.92, which is 209/3022). Out-of-denominator
+        # failures are named on their own line above, and again here when a day
+        # has any, so nothing is hidden by the narrower numerator.
+        in_denom = exposure["failures_in_denominator_by_day"].get(day, 0)
+        total_day = failures["by_day"].get(day, 0)
+        extra = f" (+{total_day - in_denom} outside the denominator)" if total_day > in_denom else ""
         print(
-            f"  {day}: {failures['by_day'].get(day, 0)} / {calls}{rate_text}"
+            f"  {day}: {in_denom} / {calls}{rate_text}{extra}"
             f"{'; ' + versions if versions else ''}"
         )
     print("Native failures by day and session model (failures / bound calls):")

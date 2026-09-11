@@ -1825,6 +1825,11 @@ def test_native_exposure_counts_classifier_bound_calls_once_per_id_by_day(tmp_pa
         ),
     }
     assert exposure["failures_per_100_bound_calls_by_day"] == {"2026-09-06": pytest.approx(66.67)}
+    # The printed numerator must be the one the rate divides, or the line
+    # contradicts itself: 2 of 3 bound calls is 66.67, and the third failure sits
+    # outside the denominator rather than being added to that numerator.
+    assert exposure["failures_in_denominator_by_day"] == {"2026-09-06": 2}
+    assert native["by_day"] == {"2026-09-06": 3}
     # The failures' session model is the newest assistant model before the row in the
     # same file (claude-test here); a day's bound calls are split by the same field.
     assert exposure["by_day_and_session_model"] == {
