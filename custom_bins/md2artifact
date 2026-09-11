@@ -314,6 +314,12 @@ def css_unescape(text: str) -> str:
     return CSS_ESCAPE_RE.sub(resolve, text)
 
 
+# `image-set()` names the resource it fetches with a bare <string>, so it
+# reaches the network without ever spelling `url(`. The vendor prefix is part
+# of the name, and the leading boundary keeps the match off a longer ident.
+CSS_FETCHING_FUNCTION_RE = re.compile(r"(?:^|[^-\w])(?:-[a-z]+-)?image-set\(")
+
+
 def css_fault(text: str) -> str | None:
     """Why this CSS may not be inlined, or None if it may.
 
@@ -322,25 +328,69 @@ def css_fault(text: str) -> str | None:
     fetch anything, so it is allowed and every other `url(` is refused. The
     delimiter is matched with optional whitespace and an optional quote, so
     `url( '#lg' )` reads the same as `url(#lg)`. `@import` fetches by
-    definition and is refused outright.
+    definition and is refused outright, and so does `image-set()`, which is a
+    fetch that spells neither token — measured issuing the request on Chromium
+    151 from a <style> element and from a style= attribute on a <rect> alike.
 
-    Both the literal spelling and the escape-decoded one are checked, because
-    neither is a superset of the other: `\\75 rl(` only fetches once decoded,
-    while `url\\(` is an escaped paren a decoder would turn into something the
-    literal check still has to see.
+    This is a MATCHER over flattened text, so it has to model everything a CSS
+    parser does between the bytes and the token it resolves. Those layers, and
+    where this check stands on each:
+
+    - code-point filtering (CR/CRLF/FF to LF, NUL and lone surrogates to
+      U+FFFD): not modelled, and it cannot matter, because it never DELETES a
+      code point and so can never join a name this check reads as two;
+    - comment removal: refused, not modelled. Measured on Chromium 151, a
+      comment SEPARATES tokens rather than joining them — `u/**/rl(` resolves
+      to two idents and the declaration is dropped — so the reported bypass
+      does not in fact fetch. The layer is refused anyway: a comment in an
+      inline chart has no legitimate use, and an unmodelled preprocessing
+      layer is exactly what the two escape holes before this one were;
+    - escape decoding: modelled (css_unescape). Both the literal spelling and
+      the decoded one are checked, because neither is a superset of the other:
+      `\\75 rl(` only fetches once decoded, while `url\\(` is an escaped paren a
+      decoder would turn into something the literal check still has to see;
+    - whitespace and case: over-approximated. All whitespace is stripped and
+      the text case folded, which can only ever produce MORE matches than a
+      parser sees, so this may refuse an exotic benign spelling but cannot
+      miss a live one;
+    - token to VALUE resolution: NOT modelled, and not modellable here. Which
+      string fetches depends on the property and the function consuming it,
+      and the set of URL-valued functions grows with the language. `src()` and
+      `image()` are specced siblings of `image-set()` that also take a bare
+      string, and neither is refused below: neither is implemented in any
+      shipping engine (measured: no fetch), while both collide with ordinary
+      label prose, and every attribute value comes through here — a chart may
+      legitimately carry `aria-label="Bar chart image (USD)"`. The day an
+      engine ships either, this check is behind.
+
+    So the fetch rules are a named denylist over an open language, incomplete
+    by construction — unlike SVG_ALLOWED_ELEMENTS, which can be an allowlist
+    because a chart's element vocabulary is closed and small. Completing them
+    means PARSING instead of matching: tokenize with a real CSS parser, then
+    judge every resolved url-token and every string in a URL-valued position,
+    with function and property names allowlisted. That costs md2artifact a
+    second dependency (it has one today, markdown-it-py) and is the move to
+    make the next time this boundary is bitten.
 
     Applied to the <style> element AND to every attribute value, because
     `style="fill:url(https://…)"` and `fill="url(https://…)"` fetch exactly as
     a <style> block does — an asymmetry between the two would be a gap that
-    survives review by looking as if it were already covered.
+    survives review by looking as if it were already covered. Of the two the
+    <style> element is the wider hole: it is document-scoped, not scoped to
+    the chart, so a rule inside an inline SVG styles the whole page (measured:
+    a fence's <style> painted a background on a <div> outside the <svg>).
     """
     spellings = {
         re.sub(r"\s+", "", text).lower(),
         re.sub(r"\s+", "", css_unescape(text)).lower(),
     }
     for flat in spellings:
+        if "/*" in flat:
+            return "contains a CSS comment"
         if "@import" in flat:
             return "uses @import"
+        if CSS_FETCHING_FUNCTION_RE.search(flat):
+            return "uses image-set(), which fetches the resource its string names"
         for m in re.finditer(r"url\(", flat):
             if not re.match(r"url\(['\"]?#", flat[m.start() :]):
                 return "has a url() that is not a same-document #reference"
@@ -361,6 +411,8 @@ def attribute_fault(name: str, value: str) -> str | None:
         return f"its {aname} attribute {fault}"
     if aname == "href" and not flat.startswith("#"):
         return f"it has an {aname} attribute that is not a same-document reference"
+    if aname == "ping":
+        return f"it carries a {aname} attribute, which POSTs to a URL of its own"
     if "javascript:" in flat:
         return f"its {aname} attribute carries a javascript: URL"
     if re.search(r"data:(?!image/)", flat):
@@ -501,8 +553,9 @@ def svg_rejection(source: str) -> str | None:
     aria-*, data-* and per-element geometry — so an attribute allowlist would
     refuse legitimate charts every time someone reached for a property nobody
     had listed. The value rules carry that half instead (attribute_fault): no
-    on* handler, no href that leaves the document, no javascript:, no non-image
-    data:, and no url() that is not a same-document #reference (see css_fault,
+    on* handler, no href that leaves the document, no `ping` (SVG2 <a> takes
+    it, and a followed link POSTs to every URL in it), no javascript:, no
+    non-image data:, and nothing that fetches from CSS (see css_fault,
     which the <style> element and every attribute value go through alike, and
     which decodes CSS escapes first because a CSS parser does).
     They are enough because the element allowlist has already ensured those

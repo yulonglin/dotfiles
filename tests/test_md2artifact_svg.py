@@ -500,3 +500,124 @@ def test_escaped_css_spellings_are_rejected(case: str, tmp_path: Path) -> None:
     html = _render(f"# Page\n\n```svg\n{ESCAPED_CSS[case]}\n```\n", tmp_path)
     assert NOTE in html, f"{case}: no rejection note"
     assert "<svg" not in html, f"{case}: inlined a fence that can fetch an external resource"
+
+
+# ─── Comments: the third preprocessing layer between the bytes and the token ──
+# A CSS tokenizer deletes `/* … */` before it decides what a token is, so the
+# flattened text a matcher searches is not the text the browser acts on. The
+# reported spellings below do NOT in fact fetch — measured on Chromium 151, a
+# comment separates tokens rather than joining them, so `u/**/rl(` resolves to
+# two idents and the declaration is dropped. They are refused anyway: an inline
+# chart has no use for a comment, and leaving a preprocessing layer unmodelled
+# is how the two escape holes before this one got in.
+COMMENT_SPLIT_CSS = {
+    "style_element_comment_split_import": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>@i/**/mport "https://example.invalid/p.css";</style></svg>'
+    ),
+    "style_element_comment_split_url": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>.bar{fill:u/**/rl(https://example.invalid/p.png)}</style></svg>"
+    ),
+    "style_element_comment_before_paren": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>.bar{fill:url/**/(https://example.invalid/p.png)}</style></svg>"
+    ),
+    "style_attribute_comment_split_import": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect style="@i/**/mport &#34;https://example.invalid/p.css&#34;" width="9"/></svg>'
+    ),
+    "style_attribute_comment_split_url": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect style="fill:u/**/rl(https://example.invalid/p.png)" width="9"/></svg>'
+    ),
+    "presentation_attribute_comment_split_url": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect fill="u/**/rl(https://example.invalid/p.png)" width="9"/></svg>'
+    ),
+    # A comment is refused wherever it sits, including the positions where it
+    # IS a legal separator and the construct does fetch.
+    "style_element_comment_after_import": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>@import/**/url(https://example.invalid/p.css);</style></svg>'
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(COMMENT_SPLIT_CSS))
+def test_comment_split_css_spellings_are_rejected(case: str, tmp_path: Path) -> None:
+    html = _render(f"# Page\n\n```svg\n{COMMENT_SPLIT_CSS[case]}\n```\n", tmp_path)
+    assert NOTE in html, f"{case}: no rejection note"
+    assert "<svg" not in html, f"{case}: inlined a fence carrying a CSS comment"
+
+
+# ─── A fetch that never spells `url(` ─────────────────────────────────────────
+# `url()` and `@import` were the whole model of what fetches. `image-set()`
+# takes a bare <string> as its URL, so it fetches with neither token present.
+# Measured on Chromium 151: every spelling below issued the request, in the
+# <style> element and through a style= attribute on an SVG <rect> alike.
+FETCHING_FUNCTIONS = {
+    "style_element_image_set": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>rect{mask-image:image-set("https://example.invalid/p.png" 1x)}</style></svg>'
+    ),
+    "style_element_image_set_uppercase": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>rect{mask-image:IMAGE-SET("https://example.invalid/p.png" 1x)}</style></svg>'
+    ),
+    "style_element_webkit_image_set": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>rect{-webkit-mask-image:-webkit-image-set("https://example.invalid/p.png" 1x)}'
+        "</style></svg>"
+    ),
+    "style_attribute_image_set": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<rect style=\"mask-image:image-set('https://example.invalid/p.png' 1x)\" width=\"9\"/>"
+        "</svg>"
+    ),
+    "style_element_escaped_image_set": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>rect{mask-image:\\69 mage-set("https://example.invalid/p.png" 1x)}</style></svg>'
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(FETCHING_FUNCTIONS))
+def test_a_css_function_that_fetches_without_url_is_rejected(case: str, tmp_path: Path) -> None:
+    html = _render(f"# Page\n\n```svg\n{FETCHING_FUNCTIONS[case]}\n```\n", tmp_path)
+    assert NOTE in html, f"{case}: no rejection note"
+    assert "<svg" not in html, f"{case}: inlined a fence that can fetch an external resource"
+
+
+def test_a_ping_attribute_is_rejected(tmp_path: Path) -> None:
+    """<a ping> POSTs to every listed URL when the link is followed.
+
+    Measured on Chromium 151: the POST goes out on click from an SVG <a>. The
+    href rule exists to stop exactly this leak, and read only href.
+    """
+    body = (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<a href="#x" ping="https://example.invalid/p"><text>go</text></a></svg>'
+    )
+    html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
+    assert NOTE in html
+    assert "<svg" not in html
+
+
+def test_parentheses_and_apostrophes_in_label_text_are_still_accepted(tmp_path: Path) -> None:
+    """The fetch rules name constructs; they do not allowlist function syntax.
+
+    Every attribute value goes through css_fault, and chart labels contain
+    parentheses and apostrophes — `aria-label="Bar chart image (USD)"` reads as
+    a function call to any matcher naive enough to allowlist `ident(`. Refusing
+    that would refuse real charts, which is why the fetch rules stay a named
+    denylist and why that denylist is incomplete by construction.
+    """
+    body = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9" role="img"'
+        ' aria-label="Bar chart image (USD, 2024) — Bob\'s revenue (approx)">'
+        '<title>Revenue (USD)</title><rect width="9" height="9" fill="#8fb8b0"/></svg>'
+    )
+    html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
+    assert body in html
+    assert NOTE not in html
