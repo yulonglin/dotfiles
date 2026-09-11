@@ -239,10 +239,39 @@ def test_storage_keys_are_prefixed_not_suffixed() -> None:
 
 
 def test_a_failed_write_and_a_failed_copy_are_both_surfaced() -> None:
-    """Silence here means the panel counts comments that are already gone."""
+    """Silence here means the panel counts comments that are already gone.
+
+    Both writers report, through one predicate. The state writer used to throw
+    its result away, and the unload guard counted comments only -- so on a page
+    that is all checklist and no notes, which is what a review queue is, a
+    reviewer with blocked site data ticked every row, closed the tab and was
+    never told the verdict had not survived.
+
+    The two writers report differently on purpose. A comment write rewrites
+    every comment, so `setItem` not throwing does cover the whole value. A
+    state write stores one control under one key, so its flag is a per-control
+    pending set being non-empty, and a control leaves that set only when its
+    own key reads back holding the value — never from the write's own return.
+
+    Changed with the storage model: the read-back used to be a lookup into a
+    cached copy of one shared document (`storedStates[id] === pendingStates[id]`),
+    a line only that design could have. The property is the same and the
+    expression is now a read of the control's own key -- `readStateKey`, not
+    `readState`, which falls back to the legacy shared document and would
+    report a refused write as stored whenever that document happened to hold
+    the same value.
+    """
     js = _layer_module().JS
-    assert "unsaved = !lsSet(" in js
+    assert "notesUnsaved = !lsSet(" in js
+    assert "statesUnsaved = !lsSet(" not in js, "a state write must not believe its own return value"
+    assert "statesUnsaved = hasPending();" in js
+    assert "if (readStateKey(id) === value) delete pendingStates[id];" in js
+    assert "readStateKey(k) === pendingStates[k]" in js
+    assert "function unsaved(){ return notesUnsaved || statesUnsaved; }" in js
     assert "refused to store them" in js
+    assert "refused to store the checklist" in js
+    # The unload guard consults the same predicate, not the comment count.
+    assert "if (!unsaved() && (!isDirty() || !comments.length)) return;" in js
     # markClean() must be reachable only once a copy has actually happened.
     assert "if (!ok) {" in js and "ok = true;" in js
 
