@@ -2,7 +2,7 @@
 
 ## Writing
 
-One paragraph is ONE line in `.md` files — never a hard newline inside a paragraph. Blank lines separate paragraphs; readers soft-wrap. This covers prose, bullet bodies and table cells.
+One paragraph is ONE line in `.md` files — never a hard newline inside a paragraph. Blank lines separate paragraphs; readers soft-wrap. This covers prose, bullet bodies and table cells. `md-unwrap --check <path>` finds violations and `md-unwrap --fix <path>` repairs them; it gates staged Markdown under `claude/` in pre-commit and CI.
 
 **Todos and separate points are bullet lists, one item per line, sub-points nested** — in notes, plans, schedules and replies alike. Several items packed into one line with commas, semicolons or "then" is a list you have not drawn yet; a todo is its own `- [ ]` line so it can be ticked on its own. Bear-specific mechanics: `bear`.
 

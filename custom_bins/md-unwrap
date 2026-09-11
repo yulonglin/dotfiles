@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""Detect and repair hard-wrapped Markdown paragraphs.
+
+    md-unwrap --check claude/                 # exit 1 if any paragraph is hard-wrapped
+    md-unwrap --fix claude/rules/foo.md       # join the wrapped lines back together
+    git show :some.md | md-unwrap --check -   # check staged content
+
+The house rule (claude/rules/communication.md) is that one paragraph is ONE line
+in Markdown: no hard newline inside a paragraph, in prose, bullet bodies or table
+cells. Readers soft-wrap; a hard wrap makes every later edit a reflow diff.
+
+A violation is a text line that continues the previous text line. Everything that
+is not flowing prose is left strictly alone, because a wrong join silently
+corrupts documentation:
+
+  - fenced code blocks (``` and ~~~) and indented code blocks (4+ spaces)
+  - tables (any line carrying a pipe)
+  - YAML frontmatter
+  - headings (ATX and setext), thematic breaks, blockquotes
+  - link reference definitions and HTML blocks
+  - a line ending in an explicit hard break (two trailing spaces, or a backslash)
+  - list item markers: a wrapped list body is joined, but the marker line stays a
+    line of its own, so list structure survives
+  - lines opening with a bolded label ("**When to use**: …"), which are one point
+    per line by intent rather than a wrap
+
+A one-line paragraph is never a violation — shortness is not wrapping.
+
+Exit codes: 0 clean (or fixed), 1 violations found under --check, 2 usage error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+FENCE_RE = re.compile(r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})")
+ATX_RE = re.compile(r"^ {0,3}#{1,6}(?:\s|$)")
+THEMATIC_RE = re.compile(r"^ {0,3}([-*_])[ \t]*(?:\1[ \t]*){2,}$")
+SETEXT_RE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
+LIST_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
+LINK_DEF_RE = re.compile(r"^ {0,3}\[[^\]]+\]:")
+HTML_START_RE = re.compile(r"^ {0,3}<")
+HTML_RAW_RE = re.compile(r"^ {0,3}<(?:script|pre|style|textarea)\b", re.IGNORECASE)
+HARD_BREAK_RE = re.compile(r"(?:  +|\\)$")
+LABEL_RE = re.compile(r"^ {0,3}(?:\*\*|__)[^*_]+(?:\*\*|__)\s*:")
+
+DEFAULT_EXCLUDES = (".git", "node_modules", ".venv", "__pycache__")
+
+
+def _indent_width(line: str) -> int:
+    width = 0
+    for char in line:
+        if char == " ":
+            width += 1
+        elif char == "\t":
+            width += 4 - (width % 4)
+        else:
+            break
+    return width
+
+
+def merge_indices(lines: list[str]) -> list[int]:
+    """Indices of lines that continue the previous line and should be joined to it."""
+    merges: list[int] = []
+    total = len(lines)
+    index = 0
+
+    # YAML frontmatter: only when the very first line opens it.
+    if total and lines[0].rstrip() == "---":
+        index = 1
+        while index < total and lines[index].rstrip() not in ("---", "..."):
+            index += 1
+        index = min(index + 1, total)
+
+    fence: tuple[str, int] | None = None
+    html_end: str | None = None  # None, "blank", or a closing tag to look for
+    prev_text = False  # the previous line is a paragraph/list body we could join onto
+    prev_hard_break = False
+
+    while index < total:
+        line = lines[index]
+        stripped = line.strip()
+
+        if fence is not None:
+            char, length = fence
+            closer = re.match(r"^ {0,3}(" + re.escape(char) + r"{" + str(length) + r",})[ \t]*$", line)
+            if closer:
+                fence = None
+            index += 1
+            continue
+
+        if html_end is not None:
+            if html_end == "blank":
+                if not stripped:
+                    html_end = None
+            elif html_end.lower() in line.lower():
+                html_end = None
+            index += 1
+            continue
+
+        if not stripped:
+            prev_text = False
+            index += 1
+            continue
+
+        fence_match = FENCE_RE.match(line)
+        if fence_match:
+            marker = fence_match.group("fence")
+            fence = (marker[0], len(marker))
+            prev_text = False
+            index += 1
+            continue
+
+        # Indented code, or a list continuation deep enough to be ambiguous with it.
+        if _indent_width(line) >= 4:
+            prev_text = False
+            index += 1
+            continue
+
+        if "|" in stripped:  # table row, or prose too pipe-heavy to risk
+            prev_text = False
+            index += 1
+            continue
+
+        if HTML_START_RE.match(line):
+            if stripped.startswith("<!--"):
+                html_end = None if "-->" in stripped else "-->"
+            elif HTML_RAW_RE.match(line):
+                html_end = "blank"
+            else:
+                html_end = "blank"
+            prev_text = False
+            index += 1
+            continue
+
+        if LINK_DEF_RE.match(line):
+            prev_text = False
+            index += 1
+            continue
+
+        if ATX_RE.match(line) or THEMATIC_RE.match(line):
+            prev_text = False
+            index += 1
+            continue
+
+        if prev_text and SETEXT_RE.match(line):  # setext heading underline
+            prev_text = False
+            index += 1
+            continue
+
+        if stripped.startswith(">"):
+            prev_text = False
+            index += 1
+            continue
+
+        # A bolded label at the head of a line ("**When to use**: …") is a
+        # labelled item, not a wrapped continuation — the house rule wants one
+        # such point per line. Treat it like a list marker: it starts a logical
+        # line, and its own wrapped body still gets joined onto it.
+        if LIST_RE.match(line) or LABEL_RE.match(line):
+            prev_text = True
+            prev_hard_break = bool(HARD_BREAK_RE.search(line.rstrip("\n")))
+            index += 1
+            continue
+
+        if prev_text and not prev_hard_break:
+            merges.append(index)
+        prev_text = True
+        prev_hard_break = bool(HARD_BREAK_RE.search(line.rstrip("\n")))
+        index += 1
+
+    return merges
+
+
+def unwrap(text: str) -> tuple[str, list[int], int]:
+    """Return (fixed text, merged line numbers (1-based), paragraph count)."""
+    newline = "\r\n" if "\r\n" in text else "\n"
+    ends_with_newline = text.endswith(("\n", "\r"))
+    lines = text.splitlines()
+    merges = merge_indices(lines)
+    if not merges:
+        return text, [], 0
+
+    merge_set = set(merges)
+    out: list[str] = []
+    for index, line in enumerate(lines):
+        if index in merge_set and out:
+            out[-1] = out[-1].rstrip() + " " + line.strip()
+        else:
+            out.append(line)
+
+    paragraphs = sum(1 for i in merges if (i - 1) not in merge_set)
+    fixed = newline.join(out) + (newline if ends_with_newline else "")
+    return fixed, [i + 1 for i in merges], paragraphs
+
+
+def iter_markdown(paths: list[str]) -> list[Path]:
+    found: list[Path] = []
+    for raw in paths:
+        path = Path(raw)
+        if path.is_dir():
+            for child in sorted(path.rglob("*.md")):
+                if any(part in DEFAULT_EXCLUDES for part in child.parts):
+                    continue
+                found.append(child)
+        else:
+            found.append(path)
+    return found
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="md-unwrap",
+        description="Detect (--check) or repair (--fix) hard-wrapped Markdown paragraphs.",
+        epilog="Files or directories; '-' reads stdin. Directories are searched for *.md.",
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="report violations, exit 1 if any (default)")
+    mode.add_argument("--fix", action="store_true", help="rewrite the files in place")
+    parser.add_argument("--exclude", action="append", default=[], metavar="SUBSTRING",
+                        help="skip any path containing SUBSTRING (repeatable)")
+    parser.add_argument("-q", "--quiet", action="store_true", help="print only the summary")
+    parser.add_argument("paths", nargs="+", help="Markdown files, directories, or '-'")
+    args = parser.parse_args(argv)
+
+    if args.paths == ["-"]:
+        text = sys.stdin.read()
+        fixed, merged, paragraphs = unwrap(text)
+        if args.fix:
+            sys.stdout.write(fixed)
+            return 0
+        if merged:
+            if not args.quiet:
+                print(f"<stdin>: {len(merged)} wrapped line(s) in {paragraphs} paragraph(s): "
+                      f"{', '.join(str(n) for n in merged[:20])}", file=sys.stderr)
+            return 1
+        return 0
+
+    targets = iter_markdown(args.paths)
+    if args.exclude:
+        targets = [p for p in targets if not any(token in str(p) for token in args.exclude)]
+
+    bad_files = 0
+    total_lines = 0
+    total_paragraphs = 0
+    for path in targets:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"md-unwrap: cannot read {path}: {exc}", file=sys.stderr)
+            return 2
+        fixed, merged, paragraphs = unwrap(text)
+        if not merged:
+            continue
+        bad_files += 1
+        total_lines += len(merged)
+        total_paragraphs += paragraphs
+        if args.fix:
+            path.write_text(fixed, encoding="utf-8")
+            if not args.quiet:
+                print(f"fixed {path}: {paragraphs} paragraph(s), {len(merged)} line(s) joined")
+        elif not args.quiet:
+            shown = ", ".join(str(n) for n in merged[:10])
+            more = " …" if len(merged) > 10 else ""
+            print(f"{path}: hard-wrapped paragraph continues at line(s) {shown}{more}")
+
+    if args.fix:
+        if not args.quiet:
+            print(f"md-unwrap: fixed {bad_files} file(s), {total_paragraphs} paragraph(s), "
+                  f"{total_lines} line(s) joined")
+        return 0
+
+    if bad_files:
+        print(f"md-unwrap: {bad_files} file(s) with hard-wrapped paragraphs "
+              f"({total_paragraphs} paragraph(s), {total_lines} line(s)). "
+              f"Fix with: md-unwrap --fix <path>", file=sys.stderr)
+        return 1
+    if not args.quiet:
+        print(f"md-unwrap: {len(targets)} file(s) clean")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
