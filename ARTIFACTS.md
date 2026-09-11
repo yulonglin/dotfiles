@@ -16,6 +16,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 
 | Artifact | Org | Status | Source | Public | Updated |
 |---|---|---|---|---|---|
+| [Dotfiles Review Queue](https://claude.ai/code/artifact/9aeb2de4-1bdb-4ec7-b843-4679ea6e7ef7) — the open pull requests grouped by how much judgement each needs rather than by age, so the table can be read instead of opened. Each row's tick is stored as its own document, so two viewers ticking different rows cannot overwrite each other, and a tick made before the store resolves is queued rather than lost | lin.yulong@gmail.com's Organization | live | `artifacts/pr-review-queue/` | no | 2026-09-11 |
 | [When Settings Reach a Session](https://claude.ai/code/artifact/7338696f-f448-4751-a209-db0cd49cdca9) — adding or changing an `env` value reaches a running session when the file is saved, while removing one takes effect only at the next launch — quoted from the environment-variable documentation, not established here; a scan on 2026-09-11 found 16 processes still carrying a value deleted two days earlier, 13 of them orphaned socat forwarders, none of which call the classifier. The scan shows stale environments, not the cause of any one of them | lin.yulong@gmail.com's Organization | live | `artifacts/settings-propagation/` | no | 2026-09-11 |
 | [Dotfiles Artifacts](https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107) — this index, hosted; republished to this URL after every artifact publish | lin.yulong@gmail.com's Organization | live | `artifacts/index/` | no | 2026-09-10 |
 | [Why Auto Mode Broke Behind the Gateway](https://claude.ai/code/artifact/959f403c-5343-40c6-ad4b-8d68f9a066e6) — every auto-mode classifier 429 needed two conditions: `CLAUDE_CODE_ATTRIBUTION_HEADER=0` (set since March) and a non-`api.anthropic.com` base URL (the model-router gateway). Claude Code 2.1.229's repair re-adds the attribution block only when the URL host is literally first-party, so gateway days 429'd and direct days did not; 28 days of transcripts split exactly on gateway on/off. Fix: drop the opt-out (b2868c8a), gateway kept; verified by before/after probes. The 8 Sep A/B was confounded (both arms proxied). Spend levers (per-tool classifier cost, 200k+ contexts, concurrency) remain open | MATS Program | live | `artifacts/auto-mode-classifier-429/` | no | 2026-09-09 |
@@ -36,7 +37,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 | [Alias Audit](https://claude.ai/code/artifact/739598b0-362d-4aaa-a8c2-c77775be5eb4) — alias files fight over names by source order; the set was cut 161 → ~110 against two months of shell history | see note | done | — | no | 2026-08-18 |
 | [Tool-Backed Agents](https://claude.ai/code/artifact/4c124679-7346-4dc5-9cb4-75889320aaf4) — which agents actually invoke their CLI rather than answering from their own reasoning | see note | done | — | no | 2026-08-18 |
 
-19 rows: 6 live, 10 done, 2 archived, 1 superseded.
+20 rows: 7 live, 10 done, 2 archived, 1 superseded.
 
 [//]: # (END GENERATED ARTIFACTS TABLE)
 
