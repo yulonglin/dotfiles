@@ -23,8 +23,8 @@
 //   9. a stored collection repaints the ticks, and they leave with the copy
 //  10. THE DEFECT AT 656dec0: a remote tick arriving while this device's write
 //      is on the wire is no longer erased by it
-//  11. ticks stored by the old shared-document page are migrated once, and the
-//      old document is left where it is
+//  11. a row with no document of its own reads its value out of the old
+//      shared document, lazily, with nothing copied and nothing marked done
 //
 // Exit code is the result; every failure prints what it expected.
 
@@ -82,13 +82,16 @@ function newPage() {
   }
 
   const h = { writes: [], snapshotCb: null, errCb: null, handOverDb: null, mode: "ok", held: [],
-              byId, stored: new Map(), subPath: null, legacy: null, legacyWrites: 0, legacyGets: 0 };
+              byId, stored: new Map(), subPath: null, legacy: null, legacyWrites: 0, legacyGets: 0,
+              legacyMode: "ok" };
 
   const docRef = (p) => ({
     path: p,
     get: () => {
       if (p !== LEGACY) bail("unexpected get() on " + p);
       h.legacyGets++;
+      if (h.legacyMode === "fail") return Promise.reject(new Error("read refused"));
+      if (h.legacyMode === "throw") throw new Error("read threw");
       const body = h.legacy;
       return Promise.resolve({ id: "checklist", exists: !!body, data: () => body || undefined });
     },
@@ -521,7 +524,13 @@ const settle = () => sleep(0);
   }
 
   // --------------------------------------------------------------- 11 ----
-  scenario("ticks stored by the old shared-document page");
+  // THE LAZY FALLBACK, which replaced a one-time migration pass. A row with no
+  // document of its own reads its value out of the old shared document, every
+  // time it is read. Nothing is copied, so there is no completion marker to
+  // record wrongly, no partial-failure window, and no "did it finish?" to get
+  // wrong: a row that never gained a document of its own is simply read from
+  // the old document again next time.
+  scenario("a row with no document of its own reads the old shared document");
   {
     const h = newPage();
     await sleep(20);
@@ -530,42 +539,128 @@ const settle = () => sleep(0);
     await sleep(20);
     h.deliver({});                         // the new collection is empty
     await sleep(20);
-    check(h.legacyGets === 1, "the old document is read once, got " + h.legacyGets);
-    check(h.tickedPrs() === "122,124", "its ticks are picked up and painted, got " + h.tickedPrs());
-    check(h.storedKeys() === "122,124", "and written out, one document per row, got " + h.storedKeys());
-    check(h.writeCount() === 2, "only the ticked rows are written, got " + h.writeCount() + " write(s)");
+    check(h.tickedPrs() === "122,124", "the old document's ticks are painted, got " + h.tickedPrs());
+    check(h.writeCount() === 0,
+      "and nothing is copied: there is no migration pass, got " + h.writeCount() + " write(s)");
+    check(h.storedKeys() === "", "so the collection is left as it was, got " + h.storedKeys());
     check(h.legacyWrites === 0,
-      "the old document is left exactly as it was, so a rolled-back page still finds its ticks");
+      "the old document is never written, so a rolled-back page still finds its ticks");
 
     h.deliverStored();
     await sleep(20);
-    check(h.legacyGets === 1 && h.writeCount() === 2, "a later delivery does not migrate again, got " + h.legacyGets + " read(s)");
+    check(h.legacyGets === 1, "the old document is read once per page, not once per delivery, got " + h.legacyGets);
+    check(h.tickedPrs() === "122,124", "and the fallback still stands on the next delivery, got " + h.tickedPrs());
+
+    // A cached empty snapshot was the case the old gate had to exclude, because
+    // migrating off one would have re-ticked rows since unticked. Reading is
+    // not writing, so it is now just another delivery.
+    h.deliverCache({});
+    await sleep(20);
+    check(h.tickedPrs() === "122,124" && h.writeCount() === 0,
+      "a snapshot the server has not confirmed needs no special case, got " + h.tickedPrs() +
+      " and " + h.writeCount() + " write(s)");
   }
 
-  // --------------------------------------------------------------- 11b ---
-  scenario("migration does not run when there is nothing to migrate from");
+  // -------------------------------------------------------------- 11a ----
+  scenario("a row's own document wins over the old shared one");
   {
     const h = newPage();
     await sleep(20);
-    h.legacy = { checked: { "124": true }, updatedAt: 1 };
+    h.legacy = { checked: { "124": true, "122": true }, updatedAt: 1 };
     h.handOverDb();
     await sleep(20);
-    h.deliver({ "119": true });            // the collection already holds rows
+    h.deliver({});
     await sleep(20);
-    check(h.legacyGets === 0, "a collection that already holds rows is never migrated over, got " + h.legacyGets + " read(s)");
-    check(h.tickedPrs() === "119", "and what it holds is what shows, got " + h.tickedPrs());
+    check(h.tickedPrs() === "122,124", "both rows fall back to the old document, got " + h.tickedPrs());
 
-    const h2 = newPage();
+    h.tick(124, false);                    // untick a row only the old document holds
+    await settle();
+    check(h.lastWrite() && h.lastWrite().path === TICKS + "/124" && h.lastWrite().data.on === false,
+      "the untick is stored as that row's own false, got " + (h.lastWrite() && h.lastWrite().path));
+    check(h.tickedPrs() === "122", "and the row reads unticked, got " + h.tickedPrs());
+
+    h.deliverStored();
+    check(h.tickedPrs() === "122",
+      "a row's own document shadows the old one for good, got " + h.tickedPrs());
+    check(h.legacyWrites === 0, "and the old document is still not written");
+  }
+
+  // -------------------------------------------------------------- 11b ----
+  // The reviewer's first reproduction: the old gate read a non-empty
+  // collection as proof that migration had finished, and a viewer ticking one
+  // row before the first delivery makes the collection non-empty.
+  scenario("a tick made before the first delivery does not hide the old document");
+  {
+    const h = newPage();
     await sleep(20);
-    h2.legacy = { checked: { "124": true }, updatedAt: 1 };
-    h2.handOverDb();
+    h.legacy = { checked: { "124": true, "122": true }, updatedAt: 1 };
+    h.handOverDb();
     await sleep(20);
-    h2.deliverCache({});                   // empty, but not yet server-definitive
+    h.tick(119, true);
+    await settle();
+    check(h.storedKeys() === "119",
+      "the tick creates a document, so the collection is no longer empty, got " + h.storedKeys());
+
+    h.deliverStored();
     await sleep(20);
-    check(h2.legacyGets === 0, "an empty snapshot the server has not confirmed does not migrate either, got " + h2.legacyGets + " read(s)");
-    h2.deliver({});
+    check(h.tickedPrs() === "119,122,124",
+      "a non-empty collection is not proof the old document is spent: its rows still read through, got " +
+      h.tickedPrs());
+  }
+
+  // -------------------------------------------------------------- 11c ----
+  // The reviewer's second reproduction, built against real quota exhaustion: a
+  // read that FAILED is not a read that returned nothing.
+  scenario("a refused read of the old document is not an empty one");
+  {
+    const h = newPage();
     await sleep(20);
-    check(h2.legacyGets === 1 && h2.storedKeys() === "124", "the confirmed one does, got " + h2.storedKeys());
+    h.legacy = { checked: { "124": true, "122": true }, updatedAt: 1 };
+    h.legacyMode = "throw";                // a get() that throws rather than rejecting
+    h.handOverDb();
+    await sleep(20);
+    h.deliver({ "119": true });
+    await sleep(20);
+    check(h.legacyGets === 1, "the old document is read, got " + h.legacyGets);
+    check(h.tickedPrs() === "119",
+      "a read that threw adds nothing, and clears nothing already there, got " + h.tickedPrs());
+
+    h.legacyMode = "fail";
+    h.deliverStored();
+    await sleep(20);
+    check(h.legacyGets === 2, "the next delivery tries again rather than recording an empty answer, got " + h.legacyGets);
+    check(h.tickedPrs() === "119", "and a refused read changes nothing either, got " + h.tickedPrs());
+
+    h.legacyMode = "ok";
+    h.deliverStored();
+    await sleep(20);
+    check(h.legacyGets === 3, "and again, got " + h.legacyGets);
+    check(h.tickedPrs() === "119,122,124", "until a read lands, and then the rows appear, got " + h.tickedPrs());
+  }
+
+  // -------------------------------------------------------------- 11d ----
+  // The partial-migration case: a store that accepts some writes and refuses
+  // others used to mark itself migrated and abandon the rest. Nothing is
+  // copied now, so a store refusing every write cannot lose a tick.
+  scenario("a store refusing every write still shows the old document's ticks");
+  {
+    const h = newPage();
+    await sleep(20);
+    h.legacy = { checked: { "124": true, "122": true, "118": true }, updatedAt: 1 };
+    h.mode = "fail";
+    h.handOverDb();
+    await sleep(20);
+    h.deliver({});
+    await sleep(20);
+    check(h.tickedPrs() === "118,122,124",
+      "every old tick reads through a store that will accept nothing, got " + h.tickedPrs());
+    check(h.writeCount() === 0, "because none of them is written, got " + h.writeCount() + " write(s)");
+    check(/synced/.test(h.sync()),
+      "and no failure is reported for work the page never took on, got " + JSON.stringify(h.sync()));
+
+    h.deliverStored();
+    await sleep(20);
+    check(h.tickedPrs() === "118,122,124", "they are still there on the next delivery, got " + h.tickedPrs());
   }
 
   // --------------------------------------------------------------- 12 ----

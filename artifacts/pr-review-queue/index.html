@@ -208,7 +208,7 @@
   // is not a bug: they disagree about one value, and the last one to speak
   // decides.
   const TICKS = "review/checklist/ticks";   // one document per row, below the old one
-  const state = { checked: {} };
+  const LEGACY = "review/checklist";        // the one document every row used to share
   let store = null;         // the db handle, null until window.claude.use("db") resolves
   // Rows this device has toggled and not yet stored: pr -> the value wanted.
   // An untick is a stored `false`, not a deleted key, so nothing has to be
@@ -219,6 +219,11 @@
   const pending = new Map();
   const inflight = new Set();   // rows whose write is on the wire
   const failed = new Set();     // rows whose last write was refused
+  // Each row's stored value as far as this page knows: the last delivered
+  // collection, plus any row whose own write has since landed.
+  const rowDocs = new Map();
+  let legacy = null;            // the old shared map, once a read of it has SUCCEEDED
+  let reading = false;
 
   function row(pr) {
     const li = document.createElement("li");
@@ -288,10 +293,19 @@
     staleHost.append(a);
   }
 
+  // One row's value, resolved where it is READ, from three layers in order of
+  // authority: this device's unstored toggle, then the row's own document,
+  // then -- only if the row has neither -- the old shared document.
+  function valueFor(pr) {
+    if (pending.has(pr)) return pending.get(pr);
+    if (rowDocs.has(pr)) return rowDocs.get(pr);
+    return !!(legacy && legacy[pr]);
+  }
+
   function paint() {
     let done = 0;
     for (const li of document.querySelectorAll("li.row")) {
-      const on = !!state.checked[li.dataset.pr];
+      const on = valueFor(li.dataset.pr);
       li.classList.toggle("is-done", on);
       const box = li.querySelector("input");
       if (box.checked !== on) box.checked = on;
@@ -320,6 +334,7 @@
       .then(() => {
         inflight.delete(pr);
         failed.delete(pr);                  // cleared only by a write that carried THIS row
+        rowDocs.set(pr, want);              // this row's stored value is now known, delivered or not
         if (pending.get(pr) === want) pending.delete(pr);
         else writeRow(pr);                  // it was toggled again while this was in flight
         syncStatus();
@@ -334,29 +349,28 @@
   // which would spin against a store that is simply refusing.
   function flush() { for (const pr of [...pending.keys()]) writeRow(pr); }
 
-  // Rows ticked before this page stored one document per row live in ONE
-  // document, as a map. Read it once and hand each ticked row to the ordinary
-  // write path, which stores it under its own key. The old document is left
-  // exactly as it was, so a viewer served a rolled-back page still finds its
-  // ticks. Two viewers migrating at once write the same values to the same
-  // documents, so that race is a no-op.
-  function migrateLegacy() {
-    new Promise((resolve) => resolve(store.doc("review/checklist").get())).then((snap) => {
+  // Rows ticked before this page stored one document per row live in ONE old
+  // document, as a map. Nothing is copied out of it and nothing records that
+  // anything was: a row with no document of its own reads its value out of the
+  // old document, every time it is read -- so there is no migration pass, no
+  // completion marker, and no partial copy to detect. A read that FAILED is
+  // not a read that returned nothing: it leaves the fallback unknown rather
+  // than empty, so nothing on screen is disturbed and the next delivery asks
+  // again. The old document is never written and never deleted, so a viewer
+  // served a rolled-back page still finds its ticks.
+  function readLegacy() {
+    if (legacy || reading || !store) return;
+    reading = true;
+    new Promise((ok) => ok(store.doc(LEGACY).get())).then((snap) => {
       const body = snap && snap.exists ? snap.data() : null;
-      const checked = body && body.checked;
-      if (!checked || typeof checked !== "object") return;
-      for (const pr of Object.keys(checked)) {
-        if (checked[pr] && !pending.has(pr)) { state.checked[pr] = true; pending.set(pr, true); }
-      }
+      legacy = body && body.checked && typeof body.checked === "object" ? body.checked : {};
+      reading = false;
       paint();
-      flush();
-    }, () => {});
+    }, () => { reading = false; });
   }
 
   function toggle(n, on) {
-    const pr = String(n);
-    state.checked[pr] = on;
-    pending.set(pr, on);
+    pending.set(String(n), on);
     paint();
     flush();
   }
@@ -370,7 +384,7 @@
     let done = 0;
     for (const group of ["quick", "code", "call", "other"]) {
       for (const pr of PRS[group]) {
-        const on = !!state.checked[pr.n];
+        const on = valueFor(String(pr.n));
         if (on) done++;
         lines.push("- [" + (on ? "x" : " ") + "] #" + pr.n + " " + pr.t);
       }
@@ -389,26 +403,19 @@
     if (!db) { sync.textContent = "checklist: this device only"; return; }
     store = db;
     flush();          // whatever was ticked while the handle was still resolving
-    let migrated = false;
     try {
       // Subscribing to the COLLECTION is what makes a remote tick on one row
       // land on that row alone.
       db.collection(TICKS).onSnapshot((snap) => {
         // Display only. No write is ever computed from this, which is why a
         // delivery can no longer clobber anything. The snapshot is the whole
-        // collection, so it is rebuilt rather than merged, with this device's
-        // unstored toggles kept on top so an older echo cannot paint away a
-        // tick the viewer has just made.
-        const next = {};
-        for (const doc of snap.docs) if (doc.exists && doc.data().on) next[doc.id] = true;
-        for (const [pr, on] of pending) { if (on) next[pr] = true; else delete next[pr]; }
-        state.checked = next;
+        // collection, so it is rebuilt rather than merged. A row stored false
+        // is kept, not dropped: that is what shadows the old document.
+        rowDocs.clear();
+        for (const doc of snap.docs) if (doc.exists) rowDocs.set(doc.id, !!doc.data().on);
         paint();
         syncStatus();
-        // An empty collection the SERVER has confirmed is the one moment the old
-        // shared document can still be the only copy. A cached empty snapshot
-        // will not do: migrating off one would re-tick rows since unticked.
-        if (!migrated && snap.empty && !snap.metadata?.fromCache) { migrated = true; migrateLegacy(); }
+        readLegacy();
         flush();   // the retry path after a refused write
       }, (err) => {
         sync.textContent = "checklist: this device only (" + (err && err.code) + ")";

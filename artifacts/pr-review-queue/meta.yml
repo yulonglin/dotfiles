@@ -30,9 +30,10 @@ db_paths:
     deliberately not under data/users/.
   review/checklist: |
     { checked: { "<pull request number>": true, ... }, updatedAt: <epoch ms> }
-    SUPERSEDED, and deliberately left in place. Every row lived in this one
-    document until 2026-09-11, which made each write a read-modify-write of
-    every other row with no compare-and-set to make it safe. The page reads it
-    once, when the ticks collection is empty and the server has confirmed that,
-    and writes each ticked row out under its own key. It is never written or
+    SUPERSEDED, and deliberately left in place as a READ-ONLY FALLBACK. Every
+    row lived in this one document until 2026-09-11, which made each write a
+    read-modify-write of every other row with no compare-and-set to make it
+    safe. Nothing was ever copied out of it: a row with no document of its own
+    reads its value from here, every time it is read, so there is no migration
+    pass to finish and no marker saying one did. It is never written and never
     deleted, so a viewer served a rolled-back page still finds their ticks.
