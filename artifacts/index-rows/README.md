@@ -16,7 +16,7 @@ A page published from now on gets `artifacts/<slug>/` with its source and built 
 | Key | Required | Content |
 |---|---|---|
 | `title` | yes | The page title, as the link text |
-| `url` | yes | The `https://claude.ai/code/artifact/<uuid>` address |
+| `url` | yes | The `https://claude.ai/code/artifact/<uuid>` address, or `unpublished` / `pending-first-publish` before the first publish. Anything else fails the build rather than dropping the row |
 | `org` | yes | `orgName` from `claude auth status` at publish time, or `see note` when it was never recorded |
 | `status` | yes | One of `live`, `done`, `archived`, `superseded`, `elsewhere` — the builder rejects anything else |
 | `status_note` | no | The clause after the status, e.g. `deleted upstream; the URL 404s`. A `superseded` row must link to its replacement here |

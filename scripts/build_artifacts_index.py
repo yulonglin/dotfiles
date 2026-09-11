@@ -44,6 +44,11 @@ STATUSES = ("live", "done", "archived", "superseded", "elsewhere")
 
 URL_RE = re.compile(r"^https://claude\.ai/code/artifact/[0-9a-fA-F-]{36}$")
 
+# The only values that mean "no row yet". Anything else that is not a URL is a
+# typo in a published artifact's address, and dropping its row would delete the
+# repo's only record of that page — so the build fails instead of skipping it.
+PLACEHOLDERS = ("", "unpublished", "pending-first-publish")
+
 REQUIRED = ("title", "url", "org", "status", "last_updated", "summary")
 
 
@@ -96,10 +101,17 @@ def load_rows(root: Path) -> tuple[list[dict], list[tuple[Path, str]]]:
 
         url = str(data.get("url") or "").strip()
         if not URL_RE.match(url):
-            # Not published yet (`unpublished`, `pending-first-publish`, empty).
-            # It has no row until it has a URL; it is reported, never invented.
-            skipped.append((rel, url or "(no url)"))
-            continue
+            if url.lower() in PLACEHOLDERS:
+                # Not published yet. It has no row until it has a URL; it is
+                # reported, never invented.
+                skipped.append((rel, url or "(no url)"))
+                continue
+            raise BuildError(
+                f"{rel}: url '{url}' is neither a published artifact address "
+                f"(https://claude.ai/code/artifact/<uuid>) nor one of the "
+                f"unpublished placeholders {', '.join(PLACEHOLDERS[1:])}. "
+                f"Fix the url — a row is never dropped for an unreadable one."
+            )
 
         missing = [k for k in REQUIRED if not str(data.get(k) or "").strip()]
         if missing:

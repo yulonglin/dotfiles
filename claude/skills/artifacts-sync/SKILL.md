@@ -40,7 +40,7 @@ The table is generated. Each row comes from one file, so two sessions recording 
 | Key in `meta.yml` | Content |
 |---|---|
 | `title` | The page title. It already asserts the finding, so the link doubles as the summary |
-| `url` | The published address. Anything else (`unpublished`, `pending-first-publish`) means no row yet |
+| `url` | The published address. Only `unpublished` and `pending-first-publish` mean no row yet — any other unparseable value fails the build, because a typo must never delete a published page's row |
 | `org` | `orgName` from `claude auth status` **at publish time** |
 | `status` | one of the five below — the builder rejects anything else |
 | `status_note` | The clause after the status. A `superseded` row **must** link to its replacement here |

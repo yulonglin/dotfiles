@@ -129,6 +129,24 @@ class BuilderTest(unittest.TestCase):
         self.assertNotIn("Draft", self.table())
         self.assertIn("not published yet", result.stdout)
 
+    def test_every_supported_placeholder_round_trips(self):
+        """The three forms the schema designates as "no URL yet" — the two
+        sentinels documented in artifacts/index-rows/README.md, plus an
+        absent/empty field — must still be skipped, not rejected."""
+        self.artifact("draft-a", "title: Draft A\nurl: unpublished\nstatus: live\n")
+        self.artifact(
+            "draft-b", "title: Draft B\nurl: pending-first-publish\nstatus: live\n"
+        )
+        self.artifact("draft-c", "title: Draft C\nurl: ''\nstatus: live\n")
+        self.artifact("draft-d", "title: Draft D\nstatus: live\n")
+        self.index_row("a", ROW_A)
+        result = run(self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("1 rows: 1 live.", self.table())
+        for name in ("Draft A", "Draft B", "Draft C", "Draft D"):
+            self.assertNotIn(name, self.table())
+        self.assertEqual(result.stdout.count("not published yet"), 4, result.stdout)
+
     # --- the conflict this change exists to remove ------------------------
 
     def test_two_rows_added_on_two_branches_both_survive_a_merge(self):
@@ -203,6 +221,55 @@ class BuilderTest(unittest.TestCase):
         run(self.root)
         self.assertEqual(run(self.root, "--check").returncode, 0)
 
+    def test_malformed_url_on_a_published_record_is_rejected_not_dropped(self):
+        """A typo in an already-published URL used to delete that row from the
+        table with exit 0. ARTIFACTS.md is the only index of published pages, so
+        an unparseable URL is invalid metadata and must fail the build."""
+        self.index_row("a", ROW_A)
+        self.index_row("b", ROW_B)
+        self.assertEqual(run(self.root).returncode, 0)
+        self.assertIn("2 rows", self.table())
+        before = (self.root / "ARTIFACTS.md").read_text(encoding="utf-8")
+
+        bad = ROW_B.replace(
+            "222222222222\n", "222222222222/\n"
+        )  # one trailing slash
+        self.index_row("b", bad)
+        result = run(self.root)
+
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("b.yml", result.stderr)
+        self.assertIn(
+            "https://claude.ai/code/artifact/22222222-2222-2222-2222-222222222222/",
+            result.stderr,
+        )
+        self.assertNotIn("not published yet", result.stdout)
+        self.assertEqual(
+            (self.root / "ARTIFACTS.md").read_text(encoding="utf-8"),
+            before,
+            "a rejected build must not rewrite the index",
+        )
+
+    def test_check_mode_fails_on_a_malformed_url(self):
+        """--check exiting 0 while a row is dropped is how CI approved an index
+        that had quietly lost a publication."""
+        self.index_row("a", ROW_A)
+        self.index_row("b", ROW_B)
+        self.assertEqual(run(self.root).returncode, 0)
+        self.index_row("b", ROW_B.replace("222222222222\n", "222222222222/\n"))
+        result = run(self.root, "--check")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("b.yml", result.stderr)
+
+    def test_url_that_is_not_an_artifact_address_is_rejected(self):
+        self.index_row("a", ROW_A.replace(
+            "https://claude.ai/code/artifact/11111111-1111-1111-1111-111111111111",
+            "https://example.com/some-page",
+        ))
+        result = run(self.root)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("https://example.com/some-page", result.stderr)
+
     def test_invented_status_is_rejected(self):
         self.index_row("a", ROW_A.replace("status: live", "status: shipped"))
         result = run(self.root)
@@ -256,6 +323,21 @@ class RealRepoTest(unittest.TestCase):
     def test_committed_index_is_current(self):
         result = run(REPO, "--check")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_real_tree_row_count_is_unchanged(self):
+        """Pins the count the fix must not move: every published meta.yml in the
+        repo still produces exactly one row."""
+        published = sum(
+            1
+            for p in [*REPO.glob("artifacts/*/meta.yml"),
+                      *REPO.glob("artifacts/index-rows/*.yml")]
+            if p.read_text(encoding="utf-8").count("url: https://claude.ai/code/artifact/")
+        )
+        result = run(REPO, "--check")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"({published} rows)", result.stdout)
+        self.assertIn(f"{published} rows:",
+                      (REPO / "ARTIFACTS.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
