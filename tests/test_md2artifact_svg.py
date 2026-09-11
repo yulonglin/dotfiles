@@ -8,12 +8,21 @@ fence is the third deliberate exception to html-off, alongside mermaid and
 <details>.
 
 It is also the only exception that emits user text UNESCAPED, so it pays for
-that with a sanitising check: the body must parse as one well-formed <svg>
-element carrying nothing on the denylist below. Anything rejected falls back to
-an escaped code block plus a visible note — exactly what a plain fence did
+that with a sanitising check, and that check is two allowlists: an element
+vocabulary, and a positive grammar for styling — a property this feature needs
+whose value is a colour, a number, a bare word, a numeric colour function or a
+same-document `url(#id)`. Anything else refuses. Anything rejected falls back
+to an escaped code block plus a visible note — exactly what a plain fence did
 before — so the property the passthrough registry exists to hold is unchanged:
 a Markdown document you did not write cannot put script into your published
 page.
+
+The styling half used to be a text matcher searching a flattened string for
+dangerous constructs, and it was bypassed three times: an escaped spelling, a
+comment, and a shorthand keyword that the flattening joined to the function
+name after it. Those three now fail on the same rule, because the grammar has
+no production for any of them — which is the property a denylist over a
+language with that much lexical freedom could never have.
 """
 
 from __future__ import annotations
@@ -605,13 +614,14 @@ def test_a_ping_attribute_is_rejected(tmp_path: Path) -> None:
 
 
 def test_parentheses_and_apostrophes_in_label_text_are_still_accepted(tmp_path: Path) -> None:
-    """The fetch rules name constructs; they do not allowlist function syntax.
+    """Label text is the reason the grammar is routed by attribute name.
 
-    Every attribute value goes through css_fault, and chart labels contain
-    parentheses and apostrophes — `aria-label="Bar chart image (USD)"` reads as
-    a function call to any matcher naive enough to allowlist `ident(`. Refusing
-    that would refuse real charts, which is why the fetch rules stay a named
-    denylist and why that denylist is incomplete by construction.
+    `aria-label="Bar chart image (USD)"` reads as a function call to any
+    matcher that allowlists `ident(`, and refusing it would refuse real
+    charts. So `aria-*`, `role`, `lang` and `title` are the names granted a
+    plain-text shape, while every other attribute value has to satisfy the
+    styling-value grammar — the looseness is granted to a name that was
+    positively recognised, never to a value that happened to look benign.
     """
     body = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9" role="img"'
@@ -621,3 +631,199 @@ def test_parentheses_and_apostrophes_in_label_text_are_still_accepted(tmp_path: 
     html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
     assert body in html
     assert NOTE not in html
+
+
+# ─── The third bypass, and why the matcher was replaced by a grammar ──────────
+# A shorthand property legitimately takes a keyword before the value that
+# fetches. The old check flattened the declaration to a single string before
+# matching, which joined that keyword to the function name and so destroyed the
+# leading boundary the match needed — the comment claiming that removing
+# whitespace "can only ever produce MORE matches than a parser sees" was false,
+# and this is the counter-example. Confirmed accepted by the old check, and
+# confirmed fetching in Chromium by the reviewer who reported it.
+#
+# These cases are refused now by the POSITIVE GRAMMAR, not by a rule naming
+# them: the grammar permits one function spelling in a value (`url(#id)`) plus
+# the numeric colour functions, so a function it has never heard of refuses
+# whatever the surrounding whitespace does. The same grammar is what refuses
+# the two spellings fixed before it — escapes and comments — so all three are
+# now covered by one rule instead of three special cases.
+WHITESPACE_JOINED = {
+    "style_element_shorthand_keyword_joins_function": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>rect{background:no-repeat image-set("https://example.invalid/p.png" 1x)}</style>'
+        "</svg>"
+    ),
+    "style_element_mask_shorthand_keyword_joins_function": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>rect{mask:no-repeat image-set("https://example.invalid/p.png" 1x)}</style></svg>'
+    ),
+    "style_attribute_shorthand_keyword_joins_function": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<rect style=\"background:repeat-x image-set('https://example.invalid/p.png' 1x)\""
+        ' width="9"/></svg>'
+    ),
+    "style_element_shorthand_keyword_joins_url": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>rect{background:no-repeat url(https://example.invalid/p.png)}</style></svg>"
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(WHITESPACE_JOINED))
+def test_a_keyword_abutting_the_function_after_flattening_is_rejected(
+    case: str, tmp_path: Path
+) -> None:
+    html = _render(f"# Page\n\n```svg\n{WHITESPACE_JOINED[case]}\n```\n", tmp_path)
+    assert NOTE in html, f"{case}: no rejection note"
+    assert "<svg" not in html, f"{case}: inlined a fence that can fetch an external resource"
+
+
+# ─── The grammar refuses by shape, so a new spelling is refused unread ────────
+# Every case below is a construct the grammar has no production for. None of
+# them needs its own rule: `@`, `\`, `/*`, a quote outside a font stack and an
+# unknown function name are all simply characters and tokens the value grammar
+# never permits.
+UNRECOGNISED_SHAPES = {
+    "unknown_property": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>rect{behavior:default}</style></svg>"
+    ),
+    "unknown_function": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>rect{width:calc(100% - 2px)}</style></svg>"
+    ),
+    "at_rule": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>@media screen{rect{fill:#333}}</style></svg>"
+    ),
+    "backslash_in_a_value": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>rect{fill:\\23 333}</style></svg>"
+    ),
+    "string_outside_a_font_stack": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>rect{fill:"https://example.invalid/p.png"}</style></svg>'
+    ),
+    "attribute_selector": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>rect[fill]{fill:#333}</style></svg>"
+    ),
+    "unknown_transform_function": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect transform="attr(href)" width="9"/></svg>'
+    ),
+    "external_namespace_declaration": (
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:z="https://example.invalid/ns">'
+        '<rect width="9"/></svg>'
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(UNRECOGNISED_SHAPES))
+def test_a_shape_the_grammar_does_not_permit_is_rejected(case: str, tmp_path: Path) -> None:
+    html = _render(f"# Page\n\n```svg\n{UNRECOGNISED_SHAPES[case]}\n```\n", tmp_path)
+    assert NOTE in html, f"{case}: no rejection note"
+    assert "<svg" not in html, f"{case}: inlined a fence the grammar cannot recognise"
+
+
+def test_the_note_names_the_property_that_refused(tmp_path: Path) -> None:
+    """A legitimate diagram that trips the grammar has to be fixable.
+
+    Naming the property is the whole difference between 'add this to the
+    allowlist' and a chart that mysteriously became a code block.
+    """
+    html = _render(
+        '# Page\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>rect{behavior:default}</style></svg>\n```\n",
+        tmp_path,
+    )
+    assert "behavior" in html
+
+
+def test_the_grammar_accepts_the_styling_a_real_diagram_uses(tmp_path: Path) -> None:
+    """The cost check: the properties and value shapes measured in this repo.
+
+    Every property here is used by a diagram in this repo's tests or in the
+    `tufte-data-viz` skill's SVG templates. If the allowlist ever has to grow,
+    this is where the new property gets pinned.
+    """
+    body = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60"'
+        ' style="vertical-align:middle;background:#fffff8">'
+        "<style>"
+        ".tufte-chart text { font-family: 'ET Book', Palatino, Georgia, serif;"
+        " font-size: 11px; fill: #999; letter-spacing: 0.05em }"
+        ".axis-line, .tick line { stroke: #ccc; stroke-width: 0.5;"
+        " stroke-dasharray: 4 3; stroke-linejoin: round }"
+        ".domain { display: none }"
+        ".data-line { fill: none; stroke: rgba(102, 102, 102, 0.9); stroke-width: 1.5 }"
+        "</style>"
+        '<polyline class="data-line" points="0,15.3 10,12.8 20,9.4 30,13.6"/>'
+        '<circle cx="0" cy="15.3" r="1.5" fill="#4e79a7" fill-opacity=".8"/>'
+        '<text x="10" y="50" text-anchor="middle" font-weight="400" font-style="italic"'
+        ' opacity="0.9" paint-order="stroke">label</text>'
+        '<g transform="translate(60, 40)" clip-path="url(#clip)">'
+        '<rect width="9" height="9" stroke-linecap="round" vector-effect="non-scaling-stroke"/>'
+        "</g></svg>"
+    )
+    html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
+    assert NOTE not in html
+    assert body in html
+
+
+# ─── The cost of the grammar, measured against real diagrams ─────────────────
+# Every SVG in this repo's documentation, as the documentation writes it. The
+# grammar was built from these plus the charts above, so if it ever has to be
+# widened or narrowed, this is what says whether a real diagram paid for it.
+# Both carry HTML comments, which an ```svg fence has refused since before the
+# grammar existed, so they are exercised the way a fence would have to carry
+# them: with the comments taken out.
+TUFTE_BASE_TEMPLATE = """<svg viewBox="0 0 750 500" xmlns="http://www.w3.org/2000/svg"
+     style="font-family: 'ET Book', 'Palatino Linotype', Palatino, Georgia, serif;
+            background: #fffff8;">
+  <g transform="translate(60, 40)">
+  </g>
+</svg>"""
+
+TUFTE_SPARKLINE = """<svg viewBox="0 0 80 20" width="80" height="20" xmlns="http://www.w3.org/2000/svg"
+     style="vertical-align: middle;">
+  <polyline
+    points="0,15.3 10,12.8 20,9.4 30,13.6 40,6.8 50,10.2 60,4.3 70,9.4 80,7.7"
+    fill="none"
+    stroke="#666"
+    stroke-width="1"
+    stroke-linejoin="round"
+  />
+  <circle cx="0" cy="15.3" r="1.5" fill="#4e79a7" />
+  <circle cx="60" cy="4.3" r="1.5" fill="#e15759" />
+  <circle cx="80" cy="7.7" r="1.5" fill="#666" />
+</svg>"""
+
+
+@pytest.mark.parametrize(
+    "case,body",
+    [("tufte_base_template", TUFTE_BASE_TEMPLATE), ("tufte_sparkline", TUFTE_SPARKLINE)],
+)
+def test_the_documented_diagrams_still_inline(case: str, body: str, tmp_path: Path) -> None:
+    html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
+    assert NOTE not in html, f"{case}: the grammar refuses a diagram the docs ship"
+    assert body in html
+
+
+def test_mask_type_is_in_the_vocabulary(tmp_path: Path) -> None:
+    """Added as a decision, not a measurement.
+
+    <mask> is in the element vocabulary and `mask-type` is how its mode is
+    selected, so the gap was real even though the only file in this repo that
+    uses it is refused anyway for embedding a raster <image>. The value is a
+    keyword and cannot fetch.
+    """
+    body = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9">'
+        '<mask id="m" style="mask-type:alpha"><rect width="9" height="9" fill="#fff"/></mask>'
+        '<rect width="9" height="9" mask="url(#m)"/></svg>'
+    )
+    html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
+    assert NOTE not in html
+    assert body in html
