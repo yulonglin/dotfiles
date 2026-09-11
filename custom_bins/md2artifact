@@ -4,7 +4,8 @@
 Renders Markdown to a self-contained page carrying the review affordances that
 the `artifact-writing` skill requires: a sticky table of contents built
 from the headings, select-to-comment annotation, per-comment edit and delete,
-an unexported-comments guard on tab close, and clipboard export. There is no
+task-list items that keep their state across a reload and travel with the
+export, an unexported-comments guard on tab close, and clipboard export. There is no
 file export: a page-initiated download is inert in the Artifact viewer.
 
 Markdown artifacts cannot carry JavaScript, so a spec or report published as
@@ -13,6 +14,7 @@ raw `.md` silently loses all of that. Run it through here first.
     md2artifact spec.md                  # -> spec.review.html
     md2artifact spec.md -o /tmp/out.html
     md2artifact spec.md --title "P1 spec" --no-toc
+    md2artifact spec.md --states approve,approve-pending-edits,deny
 
 The output is a fragment (no <html>/<head>/<body>), which is what the Artifact
 tool expects; it is also viewable directly in a browser.

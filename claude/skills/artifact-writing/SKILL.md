@@ -69,6 +69,12 @@ Known edges, reviewed by council 2026-09-02 and left as they are because none lo
 
 Test it by typing the shortcut letters into a real comment box and asserting the page state did not change. A page whose shortcuts are only tested outside the comment box has not been tested.
 
+## Checklist state persists and copies out
+
+`- [ ] item` renders a real checkbox whose state is stored under `an-states:<key>`, prefix-namespaced away from the comment array and read back on load; every read and write is wrapped, so blocked site data costs the persistence and nothing else. Copy all gains a leading `## Checklist` section listing each item as `- [x] label`, so the verdict travels with the notes explaining it. This is a control a reviewer operates, not prose, so the no-checkboxes-in-docs rule does not reach it.
+
+**A two-state checkbox is the default, not the only option.** `md2artifact --states approve,approve-pending-edits,deny` replaces it with a button cycling that set, named for screen readers and operated by Enter or Space; `[ ]` starts at the first state and `[x]` at the last, and the export writes the state in the brackets (`- [deny] label`). Declare nothing and the page stays exactly the plain-checkbox page it was. The wiring keys on `data-an-state-id`, so a hand-written page emitting the same wrapper gets all of it.
+
 ## The viewer sandbox refuses modals and downloads
 
 **`confirm`, `alert` and `prompt` do not exist in the Artifact viewer.** The viewer renders the page inside a sandboxed iframe with no `allow-modals` keyword, so `window.confirm` returns false without ever asking — Chrome only logs `Ignored call to 'confirm()'. The document is sandboxed`. A destructive control that returns early on that refusal is a dead button in the one place the page is actually read. This bit three controls at once: **Delete all** and the per-comment **delete** in the annotation layer, and a **Reset marks** button in the host page itself — so it is a rule about every control on every artifact, not a quirk of the layer. Guard destructive controls in the page instead: the button arms on the first click, says what the second click will destroy, and disarms on a timeout, on Escape, or on any re-render. Never stub `window.confirm` to test such a path — the stub supplies the dialog the viewer never will, so it hides exactly this bug. Test the control inside `<iframe sandbox="allow-scripts allow-same-origin">`, which is what the viewer does.
