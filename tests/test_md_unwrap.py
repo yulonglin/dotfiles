@@ -11,6 +11,7 @@ Run: python3 -m unittest tests.test_md_unwrap   (or pytest tests/test_md_unwrap.
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -446,6 +447,253 @@ class TestHardBreaksSurviveJoining(unittest.TestCase):
         self.assertEqual("alpha one alpha two\n", fix("alpha one\nalpha two \n"))
 
 
+def render_commonmark(text: str) -> str:
+    """Render with a strict CommonMark implementation, pulled through uv if needed."""
+    try:
+        from markdown_it import MarkdownIt
+    except ImportError:
+        pass
+    else:
+        return MarkdownIt("commonmark").render(text)
+    probe = subprocess.run(
+        ["uv", "run", "--no-project", "--with", "markdown-it-py", "python", "-c",
+         ("import sys;from markdown_it import MarkdownIt;"
+          "sys.stdout.write(MarkdownIt('commonmark').render(sys.stdin.read()))")],
+        capture_output=True, text=True, input=text,
+    )
+    if probe.returncode != 0:
+        raise unittest.SkipTest("no CommonMark renderer available: " + probe.stderr[-200:])
+    return probe.stdout
+
+
+class TestBlocksNestedInsideContainers(unittest.TestCase):
+    """A block start is measured from its CONTAINER's column, not from column zero.
+
+    Round two moved the HTML-block guard above the pipe heuristic, on the rule
+    that a guard installing protection STATE must beat a guard that skips one
+    line. The rule was right and the reading of it was too narrow: a guard that
+    is never REACHED is as absent as one that runs too late. A fence or a raw
+    HTML element written directly after a list marker was taken by the list-item
+    guard, which skips exactly one line; the block was never entered, and every
+    line of it was joined onto the opening fence's info string. A two-line code
+    block came out rendering as an empty one.
+
+    So the recogniser now runs against the line with its container prefixes
+    removed, at every column CommonMark allows: column zero, an item's content
+    column, and inside a blockquote. Indented code still wins at four columns
+    past the container, which is the line CommonMark draws.
+    """
+
+    MARKERS = ("-", "*", "+", "1.", "2)")
+    FENCES = ("```", "~~~")
+    LANGS = ("", "python")
+    RAW_TAGS = ("pre", "script", "style", "textarea")
+
+    def assert_untouched(self, source: str, message: str = "") -> None:
+        fixed, merged, _ = md_unwrap.unwrap(source)
+        self.assertEqual([], merged, message or source)
+        self.assertEqual(source, fixed, message or source)
+        self.assertEqual(render_commonmark(source), render_commonmark(fixed), message or source)
+
+    def test_a_fence_opened_on_the_list_marker_line_is_a_code_block(self):
+        for marker in self.MARKERS:
+            for fence in self.FENCES:
+                for lang in self.LANGS:
+                    with self.subTest(marker=marker, fence=fence, lang=lang):
+                        pad = " " * (len(marker) + 1)
+                        source = (f"{marker} {fence}{lang}\n"
+                                  f"{pad}x = 1\n{pad}y = 2\n{pad}{fence}\n")
+                        self.assert_untouched(source)
+
+    def test_a_fence_on_its_own_line_at_the_items_content_column(self):
+        for marker in self.MARKERS:
+            for fence in self.FENCES:
+                with self.subTest(marker=marker, fence=fence):
+                    pad = " " * (len(marker) + 1)
+                    source = (f"{marker} item body\n\n"
+                              f"{pad}{fence}sh\n{pad}x = 1\n{pad}y = 2\n{pad}{fence}\n")
+                    self.assert_untouched(source)
+
+    def test_a_raw_html_block_opened_on_the_list_marker_line(self):
+        for marker in self.MARKERS:
+            for tag in self.RAW_TAGS:
+                with self.subTest(marker=marker, tag=tag):
+                    pad = " " * (len(marker) + 1)
+                    source = (f"{marker} <{tag}>\n"
+                              f"{pad}first inner line\n\n{pad}second inner line\n"
+                              f"{pad}</{tag}>\n")
+                    self.assert_untouched(source)
+
+    def test_a_generic_html_block_opened_on_the_list_marker_line(self):
+        self.assert_untouched('- <div class="a|b">\n  line one\n  line two\n  </div>\n')
+
+    def test_content_dedented_out_of_the_item_is_prose_again(self):
+        # An HTML block is not lazy, so unindented lines leave the item and are
+        # an ordinary paragraph — joining them is the right answer, and the
+        # rendered code block above them is unaffected.
+        source = '- <div class="a|b">\nline one\nline two\n</div>\n'
+        self.assertEqual('- <div class="a|b">\nline one line two\n</div>\n', fix(source))
+
+    def test_an_html_comment_opened_on_the_list_marker_line(self):
+        self.assert_untouched("- <!-- columns | rows\n  comment one\n  comment two\n  -->\n")
+
+    def test_a_fence_inside_a_blockquote(self):
+        for fence in self.FENCES:
+            with self.subTest(fence=fence):
+                self.assert_untouched(f"> {fence}py\n> x = 1\n> y = 2\n> {fence}\n")
+
+    def test_a_raw_html_block_inside_a_blockquote(self):
+        self.assert_untouched("> <pre>\n> first inner line\n> second inner line\n> </pre>\n")
+
+    def test_a_fence_inside_a_list_inside_a_blockquote(self):
+        for fence in self.FENCES:
+            with self.subTest(fence=fence):
+                self.assert_untouched(f"> - {fence}py\n>   x = 1\n>   y = 2\n>   {fence}\n")
+
+    def test_a_fence_two_list_levels_deep(self):
+        self.assert_untouched("- outer\n  - inner\n\n    ```py\n    x = 1\n    y = 2\n    ```\n")
+
+    def test_a_block_leaving_its_blockquote_does_not_protect_the_prose_after_it(self):
+        # <pre> is not lazy, so the unquoted lines are a plain paragraph and
+        # joining them is the right answer.
+        self.assertEqual(
+            "> <pre>\nprose one prose two\n",
+            fix("> <pre>\nprose one\nprose two\n"),
+        )
+
+
+class TestClosingDelimiterIndentation(unittest.TestCase):
+    """The closing fence is measured against the container column too.
+
+    CommonMark lets the closing fence sit up to three spaces past its
+    container's content column, and ends the block with the container when a
+    line dedents out of it. Matching the closer against column zero alone either
+    reopens the document mid-code-block or freezes the rest of the file.
+    """
+
+    def test_a_closer_three_columns_past_the_container_still_closes(self):
+        source = "- ```py\n  x = 1\n     ```\nprose one\nprose two\n"
+        self.assertEqual(
+            "- ```py\n  x = 1\n     ```\nprose one prose two\n",
+            fix(source),
+        )
+        self.assertIn("<code", render_commonmark(fix(source)))
+
+    def test_a_closer_four_columns_past_the_container_stays_inside_the_block(self):
+        source = "- ```py\n  x = 1\n      ```\nprose one\nprose two\n"
+        self.assertEqual("- ```py\n  x = 1\n      ```\nprose one prose two\n", fix(source))
+
+    def test_an_item_ending_closes_the_fence_it_opened(self):
+        source = "- ```py\n  x = 1\n\nprose one\nprose two\n"
+        self.assertEqual("- ```py\n  x = 1\n\nprose one prose two\n", fix(source))
+
+    def test_a_construct_indented_under_a_paragraph_continuation_is_left_alone(self):
+        # Four spaces after a paragraph line is a lazy continuation, not a
+        # fence. The tool does not join it — under-fixing, never corrupting.
+        for construct in ("```", "~~~", "<pre>"):
+            with self.subTest(construct=construct):
+                source = f"prose line\n    {construct}\nstill prose\n"
+                self.assertEqual(source, fix(source))
+
+
+class TestRefusesDocumentsItCannotFollow(unittest.TestCase):
+    """Out of its depth is reported, never silently rewritten."""
+
+    def test_an_unterminated_fence_leaves_the_whole_document_alone(self):
+        source = "```py\nx = 1\nprose one\nprose two\n"
+        fixed, merged, _, refusal = md_unwrap.analyse(source)
+        self.assertEqual(source, fixed)
+        self.assertEqual([], merged)
+        self.assertIn("unterminated code fence", refusal)
+
+    def test_an_unterminated_raw_html_block_leaves_the_whole_document_alone(self):
+        source = "<pre>\na\nprose one\nprose two\n"
+        _, merged, _, refusal = md_unwrap.analyse(source)
+        self.assertEqual([], merged)
+        self.assertIn("unterminated", refusal)
+
+    def test_the_cli_reports_the_refusal_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "unterminated.md"
+            source = "```py\nx = 1\nprose one\nprose two\n"
+            target.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--fix", str(target)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(source, target.read_text(encoding="utf-8"))
+            self.assertIn("left unchanged", result.stderr)
+            self.assertIn("unterminated code fence opened at line 1", result.stderr)
+
+
+class TestNoJoinInsideANestedProtectedRegion(unittest.TestCase):
+    """The property check of the round-two fix, run again inside every container.
+
+    The flat matrix stayed green through this defect: nothing in it was indented
+    under anything. Each document is rebuilt inside a list item, a blockquote and
+    a list inside a blockquote, and the ground truth reads the same documents
+    with the container prefix removed.
+    """
+
+    CONTAINERS = (
+        ("- ", "  "),
+        ("* ", "  "),
+        ("+ ", "  "),
+        ("1. ", "   "),
+        ("10) ", "    "),
+        ("> ", "> "),
+        ("> - ", ">   "),
+    )
+
+    def wrap(self, lines: list[str], first: str, rest: str) -> list[str]:
+        return [(first if i == 0 else rest) + line for i, line in enumerate(lines)]
+
+    def unwrap_prefix(self, line: str, first: str, rest: str, index: int) -> str:
+        prefix = first if index == 0 else rest
+        return line[len(prefix):] if line.startswith(prefix) else line
+
+    def test_no_nested_document_is_joined_inside_its_block(self):
+        flat = TestNoJoinInsideAProtectedRegion()
+        checked = 0
+        for opener, lines in flat.documents():
+            for first, rest in self.CONTAINERS:
+                nested = self.wrap(lines, first, rest)
+                bare = [self.unwrap_prefix(line, first, rest, i)
+                        for i, line in enumerate(nested)]
+                checked += 1
+                clash = set(md_unwrap.merge_indices(nested)) & flat.protected_lines(bare)
+                self.assertEqual(
+                    set(), clash,
+                    f"joined inside {opener!r} nested under {first!r}: lines {sorted(clash)}",
+                )
+        self.assertGreater(checked, 1000, "the nesting matrix shrank")
+
+    def test_the_rendering_of_every_nested_document_survives_the_fix(self):
+        """What a reader sees must not move, whatever --fix does to the bytes.
+
+        Joining a wrapped paragraph turns a newline inside a <p> into a space
+        and changes nothing else, so comparing the rendered HTML with runs of
+        whitespace collapsed is exactly the invariant: a block whose start was
+        missed loses its <pre>, which no amount of whitespace collapsing hides.
+        """
+        flat = TestNoJoinInsideAProtectedRegion()
+        def collapse(html: str) -> str:
+            return re.sub(r"\s+", " ", html).strip()
+
+        checked = 0
+        for _opener, lines in flat.documents():
+            for first, rest in (("", ""), *self.CONTAINERS):
+                source = "".join((first if i == 0 else rest) + line + "\n"
+                                 for i, line in enumerate(lines))
+                checked += 1
+                self.assertEqual(
+                    collapse(render_commonmark(source)),
+                    collapse(render_commonmark(fix(source))),
+                    f"--fix changed what {first!r}-nested document renders as:\n{source}",
+                )
+        self.assertGreater(checked, 1000, "the nesting matrix shrank")
+
+
 # Documents that previously moved on a second --fix. The repo's own Markdown
 # does not happen to contain these shapes, so the corpus sweep below would pass
 # on the broken fixer without them.
@@ -461,6 +709,11 @@ ADVERSARIAL_FIXTURES = {
     "script-with-a-pipe-on-the-opening-line": "<script>var re = /a|b/;\nx = 1\n\ny = 2\nz = 3\n</script>\n",
     "comment-with-a-pipe-on-the-opening-line": "<!-- cols | rows\nline one\nline two\n-->\n",
     "table-directly-under-prose": "Intro prose line.\n| a | b |\n|---|---|\n| 1 | 2 |\n",
+    "fence-on-a-list-marker-line": "- ```python\n  x = 1\n  y = 2\n  ```\n",
+    "tilde-fence-on-a-list-marker-line": "* ~~~\n  x = 1\n  y = 2\n  ~~~\n",
+    "pre-on-a-list-marker-line": "1. <pre>\n   a\n\n   b\n   </pre>\n",
+    "fence-inside-a-blockquote-list": "> - ```py\n>   x = 1\n>   y = 2\n>   ```\n",
+    "closer-indented-past-the-container": "- ```py\n  x = 1\n     ```\nprose one\nprose two\n",
 }
 
 

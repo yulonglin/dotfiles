@@ -30,6 +30,19 @@ corrupts documentation:
 
 A one-line paragraph is never a violation — shortness is not wrapping.
 
+Blocks nest. A fence or an HTML element is recognised relative to its CONTAINER
+— written directly after a list marker, at a list item's continuation column, or
+inside a blockquote — because CommonMark measures a block start from the
+container's content column and calls four columns past it indented code. The
+closing delimiter is measured against the same column, and a line that dedents
+out of the item or leaves the blockquote closes what was opened inside it.
+Handled: a list item, a blockquote, a list inside a blockquote, and any depth of
+list nesting. NOT handled, and left alone rather than joined: a construct
+indented four or more columns past its container (CommonMark reads it as
+indented code, and so do we), and a fence indented under a paragraph
+continuation. If a fence or a raw HTML block is still open at the end of the
+file, the document was not understood: it is reported and left untouched.
+
 Exit codes: 0 clean (or fixed), 1 violations found under --check, 2 usage error.
 """
 
@@ -40,18 +53,33 @@ import re
 import sys
 from pathlib import Path
 
-FENCE_RE = re.compile(r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})")
+FENCE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})")
 ATX_RE = re.compile(r"^ {0,3}#{1,6}(?:\s|$)")
 THEMATIC_RE = re.compile(r"^ {0,3}([-*_])[ \t]*(?:\1[ \t]*){2,}$")
 SETEXT_RE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
 LIST_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
+LIST_MARKER_RE = re.compile(r"^ *(?P<marker>[-*+]|\d{1,9}[.)])(?P<spaces>[ \t]*)(?P<body>.*)$")
 LINK_DEF_RE = re.compile(r"^ {0,3}\[[^\]]+\]:")
-HTML_START_RE = re.compile(r"^ {0,3}<")
-HTML_RAW_RE = re.compile(r"^ {0,3}<(script|pre|style|textarea)\b", re.IGNORECASE)
+HTML_START_RE = re.compile(r"^<")
+HTML_RAW_RE = re.compile(r"^<(script|pre|style|textarea)\b", re.IGNORECASE)
 HARD_BREAK_RE = re.compile(r"(?:  +|\\)$")
 LABEL_RE = re.compile(r"^ {0,3}(?:\*\*|__)[^*_]+(?:\*\*|__)\s*:")
+QUOTE_PREFIX_RE = re.compile(r"^ {0,3}>[ \t]?")
 
 DEFAULT_EXCLUDES = (".git", "node_modules", ".venv", "__pycache__")
+
+# The container column a construct is measured against. CommonMark recognises a
+# block start at 0-3 spaces of indentation RELATIVE TO ITS CONTAINER, and treats
+# 4 or more as indented code; inside a list item the container column is the
+# item's content column, not column zero.
+BLOCK_INDENT = 3
+
+
+def _advance(column: int, text: str) -> int:
+    """The column reached after `text`, with tabs going to the next 4-stop."""
+    for char in text:
+        column += 4 - (column % 4) if char == "\t" else 1
+    return column
 
 
 def _indent_width(line: str) -> int:
@@ -66,8 +94,116 @@ def _indent_width(line: str) -> int:
     return width
 
 
-def merge_indices(lines: list[str]) -> list[int]:
-    """Indices of lines that continue the previous line and should be joined to it."""
+def _strip_quotes(line: str) -> tuple[int, str]:
+    """(blockquote depth, the line's content inside those blockquotes)."""
+    depth = 0
+    rest = line
+    while True:
+        match = QUOTE_PREFIX_RE.match(rest)
+        if not match:
+            return depth, rest
+        depth += 1
+        rest = rest[match.end():]
+
+
+def _list_marker(rest: str, indent: int) -> tuple[int, str | None] | None:
+    """(content column, text after the marker) for a list item opened by `rest`.
+
+    The text is None when nothing on the line can start a block inside the item
+    — an empty item, or a marker followed by enough spaces to make the remainder
+    indented code.
+    """
+    if THEMATIC_RE.match(rest):
+        return None
+    match = LIST_MARKER_RE.match(rest)
+    if not match:
+        return None
+    marker_end = indent + len(match.group("marker"))
+    spaces, body = match.group("spaces"), match.group("body")
+    if not spaces:
+        # "-foo" is not a list item; "-" alone is an empty one.
+        return (marker_end + 1, None) if not body else None
+    if not body:
+        return marker_end + 1, None
+    content_col = _advance(marker_end, spaces)
+    if content_col - marker_end > 4:
+        return marker_end + 1, None
+    return content_col, body
+
+
+def _block_start(body: str, container_col: int, depth: int) -> dict | None:
+    """Protection state for a fence or HTML block opened by `body`, or None.
+
+    `body` is the line with its indentation and any blockquote and list markers
+    already removed, so the same recogniser serves column zero, a list item's
+    content column and the inside of a blockquote. `container_col` is the column
+    the block's closing delimiter is measured against.
+
+    A block that opens and closes on this one line comes back as kind "done":
+    the line is still a block, so nothing may be joined onto it, but no
+    protection outlives it.
+    """
+    state = {"col": container_col, "depth": depth}
+    done = {**state, "kind": "done"}
+    fence = FENCE_RE.match(body)
+    if fence:
+        marker = fence.group("fence")
+        return {**state, "kind": "fence", "char": marker[0], "length": len(marker)}
+    if not HTML_START_RE.match(body):
+        return None
+    lowered = body.lower()
+    if body.startswith("<!--"):
+        return done if "-->" in body else {**state, "kind": "html", "end": "-->"}
+    raw = HTML_RAW_RE.match(body)
+    if raw:
+        # CommonMark HTML block type 1: <pre>, <script>, <style> and <textarea>
+        # run to their CLOSING TAG, and a blank line inside one does not end it.
+        closer = f"</{raw.group(1).lower()}>"
+        return done if closer in lowered else {**state, "kind": "html", "end": closer}
+    return {**state, "kind": "html", "end": "blank"}
+
+
+def _block_status(block: dict, depth: int, rest: str, indent: int) -> str:
+    """"open", "closed_consuming" (this line is the delimiter) or "closed_before".
+
+    "closed_before" is the container ending under the block: a non-blank line
+    that leaves the blockquote or dedents out of the list item closes every
+    block open inside it, and belongs to whatever comes next.
+    """
+    stripped = rest.strip()
+    if stripped:
+        if depth < block["depth"]:
+            return "closed_before"
+        if block["col"] and depth == block["depth"] and indent < block["col"]:
+            return "closed_before"
+    if block["kind"] == "fence":
+        closer = re.compile(r"^ *" + re.escape(block["char"]) + r"{" + str(block["length"]) + r",}[ \t]*$")
+        # The closing fence may be indented up to three spaces past its
+        # container's content column — not past column zero.
+        if indent <= block["col"] + BLOCK_INDENT and closer.match(rest):
+            return "closed_consuming"
+        return "open"
+    if block["end"] == "blank":
+        return "open" if stripped else "closed_consuming"
+    return "closed_consuming" if block["end"] in rest.lower() else "open"
+
+
+def scan(lines: list[str]) -> tuple[list[int], str | None]:
+    """(indices of lines to join onto the previous one, refusal reason or None).
+
+    A refusal reason means the document ran past the end of a block this scanner
+    could not see closed, so its structure was not understood and nothing may be
+    rewritten. Refusing loudly is the acceptable failure; joining lines inside a
+    block we misread is not.
+
+    ORDERING RULE, which the whole scanner is arranged around: the two guards
+    that install protection STATE lasting until a closing delimiter — the code
+    fence and the raw HTML block — are recognised FIRST, for every line, before
+    any guard that merely skips a single line (indented code, the pipe/table
+    heuristic, link definitions, headings, blockquotes, list markers, labels).
+    A skip guard that runs first costs one line; a state guard that never runs
+    costs every line of the block, joined as if it were prose.
+    """
     merges: list[int] = []
     total = len(lines)
     index = 0
@@ -79,99 +215,87 @@ def merge_indices(lines: list[str]) -> list[int]:
             index += 1
         index = min(index + 1, total)
 
-    fence: tuple[str, int] | None = None
-    html_end: str | None = None  # None, "blank", or a closing tag to look for
+    block: dict | None = None
+    block_line = 0
+    containers: list[int] = []  # content columns of the open list items
+    quote_depth = 0
     prev_text = False  # the previous line is a paragraph/list body we could join onto
     prev_hard_break = False
 
     while index < total:
         line = lines[index]
-        stripped = line.strip()
+        index += 1
+        raw_stripped = line.strip()
+        depth, rest = _strip_quotes(line)
+        indent = _indent_width(rest)
 
-        if fence is not None:
-            char, length = fence
-            closer = re.match(r"^ {0,3}(" + re.escape(char) + r"{" + str(length) + r",})[ \t]*$", line)
-            if closer:
-                fence = None
-            index += 1
-            continue
+        if block is not None:
+            status = _block_status(block, depth, rest, indent)
+            if status == "open":
+                continue
+            block = None
+            if status == "closed_consuming":
+                prev_text = False
+                continue
+            # "closed_before": fall through and read this line in its own right.
 
-        if html_end is not None:
-            if html_end == "blank":
-                if not stripped:
-                    html_end = None
-            elif html_end.lower() in line.lower():
-                html_end = None
-            index += 1
-            continue
-
-        if not stripped:
+        if not raw_stripped:
             prev_text = False
-            index += 1
             continue
 
-        fence_match = FENCE_RE.match(line)
-        if fence_match:
-            marker = fence_match.group("fence")
-            fence = (marker[0], len(marker))
-            prev_text = False
-            index += 1
-            continue
+        # Track the open list items, so a block start is measured against the
+        # column its container actually gives it. A non-blank line that dedents
+        # past an item's content column closes that item.
+        if depth != quote_depth:
+            containers.clear()
+            quote_depth = depth
+        while containers and indent < containers[-1]:
+            containers.pop()
+        container_col = containers[-1] if containers else 0
 
-        # Indented code, or a list continuation deep enough to be ambiguous with it.
+        # --- state-installing constructs, at every container column ---
+        if indent - container_col <= BLOCK_INDENT:
+            start = _block_start(rest.strip(), container_col, depth)
+            if start is None:
+                marker = _list_marker(rest, indent)
+                if marker is not None:
+                    content_col, body = marker
+                    containers.append(content_col)
+                    # A fence or HTML element written directly after the marker
+                    # opens inside the item, at the item's content column.
+                    if body is not None:
+                        start = _block_start(body.strip(), content_col, depth)
+            if start is not None:
+                block = None if start["kind"] == "done" else start
+                block_line = index
+                prev_text = False
+                continue
+
+        # Indented code, or a list continuation deep enough to be ambiguous with
+        # it. Measured from column zero on purpose: this guard only ever
+        # SUPPRESSES a join, so keeping it conservative cannot corrupt anything.
         if _indent_width(line) >= 4:
             prev_text = False
-            index += 1
             continue
 
-        # An HTML block start is recognised BEFORE the pipe-and-table exclusion
-        # below, because it is the guard that installs protection STATE. While
-        # the pipe heuristic ran first, an opening tag carrying a pipe — in an
-        # attribute value, or in content on the same line — was taken by the
-        # heuristic and returned early, so the block was never entered and every
-        # line of it was joined as ordinary prose. The exclusion below only ever
-        # skips one line, so losing it to an HTML start costs nothing.
-        if HTML_START_RE.match(line):
-            raw = HTML_RAW_RE.match(line)
-            if stripped.startswith("<!--"):
-                html_end = None if "-->" in stripped else "-->"
-            elif raw:
-                # CommonMark HTML block type 1: <pre>, <script>, <style> and
-                # <textarea> run to their CLOSING TAG, and a blank line inside
-                # one does not end it. Ending protection at the blank line
-                # resumed joining inside the block, which changes what the page
-                # renders and what a script means.
-                closer = f"</{raw.group(1).lower()}>"
-                html_end = None if closer in line.lower() else closer
-            else:
-                html_end = "blank"
+        if "|" in raw_stripped:  # table row, or prose too pipe-heavy to risk
             prev_text = False
-            index += 1
-            continue
-
-        if "|" in stripped:  # table row, or prose too pipe-heavy to risk
-            prev_text = False
-            index += 1
             continue
 
         if LINK_DEF_RE.match(line):
             prev_text = False
-            index += 1
             continue
 
         if ATX_RE.match(line) or THEMATIC_RE.match(line):
             prev_text = False
-            index += 1
             continue
 
         if prev_text and SETEXT_RE.match(line):  # setext heading underline
             prev_text = False
-            index += 1
             continue
 
-        if stripped.startswith(">"):
+        if raw_stripped.startswith(">"):
             prev_text = False
-            index += 1
             continue
 
         # A bolded label at the head of a line ("**When to use**: …") is a
@@ -181,26 +305,36 @@ def merge_indices(lines: list[str]) -> list[int]:
         if LIST_RE.match(line) or LABEL_RE.match(line):
             prev_text = True
             prev_hard_break = bool(HARD_BREAK_RE.search(line.rstrip("\n")))
-            index += 1
             continue
 
         if prev_text and not prev_hard_break:
-            merges.append(index)
+            merges.append(index - 1)
         prev_text = True
         prev_hard_break = bool(HARD_BREAK_RE.search(line.rstrip("\n")))
-        index += 1
 
-    return merges
+    if block is not None and (block["kind"] == "fence" or block["end"] != "blank"):
+        what = "code fence" if block["kind"] == "fence" else f"HTML block ({block['end']})"
+        return [], f"unterminated {what} opened at line {block_line}"
+    return merges, None
 
 
-def unwrap(text: str) -> tuple[str, list[int], int]:
-    """Return (fixed text, merged line numbers (1-based), paragraph count)."""
+def merge_indices(lines: list[str]) -> list[int]:
+    """Indices of lines that continue the previous line and should be joined to it."""
+    return scan(lines)[0]
+
+
+def analyse(text: str) -> tuple[str, list[int], int, str | None]:
+    """Return (fixed text, merged line numbers (1-based), paragraphs, refusal).
+
+    A refusal reason comes back with no merges and the text unchanged: the
+    scanner lost track of a block, so the document is reported, not rewritten.
+    """
     newline = "\r\n" if "\r\n" in text else "\n"
     ends_with_newline = text.endswith(("\n", "\r"))
     lines = text.splitlines()
-    merges = merge_indices(lines)
+    merges, refusal = scan(lines)
     if not merges:
-        return text, [], 0
+        return text, [], 0, refusal
 
     merge_set = set(merges)
     out: list[str] = []
@@ -219,7 +353,12 @@ def unwrap(text: str) -> tuple[str, list[int], int]:
 
     paragraphs = sum(1 for i in merges if (i - 1) not in merge_set)
     fixed = newline.join(out) + (newline if ends_with_newline else "")
-    return fixed, [i + 1 for i in merges], paragraphs
+    return fixed, [i + 1 for i in merges], paragraphs, None
+
+
+def unwrap(text: str) -> tuple[str, list[int], int]:
+    """Return (fixed text, merged line numbers (1-based), paragraph count)."""
+    return analyse(text)[:3]
 
 
 def iter_markdown(paths: list[str]) -> list[Path]:
@@ -253,7 +392,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.paths == ["-"]:
         text = sys.stdin.read()
-        fixed, merged, paragraphs = unwrap(text)
+        fixed, merged, paragraphs, refusal = analyse(text)
+        if refusal:
+            print(f"md-unwrap: <stdin> left unchanged: {refusal}", file=sys.stderr)
         if args.fix:
             sys.stdout.write(fixed)
             return 0
@@ -271,13 +412,20 @@ def main(argv: list[str] | None = None) -> int:
     bad_files = 0
     total_lines = 0
     total_paragraphs = 0
+    refused = 0
     for path in targets:
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             print(f"md-unwrap: cannot read {path}: {exc}", file=sys.stderr)
             return 2
-        fixed, merged, paragraphs = unwrap(text)
+        fixed, merged, paragraphs, refusal = analyse(text)
+        if refusal:
+            # Out of our depth: say so on every run rather than rewrite a
+            # document whose block structure we did not follow.
+            refused += 1
+            print(f"md-unwrap: {path} left unchanged: {refusal}", file=sys.stderr)
+            continue
         if not merged:
             continue
         bad_files += 1
@@ -292,10 +440,11 @@ def main(argv: list[str] | None = None) -> int:
             more = " …" if len(merged) > 10 else ""
             print(f"{path}: hard-wrapped paragraph continues at line(s) {shown}{more}")
 
+    skipped = f", {refused} file(s) left unchanged" if refused else ""
     if args.fix:
         if not args.quiet:
             print(f"md-unwrap: fixed {bad_files} file(s), {total_paragraphs} paragraph(s), "
-                  f"{total_lines} line(s) joined")
+                  f"{total_lines} line(s) joined{skipped}")
         return 0
 
     if bad_files:
@@ -304,7 +453,7 @@ def main(argv: list[str] | None = None) -> int:
               f"Fix with: md-unwrap --fix <path>", file=sys.stderr)
         return 1
     if not args.quiet:
-        print(f"md-unwrap: {len(targets)} file(s) clean")
+        print(f"md-unwrap: {len(targets) - refused} file(s) clean{skipped}")
     return 0
 
 
