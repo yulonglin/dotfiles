@@ -1,6 +1,6 @@
 title: Context Ledger
 url: https://claude.ai/code/artifact/439482e4-0d10-4715-a7d1-add2805e614a
-org: unknown
+org: see note   # the index's own idiom for genuinely unrecorded; the note is below
 # `claude auth status` returned orgName: null on the publishing session while
 # reporting authMethod "claude.ai" and publishing without trouble, so this is
 # genuinely unrecorded rather than merely untyped. Stamp it from a session
@@ -9,6 +9,13 @@ org: unknown
 first_published: 2026-08-29
 last_updated: 2026-08-30
 status: live
+
+public: no
+
+summary: >-
+  134 components cost 17,246 tok every session, 60% of it always-loaded prose rather than
+  skill descriptions; 67 of 120 skills/agents have never been invoked, and the rules cite four
+  skills with zero uses
 
 builds_with: |
   python3 inventory.py && python3 usage.py && python3 build.py

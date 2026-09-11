@@ -54,10 +54,12 @@ HTML-only receipts: `_body.txt` (or the `html_body` from `FULL_CONTENT`) is a wo
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu --print-to-pdf=out.pdf file:///abs/path/receipt.html
 ```
 
+**Set `--timezone` to the zone of the events, not your own and not UTC.** It defaults to UTC, which is wrong for an evidence pack: a message received at 16:08 Pacific carries a `00:08Z` header the following day, so a UTC render puts a purchase on the wrong calendar date and can contradict the filing it is attached to (observed 2026-09-10 on a RentalCover pack, where the purchase confirmation read 10 December for a 9 December purchase). The flag takes an IANA name and handles DST, so `America/Los_Angeles` yields PST in December and PDT in July. Re-rendering with a different zone is legitimate — it is the same generator over the same source data, and the page declares itself a reconstruction in its footer — but the native Gmail print is stronger still where the user can produce it.
+
 For a whole thread the two scripts in `scripts/` do it end to end: `build.py` turns a `get_thread` result (`messageFormat: FULL_CONTENT`, so `htmlBody` is present; save the spilled JSON as `<basename>.txt`, the output takes the file stem) or the delimited `threads.txt` capture (format in its docstring) into a Gmail-print-style page — account header, subject, message count, each message boxed with From/To/Cc/Date/Attachments, tracking pixels and tokenised links stripped; `render.py` prints those pages to PDF and reports bytes and page count:
 
 ```bash
-python3 ~/.claude/skills/gmail-connector/scripts/build.py work/threads.txt work/<basename>.txt --out work/html --account lin.yulong@gmail.com
+python3 ~/.claude/skills/gmail-connector/scripts/build.py work/threads.txt work/<basename>.txt --out work/html --account lin.yulong@gmail.com --timezone America/Los_Angeles
 python3 ~/.claude/skills/gmail-connector/scripts/render.py work/html/*.html --out work/pdf   # sandbox off
 ```
 

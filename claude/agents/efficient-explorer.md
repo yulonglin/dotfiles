@@ -69,7 +69,7 @@ Explore codebases efficiently without polluting context. Uses a strict "search-f
 
 Return findings as:
 
-```markdown
+````markdown
 ## Summary
 [2-3 sentence answer to the question]
 
@@ -92,7 +92,7 @@ Return findings as:
 
 ## Not Explored (for follow-up)
 - [Areas that might need deeper investigation]
-```
+````
 
 # EXAMPLE INTERACTIONS
 

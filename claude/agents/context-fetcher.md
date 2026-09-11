@@ -40,5 +40,4 @@ If multiple threads, lead with the most recent or most action-requiring. Cap at 
 
 ## If you find nothing
 
-Say: "No recent Gmail/Slack/Granola thread with [name] in last 60 days. Ask Yulong for context."
-Do not fabricate or speculate.
+Say: "No recent Gmail/Slack/Granola thread with [name] in last 60 days. Ask Yulong for context." Do not fabricate or speculate.

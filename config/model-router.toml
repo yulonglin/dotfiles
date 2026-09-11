@@ -40,6 +40,15 @@
 #   picker          default true: a row in /model
 #   agent           default true: an agent file; a string sets the effort
 #                   (low|medium|high|xhigh) for models that honour it; false = none
+#   writer-priority optional positive integer: eligible writers, lowest first.
+#                   Used by write-prose, not emitted into generated router files.
+#                   Only enabled models with an agent qualify; omit to opt out.
+#
+# Writer fallback: try the next eligible priority on quota or cooldown failure.
+# All provider = "codex" models use the same OAuth account and share its quota;
+# a provider-wide quota/cooldown error skips the remaining writers on that
+# provider. Other failures skip only the failed writer. If no writer remains,
+# report the blocker rather than silently choosing an unlisted model.
 
 # What Claude Code believes every routed model's window is (set in settings env
 # as CLAUDE_CODE_MAX_CONTEXT_TOKENS); 258400 is the Codex backend's input limit.
@@ -62,6 +71,7 @@ provider = "anthropic"
 [[models]]
 id = "gpt-6-astra"
 aliases = ["astra"]
+writer-priority = 2
 name = "GPT-6 Astra"
 provider = "codex"
 context-window = 258400
@@ -70,6 +80,7 @@ agent = "high"
 [[models]]
 id = "gpt-5.6-sol"
 aliases = ["sol"]
+writer-priority = 1
 name = "GPT-5.6 Sol"
 provider = "codex"
 context-window = 258400
@@ -100,6 +111,7 @@ agent = false
 [[models]]
 id = "kimi-k3"
 aliases = ["kimi"]
+writer-priority = 3
 name = "Kimi K3"
 provider = "openrouter"
 slug = "moonshotai/kimi-k3"

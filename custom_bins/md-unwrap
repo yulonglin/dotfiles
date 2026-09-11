@@ -1,0 +1,400 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["markdown-it-py>=3.0"]
+# ///
+"""Detect and repair hard-wrapped Markdown paragraphs.
+
+    md-unwrap --check claude/                 # exit 1 if any paragraph is hard-wrapped
+    md-unwrap --fix claude/rules/foo.md       # join the wrapped lines back together
+    git show :some.md | md-unwrap --check -   # check staged content
+
+The house rule (claude/rules/communication.md) is that one paragraph is ONE line
+in Markdown: no hard newline inside a paragraph, in prose, bullet bodies or table
+cells. Readers soft-wrap; a hard wrap makes every later edit a reflow diff.
+
+WHICH LINES MAY BE TOUCHED IS A COMMONMARK QUESTION, SO COMMONMARK ANSWERS IT.
+The document is parsed with markdown-it-py, and the only lines this tool will
+ever join are the interiors of top-level `paragraph` tokens, read off each
+token's source line map. Fences, indented code, HTML blocks, tables,
+frontmatter, headings, thematic breaks, link reference definitions, list
+markers, blockquotes — and every one of those nested at any depth inside any
+other — are excluded because the parser never puts them in a paragraph, not
+because a rule here remembers to skip them. Four rounds of hand-rolled block
+scanning were defeated by four constructs nobody had thought of; the fifth was a
+literal quoted fence delimiter inside a list-contained fenced example. There is
+no fifth rule here to get wrong.
+
+What remains hand-rolled is the JOIN decision inside a paragraph, which is about
+text rather than structure:
+
+  - a line ending in an explicit hard break (two trailing spaces, or a
+    backslash) keeps its break, so --fix is idempotent
+  - a line carrying a pipe is left alone: the parser has already lifted real
+    tables out, so what is left is prose too table-shaped to risk
+  - a line indented four or more columns is left alone, being ambiguous with
+    indented code and with a deep list continuation
+  - a line opening with a bolded label ("**When to use**: …") or a list marker
+    starts a logical line by intent, so it is not joined onto what precedes it —
+    though its own wrapped body is still joined onto it. A marker only reaches
+    this rule when CommonMark refused it a list of its own: "2. foo" cannot
+    interrupt a paragraph, but the author still wrote a numbered point
+  - a line opening with "<" is markup on a line of its own by intent, even where
+    CommonMark folds it into the paragraph above: a closing "</example>" cannot
+    interrupt a paragraph, so the parser reads it as a lazy continuation, and
+    joining it would reflow the author's tags
+
+A one-line paragraph is never a violation — shortness is not wrapping.
+
+If the document ends inside a code fence, or holds an HTML block whose closing
+delimiter is nowhere to be found, its structure was not understood: the file is
+reported and left untouched rather than rewritten around a guess.
+
+Exit codes: 0 clean (or fixed), 1 violations found under --check, 2 usage error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+from markdown_it import MarkdownIt
+
+HARD_BREAK_RE = re.compile(r"(?:  +|\\)$")
+LABEL_RE = re.compile(r"^ {0,3}(?:\*\*|__)[^*_]+(?:\*\*|__)\s*:")
+LIST_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
+RAW_HTML_RE = re.compile(r"^<(script|pre|style|textarea)\b", re.IGNORECASE)
+DECLARATION_RE = re.compile(r"^<![A-Za-z]")
+RAW_CLOSERS = ("</script>", "</pre>", "</style>", "</textarea>")
+
+DEFAULT_EXCLUDES = (".git", "node_modules", ".venv", "__pycache__")
+
+# CommonMark plus tables. Tables are not CommonMark, but they are everywhere in
+# this repo's Markdown and a table row joined onto its neighbour is a corrupted
+# table, so the rule is enabled rather than re-derived.
+PARSER = MarkdownIt("commonmark").enable("table")
+
+
+def _indent_width(line: str) -> int:
+    width = 0
+    for char in line:
+        if char == " ":
+            width += 1
+        elif char == "\t":
+            width += 4 - (width % 4)
+        else:
+            break
+    return width
+
+
+def _frontmatter_end(lines: list[str]) -> int:
+    """The first line index past YAML frontmatter, or 0 when there is none.
+
+    Frontmatter is not CommonMark — a parser reads `---` as a thematic break and
+    the keys between as a paragraph — so the delimiters are found here and the
+    block is handed to nobody.
+    """
+    if not lines or lines[0].rstrip() != "---":
+        return 0
+    index = 1
+    while index < len(lines) and lines[index].rstrip() not in ("---", "..."):
+        index += 1
+    return min(index + 1, len(lines))
+
+
+def _html_enders(content: str) -> tuple[str, ...] | None:
+    """The delimiters that close this HTML block, or None if a blank line does.
+
+    CommonMark gives five of its seven HTML block types an explicit end
+    condition — a line CONTAINING the delimiter — and ends the other two at a
+    blank line, which cannot go missing. All five are listed here, the block's
+    own closer first so a refusal can name it. Recognising only two of them
+    (raw tags and comments) is what let a list-contained CDATA section,
+    processing instruction or markup declaration be read as blank-line
+    terminated and have its second half joined as prose.
+    """
+    opening = content.split("\n", 1)[0].lstrip()
+    if opening.startswith("<!--"):                       # type 2
+        return ("-->",)
+    if opening.startswith("<![CDATA["):                   # type 5
+        return ("]]>",)
+    if opening.startswith("<?"):                          # type 3
+        return ("?>",)
+    if DECLARATION_RE.match(opening):                     # type 4
+        return (">",)
+    raw = RAW_HTML_RE.match(opening)                      # type 1
+    if raw:
+        own = f"</{raw.group(1).lower()}>"
+        return (own, *(closer for closer in RAW_CLOSERS if closer != own))
+    return None                                           # types 6 and 7
+
+
+def _ends_in(text: str, enders: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return any(ender in lowered for ender in enders)
+
+
+def _closed_by_its_container(tokens, position: int) -> bool:
+    """Whether the block at `position` was the last thing inside its container.
+
+    A container ends the block it holds, so a raw HTML block whose closing
+    delimiter never appears still has a known extent when markdown-it closed
+    the list item or blockquote around it on the next token: cmark-gfm reads
+    `> <pre>` followed by unquoted prose the same way.
+    """
+    following = tokens[position + 1] if position + 1 < len(tokens) else None
+    return following is not None and following.type in (
+        "list_item_close", "bullet_list_close", "ordered_list_close", "blockquote_close",
+    )
+
+
+def _unterminated_fence(tokens, lines: list[str], offset: int) -> str | None:
+    """Why the document ran off the end of a code fence, or None if it did not."""
+    total = len(lines)
+    for token in tokens:
+        if token.type != "fence" or token.map is None or token.map[1] + offset != total:
+            continue
+        char = re.escape(token.markup[0])
+        closer = re.compile(rf"^[ \t>]*{char}{{{len(token.markup)},}}[ \t]*$")
+        if not closer.match(lines[total - 1]):
+            return f"unterminated code fence opened at line {token.map[0] + offset + 1}"
+    return None
+
+
+def _html_block_extents(tokens, lines: list[str], offset: int) -> tuple[set[int], str | None]:
+    """(lines markdown-it cut out of an HTML block CommonMark keeps in it, refusal).
+
+    Measured on 2026-09-11 against reference cmark-gfm (cmarkgfm 2025.10.22):
+    markdown-it ends an HTML block at a blank line even for the five types
+    CommonMark runs to a closing delimiter — measured on markdown-it-py 3.0.0
+    and 4.2.0. The divergence needs a genuinely blank line inside a LIST item —
+    a fence, a blockquote alone, or a blank-terminated block type is unaffected
+    — and it splits one block into a block plus a paragraph, which would then be
+    joined.
+
+    So when such a token's own content lacks its closing delimiter, and the
+    delimiter does appear further down, the lines up to it are part of the
+    block and are protected. When it appears NOWHERE the extent is unknown, and
+    the file is refused rather than rewritten around a guess — unless the
+    container closed the block itself, which is an extent the parser did
+    establish.
+    """
+    protected: set[int] = set()
+    for position, token in enumerate(tokens):
+        if token.type != "html_block" or token.map is None:
+            continue
+        enders = _html_enders(token.content)
+        if not enders or _ends_in(token.content, enders):
+            continue
+        span: list[int] = []
+        for index in range(token.map[1] + offset, len(lines)):
+            span.append(index)
+            if _ends_in(lines[index], enders):
+                protected.update(span)
+                break
+        else:
+            if not _closed_by_its_container(tokens, position):
+                opened = token.map[0] + offset + 1
+                return set(), f"unterminated HTML block ({enders[0]}) opened at line {opened}"
+    return protected, None
+
+
+def _paragraph_ranges(tokens) -> list[tuple[int, int]]:
+    """Source line ranges of the paragraphs outside any blockquote.
+
+    A blockquote's prose is excluded wholesale: joining it would have to carry
+    the `>` markers, which is a rewrite rather than an unwrap.
+    """
+    depth = 0
+    ranges: list[tuple[int, int]] = []
+    for token in tokens:
+        if token.type == "blockquote_open":
+            depth += 1
+        elif token.type == "blockquote_close":
+            depth -= 1
+        elif token.type == "paragraph_open" and depth == 0 and token.map:
+            ranges.append((token.map[0], token.map[1]))
+    return ranges
+
+
+def _joins_within(lines: list[str], start: int, end: int) -> list[int]:
+    """Indices inside one paragraph that continue the line above them."""
+    found: list[int] = []
+    joinable = False  # the line above is one we may join onto
+    for index in range(start, end):
+        line = lines[index]
+        if _indent_width(line) >= 4 or "|" in line or line.lstrip().startswith("<"):
+            joinable = False
+            continue
+        if LIST_RE.match(line) or LABEL_RE.match(line):
+            joinable = not HARD_BREAK_RE.search(line)
+            continue
+        if joinable:
+            found.append(index)
+        joinable = not HARD_BREAK_RE.search(line)
+    return found
+
+
+def scan(lines: list[str]) -> tuple[list[int], str | None]:
+    """(indices of lines to join onto the previous one, refusal reason or None)."""
+    offset = _frontmatter_end(lines)
+    body = lines[offset:]
+    tokens = PARSER.parse("\n".join(body) + "\n") if body else []
+    refusal = _unterminated_fence(tokens, lines, offset)
+    if refusal:
+        return [], refusal
+    protected, refusal = _html_block_extents(tokens, lines, offset)
+    if refusal:
+        return [], refusal
+    merges: list[int] = []
+    for start, end in _paragraph_ranges(tokens):
+        start, end = start + offset, end + offset
+        if protected.intersection(range(start, end)):
+            continue
+        merges.extend(_joins_within(lines, start, end))
+    return merges, None
+
+
+def merge_indices(lines: list[str]) -> list[int]:
+    """Indices of lines that continue the previous line and should be joined to it."""
+    return scan(lines)[0]
+
+
+def analyse(text: str) -> tuple[str, list[int], int, str | None]:
+    """Return (fixed text, merged line numbers (1-based), paragraphs, refusal).
+
+    A refusal reason comes back with no merges and the text unchanged: the
+    document ended inside a block, so it is reported, not rewritten.
+    """
+    newline = "\r\n" if "\r\n" in text else "\n"
+    ends_with_newline = text.endswith(("\n", "\r"))
+    lines = text.splitlines()
+    merges, refusal = scan(lines)
+    if not merges:
+        return text, [], 0, refusal
+
+    merge_set = set(merges)
+    out: list[str] = []
+    for index, line in enumerate(lines):
+        if index in merge_set and out:
+            # Strip the continuation's LEADING indentation only. Two trailing
+            # spaces are an explicit hard break, so stripping them would delete
+            # a line break the author asked for — and would make a second --fix
+            # join the line the first one left alone.
+            body = line.lstrip()
+            if not HARD_BREAK_RE.search(body):
+                body = body.rstrip()
+            out[-1] = out[-1].rstrip() + " " + body
+        else:
+            out.append(line)
+
+    paragraphs = sum(1 for i in merges if (i - 1) not in merge_set)
+    fixed = newline.join(out) + (newline if ends_with_newline else "")
+    return fixed, [i + 1 for i in merges], paragraphs, None
+
+
+def unwrap(text: str) -> tuple[str, list[int], int]:
+    """Return (fixed text, merged line numbers (1-based), paragraph count)."""
+    return analyse(text)[:3]
+
+
+def iter_markdown(paths: list[str]) -> list[Path]:
+    found: list[Path] = []
+    for raw in paths:
+        path = Path(raw)
+        if path.is_dir():
+            for child in sorted(path.rglob("*.md")):
+                if any(part in DEFAULT_EXCLUDES for part in child.parts):
+                    continue
+                found.append(child)
+        else:
+            found.append(path)
+    return found
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="md-unwrap",
+        description="Detect (--check) or repair (--fix) hard-wrapped Markdown paragraphs.",
+        epilog="Files or directories; '-' reads stdin. Directories are searched for *.md.",
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="report violations, exit 1 if any (default)")
+    mode.add_argument("--fix", action="store_true", help="rewrite the files in place")
+    parser.add_argument("--exclude", action="append", default=[], metavar="SUBSTRING",
+                        help="skip any path containing SUBSTRING (repeatable)")
+    parser.add_argument("-q", "--quiet", action="store_true", help="print only the summary")
+    parser.add_argument("paths", nargs="+", help="Markdown files, directories, or '-'")
+    args = parser.parse_args(argv)
+
+    if args.paths == ["-"]:
+        text = sys.stdin.read()
+        fixed, merged, paragraphs, refusal = analyse(text)
+        if refusal:
+            print(f"md-unwrap: <stdin> left unchanged: {refusal}", file=sys.stderr)
+        if args.fix:
+            sys.stdout.write(fixed)
+            return 0
+        if merged:
+            if not args.quiet:
+                print(f"<stdin>: {len(merged)} wrapped line(s) in {paragraphs} paragraph(s): "
+                      f"{', '.join(str(n) for n in merged[:20])}", file=sys.stderr)
+            return 1
+        return 0
+
+    targets = iter_markdown(args.paths)
+    if args.exclude:
+        targets = [p for p in targets if not any(token in str(p) for token in args.exclude)]
+
+    bad_files = 0
+    total_lines = 0
+    total_paragraphs = 0
+    refused = 0
+    for path in targets:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"md-unwrap: cannot read {path}: {exc}", file=sys.stderr)
+            return 2
+        fixed, merged, paragraphs, refusal = analyse(text)
+        if refusal:
+            # Out of our depth: say so on every run rather than rewrite a
+            # document whose block structure we did not follow.
+            refused += 1
+            print(f"md-unwrap: {path} left unchanged: {refusal}", file=sys.stderr)
+            continue
+        if not merged:
+            continue
+        bad_files += 1
+        total_lines += len(merged)
+        total_paragraphs += paragraphs
+        if args.fix:
+            path.write_text(fixed, encoding="utf-8")
+            if not args.quiet:
+                print(f"fixed {path}: {paragraphs} paragraph(s), {len(merged)} line(s) joined")
+        elif not args.quiet:
+            shown = ", ".join(str(n) for n in merged[:10])
+            more = " …" if len(merged) > 10 else ""
+            print(f"{path}: hard-wrapped paragraph continues at line(s) {shown}{more}")
+
+    skipped = f", {refused} file(s) left unchanged" if refused else ""
+    if args.fix:
+        if not args.quiet:
+            print(f"md-unwrap: fixed {bad_files} file(s), {total_paragraphs} paragraph(s), "
+                  f"{total_lines} line(s) joined{skipped}")
+        return 0
+
+    if bad_files:
+        print(f"md-unwrap: {bad_files} file(s) with hard-wrapped paragraphs "
+              f"({total_paragraphs} paragraph(s), {total_lines} line(s)). "
+              f"Fix with: md-unwrap --fix <path>", file=sys.stderr)
+        return 1
+    if not args.quiet:
+        print(f"md-unwrap: {len(targets) - refused} file(s) clean{skipped}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

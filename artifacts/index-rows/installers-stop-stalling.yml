@@ -1,0 +1,13 @@
+title: Installers Stop Stalling; Profiles Get Names
+url: https://claude.ai/code/artifact/8d07cd03-d6f6-4b86-b72c-1ce1c03d2191
+org: unknown (see note)
+status: live
+last_updated: 2026-08-31
+public: no
+index_source: "— (built from the job's gitignored `tmp/`, not kept)"
+
+summary: >-
+  the stall was never the prompts: a silent `cargo build --quiet` and untimed fetches at the
+  top of both scripts, plus five more untimed `curl \| sh` installers found only by checking
+  the class; fixed with deadlines and purpose-named profiles (bare/standard/agent/devbox) on
+  draft PR #77, CI green

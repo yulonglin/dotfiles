@@ -61,7 +61,20 @@ PY
 OUT="$(run_hook "git add x && git commit -m m && git push -u origin feature-x" "branch 'feature-x' set up to track")"
 grep -q "pull/42" <<<"$OUT" || fail "no PR url in nudge after push: $OUT"
 grep -q "additionalContext" <<<"$OUT" || fail "not PostToolUse additionalContext"
-grep -q "pr create --draft --fill --head feature-x" "$GH_LOG" || fail "gh pr create not called as draft --fill: $(cat "$GH_LOG")"
+# Assert the flags, not one exact spelling: the argument ORDER is gh's business
+# and an exact-string match here broke on 63f71da (#120) the moment --title was
+# inserted between --fill and --head.
+grep -q "pr create .*--draft" "$GH_LOG" || fail "gh pr create not called as draft: $(cat "$GH_LOG")"
+grep -q "pr create .*--fill" "$GH_LOG" || fail "gh pr create not called with --fill: $(cat "$GH_LOG")"
+grep -q "pr create .*--head feature-x" "$GH_LOG" || fail "gh pr create not called for the pushed branch: $(cat "$GH_LOG")"
+# #120's actual subject, which had no test and so regressed silently: --fill
+# takes its title from the commit only when the branch is exactly one commit
+# ahead, and humanises the BRANCH NAME otherwise, so the hook passes an explicit
+# --title from the last commit subject.
+# "init" is the fixture repo's real last commit subject; the tool-call string
+# the hook is fed mentions `git commit -m m` but never runs it, so a hook that
+# passed "m" would be parsing the command line instead of reading git.
+grep -q "pr create .*--title init" "$GH_LOG" || fail "explicit --title from the last commit subject missing: $(cat "$GH_LOG")"
 grep -qi "merge it yourself" <<<"$OUT" || fail "review/merge instruction missing"
 grep -q "AskUserQuestion" <<<"$OUT" || fail "fallback to asking the user missing"
 ok

@@ -25,14 +25,36 @@ For a repo whose artifacts are personal rather than about the code, the same lay
 
 The moment an `Artifact` publish returns a URL, add or update its row in the same turn, before reporting back. Two facts are available then and never again: which repo the page belongs to, and which org published it. `Artifact action: list` carries neither.
 
-| Column | Content |
+**Then republish the hosted index, in that same turn, after every artifact publish** (Yulong, 2026-09-10 — this replaced the earlier "republish the index only when someone asks for a hosted copy"). Rebuild it from the Markdown and publish that HTML with the index's own `url`, so the page updates in place and the Markdown never gets ahead of it:
+
+```bash
+md2artifact ARTIFACTS.md -o artifacts/index/index.html --title "<Repo> Artifacts"
+```
+
+The URL to pass is the one on the `**Live index page:**` line of the `ARTIFACTS.md` header. That line is the single machine-readable record of where the index lives — `claude/hooks/nudge_artifact_index.sh` reads it from there to name the URL in its reminder — so keep it one line carrying exactly one artifact URL, and re-stamp it whenever the index moves. The hook only reminds; publishing stays the session's job. Never build to `$TMPDIR` or any gitignored path: `block_throwaway_artifact_path.sh` refuses the publish, and the built page belongs in git beside every other artifact.
+
+### Write the row into `meta.yml`, then rebuild — never edit the table by hand
+
+The table is generated. Each row comes from one file, so two sessions recording two artifacts write two different files and never conflict on the same line.
+
+| Key in `meta.yml` | Content |
 |---|---|
-| Artifact | The linked title. It already asserts the finding, so it doubles as the summary; give a legacy topic-titled page a one-line gloss until it is renamed |
-| Org | `orgName` from `claude auth status` **at publish time** |
-| Status | one of the five below — nothing else |
-| Source | Repo-relative path of the committed source; since 2026-09-01 the built HTML is committed beside it (`artifacts/README.md`). `—` only on legacy rows where nothing was kept |
-| Public | `no`, or the public mirror URL |
-| Updated | ISO date of the last publish |
+| `title` | The page title. It already asserts the finding, so the link doubles as the summary |
+| `url` | The published address. Only `unpublished` and `pending-first-publish` mean no row yet — any other unparseable value fails the build, because a typo must never delete a published page's row |
+| `org` | `orgName` from `claude auth status` **at publish time** |
+| `status` | one of the five below — the builder rejects anything else |
+| `status_note` | The clause after the status. A `superseded` row **must** link to its replacement here |
+| `summary` | The clause after the em dash: what the page established |
+| `public` | `no`, or the public mirror URL |
+| `last_updated` | ISO date of the last publish; the table sorts on it, newest first |
+| `index_source` | Only when the Source cell is not this artifact's own directory |
+
+```bash
+python3 scripts/build_artifacts_index.py          # rewrite the table
+python3 scripts/build_artifacts_index.py --check  # what CI runs
+```
+
+A page whose source was never kept has no directory to hold a `meta.yml`; its row lives in `artifacts/index-rows/<slug>.yml` instead, same keys. Nothing published from now on should need one. A merge conflict inside the generated block is resolved mechanically — take either side, re-run the builder, commit — because the rows themselves are in files that merged cleanly.
 
 ### Status separates "still moving" from "finished" from "retired"
 
@@ -51,6 +73,23 @@ A single `live` flag collapses three different things a reader needs to tell apa
 Nothing is ever deleted. Deleting a row destroys the only trace of where a stale link points, and the comment threads on a retired page are still the user's work.
 
 `ARTIFACTS.md` is itself published as the repo's index page and carries its own row. A living index may name its function rather than assert a finding — the documented exception to the title rule.
+
+
+## An artifact-only change goes straight to main, with no PR
+
+One PR per published page is a tax on a repo that allows direct pushes to `main` (CLAUDE.md, *Top Rules*). An **artifact-only** change skips the PR entirely: commit on `main` and push.
+
+The test is mechanical, not a judgement call. Every path in the change must be either under `artifacts/` or the literal `ARTIFACTS.md`:
+
+```bash
+git diff --cached --name-only | grep -vE '^(artifacts/|ARTIFACTS\.md$)'
+```
+
+No output means artifact-only — push it. Any output names a file that takes it out of the exemption, and that change goes through the normal branch-and-PR flow, however small it looks. Scripts, hooks, skills, settings and docs are all outside `artifacts/`, so a change that touches the publishing machinery is never artifact-only even when it also publishes a page.
+
+Two things still hold before the push: `python3 scripts/build_artifacts_index.py` so the table matches the YAML, and the built HTML committed beside its source. If the push is rejected as non-fast-forward, `git pull --rebase`; a conflict in the generated block is resolved by re-running the builder.
+
+This does not extend to merging pull requests without a human. Nothing here auto-approves or auto-merges anything — the exemption is that an artifact-only change never opens a PR in the first place.
 
 ## Absence from the listing is three different states, so record the org instead of probing
 
@@ -95,13 +134,7 @@ Check each row's Source path still exists, and that the committed built HTML sit
 
 Two consequences. A page showing behaviour the current tooling no longer produces needs a **rebuild and republish**, not a bug report. And a row whose Source is `—` can never get that rebuild, which is why the column is a durability requirement rather than bookkeeping — it is the difference between a page that can be repaired and one that is stuck forever. When a tooling fix matters (data loss, a broken export, an unusable comment box), rebuild the rows that have sources and list the ones that cannot be fixed.
 
-Republish the index in the same pass — a sync that updates only the Markdown leaves the page stale, which is the drift this skill exists to remove:
-
-```bash
-md2artifact ARTIFACTS.md -o "$TMPDIR/artifacts-index.html"
-```
-
-Publish with the index's own `url` from its row so it updates in place. On `org_mismatch`, follow `artifact-writing` § in-place update refused: new file path, publish without `url`, supersedes note, then record it here as one `superseded` row plus one new row. Warn before republishing over annotations the user may have added.
+Republish the index at the end of the pass, the same way as after any other publish (§ *Write the row at publish time*) — a sync that updates only the Markdown leaves the page stale, which is the drift this skill exists to remove. On `org_mismatch`, follow `artifact-writing` § in-place update refused: new file path, publish without `url`, supersedes note, then record it here as one `superseded` row plus one new row, and re-stamp the `**Live index page:**` line with the new URL. Warn before republishing over annotations the user may have added.
 
 Close by reporting counts per verdict, ambiguous rows named individually, and missing sources. Say plainly when nothing changed — a clean sync is a result.
 

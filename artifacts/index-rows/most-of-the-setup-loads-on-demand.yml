@@ -1,0 +1,10 @@
+title: Most of the setup now loads on demand
+url: https://claude.ai/code/artifact/26852bc6-e36f-4b55-97db-d0d3473a0b49
+org: see note
+status: done
+last_updated: 2026-08-28
+public: no
+
+summary: >-
+  the always-loaded rules tier fell from ~76 KB to ~28 KB by moving activity-scoped procedure
+  into skills
