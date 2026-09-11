@@ -200,9 +200,14 @@
 
   const URL_FOR = (n) => "https://github.com/yulonglin/dotfiles/pull/" + n;
   const state = { checked: {} };
-  let store = null;
-  let unsaved = false;      // a tick made before the handle resolved
-  let firstDelivery = true;
+  let store = null;         // the db handle, null until window.claude.use("db") resolves
+  let seenStored = false;   // the first snapshot has been delivered, so state has been reconciled
+  // Toggles this device has made that no successful write has carried yet:
+  // pr -> true for a tick, false for an untick. An untick needs an entry of
+  // its own, because a write says untick by dropping the key, and an absent
+  // key cannot by itself say whether this device dropped it or never had it.
+  const queued = new Map();
+  let writing = false;      // a write is on the wire
 
   function row(pr) {
     const li = document.createElement("li");
@@ -286,20 +291,63 @@
 
   // Every write replaces the whole document, which is what makes an untick
   // expressible: a key dropped from the map turns that row off for everyone.
-  // With no handle yet there is nowhere to write, so the tick is only marked
-  // unsaved and the first delivery flushes it.
-  function save() {
-    if (!store) { unsaved = true; return; }
-    unsaved = false;
-    store.doc("review/checklist").set({ checked: state.checked, updatedAt: Date.now() })
-      .catch(() => { document.getElementById("sync").textContent = "checklist: save failed, this device only"; });
+  // The price of a whole-document write is that it may only be computed from
+  // state already reconciled with what is stored, and the handle resolving is
+  // not that -- the stored document arrives later, on the first snapshot. So
+  // there are two gates, both enforced here rather than asserted:
+  //
+  //   * nothing is written until BOTH the handle has resolved AND the first
+  //     snapshot has been delivered. Until then a toggle only lands in
+  //     `queued`, which is what makes a write-before-the-stored-document-was-
+  //     read unreachable rather than merely unlikely;
+  //   * a write clears only the queue entries it actually carried, and only if
+  //     they have not changed since. A toggle made while the write was on the
+  //     wire stays queued, and a write that failed clears nothing at all.
+  //
+  // Those two give six reachable states of (queued non-empty, stored document
+  // unseen, write in flight, last write failed) out of sixteen: idle; loading;
+  // queued; in flight; failed and waiting to retry; and retrying. The other
+  // ten cannot be built, because in flight implies both a non-empty queue and
+  // a stored document already seen, and a failure implies a non-empty queue
+  // and therefore also a stored document already seen.
+  function reconciled(incoming) {
+    const out = { ...incoming };
+    for (const [pr, on] of queued) { if (on) out[pr] = true; else delete out[pr]; }
+    return out;
+  }
+
+  function flush() {
+    if (!store || !seenStored) return;     // gate one: nothing to reconcile against yet
+    if (writing || !queued.size) return;   // gate two: one write at a time, and only for real work
+    const sent = new Map(queued);
+    const sync = document.getElementById("sync");
+    const doc = { checked: { ...state.checked }, updatedAt: Date.now() };
+    writing = true;
+    // The executor turns a set() that throws where it should have rejected
+    // into a rejection, so the one path that would leave `writing` stuck true
+    // -- and the queue wedged behind it for the life of the page -- does not
+    // exist. The document is computed before it, not inside, so this write
+    // carries exactly what `sent` says it carries.
+    new Promise((resolve) => resolve(store.doc("review/checklist").set(doc))).then(() => {
+      writing = false;
+      for (const [pr, on] of sent) if (queued.get(pr) === on) queued.delete(pr);
+      if (!queued.size) sync.textContent = "checklist: synced across the org";
+      flush();                             // whatever queued behind this write
+    }, () => {
+      // Every entry stays queued: this write carried none of them anywhere.
+      // The retry rides on the next toggle or the next delivery rather than a
+      // timer here, which would spin against a store that is simply refusing.
+      writing = false;
+      sync.textContent = "checklist: save failed, this device only";
+    });
   }
 
   function toggle(n, on) {
     if (on) state.checked[n] = true;
     else delete state.checked[n];
+    queued.set(String(n), on);
     paint();
-    save();
+    flush();
   }
 
   // What the copy carries besides the comments. Returns "" when nothing is
@@ -335,27 +383,30 @@
         // stored fields only come out of snap.data(). Reading snap.checked
         // gave undefined on every delivery, so a reload painted nothing and
         // the ticks looked lost even though the write had landed.
-        sync.textContent = "checklist: synced across the org";
+        if (!queued.size) sync.textContent = "checklist: synced across the org";
         const body = snap && snap.exists ? snap.data() : null;
         const next = body && body.checked;
         const incoming = (next && typeof next === "object") ? next : null;
-        if (firstDelivery) {
-          firstDelivery = false;
-          // The handle resolves over the network, so a tick can land while
-          // store is still null, and that tick exists only in memory. Merge
-          // the two states once, here: replacing would drop the local tick,
-          // and flushing any earlier would replace a stored document nobody
-          // had read yet. Later deliveries replace, so an untick still lands.
-          if (incoming) state.checked = { ...incoming, ...state.checked };
+        if (!seenStored) {
+          // The reconciliation point, and the only one: what is stored, with
+          // this device's queued toggles on top. Before this line ran there
+          // was nothing to compute a whole-document write from, which is why
+          // flush() refused to write until now.
+          seenStored = true;
+          state.checked = reconciled(incoming || {});
           paint();
-          if (unsaved) save();
+          flush();
           return;
         }
         // A document that is not there is not an untick: only a stored map
         // replaces what this device holds.
         if (!incoming) return;
-        state.checked = { ...incoming };
+        // Later deliveries replace, so an untick made elsewhere lands -- but a
+        // toggle no successful write has carried yet goes back on top, or this
+        // page's own echo, or any write racing it, would paint it away.
+        state.checked = reconciled(incoming);
         paint();
+        flush();   // also the retry path after a failed write
       }, (err) => {
         sync.textContent = "checklist: this device only (" + (err && err.code) + ")";
       });
