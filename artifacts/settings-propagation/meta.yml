@@ -5,6 +5,13 @@ first_published: 2026-09-11
 last_updated: 2026-09-11
 status: live
 
+summary: >-
+  adding or changing an `env` value reaches a running session when the file is saved, while
+  removing one takes effect only at the next launch — quoted from the environment-variable
+  documentation, not established here; a scan on 2026-09-11 found 16 processes still carrying
+  a value deleted two days earlier, 13 of them orphaned socat forwarders, none of which call
+  the classifier. The scan shows stale environments, not the cause of any one of them
+
 source: index.html
 built: index.html   # hand-written HTML, no build step: the source is the page
 builds_with: |
