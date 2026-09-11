@@ -1,45 +1,35 @@
 ---
 name: write-prose
-description: Use when drafting or revising human-facing prose — artifacts, reports, specs, skills, rules and PR descriptions. Delegate the draft to the designated writer.
+description: Use when drafting or revising human-facing prose — artifacts, reports, specs, skills, rules and PR descriptions. Select the writer from the router config.
 ---
 
-# Delegate the draft, not the polish
+# Commission prose before drafting it
 
-For in-scope prose, commission the writing instead of doing it yourself. The owner's standing judgement is that Opus 5 and Fable 5/5.1 write unclear prose; do not reopen that decision. Send source material before drafting so the writer chooses the structure. Polishing your draft preserves the structure this rule is meant to replace.
-
-## In scope
-
-- Artifacts, reports and specs
-- Skill and rule text
-- PR bodies and descriptions
-
-## Out of scope
+Use this workflow for the document types above. Keep these inline:
 
 - Chat replies
 - Commit messages
 - Code comments
-- Anything under about 150 words
+- Text under about 150 words
 
-## Seats, in order
+## Select writers from one source
 
-1. `sol(high)` — GPT-5.6 Sol: default writer.
-2. `astra(high)` — GPT-6 Astra: second writer; preferred reviewer and restructurer.
-3. `kimi` — Kimi K3: cross-family fallback.
+Read `config/model-router.toml` in the dotfiles repo. Select an eligible writer by `writer-priority` and follow the fallback and quota guidance there. Use the selected model's generated agent in `claude/agents/`; never hand-write a foreign-model agent. If this session already runs the selected writer, write directly.
 
-On a quota or cooldown failure, move to the next available seat; the failure is not a finding. Sol and Astra share Codex OAuth credentials, so a quota failure can block both. If the error names `usage_limit_reached ... via provider codex`, use Kimi, which runs on OpenRouter.
+## Brief the writer with sources
 
-## Brief requirements
+Send source material before drafting so the writer can choose the structure. Include:
 
-- Supply the findings, constraints, decisions and numbers. Raw material is fine; the brief must stand alone.
-- Name the audience and what they will do with the text.
-- Include reviewer comments verbatim for revisions.
-- Include the applicable conventions from `~/.claude/checklists/writing.md`: one line per paragraph; headings assert a point in 4–7 words; results belong in figures; sourced claims link to sources; no checkbox syntax outside working todo lists.
-- Set a length target.
-- Require: "Return only the markdown, no preamble, no outer code fence. Do not write any file."
+- Findings, decisions, constraints and source paths or links.
+- The audience, intended action and length target.
+- Reviewer comments verbatim when revising.
+- `~/.claude/CLAUDE.md` and `~/.claude/checklists/writing.md` for the current standards; do not restate them here.
+- The output contract: return only the document text, without a preamble or outer code fence; do not write files.
 
-## Verify before writing the file
+## Verify the text before delivery
 
-- Read the returned text. Check for invented claims, numbers that differ from their sources and omitted scope. You remain responsible for accuracy.
-- Write the verified text to the file.
-- Show the diff.
-- Tell the user which exact model produced the text.
+- Check claims and numbers against the sources.
+- Confirm the requested scope.
+- Return substantive corrections to the writer.
+- Save the verified text and inspect the diff.
+- Name the exact model that wrote it.
