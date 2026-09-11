@@ -6,4 +6,9 @@ The escape hatch is not asking in prose — it is not asking: when the decision 
 
 Unscoped, irreversible or security-sensitive calls stay the user's however obvious one option looks; on conflict, ask. A subagent without `AskUserQuestion` returns the options plus a recommendation flagged `AMBIGUOUS:` for its caller to raise.
 
-In a worktree-isolated job the CLI's built-in git guard must be able to tell, from the command text alone, that every path a git command touches stays inside the worktree, and it refuses whatever it cannot read that way even when the command is harmless. Refused: `git -C` out of the worktree even to read (see the parent via `git log main`, `git diff main...HEAD`, `gh pr view`); a command whose name is a variable or `$(...)`; a git command welded to a heredoc or an output redirection (`git checkout -b X && cat > f <<EOF` is "too complex to verify", while `git add f && git commit && git push` passes, since every path in it is literal); and — the one that surprises — any command whose text merely *quotes* a git invocation, such as a `python3 - <<PY` script whose string content contains a git example. Practice: one git call per Bash call with literal paths, resolve a path in one call and use it in the next, keep file writes off the end of git commands, and when the file you are writing quotes git commands in its own content, use the Write or Edit tool, because no Bash form of it can pass.
+In worktree-isolated jobs, the CLI's git guard requires command text to prove all touched paths stay inside the worktree. It refuses:
+
+- `git -C` outside the worktree, even reads — inspect parent refs with `git log main`, `git diff main...HEAD`, or `gh pr view`.
+- Variable or `$(...)` command names — resolve the executable path first; invoke its literal path in a separate call.
+- Git combined with heredocs or output redirection — separate git calls from file writes.
+- Shell text that merely quotes git commands — write that content with Write or Edit.
