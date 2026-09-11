@@ -1,0 +1,37 @@
+[Unit]
+Description=Clear a stale Codex credential cooldown in the model-router upstream
+Documentation=file:%h/code/dotfiles/custom_bins/model-router-cooldown-check
+
+[Service]
+Type=oneshot
+
+# deploy.sh copies this unit verbatim -- no templating -- so nothing here may
+# depend on the repo living somewhere else, and PATH is set explicitly because
+# systemd --user does not inherit the login shell's. Two things must be on it:
+# systemctl, because the recovery action is `systemctl --user restart
+# model-router.service`; and uv, because the check's shebang is
+# `uv run --script` (it needs tomllib, so >=3.11, which the system python3 is
+# not guaranteed to be). %h is systemd's own home specifier, expanded at load
+# time, so this stays correct on a box whose home is somewhere else. Measured
+# 2026-09-11: without %h/.local/bin the unit dies `env: 'uv': No such file or
+# directory`, exit 127 -- and it would have done so silently, every hour.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+ExecStart=%h/code/dotfiles/custom_bins/model-router-cooldown-check --fix
+
+# Exit 1 (a stale cooldown that could not be cleared yet, e.g. a restart is
+# still settling) and exit 2 (the quota really is spent upstream) are normal
+# outcomes of a working check, not unit failures. Only exit 3 -- could not
+# determine -- is worth surfacing as a failed unit.
+SuccessExitStatus=0 1 2
+
+# Deliberately light sandboxing. ProtectHome=read-only would break this unit in
+# a way that is silent rather than loud: the check writes its restart-thrash
+# guard to ~/.local/state/model-router/cooldown-check.json, and that write is
+# best-effort by design (losing it must never block recovery). Under a
+# read-only home the guard would simply stop recording, and the unit would go
+# on bouncing the router every hour while still reporting success. A
+# StateDirectory= of its own would not help either -- the file has to live
+# beside the router's other state, which the router itself owns.
+PrivateTmp=true
+NoNewPrivileges=true
