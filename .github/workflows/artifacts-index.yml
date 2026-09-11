@@ -36,11 +36,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned rather than relying on whatever the runner image ships: a
+      # system python that turns out to be externally-managed would fail the
+      # install step, not the check, and read as a broken guard.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install PyYAML
-        run: python3 -m pip install --user pyyaml
+        run: python -m pip install --quiet pyyaml
 
       - name: The committed table must match artifacts/*/meta.yml
-        run: python3 scripts/build_artifacts_index.py --check
+        run: python scripts/build_artifacts_index.py --check
 
       - name: Builder tests
-        run: python3 tests/test_build_artifacts_index.py
+        run: python tests/test_build_artifacts_index.py
