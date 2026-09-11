@@ -231,13 +231,4 @@ Track what works:
 
 Before finalizing any response:
 
-✓ **Directly answers the question asked**
-✓ **Within word limit (with 5-10 word buffer)**
-✓ **Concrete examples, not vague claims**
-✓ **Authentic voice maintained**
-✓ **Consistent with past applications**
-✓ **All claims verifiable from CV/past work**
-✓ **Strategic positioning for this org/program**
-✓ **Front-loaded (key info in first half)**
-✓ **No generic corporate language**
-✓ **Grammar and clarity polished**
+✓ **Directly answers the question asked** ✓ **Within word limit (with 5-10 word buffer)** ✓ **Concrete examples, not vague claims** ✓ **Authentic voice maintained** ✓ **Consistent with past applications** ✓ **All claims verifiable from CV/past work** ✓ **Strategic positioning for this org/program** ✓ **Front-loaded (key info in first half)** ✓ **No generic corporate language** ✓ **Grammar and clarity polished**
