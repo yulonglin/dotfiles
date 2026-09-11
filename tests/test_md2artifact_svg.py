@@ -21,6 +21,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -359,3 +360,143 @@ def test_an_svg_fence_with_extra_info_words_stays_escaped(tmp_path: Path) -> Non
     assert "<svg" not in html
     assert "&lt;svg" in html
     assert NOTE not in html
+
+
+# ─── Parser divergence: what an HTML parser makes of the accepted source ──────
+# The fence is emitted verbatim into a page that a BROWSER parses, and an HTML
+# parser is not an XML parser. Judging the source with ElementTree alone is a
+# bet that the two agree; these tests hold the bet closed.
+
+
+class _Dom(HTMLParser):
+    """The tags and the oddities an HTML parser finds, in order."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tags: list[tuple[str, dict[str, str | None]]] = []
+        self.oddities: list[tuple[str, str]] = []
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
+
+    def handle_startendtag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
+
+    def handle_comment(self, data):
+        self.oddities.append(("comment", data))
+
+    def handle_decl(self, decl):
+        self.oddities.append(("decl", decl))
+
+    def unknown_decl(self, data):
+        self.oddities.append(("unknown_decl", data))
+
+    def handle_pi(self, data):
+        self.oddities.append(("pi", data))
+
+
+def _dom(fragment: str) -> _Dom:
+    parser = _Dom()
+    parser.feed(fragment)
+    parser.close()
+    return parser
+
+
+def _inlined_svg(page: str) -> str:
+    """The inlined chart, sliced out of the page so the page's own script tags
+    do not pollute the assertion."""
+    start = page.index("<svg")
+    end = page.index("</svg>", start) + len("</svg>")
+    return page[start:end]
+
+
+def test_the_accepted_chart_parses_as_the_expected_html_dom(page_html: str) -> None:
+    """Assert on the DOM an HTML parser builds, not on the output string.
+
+    A string assertion only says the bytes survived; it cannot see that an HTML
+    parser read those same bytes as a different tree. Pinning the tag sequence
+    means a future divergence — a spelling ElementTree accepts and an HTML
+    parser turns into something else — fails here instead of shipping.
+    """
+    dom = _dom(_inlined_svg(page_html))
+    names = [name for name, _ in dom.tags]
+    assert names == ["svg", "title", "style", "rect", "rect", "text", "a", "text"]
+    assert dom.oddities == []
+    assert dom.tags[0][1]["viewbox"] == "0 0 240 120"
+    assert dom.tags[6][1]["href"] == "#results"
+
+
+# A namespace-prefixed root passes an XML check that strips the prefix, but an
+# HTML parser sees an unknown element and so never enters SVG foreign content —
+# where a CDATA section stops being text and becomes a bogus comment that ends
+# at its first `>`, releasing whatever follows as live markup.
+PREFIXED_CDATA_BYPASS = (
+    '<s:svg xmlns:s="http://www.w3.org/2000/svg">'
+    "<![CDATA[><script>alert(1)</script>]]>"
+    "</s:svg>"
+)
+
+
+def test_a_namespace_prefixed_root_is_rejected(tmp_path: Path) -> None:
+    body = (
+        '<s:svg xmlns:s="http://www.w3.org/2000/svg">'
+        '<s:rect width="9" height="9"/></s:svg>'
+    )
+    html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
+    assert NOTE in html
+    assert "<s:svg" not in html, "inlined a namespace-prefixed root verbatim"
+    assert "&lt;s:svg" in html
+
+
+def test_a_cdata_section_is_rejected(tmp_path: Path) -> None:
+    body = (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<![CDATA[><script>alert(1)</script>]]></svg>"
+    )
+    html = _render(f"# Page\n\n```svg\n{body}\n```\n", tmp_path)
+    assert NOTE in html
+    assert "<![CDATA[" not in html
+    assert "<svg" not in html
+
+
+def test_the_prefixed_root_cdata_bypass_cannot_reach_the_page(tmp_path: Path) -> None:
+    """The reproduction: XML says accepted, an HTML parser builds a <script>."""
+    html = _render(f"# Page\n\n```svg\n{PREFIXED_CDATA_BYPASS}\n```\n", tmp_path)
+    assert NOTE in html
+    assert "<![CDATA[" not in html
+    assert "<script>alert(1)</script>" not in html
+
+
+# ─── CSS escapes: the same at-rule and the same function, spelled otherwise ───
+# A CSS parser resolves `\69` to `i` and `\75` to `u` before it decides what an
+# at-keyword or a function token is; a textual check that does not decode first
+# reads a different string from the one the browser acts on.
+ESCAPED_CSS = {
+    "style_element_escaped_import": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<style>@\\69 mport "https://example.invalid/p.css";</style></svg>'
+    ),
+    "style_attribute_escaped_import": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect style="@\\69 mport &#34;https://example.invalid/p.css&#34;" width="9"/></svg>'
+    ),
+    "style_element_escaped_url": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        "<style>.bar{fill:\\75 rl(https://example.invalid/p.png)}</style></svg>"
+    ),
+    "style_attribute_escaped_url": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect style="fill:u\\72 l(https://example.invalid/p.png)" width="9"/></svg>'
+    ),
+    "presentation_attribute_escaped_url": (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect fill="u\\72\\6c(https://example.invalid/p.png)" width="9"/></svg>'
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(ESCAPED_CSS))
+def test_escaped_css_spellings_are_rejected(case: str, tmp_path: Path) -> None:
+    html = _render(f"# Page\n\n```svg\n{ESCAPED_CSS[case]}\n```\n", tmp_path)
+    assert NOTE in html, f"{case}: no rejection note"
+    assert "<svg" not in html, f"{case}: inlined a fence that can fetch an external resource"

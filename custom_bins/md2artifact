@@ -274,11 +274,44 @@ SVG_ALLOWED_ELEMENTS = frozenset(
 def _local(name: str) -> str:
     """The lowercased local part of an element or attribute name.
 
-    ElementTree reports a namespaced name as `{uri}local`, and the browser
-    that finally parses the page is an HTML parser, which case-folds names
-    inside <svg> — so <SCRIPT> and ONCLICK have to be recognised too.
+    ElementTree reports a namespaced name as `{uri}local`, and the raw source
+    spells the same thing `xlink:href`, so both separators are stripped. The
+    browser that finally parses the page is an HTML parser, which case-folds
+    names inside <svg> — so <SCRIPT> and ONCLICK have to be recognised too.
     """
-    return name.rpartition("}")[2].lower()
+    return name.rpartition("}")[2].rpartition(":")[2].lower()
+
+
+# A CSS escape is a backslash followed by up to six hex digits and one optional
+# whitespace terminator, or by any other single character taken literally.
+CSS_ESCAPE_RE = re.compile(r"\\(?:([0-9a-fA-F]{1,6})[ \t\r\n\f]?|(.))", re.DOTALL)
+
+
+def css_unescape(text: str) -> str:
+    """The text as a CSS parser resolves it, escapes decoded.
+
+    A CSS tokenizer resolves escapes while it is still deciding what a token
+    IS: `@\\69 mport` becomes the at-keyword `import` and `\\75 rl(` becomes a
+    url token, because the ident is unescaped before it is compared. A textual
+    check that skips this step reads a different string from the one the
+    browser acts on, which is how an external fetch used to get through.
+
+    Decoding happens BEFORE whitespace is stripped, because the whitespace
+    after a hex escape is its terminator: `\\61 bc` is `abc`, while the same
+    bytes with the space already removed would read as the single code point
+    U+61BC.
+    """
+
+    def resolve(match: re.Match[str]) -> str:
+        digits, literal = match.groups()
+        if digits is None:
+            return literal
+        point = int(digits, 16)
+        if point == 0 or point > 0x10FFFF or 0xD800 <= point <= 0xDFFF:
+            return "�"
+        return chr(point)
+
+    return CSS_ESCAPE_RE.sub(resolve, text)
 
 
 def css_fault(text: str) -> str | None:
@@ -291,18 +324,150 @@ def css_fault(text: str) -> str | None:
     `url( '#lg' )` reads the same as `url(#lg)`. `@import` fetches by
     definition and is refused outright.
 
+    Both the literal spelling and the escape-decoded one are checked, because
+    neither is a superset of the other: `\\75 rl(` only fetches once decoded,
+    while `url\\(` is an escaped paren a decoder would turn into something the
+    literal check still has to see.
+
     Applied to the <style> element AND to every attribute value, because
     `style="fill:url(https://…)"` and `fill="url(https://…)"` fetch exactly as
     a <style> block does — an asymmetry between the two would be a gap that
     survives review by looking as if it were already covered.
     """
-    flat = re.sub(r"\s+", "", text).lower()
-    if "@import" in flat:
-        return "uses @import"
-    for m in re.finditer(r"url\(", flat):
-        if not re.match(r"url\(['\"]?#", flat[m.start() :]):
-            return "has a url() that is not a same-document #reference"
+    spellings = {
+        re.sub(r"\s+", "", text).lower(),
+        re.sub(r"\s+", "", css_unescape(text)).lower(),
+    }
+    for flat in spellings:
+        if "@import" in flat:
+            return "uses @import"
+        for m in re.finditer(r"url\(", flat):
+            if not re.match(r"url\(['\"]?#", flat[m.start() :]):
+                return "has a url() that is not a same-document #reference"
     return None
+
+
+def attribute_fault(name: str, value: str) -> str | None:
+    """Why this attribute may not be inlined, or None if it may.
+
+    One copy, called from the XML tree walk and from the HTML scan alike, so
+    the two readings of the same source cannot drift apart.
+    """
+    aname = _local(name)
+    flat = re.sub(r"\s+", "", value).lower()
+    if aname.startswith("on"):
+        return f"it carries an event-handler attribute ({aname})"
+    if fault := css_fault(value):
+        return f"its {aname} attribute {fault}"
+    if aname == "href" and not flat.startswith("#"):
+        return f"it has an {aname} attribute that is not a same-document reference"
+    if "javascript:" in flat:
+        return f"its {aname} attribute carries a javascript: URL"
+    if re.search(r"data:(?!image/)", flat):
+        return f"its {aname} attribute carries a non-image data: URL"
+    return None
+
+
+HTML_SPACE = " \t\r\n\f"
+
+
+def html_fault(source: str) -> str | None:
+    """Why the source is unsafe when an HTML parser reads it, or None.
+
+    An XML parse says what ElementTree makes of the fence. It does not say what
+    the BROWSER makes of it, and the browser is the one that matters, because
+    the fence is emitted into the page verbatim. The two parsers have different
+    rules, and where they differ the XML reading is the one that is wrong.
+
+    So the same source is scanned a second time with HTML tokenizer rules: a
+    `<` followed by an ASCII letter opens a tag whose name runs to the first
+    whitespace, `/` or `>`, and everything else — a stray `<`, a colon inside
+    an element name, a tag that never closes — is refused rather than
+    interpreted. `<style>` is raw text in HTML, so its body is skipped here and
+    judged by css_fault through the tree instead.
+
+    The scan deliberately refuses rather than normalises. A spelling exotic
+    enough to need normalising has no place in an inline chart fence, and a
+    normaliser is one more thing that can disagree with the browser.
+    """
+    i, n = 0, len(source)
+    while (lt := source.find("<", i)) >= 0:
+        j = lt + 1
+        closing = j < n and source[j] == "/"
+        if closing:
+            j += 1
+        if j >= n or not (source[j].isascii() and source[j].isalpha()):
+            return "it carries a `<` that does not open a tag"
+        start = j
+        while j < n and source[j].isascii() and source[j].isalnum():
+            j += 1
+        if j < n and source[j] == ":":
+            spelling = source[start : j + 1] + source[j + 1 :].split(">", 1)[0].split(" ", 1)[0]
+            return f"it spells an element name with a namespace prefix (<{spelling}>)"
+        name = source[start:j].lower()
+        if j < n and source[j] not in HTML_SPACE + "/>":
+            return f"it spells an element name an HTML parser would not read as <{name}>"
+        if name not in SVG_ALLOWED_ELEMENTS:
+            return f"it contains a <{name}> element, which is not in the chart vocabulary"
+        if closing:
+            end = source.find(">", j)
+            if end < 0:
+                return f"it has a </{name}> tag that is never closed"
+            i = end + 1
+            continue
+        j, fault = _scan_attributes(source, j, name)
+        if fault is not None:
+            return fault
+        if name == "style":
+            close = source.lower().find("</style", j)
+            if close < 0:
+                return "it has a <style> element that is never closed"
+            i = close
+            continue
+        i = j
+    return None
+
+
+def _scan_attributes(source: str, i: int, element: str) -> tuple[int, str | None]:
+    """Walk one start tag's attributes the way an HTML tokenizer would.
+
+    Returns the index just past the tag, and the fault if one was found.
+    """
+    n = len(source)
+    while True:
+        while i < n and source[i] in HTML_SPACE:
+            i += 1
+        if i >= n:
+            return i, f"it has a <{element}> tag that is never closed"
+        if source[i] == ">":
+            return i + 1, None
+        if source[i] == "/":
+            i += 1
+            continue
+        start = i
+        while i < n and source[i] not in HTML_SPACE + "/=>":
+            i += 1
+        name = source[start:i]
+        while i < n and source[i] in HTML_SPACE:
+            i += 1
+        value = ""
+        if i < n and source[i] == "=":
+            i += 1
+            while i < n and source[i] in HTML_SPACE:
+                i += 1
+            if i < n and source[i] in "\"'":
+                quote = source[i]
+                end = source.find(quote, i + 1)
+                if end < 0:
+                    return i, f"it has a <{element}> attribute whose quoting never closes"
+                value, i = source[i + 1 : end], end + 1
+            else:
+                start = i
+                while i < n and source[i] not in HTML_SPACE + ">":
+                    i += 1
+                value = source[start:i]
+        if fault := attribute_fault(name, html.unescape(value)):
+            return i, fault
 
 
 def svg_rejection(source: str) -> str | None:
@@ -319,14 +484,27 @@ def svg_rejection(source: str) -> str | None:
     An allowlist refuses them by construction, along with every name nobody has
     thought of yet, and the cost is small because a chart's vocabulary is small.
 
+    An XML parse alone is NOT a safe-HTML check, and treating it as one was a
+    real bypass (fixed 2026-09-11). ElementTree resolves `<s:svg>` to the same
+    local name as `<svg>`, while an HTML parser sees an unknown element and so
+    never enters SVG foreign content — where a CDATA section stops being text
+    and becomes a bogus comment that ends at its first `>`, releasing whatever
+    follows it as live markup that the element allowlist never saw, because to
+    ElementTree it was only text. Both halves are now refused outright: a
+    namespace-prefixed spelling and a CDATA section, neither of which an inline
+    chart has any use for. The source is then scanned a SECOND time under HTML
+    tokenizer rules (html_fault), so a future divergence between the two
+    parsers fails closed instead of shipping.
+
     Attributes are NOT allowlisted, on purpose. Presentation attributes are
     open-ended — every CSS property is also an attribute, alongside transform,
     aria-*, data-* and per-element geometry — so an attribute allowlist would
     refuse legitimate charts every time someone reached for a property nobody
-    had listed. The value rules below carry that half instead: no on* handler,
-    no href that leaves the document, no javascript:, no non-image data:, and
-    no url() that is not a same-document #reference (see css_fault, which the
-    <style> element and every attribute value go through alike).
+    had listed. The value rules carry that half instead (attribute_fault): no
+    on* handler, no href that leaves the document, no javascript:, no non-image
+    data:, and no url() that is not a same-document #reference (see css_fault,
+    which the <style> element and every attribute value go through alike, and
+    which decodes CSS escapes first because a CSS parser does).
     They are enough because the element allowlist has already ensured those
     attributes sit on elements that cannot execute or fetch on their own.
     Values are compared with all whitespace removed and case folded, because
@@ -335,10 +513,21 @@ def svg_rejection(source: str) -> str | None:
     A DOCTYPE is refused before the parser sees it: ElementTree resolves no
     external entities, but it does expand internal ones, so an internal DTD
     subset is a billion-laughs denial of service against whoever builds the
-    page. An element is not a document and has no business carrying one.
+    page. An element is not a document and has no business carrying one. Every
+    other markup declaration, comment and processing instruction is refused
+    alongside it, for the same reason CDATA is: an inline chart does not need
+    one, and each is a construct the two parsers read differently.
     """
+    if re.search(r"<!\s*\[", source):
+        return "it contains a CDATA section"
     if re.search(r"<!\s*(doctype|entity)", source, re.IGNORECASE):
         return "it carries a DOCTYPE or entity declaration"
+    if "<!--" in source:
+        return "it contains a comment"
+    if "<!" in source:
+        return "it contains a markup declaration"
+    if "<?" in source:
+        return "it contains a processing instruction"
     try:
         root = ET.fromstring(source)
     except ET.ParseError as exc:
@@ -352,19 +541,9 @@ def svg_rejection(source: str) -> str | None:
         if name == "style" and (fault := css_fault("".join(elem.itertext()))):
             return f"its <style> element {fault}"
         for attr, value in elem.attrib.items():
-            aname = _local(attr)
-            flat = re.sub(r"\s+", "", value).lower()
-            if aname.startswith("on"):
-                return f"it carries an event-handler attribute ({aname})"
-            if fault := css_fault(value):
-                return f"its {aname} attribute {fault}"
-            if aname == "href" and not flat.startswith("#"):
-                return f"its {name} element has an {aname} that is not a same-document reference"
-            if "javascript:" in flat:
-                return f"its {aname} attribute carries a javascript: URL"
-            if re.search(r"data:(?!image/)", flat):
-                return f"its {aname} attribute carries a non-image data: URL"
-    return None
+            if fault := attribute_fault(attr, value):
+                return fault
+    return html_fault(source)
 
 
 def _svg_token(source: str) -> Token:
