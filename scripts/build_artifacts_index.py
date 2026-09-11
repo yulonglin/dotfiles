@@ -99,7 +99,30 @@ def load_rows(root: Path) -> tuple[list[dict], list[tuple[Path, str]]]:
         if not isinstance(data, dict):
             raise BuildError(f"{rel}: expected a YAML mapping")
 
-        url = str(data.get("url") or "").strip()
+        # Read the url as it was written, before any normalisation. `str(x or "")`
+        # collapses False, 0 and an empty collection into "", which is a supported
+        # "not published yet" placeholder — so a url of `no` (YAML 1.1 False) used
+        # to delete a published page's row and exit 0. This builder must NEVER drop
+        # a row for metadata it cannot read: ARTIFACTS.md is that page's only record
+        # in this repo. Every skip must be one the schema designates, and anything
+        # else fails loudly.
+        raw_url = data.get("url")
+        if raw_url is None:
+            # Absent or null. artifacts/README.md: a url that is one of the two
+            # placeholders "or empty" gets no row and is listed as a reminder.
+            url = ""
+        elif isinstance(raw_url, str):
+            url = raw_url.strip()
+        else:
+            raise BuildError(
+                f"{rel}: url is {type(raw_url).__name__} {raw_url!r}, not a string. "
+                f"Write the published address as text "
+                f"(https://claude.ai/code/artifact/<uuid>), or one of the "
+                f"unpublished placeholders {', '.join(PLACEHOLDERS[1:])}. "
+                f"Quote a bare `no`/`off`/`yes`, which YAML reads as a boolean. "
+                f"A row is never dropped for an unreadable url."
+            )
+
         if not URL_RE.match(url):
             if url.lower() in PLACEHOLDERS:
                 # Not published yet. It has no row until it has a URL; it is

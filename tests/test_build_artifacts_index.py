@@ -250,6 +250,91 @@ class BuilderTest(unittest.TestCase):
             "a rejected build must not rewrite the index",
         )
 
+    def test_non_string_url_on_a_published_record_is_rejected_not_dropped(self):
+        """A url of `false`, `0`, an empty list or a mapping used to normalise to
+        the empty string BEFORE validation, so it was read as the "not published
+        yet" placeholder and the published page's row vanished with exit 0. The
+        reviewer reproduced it on the real tree: 18 rows became 17, successfully."""
+        for label, literal in (
+            ("false", "url: false"),
+            ("zero", "url: 0"),
+            ("empty list", "url: []"),
+            ("mapping", "url: {href: https://claude.ai/code/artifact/x}"),
+        ):
+            with self.subTest(label):
+                self.index_row("a", ROW_A)
+                self.index_row("b", ROW_B)
+                self.assertEqual(run(self.root).returncode, 0)
+                self.assertIn("2 rows", self.table())
+                before = (self.root / "ARTIFACTS.md").read_text(encoding="utf-8")
+
+                self.index_row(
+                    "b",
+                    "\n".join(
+                        literal if line.startswith("url:") else line
+                        for line in ROW_B.splitlines()
+                    )
+                    + "\n",
+                )
+                result = run(self.root)
+
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("b.yml", result.stderr)
+                self.assertNotIn("not published yet", result.stdout)
+                self.assertEqual(
+                    (self.root / "ARTIFACTS.md").read_text(encoding="utf-8"),
+                    before,
+                    "a rejected build must not rewrite the index",
+                )
+
+    def test_check_mode_fails_on_a_non_string_url(self):
+        """--check exiting 0 on a shortened index is how the drop reached CI."""
+        for literal in ("url: false", "url: 0", "url: []", "url: {a: b}"):
+            with self.subTest(literal):
+                self.index_row("a", ROW_A)
+                self.index_row("b", ROW_B)
+                self.assertEqual(run(self.root).returncode, 0)
+                self.index_row(
+                    "b",
+                    "\n".join(
+                        literal if line.startswith("url:") else line
+                        for line in ROW_B.splitlines()
+                    )
+                    + "\n",
+                )
+                result = run(self.root, "--check")
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("b.yml", result.stderr)
+
+    def test_the_rejection_names_the_original_value(self):
+        """The message has to show what is in the file, not the empty string the
+        old normalisation turned it into, or nobody can find the typo."""
+        self.index_row("a", ROW_A.replace(
+            "url: https://claude.ai/code/artifact/11111111-1111-1111-1111-111111111111",
+            "url: false",
+        ))
+        result = run(self.root)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("a.yml", result.stderr)
+        self.assertIn("False", result.stderr)
+
+    def test_null_and_absent_url_follow_the_documented_empty_field_policy(self):
+        """artifacts/README.md: a url that is one of the two placeholders "or
+        empty" gets no row and is listed as a reminder. An explicit YAML null and
+        an absent key are both that empty field, so they are skipped and reported
+        — this is the one skip the schema designates, and it stays."""
+        self.artifact("draft-null", "title: Draft Null\nurl: null\nstatus: live\n")
+        self.artifact("draft-tilde", "title: Draft Tilde\nurl: ~\nstatus: live\n")
+        self.artifact("draft-absent", "title: Draft Absent\nstatus: live\n")
+        self.index_row("a", ROW_A)
+        result = run(self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("1 rows: 1 live.", self.table())
+        for name in ("Draft Null", "Draft Tilde", "Draft Absent"):
+            self.assertNotIn(name, self.table())
+        self.assertEqual(result.stdout.count("not published yet"), 3, result.stdout)
+        self.assertEqual(run(self.root, "--check").returncode, 0)
+
     def test_check_mode_fails_on_a_malformed_url(self):
         """--check exiting 0 while a row is dropped is how CI approved an index
         that had quietly lost a publication."""
@@ -323,6 +408,15 @@ class RealRepoTest(unittest.TestCase):
     def test_committed_index_is_current(self):
         result = run(REPO, "--check")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_real_tree_builds_to_eighteen_rows(self):
+        """The literal count the reviewer watched collapse to 17. Pinned as a
+        number so any future silent drop shows up here as well as in the
+        derived count below."""
+        result = run(REPO, "--check")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("(18 rows)", result.stdout)
+        self.assertIn("18 rows:", (REPO / "ARTIFACTS.md").read_text(encoding="utf-8"))
 
     def test_real_tree_row_count_is_unchanged(self):
         """Pins the count the fix must not move: every published meta.yml in the
