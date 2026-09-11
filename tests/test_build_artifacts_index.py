@@ -657,18 +657,11 @@ class RealRepoTest(unittest.TestCase):
         result = run(REPO, "--check")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_real_tree_builds_to_eighteen_rows(self):
-        """The literal count the reviewer watched collapse to 17. Pinned as a
-        number so any future silent drop shows up here as well as in the
-        derived count below."""
-        result = run(REPO, "--check")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("(18 rows)", result.stdout)
-        self.assertIn("18 rows:", (REPO / "ARTIFACTS.md").read_text(encoding="utf-8"))
-
     def test_real_tree_row_count_is_unchanged(self):
-        """Pins the count the fix must not move: every published meta.yml in the
-        repo still produces exactly one row."""
+        """Every published row file produces exactly one row, so a silent drop
+        fails here. Derived rather than pinned to a literal: a hardcoded 18 broke
+        the moment a new artifact was legitimately added, and a test that fails on
+        correct changes gets edited rather than read."""
         published = sum(
             1
             for p in [*REPO.glob("artifacts/*/meta.yml"),
