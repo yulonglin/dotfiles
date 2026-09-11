@@ -498,5 +498,17 @@ class TestCommandLine(unittest.TestCase):
         self.assertIn("--fix", result.stdout)
 
 
+class TestRepoMarkdownStaysClean(unittest.TestCase):
+    """The gate itself: Markdown under claude/ must stay unwrapped."""
+
+    def test_claude_markdown_has_no_hard_wrapped_paragraphs(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--check", str(REPO_ROOT / "claude")],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            self.fail("hard-wrapped Markdown under claude/:\n" + result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
