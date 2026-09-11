@@ -134,9 +134,9 @@
 <div class="wrap">
   <header>
     <h1>Dotfiles Review Queue</h1>
-    <p class="sub">Eight pull requests opened today, one concern each. Tick as you go — the state is stored server-side, so it follows you between devices.</p>
+    <p class="sub">Eleven pull requests opened today, one concern each. Tick as you go — the state is stored server-side, so it follows you between devices.</p>
     <div class="counts">
-      <div class="count"><b id="c-ready">8</b><span>ready today</span></div>
+      <div class="count"><b id="c-ready">11</b><span>ready today</span></div>
       <div class="count"><b>1</b><span>needs you</span></div>
       <div class="count"><b>21</b><span>older, conflicting</span></div>
       <div class="count done"><b id="c-done">0</b><span>reviewed</span></div>
@@ -175,7 +175,10 @@
       { n: 119, t: "State what the worktree guard can and cannot verify", why: "One paragraph, rewritten to give the principle plus four refused command shapes. Judgement call: it is now the longest paragraph in the file.", add: 1, del: 1, files: 1, chips: [] },
       { n: 118, t: "Design a snapshot net for the destructive-git hook", why: "Design only, nothing implemented. Decide the open question inside: git stash create captures tracked files only, so clean -f would snapshot nothing.", add: 47, del: 0, files: 1, chips: [["hold", "design only"]] },
       { n: 124, t: "Fail if the attribution opt-out returns to settings", why: "Guards the setting that broke auto mode behind the gateway. Checks the committed and deployed copies, which differ by design.", add: 84, del: 0, files: 1, chips: [["tests", "mutation-tested"]] },
-      { n: 116, t: "Probe for whether auto mode is deciding or failing open", why: "Being rewritten against your review comments before it is worth your second look.", add: 52, del: 0, files: 1, chips: [["hold", "rewrite in flight"]] }
+      { n: 116, t: "Probe for whether auto mode is deciding or failing open", why: "Rewritten by GPT-5.6 Sol against your four comments, and moved from tests/ to a skill, since nothing in tests/ executes it. Net effect on main is one new file.", add: 51, del: 0, files: 1, chips: [["tests", "rewritten"]] },
+      { n: 126, t: "write-prose routes human-facing prose to the designated writer", why: "Sol first, Astra second, Kimi K3 when both OpenAI seats hit the one quota they share. The first draft broke the skill's own rule by being written in Opus 5; Astra rewrote it.", add: 45, del: 0, files: 1, chips: [] },
+      { n: 127, t: "When a settings change reaches a running session", why: "The published page answering the restart question, plus its index row. Adding or changing an env value reaches a live session on save; removing one waits for the next launch.", add: 1190, del: 0, files: 2, chips: [] },
+      { n: 125, t: "This review queue, as a committed artifact", why: "Source and ARTIFACTS.md row for the page you are reading. Expect a shallow conflict with #127: both insert a row at the top of the same table.", add: 1283, del: 0, files: 2, chips: [] }
     ],
     code: [
       { n: 122, t: "Inline a sanitised svg fence, with an element allowlist", why: "Unescapes user text into published pages, so the allowlist is the part to read. Salvaged from #113.", add: 585, del: 8, files: 3, chips: [["tests", "41 tests pass"]] },
@@ -187,7 +190,7 @@
     ],
     other: [
       { n: 110, t: "Report approval-hook backend failures", why: "Holds the classifier failure telemetry and the unregenerable data snapshot; both were dropped from the salvage because they already live here. Conflicting.", add: 6748, del: 24, files: 20, chips: [["conflict", "conflicting"]] },
-      { n: 123, t: "Worktree router cooldown watchdog", why: "Opened today by another session, not reviewed here.", add: 660, del: 28, files: 13, chips: [] },
+      { n: 123, t: "Worktree router cooldown watchdog", why: "Opened today by another session, not reviewed here.", add: 726, del: 28, files: 16, chips: [] },
       { n: 111, t: "Worktree bgjob guard rules", why: "Its rules paragraph already landed on main as 0f347f1, so that file is now redundant and will conflict.", add: 2252, del: 6, files: 24, chips: [["conflict", "conflicting"]] },
       { n: 112, t: "Retire gum for claude-tools select", why: "Stale since 9 September.", add: 202, del: 113, files: 19, chips: [["conflict", "conflicting"]] }
     ],
