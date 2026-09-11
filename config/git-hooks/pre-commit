@@ -224,11 +224,53 @@ if found:
     return 1
 }
 
+# === ATTRIBUTION OPT-OUT CHECK ===
+#
+# Blocks CLAUDE_CODE_ATTRIBUTION_HEADER=0 coming back to a settings file. The opt-out plus a non-api.anthropic.com base URL makes every auto-mode classifier request return a bare 429, which denies every tool call with no local log line to explain it. See tests/test_no_attribution_optout.sh for the mechanism and the upstream references.
+#
+# Delegates to that test rather than restating the rule, so there is one implementation. The test lives in the dotfiles repo only, so every other repo skips this silently. The staged blob goes in as the committed copy, because that is what the commit would publish; the deployed copy is left at its real path, because that is what this machine is running.
+
+_validate_no_attribution_optout() {
+    local file="$1"
+
+    local repo_root guard
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+    guard="${repo_root}/tests/test_no_attribution_optout.sh"
+    [ -n "${repo_root}" ] && [ -f "${guard}" ] || return 0
+
+    # Template ends in the X run, with no extension: BSD mktemp on macOS wants a trailing X run, and a suffix after it is a GNU extension. The guard only parses the path as JSON, so the name carries nothing.
+    local staged
+    staged=$(mktemp "${TMPDIR:-/tmp}/staged-settings.XXXXXX") || return 0
+    if ! git show ":${file}" > "${staged}" 2>/dev/null; then
+        rm -f "${staged}"
+        return 0
+    fi
+
+    # Explicit status capture: the hook runs under `set -e`, and a bare assignment from a failing command substitution would abort it.
+    local output status
+    output=$(CLAUDE_SETTINGS_COMMITTED="${staged}" bash "${guard}" 2>&1) && status=0 || status=$?
+    rm -f "${staged}"
+    [ "${status}" -eq 0 ] && return 0
+
+    echo ""
+    echo "⛔  Pre-commit: attribution opt-out guard FAILED for ${file}"
+    while IFS= read -r _guard_line; do echo "    ${_guard_line}"; done <<< "${output}"
+    echo ""
+    echo "    Remove env.CLAUDE_CODE_ATTRIBUTION_HEADER from the file(s) named above."
+    echo "    Background: artifacts/auto-mode-classifier-429/report.md"
+    echo ""
+    echo "    To bypass (only if you have verified the classifier still answers):"
+    echo "      git commit --no-verify"
+    echo ""
+    return 1
+}
+
 while IFS= read -r _staged_file; do
     case "${_staged_file}" in
         claude/settings.json|.claude/settings.json)
             _validate_claude_settings "${_staged_file}" || exit 1
             _validate_no_local_gateway "${_staged_file}" || exit 1
+            _validate_no_attribution_optout "${_staged_file}" || exit 1
             ;;
     esac
 done < <(git diff --cached --name-only 2>/dev/null)

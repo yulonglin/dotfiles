@@ -101,7 +101,16 @@ if [ -n "$EXISTING" ]; then
     emit "Pushed $BRANCH; PR #$EXISTING is already open for it. $NEXT"
 fi
 
-if ! CREATED=$(cd "$CWD" && gh pr create --draft --fill --head "$BRANCH" 2>&1); then
+# --fill takes the title from the commit only when the branch is exactly one
+# commit ahead of base; with more commits it humanises the BRANCH NAME instead.
+# That is how background jobs produced PRs titled "worktree agent <hex>" — and
+# why any two-commit push got a title like "gateway dropin rebase". gh's own
+# help: alongside --fill, a value given by --title takes precedence, so the body
+# stays autofilled from the commits.
+TITLE=$(git -C "$CWD" log -1 --format=%s 2>/dev/null)
+TITLE_ARG=()
+[ -n "$TITLE" ] && TITLE_ARG=(--title "$TITLE")
+if ! CREATED=$(cd "$CWD" && gh pr create --draft --fill "${TITLE_ARG[@]}" --head "$BRANCH" 2>&1); then
     emit "Pushed $BRANCH but no PR exists and \`gh pr create --draft --fill\` failed: ${CREATED//$'\n'/ }. Open one with gh pr create (title + body), then: $NEXT"
 fi
 URL=$(grep -oE 'https://github\.com/[^ ]+/pull/[0-9]+' <<< "$CREATED" | head -1)

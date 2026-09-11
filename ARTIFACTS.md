@@ -16,6 +16,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 
 | Artifact | Org | Status | Source | Public | Updated |
 |---|---|---|---|---|---|
+| [When Settings Reach a Session](https://claude.ai/code/artifact/7338696f-f448-4751-a209-db0cd49cdca9) — adding or changing an `env` value reaches a running session when the file is saved, while removing one takes effect only at the next launch — quoted from the environment-variable documentation, not established here; a scan on 2026-09-11 found 16 processes still carrying a value deleted two days earlier, 13 of them orphaned socat forwarders, none of which call the classifier. The scan shows stale environments, not the cause of any one of them | lin.yulong@gmail.com's Organization | live | `artifacts/settings-propagation/` | no | 2026-09-11 |
 | [Dotfiles Artifacts](https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107) — this index, hosted; republished to this URL after every artifact publish | lin.yulong@gmail.com's Organization | live | `artifacts/index/` | no | 2026-09-10 |
 | [Why Auto Mode Broke Behind the Gateway](https://claude.ai/code/artifact/959f403c-5343-40c6-ad4b-8d68f9a066e6) — every auto-mode classifier 429 needed two conditions: `CLAUDE_CODE_ATTRIBUTION_HEADER=0` (set since March) and a non-`api.anthropic.com` base URL (the model-router gateway). Claude Code 2.1.229's repair re-adds the attribution block only when the URL host is literally first-party, so gateway days 429'd and direct days did not; 28 days of transcripts split exactly on gateway on/off. Fix: drop the opt-out (b2868c8a), gateway kept; verified by before/after probes. The 8 Sep A/B was confounded (both arms proxied). Spend levers (per-tool classifier cost, 200k+ contexts, concurrency) remain open | MATS Program | live | `artifacts/auto-mode-classifier-429/` | no | 2026-09-09 |
 | [Remote Control and foreign models: route at the tool layer, or move the endpoint without breaking TLS](https://claude.ai/code/artifact/dfd9f494-031b-4ca3-be8b-10c73e4a45ac) — a foreign-model picker and Remote Control are mutually exclusive in one process (RC is a string check on the `ANTHROPIC_BASE_URL` host, and gateway model discovery needs that URL non-Anthropic); an unrecognised model ID silently answers from the default Claude model; a TLS-terminating proxy is technically open but rejected on fragility; route foreign models at the tool layer instead. Successor to *The Remote Control Inversion* below | yl688@cantab.ac.uk's Organization | done | `artifacts/remote-control-and-foreign-models/` | no | 2026-09-06 |
@@ -35,7 +36,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 | [Alias Audit](https://claude.ai/code/artifact/739598b0-362d-4aaa-a8c2-c77775be5eb4) — alias files fight over names by source order; the set was cut 161 → ~110 against two months of shell history | see note | done | — | no | 2026-08-18 |
 | [Tool-Backed Agents](https://claude.ai/code/artifact/4c124679-7346-4dc5-9cb4-75889320aaf4) — which agents actually invoke their CLI rather than answering from their own reasoning | see note | done | — | no | 2026-08-18 |
 
-18 rows: 5 live, 10 done, 2 archived, 1 superseded.
+19 rows: 6 live, 10 done, 2 archived, 1 superseded.
 
 [//]: # (END GENERATED ARTIFACTS TABLE)
 

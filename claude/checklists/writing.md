@@ -73,6 +73,14 @@ The goal is not to sound human. It is that each of these actively obscures the p
 - **Provoking and deferring** — a claim that raises "why?" or "which ones?" and answers somewhere else. Carry the answer in the same sentence or the next.
 - **Aphoristic headings and openers** — a metaphor standing in for the thing named ("the hardest corner"), a referent the reader must read on to decode ("the one we care about", "the most direct fix"), or an abstract noun as subject where the actor belongs ("Detection difficulty tracks..." rather than which method missed which sandbaggers). Two clauses are not the fault: "No Single Method Dominates; the Two Are Complementary" states both halves plainly. What fails is withholding the point until the body. The test, applied before the body is read: the line is understandable on its own, it names the concrete actor and the finding, and it could not headline three different paragraphs. "Detection difficulty tracks the threat model, and the hardest corner is the one we care about" plainly is **"C³ misses trained and emergent sandbaggers — 19% recall on the threat models that matter most."**
 
+## PR bodies make review bounded
+
+A PR body states four things in order: what the change establishes or enables; the evidence and commands that support it; what the reviewer should inspect; and what is deliberately out of scope. Write the causal argument in prose, not as a copied commit message or a list of features.
+
+Name the test environment when it affects the evidence. Link to source material, and state any limitation that could change the conclusion.
+
+Do not hard-wrap prose in a PR body. Let GitHub wrap each paragraph, with blank lines between paragraphs; use bullets only for parallel independent items such as several test commands or reviewer checks.
+
 ## Reference drafts worth calibrating against
 
 Calibrate against ML papers where the first paragraph frames the problem without waste, threat models are stated upfront, figures earn their space, and limitations are stated matter-of-factly rather than apologetically. Technical blogs with voice and depth belong too, Ferenc Huszár's [inference.vc](https://www.inference.vc/) among them. What to notice in each: the first sentence of every section does real work, concrete examples arrive before abstractions, and claims are direct — *"We find X"*, not *"our results suggest that X may potentially"*. Pieces that meet the bar:
