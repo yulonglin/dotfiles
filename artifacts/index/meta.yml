@@ -5,6 +5,11 @@ first_published: 2026-09-10
 last_updated: 2026-09-10
 status: live
 
+public: no
+
+summary: >-
+  this index, hosted; republished to this URL after every artifact publish
+
 source: ../../ARTIFACTS.md   # the repo-root index is the source; this directory holds only the build
 built: index.html
 builds_with: |

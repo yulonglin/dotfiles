@@ -67,6 +67,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <h1 id="artifacts-and-resources-for-dotfiles">Artifacts and Resources for dotfiles</h1>
 <p>The pages this repo's work has produced, and where the things it depends on live. Every row states what the page established, so this file can be read instead of opened.</p>
 <p>Maintained per <code>~/.claude/skills/artifacts-sync/SKILL.md</code> — rows are written at publish time, because neither the repo nor the publishing org can be recovered from the gallery afterwards. Run <code>/artifacts-sync</code> to reconcile.</p>
+<p><strong>The table is generated; edit the YAML, never the Markdown.</strong> Each row comes from one file — <code>artifacts/&lt;slug&gt;/meta.yml</code> for a page whose source is kept, <code>artifacts/index-rows/&lt;slug&gt;.yml</code> for one whose source was not — and <code>python3 scripts/build_artifacts_index.py</code> rewrites the block between the two markers below. Two publishes now touch two different files instead of the same table line, so they no longer conflict; a conflict inside the generated block is resolved by taking either side and re-running the script. Everything outside the markers is hand-written and is never touched.</p>
 <p><strong>Live index page:</strong> https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107 — published 2026-09-10 under <code>lin.yulong@gmail.com's Organization</code> from <code>artifacts/index/index.html</code>.</p>
 <p><strong>The index is republished to that same URL after every artifact publish</strong> (Yulong, 2026-09-10), which replaces the earlier &quot;republish only on request&quot; rule: rebuild <code>artifacts/index/index.html</code> from this file and publish it with <code>url</code> set to the address above, in the same turn as the row you just wrote. <code>claude/hooks/nudge_artifact_index.sh</code> reads that URL out of this header and reminds the session; it never publishes anything itself. The old rule existed because the two previous hosted copies — the org-locked original (<a href="https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802">8ad029a9</a>) and its replacement (<a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">8d035fe5</a>), deleted the same day it was published — were both removed shortly after publication, so treat a 404 on the live URL as a signal to publish a fresh page and re-stamp this line rather than as a reason to stop.</p>
 <h2 id="artifacts">Artifacts</h2>
@@ -91,28 +92,12 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>2026-09-10</td>
 </tr>
 <tr>
-<td><a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">Artifacts and Resources for dotfiles</a> — this index, published 2026-08-31 and deleted the same day</td>
-<td>unknown</td>
-<td>archived — deleted upstream; the URL 404s</td>
-<td><code>ARTIFACTS.md</code></td>
-<td>no</td>
-<td>2026-08-31</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802">Artifacts and Resources for dotfiles (previous URL)</a> — org-locked former home of this index</td>
-<td>see note</td>
-<td>superseded — by <a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">the current index</a></td>
-<td><code>ARTIFACTS.md</code></td>
-<td>no</td>
-<td>2026-08-29</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/d224e859-2f4d-452c-9781-5ab3941e57cf">Remote Control and Foreign Models</a> — native Remote Control and a non-Claude <code>/model</code> menu are mutually exclusive in one process by construction; an unrecognised model ID silently answers from the default Claude model; route at the tool layer, and the one workaround worth a test moves the endpoint without breaking TLS</td>
-<td>unknown (claude.ai login; <code>claude auth status</code> reports <code>orgName: null</code>)</td>
+<td><a href="https://claude.ai/code/artifact/959f403c-5343-40c6-ad4b-8d68f9a066e6">Why Auto Mode Broke Behind the Gateway</a> — every auto-mode classifier 429 needed two conditions: <code>CLAUDE_CODE_ATTRIBUTION_HEADER=0</code> (set since March) and a non-<code>api.anthropic.com</code> base URL (the model-router gateway). Claude Code 2.1.229's repair re-adds the attribution block only when the URL host is literally first-party, so gateway days 429'd and direct days did not; 28 days of transcripts split exactly on gateway on/off. Fix: drop the opt-out (b2868c8a), gateway kept; verified by before/after probes. The 8 Sep A/B was confounded (both arms proxied). Spend levers (per-tool classifier cost, 200k+ contexts, concurrency) remain open</td>
+<td>MATS Program</td>
 <td>live</td>
-<td><code>artifacts/remote-control-and-foreign-models/</code></td>
+<td><code>artifacts/auto-mode-classifier-429/</code></td>
 <td>no</td>
-<td>2026-09-03</td>
+<td>2026-09-09</td>
 </tr>
 <tr>
 <td><a href="https://claude.ai/code/artifact/dfd9f494-031b-4ca3-be8b-10c73e4a45ac">Remote Control and foreign models: route at the tool layer, or move the endpoint without breaking TLS</a> — a foreign-model picker and Remote Control are mutually exclusive in one process (RC is a string check on the <code>ANTHROPIC_BASE_URL</code> host, and gateway model discovery needs that URL non-Anthropic); an unrecognised model ID silently answers from the default Claude model; a TLS-terminating proxy is technically open but rejected on fragility; route foreign models at the tool layer instead. Successor to <em>The Remote Control Inversion</em> below</td>
@@ -123,10 +108,34 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>2026-09-06</td>
 </tr>
 <tr>
+<td><a href="https://claude.ai/code/artifact/d224e859-2f4d-452c-9781-5ab3941e57cf">Remote Control and Foreign Models</a> — native Remote Control and a non-Claude <code>/model</code> menu are mutually exclusive in one process by construction; an unrecognised model ID silently answers from the default Claude model; route at the tool layer, and the one workaround worth a test moves the endpoint without breaking TLS</td>
+<td>unknown (claude.ai login; <code>claude auth status</code> reports <code>orgName: null</code>)</td>
+<td>live</td>
+<td><code>artifacts/remote-control-and-foreign-models/</code></td>
+<td>no</td>
+<td>2026-09-03</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/code/artifact/46e4abb8-b37f-4597-8f47-6176f4fa4649">The Second Clear</a> — nine models across three families refuse the literal &quot;clear uncopied&quot;: every comment predating the feature carries no stamp, so it reads as uncopied and the button would wipe the page. Ship &quot;Delete copied&quot; instead, on the file's existing arm-and-confirm. Round 1 ran against a description 59 commits stale; the corrected re-run flipped the wording to &quot;copied out&quot; unanimously</td>
+<td>see note</td>
+<td>done</td>
+<td><code>tmp/anlayer/playground.html</code> (untracked scratch)</td>
+<td>no</td>
+<td>2026-09-01</td>
+</tr>
+<tr>
 <td><a href="https://claude.ai/code/artifact/8d07cd03-d6f6-4b86-b72c-1ce1c03d2191">Installers Stop Stalling; Profiles Get Names</a> — the stall was never the prompts: a silent <code>cargo build --quiet</code> and untimed fetches at the top of both scripts, plus five more untimed <code>curl | sh</code> installers found only by checking the class; fixed with deadlines and purpose-named profiles (bare/standard/agent/devbox) on draft PR #77, CI green</td>
 <td>unknown (see note)</td>
 <td>live</td>
 <td>— (built from the job's gitignored <code>tmp/</code>, not kept)</td>
+<td>no</td>
+<td>2026-08-31</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">Artifacts and Resources for dotfiles</a> — this index, published 2026-08-31 and deleted the same day</td>
+<td>unknown</td>
+<td>archived — deleted upstream; the URL 404s</td>
+<td><code>ARTIFACTS.md</code></td>
 <td>no</td>
 <td>2026-08-31</td>
 </tr>
@@ -144,26 +153,18 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>live</td>
 <td><code>artifacts/context-ledger/</code></td>
 <td>no</td>
+<td>2026-08-30</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802">Artifacts and Resources for dotfiles (previous URL)</a> — org-locked former home of this index</td>
+<td>see note</td>
+<td>superseded — by <a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">the current index</a></td>
+<td><code>ARTIFACTS.md</code></td>
+<td>no</td>
 <td>2026-08-29</td>
 </tr>
 <tr>
-<td><a href="https://claude.ai/code/artifact/46e4abb8-b37f-4597-8f47-6176f4fa4649">The Second Clear</a> — nine models across three families refuse the literal &quot;clear uncopied&quot;: every comment predating the feature carries no stamp, so it reads as uncopied and the button would wipe the page. Ship &quot;Delete copied&quot; instead, on the file's existing arm-and-confirm. Round 1 ran against a description 59 commits stale; the corrected re-run flipped the wording to &quot;copied out&quot; unanimously</td>
-<td>see note</td>
-<td>done</td>
-<td><code>tmp/anlayer/playground.html</code> (untracked scratch)</td>
-<td>no</td>
-<td>2026-09-01</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/242e3dbb-600d-44b4-87ae-9a688542e132">Task Lists Follow the Shell</a> — every session already gets its own task list, so the wrapper must never export a shared ID; the daemon is the last place a stale one hides</td>
-<td>see note</td>
-<td>done</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-28</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/26852bc6-e36f-4b55-97db-d0d3473a0b49">Most of the setup now loads on demand</a> — the always-loaded rules tier fell from ~76 KB to ~28 KB by moving activity-scoped procedure into skills</td>
+<td><a href="https://claude.ai/code/artifact/c2c019d6-dc78-4f8e-88b8-8d716bfad39d">Two Files Earn Their Keep</a> — which of the plotting-library files justified staying</td>
 <td>see note</td>
 <td>done</td>
 <td>—</td>
@@ -179,7 +180,15 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td>2026-08-28</td>
 </tr>
 <tr>
-<td><a href="https://claude.ai/code/artifact/c2c019d6-dc78-4f8e-88b8-8d716bfad39d">Two Files Earn Their Keep</a> — which of the plotting-library files justified staying</td>
+<td><a href="https://claude.ai/code/artifact/26852bc6-e36f-4b55-97db-d0d3473a0b49">Most of the setup now loads on demand</a> — the always-loaded rules tier fell from ~76 KB to ~28 KB by moving activity-scoped procedure into skills</td>
+<td>see note</td>
+<td>done</td>
+<td>—</td>
+<td>no</td>
+<td>2026-08-28</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/code/artifact/242e3dbb-600d-44b4-87ae-9a688542e132">Task Lists Follow the Shell</a> — every session already gets its own task list, so the wrapper must never export a shared ID; the daemon is the last place a stale one hides</td>
 <td>see note</td>
 <td>done</td>
 <td>—</td>
@@ -220,8 +229,9 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </tr>
 </tbody>
 </table>
+<p>18 rows: 5 live, 10 done, 2 archived, 1 superseded.</p>
 <p><strong>Status vocabulary.</strong> <code>live</code> — still being updated, cite it. <code>done</code> — the work is finished and its conclusions stand, still quotable. <code>archived</code> — deliberately retired, do not cite, row kept for its history and comment threads. <code>superseded</code> — replaced by a specific newer page, and the row links to it. <code>elsewhere</code> — published under an org this machine is not signed into. <code>done</code> is an achievement and <code>archived</code> is a retirement; only <code>superseded</code> implies a successor exists. Nothing is ever deleted from this table.</p>
-<p><strong>What the table holds today.</strong> Four rows are <code>live</code> — this index, <em>Remote Control and Foreign Models</em>, <em>Installers Stop Stalling; Profiles Get Names</em> and <em>Context Ledger</em> — and ten are <code>done</code>, each reporting finished work whose conclusions still hold. The two <code>archived</code> rows are pages deleted upstream, so their links 404: the 2026-08-31 hosted index and <em>README Trimmed; Two Proposals Await</em>; the single <code>superseded</code> row is this index's org-locked original, replaced rather than retired. Nothing has been removed.</p>
+<p><strong>What the table holds today.</strong> The tally under the table is generated with it, so it cannot go stale. The two <code>archived</code> rows are pages deleted upstream, so their links 404: the 2026-08-31 hosted index and <em>README Trimmed; Two Proposals Await</em>. The single <code>superseded</code> row is this index's org-locked original, replaced rather than retired. Nothing has ever been removed.</p>
 <p><strong>Org, and why most rows still say &quot;see note&quot;.</strong> Every row above appeared in the <code>Artifact action: list</code> result of 2026-08-29. Whether that <em>means</em> they are in the currently signed-in org depends on the listing being org-scoped, which the Claude Code docs nowhere state — so read &quot;see note&quot; as genuinely unknown rather than as a name I merely failed to type. The org's <em>name</em> is missing only because <code>claude auth status</code> returned <code>orgName: null</code> on the session that wrote this file — while reporting <code>authMethod: &quot;claude.ai&quot;</code> and publishing the index page without trouble. A null org therefore diagnoses nothing about how the session is authenticated; it is simply a field that is sometimes unpopulated. The field <em>is</em> populated on this machine as of 2026-09-10, which is where the index row's <code>lin.yulong@gmail.com's Organization</code> comes from — but reading today's org says nothing about which org published a page in August, so the older rows keep &quot;see note&quot; rather than being back-filled from it, and every row written from now on carries the org read at its own publish time.</p>
 <p><strong>These eight rows are retro-attributed.</strong> They were matched to this repo by subject matter against the Learnings section of <code>CLAUDE.md</code>, not by a source file on disk, because no built HTML was kept for any of them. Every row published from now on gets its source path recorded at publish time. Treat the two least certain — <em>Two Files Earn Their Keep</em> and <em>Tool-Backed Agents</em> — as provisional until confirmed.</p>
 <h2 id="other-resources">Other resources</h2>

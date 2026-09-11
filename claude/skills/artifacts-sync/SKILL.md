@@ -33,14 +33,28 @@ md2artifact ARTIFACTS.md -o artifacts/index/index.html --title "<Repo> Artifacts
 
 The URL to pass is the one on the `**Live index page:**` line of the `ARTIFACTS.md` header. That line is the single machine-readable record of where the index lives — `claude/hooks/nudge_artifact_index.sh` reads it from there to name the URL in its reminder — so keep it one line carrying exactly one artifact URL, and re-stamp it whenever the index moves. The hook only reminds; publishing stays the session's job. Never build to `$TMPDIR` or any gitignored path: `block_throwaway_artifact_path.sh` refuses the publish, and the built page belongs in git beside every other artifact.
 
-| Column | Content |
+### Write the row into `meta.yml`, then rebuild — never edit the table by hand
+
+The table is generated. Each row comes from one file, so two sessions recording two artifacts write two different files and never conflict on the same line.
+
+| Key in `meta.yml` | Content |
 |---|---|
-| Artifact | The linked title. It already asserts the finding, so it doubles as the summary; give a legacy topic-titled page a one-line gloss until it is renamed |
-| Org | `orgName` from `claude auth status` **at publish time** |
-| Status | one of the five below — nothing else |
-| Source | Repo-relative path of the committed source; since 2026-09-01 the built HTML is committed beside it (`artifacts/README.md`). `—` only on legacy rows where nothing was kept |
-| Public | `no`, or the public mirror URL |
-| Updated | ISO date of the last publish |
+| `title` | The page title. It already asserts the finding, so the link doubles as the summary |
+| `url` | The published address. Anything else (`unpublished`, `pending-first-publish`) means no row yet |
+| `org` | `orgName` from `claude auth status` **at publish time** |
+| `status` | one of the five below — the builder rejects anything else |
+| `status_note` | The clause after the status. A `superseded` row **must** link to its replacement here |
+| `summary` | The clause after the em dash: what the page established |
+| `public` | `no`, or the public mirror URL |
+| `last_updated` | ISO date of the last publish; the table sorts on it, newest first |
+| `index_source` | Only when the Source cell is not this artifact's own directory |
+
+```bash
+python3 scripts/build_artifacts_index.py          # rewrite the table
+python3 scripts/build_artifacts_index.py --check  # what CI runs
+```
+
+A page whose source was never kept has no directory to hold a `meta.yml`; its row lives in `artifacts/index-rows/<slug>.yml` instead, same keys. Nothing published from now on should need one. A merge conflict inside the generated block is resolved mechanically — take either side, re-run the builder, commit — because the rows themselves are in files that merged cleanly.
 
 ### Status separates "still moving" from "finished" from "retired"
 
@@ -59,6 +73,23 @@ A single `live` flag collapses three different things a reader needs to tell apa
 Nothing is ever deleted. Deleting a row destroys the only trace of where a stale link points, and the comment threads on a retired page are still the user's work.
 
 `ARTIFACTS.md` is itself published as the repo's index page and carries its own row. A living index may name its function rather than assert a finding — the documented exception to the title rule.
+
+
+## An artifact-only change goes straight to main, with no PR
+
+One PR per published page is a tax on a repo that allows direct pushes to `main` (CLAUDE.md, *Top Rules*). An **artifact-only** change skips the PR entirely: commit on `main` and push.
+
+The test is mechanical, not a judgement call. Every path in the change must be either under `artifacts/` or the literal `ARTIFACTS.md`:
+
+```bash
+git diff --cached --name-only | grep -vE '^(artifacts/|ARTIFACTS\.md$)'
+```
+
+No output means artifact-only — push it. Any output names a file that takes it out of the exemption, and that change goes through the normal branch-and-PR flow, however small it looks. Scripts, hooks, skills, settings and docs are all outside `artifacts/`, so a change that touches the publishing machinery is never artifact-only even when it also publishes a page.
+
+Two things still hold before the push: `python3 scripts/build_artifacts_index.py` so the table matches the YAML, and the built HTML committed beside its source. If the push is rejected as non-fast-forward, `git pull --rebase`; a conflict in the generated block is resolved by re-running the builder.
+
+This does not extend to merging pull requests without a human. Nothing here auto-approves or auto-merges anything — the exemption is that an artifact-only change never opens a PR in the first place.
 
 ## Absence from the listing is three different states, so record the org instead of probing
 

@@ -1,0 +1,46 @@
+name: ARTIFACTS.md matches its YAML
+
+# The table in ARTIFACTS.md is generated from one YAML file per published page.
+# A hand-edit of the generated block, or a new meta.yml whose row was never
+# built, would drift silently — the file still renders, it just stops matching
+# the data. This is the check that notices.
+#
+# Only first-party actions (actions/*), matching this repo's supply-chain posture.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ARTIFACTS.md'
+      - 'artifacts/**'
+      - 'scripts/build_artifacts_index.py'
+      - 'tests/test_build_artifacts_index.py'
+      - '.github/workflows/artifacts-index.yml'
+  pull_request:
+    paths:
+      - 'ARTIFACTS.md'
+      - 'artifacts/**'
+      - 'scripts/build_artifacts_index.py'
+      - 'tests/test_build_artifacts_index.py'
+      - '.github/workflows/artifacts-index.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Regenerate and compare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PyYAML
+        run: python3 -m pip install --user pyyaml
+
+      - name: The committed table must match artifacts/*/meta.yml
+        run: python3 scripts/build_artifacts_index.py --check
+
+      - name: Builder tests
+        run: python3 tests/test_build_artifacts_index.py

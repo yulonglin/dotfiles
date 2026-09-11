@@ -159,7 +159,7 @@ fi
 
 REL="${INDEX#"$ROOT"/}"
 if [ -f "$INDEX" ]; then
-    WHAT="Add a row to $REL for it"
+    WHAT="Record it for $REL"
 else
     WHAT="Create $REL and add it"
 fi
@@ -167,7 +167,7 @@ fi
 if [ "$RECORDED" = yes ]; then
     MSG="Published $URL, and its row in $REL is already there."
 else
-    MSG="Published $URL but it is not in $REL yet. $WHAT, following the artifacts-sync skill for the row schema — record the publishing org now, because it is not recoverable later and the gallery listing carries no repo attribution."
+    MSG="Published $URL but it is not in $REL yet. $WHAT, following the artifacts-sync skill for the row schema — the row is generated from the meta.yml beside the page source, so write the keys there and rebuild rather than editing the table. Record the publishing org now, because it is not recoverable later and the gallery listing carries no repo attribution."
 fi
 
 if [ -n "$INDEX_URL" ]; then

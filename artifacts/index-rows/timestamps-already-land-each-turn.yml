@@ -1,0 +1,9 @@
+title: Timestamps Already Land Each Turn; The Gap Is Inside Long Turns
+url: https://claude.ai/code/artifact/842dfe8e-e902-416d-86eb-aa7d5042b659
+org: see note
+status: done
+last_updated: 2026-08-27
+public: no
+
+summary: >-
+  per-turn timestamp injection is already solved; only long single turns lack a time signal
