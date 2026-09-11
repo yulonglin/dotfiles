@@ -54,6 +54,26 @@ This is the single most valuable lesson from running the loop. A fix is written 
 
 So brief the verifier to spend **most** of its effort hunting the neighbouring spelling, not re-running the suite. Budget for a third round; two rounds is normal, not a sign anything went wrong.
 
+## Three rounds of losing to a new case means the design is wrong
+
+The previous section says to expect the first fix to be too narrow. There is a threshold past which that advice inverts: once a defect has survived three genuine fixes, each defeated by a different input of the same shape, stop patching and change the design. Continuing is not diligence, it is building a worse version of something that already exists.
+
+The signal is specific: each round's fix is *correct*, the tests pass, and the next adversarial reader finds a fresh case within minutes. That pattern means the code is re-deriving something it should be delegating, or the data model makes the bug expressible. Three worked examples from one queue:
+
+- A Markdown tool hand-rolled block detection and lost four times — blank lines in raw HTML, a pipe on an opening tag, a block on a list-marker line, a literal fence delimiter inside a quoted example. The fix was to parse with a real CommonMark library and unwrap only inside paragraph token line-ranges, so every other construct is excluded by construction. It deletes code rather than adding it.
+- An index builder kept dropping rows for metadata it could not read, and the detector meant to catch misfiled rows kept being defeated by a new filename. The question "is this file meant to be a row?" is undecidable from a name. Inverting it to "does every published artifact have a row?" is decidable, and a misfiled row then surfaces as a true, actionable message.
+- Two persistence layers lost updates through six rounds of increasingly sophisticated reconciliation, including one that enumerated sixteen states and proved ten unreachable by invariant. Both stored every item in one shared document, making each write a read-modify-write with no compare-and-set available. Storing one item per key removes the conflict rather than resolving it.
+
+Each rewrite was justified by an assumption nobody had re-examined. The persistence one was explicit in a comment: "a merge cannot express an untick, because deleting the key is the only way to say not-ticked." Storing an explicit false was always available. **When a design keeps failing, find the sentence that justified it and check whether it is true.**
+
+Brief the rewrite to DELETE machinery, and ask for the net line change. If the diff grows, the new model was layered on the old one and every old bug is still there.
+
+## Run the suite around a merge, and notice if there is no suite
+
+A merged one-file change broke a test in one of these queues, and nothing caught it, because the repo had no way to run its own suites. Before merging, run whatever suite covers the change; after merging, run it again. If you cannot find a runner, that absence is itself the most valuable finding available — a repo whose CI has been failing for ten days on an unrelated job looks exactly like a repo whose CI passes, and a queue reviewed against invisible tests is reviewed against nothing.
+
+When you do build or find a runner, make it distinguish a real failure from a skip for an absent optional dependency. A runner that reports every environment gap as a failure gets ignored within a week, which leaves the repo exactly where it started.
+
 ## Writing a defect brief an agent can act on
 
 State the defect as established fact with its reproduction, name the file and line, then give the fix and the required regression tests. Demand the test **fail first** and require real command output at each step — a fixer that never watched a test fail has not shown the defect existed. Add the principle the fix serves ("this builder must never drop a row for metadata it cannot read"), because it generalises where a patch does not.
