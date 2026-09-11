@@ -246,6 +246,13 @@ def details_passthrough(tokens: list[Token]) -> list[Token]:
 
 TASK_RE = re.compile(r"^\[([ xX])\]\s+")
 
+# A state is written into the brackets of a Markdown task line by Copy all
+# (`- [deny] the label`), so a state carrying a bracket or a newline produces a
+# line that no longer parses back as a task item -- silently, in the reviewer's
+# clipboard, long after the build that accepted it. Everything else is allowed:
+# the state is a word the author chose, and only these characters break it.
+BAD_STATE_CHARS = re.compile(r"[\[\]\x00-\x1f\x7f]")
+
 
 def _inline_plain(children: list[Token]) -> str:
     """The item's visible text, used only to derive a stable control id."""
@@ -506,7 +513,12 @@ if ("IntersectionObserver" in window && targets.length) {{
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0],
+        epilog="Checklist state is keyed by a slug of the item's own label, so "
+        "reordering or inserting items keeps every tick, while rewording an item "
+        "resets that one item to its source default.",
+    )
     ap.add_argument("source", type=Path, help="Markdown file to wrap")
     ap.add_argument("-o", "--output", type=Path, help="output HTML (default: <source>.review.html)")
     ap.add_argument("--title", help="page title (default: first H1, else the filename stem)")
@@ -536,6 +548,14 @@ def main(argv: list[str] | None = None) -> int:
             ap.error("--states needs at least two comma-separated states")
         if len(set(states)) != len(states):
             ap.error("--states must not repeat a state")
+        bad = [st for st in states if BAD_STATE_CHARS.search(st)]
+        if bad:
+            ap.error(
+                "--states must not contain '[', ']' or a control character "
+                f"({', '.join(repr(st) for st in bad)}): the export writes each "
+                "state inside the brackets of a Markdown task line, and those "
+                "characters stop that line parsing back"
+            )
     text = args.source.read_text(encoding="utf-8")
 
     title = args.title

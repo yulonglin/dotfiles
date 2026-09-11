@@ -68,8 +68,9 @@ Behaviour, all of which the tests guard:
   ever asking and the browser only logs "Ignored call to ...". A delete
   guarded that way is a dead button exactly where these pages are read;
 - a `beforeunload` guard while comments exist that have not been copied out,
-  which also saves the draft on the way out. It no longer attempts a download,
-  and it protects an ordinary tab rather than a published page: the same
+  or while any write has been refused, which also saves the draft on the way
+  out. It no longer attempts a download, and it protects an ordinary tab
+  rather than a published page: the same
   sandbox that suppresses `confirm` excludes the document from unload
   prompting, so the comments' real safety net is that they are already in
   localStorage;
@@ -105,7 +106,10 @@ additions, all of which the tests guard:
   button cycling a declared state set such as approve / approve-pending-edits
   / deny. Any element wearing `data-an-state-id` is wired, persisted under
   `an-states:<key>` and exported in a `## Checklist` section of Copy all. A
-  page with no such element behaves exactly as it did;
+  page with no such element behaves exactly as it did. A refused write raises
+  the same badge, panel line and unload guard a refused comment write raises:
+  a review queue is all checklist and no prose, so a tick lost to blocked site
+  data would otherwise be the one loss this layer never reports;
 - entries gained `type: "comment" | "edit"`. An entry with no `type` is a
   comment, so every page's existing comments load unchanged; the key, the bare
   array and the loud `setItem` failure are all as they were. Edits store the
@@ -285,8 +289,11 @@ mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-thr
 .anwarn{background:var(--an-bad);color:#fff;padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
 /* Toggle controls. The generator emits the markup; this styles it, so a
    hand-written page that emits the same `data-an-state-id` wrapper gets the
-   look, the persistence and the export without copying any CSS. */
-li.antask{list-style:none}
+   look, the persistence and the export without copying any CSS.
+   The bullet is dropped only inside an UNORDERED list: a bare `li.antask`
+   also reaches an ordered checklist, where `list-style:none` deletes the step
+   numbers the author wrote the list as a numbered one to keep. */
+ul>li.antask{list-style:none}
 .anstate{display:inline-flex;align-items:baseline;gap:.45em}
 .anstatebox{flex:none;align-self:center;width:1em;height:1em;accent-color:var(--an-accent);cursor:pointer}
 .anstatebtn{flex:none;background:var(--an-field);color:var(--an-ink);border:1px solid var(--an-rule);
@@ -377,7 +384,14 @@ function readComments(){
 // Not a per-tab counter: two tabs on one page would both hand out id 1.
 function newId(){ return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
 
-var comments = readComments(), unsaved = false;
+var comments = readComments(), notesUnsaved = false, statesUnsaved = false;
+// One refused-write signal for two writers. A lost tick is as lost as a lost
+// note -- on a page that is all checklist and no prose, which is what a review
+// queue is, the tick IS the work -- so both raise the same badge, the same
+// panel line and the same unload guard. Each writer clears only its own flag,
+// because each rewrites its whole value: a `persist()` that succeeded says
+// nothing about whether the states got stored.
+function unsaved(){ return notesUnsaved || statesUnsaved; }
 comments.forEach(function(c){ if (!c.id) c.id = newId(); });
 
 // Per-comment export state. `copiedAt` is stamped only where the page-level
@@ -428,9 +442,13 @@ document.addEventListener("visibilitychange", function(){
 });
 window.addEventListener("beforeunload", function(e){
   saveDraft();
-  if (!isDirty() || !comments.length) return;
-  // The comments are already in localStorage; this only warns that they have
-  // not been copied anywhere outside this browser yet.
+  // Two reasons to stop someone. Comments that exist and have not been copied
+  // out are the ordinary one -- they are in localStorage, and this warns only
+  // that nothing outside this browser has them yet. A refused write is the
+  // other, and it is the one that would otherwise be silent on a page carrying
+  // only a checklist: the ticks are not in localStorage at all, and closing
+  // the tab is when they stop existing.
+  if (!unsaved() && (!isDirty() || !comments.length)) return;
   e.preventDefault(); e.returnValue = ""; return "";
 });
 // A second tab on the same page used to be last-writer-wins. Take its write
@@ -847,7 +865,12 @@ function readStates(){
   return (d && typeof d === "object" && !Array.isArray(d)) ? d : {};
 }
 var stateMap = readStates();
-function persistStates(){ lsSet(STATES, JSON.stringify(stateMap)); }
+function persistStates(){
+  statesUnsaved = !lsSet(STATES, JSON.stringify(stateMap));
+  // Repaint, because the only thing that makes a refused write visible is the
+  // panel line and the badge, and nothing else rebuilds them after a tick.
+  if (statesUnsaved) render();
+}
 function stateUnits(){ return Array.prototype.slice.call(document.querySelectorAll("[data-an-state-id]")); }
 function stateSetOf(unit){
   var raw = unit.getAttribute("data-an-states");
@@ -994,7 +1017,7 @@ document.addEventListener("keydown", escDisarm);
 // A refused write is the one failure the page must not hide: with the quota
 // full, the panel would otherwise count a comment that is already gone.
 function persist(){
-  unsaved = !lsSet(KEY, JSON.stringify(comments));
+  notesUnsaved = !lsSet(KEY, JSON.stringify(comments));
 }
 function unwrap(id){
   var s = document.querySelector('span.anins[data-cid="' + id + '"]');
@@ -1081,9 +1104,17 @@ function render(){
   clearCopied.disabled = !nCopied;
   var fresh = freshCount();
   badge.textContent = "\uD83D\uDCAC " + comments.length;
-  badge.className = unsaved || (isDirty() && comments.length) ? "warn" : "";
+  badge.className = unsaved() || (isDirty() && comments.length) ? "warn" : "";
   if (!comments.length) {
-    count.textContent = "No comments yet"; count.className = "ancount";
+    // A page with no comments still has somewhere to report a refused write:
+    // on a checklist-only page this line is the ONLY place the reader is told
+    // the ticks did not survive, so it outranks the empty-state wording.
+    count.textContent = statesUnsaved
+      ? "This browser refused to store the checklist \u2014 copy it out now"
+      : notesUnsaved
+        ? "This browser refused to store the change \u2014 copy your work out now"
+        : "No comments yet";
+    count.className = "ancount" + (unsaved() ? " warn" : "");
     var empty = document.createElement("p");
     empty.className = "anscope"; empty.textContent = "Select any text above to comment.";
     list.replaceChildren(empty);
@@ -1100,11 +1131,11 @@ function render(){
       nEdits + (nEdits === 1 ? " suggested edit)" : " suggested edits)")
     : comments.length + (comments.length === 1 ? " comment" : " comments");
   count.textContent = what +
-    (unsaved ? " \u2014 this browser refused to store them, copy them now"
-             : !fresh ? " \u2014 copied out"
-             : fresh === comments.length ? " \u2014 not yet copied out"
-             : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
-  count.className = "ancount" + (unsaved || isDirty() ? " warn" : "");
+    (unsaved() ? " \u2014 this browser refused to store them, copy them now"
+               : !fresh ? " \u2014 copied out"
+               : fresh === comments.length ? " \u2014 not yet copied out"
+               : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
+  count.className = "ancount" + (unsaved() || isDirty() ? " warn" : "");
   var frag = document.createDocumentFragment();
   comments.forEach(function(c){
     var d = document.createElement("div");

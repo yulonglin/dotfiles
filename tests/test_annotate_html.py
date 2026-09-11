@@ -239,10 +239,22 @@ def test_storage_keys_are_prefixed_not_suffixed() -> None:
 
 
 def test_a_failed_write_and_a_failed_copy_are_both_surfaced() -> None:
-    """Silence here means the panel counts comments that are already gone."""
+    """Silence here means the panel counts comments that are already gone.
+
+    Both writers report, through one predicate. The state writer used to throw
+    its result away, and the unload guard counted comments only -- so on a page
+    that is all checklist and no notes, which is what a review queue is, a
+    reviewer with blocked site data ticked every row, closed the tab and was
+    never told the verdict had not survived.
+    """
     js = _layer_module().JS
-    assert "unsaved = !lsSet(" in js
+    assert "notesUnsaved = !lsSet(" in js
+    assert "statesUnsaved = !lsSet(" in js
+    assert "function unsaved(){ return notesUnsaved || statesUnsaved; }" in js
     assert "refused to store them" in js
+    assert "refused to store the checklist" in js
+    # The unload guard consults the same predicate, not the comment count.
+    assert "if (!unsaved() && (!isDirty() || !comments.length)) return;" in js
     # markClean() must be reachable only once a copy has actually happened.
     assert "if (!ok) {" in js and "ok = true;" in js
 

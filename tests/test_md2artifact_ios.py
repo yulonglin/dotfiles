@@ -227,3 +227,45 @@ def test_every_heading_id_is_unique(colliding_html: str) -> None:
         "a-section-1",
         "a-section-1-1",
     ], ids
+
+
+# --- a declared state set is checked at build time ---------------------------
+# Copy all writes each state into the brackets of a Markdown task line
+# (`- [deny] the label`), which is what makes the export paste back into the
+# source. A state carrying a bracket produces `- [de]ny] the label`, a line no
+# Markdown parser reads as a task item — and the build that accepted it is long
+# over by the time anyone looks at the clipboard. So the set is rejected where
+# the author can still see the message.
+
+
+def _run_states(spec: str, tmp: Path) -> subprocess.CompletedProcess[str]:
+    src = tmp / "states.md"
+    src.write_text("# T\n\n- [ ] one\n", encoding="utf-8")
+    return subprocess.run(
+        [_interpreter(), str(MD2REVIEW), str(src), "-o", str(tmp / "out.html"),
+         "--states", spec],
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "spec",
+    ["ok,de]ny", "o[k,deny", "ok,de\nny", "ok,de\tny"],
+    ids=["close-bracket", "open-bracket", "newline", "tab"],
+)
+def test_a_state_that_breaks_the_exported_line_is_refused(spec: str, tmp_path) -> None:
+    r = _run_states(spec, tmp_path)
+    assert r.returncode != 0, r.stdout
+    assert "--states must not contain" in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize(
+    "spec",
+    ["approve,approve-pending-edits,deny", "yes,no,ask Ana (v2): 50%"],
+    ids=["the-documented-set", "punctuation-that-is-fine"],
+)
+def test_an_ordinary_state_set_still_builds(spec: str, tmp_path) -> None:
+    """Only the characters that break the line are refused, not punctuation."""
+    r = _run_states(spec, tmp_path)
+    assert r.returncode == 0, r.stderr

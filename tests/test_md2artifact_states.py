@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import functools
 import http.server
-import socketserver
 import subprocess
 import sys
 import threading
@@ -33,7 +32,7 @@ playwright_api = pytest.importorskip("playwright.sync_api")
 sync_playwright = playwright_api.sync_playwright
 expect = playwright_api.expect
 
-from test_md2artifact_browser import _Server, _chromium_path, browser  # noqa: E402,F401
+from test_md2artifact_browser import _Server, browser  # noqa: E402,F401
 
 ROOT = Path(__file__).resolve().parent.parent
 MD2REVIEW = ROOT / "custom_bins" / "md2artifact"
@@ -76,6 +75,20 @@ its own as well as its checklist.
 - [ ] ship it 1
 """
 
+# A numbered checklist. The bullet-hiding rule used to be a bare `li.antask`,
+# which reaches an ordered list too and deletes the step numbers the author
+# wrote a numbered list to keep.
+ORDERED = """# Ordered Sample
+
+An opening paragraph, so this page carries prose as well as its numbered steps.
+
+## The steps
+
+1. [ ] first step
+2. [ ] second step
+3. [ ] third step
+"""
+
 STATE_SET = "approve,approve-pending-edits,deny"
 
 
@@ -86,6 +99,7 @@ def site(tmp_path_factory):
     (tmp / "sample.md").write_text(SAMPLE, encoding="utf-8")
     (tmp / "plain.md").write_text(PLAIN, encoding="utf-8")
     (tmp / "collide.md").write_text(COLLIDING, encoding="utf-8")
+    (tmp / "ordered.md").write_text(ORDERED, encoding="utf-8")
     builds = (
         ("box.html", "sample.md", "review-states-box", []),
         ("cycle.html", "sample.md", "review-states-cycle", ["--states", STATE_SET]),
@@ -93,6 +107,7 @@ def site(tmp_path_factory):
         ("collide-box.html", "collide.md", "review-states-collide-box", []),
         ("collide-cycle.html", "collide.md", "review-states-collide-cycle",
          ["--states", STATE_SET]),
+        ("ordered.html", "ordered.md", "review-states-ordered", []),
     )
     for name, src, key, extra in builds:
         r = subprocess.run(
@@ -457,3 +472,112 @@ def test_each_same_named_item_cycles_on_its_own(ctx, site, idx: int) -> None:
     assert page.locator(".anstatebtn").all_text_contents() == [
         "approve-pending-edits" if i == idx else "approve" for i in range(3)
     ]
+
+
+# --- a lost tick is reported as loudly as a lost comment --------------------
+# A refused comment write sets the page's unsaved flag, which paints the badge,
+# writes "this browser refused to store them" into the panel and arms the
+# unload guard. The state write used to discard its result and the unload guard
+# counted comments only — so on a page that is all checklist and no notes,
+# which is exactly what a review queue is, a reviewer with blocked or full site
+# data ticked every row, closed the tab, and was never told the verdict did not
+# survive.
+
+
+def _guard_armed(page) -> bool:
+    """Whether the `beforeunload` handler would stop the reader leaving.
+
+    Dispatched rather than driven through a real navigation: Chromium only
+    shows the browser's own leave-confirmation for a page the user has
+    interacted with, and the assertion here is about the handler's decision,
+    not about Chromium's heuristic for honouring it.
+    """
+    return page.evaluate(
+        "() => { const e = new Event('beforeunload', {cancelable: true});"
+        "  window.dispatchEvent(e); return e.defaultPrevented; }"
+    )
+
+
+def _block_storage(page) -> None:
+    page.evaluate(
+        "() => { Storage.prototype.setItem = () => { throw new Error('blocked'); }; }"
+    )
+
+
+def test_a_refused_state_write_says_so_on_a_page_with_no_comments(ctx, site) -> None:
+    page = open_page(ctx, site, "box.html")
+    assert "refused" not in page.locator("#anCount").inner_text()
+    _block_storage(page)
+    page.locator("input.anstatebox").first.check()
+    expect(page.locator("#anCount")).to_contain_text("refused")
+    assert "warn" in page.locator("#anCount").get_attribute("class")
+    assert "warn" in page.locator("#anBadge").get_attribute("class")
+
+
+def test_a_refused_state_write_arms_the_unload_guard(ctx, site) -> None:
+    page = open_page(ctx, site, "box.html")
+    assert not _guard_armed(page), "a page with nothing on it stopped the reader"
+    _block_storage(page)
+    page.locator("input.anstatebox").first.check()
+    assert _guard_armed(page), "the reviewer could close the tab on a lost verdict"
+
+
+def test_a_stored_tick_does_not_arm_the_unload_guard(ctx, site) -> None:
+    """The guard reports LOSS. Ticks that reached localStorage are not lost."""
+    page = open_page(ctx, site, "box.html")
+    page.locator("input.anstatebox").first.check()
+    assert not _guard_armed(page)
+    assert "refused" not in page.locator("#anCount").inner_text()
+
+
+def test_a_refused_state_write_warns_on_a_page_that_also_has_comments(ctx, site) -> None:
+    """One flag, two writers: a stored comment must not mask a lost tick."""
+    page = open_page(ctx, site, "box.html")
+    page.evaluate(
+        "() => { const n = document.querySelector('.doc p').firstChild;"
+        "  const r = document.createRange(); r.setStart(n, 2); r.setEnd(n, 30);"
+        "  const s = getSelection(); s.removeAllRanges(); s.addRange(r); }"
+    )
+    page.wait_for_function(
+        "() => getComputedStyle(document.getElementById('anPop')).display === 'block'",
+        timeout=3000,
+    )
+    page.fill("#anTxt", "a note that stored fine")
+    page.press("#anTxt", "Enter")
+    _block_storage(page)
+    page.locator("input.anstatebox").first.check()
+    expect(page.locator("#anCount")).to_contain_text("refused to store")
+
+
+# --- an ordered checklist keeps its numbers --------------------------------
+# The rule that hides the bullet applied to every `li.antask`, so a numbered
+# checklist rendered as an unnumbered one: the steps a reviewer refers to by
+# number lost the numbers.
+
+
+def _list_style(page, selector: str) -> list[str]:
+    return page.evaluate(
+        "sel => [...document.querySelectorAll(sel)]"
+        "         .map(li => getComputedStyle(li).listStyleType)",
+        selector,
+    )
+
+
+def test_an_ordered_checklist_keeps_its_numbering(ctx, site) -> None:
+    page = open_page(ctx, site, "ordered.html")
+    expect(page.locator("ol li.antask")).to_have_count(3)
+    assert _list_style(page, "ol li.antask") == ["decimal"] * 3
+
+
+def test_an_unordered_checklist_still_drops_its_bullet(ctx, site) -> None:
+    """The other half: the control replaces the bullet, it does not join it."""
+    page = open_page(ctx, site, "box.html")
+    assert _list_style(page, "ul li.antask") == ["none"] * 3
+
+
+def test_an_ordered_item_persists_like_any_other(ctx, site) -> None:
+    page = open_page(ctx, site, "ordered.html")
+    page.locator("input.anstatebox").nth(1).check()
+    page.reload()
+    expect(page.locator("input.anstatebox").nth(1)).to_be_checked()
+    assert "- [x] second step" in export_text(page)
