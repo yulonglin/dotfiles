@@ -596,6 +596,80 @@ class TestClosingDelimiterIndentation(unittest.TestCase):
                 self.assertEqual(source, fix(source))
 
 
+class TestLiteralDelimitersInsideACodeBlock(unittest.TestCase):
+    """Code content that LOOKS like a delimiter must not be read as one.
+
+    The round-four defect, and the one that ended the hand-rolled scanner: a
+    fenced example inside a list item whose content is a quoted fence — the
+    literal text "> ```". The blockquote-stripping helper ran on every line,
+    including lines inside the fence, so it removed the quote marker and handed
+    a bare "```" to the closing-delimiter test. The fence was declared closed
+    three lines early and the code lines after it were joined as prose.
+
+    No rule here fixes that. markdown-it decides where the fence ends, and a
+    closing fence is a property of the block structure it already computed, so
+    a line of code can no longer be mistaken for one at any depth.
+    """
+
+    SOURCE = (
+        "- Example:\n"
+        "\n"
+        "  ```\n"
+        "  > ```\n"
+        "  code line one\n"
+        "  code line two\n"
+        "  ```\n"
+        "\n"
+        "Outside prose one\n"
+        "outside prose two\n"
+    )
+
+    def test_the_code_lines_after_the_literal_delimiter_are_not_joined(self):
+        fixed, merged, _ = md_unwrap.unwrap(self.SOURCE)
+        self.assertNotIn("code line one code line two", fixed)
+        self.assertEqual([10], merged, "only the outside paragraph may be joined")
+
+    def test_the_outside_paragraph_is_still_joined(self):
+        self.assertEqual(
+            self.SOURCE.replace("Outside prose one\noutside prose two",
+                                "Outside prose one outside prose two"),
+            fix(self.SOURCE),
+        )
+
+    def test_the_rendered_code_block_is_unchanged(self):
+        self.assertEqual(render_commonmark(self.SOURCE).count("<code"),
+                         render_commonmark(fix(self.SOURCE)).count("<code"))
+        self.assertIn("&gt; ```", render_commonmark(fix(self.SOURCE)))
+
+    def test_a_tilde_fence_holding_a_quoted_tilde_delimiter(self):
+        source = ("1. Example:\n\n   ~~~\n   > ~~~\n   code line one\n"
+                  "   code line two\n   ~~~\n\nOutside one\noutside two\n")
+        self.assertNotIn("code line one code line two", fix(source))
+
+    def test_a_quoted_delimiter_inside_a_top_level_fence(self):
+        source = "```\n> ```\ncode line one\ncode line two\n```\nProse one\nprose two\n"
+        self.assertNotIn("code line one code line two", fix(source))
+
+
+class TestHtmlTagLinesAreNotReflowed(unittest.TestCase):
+    """A tag on a line of its own stays there, even as a lazy continuation.
+
+    "</example>" is not one of CommonMark's block tag names and a closing tag of
+    an unknown element cannot interrupt a paragraph, so a parser folds it into
+    the prose line above it. Joining would be rendering-equivalent and still
+    wrong: the repo's agent files delimit their examples with these tags, and
+    reflowing them rewrites the author's markup.
+    """
+
+    def test_a_closing_tag_after_prose_keeps_its_own_line(self):
+        source = "<example>\nContext: something\n\n(148 words - fits)\n</example>\n"
+        self.assertEqual(source, fix(source))
+
+    def test_a_closing_tag_after_a_list_item_keeps_its_own_line(self):
+        source = "<example>\nGOOD approach:\n\n1. Glob for things\n2. Read the file\n</example>\n"
+        self.assertEqual(source, fix(source))
+
+
 class TestRefusesDocumentsItCannotFollow(unittest.TestCase):
     """Out of its depth is reported, never silently rewritten."""
 
@@ -714,6 +788,10 @@ ADVERSARIAL_FIXTURES = {
     "pre-on-a-list-marker-line": "1. <pre>\n   a\n\n   b\n   </pre>\n",
     "fence-inside-a-blockquote-list": "> - ```py\n>   x = 1\n>   y = 2\n>   ```\n",
     "closer-indented-past-the-container": "- ```py\n  x = 1\n     ```\nprose one\nprose two\n",
+    "quoted-fence-delimiter-inside-a-list-fence":
+        "- Example:\n\n  ```\n  > ```\n  code line one\n  code line two\n  ```\n"
+        "\nOutside prose one\noutside prose two\n",
+    "closing-tag-of-an-unknown-element": "<example>\nprose one\n\n(148 words)\n</example>\n",
 }
 
 

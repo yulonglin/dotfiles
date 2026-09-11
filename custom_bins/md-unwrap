@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["markdown-it-py>=3.0"]
+# ///
 """Detect and repair hard-wrapped Markdown paragraphs.
 
     md-unwrap --check claude/                 # exit 1 if any paragraph is hard-wrapped
@@ -9,39 +13,41 @@ The house rule (claude/rules/communication.md) is that one paragraph is ONE line
 in Markdown: no hard newline inside a paragraph, in prose, bullet bodies or table
 cells. Readers soft-wrap; a hard wrap makes every later edit a reflow diff.
 
-A violation is a text line that continues the previous text line. Everything that
-is not flowing prose is left strictly alone, because a wrong join silently
-corrupts documentation:
+WHICH LINES MAY BE TOUCHED IS A COMMONMARK QUESTION, SO COMMONMARK ANSWERS IT.
+The document is parsed with markdown-it-py, and the only lines this tool will
+ever join are the interiors of top-level `paragraph` tokens, read off each
+token's source line map. Fences, indented code, HTML blocks, tables,
+frontmatter, headings, thematic breaks, link reference definitions, list
+markers, blockquotes — and every one of those nested at any depth inside any
+other — are excluded because the parser never puts them in a paragraph, not
+because a rule here remembers to skip them. Four rounds of hand-rolled block
+scanning were defeated by four constructs nobody had thought of; the fifth was a
+literal quoted fence delimiter inside a list-contained fenced example. There is
+no fifth rule here to get wrong.
 
-  - fenced code blocks (``` and ~~~) and indented code blocks (4+ spaces)
-  - raw HTML blocks for <pre>, <script>, <style> and <textarea>, protected all
-    the way to their closing tag (a blank line inside one does not end it)
-  - tables (any line carrying a pipe) — but a block start is recognised first,
-    so an opening <pre> or <!-- carrying a pipe still enters its block
-  - YAML frontmatter
-  - headings (ATX and setext), thematic breaks, blockquotes
-  - link reference definitions and HTML blocks
-  - a line ending in an explicit hard break (two trailing spaces, or a backslash);
-    a joined continuation keeps its own hard break, so --fix is idempotent
-  - list item markers: a wrapped list body is joined, but the marker line stays a
-    line of its own, so list structure survives
-  - lines opening with a bolded label ("**When to use**: …"), which are one point
-    per line by intent rather than a wrap
+What remains hand-rolled is the JOIN decision inside a paragraph, which is about
+text rather than structure:
+
+  - a line ending in an explicit hard break (two trailing spaces, or a
+    backslash) keeps its break, so --fix is idempotent
+  - a line carrying a pipe is left alone: the parser has already lifted real
+    tables out, so what is left is prose too table-shaped to risk
+  - a line indented four or more columns is left alone, being ambiguous with
+    indented code and with a deep list continuation
+  - a line opening with a bolded label ("**When to use**: …") or a list marker
+    starts a logical line by intent, so it is not joined onto what precedes it —
+    though its own wrapped body is still joined onto it. A marker only reaches
+    this rule when CommonMark refused it a list of its own: "2. foo" cannot
+    interrupt a paragraph, but the author still wrote a numbered point
+  - a line opening with "<" is markup on a line of its own by intent, even where
+    CommonMark folds it into the paragraph above: a closing "</example>" cannot
+    interrupt a paragraph, so the parser reads it as a lazy continuation, and
+    joining it would reflow the author's tags
 
 A one-line paragraph is never a violation — shortness is not wrapping.
 
-Blocks nest. A fence or an HTML element is recognised relative to its CONTAINER
-— written directly after a list marker, at a list item's continuation column, or
-inside a blockquote — because CommonMark measures a block start from the
-container's content column and calls four columns past it indented code. The
-closing delimiter is measured against the same column, and a line that dedents
-out of the item or leaves the blockquote closes what was opened inside it.
-Handled: a list item, a blockquote, a list inside a blockquote, and any depth of
-list nesting. NOT handled, and left alone rather than joined: a construct
-indented four or more columns past its container (CommonMark reads it as
-indented code, and so do we), and a fence indented under a paragraph
-continuation. If a fence or a raw HTML block is still open at the end of the
-file, the document was not understood: it is reported and left untouched.
+If the document ends inside a code fence or a raw HTML block, its structure was
+not understood: it is reported and left untouched.
 
 Exit codes: 0 clean (or fixed), 1 violations found under --check, 2 usage error.
 """
@@ -53,33 +59,19 @@ import re
 import sys
 from pathlib import Path
 
-FENCE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})")
-ATX_RE = re.compile(r"^ {0,3}#{1,6}(?:\s|$)")
-THEMATIC_RE = re.compile(r"^ {0,3}([-*_])[ \t]*(?:\1[ \t]*){2,}$")
-SETEXT_RE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
-LIST_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
-LIST_MARKER_RE = re.compile(r"^ *(?P<marker>[-*+]|\d{1,9}[.)])(?P<spaces>[ \t]*)(?P<body>.*)$")
-LINK_DEF_RE = re.compile(r"^ {0,3}\[[^\]]+\]:")
-HTML_START_RE = re.compile(r"^<")
-HTML_RAW_RE = re.compile(r"^<(script|pre|style|textarea)\b", re.IGNORECASE)
+from markdown_it import MarkdownIt
+
 HARD_BREAK_RE = re.compile(r"(?:  +|\\)$")
 LABEL_RE = re.compile(r"^ {0,3}(?:\*\*|__)[^*_]+(?:\*\*|__)\s*:")
-QUOTE_PREFIX_RE = re.compile(r"^ {0,3}>[ \t]?")
+LIST_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
+RAW_HTML_RE = re.compile(r"^<(script|pre|style|textarea)\b", re.IGNORECASE)
 
 DEFAULT_EXCLUDES = (".git", "node_modules", ".venv", "__pycache__")
 
-# The container column a construct is measured against. CommonMark recognises a
-# block start at 0-3 spaces of indentation RELATIVE TO ITS CONTAINER, and treats
-# 4 or more as indented code; inside a list item the container column is the
-# item's content column, not column zero.
-BLOCK_INDENT = 3
-
-
-def _advance(column: int, text: str) -> int:
-    """The column reached after `text`, with tabs going to the next 4-stop."""
-    for char in text:
-        column += 4 - (column % 4) if char == "\t" else 1
-    return column
+# CommonMark plus tables. Tables are not CommonMark, but they are everywhere in
+# this repo's Markdown and a table row joined onto its neighbour is a corrupted
+# table, so the rule is enabled rather than re-derived.
+PARSER = MarkdownIt("commonmark").enable("table")
 
 
 def _indent_width(line: str) -> int:
@@ -94,227 +86,134 @@ def _indent_width(line: str) -> int:
     return width
 
 
-def _strip_quotes(line: str) -> tuple[int, str]:
-    """(blockquote depth, the line's content inside those blockquotes)."""
+def _frontmatter_end(lines: list[str]) -> int:
+    """The first line index past YAML frontmatter, or 0 when there is none.
+
+    Frontmatter is not CommonMark — a parser reads `---` as a thematic break and
+    the keys between as a paragraph — so the delimiters are found here and the
+    block is handed to nobody.
+    """
+    if not lines or lines[0].rstrip() != "---":
+        return 0
+    index = 1
+    while index < len(lines) and lines[index].rstrip() not in ("---", "..."):
+        index += 1
+    return min(index + 1, len(lines))
+
+
+def _html_terminator(content: str) -> str | None:
+    """The closing delimiter an HTML block needs, or None if a blank line ends it."""
+    opening = content.split("\n", 1)[0].lstrip()
+    if opening.startswith("<!--"):
+        return "-->"
+    raw = RAW_HTML_RE.match(opening)
+    # CommonMark HTML block type 1: <pre>, <script>, <style> and <textarea> run
+    # to their closing tag. Every other type ends at a blank line, which cannot
+    # go missing.
+    return f"</{raw.group(1).lower()}>" if raw else None
+
+
+def _refusal(tokens, lines: list[str], offset: int) -> str | None:
+    """Why the document ran off the end of a block, or None if it did not."""
+    total = len(lines)
+    for token in tokens:
+        if token.map is None or token.map[1] + offset != total:
+            continue
+        opened = token.map[0] + offset + 1
+        if token.type == "fence":
+            char = re.escape(token.markup[0])
+            closer = re.compile(rf"^[ \t>]*{char}{{{len(token.markup)},}}[ \t]*$")
+            if not closer.match(lines[total - 1]):
+                return f"unterminated code fence opened at line {opened}"
+        elif token.type == "html_block":
+            end = _html_terminator(token.content)
+            if end and end not in token.content.lower():
+                return f"unterminated HTML block ({end}) opened at line {opened}"
+    return None
+
+
+def _raw_html_continuations(tokens, lines: list[str], offset: int) -> set[int]:
+    """Lines markdown-it cut out of a raw HTML block that CommonMark keeps in it.
+
+    Measured against cmark 0.31 on 2026-09-11: markdown-it ends an HTML block at
+    a blank line even for <pre>, <script>, <style>, <textarea> and comments,
+    which CommonMark runs to their closing delimiter. The divergence needs a
+    genuinely blank line inside a LIST item — a fence, a blockquote alone, or a
+    blank-terminated block type is unaffected — and it splits one block into a
+    block plus a paragraph, which would then be joined.
+
+    So when such a token's own content lacks its terminator, and the terminator
+    does appear further down, the lines up to it are part of the block. When it
+    appears nowhere, markdown-it's reading stands: the block genuinely ended
+    with its container (`> <pre>` followed by unquoted prose).
+    """
+    protected: set[int] = set()
+    for token in tokens:
+        if token.type != "html_block" or token.map is None:
+            continue
+        end = _html_terminator(token.content)
+        if not end or end in token.content.lower():
+            continue
+        span: list[int] = []
+        for index in range(token.map[1] + offset, len(lines)):
+            span.append(index)
+            if end in lines[index].lower():
+                protected.update(span)
+                break
+    return protected
+
+
+def _paragraph_ranges(tokens) -> list[tuple[int, int]]:
+    """Source line ranges of the paragraphs outside any blockquote.
+
+    A blockquote's prose is excluded wholesale: joining it would have to carry
+    the `>` markers, which is a rewrite rather than an unwrap.
+    """
     depth = 0
-    rest = line
-    while True:
-        match = QUOTE_PREFIX_RE.match(rest)
-        if not match:
-            return depth, rest
-        depth += 1
-        rest = rest[match.end():]
+    ranges: list[tuple[int, int]] = []
+    for token in tokens:
+        if token.type == "blockquote_open":
+            depth += 1
+        elif token.type == "blockquote_close":
+            depth -= 1
+        elif token.type == "paragraph_open" and depth == 0 and token.map:
+            ranges.append((token.map[0], token.map[1]))
+    return ranges
 
 
-def _list_marker(rest: str, indent: int) -> tuple[int, str | None] | None:
-    """(content column, text after the marker) for a list item opened by `rest`.
-
-    The text is None when nothing on the line can start a block inside the item
-    — an empty item, or a marker followed by enough spaces to make the remainder
-    indented code.
-    """
-    if THEMATIC_RE.match(rest):
-        return None
-    match = LIST_MARKER_RE.match(rest)
-    if not match:
-        return None
-    marker_end = indent + len(match.group("marker"))
-    spaces, body = match.group("spaces"), match.group("body")
-    if not spaces:
-        # "-foo" is not a list item; "-" alone is an empty one.
-        return (marker_end + 1, None) if not body else None
-    if not body:
-        return marker_end + 1, None
-    content_col = _advance(marker_end, spaces)
-    if content_col - marker_end > 4:
-        return marker_end + 1, None
-    return content_col, body
-
-
-def _block_start(body: str, container_col: int, depth: int) -> dict | None:
-    """Protection state for a fence or HTML block opened by `body`, or None.
-
-    `body` is the line with its indentation and any blockquote and list markers
-    already removed, so the same recogniser serves column zero, a list item's
-    content column and the inside of a blockquote. `container_col` is the column
-    the block's closing delimiter is measured against.
-
-    A block that opens and closes on this one line comes back as kind "done":
-    the line is still a block, so nothing may be joined onto it, but no
-    protection outlives it.
-    """
-    state = {"col": container_col, "depth": depth}
-    done = {**state, "kind": "done"}
-    fence = FENCE_RE.match(body)
-    if fence:
-        marker = fence.group("fence")
-        return {**state, "kind": "fence", "char": marker[0], "length": len(marker)}
-    if not HTML_START_RE.match(body):
-        return None
-    lowered = body.lower()
-    if body.startswith("<!--"):
-        return done if "-->" in body else {**state, "kind": "html", "end": "-->"}
-    raw = HTML_RAW_RE.match(body)
-    if raw:
-        # CommonMark HTML block type 1: <pre>, <script>, <style> and <textarea>
-        # run to their CLOSING TAG, and a blank line inside one does not end it.
-        closer = f"</{raw.group(1).lower()}>"
-        return done if closer in lowered else {**state, "kind": "html", "end": closer}
-    return {**state, "kind": "html", "end": "blank"}
-
-
-def _block_status(block: dict, depth: int, rest: str, indent: int) -> str:
-    """"open", "closed_consuming" (this line is the delimiter) or "closed_before".
-
-    "closed_before" is the container ending under the block: a non-blank line
-    that leaves the blockquote or dedents out of the list item closes every
-    block open inside it, and belongs to whatever comes next.
-    """
-    stripped = rest.strip()
-    if stripped:
-        if depth < block["depth"]:
-            return "closed_before"
-        if block["col"] and depth == block["depth"] and indent < block["col"]:
-            return "closed_before"
-    if block["kind"] == "fence":
-        closer = re.compile(r"^ *" + re.escape(block["char"]) + r"{" + str(block["length"]) + r",}[ \t]*$")
-        # The closing fence may be indented up to three spaces past its
-        # container's content column — not past column zero.
-        if indent <= block["col"] + BLOCK_INDENT and closer.match(rest):
-            return "closed_consuming"
-        return "open"
-    if block["end"] == "blank":
-        return "open" if stripped else "closed_consuming"
-    return "closed_consuming" if block["end"] in rest.lower() else "open"
+def _joins_within(lines: list[str], start: int, end: int) -> list[int]:
+    """Indices inside one paragraph that continue the line above them."""
+    found: list[int] = []
+    joinable = False  # the line above is one we may join onto
+    for index in range(start, end):
+        line = lines[index]
+        if _indent_width(line) >= 4 or "|" in line or line.lstrip().startswith("<"):
+            joinable = False
+            continue
+        if LIST_RE.match(line) or LABEL_RE.match(line):
+            joinable = not HARD_BREAK_RE.search(line)
+            continue
+        if joinable:
+            found.append(index)
+        joinable = not HARD_BREAK_RE.search(line)
+    return found
 
 
 def scan(lines: list[str]) -> tuple[list[int], str | None]:
-    """(indices of lines to join onto the previous one, refusal reason or None).
-
-    A refusal reason means the document ran past the end of a block this scanner
-    could not see closed, so its structure was not understood and nothing may be
-    rewritten. Refusing loudly is the acceptable failure; joining lines inside a
-    block we misread is not.
-
-    ORDERING RULE, which the whole scanner is arranged around: the two guards
-    that install protection STATE lasting until a closing delimiter — the code
-    fence and the raw HTML block — are recognised FIRST, for every line, before
-    any guard that merely skips a single line (indented code, the pipe/table
-    heuristic, link definitions, headings, blockquotes, list markers, labels).
-    A skip guard that runs first costs one line; a state guard that never runs
-    costs every line of the block, joined as if it were prose.
-    """
+    """(indices of lines to join onto the previous one, refusal reason or None)."""
+    offset = _frontmatter_end(lines)
+    body = lines[offset:]
+    tokens = PARSER.parse("\n".join(body) + "\n") if body else []
+    refusal = _refusal(tokens, lines, offset)
+    if refusal:
+        return [], refusal
+    protected = _raw_html_continuations(tokens, lines, offset)
     merges: list[int] = []
-    total = len(lines)
-    index = 0
-
-    # YAML frontmatter: only when the very first line opens it.
-    if total and lines[0].rstrip() == "---":
-        index = 1
-        while index < total and lines[index].rstrip() not in ("---", "..."):
-            index += 1
-        index = min(index + 1, total)
-
-    block: dict | None = None
-    block_line = 0
-    containers: list[int] = []  # content columns of the open list items
-    quote_depth = 0
-    prev_text = False  # the previous line is a paragraph/list body we could join onto
-    prev_hard_break = False
-
-    while index < total:
-        line = lines[index]
-        index += 1
-        raw_stripped = line.strip()
-        depth, rest = _strip_quotes(line)
-        indent = _indent_width(rest)
-
-        if block is not None:
-            status = _block_status(block, depth, rest, indent)
-            if status == "open":
-                continue
-            block = None
-            if status == "closed_consuming":
-                prev_text = False
-                continue
-            # "closed_before": fall through and read this line in its own right.
-
-        if not raw_stripped:
-            prev_text = False
+    for start, end in _paragraph_ranges(tokens):
+        start, end = start + offset, end + offset
+        if protected.intersection(range(start, end)):
             continue
-
-        # Track the open list items, so a block start is measured against the
-        # column its container actually gives it. A non-blank line that dedents
-        # past an item's content column closes that item.
-        if depth != quote_depth:
-            containers.clear()
-            quote_depth = depth
-        while containers and indent < containers[-1]:
-            containers.pop()
-        container_col = containers[-1] if containers else 0
-
-        # --- state-installing constructs, at every container column ---
-        if indent - container_col <= BLOCK_INDENT:
-            start = _block_start(rest.strip(), container_col, depth)
-            if start is None:
-                marker = _list_marker(rest, indent)
-                if marker is not None:
-                    content_col, body = marker
-                    containers.append(content_col)
-                    # A fence or HTML element written directly after the marker
-                    # opens inside the item, at the item's content column.
-                    if body is not None:
-                        start = _block_start(body.strip(), content_col, depth)
-            if start is not None:
-                block = None if start["kind"] == "done" else start
-                block_line = index
-                prev_text = False
-                continue
-
-        # Indented code, or a list continuation deep enough to be ambiguous with
-        # it. Measured from column zero on purpose: this guard only ever
-        # SUPPRESSES a join, so keeping it conservative cannot corrupt anything.
-        if _indent_width(line) >= 4:
-            prev_text = False
-            continue
-
-        if "|" in raw_stripped:  # table row, or prose too pipe-heavy to risk
-            prev_text = False
-            continue
-
-        if LINK_DEF_RE.match(line):
-            prev_text = False
-            continue
-
-        if ATX_RE.match(line) or THEMATIC_RE.match(line):
-            prev_text = False
-            continue
-
-        if prev_text and SETEXT_RE.match(line):  # setext heading underline
-            prev_text = False
-            continue
-
-        if raw_stripped.startswith(">"):
-            prev_text = False
-            continue
-
-        # A bolded label at the head of a line ("**When to use**: …") is a
-        # labelled item, not a wrapped continuation — the house rule wants one
-        # such point per line. Treat it like a list marker: it starts a logical
-        # line, and its own wrapped body still gets joined onto it.
-        if LIST_RE.match(line) or LABEL_RE.match(line):
-            prev_text = True
-            prev_hard_break = bool(HARD_BREAK_RE.search(line.rstrip("\n")))
-            continue
-
-        if prev_text and not prev_hard_break:
-            merges.append(index - 1)
-        prev_text = True
-        prev_hard_break = bool(HARD_BREAK_RE.search(line.rstrip("\n")))
-
-    if block is not None and (block["kind"] == "fence" or block["end"] != "blank"):
-        what = "code fence" if block["kind"] == "fence" else f"HTML block ({block['end']})"
-        return [], f"unterminated {what} opened at line {block_line}"
+        merges.extend(_joins_within(lines, start, end))
     return merges, None
 
 
@@ -327,7 +226,7 @@ def analyse(text: str) -> tuple[str, list[int], int, str | None]:
     """Return (fixed text, merged line numbers (1-based), paragraphs, refusal).
 
     A refusal reason comes back with no merges and the text unchanged: the
-    scanner lost track of a block, so the document is reported, not rewritten.
+    document ended inside a block, so it is reported, not rewritten.
     """
     newline = "\r\n" if "\r\n" in text else "\n"
     ends_with_newline = text.endswith(("\n", "\r"))
