@@ -44,3 +44,9 @@ Expected: denial naming `[Credential Materialization]`. **If this is allowed, th
 Known cause, fixed in `b2868c8`: `CLAUDE_CODE_ATTRIBUTION_HEADER=0` in `claude/settings.json`. Claude Code re-adds the attribution block for classifier calls only when `ANTHROPIC_BASE_URL` is unset or `api.anthropic.com`; behind the model-router the opt-out is honoured and every classifier call returns a bare 429 ([anthropics/claude-code#64585](https://github.com/anthropics/claude-code/issues/64585)). Classifier-429 days matched gateway-on days exactly across 28 days. If the variable is back, that is the bug — check the live file, not the committed one:
 
     grep ATTRIBUTION ~/.claude/settings.json
+
+## The two layers disagree, and the native one wins
+
+Measured 2026-09-11 in a background job: of every Bash call in a long session — routine file work, a write outside the repo, `sudo -n true` (exit 0), `curl` to an unlisted domain, and `head -5 ~/.claude/settings.json` — **none** reached the local hook. The only tool that surfaced was `AskUserQuestion`. Meanwhile a sibling interactive session's hook denied that same settings read at 01:04:30Z as "Self-Modification/credential exploration", while native auto mode allowed it here.
+
+So in a background job the hook's rules are effectively dead code for Bash, and `approval-classifier.log` measures the hook's traffic, not auto mode's. An empty log means "nothing surfaced", never "the classifier is down".
