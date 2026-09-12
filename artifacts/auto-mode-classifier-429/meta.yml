@@ -5,21 +5,24 @@ first_published: 2026-09-09
 last_updated: 2026-09-09
 status: live
 status_note: >-
-  the two-condition claim in this row was withdrawn on 2026-09-11 — a per-version scan of 4,884
-  transcripts refutes it in both directions; see the retraction on
-  [pull request 110](https://github.com/yulonglin/dotfiles/pull/110) and the sibling page
-  *Why Auto Mode Broke Behind the Gateway* (`26263dc9`), which carries the corrected text
+  the live page's two-condition claim was withdrawn on 2026-09-11 — a per-version scan of
+  4,884 transcripts refutes it in both directions; the MATS Program page remains uncorrected,
+  so use [pull request 110](https://github.com/yulonglin/dotfiles/pull/110) and the corrected
+  sibling *Why Auto Mode Broke Behind the Gateway* (`26263dc9`)
 
 public: no
 
 summary: >-
-  every auto-mode classifier 429 needed two conditions: `CLAUDE_CODE_ATTRIBUTION_HEADER=0`
-  (set since March) and a non-`api.anthropic.com` base URL (the model-router gateway). Claude
-  Code 2.1.229's repair re-adds the attribution block only when the URL host is literally
-  first-party, so gateway days 429'd and direct days did not; 28 days of transcripts split
-  exactly on gateway on/off. Fix: drop the opt-out (b2868c8a), gateway kept; verified by
-  before/after probes. The 8 Sep A/B was confounded (both arms proxied). Spend levers
-  (per-tool classifier cost, 200k+ contexts, concurrency) remain open
+  **Its two-condition causal claim was withdrawn on 2026-09-11.** The live page is the
+  original diagnosis and remains uncorrected. A per-version scan of 4,884 transcripts
+  refutes its reading in both directions: the 14-18 August gateway window recorded 0
+  failures in 4,056 classifier-bound calls, including 0 of 795 in Fable sessions, while
+  153 failures occurred without a gateway on post-2.1.229 CLIs. The 9 September probe also
+  changed the default model, so it did not isolate the attribution block. What stands is
+  the code-level mechanism: the opt-out and base-URL host can omit the billing-attribution
+  block from classifier requests. That mechanism does not explain the September failures;
+  cause remains open. The corrected sibling page is
+  `artifacts/why-auto-mode-broke-behind-the-gateway/`
 
 source: report.md
 built: report.html
