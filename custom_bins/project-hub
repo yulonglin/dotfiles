@@ -1,0 +1,515 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""One directory per research project, hot on the fast disk, bulk on the volume.
+
+Layout (the same paths on a Mac, a Hetzner box and a RunPod pod):
+
+  ~/projects/<name>/
+  ├── code/  paper/  poster/     git repos, venvs inside   (fast disk)
+  ├── data/                      inputs, weights at rest    (volume)
+  ├── runs/                      eval logs, run outputs     (volume)
+  ├── external/                  upstream clones            (volume)
+  └── archive/                   retired material           (volume)
+
+On a tiered box (a data volume mounted on another filesystem) the four bulk
+dirs are real under $STORAGE_VOLUME/projects/<name>/ and the hub holds
+symlinks to them; on a laptop or a pod where ~/projects already lives on the
+volume they are plain directories. Repos link their own bulk dirs relatively
+(`code/logs -> ../runs/logs`) so the checkout works unchanged everywhere.
+
+  project-hub new <name>                      create the layout
+  project-hub adopt <name> <role>=<path> ...  move a repo in (same filesystem), repair
+                                              git worktrees, rename Claude/remember
+                                              dirs, re-allow direnv, rebuild the venv
+  project-hub tier <name>/<role> <dir> ...    move a cold, untracked dir to the volume,
+                                              leave a relative symlink behind
+  project-hub status [name]                   what is real, what is linked, and where
+  project-hub doctor [name]                   friction checks: interpreter start-up and
+                                              project import times, placement, bind mount
+
+Never deletes user data. A move that is not a same-filesystem rename is refused
+(use the rsync procedure in the server-storage-tiering skill). `tier` refuses a
+dir with tracked files, recent writes, or that git does not ignore.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import tomllib
+
+BULK = ("data", "runs", "external", "archive")
+HOME = Path(os.environ.get("HOME", "~")).expanduser()
+PROJECTS = HOME / "projects"
+DOT_DIR = Path(os.environ.get("DOT_DIR", HOME / "code/dotfiles"))
+
+
+def fail(msg: str, code: int = 1) -> None:
+    print(f"project-hub: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def say(msg: str) -> None:
+    print(msg)
+
+
+# ---------------------------------------------------------------- volume ----
+def storage_volume() -> Path:
+    """STORAGE_VOLUME from config/storage.conf, default /workspace."""
+    vol = "/workspace"
+    conf = DOT_DIR / "config/storage.conf"
+    if conf.is_file():
+        for line in conf.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("STORAGE_VOLUME="):
+                vol = line.split("=", 1)[1].strip().strip("'\"")
+    return Path(os.environ.get("STORAGE_VOLUME", vol))
+
+
+def tiered(volume: Path) -> bool:
+    """True when the volume is a mounted filesystem distinct from ~/projects' own.
+
+    PROJECT_HUB_FORCE_TIERED=1 overrides for tests, where both sit on one disk.
+    """
+    if os.environ.get("PROJECT_HUB_FORCE_TIERED") == "1":
+        return volume.is_dir()
+    if not volume.is_dir() or not os.access(volume, os.W_OK):
+        return False
+    base = PROJECTS if PROJECTS.exists() else HOME
+    return os.stat(volume).st_dev != os.stat(base).st_dev
+
+
+def same_fs(a: Path, b: Path) -> bool:
+    return os.stat(a).st_dev == os.stat(b).st_dev
+
+
+def encode(path: Path) -> str:
+    """Claude Code's project-dir encoding: '/' -> '-' on the absolute path."""
+    return str(path).rstrip("/").replace("/", "-")
+
+
+# ------------------------------------------------------------------- new ----
+def cmd_new(args: argparse.Namespace) -> None:
+    hub = PROJECTS / args.name
+    volume = storage_volume()
+    hub.mkdir(parents=True, exist_ok=True)
+    use_volume = tiered(volume) and not args.no_volume
+    for d in BULK:
+        target = hub / d
+        if target.exists() or target.is_symlink():
+            continue
+        if use_volume:
+            real = volume / "projects" / args.name / d
+            real.mkdir(parents=True, exist_ok=True)
+            target.symlink_to(real)
+        else:
+            target.mkdir()
+    claude_md = hub / "CLAUDE.md"
+    if not claude_md.exists():
+        claude_md.write_text(
+            f"# {args.name}\n\n"
+            "Project hub. `code/`, `paper/`, `poster/` are git repos; `data/`, `runs/`, "
+            "`external/`, `archive/` hold bulk material and are not git. "
+            "Layout and tooling: `project-hub --help`.\n\n"
+            "## Learnings\n"
+        )
+    say(f"hub {hub} ({'bulk dirs on ' + str(volume) if use_volume else 'all local'})")
+    cmd_status(argparse.Namespace(name=args.name))
+
+
+# ----------------------------------------------------------------- adopt ----
+def git(*a: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *a], cwd=cwd, text=True, capture_output=True, check=False
+    )
+
+
+def rename_claude_dirs(root: Path, old: Path, new: Path) -> int:
+    """Rename <root>/<encoded old>* to the new encoding; leave a relative compat link.
+
+    The link keeps `--resume` on an old transcript path and old job records working.
+    Only exact matches and worktree variants (`<enc>--claude-worktrees-x`,
+    `<enc>-.claude-worktrees-x`) move, so `-home-me-code-foo` never captures
+    `-home-me-code-foobar` or `-home-me-code-foo-bar`.
+    """
+    if not root.is_dir():
+        return 0
+    old_enc, new_enc = encode(old), encode(new)
+    n = 0
+    for d in sorted(root.iterdir()):
+        if not d.is_dir() or d.is_symlink():
+            continue
+        if d.name != old_enc and not d.name.startswith(
+            (old_enc + "--", old_enc + "-.")
+        ):
+            continue
+        dest = root / (new_enc + d.name[len(old_enc) :])
+        if dest.exists():
+            say(f"  keep {d.name}: {dest.name} already exists")
+            continue
+        d.rename(dest)
+        d.symlink_to(dest.name)
+        n += 1
+    return n
+
+
+def repair_worktrees(repo: Path) -> None:
+    if not (repo / ".git").exists():
+        return
+    paths = [str(repo)] + [
+        str(p)
+        for p in sorted((repo / ".claude/worktrees").glob("*"))
+        if (p / ".git").exists()
+    ]
+    r = git("worktree", "repair", *paths, cwd=repo)
+    listed = git("worktree", "list", "--porcelain", cwd=repo).stdout
+    stale = [
+        line.split(" ", 1)[1]
+        for line in listed.splitlines()
+        if line.startswith("worktree ") and not Path(line.split(" ", 1)[1]).exists()
+    ]
+    say(
+        f"  git worktree repair: {len(paths)} paths"
+        + (
+            f"; {len(stale)} registered paths missing (git worktree prune to drop)"
+            if stale
+            else ""
+        )
+    )
+    if r.returncode:
+        say("  " + r.stderr.strip().replace("\n", "\n  "))
+
+
+def cmd_adopt(args: argparse.Namespace) -> None:
+    hub = PROJECTS / args.name
+    if not hub.is_dir():
+        fail(f"{hub} does not exist; run `project-hub new {args.name}` first")
+    moves: list[tuple[str, Path]] = []
+    for spec in args.repos:
+        if "=" not in spec:
+            fail(f"expected role=path, got {spec!r}")
+        role, path = spec.split("=", 1)
+        src = Path(path).expanduser().resolve()
+        if role in BULK:
+            fail(f"{role} is a bulk dir; use `project-hub tier`")
+        if not src.is_dir():
+            fail(f"{src} is not a directory")
+        if (hub / role).exists() or (hub / role).is_symlink():
+            fail(f"{hub / role} already exists")
+        if not same_fs(src, hub):
+            fail(
+                f"{src} is on another filesystem than {hub}; rsync it per the server-storage-tiering skill"
+            )
+        moves.append((role, src))
+    for role, src in moves:
+        dest = hub / role
+        src.rename(dest)
+        say(f"{src} -> {dest}")
+        repair_worktrees(dest)
+        for root in (HOME / ".claude/projects", HOME / ".remember"):
+            n = rename_claude_dirs(root, src, dest)
+            if n:
+                say(f"  {root.name}: {n} dirs renamed, compat links left")
+        if (dest / ".envrc").is_file() and shutil.which("direnv"):
+            subprocess.run(["direnv", "allow", str(dest)], check=False)
+            say("  direnv allow")
+        if (dest / "pyproject.toml").is_file() and (dest / ".venv").is_dir():
+            if args.no_sync:
+                say(
+                    "  .venv has the old path baked into its scripts: run `uv sync --reinstall`"
+                )
+            else:
+                say(
+                    "  uv sync --reinstall (console-script shebangs carry the absolute path)"
+                )
+                subprocess.run(
+                    ["uv", "sync", "--reinstall", "--no-progress"],
+                    cwd=dest,
+                    check=False,
+                )
+        for name in ("hub",):
+            if (dest / name).is_symlink():
+                say(
+                    f"  note: {dest / name} is a hub symlink; the hub is now `..` — remove it"
+                )
+    say(
+        "stale references to check by hand: crontab -l, ~/.config/systemd/user, tmux panes, editor workspaces"
+    )
+
+
+# ------------------------------------------------------------------ tier ----
+def recent_writes(d: Path, minutes: int) -> int:
+    cutoff = time.time() - minutes * 60
+    n = 0
+    for root, _dirs, files in os.walk(d):
+        for f in files:
+            try:
+                if os.stat(os.path.join(root, f)).st_mtime > cutoff:
+                    n += 1
+            except OSError:
+                pass
+    return n
+
+
+def cmd_tier(args: argparse.Namespace) -> None:
+    name, _, role = args.target.partition("/")
+    hub = PROJECTS / name
+    repo = hub / role
+    if not repo.is_dir():
+        fail(f"{repo} is not a directory (expected <name>/<role>)")
+    for sub in args.dirs:
+        src = repo / sub
+        if src.is_symlink():
+            say(f"{src}: already a link -> {os.readlink(src)}")
+            continue
+        if not src.is_dir():
+            fail(f"{src} is not a directory")
+        if (repo / ".git").exists():
+            tracked = git("ls-files", "--", sub, cwd=repo).stdout.splitlines()
+            if tracked:
+                fail(
+                    f"{src}: {len(tracked)} tracked files (e.g. {tracked[0]}); keep it in the repo"
+                )
+            if git("check-ignore", "-q", "--no-index", sub, cwd=repo).returncode != 0:
+                fail(f"{src}: git does not ignore it; a tiered dir must be gitignored")
+        n = recent_writes(src, args.quiet_minutes)
+        if n:
+            fail(
+                f"{src}: {n} files written in the last {args.quiet_minutes} min; a live dir is not moved"
+            )
+        bucket = "data" if sub == "data" else "runs"
+        dest = hub / bucket / src.name
+        if dest.exists():
+            fail(f"{dest} already exists")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        rel = os.path.relpath(hub / bucket / src.name, start=src.parent)
+        if same_fs(src, dest.parent):
+            src.rename(dest)
+        else:
+            r = subprocess.run(
+                ["rsync", "-a", "--remove-source-files", f"{src}/", f"{dest}/"],
+                check=False,
+            )
+            if r.returncode:
+                fail(f"rsync failed for {src}; the source is intact")
+            for root, dirs, _files in os.walk(src, topdown=False):
+                for d in dirs:
+                    try:
+                        os.rmdir(os.path.join(root, d))
+                    except OSError:
+                        pass
+            try:
+                os.rmdir(src)
+            except OSError:
+                fail(
+                    f"{src} not empty after the move (a writer appeared); left in place, copy at {dest}"
+                )
+        src.symlink_to(rel)
+        say(f"{src} -> {rel}  ({dest})")
+
+
+# ---------------------------------------------------------------- status ----
+def describe(p: Path, volume: Path) -> str:
+    if p.is_symlink():
+        target = os.readlink(p)
+        ok = p.exists()
+        return f"-> {target}" + ("" if ok else "  (DANGLING)")
+    if not p.exists():
+        return "(missing)"
+    where = (
+        "volume"
+        if volume.is_dir() and os.stat(p).st_dev == os.stat(volume).st_dev
+        else "local"
+    )
+    return f"{'dir' if p.is_dir() else 'file'} [{where}]"
+
+
+def hubs(name: str | None) -> list[Path]:
+    if name:
+        return [PROJECTS / name]
+    if not PROJECTS.is_dir():
+        return []
+    return sorted(
+        p for p in PROJECTS.iterdir() if p.is_dir() and not p.name.startswith(".")
+    )
+
+
+def cmd_status(args: argparse.Namespace) -> None:
+    volume = storage_volume()
+    for hub in hubs(args.name):
+        say(f"{hub}  [{describe(hub, volume)}]")
+        for p in sorted(hub.iterdir()):
+            if p.name.startswith("."):
+                continue
+            tag = (
+                "repo" if (p / ".git").exists() else ("bulk" if p.name in BULK else "")
+            )
+            say(f"  {p.name:<14} {tag:<5} {describe(p, volume)}")
+
+
+# ---------------------------------------------------------------- doctor ----
+def timed(
+    cmd: list[str], cwd: Path, repeats: int = 3, env: dict[str, str] | None = None
+) -> float | None:
+    best = None
+    for _ in range(repeats):
+        t = time.perf_counter()
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, check=False, env=env)
+        dt = time.perf_counter() - t
+        if r.returncode:
+            return None
+        best = dt if best is None else min(best, dt)
+    return best
+
+
+def project_modules(repo: Path) -> list[str]:
+    """Import candidates: the pyproject name, then top-level packages under src/ and the root."""
+    names: list[str] = []
+    try:
+        data = tomllib.loads((repo / "pyproject.toml").read_text())
+        name = data.get("project", {}).get("name")
+        if name:
+            names.append(name.replace("-", "_"))
+    except (OSError, tomllib.TOMLDecodeError):
+        pass
+    src = repo / "src"
+    if src.is_dir():  # src layout: packages may be namespace packages, no __init__.py
+        names += sorted(
+            p.name
+            for p in src.iterdir()
+            if p.is_dir() and not p.name.startswith(("_", "."))
+        )
+    names += sorted(
+        p.name
+        for p in repo.iterdir()
+        if (p / "__init__.py").is_file()
+        and not p.name.startswith(("_", "."))
+        and p.name not in ("tests", "test", "scripts", "docs")
+    )
+    return list(dict.fromkeys(names))
+
+
+def cmd_doctor(args: argparse.Namespace) -> None:
+    volume = storage_volume()
+    flags = 0
+    if volume.is_symlink():
+        say(
+            f"! {volume} is a symlink to {volume.resolve()}: canonical paths leak the mount name; a bind mount keeps them under {volume}"
+        )
+        flags += 1
+    for hub in hubs(args.name):
+        say(hub.name)
+        for d in BULK:
+            p = hub / d
+            if (
+                tiered(volume)
+                and p.exists()
+                and not p.is_symlink()
+                and os.stat(p).st_dev != os.stat(volume).st_dev
+            ):
+                say(f"  ! {d}/ is on the local disk on a tiered box")
+                flags += 1
+        for repo in sorted(p for p in hub.iterdir() if (p / ".git").exists()):
+            py = repo / ".venv/bin/python"
+            if (
+                volume.is_dir()
+                and os.stat(repo).st_dev == os.stat(volume).st_dev
+                and not os.environ.get("PROJECT_HUB_FORCE_TIERED")
+            ):
+                say(
+                    f"  ! {repo.name}/ lives on the volume; interpreter and git will pay its latency"
+                )
+                flags += 1
+            if not py.exists():
+                say(f"  {repo.name}: no .venv")
+                continue
+            start = timed([str(py), "-c", "pass"], repo)
+            mod, imp = None, None
+            # src layouts without an installed package run with src on the path
+            env = (
+                {**os.environ, "PYTHONPATH": str(repo / "src")}
+                if (repo / "src").is_dir()
+                else None
+            )
+            for cand in project_modules(repo):
+                imp = timed([str(py), "-c", f"import {cand}"], repo, repeats=1, env=env)
+                if imp is not None:
+                    mod = cand
+                    break
+            s_ms = f"{start * 1000:.0f} ms" if start is not None else "failed"
+            i_s = f"{imp:.2f} s" if imp is not None else "no importable package"
+            mark = ""
+            if start is None or (start * 1000) > args.startup_ms:
+                mark, flags = " !", flags + 1
+            if imp is not None and imp > args.import_s:
+                mark, flags = " !", flags + 1
+            say(
+                f"  {repo.name}: python start-up {s_ms}, import {mod or '-'} {i_s}{mark}"
+            )
+    if flags:
+        say(
+            f"{flags} flag(s). Slow start-up on a volume-hosted venv: point uv at a local one (UV_PROJECT_ENVIRONMENT=~/.venvs/<name> in .envrc) or move the repo to the fast disk."
+        )
+        sys.exit(1)
+    say("no friction found")
+
+
+# ------------------------------------------------------------------ main ----
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(
+        prog="project-hub",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("new", help="create ~/projects/<name> with the hub layout")
+    p.add_argument("name")
+    p.add_argument(
+        "--no-volume", action="store_true", help="plain dirs even on a tiered box"
+    )
+    p.set_defaults(fn=cmd_new)
+    p = sub.add_parser("adopt", help="move repos into a hub: role=path ...")
+    p.add_argument("name")
+    p.add_argument("repos", nargs="+", metavar="role=path")
+    p.add_argument(
+        "--no-sync", action="store_true", help="do not run uv sync --reinstall"
+    )
+    p.set_defaults(fn=cmd_adopt)
+    p = sub.add_parser(
+        "tier", help="move cold gitignored dirs of <name>/<role> to runs/ or data/"
+    )
+    p.add_argument("target", metavar="name/role")
+    p.add_argument("dirs", nargs="+")
+    p.add_argument(
+        "--quiet-minutes",
+        type=int,
+        default=15,
+        help="refuse if written within this window",
+    )
+    p.set_defaults(fn=cmd_tier)
+    p = sub.add_parser(
+        "status", help="show each hub entry: real or linked, local or volume"
+    )
+    p.add_argument("name", nargs="?")
+    p.set_defaults(fn=cmd_status)
+    p = sub.add_parser(
+        "doctor", help="friction checks; exit 1 when something is flagged"
+    )
+    p.add_argument("name", nargs="?")
+    p.add_argument("--startup-ms", type=float, default=150)
+    p.add_argument("--import-s", type=float, default=3.0)
+    p.set_defaults(fn=cmd_doctor)
+    args = ap.parse_args(argv)
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()
