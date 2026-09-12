@@ -870,7 +870,13 @@ run_parallel() {
 
 # Set ZSH as default shell if possible
 set_zsh_default() {
-    [[ "$SHELL" == *"zsh"* ]] && return 0
+    # ${SHELL:-} and a case, not [[ "$SHELL" == … ]] && return: install.sh runs
+    # under `set -euo pipefail`, so an unset SHELL aborted the whole run here
+    # with a bare "set_zsh_default:1: SHELL: parameter not set" and exit 1.
+    # SHELL is unset in exactly the unattended environments this repo installs
+    # from — a container, cron, a systemd unit, and scripts/cloud/setup.sh's
+    # own `sudo bash -c` provisioning path. Measured on ubuntu:24.04.
+    case "${SHELL:-}" in *zsh*) return 0 ;; esac
 
     local zsh_path
     zsh_path=$(which zsh 2>/dev/null)
