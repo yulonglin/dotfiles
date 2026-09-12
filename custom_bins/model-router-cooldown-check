@@ -337,8 +337,13 @@ def run(fix: bool) -> tuple[int, dict]:
     if blocked:
         return STALE, result | {"summary": result["summary"] + " Not restarting: " + blocked + "."}
 
+    # One invariant from here: either the routes end up serving, or a hold is
+    # recorded. Every way of leaving this block without a working router is a
+    # bounce that did not achieve its goal, and repeating those hourly is the
+    # thrash the hold exists to stop.
     restart_service(timeout=15.0)
     if not wait_healthy(base_url, time.monotonic() + RESTART_WAIT_SECONDS):
+        hold_restarts(now)
         return UNKNOWN, result | {"summary": "Restarted, but the router did not come back healthy."}
 
     second = probe(base_url, token, model, timeout=90.0)
@@ -352,9 +357,7 @@ def run(fix: bool) -> tuple[int, dict]:
             "summary": "Cooldown was real: upstream still reports the quota spent."
         }
     # Defensive rather than observed: a fresh child has an empty cooldown table,
-    # so this needs the refusal to be persisted or immediately rebuilt. Whatever
-    # the cause, the bounce did not work, and repeating it hourly would be the
-    # thrash the hold exists to stop.
+    # so this needs the refusal to be persisted or immediately rebuilt.
     hold_restarts(now)
     return UNKNOWN, result | {
         "summary": "Still refusing after a restart (HTTP %s); inspect the router logs." % second["status"]

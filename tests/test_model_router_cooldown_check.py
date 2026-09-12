@@ -370,6 +370,16 @@ class TestDecisions:
         assert len(self.restarts) == 1
         assert cooldown.restart_blocked(time.time() + 3600) is not None
 
+    def test_a_router_that_does_not_come_back_is_not_bounced_again(self, monkeypatch):
+        """Every restart either ends with serving routes or records a hold."""
+        self._aged()
+        monkeypatch.setattr(cooldown, "wait_healthy", lambda base_url, deadline: False)
+        self._probes(monkeypatch, self._result("local_cooldown"))
+        code, _ = cooldown.run(fix=True)
+        assert code == cooldown.UNKNOWN
+        assert len(self.restarts) == 1
+        assert cooldown.restart_blocked(time.time() + 3600) is not None
+
     def test_an_active_hold_stops_a_second_restart(self, monkeypatch):
         cooldown.hold_restarts(time.time())
         self._aged()
