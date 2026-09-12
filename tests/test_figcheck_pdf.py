@@ -29,9 +29,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "custom_bins" / "figcheck-pdf"
 
-if shutil.which("mutool") is None:  # pragma: no cover - machine-dependent
-    raise unittest.SkipTest("mutool (mupdf-tools) is not installed")
-
 _spec = importlib.util.spec_from_loader(
     "figcheck_pdf", importlib.machinery.SourceFileLoader("figcheck_pdf", str(SCRIPT))
 )
@@ -39,6 +36,10 @@ figcheck_pdf = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(figcheck_pdf)
 
 
+# Skipped test by test rather than raised at import, because tests/run-all.sh counts a
+# Python suite as SKIP only when every test in it skipped, and reads a module-level
+# SkipTest as a collection failure.
+@unittest.skipIf(shutil.which("mutool") is None, "mutool (mupdf-tools) is not installed")
 class FigcheckPdfTest(unittest.TestCase):
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()

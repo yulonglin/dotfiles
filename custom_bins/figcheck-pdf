@@ -36,12 +36,13 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET  # mutool output is generated locally; no untrusted XML
 from pathlib import Path
+from typing import NoReturn
 
 TOL_PT = 0.8  # ignore hairline touches between neighbouring lines
 STEXT_OPTIONS = "mediabox-clip=no"  # keep the text that falls outside the page box
 
 
-def die(message: str) -> None:
+def die(message: str) -> NoReturn:
     print(f"figcheck-pdf: {message}", file=sys.stderr)
     raise SystemExit(2)
 
