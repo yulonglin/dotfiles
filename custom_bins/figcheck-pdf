@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Fail if text in a rendered PDF page overlaps or runs off the page.
+
+    figcheck-pdf figure.pdf              # page 1, non-zero exit on any problem
+    figcheck-pdf paper.pdf --page 3      # one page of a built paper
+    figcheck-pdf paper.pdf --all         # every page
+    figcheck-pdf figure.pdf --warn       # report but exit 0
+
+The matplotlib `figcheck` works on the live Figure; this is the sibling for
+anything that only exists as a PDF: TikZ figures, a compiled paper, a plot
+from another tool. It asks MuPDF (`mutool draw -F stext`) for every text
+line's bounding box and reports pairs that intersect by more than a tolerance,
+plus lines that extend past the page's media box (a clipped label).
+
+Limits: only text is checked. Boxes, arrows and a label sitting on a line are
+invisible here, so this replaces eyeballing for text collisions only; still
+look at the rendered PNG for arrow anchoring (house-plots
+references/visual-layout-quality.md).
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+import xml.etree.ElementTree as ET  # mutool output is generated locally; no untrusted XML
+
+TOL_PT = 0.8  # ignore hairline touches between neighbouring lines
+
+
+def page_count(pdf: str) -> int:
+    out = subprocess.run(["mutool", "info", pdf], capture_output=True, text=True, check=True).stdout
+    for line in out.splitlines():
+        if line.startswith("Pages:"):
+            return int(line.split()[1])
+    raise SystemExit(f"figcheck-pdf: could not read page count of {pdf}")
+
+
+def text_lines(pdf: str, page: int) -> tuple[float, float, list[tuple[str, float, float, float, float]]]:
+    xml = subprocess.run(
+        ["mutool", "draw", "-F", "stext", "-o", "-", pdf, str(page)],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    root = ET.fromstring(xml)
+    pg = root.find(".//page")
+    width, height = float(pg.get("width")), float(pg.get("height"))
+    lines = []
+    for ln in root.iter("line"):
+        text = "".join(ch.get("c", "") for ch in ln.iter("char")).strip()
+        if not text:
+            continue
+        x0, y0, x1, y1 = (float(v) for v in ln.get("bbox").split())
+        lines.append((text, x0, y0, x1, y1))
+    return width, height, lines
+
+
+def check_page(pdf: str, page: int) -> int:
+    width, height, lines = text_lines(pdf, page)
+    problems = 0
+    for i, (t, ax0, ay0, ax1, ay1) in enumerate(lines):
+        if ax0 < -TOL_PT or ay0 < -TOL_PT or ax1 > width + TOL_PT or ay1 > height + TOL_PT:
+            print(f"p{page} CLIPPED  '{t}'  bbox=({ax0:.1f},{ay0:.1f},{ax1:.1f},{ay1:.1f}) page={width:.0f}x{height:.0f}")
+            problems += 1
+        for u, bx0, by0, bx1, by1 in lines[i + 1:]:
+            ox = min(ax1, bx1) - max(ax0, bx0)
+            oy = min(ay1, by1) - max(ay0, by0)
+            if ox > TOL_PT and oy > TOL_PT:
+                print(f"p{page} OVERLAP  '{t}'  x  '{u}'  ({ox:.1f}pt x {oy:.1f}pt)")
+                problems += 1
+    print(f"p{page}: {len(lines)} text lines, {problems} problems")
+    return problems
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("pdf")
+    ap.add_argument("--page", type=int, default=1, help="page to check (default 1)")
+    ap.add_argument("--all", action="store_true", help="check every page")
+    ap.add_argument("--warn", "-w", action="store_true", help="report problems but exit 0")
+    args = ap.parse_args()
+    pages = range(1, page_count(args.pdf) + 1) if args.all else [args.page]
+    total = sum(check_page(args.pdf, p) for p in pages)
+    return 0 if (total == 0 or args.warn) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
