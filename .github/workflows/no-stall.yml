@@ -25,7 +25,6 @@ on:
       - 'tests/dump_components.zsh'
       - 'tests/dump_components_cli.zsh'
       - 'scripts/helpers/**'
-      - 'tests/golden/**'
       - '.github/workflows/no-stall.yml'
   pull_request:
     paths:
@@ -39,7 +38,6 @@ on:
       - 'tests/dump_components.zsh'
       - 'tests/dump_components_cli.zsh'
       - 'scripts/helpers/**'
-      - 'tests/golden/**'
       - '.github/workflows/no-stall.yml'
   workflow_dispatch:
 
@@ -68,7 +66,7 @@ jobs:
       - name: Stall canary
         run: bash tests/test_no_stall.sh
 
-      - name: Profile defaults (pinned component sets)
+      - name: Profile defaults (flag and profile invariants)
         run: bash tests/test_profile_defaults.sh
 
       - name: Mutation check — the canary must still be able to fail

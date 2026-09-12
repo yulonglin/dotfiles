@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-# Pins what each profile resolves to, so a default flip cannot silently change
-# a machine's component set. The fixtures in tests/golden/ were captured BEFORE
-# the standard-default flip, which is what makes the devbox check meaningful:
-# devbox must reproduce the old full `personal` set byte for byte.
+# Asserts what the profile/flag machinery PROMISES, never what it currently
+# resolves to.
 #
-# Fixtures are Linux-resolved (config.sh applies platform overrides at the end),
-# so the byte-comparisons run on Linux only; the invariants below run anywhere.
+# This file used to diff every profile against a byte-for-byte fixture in
+# tests/golden/. That pinned the answer rather than the rule: adding one line to
+# DEPLOY_REGISTRY drifted all seven profile comparisons at once (six fixture
+# files — devbox deliberately reused personal's), so a single new component
+# ("storage" on 2026-09-01, "dotfiles-sync" on 2026-09-04) turned into 15 red
+# assertions carrying one bit of information, and any DELIBERATE profile change
+# was reported as a regression. The fixtures are gone.
+#
+# What replaces them is live-against-live: the CLI path is diffed against the
+# env path, and profiles against each other. Nothing here needs a captured
+# value, so the whole file is platform-independent — the old sections 1 and 1b
+# had to skip on macOS because the fixtures were Linux-resolved.
 #
 # Usage: tests/test_profile_defaults.sh
 set -uo pipefail
 
 DOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GOLDEN="$DOT_DIR/tests/golden"
 DUMP="$DOT_DIR/tests/dump_components.zsh"
+DUMP_CLI="$DOT_DIR/tests/dump_components_cli.zsh"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 
 PASS=0
 FAIL=0
@@ -25,59 +35,68 @@ fail() {
     [[ -n "${2:-}" ]] && printf '%s\n' "$2" | head -12
 }
 
+# Resolved component states through the PROFILE= env var, and through real CLI
+# flags. Both print one VAR=value per line, LC_ALL=C sorted.
 dump() { zsh "$DUMP" "$1" "$DOT_DIR"; }
+dump_cli() { zsh "$DUMP_CLI" "$DOT_DIR" "$@"; }
+
+enabled() { grep '=true$' | sed 's/=true$//' | LC_ALL=C sort; }
+enabled_of() { dump "$1" | enabled; }
 enabled_count() { dump "$1" | grep -c '=true'; }
 is_on() { dump "$1" | grep -qx "$2=true"; }
 
-is_linux() { [[ "$(uname -s)" == "Linux" ]]; }
+# Members of A that are not in B. Empty output means A is a subset of B.
+# LC_ALL=C is load-bearing twice over: the inputs are byte-sorted, and comm
+# compares in the ambient locale unless told otherwise. Without it, en_US.UTF-8
+# collation reads a byte-sorted file as unsorted (DEPLOY_GITUI before
+# DEPLOY_GIT_CONFIG) and comm reports phantom differences.
+not_in() { LC_ALL=C comm -23 "$1" "$2"; }
 
-# ─── 1. Byte-for-byte fixtures (Linux) ───────────────────────────────────────
-
-test_fixtures() {
-    if ! is_linux; then
-        echo "  SKIP fixture comparison (fixtures are Linux-resolved)"
-        return
-    fi
-    for profile in personal devbox standard agent bare server cloud; do
-        local fixture="$GOLDEN/profile-${profile}-linux.txt"
-        # devbox and personal share one fixture: devbox must equal the old full set.
-        [[ "$profile" == "devbox" ]] && fixture="$GOLDEN/profile-personal-linux.txt"
-        if [[ ! -f "$fixture" ]]; then
-            fail "no fixture for profile '$profile'" "expected $fixture"
-            continue
-        fi
-        local diff_out
-        if diff_out=$(diff "$fixture" <(dump "$profile") 2>&1); then
-            pass "profile '$profile' matches its pinned component set"
-        else
-            fail "profile '$profile' drifted from its pinned set" "$diff_out"
-        fi
-    done
+# Every component name in either registry, as the CLI spells it (lowercase,
+# dashes). Read from config.sh so the loops below cannot drift from the registry.
+component_names() {
+    zsh -c '
+        emulate -L zsh
+        export DOT_DIR="$1" DOTFILES_SKIP_LOCAL_CONFIG=1
+        source "$DOT_DIR/config.sh" >/dev/null 2>&1
+        for e in "${INSTALL_REGISTRY[@]}" "${DEPLOY_REGISTRY[@]}"; do print -r -- "${e%%|*}"; done
+    ' _ "$DOT_DIR" 2>/dev/null | LC_ALL=C sort -u
 }
 
-# ─── 1b. The CLI path must agree with the env path ───────────────────────────
+# The variable names one component owns: INSTALL_<X> and/or DEPLOY_<X>, keeping
+# only the ones the registries actually declare (most components live in one).
+vars_of() {
+    local upper
+    upper="$(printf '%s' "$1" | tr '[:lower:]-' '[:upper:]_')"
+    printf 'INSTALL_%s\nDEPLOY_%s\n' "$upper" "$upper" \
+        | grep -Fx -f "$TMP/all-vars" | LC_ALL=C sort
+}
+
+# Variables whose value differs between two dumps.
+changed_vars() {
+    diff "$1" "$2" | grep -E '^[<>]' | sed -e 's/^[<>] //' -e 's/=.*//' | LC_ALL=C sort -u
+}
+
+dump_cli > "$TMP/baseline"
+dump_cli | cut -d= -f1 | LC_ALL=C sort > "$TMP/all-vars"
+mapfile -t COMPONENTS < <(component_names)
+
+# ─── 1. The CLI path resolves exactly like the env path ──────────────────────
 
 # The blind spot that let a critical regression ship green. config.sh applies
 # the default profile when sourced; a CLI flag then re-applies a profile on top
 # of that already-mutated state, so the two paths can disagree — and did:
 # `--devbox` resolved to 14 components while `PROFILE=devbox` gave 50, because
 # the `personal)` case body was empty and assumed registry defaults were still
-# live. Every fixture passed throughout. Real invocations use flags, so the
-# flag path is the one that actually matters.
-dump_cli() { zsh "$DOT_DIR/tests/dump_components_cli.zsh" "$DOT_DIR" "$@"; }
-
+# live. Real invocations use flags, so the flag path is the one that matters.
+# Diffing the two live dumps tests that agreement without pinning either.
 test_cli_flags_match_env_profiles() {
-    if ! is_linux; then
-        echo "  SKIP CLI/env agreement (fixtures are Linux-resolved)"
-        return
-    fi
-    # flag-set : fixture it must reproduce
     local -a cases=(
-        "--devbox:personal"
         "--personal:personal"
+        "--devbox:devbox"
+        "--standard:standard"
         "--agent:agent"
         "--bare:bare"
-        "--standard:standard"
         "--server:server"
         "--profile=cloud:cloud"
     )
@@ -85,45 +104,227 @@ test_cli_flags_match_env_profiles() {
     for entry in "${cases[@]}"; do
         flags="${entry%%:*}"
         profile="${entry##*:}"
-        if diff_out=$(diff "$GOLDEN/profile-${profile}-linux.txt" <(dump_cli "$flags") 2>&1); then
+        if diff_out=$(diff <(dump "$profile") <(dump_cli "$flags") 2>&1); then
             pass "CLI '$flags' resolves exactly like profile '$profile'"
         else
             fail "CLI '$flags' disagrees with profile '$profile'" "$diff_out"
         fi
     done
     # A bare invocation (no flags at all) is the default everyone gets.
-    if diff_out=$(diff "$GOLDEN/profile-standard-linux.txt" <(dump_cli) 2>&1); then
+    if diff_out=$(diff <(dump standard) <(dump_cli) 2>&1); then
         pass "a bare invocation resolves to 'standard'"
     else
         fail "a bare invocation does not resolve to 'standard'" "$diff_out"
     fi
 }
 
-# ─── 2. Invariants that must hold on any platform ────────────────────────────
+test_every_profile_declares_every_component() {
+    # A profile that leaves a component undeclared trips `set -u` in whichever
+    # deploy block reads it. Comparing the variable NAMES (never their values)
+    # is what the fixtures' completeness check was actually worth.
+    local profile names
+    for profile in personal devbox standard agent bare server cloud minimal; do
+        names=$(dump "$profile" | cut -d= -f1 | LC_ALL=C sort)
+        if [[ "$names" == "$(cat "$TMP/all-vars")" ]]; then
+            pass "profile '$profile' declares every registry component"
+        else
+            fail "profile '$profile' is missing or inventing components" \
+                 "$(diff <(cat "$TMP/all-vars") <(printf '%s\n' "$names"))"
+        fi
+    done
+}
 
-test_default_is_standard_not_full() {
-    # The flip itself: a bare invocation must NOT be the full set.
+# ─── 2. The relationships the profiles promise each other ────────────────────
+
+test_devbox_is_personal() {
+    # `devbox` is documented as a synonym; its case body delegates to personal
+    # and only relabels. If it ever stops being a synonym, the docs are wrong.
+    local diff_out
+    if diff_out=$(diff <(dump personal) <(dump devbox) 2>&1); then
+        pass "'devbox' and 'personal' are the same set"
+    else
+        fail "'devbox' is no longer a synonym for 'personal'" "$diff_out"
+    fi
+}
+
+test_personal_is_the_full_set() {
+    # personal starts from the registry defaults; every other profile is built
+    # by subtracting from that or by adding to minimal. So nothing may enable a
+    # component personal leaves off — that would be a component no full install
+    # gets.
+    local profile extra
+    enabled_of personal > "$TMP/personal"
+    for profile in standard agent bare server cloud minimal; do
+        enabled_of "$profile" > "$TMP/other"
+        extra=$(not_in "$TMP/other" "$TMP/personal")
+        if [[ -z "$extra" ]]; then
+            pass "profile '$profile' enables nothing 'personal' leaves off"
+        else
+            fail "profile '$profile' enables what 'personal' does not" "$extra"
+        fi
+    done
+}
+
+test_ladder_is_ordered() {
+    # bare ⊂ standard ⊆ agent ⊂ devbox, as SETS. The old version compared only
+    # counts, which two disjoint profiles of the same size would satisfy.
+    local a b extra
+    local -a rungs=(bare standard agent devbox)
+    local i
+    for (( i = 0; i < ${#rungs[@]} - 1; i++ )); do
+        a="${rungs[i]}"; b="${rungs[i+1]}"
+        enabled_of "$a" > "$TMP/lower"
+        enabled_of "$b" > "$TMP/upper"
+        extra=$(not_in "$TMP/lower" "$TMP/upper")
+        if [[ -z "$extra" ]]; then
+            pass "ladder: '$a' is a subset of '$b'"
+        else
+            fail "ladder broken: '$a' enables what '$b' does not" "$extra"
+        fi
+    done
+    # And the flip itself: the default must be strictly narrower than the full set.
     local std full
-    std=$(enabled_count standard)
-    full=$(enabled_count devbox)
+    std=$(enabled_count standard); full=$(enabled_count devbox)
     if (( std < full )); then
-        pass "default 'standard' ($std enabled) is smaller than 'devbox' ($full)"
+        pass "default 'standard' ($std enabled) is strictly smaller than 'devbox' ($full)"
     else
         fail "default profile is not narrower than devbox" "standard=$std devbox=$full"
     fi
 }
 
-test_ladder_is_ordered() {
-    # bare ⊂ standard ⊂ agent ⊂ devbox, by size at least.
-    local bare std agent full
-    bare=$(enabled_count bare); std=$(enabled_count standard)
-    agent=$(enabled_count agent); full=$(enabled_count devbox)
-    if (( bare < std && std <= agent && agent < full )); then
-        pass "profile ladder is ordered: bare=$bare < standard=$std <= agent=$agent < devbox=$full"
+test_cloud_only_subtracts_from_server() {
+    # cloud delegates to server and then turns things off; it never adds.
+    local extra sc cc
+    enabled_of cloud > "$TMP/cloud"
+    enabled_of server > "$TMP/server"
+    extra=$(not_in "$TMP/cloud" "$TMP/server")
+    sc=$(wc -l < "$TMP/server"); cc=$(wc -l < "$TMP/cloud")
+    if [[ -z "$extra" ]] && (( cc < sc )); then
+        pass "'cloud' is 'server' minus something (cloud=$cc < server=$sc)"
     else
-        fail "profile ladder is not ordered" "bare=$bare standard=$std agent=$agent devbox=$full"
+        fail "'cloud' is not a strict subset of 'server'" "extra: $extra (cloud=$cc server=$sc)"
     fi
 }
+
+# ─── 3. Flag algebra: what README.md promises about flags ────────────────────
+
+test_minimal_disables_everything() {
+    # README: "--minimal disables all defaults". `--only X` is built on it, so
+    # a leak here is how `install.sh --only vim` once ran create_dev_user —
+    # useradd, NOPASSWD:ALL in /etc/sudoers.d, and a copy of /root/.ssh.
+    local n
+    n=$(dump_cli --minimal | grep -c '=true' || true)
+    if [[ "$n" == "0" ]]; then
+        pass "--minimal enables nothing at all"
+    else
+        fail "--minimal enabled $n component(s)" "$(dump_cli --minimal | grep '=true')"
+    fi
+
+    n=$(dump_cli --only vim | grep -c '=true' || true)
+    if [[ "$n" == "1" ]]; then
+        pass "--only vim enables exactly the one component named"
+    else
+        fail "--only vim enabled $n component(s), not 1" "$(dump_cli --only vim | grep '=true')"
+    fi
+}
+
+# A flag is surgical if it moves only the variables its own component owns.
+# Checked from THREE baselines, because a bleed is invisible against a baseline
+# that already holds the value being bled. Measured: with only the default
+# baseline, a deliberate `--no-<anything>` that also sets DEPLOY_ZED=false went
+# undetected, because `standard` leaves zed off anyway. `--devbox` (nearly all
+# on) exposes a bleed to false, `--minimal` (all off) exposes a bleed to true,
+# and the bare default is the invocation people actually type.
+BASELINES=("" "--devbox" "--minimal")
+
+check_surgical() {   # $1 = flag prefix ("--no-" or "--"), $2 = expected value
+    local prefix="$1" want="$2" comp base label bad="" v
+    for base in "${BASELINES[@]}"; do
+        label="${base:-<default>}"
+        # shellcheck disable=SC2086  # $base is one flag or empty, deliberately split
+        dump_cli $base > "$TMP/base"
+        for comp in "${COMPONENTS[@]}"; do
+            # shellcheck disable=SC2086
+            dump_cli $base "${prefix}${comp}" > "$TMP/variant"
+            vars_of "$comp" > "$TMP/owned"
+            # Every variable that moved must belong to this component…
+            while read -r v; do
+                [[ -z "$v" ]] && continue
+                grep -qFx "$v" "$TMP/owned" || bad+="$label ${prefix}${comp} moved $v; "
+            done < <(changed_vars "$TMP/base" "$TMP/variant")
+            # …and the component's own variables must have landed on $want.
+            while read -r v; do
+                [[ -z "$v" ]] && continue
+                grep -qx "$v=$want" "$TMP/variant" || bad+="$label ${prefix}${comp} left $v not $want; "
+            done < "$TMP/owned"
+        done
+    done
+    printf '%s' "$bad"
+}
+
+test_no_flag_disables_exactly_one_component() {
+    # README: flags are additive to the defaults. `--no-X` therefore has to be
+    # surgical — it may turn X off and touch nothing else. Untested until now,
+    # and the whole reason the additive promise is safe to rely on.
+    local bad
+    bad=$(check_surgical "--no-" false)
+    if [[ -z "$bad" ]]; then
+        pass "--no-<component> disables exactly that component (${#COMPONENTS[@]} components x ${#BASELINES[@]} baselines)"
+    else
+        fail "--no-<component> is not surgical" "$bad"
+    fi
+}
+
+test_component_flag_enables_exactly_one_component() {
+    # The mirror: `--X` adds X to whatever is already selected, and subtracts
+    # nothing. This is the "additive" in "flags are ADDITIVE to defaults".
+    local bad
+    bad=$(check_surgical "--" true)
+    if [[ -z "$bad" ]]; then
+        pass "--<component> enables exactly that component (${#COMPONENTS[@]} components x ${#BASELINES[@]} baselines)"
+    else
+        fail "--<component> is not surgical" "$bad"
+    fi
+}
+
+test_minimal_plus_one_flag_is_one_component() {
+    # The documented recipe: "--minimal disables all defaults, then specify only
+    # what you want" (README). Composing the two must give exactly what you named.
+    local comp bad="" got want
+    for comp in "${COMPONENTS[@]}"; do
+        got=$(dump_cli --minimal "--$comp" | enabled)
+        want=$(vars_of "$comp")
+        [[ "$got" == "$want" ]] || bad+="--minimal --$comp gave [${got//$'\n'/ }] want [${want//$'\n'/ }]; "
+    done
+    if [[ -z "$bad" ]]; then
+        pass "--minimal --<component> enables exactly that component, for all ${#COMPONENTS[@]} of them"
+    else
+        fail "--minimal --<component> does not resolve to one component" "$bad"
+    fi
+}
+
+test_modifiers_change_no_components() {
+    # --append, --ascii and --force are modifiers, not components: CLAUDE.md
+    # says they "don't affect defaults". --ascii in particular now writes a
+    # per-machine config/start.txt, so it must not perturb the component set.
+    local -a mods=("--append" "--ascii=cat" "--ascii=none" "--force" "--force-reinstall")
+    local m diff_out
+    for m in "${mods[@]}"; do
+        if diff_out=$(diff "$TMP/baseline" <(dump_cli "$m") 2>&1); then
+            pass "modifier '$m' changes no component"
+        else
+            fail "modifier '$m' changed the component set" "$diff_out"
+        fi
+    done
+    # Together, and on top of a profile flag rather than the default.
+    if diff_out=$(diff <(dump_cli --server) <(dump_cli --server --append --ascii=dog --force) 2>&1); then
+        pass "modifiers stacked on '--server' change no component"
+    else
+        fail "stacked modifiers changed the component set" "$diff_out"
+    fi
+}
+
+# ─── 4. Safety invariants that no profile may break ──────────────────────────
 
 test_defenses_are_never_opt_in() {
     # A defense you must remember to enable is not a defense. Every profile that
@@ -144,7 +345,7 @@ test_no_scheduled_jobs_in_ephemeral_profiles() {
     local scheduled=(DEPLOY_CLEANUP DEPLOY_CLAUDE_CLEANUP DEPLOY_AI_UPDATE
                      DEPLOY_BREW_UPDATE DEPLOY_USAGE_PING DEPLOY_TMUX_RESUME
                      DEPLOY_MCP_SYNC DEPLOY_DEP_AUDIT DEPLOY_STALE_CLAIMS
-                     DEPLOY_SECRETS)
+                     DEPLOY_SECRETS DEPLOY_DOTFILES_SYNC)
     for profile in standard agent bare; do
         local bad=""
         for var in "${scheduled[@]}"; do
@@ -238,30 +439,6 @@ test_minimal_overrides_local_config_positives() {
     fi
 }
 
-test_nothing_means_nothing() {
-    # `minimal` and the `--only` built on it must resolve to ZERO components.
-    # Regression: platform overrides moved to the end of apply_profile and
-    # re-enabled INSTALL_CREATE_USER after every profile, so `--only vim` on a
-    # root box ran create_dev_user — useradd, sudo group, /etc/sudoers.d with
-    # NOPASSWD:ALL, and a copy of /root/.ssh. The whole suite passed over it,
-    # because no fixture covers minimal and the bare/standard fixtures pin
-    # CREATE_USER=true.
-    local n
-    n=$(dump_cli --minimal | grep -c '=true' || true)
-    if [[ "$n" == "0" ]]; then
-        pass "--minimal enables nothing at all"
-    else
-        fail "--minimal enabled $n component(s)" "$(dump_cli --minimal | grep '=true')"
-    fi
-
-    n=$(dump_cli --only vim | grep -c '=true' || true)
-    if [[ "$n" == "1" ]]; then
-        pass "--only vim enables exactly the one component named"
-    else
-        fail "--only vim enabled $n component(s), not 1" "$(dump_cli --only vim | grep '=true')"
-    fi
-}
-
 test_explicit_flag_beats_platform_override() {
     # Platform facts outrank the profile; they must NOT outrank the user. The
     # overrides run last, so without an exemption they silently reverse the
@@ -294,7 +471,7 @@ test_local_config_survives_a_profile_flag() {
         return
     fi
     printf 'DEPLOY_OBSIDIAN_SYNC=false\n' > "$local_cfg"
-    local out rc=0
+    local out
     out=$(zsh -c '
         emulate -L zsh; set -uo pipefail
         export DOT_DIR="$1"
@@ -310,29 +487,36 @@ test_local_config_survives_a_profile_flag() {
     else
         fail "a profile flag resurrected a component config.local.sh disabled" "$out"
     fi
-    return $rc
 }
 
 # ─── Run ─────────────────────────────────────────────────────────────────────
 
-echo "Profile defaults — pinned component sets and invariants"
+echo "Profile defaults — invariants of the profile and flag machinery"
 echo ""
-echo "1. Pinned fixtures"
-test_fixtures
-echo ""
-echo "1b. CLI flags agree with env profiles"
+echo "1. The CLI path agrees with the env path"
 test_cli_flags_match_env_profiles
+test_every_profile_declares_every_component
 echo ""
-echo "2. Invariants"
-test_default_is_standard_not_full
+echo "2. Relationships between profiles"
+test_devbox_is_personal
+test_personal_is_the_full_set
 test_ladder_is_ordered
+test_cloud_only_subtracts_from_server
+echo ""
+echo "3. Flag algebra"
+test_minimal_disables_everything
+test_no_flag_disables_exactly_one_component
+test_component_flag_enables_exactly_one_component
+test_minimal_plus_one_flag_is_one_component
+test_modifiers_change_no_components
+echo ""
+echo "4. Safety invariants"
 test_defenses_are_never_opt_in
 test_no_scheduled_jobs_in_ephemeral_profiles
 test_agent_can_actually_code
 test_bare_installs_no_ai_tools
 test_unknown_profile_fails_closed
 test_minimal_overrides_local_config_positives
-test_nothing_means_nothing
 test_explicit_flag_beats_platform_override
 test_local_config_survives_a_profile_flag
 
