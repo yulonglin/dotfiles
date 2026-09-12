@@ -11,6 +11,8 @@
 
 No container runtime exits 77, the runner's skip code, rather than failing.
 
+`tests/run-all.sh` discovers this file and caps every suite at 600 s, which a nine-minute run of live apt and upstream installers would lose a coin flip against. So the suite is opt-in whenever its output is captured: a human at a terminal gets the real run, and anything else gets exit 77 unless `DOTFILES_CONTAINER_TESTS=1` asks for it by name.
+
 ## What it asserts
 
 Every assertion reads the banner both scripts print before they do any work, because that line is the only statement of the resolved set a user ever sees. The rule under test is the README's: flags are additive to the profile's defaults unless `--minimal` is used.

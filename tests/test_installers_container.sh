@@ -7,6 +7,9 @@
 #   bash tests/test_installers_container.sh --keep     # leave the image behind
 #   bash tests/test_installers_container.sh --mutate   # the suite must go RED
 #
+# Opt-in when the output is captured (tests/run-all.sh, CI, an agent):
+#   DOTFILES_CONTAINER_TESTS=1 bash tests/test_installers_container.sh
+#
 # Why a container and not the runner's own filesystem: install.sh installs
 # packages, rewrites the shell, and creates a user. `no-stall.yml`'s unattended
 # job runs the installers on the GitHub runner itself and can only ask "did it
@@ -33,6 +36,18 @@ for arg in "$@"; do
         *) echo "unknown argument: $arg" >&2; exit 2 ;;
     esac
 done
+
+# tests/run-all.sh discovers every tests/test_*.sh and caps each at 600 s. A
+# full run here is about nine minutes of live apt, nodejs.org, GitHub Releases
+# and Homebrew, so inside the runner it would be a coin flip between a slow
+# pass and a timeout reported as a failure. It is therefore opt-in: a human at
+# a terminal gets the real run, anything capturing the output gets a skip
+# unless DOTFILES_CONTAINER_TESTS=1 asks for it by name.
+if [[ "${DOTFILES_CONTAINER_TESTS:-0}" != "1" && ! -t 1 ]]; then
+    echo "SKIP: the container suite is opt-in — set DOTFILES_CONTAINER_TESTS=1."
+    echo "      It needs a container runtime, the live network, and about nine minutes."
+    exit 77
+fi
 
 # Exit 77 is the runner's skip code: no container runtime is an absent
 # environment, not a failed contract, and reporting it as a failure is how a
