@@ -1110,6 +1110,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     openrouter-drift.service openrouter-drift.timer \
                     council-roster.service council-roster.timer \
                     model-router-cooldown.service model-router-cooldown.timer \
+                    codex-token-refresh.service codex-token-refresh.timer \
                     romp-tailnet-proxy.service; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             # -f: installed units are copies, not symlinks into the repo, so a
@@ -1145,6 +1146,20 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                 log_warning "could not enable $timer"
             fi
         done
+
+        # Codex token refresh: only where the Codex CLI is actually logged in.
+        # The statusline's quota read cannot refresh an expired token itself --
+        # account/rateLimits/read returns 401 forever -- so without this the
+        # line silently shows a days-old window. Gated because the check exits
+        # 2 (not installed / not logged in) on boxes that never use Codex, and
+        # an enabled timer there would just be noise.
+        if [[ -f "$HOME/.codex/auth.json" ]]; then
+            if systemctl --user enable --now codex-token-refresh.timer 2>/dev/null; then
+                log_success "codex-token-refresh.timer enabled"
+            else
+                log_warning "could not enable codex-token-refresh.timer"
+            fi
+        fi
 
         # Stale-cooldown watchdog: only where model-router is actually installed.
         # Unlike the two timers above this one is NOT unconditional, because
