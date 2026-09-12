@@ -140,12 +140,20 @@
       "Bash(* | sh)",
       "Bash(* | sh *)",
       "Bash(* | python)",
-      "Bash(* | python3)",
       "Bash(* | python -)",
+      "Bash(* | python - *)",
+      "Bash(* | python3)",
       "Bash(* | python3 -)",
+      "Bash(* | python3 - *)",
       "Bash(* | perl)",
+      "Bash(* | perl -)",
+      "Bash(* | perl - *)",
       "Bash(* | ruby)",
-      "Bash(* | node)"
+      "Bash(* | ruby -)",
+      "Bash(* | ruby - *)",
+      "Bash(* | node)",
+      "Bash(* | node -)",
+      "Bash(* | node - *)"
     ],
     "ask": [
       "Bash(sudo *)",
