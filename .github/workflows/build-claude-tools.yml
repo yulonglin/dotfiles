@@ -1,10 +1,10 @@
 name: Build claude-tools binaries
 
 # Builds the claude-tools Rust binary on native runners (no cross-compilation —
-# git2/ring/libgit2 build cleanly on-host) and publishes them to a rolling
-# "claude-tools-bin" GitHub Release. install.sh / deploy.sh fetch the matching
-# asset by `uname -sm` to power the component menu on a fresh machine before the
-# from-source build runs.
+# git2/ring/libgit2 build cleanly on-host), commits them to custom_bins/, and
+# mirrors them to a rolling "claude-tools-bin" GitHub Release. The release is a
+# convenience mirror with no in-repo consumer: the installers' fetch-and-verify
+# bootstrap was removed on 2026-09-04, and every clone carries the binaries.
 #
 # Covers darwin-arm64 (Apple Silicon) + linux-{x86_64,aarch64}. Intel macOS
 # (darwin-x86_64) is intentionally NOT built: GitHub's macos-13 Intel runners
@@ -20,6 +20,14 @@ on:
     # Trigger only on source/manifest changes. SHA256SUMS (committed back by the
     # release job) is deliberately NOT listed, so the checksum commit can't
     # retrigger this workflow.
+    paths:
+      - 'tools/claude-tools/src/**'
+      - 'tools/claude-tools/Cargo.toml'
+      - 'tools/claude-tools/Cargo.lock'
+      - '.github/workflows/build-claude-tools.yml'
+  # On a PR the build runs; the release job below is push-only, so a PR never
+  # publishes an asset or commits a binary back to the branch.
+  pull_request:
     paths:
       - 'tools/claude-tools/src/**'
       - 'tools/claude-tools/Cargo.toml'
@@ -72,6 +80,7 @@ jobs:
   release:
     name: Publish rolling release
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -98,15 +107,16 @@ jobs:
           gh release delete claude-tools-bin --yes --cleanup-tag 2>/dev/null || true
           gh release create claude-tools-bin dist/claude-tools-* dist/SHA256SUMS \
             --title "claude-tools binaries (latest)" \
-            --notes "Prebuilt claude-tools binaries for macOS/Linux (arm64 + x86_64). Auto-built from main; fetched + checksum-verified by install.sh/deploy.sh." \
+            --notes "Prebuilt claude-tools binaries for macOS/Linux (arm64 + x86_64). Auto-built from main and committed to custom_bins/; this release is a convenience mirror that nothing in the repo fetches." \
             --latest=false
 
       - name: Commit binaries + checksums to repo
         run: |
           # Commit the platform binaries directly to custom_bins/ so every
           # git clone has the right binary without a network fetch or source build.
-          # Also update tools/claude-tools/SHA256SUMS as a trust anchor for the
-          # legacy _fetch_claude_tools path (air-gapped / old installs).
+          # Also update tools/claude-tools/SHA256SUMS, which
+          # scripts/check-claude-tools-fresh.sh compares against the committed
+          # binaries to catch a rebuilt-but-unrecorded asset.
           cp dist/claude-tools-* custom_bins/
           cp dist/SHA256SUMS tools/claude-tools/SHA256SUMS
           if git diff --quiet -- custom_bins/claude-tools-* tools/claude-tools/SHA256SUMS; then

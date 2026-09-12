@@ -73,17 +73,20 @@ jobs:
         # A guard that cannot fail proves nothing. Reintroduce the silent cargo
         # build (the stall that outlived several prompt fixes) and require the
         # canary to catch it. Runs on a scratch copy so the checkout stays clean.
+        # The target is deploy.sh, not helpers.sh: this PR deletes
+        # _build_claude_tools_from_source, so deploy.sh's DEPLOY_CLAUDE_TOOLS
+        # block is now the only cargo build on the install path.
         run: |
-          cp scripts/shared/helpers.sh "$RUNNER_TEMP/helpers.bak"
+          cp deploy.sh "$RUNNER_TEMP/deploy.bak"
           sed -i 's|run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release|cargo build --release --quiet|' \
-            scripts/shared/helpers.sh
+            deploy.sh
           if bash tests/test_no_stall.sh >/dev/null 2>&1; then
             echo "::error::The stall canary passed against a deliberately broken guard — it is vacuous."
-            cp "$RUNNER_TEMP/helpers.bak" scripts/shared/helpers.sh
+            cp "$RUNNER_TEMP/deploy.bak" deploy.sh
             exit 1
           fi
           echo "Canary correctly caught the reintroduced silent build."
-          cp "$RUNNER_TEMP/helpers.bak" scripts/shared/helpers.sh
+          cp "$RUNNER_TEMP/deploy.bak" deploy.sh
 
   unattended:
     name: Real unattended runs (disposable container)

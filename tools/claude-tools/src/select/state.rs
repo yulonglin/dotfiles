@@ -8,6 +8,7 @@ pub struct AppState {
     pub cursor: usize,
     pub confirmed: bool,
     pub cancelled: bool,
+    pub idle: bool,
 }
 
 impl AppState {
@@ -21,6 +22,7 @@ impl AppState {
             cursor: first_component,
             confirmed: false,
             cancelled: false,
+            idle: false,
         }
     }
 
