@@ -5,6 +5,7 @@
 #   bash tests/test_installers_container.sh            # full run (~10 min cold)
 #   bash tests/test_installers_container.sh --quick    # contract legs only (~1 min)
 #   bash tests/test_installers_container.sh --keep     # leave the image behind
+#   bash tests/test_installers_container.sh --mutate   # the suite must go RED
 #
 # Why a container and not the runner's own filesystem: install.sh installs
 # packages, rewrites the shell, and creates a user. `no-stall.yml`'s unattended
@@ -22,10 +23,12 @@ DOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE=dotfiles-installer-contract
 declare -a RUN_ARGS=()
 KEEP=false
+MUTATE=false
 for arg in "$@"; do
     case "$arg" in
         --quick) RUN_ARGS+=(--quick) ;;
         --keep)  KEEP=true ;;
+        --mutate) MUTATE=true; RUN_ARGS+=(--quick) ;;
         -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) echo "unknown argument: $arg" >&2; exit 2 ;;
     esac
@@ -63,6 +66,21 @@ fi
 git -C "$DOT_DIR" archive --format=tar HEAD -o "$CTX/repo.tar" || exit 1
 cp "$DOT_DIR/tests/container/Dockerfile" "$CTX/Dockerfile"
 
+# A suite that cannot fail proves nothing. --mutate removes the empty-set guard
+# in the image only — the checkout is never touched — and requires the contract
+# legs to notice. It is the same shape as no-stall.yml's canary mutation step.
+if [[ "$MUTATE" == "true" ]]; then
+    mkdir -p "$CTX/src"
+    tar -xf "$CTX/repo.tar" -C "$CTX/src"
+    sed -i 's|^guard_nonempty_components() {|guard_nonempty_components() { return 0|' \
+        "$CTX/src/scripts/shared/helpers.sh"
+    grep -q 'guard_nonempty_components() { return 0' "$CTX/src/scripts/shared/helpers.sh" || {
+        echo "mutation did not apply — the guard has been renamed" >&2; exit 1; }
+    ( cd "$CTX/src" && tar -cf ../repo.tar . ) || exit 1
+    rm -rf "$CTX/src"
+    echo "MUTATION: guard_nonempty_components neutered in the image."
+fi
+
 echo "Building $IMAGE with $RUNTIME (context $(du -h "$CTX/repo.tar" | cut -f1))..."
 "$RUNTIME" build --quiet -t "$IMAGE" "$CTX" || { echo "image build failed" >&2; exit 1; }
 
@@ -72,6 +90,14 @@ echo ""
 "$RUNTIME" run --rm --init "$IMAGE" "${RUN_ARGS[@]}"
 rc=$?
 echo ""
+if [[ "$MUTATE" == "true" ]]; then
+    if [[ $rc -eq 0 ]]; then
+        echo "Container contract: VACUOUS — the suite passed against a removed guard."
+        exit 1
+    fi
+    echo "Container contract: mutation correctly caught (suite exited $rc)."
+    exit 0
+fi
 if [[ $rc -eq 0 ]]; then
     echo "Container contract: PASS ($RUNTIME, ubuntu:24.04)"
 else
