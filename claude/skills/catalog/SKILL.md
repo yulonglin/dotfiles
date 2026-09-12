@@ -106,6 +106,13 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `wrap-up` (user-invoked only) | A stalled session needs a terminal state — land it, state the blocker, or take one step |
 | `done` | "done", "finished", "ship it" — titles the finished session and hands back the `/rename` line |
 
+## Permission gates and auto mode
+
+| Skill | Use when |
+|---|---|
+| `update-auto-mode` | "why was I blocked", "auto mode keeps refusing", "add an allow rule" — which of the two gates fired, and the rule for proposing an `autoMode` change |
+| `auto-mode-probe` | Checking whether auto mode returns verdicts or lets actions run after a classifier error |
+
 ## Searching and the shell
 
 | Skill | Use when |
