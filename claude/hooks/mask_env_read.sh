@@ -128,9 +128,16 @@ SOURCERS = {"source", "."}
 VALUE_FLAGS = {"-e", "--regexp", "-g", "--glob", "--iglob", "--include",
                "--exclude", "--exclude-dir", "-t", "--type", "-d",
                "--delimiter", "-m", "--max-count", "-S", "--sort"}
-# `rg --files` lists filenames and never opens them.
+# `rg --files` lists filenames and never opens them. Scoped to the grep family,
+# because -l means something else to other readers (`bat -l sh` is a language).
 NO_READ_FLAGS = {"--files", "-l", "--files-with-matches", "-L",
                  "--files-without-match"}
+GREPPERS = {"grep", "egrep", "fgrep", "rg"}
+# Words that stand in front of the real command. `if [ -f .env ]; then cat .env`
+# splits into a segment beginning `then`, and this repo's own conventions put
+# `command` in front of an aliased binary — 211 commands in the sweep corpus do.
+PREFIXES = {"then", "else", "elif", "do", "!", "time", "command", "builtin",
+            "exec", "nohup", "nice", "eval", "sudo", "-"}
 
 # Shell separators, plus the substitution delimiters. Splitting on `$(`, `)`
 # and backticks is what catches `echo "$(cat .env)"` and
@@ -180,6 +187,28 @@ def expand(token, variables):
     return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)", sub, token)
 
 
+def strip_prefixes(tokens):
+    """Drop shell keywords, grouping punctuation and no-op wrappers.
+
+    Without this, `( cd dir && cat .env )`, `{ cat .env; }`, `then cat .env`
+    and `command cat .env` all present a first word that is not a reader, and
+    the whole segment is skipped.
+    """
+    while tokens:
+        head = tokens[0].lstrip("({!")
+        if not head:
+            tokens = tokens[1:]
+            continue
+        if head != tokens[0]:
+            tokens = [head] + tokens[1:]
+            continue
+        if os.path.basename(head) in PREFIXES:
+            tokens = tokens[1:]
+            continue
+        return tokens
+    return tokens
+
+
 def candidates_of(segment, tokens, variables, cwd):
     """(paths this segment would READ, new cwd)."""
     name = os.path.basename(tokens[0])
@@ -225,7 +254,7 @@ def candidates_of(segment, tokens, variables, cwd):
         reads += files[:1]
     elif name in READERS:
         # -l / --files print names, not contents.
-        if not any(a in NO_READ_FLAGS for a in args):
+        if name not in GREPPERS or not any(a in NO_READ_FLAGS for a in args):
             reads += files
     elif name in INTERPRETERS and any(a in INLINE_FLAGS for a in args):
         reads += ENV_TOKEN.findall(segment)
@@ -247,6 +276,10 @@ def detect_bash(command, cwd):
             # Heredocs and unbalanced quotes reach here. A parser error must
             # not silently drop the segment.
             tokens = segment.split()
+        while tokens and ASSIGN.match(tokens[0]):
+            key, _, value = tokens.pop(0).partition("=")
+            variables[key] = expand(value, variables)
+        tokens = strip_prefixes(tokens)
         while tokens and ASSIGN.match(tokens[0]):
             key, _, value = tokens.pop(0).partition("=")
             variables[key] = expand(value, variables)
@@ -287,7 +320,7 @@ if [[ ! -f "$FILE_PATH" ]]; then
 fi
 
 # Check if file is binary (skip masking for binary files)
-if file -b "$FILE_PATH" 2>/dev/null | grep -qi 'binary\|executable\|data'; then
+if file -bL "$FILE_PATH" 2>/dev/null | grep -qi 'binary\|executable\|data'; then
     deny "Binary .env file detected — refusing to read."
 fi
 

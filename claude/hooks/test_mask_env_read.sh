@@ -171,6 +171,13 @@ run_bash "redirection into while"  'while IFS= read -r l; do :; done < .env'  ma
 run_bash "cp to stdout"            'cp .env /dev/stdout'            mask
 run_bash "inline python"           'python3 -c "print(open(\".env\").read())"'  mask
 
+echo "=== SHOULD MASK: a keyword or a wrapper stands in front of the reader ==="
+run_bash "guarded by then"         'if [ -f .env ]; then cat .env; fi'      mask
+run_bash "subshell with cd"        "( cd $FIXTURE && cat .env )"            mask "$PARENT"
+run_bash "brace group"             '{ cat .env; }'                          mask
+run_bash "command prefix"          'command cat .env'                       mask
+run_bash "time prefix"             'time sed -n 1p .env'                    mask
+
 echo "=== SHOULD MASK: the Grep tool reads files too ==="
 run_grep "grep tool on .env"       "$FIXTURE/.env"                  mask
 
@@ -194,6 +201,8 @@ run_bash "source with extra args"  'source README.md .envrc'        allow
 run_bash "prose starting with dot" '. Every call site, including .envrc, now names the verbs'  allow
 # -f really does read the file as a pattern list, so it stays intercepted.
 run_bash "grep -f reads the file"  'echo hi | grep -f .env'         mask
+# -l is a names-only flag to grep, but a language to bat.
+run_bash "bat -l is a language"    'bat -l sh .env'                 mask
 
 echo "=== SHOULD ALLOW: touching an env file without reading its values ==="
 run_bash "git add"                 'git add .env'                   allow
