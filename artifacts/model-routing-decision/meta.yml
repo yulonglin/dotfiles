@@ -2,8 +2,14 @@ title: Every Session Goes Through the Router   # first published as "Foreign Mod
 url: https://claude.ai/code/artifact/2fd4040d-6a42-458e-a188-b09c8dbf3ae4
 org: yl688@cantab.ac.uk's Organization   # claude auth status, 2026-09-06
 first_published: 2026-09-06
-last_updated: 2026-09-12
+last_updated: 2026-09-06   # the date of the live page; the committed source is AHEAD of it
 status: live
+# The committed spec.md/spec.html carry a status section added 2026-09-12 that the
+# published page does not. Republishing needs a deliberate choice, not a default: this
+# page was published under yl688@cantab.ac.uk's Organization, and the session that
+# publishes today is in lin.yulong@gmail.com's. Republishing from the wrong org either
+# fails or lands the page somewhere the old URL's readers cannot follow. Stamp
+# last_updated forward only in the same turn as an actual republish.
 
 public: no
 

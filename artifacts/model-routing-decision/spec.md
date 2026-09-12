@@ -19,7 +19,7 @@
 Two statements on this page have been overtaken by later measurement, and are left in place because the page is dated evidence rather than a live manual:
 
 - **F3's "silent Claude answer".** The execution record already traced it to `fallbackModel` rather than to the client. On 2.1.263, with that setting gone, an unserved model ID fails loudly (`There's an issue with the selected model`) — recorded in `CLAUDE.md` on 2026-09-07.
-- **Step 1, the Unix-socket clause.** Left with Yulong on 2026-09-06 and never reported back, so Remote Control is off under the gateway and romp is the remote path. That is the state `.claude/rules/dotfiles-settings.md` describes today.
+- **Step 1, the Unix-socket clause.** Still unrun. `archive/2026-09-06_rc-direct-settings/README.md` on `main` gives the recipe for it ("copy this file back to `claude/rc-direct-settings.json` for the duration and launch with `CLAUDE_RC_OVERRIDE=1`") and no result has been recorded anywhere since, so Remote Control is off under the gateway and romp is the remote path. That is the state `.claude/rules/dotfiles-settings.md` describes today.
 
 ## Overview
 
