@@ -36,6 +36,11 @@ from pathlib import Path
 
 DEFAULT_MAX_AGE_HOURS = 12
 REFRESH_TIMEOUT_SECONDS = 120
+# Two clocks disagreeing by seconds is ordinary skew between whatever wrote the
+# stamp and whatever reads it. A stamp further ahead than this is a corrupt or
+# hand-edited file, and its age is then unknown -- see main() for why unknown
+# has to mean stale.
+FUTURE_SKEW_TOLERANCE_HOURS = 5 / 60
 # Small enough to be nearly all fixed overhead; the point is the token, not the
 # answer. --skip-git-repo-check because this runs from wherever systemd starts it.
 PROMPT = "Reply with exactly: OK"
@@ -64,8 +69,11 @@ def last_refresh(home: Path) -> datetime.datetime | None:
     text = raw.replace("Z", "+00:00")
     if "." in text:
         head, _, tail = text.partition(".")
-        digits = "".join(c for c in tail if c.isdigit())[:6]
-        offset = tail[len(tail) - 6:] if "+" in tail or "-" in tail else "+00:00"
+        # Cut the offset off before reading the fraction. Collecting every digit
+        # in the whole tail turns ".12+05:30" into 120530 microseconds.
+        cut = max(tail.find("+"), tail.find("-"))
+        fraction, offset = (tail[:cut], tail[cut:]) if cut >= 0 else (tail, "+00:00")
+        digits = "".join(c for c in fraction if c.isdigit())[:6]
         text = "%s.%s%s" % (head, digits.ljust(6, "0"), offset)
     try:
         parsed = datetime.datetime.fromisoformat(text)
@@ -81,9 +89,17 @@ def last_refresh(home: Path) -> datetime.datetime | None:
     return parsed
 
 
-def age_hours(stamp: datetime.datetime) -> float:
-    now = datetime.datetime.now(datetime.timezone.utc)
+def age_hours(stamp: datetime.datetime,
+              now: datetime.datetime | None = None) -> float:
+    """Signed: negative means the stamp is ahead of the clock."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
     return (now - stamp).total_seconds() / 3600
+
+
+def stamp_is_ahead(stamp: datetime.datetime,
+                   now: datetime.datetime | None = None) -> bool:
+    """Further ahead of the clock than skew explains."""
+    return age_hours(stamp, now) < -FUTURE_SKEW_TOLERANCE_HOURS
 
 
 def refresh(executable: str, home: Path) -> bool:
@@ -124,25 +140,53 @@ def main() -> int:
         code = FAILED
     else:
         before = last_refresh(home)
+        # A stamp ahead of the clock cannot be aged: now - stamp goes negative,
+        # a negative age is below every threshold, and arithmetic alone would
+        # therefore read a corrupt file as a token refreshed moments ago --
+        # green unit, no request spent, statusline stale for as long as the
+        # stamp says. Past the skew tolerance the age is unknown, and the safe
+        # reading of "I cannot tell how old this token is" is stale, not fresh.
+        # So: refresh, then judge the stamp that comes back. The likely cause is
+        # a clock that ran ahead when Codex wrote the file, which that refresh
+        # corrects by itself; a stamp still ahead afterwards is a real fault and
+        # exits 1 rather than pretending.
+        ahead = before is not None and stamp_is_ahead(before)
         result["age_hours_before"] = round(age_hours(before), 2) if before else None
-        if before is not None and not args.force and age_hours(before) < args.max_age_hours:
-            result["summary"] = "Token refreshed %.1f h ago; leaving it." % age_hours(before)
+        result["stamp_ahead_of_clock"] = ahead
+        if before is not None and not ahead and not args.force and age_hours(before) < args.max_age_hours:
+            # Clamped for display only: within the skew tolerance the age can be
+            # a hair negative, and "refreshed -0.0 h ago" reads like a bug.
+            result["summary"] = ("Token refreshed %.1f h ago; leaving it."
+                                 % max(0.0, age_hours(before)))
             code = OK
         elif not refresh(executable, home):
             result["summary"] = "Refresh request failed; token left as it was."
             code = FAILED
         else:
             after = last_refresh(home)
-            moved = after is not None and (before is None or after > before)
+            after_ahead = after is not None and stamp_is_ahead(after)
+            # Codex writes its own now, so any change to the stamp is a write.
+            # `after > before` would miss the correcting write that pulls a
+            # future stamp back to the present -- the repair, read as a no-op.
+            moved = (after is not None and not after_ahead
+                     and (before is None or after != before))
             result["refreshed"] = moved
             result["age_hours_after"] = round(age_hours(after), 2) if after else None
+            result["stamp_ahead_of_clock"] = after_ahead
             # Codex only rewrites auth.json when it actually refreshes, so under
             # --force on a still-valid token the stamp legitimately does not
             # move. What matters is the outcome, not the write: the token is
             # young enough to keep serving. Only an old stamp that stayed old
             # means the refresh we needed did not happen.
-            young = after is not None and age_hours(after) < args.max_age_hours
-            if moved:
+            young = (after is not None and not after_ahead
+                     and age_hours(after) < args.max_age_hours)
+            if after_ahead:
+                result["summary"] = (
+                    "last_refresh is %.1f h ahead of the clock, so the token's age "
+                    "cannot be read; the file is corrupt or the clock was wrong when "
+                    "it was written, and the refresh did not correct it."
+                    % -age_hours(after))
+            elif moved:
                 result["summary"] = "Token refreshed."
             elif young:
                 result["summary"] = "Token was still valid; no refresh was needed."

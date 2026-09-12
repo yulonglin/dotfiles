@@ -85,8 +85,58 @@ class TestTimestampParsing:
         assert 29.5 < refresh.age_hours(refresh.last_refresh(tmp_path)) < 30.5
 
 
-class TestSpendDecision:
-    """Whether a run spends a real upstream request."""
+    def test_a_short_fraction_keeps_its_own_microseconds(self, tmp_path):
+        """The offset must not be read as part of the fraction.
+
+        Collecting every digit in the tail turns `.12+05:30` into 120530
+        microseconds -- a stamp 0.12 s past the second read as 0.12053 s past
+        it, and worse for other offsets. Unreachable while the CLI writes a
+        fixed nine digits, which is why it is a nit and not a bug.
+        """
+        write_auth(tmp_path, "2026-09-06T06:06:06.12+05:30")
+        parsed = refresh.last_refresh(tmp_path)
+        assert parsed is not None
+        assert parsed.microsecond == 120000
+        assert parsed.utcoffset() == datetime.timedelta(hours=5, minutes=30)
+
+
+class TestClockSkew:
+    """Where the line sits between skew and a corrupt stamp.
+
+    Frozen `now`, so the equality cases are exact rather than whatever the wall
+    clock did between two statements.
+    """
+
+    NOW = datetime.datetime(2026, 9, 12, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def _ahead_by(self, **delta):
+        return self.NOW + datetime.timedelta(**delta)
+
+    def test_age_is_measured_against_the_given_now(self):
+        stamp = self.NOW - datetime.timedelta(hours=30)
+        assert refresh.age_hours(stamp, now=self.NOW) == 30.0
+
+    def test_a_stamp_exactly_at_the_tolerance_is_not_ahead(self):
+        stamp = self._ahead_by(hours=refresh.FUTURE_SKEW_TOLERANCE_HOURS)
+        assert not refresh.stamp_is_ahead(stamp, now=self.NOW)
+
+    def test_one_microsecond_past_the_tolerance_is_ahead(self):
+        stamp = self._ahead_by(
+            hours=refresh.FUTURE_SKEW_TOLERANCE_HOURS, microseconds=1)
+        assert refresh.stamp_is_ahead(stamp, now=self.NOW)
+
+    def test_a_few_seconds_ahead_is_ordinary_skew(self):
+        assert not refresh.stamp_is_ahead(self._ahead_by(seconds=5), now=self.NOW)
+
+    def test_hours_ahead_is_not_skew(self):
+        assert refresh.stamp_is_ahead(self._ahead_by(hours=6), now=self.NOW)
+
+    def test_a_stamp_in_the_past_is_never_ahead(self):
+        assert not refresh.stamp_is_ahead(self._ahead_by(days=-4000), now=self.NOW)
+
+
+class _Harness:
+    """Shared rig: a private CODEX_HOME and a refresher that never leaves it."""
 
     @pytest.fixture(autouse=True)
     def _isolate(self, tmp_path, monkeypatch):
@@ -106,6 +156,10 @@ class TestSpendDecision:
     def _run(self, monkeypatch, argv):
         monkeypatch.setattr(refresh.sys, "argv", ["codex-token-refresh", *argv])
         return refresh.main()
+
+
+class TestSpendDecision(_Harness):
+    """Whether a run spends a real upstream request."""
 
     def test_a_fresh_token_is_left_alone(self, monkeypatch):
         write_auth(self.home, iso(datetime.datetime.now(datetime.timezone.utc)))
@@ -176,3 +230,78 @@ class TestSpendDecision:
         monkeypatch.setattr(refresh.shutil, "which", lambda name: None)
         assert self._run(monkeypatch, []) == refresh.FAILED
         assert self.calls == []
+
+    def test_a_token_exactly_at_the_threshold_refreshes(self, monkeypatch):
+        """The comparison is strict: at the threshold the token is already old."""
+        at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=6)
+        write_auth(self.home, iso(at))
+        self._refresher(monkeypatch, advances=True)
+        assert self._run(monkeypatch, ["--max-age-hours", "6"]) == refresh.OK
+        assert len(self.calls) == 1, "a token at the threshold was read as fresh"
+
+
+class TestAStampFromTheFuture(_Harness):
+    """A stamp ahead of the clock must not read as "refreshed moments ago".
+
+    age_hours() goes negative there, and a negative age is below every
+    threshold, so the tool left the token alone, exited 0 and kept the unit
+    green while nothing refreshed -- the staleness this tool exists to end,
+    arriving through the opposite sign. A stamp whose age cannot be trusted is
+    treated as stale, not as fresh.
+    """
+
+    def _stamp(self, **delta):
+        now = datetime.datetime.now(datetime.timezone.utc)
+        return iso(now + datetime.timedelta(**delta))
+
+    def test_a_few_seconds_ahead_is_left_alone(self, monkeypatch, capsys):
+        """Two clocks disagreeing by seconds is noise, not corruption."""
+        write_auth(self.home, self._stamp(seconds=5))
+        self._refresher(monkeypatch, advances=True)
+        assert self._run(monkeypatch, []) == refresh.OK
+        assert self.calls == [], "spent a request on ordinary clock skew"
+        assert capsys.readouterr().out == "Token refreshed 0.0 h ago; leaving it.\n"
+
+    def test_hours_ahead_spends_a_request(self, monkeypatch, capsys):
+        write_auth(self.home, self._stamp(hours=6))
+        self._refresher(monkeypatch, advances=True)
+        assert self._run(monkeypatch, []) == refresh.OK
+        assert len(self.calls) == 1, "a stamp 6 h ahead was read as fresh"
+        assert capsys.readouterr().out.strip() == "Token refreshed."
+
+    def test_years_ahead_that_does_not_correct_is_a_failure(self, monkeypatch, capsys):
+        """The decades-green case: ten years ahead, and nothing rewrites it."""
+        write_auth(self.home, self._stamp(days=3650))
+        self._refresher(monkeypatch, advances=False)
+        assert self._run(monkeypatch, []) == refresh.FAILED
+        assert len(self.calls) == 1
+        assert "ahead of the clock" in capsys.readouterr().out
+
+    def test_years_ahead_self_heals_when_the_refresh_lands(self, monkeypatch):
+        """The likely cause is a clock that ran ahead when Codex wrote the
+        stamp, so the refresh usually corrects the file by itself."""
+        write_auth(self.home, self._stamp(days=3650))
+        self._refresher(monkeypatch, advances=True)
+        assert self._run(monkeypatch, []) == refresh.OK
+        assert not refresh.stamp_is_ahead(refresh.last_refresh(self.home))
+
+    def test_a_refresh_that_writes_a_future_stamp_is_not_success(self, monkeypatch):
+        """The reporting side of the same root cause: an aged token, a request
+        made, and a stamp afterwards that cannot be believed."""
+        write_auth(self.home, self._stamp(days=-6))
+        ahead = self._stamp(hours=8)
+
+        def fake(executable, home):
+            self.calls.append(executable)
+            write_auth(home, ahead)
+            return True
+
+        monkeypatch.setattr(refresh, "refresh", fake)
+        assert self._run(monkeypatch, []) == refresh.FAILED
+
+    def test_the_json_report_names_the_skew(self, monkeypatch, capsys):
+        """A red unit is read through --json, so the cause belongs in it."""
+        write_auth(self.home, self._stamp(days=3650))
+        self._refresher(monkeypatch, advances=False)
+        assert self._run(monkeypatch, ["--json"]) == refresh.FAILED
+        assert json.loads(capsys.readouterr().out)["stamp_ahead_of_clock"] is True
