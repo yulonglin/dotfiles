@@ -1,15 +1,20 @@
-"""Stale-cooldown detection for the model-router Codex upstream.
+"""Cooldown reporting for the model-router Codex upstream, and its one restart rule.
 
 The payloads below are the real shapes observed in
-~/.local/state/model-router/logs/cliproxyapi.log on 2026-09-09 and 2026-09-11,
-with the account-identifying auth filename removed. No token, account id or
-request content appears here.
+~/.local/state/model-router/logs/cliproxyapi.log on 2026-09-09 and 2026-09-11, with the
+account-identifying auth filename removed. No token, account id or request content
+appears here.
 
-Anything that decides whether to restart the service is exercised through the
-real HTTP parser, in TestThroughTheRealProbe. Handing `run()` a probe dict
-assembled by hand can certify a property the parser does not have: the first
-version of this suite proved that a short cooldown is left alone by injecting a
-duration the router never actually sends in a response body.
+Every restart-or-not assertion goes through the real HTTP parser, in
+TestThroughTheRealProbe. Handing `run()` a probe dict assembled by hand certifies a
+property the parser does not have, which is how two defects reached review wearing green
+badges: one test injected a duration the router never sends, and a later pair injected
+probe results instead of driving the exception paths the failures used.
+
+The tests seeded with `local_cooldown_since_unix` are seeding a key the current code never
+reads. It is deliberate: it is what the previous design measured, so those tests fail
+against that design on behaviour -- a restart that happens -- rather than on a missing
+symbol.
 """
 
 import importlib.machinery
@@ -28,24 +33,30 @@ cooldown = importlib.util.module_from_spec(_spec)
 _loader.exec_module(cooldown)
 
 
-# A local refusal. Note it quotes the upstream error that caused it, so the
-# string "usage_limit_reached" is present even though nothing left the machine.
-# Note also what it does NOT carry: any indication of how long it will hold.
+# A local refusal. Note it quotes the upstream error that caused it, so the string
+# "usage_limit_reached" is present even though nothing left the machine. Note also what it
+# does NOT carry: any indication of how long it will hold.
 LOCAL_COOLDOWN = (
     '{"type":"error","error":{"type":"rate_limit_error","message":'
     '"All credentials for model gpt-6-astra are cooling down via provider codex '
     '(last error: usage_limit_reached: The usage limit has been reached)"}}'
 )
 
-# A genuine upstream refusal, round-tripped to OpenAI.
+# A genuine upstream refusal, round-tripped to OpenAI. `resets_in_seconds` is the field
+# the one restart rule is built on: a duration, so it elapses on our own clock.
 UPSTREAM_LIMIT = (
     '{"error":{"type":"usage_limit_reached","message":"The usage limit has been '
     'reached","plan_type":"prolite","resets_at":1789436526,"eligible_promo":null,'
     '"resets_in_seconds":568157}}'
 )
 
-# The router's own selection log line. It carries the remaining cooldown -- but
-# it is a log line, not a response body, and this tool never reads the log.
+# The same refusal without a duration. Upstream is not obliged to name one.
+UPSTREAM_LIMIT_NO_WINDOW = (
+    '{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached"}}'
+)
+
+# The router's own selection log line. It carries the remaining cooldown -- but it is a
+# log line, not a response body, and this tool never reads the log.
 SELECTION_LINE = (
     'auth unavailable: 1 of 1 candidate(s) for model "gpt-6-astra" (provider=codex) '
     "are in cooldown: [provider=codex, reason=quota, remaining=96h32m3s]"
@@ -88,6 +99,11 @@ def _refusal(body, status=429):
         io.BytesIO(body.encode()))
 
 
+def _expired_window(now, window_s=3600, age_s=7200):
+    """A limit this tool watched itself whose own window has since run out."""
+    return {"at_unix": now - age_s, "window_s": window_s, "model": "gpt-6-astra"}
+
+
 class TestClassify:
     def test_success_is_ok(self):
         assert cooldown.classify(200, "") == "ok"
@@ -111,95 +127,98 @@ class TestClassify:
 
 
 class TestPayloadParsing:
-    def test_resets_at_is_read_from_the_upstream_payload(self):
-        assert cooldown.resets_at(UPSTREAM_LIMIT) == 1789436526
+    def test_the_window_is_read_from_a_genuine_upstream_refusal(self):
+        assert cooldown.resets_in_seconds(UPSTREAM_LIMIT) == 568157
 
-    def test_resets_at_absent_when_not_offered(self):
-        assert cooldown.resets_at(LOCAL_COOLDOWN) is None
+    def test_a_genuine_refusal_need_not_name_a_window(self):
+        assert cooldown.resets_in_seconds(UPSTREAM_LIMIT_NO_WINDOW) is None
 
     def test_a_local_refusal_says_nothing_about_how_long_it_will_hold(self):
-        """Why the age is measured locally: the body carries no duration.
+        """Why sightings prove nothing: the body carries no duration at all.
 
-        `remaining=` lives in the selection log line, which is not a response
-        body and which this tool never reads.
+        `remaining=` lives in the selection log line, which is not a response body and
+        which this tool never reads.
         """
+        assert cooldown.resets_in_seconds(LOCAL_COOLDOWN) is None
         assert "remaining" not in LOCAL_COOLDOWN
         assert "remaining=" in SELECTION_LINE
 
 
-class TestCooldownAge:
-    """The only clock this tool trusts is its own."""
+class TestStateDurability:
+    @pytest.fixture(autouse=True)
+    def _isolate_state(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(cooldown, "state_dir", lambda: tmp_path)
+
+    def test_a_write_that_lands_reads_back_true(self):
+        assert cooldown.write_state(hold_restarts_until_unix=123.0) is True
+        assert cooldown.read_state()["hold_restarts_until_unix"] == 123.0
+
+    def test_a_write_that_cannot_land_says_so(self, monkeypatch):
+        monkeypatch.setattr(cooldown.Path, "write_text", _unwritable)
+        assert cooldown.write_state(hold_restarts_until_unix=123.0) is False
+
+
+def _unwritable(self, *args, **kwargs):
+    raise OSError("read-only file system")
+
+
+class TestRecordedLimit:
+    """The only evidence a restart may rest on, and the ways it is refused."""
 
     @pytest.fixture(autouse=True)
     def _isolate_state(self, tmp_path, monkeypatch):
         monkeypatch.setattr(cooldown, "state_dir", lambda: tmp_path)
 
-    def test_a_first_sighting_is_recorded_and_ages_nothing(self):
+    def test_nothing_recorded_is_no_evidence(self):
+        assert cooldown.recorded_limit(time.time()) is None
+
+    def test_the_window_expires_on_our_clock_from_when_we_saw_it(self):
         now = time.time()
-        assert cooldown.cooldown_age(now) == 0.0
-        assert cooldown.read_state()["local_cooldown_since_unix"] == now
+        cooldown.write_state(observed_limit={"at_unix": now, "window_s": 600, "model": "m"})
+        assert cooldown.recorded_limit(now)["expires_unix"] == now + 600
 
-    def test_a_later_sighting_measures_from_the_first(self):
+    def test_a_record_from_the_future_is_no_evidence(self):
+        """A clock jump backwards must not present an unexpired window as expired."""
         now = time.time()
-        cooldown.write_state(local_cooldown_since_unix=now - 3600)
-        assert cooldown.cooldown_age(now) == pytest.approx(3600)
+        cooldown.write_state(observed_limit={"at_unix": now + 86400, "window_s": 60, "model": "m"})
+        assert cooldown.recorded_limit(now) is None
 
-    def test_serving_normally_resets_the_clock(self):
-        now = time.time()
-        cooldown.write_state(local_cooldown_since_unix=now - 3600,
-                             hold_restarts_until_unix=now + 3600)
-        cooldown.clear_guards()
-        assert cooldown.cooldown_age(now) == 0.0
-        assert cooldown.restart_blocked(now) is None
-
-    def test_a_timestamp_from_the_future_restarts_the_clock(self):
-        """A clock jump backwards must not read as a days-old cooldown."""
-        now = time.time()
-        cooldown.write_state(local_cooldown_since_unix=now + 86400)
-        assert cooldown.cooldown_age(now) == 0.0
+    def test_a_malformed_record_is_no_evidence(self):
+        cooldown.write_state(observed_limit={"at_unix": "yesterday", "window_s": None})
+        assert cooldown.recorded_limit(time.time()) is None
 
 
-class TestRestartGuard:
+class TestRestartHold:
     @pytest.fixture(autouse=True)
     def _isolate_state(self, tmp_path, monkeypatch):
         monkeypatch.setattr(cooldown, "state_dir", lambda: tmp_path)
 
-    def test_nothing_blocks_a_first_restart(self):
-        assert cooldown.restart_blocked(time.time()) is None
+    def test_nothing_holds_a_first_bounce(self):
+        assert cooldown.restart_hold(time.time()) is None
 
-    def test_a_recent_restart_blocks_another(self):
+    def test_arming_holds_the_next_one_and_spends_the_evidence(self):
         now = time.time()
-        cooldown.write_state(last_restart_unix=now - 60)
-        assert "settling" in cooldown.restart_blocked(now)
-
-    def test_an_old_restart_does_not_block(self):
-        now = time.time()
-        cooldown.write_state(last_restart_unix=now - cooldown.RESTART_COOLDOWN_SECONDS - 1)
-        assert cooldown.restart_blocked(now) is None
-
-    def test_a_hold_blocks_restarts_while_it_lasts(self):
-        """A confirmed limit or a failed bounce stops the next one."""
-        now = time.time()
-        cooldown.hold_restarts(now)
-        assert "holding off restarts" in cooldown.restart_blocked(now + 60)
+        cooldown.write_state(observed_limit=_expired_window(now))
+        assert cooldown.arm_restart_hold(now) is True
+        assert "standing down" in cooldown.restart_hold(now + 60)
+        assert cooldown.recorded_limit(now) is None
 
     def test_the_hold_expires_on_its_own(self):
         now = time.time()
-        cooldown.hold_restarts(now)
-        assert cooldown.restart_blocked(now + cooldown.CONFIRMED_HOLD_SECONDS + 1) is None
+        cooldown.arm_restart_hold(now)
+        assert cooldown.restart_hold(now + cooldown.RESTART_HOLD_SECONDS + 1) is None
 
     def test_the_hold_is_hours_not_days(self):
-        """Defect 1's ceiling, pinned: no local guard may outlive one workday."""
-        assert cooldown.CONFIRMED_HOLD_SECONDS <= 12 * 3600
+        """No local guard may outlive one workday: that is the outage being watched for."""
+        assert cooldown.RESTART_HOLD_SECONDS <= 12 * 3600
+
+    def test_arming_reports_failure_when_it_cannot_be_written(self, monkeypatch):
+        monkeypatch.setattr(cooldown.Path, "write_text", _unwritable)
+        assert cooldown.arm_restart_hold(time.time()) is False
 
 
 class TestThroughTheRealProbe:
-    """No mocked probe: HTTP bodies go through the parser that ships.
-
-    A restart decision made from a hand-built probe dict proves nothing about
-    the payloads the router actually sends, so every restart-or-not assertion
-    that matters lives here.
-    """
+    """No mocked probe: HTTP bodies go through the parser that ships."""
 
     @pytest.fixture(autouse=True)
     def _isolate(self, tmp_path, monkeypatch):
@@ -219,218 +238,195 @@ class TestThroughTheRealProbe:
         self._http(monkeypatch, _refusal(LOCAL_COOLDOWN))
         result = cooldown.probe("http://127.0.0.1:8787/t/x", "x", "gpt-6-astra", 1.0)
         assert result["kind"] == "local_cooldown"
-        assert result["resets_at"] is None
+        assert result["resets_in_s"] is None
 
-    def test_a_first_undated_local_cooldown_is_never_restarted(self, monkeypatch):
-        """Regression, defect 2: an ordinary brief cooldown got a restart.
+    def test_two_sightings_an_hour_apart_are_not_one_hour_of_cooldown(self, monkeypatch):
+        """Finding 3, the reason the age heuristic is gone rather than patched again.
 
-        The real refusal body carries no duration, so the old short-cooldown
-        guard could not fire and every first sighting reached restart_service.
-        Nothing here distinguishes this from a cooldown that clears by itself a
-        minute later, so the answer is to do nothing and look again next run.
+        Between the two runs the routes may have served every request that was actually
+        made. Time between observations is not persistence of one refusal, so no number
+        of sightings may reach a restart.
         """
+        now = time.time()
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN))
+        cooldown.run(fix=True)
+        monkeypatch.setattr(cooldown.time, "time", lambda: now + 3600)
         self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _Response())
-        code, result = cooldown.run(fix=True)
-        assert result["probe"]["kind"] == "local_cooldown"
+        _, result = cooldown.run(fix=True)
         assert self.restarts == []
         assert result["fixed"] is False
-        assert code == cooldown.STALE
-        assert "stale" not in result["summary"].lower()
 
-    def test_the_same_cooldown_still_holding_an_hour_later_is_cleared(self, monkeypatch):
-        """The observed incident, once the age is one this tool measured."""
-        cooldown.write_state(local_cooldown_since_unix=time.time() - 3600)
+    def test_a_local_cooldown_with_no_observed_limit_is_only_reported(self, monkeypatch):
+        """Three days of sightings still buy nothing, because they establish nothing."""
+        cooldown.write_state(local_cooldown_since_unix=time.time() - 3 * 86400)
         self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _Response())
-        code, result = cooldown.run(fix=True)
-        assert code == cooldown.OK
-        assert result["fixed"] is True
-        assert len(self.restarts) == 1
+        _, result = cooldown.run(fix=True)
+        assert self.restarts == []
+        assert result["fixed"] is False
+        assert "never saw that limit itself" in " ".join(result["undetermined"])
 
-    def test_a_genuine_upstream_limit_is_never_restarted(self, monkeypatch):
+    def test_the_report_says_what_it_saw_and_what_it_could_not_establish(self, monkeypatch):
+        """Declining is the main output now, so it has to be worth reading."""
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN))
+        _, result = cooldown.run(fix=False)
+        rendered = cooldown.render(result)
+        assert "never left this machine" in rendered
+        assert "cannot say" in rendered
+        assert "in cooldown" in rendered and "quota page" in rendered
+
+    def test_a_genuine_upstream_limit_records_its_window_and_restarts_nothing(self, monkeypatch):
         self._http(monkeypatch, _refusal(UPSTREAM_LIMIT))
         code, _ = cooldown.run(fix=True)
         assert code == cooldown.EXHAUSTED
         assert self.restarts == []
+        assert cooldown.read_state()["observed_limit"]["window_s"] == 568157
+
+    def test_a_genuine_limit_naming_no_window_records_nothing_actionable(self, monkeypatch):
+        """No duration means no clock to run, so that limit can never authorise a bounce."""
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now))
+        self._http(monkeypatch, _refusal(UPSTREAM_LIMIT_NO_WINDOW))
+        code, _ = cooldown.run(fix=True)
+        assert code == cooldown.EXHAUSTED
+        assert cooldown.read_state()["observed_limit"] is None
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _Response())
+        cooldown.run(fix=True)
+        assert self.restarts == []
+
+    def test_a_limit_still_inside_its_own_window_is_not_restarted(self, monkeypatch):
+        now = time.time()
+        cooldown.write_state(observed_limit={"at_unix": now - 60, "window_s": 3600, "model": "m"})
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _Response())
+        _, result = cooldown.run(fix=True)
+        assert self.restarts == []
+        assert "of its own window to run" in result["summary"]
+
+    def test_a_limit_that_outlived_its_own_window_is_the_one_restart(self, monkeypatch):
+        """The whole remaining scope: observed limit, its window expired, still refusing."""
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now))
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _Response())
+        code, result = cooldown.run(fix=True)
+        assert code == cooldown.OK
+        assert result["fixed"] is True
+        assert self.restarts == [15.0]
+        assert cooldown.read_state()["observed_limit"] is None
+        assert cooldown.restart_hold(time.time()) is None
+
+    def test_that_restart_needs_the_flag(self, monkeypatch):
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now))
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN))
+        _, result = cooldown.run(fix=False)
+        assert self.restarts == []
+        assert "--fix" in result["summary"]
+
+    def test_a_confirmation_probe_that_raises_still_leaves_the_hold_recorded(self, monkeypatch):
+        """Finding 1: the hold is written before the bounce, so nothing can skip it.
+
+        Cooldown at t=0, restart at t=1h, the confirmation probe times out. The old order
+        wrote the hold after the second probe, so this path recorded none and the next
+        hourly run bounced again.
+        """
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now),
+                             local_cooldown_since_unix=now - 3600)
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), OSError("timed out"))
+        with pytest.raises(cooldown.CheckError):
+            cooldown.run(fix=True)
+        assert len(self.restarts) == 1
+        assert (cooldown.read_state().get("hold_restarts_until_unix") or 0) > now
+        assert cooldown.read_state().get("observed_limit") is None
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _Response())
+        cooldown.run(fix=True)
+        assert len(self.restarts) == 1
+
+    def test_a_first_probe_that_raises_discards_the_recorded_window(self, monkeypatch):
+        """Finding 2: a transport failure must invalidate the evidence, not preserve it.
+
+        Refusal at t=0, timeout at t=1h, fresh refusal at t=2h. The old code carried the
+        age across the timeout and restarted on it; the window recorded before a router
+        we can no longer reach is worth the same nothing.
+        """
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now),
+                             local_cooldown_since_unix=now - 3600)
+        self._http(monkeypatch, OSError("timed out"))
+        with pytest.raises(cooldown.CheckError):
+            cooldown.run(fix=True)
+        assert cooldown.read_state().get("observed_limit") is None
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _Response())
+        _, result = cooldown.run(fix=True)
+        assert self.restarts == []
+        assert result["fixed"] is False
+
+    def test_an_unwritable_state_file_refuses_to_restart(self, monkeypatch):
+        """Finding 4: the documented fail-safe, now actually enforced.
+
+        Suppressing the write while still trusting the stored evidence is a restart every
+        hour, forever. A guard that cannot be recorded is a reason not to act.
+        """
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now),
+                             local_cooldown_since_unix=now - 3600)
+        monkeypatch.setattr(cooldown.Path, "write_text", _unwritable)
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _Response())
+        _, result = cooldown.run(fix=True)
+        assert self.restarts == []
+        assert result["fixed"] is False
+        assert str(cooldown.state_path()) in " ".join(result["undetermined"])
+
+    def test_a_restart_that_did_not_clear_it_is_not_repeated(self, monkeypatch):
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now))
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _refusal(LOCAL_COOLDOWN))
+        code, _ = cooldown.run(fix=True)
+        assert code == cooldown.UNKNOWN
+        assert len(self.restarts) == 1
+        assert cooldown.restart_hold(time.time() + 3600) is not None
+        assert cooldown.read_state().get("observed_limit") is None
+
+    def test_a_router_that_does_not_come_back_is_not_bounced_again(self, monkeypatch):
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now))
+        monkeypatch.setattr(cooldown, "wait_healthy", lambda base_url, deadline: False)
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN))
+        code, _ = cooldown.run(fix=True)
+        assert code == cooldown.UNKNOWN
+        assert len(self.restarts) == 1
+        assert cooldown.restart_hold(time.time() + 3600) is not None
+
+    def test_an_active_hold_stops_a_second_restart(self, monkeypatch):
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now),
+                             hold_restarts_until_unix=now + 3600)
+        self._http(monkeypatch, _refusal(LOCAL_COOLDOWN), _Response())
+        _, result = cooldown.run(fix=True)
+        assert self.restarts == []
+        assert "standing down" in result["summary"]
+
+    def test_serving_routes_clear_the_hold_and_the_observation(self, monkeypatch):
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now),
+                             hold_restarts_until_unix=now + 3600)
+        self._http(monkeypatch, _Response())
+        code, _ = cooldown.run(fix=False)
+        assert code == cooldown.OK
+        assert cooldown.read_state()["observed_limit"] is None
+        assert cooldown.restart_hold(time.time()) is None
+
+    def test_an_unexpected_response_discards_the_window(self, monkeypatch):
+        """A 5xx says nothing about the cooldown table, so the evidence lapses."""
+        now = time.time()
+        cooldown.write_state(observed_limit=_expired_window(now))
+        self._http(monkeypatch, _refusal("boom", status=503))
+        code, _ = cooldown.run(fix=True)
+        assert code == cooldown.UNKNOWN
+        assert self.restarts == []
+        assert cooldown.read_state().get("observed_limit") is None
 
     def test_a_router_that_does_not_answer_touches_nothing(self, monkeypatch):
         self._http(monkeypatch, OSError("connection refused"))
         with pytest.raises(cooldown.CheckError):
             cooldown.run(fix=True)
         assert self.restarts == []
-
-
-class TestDecisions:
-    """The probe-and-decide table, with no network and no service touched."""
-
-    @pytest.fixture(autouse=True)
-    def _isolate(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(cooldown, "state_dir", lambda: tmp_path)
-        monkeypatch.setattr(cooldown, "load_endpoint", lambda: ("http://127.0.0.1:8787/t/x", "x"))
-        monkeypatch.setattr(cooldown, "codex_routes", lambda: ["gpt-6-astra"])
-        self.restarts = []
-        monkeypatch.setattr(cooldown, "restart_service",
-                            lambda timeout: self.restarts.append(timeout))
-        monkeypatch.setattr(cooldown, "wait_healthy", lambda base_url, deadline: True)
-
-    def _probes(self, monkeypatch, *responses):
-        queue = list(responses)
-        monkeypatch.setattr(cooldown, "probe",
-                            lambda base_url, token, model, timeout: queue.pop(0))
-
-    @staticmethod
-    def _result(kind, **extra):
-        return {"status": 200 if kind == "ok" else 429, "elapsed_ms": 1.0,
-                "kind": kind, "resets_at": None} | extra
-
-    @staticmethod
-    def _aged():
-        """A local cooldown this tool has already watched for long enough."""
-        cooldown.write_state(
-            local_cooldown_since_unix=time.time() - cooldown.MIN_COOLDOWN_AGE_SECONDS - 60)
-
-    def test_serving_normally_needs_no_action(self, monkeypatch):
-        self._probes(monkeypatch, self._result("ok"))
-        code, _ = cooldown.run(fix=True)
-        assert code == cooldown.OK
-        assert self.restarts == []
-
-    def test_genuine_limit_is_never_restarted(self, monkeypatch):
-        self._probes(monkeypatch, self._result("upstream_limit", resets_at=1789436526))
-        code, _ = cooldown.run(fix=True)
-        assert code == cooldown.EXHAUSTED
-        assert self.restarts == []
-        assert cooldown.restart_blocked(time.time()) is not None
-
-    def test_a_confirmed_limit_does_not_lock_recovery_out_for_days(self, monkeypatch):
-        """Regression, defect 1: upstream's deadline must not become local policy.
-
-        A genuine limit advertising a reset 96 hours out used to be stored
-        verbatim and then prohibit every restart until that timestamp -- so the
-        one action that could discover the quota was already back was the one
-        action forbidden. The confirmation now expires on our own clock.
-        """
-        now = time.time()
-        self._probes(monkeypatch, self._result("upstream_limit", resets_at=int(now + 96 * 3600)))
-        assert cooldown.run(fix=True)[0] == cooldown.EXHAUSTED
-        assert cooldown.restart_blocked(now + 60) is not None
-        assert cooldown.restart_blocked(now + 24 * 3600) is None
-
-    def test_a_confirmed_limit_holds_even_with_no_deadline_offered(self, monkeypatch):
-        """The hold does not depend on upstream having named a reset at all."""
-        self._probes(monkeypatch, self._result("upstream_limit"))
-        code, _ = cooldown.run(fix=True)
-        assert code == cooldown.EXHAUSTED
-        assert cooldown.restart_blocked(time.time() + 60) is not None
-
-    def test_a_cooldown_seen_for_the_first_time_is_only_recorded(self, monkeypatch):
-        self._probes(monkeypatch, self._result("local_cooldown"))
-        code, result = cooldown.run(fix=True)
-        assert code == cooldown.STALE
-        assert self.restarts == []
-        assert result["cooldown_age_s"] == 0
-        assert cooldown.read_state()["local_cooldown_since_unix"]
-
-    def test_an_aged_cooldown_is_reported_but_not_fixed_without_the_flag(self, monkeypatch):
-        self._aged()
-        self._probes(monkeypatch, self._result("local_cooldown"))
-        code, result = cooldown.run(fix=False)
-        assert code == cooldown.STALE
-        assert self.restarts == []
-        assert "--fix" in result["summary"]
-
-    def test_stale_cooldown_is_cleared_and_confirmed(self, monkeypatch):
-        """The observed incident: a lockout that outlived the real window."""
-        self._aged()
-        self._probes(monkeypatch, self._result("local_cooldown"), self._result("ok"))
-        code, result = cooldown.run(fix=True)
-        assert code == cooldown.OK
-        assert result["fixed"] is True
-        assert len(self.restarts) == 1
-        assert cooldown.read_state()["local_cooldown_since_unix"] is None
-
-    def test_a_real_lockout_survives_the_restart_and_holds(self, monkeypatch):
-        """Restarting settles it: if the quota is truly spent, say so and stand down."""
-        self._aged()
-        self._probes(monkeypatch,
-                     self._result("local_cooldown"),
-                     self._result("upstream_limit", resets_at=1789436526))
-        code, result = cooldown.run(fix=True)
-        assert code == cooldown.EXHAUSTED
-        assert result["fixed"] is False
-        assert cooldown.restart_blocked(time.time() + 60) is not None
-
-    def test_a_restart_that_did_not_help_is_not_repeated_next_hour(self, monkeypatch):
-        """A bounce that changed nothing must not become an hourly bounce."""
-        self._aged()
-        self._probes(monkeypatch,
-                     self._result("local_cooldown"),
-                     self._result("local_cooldown"))
-        code, _ = cooldown.run(fix=True)
-        assert code == cooldown.UNKNOWN
-        assert len(self.restarts) == 1
-        assert cooldown.restart_blocked(time.time() + 3600) is not None
-
-    def test_a_router_that_does_not_come_back_is_not_bounced_again(self, monkeypatch):
-        """Every restart either ends with serving routes or records a hold."""
-        self._aged()
-        monkeypatch.setattr(cooldown, "wait_healthy", lambda base_url, deadline: False)
-        self._probes(monkeypatch, self._result("local_cooldown"))
-        code, _ = cooldown.run(fix=True)
-        assert code == cooldown.UNKNOWN
-        assert len(self.restarts) == 1
-        assert cooldown.restart_blocked(time.time() + 3600) is not None
-
-    def test_an_active_hold_stops_a_second_restart(self, monkeypatch):
-        cooldown.hold_restarts(time.time())
-        self._aged()
-        self._probes(monkeypatch, self._result("local_cooldown"))
-        code, result = cooldown.run(fix=True)
-        assert code == cooldown.STALE
-        assert self.restarts == []
-        assert "holding off restarts" in result["summary"]
-
-    def test_recovery_is_attempted_once_the_hold_expires(self, monkeypatch):
-        now = time.time()
-        cooldown.write_state(hold_restarts_until_unix=now - 1)
-        self._aged()
-        self._probes(monkeypatch, self._result("local_cooldown"), self._result("ok"))
-        code, result = cooldown.run(fix=True)
-        assert code == cooldown.OK
-        assert result["fixed"] is True
-
-    def test_recovery_clears_a_recorded_hold(self, monkeypatch):
-        cooldown.write_state(hold_restarts_until_unix=time.time() + 3600,
-                             local_cooldown_since_unix=time.time() - 3600)
-        self._probes(monkeypatch, self._result("ok"))
-        code, _ = cooldown.run(fix=False)
-        assert code == cooldown.OK
-        assert cooldown.restart_blocked(time.time()) is None
-        assert cooldown.read_state()["local_cooldown_since_unix"] is None
-
-    def test_an_unexpected_response_touches_nothing(self, monkeypatch):
-        self._probes(monkeypatch, self._result("error", status=500))
-        code, _ = cooldown.run(fix=True)
-        assert code == cooldown.UNKNOWN
-        assert self.restarts == []
-
-    def test_an_error_between_cooldowns_restarts_the_age_clock(self, monkeypatch):
-        """A router flapping must not accumulate its way into a restart.
-
-        The neighbouring spelling of defect 2: the age is only evidence when it
-        measures one uninterrupted run of refusals, so anything else resets it.
-        """
-        self._aged()
-        self._probes(monkeypatch, self._result("error", status=500))
-        assert cooldown.run(fix=True)[0] == cooldown.UNKNOWN
-        self._probes(monkeypatch, self._result("local_cooldown"))
-        code, result = cooldown.run(fix=True)
-        assert code == cooldown.STALE
-        assert result["cooldown_age_s"] == 0
-        assert self.restarts == []
-
-    def test_a_confirmed_limit_also_restarts_the_age_clock(self, monkeypatch):
-        """The refusal that comes back after a real limit is a new one."""
-        self._aged()
-        self._probes(monkeypatch, self._result("upstream_limit"))
-        assert cooldown.run(fix=True)[0] == cooldown.EXHAUSTED
-        assert cooldown.read_state()["local_cooldown_since_unix"] is None

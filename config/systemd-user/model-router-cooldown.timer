@@ -1,11 +1,11 @@
 [Unit]
-Description=Hourly check for a stale Codex cooldown blocking every GPT route
+Description=Hourly check for a Codex cooldown blocking every GPT route
 
 [Timer]
 OnCalendar=hourly
 # The box is a laptop/workstation, not a server: without this a missed window
 # is simply skipped. The failure being watched for lasts days, so a check that
-# silently never runs would leave exactly the blackout it exists to end.
+# silently never runs would leave exactly the blackout it exists to report.
 Persistent=true
 # Nothing depends on the hour boundary, and the probe is a real upstream call.
 RandomizedDelaySec=10m
