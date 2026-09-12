@@ -73,9 +73,9 @@ jobs:
         # A guard that cannot fail proves nothing. Reintroduce the silent cargo
         # build (the stall that outlived several prompt fixes) and require the
         # canary to catch it. Runs on a scratch copy so the checkout stays clean.
-        # The target is deploy.sh, not helpers.sh: this PR deletes
-        # _build_claude_tools_from_source, so deploy.sh's DEPLOY_CLAUDE_TOOLS
-        # block is now the only cargo build on the install path.
+        # The target is deploy.sh, not helpers.sh: _build_claude_tools_from_source
+        # is gone (2026-09-04), so deploy.sh's DEPLOY_CLAUDE_TOOLS block is the
+        # only cargo build left on the install path.
         run: |
           cp deploy.sh "$RUNNER_TEMP/deploy.bak"
           sed -i 's|run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release|cargo build --release --quiet|' \
