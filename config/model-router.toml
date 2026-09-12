@@ -3,9 +3,15 @@
 # renders this file into everything downstream and restarts the router:
 #
 #   ~/.config/model-router/config.toml   the router's routes (generated, do not edit)
-#   ~/.claude/settings.json              ANTHROPIC_BASE_URL + one modelPicker row
-#                                        per model with picker = true (working
-#                                        copy only; never committed)
+#   ~/.config/model-router/managed-settings.json
+#                                        ANTHROPIC_BASE_URL + one modelPicker row
+#                                        per model with picker = true, staged for
+#                                        the sudo line `apply` prints, which installs
+#                                        it as a MANAGED drop-in (macOS: /Library/
+#                                        Application Support/ClaudeCode/managed-
+#                                        settings.d/50-model-router.json; Linux:
+#                                        /etc/claude-code/managed-settings.d/). The
+#                                        user settings.json never carries the token.
 #   claude/agents/<id>.md                one agent file per model with agent set
 #                                        (generated files carry a marker and are
 #                                        removed when the model goes)

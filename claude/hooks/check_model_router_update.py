@@ -26,6 +26,26 @@ MAX_REPORT = 32768
 COOLDOWN = 300
 
 
+def managed_env(env):
+    """The `env` block of the model-router managed settings drop-in.
+
+    Claude Code copies a settings `env` block into the process environment, so a
+    hook a session launches already has ANTHROPIC_BASE_URL whichever settings
+    level set it. A hook launched from a plain shell does not, and since the
+    gateway keys moved to the root-owned drop-in the user settings file no
+    longer carries them either, so read the drop-in before falling back to it.
+    """
+    path = env.get("MODEL_ROUTER_MANAGED") or (
+        "/Library/Application Support/ClaudeCode/managed-settings.d/50-model-router.json"
+        if sys.platform == "darwin"
+        else "/etc/claude-code/managed-settings.d/50-model-router.json")
+    try:
+        block = json.loads(Path(path).read_text()).get("env")
+    except (OSError, ValueError):
+        return {}
+    return block if isinstance(block, dict) else {}
+
+
 def read_json(path):
     try:
         value = json.loads(path.read_text())
@@ -177,7 +197,9 @@ def check_update(force=False, *, home=None, env=None, repo=None, timeout=60, now
     state = home / ".local/state/model-router"
     try:
         config_env = read_json(home / ".claude/settings.json").get("env", {})
-        base_url = env.get("ANTHROPIC_BASE_URL", config_env.get("ANTHROPIC_BASE_URL", ""))
+        base_url = env.get("ANTHROPIC_BASE_URL")
+        if base_url is None:
+            base_url = managed_env(env).get("ANTHROPIC_BASE_URL") or config_env.get("ANTHROPIC_BASE_URL", "")
         token_path = state / "ingress-token"
         if not token_path.is_file():
             return 0, None

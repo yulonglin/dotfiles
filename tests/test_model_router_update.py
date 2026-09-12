@@ -50,6 +50,27 @@ class UpdateCheckTests(unittest.TestCase):
     def runs(self):
         return len(self.counter.read_text().splitlines()) if self.counter.exists() else 0
 
+    def test_the_managed_drop_in_supplies_the_url_once_the_user_file_is_stripped(self):
+        # `update-ai-tools` runs this checker from a plain shell, where nothing
+        # exports ANTHROPIC_BASE_URL, and after the drop-in migration the user
+        # settings file no longer carries it either. Without the drop-in in the
+        # fallback chain the post-update validation silently skips.
+        self.settings.write_text(json.dumps({"env": {"TMPDIR": "/tmp/claude"}}))
+        self.assertEqual(self.check(), (0, None))
+        self.assertEqual(self.runs(), 0)
+        managed = self.home / "managed-settings.d/50-model-router.json"
+        managed.parent.mkdir(parents=True)
+        managed.write_text(json.dumps({"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787/t/private-ingress"}}))
+        self.assertEqual(self.check(env={"MODEL_ROUTER_MANAGED": str(managed)})[0], 0)
+        self.assertEqual(self.runs(), 1)
+
+    def test_an_empty_base_url_in_the_environment_stays_an_explicit_off(self):
+        managed = self.home / "managed-settings.d/50-model-router.json"
+        managed.parent.mkdir(parents=True)
+        managed.write_text(json.dumps({"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787/t/private-ingress"}}))
+        self.assertEqual(self.check(env={"ANTHROPIC_BASE_URL": "", "MODEL_ROUTER_MANAGED": str(managed)}), (0, None))
+        self.assertEqual(self.runs(), 0)
+
     def test_changed_then_unchanged_and_native_update(self):
         self.assertEqual(self.check()[0], 0)
         self.assertEqual(self.runs(), 1)
