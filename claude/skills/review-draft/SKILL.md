@@ -13,6 +13,8 @@ Sentence and paragraph clarity is **`~/.claude/checklists/writing.md`**; the for
 
 **LLM cliches are not a separate critic.** There is no humanizer — cliche detection is the *Cut the LLM tics* section of `~/.claude/checklists/writing.md`, and the clarity critic covers it because it already reads that file. Name the section in the clarity prompt when a draft was LLM-drafted and the tics are the main worry.
 
+**Applying the merged findings is a writing job when it means new or rewritten paragraphs.** For an artifact page or paper section those go to the writer per `write-prose`, with the ranked findings as the brief; a word, number or link fix stays with the session.
+
 ## Arguments
 
 Parse from provided arguments:
