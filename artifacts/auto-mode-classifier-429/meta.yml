@@ -4,6 +4,11 @@ org: MATS Program   # claude auth status, 2026-09-09
 first_published: 2026-09-09
 last_updated: 2026-09-09
 status: live
+status_note: >-
+  the two-condition claim in this row was withdrawn on 2026-09-11 — a per-version scan of 4,884
+  transcripts refutes it in both directions; see the retraction on
+  [pull request 110](https://github.com/yulonglin/dotfiles/pull/110) and the sibling page
+  *Why Auto Mode Broke Behind the Gateway* (`26263dc9`), which carries the corrected text
 
 public: no
 
