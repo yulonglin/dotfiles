@@ -49,6 +49,8 @@ Match the strength of each claim to the evidence class behind it: an **existence
 
 Most readers stop early: many read the abstract, some read the intro or skim the figures, few read the whole thing. Those three therefore earn as much editing effort as everything else combined, which is most of the words. Effort spread evenly across the document is, as [Nanda](https://www.lesswrong.com/posts/eJGptPbbFPZGLpjsp/highly-opinionated-advice-on-how-to-write-ml-papers) argues, effort spent mostly where nobody is looking. What that effort has to buy is checkable in the draft: **the abstract states the claim, its evidence class and one limitation**; the introduction ends with the claim in a single sentence; and each figure's caption says what to see in the figure without the body text.
 
+For a paper, fix the venue — workshop, conference or journal — before drafting, because it sets length, tone and what the reader already knows. The introduction runs problem, approach with the key results previewed, then contributions, and ends with the claim in one sentence. Limitations come ordered by importance, each marked as fundamental to the method or an artefact of this implementation, and future work names a specific test rather than "scale up". A paper never mentions coding agents or AI assistance in producing the draft.
+
 [Foerster's](https://www.jakobfoerster.com/how-to-ml-paper) rule of thumb is that a draft carries about a third fluff, cut on the final pass. Check what is left rather than what was deleted: **no sentence only restates its neighbour, no paragraph opens by announcing what it is about to do, and the conclusion says something the introduction did not.**
 
 ## Reread cold; you cannot imagine a naive reader
@@ -90,6 +92,8 @@ Calibrate against ML papers where the first paragraph frames the problem without
 - Khan et al., [Debating with More Persuasive LLMs Leads to More Truthful Answers](https://arxiv.org/abs/2402.06782)
 - Kaiming He's papers
 
+Title patterns, the five-part abstract and the section skeletons distilled from the Khan and Greenblatt papers above are in `~/.claude/docs/paper-writing-style-guide.md`.
+
 ## Related
 
-Page, slide and report form, where numbers go, and terminology: `presentation.md`. Results pages: `results-analysis.md`. `reduce-ambiguity` red-teams a finished draft for how it could be misread. `clarity-critic`, `narrative-critic`, `red-team` and `fact-checker` are the critic agents `review-draft` dispatches.
+Page, slide and report form, where numbers go, and terminology: `presentation.md`. Results pages: `results-analysis.md`. `reduce-ambiguity` red-teams a finished draft for how it could be misread. `clarity-critic`, `narrative-critic`, `red-team` and `fact-checker` are the critic agents `review-draft` dispatches. Who writes the prose of an artifact page or paper section, and how it is briefed with this file: `write-prose`.

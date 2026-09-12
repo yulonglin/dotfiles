@@ -13,7 +13,7 @@ The canonical filename is **`ARTIFACTS.md` at the repo root**. One per repo.
 
 A published page lives on someone else's server under an org you may leave, so it can become unreachable without anything local changing — an account switch, an org's External-sharing toggle, a plan change. The committed source is the durable copy, and the publish is the last step rather than the record.
 
-Every artifact gets `artifacts/<slug>/` in the repo the work belongs to: `meta.yml` (url, title, **org**, dates, status), whatever rebuilds the page, and **the built HTML, committed beside the source** (Yulong, 2026-09-01 — this reversed the earlier inputs-only rule); a gitignored `build/` holds only scratch intermediates. An input that is itself ephemeral, such as a scan of a live environment, cannot be regenerated because the thing it measured has moved on — snapshot it and date it.
+Every artifact gets `artifacts/<slug>/` in the repo the work belongs to: `meta.yml` (url, title, **org**, dates, status, **author_model**), whatever rebuilds the page, and **the built HTML, committed beside the source** (Yulong, 2026-09-01 — this reversed the earlier inputs-only rule); a gitignored `build/` holds only scratch intermediates. An input that is itself ephemeral, such as a scan of a live environment, cannot be regenerated because the thing it measured has moved on — snapshot it and date it.
 
 `meta.yml` carries the publishing **org**, which the gallery cannot give back afterwards and which is precisely what breaks on an account switch.
 
@@ -48,6 +48,7 @@ The table is generated. Each row comes from one file, so two sessions recording 
 | `public` | `no`, or the public mirror URL |
 | `last_updated` | ISO date of the last publish; the table sorts on it, newest first |
 | `index_source` | Only when the Source cell is not this artifact's own directory |
+| `author_model` | The model id that wrote the prose (`write-prose`), or `generated` for a page a script emits. Not in the table; `block_claude_authored_artifact.sh` reads it and refuses a publish without it |
 
 ```bash
 python3 scripts/build_artifacts_index.py          # rewrite the table

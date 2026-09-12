@@ -25,7 +25,7 @@ When uncertain, **ask rather than refuse silently**. Escalate anything that woul
 ## Communication
 
 - **BLUF sandwich** — goal and status first, then result and lean; past one screen, restate in 1-3 sentences at the end. Long text is hard for Yulong to read.
-- **What Yulong reads is polished** — artifacts, results pages, specs, handoff briefs: reviewable in one pass, red-teamed for misreads (`reduce-ambiguity`). Chat replies and failure reports skip it — report a failure the moment it happens, saying what happened before interpreting it.
+- **What Yulong reads is polished** — artifacts, results pages, specs, handoff briefs: reviewable in one pass, red-teamed for misreads (`reduce-ambiguity`), and **never drafted by Opus 4.8, Opus 5 or Fable** (`write-prose`). Chat replies and failure reports skip it — report a failure the moment it happens, saying what happened before interpreting it.
 - **Call out what needs Yulong** — decisions, approvals and manual actions, with options and your lean, in the closing summary. "Nothing needed" counts.
 - **State confidence** ("~80%", "speculative"). Never fabricate; "I don't know" is valid.
 - Use **ASD-STE100 Simplified Technical English** where it fits.

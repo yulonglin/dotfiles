@@ -33,6 +33,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 
 | Skill | Use when |
 |---|---|
+| `write-prose` | Any artifact, report, spec, paper section, skill, rule or PR description about to be drafted or rewritten — the writer from `writer-priority`, the skeleton brief, `author_model`; also when `block_claude_authored_artifact.sh` refuses a publish |
 | `clear-writing` | Drafting or revising anything a reader must follow — paragraph structure, sentence mechanics, claim calibration, the LLM tics to cut |
 | `review-draft` | "review my draft", "run the critics", "tear this apart" — dispatches the critic panel in parallel, or one lens on its own |
 | `review-paper` | "review this paper", "critique this manuscript" — ML/AI research writing against Neel Nanda's criteria |
@@ -178,7 +179,6 @@ These are not in this repo, but they fire automatically like any other skill —
 | `narrative-critic` | Argument structure, flow, hooks, conclusions |
 | `fact-checker` | Verifying claims, flagging unsupported assertions, finding citations |
 | `red-team` | Counterexamples, unstated assumptions, the strongest objection |
-| `paper-writer` | Drafting a paper section with scientific conventions and honest limitations |
 | `application-writer` | Job and fellowship applications — narrative, positioning, word limits |
 
 ## Code and utility agents

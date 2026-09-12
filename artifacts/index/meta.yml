@@ -4,6 +4,7 @@ org: lin.yulong@gmail.com's Organization
 first_published: 2026-09-10
 last_updated: 2026-09-10
 status: live
+author_model: generated   # md2artifact over ARTIFACTS.md; no model drafts this page
 
 public: no
 

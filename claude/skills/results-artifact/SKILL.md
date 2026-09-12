@@ -9,6 +9,8 @@ The standard for what a results page must show, and how it is reviewed, lives in
 
 The checklist covers the null-and-ceiling and interval principles, causal register, metric hygiene (ground truth, positive class, base rate and skew, judge-not-regex), the ingredients a reader needs to reconstruct the run, every aggregate being one click from its examples, sampled and rejoinable transcript review, provenance, the annotation layer, the fixed per-finding shape, and separation of concerns. Its `Related` section names this file as the home for what follows.
 
+The session computes the numbers, draws the figures and builds the skeleton; the prose of the page is written by the `writer-priority` model, not by the session's Claude model, and this file plus the checklist are what that writer is briefed with (`write-prose`).
+
 ## Which interval, which test
 
 Proportions get **Wilson**, never the normal approximation, which misbehaves at 0 and 1. Differences on paired data get a **paired interval or an exact test** — overlapping intervals are never a substitute for a paired test on paired data. Anything without a closed form gets a **bootstrap**.

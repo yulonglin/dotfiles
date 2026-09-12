@@ -437,6 +437,12 @@
             "command": "bash $HOME/.claude/hooks/block_throwaway_artifact_path.sh",
             "timeout": 10,
             "statusMessage": "Checking the artifact source lives in artifacts/"
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/block_claude_authored_artifact.sh",
+            "timeout": 10,
+            "statusMessage": "Checking meta.yml names an allowed author_model"
           }
         ]
       }
