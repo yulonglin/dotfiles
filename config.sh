@@ -26,18 +26,19 @@
 #
 # The default is `standard`, NOT the full set: a bare invocation on a fresh box
 # should not schedule background jobs or touch a laptop's GUI settings. Use
-# --devbox (or PROFILE=devbox) for the full set, or persist a picker selection.
+# --devbox (or PROFILE=devbox) for the full set, or persist overrides in
+# config.local.sh.
 PROFILE="${PROFILE:-standard}"
 
 # ─── Component Registry (single source of truth) ────────────────────────────
 # Format: "name|description|platform|default"
 # - name: CLI flag name (dashes OK, auto-converted to UPPER_SNAKE for variables)
-# - description: TUI menu display text
-# - platform: all, macos, linux (controls TUI visibility; actual code may have its own guards)
+# - description: human-readable label (the component menu, the banner, docs)
+# - platform: all, macos, linux (filters the resolved set printed in the banner; actual code may have its own guards)
 # - default: true/false (initial value, overridden by profiles → config.local.sh → CLI flags)
 #
 # To add a new component: add one line here, then add the implementation block
-# in install.sh/deploy.sh. TUI menu, --flag, --no-flag, --only all work automatically.
+# in install.sh/deploy.sh. --flag, --no-flag, --only and the banner all work automatically.
 
 INSTALL_REGISTRY=(
     "core|Core packages, CLI tools, gh, uv|all|true|Base"
