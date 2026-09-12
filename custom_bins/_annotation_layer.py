@@ -68,8 +68,9 @@ Behaviour, all of which the tests guard:
   ever asking and the browser only logs "Ignored call to ...". A delete
   guarded that way is a dead button exactly where these pages are read;
 - a `beforeunload` guard while comments exist that have not been copied out,
-  which also saves the draft on the way out. It no longer attempts a download,
-  and it protects an ordinary tab rather than a published page: the same
+  or while any write has been refused, which also saves the draft on the way
+  out. It no longer attempts a download, and it protects an ordinary tab
+  rather than a published page: the same
   sandbox that suppresses `confirm` excludes the document from unload
   prompting, so the comments' real safety net is that they are already in
   localStorage;
@@ -101,6 +102,16 @@ additions, all of which the tests guard:
 - a selection overlapping an existing edit is declined -- the box points at
   that edit instead of opening a second one, because overlapping edits cannot
   be exported appliably;
+- a page may carry toggle controls in its body -- a task-list checkbox, or a
+  button cycling a declared state set such as approve / approve-pending-edits
+  / deny. Any element wearing `data-an-state-id` is wired, persisted under
+  one key of its own, `an-state:<key>:<id>`, and exported in a `## Checklist`
+  section of Copy all. One key per control is what makes two tabs safe: they
+  write different keys and cannot collide. A page with no such element behaves
+  exactly as it did. A refused write raises
+  the same badge, panel line and unload guard a refused comment write raises:
+  a review queue is all checklist and no prose, so a tick lost to blocked site
+  data would otherwise be the one loss this layer never reports;
 - entries gained `type: "comment" | "edit"`. An entry with no `type` is a
   comment, so every page's existing comments load unchanged; the key, the bare
   array and the loud `setItem` failure are all as they were. Edits store the
@@ -278,6 +289,20 @@ mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-thr
  font-size:.82rem;resize:vertical}
 .anok{background:var(--an-good-bg);color:var(--an-good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
 .anwarn{background:var(--an-bad);color:#fff;padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+/* Toggle controls. The generator emits the markup; this styles it, so a
+   hand-written page that emits the same `data-an-state-id` wrapper gets the
+   look, the persistence and the export without copying any CSS.
+   The bullet is dropped only inside an UNORDERED list: a bare `li.antask`
+   also reaches an ordered checklist, where `list-style:none` deletes the step
+   numbers the author wrote the list as a numbered one to keep. */
+ul>li.antask{list-style:none}
+.anstate{display:inline-flex;align-items:baseline;gap:.45em}
+.anstatebox{flex:none;align-self:center;width:1em;height:1em;accent-color:var(--an-accent);cursor:pointer}
+.anstatebtn{flex:none;background:var(--an-field);color:var(--an-ink);border:1px solid var(--an-rule);
+ border-radius:999px;padding:.05em .6em;font:inherit;font-size:.8em;font-weight:650;
+ white-space:nowrap;cursor:pointer}
+.anstatebtn:hover{border-color:var(--an-accent);color:var(--an-accent)}
+.anstatebtn:focus-visible,.anstatebox:focus-visible{outline:2px solid var(--an-accent);outline-offset:2px}
 #anBadge{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
  bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;background:var(--an-bg);color:var(--an-ink);
  border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
@@ -333,6 +358,7 @@ var KEY = (root && root.dataset.key) || ("annot:" + document.title);
 // so pressing Escape on one deletes the other's comments outright.
 var DIRTY = "an-dirty:" + KEY;
 var DRAFT = "an-draft:" + KEY;
+var STATES = "an-states:" + KEY;
 
 // ---- storage -------------------------------------------------------------
 // localStorage, and nothing else. An IndexedDB mirror, a backup key and a
@@ -343,7 +369,13 @@ var DRAFT = "an-draft:" + KEY;
 // whenever one quote happened to appear on this page. The republish they were
 // meant to survive is already covered, because the generator fixes the key
 // (`data-key`) from the filename rather than the title.
-function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
+// `getItem` cannot say WHY it returned null: a missing key and a read the
+// browser refused look identical, and reading a refusal as "nothing stored"
+// overwrites the page with an assumed-empty value. A read that cares takes
+// lsRead and compares against FAILED.
+var FAILED = {};
+function lsRead(k){ try { return localStorage.getItem(k); } catch (e) { return FAILED; } }
+function lsGet(k){ var v = lsRead(k); return v === FAILED ? null : v; }
 function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
 function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
 
@@ -360,7 +392,17 @@ function readComments(){
 // Not a per-tab counter: two tabs on one page would both hand out id 1.
 function newId(){ return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
 
-var comments = readComments(), unsaved = false;
+var comments = readComments(), notesUnsaved = false, statesUnsaved = false;
+// One refused-write signal for two writers. A lost tick is as lost as a lost
+// note -- on a page that is all checklist and no prose, which is what a review
+// queue is, the tick IS the work -- so both raise the same badge, the same
+// panel line and the same unload guard. Each writer clears only its own flag:
+// a `persist()` that succeeded says nothing about whether any state got
+// stored. `statesUnsaved` is not set from a write's return value at all -- it
+// is `pendingStates` being non-empty, one entry per control, and an entry
+// leaves that set only on evidence read back out of that control's own key.
+// See THE WRITE RULE in the toggle-state section.
+function unsaved(){ return notesUnsaved || statesUnsaved; }
 comments.forEach(function(c){ if (!c.id) c.id = newId(); });
 
 // Per-comment export state. `copiedAt` is stamped only where the page-level
@@ -411,14 +453,33 @@ document.addEventListener("visibilitychange", function(){
 });
 window.addEventListener("beforeunload", function(e){
   saveDraft();
-  if (!isDirty() || !comments.length) return;
-  // The comments are already in localStorage; this only warns that they have
-  // not been copied anywhere outside this browser yet.
+  // Two reasons to stop someone. Comments that exist and have not been copied
+  // out are the ordinary one -- they are in localStorage, and this warns only
+  // that nothing outside this browser has them yet. A refused write is the
+  // other, and it is the one that would otherwise be silent on a page carrying
+  // only a checklist: the ticks are not in localStorage at all, and closing
+  // the tab is when they stop existing.
+  if (!unsaved() && (!isDirty() || !comments.length)) return;
   e.preventDefault(); e.returnValue = ""; return "";
 });
 // A second tab on the same page used to be last-writer-wins. Take its write
 // instead — unless a note is open here, because nothing may pull the DOM out
 // from under a range the user is still typing against.
+//
+// NOT FIXED HERE, and stated rather than implied: this is the wholesale
+// replace the toggle states used to carry, so a comment THIS tab wrote while
+// the store was refusing is dropped from `comments` when the other tab writes,
+// and the next `persist()` that succeeds clears `notesUnsaved` over its grave.
+// The toggle-state fix -- one localStorage key per item, so two writers
+// touching different items never touch the same key -- is the right shape here
+// too, and it does not transfer as written. A state is one value under one id
+// the document itself supplies; a comment is a member of an ordered array with
+// an id this layer mints at random, and the array is the unit that add, edit,
+// delete, `copiedAt` and delete-copied all operate on. Per-comment keys mean
+// enumerating the store by prefix to read them back, a tombstone to express a
+// delete, and a compatibility break with every deployed layer generation,
+// which reads this key as a bare array. That is its own project with its own
+// tests, not a copy of this one.
 window.addEventListener("storage", function(e){
   if (e.key !== KEY || isOpen()) return;
   comments.slice().forEach(function(c){ unwrap(c.id); });
@@ -554,7 +615,11 @@ function docTextNodes(){
   var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, { acceptNode: function(n){
     var p = n.parentNode;
     if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
+    // `.anstatebtn` holds the state WORD, which the layer wrote and the reader
+    // did not: letting it join the searched text anchors a quote onto the
+    // control, where the next cycle overwrites the highlight.
     if (p.closest("mark.note") || p.closest("mark.anedit") || p.closest("[data-an-inserted]") ||
+        p.closest(".anstatebtn") ||
         p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
     return NodeFilter.FILTER_ACCEPT;
   }});
@@ -811,6 +876,205 @@ function markClean(snap){
   persist(); syncLegacyFlag();
 }
 
+// ---- toggle state controls ------------------------------------------------
+// A page may carry toggle controls in its body: a task-list checkbox, or a
+// button cycling a declared state set such as approve / approve-pending-edits
+// / deny. Both wear one wrapper, `[data-an-state-id]`, so this layer needs no
+// configuration and a page with none of them is untouched.
+//
+// ONE KEY PER CONTROL. Each control's state lives under its own localStorage
+// key, `an-state:<page key>:<control id>`, prefix-namespaced exactly as the
+// draft and dirty keys are, so nothing here can collide with the comment array
+// -- which every layer generation parses as a bare array and dies on anything
+// else.
+//
+// This replaces a shared document holding every control at once, and with it
+// the reconciliation six rounds built on top of that document. It rested on
+// "an untick is said by REMOVING a key, and a merge-style write cannot say
+// it", which is false: an untick is an explicit " ", as a tick is an explicit
+// "x". Once a value can say not-ticked, nothing needs to replace a document,
+// and the read-modify-write -- unfixable here, because localStorage offers no
+// compare-and-set -- is gone rather than reconciled. So: two tabs touching
+// DIFFERENT controls write DIFFERENT keys and cannot collide, which is the
+// shape of every reproduction that beat the previous rounds (A ticks item 1
+// while B ticks item 3); no write is derived from a read, so a stale or failed
+// read cannot clobber; a refused write for one control cannot reach another's
+// value, so the loss flag is per control. Two tabs touching the SAME control
+// resolve last-writer-wins, which is correct and is not a bug to file: they
+// disagree about one value and the last to speak decides.
+//
+// The lesson the previous round's 16-state enumeration got wrong, recorded so
+// it is not rediscovered: "localStorage is synchronous and the page is
+// single-threaded, so read -> merge -> write -> read-back is one indivisible
+// step" holds WITHIN a tab and says nothing ACROSS tabs. Single-threaded stops
+// this tab's handlers interleaving; a second tab is a separate process.
+var STATE_PREFIX = "an-state:" + KEY + ":";
+
+function stateKeyOf(id){ return STATE_PREFIX + id; }
+function stateIdOf(key){
+  return (typeof key === "string" && key.indexOf(STATE_PREFIX) === 0)
+    ? key.slice(STATE_PREFIX.length) : null;
+}
+// The control's OWN key: a write reads this back for evidence that it landed,
+// so the fallback below must not be allowed to answer for it.
+function readStateKey(id){ return lsRead(stateKeyOf(id)); }
+// State written by the shared-document layer migrates LAZILY, here, one control
+// at a time: an id with no per-item value falls back to that document, which is
+// READ where it lies and never written or deleted, so a rolled-back page still
+// finds every tick. There is no copy pass, so nothing has to answer "did every
+// item land?" -- which a store that refuses one write in three cannot be asked,
+// and the marker that answered "yes" regardless abandoned the rest for good.
+function readState(id){
+  var v = readStateKey(id);
+  if (v !== null) return v;                   // a stored value, or FAILED
+  var raw = lsRead(STATES), d = null;
+  if (raw === FAILED) return FAILED;
+  try { d = JSON.parse(raw || "null"); } catch (e) {}
+  return (d && typeof d === "object" && !Array.isArray(d) && typeof d[id] === "string") ? d[id] : null;
+}
+
+var pendingStates = {};   // id -> value this tab wrote that the store did not take
+var stateDefaults = {};   // id -> the value the document itself shipped
+
+function hasPending(){ return Object.keys(pendingStates).length > 0; }
+// THE WRITE RULE, now one rule instead of three: write the one key this
+// control owns, then read that one key back. `setItem` returning without
+// throwing is not evidence -- a browser that silently no-ops the write would
+// stand the warning down over work that never left the page -- so the flag
+// comes from what the store holds after. No other control is touched, and the
+// render is for the refused-write line, the only place a lost tick is visible.
+function writeState(id, value){
+  var was = statesUnsaved;
+  lsSet(stateKeyOf(id), value);
+  if (readStateKey(id) === value) delete pendingStates[id];
+  else pendingStates[id] = value;
+  statesUnsaved = hasPending();
+  paintStateId(id);
+  if (statesUnsaved || was) render();
+}
+// Pending over stored over the document's own value. The last of those three
+// is what keeps an id the store has dropped from going on being displayed as
+// ticked, and a `[x]` the author wrote from being blanked when it does.
+function paintState(u){
+  var id = u.dataset.anStateId;
+  // A control this tab has never wired -- one injected after load -- has been
+  // touched by nobody, so what it is showing now IS the value it shipped.
+  if (!stateDefaults.hasOwnProperty(id)) stateDefaults[id] = stateValue(u);
+  var v = pendingStates.hasOwnProperty(id) ? pendingStates[id] : readState(id);
+  // A read that FAILED says nothing about the stored value, so what the reader
+  // is looking at stays: blanking it would show an untick nobody made.
+  if (v === FAILED) return;
+  if (typeof v !== "string" || !applyState(u, v)) applyState(u, stateDefaults[id]);
+}
+function paintStateId(id){
+  stateUnits().forEach(function(u){ if (u.dataset.anStateId === id) paintState(u); });
+}
+function syncStateDom(){ stateUnits().forEach(paintState); }
+function stateUnits(){ return Array.prototype.slice.call(document.querySelectorAll("[data-an-state-id]")); }
+function stateSetOf(unit){
+  var raw = unit.getAttribute("data-an-states");
+  if (!raw) return null;
+  var a; try { a = JSON.parse(raw); } catch (e) { return null; }
+  return (Array.isArray(a) && a.length) ? a : null;
+}
+// The reader-visible text of the item, which is also the control's accessible
+// name. Read from the DOM rather than written by the generator, so it is the
+// rendered text a screen reader would reach anyway.
+function stateLabel(unit){
+  var l = unit.querySelector(".anstatelabel");
+  return ((l ? l.textContent : unit.textContent) || "").trim().replace(/\s+/g, " ");
+}
+function stateValue(unit){
+  var box = unit.querySelector(".anstatebox");
+  if (box) return box.checked ? "x" : " ";
+  var b = unit.querySelector(".anstatebtn");
+  return b ? (b.dataset.anState || "") : "";
+}
+// Applies a state to the DOM and to nothing else. A value outside the declared
+// set is refused rather than shown: a rebuilt page can meet a key written
+// under a different state set, and rendering `maybe` on a control that has no
+// such state leaves a button whose next click has nowhere to go.
+function applyState(unit, value){
+  var box = unit.querySelector(".anstatebox");
+  // A checkbox has a declared set too -- it is `x` and a space -- so a stored
+  // value from some other state set is refused here rather than silently read
+  // as "not x" and shown as an untick the reader never made.
+  if (box) {
+    if (value !== "x" && value !== " ") return false;
+    box.checked = value === "x";
+    return true;
+  }
+  var b = unit.querySelector(".anstatebtn"), set = stateSetOf(unit);
+  if (!b || !set || set.indexOf(value) < 0) return false;
+  b.dataset.anState = value;
+  b.textContent = value;
+  b.setAttribute("aria-label", stateLabel(unit) + ": " + value);
+  return true;
+}
+function wireStates(){
+  stateUnits().forEach(function(unit){
+    var id = unit.dataset.anStateId;
+    var box = unit.querySelector(".anstatebox"), btn = unit.querySelector(".anstatebtn");
+    // Read BEFORE anything stored is applied, so this is the author's own
+    // marker -- the `[x]` in the source -- and not whatever the store held.
+    stateDefaults[id] = stateValue(unit);
+    if (box) {
+      // A real checkbox: the browser supplies the role, Space toggles it, and
+      // the name is the item's own text.
+      box.setAttribute("aria-label", stateLabel(unit));
+      box.addEventListener("change", function(){
+        writeState(id, box.checked ? "x" : " ");
+      });
+      return;
+    }
+    if (!btn) return;
+    var set = stateSetOf(unit) || [];
+    if (set.length && set.indexOf(stateDefaults[id]) < 0) stateDefaults[id] = set[0];
+    // A <button> is focusable and fires click on Enter and Space, so cycling
+    // works from the keyboard with no key handler here at all.
+    btn.addEventListener("click", function(){
+      if (!set.length) return;
+      var at = set.indexOf(btn.dataset.anState);
+      var next = set[(at + 1) % set.length];
+      if (!applyState(unit, next)) return;
+      writeState(id, next);
+    });
+  });
+  // One path paints the controls, on load and on every later change alike.
+  syncStateDom();
+}
+// Plain text, one shape for both kinds of control: the state sits in the
+// brackets a Markdown task list already uses, so a two-state page exports a
+// task list that can be pasted straight back into the source.
+function stateMarkdown(){
+  return stateUnits().map(function(u){
+    return "- [" + (stateValue(u) || " ") + "] " + stateLabel(u);
+  }).join("\n");
+}
+// A second tab's write is authoritative for the ONE control it carried. The
+// event names a single key, so there is no incoming map to merge and no way
+// for it to speak for a control it did not change -- which is what two earlier
+// rounds got wrong, first by replacing the in-memory map wholesale and then by
+// reconciling one map against the other.
+window.addEventListener("storage", function(e){
+  // A null key is `localStorage.clear()` from the other tab, which takes every
+  // one of these keys with it; ignoring it left controls showing values gone
+  // from the store.
+  var id = stateIdOf(e.key);
+  if (e.key !== null && id === null) return;
+  var was = statesUnsaved;
+  // Nothing is pending once the store holds it, whoever put it there. Only the
+  // ids this event could have changed: one of them, or all on a clear.
+  (id === null ? Object.keys(pendingStates) : [id]).forEach(function(k){
+    if (pendingStates.hasOwnProperty(k) && readStateKey(k) === pendingStates[k]) {
+      delete pendingStates[k];
+    }
+  });
+  statesUnsaved = hasPending();
+  if (id === null) syncStateDom(); else paintStateId(id);
+  if (statesUnsaved || was) render();
+});
+
 // ---- destructive controls ------------------------------------------------
 // No blocking dialog appears here, and none may be added. The Artifact viewer
 // runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
@@ -872,7 +1136,7 @@ document.addEventListener("keydown", escDisarm);
 // A refused write is the one failure the page must not hide: with the quota
 // full, the panel would otherwise count a comment that is already gone.
 function persist(){
-  unsaved = !lsSet(KEY, JSON.stringify(comments));
+  notesUnsaved = !lsSet(KEY, JSON.stringify(comments));
 }
 function unwrap(id){
   var s = document.querySelector('span.anins[data-cid="' + id + '"]');
@@ -959,9 +1223,17 @@ function render(){
   clearCopied.disabled = !nCopied;
   var fresh = freshCount();
   badge.textContent = "\uD83D\uDCAC " + comments.length;
-  badge.className = unsaved || (isDirty() && comments.length) ? "warn" : "";
+  badge.className = unsaved() || (isDirty() && comments.length) ? "warn" : "";
   if (!comments.length) {
-    count.textContent = "No comments yet"; count.className = "ancount";
+    // A page with no comments still has somewhere to report a refused write:
+    // on a checklist-only page this line is the ONLY place the reader is told
+    // the ticks did not survive, so it outranks the empty-state wording.
+    count.textContent = statesUnsaved
+      ? "This browser refused to store the checklist \u2014 copy it out now"
+      : notesUnsaved
+        ? "This browser refused to store the change \u2014 copy your work out now"
+        : "No comments yet";
+    count.className = "ancount" + (unsaved() ? " warn" : "");
     var empty = document.createElement("p");
     empty.className = "anscope"; empty.textContent = "Select any text above to comment.";
     list.replaceChildren(empty);
@@ -978,11 +1250,11 @@ function render(){
       nEdits + (nEdits === 1 ? " suggested edit)" : " suggested edits)")
     : comments.length + (comments.length === 1 ? " comment" : " comments");
   count.textContent = what +
-    (unsaved ? " \u2014 this browser refused to store them, copy them now"
-             : !fresh ? " \u2014 copied out"
-             : fresh === comments.length ? " \u2014 not yet copied out"
-             : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
-  count.className = "ancount" + (unsaved || isDirty() ? " warn" : "");
+    (unsaved() ? " \u2014 this browser refused to store them, copy them now"
+               : !fresh ? " \u2014 copied out"
+               : fresh === comments.length ? " \u2014 not yet copied out"
+               : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
+  count.className = "ancount" + (unsaved() || isDirty() ? " warn" : "");
   var frag = document.createDocumentFragment();
   comments.forEach(function(c){
     var d = document.createElement("div");
@@ -1052,11 +1324,12 @@ var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markd
 function exportText(){
   var edits = comments.filter(isEdit);
   var notes = comments.filter(function(c){ return !isEdit(c); });
+  var units = stateUnits();
   var out = "# Comments \u2014 " + document.title + "\n\n";
-  if (edits.length) {
-    out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
-    if (notes.length) out += "## Comments\n\n";
-  }
+  // The checklist leads: it is the verdict, and the notes explain it.
+  if (units.length) out += "## Checklist\n\n" + stateMarkdown() + "\n\n";
+  if (edits.length) out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
+  if ((units.length || edits.length) && notes.length) out += "## Comments\n\n";
   return out + (notes.length ? markdown(notes) + "\n" : "");
 }
 function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
@@ -1079,7 +1352,9 @@ function openExport(){
 // the panel says the comments are safely out of the browser, and the unload
 // guard stands down, when nothing left it.
 $("anCopy").onclick = async function(){
-  if (!comments.length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
+  // A page can be all checklist and no notes, and copying it out is the whole
+  // point of the checklist.
+  if (!comments.length && !stateUnits().length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
   var ok = false;
   // Both taken before the await: the clipboard promise can resolve after an
   // edit has landed, and the text that went out is this one.
@@ -1098,7 +1373,7 @@ $("anCopy").onclick = async function(){
   // exporting -- the state clears when the text is actually copied out of it.
   if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
   markClean(snap); render();
-  toast('<span class="anok">copied ' + comments.length + '</span>');
+  toast('<span class="anok">copied ' + (comments.length || "the checklist") + '</span>');
 };
 $("anExportText").addEventListener("copy", function(){
   // A copy of PART of the box carried part of the Markdown, so it did not
@@ -1161,6 +1436,9 @@ badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth",
   root.addEventListener(type, function(ev){ ev.stopPropagation(); });
 });
 
+// Before restoreHighlights: a restored state word changes the page text that
+// quotes are re-anchored against, so it has to be settled first.
+wireStates();
 restoreHighlights();
 render();
 restoreDraft();

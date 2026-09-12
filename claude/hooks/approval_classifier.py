@@ -17,6 +17,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 RULES_PATH = os.path.join(os.path.dirname(__file__), "approval_classifier_rules.md")
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -800,6 +801,247 @@ def log(msg: str) -> None:
         pass
 
 
+# --- Backend outcome accounting ----------------------------------------------
+#
+# Every backend outcome that is not the happy path writes ONE log line: a
+# versioned JSON payload followed by the same human sentence this log has always
+# carried. One line, not a pair, so nothing downstream has to de-duplicate two
+# records of one event; a line written before this change starts with the human
+# sentence instead, and the two formats never overlap.
+#
+# The payload carries no command, tool input, prompt, or provider error text —
+# it does carry the session id, cwd and account, so the log is private to this
+# machine (it already was: ~/.cache). It exists so `claude-usage-audit
+# --model-usage` can separate backend failures from failed actions (one action
+# can lose both backends, and a successful fallback can follow a failed API
+# call) and slice them by where and on what they happened.
+BACKEND_EVENT_PREFIX = "BACKEND-EVENT"
+# v2 (2026-09-09): the session id is carried in the clear, and the event names
+# the backend's model plus where it ran (host, cwd, repo, remote, commit,
+# branch, CLI version, session model, account) — see collect_diagnostics.
+BACKEND_EVENT_VERSION = 2
+
+# Ordered; first match wins. claude-usage-audit keeps a frozen copy of these
+# rules for the pre-event log lines it can only read as text, and
+# tests/test_approval_classifier_failure_events.py pins the two to agree on
+# every warning this file can raise. Timeout is checked before network because a
+# socket timeout arrives as "could not reach the API" with "timed out" details.
+FAILURE_CATEGORY_RULES = (
+    ("credits", ("out of credits", "credit balance", "billing", "payment")),
+    ("usage_limit", ("usage limit", "spend limit")),
+    ("rate_limit", ("rate limit",)),
+    ("auth", ("rejected", "authentication", "invalid x-api-key", "is not set", "not logged in")),
+    ("timeout", ("timed out", "timeout")),
+    ("overloaded", ("overloaded", "http 529")),
+    ("network", ("could not reach", "errno", "connection")),
+)
+
+
+def failure_category(headline: str, details: str = "") -> str:
+    """Bucket a warning into the closed category set, conservatively."""
+    combined = f"{headline} {details}".lower()
+    for category, tokens in FAILURE_CATEGORY_RULES:
+        if any(token in combined for token in tokens):
+            return category
+    return "other"
+
+
+def new_action_id() -> str:
+    """One opaque id per classification attempt — what the audit calls an action.
+
+    Random, not derived from the tool input: a hash of a short command is
+    guessable, and nothing here needs to correlate across invocations. A retry
+    that starts a new hook process is therefore a separate attempt.
+    """
+    return uuid.uuid4().hex[:16]
+
+
+# --- Diagnostics carried on every backend event -------------------------------
+#
+# Where an outcome happened, so a failure can be sliced by machine, repo, commit,
+# CLI version, session model and account when it is investigated later. Every
+# field is read from a file that is already on disk (the repo's .git, the
+# session transcript's tail, a cache the SessionStart hook writes) — never from
+# a subprocess, because this runs inside the 30 s hook budget on the failure
+# path. Every reader fails to None; a missing field is recorded as absent.
+DIAGNOSTICS_TAIL_BYTES = 65_536
+# Written by show_auth_account.sh at session start from `claude auth status`,
+# which is too slow (a CLI start) to call from a per-action hook.
+ACCOUNT_CACHE = os.path.expanduser("~/.cache/claude/auth-account.json")
+
+
+def _read_text(path: str, limit: int = 4096) -> str | None:
+    try:
+        with open(path, "rb") as f:
+            return f.read(limit).decode("utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def git_head(cwd: str) -> dict:
+    """{'commit': short sha | None, 'branch': name | None} for the repo holding cwd.
+
+    Reads .git/HEAD and at most one ref file, resolving a worktree's `gitdir:`
+    pointer and the common dir's packed-refs. No git subprocess.
+    """
+    out: dict = {"commit": None, "branch": None}
+    if not cwd:
+        return out
+    probe = os.path.abspath(cwd)
+    gitdir = None
+    for _ in range(64):
+        candidate = os.path.join(probe, ".git")
+        if os.path.isdir(candidate):
+            gitdir = candidate
+            break
+        if os.path.isfile(candidate):
+            pointer = _read_text(candidate) or ""
+            if pointer.startswith("gitdir:"):
+                gitdir = os.path.normpath(os.path.join(probe, pointer[7:].strip()))
+            break
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    if not gitdir:
+        return out
+    head = (_read_text(os.path.join(gitdir, "HEAD")) or "").strip()
+    if not head:
+        return out
+    if not head.startswith("ref:"):
+        out["commit"] = head[:12]
+        return out
+    ref = head[4:].strip()
+    if ref.startswith("refs/heads/"):
+        out["branch"] = ref[len("refs/heads/"):]
+    commondir = (_read_text(os.path.join(gitdir, "commondir")) or "").strip()
+    common = os.path.normpath(os.path.join(gitdir, commondir)) if commondir else gitdir
+    sha = (_read_text(os.path.join(common, ref)) or "").strip()
+    if not sha:
+        packed = _read_text(os.path.join(common, "packed-refs"), limit=1_048_576) or ""
+        for line in packed.splitlines():
+            if line.endswith(" " + ref):
+                sha = line.split(" ", 1)[0]
+                break
+    out["commit"] = sha[:12] or None
+    return out
+
+
+def transcript_metadata(transcript_path: str) -> dict:
+    """CLI version, session model and branch as the transcript's newest rows record them.
+
+    Claude Code stamps `version`, `gitBranch`, `cwd` on every row and the
+    conversation model on assistant rows. Only the tail is read.
+    """
+    out: dict = {"cli_version": None, "session_model": None, "transcript_branch": None}
+    if not transcript_path:
+        return out
+    try:
+        with open(transcript_path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - DIAGNOSTICS_TAIL_BYTES))
+            tail = f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return out
+    for line in reversed(tail.splitlines()):
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        if out["cli_version"] is None and isinstance(entry.get("version"), str):
+            out["cli_version"] = entry["version"]
+        if out["transcript_branch"] is None and isinstance(entry.get("gitBranch"), str):
+            out["transcript_branch"] = entry["gitBranch"]
+        msg = entry.get("message")
+        if (out["session_model"] is None and entry.get("type") == "assistant"
+                and isinstance(msg, dict) and isinstance(msg.get("model"), str)):
+            out["session_model"] = msg["model"]
+        if all(v is not None for v in out.values()):
+            break
+    return out
+
+
+def account_identity() -> str | None:
+    """The signed-in account as cached at session start; None when uncached."""
+    raw = _read_text(ACCOUNT_CACHE)
+    if not raw:
+        return None
+    try:
+        cached = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(cached, dict):
+        return None
+    email = cached.get("email")
+    method = cached.get("method")
+    if isinstance(email, str) and email:
+        return email
+    return method if isinstance(method, str) and method else None
+
+
+def collect_diagnostics(cwd: str, transcript_path: str, trust: dict) -> dict:
+    head = git_head(cwd)
+    meta = transcript_metadata(transcript_path)
+    toplevel = trust.get("toplevel") or ""
+    try:
+        host = os.uname().nodename
+    except (AttributeError, OSError):
+        host = None
+    return {
+        "host": host,
+        "cwd": cwd or None,
+        "repo": os.path.basename(toplevel) if toplevel else None,
+        "remote": trust.get("remote_url") or None,
+        "commit": head["commit"],
+        "branch": head["branch"] or meta["transcript_branch"],
+        "cli_version": meta["cli_version"],
+        "session_model": meta["session_model"],
+        "account": account_identity(),
+    }
+
+
+def log_backend_event(
+    backend: str,
+    outcome: str,
+    *,
+    action,
+    tool,
+    permission_mode,
+    session_id,
+    model: str | None = None,
+    diagnostics: dict | None = None,
+    category: str | None = None,
+    reason: str = "",
+    human: str = "",
+) -> None:
+    observed = isinstance(permission_mode, str) and bool(permission_mode)
+    payload = {
+        "v": BACKEND_EVENT_VERSION,
+        "backend": backend,
+        "outcome": outcome,
+        "failure_category": category,
+        "action": action,
+        "session_id": session_id if isinstance(session_id, str) and session_id else None,
+        "tool": tool if isinstance(tool, str) and tool else "unknown",
+        # Absent stays distinguishable from observed: a harness that stops
+        # sending the field must not read as a session in "unknown" mode.
+        "permission_mode": permission_mode if observed else "unknown",
+        "permission_mode_observed": observed,
+        # The model this backend classified with — never the conversation model.
+        "model": model,
+    }
+    payload.update(diagnostics or {})
+    if reason:
+        payload["reason"] = reason
+    line = f"{BACKEND_EVENT_PREFIX} {json.dumps(payload, separators=(',', ':'))}"
+    if human:
+        # Collapsed so a multi-line provider message cannot split the record.
+        line += " " + " ".join(human.split())
+    log(line)
+
+
 def build_warning_message(headline: str, details: str = "", suggestion: str = "") -> str:
     lines = [f"{ANSI_RED}🚨 approval classifier problem:{ANSI_RESET} {headline}"]
     if details:
@@ -809,9 +1051,13 @@ def build_warning_message(headline: str, details: str = "", suggestion: str = ""
     return "\n".join(lines)
 
 
-def emit_warning(headline: str, details: str = "", suggestion: str = "") -> None:
+def emit_warning(
+    headline: str, details: str = "", suggestion: str = "", log_message: bool = True
+) -> None:
+    """Warn the user. `log_message=False` where a structured event already logged it."""
     msg = build_warning_message(headline, details, suggestion)
-    log(f"WARNING: {headline} — {details or 'no details'}")
+    if log_message:
+        log(f"WARNING: {headline} — {details or 'no details'}")
     # Stderr → user sees in terminal immediately
     print(msg, file=sys.stderr)
     # Stdout → Claude sees via systemMessage in PermissionRequest hook output
@@ -1590,6 +1836,10 @@ def main() -> None:
     tool_input = hook_input.get("tool_input", {})
     cwd = hook_input.get("cwd", "")
     transcript_path = hook_input.get("transcript_path", "")
+    # Backend-outcome metadata only. Both may be absent, and absent is recorded
+    # as absent rather than guessed.
+    permission_mode = hook_input.get("permission_mode")
+    session_id = hook_input.get("session_id")
 
     # A missing API key used to warn loudly and return here, which meant no
     # auto-approval at all — the failure mode behind the ~349-denial incident.
@@ -1704,6 +1954,18 @@ def main() -> None:
         # type filter did exactly that) shows up in the log as users=0.
         log(f"CONTEXT: users={len(context.user_messages)} tools={len(context.tool_calls)}")
 
+    action = new_action_id()
+    diagnostics = collect_diagnostics(cwd, transcript_path, trust)
+
+    def backend_event(backend, outcome, **kwargs):
+        log_backend_event(
+            backend, outcome,
+            action=action, tool=tool_name, permission_mode=permission_mode,
+            session_id=session_id, diagnostics=diagnostics,
+            model=MODEL if backend == "api" else SUBSCRIPTION_MODEL,
+            **kwargs,
+        )
+
     # Backend order: API key first (fast), subscription second (slower but
     # independent of the key). Only if BOTH fail does the user get the manual
     # prompt plus the loud warning.
@@ -1714,13 +1976,20 @@ def main() -> None:
         )
         write_health(HEALTH_BACKEND_API)
     except ApprovalClassifierWarning as api_warning:
-        log(f"API BACKEND FAILED: {api_warning.headline} — {api_warning.details}")
+        backend_event(
+            "api", "failure",
+            category=failure_category(api_warning.headline, api_warning.details),
+            human=f"API BACKEND FAILED: {api_warning.headline} — {api_warning.details}",
+        )
         budget = remaining_budget()
         if budget < SUBSCRIPTION_MIN_SECONDS:
             # Not enough of the hook deadline left to finish a fallback call.
             # Give up here, while there is still time to record it, rather than
             # starting a call that gets killed and leaves the health file stale.
-            log(f"SUBSCRIPTION BACKEND SKIPPED: only {budget:.1f}s of budget left")
+            backend_event(
+                "subscription", "skipped", reason="no_budget",
+                human=f"SUBSCRIPTION BACKEND SKIPPED: only {budget:.1f}s of budget left",
+            )
             write_health(HEALTH_BACKEND_DEAD, f"{api_warning.headline} | no time for fallback")
             emit_warning(
                 api_warning.headline,
@@ -1736,16 +2005,28 @@ def main() -> None:
                 timeout=min(SUBSCRIPTION_TIMEOUT_SECONDS, budget),
             )
             write_health(HEALTH_BACKEND_SUBSCRIPTION, api_warning.headline)
-            log("SUBSCRIPTION BACKEND: classified after the API backend failed")
+            backend_event(
+                "subscription", "success",
+                human="SUBSCRIPTION BACKEND: classified after the API backend failed",
+            )
         except ApprovalClassifierWarning as sub_warning:
+            backend_event(
+                "subscription", "failure",
+                category=failure_category(sub_warning.headline, sub_warning.details),
+                human=f"SUBSCRIPTION BACKEND FAILED: {sub_warning.headline}",
+            )
             write_health(HEALTH_BACKEND_DEAD, f"{api_warning.headline} | {sub_warning.headline}")
             # Report the API failure as the primary cause — it is the one the
             # user can usually fix — and name the fallback's failure too, so a
             # broken `claude` login is not mistaken for a broken key.
+            # The user still sees the combined warning; it is not logged again,
+            # because both headlines are already on the two structured lines
+            # above and a second copy would read as a third backend outcome.
             emit_warning(
                 api_warning.headline,
                 f"{api_warning.details} — subscription fallback also failed: {sub_warning.headline}",
                 sub_warning.suggestion or api_warning.suggestion,
+                log_message=False,
             )
             return
 

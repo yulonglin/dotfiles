@@ -36,6 +36,19 @@ except: print('unknown')
 " 2>/dev/null)
 
   msg="Auth: ${account}"
+
+  # Cache the identity for hooks that cannot afford a `claude auth status` call
+  # per action: approval_classifier.py stamps it on every backend event.
+  mkdir -p "$HOME/.cache/claude" 2>/dev/null
+  echo "$auth_json" | python3 -c "
+import json, sys, time
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+out = {'email': d.get('email'), 'method': d.get('authMethod'), 'ts': int(time.time())}
+json.dump(out, open(sys.argv[1], 'w'))
+" "$HOME/.cache/claude/auth-account.json" 2>/dev/null || true
 fi
 
 # The near-limit usage warning used to be appended here. It has been removed

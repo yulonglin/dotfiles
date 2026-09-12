@@ -133,7 +133,7 @@ DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect") — arra
 
 # ─── Deploy Modifiers ─────────────────────────────────────────────────────────
 DEPLOY_APPEND=false             # Append to existing configs instead of overwrite
-DEPLOY_ASCII_FILE="start.txt"   # ASCII art file for shell startup
+DEPLOY_ASCII_FILE=""            # Shell-startup art: name in config/ascii_arts/, or "none" to remove. Empty leaves the current choice
 
 # ─── Identity & Secrets ───────────────────────────────────────────────────────
 # Edit these values for your setup. Everything else should work out of the box.
@@ -168,9 +168,11 @@ PACKAGES_CORE=(
     "htop"
     "rsync"
     "shellcheck"  # Shell script linter
-    "tldr"        # Simplified man pages
     "mosh"        # resilient SSH over flaky/roaming connections
 )
+# tldr pages: the `tldr` formula (C client) is deprecated in Homebrew; tlrc is the
+# official Rust client. It is a brew-only formula, so it lives in the brew arrays
+# below rather than here, where PACKAGES_CORE also feeds apt.
 
 # macOS-specific packages (via Homebrew)
 PACKAGES_MACOS=(
@@ -192,6 +194,7 @@ PACKAGES_MACOS=(
     "gum"         # interactive shell UI (app-picker TUI)
     "vivid"       # LS_COLORS theme generator (catppuccin-mocha)
     "fpart"       # parallel rsync (fpsync) for fast many-file copies
+    "tlrc"        # tldr pages, official Rust client (binary: tldr)
 )
 
 # Linux packages (via Homebrew / Linuxbrew)
@@ -212,6 +215,7 @@ PACKAGES_LINUX_BREW=(
     "duf"
     "gum"
     "vivid"
+    "tlrc"        # tldr pages, official Rust client (binary: tldr)
 )
 
 # Extra packages (--extras flag)
@@ -225,6 +229,16 @@ PACKAGES_EXTRAS_LINUX=(
     "hyperfine"
     "gitui"
     "code2prompt"
+)
+
+# Trial packages — installed by hand while being evaluated, NOT installed by
+# install.sh. Listing one here is what tells `app-picker --audit` it is declared
+# (and sanctions its tap). Promote to an array above or `brew uninstall` it once
+# the trial is over; date each entry so the audit's reader can tell how long it has run.
+PACKAGES_TRIAL_MACOS=(
+    "hunk"                  # review-first terminal diff viewer for agent-authored changes (trial from 2026-09-03)
+    "codersauce/tap/red"    # modal Rust editor — third-party tap, Yulong's exception 2026-09-03
+    # "micro"               # candidate terminal editor, not installed yet
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

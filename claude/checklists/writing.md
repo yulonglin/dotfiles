@@ -2,6 +2,12 @@
 
 Clarity is not politeness or plain style. It is the reader finishing your sentence holding the idea you meant them to hold, and it fails in specific, checkable ways. This file collects the rules that survive contact with a real draft, ordered by how much a violation costs the reader.
 
+## Submission prose serves the reader
+
+A paper submission is a finished scientific argument, not the authors' work log. Lead with the research question, methods, supported findings and implications. Keep audit status, verification queues, unrun experiments, revision history and author decisions in separate internal notes, not the submission's prose or an appendix added merely to hold bookkeeping. A working artifact may expose these in a separate author-review view; its reader-facing narrative stays clean.
+
+Replace habitual hedges with direct claims whose scope matches the evidence. Remove speculative filler rather than dressing it as a finding. Retain qualifications that change the scientific interpretation, relevant null or opposite results, and concise substantive limitations; a polished presentation does not enlarge the claim. Do the verification behind the scenes instead of repeatedly announcing it to the reader.
+
 ## PEEL paragraphs whose first sentences form the argument
 
 Every paragraph is **Point, Evidence or Explanation, Link back to the point.** State the claim; give what supports it; close by connecting back, so the reader leaves holding the idea they entered with. A paragraph that ends on its evidence leaves the reader to infer the claim, and they will infer a different one.
@@ -47,7 +53,7 @@ Match the strength of each claim to the evidence class behind it: an **existence
 
 ## The abstract, intro and figures carry the reading
 
-Most readers stop early: many read the abstract, some read the intro or skim the figures, few read the whole thing. Those three therefore earn as much editing effort as everything else combined, which is most of the words. Effort spread evenly across the document is, as [Nanda](https://www.lesswrong.com/posts/eJGptPbbFPZGLpjsp/highly-opinionated-advice-on-how-to-write-ml-papers) argues, effort spent mostly where nobody is looking. What that effort has to buy is checkable in the draft: **the abstract states the claim, its evidence class and one limitation**; the introduction ends with the claim in a single sentence; and each figure's caption says what to see in the figure without the body text.
+Most readers stop early: many read the abstract, some read the intro or skim the figures, few read the whole thing. Those three therefore earn as much editing effort as everything else combined, which is most of the words. Effort spread evenly across the document is, as [Nanda](https://www.lesswrong.com/posts/eJGptPbbFPZGLpjsp/highly-opinionated-advice-on-how-to-write-ml-papers) argues, effort spent mostly where nobody is looking. What that effort has to buy is checkable in the draft: **the abstract states the question and central supported findings, with only qualifications needed to interpret them**; the introduction ends with the claim in a single sentence; and each figure's caption says what to see in the figure without the body text.
 
 [Foerster's](https://www.jakobfoerster.com/how-to-ml-paper) rule of thumb is that a draft carries about a third fluff, cut on the final pass. Check what is left rather than what was deleted: **no sentence only restates its neighbour, no paragraph opens by announcing what it is about to do, and the conclusion says something the introduction did not.**
 
@@ -72,6 +78,14 @@ The goal is not to sound human. It is that each of these actively obscures the p
 - **Lecturing the self-evident** — explaining standard practice the venue's readers already know (why results compare to chance). If every reader knows it, cut it.
 - **Provoking and deferring** — a claim that raises "why?" or "which ones?" and answers somewhere else. Carry the answer in the same sentence or the next.
 - **Aphoristic headings and openers** — a metaphor standing in for the thing named ("the hardest corner"), a referent the reader must read on to decode ("the one we care about", "the most direct fix"), or an abstract noun as subject where the actor belongs ("Detection difficulty tracks..." rather than which method missed which sandbaggers). Two clauses are not the fault: "No Single Method Dominates; the Two Are Complementary" states both halves plainly. What fails is withholding the point until the body. The test, applied before the body is read: the line is understandable on its own, it names the concrete actor and the finding, and it could not headline three different paragraphs. "Detection difficulty tracks the threat model, and the hardest corner is the one we care about" plainly is **"C³ misses trained and emergent sandbaggers — 19% recall on the threat models that matter most."**
+
+## PR bodies make review bounded
+
+A PR body states four things in order: what the change establishes or enables; the evidence and commands that support it; what the reviewer should inspect; and what is deliberately out of scope. Write the causal argument in prose, not as a copied commit message or a list of features.
+
+Name the test environment when it affects the evidence. Link to source material, and state any limitation that could change the conclusion.
+
+Do not hard-wrap prose in a PR body. Let GitHub wrap each paragraph, with blank lines between paragraphs; use bullets only for parallel independent items such as several test commands or reviewer checks.
 
 ## Reference drafts worth calibrating against
 

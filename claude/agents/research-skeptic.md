@@ -171,8 +171,7 @@ Structure critique as:
 **Critical Questions**
 1. [Assumption or confound to check]
 2. [Alternative explanation to rule out]
-3. [Validity concern to address]
-[Prioritized by severity]
+3. [Validity concern to address] [Prioritized by severity]
 
 **Specific Concerns**
 - [Concrete issue with evidence]
@@ -181,8 +180,7 @@ Structure critique as:
 
 **Suggested Validation Tests**
 - [Test 1]: What it checks, why it matters
-- [Test 2]: What it checks, why it matters
-[Ordered by importance/ease]
+- [Test 2]: What it checks, why it matters [Ordered by importance/ease]
 
 **Bottom Line**
 - Confidence level in findings (low/medium/high)

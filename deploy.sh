@@ -122,7 +122,8 @@ COMPONENTS:
     --text-replacements  Sync text replacements: macOS + Alfred (macOS only)
     --aliases=LIST    Additional alias scripts (comma-separated)
     --append          Append to existing configs instead of overwrite
-    --ascii=FILE      ASCII art file for shell startup
+    --ascii=NAME      Shell-startup art from config/ascii_arts/ (balloon_girl, cat, cat2, corgi, dog, paw, paw3, stars, waves3);
+                      none removes it. Off by default; the choice persists across deploys
     --no-<component>  Disable a component (e.g., --no-editor)
     --allow-worktree  Deploy even though DOT_DIR is a git worktree. Refused by
                       default: it repoints ~/.claude and ~20 other user symlinks
@@ -335,10 +336,18 @@ PROFILE
         done
     fi
 
-    # Custom ASCII art
-    if [[ "$DEPLOY_ASCII_FILE" != "start.txt" ]]; then
-        log_info "Using custom ASCII art: $DEPLOY_ASCII_FILE"
-        cp "$DOT_DIR/config/ascii_arts/$DEPLOY_ASCII_FILE" "$DOT_DIR/config/start.txt"
+    # Shell-startup art: config/start.txt is untracked and per machine; only --ascii touches it
+    if [[ "$DEPLOY_ASCII_FILE" == "none" ]]; then
+        rm -f "$DOT_DIR/config/start.txt"
+        log_info "Removed shell-startup art"
+    elif [[ -n "$DEPLOY_ASCII_FILE" ]]; then
+        ascii_src="$DOT_DIR/config/ascii_arts/${DEPLOY_ASCII_FILE%.txt}.txt"
+        if [[ -f "$ascii_src" ]]; then
+            command cp -f "$ascii_src" "$DOT_DIR/config/start.txt"
+            log_info "Using shell-startup art: ${DEPLOY_ASCII_FILE%.txt}"
+        else
+            log_warning "No such art '$DEPLOY_ASCII_FILE' — available: $(ls "$DOT_DIR/config/ascii_arts" | sed 's/\.txt$//' | tr '\n' ' ')"
+        fi
     fi
 fi
 
@@ -1109,6 +1118,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     vault-sync-tripwire.service vault-sync-tripwire.timer \
                     openrouter-drift.service openrouter-drift.timer \
                     council-roster.service council-roster.timer \
+                    model-router-cooldown.service model-router-cooldown.timer \
                     romp-tailnet-proxy.service; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             # -f: installed units are copies, not symlinks into the repo, so a
@@ -1144,6 +1154,20 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                 log_warning "could not enable $timer"
             fi
         done
+
+        # Stale-cooldown watchdog: only where model-router is actually installed.
+        # Unlike the two timers above this one is NOT unconditional, because
+        # without a router there is no ingress token, the check exits 3
+        # ("could not determine"), and that is the one exit status the unit
+        # treats as a real failure -- an hourly failing unit on every box that
+        # has no router at all.
+        if [[ -f "$HOME/.local/state/model-router/ingress-token" ]]; then
+            if systemctl --user enable --now model-router-cooldown.timer 2>/dev/null; then
+                log_success "model-router-cooldown.timer enabled"
+            else
+                log_warning "could not enable model-router-cooldown.timer"
+            fi
+        fi
 
         # Romp tailnet proxy: only where romp is actually installed. Enabling it
         # elsewhere leaves a service retrying a bind forever against a romp kernel

@@ -1,0 +1,98 @@
+title: Why Auto Mode Broke Behind the Gateway
+url: https://claude.ai/code/artifact/26263dc9-8fda-4e1e-8d37-9161665d5b12
+org: personal Max account   # claude auth status, 2026-09-10; orgName is the account's own default org, not MATS Program
+first_published: 2026-09-09
+last_updated: 2026-09-11
+status: live
+status_note: >-
+  four claims withdrawn on 2026-09-11 and published as Version 4; the mechanism stands,
+  what it was said to explain does not
+
+summary: >-
+  the mechanism behind the auto-mode 429s, verified line by line in the installed 2.1.267
+  bundle: `CLAUDE_CODE_ATTRIBUTION_HEADER=0` in the settings, combined with a base URL whose
+  host is not `api.anthropic.com`, makes Claude Code omit the billing-attribution block from
+  classifier requests; the 2.1.229 repair re-adds it only for the literal `api.anthropic.com`
+  host and ignores `_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL` (Anthropic issues
+  [64585](https://github.com/anthropics/claude-code/issues/64585) and
+  [60438](https://github.com/anthropics/claude-code/issues/60438)).
+  **Four of its claims were withdrawn on 2026-09-11** and the page carries the retraction: a
+  per-version scan of 4,884 local transcripts refutes the two-condition claim in both
+  directions (the 14-18 Aug gateway window recorded 0 failures in 4,056 bound calls, Fable
+  sessions 0 of 795, while 153 failures occurred with no gateway on post-2.1.229 CLIs), and
+  the 6 September within-day split does not survive the session as the unit of analysis (all
+  209 failures come from 4 of 30 sessions, Fisher exact p = 0.554, every one from a session
+  started after the boundary). The same call site has a second gate that is true on this
+  machine's signed-in configuration, so the block may be absent in every period — and a
+  constant cannot explain variation. Cause of the September failures: open. The opt-out is
+  gone from the committed settings since `b2868c8`, on its own merits
+favicon: "🚦"
+annotation_key: review-auto-mode-classifier-429-report
+
+republish_pending: |
+  The committed HTML is one edit ahead of live Version 4. Main landed the same
+  settings change as b2868c8 while this branch was open, so the two sentences
+  that told the reader the fix was waiting on an unmerged 963eaa2 on this
+  branch were wrong in both directions: the fix is merged, and a branch commit
+  id does not survive the squash-merge this repo uses. Both now name b2868c8
+  and the regression test 21f78d1. Republish per republishes_with below; the
+  retraction text itself is unchanged.
+
+source: |
+  None. The page is authored directly as HTML — there is no markdown or build
+  script behind it — so why-auto-mode-broke-behind-the-gateway.html IS the
+  source and every edit is made in it. It was written on 2026-09-09 by another
+  session that published from a job-local path and kept no repo copy; this
+  directory was created on 2026-09-10 when the page was next edited, by
+  reading the live artifact back and stripping the platform's publish-time
+  skeleton and its injected highlight.js runtime. Those two are re-added on
+  publish and must never be committed.
+built: why-auto-mode-broke-behind-the-gateway.html
+
+republishes_with: |
+  # the Artifact tool refuses a publish to an artifact this conversation has
+  # not read, so read first, then publish with the same url
+  Artifact action=read url=<url>
+  Artifact file_path=artifacts/why-auto-mode-broke-behind-the-gateway/why-auto-mode-broke-behind-the-gateway.html url=<url>
+  # omit favicon on a redeploy; the artifact keeps the one it has
+
+evidence: |
+  Two measurement passes, both over data that moves on and cannot be
+  regenerated.
+
+  2026-09-09, by Claude Fable 5.1: request captures, the before/after headless
+  auto-mode probes, the router log and the eight-seat council result, all in
+  ~/.claude/jobs/49656f9b/tmp/ (job-local, reaped with the job). The code-level
+  guard reading came from the Claude Code 2.1.263 bundle.
+
+  2026-09-10, by Claude Opus 5: the 2026-09-06 within-day split and the
+  per-session-model rows, from onset_0906.py and split_gateway_vs_cli.py in
+  this directory, run over every local Claude Code transcript. The same two
+  scripts are vendored under artifacts/classifier-rate-limits-2026-09/
+  alongside data-snapshot-2026-09-10.md, which transcribes their output; that
+  snapshot is the citable record, because the transcripts have since moved on.
+
+related: |
+  https://github.com/anthropics/claude-code/issues/64585
+  https://github.com/anthropics/claude-code/issues/60438
+  artifacts/classifier-rate-limits-2026-09/ — the sibling page on the same
+  incident, published to the MATS Program org, which reports the failure rates
+  by session model over the whole window rather than the within-day split
+
+open: |
+  Two seams between the 2026-09-09 pass and the 2026-09-10 one, both stated on
+  the page rather than smoothed over.
+
+  Clocks. The day-by-day table gives 04:33 for the 6 September rewire on the
+  local PDT clock, which is 11:33 UTC. The router log on the machine whose
+  transcripts the split reads (hostname ubuntu-32gb-nbg1-1, TZ UTC) has its
+  first entry that day at 09:07:31 UTC and no entry on 09-05, and the wiring
+  commit 43088ef is stamped 09:25 UTC. The earlier page was written from a
+  background job reporting itself on binky, a Mac, and quotes PDT throughout,
+  so the two figures may be two machines' routers rather than one clock error.
+  Unresolved. The split boundary is taken from the router log, not from either
+  quoted time.
+
+  Counts. The same day totals 124 in the table and 209 in the split. The split
+  counts on a UTC day with SendMessage in numerator and denominator; the table
+  counts on a local day without it. Neither corrects the other.

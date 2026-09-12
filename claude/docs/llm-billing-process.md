@@ -31,11 +31,7 @@ If all providers show errors or missing keys, inform the user which environment 
 
 ### No org-admin access (common — not a bug)
 
-If you (the user) only have a project-scoped OpenAI key or a non-admin Anthropic key, the script will print
-`No data — needs an org/admin key` for that provider plus a manual dashboard URL. This is an API-level
-restriction, not something the script or agent can work around — there is no read-only "check my balance"
-endpoint for non-admin keys on either provider. The agent should relay this immediately and stop; it should
-not spend extra tool calls (e.g. probing `/v1/models`) trying to re-derive what's already a known limitation.
+If you (the user) only have a project-scoped OpenAI key or a non-admin Anthropic key, the script will print `No data — needs an org/admin key` for that provider plus a manual dashboard URL. This is an API-level restriction, not something the script or agent can work around — there is no read-only "check my balance" endpoint for non-admin keys on either provider. The agent should relay this immediately and stop; it should not spend extra tool calls (e.g. probing `/v1/models`) trying to re-derive what's already a known limitation.
 
 Manual balance/usage checks:
 - OpenAI: https://platform.openai.com/settings/organization/billing/overview (requires org owner/admin role)

@@ -61,8 +61,7 @@ Example:
 
 Your BATNA is your walk-away power. Know it before negotiating, but don't lead with it in collaborative contexts.
 
-Strong BATNA example: "I have 3 other viewings this weekend"
-Weak BATNA example: "I desperately need a place by Monday"
+Strong BATNA example: "I have 3 other viewings this weekend" Weak BATNA example: "I desperately need a place by Monday"
 
 **In collaborative mode**: Use BATNA internally to know your limits, but don't weaponize it.
 **In competitive mode**: Reveal strong BATNAs to create urgency.
@@ -108,9 +107,7 @@ Questions that give the other person control while guiding the conversation towa
 
 Repeat their last 2-3 words as a question to encourage elaboration.
 
-Them: "This deadline is going to be really tight with current resources"
-You: "Current resources?"
-Them: [Usually explains the real constraint]
+Them: "This deadline is going to be really tight with current resources" You: "Current resources?" Them: [Usually explains the real constraint]
 
 **Warning**: Overuse makes you sound like a parrot. Use sparingly when you genuinely need more information.
 
@@ -122,8 +119,7 @@ Being warm doesn't mean being unclear. You can be both kind and direct.
 
 **Pattern**: [Warm acknowledgment] + [Clear request] + [Easy response option]
 
-**Example:**
-"I know you're swamped - could you send me the retention data by Friday? If that's too tight, let me know what works."
+**Example:** "I know you're swamped - could you send me the retention data by Friday? If that's too tight, let me know what works."
 
 **NOT**: "Sorry to bother you, I was wondering if maybe when you get a chance you could possibly..."
 
@@ -133,8 +129,7 @@ Sometimes you need to hold a boundary or be clear about limits:
 
 **Pattern**: [Acknowledge their position] + [State your reality] + [Offer what you can]
 
-**Example:**
-"I totally get that 6 months works better for you. I can only commit through February, but I'm happy to help you find the next tenant before I leave if that helps."
+**Example:** "I totally get that 6 months works better for you. I can only commit through February, but I'm happy to help you find the next tenant before I leave if that helps."
 
 **What this does**: 
 - Shows you heard them
@@ -145,8 +140,7 @@ Sometimes you need to hold a boundary or be clear about limits:
 
 When you need to back out or change plans:
 
-**Your original instinct was right:**
-"I previously said yes, but this other place with 2 toilets is just too hard to give up. You're obviously annoyed by this, but I hope you understand."
+**Your original instinct was right:** "I previously said yes, but this other place with 2 toilets is just too hard to give up. You're obviously annoyed by this, but I hope you understand."
 
 **Why this works:**
 1. Honest about what changed

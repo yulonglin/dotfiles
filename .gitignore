@@ -591,3 +591,6 @@ claude/romp-session-prompt.md
 
 # Codex sandbox-migration marker (machine-local runtime state)
 codex/.sandbox_migration
+
+# Shell-startup art chosen by deploy.sh --ascii=NAME (per machine, untracked)
+config/start.txt

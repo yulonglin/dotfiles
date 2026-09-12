@@ -17,8 +17,7 @@ Check the diff in the working directory against the current branch, and remove a
 - Casts to `any` to get around type issues.
 - Any other style that is inconsistent with the file.
 
-**Report:**
-At the end, provide only a 1-3 sentence summary of what you changed.
+**Report:** At the end, provide only a 1-3 sentence summary of what you changed.
 
 ## Reach for a neighbour instead when
 

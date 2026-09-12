@@ -1,0 +1,14 @@
+title: The Second Clear
+url: https://claude.ai/code/artifact/46e4abb8-b37f-4597-8f47-6176f4fa4649
+org: see note
+status: done
+last_updated: 2026-09-01
+public: no
+index_source: "`tmp/anlayer/playground.html` (untracked scratch)"
+
+summary: >-
+  nine models across three families refuse the literal "clear uncopied": every comment
+  predating the feature carries no stamp, so it reads as uncopied and the button would wipe
+  the page. Ship "Delete copied" instead, on the file's existing arm-and-confirm. Round 1 ran
+  against a description 59 commits stale; the corrected re-run flipped the wording to "copied
+  out" unanimously

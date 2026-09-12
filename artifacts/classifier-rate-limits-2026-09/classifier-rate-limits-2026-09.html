@@ -1,0 +1,1520 @@
+
+<title>Fable sessions through the gateway trip the classifier</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--ground:#FAF9F5;--panel:#FFFFFF;--ink:#141413;--muted:#6B6963;--hair:#E6E2D8;--hair2:#F0EDE6;--on:#D97757;--off:#3B6FA6;--on-wash:rgba(217,119,87,0.10);--code:#F2EFE8;--mark:#FBE6A2;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ground:#1C1B19;--panel:#242320;--ink:#ECE9E2;--muted:#A39F95;--hair:#35332F;--hair2:#2B2A26;--on:#D0693F;--off:#3F7FC4;--on-wash:rgba(208,105,63,0.14);--code:#2A2926;--mark:#5C4A15;}}
+:root[data-theme="dark"]{--ground:#1C1B19;--panel:#242320;--ink:#ECE9E2;--muted:#A39F95;--hair:#35332F;--hair2:#2B2A26;--on:#D0693F;--off:#3F7FC4;--on-wash:rgba(208,105,63,0.14);--code:#2A2926;--mark:#5C4A15;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.55 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;padding-block:32px 56px;padding-inline:clamp(16px,4vw,40px)}
+main{max-width:760px;margin:0 auto}
+h1{font-size:clamp(26px,4.2vw,34px);line-height:1.15;font-weight:600;letter-spacing:-0.01em;text-wrap:balance;margin:0 0 8px}
+h2{font-size:20px;line-height:1.3;font-weight:600;text-wrap:balance;margin:44px 0 10px}
+p{margin:0 0 14px;max-width:66ch}
+.sub{color:var(--muted);margin-bottom:28px}
+a{color:inherit;text-decoration-color:var(--off);text-underline-offset:3px}
+a:hover{text-decoration-color:var(--on)}
+code{font:0.88em "IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);padding:1px 5px;border-radius:4px}
+figure{margin:18px 0 8px}
+figcaption{font-size:14px;color:var(--muted);margin-top:8px;max-width:72ch}
+figcaption b{color:var(--ink);font-weight:600}
+svg.chart{display:block;width:100%;height:auto;max-width:100%;overflow:visible}
+svg .tick{font:11px "IBM Plex Mono",ui-monospace,monospace;fill:var(--muted);font-variant-numeric:tabular-nums}
+svg .lbl{font:11px "IBM Plex Sans",system-ui,sans-serif;fill:var(--ink)}
+svg .muted{fill:var(--muted)}
+svg .val{font:11.5px "IBM Plex Mono",ui-monospace,monospace;fill:var(--ink);font-variant-numeric:tabular-nums}
+svg .facet{font:600 12.5px "IBM Plex Sans",system-ui,sans-serif;fill:var(--ink)}
+svg .grid{stroke:var(--hair);stroke-width:1}
+svg .hair{stroke:var(--hair2);stroke-width:1}
+svg .axis{stroke:var(--muted);stroke-width:1}
+svg .event{stroke:var(--ink);stroke-width:1;stroke-dasharray:3 3}
+svg .ci{stroke:var(--ink);stroke-width:1.2;opacity:0.7}
+svg .hit rect[fill="transparent"]{pointer-events:all}
+svg .hit:hover rect:not([fill="transparent"]),svg .hit:hover circle{filter:brightness(0.85)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);margin:4px 0 0}
+.legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px;background:var(--sw)}
+details{margin:8px 0 4px;font-size:14px}
+summary{cursor:pointer;color:var(--muted)}
+.tablewrap{overflow-x:auto;margin-top:8px}
+table{border-collapse:collapse;font-size:13.5px;min-width:100%}
+th,td{padding:5px 10px 5px 0;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top;white-space:nowrap}
+th{font-weight:600;color:var(--muted)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+.note{font-size:13px;color:var(--muted)}
+table.fixes th,table.fixes td{white-space:normal;font-size:14px;padding:8px 12px 8px 0}
+table.fixes td:first-child{font-family:"IBM Plex Mono",ui-monospace,monospace;color:var(--muted)}
+.term{border-left:3px solid var(--off);padding:8px 14px;margin:18px 0;background:var(--panel);font-size:14.5px}
+.term p{margin:0 0 6px}
+.term p:last-child{margin:0}
+pre.mermaid{background:transparent;overflow-x:auto;margin:16px 0 4px}
+footer{margin-top:56px;padding-top:14px;border-top:1px solid var(--hair);font-size:13px;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<main>
+<h1>Fable sessions through the gateway trip the classifier</h1>
+<p class="sub">Why Claude Code's auto-mode classifier started returning <code>rate-limited</code> on this machine on 6 September 2026, what fixes it, and which mechanism is still unknown. Measured from local transcripts, 2026-09-09/10.</p>
+
+<p>Auto mode approves each shell or agent call with a separate classifier model. The gateway is the model-router loopback proxy that Claude Code talks to instead of the API. It came back up mid-morning on 6 September, and that single day settles what caused the failures: on one CLI version, one machine and one account, 1,006 classifier-bound calls before 09:00 produced no failure at all, and 1,788 calls afterwards produced 209. Sessions running Fable 5.1 went from 0 of 720 to 172 of 793, about one call in five. Opus 5 and Sonnet 5 sessions crossed the same split near zero, not at it: five failures in 107 Opus 5 calls and none in nine Sonnet 5 calls. Over the four days that follow, and on an earlier denominator the Limits qualify, 93% of the 719 failures come from Fable 5.1 sessions, and every one of them names the 1M-context Opus variant as the classifier that was rate-limited. The cheapest fix is a non-Fable default model, and it is already in place. What remains open is the mechanism: why a loopback proxy makes a Fable session's Opus classifier return 429 while that same session's own calls go through.</p>
+
+<div class="term">
+<p><b>Native failure</b> — a tool result that reads <code>&lt;model&gt; is temporarily unavailable (rate-limited), so auto mode cannot determine the safety of &lt;tool&gt; right now</code>; counted once per tool call. The <a href="https://code.claude.com/docs/en/errors#auto-mode-cannot-determine-the-safety-of-an-action">errors reference</a> lists it: Claude Code blocked the call without a verdict.</p>
+<p><b>Classifier-bound call</b> — a Bash, PowerShell, Monitor, Agent, Task or SendMessage call, the tools that reach the classifier in auto mode. It is an upper bound on classifier calls: allow rules and cached verdicts skip it. A failure on any other tool is reported separately and never divided by this count. The two charts after the split still use an older denominator that omits SendMessage; the Limits say what that costs.</p>
+<p><b>Gateway</b> — the model-router loopback proxy set as the API base URL. On before 18 August, off 18 August to 6 September, on since.</p>
+</div>
+
+<h2>Splitting one day at 09:00 isolates the gateway</h2>
+<p>Two things changed on 6 September: the gateway was rewired and CLI 2.1.263 arrived. They did not change at the same hour. The router began listening at 09:07 UTC and the wiring commit landed at 09:25, while 2.1.263 sessions had been running since 03:00. Splitting the day at 09:00 therefore holds the CLI version, the session model, the machine and the signed-in account fixed, and varies only the gateway.</p>
+<figure>
+<svg class="chart" viewBox="0 0 680 450" role="img" aria-labelledby="c3-title c3-desc" xmlns="http://www.w3.org/2000/svg">
+<title id="c3-title">Failures per 100 bound calls on 6 September 2026, before and from 09:00, CLI 2.1.263 only</title>
+<desc id="c3-desc">On one day, one CLI version, one machine and one account: no failure in any of the 1,006 classifier-bound calls before 09:00, and 209 failures in 1,788 calls afterwards. Fable 5.1 sessions go from 0 of 720 to 172 of 793, while Opus 5 sessions reach 5 of 107 and Sonnet 5 sessions stay at zero.</desc>
+<line x1="136.0" x2="136.0" y1="20" y2="430" class="grid"/>
+<text x="136.0" y="16" class="tick" text-anchor="middle">0</text>
+<line x1="259.1" x2="259.1" y1="20" y2="430" class="grid"/>
+<text x="259.1" y="16" class="tick" text-anchor="middle">10</text>
+<line x1="382.2" x2="382.2" y1="20" y2="430" class="grid"/>
+<text x="382.2" y="16" class="tick" text-anchor="middle">20</text>
+<line x1="505.4" x2="505.4" y1="20" y2="430" class="grid"/>
+<text x="505.4" y="16" class="tick" text-anchor="middle">30</text>
+<text x="530" y="446" class="lbl muted" text-anchor="end">failures per 100 bound calls (lower is better); whiskers are 95% Wilson intervals</text>
+<text x="0" y="39" class="facet">Fable 5.1</text>
+<line x1="0" x2="680" y1="44" y2="44" class="hair"/>
+<text x="128" y="60.5" class="lbl" text-anchor="end">before 09:00</text>
+<g class="hit">
+<title>Fable 5.1, before 09:00, gateway off: 0 failures / 720 bound calls = 0.0 per 100 (95% Wilson 0.0-0.5)</title>
+<rect x="132" y="46" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="57.0" r="4" fill="var(--off)"/>
+<line x1="136.0" x2="142.5" y1="57.0" y2="57.0" class="ci"/>
+<line x1="142.5" x2="142.5" y1="53.0" y2="61.0" class="ci"/>
+<text x="538" y="60.5" class="val">0 / 720  ·  0.0</text>
+</g>
+<text x="128" y="82.5" class="lbl" text-anchor="end">from 09:00</text>
+<g class="hit">
+<title>Fable 5.1, from 09:00, gateway on: 172 failures / 793 bound calls = 21.7 per 100 (95% Wilson 19.0-24.7)</title>
+<rect x="132" y="68" width="548" height="22" fill="transparent"/>
+<rect x="136.0" y="72.0" width="267.1" height="14" rx="3" fill="var(--on)"/>
+<rect x="136.0" y="72.0" width="3" height="14" fill="var(--on)"/>
+<line x1="369.5" x2="440.0" y1="79.0" y2="79.0" class="ci"/>
+<line x1="440.0" x2="440.0" y1="75.0" y2="83.0" class="ci"/>
+<text x="538" y="82.5" class="val">172 / 793  ·  21.7</text>
+</g>
+<text x="0" y="119" class="facet">Opus 5</text>
+<line x1="0" x2="680" y1="124" y2="124" class="hair"/>
+<text x="128" y="140.5" class="lbl" text-anchor="end">before 09:00</text>
+<g class="hit">
+<title>Opus 5, before 09:00, gateway off: 0 failures / 198 bound calls = 0.0 per 100 (95% Wilson 0.0-1.9)</title>
+<rect x="132" y="126" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="137.0" r="4" fill="var(--off)"/>
+<line x1="136.0" x2="159.4" y1="137.0" y2="137.0" class="ci"/>
+<line x1="159.4" x2="159.4" y1="133.0" y2="141.0" class="ci"/>
+<text x="538" y="140.5" class="val">0 / 198  ·  0.0</text>
+</g>
+<text x="128" y="162.5" class="lbl" text-anchor="end">from 09:00</text>
+<g class="hit">
+<title>Opus 5, from 09:00, gateway on: 5 failures / 107 bound calls = 4.7 per 100 (95% Wilson 2.0-10.5)</title>
+<rect x="132" y="148" width="548" height="22" fill="transparent"/>
+<rect x="136.0" y="152.0" width="57.5" height="14" rx="3" fill="var(--on)"/>
+<rect x="136.0" y="152.0" width="3" height="14" fill="var(--on)"/>
+<line x1="160.8" x2="265.0" y1="159.0" y2="159.0" class="ci"/>
+<line x1="265.0" x2="265.0" y1="155.0" y2="163.0" class="ci"/>
+<text x="538" y="162.5" class="val">5 / 107  ·  4.7</text>
+</g>
+<text x="0" y="199" class="facet">Sonnet 5</text>
+<line x1="0" x2="680" y1="204" y2="204" class="hair"/>
+<text x="128" y="220.5" class="lbl" text-anchor="end">before 09:00</text>
+<g class="hit">
+<title>Sonnet 5, before 09:00, gateway off: 0 failures / 87 bound calls = 0.0 per 100 (95% Wilson 0.0-4.2)</title>
+<rect x="132" y="206" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="217.0" r="4" fill="var(--off)"/>
+<line x1="136.0" x2="188.1" y1="217.0" y2="217.0" class="ci"/>
+<line x1="188.1" x2="188.1" y1="213.0" y2="221.0" class="ci"/>
+<text x="538" y="220.5" class="val">0 / 87  ·  0.0</text>
+</g>
+<text x="128" y="242.5" class="lbl" text-anchor="end">from 09:00</text>
+<g class="hit">
+<title>Sonnet 5, from 09:00, gateway on: 0 failures / 9 bound calls = 0.0 per 100 (95% Wilson 0.0-29.9)</title>
+<rect x="132" y="228" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="239.0" r="4" fill="var(--on)"/>
+<line x1="136.0" x2="504.3" y1="239.0" y2="239.0" class="ci"/>
+<line x1="504.3" x2="504.3" y1="235.0" y2="243.0" class="ci"/>
+<text x="538" y="242.5" class="val">0 / 9  ·  0.0</text>
+</g>
+<text x="0" y="279" class="facet">GPT-5.6 Sol</text>
+<line x1="0" x2="680" y1="284" y2="284" class="hair"/>
+<text x="128" y="300.5" class="lbl" text-anchor="end">before 09:00</text>
+<text x="140" y="300.5" class="lbl muted">no sessions</text>
+<text x="128" y="322.5" class="lbl" text-anchor="end">from 09:00</text>
+<g class="hit">
+<title>GPT-5.6 Sol, from 09:00, gateway on: 22 failures / 172 bound calls = 12.8 per 100 (95% Wilson 8.6-18.6)</title>
+<rect x="132" y="308" width="548" height="22" fill="transparent"/>
+<rect x="136.0" y="312.0" width="157.5" height="14" rx="3" fill="var(--on)"/>
+<rect x="136.0" y="312.0" width="3" height="14" fill="var(--on)"/>
+<line x1="241.9" x2="365.1" y1="319.0" y2="319.0" class="ci"/>
+<line x1="365.1" x2="365.1" y1="315.0" y2="323.0" class="ci"/>
+<text x="538" y="322.5" class="val">22 / 172  ·  12.8</text>
+</g>
+<text x="0" y="359" class="facet">GPT-6 Astra</text>
+<line x1="0" x2="680" y1="364" y2="364" class="hair"/>
+<text x="128" y="380.5" class="lbl" text-anchor="end">before 09:00</text>
+<text x="140" y="380.5" class="lbl muted">no sessions</text>
+<text x="128" y="402.5" class="lbl" text-anchor="end">from 09:00</text>
+<g class="hit">
+<title>GPT-6 Astra, from 09:00, gateway on: 10 failures / 652 bound calls = 1.5 per 100 (95% Wilson 0.8-2.8)</title>
+<rect x="132" y="388" width="548" height="22" fill="transparent"/>
+<rect x="136.0" y="392.0" width="18.9" height="14" rx="3" fill="var(--on)"/>
+<rect x="136.0" y="392.0" width="3" height="14" fill="var(--on)"/>
+<line x1="146.3" x2="170.5" y1="399.0" y2="399.0" class="ci"/>
+<line x1="170.5" x2="170.5" y1="395.0" y2="403.0" class="ci"/>
+<text x="538" y="402.5" class="val">10 / 652  ·  1.5</text>
+</g>
+</svg>
+<div class="legend"><span style="--sw:var(--off)">before 09:00, gateway off</span><span style="--sw:var(--on)">from 09:00, gateway on</span></div>
+<figcaption><b>Zero failures in 1,006 bound calls before the router came up, 209 in 1,788 after it.</b> CLI 2.1.263 sessions only, so the CLI upgrade cannot be the trigger. Nor can the Fable weekly-scoped quota, the account or capacity drift: none of them moved at 09:00 that day, and Fable is the highest of any session model after the split. Dots at zero are measured zeros; whiskers are 95% Wilson intervals, so 0 of 720 Fable calls means a true rate under about 0.5 per 100. Opus 5 is near zero rather than at it, and those five failures name <code>astra</code> as the classifier rather than the Opus 1M variant. That is the sharpest clue on the page, and the cause chain below reads it. GPT sessions ran only after the split, which is why their &ldquo;before&rdquo; row reads no sessions. Source: <a href="https://github.com/yulonglin/dotfiles/blob/main/artifacts/classifier-rate-limits-2026-09/onset_0906.py"><code>onset_0906.py</code></a> over the same transcripts.</figcaption>
+</figure>
+<details><summary>Table view: every session model, plus the hour-by-hour onset</summary><div class="tablewrap"><table><thead><tr><th>session model (CLI 2.1.263 unless noted)</th><th class="num">before 09:00<br><span class="muted">gateway off</span></th><th class="num">from 09:00<br><span class="muted">gateway on</span></th></tr></thead><tbody><tr><td>Fable 5.1</td><td class="num">0 / 720 (0.0; 0.0–0.5)</td><td class="num">172 / 793 (21.7; 19.0–24.7)</td></tr><tr><td>Opus 5</td><td class="num">0 / 198 (0.0; 0.0–1.9)</td><td class="num">5 / 107 (4.7; 2.0–10.5)</td></tr><tr><td>Sonnet 5</td><td class="num">0 / 87 (0.0; 0.0–4.2)</td><td class="num">0 / 9 (0.0; 0.0–29.9)</td></tr><tr><td>Opus 4.8</td><td class="num">0 / 1 (0.0; 0.0–79.3)</td><td class="num">0 / 36 (0.0; 0.0–9.6)</td></tr><tr><td>GPT-5.6 Sol</td><td class="num">0 / 0</td><td class="num">22 / 172 (12.8; 8.6–18.6)</td></tr><tr><td>GPT-6 Astra</td><td class="num">0 / 0</td><td class="num">10 / 652 (1.5; 0.8–2.8)</td></tr><tr><td>Kimi K3</td><td class="num">0 / 0</td><td class="num">0 / 16 (0.0; 0.0–19.4)</td></tr><tr><td>Haiku 4.5</td><td class="num">0 / 0</td><td class="num">0 / 3 (0.0; 0.0–56.2)</td></tr><tr><td><span class="muted">CLI 2.1.263, all models</span></td><td class="num">0 / 1,006 (0.0; 0.0–0.4)</td><td class="num">209 / 1,788 (11.7; 10.3–13.3)</td></tr><tr><td><span class="muted">CLI 2.1.261 sessions</span></td><td class="num">0 / 190 (0.0; 0.0–2.0)</td><td class="num">0 / 42 (0.0; 0.0–8.4)</td></tr><tr><td><span class="muted">CLI 2.1.260 sessions</span></td><td class="num">0 / 7 (0.0; 0.0–35.4)</td><td class="num">0 / 3 (0.0; 0.0–56.2)</td></tr><tr><td><span class="muted">All sessions, every CLI</span></td><td class="num">0 / 1,203 (0.0; 0.0–0.3)</td><td class="num">209 / 1,833 (11.4; 10.0–12.9)</td></tr></tbody></table><p class="note">Cells are failures / bound calls (per 100; 95% Wilson interval). The four greyed rows are context, not part of the held-fixed comparison: they pool CLI versions or sit on a version whose sessions all predate the rewire.</p></div><div class="tablewrap"><table><thead><tr><th>hour (UTC)</th><th class="num">CLI 2.1.260</th><th class="num">CLI 2.1.261</th><th class="num">CLI 2.1.263</th></tr></thead><tbody><tr><td>00:00</td><td class="num">—</td><td class="num">0 / 6</td><td class="num">—</td></tr><tr><td>01:00</td><td class="num">—</td><td class="num">0 / 65</td><td class="num">—</td></tr><tr><td>02:00</td><td class="num">—</td><td class="num">0 / 37</td><td class="num">—</td></tr><tr><td>03:00</td><td class="num">—</td><td class="num">0 / 53</td><td class="num">0 / 128</td></tr><tr><td>04:00</td><td class="num">—</td><td class="num">0 / 1</td><td class="num">0 / 107</td></tr><tr><td>05:00</td><td class="num">—</td><td class="num">0 / 1</td><td class="num">0 / 195</td></tr><tr><td>06:00</td><td class="num">—</td><td class="num">—</td><td class="num">0 / 39</td></tr><tr><td>07:00</td><td class="num">—</td><td class="num">—</td><td class="num">0 / 154</td></tr><tr><td>08:00</td><td class="num">0 / 7</td><td class="num">0 / 27</td><td class="num">0 / 383</td></tr><tr><td>09:00</td><td class="num">—</td><td class="num">0 / 37</td><td class="num">2 / 287</td></tr><tr><td>10:00</td><td class="num">—</td><td class="num">0 / 5</td><td class="num">0 / 177</td></tr><tr><td>11:00</td><td class="num">—</td><td class="num">—</td><td class="num">15 / 483</td></tr><tr><td>12:00</td><td class="num">—</td><td class="num">—</td><td class="num">13 / 272</td></tr><tr><td>13:00</td><td class="num">0 / 3</td><td class="num">—</td><td class="num">98 / 278</td></tr><tr><td>14:00</td><td class="num">—</td><td class="num">—</td><td class="num">42 / 249</td></tr><tr><td>15:00</td><td class="num">—</td><td class="num">—</td><td class="num">39 / 42</td></tr></tbody></table><p class="note">Cells are failures / bound calls. A bound call is counted in the hour of its tool use and a failure in the hour of its tool result, so a late cell can hold more failures than calls; the day totals are unaffected.</p></div>
+<p class="note">The onset is sharp: no failure in any hour up to 08:59, and the first two in the 09:00 hour, which is the hour the router began listening. Two cautions on the &ldquo;after&rdquo; side. A session fixes its base URL when it launches, so sessions started before the rewire but still running after it sit in the after column without the gateway, which pulls that column toward zero rather than away from it. And the 2.1.261 row is not a control: all of its calls that day are on the same machine-wide setting, so it cannot separate an old CLI from no gateway. The per-model rows account for every failure, summing exactly to the 209 in the 2.1.263 total. Three further failures that day fell on tools this denominator does not contain, one <code>Edit</code> and two on an MCP browser tool; they are reported here and excluded from every rate rather than divided by a call count that never held them. Across every CLI version this counter records 3,036 classifier-bound calls for the day where the by-day audit below records 2,604, because this counter puts <code>SendMessage</code> in the denominator and that one does not.</p></details>
+
+<h2>The wider picture: zero on every gateway-off day</h2>
+<figure>
+<svg class="chart" viewBox="0 0 680 342" role="img" aria-labelledby="c1-title c1-desc" xmlns="http://www.w3.org/2000/svg">
+<title id="c1-title">Classifier failures per 100 bound calls by day, 19 Aug to 9 Sep 2026</title>
+<desc id="c1-desc">Zero failures on every day the gateway was off; 8.1, 2.3, 16.2 and 25.5 per 100 on the four days after it was rewired on 6 Sep. The lower strip shows bound calls per day.</desc>
+<rect x="552.2" y="30" width="113.8" height="272" fill="var(--on-wash)"/>
+<text x="40" y="12" class="lbl muted">gateway off</text>
+<text x="666" y="12" class="lbl muted" text-anchor="end">gateway on</text>
+<line x1="40" x2="666" y1="204.0" y2="204.0" class="grid"/>
+<text x="34" y="207.5" class="tick" text-anchor="end">0</text>
+<line x1="40" x2="666" y1="147.3" y2="147.3" class="grid"/>
+<text x="34" y="150.8" class="tick" text-anchor="end">10</text>
+<line x1="40" x2="666" y1="90.7" y2="90.7" class="grid"/>
+<text x="34" y="94.2" class="tick" text-anchor="end">20</text>
+<line x1="40" x2="666" y1="34.0" y2="34.0" class="grid"/>
+<text x="34" y="37.5" class="tick" text-anchor="end">30</text>
+<text x="40" y="26" class="lbl muted">failures per 100 bound calls (lower is better)</text>
+<line x1="40" x2="666" y1="302.0" y2="302.0" class="grid"/>
+<text x="34" y="305.5" class="tick" text-anchor="end">0</text>
+<line x1="40" x2="666" y1="270.0" y2="270.0" class="grid"/>
+<text x="34" y="273.5" class="tick" text-anchor="end">2k</text>
+<line x1="40" x2="666" y1="238.0" y2="238.0" class="grid"/>
+<text x="34" y="241.5" class="tick" text-anchor="end">4k</text>
+<text x="40" y="230" class="lbl muted">bound calls per day (exposure; the 0 above means less on a 23-call day than on a 3,998-call day)</text>
+<g class="hit">
+<title>19 Aug: 0 failures / 1,169 bound calls = 0.0 per 100; CLI 2.1.234-236; gateway off</title>
+<rect x="40.0" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="54.2" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="46.2" y="283.3" width="16" height="18.7" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>20 Aug: 0 failures / 502 bound calls = 0.0 per 100; CLI 2.1.235-238; gateway off</title>
+<rect x="68.5" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="82.7" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="74.7" y="294.0" width="16" height="8.0" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>21 Aug: 0 failures / 688 bound calls = 0.0 per 100; CLI 2.1.238; gateway off</title>
+<rect x="96.9" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="111.1" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="103.1" y="291.0" width="16" height="11.0" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g><title>22 Aug: no bound calls recorded</title><text x="139.6" y="298" class="tick muted" text-anchor="middle">&#8211;</text></g>
+<g><title>23 Aug: no bound calls recorded</title><text x="168.0" y="298" class="tick muted" text-anchor="middle">&#8211;</text></g>
+<g class="hit">
+<title>24 Aug: 0 failures / 660 bound calls = 0.0 per 100; CLI 2.1.235, 241; gateway off</title>
+<rect x="182.3" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="196.5" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="188.5" y="291.4" width="16" height="10.6" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>25 Aug: 0 failures / 76 bound calls = 0.0 per 100; CLI 2.1.245-246; gateway off</title>
+<rect x="210.7" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="225.0" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="217.0" y="300.8" width="16" height="1.2" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>26 Aug: 0 failures / 958 bound calls = 0.0 per 100; CLI 2.1.245-246; gateway off</title>
+<rect x="239.2" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="253.4" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="245.4" y="286.7" width="16" height="15.3" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>27 Aug: 0 failures / 2,741 bound calls = 0.0 per 100; CLI 2.1.246-248; gateway off</title>
+<rect x="267.6" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="281.9" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="273.9" y="258.1" width="16" height="43.9" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>28 Aug: 0 failures / 3,998 bound calls = 0.0 per 100; CLI 2.1.247-251; gateway off</title>
+<rect x="296.1" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="310.3" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="302.3" y="238.0" width="16" height="64.0" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>29 Aug: 0 failures / 3,451 bound calls = 0.0 per 100; CLI 2.1.250-251; gateway off</title>
+<rect x="324.5" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="338.8" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="330.8" y="246.8" width="16" height="55.2" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>30 Aug: 0 failures / 1,978 bound calls = 0.0 per 100; CLI 2.1.251; gateway off</title>
+<rect x="353.0" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="367.2" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="359.2" y="270.4" width="16" height="31.6" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>31 Aug: 0 failures / 2,605 bound calls = 0.0 per 100; CLI 2.1.251; gateway off</title>
+<rect x="381.5" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="395.7" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="387.7" y="260.3" width="16" height="41.7" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>1 Sep: 0 failures / 3,635 bound calls = 0.0 per 100; CLI 2.1.251-258; gateway off</title>
+<rect x="409.9" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="424.1" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="416.1" y="243.8" width="16" height="58.2" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>2 Sep: 0 failures / 503 bound calls = 0.0 per 100; CLI 2.1.252-258; gateway off</title>
+<rect x="438.4" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="452.6" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="444.6" y="294.0" width="16" height="8.0" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>3 Sep: 0 failures / 155 bound calls = 0.0 per 100; CLI 2.1.258-259; gateway off</title>
+<rect x="466.8" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="481.0" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="473.0" y="299.5" width="16" height="2.5" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>4 Sep: 0 failures / 23 bound calls = 0.0 per 100; CLI 2.1.260; gateway off</title>
+<rect x="495.3" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="509.5" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="501.5" y="301.6" width="16" height="1.0" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>5 Sep: 0 failures / 24 bound calls = 0.0 per 100; CLI 2.1.260-261; gateway off</title>
+<rect x="523.7" y="30" width="28.5" height="272" fill="transparent"/>
+<circle cx="538.0" cy="201.0" r="3" fill="var(--off)"/>
+<rect x="530.0" y="301.6" width="16" height="1.0" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>6 Sep: 212 failures / 2,604 bound calls = 8.1 per 100; CLI 2.1.260-263; gateway on</title>
+<rect x="552.2" y="30" width="28.5" height="272" fill="transparent"/>
+<rect x="558.4" y="157.9" width="16" height="46.1" rx="3" fill="var(--on)"/>
+<rect x="558.4" y="201.0" width="16" height="3" fill="var(--on)"/>
+<text x="566.4" y="152.9" class="val" text-anchor="middle">8.1</text>
+<rect x="558.4" y="260.3" width="16" height="41.7" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>7 Sep: 23 failures / 1,003 bound calls = 2.3 per 100; CLI 2.1.263; gateway on</title>
+<rect x="580.6" y="30" width="28.5" height="272" fill="transparent"/>
+<rect x="586.9" y="191.0" width="16" height="13.0" rx="3" fill="var(--on)"/>
+<rect x="586.9" y="201.0" width="16" height="3" fill="var(--on)"/>
+<text x="594.9" y="186.0" class="val" text-anchor="middle">2.3</text>
+<rect x="586.9" y="286.0" width="16" height="16.0" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>8 Sep: 391 failures / 2,415 bound calls = 16.2 per 100; CLI 2.1.263; gateway on</title>
+<rect x="609.1" y="30" width="28.5" height="272" fill="transparent"/>
+<rect x="615.3" y="112.3" width="16" height="91.7" rx="3" fill="var(--on)"/>
+<rect x="615.3" y="201.0" width="16" height="3" fill="var(--on)"/>
+<text x="623.3" y="107.3" class="val" text-anchor="middle">16.2</text>
+<rect x="615.3" y="263.4" width="16" height="38.6" fill="var(--muted)" opacity="0.45"/>
+</g>
+<g class="hit">
+<title>9 Sep: 93 failures / 365 bound calls = 25.5 per 100; CLI 2.1.263, 266; gateway on</title>
+<rect x="637.5" y="30" width="28.5" height="272" fill="transparent"/>
+<rect x="643.8" y="59.6" width="16" height="144.4" rx="3" fill="var(--on)"/>
+<rect x="643.8" y="201.0" width="16" height="3" fill="var(--on)"/>
+<text x="651.8" y="54.6" class="val" text-anchor="middle">25.5</text>
+<rect x="643.8" y="296.2" width="16" height="5.8" fill="var(--muted)" opacity="0.45"/>
+</g>
+<line x1="481.0" x2="481.0" y1="30" y2="204" class="event"/>
+<text x="476.0" y="38" class="lbl" text-anchor="end">3 Sep: default model set to Fable 5.1</text>
+<line x1="552.2" x2="552.2" y1="30" y2="204" class="event"/>
+<text x="557.2" y="38" class="lbl" text-anchor="start">6 Sep: gateway rewired</text>
+<line x1="40" x2="666" y1="204" y2="204" class="axis"/>
+<line x1="40" x2="666" y1="302" y2="302" class="axis"/>
+<text x="54.2" y="316" class="tick" text-anchor="middle">19</text>
+<text x="40.0" y="332" class="lbl muted">Aug</text>
+<text x="111.1" y="316" class="tick" text-anchor="middle">21</text>
+<text x="168.0" y="316" class="tick" text-anchor="middle">23</text>
+<text x="225.0" y="316" class="tick" text-anchor="middle">25</text>
+<text x="281.9" y="316" class="tick" text-anchor="middle">27</text>
+<text x="338.8" y="316" class="tick" text-anchor="middle">29</text>
+<text x="395.7" y="316" class="tick" text-anchor="middle">31</text>
+<text x="424.1" y="316" class="tick" text-anchor="middle">1</text>
+<text x="409.9" y="332" class="lbl muted">Sep</text>
+<text x="481.0" y="316" class="tick" text-anchor="middle">3</text>
+<text x="538.0" y="316" class="tick" text-anchor="middle">5</text>
+<text x="594.9" y="316" class="tick" text-anchor="middle">7</text>
+<text x="651.8" y="316" class="tick" text-anchor="middle">9</text>
+</svg>
+<div class="legend"><span style="--sw:var(--off)">gateway off</span><span style="--sw:var(--on)">gateway on</span><span style="--sw:var(--muted);opacity:.6">bound calls</span></div>
+<figcaption><b>Zero on all 16 gateway-off days, then 8.1 to 25.5 per 100 on the four gateway-on days.</b> Dots at the baseline are days with zero failures; bars are failures per 100 bound calls. The dashed lines mark the default model changing to Fable 5.1 on 3 September, three days before any failure, and the gateway rewire on 6 September. The lower strip is exposure: 22 and 23 August recorded no bound calls, and 4 and 5 September carried only 23 and 24, so their zeros are weak evidence. This cross-period view corroborates the within-day split above; it no longer has to carry the causal claim on its own, which is what the CLI upgrade landing on 6 September used to confound. It is still on the earlier accounting, which leaves <code>SendMessage</code> out of the denominator while counting its failures, so read the heights as high rather than exact. Read the series as levels, never as a trend. The gap between counted bound calls and real classifier calls is not constant from day to day, because the share of calls that allow rules, cached verdicts and auto-approval resolve before the classifier moves with the day's workload mix. A rate here can therefore rise or fall with no change in classifier health, which is why the within-day split above is the comparison that survives. Source: <a href="https://github.com/yulonglin/dotfiles/blob/main/custom_bins/claude-usage-audit"><code>claude-usage-audit --model-usage --days 21</code></a> at the commit titled <em>classifier failures carry where they happened, and the audit gets a denominator</em>.</figcaption>
+</figure>
+<details><summary>Table view</summary><div class="tablewrap"><table><thead><tr><th>day</th><th class="num">failures</th><th class="num">bound calls</th><th class="num">per 100</th><th>CLI versions</th><th>gateway</th></tr></thead><tbody><tr><td>2026-08-19</td><td class="num">0</td><td class="num">1,169</td><td class="num">0.0</td><td>2.1.234-236</td><td>off</td></tr><tr><td>2026-08-20</td><td class="num">0</td><td class="num">502</td><td class="num">0.0</td><td>2.1.235-238</td><td>off</td></tr><tr><td>2026-08-21</td><td class="num">0</td><td class="num">688</td><td class="num">0.0</td><td>2.1.238</td><td>off</td></tr><tr><td>2026-08-24</td><td class="num">0</td><td class="num">660</td><td class="num">0.0</td><td>2.1.235, 241</td><td>off</td></tr><tr><td>2026-08-25</td><td class="num">0</td><td class="num">76</td><td class="num">0.0</td><td>2.1.245-246</td><td>off</td></tr><tr><td>2026-08-26</td><td class="num">0</td><td class="num">958</td><td class="num">0.0</td><td>2.1.245-246</td><td>off</td></tr><tr><td>2026-08-27</td><td class="num">0</td><td class="num">2,741</td><td class="num">0.0</td><td>2.1.246-248</td><td>off</td></tr><tr><td>2026-08-28</td><td class="num">0</td><td class="num">3,998</td><td class="num">0.0</td><td>2.1.247-251</td><td>off</td></tr><tr><td>2026-08-29</td><td class="num">0</td><td class="num">3,451</td><td class="num">0.0</td><td>2.1.250-251</td><td>off</td></tr><tr><td>2026-08-30</td><td class="num">0</td><td class="num">1,978</td><td class="num">0.0</td><td>2.1.251</td><td>off</td></tr><tr><td>2026-08-31</td><td class="num">0</td><td class="num">2,605</td><td class="num">0.0</td><td>2.1.251</td><td>off</td></tr><tr><td>2026-09-01</td><td class="num">0</td><td class="num">3,635</td><td class="num">0.0</td><td>2.1.251-258</td><td>off</td></tr><tr><td>2026-09-02</td><td class="num">0</td><td class="num">503</td><td class="num">0.0</td><td>2.1.252-258</td><td>off</td></tr><tr><td>2026-09-03</td><td class="num">0</td><td class="num">155</td><td class="num">0.0</td><td>2.1.258-259</td><td>off</td></tr><tr><td>2026-09-04</td><td class="num">0</td><td class="num">23</td><td class="num">0.0</td><td>2.1.260</td><td>off</td></tr><tr><td>2026-09-05</td><td class="num">0</td><td class="num">24</td><td class="num">0.0</td><td>2.1.260-261</td><td>off</td></tr><tr><td>2026-09-06</td><td class="num">212</td><td class="num">2,604</td><td class="num">8.1</td><td>2.1.260-263</td><td>on</td></tr><tr><td>2026-09-07</td><td class="num">23</td><td class="num">1,003</td><td class="num">2.3</td><td>2.1.263</td><td>on</td></tr><tr><td>2026-09-08</td><td class="num">391</td><td class="num">2,415</td><td class="num">16.2</td><td>2.1.263</td><td>on</td></tr><tr><td>2026-09-09</td><td class="num">93</td><td class="num">365</td><td class="num">25.5</td><td>2.1.263, 266</td><td>on</td></tr></tbody></table></div></details>
+
+<h2>Fable 5.1 sessions carry 93% of the failures</h2>
+<figure>
+<svg class="chart" viewBox="0 0 680 560" role="img" aria-labelledby="c2-title c2-desc" xmlns="http://www.w3.org/2000/svg">
+<title id="c2-title">Failures per 100 bound calls by session model and period, with 95% Wilson intervals</title>
+<desc id="c2-desc">Fable 5.1 sessions through the gateway fail on 22.8 per 100 bound calls; Opus 5, Sonnet 5 and GPT sessions on the same days stay under 2, and every model is at zero in the gateway-off period.</desc>
+<line x1="136.0" x2="136.0" y1="20" y2="540" class="grid"/>
+<text x="136.0" y="16" class="tick" text-anchor="middle">0</text>
+<line x1="234.5" x2="234.5" y1="20" y2="540" class="grid"/>
+<text x="234.5" y="16" class="tick" text-anchor="middle">10</text>
+<line x1="333.0" x2="333.0" y1="20" y2="540" class="grid"/>
+<text x="333.0" y="16" class="tick" text-anchor="middle">20</text>
+<line x1="431.5" x2="431.5" y1="20" y2="540" class="grid"/>
+<text x="431.5" y="16" class="tick" text-anchor="middle">30</text>
+<line x1="530.0" x2="530.0" y1="20" y2="540" class="grid"/>
+<text x="530.0" y="16" class="tick" text-anchor="middle">40</text>
+<text x="530" y="556" class="lbl muted" text-anchor="end">failures per 100 bound calls (lower is better); whiskers are 95% Wilson intervals</text>
+<text x="0" y="39" class="facet">Fable 5.1</text>
+<line x1="0" x2="680" y1="44" y2="44" class="hair"/>
+<text x="128" y="60.5" class="lbl" text-anchor="end">Aug 1-18</text>
+<text x="140" y="60.5" class="lbl muted">no sessions</text>
+<text x="128" y="82.5" class="lbl" text-anchor="end">Aug 19-Sep 5</text>
+<g class="hit">
+<title>Fable 5.1, Aug 19-Sep 5, gateway off: 0 failures / 517 bound calls = 0.0 per 100 (95% Wilson 0.0-0.7)</title>
+<rect x="132" y="68" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="79.0" r="4" fill="var(--off)"/>
+<line x1="136.0" x2="143.3" y1="79.0" y2="79.0" class="ci"/>
+<line x1="143.3" x2="143.3" y1="75.0" y2="83.0" class="ci"/>
+<text x="538" y="82.5" class="val">0 / 517  ·  0.0</text>
+</g>
+<text x="128" y="104.5" class="lbl" text-anchor="end">Sep 6-9</text>
+<g class="hit">
+<title>Fable 5.1, Sep 6-9, gateway on: 672 failures / 2,943 bound calls = 22.8 per 100 (95% Wilson 21.4-24.4)</title>
+<rect x="132" y="90" width="548" height="22" fill="transparent"/>
+<rect x="136.0" y="94.0" width="224.9" height="14" rx="3" fill="var(--on)"/>
+<rect x="136.0" y="94.0" width="3" height="14" fill="var(--on)"/>
+<line x1="346.3" x2="376.2" y1="101.0" y2="101.0" class="ci"/>
+<line x1="376.2" x2="376.2" y1="97.0" y2="105.0" class="ci"/>
+<text x="538" y="104.5" class="val">672 / 2,943  ·  22.8</text>
+</g>
+<text x="0" y="141" class="facet">Fable 5</text>
+<line x1="0" x2="680" y1="146" y2="146" class="hair"/>
+<text x="128" y="162.5" class="lbl" text-anchor="end">Aug 1-18</text>
+<g class="hit">
+<title>Fable 5, Aug 1-18, gateway on: 62 failures / 3,606 bound calls = 1.7 per 100 (95% Wilson 1.3-2.2)</title>
+<rect x="132" y="148" width="548" height="22" fill="transparent"/>
+<rect x="136.0" y="152.0" width="16.9" height="14" rx="3" fill="var(--on)"/>
+<rect x="136.0" y="152.0" width="3" height="14" fill="var(--on)"/>
+<line x1="149.2" x2="157.6" y1="159.0" y2="159.0" class="ci"/>
+<line x1="157.6" x2="157.6" y1="155.0" y2="163.0" class="ci"/>
+<text x="538" y="162.5" class="val">62 / 3,606  ·  1.7</text>
+</g>
+<text x="128" y="184.5" class="lbl" text-anchor="end">Aug 19-Sep 5</text>
+<g class="hit">
+<title>Fable 5, Aug 19-Sep 5, gateway off: 0 failures / 6,194 bound calls = 0.0 per 100 (95% Wilson 0.0-0.1)</title>
+<rect x="132" y="170" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="181.0" r="4" fill="var(--off)"/>
+<line x1="136.0" x2="136.6" y1="181.0" y2="181.0" class="ci"/>
+<line x1="136.6" x2="136.6" y1="177.0" y2="185.0" class="ci"/>
+<text x="538" y="184.5" class="val">0 / 6,194  ·  0.0</text>
+</g>
+<text x="128" y="206.5" class="lbl" text-anchor="end">Sep 6-9</text>
+<text x="140" y="206.5" class="lbl muted">no sessions</text>
+<text x="0" y="243" class="facet">Opus 5</text>
+<line x1="0" x2="680" y1="248" y2="248" class="hair"/>
+<text x="128" y="264.5" class="lbl" text-anchor="end">Aug 1-18</text>
+<g class="hit">
+<title>Opus 5, Aug 1-18, gateway on: 91 failures / 14,007 bound calls = 0.6 per 100 (95% Wilson 0.5-0.8)</title>
+<rect x="132" y="250" width="548" height="22" fill="transparent"/>
+<rect x="136.0" y="254.0" width="6.4" height="14" rx="3" fill="var(--on)"/>
+<rect x="136.0" y="254.0" width="3" height="14" fill="var(--on)"/>
+<line x1="141.2" x2="143.8" y1="261.0" y2="261.0" class="ci"/>
+<line x1="143.8" x2="143.8" y1="257.0" y2="265.0" class="ci"/>
+<text x="538" y="264.5" class="val">91 / 14,007  ·  0.6</text>
+</g>
+<text x="128" y="286.5" class="lbl" text-anchor="end">Aug 19-Sep 5</text>
+<g class="hit">
+<title>Opus 5, Aug 19-Sep 5, gateway off: 0 failures / 16,737 bound calls = 0.0 per 100 (95% Wilson 0.0-0.0)</title>
+<rect x="132" y="272" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="283.0" r="4" fill="var(--off)"/>
+<line x1="136.0" x2="136.2" y1="283.0" y2="283.0" class="ci"/>
+<line x1="136.2" x2="136.2" y1="279.0" y2="287.0" class="ci"/>
+<text x="538" y="286.5" class="val">0 / 16,737  ·  0.0</text>
+</g>
+<text x="128" y="308.5" class="lbl" text-anchor="end">Sep 6-9</text>
+<g class="hit">
+<title>Opus 5, Sep 6-9, gateway on: 5 failures / 627 bound calls = 0.8 per 100 (95% Wilson 0.3-1.9)</title>
+<rect x="132" y="294" width="548" height="22" fill="transparent"/>
+<rect x="136.0" y="298.0" width="7.9" height="14" rx="3" fill="var(--on)"/>
+<rect x="136.0" y="298.0" width="3" height="14" fill="var(--on)"/>
+<line x1="139.4" x2="154.3" y1="305.0" y2="305.0" class="ci"/>
+<line x1="154.3" x2="154.3" y1="301.0" y2="309.0" class="ci"/>
+<text x="538" y="308.5" class="val">5 / 627  ·  0.8</text>
+</g>
+<text x="0" y="345" class="facet">Sonnet 5</text>
+<line x1="0" x2="680" y1="350" y2="350" class="hair"/>
+<text x="128" y="366.5" class="lbl" text-anchor="end">Aug 1-18</text>
+<g class="hit">
+<title>Sonnet 5, Aug 1-18, gateway on: 0 failures / 1,083 bound calls = 0.0 per 100 (95% Wilson 0.0-0.4)</title>
+<rect x="132" y="352" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="363.0" r="4" fill="var(--on)"/>
+<line x1="136.0" x2="139.5" y1="363.0" y2="363.0" class="ci"/>
+<line x1="139.5" x2="139.5" y1="359.0" y2="367.0" class="ci"/>
+<text x="538" y="366.5" class="val">0 / 1,083  ·  0.0</text>
+</g>
+<text x="128" y="388.5" class="lbl" text-anchor="end">Aug 19-Sep 5</text>
+<g class="hit">
+<title>Sonnet 5, Aug 19-Sep 5, gateway off: 0 failures / 540 bound calls = 0.0 per 100 (95% Wilson 0.0-0.7)</title>
+<rect x="132" y="374" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="385.0" r="4" fill="var(--off)"/>
+<line x1="136.0" x2="143.0" y1="385.0" y2="385.0" class="ci"/>
+<line x1="143.0" x2="143.0" y1="381.0" y2="389.0" class="ci"/>
+<text x="538" y="388.5" class="val">0 / 540  ·  0.0</text>
+</g>
+<text x="128" y="410.5" class="lbl" text-anchor="end">Sep 6-9</text>
+<g class="hit">
+<title>Sonnet 5, Sep 6-9, gateway on: 0 failures / 176 bound calls = 0.0 per 100 (95% Wilson 0.0-2.1)</title>
+<rect x="132" y="396" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="407.0" r="4" fill="var(--on)"/>
+<line x1="136.0" x2="157.0" y1="407.0" y2="407.0" class="ci"/>
+<line x1="157.0" x2="157.0" y1="403.0" y2="411.0" class="ci"/>
+<text x="538" y="410.5" class="val">0 / 176  ·  0.0</text>
+</g>
+<text x="0" y="447" class="facet">GPT (Sol + Astra)</text>
+<line x1="0" x2="680" y1="452" y2="452" class="hair"/>
+<text x="128" y="468.5" class="lbl" text-anchor="end">Aug 1-18</text>
+<g class="hit">
+<title>GPT (Sol + Astra), Aug 1-18, gateway on: 0 failures / 4,652 bound calls = 0.0 per 100 (95% Wilson 0.0-0.1)</title>
+<rect x="132" y="454" width="548" height="22" fill="transparent"/>
+<circle cx="136.0" cy="465.0" r="4" fill="var(--on)"/>
+<line x1="136.0" x2="136.8" y1="465.0" y2="465.0" class="ci"/>
+<line x1="136.8" x2="136.8" y1="461.0" y2="469.0" class="ci"/>
+<text x="538" y="468.5" class="val">0 / 4,652  ·  0.0</text>
+</g>
+<text x="128" y="490.5" class="lbl" text-anchor="end">Aug 19-Sep 5</text>
+<text x="140" y="490.5" class="lbl muted">no sessions</text>
+<text x="128" y="512.5" class="lbl" text-anchor="end">Sep 6-9</text>
+<g class="hit">
+<title>GPT (Sol + Astra), Sep 6-9, gateway on: 42 failures / 2,538 bound calls = 1.7 per 100 (95% Wilson 1.2-2.2)</title>
+<rect x="132" y="498" width="548" height="22" fill="transparent"/>
+<rect x="136.0" y="502.0" width="16.3" height="14" rx="3" fill="var(--on)"/>
+<rect x="136.0" y="502.0" width="3" height="14" fill="var(--on)"/>
+<line x1="148.1" x2="158.0" y1="509.0" y2="509.0" class="ci"/>
+<line x1="158.0" x2="158.0" y1="505.0" y2="513.0" class="ci"/>
+<text x="538" y="512.5" class="val">42 / 2,538  ·  1.7</text>
+</g>
+</svg>
+<div class="legend"><span style="--sw:var(--off)">gateway off</span><span style="--sw:var(--on)">gateway on</span></div>
+<figcaption><b>Through the gateway, Fable 5.1 sessions fail on 22.8 of every 100 bound calls; Opus 5, Sonnet 5 and GPT sessions on the same days stay under 2.</b> Each panel is a session model; each row a period, coloured by gateway state. Opus 5 sessions are near zero rather than at it, 5 of 627 bound calls or 0.8 per 100. A dot at zero is a measured zero: 0 of 176 Sonnet 5 bound calls on the bad days, and zero for every model in the gateway-off period. The Fable 5 row shows the gateway also cost Fable sessions in August, at a far lower rate; no Fable 5 session ran in the 6 to 9 September period. These rates are on the earlier accounting and run high for the same reason as the chart above, so the ordering between models is the readable part, not the absolute heights. Source: <a href="https://github.com/yulonglin/dotfiles/blob/main/artifacts/classifier-rate-limits-2026-09/exposure_by_session_model.py"><code>exposure_by_session_model.py</code></a> over the same transcripts.</figcaption>
+</figure>
+<details><summary>Table view: by model and period, and by model and day</summary><div class="tablewrap"><table><thead><tr><th>session model</th><th class="num">Aug 1-18<br><span class="muted">gateway on</span></th><th class="num">Aug 19-Sep 5<br><span class="muted">gateway off</span></th><th class="num">Sep 6-9<br><span class="muted">gateway on</span></th></tr></thead><tbody><tr><td>Fable 5.1</td><td class="num">—</td><td class="num">0/517 (0.0; 0.0–0.7)</td><td class="num">672/2,943 (22.8; 21.4–24.4)</td></tr><tr><td>Fable 5</td><td class="num">62/3,606 (1.7; 1.3–2.2)</td><td class="num">0/6,194 (0.0; 0.0–0.1)</td><td class="num">—</td></tr><tr><td>Opus 5</td><td class="num">91/14,007 (0.6; 0.5–0.8)</td><td class="num">0/16,737 (0.0; 0.0–0.0)</td><td class="num">5/627 (0.8; 0.3–1.9)</td></tr><tr><td>Sonnet 5</td><td class="num">0/1,083 (0.0; 0.0–0.4)</td><td class="num">0/540 (0.0; 0.0–0.7)</td><td class="num">0/176 (0.0; 0.0–2.1)</td></tr><tr><td>GPT (Sol + Astra)</td><td class="num">0/4,652 (0.0; 0.0–0.1)</td><td class="num">—</td><td class="num">42/2,538 (1.7; 1.2–2.2)</td></tr></tbody></table><p class="note">Cells are failures/bound calls (per 100; 95% Wilson interval).</p></div><div class="tablewrap"><table><thead><tr><th>day</th><th class="num">Fable 5.1</th><th class="num">Opus 5</th><th class="num">Sonnet 5</th><th class="num">GPT-5.6 Sol</th><th class="num">GPT-6 Astra</th><th>classifier named in failures</th></tr></thead><tbody><tr><td>2026-09-06</td><td class="num">175/1,529</td><td class="num">5/345</td><td class="num">0/96</td><td class="num">22/154</td><td class="num">10/426</td><td>claude-opus-5[1m]; astra for the Opus 5 failures</td></tr><tr><td>2026-09-07</td><td class="num">22/82</td><td class="num">0/67</td><td class="num">0/19</td><td class="num">0/583</td><td class="num">1/252</td><td>claude-opus-5[1m]</td></tr><tr><td>2026-09-08</td><td class="num">382/1,087</td><td class="num">0/144</td><td class="num">0/61</td><td class="num">6/789</td><td class="num">3/334</td><td>claude-opus-5[1m]</td></tr><tr><td>2026-09-09</td><td class="num">93/245</td><td class="num">0/71</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td>claude-opus-5[1m]</td></tr></tbody></table></div>
+<p class="note">On 6 September the five Opus 5 failures named <code>astra</code> as the classifier, which is a GPT route: the session-model label is the newest assistant model earlier in the same transcript, so a mid-session model switch can misattribute a row. Failures from GPT-6 Astra sessions on 6 September also named <code>astra</code>; every Fable 5.1 failure named the Opus 1M variant.</p></details>
+
+<h2>Only the last link in the chain is open</h2>
+<p>The <a href="https://code.claude.com/docs/en/permission-modes">permission-modes docs</a> say the classifier "runs on Claude Sonnet 5 by default rather than on your <code>/model</code> selection … or on an Opus model when the session runs on a Fable model", and that after the session's first auto-mode request "the classifier's model doesn't change for the session". The router log agrees: on 8 September Opus 5 sessions made 144 bound calls while the router carried 2,341 Opus 5 requests, so most Opus traffic through the gateway is the Fable sessions' classifier. The gateway's causal role is settled by the before-and-after inside 6 September. What is not settled is the mechanism: who turns that Opus request into the 1M-context variant the failures name, and why that variant is the one that runs out of headroom.</p>
+<pre class="mermaid">
+flowchart TD
+  A["Session model: Fable 5.1"] --> B["Classifier model per the docs:<br/>an Opus model for Fable sessions,<br/>Sonnet 5 for every other session"]
+  B --> C{"Gateway, within 6 Sep"}
+  C -->|"off, before 09:00<br/>0 failures in 720 calls"| D["No failure"]
+  C -->|"on, from 09:07<br/>172 failures in 793 calls"| E["Router records the request<br/>as claude-opus-5<br/>(it records no beta header<br/>and no upstream status)"]
+  E -.->|"OPEN: which side asks for<br/>the 1M-context variant?"| F["Failure text names<br/>claude-opus-5 with the 1m suffix"]
+  F --> G["429 rate-limited on that model<br/>call blocked, no verdict, no client retry"]
+  classDef open stroke-dasharray:5 4;
+  class F open;
+</pre>
+<p class="note">Solid arrows are measured or quoted from the docs; the dashed arrow is the one open link. The sharpest clue sits on that edge. Five failures on 6 September name <code>astra</code>, a GPT route, as the classifier that was rate-limited, in sessions whose last recorded assistant model was Opus 5. A non-Fable session should get a Sonnet 5 classifier, and a fallback should at worst land on the session's own model; landing on a foreign provider's model instead says the gateway is deciding which provider a classifier request belongs to and getting it wrong. Provider resolution, rather than the context window, may therefore be what the dashed edge is hiding. The split rules the CLI upgrade out as the <em>trigger</em>, not as a contributing factor: Fable 5 sessions through the gateway in August failed at 1.7 per 100 against Fable 5.1's 21.7 on 6 September, and what amplifies the rate is not settled by a one-day split. Quota alone does not explain the pattern either: the gateway-off period spanned three Fable weekly resets with Fable sessions active and zero failures, and on 9 September the Fable-scoped seven-day quota read 100% while the all-models quota read 59%. Router log: <a href="#router-log">table</a>.</p>
+<details id="router-log"><summary>Router log: requests routed per day, model as requested (no status codes in the log)</summary><div class="tablewrap"><table><thead><tr><th>day</th><th class="num">claude-opus-5</th><th class="num">claude-fable-5-1</th><th class="num">claude-sonnet-5</th><th class="num">haiku-4-5</th><th class="num">sol / astra</th></tr></thead><tbody><tr><td>2026-09-06</td><td class="num">1,205</td><td class="num">763</td><td class="num">45</td><td class="num">451</td><td class="num">343 / 1,970</td></tr><tr><td>2026-09-07</td><td class="num">213</td><td class="num">140</td><td class="num">46</td><td class="num">333</td><td class="num">931 / 1,646</td></tr><tr><td>2026-09-08</td><td class="num">2,341</td><td class="num">1,755</td><td class="num">249</td><td class="num">676</td><td class="num">2,357 / 1,371</td></tr><tr><td>2026-09-09</td><td class="num">525</td><td class="num">343</td><td class="num">30</td><td class="num">823</td><td class="num">3 / 2</td></tr></tbody></table></div></details>
+
+<h2>Switching the session model is the cheapest fix</h2>
+<div class="tablewrap"><table class="fixes">
+<thead><tr><th>rank</th><th>fix</th><th>evidence</th><th>cost</th><th>state</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><b>Session model off Fable</b> (Opus 5 or Sonnet 5), so the classifier runs on Sonnet 5.</td><td>5 / 627 Opus 5 and 0 / 176 Sonnet 5 bound calls through the gateway on the bad days, against Fable 5.1's 672 / 2,943.</td><td>Fable stops being the default. Background jobs inherit the default; <code>claude --bg --model</code> overrides per job.</td><td>Done: default <code>model</code> is <code>opus</code> since 2026-09-10 05:08Z.</td></tr>
+<tr><td>2</td><td><b>Gateway off for Fable sessions</b>, per session with the <code>CLAUDE_RC_OVERRIDE=1</code> wrapper or globally with <code>model-router-wire off</code>.</td><td>0 / 720 Fable 5.1 classifier-bound calls in the hours before the rewire on 6 September, against 172 / 793 in the hours after it, same CLI and same account. The gateway-off period corroborates on the earlier accounting: 0 / 6,194 Fable 5 and 0 / 517 Fable 5.1.</td><td>The foreign-model picker rows and agents go with it (globally), or Remote Control comes back for that one session (per session).</td><td>Available.</td></tr>
+<tr><td>3</td><td><b>Narrow allow rules</b> of the form <code>Bash(&lt;cmd&gt; &lt;sub&gt; *)</code> in global settings, so fewer calls reach the classifier at all.</td><td>The <a href="https://code.claude.com/docs/en/auto-mode-config">auto-mode config docs</a>: narrow rules "stay in effect in auto mode, and Claude Code resolves them before the classifier runs"; broad rules such as <code>Bash(*)</code>, interpreters and Monitor are suspended.</td><td>Partial, and each rule is a command class that runs unclassified.</td><td>Candidates being mined.</td></tr>
+<tr><td>—</td><td><b>Not available</b>: choosing the classifier model; a client-side retry of the classifier call; broad <code>permissions.allow</code> rules.</td><td>Docs: "Claude Code selects the classifier model, so which reason you see isn't something you configure." Claude Code does not retry the classifier request itself; the model may re-issue the tool call (<a href="https://github.com/anthropics/claude-code/issues/74248">issue 74248</a> reports the same shape on an earlier Opus 1M classifier). Broad rules are dropped in auto mode.</td><td>—</td><td>—</td></tr>
+</tbody></table></div>
+
+<h2>Today's zero is not yet evidence of a fix</h2>
+<p>On 10 September, Fable 5.1 sessions made 78 classifier-bound calls with the gateway still on and no failure at all. Read nothing into it yet. Three things moved at once that morning: the CLI went to 2.1.267, the signed-in account changed, and the default model became Opus 5. Any of them could account for the zero, and 78 calls is in any case thin next to the 793 that produced 172 failures on 6 September. Watch it for a few days before calling anything fixed.</p>
+
+<h2>Where to look next for the mechanism</h2>
+<p>The unexplained step is narrow, and part of it has since been answered elsewhere. A Fable 5.1 session's own calls go through the gateway and succeed, while the Opus classifier call it triggers comes back 429. The router logs that request as <code>claude-opus-5</code> and records neither a beta header nor an upstream status, yet every failure names <code>claude-opus-5[1m]</code>, the 1M-context variant. So the first thing to establish is who asks for the 1M variant.</p>
+<p>A <a href="https://claude.ai/code/artifact/26263dc9-8fda-4e1e-8d37-9161665d5b12">parallel investigation on this machine</a> reports the leading candidate, and it is not the gateway alone. Two conditions have to hold together: the settings carry <code>CLAUDE_CODE_ATTRIBUTION_HEADER=0</code>, which they have since 31 March, and the base URL host is not <code>api.anthropic.com</code>, which is what the gateway makes true. Together they drop the billing-attribution block from the classifier request and the server answers a bare 429. That job verified it with before-and-after probes and filed it as issues <a href="https://github.com/anthropics/claude-code/issues/64585">64585</a> and <a href="https://github.com/anthropics/claude-code/issues/60438">60438</a>. Read alongside the split above, it fits: the gateway is one necessary condition rather than the whole cause, and the fix is removing the opt-out rather than unwiring the router. What it does not yet explain is the asymmetry this page measures, that Fable sessions fail at 21.7 per 100 while Opus 5 and Sonnet 5 sessions through the same gateway, with the same opt-out set, stay near zero.</p>
+<p>For that asymmetry the most testable candidate is the context window the gateway declares. <code>config/model-router.toml</code> sets <code>declared-context-window = 258400</code>, and <code>model-router-wire apply</code> renders that into the settings as <code>CLAUDE_CODE_MAX_CONTEXT_TOKENS</code>. That number is larger than a standard Opus window, and a client that believes its window is 258,400 tokens has a reason to request the 1M-context beta. Whether it does so for the classifier call, which is a separate request the CLI issues on its own, is exactly what is untested. The test is one Fable 5.1 session with the gateway on and that value removed or lowered to a standard window: if the classifier named in a failure loses the 1M suffix, the declared window is the mechanism; if the suffix survives, the router adds the beta itself and the router's own outbound headers are the next place to log. Fix 1 holds either way.</p>
+
+<h2>Limits</h2>
+<p>A rate is only ever computed over the tools its denominator counts. For the 6 September split those are Bash, PowerShell, Monitor, Agent, Task and SendMessage, the tools the permission-modes docs put through the classifier; failures on any other tool are listed separately and divided by nothing. The two charts below it predate that correction. They count SendMessage failures in the numerator while leaving SendMessage calls out of the denominator, so their rates run high and are not directly comparable with the split above. Recomputing them is outstanding work, and it does not touch the split, which is measured end to end on the corrected denominator.</p>
+<p>Failures are counted from retained tool-result rows only, and the CLI records no successful classifier call, so every rate is failures over an upper bound on calls, and the true per-call rate is higher than shown. The session model behind a failure is the newest assistant model earlier in the same transcript, which a mid-session model switch blurs. The failure parser is locked to the wording of CLI 2.1.263 and 2.1.266. The router log carries no status codes and records no beta headers, which is not the same as no beta header having been sent. The gap between a counted bound call and a real classifier call also varies by day, since the share resolved by allow rules and auto-approval tracks the workload mix, so the by-day series carries levels and not a trend. Every chart is read against a null of zero: the gateway-off hours and days are the control, not a modelled baseline. None of these comparisons was pre-registered. The by-model split and the within-day split were both run after the by-day pattern was seen, on the same transcripts, so 6 September is the slice that produced the hypothesis and tests it at once. That is the honest weakness of the strongest figure on this page, and the remedy is a fresh day rather than a further cut of this one.</p>
+
+<footer>Built by Claude Fable 5.1 on 2026-09-10; the 6 September within-day split, and the revisions that follow from it, added by Claude Opus 5 the same day. Numbers from <code>data.json</code> (a transcription of the measured snapshot <code>data-snapshot-2026-09-10.md</code>) in <code>artifacts/classifier-rate-limits-2026-09/</code>; accounting change under review in <a href="https://github.com/yulonglin/dotfiles/pull/110">PR #110</a>. Select any text to leave a comment or suggest an edit.</footer>
+</main>
+<!-- annotation-layer v2 -->
+<style>
+:root{--an-bg:#fff;--an-ink:#1a1a1a;--an-soft:#5d5a55;--an-rule:#d9d4cc;--an-accent:#bd5d3a;
+ --an-mark:#fbe6a2;--an-bad:#a33f2a;--an-good:#2f6b4f;--an-good-bg:#e4f0e9;--an-field:#faf9f7}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--an-bg:#1f2124;--an-ink:#eceae6;
+ --an-soft:#a9a59e;--an-rule:#3a3d42;--an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;
+ --an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}}
+:root[data-theme="dark"]{--an-bg:#1f2124;--an-ink:#eceae6;--an-soft:#a9a59e;--an-rule:#3a3d42;
+ --an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;--an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}
+mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--an-accent);cursor:pointer;border-radius:2px}
+/* A suggested edit must not read as a comment highlight: the original is
+   struck rather than filled, and the replacement carries the insert colour. */
+mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-through;
+ text-decoration-color:var(--an-bad);text-decoration-thickness:2px;cursor:pointer;border-radius:2px}
+.anins{background:var(--an-good-bg);color:var(--an-good);border-bottom:2px solid var(--an-good);
+ border-radius:2px;padding:0 .12em;cursor:pointer}
+[data-annotation-layer]{font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;color:var(--an-ink);line-height:1.5}
+[data-annotation-layer] *{box-sizing:border-box}
+#anPop{position:absolute;z-index:1050;display:none;background:var(--an-bg);border:1px solid var(--an-rule);
+ border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.18);padding:.6rem;width:min(20rem,calc(100vw - 1.5rem));
+ max-height:min(80vh,26rem);overflow:auto}
+/* A control that would overwrite unsaved words points at them instead. */
+#anPop.nudge{outline:2px solid var(--an-accent);outline-offset:2px}
+/* iOS zooms the whole page when a focused field is under 16px. */
+@media (pointer:coarse){#anPop textarea,#anExportText{font-size:16px}}
+#anPop textarea{width:100%;min-height:4.5rem;border:1px solid var(--an-rule);border-radius:5px;
+ background:var(--an-field);color:var(--an-ink);padding:.4rem;font:inherit;font-size:.86rem;resize:vertical}
+.anbtn{background:var(--an-accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
+ font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}
+.anbtn.ghost{background:transparent;color:var(--an-soft);border:1px solid var(--an-rule)}
+.anbtn.ghost.danger,.anbtn.ghost.tiny.danger{color:var(--an-bad);border-color:var(--an-bad)}
+.anbtn[disabled]{opacity:.42;cursor:default}
+/* A copied comment is marked by taking its accent AWAY, never by adding a
+   chip: after the first round most of the list is copied, so anything
+   additive becomes noise on the majority. The fresh ones keep the accent and
+   are what the eye lands on. */
+.cmt.ancopied{border-left-color:var(--an-rule)}
+/* An armed control must not look like the button that just did nothing, so it
+   fills: the second click is visibly a different act from the first. */
+.anbtn.anarmed,.anbtn.ghost.danger.anarmed,.anbtn.ghost.tiny.danger.anarmed{
+ background:var(--an-bad);color:#fff;border-color:var(--an-bad)}
+.anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
+#anPop:not(.editing) #anDelete{display:none}
+/* The mode strip is deliberately NOT in .anrow: Save has to stay the first
+   control of that row, which is also its tab order. */
+.anmodebar{display:flex;gap:.3rem;margin-bottom:.45rem}
+.anmode{flex:1;background:transparent;color:var(--an-soft);border:1px solid var(--an-rule);
+ border-radius:5px;padding:.22rem .5rem;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer}
+.anmode.ansel{background:var(--an-accent);color:#fff;border-color:var(--an-accent)}
+/* Reopening an existing note is not the place to change what it is. */
+#anPop.editing .anmodebar{display:none}
+.cmt.ansuggest{border-left-color:var(--an-good)}
+.cmt .q.struck{text-decoration:line-through}
+.cmt .ins{color:var(--an-good)}
+/* Save leads: it is the first button in the DOM, so it is also first in tab
+   order. Delete is pushed to the far end so it is never the near miss. */
+.anrow{display:flex;gap:.4rem;align-items:center;margin-top:.45rem;flex-wrap:wrap}
+#anDelete{margin-left:auto}
+.anhint{color:var(--an-soft);font-size:.72rem;margin-top:.35rem}
+.anhint kbd{font:inherit;font-size:.95em;border:1px solid var(--an-rule);border-bottom-width:2px;
+ border-radius:4px;padding:0 .25rem;background:var(--an-field)}
+#anComments{max-width:48rem;margin:3rem auto 5rem;padding:0 1rem}
+#anComments h2{font-size:1.2rem;margin:0 0 .5rem;padding-bottom:.32rem;border-bottom:1px solid var(--an-rule)}
+#anComments .anscope{color:var(--an-soft);font-size:.86rem;margin:0 0 .6rem}
+.anbar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem}
+.anacts{display:flex;gap:.4rem;margin-top:.4rem}
+.ancount{color:var(--an-soft);font-size:.87rem}
+.ancount.warn{color:var(--an-bad);font-weight:650}
+.cmt{background:var(--an-bg);border:1px solid var(--an-rule);border-left:3px solid var(--an-accent);
+ border-radius:0 7px 7px 0;padding:.6rem .8rem;margin:.5rem 0;font-size:.88rem;overflow-wrap:anywhere}
+.cmt .q{color:var(--an-soft);font-style:italic;margin-bottom:.3rem}
+.cmt .where{font-size:.72rem;color:var(--an-soft);text-transform:uppercase;letter-spacing:.06em}
+.cmt .orphan{font-size:.74rem;color:var(--an-bad)}
+#anExport{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1060;
+ background:var(--an-bg);border:1px solid var(--an-rule);border-radius:10px;padding:.9rem;
+ width:min(46rem,92vw);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+#anExport .exphead{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap}
+#anExport .exphint{color:var(--an-soft);font-size:.8rem}
+#anExport .anbtn{margin-left:auto}
+#anExportText{width:100%;height:min(24rem,55vh);border:1px solid var(--an-rule);border-radius:6px;
+ background:var(--an-field);color:var(--an-ink);padding:.6rem;font-family:ui-monospace,Menlo,monospace;
+ font-size:.82rem;resize:vertical}
+.anok{background:var(--an-good-bg);color:var(--an-good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+.anwarn{background:var(--an-bad);color:#fff;padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+#anBadge{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
+ bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;background:var(--an-bg);color:var(--an-ink);
+ border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
+ font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+#anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
+</style>
+<div data-annotation-layer="v2" data-key="review-classifier-rate-limits-2026-09">
+<section id="anComments">
+<h2 id="your-comments">Your comments</h2>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
+<div class="anbar">
+  <span class="ancount" id="anCount">No comments yet</span>
+  <button class="anbtn" id="anCopy">Copy all</button>
+  <button class="anbtn ghost danger" id="anClearCopied">Delete copied</button>
+  <button class="anbtn ghost danger" id="anClear">Delete all</button>
+  <span id="anToast"></span>
+</div>
+<div id="anList"></div>
+</section>
+<div id="anPop" role="dialog" aria-label="Comment">
+  <div class="anmodebar" role="group" aria-label="Annotation mode">
+    <button class="anmode ansel" type="button" id="anModeComment" aria-pressed="true">Comment</button>
+    <button class="anmode" type="button" id="anModeEdit" aria-pressed="false">Suggest edit</button>
+  </div>
+  <textarea id="anTxt" placeholder="What do you think?"></textarea>
+  <div class="anrow">
+    <button class="anbtn" id="anSave">Save</button>
+    <button class="anbtn ghost" id="anCancel">Cancel</button>
+    <button class="anbtn ghost danger" id="anDelete">Delete</button>
+  </div>
+  <div class="anhint"><kbd>Enter</kbd> saves &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> newline &middot; <kbd>Esc</kbd> discards &middot; <kbd>Ctrl</kbd>+<kbd>E</kbd> switches mode</div>
+</div>
+<div id="anExport" role="dialog" aria-label="Export comments">
+  <div class="exphead">
+    <strong>Your comments as Markdown</strong>
+    <span class="exphint">already selected &mdash; copy with your usual shortcut</span>
+    <button class="anbtn ghost tiny" id="anExportClose">Close</button>
+  </div>
+  <textarea id="anExportText" readonly></textarea>
+</div>
+<button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
+</div>
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var root = document.querySelector("[data-annotation-layer]");
+var KEY = (root && root.dataset.key) || ("annot:" + document.title);
+// Namespaced with a PREFIX, never a suffix. With `KEY + "-draft"`, a page
+// titled "Spec-draft" owns the same key as the draft of a page titled "Spec",
+// so pressing Escape on one deletes the other's comments outright.
+var DIRTY = "an-dirty:" + KEY;
+var DRAFT = "an-draft:" + KEY;
+
+// ---- storage -------------------------------------------------------------
+// localStorage, and nothing else. An IndexedDB mirror, a backup key and a
+// scan of neighbouring keys all lived here and all came out: the mirror let a
+// save that raced its own asynchronous recovery destroy the comments it was
+// recovering; the backup key resurrected comments the user had deliberately
+// cleared; and the neighbour scan adopted a different document's comments
+// whenever one quote happened to appear on this page. The republish they were
+// meant to survive is already covered, because the generator fixes the key
+// (`data-key`) from the filename rather than the title.
+function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
+
+// Stored as a bare array, which every generation of this layer can read. An
+// older deployed page does `JSON.parse(...).reduce(...)` on this value and
+// throws on an object, and that kills its whole script: no handlers, no
+// saving, a page that looks fine and silently does nothing.
+function readComments(){
+  var d; try { d = JSON.parse(lsGet(KEY) || "[]"); } catch (e) { return []; }
+  if (Array.isArray(d)) return d;
+  if (d && Array.isArray(d.comments)) return d.comments;  // envelope from a newer layer
+  return [];
+}
+// Not a per-tab counter: two tabs on one page would both hand out id 1.
+function newId(){ return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
+
+var comments = readComments(), unsaved = false;
+comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+
+// Per-comment export state. `copiedAt` is stamped only where the page-level
+// flag was cleared before -- a clipboard write that resolved, or a real copy
+// event on the fallback textarea -- so its absence means "never left this
+// browser". The asymmetry is deliberate: an unstamped comment can never fall
+// into the delete-copied set, so a miss costs one redundant copy rather than
+// a page of lost notes. That is also why there is no "delete the uncopied"
+// action: every comment predating this key reads as uncopied, so such a
+// button would have wiped every existing page on first run.
+function isCopied(c){ return !!c.copiedAt; }
+function copiedSet(){ return comments.filter(isCopied); }
+function freshCount(){ return comments.length - copiedSet().length; }
+function isDirty(){ return freshCount() > 0; }
+// The legacy page-level key is still written, in lockstep, because a stale tab
+// running an older layer reads it and would otherwise raise or stand down its
+// unload guard against state it cannot see.
+function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
+
+// One-time migration for comments written before `copiedAt` existed. Without
+// it every upgraded page announces "N of N not yet copied out" and re-arms the
+// unload guard for someone who copied everything out yesterday: a false alarm
+// on every page in existence, which is how a warning stops being read.
+// The legacy flag is EVIDENCE, not an inference -- an explicit "0" was written
+// by a copy that actually happened. A key that is MISSING is not evidence and
+// is left alone, so absence can never manufacture a safe state.
+(function migrateFromLegacyFlag(){
+  if (lsGet(DIRTY) !== "0" || !comments.length) return;
+  var now = Date.now(), touched = false;
+  comments.forEach(function(c){ if (!c.copiedAt) { c.copiedAt = now; touched = true; } });
+  if (touched) persist();
+})();
+var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
+var pending = null, editingId = null;
+// The box has two modes and one dirty flag. `dirty` is set by the first user
+// modification and by nothing else: an edit box OPENS with the selection
+// already in its textarea, so keying the draft autosave and the "a box with
+// words in it refuses to close" invariant on non-emptiness would turn every
+// opened edit box into an unclosable phantom draft nobody typed.
+var mode = "comment", dirty = false;
+// An entry written before v2 carries no `type`, so absence means comment.
+function isEdit(c){ return c && c.type === "edit"; }
+function bodyOf(c){ return isEdit(c) ? (c.replacement || "") : (c.note || ""); }
+
+window.addEventListener("pagehide", saveDraft);
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden") saveDraft();
+});
+window.addEventListener("beforeunload", function(e){
+  saveDraft();
+  if (!isDirty() || !comments.length) return;
+  // The comments are already in localStorage; this only warns that they have
+  // not been copied anywhere outside this browser yet.
+  e.preventDefault(); e.returnValue = ""; return "";
+});
+// A second tab on the same page used to be last-writer-wins. Take its write
+// instead — unless a note is open here, because nothing may pull the DOM out
+// from under a range the user is still typing against.
+window.addEventListener("storage", function(e){
+  if (e.key !== KEY || isOpen()) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = readComments();
+  comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+  restoreHighlights(); render();
+});
+
+function inLayer(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  return !!(node && node.closest && node.closest("[data-annotation-layer]"));
+}
+function sectionOf(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  var sec = node && node.closest ? node.closest("section") : null;
+  if (sec) { var h = sec.querySelector("h1,h2,h3"); if (h) return h.textContent.trim(); }
+  while (node && node !== document.body) {
+    var p = node.previousElementSibling;
+    while (p) { if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim(); p = p.previousElementSibling; }
+    node = node.parentNode;
+  }
+  return "document";
+}
+function isOpen(){ return pop.style.display === "block"; }
+function hasText(){ return !!txt.value.trim(); }
+// `rect` is viewport-relative. Measure the box while it is laid out but not
+// yet painted, so it never appears at the wrong place for one frame — that
+// single-frame jump is itself a flicker.
+function placePop(rect){
+  pop.style.visibility = "hidden";
+  pop.style.display = "block";
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  var top = rect.bottom + 8;
+  if (top + h > vh - 8) top = rect.top - h - 8;             // no room below: flip above
+  top = Math.max(8, Math.min(top, Math.max(8, vh - h - 8))); // and keep it on screen either way
+  pop.style.left = (Math.max(8, Math.min(rect.left, vw - w - 12)) + window.scrollX) + "px";
+  pop.style.top = (top + window.scrollY) + "px";
+  pop.style.visibility = "";
+}
+// Words the user has not saved are not something another control may
+// overwrite: clicking a second highlight used to replace the text outright.
+// `focus` is false on the touch path, where focusing a field while iOS shows
+// its selection handles collapses the selection.
+function nudge(focus){
+  if (focus !== false) txt.focus();
+  pop.classList.add("nudge");
+  setTimeout(function(){ pop.classList.remove("nudge"); }, 700);
+}
+// Applies a mode WITHOUT touching the textarea. The prefill belongs to the
+// user-driven switch below; the restore paths (an existing entry, a recovered
+// draft) supply their own text and must not have it overwritten.
+function setModeState(next){
+  mode = next;
+  var isE = mode === "edit";
+  $("anModeComment").classList.toggle("ansel", !isE);
+  $("anModeEdit").classList.toggle("ansel", isE);
+  $("anModeComment").setAttribute("aria-pressed", isE ? "false" : "true");
+  $("anModeEdit").setAttribute("aria-pressed", isE ? "true" : "false");
+  txt.placeholder = isE ? "Replacement text; an empty box suggests deleting it"
+                        : "What do you think?";
+}
+// The user-driven switch rewrites the textarea, so it declines while there are
+// unsaved words and points at them instead, exactly as a second highlight
+// click does. Reopening an existing entry is not the place to change its kind,
+// so the strip is hidden then and this is a no-op.
+function switchMode(next){
+  if (mode === next || editingId !== null) return;
+  if (dirty) { nudge(); return; }
+  setModeState(next);
+  txt.value = (next === "edit" && pending) ? pending.quote : "";
+  dirty = false;
+  txt.focus();
+}
+$("anModeComment").onclick = function(){ switchMode("comment"); };
+$("anModeEdit").onclick = function(){ switchMode("edit"); };
+
+function openEdit(c, anchor, focus){
+  if (isOpen() && editingId !== c.id && dirty) { nudge(focus); return; }
+  editingId = c.id; pending = null;
+  setModeState(isEdit(c) ? "edit" : "comment");
+  txt.value = bodyOf(c);
+  dirty = false;
+  pop.classList.add("editing");
+  placePop(anchor ? anchor.getBoundingClientRect() : { left: 16, top: 100, bottom: 100 });
+  if (focus !== false) txt.focus();
+}
+// Both parts of a suggested edit carry the entry id, as a comment highlight
+// does, so clicking the strikethrough or the replacement reopens the same box.
+document.addEventListener("click", function(ev){
+  var m = ev.target.closest && ev.target.closest("[data-cid]");
+  if (!m || pop.contains(ev.target)) return;
+  var c = comments.find(function(x){ return x.id === Number(m.dataset.cid); });
+  if (!c) return;
+  ev.preventDefault(); openEdit(c, m);
+});
+
+// Wraps a range in a highlight. surroundContents refuses a range that crosses
+// element boundaries, so fall back to lifting the contents out and wrapping.
+function wrapRange(range, id, title, cls){
+  var m = document.createElement("mark");
+  m.className = cls || "note"; m.title = title; m.dataset.cid = String(id);
+  try { range.surroundContents(m); }
+  catch (e) { m.appendChild(range.extractContents()); range.insertNode(m); }
+  return m;
+}
+// The ONE place the replacement span is created, rewritten or removed. Three
+// call sites need it (save a new edit, revise one, restore one on load) and
+// they drift apart if each does its own DOM work: an edit revised to empty has
+// to lose its span and become pure strikethrough again.
+function renderEditInline(c){
+  var m = document.querySelector('mark.anedit[data-cid="' + c.id + '"]');
+  if (!m) return;
+  m.title = c.replacement ? "suggested: " + c.replacement : "suggested deletion";
+  var s = document.querySelector('span.anins[data-cid="' + c.id + '"]');
+  if (!c.replacement) { if (s) s.remove(); return; }
+  if (!s) {
+    s = document.createElement("span");
+    s.className = "anins"; s.dataset.cid = String(c.id);
+    // The marker docTextNodes() looks for. Without it the first saved edit
+    // corrupts the anchor of every comment after it, because the replacement's
+    // words join the text that quotes are searched in.
+    s.setAttribute("data-an-inserted", "1");
+    m.parentNode.insertBefore(s, m.nextSibling);
+  }
+  s.textContent = c.replacement;
+}
+// Every text node of the page, skipping the layer's own UI, existing
+// highlights, and anything the layer itself put on the page. Re-anchoring
+// matches ORIGINAL document text only.
+function docTextNodes(){
+  var host = document.querySelector(".doc") || document.querySelector("main") || document.body;
+  var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, { acceptNode: function(n){
+    var p = n.parentNode;
+    if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
+    if (p.closest("mark.note") || p.closest("mark.anedit") || p.closest("[data-an-inserted]") ||
+        p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  var out = [], n;
+  while ((n = walker.nextNode())) out.push(n);
+  return out;
+}
+// Collapses runs of whitespace to one space, and records where each kept
+// character sits in the raw text, so a match can be mapped back to real nodes.
+function collapsedIndex(nodes){
+  var norm = "", rawAt = [], raw = 0, lastWasSpace = false;
+  for (var k = 0; k < nodes.length; k++) {
+    var v = nodes[k].nodeValue;
+    for (var i = 0; i < v.length; i++, raw++) {
+      var isSpace = /\s/.test(v[i]);
+      if (isSpace && lastWasSpace) continue;
+      norm += isSpace ? " " : v[i];
+      rawAt.push(raw);
+      lastWasSpace = isSpace;
+    }
+  }
+  return { norm: norm, rawAt: rawAt };
+}
+// Finds a stored quote again after a reload. Selection.toString() gives
+// rendered text, where a newline inside a paragraph reads as a single space,
+// so the comparison has to collapse whitespace.
+function rangeForQuote(quote){
+  if (!quote) return null;
+  var nodes = docTextNodes();
+  if (!nodes.length) return null;
+  var starts = [], raw = 0;
+  for (var k = 0; k < nodes.length; k++) { starts.push(raw); raw += nodes[k].nodeValue.length; }
+  var idx = collapsedIndex(nodes);
+  var needle = quote.replace(/\s+/g, " ").trim();
+  if (!needle) return null;
+  var at = idx.norm.indexOf(needle);
+  if (at < 0) return null;
+  var rawFrom = idx.rawAt[at], rawTo = idx.rawAt[at + needle.length - 1] + 1;
+  function locate(offset, isEnd){
+    for (var j = 0; j < nodes.length; j++) {
+      var base = starts[j], end = base + nodes[j].nodeValue.length;
+      if (isEnd ? (offset > base && offset <= end) : (offset >= base && offset < end)) return [nodes[j], offset - base];
+    }
+    return null;
+  }
+  var s = locate(rawFrom, false), f = locate(rawTo, true);
+  if (!s || !f) return null;
+  var r = document.createRange(); r.setStart(s[0], s[1]); r.setEnd(f[0], f[1]);
+  return r;
+}
+// A reload rebuilds the DOM, so saved highlights are gone while the comments
+// survive in localStorage. Put the marks back, or a comment cannot be clicked
+// open to edit or delete. Quotes no longer on the page stay listed as orphans.
+function restoreHighlights(){
+  var missed = 0;
+  comments.forEach(function(c){
+    if (document.querySelector('mark[data-cid="' + c.id + '"]')) return;
+    var r = rangeForQuote(c.quote);
+    if (!r) { missed++; return; }
+    try {
+      if (isEdit(c)) { wrapRange(r, c.id, "", "anedit"); renderEditInline(c); }
+      else wrapRange(r, c.id, c.note, "note");
+    } catch (e) { missed++; }
+  });
+  return missed;
+}
+function hasMark(c){ return !!document.querySelector('mark[data-cid="' + c.id + '"]'); }
+// A selection touching an existing suggested edit, if there is one. Overlapping
+// edits cannot be exported appliably, and a quote that spans inserted text can
+// never be re-anchored, so such a selection is declined rather than annotated.
+function editOverlapping(range){
+  var els = document.querySelectorAll('mark.anedit[data-cid], span.anins[data-cid]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i], hit = false;
+    try { hit = range.intersectsNode(el); } catch (e) { hit = false; }
+    if (!hit) continue;
+    var cid = Number(el.dataset.cid);
+    var c = comments.find(function(x){ return x.id === cid; });
+    if (c) return { entry: c, el: el };
+  }
+  return null;
+}
+
+// Opens the note box for the current selection. autofocus is false on touch:
+// focusing a textarea while iOS is showing its selection handles collapses the
+// selection before the user has typed anything.
+//
+// This function only ever OPENS. Nothing about the selection closes the box —
+// that asymmetry is the whole flicker fix. Opening the box focuses the
+// textarea, focusing collapses the document selection, and the old code read
+// that collapse back as "the user deselected" and closed the box it had just
+// opened. The box now closes only on Save, Cancel/Escape, or a press outside
+// it while it is still empty.
+function openForSelection(autofocus){
+  if (editingId !== null) return false;
+  var sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  var text = sel.toString().trim();
+  if (!text) return false;
+  if (inLayer(sel.anchorNode) || inLayer(sel.focusNode)) return false;
+  // Already open on this exact selection: do not wipe a half-typed note.
+  if (pending && pending.quote === text && isOpen()) return true;
+  // Open on some other selection the user has MODIFIED: leave it be rather
+  // than throwing away work. The test is `dirty`, not non-emptiness: an
+  // untouched prefilled edit box yields to a fresh selection, and a dirty
+  // EMPTY edit box (a pending deletion) is work and must not be overwritten.
+  if (isOpen() && dirty) return true;
+  var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
+  // Overlaps an existing suggested edit: point at that edit rather than open a
+  // second box on the range.
+  var hit = editOverlapping(range);
+  if (hit) { openEdit(hit.entry, hit.el, autofocus); nudge(autofocus); return true; }
+  editingId = null; pop.classList.remove("editing");
+  // Comment is the default on every fresh selection. A mode that stayed where
+  // it was last left would silently change what select-type-Enter means.
+  setModeState("comment");
+  pending = { quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() };
+  placePop(rect);
+  txt.value = "";
+  dirty = false;
+  if (autofocus) txt.focus();
+  return true;
+}
+// Synchronous, so the focus stays inside the user gesture — Safari only
+// raises the soft keyboard for a focus() called within one.
+document.addEventListener("mouseup", function(ev){
+  if (pop.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest("[data-cid]")) return;
+  clearTimeout(selTimer);
+  openForSelection(true);
+});
+// A press outside closes a box the user has not modified. A box with words the
+// user put there stays open: no gesture the user did not mean as "save" may
+// commit anything, and plenty of ordinary ones land here — right-clicking your
+// own selection to copy it, grabbing the scrollbar to reread the passage, or
+// pressing Clear all and then cancelling the confirm.
+//
+// The test is the dirty flag, NOT emptiness, because an edit box opens with
+// the selection already in it. Keyed on emptiness, opening one and changing
+// your mind would leave a box that cannot be dismissed.
+document.addEventListener("mousedown", function(ev){
+  if (!isOpen() || pop.contains(ev.target)) return;
+  if (dirty) return;
+  closePop();
+});
+// iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
+// handler makes the page uncommentable on iPhone and iPad. selectionchange
+// fires on every platform; debounce it so it runs once the selection settles.
+var selTimer = null;
+document.addEventListener("selectionchange", function(){
+  if (document.activeElement === txt) return;
+  if (editingId !== null) return;
+  // Same test as openForSelection: modified work stays, an untouched prefill
+  // does not hold the page hostage.
+  if (isOpen() && dirty) return;
+  clearTimeout(selTimer);
+  selTimer = setTimeout(function(){ openForSelection(false); }, 250);
+});
+
+txt.addEventListener("keydown", function(ev){
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.altKey && !ev.isComposing) { ev.preventDefault(); save(); }
+  else if (ev.key === "Escape") { ev.preventDefault(); discard(); }
+  // A CHORD, never a bare letter. A single-key binding on a control that lives
+  // inside a textarea fires on the note being typed: on the context-ledger
+  // page, `d` in a comment marked the selected row dropped.
+  else if ((ev.ctrlKey || ev.metaKey) && (ev.key === "e" || ev.key === "E")) {
+    ev.preventDefault(); switchMode(mode === "edit" ? "comment" : "edit");
+  }
+});
+// The user touched the text: from here the box holds work, whether or not the
+// prefill it opened with is still in it.
+txt.addEventListener("input", function(){ dirty = true; saveDraft(); });
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape" && isOpen() && document.activeElement !== txt) discard();
+});
+
+function closePop(){
+  // #anDelete is one element reused by every entry: an arm left live here
+  // would confirm on the next opened entry's first click.
+  disarm();
+  pop.style.display = "none"; pending = null; editingId = null;
+  pop.classList.remove("editing"); pop.classList.remove("nudge");
+  setModeState("comment"); dirty = false;
+  txt.value = ""; lsDel(DRAFT);
+}
+function discard(){ closePop(); }
+// The in-progress note, saved on every keystroke, so a forced refresh reopens
+// the box where it was instead of losing what was typed into it.
+// `dirty` gates this, not emptiness: an edit box opens pre-filled with the
+// selection, and autosaving that would leave a draft nobody typed, which then
+// reopens the box on the next load for a note that was never begun.
+// In edit mode an EMPTY dirty box is meaningful: the prefill was cleared to
+// suggest a deletion, and a refresh before Enter must bring that back. In
+// comment mode an empty box is nothing to keep.
+function saveDraft(){
+  if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
+  lsSet(DRAFT, JSON.stringify({
+    note: txt.value, editingId: editingId, mode: mode,
+    quote: pending ? pending.quote : null, where: pending ? pending.where : null
+  }));
+}
+function restoreDraft(){
+  var d = unpackDraft();
+  if (!d) return;
+  if (d.editingId != null) {
+    var c = comments.find(function(x){ return x.id === d.editingId; });
+    // The comment was deleted elsewhere. Drop the draft rather than leave it
+    // to reattach itself to whichever comment is handed that id next.
+    if (!c) { lsDel(DRAFT); return; }
+    openEdit(c, document.querySelector('mark[data-cid="' + c.id + '"]'));
+    txt.value = d.note; dirty = true;
+    return;
+  }
+  var r = rangeForQuote(d.quote);
+  if (!r) return;
+  var sel = window.getSelection();
+  if (sel) { try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {} }
+  editingId = null; pop.classList.remove("editing");
+  setModeState(d.mode === "edit" ? "edit" : "comment");
+  pending = { quote: d.quote, where: d.where || sectionOf(r.startContainer), range: r.cloneRange() };
+  placePop(r.getBoundingClientRect());
+  // Restored words ARE user work, whatever they started as.
+  txt.value = d.note; dirty = true;
+}
+function unpackDraft(){
+  var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
+  if (!d || typeof d.note !== "string") return null;
+  // An empty note is a draft only for an edit that still knows its target: a
+  // pending deletion of `quote`, or a revision of an existing edit.
+  if (!d.note.trim() && !(d.mode === "edit" && (d.quote || d.editingId != null))) return null;
+  return d;
+}
+// These keep their names and every existing call site; what changed is that
+// the state lives on the comments now and the page-level key is derived from
+// it. Renaming them to say "copied out" is a separate no-behaviour commit.
+function markDirty(){ syncLegacyFlag(); }
+// A snapshot of exactly what went into the copied text, so a comment edited
+// while an async clipboard write was in flight is not stamped as copied. The
+// copy carried the OLD wording; the comment now holds new wording that has
+// never left the page, and stamping it would put unsent words in the
+// delete-copied set.
+function copySnapshot(){
+  return comments.map(function(c){
+    return { id: c.id, where: c.where, quote: c.quote, note: bodyOf(c) };
+  });
+}
+function markClean(snap){
+  var now = Date.now(), by = {};
+  (snap || copySnapshot()).forEach(function(x){ by[x.id] = x; });
+  comments.forEach(function(c){
+    var x = by[c.id];
+    if (x && x.where === c.where && x.quote === c.quote && x.note === bodyOf(c)) c.copiedAt = now;
+  });
+  persist(); syncLegacyFlag();
+}
+
+// ---- destructive controls ------------------------------------------------
+// No blocking dialog appears here, and none may be added. The Artifact viewer
+// runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
+// `window.confirm` returns false without ever asking -- the browser just logs
+// "Ignored call to ...". Every delete guarded that way returned early on a
+// refusal the reviewer never saw: a dead button in the one place these pages
+// are read, and working perfectly in a local tab, which is why it survived.
+//
+// The guard is in the page instead. A first click arms the button and makes it
+// say what a second click will destroy; it disarms after ARM_MS, on Escape, or
+// on any re-render. Buttons are focusable, so Enter and Space arm and confirm
+// exactly like the pointer does.
+var ARM_MS = 4000;
+var WARN_CHANGED = '<span class="anwarn">the comments changed \u2014 nothing deleted</span>';
+var armedBtn = null, armedLabel = "", armedTimer = 0, armedBinding = null;
+function disarm(){
+  if (!armedBtn) return;
+  // render() may already have thrown this button away; restoring a detached
+  // node is harmless but pointless.
+  if (armedBtn.isConnected) { armedBtn.textContent = armedLabel; armedBtn.classList.remove("anarmed"); }
+  clearTimeout(armedTimer);
+  armedBtn = null; armedLabel = ""; armedTimer = 0; armedBinding = null;
+}
+// What an arm was armed AGAINST: the exact comments, plus enough of their
+// content to notice a change. A second tab's write can land inside the four
+// seconds an arm is live, and the `storage` handler only rebuilds when no note
+// is open -- so the confirming click has to prove the set is still the one the
+// label described, rather than trust that nothing moved under it.
+function bindingOf(list){
+  return list.map(function(c){
+    return c.id + ":" + (c.copiedAt || 0) + ":" + bodyOf(c).length + ":" + c.quote.length;
+  }).join(",");
+}
+// True only on the confirming click, and only while the set it was armed
+// against is unchanged. On any other click it arms `btn` and the caller must
+// return without destroying anything.
+function arm(btn, label, binding){
+  if (armedBtn === btn) {
+    var stale = armedBinding !== null && armedBinding !== binding;
+    disarm();
+    if (stale) { render(); toast(WARN_CHANGED, 4000); return false; }
+    return true;
+  }
+  disarm();
+  armedBtn = btn; armedLabel = btn.textContent;
+  armedBinding = binding === undefined ? null : binding;
+  btn.textContent = label;
+  btn.classList.add("anarmed");
+  armedTimer = setTimeout(disarm, ARM_MS);
+  return false;
+}
+// Escape cancels, whether focus sits on the armed button or anywhere else.
+// Both listeners are needed: the layer root stops key events from bubbling out
+// to the host page, so the document listener never sees a keystroke aimed at
+// the button, and a listener on the root alone would miss one aimed outside.
+function escDisarm(ev){ if (ev.key === "Escape") disarm(); }
+root.addEventListener("keydown", escDisarm);
+document.addEventListener("keydown", escDisarm);
+// A refused write is the one failure the page must not hide: with the quota
+// full, the panel would otherwise count a comment that is already gone.
+function persist(){
+  unsaved = !lsSet(KEY, JSON.stringify(comments));
+}
+function unwrap(id){
+  var s = document.querySelector('span.anins[data-cid="' + id + '"]');
+  if (s) s.remove();
+  var m = document.querySelector('mark[data-cid="' + id + '"]');
+  if (m) { while (m.firstChild) m.parentNode.insertBefore(m.firstChild, m); m.remove(); }
+}
+
+function save(){
+  if (mode === "edit") { saveEdit(txt.value.trim()); return; }
+  var note = txt.value.trim();
+  if (!note) { closePop(); return; }
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    // Reopened to reread and closed unchanged: not an edit, so it must not
+    // reset the export state and re-arm the unload prompt.
+    if (c && c.note === note) { closePop(); return; }
+    // The copy that happened carried the previous wording, so the stamp no
+    // longer describes this comment. Without this, "delete copied" destroys
+    // the only copy of the edit and the next Copy all silently omits it.
+    if (c) { c.note = note; delete c.copiedAt; }
+    var m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
+    if (m) m.title = note;
+  } else if (pending) {
+    var id = newId();
+    try { wrapRange(pending.range, id, note, "note"); } catch (e) {}
+    comments.push({ id: id, type: "comment", where: pending.where, quote: pending.quote, note: note });
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+// An empty replacement is a suggested DELETION, so there is no empty-means-
+// cancel shortcut here: the comment path's `if (!note) closePop()` would throw
+// away exactly the edit the reader worked to express.
+function saveEdit(replacement){
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    if (c && c.replacement === replacement) { closePop(); return; }
+    if (c) { c.replacement = replacement; delete c.copiedAt; renderEditInline(c); }
+  } else if (pending) {
+    // The prefill is not user work: an untouched box saves nothing, so Enter
+    // on a box still holding the selection verbatim is a close, not an entry
+    // proposing to replace the text with itself.
+    if (!dirty) { closePop(); return; }
+    var id = newId();
+    var fresh = { id: id, type: "edit", where: pending.where,
+                  quote: pending.quote, replacement: replacement };
+    try { wrapRange(pending.range, id, "", "anedit"); } catch (e) {}
+    comments.push(fresh);
+    renderEditInline(fresh);
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+
+$("anCancel").onclick = discard;
+$("anDelete").onclick = function(){
+  if (editingId === null) { closePop(); return; }
+  var id = editingId;
+  var c = comments.find(function(x){ return x.id === id; });
+  // A comment's Delete stays immediate -- the popup's CSS hides it while
+  // composing, it sits at the far end of the row, and it acts on one note the
+  // reader has just opened. A suggested edit arms first: it is written
+  // replacement text plus an anchor, and one stray click takes both.
+  if (isEdit(c) && !arm(this, "click again")) return;
+  comments = comments.filter(function(x){ return x.id !== id; });
+  unwrap(id);
+  markDirty(); persist(); render(); closePop();
+};
+$("anSave").onclick = save;
+
+// Builds into a fragment and swaps once, so the list never blanks between
+// clearing and refilling.
+function render(){
+  // Any armed row button is about to be replaced, and an arm left standing on
+  // a list this rebuild has changed would confirm a different comment.
+  disarm();
+  var list = $("anList"), count = $("anCount");
+  // Kept in step with the list on every rebuild, and disabled rather than
+  // hidden: a control that vanishes and reappears is harder to aim at than one
+  // that greys out, and its count is the only place the copied total is shown.
+  var nCopied = copiedSet().length, clearCopied = $("anClearCopied");
+  clearCopied.textContent = "Delete copied (" + nCopied + ")";
+  clearCopied.disabled = !nCopied;
+  var fresh = freshCount();
+  badge.textContent = "\uD83D\uDCAC " + comments.length;
+  badge.className = unsaved || (isDirty() && comments.length) ? "warn" : "";
+  if (!comments.length) {
+    count.textContent = "No comments yet"; count.className = "ancount";
+    var empty = document.createElement("p");
+    empty.className = "anscope"; empty.textContent = "Select any text above to comment.";
+    list.replaceChildren(empty);
+    return;
+  }
+  // Once the list can be part copied and part not, a single verdict is a lie
+  // for one half of it. The split form appears only when the list is actually
+  // mixed, so the common uniform cases stay as short as they were. The same
+  // applies to the noun: "N comments" is wrong for half a mixed page, and the
+  // plain wording is kept for the comment-only page, which is most of them.
+  var nEdits = comments.filter(isEdit).length;
+  var what = nEdits
+    ? comments.length + (comments.length === 1 ? " item (" : " items (") +
+      nEdits + (nEdits === 1 ? " suggested edit)" : " suggested edits)")
+    : comments.length + (comments.length === 1 ? " comment" : " comments");
+  count.textContent = what +
+    (unsaved ? " \u2014 this browser refused to store them, copy them now"
+             : !fresh ? " \u2014 copied out"
+             : fresh === comments.length ? " \u2014 not yet copied out"
+             : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
+  count.className = "ancount" + (unsaved || isDirty() ? " warn" : "");
+  var frag = document.createDocumentFragment();
+  comments.forEach(function(c){
+    var d = document.createElement("div");
+    d.className = "cmt" + (isCopied(c) ? " ancopied" : "") + (isEdit(c) ? " ansuggest" : "");
+    var w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
+    var q = document.createElement("div");
+    q.className = isEdit(c) ? "q struck" : "q";
+    q.textContent = "\u201C" + c.quote + "\u201D";
+    var n = document.createElement("div");
+    if (isEdit(c)) {
+      n.className = "ins";
+      n.textContent = c.replacement
+        ? "\u2192 " + c.replacement
+        : "\u2192 delete this text";
+    } else n.textContent = c.note;
+    var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
+    a.onclick = function(){
+      var m = document.querySelector('mark[data-cid="' + c.id + '"]');
+      if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
+      else openEdit(c, null);
+    };
+    // Deleting one comment used to require opening its popup first, which is a
+    // detour for the commonest correction. It asks twice, because the note
+    // itself is the only copy and there is no undo.
+    var x = document.createElement("button");
+    x.className = "anbtn ghost tiny danger"; x.textContent = "delete";
+    x.onclick = function(){
+      if (!arm(x, "click again")) return;
+      comments = comments.filter(function(y){ return y.id !== c.id; });
+      unwrap(c.id);
+      if (editingId === c.id) closePop();
+      markDirty(); persist(); render();
+    };
+    d.append(w, q, n);
+    if (!hasMark(c)) { var o = document.createElement("div"); o.className = "orphan"; o.textContent = "quoted text not found on this version of the page"; d.append(o); }
+    var acts = document.createElement("div"); acts.className = "anacts";
+    acts.append(a, x);
+    d.append(acts); frag.appendChild(d);
+  });
+  list.replaceChildren(frag);
+}
+
+function markdown(list){
+  return list.map(function(c){
+    return "- **" + c.where + "** \u2014 " + c.note + "\n  > " + c.quote.replace(/\n/g, "\n  > ");
+  }).join("\n");
+}
+// Numbered, so a session applying them can say which one it could not place.
+function editMarkdown(list){
+  return list.map(function(c, i){
+    return (i + 1) + ". **" + c.where + "**" +
+      "\n   Replace:\n   > " + c.quote.replace(/\n/g, "\n   > ") +
+      "\n   With:" + (c.replacement
+        ? "\n   > " + c.replacement.replace(/\n/g, "\n   > ")
+        : " _(nothing \u2014 delete this text)_");
+  }).join("\n\n");
+}
+// The quotes are RENDERED text and the source is Markdown, so emphasis
+// markers, links and code spans differ between the two. The note below says so
+// in the export itself, because the export leaves this page and is read
+// without it. Nobody builds a sed loop over this format.
+var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markdown. " +
+  "Locate each quote in the source and adapt the markup \u2014 do not apply these " +
+  "blocks byte-for-byte.";
+// A page with no suggested edits exports exactly what it did under v1: no
+// headings appear, so every existing paste-into-a-session habit still works.
+function exportText(){
+  var edits = comments.filter(isEdit);
+  var notes = comments.filter(function(c){ return !isEdit(c); });
+  var out = "# Comments \u2014 " + document.title + "\n\n";
+  if (edits.length) {
+    out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
+    if (notes.length) out += "## Comments\n\n";
+  }
+  return out + (notes.length ? markdown(notes) + "\n" : "");
+}
+function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
+// There is deliberately no download path. The Artifact viewer never grants a
+// page download permission, so a Download button was inert exactly where these
+// pages are read, while still making every publish warn about an offered file.
+// Copy all is the one export, with the textarea below as its fallback.
+// What the textarea currently holds. The box can sit open while the page is
+// edited behind it, so the copy event stamps the snapshot the text was built
+// from, not whatever the list happens to be when the user finally hits copy.
+var exportSnap = null;
+function openExport(){
+  var ta = $("anExportText"); ta.value = exportText();
+  exportSnap = copySnapshot();
+  $("anExport").style.display = "block";
+  ta.focus(); ta.select();
+}
+
+// Only a copy that actually happened may clear the export state — otherwise
+// the panel says the comments are safely out of the browser, and the unload
+// guard stands down, when nothing left it.
+$("anCopy").onclick = async function(){
+  if (!comments.length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
+  var ok = false;
+  // Both taken before the await: the clipboard promise can resolve after an
+  // edit has landed, and the text that went out is this one.
+  var snap = copySnapshot(), text = exportText();
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (e) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  // Clipboard refused: fall back to the selectable textarea. Opening it is not
+  // exporting -- the state clears when the text is actually copied out of it.
+  if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
+  markClean(snap); render();
+  toast('<span class="anok">copied ' + comments.length + '</span>');
+};
+$("anExportText").addEventListener("copy", function(){
+  // A copy of PART of the box carried part of the Markdown, so it did not
+  // take every comment out of the browser. Stamping them all would drop
+  // comments the user never copied into the "Delete copied" set, which is now
+  // a set something deletes. The whole-blob case is the normal one: the box
+  // opens with everything already selected.
+  var ta = this;
+  if (ta.selectionStart !== 0 || ta.selectionEnd !== ta.value.length) {
+    toast('<span class="anwarn">partial copy \u2014 nothing marked copied out</span>', 4000);
+    return;
+  }
+  markClean(exportSnap); render();
+  toast('<span class="anok">copied ' + comments.length + '</span>');
+});
+$("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
+// The safe prune, and the reason the literal request was inverted: this
+// deletes only what a copy actually carried out of the browser, so the next
+// Copy all sends fresh feedback rather than re-sending an actioned list.
+$("anClearCopied").onclick = function(){
+  var set = copiedSet();
+  if (!set.length) return;
+  if (!arm(this, "Click again to delete " + set.length + " copied out", bindingOf(set))) return;
+  var doomed = {};
+  set.forEach(function(c){ doomed[c.id] = true; unwrap(c.id); });
+  comments = comments.filter(function(c){ return !doomed[c.id]; });
+  if (editingId !== null && doomed[editingId]) closePop();
+  persist(); syncLegacyFlag(); render();
+};
+$("anClear").onclick = function(){
+  if (!comments.length) return;
+  // "Not copied out yet" is the whole reason this control asks twice, so the
+  // warning goes on the armed button, where it is read, rather than into a
+  // dialog the viewer never shows.
+  // The armed label carries the warning, because the dialog that would
+  // otherwise carry it never appears in the viewer. Naming the unsent count
+  // separately from the total is the whole point: "delete all 12" and "3 of
+  // these have never left this browser" are different facts.
+  var fresh = freshCount();
+  var warn = fresh
+    ? fresh + " not yet copied out \u2014 click again to delete all " + comments.length
+    : "All copied out \u2014 click again to delete all " + comments.length;
+  if (!arm(this, warn, bindingOf(comments))) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = []; markClean(); persist(); render();
+};
+badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+// A host page may bind single-key shortcuts on document or window -- a triage
+// console where `d` means delete, a slideshow where `j` means next. Typing a
+// note would fire them: the keystroke bubbles out of this textarea and reaches
+// those listeners, so the page acts on every letter of the comment.
+//
+// Attached at the layer root in the BUBBLE phase, which is the only position
+// that separates the two. Handlers inside the layer (the textarea's own Enter
+// and Escape) sit deeper and have already run; document- and window-level
+// handlers sit higher and never see the event. A capture-phase listener on
+// window would be too early and would kill this layer's own keys as well.
+["keydown", "keypress", "keyup"].forEach(function(type){
+  root.addEventListener(type, function(ev){ ev.stopPropagation(); });
+});
+
+restoreHighlights();
+render();
+restoreDraft();
+})();
+</script>
+<!-- /annotation-layer -->

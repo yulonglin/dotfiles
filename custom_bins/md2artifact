@@ -4,7 +4,8 @@
 Renders Markdown to a self-contained page carrying the review affordances that
 the `artifact-writing` skill requires: a sticky table of contents built
 from the headings, select-to-comment annotation, per-comment edit and delete,
-an unexported-comments guard on tab close, and clipboard export. There is no
+task-list items that keep their state across a reload and travel with the
+export, an unexported-comments guard on tab close, and clipboard export. There is no
 file export: a page-initiated download is inert in the Artifact viewer.
 
 Markdown artifacts cannot carry JavaScript, so a spec or report published as
@@ -13,6 +14,7 @@ raw `.md` silently loses all of that. Run it through here first.
     md2artifact spec.md                  # -> spec.review.html
     md2artifact spec.md -o /tmp/out.html
     md2artifact spec.md --title "P1 spec" --no-toc
+    md2artifact spec.md --states approve,approve-pending-edits,deny
 
 The output is a fragment (no <html>/<head>/<body>), which is what the Artifact
 tool expects; it is also viewable directly in a browser.
@@ -22,8 +24,10 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 try:
@@ -241,28 +245,803 @@ def details_passthrough(tokens: list[Token]) -> list[Token]:
     return out
 
 
+# The chart vocabulary, lower-cased because the check case-folds (the HTML
+# parser does too, restoring `clipPath` from `clippath` via its own adjustment
+# table). This is an ALLOWLIST: anything not named here is refused, including
+# names nobody has thought of yet. Extend it by adding a name — that is the
+# supported way to draw something this list cannot express.
+#
+# Deliberately absent, each for a reason: <foreignObject>, <script>, <iframe>,
+# <object> and <embed> execute or embed; <image> and <feImage> fetch a resource;
+# <animate>, <animateTransform>, <animateMotion> and <set> can rewrite an
+# attribute — including href — AFTER this check has read it, which is the whole
+# hole an allowlist exists to close; <switch> exists to select a <foreignObject>
+# branch; <metadata> holds arbitrary foreign-namespace XML, so allowing it would
+# mean allowing its unbounded subtree. Tool-generated SVG often carries
+# <metadata> and must have it stripped before it goes in a fence.
+SVG_ALLOWED_ELEMENTS = frozenset(
+    {
+        "svg", "g", "defs", "symbol", "use", "a", "style",
+        "title", "desc",
+        "path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
+        "text", "tspan", "textpath",
+        "marker", "clippath", "mask", "pattern",
+        "lineargradient", "radialgradient", "stop",
+        "filter", "fegaussianblur", "feoffset", "feblend", "fecolormatrix",
+        "fecomposite", "feflood", "femerge", "femergenode", "fedropshadow",
+        "femorphology",
+    }
+)
+
+
+def _local(name: str) -> str:
+    """The lowercased local part of an element or attribute name.
+
+    ElementTree reports a namespaced name as `{uri}local`, and the raw source
+    spells the same thing `xlink:href`, so both separators are stripped. The
+    browser that finally parses the page is an HTML parser, which case-folds
+    names inside <svg> — so <SCRIPT> and ONCLICK have to be recognised too.
+    """
+    return name.rpartition("}")[2].rpartition(":")[2].lower()
+
+
+# ─── The styling grammar ──────────────────────────────────────────────────────
+# Everything below permits only what it can positively recognise. The check it
+# replaced searched a flattened string for dangerous constructs, and lost three
+# times to the styling language's lexical freedom: an escaped spelling, a
+# comment, and finally whitespace flattening, which joined a shorthand's
+# leading keyword to the function name after it and so destroyed the boundary
+# the match needed (`background: <keyword> <fetching-function>(…)` — reported
+# with Chromium probes, reproduced against the old matcher here). The comment
+# that used to sit here claiming whitespace removal "can only ever produce MORE
+# matches than a parser sees" was false, and that case is the counter-example.
+#
+# A denylist over CSS cannot be finished, because the language keeps offering
+# new spellings of the same construct. A grammar has the property none of the
+# three fixes had: a construct it never permits cannot be reached by a new way
+# of spelling it, because nothing here matches on spellings at all.
+
+# The properties a diagram in this repo actually uses, plus their immediate
+# siblings in the same job. Measured, not guessed: `fill`, `stroke`,
+# `stroke-width`, `stroke-linejoin`, `stroke-dasharray`, `font-family`,
+# `font-size`, `font-style`, `font-weight`, `letter-spacing`, `display`,
+# `color`, `background`, `vertical-align`, `stop-color`, `flood-color`,
+# `clip-path`, `mask`, `filter` and `marker-end` all appear in
+# tests/test_md2artifact_svg.py or in the SVG templates of the
+# `tufte-data-viz` skill. The rest are the paint, text and reference
+# properties those imply — a chart that sets `stroke-linejoin` will set
+# `stroke-linecap`, one that sets `marker-end` will set `marker-start`.
+#
+# The list is not what makes this safe: the VALUE grammar is, and it applies
+# to every property alike, so even `mask`, `filter` and `background` — the
+# fetch-capable ones — can only ever name a same-document `#` reference. The
+# list is what makes a refusal legible, and what stops a property whose value
+# grammar nobody here has modelled from being judged by a grammar built for a
+# different one. Extend it by adding a name, the way SVG_ALLOWED_ELEMENTS is
+# extended, and add the case to the test that pins real-diagram styling.
+#
+# `mask-type` is here as a named decision rather than a measurement: nothing
+# in this repo that the element allowlist would accept uses it, but <mask> is
+# in the element vocabulary and `mask-type` is how you select its mode, so the
+# gap was real. It takes a keyword and cannot fetch. The one file that did use
+# it — a tool-exported reference diagram — is refused anyway for embedding a
+# raster <image>, which is what showed that the property was missing.
+#
+# Deliberately absent: `cursor`, whose url() fetches an image and which no
+# static chart needs; `content`, which injects text; and every `*-image`
+# longhand, since a chart paints with gradients and patterns it defines itself.
+STYLE_PROPERTIES = frozenset(
+    {
+        # paint
+        "fill", "fill-opacity", "fill-rule",
+        "stroke", "stroke-width", "stroke-opacity", "stroke-linecap",
+        "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset",
+        "stroke-miterlimit",
+        "opacity", "color", "background", "background-color",
+        "stop-color", "stop-opacity", "flood-color", "flood-opacity",
+        "lighting-color", "paint-order", "mix-blend-mode", "isolation",
+        "vector-effect", "shape-rendering", "color-interpolation-filters",
+        # text
+        "font", "font-family", "font-size", "font-style", "font-weight",
+        "font-variant", "font-stretch", "letter-spacing", "word-spacing",
+        "text-anchor", "text-decoration", "text-transform", "text-rendering",
+        "dominant-baseline", "alignment-baseline", "baseline-shift",
+        "white-space", "direction", "writing-mode", "vertical-align",
+        # layout and visibility
+        "display", "visibility", "overflow", "pointer-events",
+        "transform-origin", "transform-box",
+        "x", "y", "width", "height", "cx", "cy", "r", "rx", "ry",
+        # same-document references
+        "clip-path", "clip-rule", "mask", "mask-type", "filter",
+        "marker", "marker-start", "marker-mid", "marker-end",
+    }
+)
+
+# Only a font stack may carry a quoted string: `font-family: 'ET Book', serif`
+# is the one real diagram spelling that needs one, and a string is how a
+# resource gets named without ever spelling `url(` — which is how the second
+# fetching construct got in.
+FONT_STACK_PROPERTIES = frozenset({"font", "font-family"})
+
+# The only functions a value may call. `url()` is shaped separately, because it
+# may name a same-document fragment and nothing else; these four take numbers.
+# A function not named here is refused unread, which is what makes a new
+# fetching function harmless rather than a race to enumerate it.
+VALUE_FUNCTIONS = frozenset({"rgb", "rgba", "hsl", "hsla"})
+
+# Transform attributes are their own grammar: a list of calls from a closed set
+# whose arguments carry no nested call, so nothing in one can reach a resource.
+TRANSFORM_FUNCTIONS = frozenset(
+    {
+        "matrix", "translate", "translatex", "translatey",
+        "scale", "scalex", "scaley", "rotate", "skewx", "skewy",
+    }
+)
+TRANSFORM_ATTRIBUTES = frozenset({"transform", "gradienttransform", "patterntransform"})
+
+# Attribute values that are human text, never a URL and never CSS in any
+# engine. They are the one place the grammar steps aside, and they step aside
+# by NAME — the loose shape is granted only to names listed here.
+FREE_TEXT_ATTRIBUTES = frozenset({"role", "lang", "space", "title", "alt"})
+
+PATH_DATA_RE = re.compile(r"[MmLlHhVvCcSsQqTtAaZz0-9eE,.+\-\s]*")
+TRANSFORM_ARGUMENT_RE = re.compile(r"[0-9a-zA-Z.,+\-%\s]*")
+FRAGMENT_VALUE_RE = re.compile(r"\s*#[A-Za-z0-9_.:\-]*\s*")
+HEX_COLOUR_RE = re.compile(r"#[0-9a-fA-F]{3,8}(?![0-9A-Za-z])")
+CSS_NUMBER_RE = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?(?:%|[a-zA-Z]{1,4})?")
+CSS_IDENT_RE = re.compile(r"-{0,2}[A-Za-z_][A-Za-z0-9_-]*")
+CSS_STRING_RE = re.compile(r"(['\"])([A-Za-z0-9 ._-]*)\1")
+URL_FRAGMENT_RE = re.compile(r"\(\s*(['\"]?)#([A-Za-z0-9_.:\-]+)\1\s*\)")
+SELECTOR_RE = re.compile(r"[A-Za-z0-9_\-.#*>+~,:\s]*")
+VALUE_SEPARATORS = " \t\r\n\f,"
+
+# The SVG and XLink namespaces, matched exactly. A namespace declaration is the
+# one attribute whose value legitimately IS an external URL, so it is the one
+# attribute compared against a fixed list rather than a shape.
+SVG_NAMESPACES = frozenset(
+    {"http://www.w3.org/2000/svg", "http://www.w3.org/1999/xlink"}
+)
+
+
+def _closing_paren(text: str, opening: int) -> int:
+    """The index of the `)` that closes the `(` at `opening`, or -1."""
+    depth = 0
+    for i in range(opening, len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def css_value_fault(
+    value: str, *, strings: bool = False, separators: str = VALUE_SEPARATORS
+) -> str | None:
+    """What this value does that the grammar has no production for, or None.
+
+    The answer is a verb phrase — "calls image-set(), which is not one of the
+    permitted functions" — so each caller can name the property or attribute it
+    came from and read as one sentence in the rejection note.
+
+    A value is a list of components, and a component is one of exactly five
+    shapes: a hex colour, a number with an optional unit or percent sign, a
+    bare identifier, `url(#fragment)`, or a call to one of the numeric colour
+    functions. A font stack may additionally carry a quoted plain font name.
+    Everything else — a backslash, a `/*`, an `@`, a colon, a slash, a quote
+    outside a font stack, a function nobody listed — is refused by falling off
+    the end of that list, without any rule naming it.
+
+    None of the five shapes can reach the network. An identifier and a number
+    are inert; a hex colour is inert; `url()` is constrained to a
+    same-document fragment, which is how a chart reaches its own gradient,
+    clip path, mask, marker or filter; and the colour functions take numbers.
+    So a fetching construct spelled in a way nobody has seen yet still has to
+    arrive as one of those five shapes to be accepted, and cannot.
+    """
+    i, n = 0, len(value)
+    while i < n:
+        char = value[i]
+        if char in separators:
+            i += 1
+            continue
+        if char == "#":
+            match = HEX_COLOUR_RE.match(value, i)
+            if match is None:
+                return "has a `#` that is not a hex colour"
+            i = match.end()
+            continue
+        if char in "\"'":
+            if not strings:
+                return "has a quoted string, which only a font stack may carry"
+            match = CSS_STRING_RE.match(value, i)
+            if match is None:
+                return "has a quoted string that is not a plain font name"
+            i = match.end()
+            continue
+        if match := CSS_NUMBER_RE.match(value, i):
+            i = match.end()
+            continue
+        if match := CSS_IDENT_RE.match(value, i):
+            name, after = match.group(), match.end()
+            if after >= n or value[after] != "(":
+                i = after
+                continue
+            call = name.lower()
+            if call == "url":
+                fragment = URL_FRAGMENT_RE.match(value, after)
+                if fragment is None:
+                    return "has a url() that is not a same-document #reference"
+                i = fragment.end()
+                continue
+            if call not in VALUE_FUNCTIONS:
+                return f"calls {name}(), which is not one of the permitted functions"
+            close = _closing_paren(value, after)
+            if close < 0:
+                return f"has a {name}( that never closes"
+            if fault := css_value_fault(
+                value[after + 1 : close], separators=VALUE_SEPARATORS + "/"
+            ):
+                return f"calls {name}(), which {fault}"
+            i = close + 1
+            continue
+        return f"contains {char!r}, which no permitted value shape allows"
+    return None
+
+
+def css_declarations_fault(text: str) -> str | None:
+    """Why this `property: value; …` list may not be inlined, or None.
+
+    A verb phrase again, so `its <style> element` and `its style attribute`
+    can each prefix it.
+    """
+    for chunk in text.split(";"):
+        if not chunk.strip():
+            continue
+        raw_property, colon, value = chunk.partition(":")
+        if not colon:
+            return "has a declaration with no property"
+        name = raw_property.strip().lower()
+        if name not in STYLE_PROPERTIES:
+            return f"sets `{name}`, which is not in the chart styling vocabulary"
+        if fault := css_value_fault(value, strings=name in FONT_STACK_PROPERTIES):
+            return f"sets `{name}` to a value that {fault}"
+    return None
+
+
+def css_stylesheet_fault(text: str) -> str | None:
+    """Why this <style> element may not be inlined, or None.
+
+    A stylesheet here is a flat list of `selector { declarations }` rules and
+    nothing else. An at-rule is refused because `@` is not a selector
+    character, and a comment because `/` is not either — so `@import`, the
+    nested at-rules, and every comment-based spelling are refused by the same
+    absence rather than by three rules that each had to be thought of.
+
+    A <style> inside the fence is DOCUMENT-scoped, not chart-scoped — a rule
+    in an inline SVG painted a background on a <div> outside the <svg> in the
+    same probe — so this grammar governs the whole page's styling, not the
+    chart's.
+    """
+    i = 0
+    while i < len(text):
+        brace = text.find("{", i)
+        if brace < 0:
+            if "@" in text[i:]:
+                return "carries an at-rule, which is not a style rule"
+            if text[i:].strip():
+                return "has text outside any style rule"
+            return None
+        prelude = text[i:brace]
+        if not prelude.strip():
+            return "has a style rule with no selector"
+        if "@" in prelude:
+            return "carries an at-rule, which is not a style rule"
+        if SELECTOR_RE.fullmatch(prelude) is None:
+            bad = next(c for c in prelude if SELECTOR_RE.fullmatch(c) is None)
+            return f"has a selector containing {bad!r}, which is not a selector character"
+        close = text.find("}", brace)
+        if close < 0:
+            return "has a style rule that is never closed"
+        if fault := css_declarations_fault(text[brace + 1 : close]):
+            return fault
+        i = close + 1
+    return None
+
+
+def transform_fault(value: str) -> str | None:
+    """Why this transform list may not be inlined, or None.
+
+    A list of calls from TRANSFORM_FUNCTIONS whose arguments carry no nested
+    call — no `(` is permitted inside them — so a transform cannot reach a
+    resource however it is spelled.
+    """
+    i, n = 0, len(value)
+    while i < n:
+        if value[i] in VALUE_SEPARATORS:
+            i += 1
+            continue
+        match = CSS_IDENT_RE.match(value, i)
+        if match is None or match.end() >= n or value[match.end()] != "(":
+            return "is not a list of transform functions"
+        name = match.group().lower()
+        if name not in TRANSFORM_FUNCTIONS:
+            return f"calls {match.group()}(), which is not a transform function"
+        close = value.find(")", match.end())
+        if close < 0:
+            return f"has a {match.group()}( that never closes"
+        if TRANSFORM_ARGUMENT_RE.fullmatch(value[match.end() + 1 : close]) is None:
+            return f"passes {match.group()}() something that is not a number"
+        i = close + 1
+    return None
+
+
+def attribute_fault(name: str, value: str) -> str | None:
+    """Why this attribute may not be inlined, or None if it may.
+
+    One copy, called from the XML tree walk and from the HTML scan alike, so
+    the two readings of the same source cannot drift apart.
+
+    Every value is judged by a SHAPE, and the shape is chosen by the attribute
+    name. The default shape is the styling-value grammar, which is why an
+    attribute name nobody listed is still safe: its value has to be a colour, a
+    number, a bare word, a `#` fragment or a numeric colour function to be
+    accepted at all, and none of those can fetch. Only names listed here are
+    granted a LOOSER shape — human text, path data, a transform list, a
+    fragment reference, a namespace URI — so looseness is always a decision
+    about a name that was positively recognised.
+
+    This is also what retired the `javascript:`, non-image `data:` and
+    external-`url()` rules: each was a spelling the grammar has no production
+    for, since `:` and `/` are not value characters and a `url()` must name a
+    fragment. The two name rules that remain — no `on*` handler, no `ping` —
+    are policies about the NAME, which no value shape can express: `onclick`'s
+    value is a bare word, and a bare word is a legitimate value everywhere
+    else.
+    """
+    raw = name.lower()
+    aname = _local(name)
+    if aname.startswith("on"):
+        return f"it carries an event-handler attribute ({aname})"
+    if aname == "ping":
+        return f"it carries a {aname} attribute, which POSTs to a URL of its own"
+    if raw == "xmlns" or raw.startswith("xmlns:"):
+        if value.strip() not in SVG_NAMESPACES:
+            return f"it binds {raw} to something other than the SVG or XLink namespace"
+        return None
+    if aname == "style":
+        if fault := css_declarations_fault(value):
+            return f"its style attribute {fault}"
+        return None
+    if aname == "href":
+        if FRAGMENT_VALUE_RE.fullmatch(value) is None:
+            return f"it has an {aname} attribute that is not a same-document reference"
+        return None
+    if aname in FREE_TEXT_ATTRIBUTES or aname.startswith(("aria-", "data-")):
+        return None
+    if aname == "d":
+        if PATH_DATA_RE.fullmatch(value) is None:
+            return f"its {aname} attribute is not path data"
+        return None
+    if aname in TRANSFORM_ATTRIBUTES:
+        if fault := transform_fault(value):
+            return f"its {aname} attribute {fault}"
+        return None
+    if fault := css_value_fault(value, strings=aname in FONT_STACK_PROPERTIES):
+        return f"its {aname} attribute has a value that {fault}"
+    return None
+
+
+HTML_SPACE = " \t\r\n\f"
+
+
+def html_fault(source: str) -> str | None:
+    """Why the source is unsafe when an HTML parser reads it, or None.
+
+    An XML parse says what ElementTree makes of the fence. It does not say what
+    the BROWSER makes of it, and the browser is the one that matters, because
+    the fence is emitted into the page verbatim. The two parsers have different
+    rules, and where they differ the XML reading is the one that is wrong.
+
+    So the same source is scanned a second time with HTML tokenizer rules: a
+    `<` followed by an ASCII letter opens a tag whose name runs to the first
+    whitespace, `/` or `>`, and everything else — a stray `<`, a colon inside
+    an element name, a tag that never closes — is refused rather than
+    interpreted. `<style>` is raw text in HTML, so its body is skipped here and
+    judged by css_stylesheet_fault through the tree instead.
+
+    The scan deliberately refuses rather than normalises. A spelling exotic
+    enough to need normalising has no place in an inline chart fence, and a
+    normaliser is one more thing that can disagree with the browser.
+    """
+    i, n = 0, len(source)
+    while (lt := source.find("<", i)) >= 0:
+        j = lt + 1
+        closing = j < n and source[j] == "/"
+        if closing:
+            j += 1
+        if j >= n or not (source[j].isascii() and source[j].isalpha()):
+            return "it carries a `<` that does not open a tag"
+        start = j
+        while j < n and source[j].isascii() and source[j].isalnum():
+            j += 1
+        if j < n and source[j] == ":":
+            spelling = source[start : j + 1] + source[j + 1 :].split(">", 1)[0].split(" ", 1)[0]
+            return f"it spells an element name with a namespace prefix (<{spelling}>)"
+        name = source[start:j].lower()
+        if j < n and source[j] not in HTML_SPACE + "/>":
+            return f"it spells an element name an HTML parser would not read as <{name}>"
+        if name not in SVG_ALLOWED_ELEMENTS:
+            return f"it contains a <{name}> element, which is not in the chart vocabulary"
+        if closing:
+            end = source.find(">", j)
+            if end < 0:
+                return f"it has a </{name}> tag that is never closed"
+            i = end + 1
+            continue
+        j, fault = _scan_attributes(source, j, name)
+        if fault is not None:
+            return fault
+        if name == "style":
+            close = source.lower().find("</style", j)
+            if close < 0:
+                return "it has a <style> element that is never closed"
+            i = close
+            continue
+        i = j
+    return None
+
+
+def _scan_attributes(source: str, i: int, element: str) -> tuple[int, str | None]:
+    """Walk one start tag's attributes the way an HTML tokenizer would.
+
+    Returns the index just past the tag, and the fault if one was found.
+    """
+    n = len(source)
+    while True:
+        while i < n and source[i] in HTML_SPACE:
+            i += 1
+        if i >= n:
+            return i, f"it has a <{element}> tag that is never closed"
+        if source[i] == ">":
+            return i + 1, None
+        if source[i] == "/":
+            i += 1
+            continue
+        start = i
+        while i < n and source[i] not in HTML_SPACE + "/=>":
+            i += 1
+        name = source[start:i]
+        while i < n and source[i] in HTML_SPACE:
+            i += 1
+        value = ""
+        if i < n and source[i] == "=":
+            i += 1
+            while i < n and source[i] in HTML_SPACE:
+                i += 1
+            if i < n and source[i] in "\"'":
+                quote = source[i]
+                end = source.find(quote, i + 1)
+                if end < 0:
+                    return i, f"it has a <{element}> attribute whose quoting never closes"
+                value, i = source[i + 1 : end], end + 1
+            else:
+                start = i
+                while i < n and source[i] not in HTML_SPACE + ">":
+                    i += 1
+                value = source[start:i]
+        if fault := attribute_fault(name, html.unescape(value)):
+            return i, fault
+
+
+def svg_rejection(source: str) -> str | None:
+    """Why this ```svg fence may not be inlined, or None if it may.
+
+    Elements are checked against an ALLOWLIST (SVG_ALLOWED_ELEMENTS) over a
+    *parsed* tree, not a regex over text: anything that does not parse as one
+    well-formed <svg> element is refused outright, so there is no half-parsed
+    input for the checks below to disagree with the browser about. A denylist
+    here would be a bet that every dangerous element name has been enumerated,
+    and that bet has already lost once — the page is finally read by an HTML
+    parser, where <p>, <img> and <div> break OUT of SVG foreign content and are
+    parsed as HTML, bringing HTML's own resource-loading attributes with them.
+    An allowlist refuses them by construction, along with every name nobody has
+    thought of yet, and the cost is small because a chart's vocabulary is small.
+
+    An XML parse alone is NOT a safe-HTML check, and treating it as one was a
+    real bypass (fixed 2026-09-11). ElementTree resolves `<s:svg>` to the same
+    local name as `<svg>`, while an HTML parser sees an unknown element and so
+    never enters SVG foreign content — where a CDATA section stops being text
+    and becomes a bogus comment that ends at its first `>`, releasing whatever
+    follows it as live markup that the element allowlist never saw, because to
+    ElementTree it was only text. Both halves are now refused outright: a
+    namespace-prefixed spelling and a CDATA section, neither of which an inline
+    chart has any use for. The source is then scanned a SECOND time under HTML
+    tokenizer rules (html_fault), so a future divergence between the two
+    parsers fails closed instead of shipping.
+
+    Attribute NAMES are not allowlisted — presentation attributes are
+    open-ended, and an attribute allowlist would refuse a legitimate chart
+    every time someone reached for a property nobody had listed. Attribute
+    VALUES are, by a positive grammar (css_value_fault): a value must be a hex
+    colour, a number with an optional unit, a bare word, a `url(#fragment)` or
+    a numeric colour function, and anything else refuses. That inverts what
+    used to sit here. A text matcher searching a flattened value for dangerous
+    constructs lost three times — an escaped spelling, a comment, and finally
+    whitespace flattening joining a shorthand keyword to the function name
+    after it — because the styling language keeps offering new ways to spell a
+    construct, and a denylist over it cannot be finished. A grammar has the
+    property the three fixes did not: a construct it never permits cannot be
+    reached by a new spelling, because nothing matches on spellings.
+
+    The <style> element is the same inversion one level up (css_stylesheet_
+    fault): a flat list of `selector { declarations }` rules, each property in
+    STYLE_PROPERTIES, each value through the same grammar. An at-rule and a
+    comment refuse because `@` and `/` are not selector characters.
+
+    Two rules remain about the NAME, because no value shape can express them:
+    no on* handler, whose value is a bare word and so a legitimate value
+    everywhere else, and no `ping` (SVG2 <a> takes it, and a followed link
+    POSTs to every URL in it). The href rule is a shape, not a name rule: a
+    same-document `#` reference and nothing else, which is also what stops a
+    <use> pulling in an external document.
+
+    A DOCTYPE is refused before the parser sees it: ElementTree resolves no
+    external entities, but it does expand internal ones, so an internal DTD
+    subset is a billion-laughs denial of service against whoever builds the
+    page. An element is not a document and has no business carrying one. Every
+    other markup declaration, comment and processing instruction is refused
+    alongside it, for the same reason CDATA is: an inline chart does not need
+    one, and each is a construct the two parsers read differently.
+    """
+    if re.search(r"<!\s*\[", source):
+        return "it contains a CDATA section"
+    if re.search(r"<!\s*(doctype|entity)", source, re.IGNORECASE):
+        return "it carries a DOCTYPE or entity declaration"
+    if "<!--" in source:
+        return "it contains a comment"
+    if "<!" in source:
+        return "it contains a markup declaration"
+    if "<?" in source:
+        return "it contains a processing instruction"
+    try:
+        root = ET.fromstring(source)
+    except ET.ParseError as exc:
+        return f"it does not parse as one well-formed XML element ({exc})"
+    if _local(root.tag) != "svg":
+        return f"its root element is <{_local(root.tag)}>, not <svg>"
+    for elem in root.iter():
+        name = _local(elem.tag)
+        if name not in SVG_ALLOWED_ELEMENTS:
+            return f"it contains a <{name}> element, which is not in the chart vocabulary"
+        if name == "style" and (fault := css_stylesheet_fault("".join(elem.itertext()))):
+            return f"its <style> element {fault}"
+        for attr, value in elem.attrib.items():
+            if fault := attribute_fault(attr, value):
+                return fault
+    return html_fault(source)
+
+
+def _svg_token(source: str) -> Token:
+    """The fence body, byte for byte, as a real element.
+
+    Verbatim and not re-serialised on purpose: ElementTree would normalise
+    `viewBox` to lower case, drop namespace prefixes and reorder attributes,
+    each of which silently breaks a chart. The tree is used to JUDGE the
+    source, never to rewrite it.
+    """
+    return Token(
+        "html_block",
+        "",
+        0,
+        content=source if source.endswith("\n") else source + "\n",
+        block=True,
+    )
+
+
+def _svg_note_token(reason: str) -> Token:
+    return Token(
+        "html_block",
+        "",
+        0,
+        content=(
+            '<p class="svg-note">This <code>svg</code> block was not inlined because '
+            f"{html.escape(reason)}. Its source is shown below.</p>\n"
+        ),
+        block=True,
+    )
+
+
+def svg_passthrough(tokens: list[Token]) -> list[Token]:
+    """Inline a ```svg fence whose body survives the sanitising check.
+
+    The third deliberate exception to html-off, and the reason it exists:
+    charts on an artifact page are native SVG drawn from the house tokens, so
+    without this a chart page cannot go through this pipeline at all and has to
+    be hand-written HTML instead.
+
+    Accepted: one well-formed <svg> element built from SVG_ALLOWED_ELEMENTS —
+    the shapes, text, gradients, filters and structure a chart is drawn from —
+    and nothing else. Every other element name refuses, whether it executes
+    (<script>), embeds (<foreignObject>, <iframe>), fetches (<image>), rewrites
+    an attribute after this check has read it (<animate>, <set>), or is simply
+    unknown. Also rejected: a DOCTYPE; any on* attribute; a `ping` attribute;
+    any href/xlink:href that is not a same-document `#` reference (which is
+    also what stops a <use> pulling in an external document); and any styling
+    the value grammar cannot recognise, in the <style> element, a style=
+    attribute and a presentation attribute alike — a value must be a hex
+    colour, a number, a bare word, a numeric colour function or `url(#id)`,
+    which is how a chart reaches its own gradient. A rejected fence falls back
+    to today's behavior — an
+    escaped code block — with a visible note saying why, so a chart never fails
+    silently, and the note names the element so the fix is obvious.
+
+    An ```svg example nested inside an ordinary code fence stays escaped: the
+    outer fence swallows it, so no fence token is ever produced for it. Same as
+    mermaid.
+    """
+    out: list[Token] = []
+    for tok in tokens:
+        if tok.type == "fence" and tok.info.strip().split() == ["svg"]:
+            reason = svg_rejection(tok.content)
+            if reason is None:
+                out.append(_svg_token(tok.content))
+                continue
+            out.append(_svg_note_token(reason))
+        out.append(tok)
+    return out
+
+TASK_RE = re.compile(r"^\[([ xX])\]\s+")
+
+# A state is written into the brackets of a Markdown task line by Copy all
+# (`- [deny] the label`), so a state carrying a bracket or a newline produces a
+# line that no longer parses back as a task item -- silently, in the reviewer's
+# clipboard, long after the build that accepted it. Everything else is allowed:
+# the state is a word the author chose, and only these characters break it.
+BAD_STATE_CHARS = re.compile(r"[\[\]\x00-\x1f\x7f]")
+
+
+def _inline_plain(children: list[Token]) -> str:
+    """The item's visible text, used only to derive a stable control id."""
+    return "".join(
+        c.content for c in children if c.type in {"text", "code_inline"}
+    ).strip()
+
+
+def _allocate_id(stem: str, used: set[str]) -> str:
+    """Hand out `stem`, suffixing until the result is genuinely unused.
+
+    `used` must hold every id ALREADY EMITTED, suffixed ones included. A
+    per-stem tally is not enough: it records only the original stem, so two
+    items labelled "ship it" emit "ship-it" and "ship-it-1" while a third item
+    labelled "ship it 1" slugifies to "ship-it-1" on its own and is handed the
+    same id. Two controls then share one persistence slot and silently
+    overwrite each other's saved state — and two headings share one DOM id, so
+    a contents link jumps to the wrong section.
+    """
+    candidate = stem
+    n = 0
+    while candidate in used:
+        n += 1
+        candidate = f"{stem}-{n}"
+    used.add(candidate)
+    return candidate
+
+
+def _state_control(sid: str, checked: bool, states: list[str] | None) -> str:
+    """The opening markup of one toggle control, up to the label span.
+
+    Two shapes, one contract. With no declared state set the control is a real
+    `<input type="checkbox">`, so Space toggles it and the browser supplies the
+    role; the page a reader already knows is unchanged. With a set declared it
+    is a `<button>` cycling through that set, which is keyboard-operable for
+    the same reason. Either way the wrapper carries `data-an-state-id`, which
+    is the only thing the annotation layer looks for — a hand-written page can
+    emit the same markup and get persistence and export for free.
+
+    `[ ]` selects the first declared state and `[x]` the last, which is exactly
+    checkbox semantics when the set has two members.
+    """
+    wrap_attrs = f' data-an-state-id="{html.escape(sid, quote=True)}"'
+    if states:
+        value = states[-1] if checked else states[0]
+        wrap_attrs += (
+            ' data-an-states="'
+            + html.escape(json.dumps(states), quote=True)
+            + '"'
+        )
+        control = (
+            '<button type="button" class="anstatebtn" data-an-state="'
+            + html.escape(value, quote=True)
+            + '">'
+            + html.escape(value)
+            + "</button>"
+        )
+    else:
+        control = '<input type="checkbox" class="anstatebox"' + (
+            " checked>" if checked else ">"
+        )
+    return f'<span class="anstate"{wrap_attrs}>{control}<span class="anstatelabel">'
+
+
+def task_list_controls(tokens: list[Token], states: list[str] | None) -> list[Token]:
+    """Turn `- [ ] item` into a real toggle control, keeping the text quotable.
+
+    Only the FIRST paragraph of a list item is rewritten, and only when its
+    first text child starts with a task marker, so an ordinary list item and a
+    `[ ]` appearing mid-sentence are both left alone. The label text stays
+    ordinary escaped Markdown output — the annotation layer can still quote it
+    — while the control's own text sits in an element the layer skips.
+    """
+    used: set[str] = set()
+    for i, tok in enumerate(tokens):
+        if tok.type != "list_item_open":
+            continue
+        if not (
+            i + 2 < len(tokens)
+            and tokens[i + 1].type == "paragraph_open"
+            and tokens[i + 2].type == "inline"
+        ):
+            continue
+        kids = tokens[i + 2].children or []
+        if not kids or kids[0].type != "text":
+            continue
+        m = TASK_RE.match(kids[0].content)
+        if not m:
+            continue
+        kids[0].content = kids[0].content[m.end() :]
+        sid = _allocate_id(slugify(_inline_plain(kids))[:48] or "item", used)
+        opener = _state_control(sid, m.group(1).lower() == "x", states)
+        kids.insert(0, Token("html_inline", "", 0, content=opener))
+        kids.append(Token("html_inline", "", 0, content="</span></span>"))
+        tok.attrJoin("class", "antask")
+    return tokens
+
+
 # ─── Sanctioned passthroughs ──────────────────────────────────────────────────
 # The parser keeps html OFF so a reviewed document can never inject markup into
 # the published page. Anything the Artifact viewer renders natively (mermaid
 # today) or that reviewed documents legitimately need as real elements
-# (<details> collapsibles) gets its own narrow passthrough here instead of
-# flipping html on globally. When Anthropic ships a new viewer-native construct,
-# preserve it by adding one entry to this list: a token pass that rebuilds ONLY
-# that construct's exact spelling as an html_block, escapes any user text it
-# carries, and leaves every other spelling escaped. Each entry ships with a
-# guard test (tests/test_md2artifact_<name>.py).
-PASSTHROUGHS = [mermaid_passthrough, details_passthrough]
+# (<details> collapsibles, ```svg charts) gets its own narrow passthrough here
+# instead of flipping html on globally. When Anthropic ships a new viewer-native
+# construct, preserve it by adding one entry to this list: a token pass that
+# rebuilds ONLY that construct's exact spelling as an html_block, escapes any
+# user text it carries, and leaves every other spelling escaped. Each entry
+# ships with a guard test (tests/test_md2artifact_<name>.py).
+#
+# ```svg is the one entry that emits user text UNESCAPED, so it pays for that
+# with a check instead: the body must parse as one well-formed <svg> element
+# whose every element name is in SVG_ALLOWED_ELEMENTS — an allowlist, so an
+# element nobody anticipated refuses by default — carrying no DOCTYPE, no on*
+# attribute, no `ping`, no href/xlink:href that is not a same-document `#`
+# reference, and no styling outside the positive grammar: a property in
+# STYLE_PROPERTIES whose value is a colour, a number, a bare word, a numeric
+# colour function or `url(#id)`. Both halves are allowlists, so a construct
+# nobody anticipated refuses by default. Judged on a parsed
+# tree, emitted verbatim — never
+# re-serialised, or `viewBox` casing and namespace prefixes would not survive.
+# Anything rejected renders as an escaped code block with a note saying why,
+# which is exactly what a plain fence did before. So the property the whole
+# registry exists to hold — a Markdown document you did not write cannot put
+# script into your published page — is unchanged.
+PASSTHROUGHS = [mermaid_passthrough, details_passthrough, svg_passthrough]
 
 
-def render(md_text: str) -> tuple[str, list[tuple[int, str, str]]]:
+def render(
+    md_text: str, states: list[str] | None = None
+) -> tuple[str, list[tuple[int, str, str]]]:
     """Return (html, headings) where headings are (level, slug, text)."""
     md = MarkdownIt("commonmark", {"html": False, "linkify": True}).enable("table")
     tokens = md.parse(md_text)
     for passthrough in PASSTHROUGHS:
         tokens = passthrough(tokens)
+    # Not in PASSTHROUGHS: that list is token passes of one argument, and this
+    # one is parameterised by the document's declared state set.
+    tokens = task_list_controls(tokens, states)
 
     headings: list[tuple[int, str, str]] = []
-    seen: dict[str, int] = {}
+    used: set[str] = set()
     for i, tok in enumerate(tokens):
         if tok.type != "heading_open":
             continue
@@ -270,12 +1049,7 @@ def render(md_text: str) -> tuple[str, list[tuple[int, str, str]]]:
         if level > 3:
             continue
         text = tokens[i + 1].content
-        slug = slugify(text)
-        if slug in seen:
-            seen[slug] += 1
-            slug = f"{slug}-{seen[slug]}"
-        else:
-            seen[slug] = 0
+        slug = _allocate_id(slugify(text), used)
         tok.attrSet("id", slug)
         headings.append((level, slug, text))
 
@@ -295,8 +1069,10 @@ def toc_html(headings: list[tuple[int, str, str]]) -> str:
     return '<nav class="toc" aria-label="Contents"><h4>Contents</h4>' + "".join(rows) + "</nav>"
 
 
-def build(md_text: str, *, title: str, with_toc: bool, key: str) -> str:
-    body, headings = render(md_text)
+def build(
+    md_text: str, *, title: str, with_toc: bool, key: str, states: list[str] | None = None
+) -> str:
+    body, headings = render(md_text, states)
     toc = toc_html(headings) if with_toc else ""
     shell_open = '<div class="shell has-toc">' if toc else '<div class="shell">'
     page = TEMPLATE.format(
@@ -355,6 +1131,9 @@ table{{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0;display
 th,td{{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}}
 th{{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}}
 hr{{border:0;border-top:1px solid var(--rule);margin:2rem 0}}
+.doc svg{{max-width:100%;height:auto}}
+p.svg-note{{color:var(--bad);background:var(--bad-bg);border-radius:6px;
+ padding:.4rem .7rem;font-size:.85rem}}
 a{{color:var(--accent)}}
 details{{border:1px solid var(--rule);border-radius:7px;background:var(--panel);
  margin:1rem 0;padding:.55rem .9rem}}
@@ -401,11 +1180,23 @@ if ("IntersectionObserver" in window && targets.length) {{
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0],
+        epilog="Checklist state is keyed by a slug of the item's own label, so "
+        "reordering or inserting items keeps every tick, while rewording an item "
+        "resets that one item to its source default.",
+    )
     ap.add_argument("source", type=Path, help="Markdown file to wrap")
     ap.add_argument("-o", "--output", type=Path, help="output HTML (default: <source>.review.html)")
     ap.add_argument("--title", help="page title (default: first H1, else the filename stem)")
     ap.add_argument("--no-toc", action="store_true", help="omit the table of contents")
+    ap.add_argument(
+        "--states",
+        metavar="A,B,C",
+        help="comma-separated state set for task-list items, cycled on click "
+        "(e.g. approve,approve-pending-edits,deny). Default: a plain checkbox. "
+        "`- [ ]` starts at the first state, `- [x]` at the last",
+    )
     ap.add_argument(
         "--key",
         help="localStorage key for comments (default: derived from the filename, "
@@ -416,6 +1207,22 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.source.is_file():
         ap.error(f"no such file: {args.source}")
+
+    states: list[str] | None = None
+    if args.states is not None:
+        states = [p.strip() for p in args.states.split(",") if p.strip()]
+        if len(states) < 2:
+            ap.error("--states needs at least two comma-separated states")
+        if len(set(states)) != len(states):
+            ap.error("--states must not repeat a state")
+        bad = [st for st in states if BAD_STATE_CHARS.search(st)]
+        if bad:
+            ap.error(
+                "--states must not contain '[', ']' or a control character "
+                f"({', '.join(repr(st) for st in bad)}): the export writes each "
+                "state inside the brackets of a Markdown task line, and those "
+                "characters stop that line parsing back"
+            )
     text = args.source.read_text(encoding="utf-8")
 
     title = args.title
@@ -433,7 +1240,8 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
     out.write_text(
-        build(text, title=title, with_toc=not args.no_toc, key=key), encoding="utf-8"
+        build(text, title=title, with_toc=not args.no_toc, key=key, states=states),
+        encoding="utf-8",
     )
     print(out)
     return 0
