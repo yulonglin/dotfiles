@@ -6,7 +6,7 @@
 # Writes: config/Brewfile    (brew/cask/mas entries for `brew bundle`)
 #
 # Usage:
-#   app-picker                 # gum TUI preselected from registry defaults → writes Brewfile, then audits
+#   app-picker                 # TUI preselected from registry defaults → writes Brewfile, then audits
 #   app-picker --installed     # preselect from what THIS Mac has installed (TUI in a terminal, else just write)
 #   app-picker --defaults      # no TUI; registry defaults → Brewfile
 #   app-picker --audit         # no writes to the Brewfile; compare this Mac against it and the registry
@@ -183,11 +183,10 @@ local i
 if [[ "$MODE" == "installed" ]]; then inventory; fi
 for (( i=1; i<=n; i++ )); do
     local label="${i}	[${A_CAT[i]}·T${A_TIER[i]}] ${A_NAME[i]} — ${A_DESC[i]}"
-    # gum --selected takes a comma-separated list, so a label containing a comma
-    # (e.g. a description like "Notes, docs, and wiki") would be mis-split and fail
-    # to pre-select. Normalise commas → ';' so the CSV is unambiguous; rows and
-    # selected derive from the same label, so option↔selected matching still holds.
-    label="${label//,/;}"
+    # '|' separates the fields of the items file, so a label carrying one would
+    # split into the wrong column. Normalise it away; rows and selected derive
+    # from the same label, so option↔selected matching still holds.
+    label="${label//|//}"
     rows+=("$label")
     if [[ "$MODE" == "installed" ]]; then
         is_installed "$i" && selected+=("$label")
@@ -203,18 +202,29 @@ select_apps() {
     # Result is the chosen subset of $rows, newline-separated.
     local chosen=""
     if [[ "$MODE" == "defaults" ]] || [[ "${NON_INTERACTIVE:-false}" == "true" ]] \
-       || ! [[ -t 0 ]] || ! command -v gum &>/dev/null; then
+       || ! [[ -t 0 ]] || ! command -v claude-tools &>/dev/null; then
         chosen="${(F)selected}"
     else
-        local sel_csv="${(j:,:)selected}"
-        local height=$(( ${#rows} + 2 ))
-        local term_h; term_h=$(tput lines 2>/dev/null || echo 40)
-        (( height > term_h - 4 )) && height=$(( term_h - 4 ))
         local header="Select apps to install (space=toggle, enter=confirm):"
         [[ "$MODE" == "installed" ]] && header="Installed apps preselected — deselect to drop from the Brewfile (space=toggle, enter=confirm):"
-        chosen=$(gum choose --no-limit --height "$height" \
-            --header "$header" \
-            --selected "$sel_csv" -- "$rows[@]") || { echo "Cancelled — Brewfile unchanged." >&2; exit 0; }
+        # Items go in a FILE, never on stdin. Piping the list in makes fd 0 a
+        # pipe, which forces crossterm onto its /dev/tty fallback: fragile, and
+        # it fails outright on some terminals. stdin stays on the keyboard.
+        local items_file
+        items_file=$(mktemp "${TMPDIR:-/tmp}/app-picker-items.XXXXXX") || {
+            echo "app-picker: could not create the items file" >&2; exit 1; }
+        local j checked
+        for (( j=1; j<=${#rows}; j++ )); do
+            checked=false
+            (( ${selected[(Ie)${rows[j]}]} )) && checked=true
+            # The whole label is the name, so the TUI and the non-TUI branch
+            # hand back byte-identical strings for the parse below.
+            print -r -- "${A_CAT[j]}|${rows[j]}||$checked"
+        done > "$items_file"
+        chosen=$(claude-tools select --title "$header" --items "$items_file")
+        local rc=$?
+        rm -f "$items_file"
+        (( rc == 0 )) || { echo "Cancelled — Brewfile unchanged." >&2; exit 0; }
     fi
 
     local line
