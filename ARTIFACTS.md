@@ -16,6 +16,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 
 | Artifact | Org | Status | Source | Public | Updated |
 |---|---|---|---|---|---|
+| [The gateway keys move out of a public file](https://claude.ai/code/artifact/d1d52cd8-b565-4f98-a863-3870026adc8b) — what PR #117 changes, for a reader deciding whether to adopt it. `~/.claude` is a symlink to this repo, so the file Claude Code reads and the file git tracks are the same bytes — the gateway needs a loopback URL with a per-install token in it, and the repo is public, so the diff can never resolve. A root-owned managed drop-in ends that because the file is not in the tree at all. The costs are a manual `sudo install` per machine and the loss of the `CLAUDE_RC_OVERRIDE` escape hatch. Nothing in it has run on a real machine yet | lin.yulong@gmail.com's Organization | live | `artifacts/gateway-managed-dropin/` | no | 2026-09-12 |
 | [Dotfiles Review Queue](https://claude.ai/code/artifact/9aeb2de4-1bdb-4ec7-b843-4679ea6e7ef7) — the open pull requests grouped by how much judgement each needs rather than by age, so the table can be read instead of opened. Each row's tick is stored as its own document, so two viewers ticking different rows cannot overwrite each other, and a tick made before the store resolves is queued rather than lost | lin.yulong@gmail.com's Organization | live | `artifacts/pr-review-queue/` | no | 2026-09-11 |
 | [When Settings Reach a Session](https://claude.ai/code/artifact/7338696f-f448-4751-a209-db0cd49cdca9) — adding or changing an `env` value reaches a running session when the file is saved, while removing one takes effect only at the next launch — quoted from the environment-variable documentation, not established here; a scan on 2026-09-11 found 16 processes still carrying a value deleted two days earlier, 13 of them orphaned socat forwarders, none of which call the classifier. The scan shows stale environments, not the cause of any one of them | lin.yulong@gmail.com's Organization | live | `artifacts/settings-propagation/` | no | 2026-09-11 |
 | [Dotfiles Artifacts](https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107) — this index, hosted; republished to this URL after every artifact publish | lin.yulong@gmail.com's Organization | live | `artifacts/index/` | no | 2026-09-10 |
@@ -38,7 +39,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 | [Alias Audit](https://claude.ai/code/artifact/739598b0-362d-4aaa-a8c2-c77775be5eb4) — alias files fight over names by source order; the set was cut 161 → ~110 against two months of shell history | see note | done | — | no | 2026-08-18 |
 | [Tool-Backed Agents](https://claude.ai/code/artifact/4c124679-7346-4dc5-9cb4-75889320aaf4) — which agents actually invoke their CLI rather than answering from their own reasoning | see note | done | — | no | 2026-08-18 |
 
-21 rows: 8 live, 10 done, 2 archived, 1 superseded.
+22 rows: 9 live, 10 done, 2 archived, 1 superseded.
 
 [//]: # (END GENERATED ARTIFACTS TABLE)
 
