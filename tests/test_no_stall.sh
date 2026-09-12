@@ -157,6 +157,25 @@ test_version_probes_cannot_kill_the_install() {
     fi
 }
 
+test_no_post_increment_in_the_install_path() {
+    # `((n++))` evaluates to the OLD value, so the first increment of a counter
+    # starting at 0 evaluates to 0 — a non-zero exit status — and under
+    # `set -euo pipefail` it kills the script where it stands. Measured on
+    # ubuntu:24.04: deploy.sh died inside the ~/.codex smart merge, after the
+    # real directory had already been moved to a backup path, printing nothing
+    # (2026-09-12). Write `n=$((n + 1))`, which has no status of its own.
+    # Comment lines are excluded, or the note explaining the trap trips it.
+    local hits
+    hits=$(grep -nE '\(\([a-zA-Z_][a-zA-Z0-9_]*\+\+\)\)' \
+        "$DOT_DIR/install.sh" "$DOT_DIR/deploy.sh" "$DOT_DIR/scripts/shared/helpers.sh" \
+        | grep -vE ':[0-9]+:[[:space:]]*#' || true)
+    if [[ -z "$hits" ]]; then
+        pass "no bare ((n++)) in the install path (it exits 1 on the first bump)"
+    else
+        fail "a post-increment can abort the run under set -e" "$hits"
+    fi
+}
+
 test_every_cargo_build_is_bounded() {
     # The probe below covers ONE helper. deploy.sh had its own
     # `cargo build --release --quiet`, backgrounded and reaped by a bare
@@ -477,6 +496,7 @@ test_run_with_timeout_zero_disables
 test_fetch_carries_deadlines
 test_every_cargo_build_is_bounded
 test_version_probes_cannot_kill_the_install
+test_no_post_increment_in_the_install_path
 test_run_parallel_pid_capture_is_quoted
 test_watchdog_child_keeps_the_terminal
 test_retry_does_not_multiply_the_deadline

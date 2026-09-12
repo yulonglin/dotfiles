@@ -826,7 +826,12 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             restored=0
             for file in "${runtime_files[@]}"; do
                 if [[ -e "$backup_path/$file" ]]; then
-                    cp -r "$backup_path/$file" "$HOME/.claude/" 2>/dev/null && ((restored++))
+                    # A counter is bumped with an assignment, never a
+                    # post-increment: the latter evaluates to the OLD value, so
+                    # the first bump of a zero counter evaluates to 0, which is
+                    # a non-zero exit status, which under `set -euo pipefail`
+                    # kills deploy.sh on the spot. It did, in the codex block.
+                    cp -r "$backup_path/$file" "$HOME/.claude/" 2>/dev/null && restored=$((restored + 1))
                 fi
             done
 
@@ -928,7 +933,11 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
             codex_restored=0
             for file in "${codex_runtime_files[@]}"; do
                 if [[ -e "$codex_backup_path/$file" ]]; then
-                    cp -r "$codex_backup_path/$file" "$HOME/.codex/" 2>/dev/null && ((codex_restored++))
+                    # Measured on ubuntu:24.04: with a real ~/.codex holding
+                    # one runtime file, the old post-increment returned 0, so
+                    # deploy.sh died here mid-merge — ~/.codex already moved
+                    # aside to the backup path — with no message at all.
+                    cp -r "$codex_backup_path/$file" "$HOME/.codex/" 2>/dev/null && codex_restored=$((codex_restored + 1))
                 fi
             done
 
