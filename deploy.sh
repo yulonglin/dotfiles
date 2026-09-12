@@ -128,10 +128,11 @@ COMPONENTS:
     --allow-worktree  Deploy even though DOT_DIR is a git worktree. Refused by
                       default: it repoints ~/.claude and ~20 other user symlinks
                       at a directory cwrm/cwclean will delete.
-    --non-interactive Skip the component menu and deploy the default set. The
-                      menu is the script's only prompt; everything after it
+    --non-interactive Skip the component menu (the profile's set is used as-is)
+                      and the htop config-conflict question. Everything else
                       already runs with safe defaults (git conflicts keep
-                      existing values).
+                      existing values). On a terminal nobody types at, the menu
+                      times out to the same result by itself.
     --allow-worktree-deploy
                       Deploy even though this copy of the script lives in a git
                       worktree. Refused by default: DOT_DIR follows the script,
@@ -193,12 +194,13 @@ EOF
     fi
 fi
 
-# Make custom_bins (claude-tools) discoverable, then fetch a prebuilt
-# claude-tools matching this platform so the component menu works before the
-# from-source build below has run.
+# custom_bins (claude-tools, app-picker) must be discoverable for later steps.
 export PATH="$DOT_DIR/custom_bins:$PATH"
-bootstrap_claude_tools || true
 
+# The component menu: profiles, flags and config.local.sh pre-check the set,
+# the menu (attended terminals only) adjusts it, and the banner below prints
+# what was resolved. Every way the menu can fail says so and keeps the set —
+# see show_component_menu for the contract with the binary.
 show_component_menu deploy
 
 # Cache sudo once up front if a privileged component is selected (VPN daemon,
@@ -214,6 +216,8 @@ fi
 log_section "DEPLOYING DOTFILES"
 echo "Platform: $PLATFORM"
 echo "Profile: $PROFILE"
+print_resolved_components deploy
+guard_nonempty_components deploy
 echo "Append mode: $DEPLOY_APPEND"
 echo ""
 
@@ -782,8 +786,8 @@ if [[ "$DEPLOY_CLAUDE_TOOLS" == "true" ]] && [[ -f "$DOT_DIR/tools/claude-tools/
         # on failure. The deadline is what matters — a bare `wait` below has no
         # timeout of its own, so an unbounded cargo build here hangs the whole
         # deploy at the very last step, silently. This is the same stall class
-        # the canary is named for; it just lived in deploy.sh rather than in
-        # _build_claude_tools_from_source.
+        # the canary is named for, and this is now the only cargo build on the
+        # install path (the fetch-or-build fallback for the menu is gone).
         cd "$DOT_DIR/tools/claude-tools" \
         && run_with_timeout "${DOTFILES_BUILD_TIMEOUT:-900}" cargo build --release 2>&1 && \
         cp "$DOT_DIR/tools/claude-tools/target/release/claude-tools" "$DOT_DIR/custom_bins/$CLAUDE_TOOLS_ASSET" && \
@@ -822,7 +826,12 @@ if [[ "$DEPLOY_CLAUDE" == "true" ]]; then
             restored=0
             for file in "${runtime_files[@]}"; do
                 if [[ -e "$backup_path/$file" ]]; then
-                    cp -r "$backup_path/$file" "$HOME/.claude/" 2>/dev/null && ((restored++))
+                    # A counter is bumped with an assignment, never a
+                    # post-increment: the latter evaluates to the OLD value, so
+                    # the first bump of a zero counter evaluates to 0, which is
+                    # a non-zero exit status, which under `set -euo pipefail`
+                    # kills deploy.sh on the spot. It did, in the codex block.
+                    cp -r "$backup_path/$file" "$HOME/.claude/" 2>/dev/null && restored=$((restored + 1))
                 fi
             done
 
@@ -924,7 +933,11 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
             codex_restored=0
             for file in "${codex_runtime_files[@]}"; do
                 if [[ -e "$codex_backup_path/$file" ]]; then
-                    cp -r "$codex_backup_path/$file" "$HOME/.codex/" 2>/dev/null && ((codex_restored++))
+                    # Measured on ubuntu:24.04: with a real ~/.codex holding
+                    # one runtime file, the old post-increment returned 0, so
+                    # deploy.sh died here mid-merge — ~/.codex already moved
+                    # aside to the backup path — with no message at all.
+                    cp -r "$codex_backup_path/$file" "$HOME/.codex/" 2>/dev/null && codex_restored=$((codex_restored + 1))
                 fi
             done
 
@@ -1119,6 +1132,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     openrouter-drift.service openrouter-drift.timer \
                     council-roster.service council-roster.timer \
                     model-router-cooldown.service model-router-cooldown.timer \
+                    codex-token-refresh.service codex-token-refresh.timer \
                     romp-tailnet-proxy.service; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             # -f: installed units are copies, not symlinks into the repo, so a
@@ -1154,6 +1168,22 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                 log_warning "could not enable $timer"
             fi
         done
+
+        # Codex token refresh: only where the Codex CLI is actually logged in.
+        # The statusline's quota read cannot refresh an expired token itself --
+        # account/rateLimits/read returns 401 forever -- so without this the
+        # line silently shows a days-old window. Gated because the check exits
+        # 2 (not logged in) on boxes that never use Codex, and an enabled timer
+        # there would just be noise. Note the gate tests the credential, not the
+        # binary: where codex is installed off the unit's PATH the timer is
+        # enabled and the check exits 1, which is the intended noise.
+        if [[ -f "$HOME/.codex/auth.json" ]]; then
+            if systemctl --user enable --now codex-token-refresh.timer 2>/dev/null; then
+                log_success "codex-token-refresh.timer enabled"
+            else
+                log_warning "could not enable codex-token-refresh.timer"
+            fi
+        fi
 
         # Stale-cooldown watchdog: only where model-router is actually installed.
         # Unlike the two timers above this one is NOT unconditional, because
@@ -1647,7 +1677,7 @@ fi
 # ─── Done ─────────────────────────────────────────────────────────────────────
 
 echo ""
-log_success "Deployment complete!"
+log_success "Deployment complete! (${RESOLVED_COMPONENT_COUNT:-0} components)"
 echo ""
 echo "Next steps:"
 echo "  Restart your terminal or run: source $RC_FILE"

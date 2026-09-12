@@ -26,18 +26,19 @@
 #
 # The default is `standard`, NOT the full set: a bare invocation on a fresh box
 # should not schedule background jobs or touch a laptop's GUI settings. Use
-# --devbox (or PROFILE=devbox) for the full set, or persist a picker selection.
+# --devbox (or PROFILE=devbox) for the full set, or persist overrides in
+# config.local.sh.
 PROFILE="${PROFILE:-standard}"
 
 # ─── Component Registry (single source of truth) ────────────────────────────
 # Format: "name|description|platform|default"
 # - name: CLI flag name (dashes OK, auto-converted to UPPER_SNAKE for variables)
-# - description: TUI menu display text
-# - platform: all, macos, linux (controls TUI visibility; actual code may have its own guards)
+# - description: human-readable label (the component menu, the banner, docs)
+# - platform: all, macos, linux (filters the resolved set printed in the banner; actual code may have its own guards)
 # - default: true/false (initial value, overridden by profiles → config.local.sh → CLI flags)
 #
 # To add a new component: add one line here, then add the implementation block
-# in install.sh/deploy.sh. TUI menu, --flag, --no-flag, --only all work automatically.
+# in install.sh/deploy.sh. --flag, --no-flag, --only and the banner all work automatically.
 
 INSTALL_REGISTRY=(
     "core|Core packages, CLI tools, gh, uv|all|true|Base"
@@ -168,9 +169,11 @@ PACKAGES_CORE=(
     "htop"
     "rsync"
     "shellcheck"  # Shell script linter
-    "tldr"        # Simplified man pages
     "mosh"        # resilient SSH over flaky/roaming connections
 )
+# tldr pages: the `tldr` formula (C client) is deprecated in Homebrew; tlrc is the
+# official Rust client. It is a brew-only formula, so it lives in the brew arrays
+# below rather than here, where PACKAGES_CORE also feeds apt.
 
 # macOS-specific packages (via Homebrew)
 PACKAGES_MACOS=(
@@ -192,6 +195,7 @@ PACKAGES_MACOS=(
     "gum"         # interactive shell UI (app-picker TUI)
     "vivid"       # LS_COLORS theme generator (catppuccin-mocha)
     "fpart"       # parallel rsync (fpsync) for fast many-file copies
+    "tlrc"        # tldr pages, official Rust client (binary: tldr)
 )
 
 # Linux packages (via Homebrew / Linuxbrew)
@@ -212,6 +216,7 @@ PACKAGES_LINUX_BREW=(
     "duf"
     "gum"
     "vivid"
+    "tlrc"        # tldr pages, official Rust client (binary: tldr)
 )
 
 # Extra packages (--extras flag)
@@ -225,6 +230,16 @@ PACKAGES_EXTRAS_LINUX=(
     "hyperfine"
     "gitui"
     "code2prompt"
+)
+
+# Trial packages — installed by hand while being evaluated, NOT installed by
+# install.sh. Listing one here is what tells `app-picker --audit` it is declared
+# (and sanctions its tap). Promote to an array above or `brew uninstall` it once
+# the trial is over; date each entry so the audit's reader can tell how long it has run.
+PACKAGES_TRIAL_MACOS=(
+    "hunk"                  # review-first terminal diff viewer for agent-authored changes (trial from 2026-09-03)
+    "codersauce/tap/red"    # modal Rust editor — third-party tap, Yulong's exception 2026-09-03
+    # "micro"               # candidate terminal editor, not installed yet
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

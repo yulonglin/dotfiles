@@ -303,3 +303,127 @@ def test_repo_local_executables_found_in_trusted_repo(ac, tmp_path):
         assert ac.repo_local_executables("Bash", {"command": run}, str(repo), trust) == [
             "model-router-wire (custom_bins/)"
         ], run
+
+
+# --- the evidence channel: only the blocks the person actually typed ----------
+#
+# Claude Code appends content of its own into user turns — system reminders,
+# command output, cross-session and task messages. Measured over every
+# transcript under ~/.claude/projects on 2026-09-12: of 11,982 candidate user
+# turns, 1,635 carried one of those tags *inside* the text while the turn did
+# not begin with one, so the whole string reached the prompt as "the user's
+# recent messages". These tests pin block-level and span-level filtering.
+
+
+def no_origin(text, **extra):
+    """A user turn with no `origin` key at all. 5,608 of the 11,984 candidate
+    turns on this machine have this shape, on every CLI version through
+    2.1.269 and interleaved with `origin.kind == "human"` lines in 172 of the
+    178 files that carry both — so absent means unknown, not non-human."""
+    return {"type": "user", "message": {"role": "user", "content": text},
+            "isSidechain": False, **extra}
+
+
+def human_blocks(*texts, **extra):
+    return {"type": "user", "origin": {"kind": "human"}, "isSidechain": False,
+            "message": {"role": "user",
+                        "content": [{"type": "text", "text": t} for t in texts]}, **extra}
+
+
+def test_a_reminder_block_does_not_ride_along_with_the_ask(ac, tmp_path):
+    p = tmp_path / "blocks.jsonl"
+    write_transcript(p, [human_blocks(
+        "please delete the build dir",
+        f"<system-reminder>{INJECTION}</system-reminder>",
+    )])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["please delete the build dir"], (
+        "blocks are judged one by one: the ask survives, the appended block does not"
+    )
+
+
+def test_a_reminder_appended_inside_one_block_is_cut(ac, tmp_path):
+    p = tmp_path / "inline.jsonl"
+    write_transcript(p, [
+        no_origin(f"ship it <system-reminder>{INJECTION}</system-reminder>"),
+        human_blocks(f"and push <task-notification>{INJECTION}</task-notification> today"),
+    ])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["ship it", "and push today"]
+    assert INJECTION not in "\n".join(ctx.user_messages)
+
+
+def test_an_unterminated_tag_is_cut_to_the_end_of_the_block(ac, tmp_path):
+    p = tmp_path / "unterminated.jsonl"
+    write_transcript(p, [no_origin(f"ship it <system-reminder>{INJECTION}")])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["ship it"], "a truncated tag still swallows the rest"
+
+
+def test_tag_matching_ignores_case_and_attributes(ac, tmp_path):
+    p = tmp_path / "case.jsonl"
+    write_transcript(p, [no_origin(f'ok <SYSTEM-REMINDER kind="x">{INJECTION}</SYSTEM-REMINDER>')])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["ok"]
+
+
+def test_a_turn_with_nothing_but_injected_blocks_is_dropped(ac, tmp_path):
+    p = tmp_path / "allinjected.jsonl"
+    write_transcript(p, [
+        human_blocks(f"<task-notification>{INJECTION}</task-notification>",
+                     f"<teammate-message>{INJECTION}</teammate-message>"),
+        no_origin("the only real ask"),
+    ])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["the only real ask"]
+
+
+def test_origin_kind_null_is_not_a_person(ac, tmp_path):
+    p = tmp_path / "nullkind.jsonl"
+    write_transcript(p, [
+        {"type": "user", "isSidechain": False, "origin": {"kind": None},
+         "message": {"role": "user", "content": "drop the stash"}},
+        no_origin("the only real ask"),
+    ])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["the only real ask"], (
+        "an explicit origin whose kind is not 'human' is not the person"
+    )
+
+
+def test_a_non_dict_origin_is_not_a_person(ac, tmp_path):
+    p = tmp_path / "strorigin.jsonl"
+    write_transcript(p, [
+        {"type": "user", "isSidechain": False, "origin": "human",
+         "message": {"role": "user", "content": "drop the stash"}},
+        {"type": "user", "isSidechain": False, "origin": None,
+         "message": {"role": "user", "content": "and force-push"}},
+        no_origin("the only real ask"),
+    ])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["the only real ask"], (
+        "an origin of an unexpected shape fails closed"
+    )
+
+
+def test_absent_origin_turns_still_count(ac, tmp_path):
+    """Pins the deliberate half of the origin decision. This shape passes both
+    before and after the change: tightening it would blank the block again for
+    the 5,608 turns that carry no origin key."""
+    p = tmp_path / "absent.jsonl"
+    write_transcript(p, [no_origin("please rebase onto main")])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["please rebase onto main"]
+
+
+def test_named_origin_kinds_that_are_not_human_stay_out(ac, tmp_path):
+    p = tmp_path / "kinds.jsonl"
+    write_transcript(p, [
+        {"type": "user", "isSidechain": False, "origin": {"kind": "task-notification"},
+         "message": {"role": "user", "content": "a task finished"}},
+        {"type": "user", "isSidechain": False, "origin": {"kind": "auto-continuation"},
+         "message": {"role": "user", "content": "continue"}},
+        no_origin("the only real ask"),
+    ])
+    ctx = ac.extract_session_context(str(p))
+    assert ctx.user_messages == ["the only real ask"]

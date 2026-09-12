@@ -137,14 +137,42 @@ test_fetch_carries_deadlines() {
     fi
 }
 
-test_claude_tools_fetch_is_bounded() {
-    # The specific untimed curl that ran at the top of every install.
-    local out
-    out=$(helper_probe 'functions _fetch_claude_tools' 2>&1)
-    if [[ "$out" == *"--max-time"* ]]; then
-        pass "_fetch_claude_tools' curl carries a deadline"
+test_version_probes_cannot_kill_the_install() {
+    # A silent death is a stall's twin: the run stops, and nothing says why.
+    # Under zsh's `set -euo pipefail` an assignment inherits its command
+    # substitution's status, so `ver=$(fetch ... | grep ... )` aborts the script
+    # on that line and the `ver="${ver:-<pinned>}"` fallback written on the next
+    # line never runs. Measured on a clean ubuntu:24.04, which ships no python3:
+    # install.sh exited 127 straight after the core step — before zsh, tmux,
+    # extras or create-user — printing nothing at all (2026-09-12).
+    # Line continuations are joined first, so a probe split across lines is
+    # judged as one statement (line numbers in the diagnostic are post-join).
+    local unguarded
+    unguarded=$(sed -e :a -e '/\\$/N; s/\\\n/ /; ta' "$DOT_DIR/scripts/shared/helpers.sh" \
+        | grep -nE '^[[:space:]]+(want|sops_ver|age_ver)=\$\(' | grep -v '||' || true)
+    if [[ -z "$unguarded" ]]; then
+        pass "every remote version probe survives a failed fetch (|| fallback)"
     else
-        fail "_fetch_claude_tools still has an untimed curl" "this is the top-of-run stall"
+        fail "a version probe can abort install.sh under set -e" "$unguarded"
+    fi
+}
+
+test_no_post_increment_in_the_install_path() {
+    # `((n++))` evaluates to the OLD value, so the first increment of a counter
+    # starting at 0 evaluates to 0 — a non-zero exit status — and under
+    # `set -euo pipefail` it kills the script where it stands. Measured on
+    # ubuntu:24.04: deploy.sh died inside the ~/.codex smart merge, after the
+    # real directory had already been moved to a backup path, printing nothing
+    # (2026-09-12). Write `n=$((n + 1))`, which has no status of its own.
+    # Comment lines are excluded, or the note explaining the trap trips it.
+    local hits
+    hits=$(grep -nE '\(\([a-zA-Z_][a-zA-Z0-9_]*\+\+\)\)' \
+        "$DOT_DIR/install.sh" "$DOT_DIR/deploy.sh" "$DOT_DIR/scripts/shared/helpers.sh" \
+        | grep -vE ':[0-9]+:[[:space:]]*#' || true)
+    if [[ -z "$hits" ]]; then
+        pass "no bare ((n++)) in the install path (it exits 1 on the first bump)"
+    else
+        fail "a post-increment can abort the run under set -e" "$hits"
     fi
 }
 
@@ -183,26 +211,11 @@ test_run_parallel_pid_capture_is_quoted() {
     fi
 }
 
-test_bounded_menu_does_not_abort_the_script() {
-    # Both scripts run under `set -euo pipefail`, and in zsh a failing command
-    # substitution in a plain assignment aborts the script right there. Without
-    # `|| rc=$?` the 124 branch is unreachable and an unattended TTY run dies
-    # silently after the timeout, having installed nothing — the inverse of
-    # what the deadline was added to do. Verified under a pty.
-    local out
-    out=$(grep -A2 'claude-tools select' "$DOT_DIR/scripts/shared/helpers.sh" | grep 'items_file')
-    if [[ "$out" == *'|| rc=$?'* ]]; then
-        pass "the component menu's timeout is caught, not fatal under set -e"
-    else
-        fail "menu timeout aborts the script under set -e" "$out"
-    fi
-}
-
 test_watchdog_child_keeps_the_terminal() {
     # zsh points a backgrounded job's stdin at /dev/null even when the shell's
     # stdin is a TTY, and `<&0` does not undo it. On the fresh-Mac path (no
-    # timeout/gtimeout) that hands the component menu and chsh's PAM prompt an
-    # instant EOF.
+    # timeout/gtimeout) that hands the component menu and chsh's PAM prompt
+    # an instant EOF.
     local out
     out=$(helper_probe 'functions _watchdog_run' 2>&1)
     if [[ "$out" == *"/dev/tty"* ]]; then
@@ -276,16 +289,6 @@ test_every_curl_carries_a_deadline() {
     fi
 }
 
-test_source_build_is_bounded_and_visible() {
-    local out
-    out=$(helper_probe 'functions _build_claude_tools_from_source' 2>&1)
-    if [[ "$out" != *"--quiet"* && "$out" == *"run_with_timeout"* ]]; then
-        pass "cargo build fallback is bounded and shows its own progress (no --quiet)"
-    else
-        fail "cargo build fallback is silent or unbounded" "the stall that outlived the prompt fixes"
-    fi
-}
-
 test_parallel_group_is_bounded() {
     # One hung job must not hang the group. 3 jobs, one sleeping 60s, group
     # deadline 3s: run_parallel must return within the outer 30s deadline.
@@ -354,7 +357,7 @@ test_no_untimed_curl_pipe_installers() {
 test_deadline_holds_without_coreutils() {
     # The fresh-Mac case, and the one an adversarial review flagged: macOS ships
     # no `timeout`, and `gtimeout` only arrives with coreutils — which install.sh
-    # installs AFTER the component menu and the sudo prompt have already run. So
+    # installs AFTER the sudo prompt and the Homebrew bootstrap have already run. So
     # the deadline must survive with neither binary available, or the very first
     # run on every new Mac is unbounded.
     local start elapsed
@@ -450,13 +453,21 @@ test_noninteractive_env_hardening_present() {
     fi
 }
 
-test_menu_has_a_deadline() {
+test_menu_carries_its_own_deadline() {
+    # The menu sat black for eleven weeks after a merge dropped the flag its
+    # binary needed, while every deadline check in this file passed: the
+    # shell's 60 s wrapper fired, logged, and continued, which from the
+    # user's chair is a stall (2026-09-04). The live reproduction on a silent
+    # pty is a separate harness (PR #134); this pins the two static halves of
+    # the contract: the binary gets its own idle deadline (macOS has no
+    # timeout(1) until install.sh has run) and the wrapper's failure is
+    # caught, not fatal under set -e.
     local out
     out=$(helper_probe 'functions show_component_menu' 2>&1)
-    if [[ "$out" == *"run_with_timeout"* && "$out" == *"DOTFILES_MENU_TIMEOUT"* ]]; then
-        pass "component menu carries an idle deadline"
+    if [[ "$out" == *"--idle-timeout"* && "$out" == *'|| rc=$?'* ]]; then
+        pass "component menu carries --idle-timeout and its wrapper failure is caught"
     else
-        fail "component menu can wait forever on an unattended TTY" "the top-of-run prompt stall"
+        fail "component menu has lost its idle deadline or its rc capture" "the top-of-run prompt stall"
     fi
 }
 
@@ -483,11 +494,10 @@ echo "1. Deadline helpers"
 test_run_with_timeout_bounds_a_hang
 test_run_with_timeout_zero_disables
 test_fetch_carries_deadlines
-test_claude_tools_fetch_is_bounded
-test_source_build_is_bounded_and_visible
 test_every_cargo_build_is_bounded
+test_version_probes_cannot_kill_the_install
+test_no_post_increment_in_the_install_path
 test_run_parallel_pid_capture_is_quoted
-test_bounded_menu_does_not_abort_the_script
 test_watchdog_child_keeps_the_terminal
 test_retry_does_not_multiply_the_deadline
 test_installer_fetches_are_checked_not_interpolated
@@ -503,7 +513,7 @@ test_help_is_instant
 test_scripts_parse_without_prompting
 test_no_unguarded_bare_sudo_v
 test_noninteractive_env_hardening_present
-test_menu_has_a_deadline
+test_menu_carries_its_own_deadline
 test_chsh_is_attended_only
 
 echo ""

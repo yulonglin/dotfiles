@@ -5,17 +5,33 @@
 #   - Read tool: file_path matching .env, .env.*, .envrc
 #   - Bash tool: cat/head/tail/grep/bat on .env files
 #
-# Instead of allowing raw access, denies the read and provides masked content
-# in a systemMessage. Keys are visible, values show first 4 chars + ****.
+# Instead of allowing raw access, denies the read and returns the masked
+# content as the denial reason. Keys are visible, values show first 4 chars
+# + ****.
 #
 # Hook output format (JSON on stdout):
-#   decision.behavior = "deny" + systemMessage with masked content
+#   hookSpecificOutput.permissionDecision = "deny"
+#   hookSpecificOutput.permissionDecisionReason = <masked content>
+#
+# WARNING: the deny key is permissionDecision. Claude Code silently ignores a
+# nested decision.behavior object — the hook emitted that shape from its first
+# commit until 2026-09-12 and blocked nothing at all for its whole life, while
+# its test asserted only that the substring "deny" appeared somewhere in the
+# output. Assert the KEY, never the substring.
 #
 # Exit 0 always (JSON output controls behavior).
 
 set -euo pipefail
 
 INPUT=$(cat)
+
+# The one deny path. Shape matches block_vault_structure.sh exactly: Claude
+# Code reads hookSpecificOutput.permissionDecision and nothing else.
+deny() {
+    jq -n --arg r "$1" \
+      '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+    exit 0
+}
 
 # Extract tool_name and tool_input
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null) || exit 0
@@ -89,13 +105,7 @@ fi
 
 # Check if file is binary (skip masking for binary files)
 if file -b "$FILE_PATH" 2>/dev/null | grep -qi 'binary\|executable\|data'; then
-    jq -n '{
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        decision: {behavior: "deny", reason: "Binary .env file detected — refusing to read."}
-      }
-    }'
-    exit 0
+    deny "Binary .env file detected — refusing to read."
 fi
 
 # Read and mask the file content
@@ -111,14 +121,7 @@ fi
 # Limit file size to prevent huge outputs (100KB max)
 FILE_SIZE=$(wc -c < "$FILE_PATH" 2>/dev/null || echo 0)
 if (( FILE_SIZE > 102400 )); then
-    jq -n --arg path "$FILE_PATH" '{
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        decision: {behavior: "deny", reason: ("Env file too large to mask safely: " + $path)}
-      },
-      systemMessage: ("The file " + $path + " is over 100KB. This is unusually large for an env file — inspect manually.")
-    }'
-    exit 0
+    deny "Env file too large to mask safely: $FILE_PATH is over 100KB. This is unusually large for an env file — inspect it manually outside the transcript."
 fi
 
 # Process the file line by line
@@ -170,34 +173,23 @@ for line in sys.stdin:
 print("\n".join(lines))
 ' < "$FILE_PATH" 2>/dev/null) || {
     # Python failed — deny without content
-    jq -n --arg path "$FILE_PATH" '{
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        decision: {behavior: "deny", reason: ("Failed to mask env file: " + $path)}
-      }
-    }'
-    exit 0
+    deny "Failed to mask env file: $FILE_PATH. Refusing the read rather than falling through to the raw value."
 }
 
 # Build the output JSON with masked content
-# Truncate masked content if very long (keep under 8KB for systemMessage)
+# Truncate masked content if very long (keep the denial reason under 8KB)
 MASKED_LENGTH=${#MASKED_CONTENT}
 if (( MASKED_LENGTH > 8000 )); then
     MASKED_CONTENT="${MASKED_CONTENT:0:8000}
 ... (truncated, file has $MASKED_LENGTH chars)"
 fi
 
-jq -n \
-    --arg path "$FILE_PATH" \
-    --arg content "$MASKED_CONTENT" \
-    '{
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        decision: {
-          behavior: "deny",
-          reason: ("Secret values masked in " + $path + ". To get one specific value, use `dotfiles-secrets get-value '\''ENV_NAME - description'\''` (list keys with `dotfiles-secrets keys-meta`). Note `printenv KEY_NAME` is blocked by block_secret_expansion.sh — it would write the value into the transcript permanently.")
-        }
-      },
-      systemMessage: ("## Masked contents of " + $path + "\n\nSecret values are masked (first 4 chars visible). To read one value: `dotfiles-secrets get-value '\''ENV_NAME - description'\''`. To USE a secret without printing it: `secrets run KEY_NAME -- <command>`.\n\n```\n" + $content + "\n```")
-    }'
-exit 0
+deny "## Masked contents of $FILE_PATH
+
+Secret values are masked (first 4 chars visible).
+
+\`\`\`
+$MASKED_CONTENT
+\`\`\`
+
+To read one value: \`dotfiles-secrets get-value 'ENV_NAME - description'\` (list keys with \`dotfiles-secrets keys-meta\`). To USE a secret without printing it: \`secrets run KEY_NAME -- <command>\`. Note \`printenv KEY_NAME\` is blocked by block_secret_expansion.sh — it would write the value into the transcript permanently."
