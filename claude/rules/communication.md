@@ -40,6 +40,14 @@ Reply on the channel you were messaged on, not just the terminal. Give absolute 
 
 **"Where is X?" is answered by the path, first.** When Yulong asks where a file, doc or draft is, the first line of the reply is the absolute path (or URL) in a code block — one per thing asked for — before any status, caveat or pending work. If the thing does not exist yet, the first line says so and names the file it will become. Never bury the path in a paragraph or answer with what is in flight instead (2026-09-08: asked three times for the sabotage TeX path while the reply led with agent status). Interpret transcription artifacts charitably: VoiceInk produces phonetic errors ("VAR" → "FAR").
 
+**A shell command Yulong runs himself is written multiline, one option or argument group per line with `\` continuations.** A single long line soft-wraps in his terminal and the paste breaks at the wrap, so this one arrived split and the shell answered `(eval):2: command not found: --force-with-lease` (2026-09-12); the push failed and he retyped it.
+
+```
+git -C /home/yulong/code/dotfiles/.claude/worktrees/rq-installer-stall \
+  push --force-with-lease \
+  origin worktree-installer-stall
+```
+
 ## Durability
 
 Behavioral instructions ("allow X", "always do Y", "stop doing Z") become durable config — `settings.json` permissions, a hook, or a rules file — not memory, which is only for what config cannot encode. Never create a `.local.md` unless asked; `.md` is version-controlled and the default.
