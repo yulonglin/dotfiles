@@ -100,7 +100,6 @@
       "Bash(git reset --hard *)",
       "Bash(git clean *)",
       "Bash(git push --force *)",
-      "Bash(git push --force-with-lease *)",
       "Bash(git push -f *)",
       "Bash(git branch -D *)",
       "Bash(dd *)",
@@ -155,11 +154,7 @@
       "Bash(* | node -)",
       "Bash(* | node - *)"
     ],
-    "ask": [
-      "Bash(sudo *)",
-      "Read(**/.env)",
-      "Read(**/.env.*)"
-    ],
+    "ask": [],
     "defaultMode": "auto"
   },
   "model": "fable",
