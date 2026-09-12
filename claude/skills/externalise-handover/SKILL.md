@@ -9,6 +9,7 @@ Write out the parts of this conversation a fresh reader needs, so the work can c
 
 **Cover:**
 
+- The overarching goal(s) and motivation.
 - Tasks to do next.
 - What has been accomplished — exact commands run, inputs and arguments, outputs including absolute file paths.
 - Bugs encountered.
