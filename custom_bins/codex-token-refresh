@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Keep the Codex CLI OAuth token alive so the statusline can read quota.
+
+The statusline asks `codex app-server` for `account/rateLimits/read`. That call
+does NOT refresh an expired token -- it just returns 401 `token_expired` -- but
+any real Codex request does refresh it. So once the token lapses, the usage
+fetch can never recover on its own: it fails every attempt until something else
+happens to run Codex. Measured 2026-09-12: ~/.codex/auth.json had not refreshed
+since 2026-09-06, every statusline fetch had been 401ing for two days, and the
+line showed a stale 100%-used week whose reset had already passed. One
+`codex exec` fixed it, and quota read 4% against a window resetting five days
+out.
+
+Note the CLI's credential is NOT the one model-router uses. The router keeps its
+own copy of the same account under ~/.local/state/model-router/codex-auth/ and
+refreshes that independently, so working GPT routes say nothing about whether
+the statusline can read quota. They were in exactly that split state.
+
+A refresh costs one minimal request, so this only spends when the token is
+actually aging: the observed lifetime is about four days, and the default
+12-hour threshold leaves a wide margin without paying daily for nothing.
+
+  codex-token-refresh              # refresh only if older than the threshold
+  codex-token-refresh --force      # refresh regardless
+  codex-token-refresh --max-age-hours 6
+"""
+
+import argparse
+import datetime
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+DEFAULT_MAX_AGE_HOURS = 12
+REFRESH_TIMEOUT_SECONDS = 120
+# Small enough to be nearly all fixed overhead; the point is the token, not the
+# answer. --skip-git-repo-check because this runs from wherever systemd starts it.
+PROMPT = "Reply with exactly: OK"
+
+OK, FAILED, UNAVAILABLE = 0, 1, 2
+
+
+def codex_home() -> Path:
+    value = os.environ.get("CODEX_HOME")
+    return Path(value) if value else Path.home() / ".codex"
+
+
+def last_refresh(home: Path) -> datetime.datetime | None:
+    try:
+        raw = json.loads((home / "auth.json").read_text()).get("last_refresh")
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, str):
+        return None
+    # Rust writes nanosecond precision; datetime accepts at most microseconds.
+    text = raw.replace("Z", "+00:00")
+    if "." in text:
+        head, _, tail = text.partition(".")
+        digits = "".join(c for c in tail if c.isdigit())[:6]
+        offset = tail[len(tail) - 6:] if "+" in tail or "-" in tail else "+00:00"
+        text = "%s.%s%s" % (head, digits.ljust(6, "0"), offset)
+    try:
+        return datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def age_hours(stamp: datetime.datetime) -> float:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return (now - stamp).total_seconds() / 3600
+
+
+def refresh(executable: str, home: Path) -> bool:
+    """One minimal request. Its output is irrelevant; the token write is the point."""
+    try:
+        subprocess.run(
+            [executable, "exec", "--skip-git-repo-check", PROMPT],
+            capture_output=True, text=True, timeout=REFRESH_TIMEOUT_SECONDS,
+            env={**os.environ, "CODEX_HOME": str(home)}, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return True
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Refresh the Codex CLI OAuth token so quota stays readable.")
+    parser.add_argument("--max-age-hours", type=float, default=DEFAULT_MAX_AGE_HOURS,
+                        help="refresh only if the token is older than this (default 12)")
+    parser.add_argument("--force", action="store_true", help="refresh regardless of age")
+    parser.add_argument("--json", action="store_true", help="print the result as JSON")
+    args = parser.parse_args()
+
+    home = codex_home()
+    executable = shutil.which("codex")
+    result: dict[str, object] = {"refreshed": False}
+
+    if executable is None or not (home / "auth.json").is_file():
+        result["summary"] = "Codex CLI is not installed or not logged in; nothing to refresh."
+        code = UNAVAILABLE
+    else:
+        before = last_refresh(home)
+        result["age_hours_before"] = round(age_hours(before), 2) if before else None
+        if before is not None and not args.force and age_hours(before) < args.max_age_hours:
+            result["summary"] = "Token refreshed %.1f h ago; leaving it." % age_hours(before)
+            code = OK
+        elif not refresh(executable, home):
+            result["summary"] = "Refresh request failed; token left as it was."
+            code = FAILED
+        else:
+            after = last_refresh(home)
+            moved = after is not None and (before is None or after > before)
+            result["refreshed"] = moved
+            result["age_hours_after"] = round(age_hours(after), 2) if after else None
+            # Codex only rewrites auth.json when it actually refreshes, so under
+            # --force on a still-valid token the stamp legitimately does not
+            # move. What matters is the outcome, not the write: the token is
+            # young enough to keep serving. Only an old stamp that stayed old
+            # means the refresh we needed did not happen.
+            young = after is not None and age_hours(after) < args.max_age_hours
+            if moved:
+                result["summary"] = "Token refreshed."
+            elif young:
+                result["summary"] = "Token was still valid; no refresh was needed."
+            else:
+                result["summary"] = "Request completed but the token did not refresh."
+            code = OK if (moved or young) else FAILED
+
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print(result["summary"])
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily Codex token refresh so quota never reads stale
+
+[Timer]
+OnCalendar=daily
+# A laptop is asleep at 00:00 more often than not, and a missed day is most of
+# the token's remaining life: the observed lifetime is about four days.
+Persistent=true
+# Nothing depends on the hour, and the run makes a real upstream request.
+RandomizedDelaySec=2h
+
+[Install]
+WantedBy=timers.target

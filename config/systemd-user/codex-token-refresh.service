@@ -1,0 +1,26 @@
+[Unit]
+Description=Keep the Codex CLI OAuth token fresh so the statusline can read quota
+Documentation=file:%h/code/dotfiles/custom_bins/codex-token-refresh
+
+[Service]
+Type=oneshot
+
+# deploy.sh copies this unit verbatim -- no templating -- so nothing here may
+# depend on the repo living somewhere else, and PATH is set explicitly because
+# systemd --user does not inherit the login shell's. codex lives in Linuxbrew
+# on this box; the sibling model-router-cooldown unit needs %h/.local/bin for
+# uv, and this one needs the Linuxbrew prefix for codex. The script itself is
+# plain `#!/usr/bin/env python3`, so no uv is required here.
+Environment=PATH=/home/linuxbrew/.linuxbrew/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+ExecStart=%h/code/dotfiles/custom_bins/codex-token-refresh
+
+# Exit 2 means Codex is not installed or not logged in, which is a normal state
+# on a box that does not use it, not a unit failure. Exit 1 -- the refresh was
+# needed and did not happen -- is worth surfacing.
+SuccessExitStatus=0 2
+
+# One upstream request, writing only ~/.codex. ProtectHome would block the
+# token write this unit exists to perform.
+PrivateTmp=true
+NoNewPrivileges=true
