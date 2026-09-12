@@ -117,6 +117,8 @@ check    "rejected+installed cask → uninstall cmd" "$out" "brew uninstall --ca
 check    "rejected section names the file"         "$out" "Rejected in apps-excluded.conf, still installed"
 check    "rejected reason carries its date"        "$out" "2026-09-03 — Still installed; superseded by Alpha"
 check_not "rejected cask not also called unregistered" "$out" "omega:"
+check_not "rejected mas not also given a row template" "$out" "|OldMas|"
+check    "--help reaches the trust policy line"    "$(run --help)" "Trust policy"
 check    "rejected+installed mas → uninstall cmd"  "$out" "sudo mas uninstall 333"
 check    "unregistered cask reported"       "$out" "stray-cask"
 check_not "cask declared in config.sh not reported" "$out" "declared-cli:"
