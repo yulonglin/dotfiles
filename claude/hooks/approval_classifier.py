@@ -1333,21 +1333,50 @@ def _render_tool_call(block: dict, is_error: bool | None) -> str:
 
 
 def _is_human_turn(entry: dict) -> bool:
-    """A user line typed by the person, as opposed to a tool_result carrier,
-    a meta line (slash-command expansion) or an older-format line.
+    """A user line the person may have typed, as opposed to a tool_result
+    carrier, a meta line (slash-command expansion) or a line some other
+    producer wrote.
 
     Claude Code (measured on 2.1.263) writes typed messages as `type: "user"`
     with `origin: {"kind": "human"}`; tool results are also `type: "user"` but
     carry `tool_result` blocks. There is no `type: "human"` — the previous
     filter looked for one and matched nothing, so from whenever that landed
     until 2026-09-08 the classifier saw zero user messages.
+
+    A present `origin` must say `kind == "human"` exactly: the older test let
+    `{"kind": None}` and any non-dict shape through. An *absent* `origin` key
+    is accepted, and that is a measurement, not an oversight — of the 11,984
+    candidate user turns in the transcripts on this machine (2026-09-12),
+    5,608 carry no `origin` key, on every CLI version through 2.1.269, and 172
+    of the 178 files holding such a line also hold `origin.kind == "human"`
+    lines, so the field is unreliable within one session rather than a mode
+    marker. Rejecting the shape would blank the block again, which is the
+    2026-09-08 regression running the other way. The load-bearing gate is
+    therefore the content filter below, not `origin`.
     """
     if entry.get("isMeta") or entry.get("isCompactSummary"):
         return False
+    if "origin" not in entry:
+        return True
     origin = entry.get("origin")
-    if isinstance(origin, dict) and origin.get("kind") not in (None, "human"):
-        return False
-    return True
+    return isinstance(origin, dict) and origin.get("kind") == "human"
+
+
+# Tags Claude Code wraps around content it writes into a user turn. Every one
+# of these was seen leading a block in real transcripts under ~/.claude/projects.
+_INJECTED_TAGS = (
+    "system-reminder", "local-command-stdout", "local-command-stderr",
+    "bash-input", "bash-stdout", "bash-stderr", "command-name",
+    "command-message", "command-args", "cross-session-message",
+    "teammate-message", "task-notification", "function_results",
+    "user-prompt-submit-hook",
+)
+# An opening tag through its close, or to the end of the block when the close
+# is missing — a truncated attachment must not leave its tail behind.
+_INJECTED_SPAN_RE = re.compile(
+    r"<(%s)\b[^>]*>.*?(?:</\1>|\Z)" % "|".join(_INJECTED_TAGS),
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _is_injected_text(text: str) -> bool:
@@ -1355,8 +1384,52 @@ def _is_injected_text(text: str) -> bool:
     compaction summaries, teammate messages, system reminders — in a tag such
     as <local-command-stdout>, <bash-stdout>, <system-reminder>. A person does
     not open a message with a tag. Reviewed 2026-09-08: these were reaching the
-    prompt as if the user had typed them."""
+    prompt as if the user had typed them.
+
+    A bare `<` and not the known-tag list on purpose (2026-09-12): orchestrator
+    prompts arrive wrapped in tags this file has never heard of — <prompt>
+    leads 1,065 turns on this machine, <turn>, <unit>, <segment>, <goal> and
+    <session> more — so a known-tag test would newly feed those to the
+    classifier as things the person said. The stated cost of the bare test is
+    a person opening a message with an angle bracket; measured over the same
+    transcripts, of the 117 `origin.kind == "human"` turns that begin with one,
+    all 117 begin with a known Claude Code tag and none are prose."""
     return text.lstrip().startswith("<")
+
+
+def _human_text(content: str | dict | list) -> str:
+    """The part of a user turn the person plausibly typed.
+
+    Each text block is judged on its own, because Claude Code appends its own
+    blocks to a real ask: a turn of ["please do X", "<system-reminder>..."]
+    joins to a string that opens with the ask, and the whole thing — the
+    reminder included — used to reach the prompt under "User's recent
+    messages". A block that opens with a tag is dropped; a known tag *inside*
+    a block is cut out and the rest of that block kept, so an ask that arrives
+    with a reminder stapled to it still counts. That in-block shape is the
+    common one: 1,635 of the 11,982 candidate turns on this machine carry a
+    known tag mid-string while the turn does not begin with one.
+    """
+    if isinstance(content, dict):
+        return _human_text(content.get("content", ""))
+    if isinstance(content, str):
+        blocks = [content]
+    elif isinstance(content, list):
+        blocks = [b.get("text", "") for b in content
+                  if isinstance(b, dict) and b.get("type") == "text"]
+    else:
+        return ""
+    kept: list[str] = []
+    for block in blocks:
+        if not isinstance(block, str) or _is_injected_text(block):
+            continue
+        stripped = _INJECTED_SPAN_RE.sub(" ", block)
+        # Only a rewritten block is re-spaced; an untouched one keeps the
+        # user's own line breaks.
+        text = " ".join(stripped.split()) if stripped != block else block.strip()
+        if text:
+            kept.append(text)
+    return " ".join(kept).strip()
 
 
 def _scan_transcript_tail(
@@ -1389,8 +1462,8 @@ def _scan_transcript_tail(
                     results[str(b.get("tool_use_id", ""))] = bool(b.get("is_error"))
                 continue
             if len(users) < user_count and _is_human_turn(entry):
-                text = _extract_text(content)
-                if text and not _is_injected_text(text):
+                text = _human_text(content)
+                if text:
                     users.append(_truncate(text, MAX_USER_MSG_CHARS))
         elif kind == "assistant" and isinstance(content, list):
             for b in reversed(content):
