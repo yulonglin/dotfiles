@@ -1,8 +1,8 @@
 """Keeping the Codex CLI token alive for the statusline's quota read.
 
 The timestamps below are the real shapes written by the Codex CLI (Rust, so
-nanosecond precision, which datetime.fromisoformat will not take). No token,
-account id or email appears here.
+nanosecond precision, which datetime.fromisoformat will not take before Python
+3.11). No token, account id or email appears here.
 """
 
 import datetime
@@ -35,7 +35,16 @@ def iso(when: datetime.datetime) -> str:
 
 class TestTimestampParsing:
     def test_nanosecond_precision_is_accepted(self, tmp_path):
-        """The real observed stamp. datetime.fromisoformat rejects 9 digits."""
+        """The real observed stamp.
+
+        Note what this covers where. Python 3.11 accepts the Z suffix and a
+        9-digit fraction outright, so on 3.11+ (this suite runs 3.14, the unit
+        runs 3.12) it certifies the stdlib and passes with the truncation
+        removed. On 3.10 -- the floor this file's PEP 604 annotations set, and
+        what a 22.04 or RunPod box gives you -- fromisoformat rejects both and
+        the truncation is the only reason this passes. It is kept for that box,
+        not for this one.
+        """
         write_auth(tmp_path, "2026-09-06T06:06:06.916739921Z")
         parsed = refresh.last_refresh(tmp_path)
         assert parsed is not None
@@ -49,6 +58,19 @@ class TestTimestampParsing:
     def test_missing_stamp(self, tmp_path):
         write_auth(tmp_path, None)
         assert refresh.last_refresh(tmp_path) is None
+
+    def test_naive_stamp_is_assumed_utc(self, tmp_path):
+        """A stamp with no offset must not come back naive.
+
+        age_hours() subtracts it from an aware now(), so a naive value raises
+        TypeError instead of being handled. The fractional branch above already
+        coerces a naive stamp to UTC, so this one does too.
+        """
+        write_auth(tmp_path, "2026-09-06T06:06:06")
+        parsed = refresh.last_refresh(tmp_path)
+        assert parsed is not None
+        assert parsed.tzinfo is not None, "naive stamp will detonate in age_hours()"
+        refresh.age_hours(parsed)
 
     def test_unparseable_stamp(self, tmp_path):
         write_auth(tmp_path, "not a date")
@@ -131,12 +153,26 @@ class TestSpendDecision:
         assert self._run(monkeypatch, ["--max-age-hours", "6"]) == refresh.OK
         assert len(self.calls) == 1, "8h-old token should refresh under a 6h threshold"
 
+    def test_an_aged_naive_stamp_does_not_crash_the_run(self, monkeypatch):
+        """The crash site: a stamp with no offset reached age_hours() raw."""
+        write_auth(self.home, "2026-09-06T06:06:06")
+        self._refresher(monkeypatch, advances=True)
+        assert self._run(monkeypatch, []) == refresh.OK
+        assert len(self.calls) == 1
+
     def test_not_logged_in_is_not_a_failure(self, monkeypatch):
         """A box that never uses Codex must not run a failing unit daily."""
         assert self._run(monkeypatch, []) == refresh.UNAVAILABLE
         assert self.calls == []
 
-    def test_codex_absent_is_not_a_failure(self, monkeypatch):
+    def test_codex_absent_with_a_token_present_is_a_failure(self, monkeypatch):
+        """A credential that exists and cannot be refreshed is not a quiet state.
+
+        The unit treats exit 2 as success, so returning UNAVAILABLE here would
+        stay green while the token it guards ages out. Only a missing auth.json
+        -- nothing to keep fresh -- is quiet.
+        """
         write_auth(self.home, iso(datetime.datetime.now(datetime.timezone.utc)))
         monkeypatch.setattr(refresh.shutil, "which", lambda name: None)
-        assert self._run(monkeypatch, []) == refresh.UNAVAILABLE
+        assert self._run(monkeypatch, []) == refresh.FAILED
+        assert self.calls == []

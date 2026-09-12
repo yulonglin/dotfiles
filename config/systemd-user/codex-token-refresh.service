@@ -15,9 +15,12 @@ Environment=PATH=/home/linuxbrew/.linuxbrew/bin:%h/.local/bin:/usr/local/bin:/us
 
 ExecStart=%h/code/dotfiles/custom_bins/codex-token-refresh
 
-# Exit 2 means Codex is not installed or not logged in, which is a normal state
-# on a box that does not use it, not a unit failure. Exit 1 -- the refresh was
-# needed and did not happen -- is worth surfacing.
+# Exit 2 means there is no credential at all -- auth.json is absent, so nothing
+# can go stale. That is a normal state on a box that logged out, not a unit
+# failure. It deliberately no longer covers a missing `codex` binary: a token
+# that exists and cannot be refreshed exits 1, because a watchdog that reports
+# success while the thing it guards decays is worse than no watchdog. Exit 1 --
+# the refresh was needed and did not happen -- is worth surfacing.
 SuccessExitStatus=0 2
 
 # One upstream request, writing only ~/.codex. ProtectHome would block the

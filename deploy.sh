@@ -1160,8 +1160,10 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
         # The statusline's quota read cannot refresh an expired token itself --
         # account/rateLimits/read returns 401 forever -- so without this the
         # line silently shows a days-old window. Gated because the check exits
-        # 2 (not installed / not logged in) on boxes that never use Codex, and
-        # an enabled timer there would just be noise.
+        # 2 (not logged in) on boxes that never use Codex, and an enabled timer
+        # there would just be noise. Note the gate tests the credential, not the
+        # binary: where codex is installed off the unit's PATH the timer is
+        # enabled and the check exits 1, which is the intended noise.
         if [[ -f "$HOME/.codex/auth.json" ]]; then
             if systemctl --user enable --now codex-token-refresh.timer 2>/dev/null; then
                 log_success "codex-token-refresh.timer enabled"

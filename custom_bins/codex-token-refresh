@@ -56,6 +56,11 @@ def last_refresh(home: Path) -> datetime.datetime | None:
     if not isinstance(raw, str):
         return None
     # Rust writes nanosecond precision; datetime accepts at most microseconds.
+    # This normalisation is what holds the runtime floor at Python 3.10 -- the
+    # floor the PEP 604 annotations in this file already set. Measured: 3.10
+    # rejects both the Z suffix and a 9-digit fraction, so without this the real
+    # CLI stamp parses to None there and the tool spends a request every day and
+    # reports failure every day; 3.11 accepts both and this is a no-op.
     text = raw.replace("Z", "+00:00")
     if "." in text:
         head, _, tail = text.partition(".")
@@ -63,9 +68,17 @@ def last_refresh(home: Path) -> datetime.datetime | None:
         offset = tail[len(tail) - 6:] if "+" in tail or "-" in tail else "+00:00"
         text = "%s.%s%s" % (head, digits.ljust(6, "0"), offset)
     try:
-        return datetime.datetime.fromisoformat(text)
+        parsed = datetime.datetime.fromisoformat(text)
     except ValueError:
         return None
+    # A stamp carrying no offset parses fine and then detonates in age_hours(),
+    # which subtracts it from an aware now(). Assume UTC rather than returning
+    # None: the fractional branch above already does exactly that, upstream only
+    # ever writes UTC, and None here would spend a request and fail the unit
+    # every day on a token that is in fact still valid.
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
 
 
 def age_hours(stamp: datetime.datetime) -> float:
@@ -99,9 +112,16 @@ def main() -> int:
     executable = shutil.which("codex")
     result: dict[str, object] = {"refreshed": False}
 
-    if executable is None or not (home / "auth.json").is_file():
-        result["summary"] = "Codex CLI is not installed or not logged in; nothing to refresh."
+    if not (home / "auth.json").is_file():
+        result["summary"] = "Codex CLI is not logged in; there is no token to keep fresh."
         code = UNAVAILABLE
+    elif executable is None:
+        # Not the same state as "no credential". A token exists and is ageing,
+        # and nothing here can refresh it -- the statusline will go stale. The
+        # unit counts exit 2 as success, so reporting it that way would be a
+        # watchdog that stays green while the thing it guards decays.
+        result["summary"] = "Codex CLI is not on PATH; the existing token cannot be refreshed."
+        code = FAILED
     else:
         before = last_refresh(home)
         result["age_hours_before"] = round(age_hours(before), 2) if before else None
