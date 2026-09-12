@@ -137,6 +137,26 @@ test_fetch_carries_deadlines() {
     fi
 }
 
+test_version_probes_cannot_kill_the_install() {
+    # A silent death is a stall's twin: the run stops, and nothing says why.
+    # Under zsh's `set -euo pipefail` an assignment inherits its command
+    # substitution's status, so `ver=$(fetch ... | grep ... )` aborts the script
+    # on that line and the `ver="${ver:-<pinned>}"` fallback written on the next
+    # line never runs. Measured on a clean ubuntu:24.04, which ships no python3:
+    # install.sh exited 127 straight after the core step — before zsh, tmux,
+    # extras or create-user — printing nothing at all (2026-09-12).
+    # Line continuations are joined first, so a probe split across lines is
+    # judged as one statement (line numbers in the diagnostic are post-join).
+    local unguarded
+    unguarded=$(sed -e :a -e '/\\$/N; s/\\\n/ /; ta' "$DOT_DIR/scripts/shared/helpers.sh" \
+        | grep -nE '^[[:space:]]+(want|sops_ver|age_ver)=\$\(' | grep -v '||' || true)
+    if [[ -z "$unguarded" ]]; then
+        pass "every remote version probe survives a failed fetch (|| fallback)"
+    else
+        fail "a version probe can abort install.sh under set -e" "$unguarded"
+    fi
+}
+
 test_every_cargo_build_is_bounded() {
     # The probe below covers ONE helper. deploy.sh had its own
     # `cargo build --release --quiet`, backgrounded and reaped by a bare
@@ -456,6 +476,7 @@ test_run_with_timeout_bounds_a_hang
 test_run_with_timeout_zero_disables
 test_fetch_carries_deadlines
 test_every_cargo_build_is_bounded
+test_version_probes_cannot_kill_the_install
 test_run_parallel_pid_capture_is_quoted
 test_watchdog_child_keeps_the_terminal
 test_retry_does_not_multiply_the_deadline

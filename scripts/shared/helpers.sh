@@ -577,7 +577,11 @@ install_sops() {
         brew_install sops
     else
         local sops_ver sops_arch
-        sops_ver=$(fetch https://api.github.com/repos/getsops/sops/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        # `|| sops_ver=""` for the reason install_node carries one: under
+        # zsh's `set -e` the assignment inherits the pipeline's status, and a
+        # rate-limited GitHub API makes `grep -o` exit 1, which would kill
+        # install.sh here rather than fall through to the pinned version.
+        sops_ver=$(fetch https://api.github.com/repos/getsops/sops/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2) || sops_ver=""
         sops_ver="${sops_ver:-3.9.4}"
         case "$(uname -m)" in
             x86_64)  sops_arch="amd64" ;;
@@ -598,7 +602,9 @@ install_age() {
         brew_install age
     else
         local age_ver age_arch tmpd
-        age_ver=$(fetch https://api.github.com/repos/FiloSottile/age/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2)
+        # See install_sops: an unguarded assignment makes the pinned fallback
+        # on the next line unreachable under `set -e`.
+        age_ver=$(fetch https://api.github.com/repos/FiloSottile/age/releases/latest | grep -o '"tag_name": "v[^"]*' | cut -d'v' -f2) || age_ver=""
         age_ver="${age_ver:-1.2.1}"
         case "$(uname -m)" in
             x86_64)  age_arch="amd64" ;;
@@ -1091,8 +1097,15 @@ install_node() {
     # Current LTS major from nodejs.org; dist index is newest-first and r['lts']
     # is the codename (truthy) for LTS releases, false otherwise.
     local want
+    # `|| want=""` is load-bearing, not defensive. A plain `want=$(pipeline)`
+    # carries the pipeline's status, and under zsh's `set -e` a failing
+    # assignment aborts the script on that line — so the `want=24` fallback
+    # below never ran in any of the cases it was written for. Measured on a
+    # clean ubuntu:24.04, which ships no python3: install.sh died with exit 127
+    # immediately after the core step, before zsh, tmux, extras or create-user,
+    # printing nothing at all. An unreachable nodejs.org does the same thing.
     want=$(fetch https://nodejs.org/dist/index.json 2>/dev/null \
-        | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null)
+        | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(r['version'] for r in d if r['lts'])[1:].split('.')[0])" 2>/dev/null) || want=""
     [[ "$want" =~ ^[0-9]+$ ]] || want=24
     if is_installed node && (( $(node -v | cut -d. -f1 | tr -d 'v') >= want )); then
         return 0
