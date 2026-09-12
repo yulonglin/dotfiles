@@ -5,6 +5,15 @@ first_published: 2026-09-03
 last_updated: 2026-09-03
 status: done
 
+summary: >-
+  the Brewfile listed 40 entries while the Mac carried 53 casks and 20 App Store apps;
+  `app-picker` gained `--installed` and `--audit`, `config.sh` gained `PACKAGES_TRIAL_MACOS`,
+  `mas-get` follows the Brewfile, and the Brewfile now states 64 entries; seven casks (cursor,
+  codex-app, codexbar, conductor, espanso, aqua-voice, cloudflare-warp) are named for removal
+  and marp-cli, graphite, age and sops were removed on review; every remaining library formula
+  traces to a requested tool. The rejections first rode a third value in the registry's
+  `default` column and moved to `config/apps-excluded.conf` on 2026-09-12 after review
+
 source: report.md
 built: brewfile-audit.html
 builds_with: |
