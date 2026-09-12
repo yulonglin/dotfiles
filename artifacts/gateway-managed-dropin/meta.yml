@@ -1,0 +1,27 @@
+title: The gateway keys move out of a public file
+url: https://claude.ai/code/artifact/d1d52cd8-b565-4f98-a863-3870026adc8b
+org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-09-12 (subscriptionType max)
+first_published: 2026-09-12
+last_updated: 2026-09-12
+status: live
+
+summary: >-
+  what PR #117 changes, for a reader deciding whether to adopt it. `~/.claude` is a symlink to
+  this repo, so the file Claude Code reads and the file git tracks are the same bytes — the
+  gateway needs a loopback URL with a per-install token in it, and the repo is public, so the
+  diff can never resolve. A root-owned managed drop-in ends that because the file is not in the
+  tree at all. The costs are a manual `sudo install` per machine and the loss of the
+  `CLAUDE_RC_OVERRIDE` escape hatch. Nothing in it has run on a real machine yet
+
+source: explainer.md
+built: index.html
+builds_with: |
+  md2artifact artifacts/gateway-managed-dropin/explainer.md -o artifacts/gateway-managed-dropin/index.html
+
+related: https://github.com/yulonglin/dotfiles/pull/117
+
+established: |
+  Nothing is measured here. The page explains a proposed change and states the costs; the
+  drop-in path, the two-phase apply ordering and the CLAUDE_RC_OVERRIDE consequence are read
+  from the PR's own code and from the Claude Code managed-settings documentation, not observed
+  on a machine. The "what has and has not been verified" section says so on the page itself.
