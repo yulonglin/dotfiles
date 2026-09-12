@@ -859,14 +859,22 @@ def test_a_project_filter_stays_fail_soft_on_an_unreadable_projects_root(tmp_pat
     projects = tmp_path / "projects"
     write_jsonl(projects / "keep-me" / "s.jsonl", [assistant_row(STAMP, uuid="k", output_tokens=5)])
     root = os.path.normpath(str(projects))
-    real_scandir = os.scandir
+    # Path.iterdir calls os.listdir on Python 3.12 and os.scandir from 3.13, so
+    # patching one of the two makes the test pass on one interpreter and fail on
+    # the other. Both are refused, and the assertion then measures the product's
+    # fail-soft branch rather than the CPython version running the suite.
+    real = {"scandir": os.scandir, "listdir": os.listdir}
 
-    def refuse_root(path=".", *args, **kwargs):
-        if os.path.normpath(os.fspath(path)) == root:
-            raise PermissionError(13, "simulated unreadable projects root")
-        return real_scandir(path, *args, **kwargs)
+    def refuse_root(name):
+        def refuse(path=".", *args, **kwargs):
+            if os.path.normpath(os.fspath(path)) == root:
+                raise PermissionError(13, "simulated unreadable projects root")
+            return real[name](path, *args, **kwargs)
 
-    monkeypatch.setattr(os, "scandir", refuse_root)
+        return refuse
+
+    monkeypatch.setattr(os, "scandir", refuse_root("scandir"))
+    monkeypatch.setattr(os, "listdir", refuse_root("listdir"))
 
     result = audit.scan_transcript_model_usage(projects, project_filter="keep")
 

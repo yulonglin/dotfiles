@@ -2,15 +2,39 @@ title: Fable sessions through the gateway trip the classifier
 url: https://claude.ai/code/artifact/e57cd906-4950-49a2-8a01-8b8f29234843
 org: MATS Program   # claude auth status, 2026-09-10 (orgName populated; subscriptionType team)
 first_published: 2026-09-10
-last_updated: 2026-09-10
+last_updated: 2026-09-11
+status: live
+status_note: >-
+  its causal headline was withdrawn on 2026-09-11, and the page body still argues it —
+  read the summary, not the title, until the page is republished
+
+summary: >-
+  reports auto-mode classifier `rate-limited` failures over 2026-08-01 to 09-10 by session
+  model, against a denominator of classifier-bound tool calls: zero across 23,166 bound calls
+  while the model-router gateway was off (19 Aug-5 Sep), 719 over 6-9 Sep of which 93% came
+  from Fable 5.1 sessions, every one naming the Opus 1M-context classifier.
+  **The causal reading of those counts was withdrawn on 2026-09-11** and is not supported:
+  with the session rather than the tool call as the unit, all 209 post-boundary failures come
+  from 4 of the 30 sessions that made bound calls, one holding 161, giving Fisher exact
+  p = 0.554; 53% of Bash failures over 6-9 Sep repeat the previous failure's command, so
+  every per-call rate on the page is inflated by retry loops. What stands is the measurement
+  itself — the by-session-model denominator and the counts. Cause of the September failures:
+  open. Its sibling page, `artifacts/why-auto-mode-broke-behind-the-gateway/`, carries the
+  same retraction and the refutation of the attribution-header explanation
+
 republish_pending: |
-  The committed HTML is ahead of the live page from commit 5057a63 (the
-  2026-09-06 within-day split) through 5224783 and later; publish the latest
-  build on the branch, not 5057a63. The republish was refused: this page lives in
-  the MATS Program org and the machine is now signed in to the personal account.
-  To land it, sign back in to MATS Program, read the url, then publish the
-  committed HTML with that url. No rebuild is needed.
-status: live   # the gateway's causal role is settled by the 09-06 within-day split; the mechanism (who asks for the 1M-context variant) is untested — flip to done when the declared-context-window test lands
+  Two reasons, and the second is the blocking one.
+
+  Content. The page still carries the causal argument withdrawn on 2026-09-11
+  (see status_note and summary): its title, its headline and its 6 September
+  within-day split all read the counts causally. The sibling page was corrected
+  in place and published as Version 4; this one was not, because the republish
+  below is refused. Correct the page and its title before republishing, do not
+  publish the current build as-is.
+
+  Access. The republish was refused: this page lives in the MATS Program org and
+  the machine is now signed in to the personal account. To land it, sign back in
+  to MATS Program, read the url, then publish with that url.
 
 source: build.py + data.json
 built: classifier-rate-limits-2026-09.html
@@ -25,7 +49,8 @@ evidence: |
   data-snapshot-2026-09-10.md is the measured input, copied verbatim from the
   session's tmp/artifact-data.md on 2026-09-10, then extended the same day with
   the 2026-09-06 within-day split and the 2026-09-10 reading: counts from
-  `claude-usage-audit --model-usage --days 21` (commit 3a1cdaf) and
+  `claude-usage-audit --model-usage --days 21` (the commit titled
+  `classifier failures carry where they happened, and the audit gets a denominator`) and
   `exposure_by_session_model.py`, `onset_0906.py` and `split_gateway_vs_cli.py`
   (all three copied here) over every local Claude Code
   transcript, the router log tallies, the statusline quota cache at
@@ -33,5 +58,19 @@ evidence: |
   fetched 2026-09-09 and re-verified 2026-09-10 against permission-modes,
   auto-mode-config and errors). The transcripts and the router log move on, so
   the snapshot cannot be regenerated; data.json is its transcription.
+
+  The retraction on 2026-09-11 rests on a further pass over the same
+  transcripts: the per-session recount of the 2026-09-06 split, the repeated-
+  command tally over 6-9 September, and a per-CLI-version scan of 4,884
+  transcripts (4,040 failures, 84,750 bound calls). Those runs are recorded in
+  pull request 110's comment history, not in this directory.
+
+  The page's two source links used to be pinned to branch commits, 3a1cdaf and
+  ea8c319. Neither id outlives the squash-merge this repo uses, so both now
+  point at `blob/main/` and the producing commits are named by subject instead
+  of by id. The exact numbers they produced are not left to a link:
+  data-snapshot-2026-09-10.md is the verbatim capture, committed beside the
+  page. That file keeps its own `commit 3a1cdaf` untouched, which names the
+  branch commit the audit was run at rather than anything that lands on main.
 
 related: https://github.com/yulonglin/dotfiles/pull/110

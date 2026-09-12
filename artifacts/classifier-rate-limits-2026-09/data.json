@@ -3,11 +3,11 @@
   "sources": {
     "audit": {
       "command": "./custom_bins/claude-usage-audit --model-usage --days 21",
-      "url": "https://github.com/yulonglin/dotfiles/blob/3a1cdaf/custom_bins/claude-usage-audit"
+      "url": "https://github.com/yulonglin/dotfiles/blob/main/custom_bins/claude-usage-audit"
     },
     "exposure": {
       "command": "python3 exposure_by_session_model.py [start end]",
-      "url": "https://github.com/yulonglin/dotfiles/blob/ea8c319/artifacts/classifier-rate-limits-2026-09/exposure_by_session_model.py"
+      "url": "https://github.com/yulonglin/dotfiles/blob/main/artifacts/classifier-rate-limits-2026-09/exposure_by_session_model.py"
     },
     "snapshot": "data-snapshot-2026-09-10.md",
     "pr": "https://github.com/yulonglin/dotfiles/pull/110",
@@ -20,11 +20,11 @@
     "sibling_artifact": "https://claude.ai/code/artifact/26263dc9-8fda-4e1e-8d37-9161665d5b12",
     "onset": {
       "command": "python3 onset_0906.py",
-      "url": "https://github.com/yulonglin/dotfiles/blob/worktree-classifier-failure-accounting/artifacts/classifier-rate-limits-2026-09/onset_0906.py"
+      "url": "https://github.com/yulonglin/dotfiles/blob/main/artifacts/classifier-rate-limits-2026-09/onset_0906.py"
     },
     "split": {
       "command": "python3 split_gateway_vs_cli.py",
-      "url": "https://github.com/yulonglin/dotfiles/blob/worktree-classifier-failure-accounting/artifacts/classifier-rate-limits-2026-09/split_gateway_vs_cli.py"
+      "url": "https://github.com/yulonglin/dotfiles/blob/main/artifacts/classifier-rate-limits-2026-09/split_gateway_vs_cli.py"
     }
   },
   "by_day": [

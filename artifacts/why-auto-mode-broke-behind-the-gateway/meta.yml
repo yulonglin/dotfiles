@@ -2,10 +2,41 @@ title: Why Auto Mode Broke Behind the Gateway
 url: https://claude.ai/code/artifact/26263dc9-8fda-4e1e-8d37-9161665d5b12
 org: personal Max account   # claude auth status, 2026-09-10; orgName is the account's own default org, not MATS Program
 first_published: 2026-09-09
-last_updated: 2026-09-10
-status: live   # the gateway's causal role is settled by the 2026-09-06 within-day split; why the Opus classifier lane refuses and the Sonnet lane does not is open
+last_updated: 2026-09-11
+status: live
+status_note: >-
+  four claims withdrawn on 2026-09-11 and published as Version 4; the mechanism stands,
+  what it was said to explain does not
+
+summary: >-
+  the mechanism behind the auto-mode 429s, verified line by line in the installed 2.1.267
+  bundle: `CLAUDE_CODE_ATTRIBUTION_HEADER=0` in the settings, combined with a base URL whose
+  host is not `api.anthropic.com`, makes Claude Code omit the billing-attribution block from
+  classifier requests; the 2.1.229 repair re-adds it only for the literal `api.anthropic.com`
+  host and ignores `_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL` (Anthropic issues
+  [64585](https://github.com/anthropics/claude-code/issues/64585) and
+  [60438](https://github.com/anthropics/claude-code/issues/60438)).
+  **Four of its claims were withdrawn on 2026-09-11** and the page carries the retraction: a
+  per-version scan of 4,884 local transcripts refutes the two-condition claim in both
+  directions (the 14-18 Aug gateway window recorded 0 failures in 4,056 bound calls, Fable
+  sessions 0 of 795, while 153 failures occurred with no gateway on post-2.1.229 CLIs), and
+  the 6 September within-day split does not survive the session as the unit of analysis (all
+  209 failures come from 4 of 30 sessions, Fisher exact p = 0.554, every one from a session
+  started after the boundary). The same call site has a second gate that is true on this
+  machine's signed-in configuration, so the block may be absent in every period — and a
+  constant cannot explain variation. Cause of the September failures: open. The opt-out is
+  gone from the committed settings since `b2868c8`, on its own merits
 favicon: "🚦"
 annotation_key: review-auto-mode-classifier-429-report
+
+republish_pending: |
+  The committed HTML is one edit ahead of live Version 4. Main landed the same
+  settings change as b2868c8 while this branch was open, so the two sentences
+  that told the reader the fix was waiting on an unmerged 963eaa2 on this
+  branch were wrong in both directions: the fix is merged, and a branch commit
+  id does not survive the squash-merge this repo uses. Both now name b2868c8
+  and the regression test 21f78d1. Republish per republishes_with below; the
+  retraction text itself is unchanged.
 
 source: |
   None. The page is authored directly as HTML — there is no markdown or build
