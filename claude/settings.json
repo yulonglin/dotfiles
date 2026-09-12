@@ -139,11 +139,7 @@
       "Bash(* | zsh*)"
     ],
     "ask": [
-      "Bash(curl * | *)",
-      "Bash(wget * | *)",
-      "ExitPlanMode",
       "Bash(sudo *)",
-      "Bash(kubectl delete *)",
       "Read(**/.env)",
       "Read(**/.env.*)"
     ],
