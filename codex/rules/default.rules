@@ -30,6 +30,10 @@
 # Skipped non-Bash permission (allow): Artifact
 # Skipped non-Bash permission (allow): Read
 # Skipped non-Bash permission (allow): Read(**/.envrc)
+prefix_rule(pattern=["bash", "-lc", "model-router-wire *"], decision="allow")
+prefix_rule(pattern=["model-router-wire", "*"], decision="allow")
+prefix_rule(pattern=["bash", "-lc", "mutool draw *"], decision="allow")
+prefix_rule(pattern=["mutool", "draw", "*"], decision="allow")
 # Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-fetch
 # Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-search
 # Skipped non-Bash permission (allow): mcp__claude_ai_Notion__notion-get-comments
@@ -170,15 +174,8 @@ prefix_rule(pattern=["bash", "-lc", "* | zsh*"], decision="forbidden")
 prefix_rule(pattern=["*", "|", "zsh*"], decision="forbidden")
 
 # ask rules
-prefix_rule(pattern=["bash", "-lc", "curl * | *"], decision="prompt")
-prefix_rule(pattern=["curl", "*", "|", "*"], decision="prompt")
-prefix_rule(pattern=["bash", "-lc", "wget * | *"], decision="prompt")
-prefix_rule(pattern=["wget", "*", "|", "*"], decision="prompt")
-# Skipped non-Bash permission (ask): ExitPlanMode
 prefix_rule(pattern=["bash", "-lc", "sudo *"], decision="prompt")
 prefix_rule(pattern=["sudo", "*"], decision="prompt")
-prefix_rule(pattern=["bash", "-lc", "kubectl delete *"], decision="prompt")
-prefix_rule(pattern=["kubectl", "delete", "*"], decision="prompt")
 # Skipped non-Bash permission (ask): Read(**/.env)
 # Skipped non-Bash permission (ask): Read(**/.env.*)
 
