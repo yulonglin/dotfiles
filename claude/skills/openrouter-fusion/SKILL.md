@@ -5,7 +5,7 @@ description: Query OpenRouter — a parallel multi-model panel with judge synthe
 
 # OpenRouter
 
-**Reach OpenRouter through `openrouter-cli`, never through a subagent.** Claude Code resolves an agent's `model:` frontmatter against api.anthropic.com only, so a non-Anthropic name there either hard-fails or answers from Claude wearing another family's label. The CLI is on PATH; `--help` on any subcommand is authoritative.
+**Reach OpenRouter through `openrouter-cli` for a question or a panel; a subagent is the other route, and only for a model the router already serves.** Since the model-router gateway was wired on 2026-09-06 an agent's `model:` frontmatter does reach a foreign model — but only through a generated agent file, because `config/model-router.toml` declares which routing IDs exist and `model-router-wire apply` renders `claude/agents/`. A hand-written frontmatter naming a raw OpenRouter slug is not a route; `claude/rules/delegation.md` is the authority on that. The CLI stays the right tool for a one-off, a panel or anything that needs the call logged. It is on PATH; `--help` on any subcommand is authoritative.
 
 ```bash
 openrouter-cli models              # configured models; --check cross-checks the catalogue

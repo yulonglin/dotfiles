@@ -1,0 +1,29 @@
+title: Six of the seven bugs were already fixed
+url: https://claude.ai/code/artifact/c268d869-0260-4375-a4e9-0b33775f7d5d
+org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-09-12 (subscriptionType max)
+first_published: 2026-09-12
+last_updated: 2026-09-12
+status: live
+
+summary: >-
+  what a hook, a skill, a rule and an agent each are, defined against files in this repo rather
+  than in the abstract, and then which of seven tooling bugs belongs in which. The answer to
+  "which should we learn from" turned out to be that six were already documented in the
+  `review-pr-queue` skill that landed the day before, so the genuine remainder is one section
+  and one bullet. The classifier-rejection ask is the one item with no clean fix, because the
+  harness makes those decisions and a hook cannot veto one — all a rule can change is what the
+  model does next
+
+source: explainer.md
+built: index.html
+builds_with: |
+  md2artifact artifacts/setup-lessons-hooks-skills-rules/explainer.md -o artifacts/setup-lessons-hooks-skills-rules/index.html
+
+related: https://github.com/yulonglin/dotfiles/pull/148
+
+established: |
+  The duplication claim is checked, not asserted: items 1, 2, 3, 5, 7 and half of 4 appear
+  verbatim in `claude/skills/review-pr-queue/SKILL.md` as landed by PR #132 on 2026-09-11. The
+  model-family routing finding is one measurement on one sanitiser review, not a general
+  ranking. The always-on tier being over its ceiling is `tests/test_memory_tier_budget.py`
+  failing on `main`, before any change in the accompanying PR.
