@@ -1,9 +1,21 @@
 title: Remote Control and Foreign Models
 url: https://claude.ai/code/artifact/d224e859-2f4d-452c-9781-5ab3941e57cf
-org: unknown   # claude.ai login, orgName null at publish time
+# This file describes the 2026-09-03 publication (the url above). The org read
+# on 2026-09-06 — yl688@cantab.ac.uk's Organization — belongs to the successor
+# page, recorded in artifacts/index-rows/remote-control-and-foreign-models-dfd9f494.yml;
+# it was stamped here by mistake and said nothing about who published this url.
+org: "unknown (claude.ai login; `claude auth status` reports `orgName: null`)"
 first_published: 2026-09-03
 last_updated: 2026-09-03
 status: live
+
+public: no
+
+summary: >-
+  native Remote Control and a non-Claude `/model` menu are mutually exclusive in one process
+  by construction; an unrecognised model ID silently answers from the default Claude model;
+  route at the tool layer, and the one workaround worth a test moves the endpoint without
+  breaking TLS
 
 source: report.md
 built: report.html

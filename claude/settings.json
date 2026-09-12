@@ -3,7 +3,6 @@
   "cleanupPeriodDays": 999999,
   "env": {
     "BASH_MAX_OUTPUT_LENGTH": "100000",
-    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "258400",
     "CLAUDE_CODE_NO_FLICKER": "1",
@@ -147,10 +146,6 @@
     "defaultMode": "auto"
   },
   "model": "fable",
-  "fallbackModel": [
-    "claude-opus-5",
-    "opus"
-  ],
   "skillOverrides": {
     "claude-api": "off"
   },
@@ -467,6 +462,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/ensure_model_router.py\"",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_start.sh",
             "timeout": 5,
             "async": true
@@ -545,13 +549,22 @@
         ]
       },
       {
-        "//": "Gating a hook off compact is only safe when EVERYTHING it does is redundant after a compaction, and that is a property of the hook body, not of the source. show_auth_account.sh was tried here and moved back above: it recomputes a near-limit warning from a mutable usage cache — a side effect, not display — and now suppresses only its static output when source=compact, which recovers the noise without dropping live work. check_git_root.sh is left because it is purely a warning; the accepted cost is that a mid-session CWD change stops being re-warned after a compact. WARNING, this matcher IS a four-value allowlist despite reading like an exclusion of compact: SessionStart currently emits exactly startup, resume, clear, compact and fork, so today it excludes compact and nothing else, but a source added in a future release would be silently skipped here with no error and must be added by hand. Said explicitly because a comment asserting a safety property the code does not have is what hid the consent bug in issue #55.",
         "matcher": "startup|clear|resume|fork",
         "hooks": [
           {
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.git-root-warning -- $HOME/.claude/hooks/check_git_root.sh",
             "timeout": 3
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/check_model_router_update.py\"",
+            "timeout": 75,
+            "async": true
           }
         ]
       }
@@ -597,6 +610,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/ensure_model_router.py\"",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_mark.sh working",
             "timeout": 3
           }
@@ -625,6 +647,7 @@
     "dev-browser@dev-browser-marketplace": false,
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
+    "model-router@alignment-hive": true,
     "playground@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
@@ -840,7 +863,7 @@
   "theme": "auto",
   "verbose": true,
   "teammateMode": "in-process",
-  "remoteControlAtStartup": true,
+  "remoteControlAtStartup": false,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,

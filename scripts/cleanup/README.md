@@ -244,12 +244,13 @@ Modify the `clean_directory` function to accept a retention parameter, or create
 
 ## AI Tools Auto-Update
 
-Daily scheduled job (6:00 AM) that updates Claude Code, Gemini CLI, and Codex CLI.
+`setup_ai_update.sh` installs a daily 6:00 AM job for Claude Code, Antigravity CLI, Codex CLI, and OpenCode. Installing the schedule is separate from running the updater manually.
 
 ### Features
 
-- **Manager selection**: Uses brew on macOS and bun on Linux for Gemini/Codex updates
+- **Codex ownership**: Enforces `config/codex-install.conf`; unattended updates never switch owners
 - **`claude update`**: Works universally regardless of Claude Code install method
+- **Gateway validation**: After a successful Claude update, run the bounded infrastructure smoke check when the local model router is configured. Validation failures make the updater exit nonzero after other tools finish. A SessionStart hook also detects native/manual Claude and router-plugin version changes. Checks are cached only after a pass; failures retain a private report under `~/.local/state/model-router/update-check/`. No model-generation probes run automatically.
 - **Lock file**: Prevents concurrent runs with PID-based stale lock detection
 - **`--dry-run`**: Preview what would be updated without executing
 - **PATH setup**: Handles minimal launchd/cron PATH by sourcing brew and adding common paths

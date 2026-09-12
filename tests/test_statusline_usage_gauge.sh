@@ -58,7 +58,7 @@ usage_line() { sed -n '3p'; }
 # checks the env var before the keychain and the credentials file, and a real
 # token here would let a live fetch replace the fixture.
 render_rust() {
-    printf '%s' "$STATUS_INPUT" | env HOME="$FAKE/home" TMPDIR="$FAKE/tmp" \
+    printf '%s' "$STATUS_INPUT" | env HOME="$FAKE/home" CODEX_HOME="$FAKE/home/.codex" TMPDIR="$FAKE/tmp" \
         CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null | strip_ansi | usage_line
 }
 

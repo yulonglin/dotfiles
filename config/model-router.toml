@@ -1,0 +1,157 @@
+# The one place that says which non-Anthropic models a Claude Code session can
+# reach through the model-router gateway, and how. `model-router-wire apply`
+# renders this file into everything downstream and restarts the router:
+#
+#   ~/.config/model-router/config.toml   the router's routes (generated, do not edit)
+#   ~/.claude/settings.json              ANTHROPIC_BASE_URL + one modelPicker row
+#                                        per model with picker = true (working
+#                                        copy only; never committed)
+#   claude/agents/<id>.md                one agent file per model with agent set
+#                                        (generated files carry a marker and are
+#                                        removed when the model goes)
+#
+# Turn a model off with `enabled = false` (or delete its block) and run
+# `model-router-wire apply`; `model-router-wire status` shows what is live and
+# whether the rendered files have drifted from this one.
+#
+# Keys per [[models]] entry:
+#   id              the provider-facing routing ID; always served as a route
+#   aliases         short names, e.g. ["astra"]; every alias is served as a route
+#                   too, and the FIRST alias is the name used everywhere you type
+#                   one: the /model row, `--model`, the generated agent's name and
+#                   `subagent_type`. Without aliases the id plays that part.
+#   name            label in the picker and agent description
+#   provider        "codex"      = the OpenAI account through the Codex OAuth login
+#                                  held by the managed CLIProxyAPI child (no key)
+#                   "openrouter" = OpenRouter with the key in
+#                                  ~/.config/model-router/secrets.toml
+#                   "anthropic"  = a Claude model the router forwards unchanged:
+#                                  a picker row only, since Claude Code hides its
+#                                  own legacy rows on the first-party provider.
+#                                  id must be a claude-* ID; no aliases, no agent,
+#                                  context-window optional
+#                   another name = an [providers.<name>] block below (OpenAI-
+#                                  compatible host; key under that name in secrets.toml)
+#   slug            the provider's exact model ID (defaults to id)
+#   context-window  the model's real window at that provider; the router rescales
+#                   usage so auto-compaction fires there (only windows larger than
+#                   declared-context-window can be scaled)
+#   enabled         default true
+#   picker          default true: a row in /model
+#   agent           default true: an agent file; a string sets the effort
+#                   (low|medium|high|xhigh) for models that honour it; false = none
+#   writer-priority optional positive integer: eligible writers, lowest first.
+#                   Used by write-prose, not emitted into generated router files.
+#                   Only enabled models with an agent qualify; omit to opt out.
+#
+# Writer fallback: try the next eligible priority on quota or cooldown failure.
+# All provider = "codex" models use the same OAuth account and share its quota;
+# a provider-wide quota/cooldown error skips the remaining writers on that
+# provider. Other failures skip only the failed writer. If no writer remains,
+# report the blocker rather than silently choosing an unlisted model.
+
+# What Claude Code believes every routed model's window is (set in settings env
+# as CLAUDE_CODE_MAX_CONTEXT_TOKENS); 258400 is the Codex backend's input limit.
+declared-context-window = 258400
+
+[providers.openrouter]
+base-url = "https://openrouter.ai/api/v1"
+
+# There is deliberately no [providers.openai]. A direct api.openai.com route
+# would be the obvious fallback while the Codex OAuth account sits in a 429
+# cooldown, and the slugs are there (gpt-5.6-sol, gpt-6-astra and both siblings
+# are in the public /v1/models catalogue) -- but the chain cannot carry the
+# request. CLIProxyAPI forwards the Anthropic `max_tokens` verbatim as Chat
+# Completions `max_tokens`, and OpenAI rejects that parameter for these models:
+# "Unsupported parameter: 'max_tokens' is not supported with this model. Use
+# 'max_completion_tokens' instead." Nothing on this side can patch it -- the
+# provider schema above takes only name/base-url/models, and CLIProxyAPI's own
+# per-model `params:` does not rewrite the parameter either (both measured
+# 2026-09-12 against cli-proxy-api 7.2.154). The fix is upstream and unmerged,
+# so revisit when model-router ships a CLIProxyAPI that carries it:
+#   https://github.com/router-for-me/CLIProxyAPI/issues/5005
+#   https://github.com/router-for-me/CLIProxyAPI/pull/5669
+
+# ---- Older Claude models, passed straight through to Anthropic -----------
+# Active until at least 2027-02-05 (deprecations page, 2026-09-07). Opus 3 is
+# not addable: retired on the API 2026-01-05 and gone from OpenRouter too.
+
+[[models]]
+id = "claude-opus-4-6"
+name = "Opus 4.6"
+provider = "anthropic"
+
+# ---- OpenAI, from the account (never through OpenRouter) ----------------
+
+[[models]]
+id = "gpt-6-astra"
+aliases = ["astra"]
+writer-priority = 2
+name = "GPT-6 Astra"
+provider = "codex"
+context-window = 258400
+agent = "high"
+
+[[models]]
+id = "gpt-5.6-sol"
+aliases = ["sol"]
+writer-priority = 1
+name = "GPT-5.6 Sol"
+provider = "codex"
+context-window = 258400
+agent = "high"           # the plugin also ships gpt-5.6-sol(medium|high) on the long id
+
+# The plugin ships agents for these two; keeping the routes stops those agents
+# failing on first use. Off the picker until wanted.
+[[models]]
+id = "gpt-5.6-terra"
+name = "GPT-5.6 Terra"
+provider = "codex"
+context-window = 258400
+picker = false
+agent = false
+
+[[models]]
+id = "gpt-5.6-luna"
+name = "GPT-5.6 Luna"
+provider = "codex"
+context-window = 258400
+picker = false
+agent = false
+
+# ---- Other families, through OpenRouter ---------------------------------
+# Slugs match the council roster in config/openrouter-models.toml; windows are
+# the host's guaranteed figure from `verify-providers` on 2026-09-06.
+
+[[models]]
+id = "kimi-k3"
+aliases = ["kimi"]
+writer-priority = 3
+name = "Kimi K3"
+provider = "openrouter"
+slug = "moonshotai/kimi-k3"
+context-window = 1048576
+
+[[models]]
+id = "glm-5.3"
+aliases = ["glm"]
+name = "GLM 5.3"
+provider = "openrouter"
+slug = "z-ai/glm-5.3"
+context-window = 262144
+
+[[models]]
+id = "muse-spark-1.3"
+aliases = ["muse-spark", "muse"]
+name = "Muse Spark 1.3"
+provider = "openrouter"
+slug = "meta/muse-spark-1.3"
+context-window = 1048576
+
+[[models]]
+id = "grok-4.6"
+aliases = ["grok"]
+name = "Grok 4.6"
+provider = "openrouter"
+slug = "x-ai/grok-4.6"
+context-window = 500000

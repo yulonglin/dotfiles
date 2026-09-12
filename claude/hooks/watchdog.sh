@@ -9,7 +9,6 @@
 #   CLAUDE_WATCHDOG_INTERVAL     - check frequency in seconds (default: 60)
 #   CLAUDE_WATCHDOG_MAX_LIFE     - max lifetime in seconds (default: 28800 = 8h)
 #   CLAUDE_WATCHDOG_MEM_LIMIT_MB - RSS threshold for memory alerts (default: 4096)
-#   Requires: claude CLI in PATH with valid auth (Claude Max / OAuth)
 
 set -uo pipefail
 
@@ -78,64 +77,6 @@ send_notification() {
   printf '\a' 2>/dev/null || true
 }
 
-# Ask Haiku whether the session is genuinely stuck
-# Returns 0 (stuck) or 1 (not stuck). Falls through to 0 on any error.
-triage_with_haiku() {
-  local transcript_path="$1" stale_min="$2"
-
-  # Gate: need claude CLI
-  if ! command -v claude &>/dev/null; then
-    return 0  # No CLI — assume stuck, notify
-  fi
-
-  # Read last ~8KB of transcript for context
-  local context
-  context=$(tail -c 8000 "$transcript_path" 2>/dev/null || true)
-  if [[ -z "$context" ]]; then
-    return 0
-  fi
-
-  local prompt="The following Claude Code session transcript has had no new output for ${stale_min} minutes. Is the session stuck (e.g., error loop, hanging tool call, no progress) or not stuck (e.g., finished successfully, waiting for user input, completed its task)? Reply with exactly STUCK or NOT_STUCK followed by a one-sentence reason.
-
-Transcript (last 8KB):
-${context}"
-
-  # Runs synchronously — timeout caps at 45s, loop can't overlap itself
-  # Empty MCP config prevents connecting to external services (GitHub, Linear, etc.)
-  local mcp_config="${TMPDIR}/claude-watchdog-mcp.json"
-  [[ -f "$mcp_config" ]] || printf '{"mcpServers":{}}\n' > "$mcp_config"
-
-  local verdict
-  verdict=$(
-    printf '%s' "$prompt" | \
-    env -u CLAUDECODE CLAUDE_WATCHDOG_ENABLED=0 \
-    timeout 45 claude -p \
-      --model haiku \
-      --output-format text \
-      --no-session-persistence \
-      --tools "" \
-      --disable-slash-commands \
-      --mcp-config "$mcp_config" \
-      --strict-mcp-config \
-      2>/dev/null
-  ) || true
-
-  if [[ -z "$verdict" ]]; then
-    return 0  # CLI failed — assume stuck
-  fi
-
-  # Store reason for notification message
-  TRIAGE_REASON=$(printf '%s' "$verdict" | sed 's/^[A-Z_]* *//')
-
-  if [[ "$verdict" == NOT_STUCK* ]]; then
-    return 1  # Not stuck — skip notification
-  fi
-
-  return 0  # Stuck or ambiguous — notify
-}
-
-TRIAGE_REASON=""
-
 while true; do
   sleep "$INTERVAL"
 
@@ -186,20 +127,9 @@ while true; do
     fi
 
     STALE_MIN=$(( STALE_SECONDS / 60 ))
-    TRIAGE_REASON=""
-
-    # Haiku triage: check if actually stuck before notifying
-    if triage_with_haiku "$TRANSCRIPT_PATH" "$STALE_MIN"; then
-      # Stuck — send notification
-      local_msg="No progress for ${STALE_MIN}m"
-      if [[ -n "$TRIAGE_REASON" ]]; then
-        local_msg="${local_msg} — ${TRIAGE_REASON}"
-      else
-        local_msg="${local_msg} — session may be stuck"
-      fi
-      send_notification "$local_msg" "$PROJECT_NAME" "$SESSION_ID"
-      LAST_NOTIFY=$NOW
-    fi
-    # If not stuck, skip notification silently
+    send_notification \
+      "No recent output for ${STALE_MIN}m — session may still be running or waiting" \
+      "$PROJECT_NAME" "$SESSION_ID"
+    LAST_NOTIFY=$NOW
   fi
 done

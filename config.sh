@@ -144,6 +144,9 @@ GIT_USER_EMAIL="30549145+yulonglin@users.noreply.github.com"
 GIST_SYNC_ID="${GIST_SYNC_ID:-3cc239f160a2fe8c9e6a14829d85a371}"  # Gist used for config sync (SSH, git identity)
 
 # ─── AI Tools Configuration ───────────────────────────────────────────────────
+# Portable Codex ownership policy shared by Zsh installers and Bash updaters.
+source "$DOT_DIR/config/codex-install.conf"
+
 # MCP servers to configure for Claude Code
 MCP_SERVERS=(
     "context7:https://mcp.context7.com/mcp"

@@ -49,8 +49,7 @@
 ## 1. Problem Statement & Theory of Change
 
 ### Core Research Question
-[What specific question are you trying to answer? Be precise, measurable, and action-relevant.
-Ask yourself: "If I answer this, what will change?"]
+[What specific question are you trying to answer? Be precise, measurable, and action-relevant. Ask yourself: "If I answer this, what will change?"]
 
 ### Theory of Change
 [How will answering this question lead to real-world impact? What's your causal chain from research → knowledge → action → impact?]

@@ -2,7 +2,7 @@
 
 ## Writing
 
-One paragraph is ONE line in `.md` files — never a hard newline inside a paragraph. Blank lines separate paragraphs; readers soft-wrap. This covers prose, bullet bodies and table cells.
+One paragraph is ONE line in `.md` files — never a hard newline inside a paragraph. Blank lines separate paragraphs; readers soft-wrap. This covers prose, bullet bodies and table cells. `md-unwrap --check <path>` finds violations and `md-unwrap --fix <path>` repairs them; it gates staged Markdown under `claude/` in pre-commit and CI.
 
 **Todos and separate points are bullet lists, one item per line, sub-points nested** — in notes, plans, schedules and replies alike. Several items packed into one line with commas, semicolons or "then" is a list you have not drawn yet; a todo is its own `- [ ]` line so it can be ticked on its own. Bear-specific mechanics: `bear`.
 
@@ -10,9 +10,11 @@ Every header asserts a point, not a topic — in specs, plans, reports, READMEs,
 
 **Results belong in figures, not in paragraphs.** A passage carrying three or more numbers with intervals is a figure you have not drawn yet. This holds for papers, reports, artifacts, specs and slides alike: a reader compares positions on an axis far faster than they parse bracketed intervals in prose, and a comparison across conditions is nearly unreadable as sentences. Keep a number inline only when it is the single headline value, or the one figure a reader must be able to quote. Every comparison plot shows its chance line and its null. Tooling and style: `house-plots` for papers, `dataviz` for artifact pages.
 
-**Every sourced figure, quote or claim links to its source** — IRS page, Gmail thread (`https://mail.google.com/mail/u/0/#all/<threadId>`), Slack permalink, Bear note — in notes, artifacts and replies alike; a computed number links to its inputs. Links never end with a full stop — a trailing period gets copied into the URL. No checkbox checklists in specs or docs; `[ ]` belongs only in working todo lists.
+**Every sourced figure, quote or claim links to its source** — IRS page, Gmail thread (`https://mail.google.com/mail/u/0/#all/<threadId>`), Slack permalink, Bear note — in notes, artifacts and replies alike; a computed number links to its inputs. Links never end with a full stop — a trailing period gets copied into the URL. No checkbox checklists in specs or docs; `[ ]` belongs only where something ticks it — a working todo list, or an `md2artifact` review control.
 
 **Stale items never sit there looking current.** When a plan step, draft, todo, document row or decision is superseded, dropped or cancelled, strike it through, rewrite it or delete it — whichever leaves the least clutter — and, where the reason matters, add a short trailing note saying why and what replaced it: "~~Send the Anti Entropy request~~ dropped 3 Sep 2026: the signed variation covers the period". Completed items are ticked, not struck; struck means cancelled. In git-tracked files deletion is fine because history holds the old text; in Bear, which has no version history, rewrite or strike through rather than delete.
+
+**Model attribution names the exact model, not the family.** "Proofread by Claude Fable 5.1, 8 Sep" — not "by Claude". This applies to any label, stamp or annotation that attributes work to a model: notes, artifacts, commit messages, code comments. For non-Anthropic models the same rule holds (e.g. "reviewed by GPT-6 Astra", not "by GPT"). The human-readable model name is the one readers recognise; the model ID (`claude-fable-5-1`) goes only in machine-facing metadata.
 
 Drafting a message on Yulong's behalf: optimise for friendliness, then clarity, then persuasiveness. "Critique and improve" means apply all three and say what changed.
 

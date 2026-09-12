@@ -149,4 +149,9 @@ else
         --apply
 fi
 
+# Curate hooks for Codex; do not import Claude lifecycle scripts verbatim.
+echo ">>> Syncing maintained Codex hooks..."
+python3 "$DOTFILES_DIR/scripts/setup/sync_codex_hooks.py" --apply
+python3 "$DOTFILES_DIR/scripts/setup/repair_codex_plugin_hooks.py" --apply
+
 echo ">>> Done! Codex CLI is now synchronized with Claude Code configurations."

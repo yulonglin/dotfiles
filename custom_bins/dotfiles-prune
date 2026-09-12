@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# dotfiles-prune: weekly worktree housekeeping. Thin wrapper because the
+# launchd/cron scheduler (scripts/scheduler/scheduler.sh) takes one program
+# path with no arguments. Everything lives in `dotfiles-sync --prune`.
+set -uo pipefail
+here="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$here/dotfiles-sync" --prune "$@"

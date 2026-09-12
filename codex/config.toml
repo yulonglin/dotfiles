@@ -1,5 +1,6 @@
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_reasoning_effort = "ultra"
+# Default to "Approve for me": automatically review requests, keeping the sandbox.
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 sandbox_mode = "workspace-write"
@@ -240,6 +241,18 @@ trusted_hash = "sha256:62acbaff2b2f55f41971e21a164990aaa53c96919baa0a5eae2eb5db7
 
 [hooks.state."superpowers@claude-plugins-official:hooks/hooks-codex.json:session_start:0:0"]
 trusted_hash = "sha256:687e7af87f0cb59b1bcc71d368e097304b45d84999c90dc97358a22811691a3f"
+
+[hooks.state."remember@claude-plugins-official:hooks/hooks.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:063ea45c81012b7c36a92e4f0de9e8aaf2dcefeac5c09c6b45466acc62695486"
+
+[hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:post_tool_use:0:0"]
+trusted_hash = "sha256:b54eb6fa509b1829789b3c820f29cacd3636120ad2a563b8b839d94face0170a"
+
+[hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:session_start:0:0"]
+trusted_hash = "sha256:cd46d4c1408a0c59a707c959639837696d2fa1f17346db351523e3c04916ef56"
+
+[hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:71d43e21408ae365e00406e47e68fc72a78df1a758513ad07dcbf2490467ecd1"
 
 [memories]
 generate_memories = true

@@ -815,16 +815,14 @@ install_antigravity_cli() {
 }
 
 install_codex_cli() {
-    if is_installed codex; then return 0; fi
-    log_info "Installing Codex CLI..."
-    if is_macos; then
-        brew_install codex
-    elif cmd_exists bun; then
-        bun add -g @openai/codex &>/dev/null || { log_warning "Codex CLI failed"; return 1; }
-    else
-        log_warning "bun is required to install Codex CLI on Linux; skipping"
+    local codex_manager="${CODEX_INSTALL_MANAGER:-${DOT_DIR:-}/custom_bins/codex-install-manager}"
+    if [[ ! -x "$codex_manager" ]]; then
+        log_warning "Codex install manager is missing: $codex_manager"
         return 1
     fi
+    CODEX_INSTALL_METHOD="$CODEX_INSTALL_METHOD" \
+    CODEX_REQUIRED_SUBCOMMANDS="$CODEX_REQUIRED_SUBCOMMANDS" \
+        "$codex_manager" --ensure
 }
 
 # ─── Parallel Execution ──────────────────────────────────────────────────────

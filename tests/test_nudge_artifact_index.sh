@@ -196,6 +196,45 @@ grep -q "$URL_A" <<<"$OUT" || fail "no nudge when the index is absent entirely"
 grep -qi "create" <<<"$OUT" || fail "absent index should say to create it"
 ok
 
+# --- the hosted index is republished after every OTHER publish ---------------
+#
+# Since 2026-09-10 the index page is republished to its recorded URL after every
+# artifact publish, so "the row is already filed" is no longer a reason to stay
+# silent. The URL comes from the ARTIFACTS.md header, never from the hook.
+
+# The marker line is copied out of the REAL ARTIFACTS.md rather than invented,
+# so a header rewrite that moves or renames it fails a test here instead of
+# silently muting the republish clause on every publish.
+MARKER="$(grep -m1 -E '^\*\*Live index page:\*\*' "$REPO_ROOT/ARTIFACTS.md")" \
+    || fail "ARTIFACTS.md carries no '**Live index page:**' line for the hook to read"
+INDEX_URL="$(grep -m1 -oE 'https://claude\.ai/code/artifact/[0-9a-fA-F-]{36}' <<<"$MARKER")" \
+    || fail "the '**Live index page:**' line carries no artifact URL"
+
+printf '# Artifacts\n\n%s\n\n## Artifacts\n\n| [x](%s) | live |\n' "$MARKER" "$URL_A" \
+    > "$REPO/ARTIFACTS.md"
+
+# A publish whose row is already filed still has to refresh the hosted page.
+OUT="$(run_hook "$(payload publish "$URL_A" "")")"
+grep -qF "$INDEX_URL" <<<"$OUT" || fail "recorded publish was not asked to republish the index"
+ok
+
+# The index republishing itself must not ask itself to republish, or the nudge
+# never terminates.
+OUT="$(run_hook "$(payload publish "$INDEX_URL" "")")"
+[ -z "$OUT" ] || fail "nudged on a publish of the index page itself: $OUT"
+ok
+
+# Unrecorded and not the index: one message carrying both instructions.
+OUT="$(run_hook "$(payload publish "$URL_B" "")")"
+grep -qF "$URL_B" <<<"$OUT" || fail "lost the published URL"
+grep -q "publishing org" <<<"$OUT" || fail "lost the row instruction"
+grep -qF "$INDEX_URL" <<<"$OUT" || fail "lost the republish instruction"
+ok
+
+# The hook publishes nothing itself — it is PostToolUse advisory context only.
+grep -q "additionalContext" <<<"$OUT" || fail "republish nudge is not additionalContext"
+ok
+
 # --- the feature flag actually gates it --------------------------------------
 
 printf 'nudges = off\nnudges.artifact-index = off\n' > "$WORK/off.conf"

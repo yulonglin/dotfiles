@@ -69,24 +69,26 @@ How it works: (1) looks up your public IP against `~/.ssh/config` `HostName` ent
 
 Customization: `SERVER_NAME` env var overrides everything; `MACHINE_EMOJI` overrides the auto-assigned emoji.
 
-## Claude Code Statusline
+## Statusline separates session and provider usage
 
-Configured in `claude/settings.json` (`statusLine.command = "claude-tools statusline"`).
+Configured in `claude/settings.json` (`statusLine.command = "claude-tools statusline"`), with the renderer in [`tools/claude-tools/src/statusline.rs`](../tools/claude-tools/src/statusline.rs).
 
-```
-🌊 mats [code python] ~/code/project (main*) · 📊 45% · $0.23 · 12m
-│        │             │              │      │        │        └─ Session duration
-│        │             │              │      │        └─ Session cost
-│        │             │              │      └─ Context usage (color-coded)
-│        │             │              └─ Branch (* = dirty)
-│        │             └─ Active Claude context profiles
-│        └─ Directory
-└─ Machine name (SSH only, same as p10k)
-```
+- The first line shows the machine (SSH only), active context profiles, directory, and Git branch.
+- The session line shows the model, effort, context usage, duration, and classifier state when available.
+- The Claude usage line shows subscription quota gauges and reset pacing, including model-specific limits when reported.
+- The Codex usage line shows Codex subscription quotas for the signed-in ChatGPT account. These are Codex limits, not ChatGPT conversation counts or OpenAI API spend. Window labels come from the reported durations; the primary window is not assumed to be five hours. Only the aggregate Codex quota is rendered: per-model allowances that Codex reports beside it (Spark) are separate limits and are not shown.
 
-Context % is color-coded: green <70%, yellow 70–89%, red 90%+. Machine name uses the same `machine-name` script as Powerlevel10k, so identification is consistent across tools.
+Context usage is color-coded. Quota gauges show the percentage **used**, not remaining; their pace indicator compares usage with elapsed time in the quota window.
+
+Codex usage comes from the installed CLI's read-only `account/rateLimits/read` app-server method, implemented in [`codex_usage.rs`](../tools/claude-tools/src/codex_usage.rs). Successful snapshots are cached for five minutes; failed refreshes back off for one minute and keep old data visibly marked as stale. The collector honors `CODEX_HOME` (default `~/.codex`) and invalidates the cache when login-file metadata changes. It requires an `auth.json` file: keyring-only logins are not detected, and no Codex line is shown when that file is absent. API-key authentication does not expose ChatGPT subscription quotas; it shows `Codex usage unavailable` with the same one-minute retry backoff.
 
 `ccusage statusline` is deliberately not wired into the live Claude hook path because it can OOM on large local histories; guard logic still uses lightweight `ccusage blocks --active --json` where available.
+
+### Model usage is reported from existing records
+
+`claude-usage-audit --model-usage [--days N] [--json]` reports deduplicated token usage from local transcripts, separate direct API usage from the rotating approval-classifier `USAGE:` log lines, and quota snapshots sampled from the existing statusline cache when the command runs. The JSON schema retains the legacy `requests` key, where each count is one persisted response. `--project` filters transcript usage only; approval and quota data remain host-wide. The approval section does not observe CLI subscription fallback calls. The report stores no transcript content, account identity, project path or session identifier; successful native auto-mode classifier calls are unobserved, non-persisted calls are absent, and token counts are not subscription quota.
+
+Quota history is stored at `~/.claude/usage-data/quota-history.jsonl` without account attribution. Samples can interleave accounts because no identity is recorded. Each row contains only the cache observation time and allowlisted quota bucket utilization/reset fields; the current-cache report states its age and whether it exceeds the statusline cache's five-minute freshness window.
 
 ## Ignore Pattern Management
 
@@ -153,6 +155,10 @@ Detail missing from the per-component docs:
 ## Codex Layout
 
 `codex/` (symlinked to `~/.codex` by `./deploy.sh --codex`): `AGENTS.md` (global instructions, references CLAUDE.md as source of truth), `config.toml` (model settings, status line, per-project trust levels), `rules/` (synced from Claude Code's `rules/`), and `skills/` → symlink to `claude/skills/` so both CLIs share one skill set. Sync mechanics: [`cross-tool-extensibility.md`](./cross-tool-extensibility.md).
+
+The default is **Approve for me**: `approval_policy = "on-request"`, `approvals_reviewer = "auto_review"`, and `sandbox_mode = "workspace-write"` in `codex/config.toml`. Eligible approval requests go to Codex's automatic reviewer, which can approve or reject them; the workspace sandbox stays enabled. See the [OpenAI configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference). The CLI also exposes this mode as `codex --approve-for-me`.
+
+Check the live `~/.codex/config.toml` when diagnosing defaults: it may be a separate file, and deployment preserves an existing config during the directory merge.
 
 ## Shell Utility Functions & Aliases
 

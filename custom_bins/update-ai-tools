@@ -1,9 +1,9 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════════
 # AI CLI Tools Auto-Update
 # ═══════════════════════════════════════════════════════════════════════════════
-# Updates Claude Code, Codex CLI, and OpenCode using the correct method
-# per tool (brew on macOS, bun on Linux). Designed to run from launchd/cron.
+# Updates Claude Code, Codex CLI, and OpenCode through the package manager that
+# owns each executable. Designed to run from launchd/cron.
 #
 # Usage:
 #   update-ai-tools              # Run updates
@@ -12,9 +12,15 @@
 
 # ─── PATH Setup (critical for launchd/cron which have minimal PATH) ──────────
 
-# macOS: source Homebrew
-if [[ "$(uname -s)" == "Darwin" ]]; then
-    eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null)" || true
+# Source Homebrew on macOS or Linux when it is not already on PATH.
+if ! command -v brew &>/dev/null; then
+    for brew_executable in /opt/homebrew/bin/brew /home/linuxbrew/.linuxbrew/bin/brew /usr/local/bin/brew; do
+        if [[ -x "$brew_executable" ]]; then
+            eval "$("$brew_executable" shellenv 2>/dev/null)" || true
+            break
+        fi
+    done
+    unset brew_executable
 fi
 
 # Add common paths for globally installed tools
@@ -26,6 +32,8 @@ set -euo pipefail
 
 DRY_RUN=false
 LOCK_FILE="$HOME/.update-ai-tools.lock"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODEX_MANAGER="${CODEX_INSTALL_MANAGER:-$SCRIPT_DIR/codex-install-manager}"
 
 is_macos() { [[ "$(uname -s)" == "Darwin" ]]; }
 
@@ -38,7 +46,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: update-ai-tools [--dry-run]"
             echo ""
             echo "Updates Claude Code, Antigravity CLI, Codex CLI, and OpenCode."
-            echo "Uses brew on macOS and bun on Linux."
+            echo "Enforces Codex ownership from config/codex-install.conf."
             echo ""
             echo "Options:"
             echo "  --dry-run    Preview what would be updated"
@@ -80,7 +88,7 @@ trap release_lock EXIT
 
 # ─── Core Update Logic ──────────────────────────────────────────────────────
 
-# Update a tool using platform-appropriate manager (brew on macOS, bun on Linux)
+# Update a tool through the manager that owns its resolved executable.
 # Usage: update_tool <command_name> <brew_package> <package_name>
 update_tool() {
     local tool_name="$1" brew_name="$2" package_name="$3"
@@ -96,9 +104,12 @@ update_tool() {
     local tool_path
     tool_path=$(command -v "$tool_name" 2>/dev/null || true)
 
-    if is_macos && command -v brew &>/dev/null && [[ "$tool_path" == "$(brew --prefix 2>/dev/null)"* ]]; then
+    local brew_prefix=""
+    command -v brew &>/dev/null && brew_prefix=$(brew --prefix 2>/dev/null || true)
+
+    if [[ -n "$brew_prefix" && "$tool_path" == "$brew_prefix/"* ]]; then
         method="brew"
-    elif command -v bun &>/dev/null; then
+    elif command -v bun &>/dev/null && [[ "$tool_path" == "$HOME/.bun/bin/"* ]]; then
         method="bun"
     fi
 
@@ -130,6 +141,17 @@ update_tool() {
     esac
 }
 
+update_codex() {
+    if [[ ! -x "$CODEX_MANAGER" ]]; then
+        log_err "Codex install manager is missing: $CODEX_MANAGER"
+        return 1
+    fi
+
+    local manager_args=(--update)
+    [[ "$DRY_RUN" == "true" ]] && manager_args+=(--dry-run)
+    "$CODEX_MANAGER" "${manager_args[@]}"
+}
+
 # ─── Update Claude Code ─────────────────────────────────────────────────────
 
 update_claude() {
@@ -140,11 +162,28 @@ update_claude() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log "[DRY RUN] Would run: claude update"
+        log "[DRY RUN] Then validate router infrastructure: python3 $HOME/.claude/hooks/check_model_router_update.py --force"
         return 0
     fi
 
     log "Updating Claude Code..."
-    claude update 2>&1 || log_err "Claude Code update failed"
+    local update_status=0
+    claude update 2>&1 || update_status=$?
+    if [[ "$update_status" -ne 0 ]]; then
+        log_err "Claude Code update failed"
+        return "$update_status"
+    fi
+
+    local checker="$HOME/.claude/hooks/check_model_router_update.py"
+    if [[ ! -f "$checker" ]]; then
+        log_err "Router infrastructure checker missing: $checker"
+        return 1
+    fi
+    log "Validating router infrastructure after Claude Code update..."
+    python3 "$checker" --force || {
+        log_err "Router infrastructure validation failed"
+        return 1
+    }
 }
 
 # ─── Update Antigravity CLI ─────────────────────────────────────────────────
@@ -187,8 +226,10 @@ log "PATH: $PATH"
 set +e
 
 update_claude
+claude_update_status=$?
 update_antigravity
-update_tool "codex"    "codex"    "@openai/codex"
+update_codex
+codex_update_status=$?
 update_tool "opencode" "opencode" "opencode-ai"
 
 # ty is a uv tool — upgrade via uv directly
@@ -204,3 +245,5 @@ fi
 set -e
 
 log "═══ AI Tools Update Complete ═══"
+[[ "$codex_update_status" -eq 0 ]] || exit "$codex_update_status"
+exit "$claude_update_status"

@@ -46,6 +46,19 @@ for path in sorted(glob.glob(os.path.join(os.environ["STATE_DIR"], "*.json"))):
         continue
     age_h = (now - ts).total_seconds() / 3600
     name = st.get("repo", os.path.basename(path)[:-5])
+    if path.endswith(".prune.json"):
+        # Weekly `dotfiles-sync --prune`: the only thing worth a session's
+        # attention is what it deliberately did NOT touch -- unmerged worktrees
+        # past the stale threshold -- and a removal git refused.
+        if st.get("status") != "ok":
+            lines.append(f"{name}: the last worktree prune had a removal git refused; see"
+                         f" {path}.")
+        stale = st.get("stale") or []
+        if stale:
+            lines.append(f"{name}: {len(stale)} worktree(s) with unmerged commits older than the"
+                         f" stale threshold: {'; '.join(stale)}. Merge (cwmerge) or drop (cwrm --no-merge)"
+                         " each by hand; the prune never touches unmerged work.")
+        continue
     if st.get("status") != "ok":
         lines.append(f"{name}: last dotfiles-sync FAILED {age_h:.0f} h ago: {st.get('message', '?')}."
                      " Fix it by hand (git status there), then `dotfiles-sync` to confirm.")

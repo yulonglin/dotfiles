@@ -327,9 +327,9 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     # Pre-set PATH for subshells
     [[ -d "$HOME/.claude/bin" ]] && export PATH="$HOME/.claude/bin:$PATH"
 
-    # Bun is the global JS CLI package manager on BOTH platforms — it must land
-    # before Codex/OpenCode on Linux (they need `bun add -g`) and before the
-    # Socket CLI install below, which is `bun add -g` everywhere.
+    # Bun is the global JS CLI package manager on BOTH platforms. Codex follows
+    # config/codex-install.conf; OpenCode can fall back to bun, and Socket CLI
+    # uses `bun add -g` everywhere.
     install_bun || true
 
     if is_macos; then

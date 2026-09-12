@@ -1,6 +1,6 @@
 # Global AGENTS.md
 
-Authoritative instructions for Codex CLI agents on this machine. `CLAUDE.md` — global (`~/.claude/CLAUDE.md`) and at the repo root — is the source of truth and is updated more often; defer to it on any conflict with this file.
+Authoritative instructions for Codex CLI agents on this machine. `CLAUDE.md` — global (`~/.claude/CLAUDE.md`) and at the repo root — is the source of truth and is updated more often; adapt tool-specific guidance to the tools exposed in this Codex session. Codex compatibility guidance takes precedence over Claude-only tool assumptions.
 
 For library/API documentation, in order: Context7 MCP → `gh api` for specific files → read the locally installed library → WebSearch last.
 
@@ -43,9 +43,11 @@ You MUST refer to instructions in global `CLAUDE.md` at `~/.claude/CLAUDE.md`, a
 
 ## Tool Mapping for Skills
 Skills under `~/.codex/skills` are written for Claude Code and name its tools. Substitute:
-- `TodoWrite` → `update_plan`
-- `Task` / subagents → your own subagents (`multi_agent`; verified enabled 2026-07-27 — recheck with `codex features list`)
+- `TodoWrite` → the exposed plan tool, or a concise checklist if absent
+- `Task` / subagents → the exposed Codex collaboration tools
 - `Skill` tool references → apply the discovered skill's instructions directly
-- `Read`, `Write`, `Edit`, `Bash` → your native equivalents
+- `Read`, `Grep`, `Glob` → shell reads, `rg`, `rg --files`, `bat`
+- `Write`, `Edit` → `apply_patch`; `Bash` → the exposed shell tool
+- `Monitor` / `codex-companion` → native collaboration or review; do not launch nested Codex merely to satisfy a Claude-only workflow
 
 **If a skill applies to the task, use it** — and say which one you're using and why.

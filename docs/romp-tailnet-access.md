@@ -25,14 +25,13 @@ Two independent mechanisms, and confusing them wastes a lot of time.
 
 **`tailscale serve` routes by Host header.** Pointing a browser at `http://<tailnet-ip>/` returns **404**, not the dashboard, because serve matches the node's DNS name and an IP in the Host header matches no handler. So the IP alone is not enough; it needs a listener that bypasses serve entirely.
 
-That listener is a `socat` TCP forwarder bound to the tailnet IP. TCP-level forwarding (not an HTTP proxy) preserves the WebSocket and SSE streams the dashboard needs for live updates:
+That listener is a `socat` TCP forwarder bound to the tailnet IP. TCP-level forwarding (not an HTTP proxy) preserves the WebSocket and SSE streams the dashboard needs for live updates. It runs as the systemd user unit `romp-tailnet-proxy.service` (`config/systemd-user/`, enabled by `deploy.sh` whenever `~/romp` exists; active since 2026-08-19), so it **survives a reboot** and needs no manual command:
 
 ```bash
-setsid nohup socat TCP-LISTEN:8080,bind=100.116.158.30,fork,reuseaddr TCP:127.0.0.1:29855 \
-  > /tmp/claude/socat-romp.log 2>&1 < /dev/null &
+systemctl --user status romp-tailnet-proxy.service   # ExecStart: socat TCP-LISTEN:8080,bind=<tailnet ip>,fork,reuseaddr TCP:127.0.0.1:29855
 ```
 
-Exposure is tailnet-only, the same trust boundary as `tailscale serve` — a 100.x address is not reachable from the public internet. **It does not survive a reboot**; re-run the command, or promote it to a systemd user service.
+Exposure is tailnet-only, the same trust boundary as `tailscale serve` — a 100.x address is not reachable from the public internet. Since 2026-09-06 this is the phone's only way into sessions on hetzner: the model-router gateway is wired globally, which disables Remote Control (`docs/remote-control-and-foreign-models.md`), so keep this unit healthy. `tests/test_model_router_gateway.sh` probes it as its last leg.
 
 ## The proper fix
 
