@@ -1559,19 +1559,6 @@ def repo_local_executables(tool_name: str, tool_input: dict, cwd: str, trust: di
     return found
 
 
-def _extract_text(msg: str | dict | list) -> str:
-    """Pull plain text from a transcript message field."""
-    if isinstance(msg, str):
-        return msg.strip()
-    if isinstance(msg, dict):
-        return _extract_text(msg.get("content", ""))
-    if isinstance(msg, list):
-        return " ".join(
-            b.get("text", "") for b in msg if isinstance(b, dict) and b.get("type") == "text"
-        ).strip()
-    return ""
-
-
 def build_classify_user_msg(
     tool_name: str, tool_input: dict, cwd: str, user_message: str = "", tool_history: str = "",
 ) -> str:
