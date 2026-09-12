@@ -2,6 +2,12 @@
 
 Clarity is not politeness or plain style. It is the reader finishing your sentence holding the idea you meant them to hold, and it fails in specific, checkable ways. This file collects the rules that survive contact with a real draft, ordered by how much a violation costs the reader.
 
+## Submission prose serves the reader
+
+A paper submission is a finished scientific argument, not the authors' work log. Lead with the research question, methods, supported findings and implications. Keep audit status, verification queues, unrun experiments, revision history and author decisions in separate internal notes, not the submission's prose or an appendix added merely to hold bookkeeping. A working artifact may expose these in a separate author-review view; its reader-facing narrative stays clean.
+
+Replace habitual hedges with direct claims whose scope matches the evidence. Remove speculative filler rather than dressing it as a finding. Retain qualifications that change the scientific interpretation, relevant null or opposite results, and concise substantive limitations; a polished presentation does not enlarge the claim. Do the verification behind the scenes instead of repeatedly announcing it to the reader.
+
 ## PEEL paragraphs whose first sentences form the argument
 
 Every paragraph is **Point, Evidence or Explanation, Link back to the point.** State the claim; give what supports it; close by connecting back, so the reader leaves holding the idea they entered with. A paragraph that ends on its evidence leaves the reader to infer the claim, and they will infer a different one.
@@ -47,7 +53,7 @@ Match the strength of each claim to the evidence class behind it: an **existence
 
 ## The abstract, intro and figures carry the reading
 
-Most readers stop early: many read the abstract, some read the intro or skim the figures, few read the whole thing. Those three therefore earn as much editing effort as everything else combined, which is most of the words. Effort spread evenly across the document is, as [Nanda](https://www.lesswrong.com/posts/eJGptPbbFPZGLpjsp/highly-opinionated-advice-on-how-to-write-ml-papers) argues, effort spent mostly where nobody is looking. What that effort has to buy is checkable in the draft: **the abstract states the claim, its evidence class and one limitation**; the introduction ends with the claim in a single sentence; and each figure's caption says what to see in the figure without the body text.
+Most readers stop early: many read the abstract, some read the intro or skim the figures, few read the whole thing. Those three therefore earn as much editing effort as everything else combined, which is most of the words. Effort spread evenly across the document is, as [Nanda](https://www.lesswrong.com/posts/eJGptPbbFPZGLpjsp/highly-opinionated-advice-on-how-to-write-ml-papers) argues, effort spent mostly where nobody is looking. What that effort has to buy is checkable in the draft: **the abstract states the question and central supported findings, with only qualifications needed to interpret them**; the introduction ends with the claim in a single sentence; and each figure's caption says what to see in the figure without the body text.
 
 [Foerster's](https://www.jakobfoerster.com/how-to-ml-paper) rule of thumb is that a draft carries about a third fluff, cut on the final pass. Check what is left rather than what was deleted: **no sentence only restates its neighbour, no paragraph opens by announcing what it is about to do, and the conclusion says something the introduction did not.**
 

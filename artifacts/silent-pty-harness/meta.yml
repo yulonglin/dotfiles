@@ -1,0 +1,28 @@
+title: The silent-pty installer harness
+url: https://claude.ai/code/artifact/8245dfb8-4365-498d-95ea-475f4a68e828
+org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-09-12 (subscriptionType max)
+first_published: 2026-09-12
+last_updated: 2026-09-12
+status: live
+
+summary: >-
+  why an installer that "did nothing" on 2026-09-04 slipped past every stall check in the repo,
+  and what PR #134's harness does about it. The component menu is guarded by `[[ -t 0 ]]`, so a
+  test whose stdin is a pipe skips the menu entirely and takes a code path the user never takes
+  — only a real TTY with nobody typing reaches the bug. The harness reproduces it and is red on
+  main for the right reason, but three of its assertions can be satisfied by a menu nobody can
+  use and one case carries no time bound, so it is a diagnostic rather than a gate
+
+source: explainer.md
+built: index.html
+builds_with: |
+  md2artifact artifacts/silent-pty-harness/explainer.md -o artifacts/silent-pty-harness/index.html
+
+related: https://github.com/yulonglin/dotfiles/pull/134
+
+established: |
+  Measured on this machine on 2026-09-12: the harness was run and is red on `main`, and the
+  reviewer reproduced the reported stall through it. The two holes named on the page — three
+  assertions satisfiable by an unusable menu, and one unbounded case — were found by reading the
+  assertions and driving them, not inferred. Nothing here establishes that the installer is
+  correct on macOS; the harness runs on Linux only.
