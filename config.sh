@@ -192,7 +192,6 @@ PACKAGES_MACOS=(
     "watch"
     "sd"          # sed replacement (preferred over sed)
     "duf"         # df replacement (disk free space)
-    "gum"         # interactive shell UI (app-picker TUI)
     "vivid"       # LS_COLORS theme generator (catppuccin-mocha)
     "fpart"       # parallel rsync (fpsync) for fast many-file copies
     "tlrc"        # tldr pages, official Rust client (binary: tldr)
@@ -217,7 +216,6 @@ PACKAGES_LINUX_BREW=(
     "just"
     "sd"
     "duf"
-    "gum"
     "vivid"
     "tlrc"        # tldr pages, official Rust client (binary: tldr)
 )
