@@ -45,6 +45,18 @@ The shape that works is a two-stage pipeline: one fixer per PR, then an adversar
 
 Verification is not optional theatre. Across one queue, adversarial readers returned blocking findings on **four of four** code-carrying branches, including two silent data-corruption bugs that every passing test suite had missed. A same-family agent reviewing the same session's work echoes it; the second opinion has to come from elsewhere.
 
+## A subagent's review only counts once it is on the PR
+
+Findings that live in a returned agent message are not a review: nothing on the pull request records that the branch was read, so the next person starts from zero and the merge has no stated reason. Run the loop so every stage leaves a trace on the PR itself — the reader posts its findings, the fixer lands the edit against them, and the merge happens only after both exist.
+
+```bash
+gh api -X POST repos/<owner>/<repo>/pulls/<n>/reviews -f event=COMMENT -F body=@findings.md
+```
+
+`event=COMMENT` is the only event available here — the self-approval row below says why. Post before merging rather than after, because the review thread of a merged PR is where the reasoning has to be found later.
+
+A refused action belongs in that trace too. When the classifier denies a merge or an edit, quote its verdict text verbatim, name the exact diff it refused, and put both in the PR comment and in the closing summary — then stop and let the user look. Re-running the same intent in a different shape converts a decision the user should see into one they never hear about.
+
 ## Expect the first fix to be too narrow
 
 This is the single most valuable lesson from running the loop. A fix is written against the reported input and is usually wrong for its near cousin:
@@ -102,10 +114,10 @@ When a tool rewrites files in bulk, the repo's own files are a weak test — the
 
 | Symptom | Cause and what to do |
 |---|---|
-| `gh pr edit --body-file` fails with a Projects-classic GraphQL deprecation error | Repo-wide, hits every agent. Use `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>` |
+| `gh pr edit --body-file` fails with a Projects-classic GraphQL deprecation error | Repo-wide, hits every agent, and it can report success while writing nothing. Use `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>`, then confirm with `gh pr view <n> --json body` |
 | `gh pr review --approve` fails: "Can not approve your own pull request" | The PR author and the authenticated `gh` account are the same person. Reviews can only land as `COMMENTED`, never `APPROVED`. Attempting it also trips a `[Self-Approval]` security flag — do not retry it, and say so if a merge gate wants an approval state |
 | `gh pr merge` denied by the auto-mode classifier as `[Merge Without Review]` | Inconsistent: it may allow several then refuse. Post a real review first, and if it still refuses, ask rather than route around it |
-| An adversarial reviewer dies with a cybersecurity content flag | Security prose trips a provider-side classifier. Route that one review to a different family, and describe the mechanism in words — file and line, never payload text. See `claude/rules/sensitive-content.md` |
+| An adversarial reviewer dies with a cybersecurity content flag | Security prose trips a provider-side classifier. Measured on one sanitiser review: the OpenAI-routed seats died twice with an HTTP 400 content flag, Kimi completed the same brief, and GLM answered but stalled through six retries on one task. Re-route to Kimi first, and describe the mechanism in words — file and line, never payload text. See `claude/rules/sensitive-content.md` |
 
 ## Merge, and what to hold back
 
