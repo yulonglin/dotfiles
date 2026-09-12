@@ -1,0 +1,14 @@
+title: "Remote Control and foreign models: route at the tool layer, or move the endpoint without breaking TLS"
+url: https://claude.ai/code/artifact/dfd9f494-031b-4ca3-be8b-10c73e4a45ac
+org: yl688@cantab.ac.uk's Organization
+status: done
+last_updated: 2026-09-06
+public: no
+index_source: "`artifacts/remote-control-and-foreign-models/`"
+
+summary: >-
+  a foreign-model picker and Remote Control are mutually exclusive in one process (RC is a
+  string check on the `ANTHROPIC_BASE_URL` host, and gateway model discovery needs that URL
+  non-Anthropic); an unrecognised model ID silently answers from the default Claude model; a
+  TLS-terminating proxy is technically open but rejected on fragility; route foreign models at
+  the tool layer instead. Successor to *The Remote Control Inversion* below

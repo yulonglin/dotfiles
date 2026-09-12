@@ -1,0 +1,10 @@
+title: The Remote Control Inversion
+url: https://claude.ai/code/artifact/fadb27e4-dd05-40b2-940e-3fb674ca6251
+org: see note
+status: done
+last_updated: 2026-08-19
+public: no
+
+summary: >-
+  a global `ANTHROPIC_BASE_URL` hard-disables Remote Control, which is why the model-router
+  gateway was unwired

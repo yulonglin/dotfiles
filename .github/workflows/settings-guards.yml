@@ -1,0 +1,59 @@
+name: Settings guards
+
+# Answers "when does this test run?" for tests/test_no_attribution_optout.sh. This repo has no suite runner, so each test names its own trigger; this is that test's. The pre-commit hook in config/git-hooks/pre-commit runs the same test locally on a staged settings.json, and CI is the leg that survives --no-verify and a second machine.
+#
+# Only first-party actions (actions/*), matching this repo's supply-chain posture (no third-party GHA actions).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'claude/settings.json'
+      - 'tests/test_no_attribution_optout.sh'
+      - 'config/git-hooks/pre-commit'
+      - '.github/workflows/settings-guards.yml'
+  pull_request:
+    paths:
+      - 'claude/settings.json'
+      - 'tests/test_no_attribution_optout.sh'
+      - 'config/git-hooks/pre-commit'
+      - '.github/workflows/settings-guards.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: settings-guards-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  attribution-optout:
+    name: No CLAUDE_CODE_ATTRIBUTION_HEADER opt-out
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # A runner has no ~/.claude/settings.json, so the deployed leg reports a skip and the committed copy is what is asserted on. Pointed at a path that cannot exist so the skip is deterministic rather than incidental.
+      - name: Committed settings carry no attribution opt-out
+        run: bash tests/test_no_attribution_optout.sh
+        env:
+          CLAUDE_SETTINGS_DEPLOYED: ${{ runner.temp }}/no-deployed-copy.json
+
+      # A guard that cannot fail proves nothing. Reintroduce the exact key on a fixture and require the test to catch it.
+      - name: Mutation check — the guard must still be able to fail
+        run: |
+          python3 - "$RUNNER_TEMP/mutated-settings.json" <<'PY'
+          import json, sys
+          json.dump({"env": {"CLAUDE_CODE_ATTRIBUTION_HEADER": "0"}}, open(sys.argv[1], "w"))
+          PY
+          if CLAUDE_SETTINGS_COMMITTED="$RUNNER_TEMP/mutated-settings.json" \
+             CLAUDE_SETTINGS_DEPLOYED="$RUNNER_TEMP/no-deployed-copy.json" \
+             bash tests/test_no_attribution_optout.sh > "$RUNNER_TEMP/mutation.log" 2>&1; then
+            cat "$RUNNER_TEMP/mutation.log"
+            echo "::error::The guard passed against a settings file that sets the opt-out — it is vacuous."
+            exit 1
+          fi
+          echo "Guard correctly caught the reintroduced opt-out:"
+          cat "$RUNNER_TEMP/mutation.log"

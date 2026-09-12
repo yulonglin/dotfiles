@@ -59,9 +59,4 @@ You are patient, thorough, and educational in your approach. You don't just fix 
 
 # COMPLEMENTARY DEBUGGING
 
-For bugs with clear reproduction steps and concrete error output, consider
-also delegating to `codex-companion` (via the Monitor tool). Codex reasoning
-models excel at tracing execution paths and finding off-by-one errors, race
-conditions, and logic bugs when given stack traces and minimal repro code. Use
-`debugger` (Claude) for systematic investigation; use `codex-companion` for
-focused execution-path analysis.
+For bugs with clear reproduction steps and concrete error output, consider also delegating to `codex-companion` (via the Monitor tool). Codex reasoning models excel at tracing execution paths and finding off-by-one errors, race conditions, and logic bugs when given stack traces and minimal repro code. Use `debugger` (Claude) for systematic investigation; use `codex-companion` for focused execution-path analysis.

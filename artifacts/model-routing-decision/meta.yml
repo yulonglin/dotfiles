@@ -1,0 +1,36 @@
+title: Every Session Goes Through the Router   # first published as "Foreign Models Stay Outside the Loop", revised in place the same day when Yulong chose Option C
+url: https://claude.ai/code/artifact/2fd4040d-6a42-458e-a188-b09c8dbf3ae4
+org: yl688@cantab.ac.uk's Organization   # claude auth status, 2026-09-06
+first_published: 2026-09-06
+last_updated: 2026-09-06   # the date of the live page; the committed source is AHEAD of it
+status: live
+# The committed spec.md/spec.html carry a status section added 2026-09-12 that the
+# published page does not. Republishing needs a deliberate choice, not a default: this
+# page was published under yl688@cantab.ac.uk's Organization, and the session that
+# publishes today is in lin.yulong@gmail.com's. Republishing from the wrong org either
+# fails or lands the page somewhere the old URL's readers cannot follow. Stamp
+# last_updated forward only in the same turn as an actual republish.
+
+public: no
+
+summary: >-
+  the model-routing decision, chosen by Yulong: Option C, the model-router gateway in every
+  session with GPT from the OpenAI account (Codex OAuth) or an OpenAI API key per route,
+  OpenRouter for the other families, romp as the remote path; Options A (tool layer) and B
+  (gateway child) preserved with the reasoning that rejected them, and two closed routes
+  recorded. The accepted cost is stated: a non-Anthropic `ANTHROPIC_BASE_URL` hard-disables
+  Remote Control. The design was executed in PR #100 (merged 2026-09-06), so this page is
+  the decision record behind `config/model-router.toml` and the gateway rules, not a plan
+  awaiting work
+
+source: spec.md
+built: spec.html
+builds_with: |
+  md2artifact spec.md -o spec.html
+supersedes: |
+  the recommendation sections of artifacts/remote-control-and-foreign-models/ (2026-09-02)
+  and of "The Remote Control Inversion" (2026-08-19); their findings stand
+evidence: |
+  ../../docs/remote-control-and-foreign-models.md for the 2.1.252 measurements;
+  the F1/F2 snippets were re-read from ~/.local/share/claude/versions/2.1.263 on 2026-09-06
+  (grep -a for the quoted functions); build/ holds the council brief and answers, gitignored

@@ -21,6 +21,12 @@ The claude.ai Gmail connector (`mcp__claude_ai_Gmail__*`) can read every message
 | Read | `get_thread` / `get_message` with `messageFormat: PLAIN_TEXT` | Body as text or markdown, plus `attachment_ids` and attachment names. Enough for HTML-only receipts (Stripe, Google Play, Uber, Booking.com). |
 | Fetch attachment | `get_message` with `messageFormat: RAW` | Returns `{"id": ..., "raw": <base64url MIME>}`. Large results are spilled to a file under `~/.claude/projects/<project>/<session>/tool-results/mcp-claude_ai_Gmail-get_message-*.txt` and the tool result gives the path; small ones arrive inline, so write them to `work/raw/<id>.json` yourself. Fails above roughly 10 MB — see below. |
 
+**Never say what a message does or does not contain without having read its body.** `MINIMAL` and `METADATA_ONLY` return no body at all, and the `snippet` they and `search_threads` carry is a truncation of the opening ~100 characters that routinely cuts off mid-sentence, before the substance. Reading one of those and concluding a message omitted something is a hallucination with a tool call attached. Every claim about an email's content — that it asked a question, missed a point, agreed, refused — is a `verify-before-instructing` claim and needs `PLAIN_TEXT`.
+
+This bites hardest on the user's **own sent mail**: being told "you forgot to mention X" when X is in paragraph three is both wrong and insulting, because he wrote it. Observed 2026-09-11 on a Fox Rent A Car balance thread, where `MINIMAL` hid a full corrected payment ledger and produced a confident, false "one thing is missing".
+
+Context economy is never the reason to skip the body. A long thread is long because of quoted history, not because of the message; read it in a subagent if the size genuinely matters, or spend the tokens. `MINIMAL` and `METADATA_ONLY` are for enumerating ids, dates and senders — for deciding *which* message to read, never *what it said*.
+
 ## RAW has a size ceiling, and hitting it kills the session
 
 A message of about 15 MB returns `MCP server "claude.ai Gmail" session expired`, every time, immediately. It is not a timeout and not a rate limit: nine attempts across three sessions and two model families, including paced retries a minute apart, produced the identical error, while messages up to about 1 MB in the same sessions succeeded instantly (observed 2026-09-09 on a 15.3 MB Fox Rent A Car message carrying 25 photos and four PDFs). **The failed call also invalidates the connector session**, so the next `search_threads` or `get_message` fails the same way until the session is re-established — do the RAW attempt on a big message last, or in a subagent, so it cannot take the rest of a sweep down with it.
@@ -54,10 +60,12 @@ HTML-only receipts: `_body.txt` (or the `html_body` from `FULL_CONTENT`) is a wo
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu --print-to-pdf=out.pdf file:///abs/path/receipt.html
 ```
 
+**Set `--timezone` to the zone of the events, not your own and not UTC.** It defaults to UTC, which is wrong for an evidence pack: a message received at 16:08 Pacific carries a `00:08Z` header the following day, so a UTC render puts a purchase on the wrong calendar date and can contradict the filing it is attached to (observed 2026-09-10 on a RentalCover pack, where the purchase confirmation read 10 December for a 9 December purchase). The flag takes an IANA name and handles DST, so `America/Los_Angeles` yields PST in December and PDT in July. Re-rendering with a different zone is legitimate — it is the same generator over the same source data, and the page declares itself a reconstruction in its footer — but the native Gmail print is stronger still where the user can produce it.
+
 For a whole thread the two scripts in `scripts/` do it end to end: `build.py` turns a `get_thread` result (`messageFormat: FULL_CONTENT`, so `htmlBody` is present; save the spilled JSON as `<basename>.txt`, the output takes the file stem) or the delimited `threads.txt` capture (format in its docstring) into a Gmail-print-style page — account header, subject, message count, each message boxed with From/To/Cc/Date/Attachments, tracking pixels and tokenised links stripped; `render.py` prints those pages to PDF and reports bytes and page count:
 
 ```bash
-python3 ~/.claude/skills/gmail-connector/scripts/build.py work/threads.txt work/<basename>.txt --out work/html --account lin.yulong@gmail.com
+python3 ~/.claude/skills/gmail-connector/scripts/build.py work/threads.txt work/<basename>.txt --out work/html --account lin.yulong@gmail.com --timezone America/Los_Angeles
 python3 ~/.claude/skills/gmail-connector/scripts/render.py work/html/*.html --out work/pdf   # sandbox off
 ```
 

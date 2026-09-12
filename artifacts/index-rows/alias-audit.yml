@@ -1,0 +1,10 @@
+title: Alias Audit
+url: https://claude.ai/code/artifact/739598b0-362d-4aaa-a8c2-c77775be5eb4
+org: see note
+status: done
+last_updated: 2026-08-18
+public: no
+
+summary: >-
+  alias files fight over names by source order; the set was cut 161 → ~110 against two months
+  of shell history

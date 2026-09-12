@@ -1,0 +1,1719 @@
+<title>Every Session Goes Through the Router</title>
+<style>
+:root {
+  --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
+  --accent:#bd5d3a; --accent-bg:#f7e9e2; --good:#2f6b4f; --good-bg:#e4f0e9;
+  --bad:#a33f2a; --bad-bg:#f9e4de; --code:#f4f2ee; --mark:#fbe6a2;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+} }
+:root[data-theme="dark"] {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);margin:0;padding:2.5rem 1rem 6rem;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;line-height:1.65}
+.shell{max-width:48rem;margin:0 auto}
+.shell.has-toc{display:grid;grid-template-columns:15rem minmax(0,1fr);gap:2.4rem;max-width:72rem}
+.toc{position:sticky;top:1.5rem;align-self:start;max-height:calc(100vh - 3rem);overflow:auto;
+ font-size:.84rem;border-right:1px solid var(--rule);padding-right:.9rem}
+.toc h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+ margin:0 0 .45rem;font-weight:700}
+.toc a{display:block;color:var(--soft);text-decoration:none;padding:.22rem .45rem;
+ border-radius:5px;border-left:2px solid transparent}
+.toc a.lvl3{padding-left:1.2rem;font-size:.8rem}
+.toc a:hover{background:var(--code);color:var(--ink)}
+.toc a.on{color:var(--ink);background:var(--code);border-left-color:var(--accent);font-weight:600}
+.doc{min-width:0}
+h1{font-size:1.75rem;line-height:1.25;margin:0 0 .8rem;letter-spacing:-.015em}
+h2{font-size:1.2rem;margin:2.4rem 0 .7rem;padding-bottom:.32rem;border-bottom:1px solid var(--rule)}
+h3{font-size:1.02rem;margin:1.7rem 0 .45rem}
+p,li{margin:0 0 .85rem}
+ul,ol{padding-left:1.35rem}
+blockquote{margin:1rem 0;padding:.1rem 1rem;border-left:3px solid var(--accent);
+ background:var(--accent-bg);border-radius:0 6px 6px 0}
+pre{background:var(--code);border:1px solid var(--rule);border-radius:7px;padding:.75rem .9rem;
+ overflow-x:auto;font-size:.83rem;line-height:1.5}
+code{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+p code,li code,td code,h2 code,h3 code{background:var(--code);padding:.06rem .32rem;border-radius:4px;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0;display:block;overflow-x:auto}
+th,td{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}
+th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
+.doc svg{max-width:100%;height:auto}
+p.svg-note{color:var(--bad);background:var(--bad-bg);border-radius:6px;
+ padding:.4rem .7rem;font-size:.85rem}
+a{color:var(--accent)}
+details{border:1px solid var(--rule);border-radius:7px;background:var(--panel);
+ margin:1rem 0;padding:.55rem .9rem}
+details>summary{cursor:pointer;font-weight:600;margin:-.55rem -.9rem;padding:.55rem .9rem;
+ border-radius:7px;list-style-position:inside}
+details>summary:hover{color:var(--accent)}
+details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 0 0;
+ margin-bottom:.8rem;background:var(--code)}
+@media (max-width:56rem){
+  .shell.has-toc{display:block}
+  .toc{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--rule);
+   padding:0 0 .8rem;margin-bottom:1.4rem}
+  .toc a{display:inline-block;margin:.15rem .3rem .15rem 0;border-left:0}
+  .toc a.lvl3{padding-left:.45rem}
+}
+</style>
+<div class="shell has-toc">
+<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#the-decision-is-executed-and-merged" class="lvl2">The decision is executed and merged</a><a href="#overview" class="lvl2">Overview</a><a href="#five-facts-fix-the-design-space" class="lvl3">Five facts fix the design space</a><a href="#where-the-earlier-sessions-left-the-machine" class="lvl3">Where the earlier sessions left the machine</a><a href="#requirements" class="lvl2">Requirements</a><a href="#decision" class="lvl2">Decision</a><a href="#option-c-design" class="lvl2">Option C design</a><a href="#the-one-experiment-that-could-keep-remote-control" class="lvl3">The one experiment that could keep Remote Control</a><a href="#implementation-plan-for-the-executing-session" class="lvl3">Implementation plan, for the executing session</a><a href="#execution-record-2026-09-06" class="lvl3">Execution record, 2026-09-06</a><a href="#acceptance-criteria" class="lvl2">Acceptance Criteria</a><a href="#preserved-designs-not-adopted" class="lvl2">Preserved designs, not adopted</a><a href="#option-a-tool-layer-remote-control-native" class="lvl3">Option A: tool layer, Remote Control native</a><a href="#option-b-split-process-remote-control-parent-and-gateway-child" class="lvl3">Option B: split process, Remote Control parent and gateway child</a><a href="#closed-routes-recorded-so-they-are-not-rediscovered" class="lvl3">Closed routes, recorded so they are not rediscovered</a><a href="#side-by-side" class="lvl3">Side by side</a><a href="#reviewed-before-the-revision-and-what-the-review-changed" class="lvl2">Reviewed before the revision, and what the review changed</a><a href="#one-decision-the-plan-surfaced-for-yulong" class="lvl2">One decision the plan surfaced, for Yulong</a><a href="#what-this-page-does-not-decide" class="lvl2">What this page does not decide</a></nav>
+<div class="doc">
+<h1 id="every-session-goes-through-the-router">Every Session Goes Through the Router</h1>
+<p><strong>Decision spec, 2026-09-06, revised the same day.</strong> Consolidates the model-routing sessions of 2026-08 and 2026-09 into one design and one decision, written so another session can execute it from this page alone. The morning draft recommended the tool layer (Option A); Yulong chose Option C, the gateway in every session, with OpenAI models served from an OpenAI account or the OpenAI API rather than OpenRouter, provider per model configurable. Options A and B are preserved in full below and in this repo's git history. It supersedes the recommendation sections of <a href="https://claude.ai/code/artifact/dfd9f494-031b-4ca3-be8b-10c73e4a45ac">Remote Control and foreign models</a> (2026-09-02) and <a href="https://claude.ai/code/artifact/fadb27e4-dd05-40b2-940e-3fb674ca6251">The Remote Control Inversion</a> (2026-08-19), and it corrects two of their findings: the silent fallback (F3 below) and the claim that the assume-first-party flag is exempted from the Remote Control check (F1 below; it is not). Every function body quoted below was re-read from Claude Code 2.1.263 today (F1, F2). Behaviour that needs the client run (F3, the proxy route, <code>CLAUDE_CONFIG_DIR</code>) is inherited from the 2.1.252 and 2.1.222 measurements and carries its version where it appears. Evidence: <code>docs/remote-control-and-foreign-models.md</code>, and the model-router plugin's own log at <code>~/.claude/plugins/marketplaces/alignment-hive/plugins/model-router/docs/experiments.md</code>.</p>
+<h2 id="the-decision-is-executed-and-merged">The decision is executed and merged</h2>
+<p><strong>Added 2026-09-12.</strong> This page is the decision record; the implementation it specifies landed separately in <a href="https://github.com/yulonglin/dotfiles/pull/100">PR #100</a> (merged 2026-09-06, <code>e5d4420</code>) and has been extended since. Nothing on this page is waiting on a change to the repo — read it for <em>why</em> the routing looks the way it does, and read <code>.claude/rules/dotfiles-settings.md</code> for the operating rules in force.</p>
+<table>
+<thead>
+<tr>
+<th>Piece of the design</th>
+<th>Where it landed on <code>main</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The gateway env block, <code>modelPicker</code> rows and the &quot;gateway is ON&quot; rule</td>
+<td><code>.claude/rules/dotfiles-settings.md</code> § <em>The gateway is ON and lives only in the working copy</em> (PR #100)</td>
+</tr>
+<tr>
+<td>One source of truth for every foreign model</td>
+<td><code>config/model-router.toml</code> (PR #100)</td>
+</tr>
+<tr>
+<td>The renderer for router config, settings keys and agent files</td>
+<td><code>custom_bins/model-router-wire</code> (PR #100)</td>
+</tr>
+<tr>
+<td>Foreign subagents named in agent files (step 5)</td>
+<td>generated files under <code>claude/agents/</code> — <code>gpt-6-astra-high.md</code>, <code>glm-5.3.md</code>, <code>grok-4.6.md</code>, <code>kimi-k3.md</code>, <code>muse-spark-1.3.md</code> at PR #100; today <code>astra-high.md</code>, <code>sol-high.md</code>, <code>glm.md</code>, <code>grok.md</code>, <code>kimi.md</code>, <code>muse-spark.md</code></td>
+</tr>
+<tr>
+<td>The upgrade smoke test (step 10)</td>
+<td><code>tests/test_model_router_gateway.sh</code> (PR #100)</td>
+</tr>
+<tr>
+<td>The <code>fallbackModel</code> drop (the &quot;no silent fallback&quot; criterion)</td>
+<td><code>aa33ffa</code> on PR #100</td>
+</tr>
+<tr>
+<td>Router recovery and update validation, added after this page</td>
+<td><code>claude/hooks/ensure_model_router.py</code>, <code>claude/hooks/check_model_router_update.py</code></td>
+</tr>
+</tbody>
+</table>
+<p>Two statements on this page have been overtaken by later measurement, and are left in place because the page is dated evidence rather than a live manual:</p>
+<ul>
+<li><strong>F3's &quot;silent Claude answer&quot;.</strong> The execution record already traced it to <code>fallbackModel</code> rather than to the client. On 2.1.263, with that setting gone, an unserved model ID fails loudly (<code>There's an issue with the selected model</code>) — recorded in <code>CLAUDE.md</code> on 2026-09-07.</li>
+<li><strong>Step 1, the Unix-socket clause.</strong> Still unrun. <code>archive/2026-09-06_rc-direct-settings/README.md</code> on <code>main</code> gives the recipe for it (&quot;copy this file back to <code>claude/rc-direct-settings.json</code> for the duration and launch with <code>CLAUDE_RC_OVERRIDE=1</code>&quot;) and no result has been recorded anywhere since, so Remote Control is off under the gateway and romp is the remote path. That is the state <code>.claude/rules/dotfiles-settings.md</code> describes today.</li>
+</ul>
+<h2 id="overview">Overview</h2>
+<p>The ask across those sessions was one thing: a Claude Code session that treats non-Claude models (GPT, Gemini, GLM, Kimi, Qwen, Grok) as first-class citizens, in the <code>/model</code> picker and as subagents named in agent files, ideally without losing native Remote Control. The facts below say the first half is available today through the model-router gateway that ran here in 2026-08, and the second half is not: the Remote Control gate is a raw host check that no flag rescues. The decision is to take the first half in every session and replace Remote Control with romp, the parallel-session dashboard over Tailscale, while one cheap experiment (the Unix-socket clause in the same gate) is run first because it is the only thing that could give both.</p>
+<h3 id="five-facts-fix-the-design-space">Five facts fix the design space</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Fact</th>
+<th>Evidence</th>
+<th>Consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F1</td>
+<td>Remote Control is available only when <code>ANTHROPIC_UNIX_SOCKET</code> is set or when <code>ANTHROPIC_BASE_URL</code> is unset or has host <code>api.anthropic.com</code>. The host is compared as a string; nothing is resolved. The assume-first-party flag does not count: the binary carries the message &quot;_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL does not apply to Remote Control.&quot;</td>
+<td>2.1.263: <code>eG(){if(!xn())return!1;return!!a.ANTHROPIC_UNIX_SOCKET||Qv()}</code>, <code>Qv(){let e=process.env.ANTHROPIC_BASE_URL;if(!e)return!0;return Gw(e)}</code>, <code>Gw(e){try{let t=new URL(e).host;return[&quot;api.anthropic.com&quot;].includes(t)}</code></td>
+<td>A loopback base URL turns Remote Control off in that process. The Unix-socket clause is the one untested way through (step 1 of the plan)</td>
+</tr>
+<tr>
+<td>F2</td>
+<td>Gateway model discovery, which fills <code>/model</code> from <code>&lt;base&gt;/v1/models</code>, has four conditions: <code>CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY</code> set, the first-party provider selected (not Bedrock, Vertex or Foundry), the base URL set, and that URL failing the same first-party check, which also means it is off whenever the assume-first-party flag is set.</td>
+<td><code>Dp(){if(!a.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY)return!1;if(Le()!==&quot;firstParty&quot;)return!1;if(po())return!1;if(!a.ANTHROPIC_BASE_URL)return!1;return!0}</code>, <code>po(){if(a._CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL)return!0;return Qv()}</code></td>
+<td>Discovery is not the way to get picker rows; F4 is. The hosts-file variant the 2026-09-02 report asked to test cannot show a menu and is closed</td>
+</tr>
+<tr>
+<td>F3</td>
+<td>An unrecognised model ID answers from the default Claude model <strong>when no gateway is configured</strong>: measured on 2.1.252 for <code>--model</code> and for an agent file, with only a stderr line. Behind the router the same agent-file field works: the model-router plugin measured <code>model: gpt-5.6-sol</code> in an agent file reaching GPT on 2.1.216 through 2.1.246, and it ships six such agent files.</td>
+<td><code>docs/remote-control-and-foreign-models.md</code> Finding 1; plugin <code>experiments.md</code> (&quot;the documented full-model-ID allowance is the frontmatter/SDK field, which works&quot;; &quot;acceptance no longer depends on the var&quot; from 2.1.246)</td>
+<td>The 2026-09-02 conclusion &quot;a foreign subagent by name is impossible on every route&quot; was wrong for the router route. What stays true: without a gateway the ID is silently replaced, and the plugin's last measurement predates 2.1.252, so step 6 re-measures it on the current binary before anything relies on it</td>
+</tr>
+<tr>
+<td>F4</td>
+<td>Picker rows for routed models come from a <code>modelPicker</code> key in <code>~/.claude/settings.json</code> on 2.1.242 and later; project and local files are ignored for it. The single <code>ANTHROPIC_CUSTOM_MODEL_OPTION</code> slot is the fallback below that version.</td>
+<td>plugin setup skill, step 5; <code>experiments.md</code> &quot;modelPicker vs the custom-model env pair&quot;</td>
+<td>A full foreign menu needs neither discovery nor a hosts trick</td>
+</tr>
+<tr>
+<td>F5</td>
+<td>The Agent tool's per-call <code>model</code> parameter is a closed enum (<code>sonnet</code>, <code>opus</code>, <code>haiku</code>, <code>fable</code>); it rejects a routing ID before dispatch. Agent files and Workflow <code>opts.model</code> accept any string.</td>
+<td>plugin <code>experiments.md</code>, &quot;Dynamic general-purpose delegation&quot; (2.1.216, re-verified 2.1.246)</td>
+<td>Foreign subagents are named in agent files, one file per model and effort, exactly as the plugin ships them</td>
+</tr>
+</tbody>
+</table>
+<h3 id="where-the-earlier-sessions-left-the-machine">Where the earlier sessions left the machine</h3>
+<p>A snapshot taken on 2026-09-06 <strong>before</strong> the plan below was executed, kept as the baseline the plan was written against. For the state after execution, see the status table above.</p>
+<table>
+<thead>
+<tr>
+<th>Piece</th>
+<th>State on 2026-09-06, before execution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ANTHROPIC_BASE_URL</code></td>
+<td>unset in the committed and the deployed <code>settings.json</code>; Remote Control works; <code>remoteControlAtStartup</code> is <code>true</code></td>
+</tr>
+<tr>
+<td>model-router, the 2026-08 gateway</td>
+<td>the <code>model-router</code> plugin from the <code>alignment-hive</code> marketplace, Rust binary v0.1.13 cached under <code>~/.cache/model-router</code>, service uninstalled 2026-08-18, plugin not in <code>enabledPlugins</code> (only the marketplace is); config at <code>~/.config/model-router/config.toml</code> still lists OpenRouter as an <code>[[openai-providers]]</code> entry with Kimi K3, Qwen3.8 Max, GLM 5.2 and Muse Spark 1.2 routes; a Codex OAuth login from 2026-08-14 sits in <code>~/.local/state/model-router/codex-auth</code>; the ingress token and CLIProxyAPI config are in the same state directory</td>
+</tr>
+<tr>
+<td>Provider auth the router already knows</td>
+<td>Claude requests are forwarded to <code>api.anthropic.com</code> with their original body and credentials; GPT routes go to a managed CLIProxyAPI child that holds the Codex OAuth login (an OpenAI account, not an API key); any OpenAI-compatible endpoint is one <code>[[openai-providers]]</code> block with its key in <code>secrets.toml</code></td>
+</tr>
+<tr>
+<td><code>openrouter-cli</code>, <code>council</code>, <code>fusion</code></td>
+<td>live; seats pinned in <code>config/openrouter-models.toml</code>; every rung logs requested and resolved slug per role and usage to <code>calls.jsonl</code>, but a generation id only for <code>ask</code> and <code>fusion</code>, the chair's alone for <code>council ask</code>, and none for <code>advise</code>. They stay as the tool-layer path for one-off questions and panels</td>
+</tr>
+<tr>
+<td><code>codex-companion</code>, <code>opencode run</code></td>
+<td>live agentic workers in their own harnesses; no shared provenance log; <code>opencode</code> on PATH resolves to the bun shim rather than the repo wrapper</td>
+</tr>
+<tr>
+<td>Agent files naming a foreign model</td>
+<td>none since 2026-08-25, deleted on the F3 reading this page corrects</td>
+</tr>
+<tr>
+<td>romp</td>
+<td>installed on hetzner (<code>docs/romp-tailnet-access.md</code>), reached from the phone through a socat forwarder on the tailnet IP; that forwarder and the manager are enabled, active systemd user units (<code>romp-tailnet-proxy.service</code>, <code>romp-manager.service</code>, active since 2026-08-19), so the doc's &quot;does not survive a reboot&quot; line is stale and the other session is correcting it</td>
+</tr>
+<tr>
+<td><code>claude/rc-direct-settings.json</code></td>
+<td>blanks the gateway env keys for Remote Control sessions; prepended by the <code>claude()</code> wrapper and by <code>claude-spawn</code>, pinned by two tests; a no-op today and unnecessary under Option C</td>
+</tr>
+<tr>
+<td><code>claude()</code> wrapper auth</td>
+<td>strips <code>ANTHROPIC_API_KEY</code> and <code>ANTHROPIC_AUTH_TOKEN</code> at launch (2026-09-02), so sessions run on the OAuth login</td>
+</tr>
+<tr>
+<td>Guards</td>
+<td>the pre-commit hook refuses a staged <code>settings.json</code> carrying <code>ANTHROPIC_BASE_URL</code> or a loopback URL with a token path; <code>tests/test_pre_commit_gateway_guard.sh</code> pins it</td>
+</tr>
+</tbody>
+</table>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li><strong>MUST show a full foreign menu in every session</strong>: GPT, and the OpenRouter families, as <code>/model</code> rows and as subagents named in agent files, with the row's real context window declared.</li>
+<li><strong>MUST serve OpenAI models from an OpenAI account or the OpenAI API, not OpenRouter</strong>, and the choice is configuration: the Codex OAuth login that CLIProxyAPI holds for the account path, an <code>[[openai-providers]]</code> block with base URL <code>https://api.openai.com/v1</code> and a key in <code>secrets.toml</code> for the API path, and each routed model names which one it uses.</li>
+<li><strong>MUST keep every other family configurable the same way</strong>: OpenRouter stays the provider for Kimi, GLM, Qwen, Gemini and Grok unless a block says otherwise, and swapping a model's provider is a config edit plus a service restart, never a code change.</li>
+<li><strong>MUST have a remote path that survives a reboot.</strong> Remote Control is off under this design, so romp is the phone's way in; its forwarder already runs as an enabled user unit, and the acceptance test is a reboot, not a reading of the unit file.</li>
+<li><strong>MUST never present a Claude answer under a foreign label.</strong> The router refuses to fall back to Anthropic on a foreign-route error, agent files and picker rows name only routes the router serves, and every foreign result the tool layer returns carries provider, echoed slug, generation id and tokens.</li>
+<li><strong>MUST keep the ingress token out of the public repo.</strong> The router's base URL embeds a per-install token, so the deployed <code>settings.json</code> carries a permanent diff that the pre-commit guard refuses; the daily sync already holds the file back when the guard rejects it.</li>
+<li><strong>MUST leave TLS intact on every external hop.</strong> Loopback is the only plaintext leg; nothing terminates TLS on the session's traffic.</li>
+<li><strong>SHOULD keep Remote Control if the Unix-socket clause of F1 turns out to work.</strong> It is tested first and adopted if it holds; the design does not depend on it.</li>
+<li><strong>SHOULD keep the tool-layer workers</strong>, because a council or a one-off question is still cheaper and better-logged through <code>openrouter-cli</code> than through a session's model.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<p><strong>Option C is adopted: the model-router gateway returns in every session, with GPT served from the OpenAI account through Codex OAuth by default and from an OpenAI API key where a route says so, OpenRouter for the other families, and romp as the remote path. Remote Control is given up unless step 1 of the plan shows the Unix-socket clause keeps it.</strong> Decided by Yulong on 2026-09-06 after the morning draft; the reasoning behind the morning recommendation is preserved under Option A and is not repeated here.</p>
+<p>What the choice buys, stated once: a foreign model in the real Claude Code loop, with hooks, CLAUDE.md and repo tools, selectable from the picker and nameable in an agent file, in the session you actually use. What it costs: the phone app's relay, an unsupported gateway session as the daily driver on a binary that updates most days, the session's Anthropic traffic passing through a loopback process, and the OpenAI account's Codex subscription being spent by Claude Code sessions.</p>
+<h2 id="option-c-design">Option C design</h2>
+<pre class="mermaid">
+flowchart TD
+  phone["Phone: browser on the tailnet"] --&gt; romp["romp dashboard on hetzner&lt;br/&gt;socat forwarder, an enabled user unit since 2026-08-19"]
+  romp &lt;--&gt; cc["Claude Code session&lt;br/&gt;ANTHROPIC_BASE_URL = http://127.0.0.1:8787/t/token&lt;br/&gt;Remote Control OFF, modelPicker rows for every route"]
+  cc --&gt; router["model-router 0.1.x, loopback only&lt;br/&gt;routes by exact model ID; refuses non-loopback binds"]
+  router -- "claude-* : original body and credentials" --&gt; api["api.anthropic.com"]
+  router -- "gpt-* routes with upstream = cliproxy" --&gt; cpa["managed CLIProxyAPI child&lt;br/&gt;Codex OAuth login = the OpenAI account"]
+  cpa --&gt; oai["OpenAI, Codex backend"]
+  router -- "routes whose provider block is openai-api" --&gt; oaiapi["api.openai.com/v1&lt;br/&gt;API key from secrets.toml"]
+  router -- "routes whose provider block is openrouter" --&gt; or["openrouter.ai/api/v1&lt;br/&gt;Kimi, Qwen, GLM, Gemini, Grok"]
+  cc -. "agent files: model = routing-id" .-&gt; router
+</pre>
+<p>Since the implementation, each routed model is one entry in <code>config/model-router.toml</code> in this repo, and <code>model-router-wire apply</code> renders the router's own <code>~/.config/model-router/config.toml</code>, the settings keys and picker rows, and the agent files from it. In the router's config the provider is chosen per entry: a <code>[[models]]</code> entry with <code>upstream = &quot;cliproxy&quot;</code> is the account path; a model under an <code>[[openai-providers]]</code> block is the API path for that block's base URL. So &quot;GPT from the account, GPT-mini from the API key, Kimi from OpenRouter&quot; is three entries and nothing else. The router's <code>config-template</code> prints the annotated form of every key named here; <code>verify-providers</code> checks each provider block against its <code>/models</code> endpoint without printing keys; <code>doctor --json</code> returns the base URL to wire and the list of routed IDs to turn into picker rows.</p>
+<p>Picker rows come from <code>modelPicker</code> in the user <code>settings.json</code> (F4), one per routed ID, and are never checked against the router, so a row is removed when its route goes. The rows Yulong asked for on 2026-09-06 are GPT-6 Astra, GPT-5.6 Sol, Kimi K3, GLM 5.3, Muse Spark 1.3 and Grok 4.6. The two GPT rows are account-path routes (<code>upstream = &quot;cliproxy&quot;</code>; Codex already serves <code>gpt-6-astra</code>, which <code>codex/config.toml</code> pins), not the OpenRouter slug <code>openai/gpt-6-astra</code>, because the second requirement puts OpenAI models on the account or the API key. The other four are OpenRouter routes under the council roster's slugs: <code>moonshotai/kimi-k3</code>, <code>z-ai/glm-5.3</code>, <code>meta/muse-spark-1.3</code>, <code>x-ai/grok-4.6</code>. Subagents come from agent files (F3, F5): one file per model and effort, as the plugin ships for GPT, plus one per OpenRouter route. Tool-layer workers stay: <code>openrouter-cli</code> for panels and one-offs, <code>codex-companion</code> when a GPT worker should run in its own harness.</p>
+<h3 id="the-one-experiment-that-could-keep-remote-control">The one experiment that could keep Remote Control</h3>
+<p>F1's gate has a second clause: <code>ANTHROPIC_UNIX_SOCKET</code> set passes it. In the binary that variable is the transport for <code>claude ssh</code> remote sessions (&quot;ANTHROPIC_UNIX_SOCKET is set (claude ssh remote), and the local proxy is API-key-authed&quot;), the API dispatcher routes Anthropic calls over the socket when it is set, and OAuth is then taken from <code>CLAUDE_CODE_OAUTH_TOKEN</code>. A first-party mechanism for &quot;a local proxy in front of the API&quot; is exactly the shape of a loopback router. Untested: whether the router can be reached through a Unix socket (a socat bridge from a socket to <code>127.0.0.1:8787</code> would do for the test), whether the Remote Control bridge then connects, and whether the session's requests actually traverse the router. The test is under an hour and fully reversible, so it runs first; if it holds, Option C keeps Remote Control and romp becomes the fallback rather than the path.</p>
+<h3 id="implementation-plan-for-the-executing-session">Implementation plan, for the executing session</h3>
+<p>Each step names its check. Commands go through the plugin's bootstrap once the plugin is enabled; until then the cached binary at <code>~/.cache/model-router/v0.1.13/model-router</code> answers <code>--help</code>, <code>config-template</code> and <code>doctor</code>. Nothing in this repo is edited until step 4.</p>
+<ol>
+<li><strong>Test the Unix-socket clause</strong> (30 minutes, reversible). Start the router in the foreground with the cached binary, bridge a socket to it with socat, run one interactive <code>claude</code> with <code>ANTHROPIC_UNIX_SOCKET=&lt;socket&gt;</code>, <code>CLAUDE_CODE_OAUTH_TOKEN</code> from <code>claude setup-token</code>, no <code>ANTHROPIC_BASE_URL</code>, and <code>--model gpt-5.6-sol</code>. Check three things: the router log shows the request; the answer names a GPT model when asked which model it is; <code>/remote-control</code> connects and the session appears in the phone app. Record all three on this page whatever the outcome. If all three hold, the wiring in step 4 uses the socket variables instead of the base URL and the Remote Control cleanup in step 8 is skipped.</li>
+<li><strong>Enable the plugin and install the service.</strong> <code>claude plugin install model-router@alignment-hive --scope user</code>, then the plugin's setup skill: <code>bootstrap.sh doctor</code>, <code>ensure-upstream</code>, <code>login</code> only if doctor does not find the 2026-08-14 Codex auth, <code>service install</code>, <code>doctor</code> until green. The cached binary was v0.1.13 from the 2026-08 install; plugin 0.1.23 pins router 0.1.16 and CLIProxyAPI v7.2.132, which the first <code>doctor</code> and <code>ensure-upstream</code> fetched on 2026-09-06 (done by the implementing session; the Codex login was found, no interactive login needed). <code>service refresh</code> is the command for later bumps. Check: <code>systemctl --user status</code> shows the router unit active and <code>doctor --json</code> returns a base URL on port 8787 with the three GPT routes.</li>
+<li><strong>Configure providers.</strong> Extend <code>config.toml</code>: keep the three GPT <code>[[models]]</code> on <code>upstream = &quot;cliproxy&quot;</code>; add an <code>[[openai-providers]]</code> block named <code>openai-api</code> with base URL <code>https://api.openai.com/v1</code> and at least one model under it, with its key in <code>secrets.toml</code> under <code>[openai-providers] openai-api = ...</code>, sourced from <code>secrets get OPENAI_API_KEY</code>; keep the <code>openrouter</code> block and refresh its model list from the council roster in <code>config/openrouter-models.toml</code>, one entry per seat that OpenRouter serves. <code>service restart</code>, then <code>verify-providers</code>. Check: every provider block answers its <code>/models</code> probe and <code>doctor</code> lists every routing ID.</li>
+<li><strong>Wire the session.</strong> In the deployed <code>~/.claude/settings.json</code> (never the committed copy) add the <code>env</code> keys from the setup skill's step 5 (<code>ANTHROPIC_BASE_URL</code> from <code>doctor --json</code>, <code>_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL</code>, <code>ENABLE_TOOL_SEARCH</code>, <code>CLAUDE_CODE_MAX_CONTEXT_TOKENS</code>) and a <code>modelPicker</code> block with one row per routed ID. Confirm the pre-commit guard refuses the staged file and that <code>dotfiles-sync</code> holds it back. Apply the <code>fallbackModel</code> decision below in the same edit. Check: a fresh session shows every route in <code>/model</code>, <code>doctor</code> is green including its <code>fallback-model</code> check, and <code>claude -p --model gpt-5.6-sol &quot;which model are you&quot;</code> answers as GPT with the router log showing the hop.</li>
+<li><strong>Agent files.</strong> Restore foreign subagents as agent files under <code>claude/agents/</code>, one per routing ID and effort, in the plugin's shape (<code>model: &lt;routing-id&gt;</code>, <code>effort:</code>), for the GPT routes and for each OpenRouter route; the four files deleted on 2026-08-25 come back under their current seat names. Check: a Task call with <code>subagent_type</code> set to one of them returns a transcript whose first assistant message names the foreign family, and the router log shows the routed ID.</li>
+<li><strong>Re-measure F3 on the current binary.</strong> With the gateway wired, run the 2026-09-02 probe again: an agent file with a routing ID the router serves, and one with an ID it does not. Record both results here. The served ID must reach the router; the unserved one must fail loudly rather than answer as Claude, and if it answers as Claude the router's picker rows and agent files are the only names allowed anywhere.</li>
+<li><strong>Prove the remote path.</strong> The forwarder is already <code>romp-tailnet-proxy.service</code>, enabled and active since 2026-08-19; confirm it is listed in <code>deploy.sh</code>'s enumerated unit loop so a fresh deploy installs it, then reboot hetzner and open the romp URL from the phone. Turning on Tailscale DNS on the phone remains the way to retire the forwarder, and is optional.</li>
+<li><strong>Remove what only existed to reconcile a global gateway with Remote Control</strong>, now that Remote Control is off by design: <code>claude/rc-direct-settings.json</code> and its deployed copy, the Remote Control block of the <code>claude()</code> wrapper in <code>config/aliases/claude.sh</code> including the <code>--model gpt-5.6*</code> skip, the rc-direct prepend in <code>custom_bins/claude-spawn</code> (its <code>--settings</code> block for that file and the <code>CLAUDE_RC_OVERRIDE=0</code> opt-out), the two tests that pin that prepend, <code>tests/test_claude_spawn.sh</code> and <code>tests/test_claude_wrapper_rc.sh</code>, and <code>remoteControlAtStartup</code> in settings. Keep the pre-commit guard and its test. Skip this step if step 1 held.</li>
+<li><strong>Update the words.</strong> <code>CLAUDE.md</code> Learnings; <code>.claude/rules/dotfiles-settings.md</code>, which describes exactly this working-copy diff and needs its &quot;currently OFF&quot; paragraph flipped; the <code>council</code> skill's &quot;non-Anthropic models cannot be reached through subagents&quot; paragraph, which is true only without a gateway; <code>rules/delegation.md</code> line 13 likewise; <code>openrouter-fusion</code> skill; <code>ARTIFACTS.md</code> row for this page.</li>
+<li><strong>Smoke test as one command</strong>, kept under <code>tests/</code>: router unit active; <code>doctor</code> green; each routed ID answers a fixed probe naming its family; each provider block passes <code>verify-providers</code>; the deployed settings carry the base URL and the committed file does not; romp answers over the tailnet. Run it after every Claude Code upgrade and every router refresh.</li>
+</ol>
+<h3 id="execution-record-2026-09-06">Execution record, 2026-09-06</h3>
+<p>Measured by the implementing session on Claude Code 2.1.263, model-router 0.1.16 (plugin 0.1.23), CLIProxyAPI v7.2.132, on hetzner; its changes are on branch <code>worktree-option-c-gateway</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1, Unix socket</td>
+<td>Yulong runs it himself (decided about 09:35 UTC, relayed); the commands were handed over with the auth caveat that the socket path is described as API-key-authed and Remote Control needs the OAuth login, so an auth failure must be told apart from a gate failure. Step 8 waits for his verdict</td>
+</tr>
+<tr>
+<td>2, plugin and service</td>
+<td>done; plugin enabled at user scope, <code>model-router.service</code> active, <code>doctor</code> green on every check except <code>fallback-model</code></td>
+</tr>
+<tr>
+<td>3, providers</td>
+<td>done; four account-path <code>[[models]]</code> routes (<code>gpt-6-astra</code>, <code>gpt-5.6-sol</code>, and the shipped <code>terra</code> and <code>luna</code> so the plugin's own agents keep resolving) and an <code>openrouter</code> block with <code>kimi-k3</code>, <code>glm-5.3</code>, <code>muse-spark-1.3</code>, <code>grok-4.6</code>; <code>verify-providers</code> passes; the Codex backend's <code>/v1/models</code> lists <code>gpt-6-astra</code>, so Astra is on the account path; GLM's host-guaranteed window is 262144, not the catalogue's 1048576, and that is what is configured. No <code>openai-api</code> block: see the decision below</td>
+</tr>
+<tr>
+<td>4, wiring</td>
+<td>done through a new <code>custom_bins/model-router-wire</code>; the deployed <code>settings.json</code> carries the env block and exactly the six rows; the committed copy carries only <code>enabledPlugins</code>. Later the same morning <code>config/model-router.toml</code> became the single source for every foreign model (provider, slug, window, enabled, picker row, agent file), <code>model-router-wire apply</code> renders the router config, the settings keys and picker rows, and the generated agent files from it, and <code>status</code> reports drift. All of it is in PR #100 on branch <code>worktree-option-c-gateway</code>, which Yulong asked the implementing session to merge after the re-measurement</td>
+</tr>
+<tr>
+<td>5, agent files</td>
+<td>done: <code>gpt-6-astra-high</code>, <code>kimi-k3</code>, <code>glm-5.3</code>, <code>muse-spark-1.3</code>, <code>grok-4.6</code> under <code>claude/agents/</code></td>
+</tr>
+<tr>
+<td>6, F3 re-measured</td>
+<td>served routes: <code>claude -p --model &lt;id&gt;</code> for all six answers as its own family with one router-log line per routing ID, and an agent with <code>model: kimi-k3</code> answered as Kimi K3 with the hop in the log. Unserved name: an agent with <code>model: zz-unserved-probe</code> was routed by the router on its Claude branch to Anthropic (<code>branch=claude model=zz-unserved-probe</code>), and the reply was Claude with no error surfaced, because <code>fallbackModel</code> re-ran the failed request on Opus. So on 2.1.263 the agent-file ID does go out on the wire, F3's silent replacement is not the mechanism, and the silent Claude answer now comes from <code>fallbackModel</code></td>
+</tr>
+<tr>
+<td>7, remote path</td>
+<td><code>deploy.sh</code> already enumerates <code>romp-tailnet-proxy.service</code>; the reboot is Yulong's</td>
+</tr>
+<tr>
+<td>8, Remote Control teardown</td>
+<td>skipped pending step 1</td>
+</tr>
+<tr>
+<td>9, words</td>
+<td>done for the implementing session's files: <code>.claude/rules/dotfiles-settings.md</code>, <code>docs/romp-tailnet-access.md</code>, <code>claude/rules/delegation.md</code>, the council skill section, the <code>openrouter-cli</code> preamble; this page, the CLAUDE.md decision entry and the <code>ARTIFACTS.md</code> row by this session</td>
+</tr>
+<tr>
+<td>10, smoke test</td>
+<td><code>tests/test_model_router_gateway.sh</code> with legs unit, doctor, providers, settings deployed and committed, one route probe per ID, agent served and unserved probes, agent-file audit, romp; first run 2026-09-06 around 09:20 UTC failed on <code>doctor</code> and <code>agent:unserved</code>, both the <code>fallbackModel</code> setting. Re-run at 2026-09-06T09:35:54Z after the drop (commit aa33ffa on PR #100, applied to the deployed file): every leg passes; <code>doctor</code> green on every check; an agent with <code>model: gpt-5.6-sol</code> answered &quot;GPT-5.6 Sol.&quot; with the hop logged; an agent with <code>model: zz-unserved-probe</code> surfaced &quot;Error: There's an issue with the selected model (zz-unserved-probe). It may not exist or you may not have access to it.&quot; instead of a Claude answer</td>
+</tr>
+</tbody>
+</table>
+<h2 id="acceptance-criteria">Acceptance Criteria</h2>
+<p>Someone else verifies the design is in force by checking these; each names its test.</p>
+<ul>
+<li><strong>Every route is in the picker and answers as itself.</strong> For each row in <code>modelPicker</code>, <code>claude -p --model &lt;id&gt; &quot;state your model family in one word&quot;</code> returns that family, and the router log shows one request for that routing ID.</li>
+<li><strong>OpenAI models are served from the configured OpenAI path, not OpenRouter.</strong> With the OpenRouter key removed from <code>secrets.toml</code>, GPT routes still answer; with it restored and the Codex auth directory moved aside, the account-path GPT routes fail loudly and the API-path route still answers.</li>
+<li><strong>A provider swap is configuration only.</strong> Moving one model between the <code>openrouter</code> block, the <code>openai-api</code> block and <code>upstream = &quot;cliproxy&quot;</code> needs one config edit and <code>service restart</code>, and <code>verify-providers</code> passes afterwards.</li>
+<li><strong>Foreign subagents by name work and unserved names fail loudly.</strong> Step 6's two probes are recorded in the execution record with the binary version. On 2026-09-06 at 09:20 UTC the unserved ID failed this criterion because <code>fallbackModel</code> re-ran the request on Opus; at 09:35:54Z, with the setting dropped, both probes pass on 2.1.263 and router 0.1.16.</li>
+<li><strong>No silent fallback to Claude.</strong> A foreign route returning an upstream error surfaces as an error in the session; the router log has no Anthropic request for that turn. This holds only with <code>fallbackModel</code> absent, and the router's <code>doctor</code> says so: its <code>fallback-model</code> check fails while the setting is present. Met on 2026-09-06 at 09:35:54Z after the drop.</li>
+<li><strong>The public repo never carries the ingress token.</strong> <code>git -C ~/code/dotfiles diff claude/settings.json</code> shows the env block; the pre-commit guard test passes; <code>git log -p -S'/t/' -- claude/settings.json</code> on <code>main</code> finds nothing new.</li>
+<li><strong>The remote path survives a reboot.</strong> After <code>sudo reboot</code> on hetzner, the romp URL loads from the phone without a manual command.</li>
+<li><strong>Remote Control status is stated, not assumed.</strong> The result of step 1 is recorded on this page with the binary version; if it held, <code>/remote-control</code> connects in a wired session; if not, <code>remoteControlAtStartup</code> is gone and the wrapper no longer references Remote Control.</li>
+<li><strong>Upgrades are checked.</strong> The step 10 smoke test exists, passes on the current binary, and its last run is dated on this page.</li>
+</ul>
+<h2 id="preserved-designs-not-adopted">Preserved designs, not adopted</h2>
+<p>Kept in full so the reasoning is not rediscovered. Both were the morning's recommendation and escalation; both remain valid fallbacks if Option C breaks on a version bump.</p>
+<h3 id="option-a-tool-layer-remote-control-native">Option A: tool layer, Remote Control native</h3>
+<p>Claude Code runs exactly as Anthropic ships it. Foreign models are reached by tool calls, and their answers enter the transcript as tool results, which is also what makes provenance enforceable.</p>
+<pre class="mermaid">
+flowchart TD
+  phone["Phone: Claude app"] --&gt; relay["Anthropic relay"]
+  relay &lt;--&gt; cc["Claude Code session&lt;br/&gt;OAuth login, base URL unset&lt;br/&gt;Remote Control ON"]
+  cc --&gt; api["api.anthropic.com&lt;br/&gt;every turn and every subagent is Claude"]
+  cc --&gt; tools["Tool calls: Bash, Task, MCP&lt;br/&gt;through the normal permission prompt"]
+  tools --&gt; council["openrouter-cli ask / council"]
+  council ~~~ codex
+  tools --&gt; codex["codex-companion task"]
+  codex ~~~ oc
+  tools --&gt; oc["opencode run"]
+  council --&gt; or["OpenRouter: GPT, Gemini, GLM, Kimi, Qwen, Grok"]
+  codex --&gt; oai["OpenAI, Codex harness"]
+  oc --&gt; own["each family's own API and harness"]
+  or -. "tool_result with slug, generation id, cost" .-&gt; cc
+</pre>
+<p>What it gives: Remote Control everywhere, TLS intact, supported by Anthropic, provenance for free on the OpenRouter side, and each foreign family runs in its own harness, which several council seats noted performs better than a foreign model driving Claude's loop through a shim. A Claude subagent restricted to these tools is, in effect, a routed subagent: it delegates to the family; it just does not become it.</p>
+<p>What it gives up: no foreign row in <code>/model</code>, and no foreign model reads the live transcript as a true shared-context subagent. That residual gap is what Option C buys.</p>
+<p>Its build list, still worth doing under Option C for the tool layer: provenance for <code>codex-companion</code> and <code>opencode</code> results; one spend log and a session cap across the workers; <code>timeout --signal=KILL</code> and captured stderr on the agentic rung; the <code>opencode</code> PATH order.</p>
+<h3 id="option-b-split-process-remote-control-parent-and-gateway-child">Option B: split process, Remote Control parent and gateway child</h3>
+<p>The parent is Option A. When a foreign model needs the real loop and repo tools, the parent spawns a child Claude Code in a worktree with its own settings file pointing at the router. The child fails F1 and the parent never touches its base URL, so the parent's Remote Control is untouched.</p>
+<pre class="mermaid">
+flowchart TD
+  phone["Phone: Claude app"] --&gt; relay["Anthropic relay"]
+  relay &lt;--&gt; parent["Parent Claude Code&lt;br/&gt;base URL unset, Remote Control ON"]
+  parent --&gt; api["api.anthropic.com"]
+  parent -- "claude --settings gateway-settings.json, in a worktree" --&gt; child["Child Claude Code&lt;br/&gt;base URL = http://127.0.0.1:8787/t/token&lt;br/&gt;Remote Control OFF, modelPicker rows"]
+  child --&gt; router["model-router&lt;br/&gt;plain HTTP on loopback, TLS outward"]
+  router --&gt; api2["api.anthropic.com"]
+  router --&gt; cpa["CLIProxyAPI: OpenAI account"]
+  router --&gt; or["OpenRouter and other providers"]
+  child -. "worktree branch, merged by the parent" .-&gt; parent
+</pre>
+<p>What it gives: everything Option A gives in the parent, plus a child in which a foreign model drives the actual Claude Code loop with CLAUDE.md, hooks and repo tools. Nothing is bypassed: the child is an unsupported gateway session, which Anthropic's docs call unsupported rather than prohibited. The child can be headless (<code>claude -p --settings gateway-settings.json</code>), driven by the parent as one more tool call, which needs no spawn skill. Two constraints from the 2026-09-06 review: the child runs on an API key in its settings file rather than the inherited OAuth login, and its result comes back with the router's provenance attached so the parent can refuse a branch whose echoed model is Claude.</p>
+<p>What it costs: the child has no Remote Control, so a long child run cannot be steered from the phone, and it pays API spend on top of the subscription. Under Option C the whole design collapses into &quot;every session is the child&quot;, which is why it is not needed.</p>
+<h3 id="closed-routes-recorded-so-they-are-not-rediscovered">Closed routes, recorded so they are not rediscovered</h3>
+<ul>
+<li><strong>Host-preserving endpoint</strong> (<code>ANTHROPIC_BASE_URL=http://api.anthropic.com</code> plus a hosts-file override). Passes the Remote Control gate and fails F2 by the same function, and F4 makes it pointless anyway: picker rows never needed discovery. Closed.</li>
+<li><strong>TLS-terminating proxy</strong> (<code>https_proxy</code> plus your own CA). Technically open on 2.1.252 (no pinning, lowercase proxy variable honoured). Rejected on 2026-09-02 as the only route that decrypts the session's own OAuth traffic, and Option C makes it redundant.</li>
+<li><strong>A foreign model ID in agent frontmatter with no gateway.</strong> F3 as measured: silently Claude. With the gateway it is the design.</li>
+<li><strong>A second install via <code>CLAUDE_CONFIG_DIR</code>.</strong> The base URL is read from <code>settings.json</code> only (2.1.222).</li>
+</ul>
+<h3 id="side-by-side">Side by side</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>A: tool layer</th>
+<th>B: split process</th>
+<th>C: gateway everywhere (adopted)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Remote Control</td>
+<td>on, every session</td>
+<td>on in the parent, off in the child</td>
+<td>off, unless the Unix-socket clause holds; romp instead</td>
+</tr>
+<tr>
+<td>Foreign <code>/model</code> rows</td>
+<td>none</td>
+<td>in the child, via <code>modelPicker</code></td>
+<td>everywhere, via <code>modelPicker</code></td>
+</tr>
+<tr>
+<td>Foreign subagent by name</td>
+<td>no (F3 without a gateway)</td>
+<td>in the child, via agent files</td>
+<td>everywhere, via agent files</td>
+</tr>
+<tr>
+<td>Foreign model with repo tools and the live loop</td>
+<td>in each family's own harness only</td>
+<td>yes, in the child</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>OpenAI models from the OpenAI account or API</td>
+<td><code>codex-companion</code> only</td>
+<td>yes, by router config</td>
+<td>yes, by router config</td>
+</tr>
+<tr>
+<td>Provenance</td>
+<td>in every tool result</td>
+<td>router log for the child</td>
+<td>router log; tool layer as before</td>
+</tr>
+<tr>
+<td>TLS on external hops</td>
+<td>intact</td>
+<td>intact; loopback is the only plaintext leg</td>
+<td>intact; loopback is the only plaintext leg</td>
+</tr>
+<tr>
+<td>Support status</td>
+<td>supported</td>
+<td>parent supported, child unsupported</td>
+<td>unsupported</td>
+</tr>
+<tr>
+<td>What a version bump can break</td>
+<td>the tool CLIs, loudly</td>
+<td>the child, on demand</td>
+<td>the daily driver; the smoke test is the detector</td>
+</tr>
+<tr>
+<td>Spend</td>
+<td>subscription plus per-call API</td>
+<td>plus API for the child</td>
+<td>Codex subscription and API keys through the router</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reviewed-before-the-revision-and-what-the-review-changed">Reviewed before the revision, and what the review changed</h2>
+<p>Two reviews were run on the morning draft on 2026-09-06: a two-family council (<code>openrouter-cli council advise</code>, seats Claude Fable 5 and GPT-6 astra, both slugs echoed as requested), which reported, and a three-lens in-family workflow (fact-check against the repo and the binary, red-team of the decision, misread check, each finding adversarially verified by a second agent), which reported after the revision with twelve confirmed and twelve refuted findings; the six that still applied to the revised text were folded in (the intro's re-check claim, the earlier report's exemption claim, the council provenance cell, F2's four conditions, the two-URL bullet, the claude-spawn cleanup item), and the rest targeted passages the revision had already rewritten. Both council seats objected that the first MUST as written (&quot;every interactive session&quot;) forbade Option B by definition, and both said &quot;nothing left to test&quot; overstated F3, which had been measured on unrecognised IDs without a gateway; the revision confirmed the second objection from the plugin's own log and rewrote F3. Fable supplied the headless child form of B; GPT supplied the API-key and provenance constraints on the child. The decision itself changed afterwards by Yulong's choice, not by the review. The raw answers are in <code>build/</code>, which is gitignored.</p>
+<h2 id="one-decision-the-plan-surfaced-for-yulong">One decision the plan surfaced, for Yulong</h2>
+<p><strong><code>fallbackModel</code> against provenance.</strong> The deployed <code>settings.json</code> sets <code>fallbackModel</code> to Claude Opus 5 then <code>opus</code>, added on 2026-09-02 so a Claude session survives an overload. The router's own <code>doctor</code> fails on it, and its text says why: a routed GPT or Grok subagent whose request the gateway fails with a 404 or a 5xx silently continues on the first Claude model of that chain instead of erroring. That is exactly the Claude-under-a-foreign-label case the fifth requirement forbids, and it is invisible in the transcript. The two settings cannot both hold, so this is a trade to make, not a bug to fix:</p>
+<ul>
+<li><strong>Remove <code>fallbackModel</code></strong> (the router's recommendation): routed requests fail loudly; Claude sessions lose automatic recovery from an overload and show the error instead, which the session can retry by hand.</li>
+<li><strong>Keep <code>fallbackModel</code></strong>: Claude sessions keep overload resilience; every routed subagent carries a silent path to Claude, and the provenance criterion above cannot be met.</li>
+</ul>
+<p>The lean was remove: an overload on a Claude session is visible and recoverable, a silent substitution on a routed one is neither. Step 6 measured the failure on 2026-09-06: an unserved agent-file ID came back as Claude with no error, through this setting. <strong>Decided: drop it</strong> (Yulong, 2026-09-06 about 09:35 UTC, relayed by the implementing session). Removed from the deployed settings and the committed copy in PR #100 (aa33ffa); the re-measurement at 09:35:54Z in the execution record shows the unserved ID now erroring instead of answering as Claude.</p>
+<p><strong>The OpenAI API-key path.</strong> The only <code>OPENAI_API_KEY</code> in <code>secrets</code> is labelled with another person's name, so the implementing session added no <code>openai-api</code> provider block. <strong>Decided: skip for now</strong> (Yulong, same time, relayed). GPT stays on the Codex account path until a key that is his to spend exists; the second requirement's &quot;or the OpenAI API&quot; clause stays configured but unused.</p>
+<h2 id="what-this-page-does-not-decide">What this page does not decide</h2>
+<ul>
+<li><strong>The 2026-09-02 report is published at two URLs.</strong> Its <code>meta.yml</code> names <a href="https://claude.ai/code/artifact/d224e859-2f4d-452c-9781-5ab3941e57cf">d224e859</a> and the <code>ARTIFACTS.md</code> row committed on <code>main</code> on 2026-09-06 adds <a href="https://claude.ai/code/artifact/dfd9f494-031b-4ca3-be8b-10c73e4a45ac">dfd9f494</a>. One should be marked superseded by the other and the <code>meta.yml</code> updated to match; this page links the newer.</li>
+<li><strong>Data governance of routed sessions.</strong> Under Option C a session's repo text goes to whichever provider its model uses, under that provider's retention policy, and a subagent named in an agent file does so without a per-call prompt. The 2026-09-01 council flagged this for the tool layer; it is larger here and is not designed on this page.</li>
+<li><strong>The Codex subscription being spent by Claude Code sessions</strong> was accepted on 2026-07-20 per the plugin's log, to be revisited before any public release of the plugin; this page inherits that acceptance and does not re-examine it.</li>
+</ul>
+
+</div>
+</div>
+
+<script>
+const tocLinks = Array.from(document.querySelectorAll(".toc a"));
+const targets = tocLinks
+  .map((a) => ({ a, el: document.getElementById(a.getAttribute("href").slice(1)) }))
+  .filter((t) => t.el);
+if ("IntersectionObserver" in window && targets.length) {
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      const hit = targets.find((t) => t.el === e.target);
+      if (!hit) return;
+      tocLinks.forEach((a) => a.classList.remove("on"));
+      hit.a.classList.add("on");
+    });
+  }, { rootMargin: "-12% 0px -75% 0px" });
+  targets.forEach((t) => io.observe(t.el));
+}
+</script>
+<!-- annotation-layer v2 -->
+<style>
+:root{--an-bg:#fff;--an-ink:#1a1a1a;--an-soft:#5d5a55;--an-rule:#d9d4cc;--an-accent:#bd5d3a;
+ --an-mark:#fbe6a2;--an-bad:#a33f2a;--an-good:#2f6b4f;--an-good-bg:#e4f0e9;--an-field:#faf9f7}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--an-bg:#1f2124;--an-ink:#eceae6;
+ --an-soft:#a9a59e;--an-rule:#3a3d42;--an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;
+ --an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}}
+:root[data-theme="dark"]{--an-bg:#1f2124;--an-ink:#eceae6;--an-soft:#a9a59e;--an-rule:#3a3d42;
+ --an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;--an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}
+mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--an-accent);cursor:pointer;border-radius:2px}
+/* A suggested edit must not read as a comment highlight: the original is
+   struck rather than filled, and the replacement carries the insert colour. */
+mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-through;
+ text-decoration-color:var(--an-bad);text-decoration-thickness:2px;cursor:pointer;border-radius:2px}
+.anins{background:var(--an-good-bg);color:var(--an-good);border-bottom:2px solid var(--an-good);
+ border-radius:2px;padding:0 .12em;cursor:pointer}
+[data-annotation-layer]{font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;color:var(--an-ink);line-height:1.5}
+[data-annotation-layer] *{box-sizing:border-box}
+#anPop{position:absolute;z-index:1050;display:none;background:var(--an-bg);border:1px solid var(--an-rule);
+ border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.18);padding:.6rem;width:min(20rem,calc(100vw - 1.5rem));
+ max-height:min(80vh,26rem);overflow:auto}
+/* A control that would overwrite unsaved words points at them instead. */
+#anPop.nudge{outline:2px solid var(--an-accent);outline-offset:2px}
+/* iOS zooms the whole page when a focused field is under 16px. */
+@media (pointer:coarse){#anPop textarea,#anExportText{font-size:16px}}
+#anPop textarea{width:100%;min-height:4.5rem;border:1px solid var(--an-rule);border-radius:5px;
+ background:var(--an-field);color:var(--an-ink);padding:.4rem;font:inherit;font-size:.86rem;resize:vertical}
+.anbtn{background:var(--an-accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
+ font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}
+.anbtn.ghost{background:transparent;color:var(--an-soft);border:1px solid var(--an-rule)}
+.anbtn.ghost.danger,.anbtn.ghost.tiny.danger{color:var(--an-bad);border-color:var(--an-bad)}
+.anbtn[disabled]{opacity:.42;cursor:default}
+/* A copied comment is marked by taking its accent AWAY, never by adding a
+   chip: after the first round most of the list is copied, so anything
+   additive becomes noise on the majority. The fresh ones keep the accent and
+   are what the eye lands on. */
+.cmt.ancopied{border-left-color:var(--an-rule)}
+/* An armed control must not look like the button that just did nothing, so it
+   fills: the second click is visibly a different act from the first. */
+.anbtn.anarmed,.anbtn.ghost.danger.anarmed,.anbtn.ghost.tiny.danger.anarmed{
+ background:var(--an-bad);color:#fff;border-color:var(--an-bad)}
+.anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
+#anPop:not(.editing) #anDelete{display:none}
+/* The mode strip is deliberately NOT in .anrow: Save has to stay the first
+   control of that row, which is also its tab order. */
+.anmodebar{display:flex;gap:.3rem;margin-bottom:.45rem}
+.anmode{flex:1;background:transparent;color:var(--an-soft);border:1px solid var(--an-rule);
+ border-radius:5px;padding:.22rem .5rem;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer}
+.anmode.ansel{background:var(--an-accent);color:#fff;border-color:var(--an-accent)}
+/* Reopening an existing note is not the place to change what it is. */
+#anPop.editing .anmodebar{display:none}
+.cmt.ansuggest{border-left-color:var(--an-good)}
+.cmt .q.struck{text-decoration:line-through}
+.cmt .ins{color:var(--an-good)}
+/* Save leads: it is the first button in the DOM, so it is also first in tab
+   order. Delete is pushed to the far end so it is never the near miss. */
+.anrow{display:flex;gap:.4rem;align-items:center;margin-top:.45rem;flex-wrap:wrap}
+#anDelete{margin-left:auto}
+.anhint{color:var(--an-soft);font-size:.72rem;margin-top:.35rem}
+.anhint kbd{font:inherit;font-size:.95em;border:1px solid var(--an-rule);border-bottom-width:2px;
+ border-radius:4px;padding:0 .25rem;background:var(--an-field)}
+#anComments{max-width:48rem;margin:3rem auto 5rem;padding:0 1rem}
+#anComments h2{font-size:1.2rem;margin:0 0 .5rem;padding-bottom:.32rem;border-bottom:1px solid var(--an-rule)}
+#anComments .anscope{color:var(--an-soft);font-size:.86rem;margin:0 0 .6rem}
+.anbar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem}
+.anacts{display:flex;gap:.4rem;margin-top:.4rem}
+.ancount{color:var(--an-soft);font-size:.87rem}
+.ancount.warn{color:var(--an-bad);font-weight:650}
+.cmt{background:var(--an-bg);border:1px solid var(--an-rule);border-left:3px solid var(--an-accent);
+ border-radius:0 7px 7px 0;padding:.6rem .8rem;margin:.5rem 0;font-size:.88rem;overflow-wrap:anywhere}
+.cmt .q{color:var(--an-soft);font-style:italic;margin-bottom:.3rem}
+.cmt .where{font-size:.72rem;color:var(--an-soft);text-transform:uppercase;letter-spacing:.06em}
+.cmt .orphan{font-size:.74rem;color:var(--an-bad)}
+#anExport{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1060;
+ background:var(--an-bg);border:1px solid var(--an-rule);border-radius:10px;padding:.9rem;
+ width:min(46rem,92vw);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+#anExport .exphead{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap}
+#anExport .exphint{color:var(--an-soft);font-size:.8rem}
+#anExport .anbtn{margin-left:auto}
+#anExportText{width:100%;height:min(24rem,55vh);border:1px solid var(--an-rule);border-radius:6px;
+ background:var(--an-field);color:var(--an-ink);padding:.6rem;font-family:ui-monospace,Menlo,monospace;
+ font-size:.82rem;resize:vertical}
+.anok{background:var(--an-good-bg);color:var(--an-good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+.anwarn{background:var(--an-bad);color:#fff;padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+/* Toggle controls. The generator emits the markup; this styles it, so a
+   hand-written page that emits the same `data-an-state-id` wrapper gets the
+   look, the persistence and the export without copying any CSS.
+   The bullet is dropped only inside an UNORDERED list: a bare `li.antask`
+   also reaches an ordered checklist, where `list-style:none` deletes the step
+   numbers the author wrote the list as a numbered one to keep. */
+ul>li.antask{list-style:none}
+.anstate{display:inline-flex;align-items:baseline;gap:.45em}
+.anstatebox{flex:none;align-self:center;width:1em;height:1em;accent-color:var(--an-accent);cursor:pointer}
+.anstatebtn{flex:none;background:var(--an-field);color:var(--an-ink);border:1px solid var(--an-rule);
+ border-radius:999px;padding:.05em .6em;font:inherit;font-size:.8em;font-weight:650;
+ white-space:nowrap;cursor:pointer}
+.anstatebtn:hover{border-color:var(--an-accent);color:var(--an-accent)}
+.anstatebtn:focus-visible,.anstatebox:focus-visible{outline:2px solid var(--an-accent);outline-offset:2px}
+#anBadge{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
+ bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;background:var(--an-bg);color:var(--an-ink);
+ border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
+ font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+#anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
+</style>
+<div data-annotation-layer="v2" data-key="review-model-routing-decision-spec">
+<section id="anComments">
+<h2 id="your-comments">Your comments</h2>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
+<div class="anbar">
+  <span class="ancount" id="anCount">No comments yet</span>
+  <button class="anbtn" id="anCopy">Copy all</button>
+  <button class="anbtn ghost danger" id="anClearCopied">Delete copied</button>
+  <button class="anbtn ghost danger" id="anClear">Delete all</button>
+  <span id="anToast"></span>
+</div>
+<div id="anList"></div>
+</section>
+<div id="anPop" role="dialog" aria-label="Comment">
+  <div class="anmodebar" role="group" aria-label="Annotation mode">
+    <button class="anmode ansel" type="button" id="anModeComment" aria-pressed="true">Comment</button>
+    <button class="anmode" type="button" id="anModeEdit" aria-pressed="false">Suggest edit</button>
+  </div>
+  <textarea id="anTxt" placeholder="What do you think?"></textarea>
+  <div class="anrow">
+    <button class="anbtn" id="anSave">Save</button>
+    <button class="anbtn ghost" id="anCancel">Cancel</button>
+    <button class="anbtn ghost danger" id="anDelete">Delete</button>
+  </div>
+  <div class="anhint"><kbd>Enter</kbd> saves &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> newline &middot; <kbd>Esc</kbd> discards &middot; <kbd>Ctrl</kbd>+<kbd>E</kbd> switches mode</div>
+</div>
+<div id="anExport" role="dialog" aria-label="Export comments">
+  <div class="exphead">
+    <strong>Your comments as Markdown</strong>
+    <span class="exphint">already selected &mdash; copy with your usual shortcut</span>
+    <button class="anbtn ghost tiny" id="anExportClose">Close</button>
+  </div>
+  <textarea id="anExportText" readonly></textarea>
+</div>
+<button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
+</div>
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var root = document.querySelector("[data-annotation-layer]");
+var KEY = (root && root.dataset.key) || ("annot:" + document.title);
+// Namespaced with a PREFIX, never a suffix. With `KEY + "-draft"`, a page
+// titled "Spec-draft" owns the same key as the draft of a page titled "Spec",
+// so pressing Escape on one deletes the other's comments outright.
+var DIRTY = "an-dirty:" + KEY;
+var DRAFT = "an-draft:" + KEY;
+var STATES = "an-states:" + KEY;
+
+// ---- storage -------------------------------------------------------------
+// localStorage, and nothing else. An IndexedDB mirror, a backup key and a
+// scan of neighbouring keys all lived here and all came out: the mirror let a
+// save that raced its own asynchronous recovery destroy the comments it was
+// recovering; the backup key resurrected comments the user had deliberately
+// cleared; and the neighbour scan adopted a different document's comments
+// whenever one quote happened to appear on this page. The republish they were
+// meant to survive is already covered, because the generator fixes the key
+// (`data-key`) from the filename rather than the title.
+// `getItem` cannot say WHY it returned null: a missing key and a read the
+// browser refused look identical, and reading a refusal as "nothing stored"
+// overwrites the page with an assumed-empty value. A read that cares takes
+// lsRead and compares against FAILED.
+var FAILED = {};
+function lsRead(k){ try { return localStorage.getItem(k); } catch (e) { return FAILED; } }
+function lsGet(k){ var v = lsRead(k); return v === FAILED ? null : v; }
+function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
+
+// Stored as a bare array, which every generation of this layer can read. An
+// older deployed page does `JSON.parse(...).reduce(...)` on this value and
+// throws on an object, and that kills its whole script: no handlers, no
+// saving, a page that looks fine and silently does nothing.
+function readComments(){
+  var d; try { d = JSON.parse(lsGet(KEY) || "[]"); } catch (e) { return []; }
+  if (Array.isArray(d)) return d;
+  if (d && Array.isArray(d.comments)) return d.comments;  // envelope from a newer layer
+  return [];
+}
+// Not a per-tab counter: two tabs on one page would both hand out id 1.
+function newId(){ return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
+
+var comments = readComments(), notesUnsaved = false, statesUnsaved = false;
+// One refused-write signal for two writers. A lost tick is as lost as a lost
+// note -- on a page that is all checklist and no prose, which is what a review
+// queue is, the tick IS the work -- so both raise the same badge, the same
+// panel line and the same unload guard. Each writer clears only its own flag:
+// a `persist()` that succeeded says nothing about whether any state got
+// stored. `statesUnsaved` is not set from a write's return value at all -- it
+// is `pendingStates` being non-empty, one entry per control, and an entry
+// leaves that set only on evidence read back out of that control's own key.
+// See THE WRITE RULE in the toggle-state section.
+function unsaved(){ return notesUnsaved || statesUnsaved; }
+comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+
+// Per-comment export state. `copiedAt` is stamped only where the page-level
+// flag was cleared before -- a clipboard write that resolved, or a real copy
+// event on the fallback textarea -- so its absence means "never left this
+// browser". The asymmetry is deliberate: an unstamped comment can never fall
+// into the delete-copied set, so a miss costs one redundant copy rather than
+// a page of lost notes. That is also why there is no "delete the uncopied"
+// action: every comment predating this key reads as uncopied, so such a
+// button would have wiped every existing page on first run.
+function isCopied(c){ return !!c.copiedAt; }
+function copiedSet(){ return comments.filter(isCopied); }
+function freshCount(){ return comments.length - copiedSet().length; }
+function isDirty(){ return freshCount() > 0; }
+// The legacy page-level key is still written, in lockstep, because a stale tab
+// running an older layer reads it and would otherwise raise or stand down its
+// unload guard against state it cannot see.
+function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
+
+// One-time migration for comments written before `copiedAt` existed. Without
+// it every upgraded page announces "N of N not yet copied out" and re-arms the
+// unload guard for someone who copied everything out yesterday: a false alarm
+// on every page in existence, which is how a warning stops being read.
+// The legacy flag is EVIDENCE, not an inference -- an explicit "0" was written
+// by a copy that actually happened. A key that is MISSING is not evidence and
+// is left alone, so absence can never manufacture a safe state.
+(function migrateFromLegacyFlag(){
+  if (lsGet(DIRTY) !== "0" || !comments.length) return;
+  var now = Date.now(), touched = false;
+  comments.forEach(function(c){ if (!c.copiedAt) { c.copiedAt = now; touched = true; } });
+  if (touched) persist();
+})();
+var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
+var pending = null, editingId = null;
+// The box has two modes and one dirty flag. `dirty` is set by the first user
+// modification and by nothing else: an edit box OPENS with the selection
+// already in its textarea, so keying the draft autosave and the "a box with
+// words in it refuses to close" invariant on non-emptiness would turn every
+// opened edit box into an unclosable phantom draft nobody typed.
+var mode = "comment", dirty = false;
+// An entry written before v2 carries no `type`, so absence means comment.
+function isEdit(c){ return c && c.type === "edit"; }
+function bodyOf(c){ return isEdit(c) ? (c.replacement || "") : (c.note || ""); }
+
+window.addEventListener("pagehide", saveDraft);
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden") saveDraft();
+});
+window.addEventListener("beforeunload", function(e){
+  saveDraft();
+  // Two reasons to stop someone. Comments that exist and have not been copied
+  // out are the ordinary one -- they are in localStorage, and this warns only
+  // that nothing outside this browser has them yet. A refused write is the
+  // other, and it is the one that would otherwise be silent on a page carrying
+  // only a checklist: the ticks are not in localStorage at all, and closing
+  // the tab is when they stop existing.
+  if (!unsaved() && (!isDirty() || !comments.length)) return;
+  e.preventDefault(); e.returnValue = ""; return "";
+});
+// A second tab on the same page used to be last-writer-wins. Take its write
+// instead — unless a note is open here, because nothing may pull the DOM out
+// from under a range the user is still typing against.
+//
+// NOT FIXED HERE, and stated rather than implied: this is the wholesale
+// replace the toggle states used to carry, so a comment THIS tab wrote while
+// the store was refusing is dropped from `comments` when the other tab writes,
+// and the next `persist()` that succeeds clears `notesUnsaved` over its grave.
+// The toggle-state fix -- one localStorage key per item, so two writers
+// touching different items never touch the same key -- is the right shape here
+// too, and it does not transfer as written. A state is one value under one id
+// the document itself supplies; a comment is a member of an ordered array with
+// an id this layer mints at random, and the array is the unit that add, edit,
+// delete, `copiedAt` and delete-copied all operate on. Per-comment keys mean
+// enumerating the store by prefix to read them back, a tombstone to express a
+// delete, and a compatibility break with every deployed layer generation,
+// which reads this key as a bare array. That is its own project with its own
+// tests, not a copy of this one.
+window.addEventListener("storage", function(e){
+  if (e.key !== KEY || isOpen()) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = readComments();
+  comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+  restoreHighlights(); render();
+});
+
+function inLayer(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  return !!(node && node.closest && node.closest("[data-annotation-layer]"));
+}
+function sectionOf(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  var sec = node && node.closest ? node.closest("section") : null;
+  if (sec) { var h = sec.querySelector("h1,h2,h3"); if (h) return h.textContent.trim(); }
+  while (node && node !== document.body) {
+    var p = node.previousElementSibling;
+    while (p) { if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim(); p = p.previousElementSibling; }
+    node = node.parentNode;
+  }
+  return "document";
+}
+function isOpen(){ return pop.style.display === "block"; }
+function hasText(){ return !!txt.value.trim(); }
+// `rect` is viewport-relative. Measure the box while it is laid out but not
+// yet painted, so it never appears at the wrong place for one frame — that
+// single-frame jump is itself a flicker.
+function placePop(rect){
+  pop.style.visibility = "hidden";
+  pop.style.display = "block";
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  var top = rect.bottom + 8;
+  if (top + h > vh - 8) top = rect.top - h - 8;             // no room below: flip above
+  top = Math.max(8, Math.min(top, Math.max(8, vh - h - 8))); // and keep it on screen either way
+  pop.style.left = (Math.max(8, Math.min(rect.left, vw - w - 12)) + window.scrollX) + "px";
+  pop.style.top = (top + window.scrollY) + "px";
+  pop.style.visibility = "";
+}
+// Words the user has not saved are not something another control may
+// overwrite: clicking a second highlight used to replace the text outright.
+// `focus` is false on the touch path, where focusing a field while iOS shows
+// its selection handles collapses the selection.
+function nudge(focus){
+  if (focus !== false) txt.focus();
+  pop.classList.add("nudge");
+  setTimeout(function(){ pop.classList.remove("nudge"); }, 700);
+}
+// Applies a mode WITHOUT touching the textarea. The prefill belongs to the
+// user-driven switch below; the restore paths (an existing entry, a recovered
+// draft) supply their own text and must not have it overwritten.
+function setModeState(next){
+  mode = next;
+  var isE = mode === "edit";
+  $("anModeComment").classList.toggle("ansel", !isE);
+  $("anModeEdit").classList.toggle("ansel", isE);
+  $("anModeComment").setAttribute("aria-pressed", isE ? "false" : "true");
+  $("anModeEdit").setAttribute("aria-pressed", isE ? "true" : "false");
+  txt.placeholder = isE ? "Replacement text; an empty box suggests deleting it"
+                        : "What do you think?";
+}
+// The user-driven switch rewrites the textarea, so it declines while there are
+// unsaved words and points at them instead, exactly as a second highlight
+// click does. Reopening an existing entry is not the place to change its kind,
+// so the strip is hidden then and this is a no-op.
+function switchMode(next){
+  if (mode === next || editingId !== null) return;
+  if (dirty) { nudge(); return; }
+  setModeState(next);
+  txt.value = (next === "edit" && pending) ? pending.quote : "";
+  dirty = false;
+  txt.focus();
+}
+$("anModeComment").onclick = function(){ switchMode("comment"); };
+$("anModeEdit").onclick = function(){ switchMode("edit"); };
+
+function openEdit(c, anchor, focus){
+  if (isOpen() && editingId !== c.id && dirty) { nudge(focus); return; }
+  editingId = c.id; pending = null;
+  setModeState(isEdit(c) ? "edit" : "comment");
+  txt.value = bodyOf(c);
+  dirty = false;
+  pop.classList.add("editing");
+  placePop(anchor ? anchor.getBoundingClientRect() : { left: 16, top: 100, bottom: 100 });
+  if (focus !== false) txt.focus();
+}
+// Both parts of a suggested edit carry the entry id, as a comment highlight
+// does, so clicking the strikethrough or the replacement reopens the same box.
+document.addEventListener("click", function(ev){
+  var m = ev.target.closest && ev.target.closest("[data-cid]");
+  if (!m || pop.contains(ev.target)) return;
+  var c = comments.find(function(x){ return x.id === Number(m.dataset.cid); });
+  if (!c) return;
+  ev.preventDefault(); openEdit(c, m);
+});
+
+// Wraps a range in a highlight. surroundContents refuses a range that crosses
+// element boundaries, so fall back to lifting the contents out and wrapping.
+function wrapRange(range, id, title, cls){
+  var m = document.createElement("mark");
+  m.className = cls || "note"; m.title = title; m.dataset.cid = String(id);
+  try { range.surroundContents(m); }
+  catch (e) { m.appendChild(range.extractContents()); range.insertNode(m); }
+  return m;
+}
+// The ONE place the replacement span is created, rewritten or removed. Three
+// call sites need it (save a new edit, revise one, restore one on load) and
+// they drift apart if each does its own DOM work: an edit revised to empty has
+// to lose its span and become pure strikethrough again.
+function renderEditInline(c){
+  var m = document.querySelector('mark.anedit[data-cid="' + c.id + '"]');
+  if (!m) return;
+  m.title = c.replacement ? "suggested: " + c.replacement : "suggested deletion";
+  var s = document.querySelector('span.anins[data-cid="' + c.id + '"]');
+  if (!c.replacement) { if (s) s.remove(); return; }
+  if (!s) {
+    s = document.createElement("span");
+    s.className = "anins"; s.dataset.cid = String(c.id);
+    // The marker docTextNodes() looks for. Without it the first saved edit
+    // corrupts the anchor of every comment after it, because the replacement's
+    // words join the text that quotes are searched in.
+    s.setAttribute("data-an-inserted", "1");
+    m.parentNode.insertBefore(s, m.nextSibling);
+  }
+  s.textContent = c.replacement;
+}
+// Every text node of the page, skipping the layer's own UI, existing
+// highlights, and anything the layer itself put on the page. Re-anchoring
+// matches ORIGINAL document text only.
+function docTextNodes(){
+  var host = document.querySelector(".doc") || document.querySelector("main") || document.body;
+  var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, { acceptNode: function(n){
+    var p = n.parentNode;
+    if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
+    // `.anstatebtn` holds the state WORD, which the layer wrote and the reader
+    // did not: letting it join the searched text anchors a quote onto the
+    // control, where the next cycle overwrites the highlight.
+    if (p.closest("mark.note") || p.closest("mark.anedit") || p.closest("[data-an-inserted]") ||
+        p.closest(".anstatebtn") ||
+        p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  var out = [], n;
+  while ((n = walker.nextNode())) out.push(n);
+  return out;
+}
+// Collapses runs of whitespace to one space, and records where each kept
+// character sits in the raw text, so a match can be mapped back to real nodes.
+function collapsedIndex(nodes){
+  var norm = "", rawAt = [], raw = 0, lastWasSpace = false;
+  for (var k = 0; k < nodes.length; k++) {
+    var v = nodes[k].nodeValue;
+    for (var i = 0; i < v.length; i++, raw++) {
+      var isSpace = /\s/.test(v[i]);
+      if (isSpace && lastWasSpace) continue;
+      norm += isSpace ? " " : v[i];
+      rawAt.push(raw);
+      lastWasSpace = isSpace;
+    }
+  }
+  return { norm: norm, rawAt: rawAt };
+}
+// Finds a stored quote again after a reload. Selection.toString() gives
+// rendered text, where a newline inside a paragraph reads as a single space,
+// so the comparison has to collapse whitespace.
+function rangeForQuote(quote){
+  if (!quote) return null;
+  var nodes = docTextNodes();
+  if (!nodes.length) return null;
+  var starts = [], raw = 0;
+  for (var k = 0; k < nodes.length; k++) { starts.push(raw); raw += nodes[k].nodeValue.length; }
+  var idx = collapsedIndex(nodes);
+  var needle = quote.replace(/\s+/g, " ").trim();
+  if (!needle) return null;
+  var at = idx.norm.indexOf(needle);
+  if (at < 0) return null;
+  var rawFrom = idx.rawAt[at], rawTo = idx.rawAt[at + needle.length - 1] + 1;
+  function locate(offset, isEnd){
+    for (var j = 0; j < nodes.length; j++) {
+      var base = starts[j], end = base + nodes[j].nodeValue.length;
+      if (isEnd ? (offset > base && offset <= end) : (offset >= base && offset < end)) return [nodes[j], offset - base];
+    }
+    return null;
+  }
+  var s = locate(rawFrom, false), f = locate(rawTo, true);
+  if (!s || !f) return null;
+  var r = document.createRange(); r.setStart(s[0], s[1]); r.setEnd(f[0], f[1]);
+  return r;
+}
+// A reload rebuilds the DOM, so saved highlights are gone while the comments
+// survive in localStorage. Put the marks back, or a comment cannot be clicked
+// open to edit or delete. Quotes no longer on the page stay listed as orphans.
+function restoreHighlights(){
+  var missed = 0;
+  comments.forEach(function(c){
+    if (document.querySelector('mark[data-cid="' + c.id + '"]')) return;
+    var r = rangeForQuote(c.quote);
+    if (!r) { missed++; return; }
+    try {
+      if (isEdit(c)) { wrapRange(r, c.id, "", "anedit"); renderEditInline(c); }
+      else wrapRange(r, c.id, c.note, "note");
+    } catch (e) { missed++; }
+  });
+  return missed;
+}
+function hasMark(c){ return !!document.querySelector('mark[data-cid="' + c.id + '"]'); }
+// A selection touching an existing suggested edit, if there is one. Overlapping
+// edits cannot be exported appliably, and a quote that spans inserted text can
+// never be re-anchored, so such a selection is declined rather than annotated.
+function editOverlapping(range){
+  var els = document.querySelectorAll('mark.anedit[data-cid], span.anins[data-cid]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i], hit = false;
+    try { hit = range.intersectsNode(el); } catch (e) { hit = false; }
+    if (!hit) continue;
+    var cid = Number(el.dataset.cid);
+    var c = comments.find(function(x){ return x.id === cid; });
+    if (c) return { entry: c, el: el };
+  }
+  return null;
+}
+
+// Opens the note box for the current selection. autofocus is false on touch:
+// focusing a textarea while iOS is showing its selection handles collapses the
+// selection before the user has typed anything.
+//
+// This function only ever OPENS. Nothing about the selection closes the box —
+// that asymmetry is the whole flicker fix. Opening the box focuses the
+// textarea, focusing collapses the document selection, and the old code read
+// that collapse back as "the user deselected" and closed the box it had just
+// opened. The box now closes only on Save, Cancel/Escape, or a press outside
+// it while it is still empty.
+function openForSelection(autofocus){
+  if (editingId !== null) return false;
+  var sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  var text = sel.toString().trim();
+  if (!text) return false;
+  if (inLayer(sel.anchorNode) || inLayer(sel.focusNode)) return false;
+  // Already open on this exact selection: do not wipe a half-typed note.
+  if (pending && pending.quote === text && isOpen()) return true;
+  // Open on some other selection the user has MODIFIED: leave it be rather
+  // than throwing away work. The test is `dirty`, not non-emptiness: an
+  // untouched prefilled edit box yields to a fresh selection, and a dirty
+  // EMPTY edit box (a pending deletion) is work and must not be overwritten.
+  if (isOpen() && dirty) return true;
+  var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
+  // Overlaps an existing suggested edit: point at that edit rather than open a
+  // second box on the range.
+  var hit = editOverlapping(range);
+  if (hit) { openEdit(hit.entry, hit.el, autofocus); nudge(autofocus); return true; }
+  editingId = null; pop.classList.remove("editing");
+  // Comment is the default on every fresh selection. A mode that stayed where
+  // it was last left would silently change what select-type-Enter means.
+  setModeState("comment");
+  pending = { quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() };
+  placePop(rect);
+  txt.value = "";
+  dirty = false;
+  if (autofocus) txt.focus();
+  return true;
+}
+// Synchronous, so the focus stays inside the user gesture — Safari only
+// raises the soft keyboard for a focus() called within one.
+document.addEventListener("mouseup", function(ev){
+  if (pop.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest("[data-cid]")) return;
+  clearTimeout(selTimer);
+  openForSelection(true);
+});
+// A press outside closes a box the user has not modified. A box with words the
+// user put there stays open: no gesture the user did not mean as "save" may
+// commit anything, and plenty of ordinary ones land here — right-clicking your
+// own selection to copy it, grabbing the scrollbar to reread the passage, or
+// pressing Clear all and then cancelling the confirm.
+//
+// The test is the dirty flag, NOT emptiness, because an edit box opens with
+// the selection already in it. Keyed on emptiness, opening one and changing
+// your mind would leave a box that cannot be dismissed.
+document.addEventListener("mousedown", function(ev){
+  if (!isOpen() || pop.contains(ev.target)) return;
+  if (dirty) return;
+  closePop();
+});
+// iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
+// handler makes the page uncommentable on iPhone and iPad. selectionchange
+// fires on every platform; debounce it so it runs once the selection settles.
+var selTimer = null;
+document.addEventListener("selectionchange", function(){
+  if (document.activeElement === txt) return;
+  if (editingId !== null) return;
+  // Same test as openForSelection: modified work stays, an untouched prefill
+  // does not hold the page hostage.
+  if (isOpen() && dirty) return;
+  clearTimeout(selTimer);
+  selTimer = setTimeout(function(){ openForSelection(false); }, 250);
+});
+
+txt.addEventListener("keydown", function(ev){
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.altKey && !ev.isComposing) { ev.preventDefault(); save(); }
+  else if (ev.key === "Escape") { ev.preventDefault(); discard(); }
+  // A CHORD, never a bare letter. A single-key binding on a control that lives
+  // inside a textarea fires on the note being typed: on the context-ledger
+  // page, `d` in a comment marked the selected row dropped.
+  else if ((ev.ctrlKey || ev.metaKey) && (ev.key === "e" || ev.key === "E")) {
+    ev.preventDefault(); switchMode(mode === "edit" ? "comment" : "edit");
+  }
+});
+// The user touched the text: from here the box holds work, whether or not the
+// prefill it opened with is still in it.
+txt.addEventListener("input", function(){ dirty = true; saveDraft(); });
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape" && isOpen() && document.activeElement !== txt) discard();
+});
+
+function closePop(){
+  // #anDelete is one element reused by every entry: an arm left live here
+  // would confirm on the next opened entry's first click.
+  disarm();
+  pop.style.display = "none"; pending = null; editingId = null;
+  pop.classList.remove("editing"); pop.classList.remove("nudge");
+  setModeState("comment"); dirty = false;
+  txt.value = ""; lsDel(DRAFT);
+}
+function discard(){ closePop(); }
+// The in-progress note, saved on every keystroke, so a forced refresh reopens
+// the box where it was instead of losing what was typed into it.
+// `dirty` gates this, not emptiness: an edit box opens pre-filled with the
+// selection, and autosaving that would leave a draft nobody typed, which then
+// reopens the box on the next load for a note that was never begun.
+// In edit mode an EMPTY dirty box is meaningful: the prefill was cleared to
+// suggest a deletion, and a refresh before Enter must bring that back. In
+// comment mode an empty box is nothing to keep.
+function saveDraft(){
+  if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
+  lsSet(DRAFT, JSON.stringify({
+    note: txt.value, editingId: editingId, mode: mode,
+    quote: pending ? pending.quote : null, where: pending ? pending.where : null
+  }));
+}
+function restoreDraft(){
+  var d = unpackDraft();
+  if (!d) return;
+  if (d.editingId != null) {
+    var c = comments.find(function(x){ return x.id === d.editingId; });
+    // The comment was deleted elsewhere. Drop the draft rather than leave it
+    // to reattach itself to whichever comment is handed that id next.
+    if (!c) { lsDel(DRAFT); return; }
+    openEdit(c, document.querySelector('mark[data-cid="' + c.id + '"]'));
+    txt.value = d.note; dirty = true;
+    return;
+  }
+  var r = rangeForQuote(d.quote);
+  if (!r) return;
+  var sel = window.getSelection();
+  if (sel) { try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {} }
+  editingId = null; pop.classList.remove("editing");
+  setModeState(d.mode === "edit" ? "edit" : "comment");
+  pending = { quote: d.quote, where: d.where || sectionOf(r.startContainer), range: r.cloneRange() };
+  placePop(r.getBoundingClientRect());
+  // Restored words ARE user work, whatever they started as.
+  txt.value = d.note; dirty = true;
+}
+function unpackDraft(){
+  var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
+  if (!d || typeof d.note !== "string") return null;
+  // An empty note is a draft only for an edit that still knows its target: a
+  // pending deletion of `quote`, or a revision of an existing edit.
+  if (!d.note.trim() && !(d.mode === "edit" && (d.quote || d.editingId != null))) return null;
+  return d;
+}
+// These keep their names and every existing call site; what changed is that
+// the state lives on the comments now and the page-level key is derived from
+// it. Renaming them to say "copied out" is a separate no-behaviour commit.
+function markDirty(){ syncLegacyFlag(); }
+// A snapshot of exactly what went into the copied text, so a comment edited
+// while an async clipboard write was in flight is not stamped as copied. The
+// copy carried the OLD wording; the comment now holds new wording that has
+// never left the page, and stamping it would put unsent words in the
+// delete-copied set.
+function copySnapshot(){
+  return comments.map(function(c){
+    return { id: c.id, where: c.where, quote: c.quote, note: bodyOf(c) };
+  });
+}
+function markClean(snap){
+  var now = Date.now(), by = {};
+  (snap || copySnapshot()).forEach(function(x){ by[x.id] = x; });
+  comments.forEach(function(c){
+    var x = by[c.id];
+    if (x && x.where === c.where && x.quote === c.quote && x.note === bodyOf(c)) c.copiedAt = now;
+  });
+  persist(); syncLegacyFlag();
+}
+
+// ---- toggle state controls ------------------------------------------------
+// A page may carry toggle controls in its body: a task-list checkbox, or a
+// button cycling a declared state set such as approve / approve-pending-edits
+// / deny. Both wear one wrapper, `[data-an-state-id]`, so this layer needs no
+// configuration and a page with none of them is untouched.
+//
+// ONE KEY PER CONTROL. Each control's state lives under its own localStorage
+// key, `an-state:<page key>:<control id>`, prefix-namespaced exactly as the
+// draft and dirty keys are, so nothing here can collide with the comment array
+// -- which every layer generation parses as a bare array and dies on anything
+// else.
+//
+// This replaces a shared document holding every control at once, and with it
+// the reconciliation six rounds built on top of that document. It rested on
+// "an untick is said by REMOVING a key, and a merge-style write cannot say
+// it", which is false: an untick is an explicit " ", as a tick is an explicit
+// "x". Once a value can say not-ticked, nothing needs to replace a document,
+// and the read-modify-write -- unfixable here, because localStorage offers no
+// compare-and-set -- is gone rather than reconciled. So: two tabs touching
+// DIFFERENT controls write DIFFERENT keys and cannot collide, which is the
+// shape of every reproduction that beat the previous rounds (A ticks item 1
+// while B ticks item 3); no write is derived from a read, so a stale or failed
+// read cannot clobber; a refused write for one control cannot reach another's
+// value, so the loss flag is per control. Two tabs touching the SAME control
+// resolve last-writer-wins, which is correct and is not a bug to file: they
+// disagree about one value and the last to speak decides.
+//
+// The lesson the previous round's 16-state enumeration got wrong, recorded so
+// it is not rediscovered: "localStorage is synchronous and the page is
+// single-threaded, so read -> merge -> write -> read-back is one indivisible
+// step" holds WITHIN a tab and says nothing ACROSS tabs. Single-threaded stops
+// this tab's handlers interleaving; a second tab is a separate process.
+var STATE_PREFIX = "an-state:" + KEY + ":";
+
+function stateKeyOf(id){ return STATE_PREFIX + id; }
+function stateIdOf(key){
+  return (typeof key === "string" && key.indexOf(STATE_PREFIX) === 0)
+    ? key.slice(STATE_PREFIX.length) : null;
+}
+// The control's OWN key: a write reads this back for evidence that it landed,
+// so the fallback below must not be allowed to answer for it.
+function readStateKey(id){ return lsRead(stateKeyOf(id)); }
+// State written by the shared-document layer migrates LAZILY, here, one control
+// at a time: an id with no per-item value falls back to that document, which is
+// READ where it lies and never written or deleted, so a rolled-back page still
+// finds every tick. There is no copy pass, so nothing has to answer "did every
+// item land?" -- which a store that refuses one write in three cannot be asked,
+// and the marker that answered "yes" regardless abandoned the rest for good.
+function readState(id){
+  var v = readStateKey(id);
+  if (v !== null) return v;                   // a stored value, or FAILED
+  var raw = lsRead(STATES), d = null;
+  if (raw === FAILED) return FAILED;
+  try { d = JSON.parse(raw || "null"); } catch (e) {}
+  return (d && typeof d === "object" && !Array.isArray(d) && typeof d[id] === "string") ? d[id] : null;
+}
+
+var pendingStates = {};   // id -> value this tab wrote that the store did not take
+var stateDefaults = {};   // id -> the value the document itself shipped
+
+function hasPending(){ return Object.keys(pendingStates).length > 0; }
+// THE WRITE RULE, now one rule instead of three: write the one key this
+// control owns, then read that one key back. `setItem` returning without
+// throwing is not evidence -- a browser that silently no-ops the write would
+// stand the warning down over work that never left the page -- so the flag
+// comes from what the store holds after. No other control is touched, and the
+// render is for the refused-write line, the only place a lost tick is visible.
+function writeState(id, value){
+  var was = statesUnsaved;
+  lsSet(stateKeyOf(id), value);
+  if (readStateKey(id) === value) delete pendingStates[id];
+  else pendingStates[id] = value;
+  statesUnsaved = hasPending();
+  paintStateId(id);
+  if (statesUnsaved || was) render();
+}
+// Pending over stored over the document's own value. The last of those three
+// is what keeps an id the store has dropped from going on being displayed as
+// ticked, and a `[x]` the author wrote from being blanked when it does.
+function paintState(u){
+  var id = u.dataset.anStateId;
+  // A control this tab has never wired -- one injected after load -- has been
+  // touched by nobody, so what it is showing now IS the value it shipped.
+  if (!stateDefaults.hasOwnProperty(id)) stateDefaults[id] = stateValue(u);
+  var v = pendingStates.hasOwnProperty(id) ? pendingStates[id] : readState(id);
+  // A read that FAILED says nothing about the stored value, so what the reader
+  // is looking at stays: blanking it would show an untick nobody made.
+  if (v === FAILED) return;
+  if (typeof v !== "string" || !applyState(u, v)) applyState(u, stateDefaults[id]);
+}
+function paintStateId(id){
+  stateUnits().forEach(function(u){ if (u.dataset.anStateId === id) paintState(u); });
+}
+function syncStateDom(){ stateUnits().forEach(paintState); }
+function stateUnits(){ return Array.prototype.slice.call(document.querySelectorAll("[data-an-state-id]")); }
+function stateSetOf(unit){
+  var raw = unit.getAttribute("data-an-states");
+  if (!raw) return null;
+  var a; try { a = JSON.parse(raw); } catch (e) { return null; }
+  return (Array.isArray(a) && a.length) ? a : null;
+}
+// The reader-visible text of the item, which is also the control's accessible
+// name. Read from the DOM rather than written by the generator, so it is the
+// rendered text a screen reader would reach anyway.
+function stateLabel(unit){
+  var l = unit.querySelector(".anstatelabel");
+  return ((l ? l.textContent : unit.textContent) || "").trim().replace(/\s+/g, " ");
+}
+function stateValue(unit){
+  var box = unit.querySelector(".anstatebox");
+  if (box) return box.checked ? "x" : " ";
+  var b = unit.querySelector(".anstatebtn");
+  return b ? (b.dataset.anState || "") : "";
+}
+// Applies a state to the DOM and to nothing else. A value outside the declared
+// set is refused rather than shown: a rebuilt page can meet a key written
+// under a different state set, and rendering `maybe` on a control that has no
+// such state leaves a button whose next click has nowhere to go.
+function applyState(unit, value){
+  var box = unit.querySelector(".anstatebox");
+  // A checkbox has a declared set too -- it is `x` and a space -- so a stored
+  // value from some other state set is refused here rather than silently read
+  // as "not x" and shown as an untick the reader never made.
+  if (box) {
+    if (value !== "x" && value !== " ") return false;
+    box.checked = value === "x";
+    return true;
+  }
+  var b = unit.querySelector(".anstatebtn"), set = stateSetOf(unit);
+  if (!b || !set || set.indexOf(value) < 0) return false;
+  b.dataset.anState = value;
+  b.textContent = value;
+  b.setAttribute("aria-label", stateLabel(unit) + ": " + value);
+  return true;
+}
+function wireStates(){
+  stateUnits().forEach(function(unit){
+    var id = unit.dataset.anStateId;
+    var box = unit.querySelector(".anstatebox"), btn = unit.querySelector(".anstatebtn");
+    // Read BEFORE anything stored is applied, so this is the author's own
+    // marker -- the `[x]` in the source -- and not whatever the store held.
+    stateDefaults[id] = stateValue(unit);
+    if (box) {
+      // A real checkbox: the browser supplies the role, Space toggles it, and
+      // the name is the item's own text.
+      box.setAttribute("aria-label", stateLabel(unit));
+      box.addEventListener("change", function(){
+        writeState(id, box.checked ? "x" : " ");
+      });
+      return;
+    }
+    if (!btn) return;
+    var set = stateSetOf(unit) || [];
+    if (set.length && set.indexOf(stateDefaults[id]) < 0) stateDefaults[id] = set[0];
+    // A <button> is focusable and fires click on Enter and Space, so cycling
+    // works from the keyboard with no key handler here at all.
+    btn.addEventListener("click", function(){
+      if (!set.length) return;
+      var at = set.indexOf(btn.dataset.anState);
+      var next = set[(at + 1) % set.length];
+      if (!applyState(unit, next)) return;
+      writeState(id, next);
+    });
+  });
+  // One path paints the controls, on load and on every later change alike.
+  syncStateDom();
+}
+// Plain text, one shape for both kinds of control: the state sits in the
+// brackets a Markdown task list already uses, so a two-state page exports a
+// task list that can be pasted straight back into the source.
+function stateMarkdown(){
+  return stateUnits().map(function(u){
+    return "- [" + (stateValue(u) || " ") + "] " + stateLabel(u);
+  }).join("\n");
+}
+// A second tab's write is authoritative for the ONE control it carried. The
+// event names a single key, so there is no incoming map to merge and no way
+// for it to speak for a control it did not change -- which is what two earlier
+// rounds got wrong, first by replacing the in-memory map wholesale and then by
+// reconciling one map against the other.
+window.addEventListener("storage", function(e){
+  // A null key is `localStorage.clear()` from the other tab, which takes every
+  // one of these keys with it; ignoring it left controls showing values gone
+  // from the store.
+  var id = stateIdOf(e.key);
+  if (e.key !== null && id === null) return;
+  var was = statesUnsaved;
+  // Nothing is pending once the store holds it, whoever put it there. Only the
+  // ids this event could have changed: one of them, or all on a clear.
+  (id === null ? Object.keys(pendingStates) : [id]).forEach(function(k){
+    if (pendingStates.hasOwnProperty(k) && readStateKey(k) === pendingStates[k]) {
+      delete pendingStates[k];
+    }
+  });
+  statesUnsaved = hasPending();
+  if (id === null) syncStateDom(); else paintStateId(id);
+  if (statesUnsaved || was) render();
+});
+
+// ---- destructive controls ------------------------------------------------
+// No blocking dialog appears here, and none may be added. The Artifact viewer
+// runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
+// `window.confirm` returns false without ever asking -- the browser just logs
+// "Ignored call to ...". Every delete guarded that way returned early on a
+// refusal the reviewer never saw: a dead button in the one place these pages
+// are read, and working perfectly in a local tab, which is why it survived.
+//
+// The guard is in the page instead. A first click arms the button and makes it
+// say what a second click will destroy; it disarms after ARM_MS, on Escape, or
+// on any re-render. Buttons are focusable, so Enter and Space arm and confirm
+// exactly like the pointer does.
+var ARM_MS = 4000;
+var WARN_CHANGED = '<span class="anwarn">the comments changed \u2014 nothing deleted</span>';
+var armedBtn = null, armedLabel = "", armedTimer = 0, armedBinding = null;
+function disarm(){
+  if (!armedBtn) return;
+  // render() may already have thrown this button away; restoring a detached
+  // node is harmless but pointless.
+  if (armedBtn.isConnected) { armedBtn.textContent = armedLabel; armedBtn.classList.remove("anarmed"); }
+  clearTimeout(armedTimer);
+  armedBtn = null; armedLabel = ""; armedTimer = 0; armedBinding = null;
+}
+// What an arm was armed AGAINST: the exact comments, plus enough of their
+// content to notice a change. A second tab's write can land inside the four
+// seconds an arm is live, and the `storage` handler only rebuilds when no note
+// is open -- so the confirming click has to prove the set is still the one the
+// label described, rather than trust that nothing moved under it.
+function bindingOf(list){
+  return list.map(function(c){
+    return c.id + ":" + (c.copiedAt || 0) + ":" + bodyOf(c).length + ":" + c.quote.length;
+  }).join(",");
+}
+// True only on the confirming click, and only while the set it was armed
+// against is unchanged. On any other click it arms `btn` and the caller must
+// return without destroying anything.
+function arm(btn, label, binding){
+  if (armedBtn === btn) {
+    var stale = armedBinding !== null && armedBinding !== binding;
+    disarm();
+    if (stale) { render(); toast(WARN_CHANGED, 4000); return false; }
+    return true;
+  }
+  disarm();
+  armedBtn = btn; armedLabel = btn.textContent;
+  armedBinding = binding === undefined ? null : binding;
+  btn.textContent = label;
+  btn.classList.add("anarmed");
+  armedTimer = setTimeout(disarm, ARM_MS);
+  return false;
+}
+// Escape cancels, whether focus sits on the armed button or anywhere else.
+// Both listeners are needed: the layer root stops key events from bubbling out
+// to the host page, so the document listener never sees a keystroke aimed at
+// the button, and a listener on the root alone would miss one aimed outside.
+function escDisarm(ev){ if (ev.key === "Escape") disarm(); }
+root.addEventListener("keydown", escDisarm);
+document.addEventListener("keydown", escDisarm);
+// A refused write is the one failure the page must not hide: with the quota
+// full, the panel would otherwise count a comment that is already gone.
+function persist(){
+  notesUnsaved = !lsSet(KEY, JSON.stringify(comments));
+}
+function unwrap(id){
+  var s = document.querySelector('span.anins[data-cid="' + id + '"]');
+  if (s) s.remove();
+  var m = document.querySelector('mark[data-cid="' + id + '"]');
+  if (m) { while (m.firstChild) m.parentNode.insertBefore(m.firstChild, m); m.remove(); }
+}
+
+function save(){
+  if (mode === "edit") { saveEdit(txt.value.trim()); return; }
+  var note = txt.value.trim();
+  if (!note) { closePop(); return; }
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    // Reopened to reread and closed unchanged: not an edit, so it must not
+    // reset the export state and re-arm the unload prompt.
+    if (c && c.note === note) { closePop(); return; }
+    // The copy that happened carried the previous wording, so the stamp no
+    // longer describes this comment. Without this, "delete copied" destroys
+    // the only copy of the edit and the next Copy all silently omits it.
+    if (c) { c.note = note; delete c.copiedAt; }
+    var m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
+    if (m) m.title = note;
+  } else if (pending) {
+    var id = newId();
+    try { wrapRange(pending.range, id, note, "note"); } catch (e) {}
+    comments.push({ id: id, type: "comment", where: pending.where, quote: pending.quote, note: note });
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+// An empty replacement is a suggested DELETION, so there is no empty-means-
+// cancel shortcut here: the comment path's `if (!note) closePop()` would throw
+// away exactly the edit the reader worked to express.
+function saveEdit(replacement){
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    if (c && c.replacement === replacement) { closePop(); return; }
+    if (c) { c.replacement = replacement; delete c.copiedAt; renderEditInline(c); }
+  } else if (pending) {
+    // The prefill is not user work: an untouched box saves nothing, so Enter
+    // on a box still holding the selection verbatim is a close, not an entry
+    // proposing to replace the text with itself.
+    if (!dirty) { closePop(); return; }
+    var id = newId();
+    var fresh = { id: id, type: "edit", where: pending.where,
+                  quote: pending.quote, replacement: replacement };
+    try { wrapRange(pending.range, id, "", "anedit"); } catch (e) {}
+    comments.push(fresh);
+    renderEditInline(fresh);
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+
+$("anCancel").onclick = discard;
+$("anDelete").onclick = function(){
+  if (editingId === null) { closePop(); return; }
+  var id = editingId;
+  var c = comments.find(function(x){ return x.id === id; });
+  // A comment's Delete stays immediate -- the popup's CSS hides it while
+  // composing, it sits at the far end of the row, and it acts on one note the
+  // reader has just opened. A suggested edit arms first: it is written
+  // replacement text plus an anchor, and one stray click takes both.
+  if (isEdit(c) && !arm(this, "click again")) return;
+  comments = comments.filter(function(x){ return x.id !== id; });
+  unwrap(id);
+  markDirty(); persist(); render(); closePop();
+};
+$("anSave").onclick = save;
+
+// Builds into a fragment and swaps once, so the list never blanks between
+// clearing and refilling.
+function render(){
+  // Any armed row button is about to be replaced, and an arm left standing on
+  // a list this rebuild has changed would confirm a different comment.
+  disarm();
+  var list = $("anList"), count = $("anCount");
+  // Kept in step with the list on every rebuild, and disabled rather than
+  // hidden: a control that vanishes and reappears is harder to aim at than one
+  // that greys out, and its count is the only place the copied total is shown.
+  var nCopied = copiedSet().length, clearCopied = $("anClearCopied");
+  clearCopied.textContent = "Delete copied (" + nCopied + ")";
+  clearCopied.disabled = !nCopied;
+  var fresh = freshCount();
+  badge.textContent = "\uD83D\uDCAC " + comments.length;
+  badge.className = unsaved() || (isDirty() && comments.length) ? "warn" : "";
+  if (!comments.length) {
+    // A page with no comments still has somewhere to report a refused write:
+    // on a checklist-only page this line is the ONLY place the reader is told
+    // the ticks did not survive, so it outranks the empty-state wording.
+    count.textContent = statesUnsaved
+      ? "This browser refused to store the checklist \u2014 copy it out now"
+      : notesUnsaved
+        ? "This browser refused to store the change \u2014 copy your work out now"
+        : "No comments yet";
+    count.className = "ancount" + (unsaved() ? " warn" : "");
+    var empty = document.createElement("p");
+    empty.className = "anscope"; empty.textContent = "Select any text above to comment.";
+    list.replaceChildren(empty);
+    return;
+  }
+  // Once the list can be part copied and part not, a single verdict is a lie
+  // for one half of it. The split form appears only when the list is actually
+  // mixed, so the common uniform cases stay as short as they were. The same
+  // applies to the noun: "N comments" is wrong for half a mixed page, and the
+  // plain wording is kept for the comment-only page, which is most of them.
+  var nEdits = comments.filter(isEdit).length;
+  var what = nEdits
+    ? comments.length + (comments.length === 1 ? " item (" : " items (") +
+      nEdits + (nEdits === 1 ? " suggested edit)" : " suggested edits)")
+    : comments.length + (comments.length === 1 ? " comment" : " comments");
+  count.textContent = what +
+    (unsaved() ? " \u2014 this browser refused to store them, copy them now"
+               : !fresh ? " \u2014 copied out"
+               : fresh === comments.length ? " \u2014 not yet copied out"
+               : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
+  count.className = "ancount" + (unsaved() || isDirty() ? " warn" : "");
+  var frag = document.createDocumentFragment();
+  comments.forEach(function(c){
+    var d = document.createElement("div");
+    d.className = "cmt" + (isCopied(c) ? " ancopied" : "") + (isEdit(c) ? " ansuggest" : "");
+    var w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
+    var q = document.createElement("div");
+    q.className = isEdit(c) ? "q struck" : "q";
+    q.textContent = "\u201C" + c.quote + "\u201D";
+    var n = document.createElement("div");
+    if (isEdit(c)) {
+      n.className = "ins";
+      n.textContent = c.replacement
+        ? "\u2192 " + c.replacement
+        : "\u2192 delete this text";
+    } else n.textContent = c.note;
+    var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
+    a.onclick = function(){
+      var m = document.querySelector('mark[data-cid="' + c.id + '"]');
+      if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
+      else openEdit(c, null);
+    };
+    // Deleting one comment used to require opening its popup first, which is a
+    // detour for the commonest correction. It asks twice, because the note
+    // itself is the only copy and there is no undo.
+    var x = document.createElement("button");
+    x.className = "anbtn ghost tiny danger"; x.textContent = "delete";
+    x.onclick = function(){
+      if (!arm(x, "click again")) return;
+      comments = comments.filter(function(y){ return y.id !== c.id; });
+      unwrap(c.id);
+      if (editingId === c.id) closePop();
+      markDirty(); persist(); render();
+    };
+    d.append(w, q, n);
+    if (!hasMark(c)) { var o = document.createElement("div"); o.className = "orphan"; o.textContent = "quoted text not found on this version of the page"; d.append(o); }
+    var acts = document.createElement("div"); acts.className = "anacts";
+    acts.append(a, x);
+    d.append(acts); frag.appendChild(d);
+  });
+  list.replaceChildren(frag);
+}
+
+function markdown(list){
+  return list.map(function(c){
+    return "- **" + c.where + "** \u2014 " + c.note + "\n  > " + c.quote.replace(/\n/g, "\n  > ");
+  }).join("\n");
+}
+// Numbered, so a session applying them can say which one it could not place.
+function editMarkdown(list){
+  return list.map(function(c, i){
+    return (i + 1) + ". **" + c.where + "**" +
+      "\n   Replace:\n   > " + c.quote.replace(/\n/g, "\n   > ") +
+      "\n   With:" + (c.replacement
+        ? "\n   > " + c.replacement.replace(/\n/g, "\n   > ")
+        : " _(nothing \u2014 delete this text)_");
+  }).join("\n\n");
+}
+// The quotes are RENDERED text and the source is Markdown, so emphasis
+// markers, links and code spans differ between the two. The note below says so
+// in the export itself, because the export leaves this page and is read
+// without it. Nobody builds a sed loop over this format.
+var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markdown. " +
+  "Locate each quote in the source and adapt the markup \u2014 do not apply these " +
+  "blocks byte-for-byte.";
+// A page with no suggested edits exports exactly what it did under v1: no
+// headings appear, so every existing paste-into-a-session habit still works.
+function exportText(){
+  var edits = comments.filter(isEdit);
+  var notes = comments.filter(function(c){ return !isEdit(c); });
+  var units = stateUnits();
+  var out = "# Comments \u2014 " + document.title + "\n\n";
+  // The checklist leads: it is the verdict, and the notes explain it.
+  if (units.length) out += "## Checklist\n\n" + stateMarkdown() + "\n\n";
+  if (edits.length) out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
+  if ((units.length || edits.length) && notes.length) out += "## Comments\n\n";
+  return out + (notes.length ? markdown(notes) + "\n" : "");
+}
+function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
+// There is deliberately no download path. The Artifact viewer never grants a
+// page download permission, so a Download button was inert exactly where these
+// pages are read, while still making every publish warn about an offered file.
+// Copy all is the one export, with the textarea below as its fallback.
+// What the textarea currently holds. The box can sit open while the page is
+// edited behind it, so the copy event stamps the snapshot the text was built
+// from, not whatever the list happens to be when the user finally hits copy.
+var exportSnap = null;
+function openExport(){
+  var ta = $("anExportText"); ta.value = exportText();
+  exportSnap = copySnapshot();
+  $("anExport").style.display = "block";
+  ta.focus(); ta.select();
+}
+
+// Only a copy that actually happened may clear the export state — otherwise
+// the panel says the comments are safely out of the browser, and the unload
+// guard stands down, when nothing left it.
+$("anCopy").onclick = async function(){
+  // A page can be all checklist and no notes, and copying it out is the whole
+  // point of the checklist.
+  if (!comments.length && !stateUnits().length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
+  var ok = false;
+  // Both taken before the await: the clipboard promise can resolve after an
+  // edit has landed, and the text that went out is this one.
+  var snap = copySnapshot(), text = exportText();
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (e) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  // Clipboard refused: fall back to the selectable textarea. Opening it is not
+  // exporting -- the state clears when the text is actually copied out of it.
+  if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
+  markClean(snap); render();
+  toast('<span class="anok">copied ' + (comments.length || "the checklist") + '</span>');
+};
+$("anExportText").addEventListener("copy", function(){
+  // A copy of PART of the box carried part of the Markdown, so it did not
+  // take every comment out of the browser. Stamping them all would drop
+  // comments the user never copied into the "Delete copied" set, which is now
+  // a set something deletes. The whole-blob case is the normal one: the box
+  // opens with everything already selected.
+  var ta = this;
+  if (ta.selectionStart !== 0 || ta.selectionEnd !== ta.value.length) {
+    toast('<span class="anwarn">partial copy \u2014 nothing marked copied out</span>', 4000);
+    return;
+  }
+  markClean(exportSnap); render();
+  toast('<span class="anok">copied ' + comments.length + '</span>');
+});
+$("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
+// The safe prune, and the reason the literal request was inverted: this
+// deletes only what a copy actually carried out of the browser, so the next
+// Copy all sends fresh feedback rather than re-sending an actioned list.
+$("anClearCopied").onclick = function(){
+  var set = copiedSet();
+  if (!set.length) return;
+  if (!arm(this, "Click again to delete " + set.length + " copied out", bindingOf(set))) return;
+  var doomed = {};
+  set.forEach(function(c){ doomed[c.id] = true; unwrap(c.id); });
+  comments = comments.filter(function(c){ return !doomed[c.id]; });
+  if (editingId !== null && doomed[editingId]) closePop();
+  persist(); syncLegacyFlag(); render();
+};
+$("anClear").onclick = function(){
+  if (!comments.length) return;
+  // "Not copied out yet" is the whole reason this control asks twice, so the
+  // warning goes on the armed button, where it is read, rather than into a
+  // dialog the viewer never shows.
+  // The armed label carries the warning, because the dialog that would
+  // otherwise carry it never appears in the viewer. Naming the unsent count
+  // separately from the total is the whole point: "delete all 12" and "3 of
+  // these have never left this browser" are different facts.
+  var fresh = freshCount();
+  var warn = fresh
+    ? fresh + " not yet copied out \u2014 click again to delete all " + comments.length
+    : "All copied out \u2014 click again to delete all " + comments.length;
+  if (!arm(this, warn, bindingOf(comments))) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = []; markClean(); persist(); render();
+};
+badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+// A host page may bind single-key shortcuts on document or window -- a triage
+// console where `d` means delete, a slideshow where `j` means next. Typing a
+// note would fire them: the keystroke bubbles out of this textarea and reaches
+// those listeners, so the page acts on every letter of the comment.
+//
+// Attached at the layer root in the BUBBLE phase, which is the only position
+// that separates the two. Handlers inside the layer (the textarea's own Enter
+// and Escape) sit deeper and have already run; document- and window-level
+// handlers sit higher and never see the event. A capture-phase listener on
+// window would be too early and would kill this layer's own keys as well.
+["keydown", "keypress", "keyup"].forEach(function(type){
+  root.addEventListener(type, function(ev){ ev.stopPropagation(); });
+});
+
+// Before restoreHighlights: a restored state word changes the page text that
+// quotes are re-anchored against, so it has to be settled first.
+wireStates();
+restoreHighlights();
+render();
+restoreDraft();
+})();
+</script>
+<!-- /annotation-layer -->

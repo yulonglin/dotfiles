@@ -46,6 +46,15 @@
 #   picker          default true: a row in /model
 #   agent           default true: an agent file; a string sets the effort
 #                   (low|medium|high|xhigh) for models that honour it; false = none
+#   writer-priority optional positive integer: eligible writers, lowest first.
+#                   Used by write-prose, not emitted into generated router files.
+#                   Only enabled models with an agent qualify; omit to opt out.
+#
+# Writer fallback: try the next eligible priority on quota or cooldown failure.
+# All provider = "codex" models use the same OAuth account and share its quota;
+# a provider-wide quota/cooldown error skips the remaining writers on that
+# provider. Other failures skip only the failed writer. If no writer remains,
+# report the blocker rather than silently choosing an unlisted model.
 
 # What Claude Code believes every routed model's window is (set in settings env
 # as CLAUDE_CODE_MAX_CONTEXT_TOKENS); 258400 is the Codex backend's input limit.
@@ -53,6 +62,21 @@ declared-context-window = 258400
 
 [providers.openrouter]
 base-url = "https://openrouter.ai/api/v1"
+
+# There is deliberately no [providers.openai]. A direct api.openai.com route
+# would be the obvious fallback while the Codex OAuth account sits in a 429
+# cooldown, and the slugs are there (gpt-5.6-sol, gpt-6-astra and both siblings
+# are in the public /v1/models catalogue) -- but the chain cannot carry the
+# request. CLIProxyAPI forwards the Anthropic `max_tokens` verbatim as Chat
+# Completions `max_tokens`, and OpenAI rejects that parameter for these models:
+# "Unsupported parameter: 'max_tokens' is not supported with this model. Use
+# 'max_completion_tokens' instead." Nothing on this side can patch it -- the
+# provider schema above takes only name/base-url/models, and CLIProxyAPI's own
+# per-model `params:` does not rewrite the parameter either (both measured
+# 2026-09-12 against cli-proxy-api 7.2.154). The fix is upstream and unmerged,
+# so revisit when model-router ships a CLIProxyAPI that carries it:
+#   https://github.com/router-for-me/CLIProxyAPI/issues/5005
+#   https://github.com/router-for-me/CLIProxyAPI/pull/5669
 
 # ---- Older Claude models, passed straight through to Anthropic -----------
 # Active until at least 2027-02-05 (deprecations page, 2026-09-07). Opus 3 is
@@ -68,6 +92,7 @@ provider = "anthropic"
 [[models]]
 id = "gpt-6-astra"
 aliases = ["astra"]
+writer-priority = 2
 name = "GPT-6 Astra"
 provider = "codex"
 context-window = 258400
@@ -76,6 +101,7 @@ agent = "high"
 [[models]]
 id = "gpt-5.6-sol"
 aliases = ["sol"]
+writer-priority = 1
 name = "GPT-5.6 Sol"
 provider = "codex"
 context-window = 258400
@@ -106,6 +132,7 @@ agent = false
 [[models]]
 id = "kimi-k3"
 aliases = ["kimi"]
+writer-priority = 3
 name = "Kimi K3"
 provider = "openrouter"
 slug = "moonshotai/kimi-k3"

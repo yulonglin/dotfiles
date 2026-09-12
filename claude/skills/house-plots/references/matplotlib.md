@@ -85,32 +85,18 @@ ax.text(x, y, label, ha="center", va="bottom", fontweight="normal", fontsize=9)
 
 ### Plan the visual before you draw it
 
-This applies to every annotation, callout, ordering, and color choice — not
-just arrows. **Before writing any code**, write down the answers to:
+This applies to every annotation, callout, ordering, and color choice — not just arrows. **Before writing any code**, write down the answers to:
 
-1. **What single point does this make?** One sentence, the way you'd say it
-   out loud. *"On MATH, C³ catches sandbagging where TM misses — 51 pp gap."*
-   If you can't say it in one sentence, you're trying to make several points
-   at once; pick the one that matters most or split into multiple visuals.
-2. **What would a reader miss without this callout?** If the answer is
-   "nothing — they'd see it from the bars alone", drop the callout. Don't
-   annotate the obvious.
-3. **What's the most direct visual encoding of that point?** The answer falls
-   out of step 1. *"The gap is 51 pp"* → an object whose **length is the gap**.
-   *"This is the headline number"* → one arrow from a label to that number.
-   *"This region is special"* → shading, not an arrow.
-4. **Reading distance and time?** Poster-from-6ft and paper-from-1ft have
-   different budgets. A poster reader scans for ~3 seconds — the callout has
-   to register at a glance. A paper reader will study the figure; subtler
-   callouts work.
+1. **What single point does this make?** One sentence, the way you'd say it out loud. *"On MATH, C³ catches sandbagging where TM misses — 51 pp gap."* If you can't say it in one sentence, you're trying to make several points at once; pick the one that matters most or split into multiple visuals.
+2. **What would a reader miss without this callout?** If the answer is "nothing — they'd see it from the bars alone", drop the callout. Don't annotate the obvious.
+3. **What's the most direct visual encoding of that point?** The answer falls out of step 1. *"The gap is 51 pp"* → an object whose **length is the gap**. *"This is the headline number"* → one arrow from a label to that number. *"This region is special"* → shading, not an arrow.
+4. **Reading distance and time?** Poster-from-6ft and paper-from-1ft have different budgets. A poster reader scans for ~3 seconds — the callout has to register at a glance. A paper reader will study the figure; subtler callouts work.
 
-Only after answering 1–3 do you pick a shape. The table below is the lookup,
-not the thinking — don't skip the thinking.
+Only after answering 1–3 do you pick a shape. The table below is the lookup, not the thinking — don't skip the thinking.
 
 ### Callout shape lookup
 
-Pick the shape that encodes the claim directly. Don't reach for `arc3` curved
-arrows by default — they're for one specific case.
+Pick the shape that encodes the claim directly. Don't reach for `arc3` curved arrows by default — they're for one specific case.
 
 | Claim | Right shape | Wrong shape |
 |---|---|---|
@@ -119,9 +105,7 @@ arrows by default — they're for one specific case.
 | "This region matters" | Filled `axvspan` / shaded box | Arrow |
 | "These two things differ" | Bracket spanning both, label outside | Two separate annotations |
 
-For the **gap** case (most common in comparison bar charts), the double-headed
-arrow's *length* literally encodes the value. The reader sees "+51 pp" and the
-arrow length agreeing — that's the strongest possible visual:
+For the **gap** case (most common in comparison bar charts), the double-headed arrow's *length* literally encodes the value. The reader sees "+51 pp" and the arrow length agreeing — that's the strongest possible visual:
 
 ```python
 # Gap callout: arrow IS the gap.
@@ -136,28 +120,19 @@ ax.text(gap_x, c3_top + 3, "+51 pp gap",
         fontsize=13, fontweight="bold", color=CLAY)
 ```
 
-Place `gap_x` in the visually-empty band beside the bar pair (not on top of
-bars, not in another group's column). For grouped bars, that's typically just
-to the right of the second bar in the pair.
+Place `gap_x` in the visually-empty band beside the bar pair (not on top of bars, not in another group's column). For grouped bars, that's typically just to the right of the second bar in the pair.
 
 ### Curved callout arrows (`ax.annotate` with `connectionstyle`)
 
-Use these only when pointing *at* a single mark from a label sitting in empty
-space — not for showing a gap. Rules:
+Use these only when pointing *at* a single mark from a label sitting in empty space — not for showing a gap. Rules:
 
-1. **Never cross unrelated bars/lines/marks.** Locate the empty quadrant
-   above/beside/below the target first.
-2. **Anchor the text in that empty area**, with `ha`/`va` chosen so the text
-   block stays clear of bars.
-3. **`connectionstyle="arc3,rad=±N"`** — the rad sign chooses bulge direction;
-   pick whichever bulges *away* from any bar between start and end.
-4. **One arrow per claim.** Two arrows from the same label fan-out and read as
-   two separate annotations sharing a label — confusing.
-5. **Verify visually** at print scale. Curve fragility is invisible in code
-   review; a screenshot or PDF preview is mandatory before commit.
+1. **Never cross unrelated bars/lines/marks.** Locate the empty quadrant above/beside/below the target first.
+2. **Anchor the text in that empty area**, with `ha`/`va` chosen so the text block stays clear of bars.
+3. **`connectionstyle="arc3,rad=±N"`** — the rad sign chooses bulge direction; pick whichever bulges *away* from any bar between start and end.
+4. **One arrow per claim.** Two arrows from the same label fan-out and read as two separate annotations sharing a label — confusing.
+5. **Verify visually** at print scale. Curve fragility is invisible in code review; a screenshot or PDF preview is mandatory before commit.
 
-If text would clip a tall bar or whisker, **raise `ax.set_ylim` headroom**
-instead of squeezing the text into the bar.
+If text would clip a tall bar or whisker, **raise `ax.set_ylim` headroom** instead of squeezing the text into the bar.
 
 ### Multi-series line plot
 ```python

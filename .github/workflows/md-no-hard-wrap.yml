@@ -1,0 +1,86 @@
+name: Markdown paragraphs stay on one line
+
+# One paragraph is ONE line in Markdown (claude/rules/communication.md). The
+# pre-commit hook enforces this locally, but a hook is opt-in — --no-verify, a
+# fresh clone with no core.hooksPath, or an edit made through the GitHub web UI
+# all get past it. This workflow is the copy that cannot be skipped.
+#
+# Scoped to the Markdown the PR actually changes under claude/, so an unrelated
+# branch is never blocked by pre-existing wrapping somewhere else in the tree.
+#
+# Only first-party actions (actions/*), matching this repo's supply-chain posture.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'claude/**/*.md'
+      - 'custom_bins/md-unwrap'
+      - 'tests/test_md_unwrap.py'
+      - 'tests/test_pre_commit_md_wrap_guard.sh'
+      - 'config/git-hooks/pre-commit'
+      - '.github/workflows/md-no-hard-wrap.yml'
+  pull_request:
+    paths:
+      - 'claude/**/*.md'
+      - 'custom_bins/md-unwrap'
+      - 'tests/test_md_unwrap.py'
+      - 'tests/test_pre_commit_md_wrap_guard.sh'
+      - 'config/git-hooks/pre-commit'
+      - '.github/workflows/md-no-hard-wrap.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: md-no-hard-wrap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Checker tests, then the changed Markdown
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The checker asks markdown-it-py where the paragraphs are rather than
+      # re-deriving CommonMark block structure, so the dependency is real. uv is
+      # what its PEP 723 shebang runs under when it is invoked as a command.
+      # cmarkgfm is the reference implementation the HTML-block matrix measures
+      # markdown-it against; without it that test falls back to a uv subprocess.
+      - name: Install the checker's dependencies
+        run: python3 -m pip install --upgrade markdown-it-py uv cmarkgfm
+
+      - name: Unit tests for the checker
+        run: python3 -m unittest tests.test_md_unwrap -v
+
+      - name: Pre-commit guard test
+        run: bash tests/test_pre_commit_md_wrap_guard.sh
+
+      - name: Changed Markdown under claude/ has no hard-wrapped paragraphs
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "No usable base commit; checking all Markdown under claude/."
+            exec custom_bins/md-unwrap --check claude
+          fi
+          mapfile -t changed < <(git diff --name-only --diff-filter=ACMR "$base" HEAD -- 'claude/**/*.md' 'claude/*.md')
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo "No Markdown under claude/ changed."
+            exit 0
+          fi
+          printf 'Checking %d file(s):\n' "${#changed[@]}"
+          printf '  %s\n' "${changed[@]}"
+          custom_bins/md-unwrap --check "${changed[@]}"

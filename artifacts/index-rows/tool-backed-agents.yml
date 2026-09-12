@@ -1,0 +1,9 @@
+title: Tool-Backed Agents
+url: https://claude.ai/code/artifact/4c124679-7346-4dc5-9cb4-75889320aaf4
+org: see note
+status: done
+last_updated: 2026-08-18
+public: no
+
+summary: >-
+  which agents actually invoke their CLI rather than answering from their own reasoning

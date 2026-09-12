@@ -1,0 +1,21 @@
+title: Dotfiles Artifacts
+url: https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107
+org: lin.yulong@gmail.com's Organization
+first_published: 2026-09-10
+last_updated: 2026-09-10
+status: live
+
+public: no
+
+summary: >-
+  this index, hosted; republished to this URL after every artifact publish
+
+source: ../../ARTIFACTS.md   # the repo-root index is the source; this directory holds only the build
+built: index.html
+builds_with: |
+  md2artifact ARTIFACTS.md -o artifacts/index/index.html --title "Dotfiles Artifacts"
+
+notes: |
+  Republished to the url above after every artifact publish (Yulong, 2026-09-10), which
+  replaced the earlier "republish only on request" rule. The URL also lives in the
+  ARTIFACTS.md header, where claude/hooks/nudge_artifact_index.sh reads it.
