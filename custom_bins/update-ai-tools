@@ -162,11 +162,28 @@ update_claude() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log "[DRY RUN] Would run: claude update"
+        log "[DRY RUN] Then validate router infrastructure: python3 $HOME/.claude/hooks/check_model_router_update.py --force"
         return 0
     fi
 
     log "Updating Claude Code..."
-    claude update 2>&1 || log_err "Claude Code update failed"
+    local update_status=0
+    claude update 2>&1 || update_status=$?
+    if [[ "$update_status" -ne 0 ]]; then
+        log_err "Claude Code update failed"
+        return "$update_status"
+    fi
+
+    local checker="$HOME/.claude/hooks/check_model_router_update.py"
+    if [[ ! -f "$checker" ]]; then
+        log_err "Router infrastructure checker missing: $checker"
+        return 1
+    fi
+    log "Validating router infrastructure after Claude Code update..."
+    python3 "$checker" --force || {
+        log_err "Router infrastructure validation failed"
+        return 1
+    }
 }
 
 # ─── Update Antigravity CLI ─────────────────────────────────────────────────
@@ -209,6 +226,7 @@ log "PATH: $PATH"
 set +e
 
 update_claude
+claude_update_status=$?
 update_antigravity
 update_codex
 codex_update_status=$?
@@ -228,3 +246,4 @@ set -e
 
 log "═══ AI Tools Update Complete ═══"
 [[ "$codex_update_status" -eq 0 ]] || exit "$codex_update_status"
+exit "$claude_update_status"

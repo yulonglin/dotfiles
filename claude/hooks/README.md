@@ -72,10 +72,7 @@ Hooks for automating task and agent management workflows.
 
 **Purpose:** Repair ignored plugin-cache problems before a session uses them.
 
-**Behavior:** Preserves marketplace shell executable bits and converts Ralph
-Loop 1.0.0's two plain-text successful `Stop` messages into JSON
-`systemMessage` objects. The Ralph repair validates both exact upstream lines,
-is atomic and idempotent, and refuses partial or unknown source drift.
+**Behavior:** Preserves marketplace shell executable bits and converts Ralph Loop 1.0.0's two plain-text successful `Stop` messages into JSON `systemMessage` objects. The Ralph repair validates both exact upstream lines, is atomic and idempotent, and refuses partial or unknown source drift.
 
 **Tests:** `test_patch_ralph_loop_stop_hook.sh`.
 

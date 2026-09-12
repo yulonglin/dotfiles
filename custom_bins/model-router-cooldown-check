@@ -1,0 +1,423 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""Report a Codex cooldown in the model-router upstream; restart only on proof.
+
+CLIProxyAPI reads a limit's reset out of an upstream 429 and locks the credential until
+then -- up to several days -- without ever re-probing. When the real quota window rolls
+early, every Codex route keeps returning 429 out of a local cooldown table while the
+subscription is fine, and the router still reports healthy. Observed 2026-09-09 to -11.
+
+WHAT CANNOT BE DECIDED HERE. A local refusal is answered from the router's own table: it
+says nothing about upstream beyond quoting the error that made the entry, and names no
+duration. Separate sightings are separate observations -- they show a cooldown was present
+each time we looked, never that one cooldown held in between. Two one-minute cooldowns
+with healthy traffic between them are indistinguishable from one continuous hour, so
+neither a count of sightings nor the time between them is evidence of staleness. This tool
+no longer treats them as any, and reports instead.
+
+THE ONE THING IT RESTARTS ON: it saw a genuine `usage_limit_reached` itself, that refusal
+named its own `resets_in_seconds`, that many seconds have since passed on this machine's
+clock, and the routes are still refused locally. The cached deadline has then outlived the
+limit that created it -- observed, not inferred.
+
+THE COST, plainly: the incident that prompted this tool is no longer cleared automatically
+inside the advertised window. The 2026-09-09 refusal named 568157 seconds (6.6 days) and
+the real quota came back within one, so this tool would report that blackout hourly and
+leave the bounce to a human. What stays automatic is CLIProxyAPI holding a credential past
+the reset upstream itself quoted, which its floor and monotonic-extension logic produces.
+A bounce drops every in-flight request the router carries, `claude-*` routes to Anthropic
+included, so a watchdog acting on a false positive is worse than no watchdog.
+
+Exit codes: 0 usable, 1 refused locally and not cleared, 2 quota genuinely exhausted
+upstream, 3 could not determine.
+"""
+
+import argparse
+import datetime
+import json
+import os
+import platform
+import re
+import subprocess
+import sys
+import time
+import tomllib
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+LABEL = "com.alignment-hive.model-router"
+UNIT = "model-router.service"
+PORT = 8787
+HEALTH_PATH = "/__model-router/health"
+# After a bounce, stand down this long whatever the outcome. Armed before the service is
+# touched and cleared only on confirmed recovery, so no exit from the restart path can
+# skip it. Counted on our clock, never on the deadline upstream advertised.
+RESTART_HOLD_SECONDS = 6 * 3600
+RESTART_WAIT_SECONDS = 20.0
+
+OK, REFUSED, EXHAUSTED, UNKNOWN = 0, 1, 2, 3
+
+
+class CheckError(Exception):
+    """A diagnostic safe to print: never carries a token, URL or response body."""
+
+
+def state_dir() -> Path:
+    return Path.home() / ".local/state/model-router"
+
+
+def state_path() -> Path:
+    return state_dir() / "cooldown-check.json"
+
+
+def load_endpoint() -> tuple[str, str]:
+    """Return (base_url, token) for the locally owned router, or raise."""
+    token_path = state_dir() / "ingress-token"
+    try:
+        token = token_path.read_text().strip()
+    except OSError as exc:
+        raise CheckError("no ingress token; is model-router installed?") from exc
+    if not token:
+        raise CheckError("ingress token is empty.")
+    return "http://127.0.0.1:%d/t/%s" % (PORT, token), token
+
+
+def codex_routes() -> list[str]:
+    """Routing ids served by the Codex provider, most specific first.
+
+    The generated config puts Codex routes in top-level [[models]]; the openai-providers
+    block is OpenRouter and is unaffected by this failure.
+    """
+    config = Path(
+        os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+    ) / "model-router/config.toml"
+    try:
+        with config.open("rb") as handle:
+            data = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise CheckError("could not read the router config.") from exc
+    routes = [m["routing-id"] for m in data.get("models", []) if m.get("routing-id")]
+    if not routes:
+        raise CheckError("no Codex routes configured; nothing to check.")
+    return routes
+
+
+def probe(base_url: str, token: str, model: str, timeout: float) -> dict:
+    """One minimal generation. Returns {status, elapsed_ms, kind, resets_in_s}."""
+    body = json.dumps({
+        "model": model,
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "."}],
+    }).encode()
+    request = urllib.request.Request(
+        base_url + "/v1/messages",
+        data=body,
+        headers={
+            "x-api-key": token,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    started = time.monotonic()
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            response.read(4096)
+            status, payload = response.status, ""
+    except urllib.error.HTTPError as error:
+        status = error.code
+        try:
+            payload = error.read(4096).decode("utf-8", errors="replace")
+        except OSError:
+            payload = ""
+    except (OSError, urllib.error.URLError) as exc:
+        raise CheckError("the router did not answer; is the service running?") from exc
+
+    return {"status": status, "elapsed_ms": round((time.monotonic() - started) * 1000, 1),
+            "kind": classify(status, payload), "resets_in_s": resets_in_seconds(payload)}
+
+
+def classify(status: int, payload: str) -> str:
+    """Name the failure shape behind a probe response.
+
+    Order matters. A local cooldown refusal quotes the upstream error that caused it, so
+    its body contains "usage_limit_reached" too:
+
+        All credentials for model X are cooling down via provider codex
+        (last error: usage_limit_reached: The usage limit has been reached)
+
+    Matching on usage_limit_reached first would read every stale cooldown as a genuine one
+    and never notice it -- the exact bug this tool exists to catch.
+    """
+    if status == 200:
+        return "ok"
+    if status != 429:
+        return "error"
+    if re.search(r"cool(?:ing|down)", payload, re.IGNORECASE):
+        # Refused from the local table; the request never left the machine.
+        return "local_cooldown"
+    if "usage_limit_reached" in payload:
+        return "upstream_limit"
+    return "rate_limited"
+
+
+def resets_in_seconds(payload: str) -> int | None:
+    """How long upstream says this limit lasts.
+
+    A duration, which is why the restart rule is built on it rather than on `resets_at`:
+    it elapses against our clock from the moment we read it, with no dependence on
+    upstream's wall clock agreeing with ours.
+    """
+    found = re.search(r'"resets_in_seconds"\s*:\s*(\d{1,9})', payload)
+    return int(found.group(1)) if found else None
+
+
+def read_state() -> dict:
+    try:
+        return json.loads(state_path().read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def write_state(**fields) -> bool:
+    """Merge fields into the state file. True only once they read back.
+
+    That return value is the durability signal the restart path is gated on: a home this
+    process cannot write to must mean a watchdog that reports and never acts, not one
+    whose guards silently do nothing.
+    """
+    data = read_state() | fields
+    try:
+        state_path().parent.mkdir(parents=True, exist_ok=True)
+        state_path().write_text(json.dumps(data, indent=2, sort_keys=True))
+    except OSError:
+        return False
+    stored = read_state()
+    return all(stored.get(key) == value for key, value in fields.items())
+
+
+def forget_limit() -> None:
+    write_state(observed_limit=None)
+
+
+def clear_guards() -> None:
+    write_state(hold_restarts_until_unix=None, observed_limit=None)
+
+
+def recorded_limit(now: float) -> dict | None:
+    """The genuine upstream limit this tool timed itself, if the record is sane."""
+    seen = read_state().get("observed_limit")
+    if not isinstance(seen, dict):
+        return None
+    at, window = seen.get("at_unix"), seen.get("window_s")
+    if not isinstance(at, (int, float)) or not isinstance(window, (int, float)):
+        return None
+    if at > now:
+        return None  # The clock moved backwards; the record can prove nothing.
+    return seen | {"expires_unix": at + window}
+
+
+def arm_restart_hold(now: float) -> bool:
+    """Stand down for a bounded window, and spend the evidence, BEFORE bouncing.
+
+    Written first on purpose. Every exit from the restart path that is not a confirmed
+    recovery -- a router that never comes back, a confirmation probe that raises, this
+    process killed between the two -- must leave the next run holding off, and only a
+    write that happened before the service was touched can promise that. The observation
+    is consumed in the same write, so one expired window buys exactly one bounce however
+    that bounce ends.
+    """
+    return write_state(hold_restarts_until_unix=now + RESTART_HOLD_SECONDS, observed_limit=None)
+
+
+def restart_hold(now: float) -> str | None:
+    hold = read_state().get("hold_restarts_until_unix")
+    if isinstance(hold, (int, float)) and now < hold:
+        return "standing down after an earlier bounce; %s left" % span(hold - now)
+    return None
+
+
+def restart_command() -> list[str]:
+    if platform.system() == "Darwin":
+        return ["/bin/launchctl", "kickstart", "-k", "gui/%d/%s" % (os.getuid(), LABEL)]
+    return ["systemctl", "--user", "restart", UNIT]
+
+
+def restart_service(timeout: float) -> None:
+    try:
+        result = subprocess.run(restart_command(), capture_output=True, text=True,
+                                timeout=timeout, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CheckError("could not restart the router service.") from exc
+    if result.returncode:
+        raise CheckError("the router service refused to restart (exit %d)." % result.returncode)
+    write_state(last_restart_unix=time.time())
+
+
+def wait_healthy(base_url: str, deadline: float) -> bool:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    while time.monotonic() < deadline:
+        try:
+            with opener.open(base_url + HEALTH_PATH, timeout=1.0) as response:
+                data = json.loads(response.read(4096))
+                if response.status == 200 and data.get("status") in ("ok", "degraded"):
+                    return True
+        except (OSError, ValueError, urllib.error.URLError):
+            pass
+        time.sleep(0.25)
+    return False
+
+
+def span(seconds: float) -> str:
+    return str(datetime.timedelta(seconds=int(seconds)))
+
+
+def decline(result: dict, summary: str, *cannot: str) -> dict:
+    """Doing nothing is now the main output: say what stopped it and who can look further."""
+    return result | {"summary": summary, "undetermined": list(cannot), "check": [
+        "`rg 'in cooldown' %s/logs/cliproxyapi.log` names the credential and its `remaining=`,"
+        " the only place the router says how long an entry holds" % state_dir(),
+        "the ChatGPT plan's quota page: the one view of whether the real limit still holds",
+        "if the plan shows quota and this persists, clear it by hand with `%s`"
+        % " ".join(restart_command())]}
+
+
+def note_upstream_limit(now: float, model: str, seen: dict, result: dict) -> dict:
+    """Record a genuine limit's own window: the only evidence a restart may ever use."""
+    spent = "Upstream refused: the quota really is spent. Nothing to restart."
+    window = seen["resets_in_s"]
+    if window is None:
+        forget_limit()
+        return decline(result, spent, "how long this limit lasts: it named no"
+                       " `resets_in_seconds`, so no window is being timed and a later local"
+                       " refusal will have nothing to be measured against")
+    write_state(observed_limit={"at_unix": now, "window_s": window, "model": model})
+    return result | {
+        "summary": spent,
+        "saw": "a round-tripped `usage_limit_reached` naming a %s window, now timed here" % span(window),
+        "check": ["if the routes are still refused locally in %s, that window has outlived"
+                  " itself and `--fix` bounces the router once" % span(window)]}
+
+
+def run(fix: bool) -> tuple[int, dict]:
+    base_url, token = load_endpoint()
+    model = codex_routes()[0]
+    result = {"model": model, "fixed": False, "state_file": str(state_path())}
+
+    try:
+        first = probe(base_url, token, model, timeout=90.0)
+    except CheckError:
+        # A probe that got no answer describes nothing, and it leaves any recorded window
+        # describing a router we can no longer reach. Discard it: the cost is one missed
+        # restart, never one made on evidence whose subject moved while we were not looking.
+        forget_limit()
+        raise
+    result["probe"] = first
+    now = time.time()
+
+    if first["kind"] == "ok":
+        clear_guards()
+        return OK, result | {"summary": "Codex routes are serving normally."}
+    if first["kind"] == "upstream_limit":
+        return EXHAUSTED, note_upstream_limit(now, model, first, result)
+    if first["kind"] != "local_cooldown":
+        forget_limit()
+        return UNKNOWN, decline(
+            result, "Unexpected response (HTTP %s); not touching the service." % first["status"],
+            "anything about the cooldown table, so no window is being timed")
+
+    result["saw"] = ("every Codex route refused from the router's own cooldown table; the"
+                     " request never left this machine (HTTP %s in %d ms)"
+                     % (first["status"], round(first["elapsed_ms"])))
+    seen = recorded_limit(now)
+    result["observed_limit"] = seen
+
+    if seen is None:
+        return REFUSED, decline(
+            result,
+            "A local cooldown is holding every Codex route. Reporting only: nothing here"
+            " shows it is stale.",
+            "whether the limit behind this entry has expired -- this tool never saw that"
+            " limit itself, so it has no window to measure against",
+            "how long the entry has held: the refusal names no duration, and repeated"
+            " sightings cannot separate one long cooldown from several short ones")
+    if now < seen["expires_unix"]:
+        left = span(seen["expires_unix"] - now)
+        return REFUSED, decline(
+            result,
+            "A local cooldown is holding every Codex route, and the upstream limit behind"
+            " it still has %s of its own window to run." % left,
+            "nothing that matters: this is what a real limit with %s left looks like" % left)
+
+    result["summary"] = ("The cached cooldown has outlived its own limit: upstream's %s window"
+                         " expired %s ago and the routes are still refused."
+                         % (span(seen["window_s"]), span(now - seen["expires_unix"])))
+    standing_down = restart_hold(now)
+    if standing_down:
+        return REFUSED, decline(result, "%s Not restarting: %s." % (result["summary"], standing_down))
+    if not fix:
+        return REFUSED, result | {"summary": result["summary"] + " Re-run with --fix to bounce it."}
+
+    # The guard goes down before the service is touched, and a home that cannot hold it is
+    # itself a reason not to act: without it every hourly run would arrive here and bounce.
+    if not arm_restart_hold(now):
+        return REFUSED, decline(
+            result, result["summary"] + " Not restarting: the guard could not be written.",
+            "whether a bounce already happened, since %s is unwritable" % state_path())
+
+    restart_service(timeout=15.0)
+    result["restarted"] = True
+    if not wait_healthy(base_url, time.monotonic() + RESTART_WAIT_SECONDS):
+        return UNKNOWN, decline(result, "Restarted, but the router did not come back healthy.",
+                                "whether the cooldown cleared, since nothing answers to ask")
+
+    second = probe(base_url, token, model, timeout=90.0)
+    result["probe_after_restart"] = second
+    if second["kind"] == "ok":
+        clear_guards()
+        return OK, result | {"fixed": True, "summary": "The cached cooldown had outlived the"
+                             " real limit; it is cleared and Codex routes serve again."}
+    if second["kind"] == "upstream_limit":
+        return EXHAUSTED, note_upstream_limit(now, model, second, result)
+    return UNKNOWN, decline(
+        result, "Still refusing after a restart (HTTP %s)." % second["status"],
+        "why a fresh child rebuilt the same refusal; a restarted process starts empty")
+
+
+def render(result: dict) -> str:
+    """The report is the main output, so print the reasoning and not just the verdict."""
+    lines = [result["summary"]]
+    if result.get("saw"):
+        lines.append("  %-11s %s" % ("saw", result["saw"]))
+    lines += ["  %-11s %s" % ("cannot say", item) for item in result.get("undetermined", [])]
+    return "\n".join(lines + ["  %-11s %s" % ("check", item) for item in result.get("check", [])])
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Report a Codex cooldown in model-router, and restart only when the"
+                    " upstream limit behind it is shown to have expired.")
+    parser.add_argument("--fix", action="store_true",
+                        help="restart the router when, and only when, a limit this tool"
+                             " observed has outlived its own advertised window")
+    parser.add_argument("--json", action="store_true", help="print the result as JSON")
+    args = parser.parse_args()
+
+    try:
+        code, result = run(fix=args.fix)
+    except CheckError as error:
+        if args.json:
+            print(json.dumps({"summary": str(error), "error": True}, indent=2))
+        else:
+            print("model-router cooldown check: %s" % error, file=sys.stderr)
+        return UNKNOWN
+
+    print(json.dumps(result, indent=2, sort_keys=True) if args.json else render(result))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

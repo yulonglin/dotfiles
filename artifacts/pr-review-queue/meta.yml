@@ -1,0 +1,45 @@
+title: Dotfiles Review Queue
+url: https://claude.ai/code/artifact/9aeb2de4-1bdb-4ec7-b843-4679ea6e7ef7
+org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-09-11
+first_published: 2026-09-11
+last_updated: 2026-09-11
+status: live
+
+summary: >-
+  the open pull requests grouped by how much judgement each needs rather than by age, so the
+  table can be read instead of opened. Each row's tick is stored as its own document, so two
+  viewers ticking different rows cannot overwrite each other, and a tick made before the store
+  resolves is queued rather than lost
+published_version: 3   # the publish result reports "capabilities db", so the declaration is live
+
+source: index.html     # hand-written; there is no Markdown behind this one
+built: index.html
+regression_check: |
+  node artifacts/pr-review-queue/checklist-test.js
+
+# The page is nothing but a checklist without this, and the declaration lives in
+# the publish call rather than in the HTML, so it is recorded here: a republish
+# that omits `capabilities` carries the stored declaration forward, but a first
+# publish that omits it leaves claude.use("db") resolving null and every tick
+# local to one browser.
+capabilities:
+  db: {}
+db_paths:
+  review/checklist/ticks/<pull request number>: |
+    { on: <true|false>, updatedAt: <epoch ms> }
+    ONE DOCUMENT PER ROW. Two viewers ticking different rows write different
+    documents and cannot collide; two ticking the same row resolve
+    last-writer-wins, which is the correct reading of one disputed value.
+    An untick is a stored `false`, never a deleted key, so no write has to
+    replace the whole set to express one. Shared across the org's viewers by
+    design -- the queue is one shared review pass, not a private one, so it is
+    deliberately not under data/users/.
+  review/checklist: |
+    { checked: { "<pull request number>": true, ... }, updatedAt: <epoch ms> }
+    SUPERSEDED, and deliberately left in place as a READ-ONLY FALLBACK. Every
+    row lived in this one document until 2026-09-11, which made each write a
+    read-modify-write of every other row with no compare-and-set to make it
+    safe. Nothing was ever copied out of it: a row with no document of its own
+    reads its value from here, every time it is read, so there is no migration
+    pass to finish and no marker saying one did. It is never written and never
+    deleted, so a viewer served a rolled-back page still finds their ticks.

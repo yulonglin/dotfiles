@@ -9,6 +9,11 @@ Inputs, any mix:
     starts "--- MESSAGE ---", then From/To/Cc/Date/Subject/Attachments header lines, then a line
     "--- HTML ---" or "--- TEXT ---" and the body up to the next marker; dates are UTC "Z"
 
+Displayed message times default to UTC. Pass --timezone to render them in the zone of the
+events instead, which is what an evidence pack wants: a message received at 16:08 Pacific is
+stamped 00:08 UTC the following day, so a UTC render can contradict a filing that states the
+local date.
+
 Writes <out>/<basename>.html (headers, message count, each message boxed, tracking pixels and
 tokenised links stripped) and prints one line per thread. Feed the result to render.py.
 Exit 1 if any input fails to parse.
@@ -21,14 +26,18 @@ import sys
 import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 TRACKING_HOSTS = ("unsubscribe", "track", "click", "pixel", "beacon", "open.")
 TOKEN_PARAM = re.compile(r"[?&][^=&]*=([A-Za-z0-9_\-%.,]{20,})")
 
 
+TZ = timezone.utc  # display timezone for message headers; set from --timezone
+
+
 def fmt_date(z: str) -> str:
     dt = datetime.strptime(z, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    return dt.strftime("%a, %d %b %Y %H:%M UTC")
+    return dt.astimezone(TZ).strftime("%a, %d %b %Y %H:%M %Z")
 
 
 def clean_href(href: str) -> str:
@@ -165,10 +174,20 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True, help="directory for the .html files")
     ap.add_argument("--account", required=True, help="mailbox address shown in the page header")
     ap.add_argument("--footer", default=None,
-                    help='footer text; default "Printed from Gmail via the Gmail API on <today> (UTC)"')
+                    help='footer text; default "Printed from Gmail via the Gmail API on <today> (<zone>)"')
+    ap.add_argument("--timezone", default="UTC", metavar="ZONE",
+                    help="IANA zone for displayed message times, e.g. America/Los_Angeles. "
+                         "Default UTC. For an evidence pack set the zone of the events: a UTC "
+                         "render can show a different calendar day from the one the recipient saw.")
     a = ap.parse_args()
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    footer = a.footer or f"Printed from Gmail via the Gmail API on {today} (UTC)"
+    global TZ
+    try:
+        TZ = timezone.utc if a.timezone.upper() == "UTC" else ZoneInfo(a.timezone)
+    except Exception as e:
+        print(f"!! unknown timezone {a.timezone!r}: {e}", file=sys.stderr)
+        return 1
+    now = datetime.now(TZ)
+    footer = a.footer or f"Printed from Gmail via the Gmail API on {now:%Y-%m-%d} ({now:%Z})"
     a.out.mkdir(parents=True, exist_ok=True)
 
     threads: dict[str, dict] = {}

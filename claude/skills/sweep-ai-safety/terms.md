@@ -1,8 +1,6 @@
 # AI safety topic glossary
 
-Terms tracked by `sweep-ai-safety`. Each entry is a one-sentence working definition
-plus a seminal-or-canonical anchor (paper, blog post, or research group). These are
-*starting points* — verify the anchor before citing.
+Terms tracked by `sweep-ai-safety`. Each entry is a one-sentence working definition plus a seminal-or-canonical anchor (paper, blog post, or research group). These are *starting points* — verify the anchor before citing.
 
 > Format: **term** (aliases) — definition. *Anchor:* link / org.
 

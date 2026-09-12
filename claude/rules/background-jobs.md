@@ -5,3 +5,10 @@ In a background job (`~/.claude/jobs/`) a prose question reaches nobody — it r
 The escape hatch is not asking in prose — it is not asking: when the decision is scoped, low-risk and reversible, take the default, state the assumption, and keep working.
 
 Unscoped, irreversible or security-sensitive calls stay the user's however obvious one option looks; on conflict, ask. A subagent without `AskUserQuestion` returns the options plus a recommendation flagged `AMBIGUOUS:` for its caller to raise.
+
+In worktree-isolated jobs, the CLI's git guard requires command text to prove all touched paths stay inside the worktree. It refuses:
+
+- `git -C` outside the worktree, even reads — inspect parent refs with `git log main`, `git diff main...HEAD`, or `gh pr view`.
+- Variable or `$(...)` command names, and variable revisions (`git show "$rev"` in a loop) — resolve first, invoke the literal text in a separate call. A blocked revision comes back empty rather than refused, so an unexplained empty `git show` is this.
+- Git combined with heredocs or output redirection — separate git calls from file writes.
+- Shell text that merely quotes git commands — write that content with Write or Edit.

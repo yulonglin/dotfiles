@@ -32,12 +32,16 @@
       "TaskStop",
       "TaskUpdate",
       "TodoWrite",
+      "Update",
       "Write",
       "WebSearch",
       "WebFetch",
       "Artifact",
       "Read",
+      "EnterWorktree",
       "Read(**/.envrc)",
+      "Bash(model-router-wire *)",
+      "Bash(mutool draw *)",
       "mcp__claude_ai_Notion__notion-fetch",
       "mcp__claude_ai_Notion__notion-search",
       "mcp__claude_ai_Notion__notion-get-comments",
@@ -462,6 +466,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/ensure_model_router.py\"",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_start.sh",
             "timeout": 5,
             "async": true
@@ -548,6 +561,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/check_model_router_update.py\"",
+            "timeout": 75,
+            "async": true
+          }
+        ]
       }
     ],
     "Stop": [
@@ -587,6 +610,15 @@
       }
     ],
     "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/ensure_model_router.py\"",
+            "timeout": 20
+          }
+        ]
+      },
       {
         "hooks": [
           {
@@ -731,7 +763,8 @@
         "api.zotero.org",
         "osv.dev",
         "api.osv.dev",
-        "openreview.net"
+        "openreview.net",
+        "golang.org"
       ],
       "allowLocalBinding": true
     },
@@ -820,6 +853,7 @@
   "effortLevel": "high",
   "advisorModel": "fable",
   "showClearContextOnPlanAccept": true,
+  "dialogExpiry": "never",
   "plansDirectory": "~/vault/specs",
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,

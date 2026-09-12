@@ -164,3 +164,108 @@ def test_generated_javascript_parses(page_js: str, tmp_path) -> None:
         ["node", "--check", str(js)], capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
+
+
+# --- generated ids are unique ------------------------------------------------
+# A checklist item's persistence id, and a heading's anchor, are both slugs of
+# visible text, suffixed with a number when two of them slugify the same. The
+# suffix counter used to tally the ORIGINAL slug only, never the suffixed ids
+# it had already handed out — so two items labelled "ship it" emitted
+# "ship-it" and "ship-it-1", and a third item labelled "ship it 1" slugified
+# to "ship-it-1" on its own and took the same id. Two controls then shared one
+# storage slot and silently overwrote each other's saved state. These are the
+# browser-free half of that guard: they fail on the emitted markup alone.
+
+COLLIDING = """# Collision Sample
+
+- [ ] ship it
+- [ ] ship it
+- [ ] ship it 1
+- [ ] ship it
+
+## A section
+
+## A section
+
+## A section 1
+"""
+
+
+def _state_ids(html_text: str) -> list[str]:
+    return re.findall(r'data-an-state-id="([^"]*)"', html_text)
+
+
+@pytest.fixture(scope="module")
+def colliding_html(tmp_path_factory) -> str:
+    return _render(COLLIDING, tmp_path_factory.mktemp("md2artifact-collide"))
+
+
+def test_every_task_id_is_unique(colliding_html: str) -> None:
+    ids = _state_ids(colliding_html)
+    assert len(ids) == 4, ids
+    assert len(set(ids)) == len(ids), f"two controls share a persistence id: {ids}"
+
+
+def test_task_ids_keep_incrementing_past_a_label_that_looks_suffixed(
+    colliding_html: str,
+) -> None:
+    """The exact allocation, pinned: a suffix is retried until genuinely free."""
+    assert _state_ids(colliding_html) == [
+        "ship-it",
+        "ship-it-1",
+        "ship-it-1-1",
+        "ship-it-2",
+    ]
+
+
+def test_every_heading_id_is_unique(colliding_html: str) -> None:
+    """Duplicate DOM ids send a table-of-contents link to the wrong section."""
+    ids = re.findall(r'<h2 id="([^"]*)"', colliding_html)
+    assert len(ids) == len(set(ids)), f"two headings share an anchor: {ids}"
+    assert [i for i in ids if i.startswith("a-section")] == [
+        "a-section",
+        "a-section-1",
+        "a-section-1-1",
+    ], ids
+
+
+# --- a declared state set is checked at build time ---------------------------
+# Copy all writes each state into the brackets of a Markdown task line
+# (`- [deny] the label`), which is what makes the export paste back into the
+# source. A state carrying a bracket produces `- [de]ny] the label`, a line no
+# Markdown parser reads as a task item — and the build that accepted it is long
+# over by the time anyone looks at the clipboard. So the set is rejected where
+# the author can still see the message.
+
+
+def _run_states(spec: str, tmp: Path) -> subprocess.CompletedProcess[str]:
+    src = tmp / "states.md"
+    src.write_text("# T\n\n- [ ] one\n", encoding="utf-8")
+    return subprocess.run(
+        [_interpreter(), str(MD2REVIEW), str(src), "-o", str(tmp / "out.html"),
+         "--states", spec],
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "spec",
+    ["ok,de]ny", "o[k,deny", "ok,de\nny", "ok,de\tny"],
+    ids=["close-bracket", "open-bracket", "newline", "tab"],
+)
+def test_a_state_that_breaks_the_exported_line_is_refused(spec: str, tmp_path) -> None:
+    r = _run_states(spec, tmp_path)
+    assert r.returncode != 0, r.stdout
+    assert "--states must not contain" in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize(
+    "spec",
+    ["approve,approve-pending-edits,deny", "yes,no,ask Ana (v2): 50%"],
+    ids=["the-documented-set", "punctuation-that-is-fine"],
+)
+def test_an_ordinary_state_set_still_builds(spec: str, tmp_path) -> None:
+    """Only the characters that break the line are refused, not punctuation."""
+    r = _run_states(spec, tmp_path)
+    assert r.returncode == 0, r.stderr

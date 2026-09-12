@@ -1,0 +1,23 @@
+title: Why Auto Mode Broke Behind the Gateway
+url: https://claude.ai/code/artifact/959f403c-5343-40c6-ad4b-8d68f9a066e6
+org: MATS Program   # claude auth status, 2026-09-09
+first_published: 2026-09-09
+last_updated: 2026-09-09
+status: live
+
+public: no
+
+summary: >-
+  every auto-mode classifier 429 needed two conditions: `CLAUDE_CODE_ATTRIBUTION_HEADER=0`
+  (set since March) and a non-`api.anthropic.com` base URL (the model-router gateway). Claude
+  Code 2.1.229's repair re-adds the attribution block only when the URL host is literally
+  first-party, so gateway days 429'd and direct days did not; 28 days of transcripts split
+  exactly on gateway on/off. Fix: drop the opt-out (b2868c8a), gateway kept; verified by
+  before/after probes. The 8 Sep A/B was confounded (both arms proxied). Spend levers
+  (per-tool classifier cost, 200k+ contexts, concurrency) remain open
+
+source: report.md
+built: report.html
+builds_with: |
+  uv run --with markdown-it-py --python 3.14 --no-project python custom_bins/md2artifact report.md -o report.html
+evidence: ~/vault/tooling/dotfiles/docs/2026-09-09_handover-auto-mode-classifier-429.md   # captures and council result are job-local under ~/.claude/jobs/49656f9b/tmp/
