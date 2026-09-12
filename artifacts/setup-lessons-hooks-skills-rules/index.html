@@ -1,0 +1,1439 @@
+<title>Six of the seven bugs were already fixed; the remaining diff is one section and one bullet</title>
+<style>
+:root {
+  --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
+  --accent:#bd5d3a; --accent-bg:#f7e9e2; --good:#2f6b4f; --good-bg:#e4f0e9;
+  --bad:#a33f2a; --bad-bg:#f9e4de; --code:#f4f2ee; --mark:#fbe6a2;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+} }
+:root[data-theme="dark"] {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);margin:0;padding:2.5rem 1rem 6rem;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;line-height:1.65}
+.shell{max-width:48rem;margin:0 auto}
+.shell.has-toc{display:grid;grid-template-columns:15rem minmax(0,1fr);gap:2.4rem;max-width:72rem}
+.toc{position:sticky;top:1.5rem;align-self:start;max-height:calc(100vh - 3rem);overflow:auto;
+ font-size:.84rem;border-right:1px solid var(--rule);padding-right:.9rem}
+.toc h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+ margin:0 0 .45rem;font-weight:700}
+.toc a{display:block;color:var(--soft);text-decoration:none;padding:.22rem .45rem;
+ border-radius:5px;border-left:2px solid transparent}
+.toc a.lvl3{padding-left:1.2rem;font-size:.8rem}
+.toc a:hover{background:var(--code);color:var(--ink)}
+.toc a.on{color:var(--ink);background:var(--code);border-left-color:var(--accent);font-weight:600}
+.doc{min-width:0}
+h1{font-size:1.75rem;line-height:1.25;margin:0 0 .8rem;letter-spacing:-.015em}
+h2{font-size:1.2rem;margin:2.4rem 0 .7rem;padding-bottom:.32rem;border-bottom:1px solid var(--rule)}
+h3{font-size:1.02rem;margin:1.7rem 0 .45rem}
+p,li{margin:0 0 .85rem}
+ul,ol{padding-left:1.35rem}
+blockquote{margin:1rem 0;padding:.1rem 1rem;border-left:3px solid var(--accent);
+ background:var(--accent-bg);border-radius:0 6px 6px 0}
+pre{background:var(--code);border:1px solid var(--rule);border-radius:7px;padding:.75rem .9rem;
+ overflow-x:auto;font-size:.83rem;line-height:1.5}
+code{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+p code,li code,td code,h2 code,h3 code{background:var(--code);padding:.06rem .32rem;border-radius:4px;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0;display:block;overflow-x:auto}
+th,td{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}
+th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
+.doc svg{max-width:100%;height:auto}
+p.svg-note{color:var(--bad);background:var(--bad-bg);border-radius:6px;
+ padding:.4rem .7rem;font-size:.85rem}
+a{color:var(--accent)}
+details{border:1px solid var(--rule);border-radius:7px;background:var(--panel);
+ margin:1rem 0;padding:.55rem .9rem}
+details>summary{cursor:pointer;font-weight:600;margin:-.55rem -.9rem;padding:.55rem .9rem;
+ border-radius:7px;list-style-position:inside}
+details>summary:hover{color:var(--accent)}
+details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 0 0;
+ margin-bottom:.8rem;background:var(--code)}
+@media (max-width:56rem){
+  .shell.has-toc{display:block}
+  .toc{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--rule);
+   padding:0 0 .8rem;margin-bottom:1.4rem}
+  .toc a{display:inline-block;margin:.15rem .3rem .15rem 0;border-left:0}
+  .toc a.lvl3{padding-left:.45rem}
+}
+</style>
+<div class="shell has-toc">
+<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#the-moving-parts-defined-against-files-in-this-repo" class="lvl2">The moving parts, defined against files in this repo</a><a href="#a-hook-is-a-script-the-harness-runs-so-it-binds-even-when-the-model-would-rather-not" class="lvl3">A hook is a script the harness runs, so it binds even when the model would rather not</a><a href="#a-skill-is-a-procedure-loaded-on-demand-and-costs-nothing-until-it-matches" class="lvl3">A skill is a procedure loaded on demand, and costs nothing until it matches</a><a href="#a-rule-is-always-loaded-judgement-and-the-always-on-tier-is-already-over-budget" class="lvl3">A rule is always-loaded judgement, and the always-on tier is already over budget</a><a href="#an-agent-is-a-separate-model-instance-with-its-own-context-and-no-memory-of-yours" class="lvl3">An agent is a separate model instance with its own context and no memory of yours</a><a href="#settings-json-permissions-are-static-string-rules-the-classifier-is-a-model-that-judges-what-they-do-not-cover" class="lvl3">`settings.json` permissions are static string rules; the classifier is a model that judges what they do not cover</a><a href="#the-seven-bugs-one-verdict-each" class="lvl2">The seven bugs, one verdict each</a><a href="#1-gh-pr-edit-body-file-writes-nothing-already-in-the-skill-one-clause-added" class="lvl3">1. `gh pr edit --body-file` writes nothing — already in the skill, one clause added</a><a href="#2-github-refuses-self-approval-a-fact-to-know-not-a-bug-to-fix" class="lvl3">2. GitHub refuses self-approval — a fact to know, not a bug to fix</a><a href="#3-the-classifier-denied-merges-inconsistently-a-procedure-and-it-gets-its-own-section-below" class="lvl3">3. The classifier denied merges inconsistently — a procedure, and it gets its own section below</a><a href="#4-openai-routed-reviewers-died-on-a-content-flag-the-skill-needed-the-family-names" class="lvl3">4. OpenAI-routed reviewers died on a content flag — the skill needed the family names</a><a href="#5-stale-local-main-made-five-disjoint-prs-look-like-a-nine-way-tangle-already-in-the-skill" class="lvl3">5. Stale local `main` made five disjoint PRs look like a nine-way tangle — already in the skill</a><a href="#6-a-variable-revision-inside-a-loop-returned-empty-three-words-added-to-the-rule" class="lvl3">6. A variable revision inside a loop returned empty — three words added to the rule</a><a href="#7-inline-review-comments-are-on-a-different-endpoint-already-in-the-skill" class="lvl3">7. Inline review comments are on a different endpoint — already in the skill</a><a href="#surfacing-a-classifier-rejection-what-it-can-and-cannot-be" class="lvl2">Surfacing a classifier rejection: what it can and cannot be</a><a href="#reviewing-with-subagents-then-merging-the-sequence-written-down" class="lvl2">Reviewing with subagents, then merging: the sequence, written down</a><a href="#what-i-did-not-build-and-why" class="lvl2">What I did not build, and why</a><a href="#where-this-landed" class="lvl2">Where this landed</a></nav>
+<div class="doc">
+<h1 id="six-of-the-seven-bugs-were-already-fixed-the-remaining-diff-is-one-section-and-one-bullet">Six of the seven bugs were already fixed; the remaining diff is one section and one bullet</h1>
+<p><strong>Bottom line.</strong> PR #132 (<code>18a0262</code>, already in <code>origin/main</code>) landed a <code>review-pr-queue</code> skill that documents items 1, 2, 3, 5, 7 and half of 4 verbatim. So the honest answer to &quot;which ones should we learn from&quot; is: the learning already happened for most of the list — it just happened in a file you have not read. What was genuinely missing is the sequence you described in your own words (comment with subagents, edit with subagents, then merge), the names of the model families that survive a security review, and three words in the background-jobs rule. That is the whole pull request.</p>
+<p>The classifier ask is the one item with no clean fix. It is a procedure, not a hook, and this document says plainly what it cannot do.</p>
+<h2 id="the-moving-parts-defined-against-files-in-this-repo">The moving parts, defined against files in this repo</h2>
+<h3 id="a-hook-is-a-script-the-harness-runs-so-it-binds-even-when-the-model-would-rather-not">A hook is a script the harness runs, so it binds even when the model would rather not</h3>
+<p>A hook is a shell or Python script that Claude Code itself executes at a fixed moment in the loop — before a tool call, after one, when a session starts, when the model tries to stop. <strong>The harness runs it, not the model.</strong> That is the entire reason hooks exist: a written instruction is advice the model can forget, misread or reason its way past, while a hook is code that runs whether or not the model agrees with it.</p>
+<p>Registration lives in <code>claude/settings.json</code>, keyed by event. The live events in this repo are <code>PermissionRequest</code>, <code>PreToolUse</code>, <code>PostToolUse</code>, <code>UserPromptSubmit</code>, <code>Stop</code>, <code>SessionStart</code> and <code>SessionEnd</code>. A registration is a matcher plus a command:</p>
+<pre><code class="language-json">{
+  &quot;matcher&quot;: &quot;Bash&quot;,
+  &quot;hooks&quot;: [
+    { &quot;type&quot;: &quot;command&quot;, &quot;command&quot;: &quot;$HOME/.claude/hooks/block_destructive_git.sh&quot;, &quot;timeout&quot;: 5 }
+  ]
+}
+</code></pre>
+<p>That one refuses <code>git reset --hard</code>, <code>git checkout -- &lt;path&gt;</code>, <code>git clean -f</code>, bare <code>git stash</code> and <code>git stash pop</code>. <code>~/.claude</code> is a symlink to <code>claude/</code> in this repo, so the file on disk and the file under version control are the same file — editing a hook here changes your running environment immediately.</p>
+<p>Three concrete ones worth knowing by name, all in <code>claude/hooks/</code>:</p>
+<ul>
+<li><code>block_secret_expansion.sh</code> — <code>PreToolUse</code> on <code>Bash</code>. Stops a command that would expand a secret into a visible argument.</li>
+<li><code>pr_after_push.sh</code> — <code>PostToolUse</code> on <code>Bash</code>, wrapped in a feature gate (<code>hook_feature.sh run git.pr-after-push</code>). It opens a draft PR when a branch is pushed. It did <strong>not</strong> fire for this task's branch, and <code>gh pr list</code> came back empty six seconds after the push, so I created PR #148 by hand. Whether that is the feature gate being off or the hook not running for a subagent, I did not establish.</li>
+<li><code>approval_classifier.py</code> — <code>PermissionRequest</code>. Described in its own section below, because it is the reason item 3 is confusing.</li>
+</ul>
+<p>The rule of thumb the repo already follows: a hook is worth writing when the failure is silent, mechanical and repeats. It is the wrong tool when the correct action depends on judgement, because a hook can only say yes or no to a string.</p>
+<h3 id="a-skill-is-a-procedure-loaded-on-demand-and-costs-nothing-until-it-matches">A skill is a procedure loaded on demand, and costs nothing until it matches</h3>
+<p>A skill is a folder under <code>claude/skills/&lt;name&gt;/</code> holding a <code>SKILL.md</code> with YAML frontmatter — a <code>name</code> and a <code>description</code>. The description is the only part always in context; the body loads when a task matches. That makes a skill the cheap place for anything activity-specific.</p>
+<p><code>claude/skills/review-pr-queue/SKILL.md</code> is the worked example and the one this task extends. Its frontmatter description lists the triggers (&quot;address the comments on these PRs&quot;, &quot;clear the PR backlog&quot;), and its body is 114 lines of procedure — how to read inline comments, how to scope against the remote, how to fan out one worktree per branch, and a &quot;Known failure modes of the tooling&quot; table that is literally the bug list you were handed, written down before you asked. That table is why six of seven items need no new work.</p>
+<h3 id="a-rule-is-always-loaded-judgement-and-the-always-on-tier-is-already-over-budget">A rule is always-loaded judgement, and the always-on tier is already over budget</h3>
+<p>Files in <code>claude/rules/*.md</code> load into <strong>every session, forever</strong>. So the bar is &quot;relevant in every session&quot;, not &quot;true and useful&quot;. Activity-specific procedure belongs in a skill; the repo's own standard adds that a new standard belongs in the checklist it governs (<code>claude/checklists/</code>), not in a rule.</p>
+<p>This is measured, not a general warning. <code>tests/test_memory_tier_budget.py</code> sets a per-file ceiling on each rule and an aggregate ceiling on the whole always-on tier, and it is <strong>red on <code>origin/main</code> today</strong>, before any change of mine:</p>
+<pre><code>FAILED test_per_file_ceiling[claude/rules/background-jobs.md-1150] - 1342 &gt; 1150
+FAILED test_per_file_ceiling[claude/rules/communication.md-3100]   - 6011 &gt; 3100
+FAILED test_per_file_ceiling[claude/rules/delegation.md-2600]      - 3647 &gt; 2600
+FAILED test_aggregate_ceiling                                      - 30384 &gt; 29900
+7 failed, 12 passed
+</code></pre>
+<p>Run at commit <code>7e2df60</code> in a clean detached worktree. This is the strongest argument against &quot;just add a rule for it&quot;: the tier is 30.5 KB against a 29.9 KB ceiling and nothing is enforcing the limit, so every new rule is paid for by every future session.</p>
+<h3 id="an-agent-is-a-separate-model-instance-with-its-own-context-and-no-memory-of-yours">An agent is a separate model instance with its own context and no memory of yours</h3>
+<p>A subagent is another model run given a brief, working in its own context window, returning a result. It does not see your conversation — <code>claude/rules/delegation.md</code> requires every dispatch to state TASK, CONTEXT with explicit paths, CONSTRAINTS and an OUTPUT cap for exactly that reason.</p>
+<p>Two properties matter for the PR queue. First, an agent can be routed to a different model family, which is the only way to get a real second opinion; a same-family agent reviewing the same session's work echoes it. Second, an agent's working directory is set by its brief, and an absolute path written in a brief does not follow a worktree switch — which is why the skill insists every dispatched command starts with <code>cd &lt;absolute worktree path&gt; &amp;&amp; ...</code>.</p>
+<h3 id="settings-json-permissions-are-static-string-rules-the-classifier-is-a-model-that-judges-what-they-do-not-cover"><code>settings.json</code> permissions are static string rules; the classifier is a model that judges what they do not cover</h3>
+<p><code>claude/settings.json</code> carries a <code>permissions</code> block with four relevant keys, currently 75 <code>allow</code> entries, 43 <code>deny</code>, 3 <code>ask</code>, and <code>&quot;defaultMode&quot;: &quot;auto&quot;</code>. Entries are patterns over tool calls — <code>Bash(git reset --hard *)</code> in deny, <code>Bash(sudo *)</code> in ask, bare <code>Grep</code> in allow.</p>
+<p>These are static. They cannot express &quot;allow this if the user asked for it&quot;. That gap is what the classifier fills, and there are <strong>two</strong> classifiers, which is the source of the confusion in item 3:</p>
+<ul>
+<li><strong>The repo's own hook</strong>, <code>claude/hooks/approval_classifier.py</code>, registered on <code>PermissionRequest</code>. It sends the pending call plus session context to a model, reads <code>claude/hooks/approval_classifier_rules.md</code> as its policy, and logs a verdict to <code>~/.cache/claude/approval-classifier.log</code> in the form <code>DENY: Bash — &lt;prose reason&gt;</code>.</li>
+<li><strong>Claude Code's native auto-mode classifier</strong>, active because <code>defaultMode</code> is <code>auto</code>. It emits bracketed category labels. The <code>auto-mode-probe</code> skill exists to test it and names one of its categories, <code>Credential Materialization</code>.</li>
+</ul>
+<p>Evidence they are different, from the live log: <code>grep -c &quot;Merge Without Review&quot;</code> returns <strong>0</strong> and <code>Self-Approval</code> returns <strong>0</strong>, while <code>Self-Modification</code> returns <strong>1</strong> — and that single hit is prose inside a reason string, not a bracketed label. So the <code>[Merge Without Review]</code> and <code>[Self-Approval]</code> flags in your bug list came from the <strong>native</strong> classifier, which no file in this repo governs.</p>
+<p>Order of operations, plainly: a static <code>deny</code> or <code>ask</code> entry settles the call outright. Anything not settled reaches the classifiers. A verdict of <code>unsure</code> does not block — it prints a warning and falls through to a normal permission prompt.</p>
+<h2 id="the-seven-bugs-one-verdict-each">The seven bugs, one verdict each</h2>
+<h3 id="1-gh-pr-edit-body-file-writes-nothing-already-in-the-skill-one-clause-added">1. <code>gh pr edit --body-file</code> writes nothing — already in the skill, one clause added</h3>
+<p><strong>What happened.</strong> Every agent that tried to set a PR body hit a Projects-classic GraphQL deprecation error, and the body was not written. The workaround is <code>gh api -X PATCH repos/&lt;owner&gt;/&lt;repo&gt;/pulls/&lt;n&gt; -F body=@&lt;file&gt;</code>.</p>
+<p><strong>Why.</strong> <code>gh pr edit</code> resolves the PR through a GraphQL query that touches Projects-classic fields GitHub has retired. The REST endpoint does not.</p>
+<p><strong>Where the fix belongs: the skill, and it was already there</strong> — <code>review-pr-queue</code> table row 1, verbatim including the <code>gh api</code> replacement. I added one clause: the command can report success while writing nothing, so confirm with <code>gh pr view &lt;n&gt; --json body</code>. That is the part that turns a known bug into a check you actually perform. Nowhere near a hook: this is a fact about one CLI subcommand in one situation, and a hook that intercepted <code>gh pr edit</code> would fire in repos where it works fine.</p>
+<h3 id="2-github-refuses-self-approval-a-fact-to-know-not-a-bug-to-fix">2. GitHub refuses self-approval — a fact to know, not a bug to fix</h3>
+<p><strong>What happened.</strong> <code>gh pr review --approve</code> errors because the PR author and the authenticated <code>gh</code> account are the same person. Attempting it also trips a <code>[Self-Approval]</code> flag.</p>
+<p><strong>Why.</strong> GitHub's own API rule. Nothing local is involved.</p>
+<p><strong>Where the fix belongs: nowhere.</strong> It is already table row 2 of the skill, including the operationally important half — reviews can only land as <code>COMMENTED</code>, and if a merge gate wants an approval state you say so rather than retrying. Retrying is what trips the flag, so the guidance is &quot;know this&quot;, and it is written down.</p>
+<h3 id="3-the-classifier-denied-merges-inconsistently-a-procedure-and-it-gets-its-own-section-below">3. The classifier denied merges inconsistently — a procedure, and it gets its own section below</h3>
+<p><strong>What happened.</strong> Four <code>gh pr merge</code> calls were allowed, then one was denied as <code>[Merge Without Review]</code>. A settings edit was denied as <code>[Self-Modification]</code>.</p>
+<p><strong>Why, in part.</strong> The <code>[Merge Without Review]</code> label is the native classifier's, which nothing here configures. The <code>[Self-Modification]</code> half has a documented cause in this repo — see the compound-command finding below.</p>
+<p><strong>Where the fix belongs: the skill, as behaviour after a denial.</strong> Already partly there (table row 3: post a real review first, and if it still refuses, ask rather than route around it). I extended it with what you asked for — surfacing. Details in the dedicated section.</p>
+<h3 id="4-openai-routed-reviewers-died-on-a-content-flag-the-skill-needed-the-family-names">4. OpenAI-routed reviewers died on a content flag — the skill needed the family names</h3>
+<p><strong>What happened.</strong> Adversarial reviewers routed to OpenAI models died twice with an HTTP 400 cybersecurity content flag while reviewing a sanitiser. Kimi completed the same work; GLM answered but stalled through six retries on one task.</p>
+<p><strong>Why.</strong> A provider-side classifier reads security prose out of its frame. <code>claude/rules/sensitive-content.md</code> documents the same failure from the Anthropic side and its conclusion applies here: the vocabulary <em>is</em> the research, so rewriting to dodge the classifier degrades the work. Rerouting is the fix.</p>
+<p><strong>Where the fix belongs: the skill's failure-mode table.</strong> Row 4 already said &quot;route that one review to a different family&quot;, which is unactionable without knowing which family. I added the measurement — OpenAI 400s twice, Kimi completes, GLM stalls — and made Kimi the named first re-route.</p>
+<p><strong>What I deliberately did not do:</strong> put this in <code>claude/rules/delegation.md</code> or the <code>council</code> skill. Delegation is always-on and already 3647 bytes over a 2600 ceiling. <code>council</code> is about panel composition, not about which seat survives a security review. And the finding is provider-drift-prone — it is one observation about today's endpoints, which is exactly the kind of thing that belongs in a table row that gets corrected, not in a rule loaded into every session for a year.</p>
+<h3 id="5-stale-local-main-made-five-disjoint-prs-look-like-a-nine-way-tangle-already-in-the-skill">5. Stale local <code>main</code> made five disjoint PRs look like a nine-way tangle — already in the skill</h3>
+<p><strong>What happened.</strong> Local <code>main</code> was three commits behind at session start, so every <code>git diff main...branch</code> included commits already upstream, inflating each diffstat.</p>
+<p><strong>Why.</strong> <code>main...branch</code> is computed from the merge base with your <em>local</em> <code>main</code> ref, which a <code>git fetch</code> updates and nothing else does.</p>
+<p><strong>Where the fix belongs: the skill, and it is already there</strong> — the section &quot;Establish scope against the remote, never local main&quot;, complete with the commands and the exact outcome from that session (&quot;this turned an apparent nine-way tangle into five disjoint single-file PRs plus three genuine overlaps&quot;). I changed nothing.</p>
+<p>A hook was worth considering here and I rejected it. A <code>PreToolUse</code> hook could refuse <code>git diff</code> against a stale local <code>main</code>, but &quot;stale&quot; needs a network round trip on every diff, the correct base is not always <code>origin/main</code>, and the failure is loud once you know to look for it. A skill line costs nothing and covers it.</p>
+<h3 id="6-a-variable-revision-inside-a-loop-returned-empty-three-words-added-to-the-rule">6. A variable revision inside a loop returned empty — three words added to the rule</h3>
+<p><strong>What happened.</strong> <code>git show</code> with a variable revision inside a loop silently returned empty output under the background-job git guard.</p>
+<p><strong>Why.</strong> In a worktree-isolated background job, the CLI's git guard requires the command <em>text</em> to prove every touched path stays inside the worktree. A revision it cannot read statically cannot be proven safe.</p>
+<p><strong>I could not reproduce this.</strong> I ran the literal and variable forms back to back in my worktree and both printed identical output with exit 0. The reason is that this job is not worktree-isolated, so the guard was not active. The guard is in the Claude Code CLI, not in this repo, so there is nothing here to test it against. I am recording your report as the source.</p>
+<p><strong>Where the fix belongs: <code>claude/rules/background-jobs.md</code>, extended by one clause.</strong> PR #119 (<code>65822c3</code>) already added a four-bullet list of what the guard refuses, and one bullet covers &quot;variable or <code>$(...)</code> <strong>command names</strong>&quot;. A variable <em>revision</em> is an argument, not a command name — genuinely not covered. I widened that bullet to name revisions and added the symptom, because the discrepancy is the dangerous part: the rule describes a guard that <em>refuses</em>, and what you saw was empty output. A refusal you can see costs a retry; an empty result you cannot see produces a confidently wrong answer.</p>
+<p>The cost is honest: this file was 1342 bytes against a 1150 ceiling before my change and is 1477 after. I judged 135 bytes worth it for a silent-wrong-answer failure mode, but the tier being over budget is a real finding for you, not a footnote.</p>
+<h3 id="7-inline-review-comments-are-on-a-different-endpoint-already-in-the-skill">7. Inline review comments are on a different endpoint — already in the skill</h3>
+<p><strong>What happened.</strong> <code>gh pr view --json reviews</code> returned review objects with empty bodies. The substance was in inline comments.</p>
+<p><strong>Why.</strong> GitHub models a review and its inline comments as separate resources. The review object carries only the summary body, which is empty when the reviewer wrote only line comments.</p>
+<p><strong>Where the fix belongs: the skill, and it is the very first section</strong> — &quot;Read the comments that exist, not the ones the API shows first&quot;, with the <code>gh api repos/{owner}/{repo}/pulls/&lt;n&gt;/comments</code> call and its <code>--jq</code>. I changed nothing.</p>
+<h2 id="surfacing-a-classifier-rejection-what-it-can-and-cannot-be">Surfacing a classifier rejection: what it can and cannot be</h2>
+<p>You wrote: <em>&quot;When there's a rejection, show me the exact diff and rationale. Or surface in PR for me to review. I feel like this should maybe be a skill or rule.&quot;</em></p>
+<p><strong>A skill, and I built it into <code>review-pr-queue</code>. Here is the honest limit first: nothing in this repo can veto a classifier decision.</strong> The native auto-mode classifier runs inside the CLI. Even the repo's own <code>approval_classifier.py</code> runs as a hook and returns a verdict; a second hook cannot overrule the first. So &quot;surface the rejection&quot; cannot mean &quot;and then proceed&quot;. The only thing a rule or skill can change is what the model does <strong>next</strong> — and the default next action, which is to quietly rephrase and retry, is the one that actually harms you. It converts a decision you should see into one you never hear about.</p>
+<p>What surfacing means concretely, and what I wrote into the skill:</p>
+<ul>
+<li>Quote the verdict text <strong>verbatim</strong>. Not &quot;the classifier objected&quot; — the actual sentence. The repo hook's reasons are prose and often name the specific thing that tripped it; the log line for the one <code>Self-Modification</code> denial on record reads in part <em>&quot;this is inspecting the agent's own permission/settings configuration ... rather than routine project work — no clear user instruction in recent messages directs this specific inspection&quot;</em>, which tells you the fix is a sentence of intent, not a permission change.</li>
+<li>Name the exact diff or command that was refused.</li>
+<li>Put both in a real PR comment <strong>and</strong> in the closing summary, so it survives in the place the decision lives.</li>
+<li>Then stop. Do not re-run the same intent in a different shape.</li>
+</ul>
+<p><strong>The data point that makes this concrete, and it is not what it looks like.</strong> In this session's predecessor, a compound <code>git commit &amp;&amp; git push</code> of a <code>claude/settings.json</code> change was denied as <code>[Self-Modification]</code>, while the same commit split into separate calls went through. That reads like an evasion recipe. It is not — it is documented behaviour. <code>claude/hooks/approval_classifier_rules.md</code> states:</p>
+<blockquote>
+<p>Chained commands joined with <code>&amp;&amp;</code> are one action — evaluate the whole chain.</p>
+</blockquote>
+<p>So the compound call was judged as a single action containing a settings modification, and denied on its most sensitive component. The split calls were judged individually, and each one on its own did not match. That is the policy working as written, not a bug.</p>
+<p>The right lesson is therefore <strong>not</strong> &quot;split the command to get past it&quot;, and I deliberately did not write that anywhere. It is that one Bash call should do one thing, so each verdict is about one action — which the background-jobs rule already says for a different reason (&quot;separate git calls from file writes&quot;). If a split call is <em>itself</em> denied, that is a real answer: ask.</p>
+<p><strong>The genuinely unexplained part stays unexplained.</strong> A subagent pushed an equivalent settings change without being blocked at all, and four merges were allowed before one was refused. Both point at the classifier seeing different context in different runs, which the repo has already been bitten by once — the <code>## Learnings</code> entry dated 2026-09-08 records that the extractor had been feeding the classifier an empty string for five months. I did not investigate further; if it recurs, <code>~/.cache/claude/approval-classifier.log</code> and the <code>CONTEXT: users=N tools=M</code> line are where to start, and a subagent's own PermissionRequest verdicts landing in that same log would settle whether subagents are classified at all.</p>
+<h2 id="reviewing-with-subagents-then-merging-the-sequence-written-down">Reviewing with subagents, then merging: the sequence, written down</h2>
+<p>You wrote: <em>&quot;I mean, we should leave comments when reviewing with subagents, and edit with subagents? Then that's when we merge.&quot;</em></p>
+<p>That is a real gap and it is now a section in <code>review-pr-queue</code>. The skill already fanned out fixers and verifiers, but the verifier's findings only ever existed in a returned agent message. Nothing on the pull request recorded that the branch had been read, so the merge had no stated reason and the next reader started from zero.</p>
+<p>The sequence the skill now states: the adversarial reader <strong>posts</strong> its findings to the PR as a <code>COMMENT</code> review, the fixer lands the edit against them, and the merge happens only after both exist. Posting comes before merging, because the review thread of a merged PR is where the reasoning has to be found later. And a refused action belongs in that same trace, which is where this joins the previous section.</p>
+<h2 id="what-i-did-not-build-and-why">What I did not build, and why</h2>
+<ul>
+<li><strong>No new rule file.</strong> Nothing on this list is relevant in every session — six items are specific to working a GitHub PR queue and one is specific to worktree-isolated background jobs. The always-on tier is already 30.5 KB against a 29.9 KB ceiling with the test red.</li>
+<li><strong>No new hook.</strong> Every candidate fails the same way: a hook can only pattern-match strings, and each of these needs either a network check (item 5), a judgement call (item 3), or knowledge of a remote API's shape (items 1 and 7). The one mechanical candidate — intercepting <code>gh pr edit</code> — would misfire in every other repo, since the bug is not universal.</li>
+<li><strong>No change to <code>approval_classifier_rules.md</code>.</strong> Loosening the classifier is a security decision and yours to make. My reading is that it behaved correctly on the compound command; the inconsistency is worth investigating before anything is relaxed.</li>
+<li><strong>No change to <code>claude/rules/delegation.md</code> or the <code>council</code> skill</strong> for the model-family finding, for the budget and drift reasons in item 4.</li>
+</ul>
+<h2 id="where-this-landed">Where this landed</h2>
+<p>The explainer is this file. The code change is <strong>PR #148</strong>, https://github.com/yulonglin/dotfiles/pull/148 — two files, 15 insertions, 3 deletions.</p>
+
+</div>
+</div>
+
+<script>
+const tocLinks = Array.from(document.querySelectorAll(".toc a"));
+const targets = tocLinks
+  .map((a) => ({ a, el: document.getElementById(a.getAttribute("href").slice(1)) }))
+  .filter((t) => t.el);
+if ("IntersectionObserver" in window && targets.length) {
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      const hit = targets.find((t) => t.el === e.target);
+      if (!hit) return;
+      tocLinks.forEach((a) => a.classList.remove("on"));
+      hit.a.classList.add("on");
+    });
+  }, { rootMargin: "-12% 0px -75% 0px" });
+  targets.forEach((t) => io.observe(t.el));
+}
+</script>
+<!-- annotation-layer v2 -->
+<style>
+:root{--an-bg:#fff;--an-ink:#1a1a1a;--an-soft:#5d5a55;--an-rule:#d9d4cc;--an-accent:#bd5d3a;
+ --an-mark:#fbe6a2;--an-bad:#a33f2a;--an-good:#2f6b4f;--an-good-bg:#e4f0e9;--an-field:#faf9f7}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--an-bg:#1f2124;--an-ink:#eceae6;
+ --an-soft:#a9a59e;--an-rule:#3a3d42;--an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;
+ --an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}}
+:root[data-theme="dark"]{--an-bg:#1f2124;--an-ink:#eceae6;--an-soft:#a9a59e;--an-rule:#3a3d42;
+ --an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;--an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}
+mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--an-accent);cursor:pointer;border-radius:2px}
+/* A suggested edit must not read as a comment highlight: the original is
+   struck rather than filled, and the replacement carries the insert colour. */
+mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-through;
+ text-decoration-color:var(--an-bad);text-decoration-thickness:2px;cursor:pointer;border-radius:2px}
+.anins{background:var(--an-good-bg);color:var(--an-good);border-bottom:2px solid var(--an-good);
+ border-radius:2px;padding:0 .12em;cursor:pointer}
+[data-annotation-layer]{font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;color:var(--an-ink);line-height:1.5}
+[data-annotation-layer] *{box-sizing:border-box}
+#anPop{position:absolute;z-index:1050;display:none;background:var(--an-bg);border:1px solid var(--an-rule);
+ border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.18);padding:.6rem;width:min(20rem,calc(100vw - 1.5rem));
+ max-height:min(80vh,26rem);overflow:auto}
+/* A control that would overwrite unsaved words points at them instead. */
+#anPop.nudge{outline:2px solid var(--an-accent);outline-offset:2px}
+/* iOS zooms the whole page when a focused field is under 16px. */
+@media (pointer:coarse){#anPop textarea,#anExportText{font-size:16px}}
+#anPop textarea{width:100%;min-height:4.5rem;border:1px solid var(--an-rule);border-radius:5px;
+ background:var(--an-field);color:var(--an-ink);padding:.4rem;font:inherit;font-size:.86rem;resize:vertical}
+.anbtn{background:var(--an-accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
+ font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}
+.anbtn.ghost{background:transparent;color:var(--an-soft);border:1px solid var(--an-rule)}
+.anbtn.ghost.danger,.anbtn.ghost.tiny.danger{color:var(--an-bad);border-color:var(--an-bad)}
+.anbtn[disabled]{opacity:.42;cursor:default}
+/* A copied comment is marked by taking its accent AWAY, never by adding a
+   chip: after the first round most of the list is copied, so anything
+   additive becomes noise on the majority. The fresh ones keep the accent and
+   are what the eye lands on. */
+.cmt.ancopied{border-left-color:var(--an-rule)}
+/* An armed control must not look like the button that just did nothing, so it
+   fills: the second click is visibly a different act from the first. */
+.anbtn.anarmed,.anbtn.ghost.danger.anarmed,.anbtn.ghost.tiny.danger.anarmed{
+ background:var(--an-bad);color:#fff;border-color:var(--an-bad)}
+.anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
+#anPop:not(.editing) #anDelete{display:none}
+/* The mode strip is deliberately NOT in .anrow: Save has to stay the first
+   control of that row, which is also its tab order. */
+.anmodebar{display:flex;gap:.3rem;margin-bottom:.45rem}
+.anmode{flex:1;background:transparent;color:var(--an-soft);border:1px solid var(--an-rule);
+ border-radius:5px;padding:.22rem .5rem;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer}
+.anmode.ansel{background:var(--an-accent);color:#fff;border-color:var(--an-accent)}
+/* Reopening an existing note is not the place to change what it is. */
+#anPop.editing .anmodebar{display:none}
+.cmt.ansuggest{border-left-color:var(--an-good)}
+.cmt .q.struck{text-decoration:line-through}
+.cmt .ins{color:var(--an-good)}
+/* Save leads: it is the first button in the DOM, so it is also first in tab
+   order. Delete is pushed to the far end so it is never the near miss. */
+.anrow{display:flex;gap:.4rem;align-items:center;margin-top:.45rem;flex-wrap:wrap}
+#anDelete{margin-left:auto}
+.anhint{color:var(--an-soft);font-size:.72rem;margin-top:.35rem}
+.anhint kbd{font:inherit;font-size:.95em;border:1px solid var(--an-rule);border-bottom-width:2px;
+ border-radius:4px;padding:0 .25rem;background:var(--an-field)}
+#anComments{max-width:48rem;margin:3rem auto 5rem;padding:0 1rem}
+#anComments h2{font-size:1.2rem;margin:0 0 .5rem;padding-bottom:.32rem;border-bottom:1px solid var(--an-rule)}
+#anComments .anscope{color:var(--an-soft);font-size:.86rem;margin:0 0 .6rem}
+.anbar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem}
+.anacts{display:flex;gap:.4rem;margin-top:.4rem}
+.ancount{color:var(--an-soft);font-size:.87rem}
+.ancount.warn{color:var(--an-bad);font-weight:650}
+.cmt{background:var(--an-bg);border:1px solid var(--an-rule);border-left:3px solid var(--an-accent);
+ border-radius:0 7px 7px 0;padding:.6rem .8rem;margin:.5rem 0;font-size:.88rem;overflow-wrap:anywhere}
+.cmt .q{color:var(--an-soft);font-style:italic;margin-bottom:.3rem}
+.cmt .where{font-size:.72rem;color:var(--an-soft);text-transform:uppercase;letter-spacing:.06em}
+.cmt .orphan{font-size:.74rem;color:var(--an-bad)}
+#anExport{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1060;
+ background:var(--an-bg);border:1px solid var(--an-rule);border-radius:10px;padding:.9rem;
+ width:min(46rem,92vw);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+#anExport .exphead{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap}
+#anExport .exphint{color:var(--an-soft);font-size:.8rem}
+#anExport .anbtn{margin-left:auto}
+#anExportText{width:100%;height:min(24rem,55vh);border:1px solid var(--an-rule);border-radius:6px;
+ background:var(--an-field);color:var(--an-ink);padding:.6rem;font-family:ui-monospace,Menlo,monospace;
+ font-size:.82rem;resize:vertical}
+.anok{background:var(--an-good-bg);color:var(--an-good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+.anwarn{background:var(--an-bad);color:#fff;padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+/* Toggle controls. The generator emits the markup; this styles it, so a
+   hand-written page that emits the same `data-an-state-id` wrapper gets the
+   look, the persistence and the export without copying any CSS.
+   The bullet is dropped only inside an UNORDERED list: a bare `li.antask`
+   also reaches an ordered checklist, where `list-style:none` deletes the step
+   numbers the author wrote the list as a numbered one to keep. */
+ul>li.antask{list-style:none}
+.anstate{display:inline-flex;align-items:baseline;gap:.45em}
+.anstatebox{flex:none;align-self:center;width:1em;height:1em;accent-color:var(--an-accent);cursor:pointer}
+.anstatebtn{flex:none;background:var(--an-field);color:var(--an-ink);border:1px solid var(--an-rule);
+ border-radius:999px;padding:.05em .6em;font:inherit;font-size:.8em;font-weight:650;
+ white-space:nowrap;cursor:pointer}
+.anstatebtn:hover{border-color:var(--an-accent);color:var(--an-accent)}
+.anstatebtn:focus-visible,.anstatebox:focus-visible{outline:2px solid var(--an-accent);outline-offset:2px}
+#anBadge{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
+ bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;background:var(--an-bg);color:var(--an-ink);
+ border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
+ font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+#anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
+</style>
+<div data-annotation-layer="v2" data-key="review-explainer">
+<section id="anComments">
+<h2 id="your-comments">Your comments</h2>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
+<div class="anbar">
+  <span class="ancount" id="anCount">No comments yet</span>
+  <button class="anbtn" id="anCopy">Copy all</button>
+  <button class="anbtn ghost danger" id="anClearCopied">Delete copied</button>
+  <button class="anbtn ghost danger" id="anClear">Delete all</button>
+  <span id="anToast"></span>
+</div>
+<div id="anList"></div>
+</section>
+<div id="anPop" role="dialog" aria-label="Comment">
+  <div class="anmodebar" role="group" aria-label="Annotation mode">
+    <button class="anmode ansel" type="button" id="anModeComment" aria-pressed="true">Comment</button>
+    <button class="anmode" type="button" id="anModeEdit" aria-pressed="false">Suggest edit</button>
+  </div>
+  <textarea id="anTxt" placeholder="What do you think?"></textarea>
+  <div class="anrow">
+    <button class="anbtn" id="anSave">Save</button>
+    <button class="anbtn ghost" id="anCancel">Cancel</button>
+    <button class="anbtn ghost danger" id="anDelete">Delete</button>
+  </div>
+  <div class="anhint"><kbd>Enter</kbd> saves &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> newline &middot; <kbd>Esc</kbd> discards &middot; <kbd>Ctrl</kbd>+<kbd>E</kbd> switches mode</div>
+</div>
+<div id="anExport" role="dialog" aria-label="Export comments">
+  <div class="exphead">
+    <strong>Your comments as Markdown</strong>
+    <span class="exphint">already selected &mdash; copy with your usual shortcut</span>
+    <button class="anbtn ghost tiny" id="anExportClose">Close</button>
+  </div>
+  <textarea id="anExportText" readonly></textarea>
+</div>
+<button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
+</div>
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var root = document.querySelector("[data-annotation-layer]");
+var KEY = (root && root.dataset.key) || ("annot:" + document.title);
+// Namespaced with a PREFIX, never a suffix. With `KEY + "-draft"`, a page
+// titled "Spec-draft" owns the same key as the draft of a page titled "Spec",
+// so pressing Escape on one deletes the other's comments outright.
+var DIRTY = "an-dirty:" + KEY;
+var DRAFT = "an-draft:" + KEY;
+var STATES = "an-states:" + KEY;
+
+// ---- storage -------------------------------------------------------------
+// localStorage, and nothing else. An IndexedDB mirror, a backup key and a
+// scan of neighbouring keys all lived here and all came out: the mirror let a
+// save that raced its own asynchronous recovery destroy the comments it was
+// recovering; the backup key resurrected comments the user had deliberately
+// cleared; and the neighbour scan adopted a different document's comments
+// whenever one quote happened to appear on this page. The republish they were
+// meant to survive is already covered, because the generator fixes the key
+// (`data-key`) from the filename rather than the title.
+// `getItem` cannot say WHY it returned null: a missing key and a read the
+// browser refused look identical, and reading a refusal as "nothing stored"
+// overwrites the page with an assumed-empty value. A read that cares takes
+// lsRead and compares against FAILED.
+var FAILED = {};
+function lsRead(k){ try { return localStorage.getItem(k); } catch (e) { return FAILED; } }
+function lsGet(k){ var v = lsRead(k); return v === FAILED ? null : v; }
+function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
+
+// Stored as a bare array, which every generation of this layer can read. An
+// older deployed page does `JSON.parse(...).reduce(...)` on this value and
+// throws on an object, and that kills its whole script: no handlers, no
+// saving, a page that looks fine and silently does nothing.
+function readComments(){
+  var d; try { d = JSON.parse(lsGet(KEY) || "[]"); } catch (e) { return []; }
+  if (Array.isArray(d)) return d;
+  if (d && Array.isArray(d.comments)) return d.comments;  // envelope from a newer layer
+  return [];
+}
+// Not a per-tab counter: two tabs on one page would both hand out id 1.
+function newId(){ return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
+
+var comments = readComments(), notesUnsaved = false, statesUnsaved = false;
+// One refused-write signal for two writers. A lost tick is as lost as a lost
+// note -- on a page that is all checklist and no prose, which is what a review
+// queue is, the tick IS the work -- so both raise the same badge, the same
+// panel line and the same unload guard. Each writer clears only its own flag:
+// a `persist()` that succeeded says nothing about whether any state got
+// stored. `statesUnsaved` is not set from a write's return value at all -- it
+// is `pendingStates` being non-empty, one entry per control, and an entry
+// leaves that set only on evidence read back out of that control's own key.
+// See THE WRITE RULE in the toggle-state section.
+function unsaved(){ return notesUnsaved || statesUnsaved; }
+comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+
+// Per-comment export state. `copiedAt` is stamped only where the page-level
+// flag was cleared before -- a clipboard write that resolved, or a real copy
+// event on the fallback textarea -- so its absence means "never left this
+// browser". The asymmetry is deliberate: an unstamped comment can never fall
+// into the delete-copied set, so a miss costs one redundant copy rather than
+// a page of lost notes. That is also why there is no "delete the uncopied"
+// action: every comment predating this key reads as uncopied, so such a
+// button would have wiped every existing page on first run.
+function isCopied(c){ return !!c.copiedAt; }
+function copiedSet(){ return comments.filter(isCopied); }
+function freshCount(){ return comments.length - copiedSet().length; }
+function isDirty(){ return freshCount() > 0; }
+// The legacy page-level key is still written, in lockstep, because a stale tab
+// running an older layer reads it and would otherwise raise or stand down its
+// unload guard against state it cannot see.
+function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
+
+// One-time migration for comments written before `copiedAt` existed. Without
+// it every upgraded page announces "N of N not yet copied out" and re-arms the
+// unload guard for someone who copied everything out yesterday: a false alarm
+// on every page in existence, which is how a warning stops being read.
+// The legacy flag is EVIDENCE, not an inference -- an explicit "0" was written
+// by a copy that actually happened. A key that is MISSING is not evidence and
+// is left alone, so absence can never manufacture a safe state.
+(function migrateFromLegacyFlag(){
+  if (lsGet(DIRTY) !== "0" || !comments.length) return;
+  var now = Date.now(), touched = false;
+  comments.forEach(function(c){ if (!c.copiedAt) { c.copiedAt = now; touched = true; } });
+  if (touched) persist();
+})();
+var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
+var pending = null, editingId = null;
+// The box has two modes and one dirty flag. `dirty` is set by the first user
+// modification and by nothing else: an edit box OPENS with the selection
+// already in its textarea, so keying the draft autosave and the "a box with
+// words in it refuses to close" invariant on non-emptiness would turn every
+// opened edit box into an unclosable phantom draft nobody typed.
+var mode = "comment", dirty = false;
+// An entry written before v2 carries no `type`, so absence means comment.
+function isEdit(c){ return c && c.type === "edit"; }
+function bodyOf(c){ return isEdit(c) ? (c.replacement || "") : (c.note || ""); }
+
+window.addEventListener("pagehide", saveDraft);
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden") saveDraft();
+});
+window.addEventListener("beforeunload", function(e){
+  saveDraft();
+  // Two reasons to stop someone. Comments that exist and have not been copied
+  // out are the ordinary one -- they are in localStorage, and this warns only
+  // that nothing outside this browser has them yet. A refused write is the
+  // other, and it is the one that would otherwise be silent on a page carrying
+  // only a checklist: the ticks are not in localStorage at all, and closing
+  // the tab is when they stop existing.
+  if (!unsaved() && (!isDirty() || !comments.length)) return;
+  e.preventDefault(); e.returnValue = ""; return "";
+});
+// A second tab on the same page used to be last-writer-wins. Take its write
+// instead — unless a note is open here, because nothing may pull the DOM out
+// from under a range the user is still typing against.
+//
+// NOT FIXED HERE, and stated rather than implied: this is the wholesale
+// replace the toggle states used to carry, so a comment THIS tab wrote while
+// the store was refusing is dropped from `comments` when the other tab writes,
+// and the next `persist()` that succeeds clears `notesUnsaved` over its grave.
+// The toggle-state fix -- one localStorage key per item, so two writers
+// touching different items never touch the same key -- is the right shape here
+// too, and it does not transfer as written. A state is one value under one id
+// the document itself supplies; a comment is a member of an ordered array with
+// an id this layer mints at random, and the array is the unit that add, edit,
+// delete, `copiedAt` and delete-copied all operate on. Per-comment keys mean
+// enumerating the store by prefix to read them back, a tombstone to express a
+// delete, and a compatibility break with every deployed layer generation,
+// which reads this key as a bare array. That is its own project with its own
+// tests, not a copy of this one.
+window.addEventListener("storage", function(e){
+  if (e.key !== KEY || isOpen()) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = readComments();
+  comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+  restoreHighlights(); render();
+});
+
+function inLayer(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  return !!(node && node.closest && node.closest("[data-annotation-layer]"));
+}
+function sectionOf(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  var sec = node && node.closest ? node.closest("section") : null;
+  if (sec) { var h = sec.querySelector("h1,h2,h3"); if (h) return h.textContent.trim(); }
+  while (node && node !== document.body) {
+    var p = node.previousElementSibling;
+    while (p) { if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim(); p = p.previousElementSibling; }
+    node = node.parentNode;
+  }
+  return "document";
+}
+function isOpen(){ return pop.style.display === "block"; }
+function hasText(){ return !!txt.value.trim(); }
+// `rect` is viewport-relative. Measure the box while it is laid out but not
+// yet painted, so it never appears at the wrong place for one frame — that
+// single-frame jump is itself a flicker.
+function placePop(rect){
+  pop.style.visibility = "hidden";
+  pop.style.display = "block";
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  var top = rect.bottom + 8;
+  if (top + h > vh - 8) top = rect.top - h - 8;             // no room below: flip above
+  top = Math.max(8, Math.min(top, Math.max(8, vh - h - 8))); // and keep it on screen either way
+  pop.style.left = (Math.max(8, Math.min(rect.left, vw - w - 12)) + window.scrollX) + "px";
+  pop.style.top = (top + window.scrollY) + "px";
+  pop.style.visibility = "";
+}
+// Words the user has not saved are not something another control may
+// overwrite: clicking a second highlight used to replace the text outright.
+// `focus` is false on the touch path, where focusing a field while iOS shows
+// its selection handles collapses the selection.
+function nudge(focus){
+  if (focus !== false) txt.focus();
+  pop.classList.add("nudge");
+  setTimeout(function(){ pop.classList.remove("nudge"); }, 700);
+}
+// Applies a mode WITHOUT touching the textarea. The prefill belongs to the
+// user-driven switch below; the restore paths (an existing entry, a recovered
+// draft) supply their own text and must not have it overwritten.
+function setModeState(next){
+  mode = next;
+  var isE = mode === "edit";
+  $("anModeComment").classList.toggle("ansel", !isE);
+  $("anModeEdit").classList.toggle("ansel", isE);
+  $("anModeComment").setAttribute("aria-pressed", isE ? "false" : "true");
+  $("anModeEdit").setAttribute("aria-pressed", isE ? "true" : "false");
+  txt.placeholder = isE ? "Replacement text; an empty box suggests deleting it"
+                        : "What do you think?";
+}
+// The user-driven switch rewrites the textarea, so it declines while there are
+// unsaved words and points at them instead, exactly as a second highlight
+// click does. Reopening an existing entry is not the place to change its kind,
+// so the strip is hidden then and this is a no-op.
+function switchMode(next){
+  if (mode === next || editingId !== null) return;
+  if (dirty) { nudge(); return; }
+  setModeState(next);
+  txt.value = (next === "edit" && pending) ? pending.quote : "";
+  dirty = false;
+  txt.focus();
+}
+$("anModeComment").onclick = function(){ switchMode("comment"); };
+$("anModeEdit").onclick = function(){ switchMode("edit"); };
+
+function openEdit(c, anchor, focus){
+  if (isOpen() && editingId !== c.id && dirty) { nudge(focus); return; }
+  editingId = c.id; pending = null;
+  setModeState(isEdit(c) ? "edit" : "comment");
+  txt.value = bodyOf(c);
+  dirty = false;
+  pop.classList.add("editing");
+  placePop(anchor ? anchor.getBoundingClientRect() : { left: 16, top: 100, bottom: 100 });
+  if (focus !== false) txt.focus();
+}
+// Both parts of a suggested edit carry the entry id, as a comment highlight
+// does, so clicking the strikethrough or the replacement reopens the same box.
+document.addEventListener("click", function(ev){
+  var m = ev.target.closest && ev.target.closest("[data-cid]");
+  if (!m || pop.contains(ev.target)) return;
+  var c = comments.find(function(x){ return x.id === Number(m.dataset.cid); });
+  if (!c) return;
+  ev.preventDefault(); openEdit(c, m);
+});
+
+// Wraps a range in a highlight. surroundContents refuses a range that crosses
+// element boundaries, so fall back to lifting the contents out and wrapping.
+function wrapRange(range, id, title, cls){
+  var m = document.createElement("mark");
+  m.className = cls || "note"; m.title = title; m.dataset.cid = String(id);
+  try { range.surroundContents(m); }
+  catch (e) { m.appendChild(range.extractContents()); range.insertNode(m); }
+  return m;
+}
+// The ONE place the replacement span is created, rewritten or removed. Three
+// call sites need it (save a new edit, revise one, restore one on load) and
+// they drift apart if each does its own DOM work: an edit revised to empty has
+// to lose its span and become pure strikethrough again.
+function renderEditInline(c){
+  var m = document.querySelector('mark.anedit[data-cid="' + c.id + '"]');
+  if (!m) return;
+  m.title = c.replacement ? "suggested: " + c.replacement : "suggested deletion";
+  var s = document.querySelector('span.anins[data-cid="' + c.id + '"]');
+  if (!c.replacement) { if (s) s.remove(); return; }
+  if (!s) {
+    s = document.createElement("span");
+    s.className = "anins"; s.dataset.cid = String(c.id);
+    // The marker docTextNodes() looks for. Without it the first saved edit
+    // corrupts the anchor of every comment after it, because the replacement's
+    // words join the text that quotes are searched in.
+    s.setAttribute("data-an-inserted", "1");
+    m.parentNode.insertBefore(s, m.nextSibling);
+  }
+  s.textContent = c.replacement;
+}
+// Every text node of the page, skipping the layer's own UI, existing
+// highlights, and anything the layer itself put on the page. Re-anchoring
+// matches ORIGINAL document text only.
+function docTextNodes(){
+  var host = document.querySelector(".doc") || document.querySelector("main") || document.body;
+  var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, { acceptNode: function(n){
+    var p = n.parentNode;
+    if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
+    // `.anstatebtn` holds the state WORD, which the layer wrote and the reader
+    // did not: letting it join the searched text anchors a quote onto the
+    // control, where the next cycle overwrites the highlight.
+    if (p.closest("mark.note") || p.closest("mark.anedit") || p.closest("[data-an-inserted]") ||
+        p.closest(".anstatebtn") ||
+        p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  var out = [], n;
+  while ((n = walker.nextNode())) out.push(n);
+  return out;
+}
+// Collapses runs of whitespace to one space, and records where each kept
+// character sits in the raw text, so a match can be mapped back to real nodes.
+function collapsedIndex(nodes){
+  var norm = "", rawAt = [], raw = 0, lastWasSpace = false;
+  for (var k = 0; k < nodes.length; k++) {
+    var v = nodes[k].nodeValue;
+    for (var i = 0; i < v.length; i++, raw++) {
+      var isSpace = /\s/.test(v[i]);
+      if (isSpace && lastWasSpace) continue;
+      norm += isSpace ? " " : v[i];
+      rawAt.push(raw);
+      lastWasSpace = isSpace;
+    }
+  }
+  return { norm: norm, rawAt: rawAt };
+}
+// Finds a stored quote again after a reload. Selection.toString() gives
+// rendered text, where a newline inside a paragraph reads as a single space,
+// so the comparison has to collapse whitespace.
+function rangeForQuote(quote){
+  if (!quote) return null;
+  var nodes = docTextNodes();
+  if (!nodes.length) return null;
+  var starts = [], raw = 0;
+  for (var k = 0; k < nodes.length; k++) { starts.push(raw); raw += nodes[k].nodeValue.length; }
+  var idx = collapsedIndex(nodes);
+  var needle = quote.replace(/\s+/g, " ").trim();
+  if (!needle) return null;
+  var at = idx.norm.indexOf(needle);
+  if (at < 0) return null;
+  var rawFrom = idx.rawAt[at], rawTo = idx.rawAt[at + needle.length - 1] + 1;
+  function locate(offset, isEnd){
+    for (var j = 0; j < nodes.length; j++) {
+      var base = starts[j], end = base + nodes[j].nodeValue.length;
+      if (isEnd ? (offset > base && offset <= end) : (offset >= base && offset < end)) return [nodes[j], offset - base];
+    }
+    return null;
+  }
+  var s = locate(rawFrom, false), f = locate(rawTo, true);
+  if (!s || !f) return null;
+  var r = document.createRange(); r.setStart(s[0], s[1]); r.setEnd(f[0], f[1]);
+  return r;
+}
+// A reload rebuilds the DOM, so saved highlights are gone while the comments
+// survive in localStorage. Put the marks back, or a comment cannot be clicked
+// open to edit or delete. Quotes no longer on the page stay listed as orphans.
+function restoreHighlights(){
+  var missed = 0;
+  comments.forEach(function(c){
+    if (document.querySelector('mark[data-cid="' + c.id + '"]')) return;
+    var r = rangeForQuote(c.quote);
+    if (!r) { missed++; return; }
+    try {
+      if (isEdit(c)) { wrapRange(r, c.id, "", "anedit"); renderEditInline(c); }
+      else wrapRange(r, c.id, c.note, "note");
+    } catch (e) { missed++; }
+  });
+  return missed;
+}
+function hasMark(c){ return !!document.querySelector('mark[data-cid="' + c.id + '"]'); }
+// A selection touching an existing suggested edit, if there is one. Overlapping
+// edits cannot be exported appliably, and a quote that spans inserted text can
+// never be re-anchored, so such a selection is declined rather than annotated.
+function editOverlapping(range){
+  var els = document.querySelectorAll('mark.anedit[data-cid], span.anins[data-cid]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i], hit = false;
+    try { hit = range.intersectsNode(el); } catch (e) { hit = false; }
+    if (!hit) continue;
+    var cid = Number(el.dataset.cid);
+    var c = comments.find(function(x){ return x.id === cid; });
+    if (c) return { entry: c, el: el };
+  }
+  return null;
+}
+
+// Opens the note box for the current selection. autofocus is false on touch:
+// focusing a textarea while iOS is showing its selection handles collapses the
+// selection before the user has typed anything.
+//
+// This function only ever OPENS. Nothing about the selection closes the box —
+// that asymmetry is the whole flicker fix. Opening the box focuses the
+// textarea, focusing collapses the document selection, and the old code read
+// that collapse back as "the user deselected" and closed the box it had just
+// opened. The box now closes only on Save, Cancel/Escape, or a press outside
+// it while it is still empty.
+function openForSelection(autofocus){
+  if (editingId !== null) return false;
+  var sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  var text = sel.toString().trim();
+  if (!text) return false;
+  if (inLayer(sel.anchorNode) || inLayer(sel.focusNode)) return false;
+  // Already open on this exact selection: do not wipe a half-typed note.
+  if (pending && pending.quote === text && isOpen()) return true;
+  // Open on some other selection the user has MODIFIED: leave it be rather
+  // than throwing away work. The test is `dirty`, not non-emptiness: an
+  // untouched prefilled edit box yields to a fresh selection, and a dirty
+  // EMPTY edit box (a pending deletion) is work and must not be overwritten.
+  if (isOpen() && dirty) return true;
+  var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
+  // Overlaps an existing suggested edit: point at that edit rather than open a
+  // second box on the range.
+  var hit = editOverlapping(range);
+  if (hit) { openEdit(hit.entry, hit.el, autofocus); nudge(autofocus); return true; }
+  editingId = null; pop.classList.remove("editing");
+  // Comment is the default on every fresh selection. A mode that stayed where
+  // it was last left would silently change what select-type-Enter means.
+  setModeState("comment");
+  pending = { quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() };
+  placePop(rect);
+  txt.value = "";
+  dirty = false;
+  if (autofocus) txt.focus();
+  return true;
+}
+// Synchronous, so the focus stays inside the user gesture — Safari only
+// raises the soft keyboard for a focus() called within one.
+document.addEventListener("mouseup", function(ev){
+  if (pop.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest("[data-cid]")) return;
+  clearTimeout(selTimer);
+  openForSelection(true);
+});
+// A press outside closes a box the user has not modified. A box with words the
+// user put there stays open: no gesture the user did not mean as "save" may
+// commit anything, and plenty of ordinary ones land here — right-clicking your
+// own selection to copy it, grabbing the scrollbar to reread the passage, or
+// pressing Clear all and then cancelling the confirm.
+//
+// The test is the dirty flag, NOT emptiness, because an edit box opens with
+// the selection already in it. Keyed on emptiness, opening one and changing
+// your mind would leave a box that cannot be dismissed.
+document.addEventListener("mousedown", function(ev){
+  if (!isOpen() || pop.contains(ev.target)) return;
+  if (dirty) return;
+  closePop();
+});
+// iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
+// handler makes the page uncommentable on iPhone and iPad. selectionchange
+// fires on every platform; debounce it so it runs once the selection settles.
+var selTimer = null;
+document.addEventListener("selectionchange", function(){
+  if (document.activeElement === txt) return;
+  if (editingId !== null) return;
+  // Same test as openForSelection: modified work stays, an untouched prefill
+  // does not hold the page hostage.
+  if (isOpen() && dirty) return;
+  clearTimeout(selTimer);
+  selTimer = setTimeout(function(){ openForSelection(false); }, 250);
+});
+
+txt.addEventListener("keydown", function(ev){
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.altKey && !ev.isComposing) { ev.preventDefault(); save(); }
+  else if (ev.key === "Escape") { ev.preventDefault(); discard(); }
+  // A CHORD, never a bare letter. A single-key binding on a control that lives
+  // inside a textarea fires on the note being typed: on the context-ledger
+  // page, `d` in a comment marked the selected row dropped.
+  else if ((ev.ctrlKey || ev.metaKey) && (ev.key === "e" || ev.key === "E")) {
+    ev.preventDefault(); switchMode(mode === "edit" ? "comment" : "edit");
+  }
+});
+// The user touched the text: from here the box holds work, whether or not the
+// prefill it opened with is still in it.
+txt.addEventListener("input", function(){ dirty = true; saveDraft(); });
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape" && isOpen() && document.activeElement !== txt) discard();
+});
+
+function closePop(){
+  // #anDelete is one element reused by every entry: an arm left live here
+  // would confirm on the next opened entry's first click.
+  disarm();
+  pop.style.display = "none"; pending = null; editingId = null;
+  pop.classList.remove("editing"); pop.classList.remove("nudge");
+  setModeState("comment"); dirty = false;
+  txt.value = ""; lsDel(DRAFT);
+}
+function discard(){ closePop(); }
+// The in-progress note, saved on every keystroke, so a forced refresh reopens
+// the box where it was instead of losing what was typed into it.
+// `dirty` gates this, not emptiness: an edit box opens pre-filled with the
+// selection, and autosaving that would leave a draft nobody typed, which then
+// reopens the box on the next load for a note that was never begun.
+// In edit mode an EMPTY dirty box is meaningful: the prefill was cleared to
+// suggest a deletion, and a refresh before Enter must bring that back. In
+// comment mode an empty box is nothing to keep.
+function saveDraft(){
+  if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
+  lsSet(DRAFT, JSON.stringify({
+    note: txt.value, editingId: editingId, mode: mode,
+    quote: pending ? pending.quote : null, where: pending ? pending.where : null
+  }));
+}
+function restoreDraft(){
+  var d = unpackDraft();
+  if (!d) return;
+  if (d.editingId != null) {
+    var c = comments.find(function(x){ return x.id === d.editingId; });
+    // The comment was deleted elsewhere. Drop the draft rather than leave it
+    // to reattach itself to whichever comment is handed that id next.
+    if (!c) { lsDel(DRAFT); return; }
+    openEdit(c, document.querySelector('mark[data-cid="' + c.id + '"]'));
+    txt.value = d.note; dirty = true;
+    return;
+  }
+  var r = rangeForQuote(d.quote);
+  if (!r) return;
+  var sel = window.getSelection();
+  if (sel) { try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {} }
+  editingId = null; pop.classList.remove("editing");
+  setModeState(d.mode === "edit" ? "edit" : "comment");
+  pending = { quote: d.quote, where: d.where || sectionOf(r.startContainer), range: r.cloneRange() };
+  placePop(r.getBoundingClientRect());
+  // Restored words ARE user work, whatever they started as.
+  txt.value = d.note; dirty = true;
+}
+function unpackDraft(){
+  var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
+  if (!d || typeof d.note !== "string") return null;
+  // An empty note is a draft only for an edit that still knows its target: a
+  // pending deletion of `quote`, or a revision of an existing edit.
+  if (!d.note.trim() && !(d.mode === "edit" && (d.quote || d.editingId != null))) return null;
+  return d;
+}
+// These keep their names and every existing call site; what changed is that
+// the state lives on the comments now and the page-level key is derived from
+// it. Renaming them to say "copied out" is a separate no-behaviour commit.
+function markDirty(){ syncLegacyFlag(); }
+// A snapshot of exactly what went into the copied text, so a comment edited
+// while an async clipboard write was in flight is not stamped as copied. The
+// copy carried the OLD wording; the comment now holds new wording that has
+// never left the page, and stamping it would put unsent words in the
+// delete-copied set.
+function copySnapshot(){
+  return comments.map(function(c){
+    return { id: c.id, where: c.where, quote: c.quote, note: bodyOf(c) };
+  });
+}
+function markClean(snap){
+  var now = Date.now(), by = {};
+  (snap || copySnapshot()).forEach(function(x){ by[x.id] = x; });
+  comments.forEach(function(c){
+    var x = by[c.id];
+    if (x && x.where === c.where && x.quote === c.quote && x.note === bodyOf(c)) c.copiedAt = now;
+  });
+  persist(); syncLegacyFlag();
+}
+
+// ---- toggle state controls ------------------------------------------------
+// A page may carry toggle controls in its body: a task-list checkbox, or a
+// button cycling a declared state set such as approve / approve-pending-edits
+// / deny. Both wear one wrapper, `[data-an-state-id]`, so this layer needs no
+// configuration and a page with none of them is untouched.
+//
+// ONE KEY PER CONTROL. Each control's state lives under its own localStorage
+// key, `an-state:<page key>:<control id>`, prefix-namespaced exactly as the
+// draft and dirty keys are, so nothing here can collide with the comment array
+// -- which every layer generation parses as a bare array and dies on anything
+// else.
+//
+// This replaces a shared document holding every control at once, and with it
+// the reconciliation six rounds built on top of that document. It rested on
+// "an untick is said by REMOVING a key, and a merge-style write cannot say
+// it", which is false: an untick is an explicit " ", as a tick is an explicit
+// "x". Once a value can say not-ticked, nothing needs to replace a document,
+// and the read-modify-write -- unfixable here, because localStorage offers no
+// compare-and-set -- is gone rather than reconciled. So: two tabs touching
+// DIFFERENT controls write DIFFERENT keys and cannot collide, which is the
+// shape of every reproduction that beat the previous rounds (A ticks item 1
+// while B ticks item 3); no write is derived from a read, so a stale or failed
+// read cannot clobber; a refused write for one control cannot reach another's
+// value, so the loss flag is per control. Two tabs touching the SAME control
+// resolve last-writer-wins, which is correct and is not a bug to file: they
+// disagree about one value and the last to speak decides.
+//
+// The lesson the previous round's 16-state enumeration got wrong, recorded so
+// it is not rediscovered: "localStorage is synchronous and the page is
+// single-threaded, so read -> merge -> write -> read-back is one indivisible
+// step" holds WITHIN a tab and says nothing ACROSS tabs. Single-threaded stops
+// this tab's handlers interleaving; a second tab is a separate process.
+var STATE_PREFIX = "an-state:" + KEY + ":";
+
+function stateKeyOf(id){ return STATE_PREFIX + id; }
+function stateIdOf(key){
+  return (typeof key === "string" && key.indexOf(STATE_PREFIX) === 0)
+    ? key.slice(STATE_PREFIX.length) : null;
+}
+// The control's OWN key: a write reads this back for evidence that it landed,
+// so the fallback below must not be allowed to answer for it.
+function readStateKey(id){ return lsRead(stateKeyOf(id)); }
+// State written by the shared-document layer migrates LAZILY, here, one control
+// at a time: an id with no per-item value falls back to that document, which is
+// READ where it lies and never written or deleted, so a rolled-back page still
+// finds every tick. There is no copy pass, so nothing has to answer "did every
+// item land?" -- which a store that refuses one write in three cannot be asked,
+// and the marker that answered "yes" regardless abandoned the rest for good.
+function readState(id){
+  var v = readStateKey(id);
+  if (v !== null) return v;                   // a stored value, or FAILED
+  var raw = lsRead(STATES), d = null;
+  if (raw === FAILED) return FAILED;
+  try { d = JSON.parse(raw || "null"); } catch (e) {}
+  return (d && typeof d === "object" && !Array.isArray(d) && typeof d[id] === "string") ? d[id] : null;
+}
+
+var pendingStates = {};   // id -> value this tab wrote that the store did not take
+var stateDefaults = {};   // id -> the value the document itself shipped
+
+function hasPending(){ return Object.keys(pendingStates).length > 0; }
+// THE WRITE RULE, now one rule instead of three: write the one key this
+// control owns, then read that one key back. `setItem` returning without
+// throwing is not evidence -- a browser that silently no-ops the write would
+// stand the warning down over work that never left the page -- so the flag
+// comes from what the store holds after. No other control is touched, and the
+// render is for the refused-write line, the only place a lost tick is visible.
+function writeState(id, value){
+  var was = statesUnsaved;
+  lsSet(stateKeyOf(id), value);
+  if (readStateKey(id) === value) delete pendingStates[id];
+  else pendingStates[id] = value;
+  statesUnsaved = hasPending();
+  paintStateId(id);
+  if (statesUnsaved || was) render();
+}
+// Pending over stored over the document's own value. The last of those three
+// is what keeps an id the store has dropped from going on being displayed as
+// ticked, and a `[x]` the author wrote from being blanked when it does.
+function paintState(u){
+  var id = u.dataset.anStateId;
+  // A control this tab has never wired -- one injected after load -- has been
+  // touched by nobody, so what it is showing now IS the value it shipped.
+  if (!stateDefaults.hasOwnProperty(id)) stateDefaults[id] = stateValue(u);
+  var v = pendingStates.hasOwnProperty(id) ? pendingStates[id] : readState(id);
+  // A read that FAILED says nothing about the stored value, so what the reader
+  // is looking at stays: blanking it would show an untick nobody made.
+  if (v === FAILED) return;
+  if (typeof v !== "string" || !applyState(u, v)) applyState(u, stateDefaults[id]);
+}
+function paintStateId(id){
+  stateUnits().forEach(function(u){ if (u.dataset.anStateId === id) paintState(u); });
+}
+function syncStateDom(){ stateUnits().forEach(paintState); }
+function stateUnits(){ return Array.prototype.slice.call(document.querySelectorAll("[data-an-state-id]")); }
+function stateSetOf(unit){
+  var raw = unit.getAttribute("data-an-states");
+  if (!raw) return null;
+  var a; try { a = JSON.parse(raw); } catch (e) { return null; }
+  return (Array.isArray(a) && a.length) ? a : null;
+}
+// The reader-visible text of the item, which is also the control's accessible
+// name. Read from the DOM rather than written by the generator, so it is the
+// rendered text a screen reader would reach anyway.
+function stateLabel(unit){
+  var l = unit.querySelector(".anstatelabel");
+  return ((l ? l.textContent : unit.textContent) || "").trim().replace(/\s+/g, " ");
+}
+function stateValue(unit){
+  var box = unit.querySelector(".anstatebox");
+  if (box) return box.checked ? "x" : " ";
+  var b = unit.querySelector(".anstatebtn");
+  return b ? (b.dataset.anState || "") : "";
+}
+// Applies a state to the DOM and to nothing else. A value outside the declared
+// set is refused rather than shown: a rebuilt page can meet a key written
+// under a different state set, and rendering `maybe` on a control that has no
+// such state leaves a button whose next click has nowhere to go.
+function applyState(unit, value){
+  var box = unit.querySelector(".anstatebox");
+  // A checkbox has a declared set too -- it is `x` and a space -- so a stored
+  // value from some other state set is refused here rather than silently read
+  // as "not x" and shown as an untick the reader never made.
+  if (box) {
+    if (value !== "x" && value !== " ") return false;
+    box.checked = value === "x";
+    return true;
+  }
+  var b = unit.querySelector(".anstatebtn"), set = stateSetOf(unit);
+  if (!b || !set || set.indexOf(value) < 0) return false;
+  b.dataset.anState = value;
+  b.textContent = value;
+  b.setAttribute("aria-label", stateLabel(unit) + ": " + value);
+  return true;
+}
+function wireStates(){
+  stateUnits().forEach(function(unit){
+    var id = unit.dataset.anStateId;
+    var box = unit.querySelector(".anstatebox"), btn = unit.querySelector(".anstatebtn");
+    // Read BEFORE anything stored is applied, so this is the author's own
+    // marker -- the `[x]` in the source -- and not whatever the store held.
+    stateDefaults[id] = stateValue(unit);
+    if (box) {
+      // A real checkbox: the browser supplies the role, Space toggles it, and
+      // the name is the item's own text.
+      box.setAttribute("aria-label", stateLabel(unit));
+      box.addEventListener("change", function(){
+        writeState(id, box.checked ? "x" : " ");
+      });
+      return;
+    }
+    if (!btn) return;
+    var set = stateSetOf(unit) || [];
+    if (set.length && set.indexOf(stateDefaults[id]) < 0) stateDefaults[id] = set[0];
+    // A <button> is focusable and fires click on Enter and Space, so cycling
+    // works from the keyboard with no key handler here at all.
+    btn.addEventListener("click", function(){
+      if (!set.length) return;
+      var at = set.indexOf(btn.dataset.anState);
+      var next = set[(at + 1) % set.length];
+      if (!applyState(unit, next)) return;
+      writeState(id, next);
+    });
+  });
+  // One path paints the controls, on load and on every later change alike.
+  syncStateDom();
+}
+// Plain text, one shape for both kinds of control: the state sits in the
+// brackets a Markdown task list already uses, so a two-state page exports a
+// task list that can be pasted straight back into the source.
+function stateMarkdown(){
+  return stateUnits().map(function(u){
+    return "- [" + (stateValue(u) || " ") + "] " + stateLabel(u);
+  }).join("\n");
+}
+// A second tab's write is authoritative for the ONE control it carried. The
+// event names a single key, so there is no incoming map to merge and no way
+// for it to speak for a control it did not change -- which is what two earlier
+// rounds got wrong, first by replacing the in-memory map wholesale and then by
+// reconciling one map against the other.
+window.addEventListener("storage", function(e){
+  // A null key is `localStorage.clear()` from the other tab, which takes every
+  // one of these keys with it; ignoring it left controls showing values gone
+  // from the store.
+  var id = stateIdOf(e.key);
+  if (e.key !== null && id === null) return;
+  var was = statesUnsaved;
+  // Nothing is pending once the store holds it, whoever put it there. Only the
+  // ids this event could have changed: one of them, or all on a clear.
+  (id === null ? Object.keys(pendingStates) : [id]).forEach(function(k){
+    if (pendingStates.hasOwnProperty(k) && readStateKey(k) === pendingStates[k]) {
+      delete pendingStates[k];
+    }
+  });
+  statesUnsaved = hasPending();
+  if (id === null) syncStateDom(); else paintStateId(id);
+  if (statesUnsaved || was) render();
+});
+
+// ---- destructive controls ------------------------------------------------
+// No blocking dialog appears here, and none may be added. The Artifact viewer
+// runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
+// `window.confirm` returns false without ever asking -- the browser just logs
+// "Ignored call to ...". Every delete guarded that way returned early on a
+// refusal the reviewer never saw: a dead button in the one place these pages
+// are read, and working perfectly in a local tab, which is why it survived.
+//
+// The guard is in the page instead. A first click arms the button and makes it
+// say what a second click will destroy; it disarms after ARM_MS, on Escape, or
+// on any re-render. Buttons are focusable, so Enter and Space arm and confirm
+// exactly like the pointer does.
+var ARM_MS = 4000;
+var WARN_CHANGED = '<span class="anwarn">the comments changed \u2014 nothing deleted</span>';
+var armedBtn = null, armedLabel = "", armedTimer = 0, armedBinding = null;
+function disarm(){
+  if (!armedBtn) return;
+  // render() may already have thrown this button away; restoring a detached
+  // node is harmless but pointless.
+  if (armedBtn.isConnected) { armedBtn.textContent = armedLabel; armedBtn.classList.remove("anarmed"); }
+  clearTimeout(armedTimer);
+  armedBtn = null; armedLabel = ""; armedTimer = 0; armedBinding = null;
+}
+// What an arm was armed AGAINST: the exact comments, plus enough of their
+// content to notice a change. A second tab's write can land inside the four
+// seconds an arm is live, and the `storage` handler only rebuilds when no note
+// is open -- so the confirming click has to prove the set is still the one the
+// label described, rather than trust that nothing moved under it.
+function bindingOf(list){
+  return list.map(function(c){
+    return c.id + ":" + (c.copiedAt || 0) + ":" + bodyOf(c).length + ":" + c.quote.length;
+  }).join(",");
+}
+// True only on the confirming click, and only while the set it was armed
+// against is unchanged. On any other click it arms `btn` and the caller must
+// return without destroying anything.
+function arm(btn, label, binding){
+  if (armedBtn === btn) {
+    var stale = armedBinding !== null && armedBinding !== binding;
+    disarm();
+    if (stale) { render(); toast(WARN_CHANGED, 4000); return false; }
+    return true;
+  }
+  disarm();
+  armedBtn = btn; armedLabel = btn.textContent;
+  armedBinding = binding === undefined ? null : binding;
+  btn.textContent = label;
+  btn.classList.add("anarmed");
+  armedTimer = setTimeout(disarm, ARM_MS);
+  return false;
+}
+// Escape cancels, whether focus sits on the armed button or anywhere else.
+// Both listeners are needed: the layer root stops key events from bubbling out
+// to the host page, so the document listener never sees a keystroke aimed at
+// the button, and a listener on the root alone would miss one aimed outside.
+function escDisarm(ev){ if (ev.key === "Escape") disarm(); }
+root.addEventListener("keydown", escDisarm);
+document.addEventListener("keydown", escDisarm);
+// A refused write is the one failure the page must not hide: with the quota
+// full, the panel would otherwise count a comment that is already gone.
+function persist(){
+  notesUnsaved = !lsSet(KEY, JSON.stringify(comments));
+}
+function unwrap(id){
+  var s = document.querySelector('span.anins[data-cid="' + id + '"]');
+  if (s) s.remove();
+  var m = document.querySelector('mark[data-cid="' + id + '"]');
+  if (m) { while (m.firstChild) m.parentNode.insertBefore(m.firstChild, m); m.remove(); }
+}
+
+function save(){
+  if (mode === "edit") { saveEdit(txt.value.trim()); return; }
+  var note = txt.value.trim();
+  if (!note) { closePop(); return; }
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    // Reopened to reread and closed unchanged: not an edit, so it must not
+    // reset the export state and re-arm the unload prompt.
+    if (c && c.note === note) { closePop(); return; }
+    // The copy that happened carried the previous wording, so the stamp no
+    // longer describes this comment. Without this, "delete copied" destroys
+    // the only copy of the edit and the next Copy all silently omits it.
+    if (c) { c.note = note; delete c.copiedAt; }
+    var m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
+    if (m) m.title = note;
+  } else if (pending) {
+    var id = newId();
+    try { wrapRange(pending.range, id, note, "note"); } catch (e) {}
+    comments.push({ id: id, type: "comment", where: pending.where, quote: pending.quote, note: note });
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+// An empty replacement is a suggested DELETION, so there is no empty-means-
+// cancel shortcut here: the comment path's `if (!note) closePop()` would throw
+// away exactly the edit the reader worked to express.
+function saveEdit(replacement){
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    if (c && c.replacement === replacement) { closePop(); return; }
+    if (c) { c.replacement = replacement; delete c.copiedAt; renderEditInline(c); }
+  } else if (pending) {
+    // The prefill is not user work: an untouched box saves nothing, so Enter
+    // on a box still holding the selection verbatim is a close, not an entry
+    // proposing to replace the text with itself.
+    if (!dirty) { closePop(); return; }
+    var id = newId();
+    var fresh = { id: id, type: "edit", where: pending.where,
+                  quote: pending.quote, replacement: replacement };
+    try { wrapRange(pending.range, id, "", "anedit"); } catch (e) {}
+    comments.push(fresh);
+    renderEditInline(fresh);
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+
+$("anCancel").onclick = discard;
+$("anDelete").onclick = function(){
+  if (editingId === null) { closePop(); return; }
+  var id = editingId;
+  var c = comments.find(function(x){ return x.id === id; });
+  // A comment's Delete stays immediate -- the popup's CSS hides it while
+  // composing, it sits at the far end of the row, and it acts on one note the
+  // reader has just opened. A suggested edit arms first: it is written
+  // replacement text plus an anchor, and one stray click takes both.
+  if (isEdit(c) && !arm(this, "click again")) return;
+  comments = comments.filter(function(x){ return x.id !== id; });
+  unwrap(id);
+  markDirty(); persist(); render(); closePop();
+};
+$("anSave").onclick = save;
+
+// Builds into a fragment and swaps once, so the list never blanks between
+// clearing and refilling.
+function render(){
+  // Any armed row button is about to be replaced, and an arm left standing on
+  // a list this rebuild has changed would confirm a different comment.
+  disarm();
+  var list = $("anList"), count = $("anCount");
+  // Kept in step with the list on every rebuild, and disabled rather than
+  // hidden: a control that vanishes and reappears is harder to aim at than one
+  // that greys out, and its count is the only place the copied total is shown.
+  var nCopied = copiedSet().length, clearCopied = $("anClearCopied");
+  clearCopied.textContent = "Delete copied (" + nCopied + ")";
+  clearCopied.disabled = !nCopied;
+  var fresh = freshCount();
+  badge.textContent = "\uD83D\uDCAC " + comments.length;
+  badge.className = unsaved() || (isDirty() && comments.length) ? "warn" : "";
+  if (!comments.length) {
+    // A page with no comments still has somewhere to report a refused write:
+    // on a checklist-only page this line is the ONLY place the reader is told
+    // the ticks did not survive, so it outranks the empty-state wording.
+    count.textContent = statesUnsaved
+      ? "This browser refused to store the checklist \u2014 copy it out now"
+      : notesUnsaved
+        ? "This browser refused to store the change \u2014 copy your work out now"
+        : "No comments yet";
+    count.className = "ancount" + (unsaved() ? " warn" : "");
+    var empty = document.createElement("p");
+    empty.className = "anscope"; empty.textContent = "Select any text above to comment.";
+    list.replaceChildren(empty);
+    return;
+  }
+  // Once the list can be part copied and part not, a single verdict is a lie
+  // for one half of it. The split form appears only when the list is actually
+  // mixed, so the common uniform cases stay as short as they were. The same
+  // applies to the noun: "N comments" is wrong for half a mixed page, and the
+  // plain wording is kept for the comment-only page, which is most of them.
+  var nEdits = comments.filter(isEdit).length;
+  var what = nEdits
+    ? comments.length + (comments.length === 1 ? " item (" : " items (") +
+      nEdits + (nEdits === 1 ? " suggested edit)" : " suggested edits)")
+    : comments.length + (comments.length === 1 ? " comment" : " comments");
+  count.textContent = what +
+    (unsaved() ? " \u2014 this browser refused to store them, copy them now"
+               : !fresh ? " \u2014 copied out"
+               : fresh === comments.length ? " \u2014 not yet copied out"
+               : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
+  count.className = "ancount" + (unsaved() || isDirty() ? " warn" : "");
+  var frag = document.createDocumentFragment();
+  comments.forEach(function(c){
+    var d = document.createElement("div");
+    d.className = "cmt" + (isCopied(c) ? " ancopied" : "") + (isEdit(c) ? " ansuggest" : "");
+    var w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
+    var q = document.createElement("div");
+    q.className = isEdit(c) ? "q struck" : "q";
+    q.textContent = "\u201C" + c.quote + "\u201D";
+    var n = document.createElement("div");
+    if (isEdit(c)) {
+      n.className = "ins";
+      n.textContent = c.replacement
+        ? "\u2192 " + c.replacement
+        : "\u2192 delete this text";
+    } else n.textContent = c.note;
+    var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
+    a.onclick = function(){
+      var m = document.querySelector('mark[data-cid="' + c.id + '"]');
+      if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
+      else openEdit(c, null);
+    };
+    // Deleting one comment used to require opening its popup first, which is a
+    // detour for the commonest correction. It asks twice, because the note
+    // itself is the only copy and there is no undo.
+    var x = document.createElement("button");
+    x.className = "anbtn ghost tiny danger"; x.textContent = "delete";
+    x.onclick = function(){
+      if (!arm(x, "click again")) return;
+      comments = comments.filter(function(y){ return y.id !== c.id; });
+      unwrap(c.id);
+      if (editingId === c.id) closePop();
+      markDirty(); persist(); render();
+    };
+    d.append(w, q, n);
+    if (!hasMark(c)) { var o = document.createElement("div"); o.className = "orphan"; o.textContent = "quoted text not found on this version of the page"; d.append(o); }
+    var acts = document.createElement("div"); acts.className = "anacts";
+    acts.append(a, x);
+    d.append(acts); frag.appendChild(d);
+  });
+  list.replaceChildren(frag);
+}
+
+function markdown(list){
+  return list.map(function(c){
+    return "- **" + c.where + "** \u2014 " + c.note + "\n  > " + c.quote.replace(/\n/g, "\n  > ");
+  }).join("\n");
+}
+// Numbered, so a session applying them can say which one it could not place.
+function editMarkdown(list){
+  return list.map(function(c, i){
+    return (i + 1) + ". **" + c.where + "**" +
+      "\n   Replace:\n   > " + c.quote.replace(/\n/g, "\n   > ") +
+      "\n   With:" + (c.replacement
+        ? "\n   > " + c.replacement.replace(/\n/g, "\n   > ")
+        : " _(nothing \u2014 delete this text)_");
+  }).join("\n\n");
+}
+// The quotes are RENDERED text and the source is Markdown, so emphasis
+// markers, links and code spans differ between the two. The note below says so
+// in the export itself, because the export leaves this page and is read
+// without it. Nobody builds a sed loop over this format.
+var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markdown. " +
+  "Locate each quote in the source and adapt the markup \u2014 do not apply these " +
+  "blocks byte-for-byte.";
+// A page with no suggested edits exports exactly what it did under v1: no
+// headings appear, so every existing paste-into-a-session habit still works.
+function exportText(){
+  var edits = comments.filter(isEdit);
+  var notes = comments.filter(function(c){ return !isEdit(c); });
+  var units = stateUnits();
+  var out = "# Comments \u2014 " + document.title + "\n\n";
+  // The checklist leads: it is the verdict, and the notes explain it.
+  if (units.length) out += "## Checklist\n\n" + stateMarkdown() + "\n\n";
+  if (edits.length) out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
+  if ((units.length || edits.length) && notes.length) out += "## Comments\n\n";
+  return out + (notes.length ? markdown(notes) + "\n" : "");
+}
+function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
+// There is deliberately no download path. The Artifact viewer never grants a
+// page download permission, so a Download button was inert exactly where these
+// pages are read, while still making every publish warn about an offered file.
+// Copy all is the one export, with the textarea below as its fallback.
+// What the textarea currently holds. The box can sit open while the page is
+// edited behind it, so the copy event stamps the snapshot the text was built
+// from, not whatever the list happens to be when the user finally hits copy.
+var exportSnap = null;
+function openExport(){
+  var ta = $("anExportText"); ta.value = exportText();
+  exportSnap = copySnapshot();
+  $("anExport").style.display = "block";
+  ta.focus(); ta.select();
+}
+
+// Only a copy that actually happened may clear the export state — otherwise
+// the panel says the comments are safely out of the browser, and the unload
+// guard stands down, when nothing left it.
+$("anCopy").onclick = async function(){
+  // A page can be all checklist and no notes, and copying it out is the whole
+  // point of the checklist.
+  if (!comments.length && !stateUnits().length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
+  var ok = false;
+  // Both taken before the await: the clipboard promise can resolve after an
+  // edit has landed, and the text that went out is this one.
+  var snap = copySnapshot(), text = exportText();
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (e) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  // Clipboard refused: fall back to the selectable textarea. Opening it is not
+  // exporting -- the state clears when the text is actually copied out of it.
+  if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
+  markClean(snap); render();
+  toast('<span class="anok">copied ' + (comments.length || "the checklist") + '</span>');
+};
+$("anExportText").addEventListener("copy", function(){
+  // A copy of PART of the box carried part of the Markdown, so it did not
+  // take every comment out of the browser. Stamping them all would drop
+  // comments the user never copied into the "Delete copied" set, which is now
+  // a set something deletes. The whole-blob case is the normal one: the box
+  // opens with everything already selected.
+  var ta = this;
+  if (ta.selectionStart !== 0 || ta.selectionEnd !== ta.value.length) {
+    toast('<span class="anwarn">partial copy \u2014 nothing marked copied out</span>', 4000);
+    return;
+  }
+  markClean(exportSnap); render();
+  toast('<span class="anok">copied ' + comments.length + '</span>');
+});
+$("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
+// The safe prune, and the reason the literal request was inverted: this
+// deletes only what a copy actually carried out of the browser, so the next
+// Copy all sends fresh feedback rather than re-sending an actioned list.
+$("anClearCopied").onclick = function(){
+  var set = copiedSet();
+  if (!set.length) return;
+  if (!arm(this, "Click again to delete " + set.length + " copied out", bindingOf(set))) return;
+  var doomed = {};
+  set.forEach(function(c){ doomed[c.id] = true; unwrap(c.id); });
+  comments = comments.filter(function(c){ return !doomed[c.id]; });
+  if (editingId !== null && doomed[editingId]) closePop();
+  persist(); syncLegacyFlag(); render();
+};
+$("anClear").onclick = function(){
+  if (!comments.length) return;
+  // "Not copied out yet" is the whole reason this control asks twice, so the
+  // warning goes on the armed button, where it is read, rather than into a
+  // dialog the viewer never shows.
+  // The armed label carries the warning, because the dialog that would
+  // otherwise carry it never appears in the viewer. Naming the unsent count
+  // separately from the total is the whole point: "delete all 12" and "3 of
+  // these have never left this browser" are different facts.
+  var fresh = freshCount();
+  var warn = fresh
+    ? fresh + " not yet copied out \u2014 click again to delete all " + comments.length
+    : "All copied out \u2014 click again to delete all " + comments.length;
+  if (!arm(this, warn, bindingOf(comments))) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = []; markClean(); persist(); render();
+};
+badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+// A host page may bind single-key shortcuts on document or window -- a triage
+// console where `d` means delete, a slideshow where `j` means next. Typing a
+// note would fire them: the keystroke bubbles out of this textarea and reaches
+// those listeners, so the page acts on every letter of the comment.
+//
+// Attached at the layer root in the BUBBLE phase, which is the only position
+// that separates the two. Handlers inside the layer (the textarea's own Enter
+// and Escape) sit deeper and have already run; document- and window-level
+// handlers sit higher and never see the event. A capture-phase listener on
+// window would be too early and would kill this layer's own keys as well.
+["keydown", "keypress", "keyup"].forEach(function(type){
+  root.addEventListener(type, function(ev){ ev.stopPropagation(); });
+});
+
+// Before restoreHighlights: a restored state word changes the page text that
+// quotes are re-anchored against, so it has to be settled first.
+wireStates();
+restoreHighlights();
+render();
+restoreDraft();
+})();
+</script>
+<!-- /annotation-layer -->
