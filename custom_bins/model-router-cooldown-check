@@ -12,23 +12,32 @@ so nothing else notices. Observed 2026-09-09 to 2026-09-11: a 96h lockout held
 while the ChatGPT plan showed full quota.
 
 The cooldown lives in the upstream child process only, so bouncing the service
-clears it. That is safe to do blindly *only* if we can tell a stale cooldown
-from a real one, which we can:
+clears it. One probe cannot say whether bouncing it is warranted: a local
+refusal is answered from the router's own table, so it reports nothing about
+upstream beyond quoting the error that first caused the entry. The decision is
+therefore three steps, each biased towards doing nothing:
 
-  stale  -> refused locally, ~1ms, message says "are in cooldown"/"cooling down"
-  real   -> round-trips upstream, ~1s, message says "usage_limit_reached"
-
-So: probe, and restart only on the local-refusal shape. After the restart the
-probe is repeated, which settles it -- 200 means it was stale, a genuine
-usage_limit_reached means the quota really is spent and we record that so the
-next run does not bounce the service again.
+  age      a local refusal younger than MIN_COOLDOWN_AGE_SECONDS on *our* clock
+           is ordinary backoff and is left alone. Upstream caps the backoff it
+           computes itself at 30 minutes (quotaBackoffMax), so a refusal still
+           holding after that is not ordinary. The age is measured here across
+           separate runs, because the router's own `remaining=`/`resets_at`
+           figures are the values this tool exists to distrust; they set no
+           policy and only appear in the JSON as reported detail.
+  restart  only an aged local refusal earns a bounce, and the probe is then
+           repeated, which is what actually settles it: 200 means it was stale.
+  hold     a genuine usage_limit_reached, or a restart that did not clear the
+           refusal, records CONFIRMED_HOLD_SECONDS of not trying again. That
+           hold is on our clock too, deliberately -- an unbounded one built
+           from the upstream deadline recreates the multi-day blackout this
+           tool exists to end.
 
   model-router-cooldown-check            # probe and report; never restarts
-  model-router-cooldown-check --fix      # restart when the cooldown looks stale
+  model-router-cooldown-check --fix      # restart once the cooldown has aged
   model-router-cooldown-check --json     # machine-readable result
 
-Exit codes: 0 routes are usable, 1 stale cooldown found (or cleared with --fix),
-2 quota genuinely exhausted upstream, 3 could not determine.
+Exit codes: 0 routes are usable, 1 a local cooldown is holding them and was not
+cleared, 2 quota genuinely exhausted upstream, 3 could not determine.
 """
 
 import argparse
@@ -49,10 +58,17 @@ LABEL = "com.alignment-hive.model-router"
 UNIT = "model-router.service"
 PORT = 8787
 HEALTH_PATH = "/__model-router/health"
-# A cooldown this long is never worth trusting: the upstream hint is a worst
-# case, and the window it names can roll early. Anything shorter is ordinary
-# backoff and is left alone.
-STALE_AFTER_SECONDS = 30 * 60
+# How long a local refusal must persist, measured across separate runs of this
+# check, before a restart is on the table. Upstream caps its own computed
+# backoff at 30 minutes, so a refusal that outlives that is not ordinary
+# backoff. A cooldown seen for the first time is never acted on.
+MIN_COOLDOWN_AGE_SECONDS = 30 * 60
+# After learning that a restart is not the answer -- upstream confirmed the
+# quota spent, or a bounce failed to clear the refusal -- wait this long before
+# trying again. Bounded on purpose and short relative to the multi-day
+# deadlines upstream advertises; the cost of each retry is that a restart drops
+# every in-flight request the router is carrying, Anthropic routes included.
+CONFIRMED_HOLD_SECONDS = 6 * 3600
 # Never bounce the service more often than this, whatever the probe says.
 RESTART_COOLDOWN_SECONDS = 10 * 60
 RESTART_WAIT_SECONDS = 20.0
@@ -137,7 +153,6 @@ def probe(base_url: str, token: str, model: str, timeout: float) -> dict:
         "elapsed_ms": round(elapsed_ms, 1),
         "kind": classify(status, payload),
         "resets_at": resets_at(payload),
-        "cooldown_remaining_s": cooldown_remaining(payload),
     }
 
 
@@ -170,15 +185,6 @@ def resets_at(payload: str) -> int | None:
     return int(found.group(1)) if found else None
 
 
-def cooldown_remaining(payload: str) -> int | None:
-    """Parse `remaining=96h32m3s` out of a local cooldown refusal."""
-    found = re.search(r"remaining=(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?", payload)
-    if not found or not any(found.groups()):
-        return None
-    hours, minutes, seconds = (int(g or 0) for g in found.groups())
-    return hours * 3600 + minutes * 60 + seconds
-
-
 def read_state() -> dict:
     try:
         return json.loads((state_dir() / "cooldown-check.json").read_text())
@@ -203,11 +209,55 @@ def restart_blocked(now: float) -> str | None:
     last = state.get("last_restart_unix")
     if isinstance(last, (int, float)) and now - last < RESTART_COOLDOWN_SECONDS:
         return "a restart %d s ago is still settling" % int(now - last)
-    limit = state.get("upstream_limit_resets_at")
-    if isinstance(limit, int) and now < limit:
-        left = datetime.timedelta(seconds=int(limit - now))
-        return "upstream reported a genuine quota limit; %s left on that window" % left
+    hold = state.get("hold_restarts_until_unix")
+    if isinstance(hold, (int, float)) and now < hold:
+        left = datetime.timedelta(seconds=int(hold - now))
+        return "a restart was already shown not to help; %s before the next attempt" % left
     return None
+
+
+def hold_restarts(now: float) -> None:
+    """Stand down for a bounded window after learning a restart will not help.
+
+    The window is ours, never the `resets_at` upstream advertised. Honouring
+    that deadline is what CLIProxyAPI already does wrong: it is a worst case,
+    it can name a point days away, and believing it here would prohibit every
+    recovery attempt for those days -- including the one that would have found
+    the quota already back. So the hold expires on a fixed local timer and the
+    next run is free to try again.
+    """
+    write_state(hold_restarts_until_unix=now + CONFIRMED_HOLD_SECONDS,
+                local_cooldown_since_unix=None)
+
+
+def clear_guards() -> None:
+    """Routes are serving: forget the cooldown clock and the restart hold."""
+    write_state(hold_restarts_until_unix=None, local_cooldown_since_unix=None)
+
+
+def forget_cooldown_clock() -> None:
+    """Whatever we just saw, it was not the cooldown we were timing."""
+    write_state(local_cooldown_since_unix=None)
+
+
+def cooldown_age(now: float) -> float:
+    """Seconds this local refusal has persisted, by our own measurement.
+
+    First sighting records the timestamp and reports an age of zero. Any probe
+    that is not a local refusal clears it, so the clock only ever accumulates
+    over a run of consecutive sightings. It cannot tell one long cooldown from
+    two back-to-back ones -- both mean the routes have been dead for that long,
+    which is the question being asked.
+
+    A home this cannot write to is therefore a watchdog that never restarts
+    anything, because the age is never carried between runs. That is the right
+    way for it to break.
+    """
+    since = read_state().get("local_cooldown_since_unix")
+    if not isinstance(since, (int, float)) or since > now:
+        write_state(local_cooldown_since_unix=now)
+        return 0.0
+    return now - since
 
 
 def restart_service(timeout: float) -> None:
@@ -247,36 +297,43 @@ def run(fix: bool) -> tuple[int, dict]:
     first = probe(base_url, token, model, timeout=90.0)
     result["probe"] = first
 
+    now = time.time()
+
     if first["kind"] == "ok":
-        write_state(upstream_limit_resets_at=None)
+        clear_guards()
         return OK, result | {"summary": "Codex routes are serving normally."}
 
     if first["kind"] == "upstream_limit":
-        if first["resets_at"]:
-            write_state(upstream_limit_resets_at=first["resets_at"])
+        hold_restarts(now)
         return EXHAUSTED, result | {
             "summary": "Quota is genuinely exhausted upstream; the cooldown is correct."
         }
 
     if first["kind"] != "local_cooldown":
+        # A plain 429 or a 5xx is not the refusal being timed, so the clock
+        # starts again from the next sighting. A router flapping between errors
+        # and cooldowns must not accumulate its way into a restart.
+        forget_cooldown_clock()
         return UNKNOWN, result | {
             "summary": "Unexpected response (HTTP %s); not touching the service." % first["status"]
         }
 
-    remaining = first["cooldown_remaining_s"]
+    age = cooldown_age(now)
+    result["cooldown_age_s"] = round(age)
     result["summary"] = (
-        "Local cooldown is holding every Codex route"
-        + (" for another %s" % datetime.timedelta(seconds=remaining) if remaining else "")
-        + "; the request never reached upstream."
+        "A local cooldown is holding every Codex route, first seen %s ago; "
+        "the request never reached upstream."
+        % datetime.timedelta(seconds=int(age))
     )
-    if remaining is not None and remaining < STALE_AFTER_SECONDS:
-        return OK, result | {
-            "summary": result["summary"] + " Short enough to be ordinary backoff; leaving it."
+    if age < MIN_COOLDOWN_AGE_SECONDS:
+        return STALE, result | {
+            "summary": result["summary"]
+            + " Too new to be anything but ordinary backoff; watching, not restarting."
         }
     if not fix:
         return STALE, result | {"summary": result["summary"] + " Re-run with --fix to clear it."}
 
-    blocked = restart_blocked(time.time())
+    blocked = restart_blocked(now)
     if blocked:
         return STALE, result | {"summary": result["summary"] + " Not restarting: " + blocked + "."}
 
@@ -287,14 +344,18 @@ def run(fix: bool) -> tuple[int, dict]:
     second = probe(base_url, token, model, timeout=90.0)
     result["probe_after_restart"] = second
     if second["kind"] == "ok":
-        write_state(upstream_limit_resets_at=None)
+        clear_guards()
         return OK, result | {"fixed": True, "summary": "Stale cooldown cleared; Codex routes serve again."}
     if second["kind"] == "upstream_limit":
-        if second["resets_at"]:
-            write_state(upstream_limit_resets_at=second["resets_at"])
+        hold_restarts(now)
         return EXHAUSTED, result | {
             "summary": "Cooldown was real: upstream still reports the quota spent."
         }
+    # Defensive rather than observed: a fresh child has an empty cooldown table,
+    # so this needs the refusal to be persisted or immediately rebuilt. Whatever
+    # the cause, the bounce did not work, and repeating it hourly would be the
+    # thrash the hold exists to stop.
+    hold_restarts(now)
     return UNKNOWN, result | {
         "summary": "Still refusing after a restart (HTTP %s); inspect the router logs." % second["status"]
     }
@@ -304,7 +365,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Detect, and optionally clear, a stale Codex cooldown in model-router.")
     parser.add_argument("--fix", action="store_true",
-                        help="restart the router service when the cooldown looks stale")
+                        help="restart the router once a local cooldown has persisted")
     parser.add_argument("--json", action="store_true", help="print the result as JSON")
     args = parser.parse_args()
 

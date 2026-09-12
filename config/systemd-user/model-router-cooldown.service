@@ -25,13 +25,15 @@ ExecStart=%h/code/dotfiles/custom_bins/model-router-cooldown-check --fix
 # determine -- is worth surfacing as a failed unit.
 SuccessExitStatus=0 1 2
 
-# Deliberately light sandboxing. ProtectHome=read-only would break this unit in
-# a way that is silent rather than loud: the check writes its restart-thrash
-# guard to ~/.local/state/model-router/cooldown-check.json, and that write is
-# best-effort by design (losing it must never block recovery). Under a
-# read-only home the guard would simply stop recording, and the unit would go
-# on bouncing the router every hour while still reporting success. A
-# StateDirectory= of its own would not help either -- the file has to live
-# beside the router's other state, which the router itself owns.
+# Deliberately light sandboxing. ProtectHome=read-only would break this unit
+# silently: every judgement it makes is carried between runs in
+# ~/.local/state/model-router/cooldown-check.json -- how long the current
+# refusal has been held, and whether a restart was already shown not to help --
+# and that write is best-effort by design, because losing it must never block
+# recovery. Under a read-only home nothing accumulates, so the check would see
+# a first-ever cooldown every hour, never act, and still exit 0. That is the
+# safe direction to fail in, but it is a watchdog that has quietly stopped
+# watching. A StateDirectory= of its own would not help either -- the file has
+# to live beside the router's other state, which the router itself owns.
 PrivateTmp=true
 NoNewPrivileges=true
