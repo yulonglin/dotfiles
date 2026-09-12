@@ -1,0 +1,129 @@
+{
+  "measured": "2026-09-09/10, all local Claude Code transcripts on this machine",
+  "sources": {
+    "audit": {
+      "command": "./custom_bins/claude-usage-audit --model-usage --days 21",
+      "url": "https://github.com/yulonglin/dotfiles/blob/main/custom_bins/claude-usage-audit"
+    },
+    "exposure": {
+      "command": "python3 exposure_by_session_model.py [start end]",
+      "url": "https://github.com/yulonglin/dotfiles/blob/main/artifacts/classifier-rate-limits-2026-09/exposure_by_session_model.py"
+    },
+    "snapshot": "data-snapshot-2026-09-10.md",
+    "pr": "https://github.com/yulonglin/dotfiles/pull/110",
+    "docs_permission_modes": "https://code.claude.com/docs/en/permission-modes",
+    "docs_auto_mode_config": "https://code.claude.com/docs/en/auto-mode-config",
+    "docs_errors": "https://code.claude.com/docs/en/errors#auto-mode-cannot-determine-the-safety-of-an-action",
+    "issue_74248": "https://github.com/anthropics/claude-code/issues/74248",
+    "issue_64585": "https://github.com/anthropics/claude-code/issues/64585",
+    "issue_60438": "https://github.com/anthropics/claude-code/issues/60438",
+    "sibling_artifact": "https://claude.ai/code/artifact/26263dc9-8fda-4e1e-8d37-9161665d5b12",
+    "onset": {
+      "command": "python3 onset_0906.py",
+      "url": "https://github.com/yulonglin/dotfiles/blob/main/artifacts/classifier-rate-limits-2026-09/onset_0906.py"
+    },
+    "split": {
+      "command": "python3 split_gateway_vs_cli.py",
+      "url": "https://github.com/yulonglin/dotfiles/blob/main/artifacts/classifier-rate-limits-2026-09/split_gateway_vs_cli.py"
+    }
+  },
+  "by_day": [
+    {"day": "2026-08-19", "failures": 0, "bound": 1169, "cli": "2.1.234-236", "gateway": "off"},
+    {"day": "2026-08-20", "failures": 0, "bound": 502, "cli": "2.1.235-238", "gateway": "off"},
+    {"day": "2026-08-21", "failures": 0, "bound": 688, "cli": "2.1.238", "gateway": "off"},
+    {"day": "2026-08-24", "failures": 0, "bound": 660, "cli": "2.1.235, 241", "gateway": "off"},
+    {"day": "2026-08-25", "failures": 0, "bound": 76, "cli": "2.1.245-246", "gateway": "off"},
+    {"day": "2026-08-26", "failures": 0, "bound": 958, "cli": "2.1.245-246", "gateway": "off"},
+    {"day": "2026-08-27", "failures": 0, "bound": 2741, "cli": "2.1.246-248", "gateway": "off"},
+    {"day": "2026-08-28", "failures": 0, "bound": 3998, "cli": "2.1.247-251", "gateway": "off"},
+    {"day": "2026-08-29", "failures": 0, "bound": 3451, "cli": "2.1.250-251", "gateway": "off"},
+    {"day": "2026-08-30", "failures": 0, "bound": 1978, "cli": "2.1.251", "gateway": "off"},
+    {"day": "2026-08-31", "failures": 0, "bound": 2605, "cli": "2.1.251", "gateway": "off"},
+    {"day": "2026-09-01", "failures": 0, "bound": 3635, "cli": "2.1.251-258", "gateway": "off"},
+    {"day": "2026-09-02", "failures": 0, "bound": 503, "cli": "2.1.252-258", "gateway": "off"},
+    {"day": "2026-09-03", "failures": 0, "bound": 155, "cli": "2.1.258-259", "gateway": "off"},
+    {"day": "2026-09-04", "failures": 0, "bound": 23, "cli": "2.1.260", "gateway": "off"},
+    {"day": "2026-09-05", "failures": 0, "bound": 24, "cli": "2.1.260-261", "gateway": "off"},
+    {"day": "2026-09-06", "failures": 212, "bound": 2604, "cli": "2.1.260-263", "gateway": "on"},
+    {"day": "2026-09-07", "failures": 23, "bound": 1003, "cli": "2.1.263", "gateway": "on"},
+    {"day": "2026-09-08", "failures": 391, "bound": 2415, "cli": "2.1.263", "gateway": "on"},
+    {"day": "2026-09-09", "failures": 93, "bound": 365, "cli": "2.1.263, 266", "gateway": "on"}
+  ],
+  "events": [
+    {"day": "2026-09-03", "label": "default model set to Fable 5.1"},
+    {"day": "2026-09-06", "label": "gateway rewired"}
+  ],
+  "periods": [
+    {"id": "aug_on", "label": "Aug 1-18", "gateway": "on"},
+    {"id": "fine", "label": "Aug 19-Sep 5", "gateway": "off"},
+    {"id": "bad", "label": "Sep 6-9", "gateway": "on"}
+  ],
+  "by_model": [
+    {"model": "Fable 5.1", "aug_on": null, "fine": [0, 517], "bad": [672, 2943]},
+    {"model": "Fable 5", "aug_on": [62, 3606], "fine": [0, 6194], "bad": null},
+    {"model": "Opus 5", "aug_on": [91, 14007], "fine": [0, 16737], "bad": [5, 627]},
+    {"model": "Sonnet 5", "aug_on": [0, 1083], "fine": [0, 540], "bad": [0, 176]},
+    {"model": "GPT (Sol + Astra)", "aug_on": [0, 4652], "fine": null, "bad": [42, 2538]}
+  ],
+  "by_model_by_day": [
+    {"day": "2026-09-06", "Fable 5.1": [175, 1529], "Opus 5": [5, 345], "Sonnet 5": [0, 96], "GPT-5.6 Sol": [22, 154], "GPT-6 Astra": [10, 426], "classifier": "claude-opus-5[1m]; astra for the Opus 5 failures"},
+    {"day": "2026-09-07", "Fable 5.1": [22, 82], "Opus 5": [0, 67], "Sonnet 5": [0, 19], "GPT-5.6 Sol": [0, 583], "GPT-6 Astra": [1, 252], "classifier": "claude-opus-5[1m]"},
+    {"day": "2026-09-08", "Fable 5.1": [382, 1087], "Opus 5": [0, 144], "Sonnet 5": [0, 61], "GPT-5.6 Sol": [6, 789], "GPT-6 Astra": [3, 334], "classifier": "claude-opus-5[1m]"},
+    {"day": "2026-09-09", "Fable 5.1": [93, 245], "Opus 5": [0, 71], "Sonnet 5": null, "GPT-5.6 Sol": null, "GPT-6 Astra": null, "classifier": "claude-opus-5[1m]"}
+  ],
+  "split_0906": {
+    "measured": "python3 onset_0906.py, re-run 2026-09-10 after the denominator fix; router began listening 09:07 UTC, wiring commit 09:25",
+    "denominator": "Bash, PowerShell, Monitor, Agent, Task and SendMessage — the tools the permission-modes docs put through the classifier. Failures on any other tool are excluded from every rate and reported separately.",
+    "excluded": {"total": 3, "detail": "Edit 1, an MCP browser tool 2"},
+    "periods": [
+      {"id": "before", "label": "before 09:00", "gateway": "off"},
+      {"id": "after", "label": "from 09:00", "gateway": "on"}
+    ],
+    "by_model": [
+      {"model": "Fable 5.1", "before": [0, 720], "after": [172, 793]},
+      {"model": "Opus 5", "before": [0, 198], "after": [5, 107]},
+      {"model": "Sonnet 5", "before": [0, 87], "after": [0, 9]},
+      {"model": "GPT-5.6 Sol", "before": null, "after": [22, 172]},
+      {"model": "GPT-6 Astra", "before": null, "after": [10, 652]}
+    ],
+    "table_rows": [
+      {"row": "Fable 5.1", "kind": "model", "before": [0, 720], "after": [172, 793]},
+      {"row": "Opus 5", "kind": "model", "before": [0, 198], "after": [5, 107]},
+      {"row": "Sonnet 5", "kind": "model", "before": [0, 87], "after": [0, 9]},
+      {"row": "Opus 4.8", "kind": "model", "before": [0, 1], "after": [0, 36]},
+      {"row": "GPT-5.6 Sol", "kind": "model", "before": [0, 0], "after": [22, 172]},
+      {"row": "GPT-6 Astra", "kind": "model", "before": [0, 0], "after": [10, 652]},
+      {"row": "Kimi K3", "kind": "model", "before": [0, 0], "after": [0, 16]},
+      {"row": "Haiku 4.5", "kind": "model", "before": [0, 0], "after": [0, 3]},
+      {"row": "CLI 2.1.263, all models", "kind": "context", "before": [0, 1006], "after": [209, 1788]},
+      {"row": "CLI 2.1.261 sessions", "kind": "context", "before": [0, 190], "after": [0, 42]},
+      {"row": "CLI 2.1.260 sessions", "kind": "context", "before": [0, 7], "after": [0, 3]},
+      {"row": "All sessions, every CLI", "kind": "context", "before": [0, 1203], "after": [209, 1833]}
+    ],
+    "hours": [
+      {"hour": "00", "2.1.260": null, "2.1.261": [0, 6], "2.1.263": null},
+      {"hour": "01", "2.1.260": null, "2.1.261": [0, 65], "2.1.263": null},
+      {"hour": "02", "2.1.260": null, "2.1.261": [0, 37], "2.1.263": null},
+      {"hour": "03", "2.1.260": null, "2.1.261": [0, 53], "2.1.263": [0, 128]},
+      {"hour": "04", "2.1.260": null, "2.1.261": [0, 1], "2.1.263": [0, 107]},
+      {"hour": "05", "2.1.260": null, "2.1.261": [0, 1], "2.1.263": [0, 195]},
+      {"hour": "06", "2.1.260": null, "2.1.261": null, "2.1.263": [0, 39]},
+      {"hour": "07", "2.1.260": null, "2.1.261": null, "2.1.263": [0, 154]},
+      {"hour": "08", "2.1.260": [0, 7], "2.1.261": [0, 27], "2.1.263": [0, 383]},
+      {"hour": "09", "2.1.260": null, "2.1.261": [0, 37], "2.1.263": [2, 287]},
+      {"hour": "10", "2.1.260": null, "2.1.261": [0, 5], "2.1.263": [0, 177]},
+      {"hour": "11", "2.1.260": null, "2.1.261": null, "2.1.263": [15, 483]},
+      {"hour": "12", "2.1.260": null, "2.1.261": null, "2.1.263": [13, 272]},
+      {"hour": "13", "2.1.260": [0, 3], "2.1.261": null, "2.1.263": [98, 278]},
+      {"hour": "14", "2.1.260": null, "2.1.261": null, "2.1.263": [42, 249]},
+      {"hour": "15", "2.1.260": null, "2.1.261": null, "2.1.263": [39, 42]}
+    ]
+  },
+  "sep10": {"model": "Fable 5.1", "failures": 0, "bound": 78, "cli": "2.1.267", "gateway": "on"},
+  "router_log": [
+    {"day": "2026-09-06", "claude-opus-5": 1205, "claude-fable-5-1": 763, "claude-sonnet-5": 45, "haiku-4-5": 451, "sol": 343, "astra": 1970},
+    {"day": "2026-09-07", "claude-opus-5": 213, "claude-fable-5-1": 140, "claude-sonnet-5": 46, "haiku-4-5": 333, "sol": 931, "astra": 1646},
+    {"day": "2026-09-08", "claude-opus-5": 2341, "claude-fable-5-1": 1755, "claude-sonnet-5": 249, "haiku-4-5": 676, "sol": 2357, "astra": 1371},
+    {"day": "2026-09-09", "claude-opus-5": 525, "claude-fable-5-1": 343, "claude-sonnet-5": 30, "haiku-4-5": 823, "sol": 3, "astra": 2}
+  ]
+}

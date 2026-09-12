@@ -1,0 +1,1378 @@
+<title>Why Auto Mode Broke Behind the Gateway</title>
+<style>
+:root {
+  --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
+  --accent:#bd5d3a; --accent-bg:#f7e9e2; --good:#2f6b4f; --good-bg:#e4f0e9;
+  --bad:#a33f2a; --bad-bg:#f9e4de; --code:#f4f2ee; --mark:#fbe6a2;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+} }
+:root[data-theme="dark"] {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);margin:0;padding:2.5rem 1rem 6rem;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;line-height:1.65}
+.shell{max-width:48rem;margin:0 auto}
+.shell.has-toc{display:grid;grid-template-columns:15rem minmax(0,1fr);gap:2.4rem;max-width:72rem}
+.toc{position:sticky;top:1.5rem;align-self:start;max-height:calc(100vh - 3rem);overflow:auto;
+ font-size:.84rem;border-right:1px solid var(--rule);padding-right:.9rem}
+.toc h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+ margin:0 0 .45rem;font-weight:700}
+.toc a{display:block;color:var(--soft);text-decoration:none;padding:.22rem .45rem;
+ border-radius:5px;border-left:2px solid transparent}
+.toc a.lvl3{padding-left:1.2rem;font-size:.8rem}
+.toc a:hover{background:var(--code);color:var(--ink)}
+.toc a.on{color:var(--ink);background:var(--code);border-left-color:var(--accent);font-weight:600}
+.doc{min-width:0}
+h1{font-size:1.75rem;line-height:1.25;margin:0 0 .8rem;letter-spacing:-.015em}
+h2{font-size:1.2rem;margin:2.4rem 0 .7rem;padding-bottom:.32rem;border-bottom:1px solid var(--rule)}
+h3{font-size:1.02rem;margin:1.7rem 0 .45rem}
+p,li{margin:0 0 .85rem}
+ul,ol{padding-left:1.35rem}
+blockquote{margin:1rem 0;padding:.1rem 1rem;border-left:3px solid var(--accent);
+ background:var(--accent-bg);border-radius:0 6px 6px 0}
+pre{background:var(--code);border:1px solid var(--rule);border-radius:7px;padding:.75rem .9rem;
+ overflow-x:auto;font-size:.83rem;line-height:1.5}
+code{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+p code,li code,td code,h2 code,h3 code{background:var(--code);padding:.06rem .32rem;border-radius:4px;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0;display:block;overflow-x:auto}
+th,td{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}
+th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
+a{color:var(--accent)}
+details{border:1px solid var(--rule);border-radius:7px;background:var(--panel);
+ margin:1rem 0;padding:.55rem .9rem}
+details>summary{cursor:pointer;font-weight:600;margin:-.55rem -.9rem;padding:.55rem .9rem;
+ border-radius:7px;list-style-position:inside}
+details>summary:hover{color:var(--accent)}
+details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 0 0;
+ margin-bottom:.8rem;background:var(--code)}
+@media (max-width:56rem){
+  .shell.has-toc{display:block}
+  .toc{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--rule);
+   padding:0 0 .8rem;margin-bottom:1.4rem}
+  .toc a{display:inline-block;margin:.15rem .3rem .15rem 0;border-left:0}
+  .toc a.lvl3{padding-left:.45rem}
+}
+</style>
+<div class="shell has-toc">
+<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#corrections-11-september" class="lvl2">Four claims here are withdrawn</a><a href="#one-setting-and-one-url-check-produced-every-429" class="lvl2">One setting and one URL check produced every 429</a><a href="#auto-mode-makes-a-second-hidden-request-for-every-tool-call" class="lvl2">Auto mode makes a second, hidden request for every tool call</a><a href="#claude-code-drops-the-attribution-block-whenever-both-conditions-hold" class="lvl2">Claude Code drops the attribution block whenever both conditions hold</a><a href="#failures-begin-the-hour-the-router-came-up" class="lvl2">Failures begin the hour the router came up</a><a href="#the-two-week-quiet-spell-was-the-gateway-being-off" class="lvl2">The two-week quiet spell was the gateway being off</a><a href="#removing-the-setting-fixed-it-and-the-gateway-stays-wired" class="lvl2">Removing the setting fixed it and the gateway stays wired</a><a href="#the-router-could-not-have-fixed-this" class="lvl2">The router could not have fixed this</a><a href="#what-this-does-not-fix" class="lvl2">What this does not fix</a><a href="#sessions-started-before-the-fix-still-fail-and-the-daemon-hands-out-stale-ones" class="lvl2">Sessions started before the fix still fail, and the daemon hands out stale ones</a><a href="#questions-from-the-9-september-review-answered" class="lvl2">Questions from the 9 September review, answered</a><a href="#provenance" class="lvl2">Provenance</a></nav>
+<div class="doc">
+<h1 id="why-auto-mode-broke-behind-the-gateway">Why Auto Mode Broke Behind the Gateway</h1>
+<p>Auto-mode tool calls were denied in bursts on 13 to 18 August and again from 6 September, with the usage meter running hot on light days. Root cause found, fixed and verified 9 September 2026. The fix did not stick: the opt-out was back in both the live and the committed settings on 10 September, and was removed again the same morning. Written by Claude Fable 5.1 from a background job on binky, with the within-day split and the per-model rows added 10 September by Claude Opus 5; the raw data and the eight-seat council review are listed at the end.</p>
+<h2 id="corrections-11-september">Four claims here are withdrawn</h2>
+<blockquote>
+<p><strong>Added 11 September 2026 by Claude Opus 5.</strong> The mechanism this page describes is real and was since verified line by line in the installed 2.1.267 binary. What is withdrawn is that it explains <em>this machine's</em> failures, and that the 6 September split proves the gateway caused them. The cause is open again.</p>
+</blockquote>
+<p><strong>1. The two-condition claim is refuted by this machine's own history.</strong> A per-version scan of every local transcript — 4,884 files, 4,040 failures, 84,750 classifier-bound calls — contradicts it in both directions. The claim predicts failure wherever the opt-out and a gateway coincide on a CLI past 2.1.229. The gateway window of 14 to 18 August is exactly that, and recorded <strong>0 failures in 4,056 calls</strong>, with Fable sessions at <strong>0 of 795</strong>. The claim also forbids failures with no gateway on a post-boundary CLI, yet 2.1.229 produced 139 failures in 2,220 calls and 2.1.231 produced 14, both only in their gateway-off hours. Sixteen versions from 2.1.233 to 2.1.261 are zero across 28,353 calls, gateway on and gateway off alike; failures resume only at 2.1.263.</p>
+<p><strong>2. The within-day split below does not survive the session as the unit of analysis.</strong> Counting tool calls treated 209 failures as 209 independent events. All 209 come from <strong>4 sessions out of the 30</strong> that made classifier-bound calls that afternoon, and one session holds 161 of them. With the session as the unit: 0 of 9 calling sessions failed before 09:00, 4 of 25 after, <strong>Fisher exact two-sided p = 0.554</strong>. Every one of the 209 came from a session that <em>started</em> at or after 09:00, while the five sessions that ran across the boundary made 310 post-boundary calls with zero failures. A process takes its environment at startup, so the clock split is a cohort split, not one population under two conditions. The counts are inflated by retry loops as well: 53% of Bash failures repeat the previous failure's command, and one session failed 175 times consecutively on a single command.</p>
+<p><strong>3. The 9 September verification does not isolate the block.</strong> That probe removed the opt-out <em>and</em> moved the default model to Opus, which switches the classifier to the Sonnet lane that does not fail, so it may have changed the lane rather than the header. The matrix never ran the complementary cell, opt-out set on a direct connection on the Opus lane. And fifteen requests fired as a burst at a path with no client retry is itself a way to empty a token bucket, so 15-against-15 is not evidence of a block policy.</p>
+<p><strong>4. The lane asymmetry is a gradient, not a dichotomy.</strong> Ordered by rate rather than count: Fable about 22%, GPT-5.6 Sol 12.8%, Opus 5 at 5 of 107, GPT-6 Astra 1.5%, and Sonnet at 0 of 9, which carries no information at all. On 11 September a session running on Opus 5 had its own classifier refuse calls, naming <code>claude-opus-5</code>. The Opus lane is not clean either.</p>
+<p><strong>What still stands.</strong> The guard is real and still in 2.1.267: the attribution block is re-added only when the caller asked to ignore the opt-out, the provider is first-party, no Unix socket is in use, and the base URL is unset or literally <code>api.anthropic.com</code>. The assume-first-party flag reaches two sibling tests four lines away in the same builder but not this one, which reads as an oversight. Nothing in the changelog from 2.1.230 to 2.1.267 widens it, so an upstream fix is not why the failures stopped. Removing the opt-out remains worth doing: it broke every classifier call before 2.1.231 and buys nothing.</p>
+<p><strong>Why the mechanism may still not be the cause.</strong> The same call site carries a second gate, true when no API key resolves and an account is signed in, which is this machine's configuration. If it holds, the repair is never requested at all, so the block is absent from every classifier request in every period — and a constant cannot explain a varying outcome. Two of its sub-terms could not be settled by reading the bundle, so this is the leading reading rather than a settled one.</p>
+<p>A request-level capture at the loopback router, recording whether each classifier request carried the block against its upstream status in the same minute, is the observation that would settle it. Until then the honest position is that the cause of the September failures is unknown, and that it needs a CLI at or past 2.1.263 together with the September gateway configuration, which differs from August's by the <code>_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL</code> flag.</p>
+<h2 id="one-setting-and-one-url-check-produced-every-429">One setting and one URL check produced every 429</h2>
+<p>Two things had to be true at once for a classifier call to fail, on any CLI from 2.1.229 onwards. <strong>(Withdrawn &mdash; see <a href="#corrections-11-september">Four claims here are withdrawn</a>; the August gateway window refutes this.)</strong> The settings file carried <code>CLAUDE_CODE_ATTRIBUTION_HEADER=0</code>, an opt-out that has sat there since 31 March. And the request had to leave through a base URL that is not <code>api.anthropic.com</code>, which is what the model-router gateway is. Either one alone is harmless. Together, Claude Code sends the classifier request without a block the server insists on, and the server answers a bare 429 in 0.3 seconds. Removing the opt-out ends it, and the gateway stays. Before 2.1.229 (released 12 August) the opt-out alone was enough, on every path, which is why auto mode also failed before the gateway existed; see the questions section below. Two of the roughly 270 errors in the window, both on 4 September with the gateway off, sit alongside 36 server-overload fallbacks that day and are ordinary overload, not this bug.</p>
+<h2 id="auto-mode-makes-a-second-hidden-request-for-every-tool-call">Auto mode makes a second, hidden request for every tool call</h2>
+<p>When the model proposes a tool call in auto mode, Claude Code does not run it straight away. It sends a separate request to a classifier, with the transcript attached, asking whether the action is safe. That request never appears in the session transcript file, so a scan of transcripts undercounts what the meter sees. The classifier runs on the session's model tier: Sonnet sessions classify on Sonnet, Fable sessions on Opus 5 with the 1M window.</p>
+<pre class="mermaid">
+flowchart TD
+  A[Model proposes a tool call&lt;br/&gt;for example Bash] --&gt; B{Allow or deny rule&lt;br/&gt;matches?}
+  B -- yes --&gt; R[Run or refuse locally&lt;br/&gt;no network call]
+  B -- no --&gt; C[Classifier request&lt;br/&gt;system prompt: security monitor&lt;br/&gt;body: transcript, about 188 KB&lt;br/&gt;max_tokens 64]
+  C --&gt; D{Server answer}
+  D -- 200 verdict --&gt; E[Run the tool&lt;br/&gt;or deny with a reason]
+  D -- 429 --&gt; F[Retry, up to 5 times]
+  F --&gt; G[Deny the tool&lt;br/&gt;Model re-plans at full context]
+</pre>
+<p>The re-plan is where the visible cost comes from. Every denied Bash sends the whole conversation back to the main model, at about 190k tokens on a typical session here, and the model tries a different route that gets denied again.</p>
+<h2 id="claude-code-drops-the-attribution-block-whenever-both-conditions-hold">Claude Code drops the attribution block whenever both conditions hold</h2>
+<p>The attribution block is a short text line Claude Code puts into the system prompt of its own requests, naming the client and billing context. The opt-out variable suppresses it. Claude Code 2.1.229 added a repair for the classifier path, because the server rejects classifier requests without the block (Anthropic tracks this as <a href="https://github.com/anthropics/claude-code/issues/64585">issue 64585</a>, the resolution of <a href="https://github.com/anthropics/claude-code/issues/60438">issue 60438</a>). The repair has a guard: it only re-adds the block when the base URL is unset or its host is literally <code>api.anthropic.com</code>. The <code>_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL</code> flag that the gateway sets is checked by a different function and does not reach this one.</p>
+<pre class="mermaid">
+flowchart TD
+  A[Classifier request&lt;br/&gt;being assembled] --&gt; B{Opt-out set?&lt;br/&gt;CLAUDE_CODE_ATTRIBUTION_HEADER=0}
+  B -- no --&gt; OK[Block included&lt;br/&gt;server answers 200]
+  B -- yes --&gt; C{Base URL host is&lt;br/&gt;api.anthropic.com&lt;br/&gt;or unset?}
+  C -- yes, direct --&gt; OK
+  C -- no, gateway --&gt; BAD[Block omitted&lt;br/&gt;server answers bare 429&lt;br/&gt;no retry-after, no headers]
+</pre>
+<p>Every captured request from the 8 September A/B lacked the block, on both arms, because both arms went through a loopback proxy URL. That is why that A/B showed no difference: it compared two failing paths and concluded, wrongly, that the router was innocent and Anthropic was throttling the account. The router was innocent, but for the reason above, not because the throttle was elsewhere.</p>
+<h2 id="failures-begin-the-hour-the-router-came-up">Failures begin the hour the router came up</h2>
+<p>The router began listening at 09:07 UTC on 6 September and the wiring commit landed at 09:25, in the middle of the working day. Sessions on CLI 2.1.263 had been running since 03:00 UTC. Splitting that one day at 09:00 UTC therefore holds the CLI version, the session model, the machine and the account fixed, and varies only whether the request left through the gateway. Each cell below is failures over classifier-bound tool calls.</p>
+<table>
+<thead>
+<tr>
+<th>Session model, CLI 2.1.263</th>
+<th>Before 09:00 UTC</th>
+<th>From 09:00 UTC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fable 5.1</td>
+<td>0 / 720</td>
+<td>172 / 793</td>
+</tr>
+<tr>
+<td>Opus 5</td>
+<td>0 / 198</td>
+<td>5 / 107</td>
+</tr>
+<tr>
+<td>Sonnet 5</td>
+<td>0 / 87</td>
+<td>0 / 9</td>
+</tr>
+<tr>
+<td>GPT-5.6 Sol</td>
+<td>0 / 0</td>
+<td>22 / 172</td>
+</tr>
+<tr>
+<td>GPT-6 Astra</td>
+<td>0 / 0</td>
+<td>10 / 652</td>
+</tr>
+<tr>
+<td><strong>All models on 2.1.263</strong></td>
+<td><strong>0 / 1006</strong></td>
+<td><strong>209 / 1788</strong></td>
+</tr>
+<tr>
+<td>Sessions still on CLI 2.1.261 — context, not a control</td>
+<td>0 / 190</td>
+<td>0 / 42</td>
+</tr>
+</tbody>
+</table>
+<p>Sessions already running 2.1.263 made over a thousand classifier-bound calls that morning without a single failure, and began failing within the hour the router came up. <strong>(Withdrawn &mdash; this split does not survive the session as the unit of analysis; see <a href="#corrections-11-september">the corrections</a>.)</strong> That rules out the CLI version, the weekly model-scoped quota, the account and server-side capacity drift as the trigger, because none of them changed at 09:00 that day. The 2.1.261 row is listed for context rather than as a control: those sessions ran on the same machine-wide setting, so they vary the CLI version and nothing else.</p>
+<p>The split also adds something the root cause above does not yet explain. The failures concentrate in Fable 5.1 sessions, whose classifier runs on Opus 5 with the 1M window. Opus 5 and Sonnet 5 sessions, whose classifier runs on Sonnet 5, stay at or near zero through the same gateway with the same opt-out set. So the missing attribution block appears to be refused on the Opus classifier lane and tolerated on the Sonnet lane, which is consistent with the model-dependent gating measured in issue 60438. Treat that as an observation, not a settled claim: a dropped block predicts uniform failure and says nothing about why the lane should matter. Five of the Opus 5 failures also name <code>astra</code> as their classifier rather than the Opus variant, which suggests the gateway sometimes mis-resolves which provider a classifier request belongs to.</p>
+<p>Three limits. The denominator counts classifier-bound tool calls — Bash, PowerShell, Monitor, Agent, Task and SendMessage — which is an upper bound on classifier calls, because allow rules and cached verdicts skip the classifier. Three failures on tools outside that set, one <code>Edit</code> and two on an MCP browser tool, are excluded from every cell. And the gap between bound calls and real classifier calls moves with the workload mix, so a day-to-day rate series is not a trend; this within-day split is the comparison that survives. One further caution understates the second column rather than inflating it: a session fixes its base URL when it starts, so sessions launched before the rewire but still running after it sit in that column without the gateway.</p>
+<p>The next section covers the same event day by day across three weeks, and the two are meant to be read together rather than added up. Their 6 September totals differ, 124 there against 209 here, because the counting rules differ: this section counts on a UTC day and puts <code>SendMessage</code> in both the numerator and the denominator, while the day table counts on a local day and leaves it out. Neither number is the other's correction.</p>
+<p>The two clocks are also worth stating, because they are not the same reading. The day table gives 04:33 for the rewire on the local PDT clock, which is 11:33 UTC. The boundary here comes from the router's own log on the machine these transcripts were written on, whose first entry that day is 09:07:31 UTC, with the wiring commit at 09:25 UTC. Whether the two describe one machine and a conversion slip, or two machines whose routers started at different times, is unresolved; the split is taken from the log rather than from either quoted time.</p>
+<h2 id="the-two-week-quiet-spell-was-the-gateway-being-off">The two-week quiet spell was the gateway being off</h2>
+<p>The opt-out was present the whole time, so the only variable that moved is whether sessions went through the gateway. Each row is one local day; CLI versions come from the transcripts, 429 counts from the &quot;cannot determine the safety&quot; errors in them.</p>
+<table>
+<thead>
+<tr>
+<th>Day</th>
+<th>Sessions via gateway</th>
+<th>Classifier 429s</th>
+<th>CLI version</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Aug 12</td>
+<td>no</td>
+<td>0</td>
+<td>2.1.229</td>
+</tr>
+<tr>
+<td>Aug 13</td>
+<td>yes, wired 23:32</td>
+<td>4</td>
+<td>2.1.231 to 2.1.232</td>
+</tr>
+<tr>
+<td>Aug 15</td>
+<td>wired, but the router log shows no model traffic</td>
+<td>0</td>
+<td>2.1.229</td>
+</tr>
+<tr>
+<td>Aug 17</td>
+<td>yes</td>
+<td>10</td>
+<td>2.1.234</td>
+</tr>
+<tr>
+<td>Aug 18</td>
+<td>yes, unwired that day</td>
+<td>13</td>
+<td>2.1.234</td>
+</tr>
+<tr>
+<td>Aug 19 to Sep 3</td>
+<td>no</td>
+<td>0 every day</td>
+<td>2.1.234 to 2.1.260</td>
+</tr>
+<tr>
+<td>Sep 4</td>
+<td>no</td>
+<td>2</td>
+<td>2.1.261</td>
+</tr>
+<tr>
+<td>Sep 5</td>
+<td>no</td>
+<td>0</td>
+<td>2.1.261 to 2.1.263</td>
+</tr>
+<tr>
+<td>Sep 6</td>
+<td>yes, rewired 04:33</td>
+<td>124</td>
+<td>2.1.263</td>
+</tr>
+<tr>
+<td>Sep 8</td>
+<td>yes</td>
+<td>100</td>
+<td>2.1.263 to 2.1.266</td>
+</tr>
+<tr>
+<td>Sep 9</td>
+<td>yes</td>
+<td>14</td>
+<td>2.1.267</td>
+</tr>
+</tbody>
+</table>
+<p>The fix for direct connections shipped in 2.1.229, before this window opens. So on every day since, direct sessions worked and gateway sessions failed, whatever the CLI version. That is the &quot;went away for two weeks, came back 14 hours ago&quot; shape: the gateway was unwired on 18 August and rewired on 6 September.</p>
+<h2 id="removing-the-setting-fixed-it-and-the-gateway-stays-wired">Removing the setting fixed it and the gateway stays wired</h2>
+<p>The opt-out was removed from the live settings and committed as <code>b2868c8a</code>. The same headless auto-mode probe, one Bash command that creates and removes a file, ran before and after.</p>
+<p><strong>That removal did not hold, and the current state is the second one.</strong> On the morning of 10 September the opt-out was present again in both the live settings and the committed file. The likeliest reason is a session that started before the removal and wrote its own stale copy of the settings back, which is the same staleness the section below describes, acting on the file rather than on one process. It has now been removed from the live file and committed again as <code>b2868c8</code>, which is on <code>main</code>, with <code>21f78d1</code> adding a test that fails if the opt-out returns. Landing the fix therefore needs two more things: the daemon restarted, and every session started before the removal restarted with it.</p>
+<table>
+<thead>
+<tr>
+<th>Probe</th>
+<th>Classifier outcome</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sep 8, through router, opt-out set</td>
+<td>15 requests, 15 × 429</td>
+<td>max turns, every Bash denied, $0.25, command never ran</td>
+</tr>
+<tr>
+<td>Sep 8, direct via proxy URL, opt-out set</td>
+<td>15 requests, 15 × 429</td>
+<td>same</td>
+</tr>
+<tr>
+<td>Sep 9, through router, opt-out removed</td>
+<td>verdicts returned</td>
+<td>success, &quot;done&quot;, 0 denials, 3 turns</td>
+</tr>
+<tr>
+<td>Sep 9, direct, opt-out removed</td>
+<td>verdicts returned</td>
+<td>success, &quot;done&quot;, 0 denials, 3 turns</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-router-could-not-have-fixed-this">The router could not have fixed this</h2>
+<p>The router never sees the block. Claude Code decides not to include it before the request leaves the process, so there is nothing for the router to forward or repair. The router could forge the line itself, but that would mean synthesising Anthropic's billing attribution on the client's behalf, which is the wrong side of the boundary and a plausible way to get an account flagged. The gap sits in Claude Code: its repair keys on the raw URL host instead of honouring the first-party flag it offers for exactly this gateway case. That is worth filing upstream. Until then, not setting the opt-out is the clean fix, and it costs nothing: the block is a billing attribution line, not data about the work.</p>
+<h2 id="what-this-does-not-fix">What this does not fix</h2>
+<p>The 429s and the denial loops are gone. Three cost drivers are untouched, and were flagged by seven of eight council seats as the part the first diagnosis got backwards, since the heaviest spend days (2 to 4 September) had almost no 429s.</p>
+<ul>
+<li>Every non-allowlisted tool call in auto mode still costs one classifier request on the session's model tier, about 47k mostly cached tokens each. Now that they succeed, they are billed where the 429s probably were not.</li>
+<li>Long contexts. 29% of last week's requests carried 200k tokens or more, and 6% carried 400k or more. Compacting at task boundaries is the lever.</li>
+<li>Nine parallel auto-mode sessions are nine classifier streams.</li>
+</ul>
+<p>The levers the council agreed on: narrow <code>permissions.allow</code> rules for the read-only Bash patterns agents use most, deny rules and deterministic local PreToolUse hooks as classifier-free fast paths, a hook that stops a job after repeated identical denials, and compaction before 200k. Each allow rule's effect can be checked by counting classifier requests in the router log before rolling it out.</p>
+<h2 id="sessions-started-before-the-fix-still-fail-and-the-daemon-hands-out-stale-ones">Sessions started before the fix still fail, and the daemon hands out stale ones</h2>
+<p>Settings <code>env</code> values are copied into the process environment when a Claude Code process starts, so every session launched before 22:21 PDT on 9 September still carries the opt-out and still 429s. The session that answered the review questions below is one: its process started at 17:30 PDT as a daemon pre-spawned spare, was claimed for a new job at 22:53, and showed <code>CLAUDE_CODE_ATTRIBUTION_HEADER=0</code> in its environment. Transcripts logged 46 classifier refusals in that session's first hour, well after the fix, and re-authenticating and switching model did not clear them. The daemon keeps a pool of such spares, so a job started after the fix can still land on a pre-fix process. The fix is complete only after the daemon and every interactive session are restarted.</p>
+<p>One thing does not fit and is left open. Refusals in that session were intermittent, while the 8 September capture was 15 failures out of 15. A handful of commands went through, including one <code>git log</code>, and half an hour later a plain <code>git status</code> was refused, so the difference is not which command was asked for. A stale opt-out predicts uniform failure, so either the server's 429 is not deterministic, or something besides the opt-out is throttling this account's classifier lane. Deciding between them needs the headless probe from the fix, run from a stale process and a fresh one, and that probe needs the shell access the refusals were blocking. Until it runs, treat the stale-process claim as the reason to restart, not as a closed case.</p>
+<pre><code class="language-bash"># which live claude processes still carry the opt-out
+for p in $(pgrep -f claude); do ps -E -o command= -p &quot;$p&quot; | grep -q 'ATTRIBUTION_HEADER=0' &amp;&amp; echo &quot;$p stale&quot;; done
+# restart the daemon (this terminates background sessions), then reopen interactive sessions
+claude daemon stop
+</code></pre>
+<h2 id="questions-from-the-9-september-review-answered">Questions from the 9 September review, answered</h2>
+<p><strong>Auto mode also failed before the gateway existed. Why?</strong> Because until 12 August the opt-out alone broke the classifier on every path. The v2.1.229 release notes (12 Aug 20:56) read: &quot;Fixed auto mode failing on every tool call for users who disable the attribution header via <code>CLAUDE_CODE_ATTRIBUTION_HEADER</code> (direct Anthropic API connections)&quot;. That is <a href="https://github.com/anthropics/claude-code/issues/64585">issue 64585</a>, opened 1 June by a reporter on the plain Anthropic API with no proxy, and <a href="https://github.com/anthropics/claude-code/issues/60438">issue 60438</a> from 19 May. The opt-out has been in the settings since 31 March, so from then until 12 August every auto-mode session failed, direct or not. The gateway was first wired on 13 August at 23:32, one day after the direct fix shipped, so the failures never visibly stopped: the cause narrowed from &quot;opt-out anywhere&quot; to &quot;opt-out behind a gateway&quot; overnight.</p>
+<p><strong>What is a re-plan?</strong> When the classifier denies a tool call, the tool does not run and the denial is returned to the model as the tool's result. The model then has to produce a new turn, which is a fresh request to the main model carrying the whole conversation, about 190k tokens on a typical session here. In the failing state each Bash cost five classifier attempts, one denial, one full-context re-plan, and then the model proposed another Bash and the cycle repeated.</p>
+<p><strong>Should this be filed upstream?</strong> Yes. The 2.1.229 repair re-adds the block only when the base URL host is literally <code>api.anthropic.com</code>, and ignores <code>_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL</code>, the flag Claude Code itself offers for a first-party gateway. A draft issue is in the handover. The guard reading came from the 2.1.263 bundle in the earlier job; this session could not re-open the bundle because the classifier blocked the command, so the code-level claim rests on that read plus the release-note wording and the before/after probes. Confidence about 85%.</p>
+<p><strong>Is a gateway supported, and is the model-router against the terms?</strong> Gateways are a documented configuration. Anthropic's <a href="https://code.claude.com/docs/en/llm-gateway">LLM gateway page</a> says <code>ANTHROPIC_BASE_URL</code> &quot;is the variable that points Claude Code at the gateway&quot;, and explicitly covers a subscription login through one: &quot;a saved claude.ai login remains the active credential, so its usage limits and billing apply&quot;, provided the gateway forwards the OAuth capability beta. The same page says Anthropic &quot;doesn't endorse, maintain, or audit third-party gateway products, and doesn't support routing Claude Code to non-Claude models through any gateway&quot;. Unsupported means no help when it breaks, not a stated breach. The Consumer Terms themselves were not read for this answer; the earlier note in <code>docs/remote-control-and-foreign-models.md</code> reached &quot;probably not a breach on a plain reading&quot;. About 70% that the foreign-model routing is terms-clean; the Claude-through-gateway part is documented.</p>
+<p><strong>Why is billing involved at all?</strong> The block is Claude Code's billing-attribution line (<code>x-anthropic-billing-header</code>), which tells the server the request comes from Claude Code and in what context. Why the classifier lane insists on it is not stated anywhere by Anthropic. The shape of the failure suggests a server-side check that the request really is Claude Code's classifier: issue 60438 measured an instant 429 on Opus and Sonnet with a pass on Haiku, while ordinary messages to the same models succeeded, which is a gate, not a quota. Speculative, about 60%. Whether the failed attempts drew down the subscription meter is still open.</p>
+<p><strong>Are we sure it is fixed, and do sessions need restarting?</strong> The before/after probes on fresh processes succeeded through the router and direct. Yes to restarting: see the section above, where a pre-fix process was caught still failing at 23:00 on 9 September, after the fix. Answered again on 10 September, with a correction: the opt-out was back in both the live and the committed settings that morning, so the mechanism is verified but the removal was not durable. It has been removed and committed a second time as <code>b2868c8</code>, now on <code>main</code>, and the fix lands only once every pre-fix process, the daemon included, has been restarted.</p>
+<h2 id="provenance">Provenance</h2>
+<ul>
+<li>Handover with the step list: <code>~/vault/tooling/dotfiles/docs/2026-09-09_handover-auto-mode-classifier-429.md</code></li>
+<li>Timeline report, with the withdrawn first diagnosis left in place: <code>~/vault/tooling/dotfiles/docs/2026-09-06-usage-spike-diagnosis.md</code></li>
+<li>Captures, probes, council brief and the 659-line council result: <code>~/.claude/jobs/49656f9b/tmp/</code> (job-local, reaped with the job)</li>
+<li>Code path: Claude Code 2.1.263, function <code>D4t</code> in the bundled CLI, guard <code>ignoreEnvOptOut &amp;&amp; provider firstParty &amp;&amp; ev()</code>, where <code>ev()</code> tests the <code>ANTHROPIC_BASE_URL</code> host against <code>api.anthropic.com</code></li>
+<li>Council: <code>openrouter-cli council ask</code>, eight seats plus Claude Fable 5 as chair, $3.93, 8 September 2026. The Grok 4.6 seat supplied the pointer to issue 60438</li>
+<li>The 6 September within-day split and the per-session-model rows were measured by Claude Opus 5 on 10 September 2026, in a parallel investigation, over every local Claude Code transcript. Scripts: <code>artifacts/why-auto-mode-broke-behind-the-gateway/onset_0906.py</code> and <code>split_gateway_vs_cli.py</code> beside it; the same two are vendored under <code>artifacts/classifier-rate-limits-2026-09/</code> with the data snapshot they feed. The transcripts move on, so those counts cannot be regenerated from a later run</li>
+<li>This page is written directly as HTML, with no separate build source. The file that publishes it is committed at <code>artifacts/why-auto-mode-broke-behind-the-gateway/why-auto-mode-broke-behind-the-gateway.html</code> in the dotfiles repo, and every later edit is made there</li>
+</ul>
+
+</div>
+</div>
+
+<script>
+const tocLinks = Array.from(document.querySelectorAll(".toc a"));
+const targets = tocLinks
+  .map((a) => ({ a, el: document.getElementById(a.getAttribute("href").slice(1)) }))
+  .filter((t) => t.el);
+if ("IntersectionObserver" in window && targets.length) {
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      const hit = targets.find((t) => t.el === e.target);
+      if (!hit) return;
+      tocLinks.forEach((a) => a.classList.remove("on"));
+      hit.a.classList.add("on");
+    });
+  }, { rootMargin: "-12% 0px -75% 0px" });
+  targets.forEach((t) => io.observe(t.el));
+}
+</script>
+<!-- annotation-layer v2 -->
+<style>
+:root{--an-bg:#fff;--an-ink:#1a1a1a;--an-soft:#5d5a55;--an-rule:#d9d4cc;--an-accent:#bd5d3a;
+ --an-mark:#fbe6a2;--an-bad:#a33f2a;--an-good:#2f6b4f;--an-good-bg:#e4f0e9;--an-field:#faf9f7}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--an-bg:#1f2124;--an-ink:#eceae6;
+ --an-soft:#a9a59e;--an-rule:#3a3d42;--an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;
+ --an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}}
+:root[data-theme="dark"]{--an-bg:#1f2124;--an-ink:#eceae6;--an-soft:#a9a59e;--an-rule:#3a3d42;
+ --an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;--an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}
+mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--an-accent);cursor:pointer;border-radius:2px}
+/* A suggested edit must not read as a comment highlight: the original is
+   struck rather than filled, and the replacement carries the insert colour. */
+mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-through;
+ text-decoration-color:var(--an-bad);text-decoration-thickness:2px;cursor:pointer;border-radius:2px}
+.anins{background:var(--an-good-bg);color:var(--an-good);border-bottom:2px solid var(--an-good);
+ border-radius:2px;padding:0 .12em;cursor:pointer}
+[data-annotation-layer]{font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;color:var(--an-ink);line-height:1.5}
+[data-annotation-layer] *{box-sizing:border-box}
+#anPop{position:absolute;z-index:1050;display:none;background:var(--an-bg);border:1px solid var(--an-rule);
+ border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.18);padding:.6rem;width:min(20rem,calc(100vw - 1.5rem));
+ max-height:min(80vh,26rem);overflow:auto}
+/* A control that would overwrite unsaved words points at them instead. */
+#anPop.nudge{outline:2px solid var(--an-accent);outline-offset:2px}
+/* iOS zooms the whole page when a focused field is under 16px. */
+@media (pointer:coarse){#anPop textarea,#anExportText{font-size:16px}}
+#anPop textarea{width:100%;min-height:4.5rem;border:1px solid var(--an-rule);border-radius:5px;
+ background:var(--an-field);color:var(--an-ink);padding:.4rem;font:inherit;font-size:.86rem;resize:vertical}
+.anbtn{background:var(--an-accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
+ font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}
+.anbtn.ghost{background:transparent;color:var(--an-soft);border:1px solid var(--an-rule)}
+.anbtn.ghost.danger,.anbtn.ghost.tiny.danger{color:var(--an-bad);border-color:var(--an-bad)}
+.anbtn[disabled]{opacity:.42;cursor:default}
+/* A copied comment is marked by taking its accent AWAY, never by adding a
+   chip: after the first round most of the list is copied, so anything
+   additive becomes noise on the majority. The fresh ones keep the accent and
+   are what the eye lands on. */
+.cmt.ancopied{border-left-color:var(--an-rule)}
+/* An armed control must not look like the button that just did nothing, so it
+   fills: the second click is visibly a different act from the first. */
+.anbtn.anarmed,.anbtn.ghost.danger.anarmed,.anbtn.ghost.tiny.danger.anarmed{
+ background:var(--an-bad);color:#fff;border-color:var(--an-bad)}
+.anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
+#anPop:not(.editing) #anDelete{display:none}
+/* The mode strip is deliberately NOT in .anrow: Save has to stay the first
+   control of that row, which is also its tab order. */
+.anmodebar{display:flex;gap:.3rem;margin-bottom:.45rem}
+.anmode{flex:1;background:transparent;color:var(--an-soft);border:1px solid var(--an-rule);
+ border-radius:5px;padding:.22rem .5rem;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer}
+.anmode.ansel{background:var(--an-accent);color:#fff;border-color:var(--an-accent)}
+/* Reopening an existing note is not the place to change what it is. */
+#anPop.editing .anmodebar{display:none}
+.cmt.ansuggest{border-left-color:var(--an-good)}
+.cmt .q.struck{text-decoration:line-through}
+.cmt .ins{color:var(--an-good)}
+/* Save leads: it is the first button in the DOM, so it is also first in tab
+   order. Delete is pushed to the far end so it is never the near miss. */
+.anrow{display:flex;gap:.4rem;align-items:center;margin-top:.45rem;flex-wrap:wrap}
+#anDelete{margin-left:auto}
+.anhint{color:var(--an-soft);font-size:.72rem;margin-top:.35rem}
+.anhint kbd{font:inherit;font-size:.95em;border:1px solid var(--an-rule);border-bottom-width:2px;
+ border-radius:4px;padding:0 .25rem;background:var(--an-field)}
+#anComments{max-width:48rem;margin:3rem auto 5rem;padding:0 1rem}
+#anComments h2{font-size:1.2rem;margin:0 0 .5rem;padding-bottom:.32rem;border-bottom:1px solid var(--an-rule)}
+#anComments .anscope{color:var(--an-soft);font-size:.86rem;margin:0 0 .6rem}
+.anbar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem}
+.anacts{display:flex;gap:.4rem;margin-top:.4rem}
+.ancount{color:var(--an-soft);font-size:.87rem}
+.ancount.warn{color:var(--an-bad);font-weight:650}
+.cmt{background:var(--an-bg);border:1px solid var(--an-rule);border-left:3px solid var(--an-accent);
+ border-radius:0 7px 7px 0;padding:.6rem .8rem;margin:.5rem 0;font-size:.88rem;overflow-wrap:anywhere}
+.cmt .q{color:var(--an-soft);font-style:italic;margin-bottom:.3rem}
+.cmt .where{font-size:.72rem;color:var(--an-soft);text-transform:uppercase;letter-spacing:.06em}
+.cmt .orphan{font-size:.74rem;color:var(--an-bad)}
+#anExport{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1060;
+ background:var(--an-bg);border:1px solid var(--an-rule);border-radius:10px;padding:.9rem;
+ width:min(46rem,92vw);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+#anExport .exphead{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap}
+#anExport .exphint{color:var(--an-soft);font-size:.8rem}
+#anExport .anbtn{margin-left:auto}
+#anExportText{width:100%;height:min(24rem,55vh);border:1px solid var(--an-rule);border-radius:6px;
+ background:var(--an-field);color:var(--an-ink);padding:.6rem;font-family:ui-monospace,Menlo,monospace;
+ font-size:.82rem;resize:vertical}
+.anok{background:var(--an-good-bg);color:var(--an-good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+.anwarn{background:var(--an-bad);color:#fff;padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+#anBadge{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
+ bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;background:var(--an-bg);color:var(--an-ink);
+ border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
+ font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+#anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
+</style>
+<div data-annotation-layer="v2" data-key="review-auto-mode-classifier-429-report">
+<section id="anComments">
+<h2 id="your-comments">Your comments</h2>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
+<div class="anbar">
+  <span class="ancount" id="anCount">No comments yet</span>
+  <button class="anbtn" id="anCopy">Copy all</button>
+  <button class="anbtn ghost danger" id="anClearCopied">Delete copied</button>
+  <button class="anbtn ghost danger" id="anClear">Delete all</button>
+  <span id="anToast"></span>
+</div>
+<div id="anList"></div>
+</section>
+<div id="anPop" role="dialog" aria-label="Comment">
+  <div class="anmodebar" role="group" aria-label="Annotation mode">
+    <button class="anmode ansel" type="button" id="anModeComment" aria-pressed="true">Comment</button>
+    <button class="anmode" type="button" id="anModeEdit" aria-pressed="false">Suggest edit</button>
+  </div>
+  <textarea id="anTxt" placeholder="What do you think?"></textarea>
+  <div class="anrow">
+    <button class="anbtn" id="anSave">Save</button>
+    <button class="anbtn ghost" id="anCancel">Cancel</button>
+    <button class="anbtn ghost danger" id="anDelete">Delete</button>
+  </div>
+  <div class="anhint"><kbd>Enter</kbd> saves &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> newline &middot; <kbd>Esc</kbd> discards &middot; <kbd>Ctrl</kbd>+<kbd>E</kbd> switches mode</div>
+</div>
+<div id="anExport" role="dialog" aria-label="Export comments">
+  <div class="exphead">
+    <strong>Your comments as Markdown</strong>
+    <span class="exphint">already selected &mdash; copy with your usual shortcut</span>
+    <button class="anbtn ghost tiny" id="anExportClose">Close</button>
+  </div>
+  <textarea id="anExportText" readonly></textarea>
+</div>
+<button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
+</div>
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var root = document.querySelector("[data-annotation-layer]");
+var KEY = (root && root.dataset.key) || ("annot:" + document.title);
+// Namespaced with a PREFIX, never a suffix. With `KEY + "-draft"`, a page
+// titled "Spec-draft" owns the same key as the draft of a page titled "Spec",
+// so pressing Escape on one deletes the other's comments outright.
+var DIRTY = "an-dirty:" + KEY;
+var DRAFT = "an-draft:" + KEY;
+
+// ---- storage -------------------------------------------------------------
+// localStorage, and nothing else. An IndexedDB mirror, a backup key and a
+// scan of neighbouring keys all lived here and all came out: the mirror let a
+// save that raced its own asynchronous recovery destroy the comments it was
+// recovering; the backup key resurrected comments the user had deliberately
+// cleared; and the neighbour scan adopted a different document's comments
+// whenever one quote happened to appear on this page. The republish they were
+// meant to survive is already covered, because the generator fixes the key
+// (`data-key`) from the filename rather than the title.
+function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
+
+// Stored as a bare array, which every generation of this layer can read. An
+// older deployed page does `JSON.parse(...).reduce(...)` on this value and
+// throws on an object, and that kills its whole script: no handlers, no
+// saving, a page that looks fine and silently does nothing.
+function readComments(){
+  var d; try { d = JSON.parse(lsGet(KEY) || "[]"); } catch (e) { return []; }
+  if (Array.isArray(d)) return d;
+  if (d && Array.isArray(d.comments)) return d.comments;  // envelope from a newer layer
+  return [];
+}
+// Not a per-tab counter: two tabs on one page would both hand out id 1.
+function newId(){ return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
+
+var comments = readComments(), unsaved = false;
+comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+
+// Per-comment export state. `copiedAt` is stamped only where the page-level
+// flag was cleared before -- a clipboard write that resolved, or a real copy
+// event on the fallback textarea -- so its absence means "never left this
+// browser". The asymmetry is deliberate: an unstamped comment can never fall
+// into the delete-copied set, so a miss costs one redundant copy rather than
+// a page of lost notes. That is also why there is no "delete the uncopied"
+// action: every comment predating this key reads as uncopied, so such a
+// button would have wiped every existing page on first run.
+function isCopied(c){ return !!c.copiedAt; }
+function copiedSet(){ return comments.filter(isCopied); }
+function freshCount(){ return comments.length - copiedSet().length; }
+function isDirty(){ return freshCount() > 0; }
+// The legacy page-level key is still written, in lockstep, because a stale tab
+// running an older layer reads it and would otherwise raise or stand down its
+// unload guard against state it cannot see.
+function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
+
+// One-time migration for comments written before `copiedAt` existed. Without
+// it every upgraded page announces "N of N not yet copied out" and re-arms the
+// unload guard for someone who copied everything out yesterday: a false alarm
+// on every page in existence, which is how a warning stops being read.
+// The legacy flag is EVIDENCE, not an inference -- an explicit "0" was written
+// by a copy that actually happened. A key that is MISSING is not evidence and
+// is left alone, so absence can never manufacture a safe state.
+(function migrateFromLegacyFlag(){
+  if (lsGet(DIRTY) !== "0" || !comments.length) return;
+  var now = Date.now(), touched = false;
+  comments.forEach(function(c){ if (!c.copiedAt) { c.copiedAt = now; touched = true; } });
+  if (touched) persist();
+})();
+var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
+var pending = null, editingId = null;
+// The box has two modes and one dirty flag. `dirty` is set by the first user
+// modification and by nothing else: an edit box OPENS with the selection
+// already in its textarea, so keying the draft autosave and the "a box with
+// words in it refuses to close" invariant on non-emptiness would turn every
+// opened edit box into an unclosable phantom draft nobody typed.
+var mode = "comment", dirty = false;
+// An entry written before v2 carries no `type`, so absence means comment.
+function isEdit(c){ return c && c.type === "edit"; }
+function bodyOf(c){ return isEdit(c) ? (c.replacement || "") : (c.note || ""); }
+
+window.addEventListener("pagehide", saveDraft);
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden") saveDraft();
+});
+window.addEventListener("beforeunload", function(e){
+  saveDraft();
+  if (!isDirty() || !comments.length) return;
+  // The comments are already in localStorage; this only warns that they have
+  // not been copied anywhere outside this browser yet.
+  e.preventDefault(); e.returnValue = ""; return "";
+});
+// A second tab on the same page used to be last-writer-wins. Take its write
+// instead — unless a note is open here, because nothing may pull the DOM out
+// from under a range the user is still typing against.
+window.addEventListener("storage", function(e){
+  if (e.key !== KEY || isOpen()) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = readComments();
+  comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+  restoreHighlights(); render();
+});
+
+function inLayer(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  return !!(node && node.closest && node.closest("[data-annotation-layer]"));
+}
+function sectionOf(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  var sec = node && node.closest ? node.closest("section") : null;
+  if (sec) { var h = sec.querySelector("h1,h2,h3"); if (h) return h.textContent.trim(); }
+  while (node && node !== document.body) {
+    var p = node.previousElementSibling;
+    while (p) { if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim(); p = p.previousElementSibling; }
+    node = node.parentNode;
+  }
+  return "document";
+}
+function isOpen(){ return pop.style.display === "block"; }
+function hasText(){ return !!txt.value.trim(); }
+// `rect` is viewport-relative. Measure the box while it is laid out but not
+// yet painted, so it never appears at the wrong place for one frame — that
+// single-frame jump is itself a flicker.
+function placePop(rect){
+  pop.style.visibility = "hidden";
+  pop.style.display = "block";
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  var top = rect.bottom + 8;
+  if (top + h > vh - 8) top = rect.top - h - 8;             // no room below: flip above
+  top = Math.max(8, Math.min(top, Math.max(8, vh - h - 8))); // and keep it on screen either way
+  pop.style.left = (Math.max(8, Math.min(rect.left, vw - w - 12)) + window.scrollX) + "px";
+  pop.style.top = (top + window.scrollY) + "px";
+  pop.style.visibility = "";
+}
+// Words the user has not saved are not something another control may
+// overwrite: clicking a second highlight used to replace the text outright.
+// `focus` is false on the touch path, where focusing a field while iOS shows
+// its selection handles collapses the selection.
+function nudge(focus){
+  if (focus !== false) txt.focus();
+  pop.classList.add("nudge");
+  setTimeout(function(){ pop.classList.remove("nudge"); }, 700);
+}
+// Applies a mode WITHOUT touching the textarea. The prefill belongs to the
+// user-driven switch below; the restore paths (an existing entry, a recovered
+// draft) supply their own text and must not have it overwritten.
+function setModeState(next){
+  mode = next;
+  var isE = mode === "edit";
+  $("anModeComment").classList.toggle("ansel", !isE);
+  $("anModeEdit").classList.toggle("ansel", isE);
+  $("anModeComment").setAttribute("aria-pressed", isE ? "false" : "true");
+  $("anModeEdit").setAttribute("aria-pressed", isE ? "true" : "false");
+  txt.placeholder = isE ? "Replacement text; an empty box suggests deleting it"
+                        : "What do you think?";
+}
+// The user-driven switch rewrites the textarea, so it declines while there are
+// unsaved words and points at them instead, exactly as a second highlight
+// click does. Reopening an existing entry is not the place to change its kind,
+// so the strip is hidden then and this is a no-op.
+function switchMode(next){
+  if (mode === next || editingId !== null) return;
+  if (dirty) { nudge(); return; }
+  setModeState(next);
+  txt.value = (next === "edit" && pending) ? pending.quote : "";
+  dirty = false;
+  txt.focus();
+}
+$("anModeComment").onclick = function(){ switchMode("comment"); };
+$("anModeEdit").onclick = function(){ switchMode("edit"); };
+
+function openEdit(c, anchor, focus){
+  if (isOpen() && editingId !== c.id && dirty) { nudge(focus); return; }
+  editingId = c.id; pending = null;
+  setModeState(isEdit(c) ? "edit" : "comment");
+  txt.value = bodyOf(c);
+  dirty = false;
+  pop.classList.add("editing");
+  placePop(anchor ? anchor.getBoundingClientRect() : { left: 16, top: 100, bottom: 100 });
+  if (focus !== false) txt.focus();
+}
+// Both parts of a suggested edit carry the entry id, as a comment highlight
+// does, so clicking the strikethrough or the replacement reopens the same box.
+document.addEventListener("click", function(ev){
+  var m = ev.target.closest && ev.target.closest("[data-cid]");
+  if (!m || pop.contains(ev.target)) return;
+  var c = comments.find(function(x){ return x.id === Number(m.dataset.cid); });
+  if (!c) return;
+  ev.preventDefault(); openEdit(c, m);
+});
+
+// Wraps a range in a highlight. surroundContents refuses a range that crosses
+// element boundaries, so fall back to lifting the contents out and wrapping.
+function wrapRange(range, id, title, cls){
+  var m = document.createElement("mark");
+  m.className = cls || "note"; m.title = title; m.dataset.cid = String(id);
+  try { range.surroundContents(m); }
+  catch (e) { m.appendChild(range.extractContents()); range.insertNode(m); }
+  return m;
+}
+// The ONE place the replacement span is created, rewritten or removed. Three
+// call sites need it (save a new edit, revise one, restore one on load) and
+// they drift apart if each does its own DOM work: an edit revised to empty has
+// to lose its span and become pure strikethrough again.
+function renderEditInline(c){
+  var m = document.querySelector('mark.anedit[data-cid="' + c.id + '"]');
+  if (!m) return;
+  m.title = c.replacement ? "suggested: " + c.replacement : "suggested deletion";
+  var s = document.querySelector('span.anins[data-cid="' + c.id + '"]');
+  if (!c.replacement) { if (s) s.remove(); return; }
+  if (!s) {
+    s = document.createElement("span");
+    s.className = "anins"; s.dataset.cid = String(c.id);
+    // The marker docTextNodes() looks for. Without it the first saved edit
+    // corrupts the anchor of every comment after it, because the replacement's
+    // words join the text that quotes are searched in.
+    s.setAttribute("data-an-inserted", "1");
+    m.parentNode.insertBefore(s, m.nextSibling);
+  }
+  s.textContent = c.replacement;
+}
+// Every text node of the page, skipping the layer's own UI, existing
+// highlights, and anything the layer itself put on the page. Re-anchoring
+// matches ORIGINAL document text only.
+function docTextNodes(){
+  var host = document.querySelector(".doc") || document.querySelector("main") || document.body;
+  var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, { acceptNode: function(n){
+    var p = n.parentNode;
+    if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
+    if (p.closest("mark.note") || p.closest("mark.anedit") || p.closest("[data-an-inserted]") ||
+        p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  var out = [], n;
+  while ((n = walker.nextNode())) out.push(n);
+  return out;
+}
+// Collapses runs of whitespace to one space, and records where each kept
+// character sits in the raw text, so a match can be mapped back to real nodes.
+function collapsedIndex(nodes){
+  var norm = "", rawAt = [], raw = 0, lastWasSpace = false;
+  for (var k = 0; k < nodes.length; k++) {
+    var v = nodes[k].nodeValue;
+    for (var i = 0; i < v.length; i++, raw++) {
+      var isSpace = /\s/.test(v[i]);
+      if (isSpace && lastWasSpace) continue;
+      norm += isSpace ? " " : v[i];
+      rawAt.push(raw);
+      lastWasSpace = isSpace;
+    }
+  }
+  return { norm: norm, rawAt: rawAt };
+}
+// Finds a stored quote again after a reload. Selection.toString() gives
+// rendered text, where a newline inside a paragraph reads as a single space,
+// so the comparison has to collapse whitespace.
+function rangeForQuote(quote){
+  if (!quote) return null;
+  var nodes = docTextNodes();
+  if (!nodes.length) return null;
+  var starts = [], raw = 0;
+  for (var k = 0; k < nodes.length; k++) { starts.push(raw); raw += nodes[k].nodeValue.length; }
+  var idx = collapsedIndex(nodes);
+  var needle = quote.replace(/\s+/g, " ").trim();
+  if (!needle) return null;
+  var at = idx.norm.indexOf(needle);
+  if (at < 0) return null;
+  var rawFrom = idx.rawAt[at], rawTo = idx.rawAt[at + needle.length - 1] + 1;
+  function locate(offset, isEnd){
+    for (var j = 0; j < nodes.length; j++) {
+      var base = starts[j], end = base + nodes[j].nodeValue.length;
+      if (isEnd ? (offset > base && offset <= end) : (offset >= base && offset < end)) return [nodes[j], offset - base];
+    }
+    return null;
+  }
+  var s = locate(rawFrom, false), f = locate(rawTo, true);
+  if (!s || !f) return null;
+  var r = document.createRange(); r.setStart(s[0], s[1]); r.setEnd(f[0], f[1]);
+  return r;
+}
+// A reload rebuilds the DOM, so saved highlights are gone while the comments
+// survive in localStorage. Put the marks back, or a comment cannot be clicked
+// open to edit or delete. Quotes no longer on the page stay listed as orphans.
+function restoreHighlights(){
+  var missed = 0;
+  comments.forEach(function(c){
+    if (document.querySelector('mark[data-cid="' + c.id + '"]')) return;
+    var r = rangeForQuote(c.quote);
+    if (!r) { missed++; return; }
+    try {
+      if (isEdit(c)) { wrapRange(r, c.id, "", "anedit"); renderEditInline(c); }
+      else wrapRange(r, c.id, c.note, "note");
+    } catch (e) { missed++; }
+  });
+  return missed;
+}
+function hasMark(c){ return !!document.querySelector('mark[data-cid="' + c.id + '"]'); }
+// A selection touching an existing suggested edit, if there is one. Overlapping
+// edits cannot be exported appliably, and a quote that spans inserted text can
+// never be re-anchored, so such a selection is declined rather than annotated.
+function editOverlapping(range){
+  var els = document.querySelectorAll('mark.anedit[data-cid], span.anins[data-cid]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i], hit = false;
+    try { hit = range.intersectsNode(el); } catch (e) { hit = false; }
+    if (!hit) continue;
+    var cid = Number(el.dataset.cid);
+    var c = comments.find(function(x){ return x.id === cid; });
+    if (c) return { entry: c, el: el };
+  }
+  return null;
+}
+
+// Opens the note box for the current selection. autofocus is false on touch:
+// focusing a textarea while iOS is showing its selection handles collapses the
+// selection before the user has typed anything.
+//
+// This function only ever OPENS. Nothing about the selection closes the box —
+// that asymmetry is the whole flicker fix. Opening the box focuses the
+// textarea, focusing collapses the document selection, and the old code read
+// that collapse back as "the user deselected" and closed the box it had just
+// opened. The box now closes only on Save, Cancel/Escape, or a press outside
+// it while it is still empty.
+function openForSelection(autofocus){
+  if (editingId !== null) return false;
+  var sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  var text = sel.toString().trim();
+  if (!text) return false;
+  if (inLayer(sel.anchorNode) || inLayer(sel.focusNode)) return false;
+  // Already open on this exact selection: do not wipe a half-typed note.
+  if (pending && pending.quote === text && isOpen()) return true;
+  // Open on some other selection the user has MODIFIED: leave it be rather
+  // than throwing away work. The test is `dirty`, not non-emptiness: an
+  // untouched prefilled edit box yields to a fresh selection, and a dirty
+  // EMPTY edit box (a pending deletion) is work and must not be overwritten.
+  if (isOpen() && dirty) return true;
+  var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
+  // Overlaps an existing suggested edit: point at that edit rather than open a
+  // second box on the range.
+  var hit = editOverlapping(range);
+  if (hit) { openEdit(hit.entry, hit.el, autofocus); nudge(autofocus); return true; }
+  editingId = null; pop.classList.remove("editing");
+  // Comment is the default on every fresh selection. A mode that stayed where
+  // it was last left would silently change what select-type-Enter means.
+  setModeState("comment");
+  pending = { quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() };
+  placePop(rect);
+  txt.value = "";
+  dirty = false;
+  if (autofocus) txt.focus();
+  return true;
+}
+// Synchronous, so the focus stays inside the user gesture — Safari only
+// raises the soft keyboard for a focus() called within one.
+document.addEventListener("mouseup", function(ev){
+  if (pop.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest("[data-cid]")) return;
+  clearTimeout(selTimer);
+  openForSelection(true);
+});
+// A press outside closes a box the user has not modified. A box with words the
+// user put there stays open: no gesture the user did not mean as "save" may
+// commit anything, and plenty of ordinary ones land here — right-clicking your
+// own selection to copy it, grabbing the scrollbar to reread the passage, or
+// pressing Clear all and then cancelling the confirm.
+//
+// The test is the dirty flag, NOT emptiness, because an edit box opens with
+// the selection already in it. Keyed on emptiness, opening one and changing
+// your mind would leave a box that cannot be dismissed.
+document.addEventListener("mousedown", function(ev){
+  if (!isOpen() || pop.contains(ev.target)) return;
+  if (dirty) return;
+  closePop();
+});
+// iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
+// handler makes the page uncommentable on iPhone and iPad. selectionchange
+// fires on every platform; debounce it so it runs once the selection settles.
+var selTimer = null;
+document.addEventListener("selectionchange", function(){
+  if (document.activeElement === txt) return;
+  if (editingId !== null) return;
+  // Same test as openForSelection: modified work stays, an untouched prefill
+  // does not hold the page hostage.
+  if (isOpen() && dirty) return;
+  clearTimeout(selTimer);
+  selTimer = setTimeout(function(){ openForSelection(false); }, 250);
+});
+
+txt.addEventListener("keydown", function(ev){
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.altKey && !ev.isComposing) { ev.preventDefault(); save(); }
+  else if (ev.key === "Escape") { ev.preventDefault(); discard(); }
+  // A CHORD, never a bare letter. A single-key binding on a control that lives
+  // inside a textarea fires on the note being typed: on the context-ledger
+  // page, `d` in a comment marked the selected row dropped.
+  else if ((ev.ctrlKey || ev.metaKey) && (ev.key === "e" || ev.key === "E")) {
+    ev.preventDefault(); switchMode(mode === "edit" ? "comment" : "edit");
+  }
+});
+// The user touched the text: from here the box holds work, whether or not the
+// prefill it opened with is still in it.
+txt.addEventListener("input", function(){ dirty = true; saveDraft(); });
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape" && isOpen() && document.activeElement !== txt) discard();
+});
+
+function closePop(){
+  // #anDelete is one element reused by every entry: an arm left live here
+  // would confirm on the next opened entry's first click.
+  disarm();
+  pop.style.display = "none"; pending = null; editingId = null;
+  pop.classList.remove("editing"); pop.classList.remove("nudge");
+  setModeState("comment"); dirty = false;
+  txt.value = ""; lsDel(DRAFT);
+}
+function discard(){ closePop(); }
+// The in-progress note, saved on every keystroke, so a forced refresh reopens
+// the box where it was instead of losing what was typed into it.
+// `dirty` gates this, not emptiness: an edit box opens pre-filled with the
+// selection, and autosaving that would leave a draft nobody typed, which then
+// reopens the box on the next load for a note that was never begun.
+// In edit mode an EMPTY dirty box is meaningful: the prefill was cleared to
+// suggest a deletion, and a refresh before Enter must bring that back. In
+// comment mode an empty box is nothing to keep.
+function saveDraft(){
+  if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
+  lsSet(DRAFT, JSON.stringify({
+    note: txt.value, editingId: editingId, mode: mode,
+    quote: pending ? pending.quote : null, where: pending ? pending.where : null
+  }));
+}
+function restoreDraft(){
+  var d = unpackDraft();
+  if (!d) return;
+  if (d.editingId != null) {
+    var c = comments.find(function(x){ return x.id === d.editingId; });
+    // The comment was deleted elsewhere. Drop the draft rather than leave it
+    // to reattach itself to whichever comment is handed that id next.
+    if (!c) { lsDel(DRAFT); return; }
+    openEdit(c, document.querySelector('mark[data-cid="' + c.id + '"]'));
+    txt.value = d.note; dirty = true;
+    return;
+  }
+  var r = rangeForQuote(d.quote);
+  if (!r) return;
+  var sel = window.getSelection();
+  if (sel) { try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {} }
+  editingId = null; pop.classList.remove("editing");
+  setModeState(d.mode === "edit" ? "edit" : "comment");
+  pending = { quote: d.quote, where: d.where || sectionOf(r.startContainer), range: r.cloneRange() };
+  placePop(r.getBoundingClientRect());
+  // Restored words ARE user work, whatever they started as.
+  txt.value = d.note; dirty = true;
+}
+function unpackDraft(){
+  var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
+  if (!d || typeof d.note !== "string") return null;
+  // An empty note is a draft only for an edit that still knows its target: a
+  // pending deletion of `quote`, or a revision of an existing edit.
+  if (!d.note.trim() && !(d.mode === "edit" && (d.quote || d.editingId != null))) return null;
+  return d;
+}
+// These keep their names and every existing call site; what changed is that
+// the state lives on the comments now and the page-level key is derived from
+// it. Renaming them to say "copied out" is a separate no-behaviour commit.
+function markDirty(){ syncLegacyFlag(); }
+// A snapshot of exactly what went into the copied text, so a comment edited
+// while an async clipboard write was in flight is not stamped as copied. The
+// copy carried the OLD wording; the comment now holds new wording that has
+// never left the page, and stamping it would put unsent words in the
+// delete-copied set.
+function copySnapshot(){
+  return comments.map(function(c){
+    return { id: c.id, where: c.where, quote: c.quote, note: bodyOf(c) };
+  });
+}
+function markClean(snap){
+  var now = Date.now(), by = {};
+  (snap || copySnapshot()).forEach(function(x){ by[x.id] = x; });
+  comments.forEach(function(c){
+    var x = by[c.id];
+    if (x && x.where === c.where && x.quote === c.quote && x.note === bodyOf(c)) c.copiedAt = now;
+  });
+  persist(); syncLegacyFlag();
+}
+
+// ---- destructive controls ------------------------------------------------
+// No blocking dialog appears here, and none may be added. The Artifact viewer
+// runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
+// `window.confirm` returns false without ever asking -- the browser just logs
+// "Ignored call to ...". Every delete guarded that way returned early on a
+// refusal the reviewer never saw: a dead button in the one place these pages
+// are read, and working perfectly in a local tab, which is why it survived.
+//
+// The guard is in the page instead. A first click arms the button and makes it
+// say what a second click will destroy; it disarms after ARM_MS, on Escape, or
+// on any re-render. Buttons are focusable, so Enter and Space arm and confirm
+// exactly like the pointer does.
+var ARM_MS = 4000;
+var WARN_CHANGED = '<span class="anwarn">the comments changed \u2014 nothing deleted</span>';
+var armedBtn = null, armedLabel = "", armedTimer = 0, armedBinding = null;
+function disarm(){
+  if (!armedBtn) return;
+  // render() may already have thrown this button away; restoring a detached
+  // node is harmless but pointless.
+  if (armedBtn.isConnected) { armedBtn.textContent = armedLabel; armedBtn.classList.remove("anarmed"); }
+  clearTimeout(armedTimer);
+  armedBtn = null; armedLabel = ""; armedTimer = 0; armedBinding = null;
+}
+// What an arm was armed AGAINST: the exact comments, plus enough of their
+// content to notice a change. A second tab's write can land inside the four
+// seconds an arm is live, and the `storage` handler only rebuilds when no note
+// is open -- so the confirming click has to prove the set is still the one the
+// label described, rather than trust that nothing moved under it.
+function bindingOf(list){
+  return list.map(function(c){
+    return c.id + ":" + (c.copiedAt || 0) + ":" + bodyOf(c).length + ":" + c.quote.length;
+  }).join(",");
+}
+// True only on the confirming click, and only while the set it was armed
+// against is unchanged. On any other click it arms `btn` and the caller must
+// return without destroying anything.
+function arm(btn, label, binding){
+  if (armedBtn === btn) {
+    var stale = armedBinding !== null && armedBinding !== binding;
+    disarm();
+    if (stale) { render(); toast(WARN_CHANGED, 4000); return false; }
+    return true;
+  }
+  disarm();
+  armedBtn = btn; armedLabel = btn.textContent;
+  armedBinding = binding === undefined ? null : binding;
+  btn.textContent = label;
+  btn.classList.add("anarmed");
+  armedTimer = setTimeout(disarm, ARM_MS);
+  return false;
+}
+// Escape cancels, whether focus sits on the armed button or anywhere else.
+// Both listeners are needed: the layer root stops key events from bubbling out
+// to the host page, so the document listener never sees a keystroke aimed at
+// the button, and a listener on the root alone would miss one aimed outside.
+function escDisarm(ev){ if (ev.key === "Escape") disarm(); }
+root.addEventListener("keydown", escDisarm);
+document.addEventListener("keydown", escDisarm);
+// A refused write is the one failure the page must not hide: with the quota
+// full, the panel would otherwise count a comment that is already gone.
+function persist(){
+  unsaved = !lsSet(KEY, JSON.stringify(comments));
+}
+function unwrap(id){
+  var s = document.querySelector('span.anins[data-cid="' + id + '"]');
+  if (s) s.remove();
+  var m = document.querySelector('mark[data-cid="' + id + '"]');
+  if (m) { while (m.firstChild) m.parentNode.insertBefore(m.firstChild, m); m.remove(); }
+}
+
+function save(){
+  if (mode === "edit") { saveEdit(txt.value.trim()); return; }
+  var note = txt.value.trim();
+  if (!note) { closePop(); return; }
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    // Reopened to reread and closed unchanged: not an edit, so it must not
+    // reset the export state and re-arm the unload prompt.
+    if (c && c.note === note) { closePop(); return; }
+    // The copy that happened carried the previous wording, so the stamp no
+    // longer describes this comment. Without this, "delete copied" destroys
+    // the only copy of the edit and the next Copy all silently omits it.
+    if (c) { c.note = note; delete c.copiedAt; }
+    var m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
+    if (m) m.title = note;
+  } else if (pending) {
+    var id = newId();
+    try { wrapRange(pending.range, id, note, "note"); } catch (e) {}
+    comments.push({ id: id, type: "comment", where: pending.where, quote: pending.quote, note: note });
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+// An empty replacement is a suggested DELETION, so there is no empty-means-
+// cancel shortcut here: the comment path's `if (!note) closePop()` would throw
+// away exactly the edit the reader worked to express.
+function saveEdit(replacement){
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    if (c && c.replacement === replacement) { closePop(); return; }
+    if (c) { c.replacement = replacement; delete c.copiedAt; renderEditInline(c); }
+  } else if (pending) {
+    // The prefill is not user work: an untouched box saves nothing, so Enter
+    // on a box still holding the selection verbatim is a close, not an entry
+    // proposing to replace the text with itself.
+    if (!dirty) { closePop(); return; }
+    var id = newId();
+    var fresh = { id: id, type: "edit", where: pending.where,
+                  quote: pending.quote, replacement: replacement };
+    try { wrapRange(pending.range, id, "", "anedit"); } catch (e) {}
+    comments.push(fresh);
+    renderEditInline(fresh);
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+
+$("anCancel").onclick = discard;
+$("anDelete").onclick = function(){
+  if (editingId === null) { closePop(); return; }
+  var id = editingId;
+  var c = comments.find(function(x){ return x.id === id; });
+  // A comment's Delete stays immediate -- the popup's CSS hides it while
+  // composing, it sits at the far end of the row, and it acts on one note the
+  // reader has just opened. A suggested edit arms first: it is written
+  // replacement text plus an anchor, and one stray click takes both.
+  if (isEdit(c) && !arm(this, "click again")) return;
+  comments = comments.filter(function(x){ return x.id !== id; });
+  unwrap(id);
+  markDirty(); persist(); render(); closePop();
+};
+$("anSave").onclick = save;
+
+// Builds into a fragment and swaps once, so the list never blanks between
+// clearing and refilling.
+function render(){
+  // Any armed row button is about to be replaced, and an arm left standing on
+  // a list this rebuild has changed would confirm a different comment.
+  disarm();
+  var list = $("anList"), count = $("anCount");
+  // Kept in step with the list on every rebuild, and disabled rather than
+  // hidden: a control that vanishes and reappears is harder to aim at than one
+  // that greys out, and its count is the only place the copied total is shown.
+  var nCopied = copiedSet().length, clearCopied = $("anClearCopied");
+  clearCopied.textContent = "Delete copied (" + nCopied + ")";
+  clearCopied.disabled = !nCopied;
+  var fresh = freshCount();
+  badge.textContent = "\uD83D\uDCAC " + comments.length;
+  badge.className = unsaved || (isDirty() && comments.length) ? "warn" : "";
+  if (!comments.length) {
+    count.textContent = "No comments yet"; count.className = "ancount";
+    var empty = document.createElement("p");
+    empty.className = "anscope"; empty.textContent = "Select any text above to comment.";
+    list.replaceChildren(empty);
+    return;
+  }
+  // Once the list can be part copied and part not, a single verdict is a lie
+  // for one half of it. The split form appears only when the list is actually
+  // mixed, so the common uniform cases stay as short as they were. The same
+  // applies to the noun: "N comments" is wrong for half a mixed page, and the
+  // plain wording is kept for the comment-only page, which is most of them.
+  var nEdits = comments.filter(isEdit).length;
+  var what = nEdits
+    ? comments.length + (comments.length === 1 ? " item (" : " items (") +
+      nEdits + (nEdits === 1 ? " suggested edit)" : " suggested edits)")
+    : comments.length + (comments.length === 1 ? " comment" : " comments");
+  count.textContent = what +
+    (unsaved ? " \u2014 this browser refused to store them, copy them now"
+             : !fresh ? " \u2014 copied out"
+             : fresh === comments.length ? " \u2014 not yet copied out"
+             : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
+  count.className = "ancount" + (unsaved || isDirty() ? " warn" : "");
+  var frag = document.createDocumentFragment();
+  comments.forEach(function(c){
+    var d = document.createElement("div");
+    d.className = "cmt" + (isCopied(c) ? " ancopied" : "") + (isEdit(c) ? " ansuggest" : "");
+    var w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
+    var q = document.createElement("div");
+    q.className = isEdit(c) ? "q struck" : "q";
+    q.textContent = "\u201C" + c.quote + "\u201D";
+    var n = document.createElement("div");
+    if (isEdit(c)) {
+      n.className = "ins";
+      n.textContent = c.replacement
+        ? "\u2192 " + c.replacement
+        : "\u2192 delete this text";
+    } else n.textContent = c.note;
+    var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
+    a.onclick = function(){
+      var m = document.querySelector('mark[data-cid="' + c.id + '"]');
+      if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
+      else openEdit(c, null);
+    };
+    // Deleting one comment used to require opening its popup first, which is a
+    // detour for the commonest correction. It asks twice, because the note
+    // itself is the only copy and there is no undo.
+    var x = document.createElement("button");
+    x.className = "anbtn ghost tiny danger"; x.textContent = "delete";
+    x.onclick = function(){
+      if (!arm(x, "click again")) return;
+      comments = comments.filter(function(y){ return y.id !== c.id; });
+      unwrap(c.id);
+      if (editingId === c.id) closePop();
+      markDirty(); persist(); render();
+    };
+    d.append(w, q, n);
+    if (!hasMark(c)) { var o = document.createElement("div"); o.className = "orphan"; o.textContent = "quoted text not found on this version of the page"; d.append(o); }
+    var acts = document.createElement("div"); acts.className = "anacts";
+    acts.append(a, x);
+    d.append(acts); frag.appendChild(d);
+  });
+  list.replaceChildren(frag);
+}
+
+function markdown(list){
+  return list.map(function(c){
+    return "- **" + c.where + "** \u2014 " + c.note + "\n  > " + c.quote.replace(/\n/g, "\n  > ");
+  }).join("\n");
+}
+// Numbered, so a session applying them can say which one it could not place.
+function editMarkdown(list){
+  return list.map(function(c, i){
+    return (i + 1) + ". **" + c.where + "**" +
+      "\n   Replace:\n   > " + c.quote.replace(/\n/g, "\n   > ") +
+      "\n   With:" + (c.replacement
+        ? "\n   > " + c.replacement.replace(/\n/g, "\n   > ")
+        : " _(nothing \u2014 delete this text)_");
+  }).join("\n\n");
+}
+// The quotes are RENDERED text and the source is Markdown, so emphasis
+// markers, links and code spans differ between the two. The note below says so
+// in the export itself, because the export leaves this page and is read
+// without it. Nobody builds a sed loop over this format.
+var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markdown. " +
+  "Locate each quote in the source and adapt the markup \u2014 do not apply these " +
+  "blocks byte-for-byte.";
+// A page with no suggested edits exports exactly what it did under v1: no
+// headings appear, so every existing paste-into-a-session habit still works.
+function exportText(){
+  var edits = comments.filter(isEdit);
+  var notes = comments.filter(function(c){ return !isEdit(c); });
+  var out = "# Comments \u2014 " + document.title + "\n\n";
+  if (edits.length) {
+    out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
+    if (notes.length) out += "## Comments\n\n";
+  }
+  return out + (notes.length ? markdown(notes) + "\n" : "");
+}
+function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
+// There is deliberately no download path. The Artifact viewer never grants a
+// page download permission, so a Download button was inert exactly where these
+// pages are read, while still making every publish warn about an offered file.
+// Copy all is the one export, with the textarea below as its fallback.
+// What the textarea currently holds. The box can sit open while the page is
+// edited behind it, so the copy event stamps the snapshot the text was built
+// from, not whatever the list happens to be when the user finally hits copy.
+var exportSnap = null;
+function openExport(){
+  var ta = $("anExportText"); ta.value = exportText();
+  exportSnap = copySnapshot();
+  $("anExport").style.display = "block";
+  ta.focus(); ta.select();
+}
+
+// Only a copy that actually happened may clear the export state — otherwise
+// the panel says the comments are safely out of the browser, and the unload
+// guard stands down, when nothing left it.
+$("anCopy").onclick = async function(){
+  if (!comments.length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
+  var ok = false;
+  // Both taken before the await: the clipboard promise can resolve after an
+  // edit has landed, and the text that went out is this one.
+  var snap = copySnapshot(), text = exportText();
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (e) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  // Clipboard refused: fall back to the selectable textarea. Opening it is not
+  // exporting -- the state clears when the text is actually copied out of it.
+  if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
+  markClean(snap); render();
+  toast('<span class="anok">copied ' + comments.length + '</span>');
+};
+$("anExportText").addEventListener("copy", function(){
+  // A copy of PART of the box carried part of the Markdown, so it did not
+  // take every comment out of the browser. Stamping them all would drop
+  // comments the user never copied into the "Delete copied" set, which is now
+  // a set something deletes. The whole-blob case is the normal one: the box
+  // opens with everything already selected.
+  var ta = this;
+  if (ta.selectionStart !== 0 || ta.selectionEnd !== ta.value.length) {
+    toast('<span class="anwarn">partial copy \u2014 nothing marked copied out</span>', 4000);
+    return;
+  }
+  markClean(exportSnap); render();
+  toast('<span class="anok">copied ' + comments.length + '</span>');
+});
+$("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
+// The safe prune, and the reason the literal request was inverted: this
+// deletes only what a copy actually carried out of the browser, so the next
+// Copy all sends fresh feedback rather than re-sending an actioned list.
+$("anClearCopied").onclick = function(){
+  var set = copiedSet();
+  if (!set.length) return;
+  if (!arm(this, "Click again to delete " + set.length + " copied out", bindingOf(set))) return;
+  var doomed = {};
+  set.forEach(function(c){ doomed[c.id] = true; unwrap(c.id); });
+  comments = comments.filter(function(c){ return !doomed[c.id]; });
+  if (editingId !== null && doomed[editingId]) closePop();
+  persist(); syncLegacyFlag(); render();
+};
+$("anClear").onclick = function(){
+  if (!comments.length) return;
+  // "Not copied out yet" is the whole reason this control asks twice, so the
+  // warning goes on the armed button, where it is read, rather than into a
+  // dialog the viewer never shows.
+  // The armed label carries the warning, because the dialog that would
+  // otherwise carry it never appears in the viewer. Naming the unsent count
+  // separately from the total is the whole point: "delete all 12" and "3 of
+  // these have never left this browser" are different facts.
+  var fresh = freshCount();
+  var warn = fresh
+    ? fresh + " not yet copied out \u2014 click again to delete all " + comments.length
+    : "All copied out \u2014 click again to delete all " + comments.length;
+  if (!arm(this, warn, bindingOf(comments))) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = []; markClean(); persist(); render();
+};
+badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+// A host page may bind single-key shortcuts on document or window -- a triage
+// console where `d` means delete, a slideshow where `j` means next. Typing a
+// note would fire them: the keystroke bubbles out of this textarea and reaches
+// those listeners, so the page acts on every letter of the comment.
+//
+// Attached at the layer root in the BUBBLE phase, which is the only position
+// that separates the two. Handlers inside the layer (the textarea's own Enter
+// and Escape) sit deeper and have already run; document- and window-level
+// handlers sit higher and never see the event. A capture-phase listener on
+// window would be too early and would kill this layer's own keys as well.
+["keydown", "keypress", "keyup"].forEach(function(type){
+  root.addEventListener(type, function(ev){ ev.stopPropagation(); });
+});
+
+restoreHighlights();
+render();
+restoreDraft();
+})();
+</script>
+<!-- /annotation-layer -->
+
+<!--claude-mermaid-runtime-begin:3477-->
+<style>.mermaid-diagram{margin-block:4px}.mermaid-diagram svg{display:block;margin:0 auto;max-width:100%;height:auto}</style>
+<script src="/_runtime/mermaid-11.16.1.min.js"></script>
+<script>(function(){
+var CFG={"palettes":{"light":{"surface":"#f4efe4","text":"#42392e","line":"#8a7f6d","border":"#7a6c52","bg":"#fffdf8"},"dark":{"surface":"#262b34","text":"#f2f3f5","line":"#a8adb8","border":"#9aa4b8","bg":"#1f232b"}}};
+if(typeof mermaid==='undefined')return;
+var pres=Array.prototype.slice.call(document.querySelectorAll('pre.mermaid')).filter(function(p){if(p.hasAttribute('data-claude-mermaid-claimed'))return false;p.setAttribute('data-claude-mermaid-claimed','1');return true;});
+if(!pres.length)return;
+var mq=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+var root=document.documentElement;
+var items=pres.map(function(pre){
+var mount=document.createElement('div');mount.className='mermaid-diagram';
+return {pre:pre,mount:mount,src:pre.textContent||''};
+});
+var seq=0;
+var renderGen=0;
+var lastKey='';
+function pageBg(fallback){
+var els=[document.body,document.documentElement];
+for(var i=0;i<els.length;i++){
+var c=els[i]&&getComputedStyle(els[i]).backgroundColor;
+if(c&&c!=='transparent'&&c!=='rgba(0, 0, 0, 0)')return c;
+}
+return fallback;
+}
+function render(){
+var theme=root.getAttribute('data-theme');
+var dark=theme==='dark'||(!!(mq&&mq.matches)&&theme!=='light');
+var pal=dark?CFG.palettes.dark:CFG.palettes.light;
+var bg=pageBg(pal.bg);
+var key=(dark?'d':'l')+'|'+bg;
+if(key===lastKey)return;
+lastKey=key;
+var gen=++renderGen;
+var font=getComputedStyle(document.body).fontFamily||'sans-serif';
+var nat={useMaxWidth:false};
+mermaid.initialize({
+startOnLoad:false,securityLevel:'strict',theme:'base',
+flowchart:nat,sequence:nat,er:nat,state:nat,class:nat,pie:nat,
+gantt:nat,journey:nat,timeline:nat,gitGraph:nat,mindmap:nat,xyChart:nat,
+quadrantChart:nat,sankey:nat,c4:nat,requirement:nat,block:nat,
+packet:nat,kanban:nat,architecture:nat,radar:nat,
+themeVariables:{background:bg,mainBkg:pal.surface,primaryColor:pal.surface,
+primaryTextColor:pal.text,lineColor:pal.line,primaryBorderColor:pal.border,
+nodeBorder:pal.border,clusterBorder:pal.border,edgeLabelBackground:bg,
+clusterBkg:'rgba(127,127,127,0.07)',titleColor:pal.text,
+darkMode:dark,rowOdd:bg,rowEven:'rgba(127,127,127,0.07)',
+attributeBackgroundColorOdd:bg,attributeBackgroundColorEven:'rgba(127,127,127,0.07)',
+fontSize:'16px',fontFamily:font},
+themeCSS:'.node rect, .node circle, .node polygon, .node path, .cluster rect { stroke-width: 2px; }'
+});
+items.forEach(function(it){
+var id='claude-mermaid-'+seq++;
+mermaid.render(id,it.src).then(function(r){
+if(gen!==renderGen)return;
+var prev=it.pre.previousElementSibling;
+if(prev&&prev.className==='mermaid-diagram'&&prev!==it.mount)return;
+it.mount.innerHTML=r.svg;
+if(!it.mount.parentNode)it.pre.parentNode.insertBefore(it.mount,it.pre);
+it.pre.style.display='none';
+},function(){
+var scratch=document.getElementById(id);
+if(scratch)scratch.parentNode.removeChild(scratch);
+scratch=document.getElementById('d'+id);
+if(scratch)scratch.parentNode.removeChild(scratch);
+if(gen!==renderGen)return;
+if(it.mount.parentNode)it.mount.parentNode.removeChild(it.mount);
+it.pre.style.display='';
+});
+});
+}
+render();
+if(mq&&mq.addEventListener)mq.addEventListener('change',render);
+if(typeof MutationObserver!=='undefined')new MutationObserver(render).observe(root,{attributes:true,attributeFilter:['data-theme']});
+})();</script>
+<!--claude-mermaid-runtime-end-->
