@@ -7,6 +7,7 @@ No network, no real HOME touched; git is the only external tool used.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 BIN = REPO / "custom_bins/project-hub"
+
+
+def enc(path: Path) -> str:
+    """Claude Code project-dir name: every non-alphanumeric char becomes "-"."""
+    return re.sub(r"[^a-zA-Z0-9]", "-", str(path))
 
 
 class ProjectHubTest(unittest.TestCase):
@@ -112,7 +118,7 @@ class ProjectHubTest(unittest.TestCase):
             self.git("status", "--porcelain", cwd=dest / ".claude/worktrees/feature"),
             "",
         )
-        enc_new = str(dest).replace("/", "-")
+        enc_new = enc(dest)
         proj = self.home / ".claude/projects"
         self.assertTrue((proj / enc_new).is_dir() and not (proj / enc_new).is_symlink())
         self.assertTrue((proj / enc_old).is_symlink())
@@ -122,6 +128,36 @@ class ProjectHubTest(unittest.TestCase):
             (proj / f"{enc_old}-other").is_dir()
             and not (proj / f"{enc_old}-other").is_symlink()
         )
+
+    def test_adopt_matches_both_claude_encodings_of_a_dotted_path(self) -> None:
+        # Claude Code 2.1.26x encodes every non-alphanumeric char as '-'; older
+        # releases mapped only '/'. Both kinds of dir exist on a real box.
+        self.run_hub("new", "proj")
+        src = self.make_repo(self.home / "code/thing.v2")
+        current = enc(src)
+        legacy = str(src).replace("/", "-")
+        proj = self.home / ".claude/projects"
+        (proj / current).mkdir()
+        (proj / f"{current}--claude-worktrees-feature").mkdir()
+        (proj / f"{legacy}-.claude-worktrees-old").mkdir()
+        (proj / f"{current}--other").mkdir()  # not a worktree variant: stays
+        self.run_hub("adopt", "proj", f"code={src}", "--no-sync")
+        new = enc(self.home / "projects/proj/code")
+        self.assertTrue((proj / new).is_dir())
+        self.assertTrue((proj / f"{new}--claude-worktrees-feature").is_dir())
+        self.assertTrue((proj / f"{new}-.claude-worktrees-old").is_dir())
+        self.assertEqual(os.readlink(proj / current), new)
+        self.assertTrue(
+            (proj / f"{current}--other").is_dir()
+            and not (proj / f"{current}--other").is_symlink()
+        )
+
+    def test_shebang_runs_under_uv(self) -> None:
+        r = subprocess.run(
+            [str(BIN), "--help"], text=True, capture_output=True, check=False
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("project-hub new", r.stdout)
 
     def test_adopt_refuses_existing_role_and_bulk_role(self) -> None:
         self.run_hub("new", "proj")
@@ -144,7 +180,10 @@ class ProjectHubTest(unittest.TestCase):
         self.assertIn("written in the last", r.stderr)
         old = 0
         os.utime(code / "logs/a.eval", (old, old))
-        self.run_hub("tier", "proj/code", "logs", "--quiet-minutes", "1")
+        (self.home / "projects/proj/paper").mkdir()
+        r = self.run_hub("tier", "proj/code", "../paper", ok=False)
+        self.assertIn("not inside", r.stderr)
+        self.run_hub("tier", "proj/code", "./logs/", "--quiet-minutes", "1")
         self.assertTrue((code / "logs").is_symlink())
         self.assertEqual(os.readlink(code / "logs"), "../runs/logs")
         self.assertEqual((code / "logs/a.eval").read_text(), "cold")

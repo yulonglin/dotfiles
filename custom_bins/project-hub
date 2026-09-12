@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -92,12 +93,29 @@ def same_fs(a: Path, b: Path) -> bool:
 
 
 def encode(path: Path) -> str:
-    """Claude Code's project-dir encoding: '/' -> '-' on the absolute path."""
-    return str(path).rstrip("/").replace("/", "-")
+    """Claude Code's project-dir encoding: every non-alphanumeric byte -> '-'.
+
+    Measured in ~/.claude/projects on 2.1.26x: `/.claude/worktrees/astra+aiscik`
+    became `--claude-worktrees-astra-aiscik`. Older releases mapped only '/', so
+    `-.claude-worktrees-x` dirs still exist beside the new form; `encodings()`
+    returns both for matching, this one is what new dirs are named.
+    """
+    return re.sub(r"[^a-zA-Z0-9]", "-", str(path).rstrip("/"))
+
+
+def encodings(path: Path) -> tuple[str, ...]:
+    """Current and legacy encodings of a path, for matching existing dirs."""
+    legacy = str(path).rstrip("/").replace("/", "-")
+    return tuple(dict.fromkeys((encode(path), legacy)))
+
+
+WORKTREE_SUFFIXES = ("--claude-worktrees-", "-.claude-worktrees-")
 
 
 # ------------------------------------------------------------------- new ----
 def cmd_new(args: argparse.Namespace) -> None:
+    if not args.name or "/" in args.name or args.name.startswith("."):
+        fail(f"name must be a plain directory name, got {args.name!r}")
     hub = PROJECTS / args.name
     volume = storage_volume()
     hub.mkdir(parents=True, exist_ok=True)
@@ -136,20 +154,27 @@ def rename_claude_dirs(root: Path, old: Path, new: Path) -> int:
     """Rename <root>/<encoded old>* to the new encoding; leave a relative compat link.
 
     The link keeps `--resume` on an old transcript path and old job records working.
-    Only exact matches and worktree variants (`<enc>--claude-worktrees-x`,
-    `<enc>-.claude-worktrees-x`) move, so `-home-me-code-foo` never captures
-    `-home-me-code-foobar` or `-home-me-code-foo-bar`.
+    Only exact matches (current or legacy encoding) and their `.claude/worktrees/`
+    variants move, so `-home-me-code-foo` never captures `-home-me-code-foobar`
+    or `-home-me-code-foo-bar`.
     """
     if not root.is_dir():
         return 0
-    old_enc, new_enc = encode(old), encode(new)
+    new_enc = encode(new)
     n = 0
     for d in sorted(root.iterdir()):
         if not d.is_dir() or d.is_symlink():
             continue
-        if d.name != old_enc and not d.name.startswith(
-            (old_enc + "--", old_enc + "-.")
-        ):
+        old_enc = next(
+            (
+                e
+                for e in encodings(old)
+                if d.name == e
+                or d.name.startswith(tuple(e + s for s in WORKTREE_SUFFIXES))
+            ),
+            None,
+        )
+        if old_enc is None:
             continue
         dest = root / (new_enc + d.name[len(old_enc) :])
         if dest.exists():
@@ -198,6 +223,8 @@ def cmd_adopt(args: argparse.Namespace) -> None:
             fail(f"expected role=path, got {spec!r}")
         role, path = spec.split("=", 1)
         src = Path(path).expanduser().resolve()
+        if not role or "/" in role or role.startswith("."):
+            fail(f"role must be a plain directory name, got {role!r}")
         if role in BULK:
             fail(f"{role} is a bulk dir; use `project-hub tier`")
         if not src.is_dir():
@@ -209,9 +236,17 @@ def cmd_adopt(args: argparse.Namespace) -> None:
                 f"{src} is on another filesystem than {hub}; rsync it per the server-storage-tiering skill"
             )
         moves.append((role, src))
+    failed = 0
     for role, src in moves:
         dest = hub / role
-        src.rename(dest)
+        try:
+            src.rename(dest)
+        except (
+            OSError
+        ) as e:  # the earlier repos are complete, valid moves; report and go on
+            say(f"! {src} not moved: {e}")
+            failed += 1
+            continue
         say(f"{src} -> {dest}")
         repair_worktrees(dest)
         for root in (HOME / ".claude/projects", HOME / ".remember"):
@@ -243,6 +278,8 @@ def cmd_adopt(args: argparse.Namespace) -> None:
     say(
         "stale references to check by hand: crontab -l, ~/.config/systemd/user, tmux panes, editor workspaces"
     )
+    if failed:
+        sys.exit(1)
 
 
 # ------------------------------------------------------------------ tier ----
@@ -272,6 +309,12 @@ def cmd_tier(args: argparse.Namespace) -> None:
             continue
         if not src.is_dir():
             fail(f"{src} is not a directory")
+        if (
+            not src.resolve().is_relative_to(repo.resolve())
+            or src.resolve() == repo.resolve()
+        ):
+            fail(f"{sub!r} is not inside {repo}")
+        sub = os.path.relpath(src, repo)  # normalise ./data, data/ and nested forms
         if (repo / ".git").exists():
             tracked = git("ls-files", "--", sub, cwd=repo).stdout.splitlines()
             if tracked:
@@ -285,17 +328,21 @@ def cmd_tier(args: argparse.Namespace) -> None:
             fail(
                 f"{src}: {n} files written in the last {args.quiet_minutes} min; a live dir is not moved"
             )
-        bucket = "data" if sub == "data" else "runs"
+        bucket = "data" if src.name == "data" else "runs"
         dest = hub / bucket / src.name
-        if dest.exists():
-            fail(f"{dest} already exists")
         dest.parent.mkdir(parents=True, exist_ok=True)
         rel = os.path.relpath(hub / bucket / src.name, start=src.parent)
         if same_fs(src, dest.parent):
+            if dest.exists():
+                fail(f"{dest} already exists")
             src.rename(dest)
         else:
+            # A partial copy from an interrupted run is resumed, not refused: rsync
+            # skips what already arrived and unlinks each source file after transfer.
+            if dest.exists():
+                say(f"  resuming into existing {dest}")
             r = subprocess.run(
-                ["rsync", "-a", "--remove-source-files", f"{src}/", f"{dest}/"],
+                ["rsync", "-aH", "--remove-source-files", f"{src}/", f"{dest}/"],
                 check=False,
             )
             if r.returncode:
@@ -310,7 +357,8 @@ def cmd_tier(args: argparse.Namespace) -> None:
                 os.rmdir(src)
             except OSError:
                 fail(
-                    f"{src} not empty after the move (a writer appeared); left in place, copy at {dest}"
+                    f"{src} not empty after the move (a writer appeared); left in place, "
+                    f"copy at {dest}; rerun `tier` when it is quiet to resume"
                 )
         src.symlink_to(rel)
         say(f"{src} -> {rel}  ({dest})")
