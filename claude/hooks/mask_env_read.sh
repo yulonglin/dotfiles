@@ -1,9 +1,38 @@
 #!/usr/bin/env bash
 # PreToolUse hook: mask secret values when .env/.envrc files are read.
 #
+# ---------------------------------------------------------------------------
+# THIS HOOK IS NOT A SECURITY BOUNDARY. IT IS A GUARD RAIL AGAINST ACCIDENTS.
+#
+# It reads the command TEXT before the shell expands it, so it can only ever
+# recognise the shapes it has been taught. A command-text filter cannot be
+# complete, and no amount of widening will make it complete:
+#
+#     python3 -c "print(open(chr(46)+'env').read())"
+#
+# defeats every list in this file, and so does base64-ing the name, building
+# the path from two variables, or reading through a file descriptor. Anyone
+# who wants the value gets the value.
+#
+# So do NOT reason "the hook covers it" and drop a permission rule. That exact
+# reasoning is why this file needed hardening: on 2026-09-12 `permissions.ask`
+# on `Read(**/.env*)` was called redundant *because the hook existed*, while
+# the hook had never blocked anything in its life (see the shape warning
+# below). The permission rules are the gate. This hook is the thing that stops
+# an ordinary `cat .env` from writing a live credential into the transcript
+# where it stays forever.
+#
+# Current gate, for reference (claude/settings.json, permissions):
+#     ask:   Read(**/.env)   Read(**/.env.*)
+#     allow: Read(**/.envrc)   <-- no gate at all; for .envrc this hook is
+#                                  the only thing in the way
+# Neither rule covers the Bash tool, which is what most of the code below is.
+# ---------------------------------------------------------------------------
+#
 # Intercepts:
-#   - Read tool: file_path matching .env, .env.*, .envrc
-#   - Bash tool: cat/head/tail/grep/bat on .env files
+#   - Read tool:  tool_input.file_path
+#   - Grep tool:  tool_input.path  (only once settings registers a Grep matcher)
+#   - Bash tool:  a reader command applied to an env file, in any shell segment
 #
 # Instead of allowing raw access, denies the read and returns the masked
 # content as the denial reason. Keys are visible, values show first 4 chars
@@ -18,6 +47,16 @@
 # commit until 2026-09-12 and blocked nothing at all for its whole life, while
 # its test asserted only that the substring "deny" appeared somewhere in the
 # output. Assert the KEY, never the substring.
+#
+# WARNING: a hook can only run if its `if` clause in settings.json lets it.
+# `Bash(*.env*)` glob-matches the command text, so `cat notes.txt` — a symlink
+# to .env — never reaches this file however well it is handled here. The
+# symlink and quoted/variable-path handling below is worth having anyway, but
+# it is live only when the hook is invoked.
+#
+# Known gaps, deliberately not chased: nested shells (`bash -c '...'`),
+# interpreters that build the filename at runtime, anything reading through a
+# pre-opened descriptor, and any reader not in the list below.
 #
 # Exit 0 always (JSON output controls behavior).
 
@@ -37,65 +76,209 @@ deny() {
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null) || exit 0
 [[ -z "$TOOL_NAME" ]] && exit 0
 
-# Determine the target file path based on tool type
-FILE_PATH=""
+CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
-if [[ "$TOOL_NAME" == "Read" ]]; then
-    FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""' 2>/dev/null) || exit 0
-elif [[ "$TOOL_NAME" == "Bash" ]]; then
-    CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null) || exit 0
-    [[ -z "$CMD" ]] && exit 0
+# The single argument handed to the detector: a path for the file tools, the
+# whole command line for Bash.
+SUBJECT=""
+case "$TOOL_NAME" in
+    Read)  SUBJECT=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""' 2>/dev/null) || exit 0 ;;
+    Grep)  SUBJECT=$(printf '%s' "$INPUT" | jq -r '.tool_input.path // ""' 2>/dev/null) || exit 0 ;;
+    Bash)  SUBJECT=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null) || exit 0 ;;
+    *) exit 0 ;;
+esac
+[[ -z "$SUBJECT" ]] && exit 0
 
-    # Check EVERY shell segment, not just the whole command's first word.
-    # A pipeline is not an exemption: `cat .env | head` leaks exactly as much
-    # as `cat .env`, and `ls && cat .env` hides the read behind an innocuous
-    # first word. Splitting on ||, &&, ; and | closes both.
-    #
-    # BEHAVIOR NOTE: this deliberately changes results for pipelines that used
-    # to run unguarded — `cat .env | wc -l` now returns the masked-content
-    # denial instead of a line count. The count is recoverable from the masked
-    # output; a raw value in the transcript is not recoverable at all.
-    #
-    # If a command reads more than one env file, only the FIRST match is
-    # reported; the rest are suppressed along with the whole command.
-    while IFS= read -r SEGMENT; do
-        [[ -z "${SEGMENT// /}" ]] && continue
-        CMD_NAME=$(printf '%s' "$SEGMENT" | awk '{print $1}')
-        case "$CMD_NAME" in
-            cat|head|tail|bat|less|more|grep) ;;
-            */cat|*/head|*/tail|*/bat|*/less|*/more|*/grep) ;;
-            *) continue ;;
-        esac
-        # Extract file paths that look like env files from the segment's args
-        FILE_PATH=$(printf '%s' "$SEGMENT" | grep -oE '[^[:space:]]+/(\.env[^[:space:]]*|\.envrc)|[[:space:]](\.env[^[:space:]]*|\.envrc)' | tr -d ' ' | tail -1) || true
-        # Also try: command operates on a bare .env in cwd
-        if [[ -z "$FILE_PATH" ]]; then
-            FILE_PATH=$(printf '%s' "$SEGMENT" | grep -oE '\b\.env[a-zA-Z._]*\b|\b\.envrc\b' | tail -1) || true
-        fi
-        [[ -n "$FILE_PATH" ]] && break
-    done < <(printf '%s' "$CMD" | awk '{gsub(/\|\||&&|[;|]/, "\n"); print}')
-fi
+# One detector for all three tools. Prints the absolute path of the env file
+# the call would read, or nothing. Failing open on an internal error is the
+# deliberate choice: this is a guard rail, and a crashing guard rail must not
+# wedge every Bash call in the session.
+FILE_PATH=$(python3 - "$TOOL_NAME" "$SUBJECT" "$CWD" <<'PY' 2>/dev/null || true
+import os
+import re
+import shlex
+import sys
+
+TOOL, SUBJECT, CWD = sys.argv[1], sys.argv[2], sys.argv[3]
+
+# Commands that put file CONTENT somewhere a human or a transcript can see.
+# Writers, movers and editors are deliberately absent: `git add .env`,
+# `rm .env`, `mv .env x` and `vim .env` do not leak a value into the
+# transcript, and intercepting them would break ordinary work for nothing.
+READERS = {
+    "cat", "head", "tail", "bat", "less", "more", "grep", "egrep", "fgrep",
+    "rg", "sed", "awk", "gawk", "mawk", "nl", "tac", "rev", "cut", "od",
+    "xxd", "hexdump", "strings", "base64", "dd", "diff", "source", ".",
+}
+# An inline script is a reader whenever an env filename appears in its text.
+INTERPRETERS = {"python", "python2", "python3", "perl", "ruby", "node", "bun", "deno", "php"}
+INLINE_FLAGS = ("-c", "-e", "-E", "-p", "-n")
+# `cp .env /dev/stdout` is a read wearing a copy's clothes.
+STDOUT_SINKS = {"/dev/stdout", "/dev/stderr", "/dev/fd/1", "/dev/fd/2",
+                "/proc/self/fd/1", "/proc/self/fd/2"}
+COPIERS = {"cp", "install"}
+# `source FILE [args]` reads only its first argument. Enforcing that is not
+# pedantry: a prose sentence inside a commit-message heredoc starts with ". ",
+# which parses as the source builtin, and any filename later in the sentence
+# would otherwise be read as its target.
+SOURCERS = {"source", "."}
+# Flags whose value is a pattern, a glob or a delimiter — never a file to read.
+# `rg -g '.envrc'` names a glob; `grep -f .env` really does read .env, so -f is
+# deliberately absent.
+VALUE_FLAGS = {"-e", "--regexp", "-g", "--glob", "--iglob", "--include",
+               "--exclude", "--exclude-dir", "-t", "--type", "-d",
+               "--delimiter", "-m", "--max-count", "-S", "--sort"}
+# `rg --files` lists filenames and never opens them.
+NO_READ_FLAGS = {"--files", "-l", "--files-with-matches", "-L",
+                 "--files-without-match"}
+
+# Shell separators, plus the substitution delimiters. Splitting on `$(`, `)`
+# and backticks is what catches `echo "$(cat .env)"` and
+# `export $(cat .env | xargs)` — the two commonest accidental load idioms.
+SPLIT = re.compile(r"\|\||&&|[;|\n]|\$\(|\)|`|<\(|>\(")
+ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+REDIR = re.compile(r"^\d*(>>|>|<<<|<<|<)(.*)$")
+ENV_TOKEN = re.compile(r"[^\s'\"]*\.env(?:rc|\.[A-Za-z0-9_.-]+)?")
+
+
+def envish(name):
+    return name in (".env", ".envrc") or name.startswith(".env.")
+
+
+def is_env_file(path):
+    """True if the path is named like an env file, or points at one.
+
+    The second half is the symlink case: the basename check tests the link,
+    so a link named anything at all walked straight past it before.
+    """
+    if envish(os.path.basename(path)):
+        return True
+    try:
+        return envish(os.path.basename(os.path.realpath(path)))
+    except OSError:
+        return False
+
+
+def absolutise(token, cwd):
+    token = os.path.expanduser(token)
+    if os.path.isabs(token):
+        return os.path.normpath(token)
+    return os.path.normpath(os.path.join(cwd, token)) if cwd else token
+
+
+def expand(token, variables):
+    """Resolve $VAR / ${VAR} from same-command assignments, then the real env.
+
+    `V=/path/to/.env; cat "$V"` was a one-line bypass of a hook whose whole
+    purpose is to stop that read: the text `cat "$V"` contains no .env at all.
+    """
+    def sub(match):
+        name = match.group(1) or match.group(2)
+        if name in variables:
+            return variables[name]
+        return os.environ.get(name, match.group(0))
+    return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)", sub, token)
+
+
+def candidates_of(segment, tokens, variables, cwd):
+    """(paths this segment would READ, new cwd)."""
+    name = os.path.basename(tokens[0])
+    args = tokens[1:]
+
+    if name in ("cd", "pushd"):
+        target = [a for a in args if not a.startswith("-")]
+        if target:
+            return [], absolutise(expand(target[0], variables), cwd)
+        return [], cwd
+
+    files, reads, pending = [], [], None
+    for arg in args:
+        if pending == "out":
+            pending = None
+            continue
+        if pending == "in":
+            reads.append(arg)
+            pending = None
+            continue
+        if pending == "flag":
+            pending = None
+            continue
+        if arg in VALUE_FLAGS:
+            pending = "flag"
+            continue
+        match = REDIR.match(arg)
+        if match:
+            operator, rest = match.group(1), match.group(2)
+            if operator == "<":
+                # An input redirection from an env file is a read whatever the
+                # command is: `while IFS= read -r l; do :; done < .env`.
+                if rest:
+                    reads.append(rest)
+                else:
+                    pending = "in"
+            elif operator in (">", ">>") and not rest:
+                pending = "out"
+            continue
+        files.append(arg)
+
+    if name in SOURCERS:
+        reads += files[:1]
+    elif name in READERS:
+        # -l / --files print names, not contents.
+        if not any(a in NO_READ_FLAGS for a in args):
+            reads += files
+    elif name in INTERPRETERS and any(a in INLINE_FLAGS for a in args):
+        reads += ENV_TOKEN.findall(segment)
+    elif name in COPIERS and any(expand(f, variables) in STDOUT_SINKS for f in files):
+        reads += files
+
+    return reads, cwd
+
+
+def detect_bash(command, cwd):
+    variables = {}
+    for segment in SPLIT.split(command):
+        segment = segment.strip()
+        if not segment:
+            continue
+        try:
+            tokens = shlex.split(segment, posix=True)
+        except ValueError:
+            # Heredocs and unbalanced quotes reach here. A parser error must
+            # not silently drop the segment.
+            tokens = segment.split()
+        while tokens and ASSIGN.match(tokens[0]):
+            key, _, value = tokens.pop(0).partition("=")
+            variables[key] = expand(value, variables)
+        if not tokens:
+            continue
+        variables["PWD"] = cwd
+        reads, cwd = candidates_of(segment, tokens, variables, cwd)
+        for token in reads:
+            token = expand(token, variables)
+            if not token or token.startswith("-"):
+                continue
+            path = absolutise(token, cwd)
+            if is_env_file(path):
+                return path
+    return None
+
+
+try:
+    if TOOL == "Bash":
+        found = detect_bash(SUBJECT, CWD)
+    else:
+        candidate = absolutise(expand(SUBJECT, {}), CWD)
+        found = candidate if is_env_file(candidate) else None
+    if found:
+        print(found)
+except Exception:  # noqa: BLE001 - a guard rail must not wedge the session
+    pass
+PY
+)
 
 # No env file detected — allow
 [[ -z "$FILE_PATH" ]] && exit 0
-
-# Normalize the filename (basename for pattern matching)
-BASENAME=$(basename "$FILE_PATH")
-
-# Check if file matches .env patterns: .env, .env.*, .envrc
-case "$BASENAME" in
-    .env|.envrc) ;; # match
-    .env.*) ;; # match .env.local, .env.production, etc.
-    *) exit 0 ;; # not an env file, allow
-esac
-
-# Resolve the full path (handle relative paths using cwd from hook input)
-if [[ "$FILE_PATH" != /* ]]; then
-    CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
-    if [[ -n "$CWD" ]]; then
-        FILE_PATH="$CWD/$FILE_PATH"
-    fi
-fi
 
 # Check if file exists
 if [[ ! -f "$FILE_PATH" ]]; then
