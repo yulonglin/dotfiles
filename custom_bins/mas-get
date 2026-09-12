@@ -12,8 +12,8 @@
 #   works. This script runs `mas get` for every mas app the Brewfile selects
 #   that isn't already installed, then `brew bundle` can run cleanly (its mas
 #   lines become no-ops once apps are installed). Without a Brewfile it falls
-#   back to the registry rows with default=true; `default=exclude` rows are
-#   never acquired.
+#   back to the registry rows with default=true. A rejected app needs no special
+#   case here: it has no row in apps.conf, it is in config/apps-excluded.conf.
 #
 # Ref: https://github.com/Homebrew/brew/issues/21559
 #
@@ -82,7 +82,6 @@ while IFS='|' read -r method id _cat _tier _def name _desc _auth; do
     [[ -z "${method// }" || "${method[1]}" == "#" ]] && continue
     method="${method// }"; id="${id// }"; name="${name# }"; name="${name% }"; _def="${_def// }"
     [[ "$method" != "mas" ]] && continue
-    [[ "$_def" == "exclude" ]] && continue   # rejected in the registry — never acquire
     if [[ "$HAVE_BREWFILE" == "true" ]]; then
         [[ -n "${selected_ids[$id]+_}" ]] || continue   # deselected in app-picker
     else

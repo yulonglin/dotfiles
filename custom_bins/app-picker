@@ -10,6 +10,7 @@
 #   app-picker --installed     # preselect from what THIS Mac has installed (TUI in a terminal, else just write)
 #   app-picker --defaults      # no TUI; registry defaults → Brewfile
 #   app-picker --audit         # no writes to the Brewfile; compare this Mac against it and the registry
+#   app-picker --excluded      # print the rejected apps (config/apps-excluded.conf) and whether each is still installed
 #   app-picker --deps          # print why every installed formula is here (requested vs pulled in by what)
 #   app-picker --dry-run       # print the Brewfile to stdout; no write, no audit
 #   app-picker --no-audit      # skip the audit after writing
@@ -20,8 +21,11 @@
 #   app-picker --conf PATH     # registry path (default: <dotfiles>/config/apps.conf)
 #   app-picker --file PATH     # Brewfile path (default: <dotfiles>/config/Brewfile)
 #
-# Registry `default` column: true | false | exclude. An `exclude` row never reaches the
-# TUI or the Brewfile; the audit lists it with an uninstall command while it is installed.
+# Two registries, one question each. config/apps.conf says what gets installed, and its
+# `default` column is true | false — the initial toggle state, nothing more. Rejected apps
+# live in config/apps-excluded.conf (method|id|name|since|why): never offered, never in the
+# Brewfile, listed by --excluded, and named with an uninstall command by --audit while one
+# is still installed. An id in both files is an authoring error and app-picker refuses to run.
 #
 # The audit prints commands and never runs them. It never suggests `brew bundle cleanup`:
 # that would remove every CLI formula config.sh installs, since those are not in the Brewfile.
@@ -38,10 +42,11 @@ SCRIPT_DIR="${0:A:h}"
 DOT_DIR="${DOT_DIR:-${SCRIPT_DIR:h}}"
 
 CONF="$DOT_DIR/config/apps.conf"
+EXCL_CONF=""          # defaults to apps-excluded.conf beside $CONF, once --conf is parsed
 BREWFILE="$DOT_DIR/config/Brewfile"
 APPS_DIR="${APP_PICKER_APPS_DIR:-/Applications}"   # overridable for tests
 DEPS_DOC="${APP_PICKER_DEPS_DOC:-$DOT_DIR/docs/brew-formulae.md}"
-MODE="tui"          # tui | defaults | installed | audit | deps
+MODE="tui"          # tui | defaults | installed | audit | deps | excluded
 DRY_RUN=false
 DO_AUDIT=true
 
@@ -50,17 +55,20 @@ while [[ $# -gt 0 ]]; do
         --defaults)      MODE="defaults"; shift ;;
         --installed)     MODE="installed"; shift ;;
         --audit)         MODE="audit"; shift ;;
+        --excluded)      MODE="excluded"; shift ;;
         --deps)          MODE="deps"; shift ;;
         --dry-run)       DRY_RUN=true; shift ;;
         --no-audit)      DO_AUDIT=false; shift ;;
         --conf)          CONF="$2"; shift 2 ;;
+        --excluded-conf) EXCL_CONF="$2"; shift 2 ;;
         --file)          BREWFILE="$2"; shift 2 ;;
-        -h|--help)       sed -n '2,31p' "$0"; exit 0 ;;
+        -h|--help)       sed -n '2,34p' "$0"; exit 0 ;;
         *) echo "app-picker: unknown arg '$1'" >&2; exit 2 ;;
     esac
 done
 
 [[ -f "$CONF" ]] || { echo "app-picker: registry not found: $CONF" >&2; exit 1; }
+[[ -n "$EXCL_CONF" ]] || EXCL_CONF="${CONF:h}/apps-excluded.conf"
 
 # ─── Parse registry ──────────────────────────────────────────────────────────
 # Arrays are index-aligned. zsh arrays are 1-based.
@@ -74,6 +82,34 @@ done < "$CONF"
 
 local n=${#A_METHOD}
 (( n > 0 )) || { echo "app-picker: no apps parsed from $CONF" >&2; exit 1; }
+
+# ─── Parse the rejected apps (method|id|name|since|why) ──────────────────────
+# Absent file = nothing rejected, which is a valid registry, not an error.
+typeset -a X_METHOD X_ID X_NAME X_SINCE X_WHY
+if [[ -f "$EXCL_CONF" ]]; then
+    while IFS='|' read -r method id name since why; do
+        [[ -z "${method// }" || "${method[1]}" == "#" ]] && continue
+        X_METHOD+=("${method// }"); X_ID+=("${id// }"); X_NAME+=("${${name# }% }")
+        X_SINCE+=("${since// }"); X_WHY+=("${${why# }% }")
+    done < "$EXCL_CONF"
+fi
+local xn=${#X_METHOD}
+
+# An id in both files would be offered for install and marked for uninstall at once.
+if (( xn > 0 )); then
+    typeset -A _reg_key
+    local _i _k _clash=""
+    for (( _i=1; _i<=n; _i++ )); do _k="${A_METHOD[_i]}:${A_ID[_i]}"; _reg_key[$_k]=1; done
+    for (( _i=1; _i<=xn; _i++ )); do
+        _k="${X_METHOD[_i]}:${X_ID[_i]}"
+        [[ -n "${_reg_key[$_k]+_}" ]] && _clash+="  $_k"$'\n'
+    done
+    if [[ -n "$_clash" ]]; then
+        print -ru2 -- "app-picker: these ids are in BOTH $CONF and $EXCL_CONF — an app belongs to exactly one:"
+        print -rnu2 -- "$_clash"
+        exit 1
+    fi
+fi
 
 # ─── Machine inventory (casks, requested formulae, App Store receipts, taps) ──
 typeset -A INST_CASK INST_FORMULA INST_MAS   # INST_MAS: app stem → bundle id
@@ -109,25 +145,27 @@ mas_stem_for() {  # <registry name> → installed app stem, or nothing
     done
 }
 
-is_installed() {  # <registry index> → 0 if installed on this Mac
-    local i=$1
-    case "${A_METHOD[i]}" in
-        cask) [[ -n "${INST_CASK[${A_ID[i]}]+_}" ]] ;;
-        brew) [[ -n "${INST_FORMULA[${A_ID[i]}]+_}" ]] ;;
-        mas)  [[ -n "$(mas_stem_for "${A_NAME[i]}")" ]] ;;
+# The two helpers below take method/id/name rather than a registry index, because the
+# rejected apps live in their own file and have no index into the registry arrays.
+is_installed_app() {  # <method> <id> <name> → 0 if installed on this Mac
+    case "$1" in
+        cask) [[ -n "${INST_CASK[$2]+_}" ]] ;;
+        brew) [[ -n "${INST_FORMULA[$2]+_}" ]] ;;
+        mas)  [[ -n "$(mas_stem_for "$3")" ]] ;;
         *)    return 1 ;;
     esac
 }
-
-uninstall_cmd() {  # <registry index> → the command that removes it (printed, never run)
-    local i=$1 stem
-    case "${A_METHOD[i]}" in
-        cask) print -r -- "brew uninstall --cask ${A_ID[i]}" ;;
-        brew) print -r -- "brew uninstall ${INST_FORMULA[${A_ID[i]}]:-${A_ID[i]}}" ;;
-        mas)  stem="$(mas_stem_for "${A_NAME[i]}")"
-              print -r -- "sudo mas uninstall ${A_ID[i]}    # or Trash \"$APPS_DIR/${stem:-${A_NAME[i]}}.app\"" ;;
+uninstall_cmd_app() {  # <method> <id> <name> → the command that removes it (printed, never run)
+    local stem
+    case "$1" in
+        cask) print -r -- "brew uninstall --cask $2" ;;
+        brew) print -r -- "brew uninstall ${INST_FORMULA[$2]:-$2}" ;;
+        mas)  stem="$(mas_stem_for "$3")"
+              print -r -- "sudo mas uninstall $2    # or Trash \"$APPS_DIR/${stem:-$3}.app\"" ;;
     esac
 }
+is_installed()   { is_installed_app   "${A_METHOD[$1]}" "${A_ID[$1]}" "${A_NAME[$1]}"; }
+uninstall_cmd()  { uninstall_cmd_app  "${A_METHOD[$1]}" "${A_ID[$1]}" "${A_NAME[$1]}"; }
 
 declared_elsewhere() {  # <token> → 0 if config.sh or helpers.sh names it (CLI tools, --ai-tools casks)
     local f
@@ -143,7 +181,6 @@ typeset -a rows selected
 local i
 if [[ "$MODE" == "installed" ]]; then inventory; fi
 for (( i=1; i<=n; i++ )); do
-    [[ "${A_DEFAULT[i]}" == "exclude" ]] && continue
     local label="${i}	[${A_CAT[i]}·T${A_TIER[i]}] ${A_NAME[i]} — ${A_DESC[i]}"
     # gum --selected takes a comma-separated list, so a label containing a comma
     # (e.g. a description like "Notes, docs, and wiki") would be mis-split and fail
@@ -266,19 +303,17 @@ audit() {
     print -r -- ""
     print -r -- "Audit: this Mac vs $BREWFILE (commands are printed, not run)"
 
-    # A. excluded but still installed
+    # A. rejected in apps-excluded.conf but still installed
     local out=""
-    for (( i=1; i<=n; i++ )); do
-        [[ "${A_DEFAULT[i]}" == "exclude" ]] || continue
-        is_installed "$i" || continue
-        out+="  $(uninstall_cmd "$i")"$'\n'"      ↳ ${A_DESC[i]}"$'\n'
+    for (( i=1; i<=xn; i++ )); do
+        is_installed_app "${X_METHOD[i]}" "${X_ID[i]}" "${X_NAME[i]}" || continue
+        out+="  $(uninstall_cmd_app "${X_METHOD[i]}" "${X_ID[i]}" "${X_NAME[i]}")"$'\n'"      ↳ ${X_SINCE[i]} — ${X_WHY[i]}"$'\n'
     done
-    [[ -n "$out" ]] && { section "Excluded in the registry, still installed → uninstall:"; print -rn -- "$out"; }
+    [[ -n "$out" ]] && { section "Rejected in ${EXCL_CONF:t}, still installed → uninstall:"; print -rn -- "$out"; }
 
     # B. registered, installed, not selected
     out=""
     for (( i=1; i<=n; i++ )); do
-        [[ "${A_DEFAULT[i]}" == "exclude" ]] && continue
         [[ -n "${picked[$i]+_}" ]] && continue
         is_installed "$i" || continue
         out+="  $(uninstall_cmd "$i")    # ${A_NAME[i]}"$'\n'
@@ -294,11 +329,19 @@ audit() {
     [[ -n "$out" ]] && { section "In the Brewfile but not installed → mas-get && brew bundle --file=$BREWFILE:"; print -rn -- "$out"; }
 
     # D. installed casks / App Store apps the registry does not know
+    # A rejected app is known, not unregistered: section A already names it, so keep it
+    # out of here or it would be reported twice with contradictory advice.
     typeset -A reg_cask reg_mas_stem
     for (( i=1; i<=n; i++ )); do
         [[ "${A_METHOD[i]}" == "cask" ]] && reg_cask[${A_ID[i]}]=1
         if [[ "${A_METHOD[i]}" == "mas" ]]; then
             s="$(mas_stem_for "${A_NAME[i]}")"; [[ -n "$s" ]] && reg_mas_stem[$s]=1
+        fi
+    done
+    for (( i=1; i<=xn; i++ )); do
+        [[ "${X_METHOD[i]}" == "cask" ]] && reg_cask[${X_ID[i]}]=1
+        if [[ "${X_METHOD[i]}" == "mas" ]]; then
+            s="$(mas_stem_for "${X_NAME[i]}")"; [[ -n "$s" ]] && reg_mas_stem[$s]=1
         fi
     done
     typeset -a unknown_casks
@@ -328,6 +371,7 @@ audit() {
     # E. requested formulae nobody declares
     typeset -A reg_brew
     for (( i=1; i<=n; i++ )); do [[ "${A_METHOD[i]}" == "brew" ]] && reg_brew[${A_ID[i]}]=1; done
+    for (( i=1; i<=xn; i++ )); do [[ "${X_METHOD[i]}" == "brew" ]] && reg_brew[${X_ID[i]}]=1; done
     out=""
     for t in "${(ko)INST_FORMULA[@]}"; do
         [[ "$t" == "mas" || -n "${reg_brew[$t]+_}" ]] && continue
@@ -356,6 +400,34 @@ audit() {
         section "Third-party taps whose formulae config.sh declares (exception on record):"
         print -rl -- "${ok_taps[@]/#/  }"
     fi
+}
+
+# ─── --excluded: the rejected apps as one screen ────────────────────────
+print_excluded() {
+    if (( xn == 0 )); then
+        print -r -- "No rejected apps ($EXCL_CONF is empty or absent)."
+        return 0
+    fi
+    inventory
+    local i state w=0
+    for (( i=1; i<=xn; i++ )); do (( ${#X_NAME[i]} > w )) && w=${#X_NAME[i]}; done
+    print -r -- "Rejected apps — $EXCL_CONF"
+    print -r -- "Never offered in the picker and never written to the Brewfile."
+    for (( i=1; i<=xn; i++ )); do
+        state="gone"
+        if [[ "$BREW_OK" == "true" ]] && is_installed_app "${X_METHOD[i]}" "${X_ID[i]}" "${X_NAME[i]}"; then
+            state="STILL INSTALLED"
+        elif [[ "$BREW_OK" != "true" ]]; then
+            state="?"
+        fi
+        print -r -- ""
+        printf '  %-*s  %s  %s\n' "$w" "${X_NAME[i]}" "${X_SINCE[i]}" "$state"
+        print -r -- "      ${X_WHY[i]}"
+        [[ "$state" == "STILL INSTALLED" ]] && \
+            print -r -- "      → $(uninstall_cmd_app "${X_METHOD[i]}" "${X_ID[i]}" "${X_NAME[i]}")"
+    done
+    print -r -- ""
+    print -r -- "To offer one again: delete its line from $EXCL_CONF and add a row to $CONF."
 }
 
 # ─── Formula provenance: why is each installed formula here? ─────────────────
@@ -389,7 +461,7 @@ def roots(n, seen=None):
 reg = set()
 for line in open(conf, encoding='utf-8'):
     p = [s.strip() for s in line.split('|')]
-    if len(p) >= 5 and p[0] == 'brew' and p[4] != 'exclude': reg.add(p[1])
+    if len(p) >= 5 and p[0] == 'brew': reg.add(p[1])
 texts = {}
 for rel in ('config.sh', 'scripts/shared/helpers.sh'):
     try: texts[rel] = open(f'{dot}/{rel}', encoding='utf-8').read()
@@ -427,6 +499,10 @@ PY
 }
 
 # ─── Main ────────────────────────────────────────────────────────────────────
+if [[ "$MODE" == "excluded" ]]; then
+    print_excluded
+    exit 0
+fi
 if [[ "$MODE" == "deps" ]]; then
     deps_doc true
     exit 0
