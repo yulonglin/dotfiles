@@ -188,6 +188,19 @@ class RouterGuardTests(unittest.TestCase):
         self.health.assert_not_called()
         self.assertEqual(self.calls, [])
 
+    def test_the_managed_drop_in_supplies_the_url_once_the_user_file_is_stripped(self):
+        # The migrated user settings file carries no gateway key, so recovery
+        # has to read the root-owned drop-in or it silently stops running.
+        self.settings.write_text(json.dumps({"env": {"TMPDIR": "/tmp/claude"}}))
+        self.assertIsNone(self.guard.ensure_router("SessionStart", home=self.home, env={}, system="Darwin"))
+        self.health.assert_not_called()
+        managed = self.home / "managed-settings.d/50-model-router.json"
+        managed.parent.mkdir(parents=True)
+        managed.write_text(json.dumps({"env": {"ANTHROPIC_BASE_URL": self.base}}))
+        self.guard.ensure_router("SessionStart", home=self.home,
+                                 env={"MODEL_ROUTER_MANAGED": str(managed)}, system="Darwin")
+        self.health.assert_called()
+
     def test_other_os_and_unowned_urls_skip(self):
         self.assertIsNone(self.guard.ensure_router("SessionStart", home=self.home, env={}, system="Linux"))
         for url in ["https://api.anthropic.com", "http://localhost:8787/t/" + self.token,

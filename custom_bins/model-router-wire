@@ -399,7 +399,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
             print(f"then rerun `model-router-wire apply` to strip the keys from {SETTINGS}")
         else:
             print(f"WARNING: {SETTINGS} carries no gateway keys either, so sessions run direct to Anthropic until the sudo step")
-        print("after installing, start a fresh session and check /status names 'Enterprise managed settings (file)' and /model lists the routed rows")
+        print("after installing, start a fresh session and check /status names 'Enterprise managed settings (drop-ins)' -- or '(file + drop-ins)' if a managed-settings.json sits beside it -- and /model lists the routed rows")
     print("restart Claude Code sessions to see the rows")
     if args.no_restart:
         return 0
