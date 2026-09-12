@@ -27,9 +27,29 @@ mkdir -p /workspace/{cache,share,outputs,archive,hf,torch,bun,projects-data}
 ```
 `/workspace` is the RunPod convention; adopting it everywhere gives path parity.
 
-### Code/projects parity (direction flips by platform)
-- **Hetzner / bare-metal (root persists):** real dirs live in `$HOME`, add forward links for parity: `ln -s ~/code /workspace/code`, `ln -s ~/projects /workspace/projects`.
-- **RunPod (container disk is ephemeral, `/workspace` persists):** real dirs live under `/workspace`, and `~/code` → `/workspace/code`. The direction is reversed but **both paths resolve in both environments.**
+**Prefer a bind mount over a symlink for `/workspace`**: `mount --bind /mnt/<VOLUME> /workspace` plus the fstab line `/mnt/<VOLUME> /workspace none bind,nofail,x-systemd.requires-mounts-for=/mnt/<VOLUME> 0 0` (then `systemctl daemon-reload`). With a symlink every canonical path — `pwd -P`, Claude Code's project keys, the sandbox allowlist, `lsof` — reads `/mnt/<VOLUME>/...`, so `~/.claude/projects` grows a second `-mnt-HC-Volume-...` key for the same repo and the sandbox `allowWrite` entry for `/workspace` never matches. `project-hub doctor` flags the symlink form.
+
+### Research projects: one hub per project, hot on the fast disk, bulk on the volume
+
+`~/projects/<name>/` is the unit — the same path on the Mac, a Hetzner box and a RunPod pod — and `project-hub` (`custom_bins/`) creates and maintains it:
+
+```
+~/projects/<name>/
+├── code/  paper/  poster/     git repos, .venv inside      fast disk (NVMe)
+├── data/                      inputs, weights at rest       volume
+├── runs/                      eval logs, run outputs        volume
+├── external/                  upstream clones               volume
+└── archive/                   retired material              volume
+```
+
+- **Hetzner / bare-metal:** `~/projects` is a real dir on the root NVMe; the four bulk dirs are real under `$STORAGE_VOLUME/projects/<name>/` and the hub holds symlinks to them. Interpreter start-up, git and pytest stay on local IOPS; eval logs and weights sit on the big disk.
+- **RunPod / Vast (ephemeral root):** `~/projects -> /workspace/projects`, everything real on the volume; `project-hub new` then makes plain dirs.
+- **Mac:** no volume, plain dirs. `project-hub` reads `config/storage.conf` and decides per machine.
+- **Inside a repo, bulk subdirs link relatively** — `code/logs -> ../runs/logs`, `code/data -> ../data` — so the checkout works unchanged on every box. `project-hub tier <name>/code logs data` makes the link after checking the dir is gitignored, has **no tracked files** (an `out/` that git ignores as a directory can still carry committed artifacts — that one stays in the repo) and had no writes in the last 15 minutes.
+- **No `hub` symlink inside repos.** With the siblings in one directory `..` is the hub; Claude Code loads the hub's `CLAUDE.md` from the parent. A tracked absolute `hub -> /Users/...` link is a committed cross-machine bug.
+- **Adopting existing repos:** `project-hub adopt <name> code=~/code/x paper=~/writing/y` renames on the same filesystem (never a cross-fs copy), runs `git worktree repair` for `.claude/worktrees/*`, renames `~/.claude/projects` and `~/.remember` encodings (leaving a compat symlink so `--resume` and old job records keep working), re-allows direnv and rebuilds the venv, whose console-script shebangs carry the absolute path.
+- **Friction check:** `project-hub doctor` times interpreter start-up and the project import per repo and flags a venv on the volume; when it flags, point uv at a local env (`UV_PROJECT_ENVIRONMENT`) or move the repo to the fast disk rather than living with it.
+- The forward link `/workspace/code -> ~/code` stays for path parity; the old `/workspace/projects -> ~/projects` direction is replaced by the hub layout above.
 
 ### Relocate-with-symlink-back (the core move)
 ```bash
