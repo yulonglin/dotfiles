@@ -178,10 +178,10 @@ class TestRestartGuard:
         assert cooldown.restart_blocked(now) is None
 
     def test_a_hold_blocks_restarts_while_it_lasts(self):
-        """Having learned a restart does not help, stop bouncing the service."""
+        """A confirmed limit or a failed bounce stops the next one."""
         now = time.time()
         cooldown.hold_restarts(now)
-        assert "not to help" in cooldown.restart_blocked(now + 60)
+        assert "holding off restarts" in cooldown.restart_blocked(now + 60)
 
     def test_the_hold_expires_on_its_own(self):
         now = time.time()
@@ -387,7 +387,7 @@ class TestDecisions:
         code, result = cooldown.run(fix=True)
         assert code == cooldown.STALE
         assert self.restarts == []
-        assert "not to help" in result["summary"]
+        assert "holding off restarts" in result["summary"]
 
     def test_recovery_is_attempted_once_the_hold_expires(self, monkeypatch):
         now = time.time()

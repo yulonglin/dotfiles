@@ -212,14 +212,17 @@ def restart_blocked(now: float) -> str | None:
     hold = state.get("hold_restarts_until_unix")
     if isinstance(hold, (int, float)) and now < hold:
         left = datetime.timedelta(seconds=int(hold - now))
-        return "a restart was already shown not to help; %s before the next attempt" % left
+        return "holding off restarts after a confirmed limit or a failed bounce; %s left" % left
     return None
 
 
 def hold_restarts(now: float) -> None:
-    """Stand down for a bounded window after learning a restart will not help.
+    """Stand down from restarting for a bounded window.
 
-    The window is ours, never the `resets_at` upstream advertised. Honouring
+    Written on the two outcomes that say a bounce is not the answer right now:
+    upstream itself reported the quota spent, or a bounce was tried and left
+    the routes still dead. The window is ours, never the `resets_at` upstream
+    advertised. Honouring
     that deadline is what CLIProxyAPI already does wrong: it is a worst case,
     it can name a point days away, and believing it here would prohibit every
     recovery attempt for those days -- including the one that would have found
