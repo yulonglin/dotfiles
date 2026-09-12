@@ -8,14 +8,24 @@
 
 The matplotlib `figcheck` works on the live Figure; this is the sibling for
 anything that only exists as a PDF: TikZ figures, a compiled paper, a plot
-from another tool. It asks MuPDF (`mutool draw -F stext`) for every text
-line's bounding box and reports pairs that intersect by more than a tolerance,
-plus lines that extend past the page's media box (a clipped label).
+from another tool. It asks MuPDF for every text line's bounding box and reports
+pairs that intersect by more than a tolerance, plus lines that extend past the
+page box (a clipped label).
 
-Limits: only text is checked. Boxes, arrows and a label sitting on a line are
-invisible here, so this replaces eyeballing for text collisions only; still
-look at the rendered PNG for arrow anchoring (house-plots
-references/visual-layout-quality.md).
+Extraction goes through `mutool convert -F stext -O mediabox-clip=no`, because
+MuPDF's default structured text discards text that falls outside the page box:
+the label that ran furthest off the page was the one the bounds check never saw.
+mutool ignores an unknown -O option silently, so each run first measures its own
+mutool on a generated probe page and refuses to report at all (exit 2, `--warn`
+included) when off-page text does not survive. A gate that cannot be checked is
+not reported as clean.
+
+Limits: only text is checked, and only against the page box. Boxes, arrows and a
+label sitting on a line are invisible here, and so is text hidden by a clip path
+in the content stream or covered by a later fill — that text stays in the stream,
+so it is neither reported as clipped nor kept out of the overlap check. This
+replaces eyeballing for text collisions only; still look at the rendered PNG for
+arrow anchoring (house-plots references/visual-layout-quality.md).
 """
 
 from __future__ import annotations
@@ -23,9 +33,40 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET  # mutool output is generated locally; no untrusted XML
+from pathlib import Path
 
 TOL_PT = 0.8  # ignore hairline touches between neighbouring lines
+STEXT_OPTIONS = "mediabox-clip=no"  # keep the text that falls outside the page box
+
+
+def die(message: str) -> None:
+    print(f"figcheck-pdf: {message}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def minimal_pdf(items: list[tuple[str, float, float]], size: float = 12,
+                box: tuple[float, float, float, float] = (0, 0, 200, 200)) -> bytes:
+    """A one-page PDF of Helvetica lines at (x, y) — the fixture the probe measures."""
+    stream = "".join(f"BT /F1 {size} Tf {x} {y} Td ({text}) Tj ET\n" for text, x, y in items).encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        f"<< /Type /Page /Parent 2 0 R /MediaBox [{' '.join(str(v) for v in box)}]"
+        f" /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".encode(),
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"endstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out, offsets = bytearray(b"%PDF-1.4\n"), []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj\n".encode() + body + b"\nendobj\n"
+    startxref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode() + b"0000000000 65535 f \n"
+    out += b"".join(f"{off:010d} 00000 n \n".encode() for off in offsets)
+    out += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{startxref}\n%%EOF\n".encode()
+    return bytes(out)
 
 
 def page_count(pdf: str) -> int:
@@ -37,11 +78,13 @@ def page_count(pdf: str) -> int:
 
 
 def text_lines(pdf: str, page: int) -> tuple[float, float, list[tuple[str, float, float, float, float]]]:
-    xml = subprocess.run(
-        ["mutool", "draw", "-F", "stext", "-o", "-", pdf, str(page)],
-        capture_output=True, text=True, check=True,
-    ).stdout
-    root = ET.fromstring(xml)
+    with tempfile.TemporaryDirectory() as scratch:
+        stext = Path(scratch) / "page.xml"  # mutool convert has no stdout target
+        subprocess.run(
+            ["mutool", "convert", "-F", "stext", "-O", STEXT_OPTIONS, "-o", str(stext), pdf, str(page)],
+            capture_output=True, text=True, check=True,
+        )
+        root = ET.fromstring(stext.read_text())
     pg = root.find(".//page")
     width, height = float(pg.get("width")), float(pg.get("height"))
     lines = []
@@ -52,6 +95,18 @@ def text_lines(pdf: str, page: int) -> tuple[float, float, list[tuple[str, float
         x0, y0, x1, y1 = (float(v) for v in ln.get("bbox").split())
         lines.append((text, x0, y0, x1, y1))
     return width, height, lines
+
+
+def require_off_page_text() -> None:
+    """Prove this mutool keeps off-page text, since an unrecognised -O option is a silent no-op."""
+    with tempfile.TemporaryDirectory() as scratch:
+        probe = Path(scratch) / "probe.pdf"
+        probe.write_bytes(minimal_pdf([("off the page", 220, 100)]))
+        width, _height, lines = text_lines(str(probe), 1)
+    if not any(x1 > width + TOL_PT for _t, _x0, _y0, x1, _y1 in lines):
+        die("this mutool drops text lying outside the page box, so a clipped label would be "
+            "reported clean. Not checking. Upgrade mutool to a build whose stext accepts "
+            "-O mediabox-clip=no.")
 
 
 def check_page(pdf: str, page: int) -> int:
@@ -74,11 +129,23 @@ def check_page(pdf: str, page: int) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("pdf")
-    ap.add_argument("--page", type=int, default=1, help="page to check (default 1)")
+    ap.add_argument("--page", type=int, help="page to check (default 1)")
     ap.add_argument("--all", action="store_true", help="check every page")
     ap.add_argument("--warn", "-w", action="store_true", help="report problems but exit 0")
     args = ap.parse_args()
-    pages = range(1, page_count(args.pdf) + 1) if args.all else [args.page]
+    if args.all and args.page is not None:
+        ap.error("--page and --all are mutually exclusive")
+    count = page_count(args.pdf)
+    if args.all:
+        pages = range(1, count + 1)
+    else:
+        # mutool clamps a request past the end, so an unchecked page number would
+        # otherwise certify whichever page it landed on.
+        page = 1 if args.page is None else args.page
+        if not 1 <= page <= count:
+            ap.error(f"--page {page} is out of range: {args.pdf} has {count} page(s)")
+        pages = [page]
+    require_off_page_text()
     total = sum(check_page(args.pdf, p) for p in pages)
     return 0 if (total == 0 or args.warn) else 1
 
