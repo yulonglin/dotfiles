@@ -327,6 +327,48 @@ _check_markdown_hard_wrap() {
     return 1
 }
 
+# === ZSH SYNTAX CHECK ===
+#
+# ShellCheck cannot parse zsh (SC1071), so a zsh file's only static check is
+# `zsh -n`. A file counts as zsh when its staged first line is a zsh shebang or
+# when it lives where zsh sources it (config/*.sh, config/aliases/*.sh have no
+# shebang). Bash files keep ShellCheck, run by hand per coding-conventions.md.
+
+_is_staged_zsh() {
+    local file="$1"
+    # `|| true`: under pipefail, `head` closing the pipe early makes `git show`
+    # exit 141 on any file past the pipe buffer, which would misclassify it.
+    local first
+    first=$(git show ":${file}" 2>/dev/null | head -n 1 || true)
+    case "${first}" in
+        "#!"*zsh*)  return 0 ;;
+        "#!"*)      return 1 ;;   # any other interpreter, e.g. a bash shebang under config/
+    esac
+    # Shebang-less: zsh if it lives where zsh sources it.
+    case "${file}" in
+        config/aliases/*.sh|config/*.sh) return 0 ;;
+    esac
+    return 1
+}
+
+if command -v zsh &>/dev/null; then
+    _zsh_failed=""
+    while IFS= read -r _staged_file; do
+        [ -n "${_staged_file}" ] || continue
+        _is_staged_zsh "${_staged_file}" || continue
+        if ! git show ":${_staged_file}" 2>/dev/null | zsh -n 2>"${TMPDIR:-/tmp}/zsh-n.$$"; then
+            echo "⛔  Pre-commit: zsh -n failed for ${_staged_file}"
+            sed 's/^/    /' "${TMPDIR:-/tmp}/zsh-n.$$"
+            _zsh_failed=1
+        fi
+        rm -f "${TMPDIR:-/tmp}/zsh-n.$$"
+    done < <(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)
+    if [ -n "${_zsh_failed}" ]; then
+        echo "    To bypass (NOT recommended): git commit --no-verify"
+        exit 1
+    fi
+fi
+
 # === REPO-SPECIFIC HOOKS (Additive) ===
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
