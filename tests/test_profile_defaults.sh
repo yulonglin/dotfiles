@@ -5,7 +5,8 @@
 #
 # This file used to diff every profile against a byte-for-byte fixture in
 # tests/golden/. That pinned the answer rather than the rule: adding one line to
-# DEPLOY_REGISTRY drifted all seven fixtures at once, so a single new component
+# DEPLOY_REGISTRY drifted all seven profile comparisons at once (six fixture
+# files — devbox deliberately reused personal's), so a single new component
 # ("storage" on 2026-09-01, "dotfiles-sync" on 2026-09-04) turned into 15 red
 # assertions carrying one bit of information, and any DELIBERATE profile change
 # was reported as a regression. The fixtures are gone.
