@@ -12,7 +12,10 @@
 # green against a hook that blocked nothing. A substring check here can never
 # tell a working hook from a decorative one; keep the jq key assertions.
 
-HOOK="$(cd "$(dirname "$0")" && pwd)/mask_env_read.sh"
+# HOOK is overridable so the same suite can be pointed at an older revision:
+#   git show <rev>:claude/hooks/mask_env_read.sh > /tmp/old_hook.sh
+#   HOOK=/tmp/old_hook.sh bash claude/hooks/test_mask_env_read.sh
+HOOK="${HOOK:-$(cd "$(dirname "$0")" && pwd)/mask_env_read.sh}"
 PASS=0
 FAIL=0
 
@@ -27,6 +30,9 @@ trap 'rm -rf "$FIXTURE"' EXIT
 printf 'API_KEY=supersecretvalue\nPLAIN=hello\n' > "$FIXTURE/.env"
 printf 'export TOKEN=anothersecret\n' > "$FIXTURE/.envrc"
 printf 'not an env file\n' > "$FIXTURE/README.md"
+# A symlink whose own name says nothing about what it points at. The basename
+# check tests the link, so this walked straight past the hook.
+ln -s .env "$FIXTURE/notes.txt"
 
 # Read the verdict out of the hook's JSON by KEY. Anything that is not a
 # well-formed object carrying hookSpecificOutput.permissionDecision == "deny"
@@ -64,14 +70,29 @@ check() {
     PASS=$((PASS + 1))
 }
 
+# The 4th argument is the session cwd the hook is told about. It defaults to
+# the fixture; the `cd` cases need it to be somewhere else, because a hook that
+# resolves every relative path against the session cwd only looks correct while
+# the two happen to be the same directory.
 run_bash() {
-    local desc="$1" cmd="$2" expect="$3"
+    local desc="$1" cmd="$2" expect="$3" cwd="${4:-$FIXTURE}"
     local out
     out=$(python3 -c "
 import json, sys
 print(json.dumps({'tool_name': 'Bash', 'cwd': sys.argv[2],
                   'tool_input': {'command': sys.argv[1]}}))" \
-        "$cmd" "$FIXTURE" | bash "$HOOK" 2>/dev/null)
+        "$cmd" "$cwd" | bash "$HOOK" 2>/dev/null)
+    check "$desc" "$expect" "$out"
+}
+
+run_grep() {
+    local desc="$1" path="$2" expect="$3"
+    local out
+    out=$(python3 -c "
+import json, sys
+print(json.dumps({'tool_name': 'Grep', 'cwd': sys.argv[2],
+                  'tool_input': {'pattern': 'KEY', 'path': sys.argv[1]}}))" \
+        "$path" "$FIXTURE" | bash "$HOOK" 2>/dev/null)
     check "$desc" "$expect" "$out"
 }
 
@@ -111,6 +132,91 @@ run_bash "git status"              'git status --short'       allow
 run_bash "ls with pipe"            'ls -la | wc -l'           allow
 run_read "read a normal file"      "$FIXTURE/README.md"       allow
 run_bash "nonexistent env file"    'cat .env.missing'         allow
+
+# --- Bypasses measured live on 2026-09-12, ordered by how likely each is to
+# --- happen by accident rather than by attack.
+
+echo "=== SHOULD MASK: the path never appears literally (cd, variables, quotes) ==="
+# PARENT is the fixture's parent, so a relative token resolved against the
+# session cwd instead of the cd'd-into directory misses the file entirely.
+PARENT="$(dirname "$FIXTURE")"
+run_bash "cd then read"            "cd $FIXTURE && cat .env"        mask "$PARENT"
+run_bash "cd then sed"             "cd $FIXTURE; sed -n 1p .env"    mask "$PARENT"
+run_bash "variable path"           "V=$FIXTURE/.env; cat \"\$V\""   mask "$PARENT"
+run_bash "braced variable path"    "V=$FIXTURE/.env; cat \"\${V}\"" mask "$PARENT"
+run_bash "quoted absolute path"    "cat \"$FIXTURE/.env\""           mask "$PARENT"
+
+echo "=== SHOULD MASK: symlink to an env file (basename says nothing) ==="
+run_bash "cat a symlink"           'cat notes.txt'                  mask
+run_read "read a symlink"          "$FIXTURE/notes.txt"             mask
+
+echo "=== SHOULD MASK: readers the command list did not know about ==="
+run_bash "sed"                     'sed -n 1p .env'                 mask
+run_bash "awk"                     "awk 'NR==1' .env"               mask
+run_bash "nl"                      'nl .env'                        mask
+run_bash "tac"                     'tac .env'                       mask
+run_bash "od"                      'od -c .env'                     mask
+run_bash "xxd"                     'xxd .env'                       mask
+run_bash "strings"                 'strings .env'                   mask
+run_bash "cut"                     'cut -d= -f2 .env'               mask
+run_bash "base64"                  'base64 .env'                    mask
+run_bash "source"                  'source .envrc'                  mask
+run_bash "dot builtin"             '. .envrc'                       mask
+
+echo "=== SHOULD MASK: the read hides inside a substitution or a redirection ==="
+run_bash "command substitution"    'echo "$(cat .env)"'             mask
+run_bash "backtick substitution"   'echo `cat .env`'                mask
+run_bash "export from xargs"       'export $(cat .env | xargs)'     mask
+run_bash "redirection into while"  'while IFS= read -r l; do :; done < .env'  mask
+run_bash "cp to stdout"            'cp .env /dev/stdout'            mask
+run_bash "inline python"           'python3 -c "print(open(\".env\").read())"'  mask
+
+echo "=== SHOULD MASK: a keyword or a wrapper stands in front of the reader ==="
+run_bash "guarded by then"         'if [ -f .env ]; then cat .env; fi'      mask
+run_bash "subshell with cd"        "( cd $FIXTURE && cat .env )"            mask "$PARENT"
+run_bash "brace group"             '{ cat .env; }'                          mask
+run_bash "command prefix"          'command cat .env'                       mask
+run_bash "time prefix"             'time sed -n 1p .env'                    mask
+
+echo "=== SHOULD MASK: the Grep tool reads files too ==="
+run_grep "grep tool on .env"       "$FIXTURE/.env"                  mask
+
+# --- False-positive guards. Widening the reader set is only safe if ordinary
+# --- work still runs; each of these would be newly broken by a careless list.
+
+echo "=== SHOULD ALLOW: the new readers on ordinary files ==="
+run_bash "sed on a normal file"    "sed -i 's/a/b/' README.md"      allow
+run_bash "awk on a normal file"    "awk '{print}' README.md"        allow
+run_bash "cut on a normal file"    'cut -c1-3 README.md'            allow
+run_bash "grep over a tree"        'grep -rn KEY .'                 allow
+run_bash "inline python, no env"   'python3 -c "print(1)"'          allow
+run_bash "venv dir called .env"    'source .env/bin/activate'       allow
+# rg -g takes a glob, not a path, and --files/-l print names, never contents.
+run_bash "rg glob argument"        "rg --files -g '.envrc'"         allow
+run_bash "rg -l names only"        'rg -l KEY .env'                 allow
+run_bash "grep -e pattern"         'grep -e .env README.md'         allow
+# `source FILE args` reads only FILE. A prose sentence in a commit-message
+# heredoc begins with ". ", which parses as the source builtin.
+run_bash "source with extra args"  'source README.md .envrc'        allow
+run_bash "prose starting with dot" '. Every call site, including .envrc, now names the verbs'  allow
+# -f really does read the file as a pattern list, so it stays intercepted.
+run_bash "grep -f reads the file"  'echo hi | grep -f .env'         mask
+# -l is a names-only flag to grep, but a language to bat.
+run_bash "bat -l is a language"    'bat -l sh .env'                 mask
+
+echo "=== SHOULD ALLOW: touching an env file without reading its values ==="
+run_bash "git add"                 'git add .env'                   allow
+run_bash "ls"                      'ls -la .env'                    allow
+run_bash "rm"                      'rm -f .env'                     allow
+run_bash "mv"                      'mv .env .env.bak'               allow
+run_bash "cp to a backup"          'cp .env .env.bak'               allow
+run_bash "append to it"            'echo "FOO=bar" >> .env'         allow
+run_bash "write over it"           'cat > .env'                     allow
+run_bash "editor"                  'vim .env'                       allow
+
+echo "=== SHOULD ALLOW: variables and cd that do not lead to an env file ==="
+run_bash "variable to normal file" 'V=README.md; cat "$V"'          allow
+run_bash "cd then normal read"     "cd $FIXTURE && cat README.md"   allow "$PARENT"
 
 echo "=== SHOULD MASK: the deny is carried by permissionDecision, not decision.behavior ==="
 SHAPE=$(python3 -c "
