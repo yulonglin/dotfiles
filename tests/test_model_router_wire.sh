@@ -43,7 +43,7 @@ export MODEL_ROUTER_MANAGED="$WORK/managed.d/50-model-router.json"
 export MODEL_ROUTER_STAGED="$WORK/staged.json"
 export MODEL_ROUTER_AGENTS="$WORK/agents"
 
-# --- Phase 1: stage, print the sudo line, leave the user file alone ----------
+# --- Phase 1: stage, print the sudo line, keep the gateway keys in the user file ---
 out="$("$WIRE" apply --no-restart)"
 [ -f "$MODEL_ROUTER_STAGED" ] || fail "apply did not stage $MODEL_ROUTER_STAGED"
 # GNU stat -f means "filesystem status" and SUCCEEDS while printing the wrong
@@ -52,14 +52,19 @@ mode="$(stat -c '%a' "$MODEL_ROUTER_STAGED" 2>/dev/null || stat -f '%Lp' "$MODEL
 [ "$mode" = "600" ] || fail "staged file mode is $mode, expected 600"
 has_key "$MODEL_ROUTER_STAGED" ANTHROPIC_BASE_URL || fail "staged file lacks ANTHROPIC_BASE_URL"
 has_key "$MODEL_ROUTER_STAGED" _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL || fail "staged file lacks the first-party flag"
-has_top "$MODEL_ROUTER_STAGED" modelPicker || fail "staged file lacks modelPicker"
+has_top "$MODEL_ROUTER_STAGED" modelPicker && fail "staged file carries modelPicker (the rows stay in the user file)"
+has_key "$MODEL_ROUTER_STAGED" ENABLE_TOOL_SEARCH && fail "staged file carries ENABLE_TOOL_SEARCH (it stays in the user file)"
+has_key "$MODEL_ROUTER_STAGED" CLAUDE_CODE_MAX_CONTEXT_TOKENS && fail "staged file carries the context-window key (it stays in the user file)"
 has_top "$MODEL_ROUTER_STAGED" permissions && fail "staged file carries a personal key (permissions)"
 printf '%s' "$out" | grep -q 'sudo install -d -m 0755' || fail "apply did not print the sudo install line: $out"
 printf '%s' "$out" | grep -q -- "-o root -g" || fail "sudo line does not set root ownership: $out"
 # shellcheck disable=SC2016  # the backticks are literal text in the tool's output
 printf '%s' "$out" | grep -q 'rerun `model-router-wire apply`' || fail "apply did not say to rerun after the sudo step"
 has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL || fail "phase 1 stripped the user file before the managed drop-in existed"
-has_top "$CLAUDE_SETTINGS" modelPicker || fail "phase 1 removed modelPicker before the managed drop-in existed"
+has_top "$CLAUDE_SETTINGS" modelPicker || fail "phase 1 removed modelPicker from the user file (the rows belong there)"
+python3 -c 'import json,sys; rows=[o["model"] for o in json.load(open(sys.argv[1])).get("modelPicker",{}).get("options",[])]; sys.exit(0 if rows and "old" not in rows else 1)' "$CLAUDE_SETTINGS" \
+  || fail "phase 1 did not re-render the picker rows into the user file"
+"$WIRE" status | grep -q 'not wired' && fail "status calls the gateway off while the user file carries it"
 [ -f "$MODEL_ROUTER_CONFIG" ] || fail "router config not rendered"
 [ -f "$MODEL_ROUTER_MANAGED" ] && fail "apply wrote the managed path itself (it must go through sudo)"
 
@@ -74,7 +79,8 @@ out="$("$WIRE" apply --no-restart)"
 printf '%s' "$out" | grep -q 'committable again' || fail "phase 2 did not report the strip: $out"
 has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL && fail "phase 2 left ANTHROPIC_BASE_URL in the user file"
 has_key "$CLAUDE_SETTINGS" _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL && fail "phase 2 left the first-party flag in the user file"
-has_top "$CLAUDE_SETTINGS" modelPicker && fail "phase 2 left modelPicker in the user file"
+has_top "$CLAUDE_SETTINGS" modelPicker || fail "phase 2 removed modelPicker from the user file (the rows belong there)"
+has_key "$CLAUDE_SETTINGS" CLAUDE_CODE_MAX_CONTEXT_TOKENS || fail "phase 2 removed the context-window key, which the user file owns"
 has_key "$CLAUDE_SETTINGS" TMPDIR || fail "phase 2 removed an unrelated env key"
 has_key "$CLAUDE_SETTINGS" ENABLE_TOOL_SEARCH || fail "phase 2 removed ENABLE_TOOL_SEARCH, which the committed user file legitimately carries"
 has_top "$CLAUDE_SETTINGS" statusLine || fail "phase 2 removed a top-level user key"
@@ -103,8 +109,9 @@ p = sys.argv[1]; d = json.load(open(p)); d["env"]["ANTHROPIC_BASE_URL"] = "http:
 PY
 out="$("$WIRE" off)"
 has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL && fail "off left ANTHROPIC_BASE_URL in the user file"
+has_top "$CLAUDE_SETTINGS" modelPicker && fail "off left the picker rows in the user file"
 [ -f "$MODEL_ROUTER_STAGED" ] && fail "off left the staged file"
 printf '%s' "$out" | grep -q 'sudo rm -f' || fail "off did not print the sudo rm line while the drop-in exists: $out"
 [ -f "$MODEL_ROUTER_MANAGED" ] || fail "off removed the managed path itself"
 
-echo "PASS: model-router-wire stages, waits for the sudo step, then strips the user file"
+echo "PASS: model-router-wire stages the two gateway keys, keeps the rows and the rest in the user file, waits for the sudo step, then strips only those two"

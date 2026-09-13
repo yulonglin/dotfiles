@@ -4,14 +4,21 @@
 #
 #   ~/.config/model-router/config.toml   the router's routes (generated, do not edit)
 #   ~/.config/model-router/managed-settings.json
-#                                        ANTHROPIC_BASE_URL + one modelPicker row
-#                                        per model with picker = true, staged for
-#                                        the sudo line `apply` prints, which installs
-#                                        it as a MANAGED drop-in (macOS: /Library/
-#                                        Application Support/ClaudeCode/managed-
-#                                        settings.d/50-model-router.json; Linux:
-#                                        /etc/claude-code/managed-settings.d/). The
-#                                        user settings.json never carries the token.
+#                                        ANTHROPIC_BASE_URL and the first-party
+#                                        flag, and nothing else: they embed the
+#                                        token, so they cannot sit in a public
+#                                        file. Staged for the sudo line `apply`
+#                                        prints, which installs it as a MANAGED
+#                                        drop-in (macOS: /Library/Application
+#                                        Support/ClaudeCode/managed-settings.d/
+#                                        50-model-router.json; Linux: /etc/
+#                                        claude-code/managed-settings.d/). Until
+#                                        that sudo step is run on a machine, the
+#                                        keys stay in the user settings.json.
+#   ~/.claude/settings.json              one modelPicker row per model with
+#                                        picker = true, plus ENABLE_TOOL_SEARCH
+#                                        and the context-window key. Nothing here
+#                                        is secret, so a roster edit needs no root.
 #   claude/agents/<id>.md                one agent file per model with agent set
 #                                        (generated files carry a marker and are
 #                                        removed when the model goes)

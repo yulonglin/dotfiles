@@ -55,8 +55,8 @@ class WriterPolicyTests(unittest.TestCase):
             wire.render_router_config(without_policy),
         )
         self.assertEqual(
-            wire.render_settings(self.source, {}, "test-only"),
-            wire.render_settings(without_policy, {}, "test-only"),
+            wire.render_user(self.source, {}, "test-only"),
+            wire.render_user(without_policy, {}, "test-only"),
         )
         for model, plain in zip(self.source["models"], without_policy["models"]):
             if wire.effort_of(model) is not None:

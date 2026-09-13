@@ -15,7 +15,7 @@
 #   romp       the dashboard answers on the tailnet IP forwarder (skipped where ~/romp is absent)
 #
 # Options: --skip-probes (no claude -p calls), --routes id,id (probe a subset;
-# default is every modelPicker row in the managed drop-in).
+# default is every modelPicker row in the deployed settings).
 # Loopback is blocked inside the Claude Code Bash sandbox, so run this with the
 # sandbox off or from a plain shell; a healthy router reads as down otherwise.
 # macOS ships Python 3.9 (no tomllib); the tomllib leg falls back to uv's interpreter.
@@ -82,12 +82,28 @@ if "$bootstrap" verify-providers >/dev/null 2>&1; then ok "providers verify-prov
 managed_url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("env",{}).get("ANTHROPIC_BASE_URL",""))' "$MANAGED" 2>/dev/null)"
 deployed_url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("env",{}).get("ANTHROPIC_BASE_URL",""))' "$SETTINGS" 2>/dev/null)"
 committed_url="$(git -C "$REPO" show HEAD:claude/settings.json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("env",{}).get("ANTHROPIC_BASE_URL",""))' 2>/dev/null)"
+# A machine that has not run the one-time sudo step carries the gateway in the
+# user file and works exactly as it did before the drop-in existed. That is a
+# supported state for as long as the fleet is part-migrated, so it skips rather
+# than fails -- otherwise this suite is red on every un-migrated machine and the
+# noise teaches you to ignore it. Only a machine that has BOTH is drift.
 case "$managed_url" in
   http://127.0.0.1:*) ok "settings  managed drop-in wired to loopback" ;;
-  "") fail "settings  no managed drop-in at $MANAGED (run: model-router-wire apply, then its sudo line)" ;;
+  "")
+    case "$deployed_url" in
+      http://127.0.0.1:*) skip "settings  no drop-in yet; gateway is in $SETTINGS (pre-migration state; run: model-router-wire apply, then its sudo line)" ;;
+      *) fail "settings  no managed drop-in at $MANAGED and no base URL in $SETTINGS (run: model-router-wire apply, then its sudo line)" ;;
+    esac
+    ;;
   *) fail "settings  managed ANTHROPIC_BASE_URL is not loopback: $managed_url" ;;
 esac
-if [ -n "$deployed_url" ]; then fail "settings  deployed $SETTINGS still carries ANTHROPIC_BASE_URL (run: model-router-wire apply)"; else ok "settings  deployed user file carries no base URL"; fi
+if [ -z "$managed_url" ]; then
+  :  # pre-migration: the user file is meant to carry the URL, already reported above
+elif [ -n "$deployed_url" ]; then
+  fail "settings  deployed $SETTINGS still carries ANTHROPIC_BASE_URL as well as the drop-in (run: model-router-wire apply)"
+else
+  ok "settings  deployed user file carries no base URL"
+fi
 if [ -n "$committed_url" ]; then fail "settings  HEAD's claude/settings.json carries ANTHROPIC_BASE_URL"; else ok "settings  committed copy carries no base URL"; fi
 
 # source: everything rendered from config/model-router.toml is current
@@ -98,7 +114,7 @@ if [ "$skip_probes" -eq 0 ]; then
   if [ -n "$routes_arg" ]; then
     routes="${routes_arg//,/ }"
   else
-    routes="$(python3 -c 'import json,sys; print(" ".join(o["model"] for o in json.load(open(sys.argv[1])).get("modelPicker",{}).get("options",[])))' "$MANAGED" 2>/dev/null)"
+    routes="$(python3 -c 'import json,sys; print(" ".join(o["model"] for o in json.load(open(sys.argv[1])).get("modelPicker",{}).get("options",[])))' "$SETTINGS" 2>/dev/null)"
   fi
   if [ -z "$routes" ]; then
     fail "routes    no modelPicker rows to probe and no --routes given"
