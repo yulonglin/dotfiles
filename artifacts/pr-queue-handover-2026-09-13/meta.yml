@@ -1,0 +1,27 @@
+title: Six PRs open, four need a decision from you
+url: https://claude.ai/code/artifact/3a98e9c4-b49c-4b35-b9ec-d80bbce9142e
+org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-09-13
+first_published: 2026-09-13
+last_updated: 2026-09-13
+status: live
+
+summary: >-
+  the handover after a session that merged 30 pull requests and turned `main` green on all five CI
+  workflows for the first time since 1 September. Four open PRs need a decision, one of them held on
+  a real defect — the pre-commit gate accepts a broken zsh file when `zsh` is missing from PATH. The
+  through-line is that three separate security mechanisms were documented as working while doing
+  nothing: the classifier's user-message extractor, the env-masking hook, and an assertion of mine
+  about the deny list
+
+source: explainer.md
+built: index.html
+builds_with: |
+  md2artifact artifacts/pr-queue-handover-2026-09-13/explainer.md -o artifacts/pr-queue-handover-2026-09-13/index.html
+
+established: |
+  Every count is from a command run in the session rather than recalled: 30 merged from
+  `gh pr list --state merged`, the five green workflows from `gh run list --branch main`, the
+  26% injected-content figure and the 423-character rejected-variant measurement from runs over
+  `~/.claude/projects`, and the deny-list false-positive counts from this machine's own command
+  history. The three decisions it asks for are the user's; the recommendations are stated as
+  recommendations and each names what it would cost.
