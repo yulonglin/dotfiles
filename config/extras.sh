@@ -85,7 +85,8 @@ bindkey "^G" git_prepare
 
 explain () {
   if [ "$#" -eq 0 ]; then
-    while read  -p "Command: " cmd; do
+    # zsh: `read -p` reads from a coprocess; the prompt goes in the name as "var?prompt"
+    while read -r "cmd?Command: "; do
       curl -Gs "https://www.mankier.com/api/explain/?cols="$(tput cols) --data-urlencode "q=$cmd"
     done
     echo "Bye!"
