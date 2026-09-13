@@ -27,6 +27,26 @@ HEALTH_PATH = "/__model-router/health"
 REPAIR_SECONDS = 12.0
 
 
+def managed_env(env):
+    """The `env` block of the model-router managed settings drop-in.
+
+    Claude Code copies a settings `env` block into the process environment, so a
+    hook a session launches already has ANTHROPIC_BASE_URL whichever settings
+    level set it. A hook launched from a plain shell does not, and since the
+    gateway keys moved to the root-owned drop-in the user settings file no
+    longer carries them either, so read the drop-in before falling back to it.
+    """
+    path = env.get("MODEL_ROUTER_MANAGED") or (
+        "/Library/Application Support/ClaudeCode/managed-settings.d/50-model-router.json"
+        if sys.platform == "darwin"
+        else "/etc/claude-code/managed-settings.d/50-model-router.json")
+    try:
+        block = json.loads(Path(path).read_text()).get("env")
+    except (OSError, ValueError):
+        return {}
+    return block if isinstance(block, dict) else {}
+
+
 class GuardError(Exception):
     """A diagnostic with fixed text, safe to show without leaking credentials."""
 
@@ -229,13 +249,17 @@ def ensure_router(event, *, home=None, env=None, system=None, budget=REPAIR_SECO
 
     try:
         if "ANTHROPIC_BASE_URL" in env:
+            # An empty value here stays an explicit off; only the unset case
+            # falls through to the files below.
             base_url = env["ANTHROPIC_BASE_URL"]
         else:
-            settings = home / ".claude/settings.json"
-            if not settings.exists():
-                return None
-            config = json.loads(settings.read_text())
-            base_url = config.get("env", {}).get("ANTHROPIC_BASE_URL", "")
+            base_url = managed_env(env).get("ANTHROPIC_BASE_URL", "")
+            if not base_url:
+                settings = home / ".claude/settings.json"
+                if not settings.exists():
+                    return None
+                config = json.loads(settings.read_text())
+                base_url = config.get("env", {}).get("ANTHROPIC_BASE_URL", "")
         if not isinstance(base_url, str) or not base_url.startswith("http://127.0.0.1:%s/t/" % PORT):
             return None
         state = home / ".local/state/model-router"

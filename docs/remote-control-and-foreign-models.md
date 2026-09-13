@@ -96,7 +96,7 @@ Two honest non-mysterious reasons beyond that: Claude Code is a distribution cha
 ## Two stale items in the repo
 
 1. **`claude/rc-direct-settings.json` is a no-op**, and the `claude()` wrapper still prepends it to every interactive session and to `remote-control`/`rc`/`agents`. Three council seats flagged it. It is harmless to recommendation (b): the wrapper skips it whenever the caller supplies its own `--settings` (`config/aliases/claude.sh:209`), and a worker spawned from bash never goes through the zsh wrapper at all. Delete it for tidiness or leave it — low stakes either way.
-2. **`.claude/rules/dotfiles-settings.md` says `claude/settings.json` carries the gateway URL as a permanent working-tree diff "on purpose".** It does not — neither the committed file nor the deployed `~/.claude/settings.json` has any `ANTHROPIC_*` key. Matches the 2026-08-18 learning; the rule text should be re-scoped to "if the gateway is ever re-enabled". This one matters because it will mislead whoever tries this next.
+2. ~~**`.claude/rules/dotfiles-settings.md` says `claude/settings.json` carries the gateway URL as a permanent working-tree diff "on purpose".** It does not — neither the committed file nor the deployed `~/.claude/settings.json` has any `ANTHROPIC_*` key. Matches the 2026-08-18 learning; the rule text should be re-scoped to "if the gateway is ever re-enabled".~~ Resolved 2026-09-06: the gateway was re-enabled the same day, and the keys now live in a managed settings drop-in (`model-router-wire apply` stages it, one sudo line installs it), so `claude/settings.json` carries no gateway key in either the working copy or HEAD. The rule text describes that arrangement.
 
 ## What breaks quietly in the recommended design
 
