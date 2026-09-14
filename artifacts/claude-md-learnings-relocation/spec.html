@@ -1,4 +1,4 @@
-<title>Dotfiles Artifacts</title>
+<title>Relocate the Learnings section, and drop most of it</title>
 <style>
 :root {
   --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
@@ -65,301 +65,92 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 }
 </style>
 <div class="shell has-toc">
-<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#artifacts" class="lvl2">Artifacts</a><a href="#other-resources" class="lvl2">Other resources</a><a href="#publishing-a-page-publicly-is-an-org-decision-not-a-local-one" class="lvl2">Publishing a page publicly is an org decision, not a local one</a></nav>
+<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#overview" class="lvl2">Overview</a><a href="#what-is-deliberately-not-in-scope" class="lvl3">What is deliberately not in scope</a><a href="#requirements" class="lvl2">Requirements</a><a href="#every-relocation-lands-in-docs-or-a-skill-never-in-an-always-on-rule-file" class="lvl3">Every relocation lands in `docs/` or a skill, never in an always-on rule file</a><a href="#an-entry-drops-unless-a-future-reader-would-search-for-it" class="lvl3">An entry drops unless a future reader would search for it</a><a href="#six-entries-drop-as-exact-duplicates-and-the-duplicate-must-be-quoted-before-deletion" class="lvl3">Six entries drop as exact duplicates, and the duplicate MUST be quoted before deletion</a><a href="#three-references-encode-the-old-policy-and-must-be-rewritten-not-repointed" class="lvl3">Three references encode the old policy and MUST be rewritten, not repointed</a><a href="#one-stale-claim-must-be-corrected-in-the-same-pass" class="lvl3">One stale claim MUST be corrected in the same pass</a><a href="#claude-rules-sensitive-content-md-loses-a-pointer-to-a-dropped-entry" class="lvl3">`claude/rules/sensitive-content.md` loses a pointer to a dropped entry</a><a href="#the-28-entries-with-a-proposed-verdict-each" class="lvl2">The 28 entries, with a proposed verdict each</a><a href="#relocate-5-entries-keep-their-own-line-somewhere-else" class="lvl3">Relocate — 5 entries keep their own line somewhere else</a><a href="#drop-the-entry-keep-one-line-2-entries-contribute-a-tail" class="lvl3">Drop the entry, keep one line — 2 entries contribute a tail</a><a href="#drop-entirely-21-entries" class="lvl3">Drop entirely — 21 entries</a><a href="#acceptance-criteria" class="lvl2">Acceptance Criteria</a><a href="#what-would-make-this-wrong" class="lvl3">What would make this wrong</a></nav>
 <div class="doc">
-<h1 id="artifacts-and-resources-for-dotfiles">Artifacts and Resources for dotfiles</h1>
-<p>The pages this repo's work has produced, and where the things it depends on live. Every row states what the page established, so this file can be read instead of opened.</p>
-<p>Maintained per <code>~/.claude/skills/artifacts-sync/SKILL.md</code> — rows are written at publish time, because neither the repo nor the publishing org can be recovered from the gallery afterwards. Run <code>/artifacts-sync</code> to reconcile.</p>
-<p><strong>The table is generated; edit the YAML, never the Markdown.</strong> Each row comes from one file — <code>artifacts/&lt;slug&gt;/meta.yml</code> for a page whose source is kept, <code>artifacts/index-rows/&lt;slug&gt;.yml</code> for one whose source was not — and <code>python3 scripts/build_artifacts_index.py</code> rewrites the block between the two markers below. Two publishes now touch two different files instead of the same table line, so they no longer conflict; a conflict inside the generated block is resolved by taking either side and re-running the script. Everything outside the markers is hand-written and is never touched.</p>
-<p><strong>Live index page:</strong> https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107 — published 2026-09-10 under <code>lin.yulong@gmail.com's Organization</code> from <code>artifacts/index/index.html</code>.</p>
-<p><strong>The index is republished to that same URL after every artifact publish</strong> (Yulong, 2026-09-10), which replaces the earlier &quot;republish only on request&quot; rule: rebuild <code>artifacts/index/index.html</code> from this file and publish it with <code>url</code> set to the address above, in the same turn as the row you just wrote. <code>claude/hooks/nudge_artifact_index.sh</code> reads that URL out of this header and reminds the session; it never publishes anything itself. The old rule existed because the two previous hosted copies — the org-locked original (<a href="https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802">8ad029a9</a>) and its replacement (<a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">8d035fe5</a>), deleted the same day it was published — were both removed shortly after publication, so treat a 404 on the live URL as a signal to publish a fresh page and re-stamp this line rather than as a reason to stop.</p>
-<h2 id="artifacts">Artifacts</h2>
-<table>
-<thead>
-<tr>
-<th>Artifact</th>
-<th>Org</th>
-<th>Status</th>
-<th>Source</th>
-<th>Public</th>
-<th>Updated</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><a href="https://claude.ai/code/artifact/8d0af943-a622-4228-814a-9d5a4a0d6510">Relocate the Learnings section, and drop most of it</a> — the destination-per-entry contract for emptying <code>CLAUDE.md</code>'s <code>## Learnings</code> section, which had reached 37.5 KB inside a file four times over its 11,100-byte ceiling. The finding that set the shape: the section was doing two jobs under one heading — operational state Claude acts on, and incident forensics — and only the first earns a slot in a file that loads every session. So the axis is relocate-or-drop rather than prune, biased to drop because git history is the archive. Of 28 entries, 7 produce a surviving line elsewhere and 23 drop, six of them already stated verbatim at their destination. Every destination is under <code>docs/</code> or a skill, never <code>claude/rules/</code>, because six other files in the same budget suite are also over ceiling and a relocation into one would deepen a second failure. Published as a review page: each entry is a cycling control, approve / veto-keep / veto-relocate, for Yulong to veto entry by entry before anything is edited</td>
-<td>lin.yulong@gmail.com's Organization</td>
-<td>live</td>
-<td><code>artifacts/claude-md-learnings-relocation/</code></td>
-<td>no</td>
-<td>2026-09-14</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107">Dotfiles Artifacts</a> — this index, hosted; republished to this URL after every artifact publish</td>
-<td>lin.yulong@gmail.com's Organization</td>
-<td>live</td>
-<td><code>artifacts/index/</code></td>
-<td>no</td>
-<td>2026-09-14</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/3a98e9c4-b49c-4b35-b9ec-d80bbce9142e">Six PRs open, four need a decision from you</a> — the handover after a session that merged 30 pull requests and turned <code>main</code> green on all five CI workflows for the first time since 1 September. Four open PRs need a decision, one of them held on a real defect — the pre-commit gate accepts a broken zsh file when <code>zsh</code> is missing from PATH. The through-line is that three separate security mechanisms were documented as working while doing nothing: the classifier's user-message extractor, the env-masking hook, and an assertion of mine about the deny list</td>
-<td>lin.yulong@gmail.com's Organization</td>
-<td>live</td>
-<td><code>artifacts/pr-queue-handover-2026-09-13/</code></td>
-<td>no</td>
-<td>2026-09-13</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/d1d52cd8-b565-4f98-a863-3870026adc8b">The gateway keys move out of a public file</a> — what PR #117 changes, for a reader deciding whether to adopt it. <code>~/.claude</code> is a symlink to this repo, so the file Claude Code reads and the file git tracks are the same bytes — the gateway needs a loopback URL with a per-install token in it, and the repo is public, so the diff can never resolve. A root-owned managed drop-in ends that because the file is not in the tree at all. The costs are a manual <code>sudo install</code> per machine and the loss of the <code>CLAUDE_RC_OVERRIDE</code> escape hatch. Nothing in it has run on a real machine yet</td>
-<td>lin.yulong@gmail.com's Organization</td>
-<td>live</td>
-<td><code>artifacts/gateway-managed-dropin/</code></td>
-<td>no</td>
-<td>2026-09-12</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/c268d869-0260-4375-a4e9-0b33775f7d5d">Six of the seven bugs were already fixed</a> — what a hook, a skill, a rule and an agent each are, defined against files in this repo rather than in the abstract, and then which of seven tooling bugs belongs in which. The answer to &quot;which should we learn from&quot; turned out to be that six were already documented in the <code>review-pr-queue</code> skill that landed the day before, so the genuine remainder is one section and one bullet. The classifier-rejection ask is the one item with no clean fix, because the harness makes those decisions and a hook cannot veto one — all a rule can change is what the model does next</td>
-<td>lin.yulong@gmail.com's Organization</td>
-<td>live</td>
-<td><code>artifacts/setup-lessons-hooks-skills-rules/</code></td>
-<td>no</td>
-<td>2026-09-12</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/8245dfb8-4365-498d-95ea-475f4a68e828">The silent-pty installer harness</a> — why an installer that &quot;did nothing&quot; on 2026-09-04 slipped past every stall check in the repo, and what PR #134's harness does about it. The component menu is guarded by <code>[[ -t 0 ]]</code>, so a test whose stdin is a pipe skips the menu entirely and takes a code path the user never takes — only a real TTY with nobody typing reaches the bug. The harness reproduces it and is red on main for the right reason, but three of its assertions can be satisfied by a menu nobody can use and one case carries no time bound, so it is a diagnostic rather than a gate</td>
-<td>lin.yulong@gmail.com's Organization</td>
-<td>live</td>
-<td><code>artifacts/silent-pty-harness/</code></td>
-<td>no</td>
-<td>2026-09-12</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/e57cd906-4950-49a2-8a01-8b8f29234843">Fable sessions through the gateway trip the classifier</a> — reports auto-mode classifier <code>rate-limited</code> failures over 2026-08-01 to 09-10 by session model, against a denominator of classifier-bound tool calls: zero across 23,166 bound calls while the model-router gateway was off (19 Aug-5 Sep), 719 over 6-9 Sep of which 93% came from Fable 5.1 sessions, every one naming the Opus 1M-context classifier. <strong>The causal reading of those counts was withdrawn on 2026-09-11</strong> and is not supported: with the session rather than the tool call as the unit, all 209 post-boundary failures come from 4 of the 30 sessions that made bound calls, one holding 161, giving Fisher exact p = 0.554; 53% of Bash failures over 6-9 Sep repeat the previous failure's command, so every per-call rate on the page is inflated by retry loops. What stands is the measurement itself — the by-session-model denominator and the counts. Cause of the September failures: open. Its sibling page, <code>artifacts/why-auto-mode-broke-behind-the-gateway/</code>, carries the same retraction and the refutation of the attribution-header explanation</td>
-<td>MATS Program</td>
-<td>live — its causal headline was withdrawn on 2026-09-11, and the page body still argues it — read the summary, not the title, until the page is republished</td>
-<td><code>artifacts/classifier-rate-limits-2026-09/</code></td>
-<td>no</td>
-<td>2026-09-11</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/9aeb2de4-1bdb-4ec7-b843-4679ea6e7ef7">Dotfiles Review Queue</a> — the open pull requests grouped by how much judgement each needs rather than by age, so the table can be read instead of opened. Each row's tick is stored as its own document, so two viewers ticking different rows cannot overwrite each other, and a tick made before the store resolves is queued rather than lost</td>
-<td>lin.yulong@gmail.com's Organization</td>
-<td>live</td>
-<td><code>artifacts/pr-review-queue/</code></td>
-<td>no</td>
-<td>2026-09-11</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/7338696f-f448-4751-a209-db0cd49cdca9">When Settings Reach a Session</a> — adding or changing an <code>env</code> value reaches a running session when the file is saved, while removing one takes effect only at the next launch — quoted from the environment-variable documentation, not established here; a scan on 2026-09-11 found 16 processes still carrying a value deleted two days earlier, 13 of them orphaned socat forwarders, none of which call the classifier. The scan shows stale environments, not the cause of any one of them</td>
-<td>lin.yulong@gmail.com's Organization</td>
-<td>live</td>
-<td><code>artifacts/settings-propagation/</code></td>
-<td>no</td>
-<td>2026-09-11</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/26263dc9-8fda-4e1e-8d37-9161665d5b12">Why Auto Mode Broke Behind the Gateway</a> — the mechanism behind the auto-mode 429s, verified line by line in the installed 2.1.267 bundle: <code>CLAUDE_CODE_ATTRIBUTION_HEADER=0</code> in the settings, combined with a base URL whose host is not <code>api.anthropic.com</code>, makes Claude Code omit the billing-attribution block from classifier requests; the 2.1.229 repair re-adds it only for the literal <code>api.anthropic.com</code> host and ignores <code>_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL</code> (Anthropic issues <a href="https://github.com/anthropics/claude-code/issues/64585">64585</a> and <a href="https://github.com/anthropics/claude-code/issues/60438">60438</a>). <strong>Four of its claims were withdrawn on 2026-09-11</strong> and the page carries the retraction: a per-version scan of 4,884 local transcripts refutes the two-condition claim in both directions (the 14-18 Aug gateway window recorded 0 failures in 4,056 bound calls, Fable sessions 0 of 795, while 153 failures occurred with no gateway on post-2.1.229 CLIs), and the 6 September within-day split does not survive the session as the unit of analysis (all 209 failures come from 4 of 30 sessions, Fisher exact p = 0.554, every one from a session started after the boundary). The same call site has a second gate that is true on this machine's signed-in configuration, so the block may be absent in every period — and a constant cannot explain variation. Cause of the September failures: open. The opt-out is gone from the committed settings since <code>b2868c8</code>, on its own merits</td>
-<td>personal Max account</td>
-<td>live — four claims withdrawn on 2026-09-11 and published as Version 4; the mechanism stands, what it was said to explain does not</td>
-<td><code>artifacts/why-auto-mode-broke-behind-the-gateway/</code></td>
-<td>no</td>
-<td>2026-09-11</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/959f403c-5343-40c6-ad4b-8d68f9a066e6">Why Auto Mode Broke Behind the Gateway</a> — <strong>Its two-condition causal claim was withdrawn on 2026-09-11.</strong> The live page is the original diagnosis and remains uncorrected. A per-version scan of 4,884 transcripts refutes its reading in both directions: the 14-18 August gateway window recorded 0 failures in 4,056 classifier-bound calls, including 0 of 795 in Fable sessions, while 153 failures occurred without a gateway on post-2.1.229 CLIs. The 9 September probe also changed the default model, so it did not isolate the attribution block. What stands is the code-level mechanism: the opt-out and base-URL host can omit the billing-attribution block from classifier requests. That mechanism does not explain the September failures; cause remains open. The corrected sibling page is <code>artifacts/why-auto-mode-broke-behind-the-gateway/</code></td>
-<td>MATS Program</td>
-<td>live — the live page's two-condition claim was withdrawn on 2026-09-11 — a per-version scan of 4,884 transcripts refutes it in both directions; the MATS Program page remains uncorrected, so use <a href="https://github.com/yulonglin/dotfiles/pull/110">pull request 110</a> and the corrected sibling <em>Why Auto Mode Broke Behind the Gateway</em> (<code>26263dc9</code>)</td>
-<td><code>artifacts/auto-mode-classifier-429/</code></td>
-<td>no</td>
-<td>2026-09-09</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/dfd9f494-031b-4ca3-be8b-10c73e4a45ac">Remote Control and foreign models: route at the tool layer, or move the endpoint without breaking TLS</a> — a foreign-model picker and Remote Control are mutually exclusive in one process (RC is a string check on the <code>ANTHROPIC_BASE_URL</code> host, and gateway model discovery needs that URL non-Anthropic); an unrecognised model ID silently answers from the default Claude model; a TLS-terminating proxy is technically open but rejected on fragility; route foreign models at the tool layer instead. Successor to <em>The Remote Control Inversion</em> below</td>
-<td>yl688@cantab.ac.uk's Organization</td>
-<td>done</td>
-<td><code>artifacts/remote-control-and-foreign-models/</code></td>
-<td>no</td>
-<td>2026-09-06</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/2fd4040d-6a42-458e-a188-b09c8dbf3ae4">Every Session Goes Through the Router</a> — the model-routing decision, chosen by Yulong: Option C, the model-router gateway in every session with GPT from the OpenAI account (Codex OAuth) or an OpenAI API key per route, OpenRouter for the other families, romp as the remote path; Options A (tool layer) and B (gateway child) preserved with the reasoning that rejected them, and two closed routes recorded. The accepted cost is stated: a non-Anthropic <code>ANTHROPIC_BASE_URL</code> hard-disables Remote Control. The design was executed in PR #100 (merged 2026-09-06), so this page is the decision record behind <code>config/model-router.toml</code> and the gateway rules, not a plan awaiting work</td>
-<td>yl688@cantab.ac.uk's Organization</td>
-<td>live</td>
-<td><code>artifacts/model-routing-decision/</code></td>
-<td>no</td>
-<td>2026-09-06</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/d224e859-2f4d-452c-9781-5ab3941e57cf">Remote Control and Foreign Models</a> — native Remote Control and a non-Claude <code>/model</code> menu are mutually exclusive in one process by construction; an unrecognised model ID silently answers from the default Claude model; route at the tool layer, and the one workaround worth a test moves the endpoint without breaking TLS</td>
-<td>unknown (claude.ai login; <code>claude auth status</code> reports <code>orgName: null</code>)</td>
-<td>live</td>
-<td><code>artifacts/remote-control-and-foreign-models/</code></td>
-<td>no</td>
-<td>2026-09-03</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/1e36e85b-83c6-46e9-9fb7-df929387dbb4">Seven Casks Marked for Removal and Twenty-Seven Apps Join the Registry</a> — the Brewfile listed 40 entries while the Mac carried 53 casks and 20 App Store apps; <code>app-picker</code> gained <code>--installed</code> and <code>--audit</code>, <code>config.sh</code> gained <code>PACKAGES_TRIAL_MACOS</code>, <code>mas-get</code> follows the Brewfile, and the Brewfile now states 64 entries; seven casks (cursor, codex-app, codexbar, conductor, espanso, aqua-voice, cloudflare-warp) are named for removal and marp-cli, graphite, age and sops were removed on review; every remaining library formula traces to a requested tool. The rejections first rode a third value in the registry's <code>default</code> column and moved to <code>config/apps-excluded.conf</code> on 2026-09-12 after review</td>
-<td>unknown</td>
-<td>done</td>
-<td><code>artifacts/brewfile-audit/</code></td>
-<td>no</td>
-<td>2026-09-03</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/46e4abb8-b37f-4597-8f47-6176f4fa4649">The Second Clear</a> — nine models across three families refuse the literal &quot;clear uncopied&quot;: every comment predating the feature carries no stamp, so it reads as uncopied and the button would wipe the page. Ship &quot;Delete copied&quot; instead, on the file's existing arm-and-confirm. Round 1 ran against a description 59 commits stale; the corrected re-run flipped the wording to &quot;copied out&quot; unanimously</td>
-<td>see note</td>
-<td>done</td>
-<td><code>tmp/anlayer/playground.html</code> (untracked scratch)</td>
-<td>no</td>
-<td>2026-09-01</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/8d07cd03-d6f6-4b86-b72c-1ce1c03d2191">Installers Stop Stalling; Profiles Get Names</a> — the stall was never the prompts: a silent <code>cargo build --quiet</code> and untimed fetches at the top of both scripts, plus five more untimed <code>curl | sh</code> installers found only by checking the class; fixed with deadlines and purpose-named profiles (bare/standard/agent/devbox) on draft PR #77, CI green</td>
-<td>unknown (see note)</td>
-<td>live</td>
-<td>— (built from the job's gitignored <code>tmp/</code>, not kept)</td>
-<td>no</td>
-<td>2026-08-31</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">Artifacts and Resources for dotfiles</a> — this index, published 2026-08-31 and deleted the same day</td>
-<td>unknown</td>
-<td>archived — deleted upstream; the URL 404s</td>
-<td><code>ARTIFACTS.md</code></td>
-<td>no</td>
-<td>2026-08-31</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/720f1fce-0147-47ef-a9f5-9afb98768445">README Trimmed; Two Proposals Await</a> — the same report at its original URL</td>
-<td>unknown</td>
-<td>archived — deleted upstream; the URL 404s</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-31</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/439482e4-0d10-4715-a7d1-add2805e614a">Context Ledger</a> — 134 components cost 17,246 tok every session, 60% of it always-loaded prose rather than skill descriptions; 67 of 120 skills/agents have never been invoked, and the rules cite four skills with zero uses</td>
-<td>see note</td>
-<td>live</td>
-<td><code>artifacts/context-ledger/</code></td>
-<td>no</td>
-<td>2026-08-30</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802">Artifacts and Resources for dotfiles (previous URL)</a> — org-locked former home of this index</td>
-<td>see note</td>
-<td>superseded — by <a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">the current index</a></td>
-<td><code>ARTIFACTS.md</code></td>
-<td>no</td>
-<td>2026-08-29</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/c2c019d6-dc78-4f8e-88b8-8d716bfad39d">Two Files Earn Their Keep</a> — which of the plotting-library files justified staying</td>
-<td>see note</td>
-<td>done</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-28</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/aecdec3a-7fb5-43b3-8841-c4d176de379d">Pick The House Chart Style</a> — the chart-style options put side by side for a decision</td>
-<td>see note</td>
-<td>done</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-28</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/26852bc6-e36f-4b55-97db-d0d3473a0b49">Most of the setup now loads on demand</a> — the always-loaded rules tier fell from ~76 KB to ~28 KB by moving activity-scoped procedure into skills</td>
-<td>see note</td>
-<td>done</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-28</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/242e3dbb-600d-44b4-87ae-9a688542e132">Task Lists Follow the Shell</a> — every session already gets its own task list, so the wrapper must never export a shared ID; the daemon is the last place a stale one hides</td>
-<td>see note</td>
-<td>done</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-28</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/842dfe8e-e902-416d-86eb-aa7d5042b659">Timestamps Already Land Each Turn; The Gap Is Inside Long Turns</a> — per-turn timestamp injection is already solved; only long single turns lack a time signal</td>
-<td>see note</td>
-<td>done</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-27</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/fadb27e4-dd05-40b2-940e-3fb674ca6251">The Remote Control Inversion</a> — a global <code>ANTHROPIC_BASE_URL</code> hard-disables Remote Control, which is why the model-router gateway was unwired</td>
-<td>see note</td>
-<td>done</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-19</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/739598b0-362d-4aaa-a8c2-c77775be5eb4">Alias Audit</a> — alias files fight over names by source order; the set was cut 161 → ~110 against two months of shell history</td>
-<td>see note</td>
-<td>done</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-18</td>
-</tr>
-<tr>
-<td><a href="https://claude.ai/code/artifact/4c124679-7346-4dc5-9cb4-75889320aaf4">Tool-Backed Agents</a> — which agents actually invoke their CLI rather than answering from their own reasoning</td>
-<td>see note</td>
-<td>done</td>
-<td>—</td>
-<td>no</td>
-<td>2026-08-18</td>
-</tr>
-</tbody>
-</table>
-<p>29 rows: 15 live, 11 done, 2 archived, 1 superseded.</p>
-<p><strong>Status vocabulary.</strong> <code>live</code> — still being updated, cite it. <code>done</code> — the work is finished and its conclusions stand, still quotable. <code>archived</code> — deliberately retired, do not cite, row kept for its history and comment threads. <code>superseded</code> — replaced by a specific newer page, and the row links to it. <code>elsewhere</code> — published under an org this machine is not signed into. <code>done</code> is an achievement and <code>archived</code> is a retirement; only <code>superseded</code> implies a successor exists. Nothing is ever deleted from this table.</p>
-<p><strong>What the table holds today.</strong> The tally under the table is generated with it, so it cannot go stale. The two <code>archived</code> rows are pages deleted upstream, so their links 404: the 2026-08-31 hosted index and <em>README Trimmed; Two Proposals Await</em>. The single <code>superseded</code> row is this index's org-locked original, replaced rather than retired. Nothing has ever been removed.</p>
-<p><strong>Org, and why most rows still say &quot;see note&quot;.</strong> Every row above appeared in the <code>Artifact action: list</code> result of 2026-08-29. Whether that <em>means</em> they are in the currently signed-in org depends on the listing being org-scoped, which the Claude Code docs nowhere state — so read &quot;see note&quot; as genuinely unknown rather than as a name I merely failed to type. The org's <em>name</em> is missing only because <code>claude auth status</code> returned <code>orgName: null</code> on the session that wrote this file — while reporting <code>authMethod: &quot;claude.ai&quot;</code> and publishing the index page without trouble. A null org therefore diagnoses nothing about how the session is authenticated; it is simply a field that is sometimes unpopulated. The field <em>is</em> populated on this machine as of 2026-09-10, which is where the index row's <code>lin.yulong@gmail.com's Organization</code> comes from — but reading today's org says nothing about which org published a page in August, so the older rows keep &quot;see note&quot; rather than being back-filled from it, and every row written from now on carries the org read at its own publish time.</p>
-<p><strong>These eight rows are retro-attributed.</strong> They were matched to this repo by subject matter against the Learnings section of <code>CLAUDE.md</code>, not by a source file on disk, because no built HTML was kept for any of them. Every row published from now on gets its source path recorded at publish time. Treat the two least certain — <em>Two Files Earn Their Keep</em> and <em>Tool-Backed Agents</em> — as provisional until confirmed.</p>
-<h2 id="other-resources">Other resources</h2>
-<table>
-<thead>
-<tr>
-<th>Resource</th>
-<th>What it is</th>
-<th>Where</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Artifact gallery</td>
-<td>Every artifact on the account, across repos, newest first and truncated by a listing window</td>
-<td><a href="https://claude.ai/code/artifacts">claude.ai/code/artifacts</a></td>
-</tr>
-<tr>
-<td><code>dotfiles-personal</code></td>
-<td>The private repo holding <code>plans/</code>, <code>.remember/</code>, personal <code>docs/</code>, <code>config/machines.conf</code> — this repo is public, so personal working artifacts never live on a branch here</td>
-<td>private GitHub repo</td>
-</tr>
-<tr>
-<td>Bitwarden Secrets Manager</td>
-<td>API keys, reached through the <code>secrets</code> command; never exported into every shell</td>
-<td>token at <code>~/.config/bws/token</code></td>
-</tr>
-<tr>
-<td>Global rules</td>
-<td>Always-loaded judgment; activity-scoped procedure lives in skills, indexed by <code>catalog</code></td>
-<td><code>claude/rules/</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="publishing-a-page-publicly-is-an-org-decision-not-a-local-one">Publishing a page publicly is an org decision, not a local one</h2>
-<p>Under a Team or Enterprise org, public sharing is off until an <strong>Owner</strong> enables External sharing. Re-disabling it blocks access through every existing public link at once, without changing any artifact's audience — access resumes if it is turned back on, so the links are suspended rather than destroyed. The risk is an outage nobody here can fix, not permanent loss.</p>
-<p>So the Public column above is <code>no</code> throughout. Two fallbacks: a self-hosted mirror of the built HTML, which no org toggle can reach; or publishing outward-facing pages from a personal Pro/Max account, where public is the only sharing mode — though that second one does <strong>not</strong> rescue a connector-backed page, which stays private on every plan. The full policy, including why no stored token can publish into another org, is in the <code>artifacts-sync</code> skill.</p>
+<h1 id="relocate-the-learnings-section-and-drop-most-of-it">Relocate the Learnings section, and drop most of it</h1>
+<h2 id="overview">Overview</h2>
+<p><code>CLAUDE.md</code> is 45,981 bytes against a whole-file ceiling of 11,100 — <strong>four times over</strong>. Its <code>## Learnings</code> section is 37.5 KB of that, and the file loads on every session in this repo.</p>
+<p>The section has been doing two jobs under one heading. One is <strong>operational state Claude must know before acting</strong>: a live trap, an unguarded gotcha, a constraint that changes the next command. The other is <strong>incident forensics</strong>: how a bug was found, what was measured, what was rejected. Only the first earns a slot in a file that loads every session. The second is documentation, and the repo's own Top Rules already say where it goes — <em>&quot;A new rule belongs in the checklist it governs; adding it to a skill or a rule instead is how the duplication came back last time.&quot;</em></p>
+<p>So the operation is not a prune. Retire-versus-compress is the wrong axis, because both keep the mass and only move it around. The right axis is <strong>relocate or drop</strong>, biased hard toward drop: git history is the archive, and an entry earns a destination only if a future reader would genuinely go looking for it.</p>
+<p>Of 28 entries, <strong>7 produce a surviving line elsewhere and 23 drop entirely</strong>. Six are already stated verbatim at their destination — they are pure duplication and cost bytes every session to say nothing new.</p>
+<p>This also resolves a contradiction that has stood for weeks: the section's own instruction says <em>&quot;keep under 20, prune past two weeks&quot;</em> while the ceiling only fits about six one-liners. The rule and the test have been describing different files. After this pass the instruction is rewritten to match the charter.</p>
+<h3 id="what-is-deliberately-not-in-scope">What is deliberately not in scope</h3>
+<p>The budget test fails <strong>seven</strong> ways, not one. <code>CLAUDE.md</code> is the largest, but <code>claude/rules/communication.md</code> (6,011 against 3,100), <code>claude/rules/delegation.md</code> (3,647 against 2,600), <code>claude/rules/background-jobs.md</code> (1,342 against 1,150), <code>claude/CLAUDE.md</code> (4,355 against 4,250) and the 30,384-against-29,900 aggregate all fail too, and two rule files have no ceiling defined at all. Those load in <strong>every repo</strong>, so proportionally they cost more per session than this one does. They are a separate decision and are not touched here — but no relocation in this spec targets <code>claude/rules/</code>, precisely so that fixing one failure does not deepen another.</p>
+<h2 id="requirements">Requirements</h2>
+<h3 id="every-relocation-lands-in-docs-or-a-skill-never-in-an-always-on-rule-file">Every relocation lands in <code>docs/</code> or a skill, never in an always-on rule file</h3>
+<p>All seven destinations MUST be files that load on demand rather than every session. Verified present: <code>docs/terminal-and-dev-tools.md</code>, <code>docs/remote-control-and-foreign-models.md</code>, <code>docs/tooling-and-packages.md</code>, <code>docs/deploy-components.md</code>, <code>docs/shell-scripting-gotchas.md</code>, <code>claude/checklists/local-services.md</code>, <code>claude/skills/jobs/references/task-list-scoping.md</code>. No new file is created.</p>
+<h3 id="an-entry-drops-unless-a-future-reader-would-search-for-it">An entry drops unless a future reader would search for it</h3>
+<p>The test for DROP is not &quot;is it true&quot; but &quot;would anyone look for it&quot;. An entry MUST drop when a named test guards the behaviour (the test is the record), when the code or config <em>is</em> the record, when it is a changelog for a tool that documents itself, or when its substance is investigation narrative rather than a durable fact. Truth is not the bar; retrievability is.</p>
+<h3 id="six-entries-drop-as-exact-duplicates-and-the-duplicate-must-be-quoted-before-deletion">Six entries drop as exact duplicates, and the duplicate MUST be quoted before deletion</h3>
+<p>These already exist at their destination. Each MUST be confirmed by reading the destination line, not by trusting this table:</p>
+<ul>
+<li>Entry 3 (sticky <code>env</code> key) — <code>claude/skills/jobs/references/task-list-scoping.md:38</code> and <code>claude/skills/spawn-session/SKILL.md:90</code></li>
+<li>Entry 14 and entry 15 (<code>headless-claude</code>, background exit 0) — <code>claude/rules/delegation.md:15</code></li>
+<li>Entry 20 (<code>excludedCommands</code>) — <code>claude/skills/jobs/SKILL.md:89</code></li>
+<li>Entry 21 (mise retired) — <code>docs/tooling-and-packages.md:13,15,17</code></li>
+<li>Entry 27 (plugins retired) — <code>docs/plugin-management.md:7,9,17,52</code></li>
+<li>Entry 28 (inherited <code>ANTHROPIC_API_KEY</code>) — <code>claude/skills/spawn-session/SKILL.md:88</code></li>
+</ul>
+<h3 id="three-references-encode-the-old-policy-and-must-be-rewritten-not-repointed">Three references encode the old policy and MUST be rewritten, not repointed</h3>
+<ul>
+<li><code>docs/external-resources.md:63</code> says <code>One-off insight → ## Learnings in project CLAUDE.md</code>. That instruction is what produced this backlog and MUST now route to the owning doc or skill.</li>
+<li><code>docs/tooling-and-packages.md:51</code> describes Past Learnings as the destination of a two-week pruning rule that no longer exists.</li>
+<li><code>CLAUDE.md</code> line 71, the section intro, MUST be rewritten to the new charter: transient machine state only, anything outliving a week moves out.</li>
+</ul>
+<h3 id="one-stale-claim-must-be-corrected-in-the-same-pass">One stale claim MUST be corrected in the same pass</h3>
+<p><code>claude/skills/jobs/SKILL.md:89</code> states that <code>claude/settings.json</code> <em>&quot;carries a permanent machine-local diff, so a merge that touched it would abort&quot;</em>. PR #117 ended that, but only on a machine that has run the managed-drop-in migration. The line MUST be qualified rather than deleted, because it stays true on every un-migrated machine — which today is all of them.</p>
+<h3 id="claude-rules-sensitive-content-md-loses-a-pointer-to-a-dropped-entry"><code>claude/rules/sensitive-content.md</code> loses a pointer to a dropped entry</h3>
+<p>Line 9 cites <em>&quot;mechanism and measurements: CLAUDE.md § Learnings, 2026-09-02&quot;</em>, and entry 17 drops. The rule already states the mechanism, so the parenthetical SHOULD simply go; nothing operational is lost.</p>
+<h2 id="the-28-entries-with-a-proposed-verdict-each">The 28 entries, with a proposed verdict each</h2>
+<p>Each line is a control. Leave it as proposed to approve; click to cycle to <strong>veto-keep</strong> (stays in CLAUDE.md) or <strong>veto-relocate</strong> (do not drop — give it a home). Copy the export back into a session and the surviving verdicts get applied.</p>
+<h3 id="relocate-5-entries-keep-their-own-line-somewhere-else">Relocate — 5 entries keep their own line somewhere else</h3>
+<ul>
+<li class="antask"><span class="anstate" data-an-state-id="1-statusline-codex-quota-401ing-09-12-docs-termi" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>1 · statusline Codex quota 401ing</strong> (09-12) → <code>docs/terminal-and-dev-tools.md</code>. The durable trap: <code>account/rateLimits/read</code> reads the token but never refreshes it, <code>codex login status</code> still reports logged in so it is not a usable check, and the router holds a separate copy so GPT routes can be healthy while the statusline reads days old.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="9-gateway-on-mac-tools-assumed-linux-09-06-claud" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>9 · gateway on Mac, tools assumed Linux</strong> (09-06) → <code>claude/checklists/local-services.md</code>. The convention is stated nowhere else: <code>#!/usr/bin/env python3</code> is Apple's 3.9 on macOS, so a repo script needing <code>tomllib</code> uses the <code>uv run --script</code> shebang with <code>requires-python &gt;= 3.11</code>. The machine-state half drops.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="13-mas-list-hangs-09-03-docs-tooling-and-package" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>13 · <code>mas list</code> hangs</strong> (09-03) → <code>docs/tooling-and-packages.md</code>, beside the mas facts it qualifies. Still live: <code>custom_bins/mas-get</code> and <code>install.sh</code>'s post-check both call it and will hang until they get a <code>timeout</code>.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="16-cp-aliased-i-pkill-f-self-matches-09-02-docs-" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>16 · <code>cp</code> aliased <code>-i</code>; <code>pkill -f</code> self-matches</strong> (09-02) → <code>docs/shell-scripting-gotchas.md</code>. Both are live traps with no test behind them.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="25-unit-file-not-deployed-until-named-in-deploy-" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>25 · unit file not deployed until named in <code>deploy.sh</code></strong> (09-01) → <code>docs/deploy-components.md</code>. The loop is enumerated, not globbed; the same holds for <code>nudges</code>, where a family set to <code>off</code> gates its members.</span></span></li>
+</ul>
+<h3 id="drop-the-entry-keep-one-line-2-entries-contribute-a-tail">Drop the entry, keep one line — 2 entries contribute a tail</h3>
+<ul>
+<li class="antask"><span class="anstate" data-an-state-id="5-legacy-opus-picker-rows-09-07-entry-drops-the-" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>5 · legacy Opus picker rows</strong> (09-07) — entry drops; the tail relocates to <code>docs/remote-control-and-foreign-models.md</code>: <code>CLAUDE_CODE_MAX_CONTEXT_TOKENS</code> is process-global, so a 1M-window picker row still compacts at the settings value.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="8-the-two-token-bearing-gateway-keys-09-06-entry" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>8 · the two token-bearing gateway keys</strong> (09-06) — entry drops, since <code>.claude/rules/dotfiles-settings.md</code> states all of it at length; the tail relocates to <code>claude/skills/jobs/references/task-list-scoping.md</code>: the daemon replays the launcher's argv on resume, so a <code>--settings</code> path the wrapper prepends must outlive every job that captured it.</span></span></li>
+</ul>
+<h3 id="drop-entirely-21-entries">Drop entirely — 21 entries</h3>
+<ul>
+<li class="antask"><span class="anstate" data-an-state-id="2-stale-cliproxyapi-cooldown-09-12-tool-hourly-s" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>2 · stale CLIProxyAPI cooldown</strong> (09-12). Tool, hourly service and upstream issue 5758 are the record. If you want one line kept, the candidate is that a local refusal returns in ~1 ms and <em>quotes</em> the upstream <code>usage_limit_reached</code>, so matching on that text reads every stale cooldown as genuine.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="3-sticky-deleted-env-key-09-11-already-stated-at" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>3 · sticky deleted <code>env</code> key</strong> (09-11). Already stated at both its own named destinations.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="4-approval-classifier-judged-blind-09-08-fixed-a" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>4 · approval classifier judged blind</strong> (09-08). Fixed and pinned by <code>tests/test_approval_classifier_context.py</code>.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="6-unloaded-router-needs-bootstrap-09-08-encoded-" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>6 · unloaded router needs bootstrap</strong> (09-08). Encoded in the hook, guarded by its test.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="7-router-recovery-and-update-validation-09-08-ch" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>7 · router recovery and update validation</strong> (09-08). Changelog for a tool with its own tests.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="10-dangling-pin-in-pins-json-09-06-fixed-guarded" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>10 · dangling pin in <code>pins.json</code></strong> (09-06). Fixed, guarded by <code>tests/test_claude_jobs_reap.py</code>.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="11-daily-dotfiles-sync-baseref-head-09-04-docs-d" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>11 · daily <code>dotfiles-sync</code>, <code>baseRef=head</code></strong> (09-04). <code>docs/deploy-components.md:47</code> covers the job; <code>.claude/settings.json</code> is the baseRef record.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="12-webfetch-hangs-in-sandboxed-claude-p-09-03-de" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>12 · <code>WebFetch</code> hangs in sandboxed <code>claude -p</code></strong> (09-03). Dead path — <code>claude -p</code> delegation was retired the same week.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="14-headless-claude-retired-09-02-stated-in-deleg" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>14 · <code>headless-claude</code> retired</strong> (09-02). Stated in <code>delegation.md:15</code>.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="15-background-wrapper-exit-0-09-02-stated-in-del" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>15 · background wrapper exit 0</strong> (09-02). Stated in <code>delegation.md:15</code>.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="17-cyber-safeguard-downgrade-is-a-cli-literal-09" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>17 · cyber-safeguard downgrade is a CLI literal</strong> (09-02). Self-dated — the entry says the literal has a shelf life of days — and <code>sensitive-content.md:9</code> carries the durable mechanism.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="18-deploy-sh-wrote-symlinks-into-the-skills-dir-" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>18 · <code>deploy.sh</code> wrote symlinks into the skills dir</strong> (09-02). Fixed; the sync script now refuses when target resolves to source.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="19-unrecognised-model-id-falls-back-silently-09-" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>19 · unrecognised model ID falls back silently</strong> (09-01). Superseded by its own trailing note: it fails loudly on 2.1.263.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="20-excludedcommands-takes-cmd-08-31-claude-skill" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>20 · <code>excludedCommands</code> takes <code>cmd:*</code></strong> (08-31). <code>claude/skills/jobs/SKILL.md:89</code> states it at greater length.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="21-mise-retired-node-on-one-authority-08-31-all-" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>21 · mise retired, node on one authority</strong> (08-31). All three halves are in <code>docs/tooling-and-packages.md</code>.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="22-app-lifecycle-suites-read-a-fixture-08-30-the" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>22 · app-lifecycle suites read a fixture</strong> (08-30). The fixture and its 165 assertions are the record.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="23-md2artifact-comment-box-flicker-08-28-fixed-g" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>23 · md2artifact comment-box flicker</strong> (08-28). Fixed, guarded by <code>tests/test_md2artifact_browser.py</code>.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="24-the-llm-council-is-one-skill-09-01-the-skill-" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>24 · the LLM council is one skill</strong> (09-01). The skill and <code>config/openrouter-models.toml</code> are the artifacts.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="26-standards-are-five-checklists-08-30-claude-md" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>26 · standards are five checklists</strong> (08-30). CLAUDE.md's own Top Rules assert it.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="27-plugins-retired-keepers-migrated-08-30-docs-p" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>27 · plugins retired, keepers migrated</strong> (08-30). <code>docs/plugin-management.md</code> covers the enable-gate, the tombstones and the plugin-shipped-MCP trap.</span></span></li>
+<li class="antask"><span class="anstate" data-an-state-id="28-inherited-anthropic-api-key-09-02-stated-in-s" data-an-states="[&quot;approve&quot;, &quot;veto-keep&quot;, &quot;veto-relocate&quot;]"><button type="button" class="anstatebtn" data-an-state="approve">approve</button><span class="anstatelabel"><strong>28 · inherited <code>ANTHROPIC_API_KEY</code></strong> (09-02). Stated in <code>spawn-session/SKILL.md:88</code>.</span></span></li>
+</ul>
+<h2 id="acceptance-criteria">Acceptance Criteria</h2>
+<ul>
+<li><code>uv run --with pytest pytest tests/test_memory_tier_budget.py -k CLAUDE</code> passes for the repo-root file. Projected size is <strong>~8,660 bytes</strong> against the 11,100 ceiling — the 8,513-byte head plus a rewritten section stub of roughly 150 bytes, with no entries retained. The other six failures in that suite remain, unchanged and out of scope.</li>
+<li>Every surviving line is present at its named destination, and <code>rg</code> finds no orphan: for each of the seven, the fact is retrievable by searching the term a reader would actually use.</li>
+<li>The three old-policy references and the one stale claim are rewritten, and <code>rg 'CLAUDE\.md § Learnings'</code> returns only <code>ARTIFACTS.md</code> and its build output, which cite the section as historical basis and stay true.</li>
+<li><code>md-unwrap --check</code> passes on every edited Markdown file.</li>
+<li>No file under <code>claude/rules/</code> grows. The aggregate always-on figure is unchanged by this pass.</li>
+<li><code>git log -S</code> can still recover any dropped entry, which is the whole basis for dropping rather than archiving: <code>git log -S 'app-lifecycle' -- CLAUDE.md</code>.</li>
+</ul>
+<h3 id="what-would-make-this-wrong">What would make this wrong</h3>
+<p>If a dropped entry is later needed and <code>git log -S</code> does not find it, the drop test was too aggressive and the charter needs a higher bar. That is the failure mode worth watching, and it is cheap to reverse: the text is in history, and restoring one line costs nothing.</p>
 
 </div>
 </div>
@@ -486,7 +277,7 @@ ul>li.antask{list-style:none}
  font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
 #anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
 </style>
-<div data-annotation-layer="v2" data-key="review-artifacts">
+<div data-annotation-layer="v2" data-key="review-claude-md-learnings-relocation-spec">
 <section id="anComments">
 <h2 id="your-comments">Your comments</h2>
 <p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>

@@ -1,0 +1,31 @@
+title: Relocate the Learnings section, and drop most of it
+url: https://claude.ai/code/artifact/8d0af943-a622-4228-814a-9d5a4a0d6510
+org: lin.yulong@gmail.com's Organization   # the account this session is signed in as, 2026-09-14
+first_published: 2026-09-14
+last_updated: 2026-09-14
+status: live   # awaiting Yulong's per-entry veto on the page; nothing is edited until the export comes back
+
+public: no
+
+summary: >-
+  the destination-per-entry contract for emptying `CLAUDE.md`'s `## Learnings` section, which
+  had reached 37.5 KB inside a file four times over its 11,100-byte ceiling. The finding that
+  set the shape: the section was doing two jobs under one heading — operational state Claude
+  acts on, and incident forensics — and only the first earns a slot in a file that loads every
+  session. So the axis is relocate-or-drop rather than prune, biased to drop because git
+  history is the archive. Of 28 entries, 7 produce a surviving line elsewhere and 23 drop, six
+  of them already stated verbatim at their destination. Every destination is under `docs/` or a
+  skill, never `claude/rules/`, because six other files in the same budget suite are also over
+  ceiling and a relocation into one would deepen a second failure. Published as a review page:
+  each entry is a cycling control, approve / veto-keep / veto-relocate, for Yulong to veto
+  entry by entry before anything is edited
+
+source: spec.md
+built: spec.html
+builds_with: |
+  md2artifact spec.md --states approve,veto-keep,veto-relocate -o spec.html
+evidence: |
+  entry list and byte counts taken from origin/main at 3ea931c (CLAUDE.md, 45,981 B, 28 entries)
+  on 2026-09-14, after PR #117 merged; ceilings and the seven current failures from
+  `uv run --with pytest pytest tests/test_memory_tier_budget.py -q`, which is wired into no
+  workflow, hook or justfile target and so had never run automatically
