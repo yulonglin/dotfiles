@@ -68,18 +68,31 @@ fi
 # --- 3. a spinner that is NOT a descendant is left alone ---------------------
 # The safety property. Age gate wide open and CPU threshold low, so only the
 # ancestry check can save it.
+#
+# Anchored to a dummy process with no children, NOT to the real Alfred. An
+# earlier version of this test ran unanchored, which pointed a kill-enabled run
+# with --age-minutes 0 at the live Alfred tree — if any real workflow had been
+# above the threshold at that moment, the suite would have killed it. A test for
+# a process killer must never be able to kill something the developer cares
+# about, so the anchor here is a process whose tree is known to be empty.
+sleep 120 &
+DUMMY_ANCHOR=$!
+SPAWNED+=("$DUMMY_ANCHOR")
+
 osascript -e 'repeat' -e 'end repeat' &
 OUTSIDER=$!
 SPAWNED+=("$OUTSIDER")
 sleep 3
 
-"$WATCHDOG" --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
+"$WATCHDOG" --test-anchor-pid "$DUMMY_ANCHOR" \
+  --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
 if kill -0 "$OUTSIDER" 2>/dev/null; then
-  pass "leaves a spinning osascript that is not an Alfred descendant alone"
+  pass "leaves a spinning osascript that is not a descendant of the anchor alone"
 else
-  fail "KILLED a process outside the Alfred tree"
+  fail "KILLED a process outside the anchor's tree"
 fi
 kill -9 "$OUTSIDER" 2>/dev/null || true
+kill -9 "$DUMMY_ANCHOR" 2>/dev/null || true
 
 # --- 4. a busy-but-not-wedged process survives the two-sample check ----------
 # Sleeps at ~0% CPU: stands in for a blocked `display dialog`, which is the
@@ -152,17 +165,23 @@ kill -9 "$YOUNG" 2>/dev/null || true
 # ALFRED_WATCHDOG_ANCHOR_PID, which meant a shell profile or a direnv .envrc
 # could silently point the tool at a process tree outside Alfred and have it kill
 # things there. It is a flag now, so an exported variable must do nothing.
+#
+# Proving this needs a run with NO --test-anchor-pid, which means the anchor
+# resolves to the real Alfred — so it runs --dry-run and inspects what the tool
+# says it *would* kill, rather than letting it kill anything. The env var points
+# at this shell, whose tree does contain the spinner below; if the variable were
+# still honoured, the spinner would be named as a candidate.
 osascript -e 'repeat' -e 'end repeat' &
 ENVTEST=$!
 SPAWNED+=("$ENVTEST")
 sleep 3
 
-ALFRED_WATCHDOG_ANCHOR_PID=$$ "$WATCHDOG" \
-  --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
-if kill -0 "$ENVTEST" 2>/dev/null; then
-  pass "ALFRED_WATCHDOG_ANCHOR_PID in the environment no longer redirects the anchor"
-else
+ENV_OUT="$(ALFRED_WATCHDOG_ANCHOR_PID=$$ "$WATCHDOG" \
+  --dry-run --age-minutes 0 --cpu-threshold 50 --sample-gap 2 2>&1)"
+if grep -q "$ENVTEST" <<< "$ENV_OUT"; then
   fail "environment variable still redirects the anchor — ambient authority is back"
+else
+  pass "ALFRED_WATCHDOG_ANCHOR_PID in the environment no longer redirects the anchor"
 fi
 kill -9 "$ENVTEST" 2>/dev/null || true
 
@@ -173,6 +192,26 @@ if [[ $? -eq 64 ]]; then
 else
   fail "did not exit 64 on bad --test-anchor-pid"
 fi
+
+# --- 10. anchor PID 1 matches nothing rather than everything -----------------
+# The walk stops at pid <= 1, so anchoring to launchd makes every process a
+# NON-candidate. That is the fail-safe direction, but it is an accident of the
+# loop bound rather than an explicit rule, and a future tidy-up of the walk could
+# silently invert it into "every process descends from pid 1" — which would make
+# the tool eligible to kill every osascript on the machine. Pinned deliberately.
+osascript -e 'repeat' -e 'end repeat' &
+ROOTTEST=$!
+SPAWNED+=("$ROOTTEST")
+sleep 3
+
+ROOT_OUT="$("$WATCHDOG" --test-anchor-pid 1 \
+  --dry-run --age-minutes 0 --cpu-threshold 50 --sample-gap 2 2>&1)"
+if grep -q "$ROOTTEST" <<< "$ROOT_OUT"; then
+  fail "anchor PID 1 made everything a candidate — the ancestry walk inverted"
+else
+  pass "anchor PID 1 matches nothing rather than everything"
+fi
+kill -9 "$ROOTTEST" 2>/dev/null || true
 
 echo
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"

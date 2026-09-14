@@ -27,6 +27,23 @@
 # `ps %cpu` on macOS is a decay-weighted recent average, not a lifetime one, so a
 # process that only just became busy can read hot on both samples.
 #
+# TWO LIMITS WORTH KNOWING:
+#
+# 1. It only looks at `osascript`. Alfred "Run Script" actions can also be bash,
+#    zsh, python, perl, ruby, node or swift, and a wedged one of those is
+#    invisible here. The two incidents that motivated this were both osascript.
+#    So "no wedged Alfred scripts" means no wedged *osascript* — it is not a
+#    clean bill of health for the whole machine.
+#
+# 2. The one case the gates do not protect is long pure-AppleScript compute.
+#    Heavy workflows usually delegate (`do shell script "sips …"`, `tell
+#    application "Music"`), and then the CPU burns in the *child* while osascript
+#    blocks near 0% and is spared. But a genuine `repeat` over tens of thousands
+#    of list items burns CPU in AppleScript itself and is indistinguishable from
+#    an infinite loop by any sample — only elapsed time tells them apart, and
+#    only probabilistically. The age gate is the sole protection for that class,
+#    which is why `--age-minutes 0` (tests only) removes it entirely.
+#
 # Only descendants of the running Alfred process are considered, so an `osascript`
 # you started from a terminal is never a candidate.
 #
@@ -236,6 +253,18 @@ for pid in "${confirmed[@]}"; do
   if kill -0 "$pid" 2>/dev/null; then
     warn "PID $pid ignored TERM; sending KILL."
     kill -KILL "$pid" 2>/dev/null || true
+    sleep 1
+  fi
+
+  # Confirm it is actually gone before claiming so. Both kills are error-suppressed,
+  # and they can fail for reasons other than success — most plainly EPERM, if the
+  # PID now belongs to another user after being reused. Logging "killed" off the
+  # back of a suppressed failure would put a false entry in the permanent record,
+  # which is worse than no entry: this log is the only account of what the tool
+  # has done unattended.
+  if kill -0 "$pid" 2>/dev/null; then
+    warn "PID $pid survived both TERM and KILL — not ours to kill? Leaving it, nothing logged."
+    continue
   fi
 
   printf '%s killed pid=%s age_min=%s cpu=%s args=%s\n' \
