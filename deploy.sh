@@ -90,7 +90,8 @@ COMPONENTS:
     --codex           Deploy Codex CLI config (~/.codex symlink)
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
-    --alfred          Repair Dropbox-synced Alfred prefs: de-quarantine, +x, hotkey (macOS only)
+    --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
+                      schedule alfred-watchdog for wedged workflow scripts (macOS only)
     --ghostty         Deploy Ghostty terminal config
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
     --htop            Deploy htop configuration
