@@ -1344,6 +1344,16 @@ queue_scheduled_job() {
     # energy" and is invisible until someone opens Activity Monitor.
     if [[ "$DEPLOY_ALFRED" == "true" ]] && is_macos; then
         queue_scheduled_job alfred-watchdog "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh"
+    elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)ALFRED]} )); then
+        # Opting out has to actually unload it, or --no-alfred leaves a launchd
+        # job running every 5 minutes that the user just asked not to have. Same
+        # reasoning as the hide-idle-apps branch below, including why this is
+        # gated on an EXPLICIT --no-alfred rather than on the flag being false:
+        # --only and --minimal set every other component false, so `--only vim`
+        # would otherwise tear this job down despite --only promising to touch
+        # nothing else. Refusing a component and not selecting it are different.
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh" ]] && \
+            "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh" --uninstall >/dev/null 2>&1 || true
     fi
 
     if [[ "$DEPLOY_KILL_SKY_CUA" == "true" ]] && is_macos; then

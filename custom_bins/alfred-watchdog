@@ -40,9 +40,16 @@
 #    application "Music"`), and then the CPU burns in the *child* while osascript
 #    blocks near 0% and is spared. But a genuine `repeat` over tens of thousands
 #    of list items burns CPU in AppleScript itself and is indistinguishable from
-#    an infinite loop by any sample — only elapsed time tells them apart, and
-#    only probabilistically. The age gate is the sole protection for that class,
-#    which is why `--age-minutes 0` (tests only) removes it entirely.
+#    an infinite loop by any sample. To be at risk it must have burned CPU for
+#    more than half a lifetime exceeding --age-minutes, so at the default that
+#    is upwards of fifteen CPU-minutes while still hot on both samples.
+#
+# The cumulative gate cuts both ways, and the cost should be stated plainly: it
+# is a duty-ratio test, not a fixed CPU budget. A process that idled for an hour
+# and THEN genuinely wedges has to spin for about another hour before its CPU
+# time reaches half its lifetime, so a wedge in a long-lived script is caught
+# late. That is deliberate — late beats killing work that was never broken — but
+# it is not the same guarantee as the 30-minute figure suggests on its own.
 #
 # Only descendants of the running Alfred process are considered, so an `osascript`
 # you started from a terminal is never a candidate.
@@ -78,6 +85,15 @@ CPU_THRESHOLD=80
 SAMPLE_GAP=5
 DRY_RUN=0
 
+# Initialized here, and that initialization is the whole point: renaming the old
+# environment variable to a flag did NOT remove the ambient override, because an
+# uninitialized variable is still readable from the environment. `TEST_ANCHOR_PID=1
+# alfred-watchdog` re-anchored the tool exactly as the old name had. The first
+# regression test missed it by testing only the old name — a test can only fail
+# on the mistake it imagines. Setting it to empty is what makes the flag the sole
+# way in; tests now cover both names.
+TEST_ANCHOR_PID=''
+
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/alfred-watchdog"
 LOG_FILE="$STATE_DIR/watchdog.log"
 
@@ -104,6 +120,15 @@ done
 for v in AGE_MINUTES CPU_THRESHOLD SAMPLE_GAP; do
   [[ "${!v}" =~ ^[0-9]+$ ]] || { warn "$v must be a whole number, got '${!v}'"; exit 64; }
 done
+
+# Force base 10 after validating. The digit check above happily accepts "08",
+# and bash then reads it as octal in arithmetic and errors out on the invalid
+# digit — so `--age-minutes 08` passed validation and blew up later, at the point
+# where the number was actually used. Normalizing once here keeps every later
+# arithmetic and comparison honest.
+AGE_MINUTES=$((10#$AGE_MINUTES))
+CPU_THRESHOLD=$((10#$CPU_THRESHOLD))
+SAMPLE_GAP=$((10#$SAMPLE_GAP))
 
 # Validated separately because it is optional. A non-numeric anchor would make
 # the ancestry walk compare garbage and match nothing, which fails safe, but it
@@ -200,6 +225,46 @@ cpu_percent() {
   printf '%s' "$pct" | tr -d ' ' | cut -d. -f1
 }
 
+# Cumulative CPU time consumed, in WHOLE seconds, from ps TIME ([[dd-]hh:]mm:ss).
+# Empty if the process is gone.
+#
+# int() is load-bearing, not tidiness: macOS prints this field with hundredths
+# ("0:03.21"), and bash's [[ -lt ]] cannot compare a decimal — it raises a syntax
+# error. That error made every candidate fail the gate and be skipped, so the
+# tool silently stopped killing anything at all, which the suite caught as "did
+# NOT kill a wedged descendant". Elapsed time (etime) has no fraction, so only
+# this reader needs it.
+cpu_seconds() {
+  local t
+  t="$(ps -o time= -p "$1" 2>/dev/null)" || return 0
+  [[ -z "$t" ]] && return 0
+  printf '%s' "$t" | tr -d ' ' | awk -F'[-:]' '
+    NF==4 { printf "%d\n", int($1*86400 + $2*3600 + $3*60 + $4); next }
+    NF==3 { printf "%d\n", int($1*3600 + $2*60 + $3); next }
+    NF==2 { printf "%d\n", int($1*60 + $2); next }
+    { print 0 }'
+}
+
+# A process's start time, used as a birth identity. Ancestry is not identity: a
+# reused PID can belong to a brand-new child of Alfred, which passes every
+# ancestry check while being a completely different process from the one that was
+# judged. Comparing the start time before each signal is what makes "this is
+# still the process I decided about" an actual check rather than an assumption.
+birth_id() { ps -o lstart= -p "$1" 2>/dev/null || return 0; }
+
+# True while a pid is a real, running process. `kill -0` is NOT a substitute: it
+# succeeds for a zombie, and a killed process stays a zombie until its parent
+# reaps it. Alfred's script wrappers do not always reap promptly — and a wedged
+# parent never will — so a successful kill would read back as "still alive", and
+# the tool would warn that its own kill had failed and skip the log entry for a
+# process it had in fact just killed. Process state is the honest question.
+is_running() {
+  local st
+  st="$(ps -o state= -p "$1" 2>/dev/null)" || return 1
+  st="$(printf '%s' "$st" | tr -d ' ')"
+  [[ -n "$st" && "$st" != Z* ]]
+}
+
 age_seconds=$((AGE_MINUTES * 60))
 
 # Same exit-code care as the Alfred lookup above: an error must not read as
@@ -213,16 +278,45 @@ if [[ $pgrep_status -gt 1 ]]; then
   exit 69
 fi
 
-# First pass: old enough, hot enough, and descended from Alfred.
+# First pass: descended from Alfred, old enough, has actually spent that time
+# burning CPU, and is hot right now.
+#
+# The cumulative-CPU gate is the one that stops an *old* process being killed for
+# a *short* burst. Age measures how long a process has existed, not how long it
+# has been busy — so a workflow that sat in a dialog for an hour and then began
+# ten seconds of real work already satisfies any age threshold, and two samples
+# five seconds apart can both land inside that burst. Requiring it to have
+# consumed at least half its lifetime in CPU time separates the two cleanly: a
+# genuine spinner pegged for half an hour has ~30 minutes of CPU time, while the
+# hour-old script that just woke up has ten seconds. Nothing about %cpu alone can
+# make that distinction, which is why the earlier version could not.
 candidates=()
+birth=()
 while read -r pid; do
   [[ -z "$pid" ]] && continue
   descends_from_alfred "$pid" || continue
+
+  # Bracket the eligibility reads with the identity, rather than taking it at the
+  # end. Each `ps` below is a separate call, so the process can exit partway
+  # through and its PID be reissued: capturing identity last would then pair the
+  # replacement's identity with measurements taken from the process it replaced,
+  # and every later comparison would confirm a match that never existed.
+  birth_before="$(birth_id "$pid")"
+  [[ -z "$birth_before" ]] && continue
+
   secs="$(elapsed_seconds "$pid")"
   [[ -z "$secs" || "$secs" -lt "$age_seconds" ]] && continue
+  cputime="$(cpu_seconds "$pid")"
+  [[ -z "$cputime" || "$cputime" -lt $(( secs / 2 )) ]] && continue
   cpu="$(cpu_percent "$pid")"
   [[ -z "$cpu" || "$cpu" -lt "$CPU_THRESHOLD" ]] && continue
+
+  # Same process throughout? If not, every reading above is suspect, so discard
+  # rather than guess which of them still applies.
+  [[ "$(birth_id "$pid")" != "$birth_before" ]] && continue
+
   candidates+=("$pid")
+  birth+=("$birth_before")
 done <<< "$osascript_pids"
 
 if [[ ${#candidates[@]} -eq 0 ]]; then
@@ -235,11 +329,23 @@ log "First sample flagged ${#candidates[@]}: ${candidates[*]}. Re-checking in ${
 sleep "$SAMPLE_GAP"
 
 confirmed=()
-for pid in "${candidates[@]}"; do
-  kill -0 "$pid" 2>/dev/null || { log "PID $pid exited on its own."; continue; }
+confirmed_birth=()
+for i in "${!candidates[@]}"; do
+  pid="${candidates[$i]}"
+  is_running "$pid" || { log "PID $pid exited on its own."; continue; }
+
+  # Same process as the one judged a moment ago? A PID freed and immediately
+  # reissued to a new Alfred child would pass every ancestry test while being a
+  # different program of a different age.
+  if [[ "$(birth_id "$pid")" != "${birth[$i]}" ]]; then
+    log "PID $pid is a different process now (PID reused). Leaving it."
+    continue
+  fi
+
   cpu="$(cpu_percent "$pid")"
   if [[ -n "$cpu" && "$cpu" -ge "$CPU_THRESHOLD" ]]; then
     confirmed+=("$pid")
+    confirmed_birth+=("${birth[$i]}")
   else
     log "PID $pid dropped to ${cpu:-?}% — working, not wedged. Leaving it."
   fi
@@ -252,15 +358,17 @@ fi
 
 mkdir -p "$STATE_DIR"
 
-for pid in "${confirmed[@]}"; do
-  # Re-check ancestry immediately before killing, not just when the candidate was
+for i in "${!confirmed[@]}"; do
+  pid="${confirmed[$i]}"
+  want_birth="${confirmed_birth[$i]}"
+
+  # Re-check identity immediately before killing, not just when the candidate was
   # first picked. Several seconds pass in between (--sample-gap, plus 2s per
   # earlier kill), and in that window the candidate can exit and the OS reuse its
-  # PID for something else entirely. Without this, `kill -0` would still succeed
-  # and we would shoot the replacement. Rare, but the whole premise of this tool
-  # is a machine left alone for hours, so rare events get their turn.
-  if ! descends_from_alfred "$pid"; then
-    warn "PID $pid is no longer an Alfred descendant (exited and the PID was reused?). Leaving it."
+  # PID. Ancestry alone is not enough here — a reused PID may well belong to
+  # another Alfred child — so the start time has to match too.
+  if ! descends_from_alfred "$pid" || [[ "$(birth_id "$pid")" != "$want_birth" ]]; then
+    warn "PID $pid is no longer the process that was judged (exited and the PID was reused?). Leaving it."
     continue
   fi
 
@@ -282,18 +390,18 @@ for pid in "${confirmed[@]}"; do
   # matches this script's own command line.
   kill -TERM "$pid" 2>/dev/null || true
   sleep 2
-  if kill -0 "$pid" 2>/dev/null; then
+  if is_running "$pid"; then
     # Re-check ancestry before escalating. This second window is the more
     # dangerous of the two: after TERM succeeds, a replacement holding the reused
     # PID needs only to EXIST to receive KILL — there is no CPU or age gate left
     # on this path at all. Without this check, the tool's most forceful signal is
     # its least discriminating one.
-    if descends_from_alfred "$pid"; then
+    if descends_from_alfred "$pid" && [[ "$(birth_id "$pid")" == "$want_birth" ]]; then
       warn "PID $pid ignored TERM; sending KILL."
       kill -KILL "$pid" 2>/dev/null || true
       sleep 1
     else
-      warn "PID $pid is no longer an Alfred descendant after TERM (PID reused?). Not escalating."
+      warn "PID $pid is no longer the process that was judged after TERM (PID reused?). Not escalating."
       continue
     fi
   fi
@@ -304,13 +412,25 @@ for pid in "${confirmed[@]}"; do
   # back of a suppressed failure would put a false entry in the permanent record,
   # which is worse than no entry: this log is the only account of what the tool
   # has done unattended.
-  if kill -0 "$pid" 2>/dev/null; then
+  #
+  # is_running, not `kill -0`: a killed process is a zombie until its parent reaps
+  # it, `kill -0` succeeds on zombies, and Alfred's wrappers do not always reap
+  # promptly — a wedged parent never will. Using kill -0 here made the tool warn
+  # that its own successful kill had failed, and skip the log line for it. Caught
+  # by the test suite, which asserted the same wrong thing for the same reason.
+  if is_running "$pid"; then
     warn "PID $pid survived both TERM and KILL — not ours to kill? Leaving it, nothing logged."
     continue
   fi
 
-  printf '%s killed pid=%s age_min=%s cpu=%s args=%s\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$pid" "$mins" "$cpu" "$args" >> "$LOG_FILE"
+  # A failed append (full disk, bad perms) must not abort the loop under set -e
+  # and strand the remaining confirmed wedges unkilled. Losing the record is bad;
+  # losing the record AND leaving cores spinning is worse.
+  if ! printf '%s killed pid=%s age_min=%s cpu=%s args=%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$pid" "$mins" "$cpu" "$args" >> "$LOG_FILE" 2>/dev/null
+  then
+    warn "Could not write to $LOG_FILE — the kill happened, the record did not."
+  fi
   log "Killed PID $pid (${mins}m at ${cpu}%): $args"
 done
 

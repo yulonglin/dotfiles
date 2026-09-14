@@ -415,6 +415,11 @@ apply_profile() {
             DEPLOY_BEARCLI=false
             DEPLOY_FILE_APPS=false
             DEPLOY_CLAUDE_TOOLS=false
+            # Alfred is a GUI launcher, so this was harmless while --alfred only
+            # repaired preferences on a machine that had none. It now also
+            # schedules a 5-minute launchd job, and "shared machine, no GUI" is
+            # the last place that belongs.
+            DEPLOY_ALFRED=false
             ;;
         cloud)
             # Lean remote dev box (RunPod): server minus the heavy compiles/MCP.
