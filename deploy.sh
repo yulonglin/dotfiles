@@ -1337,6 +1337,14 @@ queue_scheduled_job() {
         queue_scheduled_job keyboard-repeat "$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh"
     fi
 
+    # Rides the same --alfred flag as alfred-fix: both exist because Alfred has
+    # failure modes nothing else on the machine reports. A wedged workflow script
+    # bills its CPU to Alfred, so it reads as "Alfred is using significant
+    # energy" and is invisible until someone opens Activity Monitor.
+    if [[ "$DEPLOY_ALFRED" == "true" ]] && is_macos; then
+        queue_scheduled_job alfred-watchdog "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh"
+    fi
+
     if [[ "$DEPLOY_KILL_SKY_CUA" == "true" ]] && is_macos; then
         queue_scheduled_job kill-sky-cua "$DOT_DIR/scripts/cleanup/setup_kill_sky_cua.sh"
     fi
