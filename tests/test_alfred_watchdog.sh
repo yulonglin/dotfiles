@@ -122,8 +122,12 @@ sleep 3
 
 "$WATCHDOG" --test-anchor-pid $$ \
   --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
+WEDGED_RC=$?
 sleep 1
-if kill -0 "$WEDGED" 2>/dev/null; then
+if [[ $WEDGED_RC -ne 0 ]]; then
+  fail "watchdog exited $WEDGED_RC on the wedged case (expected 0)"
+  kill -9 "$WEDGED" 2>/dev/null || true
+elif kill -0 "$WEDGED" 2>/dev/null; then
   fail "did NOT kill a wedged descendant"
   kill -9 "$WEDGED" 2>/dev/null || true
 else
@@ -212,6 +216,39 @@ else
   pass "anchor PID 1 matches nothing rather than everything"
 fi
 kill -9 "$ROOTTEST" 2>/dev/null || true
+
+# --- 11. the SECOND sample can reject a candidate ----------------------------
+# Without this, nothing in the suite exercises second-sample rejection: the idle
+# fixture never passes the first CPU gate, and the wedged one stays hot to the
+# end, so deleting the entire second sample would leave every other case green.
+#
+# This process spins hard for ~4s and then goes idle, so with a 6s gap it is hot
+# on the first sample and cool on the second — the one path that reaches
+# confirmation and declines. Asserting survival alone would be too weak (it also
+# survives if the watchdog errors out early), so the tool's own "working, not
+# wedged" line has to appear too.
+osascript -e 'set deadline to (current date) + 4' \
+          -e 'repeat while (current date) < deadline' \
+          -e 'end repeat' \
+          -e 'delay 60' &
+COOLING=$!
+SPAWNED+=("$COOLING")
+sleep 1
+
+COOL_OUT="$("$WATCHDOG" --test-anchor-pid $$ \
+  --age-minutes 0 --cpu-threshold 50 --sample-gap 6 2>&1)"
+COOL_RC=$?
+
+if [[ $COOL_RC -ne 0 ]]; then
+  fail "watchdog exited $COOL_RC on the cooling case (expected 0)"
+elif ! grep -q "working, not wedged" <<< "$COOL_OUT"; then
+  fail "cooling process never reached the second sample — rejection path untested"
+elif kill -0 "$COOLING" 2>/dev/null; then
+  pass "a candidate that cools between samples is spared at confirmation"
+else
+  fail "KILLED a process that cooled between samples"
+fi
+kill -9 "$COOLING" 2>/dev/null || true
 
 echo
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"

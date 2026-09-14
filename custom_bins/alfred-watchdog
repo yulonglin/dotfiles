@@ -50,7 +50,7 @@
 # Usage:
 #   alfred-watchdog                     Check and kill what qualifies
 #   alfred-watchdog --dry-run           Report candidates, kill nothing
-#   alfred-watchdog --age-minutes 30    Require 30 min of age (default 10)
+#   alfred-watchdog --age-minutes 60    Require 60 min of age (default 30)
 #   alfred-watchdog --cpu-threshold 50  Require 50% CPU (default 80)
 #   alfred-watchdog --sample-gap 10     Seconds between the two samples (default 5)
 #   alfred-watchdog --help
@@ -65,7 +65,15 @@
 # not check" must never look alike in a log.
 set -euo pipefail
 
-AGE_MINUTES=10
+# 30 minutes, not 10. Two independent reviewers made the same point: a finite
+# AppleScript batch job that is genuinely progressing looks identical to a wedge
+# under any CPU sample, so the age gate is the only thing standing between the
+# two, and at 10 minutes it stands quite close to plausible real work. Nothing is
+# lost by waiting: the incident this was built for ran 18 hours, and a script
+# filter — expected to answer in milliseconds — is no less broken at 30 minutes
+# than at 10. The cost of being wrong in one direction is 20 more minutes of a
+# warm fan; in the other, it is killing someone's job halfway through.
+AGE_MINUTES=30
 CPU_THRESHOLD=80
 SAMPLE_GAP=5
 DRY_RUN=0
@@ -160,16 +168,37 @@ descends_from_alfred() {
   return 1
 }
 
-# Elapsed seconds for a pid, from ps ETIME ([[dd-]hh:]mm:ss).
+# A process that has simply finished is the normal case, not an error, so both
+# readers below capture `ps` on its own line and swallow a non-zero exit into an
+# empty answer that callers already handle.
+#
+# Writing these as a bare `ps | tr | awk` pipeline was a real bug, not a style
+# point: under `set -e` with `pipefail` the dead-process exit from `ps` fails the
+# whole pipeline, and `x="$(reader "$pid")"` then aborts the entire script before
+# the caller's own empty-value guard can run. One osascript finishing normally
+# mid-scan would stop the watchdog before it dealt with the actual wedges — the
+# failure mode being silent and total, on the run where it mattered most. An
+# unreadable process list still surfaces, but through the pgrep exit check above.
+
+# Elapsed seconds for a pid, from ps ETIME ([[dd-]hh:]mm:ss). Empty if it is gone.
 elapsed_seconds() {
-  ps -o etime= -p "$1" 2>/dev/null | tr -d ' ' | awk -F'[-:]' '
+  local etime
+  etime="$(ps -o etime= -p "$1" 2>/dev/null)" || return 0
+  [[ -z "$etime" ]] && return 0
+  printf '%s' "$etime" | tr -d ' ' | awk -F'[-:]' '
     NF==4 { print $1*86400 + $2*3600 + $3*60 + $4; next }
     NF==3 { print $1*3600 + $2*60 + $3; next }
     NF==2 { print $1*60 + $2; next }
     { print 0 }'
 }
 
-cpu_percent() { ps -o %cpu= -p "$1" 2>/dev/null | tr -d ' ' | cut -d. -f1; }
+# Whole-number %CPU for a pid. Empty if it is gone.
+cpu_percent() {
+  local pct
+  pct="$(ps -o %cpu= -p "$1" 2>/dev/null)" || return 0
+  [[ -z "$pct" ]] && return 0
+  printf '%s' "$pct" | tr -d ' ' | cut -d. -f1
+}
 
 age_seconds=$((AGE_MINUTES * 60))
 
@@ -238,7 +267,10 @@ for pid in "${confirmed[@]}"; do
   # Captured before the kill so the log says which workflow was at fault, and
   # after the ancestry re-check so it describes the process actually being killed.
   args="$(ps -o args= -p "$pid" 2>/dev/null | head -c 300 || true)"
-  mins=$(( $(elapsed_seconds "$pid") / 60 ))
+  # Default to 0 rather than substituting an empty string into the arithmetic,
+  # which is a syntax error and would abort the run.
+  secs="$(elapsed_seconds "$pid")"
+  mins=$(( ${secs:-0} / 60 ))
   cpu="$(cpu_percent "$pid")"
 
   if [[ $DRY_RUN -eq 1 ]]; then
@@ -251,9 +283,19 @@ for pid in "${confirmed[@]}"; do
   kill -TERM "$pid" 2>/dev/null || true
   sleep 2
   if kill -0 "$pid" 2>/dev/null; then
-    warn "PID $pid ignored TERM; sending KILL."
-    kill -KILL "$pid" 2>/dev/null || true
-    sleep 1
+    # Re-check ancestry before escalating. This second window is the more
+    # dangerous of the two: after TERM succeeds, a replacement holding the reused
+    # PID needs only to EXIST to receive KILL — there is no CPU or age gate left
+    # on this path at all. Without this check, the tool's most forceful signal is
+    # its least discriminating one.
+    if descends_from_alfred "$pid"; then
+      warn "PID $pid ignored TERM; sending KILL."
+      kill -KILL "$pid" 2>/dev/null || true
+      sleep 1
+    else
+      warn "PID $pid is no longer an Alfred descendant after TERM (PID reused?). Not escalating."
+      continue
+    fi
   fi
 
   # Confirm it is actually gone before claiming so. Both kills are error-suppressed,
