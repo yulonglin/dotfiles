@@ -196,6 +196,9 @@ PACKAGES_MACOS=(
     "vivid"       # LS_COLORS theme generator (catppuccin-mocha)
     "fpart"       # parallel rsync (fpsync) for fast many-file copies
     "tlrc"        # tldr pages, official Rust client (binary: tldr)
+    "poppler"     # pdftotext + pdftoppm; Claude Code's Read tool needs pdftoppm to render PDF pages.
+                  # apt calls this poppler-utils, so it is installed there from install.sh's inline
+                  # apt list rather than from PACKAGES_CORE, which passes names through unchanged.
 )
 
 # Linux packages (via Homebrew / Linuxbrew)

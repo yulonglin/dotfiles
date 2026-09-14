@@ -188,7 +188,8 @@ elif is_linux; then
 
     # Core packages via apt
     log_info "Installing core packages via apt..."
-    install_packages apt "${PACKAGES_CORE[@]}" less nano nvtop lsof unzip bubblewrap socat
+    # poppler-utils is the apt name for brew's poppler (pdftotext, pdftoppm) — see PACKAGES_MACOS
+    install_packages apt "${PACKAGES_CORE[@]}" less nano nvtop lsof unzip bubblewrap socat poppler-utils
 
     # Modern CLI tools via Linuxbrew
     if install_linuxbrew; then
