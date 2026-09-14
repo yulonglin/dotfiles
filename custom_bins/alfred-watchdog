@@ -267,6 +267,14 @@ cpu_seconds() {
 # ancestry check while being a completely different process from the one that was
 # judged. Comparing the start time before each signal is what makes "this is
 # still the process I decided about" an actual check rather than an assumption.
+# A zombie's ps fields are a half-live mix, measured: state=Z and %cpu=0.0 with
+# time frozen, but lstart still returns non-empty and exits 0, ppid is live, and
+# etime keeps counting. So "non-empty lstart" is NOT a liveness test — it is
+# right for a dead PID (which returns empty) and wrong for a zombie. It is safe
+# here only because `pgrep -x osascript` does not list zombies, so one can never
+# reach the candidate loop in the first place. That upstream filter is load
+# bearing: anything that widens the candidate set past pgrep has to re-establish
+# liveness itself, with is_running, rather than inheriting this assumption.
 birth_id() { ps -o lstart= -p "$1" 2>/dev/null || return 0; }
 
 # True while a pid is a real, running process. `kill -0` is NOT a substitute: it
