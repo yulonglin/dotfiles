@@ -8,7 +8,7 @@ The section has been doing two jobs under one heading. One is **operational stat
 
 So the operation is not a prune. Retire-versus-compress is the wrong axis, because both keep the mass and only move it around. The right axis is **relocate or drop**, biased hard toward drop: git history is the archive, and an entry earns a destination only if a future reader would genuinely go looking for it.
 
-Of 28 entries, **7 produce a surviving line elsewhere and 23 drop entirely**. Six are already stated verbatim at their destination — they are pure duplication and cost bytes every session to say nothing new.
+Of 28 entries, **7 produce a surviving line elsewhere and 23 drop entirely**. Seven are already stated verbatim at their destination — they are pure duplication and cost bytes every session to say nothing new.
 
 This also resolves a contradiction that has stood for weeks: the section's own instruction says *"keep under 20, prune past two weeks"* while the ceiling only fits about six one-liners. The rule and the test have been describing different files. After this pass the instruction is rewritten to match the charter.
 
@@ -26,7 +26,7 @@ All seven destinations MUST be files that load on demand rather than every sessi
 
 The test for DROP is not "is it true" but "would anyone look for it". An entry MUST drop when a named test guards the behaviour (the test is the record), when the code or config *is* the record, when it is a changelog for a tool that documents itself, or when its substance is investigation narrative rather than a durable fact. Truth is not the bar; retrievability is.
 
-### Six entries drop as exact duplicates, and the duplicate MUST be quoted before deletion
+### Seven entries drop as exact duplicates, and the duplicate MUST be quoted before deletion
 
 These already exist at their destination. Each MUST be confirmed by reading the destination line, not by trusting this table:
 
