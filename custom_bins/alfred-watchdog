@@ -7,13 +7,25 @@
 # surfaced only as "Alfred is using significant energy" because macOS bills a
 # child's energy to the parent app.
 #
-# Age alone is NOT a safe signal for killing these. Alfred workflows legitimately
-# run AppleScript that blocks indefinitely — `display dialog` waits for the user,
-# and polling loops sit on `delay`. What separates a wedge from those is CPU: a
-# blocked dialog idles near 0%, a spinner is pegged. So this tool kills only a
-# process that is BOTH older than --age-minutes AND above --cpu-threshold on two
-# samples taken --sample-gap apart. A process that drops between samples is doing
-# real work and is left alone.
+# Neither age nor CPU alone is a safe signal, and the two gates do different jobs.
+#
+# CPU separates a wedge from a BLOCKED script. Alfred workflows legitimately run
+# AppleScript that waits indefinitely — `display dialog` waits for the user, and
+# polling loops sit on `delay`. Those idle near 0% while a spinner stays pegged,
+# so requiring high CPU spares them.
+#
+# Age separates a wedge from a BUSY script, and it is the only thing that does.
+# Nothing observable at the process level distinguishes "spinning on a bug" from
+# "computing hard" — both burn CPU. The claim being leaned on is narrower and
+# about Alfred specifically: a script filter fires per keystroke and is expected
+# to answer in milliseconds, so one still pegged after --age-minutes is broken,
+# whatever it believes it is doing.
+#
+# The second sample is therefore NOT proof that a process is wedged rather than
+# working. All it establishes is that the process has not finished or dropped off
+# in the interval, which is worth checking cheaply before killing something. Note
+# `ps %cpu` on macOS is a decay-weighted recent average, not a lifetime one, so a
+# process that only just became busy can read hot on both samples.
 #
 # Only descendants of the running Alfred process are considered, so an `osascript`
 # you started from a terminal is never a candidate.
@@ -25,6 +37,10 @@
 #   alfred-watchdog --cpu-threshold 50  Require 50% CPU (default 80)
 #   alfred-watchdog --sample-gap 10     Seconds between the two samples (default 5)
 #   alfred-watchdog --help
+#
+# --test-anchor-pid <pid> exists for tests/test_alfred_watchdog.sh only: it uses
+# that PID as the ancestry anchor in place of Alfred. Deliberately a flag rather
+# than an environment variable, so nothing ambient can redirect what gets killed.
 #
 # Exits 0 whether or not anything was killed; a wedge is an expected condition,
 # not an error. Exits 64 on bad arguments and 69 when the process list could not
@@ -55,6 +71,7 @@ while [[ $# -gt 0 ]]; do
     --age-minutes)    AGE_MINUTES="${2:?--age-minutes needs a value}"; shift 2 ;;
     --cpu-threshold)  CPU_THRESHOLD="${2:?--cpu-threshold needs a value}"; shift 2 ;;
     --sample-gap)     SAMPLE_GAP="${2:?--sample-gap needs a value}"; shift 2 ;;
+    --test-anchor-pid) TEST_ANCHOR_PID="${2:?--test-anchor-pid needs a value}"; shift 2 ;;
     *) warn "unknown argument: $1 (try --help)"; exit 64 ;;
   esac
 done
@@ -62,6 +79,14 @@ done
 for v in AGE_MINUTES CPU_THRESHOLD SAMPLE_GAP; do
   [[ "${!v}" =~ ^[0-9]+$ ]] || { warn "$v must be a whole number, got '${!v}'"; exit 64; }
 done
+
+# Validated separately because it is optional. A non-numeric anchor would make
+# the ancestry walk compare garbage and match nothing, which fails safe, but it
+# would do so silently — and this flag decides what is eligible to be killed.
+if [[ -n "${TEST_ANCHOR_PID:-}" && ! "$TEST_ANCHOR_PID" =~ ^[0-9]+$ ]]; then
+  warn "--test-anchor-pid must be a whole number, got '$TEST_ANCHOR_PID'"
+  exit 64
+fi
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   warn "Alfred is macOS-only; nothing to do."
@@ -76,11 +101,18 @@ fi
 # must not collapse into the same "Alfred isn't running" conclusion, or the
 # watchdog reports all-clear on every run while never checking anything.
 #
-# ALFRED_WATCHDOG_ANCHOR_PID is a testing seam: it substitutes a different process
-# for Alfred as the ancestry anchor, so tests/test_alfred_watchdog.sh can build a
-# real wedged tree and prove the kill path works without driving Alfred itself.
-if [[ -n "${ALFRED_WATCHDOG_ANCHOR_PID:-}" ]]; then
-  alfred_pid="$ALFRED_WATCHDOG_ANCHOR_PID"
+# --test-anchor-pid is a testing seam: it substitutes a different process for
+# Alfred as the ancestry anchor, so tests/test_alfred_watchdog.sh can build a real
+# wedged tree and prove the kill path works without driving Alfred itself.
+#
+# It is deliberately a FLAG and not an environment variable. As an exported
+# variable it would be ambient authority — a shell profile, a direnv .envrc, or
+# any wrapper that happened to export it would silently redirect the anchor and
+# turn every later run into something that kills processes outside the Alfred
+# tree, with only the age and CPU gates left standing. That is precisely the
+# failure this tool exists to prevent. A flag has to be typed by the caller.
+if [[ -n "${TEST_ANCHOR_PID:-}" ]]; then
+  alfred_pid="$TEST_ANCHOR_PID"
   warn "Using test anchor PID $alfred_pid instead of Alfred."
 else
   set +e
@@ -175,7 +207,19 @@ fi
 mkdir -p "$STATE_DIR"
 
 for pid in "${confirmed[@]}"; do
-  # Captured before the kill so the log says which workflow was at fault.
+  # Re-check ancestry immediately before killing, not just when the candidate was
+  # first picked. Several seconds pass in between (--sample-gap, plus 2s per
+  # earlier kill), and in that window the candidate can exit and the OS reuse its
+  # PID for something else entirely. Without this, `kill -0` would still succeed
+  # and we would shoot the replacement. Rare, but the whole premise of this tool
+  # is a machine left alone for hours, so rare events get their turn.
+  if ! descends_from_alfred "$pid"; then
+    warn "PID $pid is no longer an Alfred descendant (exited and the PID was reused?). Leaving it."
+    continue
+  fi
+
+  # Captured before the kill so the log says which workflow was at fault, and
+  # after the ancestry re-check so it describes the process actually being killed.
   args="$(ps -o args= -p "$pid" 2>/dev/null | head -c 300 || true)"
   mins=$(( $(elapsed_seconds "$pid") / 60 ))
   cpu="$(cpu_percent "$pid")"

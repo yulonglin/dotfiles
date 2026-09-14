@@ -6,7 +6,7 @@
 # Both are tested against real processes rather than mocks — a spinning
 # `osascript` is cheap to create and is exactly what the tool sees in production.
 #
-# Uses ALFRED_WATCHDOG_ANCHOR_PID to stand in for Alfred so the kill path can be
+# Uses --test-anchor-pid to stand in for Alfred so the kill path can be
 # exercised without driving the real app.
 #
 # macOS only (osascript, BSD ps). Run outside a sandbox: pgrep needs sysmond.
@@ -90,7 +90,7 @@ SPAWNED+=("$IDLER")
 sleep 2
 IDLER_PARENT=$$
 
-ALFRED_WATCHDOG_ANCHOR_PID=$IDLER_PARENT "$WATCHDOG" \
+"$WATCHDOG" --test-anchor-pid "$IDLER_PARENT" \
   --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
 if kill -0 "$IDLER" 2>/dev/null; then
   pass "leaves an idle (0% CPU) descendant alone even when anchored to its parent"
@@ -107,7 +107,7 @@ WEDGED=$!
 SPAWNED+=("$WEDGED")
 sleep 3
 
-ALFRED_WATCHDOG_ANCHOR_PID=$$ "$WATCHDOG" \
+"$WATCHDOG" --test-anchor-pid $$ \
   --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
 sleep 1
 if kill -0 "$WEDGED" 2>/dev/null; then
@@ -123,7 +123,7 @@ DRY=$!
 SPAWNED+=("$DRY")
 sleep 3
 
-ALFRED_WATCHDOG_ANCHOR_PID=$$ "$WATCHDOG" \
+"$WATCHDOG" --test-anchor-pid $$ \
   --dry-run --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
 if kill -0 "$DRY" 2>/dev/null; then
   pass "--dry-run reports without killing"
@@ -138,7 +138,7 @@ YOUNG=$!
 SPAWNED+=("$YOUNG")
 sleep 3
 
-ALFRED_WATCHDOG_ANCHOR_PID=$$ "$WATCHDOG" \
+"$WATCHDOG" --test-anchor-pid $$ \
   --age-minutes 10 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
 if kill -0 "$YOUNG" 2>/dev/null; then
   pass "age gate spares a spinner younger than --age-minutes"
@@ -146,6 +146,33 @@ else
   fail "killed a spinner below the age threshold"
 fi
 kill -9 "$YOUNG" 2>/dev/null || true
+
+# --- 8. the anchor cannot be redirected by the environment -------------------
+# Regression test for a review finding: the anchor used to be read from
+# ALFRED_WATCHDOG_ANCHOR_PID, which meant a shell profile or a direnv .envrc
+# could silently point the tool at a process tree outside Alfred and have it kill
+# things there. It is a flag now, so an exported variable must do nothing.
+osascript -e 'repeat' -e 'end repeat' &
+ENVTEST=$!
+SPAWNED+=("$ENVTEST")
+sleep 3
+
+ALFRED_WATCHDOG_ANCHOR_PID=$$ "$WATCHDOG" \
+  --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
+if kill -0 "$ENVTEST" 2>/dev/null; then
+  pass "ALFRED_WATCHDOG_ANCHOR_PID in the environment no longer redirects the anchor"
+else
+  fail "environment variable still redirects the anchor — ambient authority is back"
+fi
+kill -9 "$ENVTEST" 2>/dev/null || true
+
+# --- 9. --test-anchor-pid rejects a non-numeric value ------------------------
+"$WATCHDOG" --test-anchor-pid not-a-pid >/dev/null 2>&1
+if [[ $? -eq 64 ]]; then
+  pass "rejects non-numeric --test-anchor-pid with exit 64"
+else
+  fail "did not exit 64 on bad --test-anchor-pid"
+fi
 
 echo
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
