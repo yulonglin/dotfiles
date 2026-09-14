@@ -9,6 +9,14 @@
 # Uses --test-anchor-pid to stand in for Alfred so the kill path can be
 # exercised without driving the real app.
 #
+# Every case that asserts a process SURVIVED also asserts the watchdog exited 0
+# first. Survival on its own is not evidence of anything: a tool that aborts on
+# startup — a dead process list, a `set -e` trip — leaves every process alive and
+# would turn the whole suite green while doing nothing. That protection used to
+# rest entirely on one case (the wedged one, which asserts its exit code
+# alongside the kill), so re-timing or splitting that single test would have
+# silently made five others maskable. Each now carries its own.
+#
 # SAFETY RULE FOR THIS FILE: no kill-enabled run may ever be anchored at a
 # process whose descendants include anything this suite did not spawn. That rules
 # out the real Alfred (an earlier version pointed a kill-enabled run straight at
@@ -209,7 +217,10 @@ sleep 3
 
 "$WATCHDOG" --test-anchor-pid "$LONE_ANCHOR" \
   --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
-if is_running "$OUTSIDER"; then
+RC=$?
+if [[ $RC -ne 0 ]]; then
+  fail "watchdog exited $RC (expected 0) — survival below would be meaningless"
+elif is_running "$OUTSIDER"; then
   pass "leaves a spinning osascript outside the anchor's tree alone"
 else
   fail "KILLED a process outside the anchor's tree"
@@ -225,7 +236,10 @@ sleep 2
 
 "$WATCHDOG" --test-anchor-pid "$ANCHOR" \
   --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
-if is_running "$IDLER"; then
+RC=$?
+if [[ $RC -ne 0 ]]; then
+  fail "watchdog exited $RC (expected 0) — survival below would be meaningless"
+elif is_running "$IDLER"; then
   pass "leaves an idle (0% CPU) descendant alone"
 else
   fail "KILLED an idle descendant — CPU gate is not working"
@@ -261,7 +275,10 @@ sleep 3
 
 "$WATCHDOG" --test-anchor-pid "$ANCHOR" \
   --dry-run --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
-if is_running "$DRY"; then
+RC=$?
+if [[ $RC -ne 0 ]]; then
+  fail "watchdog exited $RC (expected 0) — survival below would be meaningless"
+elif is_running "$DRY"; then
   pass "--dry-run reports without killing"
 else
   fail "--dry-run killed a process"
@@ -275,7 +292,10 @@ sleep 3
 
 "$WATCHDOG" --test-anchor-pid "$ANCHOR" \
   --age-minutes 10 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
-if is_running "$YOUNG"; then
+RC=$?
+if [[ $RC -ne 0 ]]; then
+  fail "watchdog exited $RC (expected 0) — survival below would be meaningless"
+elif is_running "$YOUNG"; then
   pass "age gate spares a spinner younger than --age-minutes"
 else
   fail "killed a spinner below the age threshold"
@@ -369,7 +389,10 @@ sleep 14   # 12s idle, then ~2s of spinning: hot now, but ~14% of life on CPU
 
 "$WATCHDOG" --test-anchor-pid "$ANCHOR" \
   --age-minutes 0 --cpu-threshold 50 --sample-gap 2 >/dev/null 2>&1
-if is_running "$BURSTY"; then
+RC=$?
+if [[ $RC -ne 0 ]]; then
+  fail "watchdog exited $RC (expected 0) — survival below would be meaningless"
+elif is_running "$BURSTY"; then
   pass "cumulative-CPU gate spares a mostly-idle process that just turned hot"
 else
   fail "KILLED a mostly-idle process during a short burst — duty-ratio gate is not working"
