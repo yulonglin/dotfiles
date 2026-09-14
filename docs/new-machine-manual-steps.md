@@ -53,7 +53,7 @@ fresh Mac.
 
 | App | Binding | Notes |
 |-----|---------|-------|
-| Alfred | Caps Lock → summon | **Automated** via `alfred-fix` golden snapshot (`config/alfred/local-golden/`). Verify after first launch. |
+| Alfred | Caps Lock → summon | **Automated** via `alfred-fix` golden snapshot (`config/alfred/local-golden/`). Verify after first launch. The `--alfred` flag also schedules `alfred-watchdog` (every 5 min) to kill wedged workflow scripts. |
 | Mouseless | grid = Right ⌘, free mode = Right ⌥ | Config in `config/mouseless/config.yaml` (copied by deploy). |
 | VoiceInk | Right Shift → start recording | Manual — set in VoiceInk's own settings. |
 

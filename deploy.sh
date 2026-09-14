@@ -90,7 +90,8 @@ COMPONENTS:
     --codex           Deploy Codex CLI config (~/.codex symlink)
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
-    --alfred          Repair Dropbox-synced Alfred prefs: de-quarantine, +x, hotkey (macOS only)
+    --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
+                      schedule alfred-watchdog for wedged workflow scripts (macOS only)
     --ghostty         Deploy Ghostty terminal config
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
     --htop            Deploy htop configuration
@@ -1335,6 +1336,24 @@ queue_scheduled_job() {
 
     if [[ "$DEPLOY_KEYBOARD" == "true" ]] && is_macos; then
         queue_scheduled_job keyboard-repeat "$DOT_DIR/scripts/cleanup/setup_keyboard_repeat.sh"
+    fi
+
+    # Rides the same --alfred flag as alfred-fix: both exist because Alfred has
+    # failure modes nothing else on the machine reports. A wedged workflow script
+    # bills its CPU to Alfred, so it reads as "Alfred is using significant
+    # energy" and is invisible until someone opens Activity Monitor.
+    if [[ "$DEPLOY_ALFRED" == "true" ]] && is_macos; then
+        queue_scheduled_job alfred-watchdog "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh"
+    elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)ALFRED]} )); then
+        # Opting out has to actually unload it, or --no-alfred leaves a launchd
+        # job running every 5 minutes that the user just asked not to have. Same
+        # reasoning as the hide-idle-apps branch below, including why this is
+        # gated on an EXPLICIT --no-alfred rather than on the flag being false:
+        # --only and --minimal set every other component false, so `--only vim`
+        # would otherwise tear this job down despite --only promising to touch
+        # nothing else. Refusing a component and not selecting it are different.
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh" ]] && \
+            "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh" --uninstall >/dev/null 2>&1 || true
     fi
 
     if [[ "$DEPLOY_KILL_SKY_CUA" == "true" ]] && is_macos; then

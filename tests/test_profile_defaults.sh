@@ -342,10 +342,13 @@ test_defenses_are_never_opt_in() {
 
 test_no_scheduled_jobs_in_ephemeral_profiles() {
     # Nothing on a throwaway box should install launchd/cron jobs.
+    # DEPLOY_ALFRED belongs here even though it reads like a GUI-prefs component:
+    # it also schedules alfred-watchdog every 5 minutes. A flag earns a place on
+    # this list by scheduling something, not by sounding like it does.
     local scheduled=(DEPLOY_CLEANUP DEPLOY_CLAUDE_CLEANUP DEPLOY_AI_UPDATE
                      DEPLOY_BREW_UPDATE DEPLOY_USAGE_PING DEPLOY_TMUX_RESUME
                      DEPLOY_MCP_SYNC DEPLOY_DEP_AUDIT DEPLOY_STALE_CLAIMS
-                     DEPLOY_SECRETS DEPLOY_DOTFILES_SYNC)
+                     DEPLOY_SECRETS DEPLOY_DOTFILES_SYNC DEPLOY_ALFRED)
     for profile in standard agent bare; do
         local bad=""
         for var in "${scheduled[@]}"; do

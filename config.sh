@@ -92,7 +92,7 @@ DEPLOY_REGISTRY=(
     "bedtime|Bedtime timezone enforcement|macos|true|macOS"
     "text-replacements|Sync macOS + Alfred text replacements|macos|true|macOS"
     "mouseless|Keyboard-driven mouse control|macos|true|macOS"
-    "alfred|Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey)|macos|true|macOS"
+    "alfred|Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and watch for wedged workflow scripts|macos|true|macOS"
     "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true|macOS"
     "vpn|NordVPN + Tailscale split tunnel daemon|macos|true|macOS"
     "pueue|Pueue + systemd resource slices|linux|true|Linux"
@@ -415,6 +415,11 @@ apply_profile() {
             DEPLOY_BEARCLI=false
             DEPLOY_FILE_APPS=false
             DEPLOY_CLAUDE_TOOLS=false
+            # Alfred is a GUI launcher, so this was harmless while --alfred only
+            # repaired preferences on a machine that had none. It now also
+            # schedules a 5-minute launchd job, and "shared machine, no GUI" is
+            # the last place that belongs.
+            DEPLOY_ALFRED=false
             ;;
         cloud)
             # Lean remote dev box (RunPod): server minus the heavy compiles/MCP.
