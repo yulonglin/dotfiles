@@ -164,6 +164,20 @@ else
   fail "did not exit 64 on unknown flag"
 fi
 
+# A flag given no value is a usage error like any other. `${2:?msg}` aborts with
+# exit 1, so this path used to contradict the documented contract and would read
+# to a caller as a real failure rather than a mistyped command.
+DANGLING_FAILED=""
+for flag in --age-minutes --cpu-threshold --sample-gap --test-anchor-pid; do
+  "$WATCHDOG" "$flag" >/dev/null 2>&1
+  [[ $? -eq 64 ]] || DANGLING_FAILED+="$flag "
+done
+if [[ -z "$DANGLING_FAILED" ]]; then
+  pass "a value-taking flag with no value exits 64"
+else
+  fail "these flags did not exit 64 when given no value: $DANGLING_FAILED"
+fi
+
 "$WATCHDOG" --test-anchor-pid not-a-pid >/dev/null 2>&1
 if [[ $? -eq 64 ]]; then
   pass "rejects non-numeric --test-anchor-pid with exit 64"

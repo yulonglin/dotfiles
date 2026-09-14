@@ -106,13 +106,21 @@ warn() { printf '\033[0;33m[alfred-watchdog]\033[0m %s\n' "$*" >&2; }
   awk '/^#!/ {next} /^[^#]/ {exit} {print}' "$0" | sed 's/^# \{0,1\}//'; exit 0
 }
 
+# `${2:?msg}` was tempting but aborts with exit 1, while the header promises 64
+# for a bad argument and the other two bad-argument paths below deliver it. A
+# caller testing `$? -eq 64` to tell a usage error from a real failure would have
+# misread a dangling flag as the latter.
+need_value() {
+  [[ $# -ge 2 && -n "${2:-}" ]] || { warn "$1 needs a value (try --help)"; exit 64; }
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run)        DRY_RUN=1; shift ;;
-    --age-minutes)    AGE_MINUTES="${2:?--age-minutes needs a value}"; shift 2 ;;
-    --cpu-threshold)  CPU_THRESHOLD="${2:?--cpu-threshold needs a value}"; shift 2 ;;
-    --sample-gap)     SAMPLE_GAP="${2:?--sample-gap needs a value}"; shift 2 ;;
-    --test-anchor-pid) TEST_ANCHOR_PID="${2:?--test-anchor-pid needs a value}"; shift 2 ;;
+    --age-minutes)    need_value "$@"; AGE_MINUTES="$2"; shift 2 ;;
+    --cpu-threshold)  need_value "$@"; CPU_THRESHOLD="$2"; shift 2 ;;
+    --sample-gap)     need_value "$@"; SAMPLE_GAP="$2"; shift 2 ;;
+    --test-anchor-pid) need_value "$@"; TEST_ANCHOR_PID="$2"; shift 2 ;;
     *) warn "unknown argument: $1 (try --help)"; exit 64 ;;
   esac
 done
@@ -185,9 +193,18 @@ fi
 # test would miss them. Bounded by the walk reaching pid 1 or 0.
 descends_from_alfred() {
   local pid="$1" hops=0
+  local parent
   while [[ -n "$pid" && "$pid" -gt 1 && $hops -lt 20 ]]; do
     [[ "$pid" == "$alfred_pid" ]] && return 0
-    pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+    # Capture ps on its own line like the readers below, rather than piping it.
+    # This one was left as a bare `ps | tr` pipeline when the others were fixed,
+    # and it is safe today only because every call site happens to sit under `||`
+    # or `if !`, which suppresses errexit inside the function. The first
+    # unguarded `x="$(descends_from_alfred …)"` call would resurrect the abort
+    # this class already caused twice, so close it here instead of leaving it to
+    # call-site discipline nobody will remember.
+    parent="$(ps -o ppid= -p "$pid" 2>/dev/null)" || parent=''
+    pid="$(printf '%s' "$parent" | tr -d ' ')"
     hops=$((hops + 1))
   done
   return 1
@@ -356,7 +373,13 @@ if [[ ${#confirmed[@]} -eq 0 ]]; then
   exit 0
 fi
 
-mkdir -p "$STATE_DIR"
+# Not fatal. An unwritable state directory would otherwise abort here — after the
+# wedges have been confirmed but before a single one is killed — which is the
+# same trade the LOG_FILE guard below already rules the wrong way round: losing
+# the record is bad, losing the record AND leaving cores spinning is worse.
+if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+  warn "Could not create $STATE_DIR — proceeding with the kills, but nothing will be logged."
+fi
 
 for i in "${!confirmed[@]}"; do
   pid="${confirmed[$i]}"
