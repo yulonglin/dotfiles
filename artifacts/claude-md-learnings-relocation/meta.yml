@@ -2,8 +2,8 @@ title: Relocate the Learnings section, and drop most of it
 url: https://claude.ai/code/artifact/8d0af943-a622-4228-814a-9d5a4a0d6510
 org: lin.yulong@gmail.com's Organization   # the account this session is signed in as, 2026-09-14
 first_published: 2026-09-14
-last_updated: 2026-09-14
-status: live   # awaiting Yulong's per-entry veto on the page; nothing is edited until the export comes back
+last_updated: 2026-09-15
+status: done   # approved in full on 2026-09-15 (no vetoes) and applied; CLAUDE.md went 45,981 -> 9,728 bytes
 
 public: no
 

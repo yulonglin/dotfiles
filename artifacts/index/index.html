@@ -89,10 +89,10 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <tr>
 <td><a href="https://claude.ai/code/artifact/8d0af943-a622-4228-814a-9d5a4a0d6510">Relocate the Learnings section, and drop most of it</a> — the destination-per-entry contract for emptying <code>CLAUDE.md</code>'s <code>## Learnings</code> section, which had reached 37.5 KB inside a file four times over its 11,100-byte ceiling. The finding that set the shape: the section was doing two jobs under one heading — operational state Claude acts on, and incident forensics — and only the first earns a slot in a file that loads every session. So the axis is relocate-or-drop rather than prune, biased to drop because git history is the archive. Of 28 entries, 7 produce a surviving line elsewhere and 23 drop, six of them already stated verbatim at their destination. Every destination is under <code>docs/</code> or a skill, never <code>claude/rules/</code>, because six other files in the same budget suite are also over ceiling and a relocation into one would deepen a second failure. Published as a review page: each entry is a cycling control, approve / veto-keep / veto-relocate, for Yulong to veto entry by entry before anything is edited</td>
 <td>lin.yulong@gmail.com's Organization</td>
-<td>live</td>
+<td>done</td>
 <td><code>artifacts/claude-md-learnings-relocation/</code></td>
 <td>no</td>
-<td>2026-09-14</td>
+<td>2026-09-15</td>
 </tr>
 <tr>
 <td><a href="https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107">Dotfiles Artifacts</a> — this index, hosted; republished to this URL after every artifact publish</td>
@@ -320,7 +320,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </tr>
 </tbody>
 </table>
-<p>29 rows: 15 live, 11 done, 2 archived, 1 superseded.</p>
+<p>29 rows: 14 live, 12 done, 2 archived, 1 superseded.</p>
 <p><strong>Status vocabulary.</strong> <code>live</code> — still being updated, cite it. <code>done</code> — the work is finished and its conclusions stand, still quotable. <code>archived</code> — deliberately retired, do not cite, row kept for its history and comment threads. <code>superseded</code> — replaced by a specific newer page, and the row links to it. <code>elsewhere</code> — published under an org this machine is not signed into. <code>done</code> is an achievement and <code>archived</code> is a retirement; only <code>superseded</code> implies a successor exists. Nothing is ever deleted from this table.</p>
 <p><strong>What the table holds today.</strong> The tally under the table is generated with it, so it cannot go stale. The two <code>archived</code> rows are pages deleted upstream, so their links 404: the 2026-08-31 hosted index and <em>README Trimmed; Two Proposals Await</em>. The single <code>superseded</code> row is this index's org-locked original, replaced rather than retired. Nothing has ever been removed.</p>
 <p><strong>Org, and why most rows still say &quot;see note&quot;.</strong> Every row above appeared in the <code>Artifact action: list</code> result of 2026-08-29. Whether that <em>means</em> they are in the currently signed-in org depends on the listing being org-scoped, which the Claude Code docs nowhere state — so read &quot;see note&quot; as genuinely unknown rather than as a name I merely failed to type. The org's <em>name</em> is missing only because <code>claude auth status</code> returned <code>orgName: null</code> on the session that wrote this file — while reporting <code>authMethod: &quot;claude.ai&quot;</code> and publishing the index page without trouble. A null org therefore diagnoses nothing about how the session is authenticated; it is simply a field that is sometimes unpopulated. The field <em>is</em> populated on this machine as of 2026-09-10, which is where the index row's <code>lin.yulong@gmail.com's Organization</code> comes from — but reading today's org says nothing about which org published a page in August, so the older rows keep &quot;see note&quot; rather than being back-filled from it, and every row written from now on carries the org read at its own publish time.</p>
