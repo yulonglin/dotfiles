@@ -4,8 +4,11 @@ The always-on tier is what every session pays for before it does any work:
 `claude/rules/*.md` + `claude/CLAUDE.md` + the active output style. This file is
 the guard that stops it re-growing. Two kinds of assertion:
 
-- **Budget** — a per-file ceiling and an aggregate ceiling, plus a floor on how
-  much the 2026-08-28 rules-to-skills restructure actually removed.
+- **Budget** — one total for the global tier and one for this repo's own
+  `CLAUDE.md`, because a session pays a sum, not a row. The set is globbed from
+  disk rather than listed, and per-file ceilings are gone: they were eleven
+  guesses to maintain, and a list is what let two rule files sit in every
+  session's context while outside the number the gate enforced.
 - **Protected content** — passages that must survive a trim byte-for-byte, so
   that "we moved it into a skill" cannot quietly mean "we deleted it".
 
@@ -23,58 +26,51 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 TAG = "pretrim-memory-2026-07-29"
 
-# The always-loaded tier: every session pays these bytes. Measured at f605dcd
-# (parent of 5873a70, the restructure commit) with
-#   git ls-tree -r -l f605dcd -- claude/rules claude/CLAUDE.md claude/output-styles
-# The repo's own CLAUDE.md is deliberately NOT in this set: it loads only in
-# this repo, and it is not in the git baseline above.
-PRE_RESTRUCTURE_BYTES = 76512
+# For scale: the tier measured 76,512 bytes before the 2026-08-28 rules-to-skills
+# restructure (at f605dcd, the parent of 5873a70), and 26,632 just after it. The
+# ceiling below is what stops it walking back.
 
-# Ceilings are current size x ~1.12, with a 150-byte floor so that small files
-# get room for a real sentence rather than a fragment (12% of background-jobs.md
-# is only 93 bytes), rounded up to the next 50. Tight enough that regrowth trips
-# the guard, loose enough that an ordinary edit does not.
-ALWAYS_ON = [
-    # Raised from 950 on 2026-09-08: the file gained one sentence on the CLI's
-    # worktree-isolation git guard (`git -C` and variable-named commands are
-    # refused), a rule no other always-on file states. 12% of 776 bytes was
-    # 93 bytes, too small for one sentence.
-    ("claude/rules/background-jobs.md", 1150),
-    # Raised from the old 1300: this file legitimately grew when it absorbed the
-    # scratch-script promotion rules from the deleted
-    # reusable-component-promotion.md. The content moved here, it was not added.
-    # 2026-09-08: add a short pointer to the on-demand service lifecycle checklist.
-    ("claude/rules/coding-conventions.md", 2400),
-    ("claude/rules/communication.md", 3100),
-    ("claude/rules/delegation.md", 2600),
-    ("claude/rules/experiments.md", 3050),
-    # Added 2026-09-03: evidence packs attach source printouts, never text
-    # transcriptions. Four short paragraphs; the how lives in gmail-connector.
-    ("claude/rules/evidence.md", 1550),
-    # pointers.md was deleted on 2026-08-30. Its whole job was indexing skills,
-    # and four of the skills it indexed had never been invoked in 4,100 sessions
-    # -- the index cost more every session than the things it indexed returned.
-    # Its one unique rule ("one topic keeps one link") moved into artifacts-sync.
-    # Cut to four red lines on 2026-08-30: nulls, ceilings, intervals, causal
-    # register, judge-not-regex and the terminology reference venues all live in
-    # the checklists now (results-analysis.md, presentation.md), which the rule
-    # routes to instead of restating.
-    ("claude/rules/research-core.md", 1400),
-    ("claude/rules/safety.md", 2550),
-    ("claude/rules/verify-before-instructing.md", 1050),
-    ("claude/CLAUDE.md", 4250),
-    ("claude/output-styles/effortful-learning.md", 5950),
-]
+# The tier is DERIVED FROM DISK, never listed. A hand-maintained list is how this
+# guard came to under-count by 3,674 bytes: vault-deliverables.md and
+# sensitive-content.md sat in claude/rules/, loaded into every session, and
+# outside the set the aggregate summed -- so the number enforced was not the
+# number a session paid, and no assertion could notice. Globbing makes that
+# failure mode unreachable: a new rule file is counted the moment it exists.
+def always_on_files() -> list[Path]:
+    files = sorted((REPO / "claude/rules").glob("*.md"))
+    files.append(REPO / "claude/CLAUDE.md")
+    files += sorted((REPO / "claude/output-styles").glob("*.md"))
+    return files
 
-# Loaded on top of the always-on tier for sessions in this repo. Its ceiling
-# assumes the Learnings block stays inside its two-week window, with older
-# entries moved to docs/tooling-and-packages.md § Past Learnings rather than
-# deleted.
-REPO_CLAUDE_MD = ("CLAUDE.md", 11100)
 
-FILES = ALWAYS_ON + [REPO_CLAUDE_MD]
+def breakdown(files: list[Path]) -> str:
+    """Biggest first -- a total that fails should say where the weight is."""
+    rows = sorted(((f.stat().st_size, f) for f in files), reverse=True)
+    return "\n".join(
+        f"  {n:6d}  {f.relative_to(REPO)}" for n, f in rows
+    )
 
-AGGREGATE_CEILING = 29900  # always-on tier only, ~12% over its current 26,632
+
+# ONE number gates the global tier, because one number is what a session pays.
+# Per-file ceilings were dropped on 2026-09-15: they were eleven separate
+# guesses to maintain, being 200 bytes over one of them cost nothing real, and
+# eight of them failing at once said nothing a reader could act on. Where the
+# weight sits is a diagnostic, printed on failure, not an assertion.
+#
+# Set to today's measured 35,326 rounded up, so the gate blocks growth from the
+# moment it is wired rather than being red on arrival. It only ever goes DOWN:
+# lower it whenever the tier shrinks. The standing target is 29,900, which is
+# where it was set when the tier measured 26,632; the 5,426-byte gap between
+# that and today is the backlog this gate stops from widening.
+ALWAYS_ON_TARGET = 29900
+ALWAYS_ON_CEILING = 35500
+
+# Loaded on top of the always-on tier, for sessions in this repo only, so it gets
+# its own budget rather than sharing the global one -- a different blast radius
+# deserves a different number. Emptied on 2026-09-15 (45,981 -> 9,728) when the
+# Learnings section became transient machine state only.
+REPO_CLAUDE_MD = "CLAUDE.md"
+REPO_CLAUDE_MD_CEILING = 11100
 
 # The sandbox failure-mode table moved out of the rules and into the jobs skill
 # during the restructure. It is protected content: costly to re-derive, and the
@@ -122,31 +118,27 @@ def sandbox_table(text: str, where: str) -> str:
     return "\n".join(block)
 
 
-@pytest.mark.parametrize("path,ceiling", FILES)
-def test_per_file_ceiling(path: str, ceiling: int) -> None:
-    assert size(path) <= ceiling, f"{path}: {size(path)} > {ceiling}"
+def test_always_on_tier_total() -> None:
+    """What every session pays before it does any work, in one number."""
+    files = always_on_files()
+    total = sum(f.stat().st_size for f in files)
+    assert total <= ALWAYS_ON_CEILING, (
+        f"always-on tier is {total} bytes, over the {ALWAYS_ON_CEILING} ceiling "
+        f"by {total - ALWAYS_ON_CEILING} (standing target {ALWAYS_ON_TARGET}). "
+        f"These files load in EVERY repo, so a byte here costs more than a byte "
+        f"in a project CLAUDE.md. Where the weight is:\n{breakdown(files)}"
+    )
 
 
-def test_aggregate_ceiling() -> None:
-    total = sum(size(p) for p, _ in ALWAYS_ON)
-    assert total <= AGGREGATE_CEILING, f"{total} > {AGGREGATE_CEILING}"
-
-
-def test_no_unguarded_rule_files() -> None:
-    """Every rule file carries a ceiling.
-
-    Without this, adding claude/rules/foo.md would sail past both the per-file
-    and the aggregate ceiling, because both only look at the listed paths.
-    """
-    on_disk = {f"claude/rules/{p.name}" for p in (REPO / "claude/rules").glob("*.md")}
-    guarded = {p for p, _ in ALWAYS_ON if p.startswith("claude/rules/")}
-    assert on_disk == guarded, f"unguarded: {on_disk - guarded}, stale: {guarded - on_disk}"
-
-
-def test_restructure_removed_most_of_the_tier() -> None:
-    after = sum(size(p) for p, _ in ALWAYS_ON)
-    reduction = (PRE_RESTRUCTURE_BYTES - after) / PRE_RESTRUCTURE_BYTES
-    assert reduction >= 0.60, f"only {reduction:.1%} smaller than pre-restructure"
+def test_repo_claude_md_total() -> None:
+    """This repo's own file, budgeted separately: it loads only here."""
+    total = size(REPO_CLAUDE_MD)
+    assert total <= REPO_CLAUDE_MD_CEILING, (
+        f"{REPO_CLAUDE_MD} is {total} bytes, over the {REPO_CLAUDE_MD_CEILING} "
+        f"ceiling by {total - REPO_CLAUDE_MD_CEILING}. The `## Learnings` section "
+        f"takes transient machine state only; anything durable moves to the file "
+        f"that owns the topic, and anything a test or the code records is dropped."
+    )
 
 
 @pytest.mark.parametrize("key", ["IMPORTANT NOTE", "Use existing code"])

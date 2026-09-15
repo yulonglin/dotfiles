@@ -1,0 +1,93 @@
+name: Always-on guards
+
+# The tests here guard things that have each already failed silently once, and
+# none of them can be triggered by "its own file changed" — which is the trigger
+# every other workflow in this repo uses.
+#
+# The budget test fails from drift ACROSS files it does not own: no single edit
+# to a rule file looks wrong, and the total crosses a line nobody is watching. A
+# path filter cannot catch that shape, because the shape is the sum. The rest are
+# security guards whose failure mode is silence: the approval classifier ran
+# blind for five months, the env-mask hook was inert from birth, and the
+# pre-commit gateway guard is the only thing standing between a loopback token
+# and a public repo. A guard that stops running looks exactly like a guard that
+# passes, so these run on every push and every pull request, unfiltered.
+#
+# Deliberately NOT a suite runner for all 85 tests: several need zsh, a tailnet,
+# a live router or a macOS host, and a workflow that is red for environmental
+# reasons teaches people to ignore it. This is the set that must never go quiet.
+#
+# Only first-party actions (actions/*), matching this repo's supply-chain posture.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: always-on-guards-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guards:
+    name: Budget and security guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # fetch-depth 0 and tags: the budget test reads protected passages out of
+      # the pretrim-memory-2026-07-29 tag to prove they survived a trim
+      # byte-for-byte. A shallow clone has no tags, and the test would error
+      # rather than fail — a different and much less legible outcome.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+
+      # The context tier every session pays for, before it does any work.
+      - name: Always-on byte budget
+        run: python -m pytest tests/test_memory_tier_budget.py -q
+
+      # The guard that keeps the tokened loopback URL out of a public repo.
+      - name: Pre-commit gateway guard
+        run: bash tests/test_pre_commit_gateway_guard.sh
+
+      # The extractor that fed the approval classifier an empty string for five
+      # months. These pin the real transcript line shapes.
+      - name: Approval classifier context
+        run: python -m pytest tests/test_approval_classifier_context.py -q
+
+      - name: Settings shape
+        run: python -m pytest tests/test_validate_claude_settings.py -q
+
+      - name: Secrets stay out of the ambient environment
+        run: bash tests/test_secrets_global_scope.sh
+
+      - name: Artifacts are not built in throwaway paths
+        run: bash tests/test_block_throwaway_artifact_path.sh
+
+      # A guard that cannot fail proves nothing. The budget gate is derived from
+      # a glob, so the case worth proving is that a NEW always-on file is counted
+      # the moment it exists — which is exactly what the previous hand-maintained
+      # list got wrong, leaving 3,674 bytes uncounted in every session.
+      - name: Mutation check — a new rule file must trip the budget
+        run: |
+          python -c "open('claude/rules/zz-ci-mutation-probe.md','w').write('x'*8000)"
+          if python -m pytest tests/test_memory_tier_budget.py -q > "$RUNNER_TEMP/mutation.log" 2>&1; then
+            rm -f claude/rules/zz-ci-mutation-probe.md
+            cat "$RUNNER_TEMP/mutation.log"
+            echo "::error::The budget gate passed with 8000 extra always-on bytes on disk — it is vacuous."
+            exit 1
+          fi
+          rm -f claude/rules/zz-ci-mutation-probe.md
+          echo "Budget gate correctly caught the injected file:"
+          grep -m1 "always-on tier is" "$RUNNER_TEMP/mutation.log" || true
