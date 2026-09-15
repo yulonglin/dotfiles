@@ -109,6 +109,8 @@ The same command adds `native_auto_mode_classifier_failures` from the shared tra
 
 Quota history is stored at `~/.claude/usage-data/quota-history.jsonl` without account attribution. Samples can interleave accounts because no identity is recorded. Each row contains only the cache observation time and allowlisted quota bucket utilization/reset fields; the current-cache report states its age and whether it exceeds the statusline cache's five-minute freshness window.
 
+**The Codex quota line can only go stale, never self-heal.** It calls `account/rateLimits/read` on `codex app-server`, and that call reads the token without refreshing it, while any real request does refresh it — so once `~/.codex/auth.json` lapses the quota read can never recover on its own. `codex login status` still reports a logged-in ChatGPT account throughout, so it is not a usable check; the tell is `fetched_at` days older than `attempted_at` in the cache. One real `codex` request repairs it, and `custom_bins/codex-token-refresh` runs daily for that reason. This is **not** the credential model-router uses: the router keeps its own copy under `~/.local/state/model-router/codex-auth/` and refreshes it itself, so every GPT route can serve normally while this line reads days old.
+
 ## Ignore Pattern Management
 
 `claude-tools ignore` manages per-repo `.gitignore` and `.ignore` patterns interactively.

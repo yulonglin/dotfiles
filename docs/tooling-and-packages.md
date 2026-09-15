@@ -22,6 +22,10 @@ Codex has one configured owner in `config/codex-install.conf`: `homebrew` by def
 
 **`mas 7.0.0` requires sudo for every install** (`mas install`, `mas get`, `mas purchase`) and self-escalates by calling `sudo` internally. `install.sh --apps` pre-warms sudo with `sudo -v` (interactive TTY only) and keeps it alive with a background heartbeat for the duration of `brew bundle`, so a single password entry covers all mas apps. `mas account` was removed in 7.0.0 — there is no CLI way to confirm the signed-in store account (App Store UI only). The iCloud account and the Media & Purchases (store) account can differ; `mas` only cares about the store account.
 
+**`mas list` hangs on macOS 26 with mas 7.0.0**, so anything that shells out to it stalls rather than failing. `app-picker --audit` avoids it by detecting App Store apps from `Contents/_MASReceipt/receipt` under `/Applications`, but `custom_bins/mas-get` and `install.sh`'s post-check still call it and will hang until they get a `timeout`.
+
+**A repo script that imports `tomllib` needs the `uv run --script` shebang, not `#!/usr/bin/env python3`.** On macOS that shebang resolves to Apple's Python 3.9 even in an interactive shell, since there is no Homebrew python on the Macs here, and 3.9 has no `tomllib` — so the script cannot run at all. Use the repo's `uv run --script` header with `requires-python >= 3.11`.
+
 ## Symlink vs Copy vs Sourced
 
 Getting this wrong is the most common cause of "I edited the config and nothing changed".
@@ -48,7 +52,7 @@ Getting this wrong is the most common cause of "I edited the config and nothing 
 
 ## Past Learnings
 
-Older entries retired from `CLAUDE.md` § Learnings under the two-week pruning rule, kept because each one cost real debugging time.
+What survived the 2026-09-14 emptying of `CLAUDE.md` § Learnings, plus older entries retired before it. The two-week pruning rule these were kept under is gone: findings now go to the file that owns the topic when a future reader would search for them, and are dropped when a named test or the code already records them.
 
 - The statusline used to have two implementations that had to stay in sync — `tools/claude-tools/src/statusline.rs` and a `claude/statusline.sh` fallback. The parity hook nagging on edit was deleted 2026-08-28 and the fallback itself was retired 2026-08-30, leaving Rust as the only implementation; all three real-world platform binaries were committed and current at retirement, and `tests/test_statusline_classifier.sh` and `tests/test_statusline_usage_gauge.sh` no longer compare two renderers but pin the Rust output to literal expected strings, ANSI included. The silent failure that remains is `darwin-arm64` — nobody on Linux can cross-compile it — so `scripts/check-claude-tools-fresh.sh` flagging committed binaries older than the source is now the whole guard (2026-08-03, resolved 2026-08-30)
 - The Codex desktop app self-heals disabled Sky launch paths: after `codex plugin remove computer-history@openai-bundled` it rewrote the `turn-ended` hook and relaunched `SkyComputerUseService` two minutes later, despite both Sky-backed plugins showing `not installed`. The durable mitigation is an empty `~/.codex/computer-use` marked `uchg` (preserved runtime: `~/.codex/computer-use.disabled-2026-08-24`). Keep `codex/config.toml` free of Sky `notify` hooks — a disabled plugin section does not neutralize a top-level notifier. Do not add a periodic killer; it only creates respawn churn (2026-08-24)

@@ -54,3 +54,9 @@ else (decrement, values that can reach 0), use `n=$(( n + 1 ))` — no exit-code
 # ALWAYS safe — no arithmetic exit-code semantics
 ok=$(( ok + 1 ))
 ```
+
+**`cp` is aliased `-i`, so a scripted restore can block on the overwrite prompt:**
+A non-interactive `cp` back over an existing file waits for a confirmation nobody types, and the command times out with the file left mutated on disk. Use `command cp -f` (or `install`, or `cat >`) in anything non-interactive, and never chain a restore after a step that can itself block.
+
+**`pkill -f <pattern>` matches the shell that ran it:**
+The caller's own command line contains the pattern, so the pattern kills its own shell (exit 144). Pattern-kill only on text the caller's command line cannot contain.
