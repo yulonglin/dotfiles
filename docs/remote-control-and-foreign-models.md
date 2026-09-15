@@ -93,6 +93,8 @@ Primary sources fetched directly. **The pattern that actually got enforced is no
 
 Two honest non-mysterious reasons beyond that: Claude Code is a distribution channel for Claude, and the loop is genuinely Claude-shaped — prompt formats, tool schemas, retries, prompt caching and compaction. Several seats made the same point independently: **a foreign model driving Claude Code's loop through a translation shim performs worse than that family's own harness**, which you already have in OpenCode and codex-companion. The picker row is partly a fake prize on its own terms.
 
+**`CLAUDE_CODE_MAX_CONTEXT_TOKENS` is process-global, not per-row.** A `modelPicker` row advertising a 1M-token window still compacts at whatever the settings value says, so the row's window is cosmetic wherever it exceeds it.
+
 ## Two stale items in the repo
 
 1. **`claude/rc-direct-settings.json` is a no-op**, and the `claude()` wrapper still prepends it to every interactive session and to `remote-control`/`rc`/`agents`. Three council seats flagged it. It is harmless to recommendation (b): the wrapper skips it whenever the caller supplies its own `--settings` (`config/aliases/claude.sh:209`), and a worker spawned from bash never goes through the zsh wrapper at all. Delete it for tidiness or leave it — low stakes either way.

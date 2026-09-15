@@ -74,4 +74,6 @@ gh is installed current (Linux: the official `cli.github.com` apt repo with sudo
 
 **New custom binary** — add the script to `custom_bins/` (automatically on PATH) and `chmod +x` it.
 
+**New systemd user unit** — dropping a `.service`/`.timer` into `config/systemd-user/` is not enough: that loop in `deploy.sh` is enumerated, not globbed, so a unit is never installed until its name is listed there. `openrouter-drift.{service,timer}` sat in the repo for a month that way, with the drift check its skill documented never once having run. The same shape applies to `nudges`: a family set to `off` gates its members, so a new nudge must be listed explicitly or it stays silent.
+
 **Code style** — 2-space indentation in shell scripts; use the `backup_file()` helper for anything destructive. General language conventions live in `~/.claude/rules/coding-conventions.md`.

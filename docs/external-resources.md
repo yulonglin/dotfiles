@@ -60,7 +60,7 @@ Switch with `/output-style <name>`. No reason to commit to one — toggle per ta
 
 ## Where to send patterns you discover
 
-- One-off insight → `## Learnings` in project CLAUDE.md
+- One-off insight → the file that owns the topic: a doc under `docs/`, the skill that runs the thing, or the rule that governs it. `## Learnings` in a project CLAUDE.md is for transient machine state only, and anything a test or the code already records needs no note at all
 - Recurring across projects → promote to global CLAUDE.md or a `rules/*.md`
 - Reusable workflow → skill or slash command
 - Reference / quarterly skim material → `docs/`
