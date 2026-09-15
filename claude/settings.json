@@ -862,7 +862,7 @@
   "advisorModel": "fable",
   "showClearContextOnPlanAccept": true,
   "dialogExpiry": "never",
-  "plansDirectory": "~/vault/specs",
+  "plansDirectory": "plans/",
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
