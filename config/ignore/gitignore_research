@@ -15,3 +15,9 @@ archive/
 /data
 /experiments
 /logs
+
+# Claude Code plan files (plansDirectory = "plans/"). Root-anchored so a repo
+# that tracks docs/plans/ or similar is unaffected, and git-only, so rg/fd/Claude
+# still find them. Unlike the output dirs removed in d15ba51a, these are
+# disposable working artifacts, not irreplaceable research output.
+/plans
