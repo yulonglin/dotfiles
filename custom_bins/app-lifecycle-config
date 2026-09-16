@@ -36,7 +36,12 @@ EX_CONFIG = 78
 # The action scale, in order. `manual:` is the Shortcut's action and also the
 # ceiling for the destructive rungs of `auto:`; comparing ranks is how that
 # ceiling is applied.
-ACTIONS = ("skip", "hide", "close", "quit")
+# `hide` and `minimise` share a rank: both leave every window intact and differ
+# only in where the app goes (off screen vs the Dock). `minimise` is a `manual:`
+# value only - the idle job hides, and has no minimise rung - so `auto:` takes
+# the shorter list and rejects it by name rather than as a typo.
+ACTIONS = ("skip", "hide", "minimise", "close", "quit")
+AUTO_ACTIONS = ("skip", "hide", "close", "quit")
 
 # Every key allowed under `defaults:`, with its built-in fallback and the
 # environment variable that overrides it. The three names spelled out in the
@@ -56,7 +61,7 @@ DEFAULT_KEYS = {
     # accepted rather than rejected as corrupt - it now resolves to a harmless
     # no-op instead of to a massacre, so there is nothing to reject.
     "manual": ("action", "skip", None),
-    "auto": ("action", "skip", None),
+    "auto": ("auto_action", "skip", None),
     # See MIGRATION_DEFAULTS below before changing either of the two above:
     # migrate() writes these same fallbacks into the YAML it generates, where
     # they carry the opposite meaning.
@@ -93,7 +98,7 @@ MIGRATION_DEFAULTS = {
 # app (ignores synthetic keystrokes), not a tunable.
 APP_KEYS = {
     "manual": "action",
-    "auto": "action",
+    "auto": "auto_action",
     "hide_after": "minutes",
     "close_after": "minutes",
     "quit_after": "minutes",
@@ -273,6 +278,13 @@ def check(kind, key, value, where):
         if value not in ACTIONS:
             fail("%s: %s=%r must be one of %s" % (where, key, value, "/".join(ACTIONS)))
         return value
+    if kind == "auto_action":
+        if value == "minimise":
+            fail("%s: auto: minimise is not supported - the idle job only hides;"
+                 " put minimise under manual:" % where)
+        if value not in AUTO_ACTIONS:
+            fail("%s: %s=%r must be one of %s" % (where, key, value, "/".join(AUTO_ACTIONS)))
+        return value
     if kind == "bool":
         if value not in ("true", "false"):
             fail("%s: %s=%r must be true or false" % (where, key, value))
@@ -422,7 +434,8 @@ def migrate(path, out):
               " Shortcut's action\n")
     out.write("# and the ceiling for the idle job's destructive rungs;"
               " `auto:` governs hiding\n")
-    out.write("# alone. Scale: skip < hide < close < quit.\n\n")
+    out.write("# alone. Scale: skip < hide = minimise < close < quit"
+              " (minimise is manual-only).\n\n")
     out.write("defaults:\n")
     for key, (_kind, fallback, _env) in DEFAULT_KEYS.items():
         out.write("  %s: %s\n" % (key, MIGRATION_DEFAULTS.get(key, fallback)))
