@@ -1,13 +1,24 @@
 [Unit]
-Description=Monthly OpenRouter model drift check
+Description=Weekly OpenRouter model drift check
 
 [Timer]
-OnCalendar=monthly
+# Weekly, not monthly. The failure this check exists to name -- a configured
+# slug retired from the catalogue -- takes every 8-seat `council ask` down
+# silently: the call hangs for its full timeout with no output and no error.
+# On 2026-09-16 `qwen/qwen3.8-max` did exactly that on day 15 of a monthly
+# cycle, so the one report that would have called it "Broken now ... calls fail
+# outright" was not due for another 15 days. The fortnightly council-roster job
+# had in fact listed the same slug the day before, but as one of three ordinary
+# "a newer checkpoint exists" swaps -- unlabelled churn, which is why that layer
+# does not substitute for this one. A single unauthenticated GET of a public
+# catalogue costs ~100 ms of CPU, so bounding the exposure at a week rather
+# than a month is close to free.
+OnCalendar=weekly
 # The box is a laptop/workstation, not a server: without this a missed window
-# is simply skipped, and a monthly check that silently never runs is worse
-# than no check.
+# is simply skipped, and a check that silently never runs is worse than no
+# check.
 Persistent=true
-# Monthly means every box fires at 00:00 on the 1st; spread the load.
+# Weekly means every box fires at 00:00 on Monday; spread the load.
 RandomizedDelaySec=6h
 
 [Install]
