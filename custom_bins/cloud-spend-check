@@ -21,7 +21,7 @@ Providers: modal (all profiles in ~/.modal.toml). runpod, vastai and mats are
 recognised names with no collector yet; they are reported as skipped rather
 than silently contributing nothing to an all-clear.
 
-Exit codes: 0 the check ran (with or without findings), 3 no provider could be
+Exit codes: 0 the check ran against at least one account, 3 nothing could be
 queried, so the all-clear is not trustworthy.
 """
 
@@ -45,26 +45,43 @@ FLAT_DAYS = int(os.environ.get("CLOUD_SPEND_FLAT_DAYS", "3"))
 FLAT_TOL = float(os.environ.get("CLOUD_SPEND_FLAT_TOL", "0.05"))
 # Below this daily spend a flat run is not worth anyone's attention.
 FLOOR = float(os.environ.get("CLOUD_SPEND_FLOOR", "20"))
+# How far behind today the provider's latest billed day may be before the data
+# is treated as stale. Modal reports complete intervals only and runs about a
+# day behind, so 2 leaves room without letting a week-old series look live.
+MAX_CUTOFF_LAG_DAYS = int(os.environ.get("CLOUD_SPEND_MAX_CUTOFF_LAG_DAYS", "2"))
 
 STATE_DIR = Path(
     os.environ.get("CLOUD_SPEND_STATE_DIR", Path.home() / ".local/state/cloud-spend")
 )
-# Providers named but not yet collected from.
 PLANNED = ("runpod", "vastai", "mats")
 IMPLEMENTED = ("modal",)
 
 # modal emits SGR codes through rich even under NO_COLOR=1 and TERM=dumb
-# (measured 2026-09-16: NO_COLOR drops the 38;5 colours but keeps the bold),
-# so --json output must be de-escaped before it will parse.
+# (measured 2026-09-16: NO_COLOR drops the colours but keeps the bold), so
+# --json output must be de-escaped before it will parse.
 ANSI = re.compile(r"\x1B\[[0-9;]*[mK]")
+
+# MODAL_TOKEN_ID/SECRET take precedence over .modal.toml (modal/config.py:9).
+# If a shell exports them -- direnv does, they are managed secrets here -- then
+# every per-profile query would hit that one workspace while being labelled
+# with a different profile name each time, and the other workspaces would go
+# unchecked behind a clean report. Dropped from the child environment.
+MODAL_CREDENTIAL_OVERRIDES = ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET")
 
 
 class ProviderError(RuntimeError):
     """The provider is configured but could not be queried."""
 
 
-def run_cmd(cmd: list[str], env: dict[str, str] | None = None, timeout: int = 180) -> str:
+def run_cmd(
+    cmd: list[str],
+    env: dict[str, str] | None = None,
+    drop: tuple[str, ...] = (),
+    timeout: int = 180,
+) -> str:
     full = {**os.environ, "NO_COLOR": "1", "TERM": "dumb", **(env or {})}
+    for key in drop:
+        full.pop(key, None)
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=full)
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()
@@ -81,41 +98,66 @@ def modal_profiles(config: Path | None = None) -> list[str]:
     return re.findall(r"^\[([^\]]+)\]", cfg.read_text(), re.M)
 
 
-def collect_modal(days: int) -> dict[tuple[str, str, str], dict[str, float]]:
-    """Return {(provider, profile, resource): {day: cost}} across every profile.
+def collect_modal(days: int) -> tuple[dict, list[str], list[str]]:
+    """Return (series, errors, checked_profiles).
 
-    Every profile is queried, not just the active one: the incident's spend sat
-    in a shared workspace that was not the default on this machine.
+    series is {(provider, account, resource_id, display_name): {day: cost}}.
+    Keyed on the provider's own object ID, never the description: 8 of the 12
+    app names in the captured fixture map to more than one object (one to 36),
+    and keying on the name silently sums or overwrites their costs, so a cheap
+    ephemeral app can mask a continuously billed GPU.
+
+    A profile that cannot be queried yields an error and is skipped; the others
+    are still collected. One revoked credential must not turn the whole report
+    into a findings-free all-clear.
     """
-    out: dict[tuple[str, str, str], dict[str, float]] = defaultdict(dict)
+    out: dict = defaultdict(dict)
+    errors: list[str] = []
+    checked: list[str] = []
     profiles = modal_profiles()
     if not profiles:
-        raise ProviderError("no profiles in ~/.modal.toml")
+        return {}, ["modal: no profiles in ~/.modal.toml"], []
     start = (date.today() - timedelta(days=days)).isoformat()
     for profile in profiles:
-        raw = run_cmd(
-            ["modal", "billing", "report", "--start", start, "-r", "d", "--json"],
-            env={"MODAL_PROFILE": profile},
-        )
-        for row in json.loads(raw.strip() or "[]"):
-            resource = row.get("Description") or row.get("Object ID") or "?"
-            out[("modal", profile, resource)][row["Interval Start"][:10]] = float(
-                row["Cost"]
+        try:
+            raw = run_cmd(
+                ["modal", "billing", "report", "--start", start, "-r", "d", "--json"],
+                env={"MODAL_PROFILE": profile},
+                drop=MODAL_CREDENTIAL_OVERRIDES,
             )
-    return out
+            rows = json.loads(raw.strip() or "[]")
+        except FileNotFoundError:
+            return {}, ["modal: CLI not on PATH"], []
+        except (ProviderError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
+            errors.append(f"modal/{profile}: {exc}")
+            continue
+        checked.append(f"modal/{profile}")
+        for row in rows:
+            resource_id = row.get("Object ID") or row.get("Description") or "?"
+            display = row.get("Description") or resource_id
+            key = ("modal", profile, resource_id, display)
+            out[key][row["Interval Start"][:10]] = float(row["Cost"])
+    return dict(out), errors, checked
 
 
-def flat_run(costs: dict[str, float]) -> tuple[int, float] | None:
-    """Longest flat run of consecutive days ending on the most recent billed day.
+def flat_run(costs: dict[str, float], cutoff: str | None = None) -> tuple[int, float] | None:
+    """Longest flat run of consecutive days ending at `cutoff`.
 
-    Returns (length, mean) or None. A run qualifies when it spans FLAT_DAYS or
-    more consecutive calendar days, every day clears FLOOR, and the spread is
-    within FLAT_TOL of the peak day. A calendar gap ends the run: a resource
-    that went quiet for a day was not pinned.
+    Returns (length, mean) or None. A run qualifies when it ends on the latest
+    day the provider has billed for anything, spans FLAT_DAYS or more
+    consecutive calendar days, every day clears FLOOR, and the spread is within
+    FLAT_TOL of the peak.
+
+    Requiring the run to reach the cutoff is what stops a stopped resource from
+    being re-reported every day until it falls out of the lookback window: once
+    billing moves on without it, its last flat day is behind the cutoff and it
+    drops out. A calendar gap inside the run ends it for the same reason.
     """
     if len(costs) < FLAT_DAYS:
         return None
     days = sorted(costs)
+    if cutoff is not None and days[-1] != cutoff:
+        return None
     best: tuple[int, float] | None = None
     for length in range(FLAT_DAYS, len(days) + 1):
         window_days = days[-length:]
@@ -131,18 +173,27 @@ def flat_run(costs: dict[str, float]) -> tuple[int, float] | None:
     return best
 
 
-def analyse(series: dict[tuple[str, str, str], dict[str, float]]) -> list[dict]:
+def analyse(series: dict, today: date | None = None) -> list[dict]:
+    """Findings for every resource still billing flat at the latest billed day."""
+    if not series:
+        return []
+    cutoff = max(day for costs in series.values() for day in costs)
+    now = today or date.today()
+    # Every resource stopped days ago: the series is history, not a live bill.
+    if (now - date.fromisoformat(cutoff)).days > MAX_CUTOFF_LAG_DAYS:
+        return []
     findings = []
-    for (provider, profile, resource), costs in series.items():
-        run = flat_run(costs)
+    for (provider, account, resource_id, display), costs in series.items():
+        run = flat_run(costs, cutoff=cutoff)
         if run is None:
             continue
         length, mean = run
         findings.append(
             {
                 "provider": provider,
-                "profile": profile,
-                "resource": resource,
+                "profile": account,
+                "resource": display,
+                "resource_id": resource_id,
                 "flat_days": length,
                 "mean_daily_usd": round(mean, 2),
                 "run_total_usd": round(mean * length, 2),
@@ -156,30 +207,25 @@ def analyse(series: dict[tuple[str, str, str], dict[str, float]]) -> list[dict]:
 def build_report(days: int, wanted: set[str]) -> dict:
     report: dict = {"findings": [], "errors": [], "skipped": [], "checked": []}
     if "modal" in wanted:
-        try:
-            report["findings"] = analyse(collect_modal(days))
-            report["checked"].append("modal")
-        except FileNotFoundError:
-            report["errors"].append("modal: CLI not on PATH")
-        except (ProviderError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
-            report["errors"].append(f"modal: {exc}")
+        series, errors, checked = collect_modal(days)
+        report["findings"] = analyse(series)
+        report["errors"].extend(errors)
+        report["checked"].extend(checked)
     for name in sorted(wanted & set(PLANNED)):
         report["skipped"].append(f"{name}: no collector implemented yet")
     return report
 
 
 def format_human(report: dict) -> list[str]:
-    lines = []
-    for skip in report["skipped"]:
-        lines.append(f"skipped: {skip}")
+    lines = [f"skipped: {s}" for s in report["skipped"]]
     if not report["findings"]:
         if report["checked"]:
-            lines.append("No sustained flat spend found.")
+            lines.append(f"No sustained flat spend found ({len(report['checked'])} account(s)).")
         return lines
     lines.append("Sustained flat spend -- confirm this is still intended:")
     for f in report["findings"]:
         lines.append(
-            f"  {f['provider']}/{f['profile']}  {f['resource']}: "
+            f"  {f['provider']}/{f['profile']}  {f['resource']} ({f['resource_id']}): "
             f"${f['mean_daily_usd']}/day flat for {f['flat_days']}d "
             f"(${f['run_total_usd']} so far, ${f['projected_30d_usd']} per 30d); "
             f"last billed {f['last_billed_day']}"
@@ -203,8 +249,7 @@ def main() -> int:
     ap.add_argument("--no-state", action="store_true", help="do not write the state file")
     args = ap.parse_args()
 
-    wanted = set(args.provider or IMPLEMENTED)
-    report = build_report(args.days, wanted)
+    report = build_report(args.days, set(args.provider or IMPLEMENTED))
 
     if not args.no_state:
         try:
