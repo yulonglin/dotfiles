@@ -111,7 +111,19 @@ get_running_apps() {
             set procName to name of proc
             set procBID to bundle identifier of proc
             if procBID is missing value then set procBID to ""
-            set output to output & procName & "|" & procBID & "|" & (unix id of proc) & linefeed
+            -- Guarded like the bundle id above, and for a blunter reason: this
+            -- expression sits inside the loop that builds the WHOLE inventory,
+            -- so one process whose unix id could not be read would fail the
+            -- enumeration outright - and main() treats an unreadable inventory
+            -- as "do nothing", so a single odd process would silently turn the
+            -- entire Shortcut into a no-op. An empty id costs that one process
+            -- its precise address and nothing else: ps_ref falls back to the
+            -- name, which is what every rung did before this change.
+            set procPID to ""
+            try
+                set procPID to (unix id of proc) as text
+            end try
+            set output to output & procName & "|" & procBID & "|" & procPID & linefeed
         end repeat
         return output
     end tell'
