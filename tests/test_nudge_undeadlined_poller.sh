@@ -84,6 +84,11 @@ expect_fires 'while true; do curl -s "$URL/health"; done'
 expect_fires 'until curl -sf "$URL/health"; do sleep 60; done'
 expect_fires 'while [ 1 = 1 ]; do probe; sleep 60; done'
 expect_fires 'time bash ./watchdog.sh'
+# [review] sleep in the loop CONDITION, a common idiom
+expect_fires 'while sleep 60; do probe "$URL"; done'
+# [review] a shell variable named timeout is not a deadline
+expect_fires 'timeout=60 bash ./watchdog.sh'
+expect_fires 'echo nevermind; bash ./watchdog.sh'
 
 echo "--- genuinely bounded, so silent ---"
 expect_silent 'timeout 12h bash scripts/vllm-endpoint-watchdog.sh 180'
@@ -125,6 +130,14 @@ expect_silent 'nohup python analyze_watchdog.py &'
 expect_silent 'eza --tree watchdog/'
 expect_silent 'cd logs && ls watchdog-2026-09.log'
 expect_silent 'wc -l tmp/vllm-watchdog.log'
+# [review] `watchdog` is the canonical Python file-watching package (~200M PyPI
+# downloads). Nagging on every install of it is how this hook would have died.
+expect_silent 'pip install watchdog'
+expect_silent 'uv add watchdog'
+expect_silent 'uv pip install watchdog==6.0.0'
+expect_silent 'npm install watchdog'
+expect_silent 'brew install watchdog'
+expect_silent 'grep -rn "watchdog" pyproject.toml'
 
 echo "--- ordinary commands, so silent ---"
 expect_silent 'echo "wait until done"; sleep 5'
