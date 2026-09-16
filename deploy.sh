@@ -1133,6 +1133,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     council-roster.service council-roster.timer \
                     model-router-cooldown.service model-router-cooldown.timer \
                     codex-token-refresh.service codex-token-refresh.timer \
+                    cloud-spend-check.service cloud-spend-check.timer \
                     romp-tailnet-proxy.service; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             # -f: installed units are copies, not symlinks into the repo, so a
@@ -1196,6 +1197,19 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                 log_success "model-router-cooldown.timer enabled"
             else
                 log_warning "could not enable model-router-cooldown.timer"
+            fi
+        fi
+
+        # Flat-cloud-spend check: only where Modal is actually configured. Same
+        # reasoning as the cooldown watchdog above -- with no ~/.modal.toml the
+        # check has no provider it can query, exits 3, and the unit treats that
+        # as a failure by design, so an unconditional enable would leave a
+        # daily failing unit on every box that has never used Modal.
+        if [[ -f "$HOME/.modal.toml" ]]; then
+            if systemctl --user enable --now cloud-spend-check.timer 2>/dev/null; then
+                log_success "cloud-spend-check.timer enabled"
+            else
+                log_warning "could not enable cloud-spend-check.timer"
             fi
         fi
 
