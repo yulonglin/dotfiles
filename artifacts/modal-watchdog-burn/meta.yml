@@ -1,0 +1,31 @@
+title: The Watchdog That Wouldn't Stop
+url: https://claude.ai/artifact/Su5RQcCp6eQWNwHVVVyDkP
+org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-09-16
+first_published: 2026-09-16
+last_updated: 2026-09-16
+status: live
+
+source: index.html
+
+builds_with: |
+  Hand-written HTML; the annotation layer is applied with
+  `annotate-html artifacts/modal-watchdog-burn/index.html` before publishing.
+  Both charts are inline SVG drawn in page JS from a 61-day billing series
+  embedded in the file, which is the same real capture committed as
+  tests/fixtures/modal-billing-2026-07-16_2026-09-15.json.
+
+summary: >-
+  a health-check watchdog polling every 180s against a 300s Modal
+  `scaledown_window` held one H100 awake for 31 days and $3,060, which was 96.7%
+  of all Modal spend in the period; the poll interval sitting inside the idle
+  window made the health check itself the load, so the container could never
+  scale to zero. Establishes that flatness, not magnitude, is the detectable
+  signature: simulated against the real 61-day series a "any day over $50"
+  threshold fires two days earlier but on six days of legitimate eval work,
+  while "three consecutive days within 5% variance" scores zero false
+  positives — though the data cannot separate that rule from "three days
+  running over $50", since the sample holds no legitimate 3-day run above
+  $50/day. Also records that the three guards built afterwards sit at different
+  distances from the mistake, and that the deadline nudge needed four
+  tool-having model reviewers before it was safe to ship, each finding a
+  distinct defect that would have killed it.
