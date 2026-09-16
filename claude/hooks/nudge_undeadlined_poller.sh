@@ -57,6 +57,14 @@ strip_wrappers() {
             systemd-run\ *|jexp\ *|srun\ *|nice\ *|ionice\ *)
                 s="${s#* }"
                 while [ "${s#-}" != "$s" ]; do s="${s#* }"; done ;;
+            *)
+                # A leading VAR=value assignment. Without this,
+                # `timeout=60 bash ./watchdog.sh` reads as a command named
+                # "timeout=60" and the watchdog behind it is invisible -- and a
+                # shell variable called timeout is not a deadline.
+                case "${s%% *}" in
+                    [A-Za-z_]*=*) s="${s#* }" ;;
+                esac ;;
         esac
     done
     printf '%s' "$s"
@@ -113,7 +121,7 @@ FIRE=false
 # counts as polling when it sleeps or makes a request.
 if ! starts_bounded "$CMD" && ! has_lifetime_flag "$CMD"; then
     case "$CMD" in
-        *"while true"*|*"while :"*|*"while ["*|*"until "*)
+        *"while true"*|*"while :"*|*"while ["*|*"until "*|*"while sleep"*)
             # `do ` must be present too, so prose like `echo "wait until done"`
             # alongside an unrelated sleep is not read as a loop.
             case "$CMD" in
