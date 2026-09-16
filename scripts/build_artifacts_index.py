@@ -42,7 +42,15 @@ HEADER = [
 # The five values the artifacts-sync skill allows, and nothing else.
 STATUSES = ("live", "done", "archived", "superseded", "elsewhere")
 
-URL_RE = re.compile(r"^https://claude\.ai/code/artifact/[0-9a-fA-F-]{36}$")
+# Two shapes, because the platform changed the address and the old pages keep
+# theirs. The original is /code/artifact/<uuid>; as of 2026-09 a publish returns
+# /artifact/<short-id>, a base62 token rather than a UUID, and that is what
+# `Artifact list` reports for every page including ones published under the old
+# form. Accept both -- rejecting the current shape would make the row for every
+# newly published artifact unwritable.
+URL_RE = re.compile(
+    r"^https://claude\.ai/(?:code/artifact/[0-9a-fA-F-]{36}|artifact/[0-9A-Za-z]{16,32})$"
+)
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # The only values that mean "no row yet". Anything else that is not a URL is a
@@ -95,7 +103,8 @@ TYPES: dict[str, tuple[type, ...]] = {
 
 TYPE_HINT = {
     "url": (
-        "the published address as text (https://claude.ai/code/artifact/<uuid>), "
+        "the published address as text (https://claude.ai/artifact/<id>, or the "
+        "older https://claude.ai/code/artifact/<uuid>), "
         "or one of the unpublished placeholders "
         f"{', '.join(PLACEHOLDERS[1:])}"
     ),
@@ -338,7 +347,7 @@ def load_rows(root: Path) -> tuple[list[dict], list[tuple[Path, str]]]:
                 continue
             raise BuildError(
                 f"{rel}: url '{url}' is neither a published artifact address "
-                f"(https://claude.ai/code/artifact/<uuid>) nor one of the "
+                f"(https://claude.ai/artifact/<id> or the older /code/artifact/<uuid>) nor one of the "
                 f"unpublished placeholders {', '.join(PLACEHOLDERS[1:])}. "
                 f"Fix the url — a row is never dropped for an unreadable one."
             )

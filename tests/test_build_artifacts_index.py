@@ -11,6 +11,7 @@ duplicate URL and a raw pipe all produce a silently wrong index rather than an e
 if nobody checks, and a silently wrong index is exactly what this file exists to stop.
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -662,11 +663,17 @@ class RealRepoTest(unittest.TestCase):
         fails here. Derived rather than pinned to a literal: a hardcoded 18 broke
         the moment a new artifact was legitimately added, and a test that fails on
         correct changes gets edited rather than read."""
+        # Both address shapes: /code/artifact/<uuid> is the original and older
+        # pages keep it, while a publish has returned /artifact/<short-id> since
+        # 2026-09. Counting only the old one silently under-counts every newly
+        # published page, which is the same stale-format assumption that made
+        # the builder reject them outright.
         published = sum(
             1
             for p in [*REPO.glob("artifacts/*/meta.yml"),
                       *REPO.glob("artifacts/index-rows/*.yml")]
-            if p.read_text(encoding="utf-8").count("url: https://claude.ai/code/artifact/")
+            if re.search(r"^url: https://claude\.ai/(code/)?artifact/",
+                         p.read_text(encoding="utf-8"), re.M)
         )
         result = run(REPO, "--check")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
