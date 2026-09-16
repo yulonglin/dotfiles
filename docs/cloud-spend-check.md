@@ -29,6 +29,15 @@ Modal is the only implemented collector and it queries **every** profile in `~/.
 
 Exit codes: 0 the check ran, with or without findings; 3 no provider could be queried. Exit 3 is deliberately not in the unit's `SuccessExitStatus`, so a monitor that cannot monitor shows up in `systemctl --user --failed` instead of logging a quiet success. `deploy.sh` only enables the timer where `~/.modal.toml` exists, so a box that has never used Modal does not get a daily failing unit.
 
+## Four things the collector has to get right
+
+Each of these was a real defect caught in review, and each has a test.
+
+- **Key on the provider's object ID, never the description.** Eight of the twelve app names in the captured fixture map to more than one object, and `jlens-monitor-qwen36` maps to 36. Keyed on the name, a cheap ephemeral app overwrites a continuously billed GPU on every shared day and the flat run disappears into an all-clear.
+- **Drop inherited `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` from each child.** They outrank `.modal.toml` (`modal/config.py:9`), and direnv exports them here, so leaving them in place would send every per-profile query to one workspace while labelling the results with a different profile name each time — the other workspaces silently unchecked behind a clean report.
+- **Handle a failing profile per profile.** One revoked credential or timeout must not discard the profiles already collected, or the nudge sees a findings-free report. `checked` lists each account actually queried, so an all-clear states its own coverage.
+- **A flat run must reach the latest billed day.** Otherwise a resource that stopped keeps being reported every day until it falls out of the lookback window. A whole series older than `CLOUD_SPEND_MAX_CUTOFF_LAG_DAYS` (default 2) is treated as history and reports nothing.
+
 ## The related process guard
 
 `cwrm` refuses to remove a worktree that has live processes in it, and `cwclean` marks such a worktree `+procs` and keeps it. `--force` does **not** bypass this: that flag is about gitignored artifacts, which you discard deliberately, whereas orphaning a running process is the more expensive mistake. `--ignore-procs` is the explicit opt-out. In the incident the poller outlived its worktree by 16 days, still writing to a log in a directory that had been deleted and recreated around it.
