@@ -54,6 +54,8 @@ The three guards sit at different distances from the mistake. The nudge fires be
 
 ## The poller should not have existed
 
-Checked against the installed Modal 1.4.3 `@app.function` signature, the platform already declares what the watchdog was doing by hand: `min_containers` keeps a container warm (which is precisely what the 180 s poll achieved, undeclared), `timeout` bounds a request that never completes (default 300 s; the app that burned set 12 hours), and `max_inputs` recycles a container instead of redeploying it. Two gaps are genuine — `modal.Probe` exists only for Sandboxes so a deployed function has no liveness probe, and no parameter declares an expected duration.
+Checked against the installed Modal 1.4.3 `@app.function` signature, the platform already declares the expensive half of what the watchdog was doing by hand: `min_containers` keeps a container warm, which is precisely what the 180 s poll achieved undeclared, and `timeout` bounds a request that never completes (default 300 s; the app that burned set 12 hours). For a `@modal.web_server`, `timeout` caps each forwarded request rather than the container's lifetime — the server boots once behind an ASGI proxy — so lowering it cannot force cold starts.
+
+~~and `max_inputs` recycles a container instead of redeploying it~~ — retracted 2026-09-16: Modal 1.4.3 accepts only `max_inputs=1`, now spelled `single_use_containers`, and refuses it for servers outright. There is no N-input recycle, so the recovery half of the watchdog has no declarative replacement. Three gaps are genuine: no liveness probe for a deployed function (`modal.Probe` is Sandbox-only), no way to declare an expected duration, and no container recycling short of one request per container.
 
 So the nudge's advice is the second-best fix. The best one is to ask whether the platform has a setting for what the loop is doing, because a declared parameter is auditable and a process in a tmux pane is not.

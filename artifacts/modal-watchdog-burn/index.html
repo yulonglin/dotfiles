@@ -279,19 +279,15 @@
           <td>Max execution time per input (default 300s; this app set 12h)</td>
           <td>A wedged request pinned its container for up to 12 hours</td>
         </tr>
-        <tr>
-          <td class="n"><code>max_inputs</code></td>
-          <td>Recycle the container after N inputs</td>
-          <td>Redeployed by hand after three failed polls</td>
-        </tr>
       </tbody>
     </table>
   </div>
 
   <section class="col">
     <p><code>min_containers=1</code> is the whole watchdog, in one line, in the app definition. The difference is not behaviour — it is that a declared parameter is auditable and a tmux pane is not. Nobody could see the keep-alive because it was never written down as one.</p>
-    <p>Two things the platform genuinely does not offer, so the gap was real: there is <strong>no liveness probe for a deployed function</strong> — <code>modal.Probe</code> exists but only for Sandboxes, and <code>@app.function</code> takes no probe parameter — and there is <strong>no way to declare an expected duration</strong>. <code>timeout</code> and <code>startup_timeout</code> are the only time-shaped parameters and both are hard kills, not estimates.</p>
-    <p>Least certain of the three: <code>max_inputs</code> semantics for a long-lived <code>@modal.web_server</code>, which holds its input differently from a batch function. The parameter list and the Sandbox-only probe were read from the source; that one was not.</p>
+    <p>An earlier version of this page listed a third parameter, <code>max_inputs</code>, as a way to recycle a container after N requests. <strong>That was wrong and has been removed.</strong> Modal 1.4.3 accepts only <code>max_inputs=1</code> — now spelled <code>single_use_containers</code> — and refuses it for web servers outright. There is no N-input recycle, so nothing declarative replaces "redeploy it when it wedges."</p>
+    <p>Three things the platform genuinely does not offer, which is why the watchdog was not simply reinventing a feature: there is <strong>no liveness probe for a deployed function</strong> — <code>modal.Probe</code> exists but only for Sandboxes, and <code>@app.function</code> takes no probe parameter; there is <strong>no way to declare an expected duration</strong>, only hard kills; and there is <strong>no container recycling short of one-request-per-container</strong>.</p>
+    <p>What did resolve is the question of what <code>timeout</code> bounds. For a <code>@modal.web_server</code> it caps each <em>forwarded request</em>, not the container's lifetime: the server boots once and an ASGI proxy sits in front of it, so lowering the value cannot force cold starts. That makes it the one safe lever, and on this app it was set to twelve hours.</p>
   </section>
 
   <section class="col">
