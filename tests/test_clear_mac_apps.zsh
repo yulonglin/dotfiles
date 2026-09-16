@@ -668,6 +668,42 @@ check_not "no stored process list"  "$INVENTORY" "set procList to"
 check     "iterated inline"         "$INVENTORY" "repeat with proc in (every process"
 check     "and the unix id is kept" "$INVENTORY" "unix id of proc"
 
+# --- 24. a delimiter inside a process name cannot redirect an action -------
+# The inventory is pipe-separated and entries are tab-joined, so either
+# character inside a process NAME shifts a fragment of that name into the
+# bundle-id field. That was harmless while actions were addressed by name - the
+# bogus address simply matched nothing. It stopped being harmless once quit
+# started addressing an app by bundle id: a name whose tail happens to equal
+# another running app's bundle id sends the quit to THAT app, even one the
+# config independently marks `skip`. Malformed records are dropped instead.
+print -r -- "24. a delimiter in a process name cannot redirect a quit"
+cat > "$ROOT/config/app-lifecycle.yaml" <<'YAML'
+defaults:
+  manual: quit
+apps:
+  Victim App:  {manual: skip}
+YAML
+# Line 1 hides the victim's bundle id after a TAB; line 2 after a PIPE. Line 3
+# is the victim itself, running and configured skip, so a quit reaching it is
+# unambiguously wrong rather than merely untidy.
+# TAB via a variable: `$'\t'` inside double quotes is literal text, not a tab,
+# and a fixture that only LOOKS malformed would pass against the broken code.
+TAB=$'\t'
+export STUB_APP_LIST="Bad${TAB}com.victim.app|com.evil.one|601
+Bad|com.victim.app|com.evil.two|602
+Victim App|com.victim.app|603
+"
+run --dry-run
+check     "both malformed records are reported" "$ERR" "unreadable process record"
+check     "and neither is acted on"             "$OUT" "Would QUIT (0)"
+check     "the victim is still skipped"         "$OUT" "Victim App"
+
+export STUB_QUIT_LOG="$WORK/quit24.log"
+run
+check_not "no quit is addressed at the skipped app" "$(cat "$STUB_QUIT_LOG" 2>/dev/null)" "com.victim.app"
+check_not "nor at either malformed record's id"     "$(cat "$STUB_QUIT_LOG" 2>/dev/null)" "com.evil"
+unset STUB_QUIT_LOG
+
 # --- a broken config stops us dead -----------------------------------------
 # The default action here is "quit", so a config we cannot read must abort
 # rather than fall back to defaults and quit everything.

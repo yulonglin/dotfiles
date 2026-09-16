@@ -736,6 +736,28 @@ main() {
     local -a running_entries=()
     while IFS='|' read -r name bid pid; do
         [[ -n "$name" ]] || continue
+        # A record we cannot trust is DROPPED, never defaulted. `defaults.manual`
+        # is quit, so letting a malformed one fall through would quit an app we
+        # could not even identify - and, since the quit is now addressed by
+        # bundle id, it could be addressed at a DIFFERENT app than the one this
+        # line describes, including one whose own config says skip.
+        #
+        # Two shapes are rejected, one per delimiter:
+        #   - a unix id that is not all digits. That is what a `|` inside a
+        #     process name produces: the fields shift left, and the real bundle
+        #     id lands in pid while some fragment of the name lands in bid.
+        #   - a name or bundle id containing a tab. Entries are tab-joined, so a
+        #     tab in the name adds a field and lets a suffix of the name
+        #     masquerade as the bundle id.
+        # Dropping costs that process its action, which is the safe direction:
+        # the rungs here only ever take things away. It is warned about rather
+        # than recorded as a failed action, because a --only run aimed at some
+        # other app should not be failed by an unrelated malformed record.
+        if [[ -n "$pid" && "$pid" != <-> ]] \
+           || [[ "$name" == *"$SEP"* ]] || [[ "$bid" == *"$SEP"* ]]; then
+            echo "clear-mac-apps: unreadable process record, skipping: ${name}" >&2
+            continue
+        fi
         # --only narrows the candidate list BEFORE classification, so config
         # still gets to veto. It can only ever make us do less, never more.
         if (( ${#ONLY_APPS} > 0 )); then
