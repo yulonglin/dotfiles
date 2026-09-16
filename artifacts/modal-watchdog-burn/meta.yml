@@ -28,4 +28,12 @@ summary: >-
   $50/day. Also records that the three guards built afterwards sit at different
   distances from the mistake, and that the deadline nudge needed four
   tool-having model reviewers before it was safe to ship, each finding a
-  distinct defect that would have killed it.
+  distinct defect that would have killed it. Version 2 adds the sharper
+  reframing, checked against the installed Modal 1.4.3 `@app.function`
+  signature: the defect was not a missing deadline but an external control
+  loop standing in for a declarative setting — `min_containers` is the whole
+  watchdog in one auditable line, `timeout` (300 s default, 12 h here) would
+  have killed the wedged request, and `max_inputs` recycles a container
+  instead of redeploying it. Two gaps are genuine: `modal.Probe` is
+  Sandbox-only so a deployed function has no liveness probe, and no parameter
+  declares an expected duration.

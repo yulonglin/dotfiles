@@ -51,3 +51,9 @@ The nudge is silent when the command is already bounded (`timeout`, `systemd-run
 It also asks the question that actually mattered: **is the poll interval shorter than the idle timeout of the thing being polled?** At 180 s against a 300 s `scaledown_window` the watchdog was a keep-alive wearing a health check's name, and no deadline would have made that correct — only cheaper.
 
 The three guards sit at different distances from the mistake. The nudge fires before the poller starts, `cwrm` refuses to orphan it, and `cloud-spend-check` catches the bill a few days later. The last of those is the backstop, not the fix.
+
+## The poller should not have existed
+
+Checked against the installed Modal 1.4.3 `@app.function` signature, the platform already declares what the watchdog was doing by hand: `min_containers` keeps a container warm (which is precisely what the 180 s poll achieved, undeclared), `timeout` bounds a request that never completes (default 300 s; the app that burned set 12 hours), and `max_inputs` recycles a container instead of redeploying it. Two gaps are genuine — `modal.Probe` exists only for Sandboxes so a deployed function has no liveness probe, and no parameter declares an expected duration.
+
+So the nudge's advice is the second-best fix. The best one is to ask whether the platform has a setting for what the loop is doing, because a declared parameter is auditable and a process in a tmux pane is not.
