@@ -356,6 +356,38 @@ alias yn='yolo -t'  # yn <name>: yolo with task name
 # Artifact dirs checked across worktree commands (port, remove, clean)
 _CW_ARTIFACT_DIRS=(out logs data results experiments)
 
+# Print "PID<TAB>command" for every process whose cwd is at or under $1.
+#
+# Removing a worktree does NOT kill processes running in it: they keep the
+# deleted directory as their cwd and carry on. In 2026-08 a vLLM health-check
+# poller outlived its worktree by 16 days and held a Modal H100 warm the whole
+# time, $96/day, because nothing ever looked. Best effort -- a process owned by
+# another user is invisible here, and that is fine: this is a warning, not a
+# security boundary.
+_cw_live_procs() {
+  local target="${1:?_cw_live_procs: need a path}" pid cwd
+  if [[ -d /proc/1 ]]; then
+    for pid in /proc/[0-9]*; do
+      cwd=$(readlink "$pid/cwd" 2>/dev/null) || continue
+      # A process whose dir is already gone reads as "/path (deleted)".
+      cwd="${cwd% (deleted)}"
+      case "$cwd" in
+        "$target"|"$target"/*)
+          printf '%s\t%s\n' "${pid##*/}" \
+            "$(tr '\0' ' ' <"$pid/cmdline" 2>/dev/null | cut -c1-70)" ;;
+      esac
+    done
+  else
+    # macOS/BSD: lsof is the only portable way to read another process's cwd.
+    lsof -a -d cwd -Fpn 2>/dev/null | awk -v t="$target" '
+      /^p/ { pid = substr($0, 2) }
+      /^n/ { d = substr($0, 2); if (d == t || index(d, t "/") == 1) print pid }
+    ' | while read -r pid; do
+      printf '%s\t%s\n' "$pid" "$(ps -o args= -p "$pid" 2>/dev/null | cut -c1-70)"
+    done
+  fi
+}
+
 # worktree commands
 _cw_launch() {
   # Shared implementation for cw/cwy — idempotent worktree launcher
@@ -579,18 +611,21 @@ cwrm() {
   # Remove a Claude-created worktree: merge branch → remove dir → delete branch
   # Merges into current branch by default (use --no-merge to skip)
   # Warns if gitignored artifacts exist (use cwport first or --force)
-  local force=false no_merge=false
-  while [[ "$1" == --* ]]; do
+  local force=false no_merge=false ignore_procs=false
+  # ${1:-} throughout: a bare `cwrm` must reach its usage message, not die on
+  # an unset parameter under `setopt no_unset`.
+  while [[ "${1:-}" == --* ]]; do
     case "$1" in
       --force) force=true; shift ;;
       --no-merge) no_merge=true; shift ;;
+      --ignore-procs) ignore_procs=true; shift ;;
       *) break ;;
     esac
   done
 
-  local name="$1"
+  local name="${1:-}"
   if [[ -z "$name" ]]; then
-    echo "Usage: cwrm [--force] [--no-merge] <worktree-name>"
+    echo "Usage: cwrm [--force] [--no-merge] [--ignore-procs] <worktree-name>"
     echo ""; cwl; return 1
   fi
 
@@ -620,6 +655,24 @@ cwrm() {
     fi
   fi
 
+  # Live processes running inside the worktree. Deliberately NOT covered by
+  # --force: that flag is about gitignored artifacts, which you lose on
+  # purpose, whereas orphaning a running process is a different hazard and the
+  # expensive one -- removal leaves it running against a deleted cwd where
+  # nobody will look for it again. --ignore-procs is the explicit opt-out.
+  if ! $ignore_procs; then
+    local procs
+    procs=$(_cw_live_procs "$wt_path")
+    if [[ -n "$procs" ]]; then
+      echo "Refusing to remove: processes are running in this worktree" >&2
+      printf '%s\n' "$procs" | while IFS=$'\t' read -r pid cmd; do
+        printf '  %-8s %s\n' "$pid" "$cmd" >&2
+      done
+      echo "  Stop them first, or: cwrm --ignore-procs $name" >&2
+      return 1
+    fi
+  fi
+
   # Merge worktree branch into current branch (default)
   if ! $no_merge; then
     cwmerge "$name" || return 1
@@ -643,7 +696,7 @@ cwclean() {
   # Remove clean worktrees (no uncommitted changes, no artifacts)
   # Usage: cwclean [--dry-run]
   local dry_run=false
-  [[ "$1" == "--dry-run" ]] && dry_run=true
+  [[ "${1:-}" == "--dry-run" ]] && dry_run=true
 
   git worktree prune  # clean up metadata for deleted dirs
 
@@ -660,7 +713,7 @@ cwclean() {
     return 0
   fi
 
-  local cleaned=0 skipped=0 name wt_status has_artifacts
+  local cleaned=0 skipped=0 name wt_status has_artifacts has_procs wt_path_nc
   for wt in "$wt_dir"/*/; do
     [[ ! -d "$wt" ]] && continue
     name=$(basename "$wt")
@@ -681,7 +734,15 @@ cwclean() {
       [[ -d "$wt/$dir" ]] && has_artifacts=" +artifacts"
     done
 
-    if [[ "$wt_status" == "clean" ]] && [[ -z "$has_artifacts" ]]; then
+    # A worktree with something running in it is never "clean". Checked here
+    # as well as in cwrm because cwclean calls `cwrm --force`, and a bare
+    # refusal mid-loop would read as an error rather than a deliberate keep.
+    # The glob gives a trailing slash; _cw_live_procs compares paths exactly.
+    wt_path_nc="${wt%/}"
+    has_procs=""
+    [[ -n "$(_cw_live_procs "$wt_path_nc")" ]] && has_procs=" +procs"
+
+    if [[ "$wt_status" == "clean" ]] && [[ -z "$has_artifacts$has_procs" ]]; then
       if $dry_run; then
         printf "  %-30s [would remove]\n" "$name"
       else
@@ -689,7 +750,7 @@ cwclean() {
       fi
       cleaned=$(( cleaned + 1 ))
     else
-      printf "  %-30s [%s%s] — kept\n" "$name" "$wt_status" "$has_artifacts"
+      printf "  %-30s [%s%s%s] — kept\n" "$name" "$wt_status" "$has_artifacts" "$has_procs"
       skipped=$(( skipped + 1 ))
     fi
   done

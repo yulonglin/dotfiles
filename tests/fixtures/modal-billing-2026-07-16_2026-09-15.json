@@ -1,0 +1,632 @@
+[
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-11T00:00:00",
+  "Cost": "11.79352421"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-12T00:00:00",
+  "Cost": "6.63221804"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "1.91811828"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "80.00539459"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-14T00:00:00",
+  "Cost": "29.79993291"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-15T00:00:00",
+  "Cost": "93.66825081"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-16T00:00:00",
+  "Cost": "96.14263405"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-17T00:00:00",
+  "Cost": "95.89335680"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-18T00:00:00",
+  "Cost": "96.09770466"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-19T00:00:00",
+  "Cost": "95.61923512"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-20T00:00:00",
+  "Cost": "96.17806519"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-21T00:00:00",
+  "Cost": "96.12619836"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-22T00:00:00",
+  "Cost": "96.12795392"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-23T00:00:00",
+  "Cost": "96.48709328"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-24T00:00:00",
+  "Cost": "96.16166420"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-25T00:00:00",
+  "Cost": "95.95229286"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-26T00:00:00",
+  "Cost": "96.11356075"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-27T00:00:00",
+  "Cost": "96.10432916"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-28T00:00:00",
+  "Cost": "96.86694765"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-29T00:00:00",
+  "Cost": "96.20982026"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-30T00:00:00",
+  "Cost": "96.15190262"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-08-31T00:00:00",
+  "Cost": "96.02724189"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-01T00:00:00",
+  "Cost": "95.85344707"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-02T00:00:00",
+  "Cost": "96.17243061"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-03T00:00:00",
+  "Cost": "96.39246885"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-04T00:00:00",
+  "Cost": "96.16794448"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-05T00:00:00",
+  "Cost": "96.99718188"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-06T00:00:00",
+  "Cost": "96.69720879"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-07T00:00:00",
+  "Cost": "96.28481882"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-08T00:00:00",
+  "Cost": "96.64156872"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-09T00:00:00",
+  "Cost": "96.65491624"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-10T00:00:00",
+  "Cost": "96.20690298"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-11T00:00:00",
+  "Cost": "96.18873792"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-12T00:00:00",
+  "Cost": "96.39163067"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-13T00:00:00",
+  "Cost": "96.10244530"
+ },
+ {
+  "Description": "impossiblebench-qwen36-vllm",
+  "Interval Start": "2026-09-14T00:00:00",
+  "Cost": "45.39147081"
+ },
+ {
+  "Description": "inspect_modal_sandbox",
+  "Interval Start": "2026-08-26T00:00:00",
+  "Cost": "0.72938479"
+ },
+ {
+  "Description": "inspect_modal_sandbox",
+  "Interval Start": "2026-08-27T00:00:00",
+  "Cost": "0.02503445"
+ },
+ {
+  "Description": "jlens-import-probe",
+  "Interval Start": "2026-08-19T00:00:00",
+  "Cost": "0.00000384"
+ },
+ {
+  "Description": "jlens-mem-diag",
+  "Interval Start": "2026-07-25T00:00:00",
+  "Cost": "0.00219821"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-18T00:00:00",
+  "Cost": "1.71252522"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-19T00:00:00",
+  "Cost": "0.01025473"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-19T00:00:00",
+  "Cost": "25.16653891"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-19T00:00:00",
+  "Cost": "0.17637599"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-19T00:00:00",
+  "Cost": "0.34840451"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-19T00:00:00",
+  "Cost": "0.28166401"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-21T00:00:00",
+  "Cost": "0.35876035"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-21T00:00:00",
+  "Cost": "0.42044343"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-24T00:00:00",
+  "Cost": "0.00000384"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-24T00:00:00",
+  "Cost": "0.00000384"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-24T00:00:00",
+  "Cost": "0.00000384"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-24T00:00:00",
+  "Cost": "0.00000384"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-24T00:00:00",
+  "Cost": "5.27378577"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-24T00:00:00",
+  "Cost": "5.79348856"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-25T00:00:00",
+  "Cost": "27.10963832"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-25T00:00:00",
+  "Cost": "12.33330645"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-25T00:00:00",
+  "Cost": "13.66793004"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-25T00:00:00",
+  "Cost": "13.17155762"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-25T00:00:00",
+  "Cost": "13.33040824"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-25T00:00:00",
+  "Cost": "12.05238292"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-07-25T00:00:00",
+  "Cost": "4.89713236"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-08T00:00:00",
+  "Cost": "3.19471221"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-08T00:00:00",
+  "Cost": "0.73189451"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "19.56576702"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "0.10413203"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "0.19963804"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "0.22107385"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "0.77960240"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "2.12950511"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "0.08573137"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "0.10598439"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-13T00:00:00",
+  "Cost": "9.25780603"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-19T00:00:00",
+  "Cost": "5.26694712"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-19T00:00:00",
+  "Cost": "6.42795408"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-19T00:00:00",
+  "Cost": "6.81837427"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-19T00:00:00",
+  "Cost": "2.08611853"
+ },
+ {
+  "Description": "jlens-monitor-qwen36",
+  "Interval Start": "2026-08-19T00:00:00",
+  "Cost": "6.46859756"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "4.16881342"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "0.84722813"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "3.94495716"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "0.00466946"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "0.35649679"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "0.00991533"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "36.82272253"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "43.67705440"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "0.00219891"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "0.29338742"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "0.60815438"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-10T00:00:00",
+  "Cost": "4.17962304"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-11T00:00:00",
+  "Cost": "0E-8"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-11T00:00:00",
+  "Cost": "0.19125161"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-11T00:00:00",
+  "Cost": "19.75173829"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-18T00:00:00",
+  "Cost": "0.49509537"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-18T00:00:00",
+  "Cost": "0E-8"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-18T00:00:00",
+  "Cost": "22.98154417"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-18T00:00:00",
+  "Cost": "41.42717989"
+ },
+ {
+  "Description": "jlens-monitor-qwen36-vllm",
+  "Interval Start": "2026-08-19T00:00:00",
+  "Cost": "2.16124750"
+ },
+ {
+  "Description": "jlens-qwen36-cached-l42",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "0.06562321"
+ },
+ {
+  "Description": "jlens-qwen36-cached-l42",
+  "Interval Start": "2026-08-18T00:00:00",
+  "Cost": "0.08010386"
+ },
+ {
+  "Description": "jlens-qwen36-cached-l42",
+  "Interval Start": "2026-08-18T00:00:00",
+  "Cost": "0E-8"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "0.30231246"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "0.70869295"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "0.50874441"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "0.73567139"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.74312635"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.93433046"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.78459225"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.47020628"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.69406928"
+ },
+ {
+  "Description": "nla-e2e-fve",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.94145710"
+ },
+ {
+  "Description": "nla-keep-copy",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.00266318"
+ },
+ {
+  "Description": "nla-keep-copy",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.00243160"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "247.47983907"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "9.94553868"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "29.01153695"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "215.22664121"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "11.15162804"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "28.55012133"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-16T00:00:00",
+  "Cost": "119.39401560"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.31164445"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "156.55777780"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "102.18762568"
+ },
+ {
+  "Description": "nla-rl-probe",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "157.96330070"
+ },
+ {
+  "Description": "nla-roundtrip-eval",
+  "Interval Start": "2026-07-17T00:00:00",
+  "Cost": "0.44105503"
+ },
+ {
+  "Description": "sprint-qwen-vllm",
+  "Interval Start": "2026-08-24T00:00:00",
+  "Cost": "1.49917046"
+ },
+ {
+  "Description": "sprint-qwen-vllm",
+  "Interval Start": "2026-08-24T00:00:00",
+  "Cost": "0.03084265"
+ }
+]

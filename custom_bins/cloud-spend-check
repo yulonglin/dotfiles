@@ -1,0 +1,230 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""Report sustained FLAT cloud spend, which is the signature of an idle resource.
+
+Real work varies day to day; an idle pinned container bills a near-identical
+amount every day, nights and weekends included. So this keys on flatness, not
+magnitude. Measured against the 2026-08/09 Modal incident (61 days of billing,
+one idle H100 at ~$96/day for 30 days): a plain "any day over $50" threshold
+fired on six days of legitimate eval work, while "three flat days" fired on
+none. A guard that cries wolf gets muted, so the false-positive rate is the
+property that matters, not how early the rule can fire.
+
+What this CANNOT decide: a flat series is not proof of waste. A long training
+run on a fixed allocation is flat too. The output therefore asks whether the
+spend is still intended and never stops anything. Acting on it is a human's
+job -- see docs/cloud-spend-check.md for the incident this came from.
+
+Providers: modal (all profiles in ~/.modal.toml). runpod, vastai and mats are
+recognised names with no collector yet; they are reported as skipped rather
+than silently contributing nothing to an all-clear.
+
+Exit codes: 0 the check ran (with or without findings), 3 no provider could be
+queried, so the all-clear is not trustworthy.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import statistics
+import subprocess
+import sys
+from collections import defaultdict
+from datetime import date, timedelta
+from pathlib import Path
+
+# A run must be at least this many consecutive days to count as sustained.
+FLAT_DAYS = int(os.environ.get("CLOUD_SPEND_FLAT_DAYS", "3"))
+# Spread across the run, as a fraction of its peak day. The idle H100 held
+# under 0.01; real eval days in the same series varied by 0.3 to 0.9.
+FLAT_TOL = float(os.environ.get("CLOUD_SPEND_FLAT_TOL", "0.05"))
+# Below this daily spend a flat run is not worth anyone's attention.
+FLOOR = float(os.environ.get("CLOUD_SPEND_FLOOR", "20"))
+
+STATE_DIR = Path(
+    os.environ.get("CLOUD_SPEND_STATE_DIR", Path.home() / ".local/state/cloud-spend")
+)
+# Providers named but not yet collected from.
+PLANNED = ("runpod", "vastai", "mats")
+IMPLEMENTED = ("modal",)
+
+# modal emits SGR codes through rich even under NO_COLOR=1 and TERM=dumb
+# (measured 2026-09-16: NO_COLOR drops the 38;5 colours but keeps the bold),
+# so --json output must be de-escaped before it will parse.
+ANSI = re.compile(r"\x1B\[[0-9;]*[mK]")
+
+
+class ProviderError(RuntimeError):
+    """The provider is configured but could not be queried."""
+
+
+def run_cmd(cmd: list[str], env: dict[str, str] | None = None, timeout: int = 180) -> str:
+    full = {**os.environ, "NO_COLOR": "1", "TERM": "dumb", **(env or {})}
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=full)
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        tail = detail[-1][:200] if detail else "no output"
+        raise ProviderError(f"{cmd[0]} exited {proc.returncode}: {tail}")
+    return ANSI.sub("", proc.stdout)
+
+
+def modal_profiles(config: Path | None = None) -> list[str]:
+    """Profile names from ~/.modal.toml, in file order."""
+    cfg = config or Path(os.environ.get("MODAL_CONFIG_PATH", Path.home() / ".modal.toml"))
+    if not cfg.exists():
+        return []
+    return re.findall(r"^\[([^\]]+)\]", cfg.read_text(), re.M)
+
+
+def collect_modal(days: int) -> dict[tuple[str, str, str], dict[str, float]]:
+    """Return {(provider, profile, resource): {day: cost}} across every profile.
+
+    Every profile is queried, not just the active one: the incident's spend sat
+    in a shared workspace that was not the default on this machine.
+    """
+    out: dict[tuple[str, str, str], dict[str, float]] = defaultdict(dict)
+    profiles = modal_profiles()
+    if not profiles:
+        raise ProviderError("no profiles in ~/.modal.toml")
+    start = (date.today() - timedelta(days=days)).isoformat()
+    for profile in profiles:
+        raw = run_cmd(
+            ["modal", "billing", "report", "--start", start, "-r", "d", "--json"],
+            env={"MODAL_PROFILE": profile},
+        )
+        for row in json.loads(raw.strip() or "[]"):
+            resource = row.get("Description") or row.get("Object ID") or "?"
+            out[("modal", profile, resource)][row["Interval Start"][:10]] = float(
+                row["Cost"]
+            )
+    return out
+
+
+def flat_run(costs: dict[str, float]) -> tuple[int, float] | None:
+    """Longest flat run of consecutive days ending on the most recent billed day.
+
+    Returns (length, mean) or None. A run qualifies when it spans FLAT_DAYS or
+    more consecutive calendar days, every day clears FLOOR, and the spread is
+    within FLAT_TOL of the peak day. A calendar gap ends the run: a resource
+    that went quiet for a day was not pinned.
+    """
+    if len(costs) < FLAT_DAYS:
+        return None
+    days = sorted(costs)
+    best: tuple[int, float] | None = None
+    for length in range(FLAT_DAYS, len(days) + 1):
+        window_days = days[-length:]
+        span = date.fromisoformat(window_days[-1]) - date.fromisoformat(window_days[0])
+        if span.days != length - 1:
+            break
+        window = [costs[d] for d in window_days]
+        if min(window) < FLOOR:
+            break
+        if max(window) <= 0 or (max(window) - min(window)) / max(window) > FLAT_TOL:
+            break
+        best = (length, statistics.fmean(window))
+    return best
+
+
+def analyse(series: dict[tuple[str, str, str], dict[str, float]]) -> list[dict]:
+    findings = []
+    for (provider, profile, resource), costs in series.items():
+        run = flat_run(costs)
+        if run is None:
+            continue
+        length, mean = run
+        findings.append(
+            {
+                "provider": provider,
+                "profile": profile,
+                "resource": resource,
+                "flat_days": length,
+                "mean_daily_usd": round(mean, 2),
+                "run_total_usd": round(mean * length, 2),
+                "projected_30d_usd": round(mean * 30, 2),
+                "last_billed_day": max(costs),
+            }
+        )
+    return sorted(findings, key=lambda f: -f["mean_daily_usd"])
+
+
+def build_report(days: int, wanted: set[str]) -> dict:
+    report: dict = {"findings": [], "errors": [], "skipped": [], "checked": []}
+    if "modal" in wanted:
+        try:
+            report["findings"] = analyse(collect_modal(days))
+            report["checked"].append("modal")
+        except FileNotFoundError:
+            report["errors"].append("modal: CLI not on PATH")
+        except (ProviderError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
+            report["errors"].append(f"modal: {exc}")
+    for name in sorted(wanted & set(PLANNED)):
+        report["skipped"].append(f"{name}: no collector implemented yet")
+    return report
+
+
+def format_human(report: dict) -> list[str]:
+    lines = []
+    for skip in report["skipped"]:
+        lines.append(f"skipped: {skip}")
+    if not report["findings"]:
+        if report["checked"]:
+            lines.append("No sustained flat spend found.")
+        return lines
+    lines.append("Sustained flat spend -- confirm this is still intended:")
+    for f in report["findings"]:
+        lines.append(
+            f"  {f['provider']}/{f['profile']}  {f['resource']}: "
+            f"${f['mean_daily_usd']}/day flat for {f['flat_days']}d "
+            f"(${f['run_total_usd']} so far, ${f['projected_30d_usd']} per 30d); "
+            f"last billed {f['last_billed_day']}"
+        )
+    return lines
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        prog="cloud-spend-check",
+        description="Report sustained flat cloud spend (the idle-resource signature).",
+    )
+    ap.add_argument("--days", type=int, default=14, help="lookback window (default 14)")
+    ap.add_argument(
+        "--provider",
+        action="append",
+        choices=sorted(IMPLEMENTED + PLANNED),
+        help="limit to a provider; repeatable (default: every implemented one)",
+    )
+    ap.add_argument("--json", action="store_true", help="print the report as JSON")
+    ap.add_argument("--no-state", action="store_true", help="do not write the state file")
+    args = ap.parse_args()
+
+    wanted = set(args.provider or IMPLEMENTED)
+    report = build_report(args.days, wanted)
+
+    if not args.no_state:
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            (STATE_DIR / "latest.json").write_text(json.dumps(report, indent=2) + "\n")
+        except OSError as exc:
+            # The nudge reads this file; a silent failure would look like an
+            # all-clear forever, so say so rather than carrying on quietly.
+            report["errors"].append(f"state: {exc}")
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        for err in report["errors"]:
+            print(f"error: {err}", file=sys.stderr)
+        for line in format_human(report):
+            print(line)
+
+    return 0 if report["checked"] else 3
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,19 @@
+[Unit]
+Description=Daily check for sustained flat cloud spend
+
+[Timer]
+# Daily, not hourly: provider billing is reported at daily resolution and the
+# rule needs three consecutive days before it can say anything, so a shorter
+# period would re-derive the same verdict from the same numbers. The failure
+# being watched for costs about $96 a day, so a day's detection latency is the
+# right trade against querying a billing API twenty-four times over.
+OnCalendar=daily
+# The box is a laptop/workstation, not a server: without this a missed window
+# is simply skipped, and the failure being watched for lasts weeks.
+Persistent=true
+# Nothing depends on the hour boundary, and each run is a real billing API
+# call per Modal profile.
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

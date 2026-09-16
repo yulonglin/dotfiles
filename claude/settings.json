@@ -555,6 +555,12 @@
           },
           {
             "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.cloud-spend -- $HOME/.claude/hooks/nudge_cloud_spend.sh",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/sync_claude_config_vault.sh",
             "timeout": 10
           }
