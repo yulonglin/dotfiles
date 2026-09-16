@@ -137,6 +137,70 @@ CALL_LOG = (
 )
 
 
+# The liveness verdict of the scheduled roster check, in machine-readable form.
+#
+# `council roster --check` already fetches the catalogue, so knowing which
+# configured slug is no longer IN it costs nothing extra -- but until now that
+# knowledge only ever reached the human-readable report, where a retired seat is
+# indistinguishable from a merely superseded one (both print as a `-` line). On
+# 2026-09-16 `council ask` hung for its full ten-minute timeout because a seat
+# had been retired from the catalogue, and the check had spotted it the day
+# before. This file is what the session-start nudge reads.
+#
+# It sits beside roster-report.txt in the unit's StateDirectory, so the unit
+# needs no change: ProtectHome=read-only still bind-mounts that directory
+# writable inside the sandbox (measured for the sibling drift unit, 2026-08-28).
+LIVENESS = Path(
+    os.environ.get("COUNCIL_LIVENESS")
+    or (Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+        / "council-roster" / "liveness.json")
+)
+
+
+def liveness_record(cfg: dict, live_ids: set[str]) -> dict | None:
+    """Which configured slugs the catalogue no longer lists, or None.
+
+    None on an empty catalogue: a fetch that came back with nothing is a broken
+    fetch, and recording it would declare every model on the roster dead.
+
+    Checked against the RAW catalogue ids, never `catalog_rows()`, which drops
+    floating (`~`) aliases and `:` variants because they cannot be SEATED. They
+    can still be configured -- as the chair, or as an off-roster `[[models]]`
+    entry -- and calling one works fine, so filtering here would report a
+    healthy slug as retired at every session start.
+
+    Every role, for the reason `configured()` gives: the `judge` slug once
+    rotted unnoticed and broke every fusion call.
+    """
+    if not live_ids:
+        return None
+    dead = []
+    for role, slug in configured(cfg):
+        if slug in live_ids:
+            continue
+        alias = next(
+            (m.get("alias") or "" for m in entries(cfg) if m["slug"] == slug), ""
+        )
+        dead.append({"role": role, "alias": alias, "slug": slug})
+    return {
+        "checked_at": datetime.datetime.now(datetime.timezone.utc)
+                              .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "catalog": len(live_ids),
+        "dead": dead,
+    }
+
+
+def write_liveness(record: dict | None) -> None:
+    """Persist the verdict. A failure to write must never fail the check."""
+    if record is None:
+        return
+    try:
+        LIVENESS.parent.mkdir(parents=True, exist_ok=True)
+        LIVENESS.write_text(json.dumps(record, indent=2) + "\n")
+    except OSError as e:
+        print(f"openrouter-cli: cannot write {LIVENESS}: {e}", file=sys.stderr)
+
+
 def log_call(command: str, prompt: str, entries: list[dict], response_id: str | None,
              usage: dict | None) -> None:
     """Record requested-vs-resolved model ids for one invocation.
@@ -850,9 +914,16 @@ SEATS_BEGIN = "# BEGIN council-auto"
 SEATS_END = "# END council-auto"
 
 
-def catalog_rows() -> list[dict]:
-    """Every billable non-floating catalog entry, with prices in USD per M."""
-    data = get_json(f"{OR_BASE}/models").get("data", [])
+def catalog_rows(data: list[dict] | None = None) -> list[dict]:
+    """Every billable non-floating catalog entry, with prices in USD per M.
+
+    `data` lets a caller that has already fetched the raw catalogue pass it in,
+    so one command makes one catalogue call. Threaded as an argument rather than
+    memoised in a module global, which would outlive a test's patched catalogue
+    and serve it to the next test.
+    """
+    if data is None:
+        data = get_json(f"{OR_BASE}/models").get("data", [])
     rows = []
     for e in data:
         slug = e.get("id") or ""
@@ -958,15 +1029,19 @@ def alias_for(cfg: dict, family: str, slug: str) -> str:
     return family.split("-")[0]
 
 
-def propose_roster(cfg: dict) -> tuple[list[dict], list[str], list[str]]:
-    """(seats, families with no affordable model, index attribution lines)."""
+def propose_roster(cfg: dict, rows: list[dict] | None = None) -> tuple[list[dict], list[str], list[str]]:
+    """(seats, families with no affordable model, index attribution lines).
+
+    `rows` is the filtered catalogue when the caller already fetched it.
+    """
     council = cfg.get("council") or {}
     families = list(council.get("families") or [])
     cap = float(council.get("max_output_price") or 0) or float("inf")
     in_cap = float(council.get("max_input_price") or 0) or float("inf")
     if len(families) > 8:
         die(f"council has {len(families)} families; fusion panels take at most 8")
-    rows = catalog_rows()
+    if rows is None:
+        rows = catalog_rows()
     scores, credits = index_scores()
     picked, gaps = [], []
     for fam in families:
@@ -1053,7 +1128,16 @@ def cmd_council_roster(args, cfg) -> None:
         print(f"{s['alias']:<8} {s['slug']:<32} {sc:>6}  {s.get('basis', '?')}")
     if not args.check:
         return
-    picked, gaps, credits = propose_roster(cfg)
+
+    # The catalogue first, and the liveness verdict written before anything
+    # else. The ranking below also needs the Epoch zip, which is the slow and
+    # fragile fetch of the two; recording liveness after it would mean an Epoch
+    # outage leaves the nudge with nothing to read -- the exact silence this
+    # file exists to end.
+    data = get_json(f"{OR_BASE}/models").get("data", [])
+    write_liveness(liveness_record(cfg, {e.get("id") for e in data if e.get("id")}))
+
+    picked, gaps, credits = propose_roster(cfg, catalog_rows(data))
     now = {s["slug"] for s in picked}
     was = {s["slug"] for s in current}
     if now == was and not gaps:
