@@ -74,6 +74,7 @@ case "$script" in
     *AXMinimized*)
         # minimise_app. Settable for the same reason as STUB_HIDE_RC below: it
         # runs in a background job whose status is the thing under test.
+        [[ -n "${STUB_MINIMISE_LOG:-}" ]] && print -r -- "$script" >> "$STUB_MINIMISE_LOG"
         (( ${STUB_MINIMISE_RC:-0} != 0 )) && exit "${STUB_MINIMISE_RC}"
         : ;;
     *keystroke*)
@@ -86,6 +87,12 @@ case "$script" in
         # background job and `wait` with no arguments would discard exactly
         # this status - which is the thing the test using it is checking.
         (( ${STUB_HIDE_RC:-0} != 0 )) && exit "${STUB_HIDE_RC}"
+        : ;;
+    *" to quit"*)
+        # quit_app. Logged so a test can read WHICH app was addressed: the
+        # script sends a bundle id where it has one, and that is the only part
+        # of the quit that distinguishes two processes sharing a name.
+        [[ -n "${STUB_QUIT_LOG:-}" ]] && print -r -- "$script" >> "$STUB_QUIT_LOG"
         : ;;
     *"to count windows"*)         print -r -- "${STUB_WINDOW_COUNT:-2}" ;;
     *"background only is false"*) print -rn -- "${STUB_APP_LIST:-}" ;;
@@ -123,12 +130,15 @@ fi
 
 # --- canned inputs ---------------------------------------------------------
 # One app per bucket the old config produced, plus one it never mentioned.
-export STUB_APP_LIST="Ghostty|com.mitchellh.ghostty
-Bear|net.shinyfrog.bear
-Mouseless|com.sinusoid.mouseless
-Spark Desktop|com.readdle.smartemail
-Safari|com.apple.Safari
-Google Chrome|com.google.Chrome
+# Three fields, as the real inventory emits: name|bundle id|unix id. The ids are
+# arbitrary but distinct, so every rung below addresses a process the way a real
+# run does rather than through the name fallback.
+export STUB_APP_LIST="Ghostty|com.mitchellh.ghostty|101
+Bear|net.shinyfrog.bear|102
+Mouseless|com.sinusoid.mouseless|103
+Spark Desktop|com.readdle.smartemail|104
+Safari|com.apple.Safari|105
+Google Chrome|com.google.Chrome|106
 "
 export STUB_CHROME_TABS="1|Inbox (3) - Gmail
 2|Google Meet - standup
@@ -139,6 +149,8 @@ AXCAP="$ROOT/home/.cache/hide-idle-apps/ax-capability"
 run() {  # run [args...]; sets OUT / ERR / RC
     [[ -n "${STUB_AX_LOG:-}" ]]     && : > "$STUB_AX_LOG"
     [[ -n "${STUB_KEY_LOG:-}" ]]    && : > "$STUB_KEY_LOG"
+    [[ -n "${STUB_QUIT_LOG:-}" ]]     && : > "$STUB_QUIT_LOG"
+    [[ -n "${STUB_MINIMISE_LOG:-}" ]] && : > "$STUB_MINIMISE_LOG"
     [[ -n "${STUB_NOTIFY_LOG:-}" ]] && : > "$STUB_NOTIFY_LOG"
     [[ -n "${STUB_CHROME_CALLS:-}" ]] && : > "$STUB_CHROME_CALLS"
     # HOME is faked because the close path remembers which apps cannot be closed
@@ -597,6 +609,56 @@ export STUB_CHROME_TABS_3="$STUB_CHROME_TABS_2"
 run --only "Google Chrome" --max-action close
 check     "a target left open exits non-zero"  "$(( RC != 0 ))" "1"
 unset STUB_CHROME_TABS_2 STUB_CHROME_TABS_3 STUB_CHROME_CALLS
+
+# --- 22. two processes sharing a name get their own action -----------------
+# Every Safari web app runs the one shared `Web App` binary, so they all report
+# that same process NAME. The bundle id is the only thing that says which web
+# app a process IS, and the unix id is the only thing that can address one of
+# them. Before this, the buckets held names: Focusmate was correctly recognised
+# and put in the minimise bucket, and then the quit aimed at the OTHER web app -
+# same name - killed it anyway.
+print -r -- "22. two same-named processes each get their own action"
+cat > "$ROOT/config/app-lifecycle.yaml" <<'YAML'
+defaults:
+  manual: quit
+apps:
+  Focusmate (Safari):  {manual: minimise}
+YAML
+# The registry is what maps a config name onto a bundle id; without it the
+# `Web App` process name matches nothing and both would take the default.
+print -r -- "Focusmate (Safari)|com.apple.Safari.WebApp.FOCUS|/x/Focusmate.app" \
+    > "$ROOT/config/safari_web_apps.local"
+export STUB_APP_LIST="Web App|com.apple.Safari.WebApp.ARTIFACTS|501
+Web App|com.apple.Safari.WebApp.FOCUS|502
+"
+run --dry-run
+check "the unlisted web app is still quit"   "$OUT" "Would QUIT (1)"
+check "the configured one is minimised"      "$OUT" "Would MINIMISE (1)"
+
+# The classification above can be right while the action still lands on the
+# wrong process, which is exactly what happened: both are named `Web App`.
+export STUB_QUIT_LOG="$WORK/quit.log" STUB_MINIMISE_LOG="$WORK/minimise.log"
+run
+check     "the minimise addresses the configured process"  "$(cat "$STUB_MINIMISE_LOG" 2>/dev/null)" "unix id is 502"
+check_not "and never the other one"                        "$(cat "$STUB_MINIMISE_LOG" 2>/dev/null)" "unix id is 501"
+check     "the quit names the unlisted app's bundle id"    "$(cat "$STUB_QUIT_LOG" 2>/dev/null)"     "WebApp.ARTIFACTS"
+check_not "and never the configured app's"                 "$(cat "$STUB_QUIT_LOG" 2>/dev/null)"     "WebApp.FOCUS"
+check_not "and never addresses an app by the shared name"  "$(cat "$STUB_QUIT_LOG" 2>/dev/null)"     'application "Web App"'
+unset STUB_QUIT_LOG STUB_MINIMISE_LOG
+rm -f "$ROOT/config/safari_web_apps.local"
+
+# --- 23. the inventory query must not store its whose-result ---------------
+# Not reachable through the stub: the aliasing lives inside System Events, which
+# the stub replaces, so no canned app list can reproduce it. Measured 2026-09-16
+# against `lsappinfo` - reading a property per element off a STORED whose-result
+# returns the FIRST same-named process every time, for `process` and for
+# `application process`, by element and by index. Pinned at the source, which is
+# the only place the property can be checked without a window server.
+print -r -- "23. the inventory iterates its whose-result inline"
+INVENTORY=$(sed -n '/^get_running_apps()/,/^}/p' "$REPO/custom_bins/clear-mac-apps")
+check_not "no stored process list"  "$INVENTORY" "set procList to"
+check     "iterated inline"         "$INVENTORY" "repeat with proc in (every process"
+check     "and the unix id is kept" "$INVENTORY" "unix id of proc"
 
 # --- a broken config stops us dead -----------------------------------------
 # The default action here is "quit", so a config we cannot read must abort

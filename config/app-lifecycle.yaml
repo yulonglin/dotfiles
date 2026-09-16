@@ -41,9 +41,9 @@ apps:
   Super Productivity:    {manual: close}
   Things:                {manual: close}
   Things3:               {manual: close}
-  Focusmate (Safari):    {manual: hide}
+  Focusmate (Safari):    {manual: minimise}   # the Dock, not off screen - see below
   zoom.us:               {manual: skip}
-  Obsidian:              {manual: hide}
+  Obsidian:              {manual: minimise}
   VoiceInk:              {manual: close}
   Bear:                  {manual: close}
   MacMediaKeyForwarder:  {manual: close}
@@ -54,6 +54,14 @@ apps:
   Spark Desktop:         {slow: true}      # ignores keystrokes; poll up to 30 s
   FaceTime:              {manual: quit, auto: skip}   # never touched automatically
 
+# Window-title substrings that spare a window from the close rung. This is NOT
+# what keeps Focusmate alive, and must not be read as a backstop for it: the
+# branch that consults these patterns is reached only by an app the `apps:` list
+# did not already classify, and `manual: minimise` classifies Focusmate first.
+# What protects it is the minimise rung plus the bundle id in
+# config/safari_web_apps.local, which is the only thing that tells one `Web App`
+# process from another. The entry is kept because it still applies if Focusmate
+# is ever moved back to close or quit.
 protect_windows:
   - Google Meet
   - Focusmate (Safari)
