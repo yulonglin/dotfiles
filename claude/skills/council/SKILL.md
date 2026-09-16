@@ -1,6 +1,6 @@
 ---
 name: council
-description: Ask another model family — one model, an agentic reviewer, or the full eight-seat LLM council with blind peer ranking. Use for "second opinion", "sanity check this", "ask another model", "am I wrong", "llm council", "panel review", "review this with multiple models", "adversarial review", before publishing a result or spec someone will act on.
+description: Ask another model family — one model, one agentic reviewer, one agentic reviewer per family, or the full eight-seat LLM council with blind peer ranking. Use for "second opinion", "sanity check this", "ask another model", "am I wrong", "llm council", "panel review", "review this with multiple models", "review this diff with several models", "adversarial review", before publishing a result or spec someone will act on.
 ---
 
 # Asking Another Model
@@ -9,14 +9,14 @@ A second opinion is only worth its cost when it comes from a **different model f
 
 Two questions decide where to go, and they are **independent**:
 
-1. **Does the reviewer need to run things** — read the repo, run tests, iterate? If yes, go to the agentic rung; no amount of deliberation substitutes for execution.
+1. **Does the reviewer need to run things** — read the repo, run tests, iterate? If yes, only an agentic rung will do; no amount of deliberation substitutes for execution.
 2. **How contested is the answer** — would competent models genuinely disagree? That sets how many opinions you need.
 
-Treating these as one ladder is a mistake: a hard refactor needs tools and one model; a contested factual claim needs eight models and no tools.
+Treating these as one ladder is a mistake: a hard refactor needs tools and one model; a contested factual claim needs eight models and no tools; a contested question **about code** needs tools *and* several families, and that is the agentic council.
 
-## Pick the rung by how contested the answer is
+## The table crosses two axes, not one
 
-Contestedness sets the rung, not stakes and not cost. Climbing past what the question needs buys latency and a longer thing to read. The agentic rung sits in the table for completeness but is chosen by question 1 above, not by this ordering.
+Question 1 picks the block. The five text-only rungs reason over text they are handed; the two agentic rungs run inside the repo. Question 2 then picks the row within the block — contestedness, not stakes and not cost. Climbing past what the question needs buys latency and a longer thing to read.
 
 | Rung | Command | Calls | Cost | Latency | The question is… |
 |---|---|---|---|---|---|
@@ -24,6 +24,7 @@ Contestedness sets the rung, not stakes and not cost. Climbing past what the que
 | **one family** | `openrouter-cli ask <alias> "…"` | 1 | $0.01–0.08 | seconds | Bounded, and you want one genuinely different prior on it |
 | **two advisors** | `openrouter-cli council advise "…"` | 2 | ~$0.09 | seconds | Real but not contested: the two strongest models, both answers, no synthesis |
 | **agentic** | `codex-companion` (GPT), `opencode run` (others) | many | varies | minutes | Only answerable by *running* things — reading the repo, running tests, iterating |
+| **agentic council** | Agent tool, one `subagent_type` per routed family, dispatched in one message | many per seat | varies | minutes | Only answerable by running things **and** contested — a diff, a hook, a test suite where competent reviewers would reach different verdicts |
 | **council** | `openrouter-cli council ask "…"` | 1 request, 9 models | ~$0.34 | ~1 min | Genuinely contested: you need the spread of opinion, not one view |
 | **council --rank** | `openrouter-cli council ask "…" --rank` | 17 requests | ~$0.60 | ~2 min | So contested that you need to know which answer *the other models* found strongest |
 
@@ -67,7 +68,9 @@ The ones you already know — so the panel spends its budget past them.
 "Is the null right for this metric?" beats "any thoughts?".
 ```
 
-`--context <path>` inlines a file into the council brief, repeatable, so all eight seats see the same code. That is the tool for "review this diff". It is **not** an agentic loop — no seat can run the tests or grep the repo. When the question needs that, drop to the agentic rung instead of pasting a whole repository.
+`--context <path>` inlines a file into the council brief, repeatable, so all eight seats see the same text. It is **not** an agentic loop — no seat can run the tests, grep for the other call sites, or check whether the pattern it suspects actually fires. So `--context` is for **prose, a spec, or numbers with no repo behind them**. For a question about **code the reviewer could read**, the agentic council is the better rung, and choosing it no longer costs you the panel: it is the same several-families-at-once shape with the repo attached.
+
+Measured on 2026-09-16, one shell hook reviewed both ways. Four families dispatched as subagents each found a distinct blocking defect, and three of the four said do not ship: one verified twelve false positives by piping the exact commands into the hook, one caught that `pip install watchdog` fired it, and one caught that `until <check>; do sleep; done` is wait-for-ready — it terminates when the endpoint comes up, so it is the opposite of the keep-alive the hook was written to catch, and the test suite asserted the wrong polarity. The eight-seat text-only panel, handed the same files with `--context`, returned nothing at all. The test count went 26 to 84.
 
 **Pass a long brief with `--context`, not as an argument.** The prompt is an argv string, so a brief past roughly 100 KB dies with `argument list too long` before any model is reached. Write the brief to a file and point `--context` at it; the positional prompt then carries only the instruction ("answer the brief in the context file").
 
@@ -105,6 +108,8 @@ The mitigation is local, so **it covers `--rank` only**: the ranking and chair p
 ### Everything you send goes to eight vendors
 
 `council ask` broadcasts your brief — including every file passed with `--context` — to eight separate providers under their own retention and training policies. Redact before sending: credentials, customer data, unpublished results, anything under NDA. The cheaper rungs narrow the blast radius (`advise` reaches two vendors, `ask` one), which is another reason not to climb reflexively.
+
+**On the agentic council the blast radius is what each seat chooses to read, not what you pasted.** A routed seat reaches the whole checkout it is launched in, and every routed seat carries what it reads to its provider — OpenAI for the Codex-routed seat, the OpenRouter provider for the rest. Redaction is therefore a property of the tree, not of the brief: do not dispatch a seat into a checkout holding credentials, customer data or unpublished results.
 
 ### The chair grades its own answer
 
@@ -151,7 +156,24 @@ Attribution is required by the data licences wherever these scores appear: **Epo
 
 Since 2026-09-06 the model-router gateway is wired globally (Option C of the model-routing decision spec), so an agent file whose `model:` is a **routing ID the router serves** reaches that family: the request carries the ID through the router, and the router log shows the hop (measured on 2.1.263 with `kimi-k3`, `glm-5.3`, `muse-spark-1.3`, `grok-4.6`, `gpt-6-astra`, `gpt-5.6-sol`). Those agent files are generated into `claude/agents/` from `config/model-router.toml`, the one file that declares every foreign model (`model-router-wire apply` renders it; `status` lists the live routes), and `tests/test_model_router_gateway.sh` proves each one answers as itself.
 
-Any **other** name is still the old trap: an unrecognised model ID does not fail — **it silently falls back to the session's default model.** Measured on 2.1.252 without a gateway (2026-09-01): an agent file with `model: openai/gpt-5.6-sol` loaded, ran, and answered from `claude-opus-5`; the only signal was a stderr line `[claude-code:unrecognized_model]` that the calling session never sees. So the result is Claude **wearing another family's label** — a fabricated multi-family result, and a panel that is secretly one model agreeing with itself is worse than no panel, because it looks like corroboration. Never write a foreign agent file by hand: add the model to `config/model-router.toml` and run `model-router-wire apply`, which also removes the file when the model is turned off. The council itself still runs through the CLI, which is cheaper per call and logs provenance (echoed slug, generation id, usage) that a subagent transcript does not; the full investigation, including the rejected proxy route and the ToS reading, is in `docs/remote-control-and-foreign-models.md`.
+Any **other** name is still the old trap: an unrecognised model ID does not fail — **it silently falls back to the session's default model.** Measured on 2.1.252 without a gateway (2026-09-01): an agent file with `model: openai/gpt-5.6-sol` loaded, ran, and answered from `claude-opus-5`; the only signal was a stderr line `[claude-code:unrecognized_model]` that the calling session never sees. So the result is Claude **wearing another family's label** — a fabricated multi-family result, and a panel that is secretly one model agreeing with itself is worse than no panel, because it looks like corroboration. Never write a foreign agent file by hand: add the model to `config/model-router.toml` and run `model-router-wire apply`, which also removes the file when the model is turned off. The **text-only** council still runs through the CLI, which is cheaper per call and logs provenance (echoed slug, generation id, usage) that a subagent transcript does not; the agentic council trades that log away in exchange for repo access, which is the price of the rung. The full investigation, including the rejected proxy route and the ToS reading, is in `docs/remote-control-and-foreign-models.md`.
+
+## Running an agentic council
+
+**One Agent call per family, all in a single message**, so the seats run concurrently — dispatched one at a time, the review costs the sum of the seats instead of the slowest one. `model-router-wire status` lists the live routes and `claude/agents/` holds the generated files; those two are the authority, because a list written into a skill drifts. As of 2026-09-16 the routed families are OpenAI (`astra(high)` or `sol(high)` — both sit on the same Codex OAuth account, so they are **one seat, not two**), z-ai (`glm`), x-ai (`grok`), moonshot (`kimi`) and meta (`muse-spark`), plus Claude itself through the Agent tool's `model: "fable"`. Use only those generated names: the unrecognised-`model:` trap above applies to this rung in full, so a hand-written foreign agent file gives you Claude wearing another family's label, and a panel that is secretly one model agreeing with itself is worse than no panel.
+
+A seat has the repo but not your conversation, so **every brief is still self-contained** — it cannot know which of the files changed this week is the one under review. Each brief carries:
+
+- **Repo-relative paths only.** A seat may run in a worktree, and an absolute path from your tree silently addresses a different checkout.
+- **Read-only, stated explicitly.** It may read, grep and run the tests; it may not edit, commit or push. Several seats editing one file concurrently is the failure mode this prevents.
+- **The question and the constraints** that make the obvious answer wrong, exactly as for a pasted brief.
+- **Findings with a severity on each**, plus what the seat did to establish them. "Verified by piping the exact command into the hook" is worth more than an assertion, and asking for it is what produces it.
+
+Then you de-duplicate and adjudicate yourself: **there is no chair on this rung**, and nothing synthesises for you. *Disagreement is the finding* below applies unchanged — three families raising one point is one finding with three names on it, two families reaching opposite verdicts is the bucket to read first, and each finding is reported with the seat that raised it.
+
+**This rung fails closed too, but only because you make it.** A seat that errors, times out or returns nothing did not review; report it absent rather than presenting four families as five. The CLI rungs enforce that in code; here nothing enforces it.
+
+**What it costs against the CLI rungs.** It is slower — minutes per seat, against roughly one minute for a whole `council ask`. It spends each subagent's context window rather than being one billed request, but "no API dollars" is wrong: the OpenRouter-routed seats bill the key in `~/.config/model-router/secrets.toml`, and only the Codex-routed seats draw on the OAuth quota instead. None of that spend reaches `~/.local/state/openrouter-cli/calls.jsonl`, which only `openrouter-cli` writes, so this rung has **no per-call cost log and no resolved-model provenance** — capture anything you need from the agent transcripts at the time. And it cannot answer a question with no repo behind it: a seat with nothing to read is a slow way to reach the model `openrouter-cli` reaches in one call.
 
 ## Disagreement is the finding, not the consensus
 
@@ -183,9 +205,9 @@ tail -5 ~/.local/state/openrouter-cli/calls.jsonl | jq '{ts, command, models}'
 
 Seats are pinned rather than floating precisely so provenance survives. Floating `~family-latest` slugs gave zero-maintenance freshness and destroyed attribution: the catalogue does not publish what one points at, and measured against the call log most of them resolved to *themselves*, so even the log could not recover which model answered. A fortnightly index refresh buys the freshness back without that cost. **If a result matters, capture the resolved id at the time** — the log is local and unsynced.
 
-## Only the agentic rung can run your code
+## Two rungs can run your code; the second seats several families
 
-`codex-companion` gives GPT a real agentic loop over the code; OpenCode is the equivalent for every other family. GPT agentic coding always goes through codex-companion; OpenCode covers the rest.
+`codex-companion` gives GPT a real agentic loop over the code; OpenCode is the equivalent for every other family. GPT agentic coding always goes through codex-companion; OpenCode covers the rest. For **several** families over one repo, use routed subagents instead — one process per family with the checkout already attached, rather than one external CLI per family (*Running an agentic council* above).
 
 | You want | Invocation |
 |---|---|
@@ -194,6 +216,7 @@ Seats are pinned rather than floating precisely so provenance survives. Floating
 | Open-ended investigation | Monitor tool, `codex-companion task` |
 | Agentic coding, non-GPT | `opencode run -m openrouter/<slug> "<brief>"` |
 | Judgement or research taste, Anthropic | Agent tool, `model: "fable"` |
+| Several families reviewing one diff, hook or suite | Agent tool, one `subagent_type` per routed family, in one message |
 
 OpenCode config lives at `~/.config/opencode/opencode.json`, overridden by a project-level `./opencode.json`; the repo template is `config/opencode/opencode.json` and uses `{env:OPENROUTER_API_KEY}` rather than an on-disk key.
 
@@ -214,4 +237,5 @@ OpenCode config lives at `~/.config/opencode/opencode.json`, overridden by a pro
 - `check-misreads` — how a draft could be *misread*, a different pass; run it after the council's substantive findings are fixed
 - `results-artifact` — the intervals, nulls and ceilings the council will be checking against
 - `config/openrouter-models.toml` — the single place: seats, chair, cap, cadence
+- `config/model-router.toml` — the single place for the routed families the agentic council seats; `model-router-wire apply` generates `claude/agents/`
 - `custom_bins/openrouter-cli` — `council`, `ask`, `fusion`, `models`, `drift`
