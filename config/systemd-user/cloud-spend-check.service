@@ -1,0 +1,33 @@
+[Unit]
+Description=Report sustained flat cloud spend (the idle-resource signature)
+Documentation=file:%h/code/dotfiles/custom_bins/cloud-spend-check
+
+[Service]
+Type=oneshot
+
+# deploy.sh copies this unit verbatim -- no templating -- so nothing here may
+# depend on the repo living somewhere else, and PATH is set explicitly because
+# systemd --user does not inherit the login shell's. Three things must be on
+# it: uv, because the check's shebang is `uv run --script`; modal, which the
+# collector shells out to; and both live in %h/.local/bin. %h is systemd's own
+# home specifier, expanded at load time.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+ExecStart=%h/code/dotfiles/custom_bins/cloud-spend-check --days 14
+
+# Exit 3 means no provider could be queried, so the "no flat spend found" line
+# would be an all-clear nobody earned. That IS the failure worth seeing, so it
+# is deliberately NOT in SuccessExitStatus: a monitor that cannot monitor
+# should show up in `systemctl --user --failed`, not log a quiet success. The
+# common no-credentials case is handled earlier, by deploy.sh only enabling
+# the timer when ~/.modal.toml exists.
+
+# State lives in ~/.local/state/cloud-spend/latest.json, which the nudge reads.
+StateDirectory=cloud-spend
+
+# Deliberately no ProtectHome. The check reads ~/.modal.toml for the profile
+# list and shells out to `modal`, which maintains its own caches under the
+# home directory; a read-only home turns that into an exit-3 every day and
+# the monitor reports itself broken instead of reporting spend.
+PrivateTmp=true
+NoNewPrivileges=true
