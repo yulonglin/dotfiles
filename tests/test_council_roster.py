@@ -433,3 +433,82 @@ class TestInputPriceCap:
     def test_input_cap_defaults_to_unbounded(self):
         rows = [row("x/a", out=5, created=100, din=999.0)]
         assert orc.pick_seat("x", rows, {"a": 1.0}, 60.0)["slug"] == "x/a"
+
+
+class TestLivenessRecord:
+    """The machine-readable liveness verdict the session-start nudge reads.
+
+    On 2026-09-16 `council ask` hung for its full ten-minute timeout because a
+    seat had been retired from the catalogue. The fortnightly check had found it
+    the day before, but only wrote the human-readable report, where a retired
+    seat and a merely superseded one both print as a `-` line -- so nothing
+    downstream could tell "this call will hang" from "a better model exists".
+    """
+
+    CFG = {
+        "council": {
+            "chair": "anthropic/claude-fable-5",
+            "seats": [
+                {"alias": "gpt", "slug": "openai/gpt-6-astra", "family": "openai"},
+                {"alias": "qwen", "slug": "qwen/qwen3.8-max", "family": "qwen"},
+            ],
+        },
+        "models": [{"alias": "extra", "slug": "vendor/off-roster"}],
+    }
+
+    def test_names_the_retired_seat_and_nothing_else(self):
+        live = {"openai/gpt-6-astra", "anthropic/claude-fable-5",
+                "vendor/off-roster"}
+        rec = orc.liveness_record(self.CFG, live)
+        assert [d["slug"] for d in rec["dead"]] == ["qwen/qwen3.8-max"]
+        assert rec["dead"][0]["role"] == "seat"
+        assert rec["dead"][0]["alias"] == "qwen"
+        assert rec["catalog"] == 3
+
+    def test_a_healthy_roster_records_an_empty_verdict(self):
+        """Empty, not None: the nudge must be able to tell "checked, all live"
+        from "never checked"."""
+        live = {"anthropic/claude-fable-5", "openai/gpt-6-astra",
+                "qwen/qwen3.8-max", "vendor/off-roster"}
+        assert orc.liveness_record(self.CFG, live)["dead"] == []
+
+    def test_an_empty_catalogue_records_nothing(self):
+        """A fetch that came back empty is a broken fetch. Recording it would
+        declare every model on the roster dead and fire the nudge at every
+        session start until the next scheduled run."""
+        assert orc.liveness_record(self.CFG, set()) is None
+
+    def test_the_chair_and_off_roster_models_are_checked_too(self):
+        """The `judge` slug once rotted here unnoticed, breaking every fusion
+        call: a dead chair hangs as surely as a dead seat."""
+        live = {"openai/gpt-6-astra", "qwen/qwen3.8-max"}
+        dead = {d["slug"] for d in orc.liveness_record(self.CFG, live)["dead"]}
+        assert dead == {"anthropic/claude-fable-5", "vendor/off-roster"}
+
+    def test_floating_and_variant_slugs_are_judged_on_the_raw_catalogue(self):
+        """`catalog_rows()` drops `~` aliases and `:` variants because they
+        cannot be SEATED. They can still be configured and they call fine, so
+        judging liveness on the filtered rows would report a healthy chair as
+        retired at every session start."""
+        cfg = {"council": {"chair": "~vendor/model-latest", "seats": []},
+               "models": [{"alias": "f", "slug": "vendor/model:free"}]}
+        live = {"~vendor/model-latest", "vendor/model:free"}
+        assert orc.liveness_record(cfg, live)["dead"] == []
+
+    def test_write_survives_an_unwritable_destination(self, tmp_path, monkeypatch,
+                                                      capsys):
+        """A state directory that cannot be written must not fail the check the
+        scheduled unit is there to run."""
+        blocked = tmp_path / "file" / "liveness.json"
+        (tmp_path / "file").write_text("not a directory")
+        monkeypatch.setattr(orc, "LIVENESS", blocked)
+        orc.write_liveness({"dead": []})
+        assert "cannot write" in capsys.readouterr().err
+
+    def test_write_skips_a_none_verdict(self, tmp_path, monkeypatch):
+        """No verdict must leave the previous one in place, not truncate it."""
+        target = tmp_path / "liveness.json"
+        target.write_text("previous\n")
+        monkeypatch.setattr(orc, "LIVENESS", target)
+        orc.write_liveness(None)
+        assert target.read_text() == "previous\n"
