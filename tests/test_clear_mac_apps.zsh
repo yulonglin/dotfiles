@@ -496,18 +496,26 @@ check_not "acts on nothing"                      "$OUT" "Would QUIT"
 # whether that worked.
 print -r -- "18. a capped selective-close closes, rather than reporting a refusal as success"
 cp "$REPO/tests/fixtures/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
-export STUB_APP_LIST="Google Chrome|com.google.Chrome
+export STUB_APP_LIST="Google Chrome|com.google.Chrome|707
 "
 export STUB_CHROME_CALLS="$WORK/chrome.calls"
 export STUB_CHROME_TABS_2="1|Inbox (3) - Gmail
 "
-export STUB_WINDOW_COUNT=2 STUB_AX_RC=0
+export STUB_WINDOW_COUNT=2 STUB_AX_RC=0 STUB_AX_LOG="$WORK/ax18.log"
 : > "$AXCAP"
 
 run --only "Google Chrome" --max-action close
 check     "it closes instead of refusing"        "$OUT" "closing its windows instead"
 check_not "and still never quits"                "$OUT" "Quitting Google Chrome"
 check     "a close that worked exits 0"          "$(( RC == 0 ))" "1"
+# This branch reaches close_app_windows from inside close_app_selectively, which
+# is a different call site from the close rung in main() - and it was the one
+# left handing over a bare name after the buckets started carrying entries. The
+# name still "worked" (it fell back to name addressing), so only an assertion
+# about the address catches it.
+check     "the capped close addresses Chrome by id" "$(cat "$STUB_AX_LOG" 2>/dev/null)" "unix id is 707"
+check_not "not by its name"                         "$(cat "$STUB_AX_LOG" 2>/dev/null)" 'process "Google Chrome"'
+unset STUB_AX_LOG
 
 # Same path, but the close genuinely fails: AX click errors, the keystroke
 # fallback tells us nothing, so the windows are still there.

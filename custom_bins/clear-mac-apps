@@ -139,9 +139,18 @@ ps_ref() {
 # bucket of names cannot say WHICH of them the config matched, and the quit
 # aimed at one landed on the other. The bundle id and unix id are both allowed
 # to be empty; ps_ref and quit_app each fall back to the name.
+#
+# Each accessor answers EMPTY rather than guessing when it is handed something
+# that is not a three-field entry - a bare app name, say, passed by a call site
+# that was not converted. `${1##*\t}` on a tab-less string returns the whole
+# string, so an unconverted caller would have handed `Google Chrome` to ps_ref
+# as a unix id; that failed safe only because it is not numeric. Answering empty
+# makes the fallback to the name deliberate instead of accidental.
 e_name() { print -r -- "${1%%$'\t'*}" }
-e_bid()  { local rest="${1#*$'\t'}"; print -r -- "${rest%%$'\t'*}" }
-e_pid()  { print -r -- "${1##*$'\t'}" }
+e_bid()  { [[ "$1" == *$'\t'* ]] || { print -r -- ""; return 0 }
+           local rest="${1#*$'\t'}"; print -r -- "${rest%%$'\t'*}" }
+e_pid()  { [[ "$1" == *$'\t'*$'\t'* ]] || { print -r -- ""; return 0 }
+           print -r -- "${1##*$'\t'}" }
 
 # Quit an app gracefully.
 #
@@ -552,10 +561,10 @@ close_app_selectively() {
     if (( ${#protected_windows} == 0 )); then
         if [[ "$MAX_ACTION" == close ]]; then
             echo "  $app: would quit, but this run is capped at close — closing its windows instead"
-            close_app_windows "$app"
+            close_app_windows "$entry"
             return
         fi
-        quit_app "$app"
+        quit_app "$app" "$(e_bid "$entry")"
         return
     fi
 
