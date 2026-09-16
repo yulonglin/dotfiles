@@ -41,3 +41,13 @@ Each of these was a real defect caught in review, and each has a test.
 ## The related process guard
 
 `cwrm` refuses to remove a worktree that has live processes in it, and `cwclean` marks such a worktree `+procs` and keeps it. `--force` does **not** bypass this: that flag is about gitignored artifacts, which you discard deliberately, whereas orphaning a running process is the more expensive mistake. `--ignore-procs` is the explicit opt-out. In the incident the poller outlived its worktree by 16 days, still writing to a log in a directory that had been deleted and recreated around it.
+
+## The deadline nudge catches it three layers earlier
+
+`claude/hooks/nudge_undeadlined_poller.sh` fires before a Bash command that looks like a polling loop carrying no deadline — a `watchdog`/`keep-warm`/`keepalive` invocation, or a `while true` loop containing a `sleep`. It points at coreutils `timeout`, which already does the job; shipping another wrapper would only duplicate it.
+
+The nudge is silent when the command is already bounded (`timeout`, `systemd-run`, `jexp`, an explicit `--max-age`/`--deadline`, or `--no-deadline` as the opt-out), and when the command merely reads, searches or kills something with one of those words in its name. It runs on **every** Bash call, so a false positive is expensive; `tests/test_nudge_undeadlined_poller.sh` pins 26 cases, 5 loud and 21 quiet, including the real command from the incident.
+
+It also asks the question that actually mattered: **is the poll interval shorter than the idle timeout of the thing being polled?** At 180 s against a 300 s `scaledown_window` the watchdog was a keep-alive wearing a health check's name, and no deadline would have made that correct — only cheaper.
+
+The three guards sit at different distances from the mistake. The nudge fires before the poller starts, `cwrm` refuses to orphan it, and `cloud-spend-check` catches the bill a few days later. The last of those is the backstop, not the fix.
