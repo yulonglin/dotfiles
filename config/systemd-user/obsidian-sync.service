@@ -41,8 +41,18 @@ StartLimitBurst=5
 # This service's entire job is writing to ~/vault, so ProtectHome=read-only --
 # used by the sibling council-roster unit -- would break it outright. It also
 # needs ~/.config/obsidian-headless for its auth token and sync state.
-# ProtectSystem=strict still keeps it out of everything outside $HOME.
+# ProtectSystem=strict, plus an explicit ReadWritePaths rather than trusting an
+# implicit exemption. Measured on this box 2026-09-17 with `systemd-run --user
+# --wait -p ProtectSystem=strict`: writes to ~/vault, ~/code, ~/.local/state and
+# ~/.cache all succeed, because for a USER manager strict does not remount $HOME
+# read-only. Writes to ~/scratch FAIL under the same setting -- it is a symlink
+# to /workspace, a separate disk, which strict does lock. So the exemption is
+# real but it is an exemption for $HOME specifically, not for "anything the user
+# owns", and it is not something to build on silently. Naming the paths means a
+# systemd change or a path moved onto /workspace fails loudly at start rather
+# than silently writing nothing.
 ProtectSystem=strict
+ReadWritePaths=%h/vault %h/.config/obsidian-headless
 NoNewPrivileges=true
 PrivateTmp=true
 

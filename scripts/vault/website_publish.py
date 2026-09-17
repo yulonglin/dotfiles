@@ -307,6 +307,17 @@ def do_publish(count: int, dry: bool) -> int:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     branch = f"vault-sync/{stamp}"
 
+    # Branch from main, not from wherever the clone was left. A publish run that
+    # started on a feature branch would sweep that whole branch into the PR and
+    # merge it to the live site as a side effect of someone editing a post on
+    # their phone. Being on main also means the repo-to-vault direction compares
+    # against what is actually published rather than against unmerged work.
+    if run(["git", "status", "--porcelain"], check=False).stdout.strip():
+        print("the repo has uncommitted changes; refusing to publish from a dirty tree")
+        return 1
+    run(["git", "checkout", "main"])
+    run(["git", "pull", "--ff-only"])
+
     dirty = run(["git", "status", "--porcelain", "--", "src/", "public/"]).stdout.strip()
     if not dirty:
         print("nothing staged for the site; vault changes did not alter the repo")
@@ -326,7 +337,6 @@ def do_publish(count: int, dry: bool) -> int:
         return 1
     print("  build passed")
 
-    base = run(["git", "rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip()
     run(["git", "checkout", "-b", branch])
     try:
         run(["git", "add", "--", "src/", "public/"])
@@ -361,10 +371,12 @@ def do_publish(count: int, dry: bool) -> int:
             return 1
 
         run(["gh", "pr", "merge", branch, "--squash", "--delete-branch"])
+        run(["git", "checkout", "main"], check=False)
+        run(["git", "pull", "--ff-only"], check=False)
         print("  merged; Netlify will deploy from main")
         notify(f"Website published: {count} file(s) live shortly.\n{pr}")
     finally:
-        run(["git", "checkout", base], check=False)
+        run(["git", "checkout", "main"], check=False)
     return 0
 
 
