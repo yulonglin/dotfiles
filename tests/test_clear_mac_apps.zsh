@@ -71,6 +71,12 @@ case "$script" in
         [[ -n "${STUB_AX_LOG:-}" ]] && print -r -- "$script" >> "$STUB_AX_LOG"
         (( ${STUB_AX_RC:-0} != 0 )) && exit "${STUB_AX_RC}"
         print -r -- 0 ;;
+    *AXMinimized*)
+        # minimise_app. Settable for the same reason as STUB_HIDE_RC below: it
+        # runs in a background job whose status is the thing under test.
+        [[ -n "${STUB_MINIMISE_LOG:-}" ]] && print -r -- "$script" >> "$STUB_MINIMISE_LOG"
+        (( ${STUB_MINIMISE_RC:-0} != 0 )) && exit "${STUB_MINIMISE_RC}"
+        : ;;
     *keystroke*)
         [[ -n "${STUB_KEY_LOG:-}" ]] && print -r -- "$script" >> "$STUB_KEY_LOG" ;;
     *"display notification"*)
@@ -81,6 +87,12 @@ case "$script" in
         # background job and `wait` with no arguments would discard exactly
         # this status - which is the thing the test using it is checking.
         (( ${STUB_HIDE_RC:-0} != 0 )) && exit "${STUB_HIDE_RC}"
+        : ;;
+    *" to quit"*)
+        # quit_app. Logged so a test can read WHICH app was addressed: the
+        # script sends a bundle id where it has one, and that is the only part
+        # of the quit that distinguishes two processes sharing a name.
+        [[ -n "${STUB_QUIT_LOG:-}" ]] && print -r -- "$script" >> "$STUB_QUIT_LOG"
         : ;;
     *"to count windows"*)         print -r -- "${STUB_WINDOW_COUNT:-2}" ;;
     *"background only is false"*) print -rn -- "${STUB_APP_LIST:-}" ;;
@@ -118,12 +130,15 @@ fi
 
 # --- canned inputs ---------------------------------------------------------
 # One app per bucket the old config produced, plus one it never mentioned.
-export STUB_APP_LIST="Ghostty|com.mitchellh.ghostty
-Bear|net.shinyfrog.bear
-Mouseless|com.sinusoid.mouseless
-Spark Desktop|com.readdle.smartemail
-Safari|com.apple.Safari
-Google Chrome|com.google.Chrome
+# Three fields, as the real inventory emits: name|bundle id|unix id. The ids are
+# arbitrary but distinct, so every rung below addresses a process the way a real
+# run does rather than through the name fallback.
+export STUB_APP_LIST="Ghostty|com.mitchellh.ghostty|101
+Bear|net.shinyfrog.bear|102
+Mouseless|com.sinusoid.mouseless|103
+Spark Desktop|com.readdle.smartemail|104
+Safari|com.apple.Safari|105
+Google Chrome|com.google.Chrome|106
 "
 export STUB_CHROME_TABS="1|Inbox (3) - Gmail
 2|Google Meet - standup
@@ -134,6 +149,8 @@ AXCAP="$ROOT/home/.cache/hide-idle-apps/ax-capability"
 run() {  # run [args...]; sets OUT / ERR / RC
     [[ -n "${STUB_AX_LOG:-}" ]]     && : > "$STUB_AX_LOG"
     [[ -n "${STUB_KEY_LOG:-}" ]]    && : > "$STUB_KEY_LOG"
+    [[ -n "${STUB_QUIT_LOG:-}" ]]     && : > "$STUB_QUIT_LOG"
+    [[ -n "${STUB_MINIMISE_LOG:-}" ]] && : > "$STUB_MINIMISE_LOG"
     [[ -n "${STUB_NOTIFY_LOG:-}" ]] && : > "$STUB_NOTIFY_LOG"
     [[ -n "${STUB_CHROME_CALLS:-}" ]] && : > "$STUB_CHROME_CALLS"
     # HOME is faked because the close path remembers which apps cannot be closed
@@ -422,6 +439,51 @@ run --only Bear
 check     "a hide that failed exits non-zero"    "$(( RC != 0 ))" "1"
 unset STUB_HIDE_RC
 
+# `minimise` sits beside `hide` on the scale and has the same failure shape: a
+# gentle value that must not fall through to quit, run as a background job
+# whose status has to be collected. Same two checks as 13 and 17, on its bucket.
+print -r -- "17b. a minimise app has its windows minimised, not hidden or quit"
+export STUB_APP_LIST="Bear|net.shinyfrog.bear
+Safari|com.apple.Safari
+"
+print -r -- "defaults:
+  manual: quit
+  auto: quit
+apps:
+  Bear: {manual: minimise}" > "$ROOT/config/app-lifecycle.yaml"
+run --dry-run
+check     "Bear is minimised"                    "$OUT" "Would MINIMISE (1):
+  - Bear"
+check_not "and not hidden"                       "$OUT" "Would HIDE"
+check_not "and never quit"                       "$OUT" "- Bear
+  - Safari"
+check     "the default app still quits"          "$OUT" "Would QUIT (1):
+  - Safari"
+
+export STUB_MINIMISE_RC=0
+run --only Bear
+check     "the minimise bucket is the one that ran" "$OUT" "Minimising 1 apps in parallel"
+check     "a minimise that worked exits 0"          "$(( RC == 0 ))" "1"
+export STUB_MINIMISE_RC=1
+run --only Bear
+check     "a minimise that failed exits non-zero"   "$(( RC != 0 ))" "1"
+unset STUB_MINIMISE_RC
+export STUB_APP_LIST="Bear|net.shinyfrog.bear
+"
+
+# The idle job has no minimise rung, so `auto: minimise` would have to mean
+# either "hide" or "skip" - and the helper's rule is to reject, not guess.
+print -r -- "17c. auto: minimise is rejected by name, not as a typo"
+print -r -- "defaults:
+  manual: quit
+  auto: quit
+apps:
+  Bear: {auto: minimise}" > "$ROOT/config/app-lifecycle.yaml"
+run --dry-run
+check     "exits non-zero"                       "$(( RC != 0 ))" "1"
+check     "says why"                             "$ERR" "auto: minimise is not supported"
+check_not "acts on nothing"                      "$OUT" "Would QUIT"
+
 # Codex, this round: with the run capped at close and the protected tab gone by
 # the rescan, close_app_selectively called quit_app_capped, which refuses the
 # quit and returns 0 - having closed nothing. escalate() reads 0 as "the close
@@ -434,18 +496,26 @@ unset STUB_HIDE_RC
 # whether that worked.
 print -r -- "18. a capped selective-close closes, rather than reporting a refusal as success"
 cp "$REPO/tests/fixtures/app-lifecycle.yaml" "$ROOT/config/app-lifecycle.yaml"
-export STUB_APP_LIST="Google Chrome|com.google.Chrome
+export STUB_APP_LIST="Google Chrome|com.google.Chrome|707
 "
 export STUB_CHROME_CALLS="$WORK/chrome.calls"
 export STUB_CHROME_TABS_2="1|Inbox (3) - Gmail
 "
-export STUB_WINDOW_COUNT=2 STUB_AX_RC=0
+export STUB_WINDOW_COUNT=2 STUB_AX_RC=0 STUB_AX_LOG="$WORK/ax18.log"
 : > "$AXCAP"
 
 run --only "Google Chrome" --max-action close
 check     "it closes instead of refusing"        "$OUT" "closing its windows instead"
 check_not "and still never quits"                "$OUT" "Quitting Google Chrome"
 check     "a close that worked exits 0"          "$(( RC == 0 ))" "1"
+# This branch reaches close_app_windows from inside close_app_selectively, which
+# is a different call site from the close rung in main() - and it was the one
+# left handing over a bare name after the buckets started carrying entries. The
+# name still "worked" (it fell back to name addressing), so only an assertion
+# about the address catches it.
+check     "the capped close addresses Chrome by id" "$(cat "$STUB_AX_LOG" 2>/dev/null)" "unix id is 707"
+check_not "not by its name"                         "$(cat "$STUB_AX_LOG" 2>/dev/null)" 'process "Google Chrome"'
+unset STUB_AX_LOG
 
 # Same path, but the close genuinely fails: AX click errors, the keystroke
 # fallback tells us nothing, so the windows are still there.
@@ -547,6 +617,92 @@ export STUB_CHROME_TABS_3="$STUB_CHROME_TABS_2"
 run --only "Google Chrome" --max-action close
 check     "a target left open exits non-zero"  "$(( RC != 0 ))" "1"
 unset STUB_CHROME_TABS_2 STUB_CHROME_TABS_3 STUB_CHROME_CALLS
+
+# --- 22. two processes sharing a name get their own action -----------------
+# Every Safari web app runs the one shared `Web App` binary, so they all report
+# that same process NAME. The bundle id is the only thing that says which web
+# app a process IS, and the unix id is the only thing that can address one of
+# them. Before this, the buckets held names: Focusmate was correctly recognised
+# and put in the minimise bucket, and then the quit aimed at the OTHER web app -
+# same name - killed it anyway.
+print -r -- "22. two same-named processes each get their own action"
+cat > "$ROOT/config/app-lifecycle.yaml" <<'YAML'
+defaults:
+  manual: quit
+apps:
+  Focusmate (Safari):  {manual: minimise}
+YAML
+# The registry is what maps a config name onto a bundle id; without it the
+# `Web App` process name matches nothing and both would take the default.
+print -r -- "Focusmate (Safari)|com.apple.Safari.WebApp.FOCUS|/x/Focusmate.app" \
+    > "$ROOT/config/safari_web_apps.local"
+export STUB_APP_LIST="Web App|com.apple.Safari.WebApp.ARTIFACTS|501
+Web App|com.apple.Safari.WebApp.FOCUS|502
+"
+run --dry-run
+check "the unlisted web app is still quit"   "$OUT" "Would QUIT (1)"
+check "the configured one is minimised"      "$OUT" "Would MINIMISE (1)"
+
+# The classification above can be right while the action still lands on the
+# wrong process, which is exactly what happened: both are named `Web App`.
+export STUB_QUIT_LOG="$WORK/quit.log" STUB_MINIMISE_LOG="$WORK/minimise.log"
+run
+check     "the minimise addresses the configured process"  "$(cat "$STUB_MINIMISE_LOG" 2>/dev/null)" "unix id is 502"
+check_not "and never the other one"                        "$(cat "$STUB_MINIMISE_LOG" 2>/dev/null)" "unix id is 501"
+check     "the quit names the unlisted app's bundle id"    "$(cat "$STUB_QUIT_LOG" 2>/dev/null)"     "WebApp.ARTIFACTS"
+check_not "and never the configured app's"                 "$(cat "$STUB_QUIT_LOG" 2>/dev/null)"     "WebApp.FOCUS"
+check_not "and never addresses an app by the shared name"  "$(cat "$STUB_QUIT_LOG" 2>/dev/null)"     'application "Web App"'
+unset STUB_QUIT_LOG STUB_MINIMISE_LOG
+rm -f "$ROOT/config/safari_web_apps.local"
+
+# --- 23. the inventory query must not store its whose-result ---------------
+# Not reachable through the stub: the aliasing lives inside System Events, which
+# the stub replaces, so no canned app list can reproduce it. Measured 2026-09-16
+# against `lsappinfo` - reading a property per element off a STORED whose-result
+# returns the FIRST same-named process every time, for `process` and for
+# `application process`, by element and by index. Pinned at the source, which is
+# the only place the property can be checked without a window server.
+print -r -- "23. the inventory iterates its whose-result inline"
+INVENTORY=$(sed -n '/^get_running_apps()/,/^}/p' "$REPO/custom_bins/clear-mac-apps")
+check_not "no stored process list"  "$INVENTORY" "set procList to"
+check     "iterated inline"         "$INVENTORY" "repeat with proc in (every process"
+check     "and the unix id is kept" "$INVENTORY" "unix id of proc"
+
+# --- 24. a delimiter inside a process name cannot redirect an action -------
+# The inventory is pipe-separated and entries are tab-joined, so either
+# character inside a process NAME shifts a fragment of that name into the
+# bundle-id field. That was harmless while actions were addressed by name - the
+# bogus address simply matched nothing. It stopped being harmless once quit
+# started addressing an app by bundle id: a name whose tail happens to equal
+# another running app's bundle id sends the quit to THAT app, even one the
+# config independently marks `skip`. Malformed records are dropped instead.
+print -r -- "24. a delimiter in a process name cannot redirect a quit"
+cat > "$ROOT/config/app-lifecycle.yaml" <<'YAML'
+defaults:
+  manual: quit
+apps:
+  Victim App:  {manual: skip}
+YAML
+# Line 1 hides the victim's bundle id after a TAB; line 2 after a PIPE. Line 3
+# is the victim itself, running and configured skip, so a quit reaching it is
+# unambiguously wrong rather than merely untidy.
+# TAB via a variable: `$'\t'` inside double quotes is literal text, not a tab,
+# and a fixture that only LOOKS malformed would pass against the broken code.
+TAB=$'\t'
+export STUB_APP_LIST="Bad${TAB}com.victim.app|com.evil.one|601
+Bad|com.victim.app|com.evil.two|602
+Victim App|com.victim.app|603
+"
+run --dry-run
+check     "both malformed records are reported" "$ERR" "unreadable process record"
+check     "and neither is acted on"             "$OUT" "Would QUIT (0)"
+check     "the victim is still skipped"         "$OUT" "Victim App"
+
+export STUB_QUIT_LOG="$WORK/quit24.log"
+run
+check_not "no quit is addressed at the skipped app" "$(cat "$STUB_QUIT_LOG" 2>/dev/null)" "com.victim.app"
+check_not "nor at either malformed record's id"     "$(cat "$STUB_QUIT_LOG" 2>/dev/null)" "com.evil"
+unset STUB_QUIT_LOG
 
 # --- a broken config stops us dead -----------------------------------------
 # The default action here is "quit", so a config we cannot read must abort

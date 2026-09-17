@@ -9,6 +9,7 @@
 # so no zsh here parses YAML:
 #   manual: skip   - leave the app completely alone
 #   manual: hide   - hide it as Cmd+H does; no window is touched
+#   manual: minimise - send its windows to the Dock; hidden state untouched
 #   manual: close  - close its windows but never quit it
 #   manual: quit   - quit it (the default for unlisted apps)
 #   slow: true     - ignores keystrokes; quit then poll for exit
@@ -87,40 +88,123 @@ load_config() {
     eval "$emitted"
 }
 
-# Get list of running GUI apps as "name|bundle_id" per line
+# Get list of running GUI apps as "name|bundle_id|unix_id" per line.
+#
+# The whose-result is iterated INLINE and never stored in a variable first.
+# That is not a style choice. Reading a property per element off a STORED
+# element list resolves every same-named process to the FIRST process of that
+# name, so two Safari web apps - they all run the one shared `Web App` binary
+# and so share the process name - came back carrying the same bundle
+# identifier. The second was then classified as the first, and an app asking
+# for `hide` or `minimise` was quit because the app it was mistaken for was
+# unlisted. Measured 2026-09-16 against `lsappinfo`: every stored-list form
+# aliases (generic `process` and `application process`, by element or by
+# index); inline and bulk parallel-list forms report each process correctly.
+# hide-idle-apps reads the bulk form, which is why it never had this fault.
+#
+# The unix id rides along because a NAME is not an address: the actions below
+# resolve each process by unix id, since two processes can share a name.
 get_running_apps() {
     osascript -e 'tell application "System Events"
-        set procList to every process whose background only is false
         set output to ""
-        repeat with proc in procList
+        repeat with proc in (every process whose background only is false)
             set procName to name of proc
             set procBID to bundle identifier of proc
             if procBID is missing value then set procBID to ""
-            set output to output & procName & "|" & procBID & linefeed
+            -- Guarded like the bundle id above, and for a blunter reason: this
+            -- expression sits inside the loop that builds the WHOLE inventory,
+            -- so one process whose unix id could not be read would fail the
+            -- enumeration outright - and main() treats an unreadable inventory
+            -- as "do nothing", so a single odd process would silently turn the
+            -- entire Shortcut into a no-op. An empty id costs that one process
+            -- its precise address and nothing else: ps_ref falls back to the
+            -- name, which is what every rung did before this change.
+            set procPID to ""
+            try
+                set procPID to (unix id of proc) as text
+            end try
+            set output to output & procName & "|" & procBID & "|" & procPID & linefeed
         end repeat
         return output
     end tell'
 }
 
-# Quit an app gracefully
+# The AppleScript specifier for one process, used by every System Events call
+# below. A unix id is the only handle that distinguishes two processes sharing a
+# name, which is the normal case for Safari web apps. Falling back to the name
+# keeps the script working where no id was captured - an older stub, or a
+# process System Events listed without one - at the old level of ambiguity
+# rather than failing outright.
+#
+# Usage: ps_ref "<pid>" "<name>"
+ps_ref() {
+    if [[ "${1:-}" == <-> ]]; then
+        print -r -- "(first process whose unix id is $1)"
+    else
+        print -r -- "process \"$2\""
+    fi
+}
+
+# One running process, as carried from the inventory to the action that acts on
+# it: "<name>\t<bundle id>\t<unix id>". The classification buckets hold these
+# rather than names, because two Safari web apps share the name `Web App` - so a
+# bucket of names cannot say WHICH of them the config matched, and the quit
+# aimed at one landed on the other. The bundle id and unix id are both allowed
+# to be empty; ps_ref and quit_app each fall back to the name.
+#
+# Each accessor answers EMPTY rather than guessing when it is handed something
+# that is not a three-field entry - a bare app name, say, passed by a call site
+# that was not converted. `${1##*\t}` on a tab-less string returns the whole
+# string, so an unconverted caller would have handed `Google Chrome` to ps_ref
+# as a unix id; that failed safe only because it is not numeric. Answering empty
+# makes the fallback to the name deliberate instead of accidental.
+e_name() { print -r -- "${1%%$'\t'*}" }
+e_bid()  { [[ "$1" == *$'\t'* ]] || { print -r -- ""; return 0 }
+           local rest="${1#*$'\t'}"; print -r -- "${rest%%$'\t'*}" }
+e_pid()  { [[ "$1" == *$'\t'*$'\t'* ]] || { print -r -- ""; return 0 }
+           print -r -- "${1##*$'\t'}" }
+
+# Quit an app gracefully.
+#
+# Addressed by bundle id when there is one. `tell application "<name>"` asks
+# LaunchServices to find an app with that name, and for a Safari web app the
+# name is `Web App`, which resolves to the shared system binary rather than to
+# the web app that is running - so the quit landed on whichever instance
+# LaunchServices picked, and could even launch a fresh one. A bundle id is
+# unique per web app and names exactly the app the config was written about.
+#
+# Usage: quit_app "<name>" "<bundle_id>"
 quit_app() {
-    local app="$1"
-    osascript -e "tell application \"$app\" to quit" 2>/dev/null || true
+    local app="$1" bid="${2:-}"
+    if [[ -n "$bid" ]]; then
+        osascript -e "tell application id \"$bid\" to quit" 2>/dev/null || true
+    else
+        osascript -e "tell application \"$app\" to quit" 2>/dev/null || true
+    fi
 }
 
 # Quit an app and poll until it exits (max 30s), for apps that ignore keystrokes.
 # No focus dependency (System Events polling is name-based), safe to run in parallel.
 # Usage: slow_quit_and_wait "AppName"
 slow_quit_and_wait() {
-    local app="$1"
+    local entry="$1"
+    local app="$(e_name "$entry")" bid="$(e_bid "$entry")" pid="$(e_pid "$entry")"
     echo "Quitting (slow): $app"
-    quit_app "$app"
+    quit_app "$app" "$bid"
     local elapsed=0
     while (( elapsed < 30 )); do
         sleep 2
         elapsed=$((elapsed + 2))
+        # By unix id, not by name: a second process sharing this one's name
+        # would read as "still running" forever and burn the full 30s, and -
+        # worse - a run where THIS process had exited would still be reported
+        # as a timeout.
         local still_running
-        still_running=$(osascript -e "tell application \"System Events\" to return (name of every process whose name is \"$app\")" 2>/dev/null || echo "")
+        if [[ "$pid" == <-> ]]; then
+            still_running=$(osascript -e "tell application \"System Events\" to return (name of every process whose unix id is $pid)" 2>/dev/null || echo "")
+        else
+            still_running=$(osascript -e "tell application \"System Events\" to return (name of every process whose name is \"$app\")" 2>/dev/null || echo "")
+        fi
         if [[ -z "$still_running" ]]; then
             echo "  $app exited after ${elapsed}s"
             return 0
@@ -196,9 +280,10 @@ record_ax_unsupported() {
     mv "$tmp" "$AX_CAPABILITY_FILE"
 }
 
+# Usage: count_app_windows "<name>" "<pid>"
 count_app_windows() {
     ax_trace "count $1"
-    osascript -e "tell application \"System Events\" to tell process \"$1\" to count windows" 2>>"$AX_TRACE_LOG"
+    osascript -e "tell application \"System Events\" to tell $(ps_ref "${2:-}" "$1") to count windows" 2>>"$AX_TRACE_LOG"
 }
 
 # Close every window by clicking its close button, and print how many are left.
@@ -210,11 +295,12 @@ count_app_windows() {
 # the delay to tear a window down would otherwise be branded on its first slow
 # close and, since the record is never revisited, branded forever.
 ax_close_app_windows() {
-    local app="$1"
-    local patience="${2:-3}"
+    local app="$1" pid="${2:-}"
+    local patience="${3:-3}"
+    local ref="$(ps_ref "$pid" "$app")"
     osascript -e "
         tell application \"System Events\"
-            tell process \"$app\"
+            tell ${ref}
                 set attempts to 0
                 set stalls to 0
                 repeat while (count of windows) > 0 and attempts < 20
@@ -248,28 +334,30 @@ ax_close_app_windows() {
 # Tries the focus-free AX close first, and falls back to keystrokes for apps
 # that cannot do it - remembering which those are so the probe happens once.
 close_app_windows() {
-    local app="$1"
+    local entry="$1"
     local patience="${2:-3}"
+    local app="$(e_name "$entry")" pid="$(e_pid "$entry")"
     local count remaining
 
     # An app with no windows is already in the state closing would leave it. Do
     # not probe it, and above all do not record it as keystroke-only: a probe
     # that fails for want of a window says nothing about what the app supports.
-    count=$(count_app_windows "$app") || count=""
+    count=$(count_app_windows "$app" "$pid") || count=""
     [[ "$count" == 0 ]] && return 0
 
     if ! ax_close_unsupported "$app"; then
-        if remaining=$(ax_close_app_windows "$app" "$patience") && [[ "$remaining" == 0 ]]; then
+        if remaining=$(ax_close_app_windows "$app" "$pid" "$patience") && [[ "$remaining" == 0 ]]; then
             return 0
         fi
         record_ax_unsupported "$app"
     fi
-    close_app_windows_keystroke "$app" "$patience"
+    close_app_windows_keystroke "$app" "$pid" "$patience"
 }
 
 close_app_windows_keystroke() {
-    local app="$1"
-    local patience="${2:-3}"
+    local app="$1" pid="${2:-}"
+    local patience="${3:-3}"
+    local ref="$(ps_ref "$pid" "$app")"
     local remaining=""
     # Use Cmd+W via System Events - works for Electron apps and others
     # that don't respond to standard AppleScript window commands.
@@ -286,7 +374,7 @@ close_app_windows_keystroke() {
     # app whose windows are still open - the one case that must not happen.
     remaining=$(osascript -e "
         tell application \"System Events\"
-            tell process \"$app\"
+            tell ${ref}
                 set frontmost to true
                 -- Activation from a Shortcuts-spawned process can lag; a keystroke
                 -- fired before frontmost actually flips is dropped (no other window
@@ -335,9 +423,10 @@ close_app_windows_keystroke() {
 }
 
 # Get the title of a (non-Chrome) app's frontmost window, best-effort
+# Usage: get_app_frontmost_window_title "<name>" "<pid>"
 get_app_frontmost_window_title() {
-    local app="$1"
-    osascript -e "tell application \"System Events\" to tell process \"$app\" to get name of window 1" 2>/dev/null
+    local app="$1" pid="${2:-}"
+    osascript -e "tell application \"System Events\" to tell $(ps_ref "$pid" "$app") to get name of window 1" 2>/dev/null
 }
 
 # Get all Chrome window IDs and tab titles as "window_id|tab_title" per line
@@ -360,7 +449,26 @@ APPLESCRIPT
 # what `manual: hide` asks for, and it is also the rung the idle job reaches
 # on its own - so both triggers end up in the same one-line implementation.
 hide_app() {
-    osascript -e "tell application \"System Events\" to set visible of process \"$1\" to false" 2>/dev/null
+    osascript -e "tell application \"System Events\" to set visible of $(ps_ref "$(e_pid "$1")" "$(e_name "$1")") to false" 2>/dev/null
+}
+
+# Minimise every window of an app to the Dock, over the same System Events AX
+# route the close path uses - no focus needed, so it runs in parallel like
+# hide_app. `manual: minimise` is the alternative to hide for an app whose
+# windows you want in the Dock rather than off screen. It never changes the
+# process's hidden state: an app the idle job (or Cmd+H) already hid stays
+# hidden, with its windows minimised for when it is next shown - un-hiding it
+# here would flash every window back onto the screen first, and a hidden app
+# is already cleared. A window with no
+# minimise button (a sheet, a panel) makes System Events error out and the loop
+# stop there; the non-zero status is then reported as a failed action rather
+# than a clean run, mirroring hide_app, which has no `try` either.
+minimise_app() {
+    osascript -e "tell application \"System Events\" to tell $(ps_ref "$(e_pid "$1")" "$(e_name "$1")")
+        repeat with w in windows
+            set value of attribute \"AXMinimized\" of w to true
+        end repeat
+    end tell" 2>/dev/null
 }
 
 # A quit that the close rung is allowed to veto. close_app_selectively decides
@@ -378,14 +486,16 @@ hide_app() {
 # to be collected and waited on one at a time - otherwise a failed action is
 # indistinguishable from a clean run. The names ride alongside because a PID
 # alone cannot say which app it was.
-run_parallel() {   # run_parallel <rung> <fn> <app>...
+run_parallel() {   # run_parallel <rung> <fn> <entry>...
     local rung="$1" fn="$2"; shift 2
     local -a pids=() names=()
-    local app=""
-    for app in "$@"; do
-        "$fn" "$app" &
+    local entry=""
+    for entry in "$@"; do
+        "$fn" "$entry" &
         pids+=($!)
-        names+=("$app")
+        # The NAME, not the entry: this is what a failure notification says out
+        # loud, and nobody wants to read a bundle id in a notification.
+        names+=("$(e_name "$entry")")
     done
     local -i i=0
     for (( i = 1; i <= ${#pids}; i++ )); do
@@ -393,18 +503,21 @@ run_parallel() {   # run_parallel <rung> <fn> <app>...
     done
 }
 
+# Usage: quit_app_capped "<entry>"
 quit_app_capped() {
     if [[ "$MAX_ACTION" == close ]]; then
-        echo "  $1: would quit, but this run is capped at close"
+        echo "  $(e_name "$1"): would quit, but this run is capped at close"
         return 0
     fi
-    quit_app "$1"
+    quit_app "$(e_name "$1")" "$(e_bid "$1")"
 }
 
 # Usage: close_app_selectively "Google Chrome" "Google Meet" "pattern2" ...
+# Usage: close_app_selectively "<entry>" "<pattern>"...
 close_app_selectively() {
-    local app="$1"; shift
+    local entry="$1"; shift
     local -a protected_patterns=("$@")
+    local app="$(e_name "$entry")"
 
     if [[ "$app" != "Google Chrome" ]]; then
         # Non-Chrome: we can't selectively close individual windows, only
@@ -460,10 +573,10 @@ close_app_selectively() {
     if (( ${#protected_windows} == 0 )); then
         if [[ "$MAX_ACTION" == close ]]; then
             echo "  $app: would quit, but this run is capped at close — closing its windows instead"
-            close_app_windows "$app"
+            close_app_windows "$entry"
             return
         fi
-        quit_app "$app"
+        quit_app "$app" "$(e_bid "$entry")"
         return
     fi
 
@@ -504,7 +617,7 @@ close_app_selectively() {
 
     # Zombie check: if 0 windows remain after close, quit the app
     if (( ${#still_open} == 0 )); then
-        quit_app_capped "$app"
+        quit_app_capped "$entry"
     fi
     return $(( stuck > 0 ))
 }
@@ -546,19 +659,22 @@ main() {
     # each app's `manual:` value; `manual: quit` needs no set, it's the default.
     typeset -A no_touch_set
     typeset -A hide_only_set
+    typeset -A minimise_set
     typeset -A close_windows_set
     typeset -A slow_quit_set
 
     # One bucket per value on the scale, `quit` being the default and so needing
     # none. `hide` needs its own: it is a valid `manual:` value, and without a
     # bucket it fell through to the default and QUIT the app - the config asking
-    # for the gentlest action and getting the harshest.
+    # for the gentlest action and getting the harshest. `minimise` is the same
+    # shape: a gentle value that must not fall through.
     local key
     for key in "${ALC_APP_KEYS[@]}"; do
         case "${ALC_MANUAL[$key]}" in
-            skip)  no_touch_set[$key]=1 ;;
-            hide)  hide_only_set[$key]=1 ;;
-            close) close_windows_set[$key]=1 ;;
+            skip)     no_touch_set[$key]=1 ;;
+            hide)     hide_only_set[$key]=1 ;;
+            minimise) minimise_set[$key]=1 ;;
+            close)    close_windows_set[$key]=1 ;;
         esac
         # NOT a bucket: `slow:` says how a quit is AWAITED, so it only means
         # anything once an app has been classified as a quit. As a bucket it
@@ -572,6 +688,7 @@ main() {
     # Build bundle ID sets for fallback matching (from registry)
     typeset -A no_touch_bids
     typeset -A hide_only_bids
+    typeset -A minimise_bids
     typeset -A close_windows_bids
     typeset -A slow_quit_bids
 
@@ -581,6 +698,9 @@ main() {
     for name in ${(k)hide_only_set}; do
         [[ -n "${registry[$name]:-}" ]] && hide_only_bids[${registry[$name]}]=1
     done
+    for name in ${(k)minimise_set}; do
+        [[ -n "${registry[$name]:-}" ]] && minimise_bids[${registry[$name]}]=1
+    done
     for name in ${(k)close_windows_set}; do
         [[ -n "${registry[$name]:-}" ]] && close_windows_bids[${registry[$name]}]=1
     done
@@ -588,7 +708,8 @@ main() {
         [[ -n "${registry[$name]:-}" ]] && slow_quit_bids[${registry[$name]}]=1
     done
 
-    # Get running apps with bundle IDs (tab-separated: "name<TAB>bid")
+    # Get running apps with bundle IDs and unix ids (tab-separated:
+    # "name<TAB>bid<TAB>pid")
     # Tab-separated to handle multiple processes with the same name (e.g. Safari web apps)
     #
     # Captured, not piped from `< <(...)`, whose exit status is discarded: a
@@ -613,8 +734,30 @@ main() {
         return 1
     fi
     local -a running_entries=()
-    while IFS='|' read -r name bid; do
+    while IFS='|' read -r name bid pid; do
         [[ -n "$name" ]] || continue
+        # A record we cannot trust is DROPPED, never defaulted. `defaults.manual`
+        # is quit, so letting a malformed one fall through would quit an app we
+        # could not even identify - and, since the quit is now addressed by
+        # bundle id, it could be addressed at a DIFFERENT app than the one this
+        # line describes, including one whose own config says skip.
+        #
+        # Two shapes are rejected, one per delimiter:
+        #   - a unix id that is not all digits. That is what a `|` inside a
+        #     process name produces: the fields shift left, and the real bundle
+        #     id lands in pid while some fragment of the name lands in bid.
+        #   - a name or bundle id containing a tab. Entries are tab-joined, so a
+        #     tab in the name adds a field and lets a suffix of the name
+        #     masquerade as the bundle id.
+        # Dropping costs that process its action, which is the safe direction:
+        # the rungs here only ever take things away. It is warned about rather
+        # than recorded as a failed action, because a --only run aimed at some
+        # other app should not be failed by an unrelated malformed record.
+        if [[ -n "$pid" && "$pid" != <-> ]] \
+           || [[ "$name" == *"$SEP"* ]] || [[ "$bid" == *"$SEP"* ]]; then
+            echo "clear-mac-apps: unreadable process record, skipping: ${name}" >&2
+            continue
+        fi
         # --only narrows the candidate list BEFORE classification, so config
         # still gets to veto. It can only ever make us do less, never more.
         if (( ${#ONLY_APPS} > 0 )); then
@@ -624,7 +767,7 @@ main() {
             done
             $matched || continue
         fi
-        running_entries+=("${name}${SEP}${bid}")
+        running_entries+=("${name}${SEP}${bid}${SEP}${pid}")
     done <<< "$running"
 
     # Classify: check name match first, bundle ID as fallback
@@ -634,6 +777,7 @@ main() {
     local _title
     local -a apps_to_quit=()
     local -a apps_hide=()
+    local -a apps_minimise=()
     local -a apps_close_windows=()
     local -a apps_slow_quit=()
     local -a apps_selective_close=()
@@ -643,11 +787,13 @@ main() {
     # decide "this app gets quit" cannot disagree about the slow modifier.
     # Appends to the arrays above by zsh's dynamic scoping.
     push_quit() {
-        local qapp="$1" qbid="$2" qlower="${(L)1}"
+        local qentry="$1"
+        local qapp="$(e_name "$qentry")" qbid="$(e_bid "$qentry")"
+        local qlower="${(L)qapp}"
         if (( ${+slow_quit_set[$qlower]} )) || { [[ -n "$qbid" ]] && (( ${+slow_quit_bids[$qbid]} )) }; then
-            apps_slow_quit+=("$qapp")
+            apps_slow_quit+=("$qentry")
         else
-            apps_to_quit+=("$qapp")
+            apps_to_quit+=("$qentry")
         fi
     }
 
@@ -655,35 +801,39 @@ main() {
     # gets its own value. Falling straight through to a quit made the default a
     # lie in the safe direction - `defaults.manual: close` still quit every
     # unlisted app - but reading the default unconditionally is the mirror bug.
-    # The three sets above hold only the skip/hide/close apps, so a listed app
+    # The sets above hold only the skip/hide/minimise/close apps, so a listed app
     # whose `manual:` is an explicit `quit` also lands here, and a gentler
     # default would silently overrule it. The app's own value wins; the default
     # applies only where the config genuinely never named it. Only `quit` needs
     # push_quit's slow-modifier lookup.
     push_default() {
-        local action="${ALC_MANUAL[${(L)1}]:-$ALC_DEFAULT_MANUAL}"
+        local dentry="$1"
+        local dname="$(e_name "$dentry")"
+        local action="${ALC_MANUAL[${(L)dname}]:-$ALC_DEFAULT_MANUAL}"
         case "$action" in
-            skip)  apps_skipped+=("$1") ;;
-            hide)  apps_hide+=("$1") ;;
-            close) apps_close_windows+=("$1") ;;
-            *)     push_quit "$1" "$2" ;;
+            skip)     apps_skipped+=("$dentry") ;;
+            hide)     apps_hide+=("$dentry") ;;
+            minimise) apps_minimise+=("$dentry") ;;
+            close)    apps_close_windows+=("$dentry") ;;
+            *)        push_quit "$dentry" ;;
         esac
     }
 
     for entry in "${running_entries[@]}"; do
-        local app="${entry%%${SEP}*}"
-        local bid="${entry#*${SEP}}"
+        local app="$(e_name "$entry")" bid="$(e_bid "$entry")" pid="$(e_pid "$entry")"
         local app_lower="${(L)app}"
 
         if (( ${+no_touch_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+no_touch_bids[$bid]} )) }; then
-            apps_skipped+=("$app")
+            apps_skipped+=("$entry")
         elif (( ${+hide_only_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+hide_only_bids[$bid]} )) }; then
-            apps_hide+=("$app")
+            apps_hide+=("$entry")
+        elif (( ${+minimise_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+minimise_bids[$bid]} )) }; then
+            apps_minimise+=("$entry")
         elif (( ${+close_windows_set[$app_lower]} )) || { [[ -n "$bid" ]] && (( ${+close_windows_bids[$bid]} )) }; then
-            apps_close_windows+=("$app")
+            apps_close_windows+=("$entry")
         elif (( ${#protected_patterns} > 0 )) && [[ "$ALC_DEFAULT_MANUAL" == (close|quit) ]]; then
             # Check if this app has any protected windows. Skipped entirely for
-            # a skip/hide default, which touches no window and so has nothing to
+            # a skip/hide/minimise default, which closes no window and so has nothing to
             # protect - the check costs an AppleScript round-trip per app.
             local has_protected=false
             if [[ "$app" == "Google Chrome" ]]; then
@@ -741,7 +891,7 @@ main() {
                 # act. Chrome's query differs: it iterates `every window` and
                 # returns empty with status 0, so there a nonzero really does
                 # mean the query broke.
-                _title=$(get_app_frontmost_window_title "$app")
+                _title=$(get_app_frontmost_window_title "$app" "$pid")
                 if [[ -n "$_title" ]]; then
                     for pattern in "${protected_patterns[@]}"; do
                         if [[ "${(L)_title}" == *"${(L)pattern}"* ]]; then
@@ -752,12 +902,12 @@ main() {
                 fi
             fi
             if $has_protected; then
-                apps_selective_close+=("$app")
+                apps_selective_close+=("$entry")
             else
-                push_default "$app" "$bid"
+                push_default "$entry"
             fi
         else
-            push_default "$app" "$bid"
+            push_default "$entry"
         fi
     done
 
@@ -777,8 +927,8 @@ main() {
         echo "=== DRY RUN ==="
         echo ""
         echo "Would QUIT (${#apps_to_quit}):"
-        for app in "${apps_to_quit[@]}"; do
-            echo "  - $app"
+        for entry in "${apps_to_quit[@]}"; do
+            echo "  - $(e_name "$entry")"
         done
         # Printed only when it applies, like SELECTIVE-CLOSE below: an app asking
         # for `manual: hide` has to be both running and matched for this to have
@@ -787,32 +937,39 @@ main() {
         if (( ${#apps_hide} > 0 )); then
             echo ""
             echo "Would HIDE (${#apps_hide}):"
-            for app in "${apps_hide[@]}"; do
-                echo "  - $app"
+            for entry in "${apps_hide[@]}"; do
+                echo "  - $(e_name "$entry")"
+            done
+        fi
+        if (( ${#apps_minimise} > 0 )); then
+            echo ""
+            echo "Would MINIMISE (${#apps_minimise}):"
+            for entry in "${apps_minimise[@]}"; do
+                echo "  - $(e_name "$entry")"
             done
         fi
         echo ""
         echo "Would CLOSE WINDOWS (${#apps_close_windows}):"
-        for app in "${apps_close_windows[@]}"; do
-            echo "  - $app"
+        for entry in "${apps_close_windows[@]}"; do
+            echo "  - $(e_name "$entry")"
         done
         echo ""
         echo "Would SLOW-QUIT (${#apps_slow_quit}):"
-        for app in "${apps_slow_quit[@]}"; do
-            echo "  - $app"
+        for entry in "${apps_slow_quit[@]}"; do
+            echo "  - $(e_name "$entry")"
         done
         echo ""
         if (( ${#apps_selective_close} > 0 )); then
             local patterns_display="${(j:, :)${(@qq)protected_patterns}}"
             echo "Would SELECTIVE-CLOSE (matching: ${patterns_display}):"
-            for app in "${apps_selective_close[@]}"; do
-                echo "  - $app"
+            for entry in "${apps_selective_close[@]}"; do
+                echo "  - $(e_name "$entry")"
             done
             echo ""
         fi
         echo "Would SKIP (no-touch):"
-        for app in "${apps_skipped[@]}"; do
-            echo "  - $app"
+        for entry in "${apps_skipped[@]}"; do
+            echo "  - $(e_name "$entry")"
         done
         return 0
     fi
@@ -837,8 +994,8 @@ main() {
     # a close that silently failed is what starts a quit clock it should not.
     if (( ${#apps_to_quit} > 0 )); then
         echo "Quitting ${#apps_to_quit} apps in parallel..."
-        for app in "${apps_to_quit[@]}"; do
-            quit_app "$app" &
+        for entry in "${apps_to_quit[@]}"; do
+            quit_app "$(e_name "$entry")" "$(e_bid "$entry")" &
         done
         wait
     fi
@@ -850,35 +1007,43 @@ main() {
         echo "Hiding ${#apps_hide} apps in parallel..."
         run_parallel hide hide_app "${apps_hide[@]}"
     fi
+    if (( ${#apps_minimise} > 0 )); then
+        echo "Minimising ${#apps_minimise} apps in parallel..."
+        run_parallel minimise minimise_app "${apps_minimise[@]}"
+    fi
 
     # Sequential, because the keystroke fallback needs focus and two of those in
     # parallel would fight over it. The AX path itself needs no focus.
-    for app in "${apps_close_windows[@]}"; do
-        echo "Closing windows: $app"
-        close_app_windows "$app" 3 || { echo "  Warning: $app still has windows"; FAILED_ACTIONS+=("close: $app"); }
+    for entry in "${apps_close_windows[@]}"; do
+        local cname="$(e_name "$entry")"
+        echo "Closing windows: $cname"
+        close_app_windows "$entry" 3 || { echo "  Warning: $cname still has windows"; FAILED_ACTIONS+=("close: $cname"); }
     done
 
     # Slow-quit apps in parallel: send quit, then poll each until exit (max 30s each).
-    # No focus needed (System Events polling is name-based), so safe to background.
+    # No focus needed (the poll is a System Events lookup by unix id), so safe
+    # to background.
     if (( ${#apps_slow_quit} > 0 )); then
         echo "Quitting (slow) ${#apps_slow_quit} apps in parallel..."
         run_parallel quit slow_quit_and_wait "${apps_slow_quit[@]}"
     fi
 
     # Selective-close: close non-protected windows, keep app alive
-    for app in "${apps_selective_close[@]}"; do
-        echo "Selective-close: $app"
-        close_app_selectively "$app" "${protected_patterns[@]}" || FAILED_ACTIONS+=("close: $app")
+    for entry in "${apps_selective_close[@]}"; do
+        local sname="$(e_name "$entry")"
+        echo "Selective-close: $sname"
+        close_app_selectively "$entry" "${protected_patterns[@]}" || FAILED_ACTIONS+=("close: $sname")
     done
 
     echo ""
     echo "Done."
     (( ${#no_touch_set} > 0 )) && echo "  No-touch: ${(k)no_touch_set}"
     (( ${#hide_only_set} > 0 )) && echo "  Hide-only: ${(k)hide_only_set}"
+    (( ${#minimise_set} > 0 )) && echo "  Minimise: ${(k)minimise_set}"
     (( ${#close_windows_set} > 0 )) && echo "  Close-windows: ${(k)close_windows_set}"
     (( ${#slow_quit_set} > 0 )) && echo "  Slow-quit: ${(k)slow_quit_set}"
 
-    # Explicit, because the four lines above are `(( cond )) && echo` and the
+    # Explicit, because the five lines above are `(( cond )) && echo` and the
     # last one's condition would otherwise become this script's exit status -
     # i.e. "does the config list a slow: true app", which is not a result.
     (( ${#FAILED_ACTIONS} > 0 )) && echo "  Failed actions: ${(j:, :)FAILED_ACTIONS}"
