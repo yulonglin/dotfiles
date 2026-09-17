@@ -259,35 +259,39 @@
   </section>
 
   <section class="col">
-    <h2>The platform already had a knob for this</h2>
-    <p>The sharper lesson is not that the watchdog lacked a deadline. It is that a poller keeping something alive is <strong>a configuration setting someone wrote in bash</strong>. Checked against the installed Modal 1.4.3 source, three declared parameters cover what it was doing:</p>
+    <h2>Half of it was a config setting written in bash</h2>
+    <p>The sharper lesson is not that the watchdog lacked a deadline. A poller that keeps something alive is <strong>a configuration setting someone wrote in bash</strong> — except only one half of this one was, and the other half has no declarative form at all.</p>
   </section>
 
   <div class="table-box">
     <table>
       <thead>
-        <tr><th>Parameter</th><th>What it declares</th><th>What the watchdog did instead</th></tr>
+        <tr><th>What the watchdog did</th><th>Declarative equivalent</th><th>Verdict</th></tr>
       </thead>
       <tbody>
         <tr class="flagged">
-          <td class="n"><code>min_containers</code></td>
-          <td>Keep N containers warm even when idle</td>
-          <td>Achieved exactly this, as an undeclared side effect of a health check</td>
+          <td>Kept the endpoint warm <em>(the accident)</em></td>
+          <td class="n"><code>min_containers=N</code></td>
+          <td><strong>Not wanted.</strong> This is what the poll achieved by accident, not a recommendation. The right value here is 0 — nothing should be warm between runs.</td>
         </tr>
         <tr>
+          <td>Bounded a hung request</td>
           <td class="n"><code>timeout</code></td>
-          <td>Max execution time per input (default 300s; this app set 12h)</td>
-          <td>A wedged request pinned its container for up to 12 hours</td>
+          <td>Default 300 s; this app set <strong>12 h</strong>, which is right for the batch path it was copy-pasted from and far too long for a server. Now 3,660 s, derived from the client's own 3,600 s cutoff.</td>
+        </tr>
+        <tr>
+          <td>Redeployed on a wedge <em>(the point)</em></td>
+          <td class="n">— none —</td>
+          <td><strong>No replacement exists.</strong> No liveness probe for a deployed function, and no N-input container recycle.</td>
         </tr>
       </tbody>
     </table>
   </div>
 
   <section class="col">
-    <p><code>min_containers=1</code> is the whole watchdog, in one line, in the app definition. The difference is not behaviour — it is that a declared parameter is auditable and a tmux pane is not. Nobody could see the keep-alive because it was never written down as one.</p>
-    <p>An earlier version of this page listed a third parameter, <code>max_inputs</code>, as a way to recycle a container after N requests. <strong>That was wrong and has been removed.</strong> Modal 1.4.3 accepts only <code>max_inputs=1</code> — now spelled <code>single_use_containers</code> — and refuses it for web servers outright. There is no N-input recycle, so nothing declarative replaces "redeploy it when it wedges."</p>
-    <p>Three things the platform genuinely does not offer, which is why the watchdog was not simply reinventing a feature: there is <strong>no liveness probe for a deployed function</strong> — <code>modal.Probe</code> exists but only for Sandboxes, and <code>@app.function</code> takes no probe parameter; there is <strong>no way to declare an expected duration</strong>, only hard kills; and there is <strong>no container recycling short of one-request-per-container</strong>.</p>
-    <p>What did resolve is the question of what <code>timeout</code> bounds. For a <code>@modal.web_server</code> it caps each <em>forwarded request</em>, not the container's lifetime: the server boots once and an ASGI proxy sits in front of it, so lowering the value cannot force cold starts. That makes it the one safe lever, and on this app it was set to twelve hours.</p>
+    <p>So the accident is declarable and the purpose is not. <code>min_containers=1</code> would have produced the same $96/day, but visibly, in the app definition, where a reader would see it — the difference is auditability, not behaviour. Nobody could see this keep-alive because it was never written down as one.</p>
+    <p>Three gaps are genuine, which is why the script was not simply reinventing a feature: <code>modal.Probe</code> exists but only for Sandboxes, so a deployed function has no liveness probe; nothing declares an expected duration, only hard kills; and <code>max_inputs</code> accepts only the value 1, refused for servers outright, so there is no recycle-after-N.</p>
+    <p>An earlier version of this page listed <code>max_inputs</code> as an N-input recycle. That was wrong, and it is corrected here rather than quietly removed, because the wrong version was published and read.</p>
   </section>
 
   <section class="col">
@@ -314,31 +318,37 @@
       <span class="when">After</span>
       <div>
         <h3>Flat daily spend, surfaced where someone reads it</h3>
-        <p>A daily check across every cloud account flags sustained flat billing and raises it at the start of the next session. This is the backstop. It would have caught this one on <span class="num">17 August</span> — two days in, about <span class="num">$2,700</span> unspent.</p>
+        <p>A daily check across every cloud account flags sustained flat billing and raises it at the start of the next session, in <em>any</em> repo — the hook is registered globally, not per-project. This is the backstop. It would have caught this one on <span class="num">17 August</span> — two days in, about <span class="num">$2,700</span> unspent.</p>
+        <p>Its limit is the machine: the check runs locally and reports into the next session <em>on that box</em>, so a burn started from a laptop you are not currently sitting at waits until you open a session there. Cloud billing is global; this guard is not.</p>
       </div>
     </div>
   </div>
 
   <section class="col">
-    <h2>The guard needed four reviewers to become safe</h2>
-    <p>The hook that nudges toward a deadline was reviewed by four model families, each able to read the repository and run the hook rather than only read a diff. Every one of them found a distinct defect that would have killed it, and three of the four blocked it outright.</p>
+    <h2>So what do we actually do now</h2>
+    <p>Concretely, as of 17 September:</p>
     <ul>
-      <li><strong>The advice never reached the agent.</strong> It was emitted only as a user-visible message, not into the model's context — so the nudge would have been seen by a human and ignored by the thing running the command.</li>
-      <li><strong>It fired on the word, not the act.</strong> Matching <code>watchdog</code> anywhere meant <code>mv watchdog.sh archive/</code>, <code>docker logs watchdog</code> and <code>mkdir keepalive</code> all triggered it.</li>
-      <li><strong><code>pip install watchdog</code>.</strong> That is a real Python package with roughly 200M downloads, present in most of these repositories. On its own this would have trained the ignore reflex inside a week.</li>
-      <li><strong><code>until</code> is the opposite of a keep-alive.</strong> <code>while curl …; do sleep; done</code> runs while the endpoint is <em>up</em> — that is the keep-alive. <code>until curl …; do sleep; done</code> <em>stops</em> when it comes up: ordinary wait-for-ready. The hook fired on it, and the test suite asserted it should.</li>
+      <li><strong>The watchdog is deleted, and nothing replaces its recovery half yet.</strong> The config it was compensating for is fixed — <code>timeout</code> is 3,660 s instead of 12 h — but if the endpoint wedges again under load, no automation catches it. That is a known, accepted gap while no run is active, not a solved problem.</li>
+      <li><strong>No Modal built-in covers the wedge.</strong> There is no liveness probe for a deployed function. If the watchdog comes back it should be owned by the run script, started and killed with the eval run, rather than launched by hand — during a run, real traffic keeps the endpoint warm anyway, so the poll costs nothing; after the run, it must not exist.</li>
+      <li><strong>The three guards on this machine are about noticing, not preventing.</strong> A nudge before an unbounded poller starts, a refusal to remove a worktree with live processes, and a daily flat-spend check. They would have caught this one on 17 August, roughly $2,700 unspent.</li>
+      <li><strong>Nothing here involves the <code>watchdog</code> PyPI package.</strong> That is an unrelated file-watching library; it appears in this write-up only as a command (<code>pip install watchdog</code>) that an early version of the nudge wrongly fired on.</li>
     </ul>
-    <blockquote>
-      <p>Only reviewers with tools found these. The false positives were confirmed by running commands through the live hook, not inferred from reading it — and the eight-model text-only panel, given the same code as pasted context, returned nothing at all.</p>
-    </blockquote>
-    <p>The hook now carries <span class="num">84</span> test cases. Most of them assert <em>silence</em>, because on something that runs before every shell command, the false positives are what kill it.</p>
+    <p>The open question that decides whether the script comes back: whether a per-request <code>timeout</code> firing under <code>@modal.concurrent</code> tears down the whole container or only that one request. If it recycles the container, the wedge clears itself and the watchdog stays dead. If it frees only a slot, the wedged server survives and every later request hangs its full 3,660 s.</p>
+  </section>
+
+  <section class="col">
+    <h2>The worktree was the wrong unit</h2>
+    <p>The middle guard refuses to remove a <em>worktree</em> that has live processes in it. Checking this machine on 17 September showed that is too narrow: <strong>15 orphaned processes launched by Claude sessions are still running, reparented to init.</strong></p>
+    <p>The sharpest is a <code>python3 -m http.server</code> started on 18 August — <span class="num">30</span> days — whose working directory reads <code>…/worktrees/a1-stock-scale48 (deleted)</code>. That is the same worktree the watchdog lived in. It orphaned two long-lived processes, not one, and the second one is still holding a TCP port. It was found only because an attempt to bind that port during this investigation failed, and the failure was initially misread as something else.</p>
+    <p>So the real unit of work is the session, not the directory, and killing a session does not reap what it spawned. What a session-level guard should look like is still open — and the prior from this whole incident argues for reporting over killing, since the thing that failed was never detection.</p>
   </section>
 
   <section class="col">
     <h2>What actually goes wrong</h2>
     <p>Every layer here worked, and the money still burned. The endpoint watchdog did its job. The billing data was correct and available the whole time. The roster check that monitors the review panel had even detected a separate dead component a day earlier — and wrote it to a file under <code>~/.local/state/</code> that nothing reads.</p>
     <p>That is the actual pattern, and it repeated twice in one investigation: <strong>a monitor that reports into a file nobody opens is not a monitor.</strong> The fix in both cases was not better detection. It was putting the finding in front of someone at the moment they could act on it.</p>
-    <p>The second pattern is narrower and worth naming: <strong>a process written for one run needs an end condition, not just a start condition.</strong> A deadline would have capped this at twelve hours. The mechanism — <code>timeout</code> — has been in coreutils for decades. Nobody reached for it, because nothing asked.</p>
+    <p>The second pattern is narrower and worth naming: <strong>a process written for one run needs an end condition, not just a start condition.</strong> A deadline would have capped this at twelve hours, and <code>timeout</code> has been in coreutils for decades. Nobody reached for it, because nothing asked.</p>
+    <p>But a clock is the crude version of the question. What you actually want to know is whether the thing is <em>progressing</em> — a wedged server has an open port and no progress, a busy one has progress, an idle one has neither but also nothing pending. No timeout can tell those three apart, and neither can a deadline; they just bound the damage. A duration estimated from a short run with generous buffer is the practical approximation, and how the 3,660 s above was arrived at, but it is an approximation of the wrong measurement.</p>
   </section>
 
   <p class="foot">
