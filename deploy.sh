@@ -1133,6 +1133,8 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     council-roster.service council-roster.timer \
                     model-router-cooldown.service model-router-cooldown.timer \
                     codex-token-refresh.service codex-token-refresh.timer \
+                    obsidian-sync.service \
+                    website-publish.service website-publish.timer \
                     romp-tailnet-proxy.service; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             # -f: installed units are copies, not symlinks into the repo, so a
