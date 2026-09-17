@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-VAULT = Path(os.environ.get("WEBSITE_VAULT", "/home/yulong/vault/writing"))
+VAULT = Path(os.environ.get("WEBSITE_VAULT", "/home/yulong/vault/writing/website"))
 REPO = Path(os.environ.get("WEBSITE_REPO", "/home/yulong/code/yulonglin.github.io"))
 STATE = Path(
     os.environ.get(
@@ -65,17 +65,35 @@ DIRS = {
 }
 FILES = {"resume.pdf": "public/resume.pdf"}
 
+SITE = "https://yulonglin.com"
+
+# Where each collection actually surfaces, read off the pages that consume it
+# rather than assumed: site/ is pulled entry by entry, research/ renders as
+# anchored sections of one page, and jobs/ appears inside the about page.
+LIVE_URL = {
+    "posts": lambda stem: f"{SITE}/writing/{stem}",
+    "research": lambda stem: f"{SITE}/research#{stem}",
+    "jobs": lambda stem: f"{SITE}/about",
+    "site": lambda stem: f"{SITE}/" + {"home": "", "about": "about", "things": "things"}.get(stem, stem),
+}
+
+# Only these collections have a draft flag in the Astro schema, so only these
+# can carry an opt-in. site/ holds three fixed pages and jobs/ holds CV entries;
+# neither is a place drafting happens.
+OPT_IN_DIRS = {"posts", "research"}
+
 # Astro's telemetry tries to create ~/.config/astro, which the sandbox denies;
 # the build dies before it compiles anything unless this is set.
 BUILD_ENV = {**os.environ, "ASTRO_TELEMETRY_DISABLED": "1"}
 
-PULL, PUSH, CONFLICT, NEW_VAULT, NEW_REPO, GONE = (
+PULL, PUSH, CONFLICT, NEW_VAULT, NEW_REPO, GONE, NO_OPT_IN = (
     "pull",
     "push",
     "conflict",
     "new-in-vault",
     "new-in-repo",
     "missing",
+    "no-opt-in",
 )
 
 
@@ -97,7 +115,47 @@ class Item:
             NEW_REPO: "repo -> vault (new)",
             CONFLICT: "BOTH CHANGED",
             GONE: "missing one side",
+            NO_OPT_IN: "no explicit draft: line",
         }[self.action]
+
+
+def frontmatter(path: Path) -> list[str]:
+    """The frontmatter lines of a markdown file, or [] if it has none."""
+    try:
+        lines = path.read_text().split("\n")
+    except (OSError, UnicodeDecodeError):
+        return []
+    if not lines or lines[0].strip() != "---":
+        return []
+    try:
+        return lines[1 : lines.index("---", 1)]
+    except ValueError:
+        return []
+
+
+def has_explicit_draft(path: Path) -> bool:
+    """True when the file states draft: outright rather than leaning on a default.
+
+    Silence used to mean published, because the Astro schema defaulted draft to
+    false. A note typed on a phone with no frontmatter at all would therefore
+    have gone straight to the live site. The schema default is now true, and
+    this is the second half of that: publishing requires the file to say so.
+    """
+    return any(line.startswith("draft:") for line in frontmatter(path))
+
+
+def is_draft(path: Path) -> bool:
+    for line in frontmatter(path):
+        if line.startswith("draft:"):
+            return line.split(":", 1)[1].strip() == "true"
+    return True  # silence means unpublished
+
+
+def is_unlisted(path: Path) -> bool:
+    for line in frontmatter(path):
+        if line.startswith("unlisted:"):
+            return line.split(":", 1)[1].strip() == "true"
+    return False
 
 
 def sha(path: Path) -> str | None:
@@ -165,8 +223,18 @@ def survey(state: dict[str, str]) -> list[Item]:
     items = []
     for key, vault, repo in pairs():
         action = classify(key, vault, repo, state)
-        if action:
-            items.append(Item(key, vault, repo, action))
+        if not action:
+            continue
+        # A file heading for the live site has to opt in explicitly. This is
+        # only a gate on the publish direction: a repo-to-vault copy is just
+        # keeping the vault current and carries no such risk.
+        if (
+            action in (PULL, NEW_VAULT)
+            and key.split("/")[0] in OPT_IN_DIRS
+            and not has_explicit_draft(vault)
+        ):
+            action = NO_OPT_IN
+        items.append(Item(key, vault, repo, action))
     return items
 
 
@@ -187,6 +255,77 @@ def record_agreed(state: dict[str, str]) -> int:
     return seeded
 
 
+README_WARNING = """# Everything in these folders is published to yulonglin.com
+
+This is not a private notes folder. Once the publish timer is running, an edit
+saved here reaches the public internet on its own, within about ten minutes,
+as soon as CI passes. There is no second confirmation step.
+
+A file is only published if its frontmatter says so outright. A note with no
+`draft:` line stays unpublished, in the Astro schema and in the sync script
+both, so a half-finished thought typed on a phone cannot go live by accident.
+To publish, set `draft: false`. To retire something that is already public
+without breaking links other people hold, set `unlisted: true` -- the page and
+its URL stay alive, but it leaves the listings and the feed.
+
+`site/` and `jobs/` have no draft flag: those are three fixed pages and the CV
+entries on the about page, and they are always live.
+
+This file is generated by `website_publish.py` on every sync. Edits to it are
+overwritten.
+"""
+
+STATE_LABEL = {
+    (False, False): "live",
+    (False, True): "unlisted",
+    (True, False): "draft",
+    (True, True): "draft",
+}
+
+
+def write_readme() -> None:
+    """Regenerate the vault index: what publishes, what does not, and where."""
+    out = [README_WARNING, f"Generated {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC.\n"]
+    titles = {"site": "Site pages", "posts": "Posts", "research": "Research", "jobs": "CV entries"}
+    for vdir in ("site", "posts", "research", "jobs"):
+        root = VAULT / vdir
+        files = sorted(root.glob("*.md"))
+        if not files:
+            continue
+        out.append(f"## {titles[vdir]}\n")
+        gated = vdir in OPT_IN_DIRS
+        out.append("| file | state | live at |" if gated else "| file | live at |")
+        out.append("|---|---|---|" if gated else "|---|---|")
+        for f in files:
+            stem = f.stem
+            url = LIVE_URL[vdir](stem)
+            if not gated:
+                out.append(f"| [[{stem}]] | {url} |")
+                continue
+            # A -zh post has no page of its own: [slug].astro looks it up from
+            # the UNFILTERED collection and renders it behind the language
+            # toggle on its English counterpart. Its own draft flag is never
+            # consulted, so reporting one here would be a lie.
+            if stem.endswith("-zh"):
+                parent = stem[: -len("-zh")]
+                shown = (root / f"{parent}.md").exists() and not is_draft(root / f"{parent}.md")
+                where = f"{LIVE_URL[vdir](parent)} (Chinese toggle)" if shown else "not published"
+                out.append(f"| [[{stem}]] | follows [[{parent}]] | {where} |")
+                continue
+            if not has_explicit_draft(f):
+                out.append(f"| [[{stem}]] | **no `draft:` line** | not published |")
+                continue
+            state = STATE_LABEL[(is_draft(f), is_unlisted(f))]
+            where = "not published" if state == "draft" else url
+            out.append(f"| [[{stem}]] | {state} | {where} |")
+        out.append("")
+    resume = VAULT / "resume.pdf"
+    if resume.exists():
+        out.append("## CV\n")
+        out.append(f"`resume.pdf` is published at {SITE}/resume.pdf. Replace the file to update it.\n")
+    (VAULT / "README.md").write_text("\n".join(out))
+
+
 def copy(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
@@ -205,6 +344,7 @@ def report(items: list[Item]) -> None:
     width = max(len(i.key) for i in items)
     for group, label in (
         (CONFLICT, "conflicts (skipped)"),
+        (NO_OPT_IN, "not published - add an explicit `draft: true` or `draft: false`"),
         (GONE, "missing on one side (skipped)"),
         (PULL, "vault -> repo"),
         (NEW_VAULT, "vault -> repo (new)"),
@@ -222,7 +362,7 @@ def do_sync(items: list[Item], state: dict[str, str], dry: bool) -> tuple[int, i
     """Apply the copies. Returns (to_repo, to_vault) counts."""
     to_repo = to_vault = 0
     for item in items:
-        if item.action in (CONFLICT, GONE):
+        if item.action in (CONFLICT, GONE, NO_OPT_IN):
             continue
         if item.action in (PULL, NEW_VAULT):
             if not dry:
@@ -386,11 +526,12 @@ def main() -> int:
         "command",
         nargs="?",
         default="status",
-        choices=["status", "sync", "publish", "adopt-repo", "adopt-vault"],
+        choices=["status", "sync", "publish", "index", "adopt-repo", "adopt-vault"],
         help=(
             "status: report only (default). sync: copy. publish: sync, PR, merge on "
-            "green. adopt-repo / adopt-vault: declare that side authoritative for "
-            "every differing file and reset the baseline - for a first run, or after "
+            "green. index: regenerate the vault README without copying anything. "
+            "adopt-repo / adopt-vault: declare that side authoritative for every "
+            "differing file and reset the baseline - for a first run, or after "
             "resolving conflicts by hand."
         ),
     )
@@ -422,6 +563,12 @@ def main() -> int:
                   file=sys.stderr)
             return 2
 
+    if args.command == "index":
+        if not args.dry_run:
+            write_readme()
+        print(f"wrote {VAULT / 'README.md'}")
+        return 0
+
     state = load_state()
     items = survey(state)
     report(items)
@@ -442,12 +589,13 @@ def main() -> int:
         print(f"\nadopted the {winner} side for {moved} file(s); baseline reset")
         return 0
 
-    conflicts = [i for i in items if i.action in (CONFLICT, GONE)]
+    conflicts = [i for i in items if i.action in (CONFLICT, GONE, NO_OPT_IN)]
     if args.command == "status":
         return 1 if conflicts else 0
 
     to_repo, to_vault = do_sync(items, state, args.dry_run)
     if not args.dry_run:
+        write_readme()
         seeded = record_agreed(state)
         save_state(state)
         if seeded:
