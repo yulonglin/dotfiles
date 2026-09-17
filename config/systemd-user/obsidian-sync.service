@@ -1,0 +1,50 @@
+[Unit]
+Description=Obsidian Sync headless client for ~/vault
+Documentation=file:%h/vault/tooling/yulonglin.github.io/2026-09-17-vault-website-publish-design.md
+
+# Network only. The vault lives on local disk; nothing else on this box has to
+# be up first.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Obsidian itself is NOT installed on this box -- `ob` is the headless client,
+# installed under ~/.bun/bin, which a user unit's minimal PATH does not include.
+# Without this the unit dies at exit 127 and the vault silently stops syncing,
+# which is the failure this service exists to prevent.
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+# --continuous, not a one-shot in a timer. A one-shot only closes the gap at
+# each tick, so an edit made on the phone waits for the next fire before it can
+# even be seen; continuous mode means the vault on this box is the vault.
+# The vault path is passed explicitly rather than relying on cwd, which for a
+# systemd unit is /.
+ExecStart=/home/yulong/.bun/bin/ob sync --continuous --path %h/vault
+
+# Sync is a network client: it will lose its connection, and the remote will
+# occasionally refuse. Restarting is the correct response to all of it. The
+# delay is deliberately not tiny -- a tight respawn against a server returning
+# 5xx is a way to get rate-limited rather than a way to recover.
+Restart=always
+RestartSec=30s
+
+# But not forever in a hot loop: five failures inside ten minutes means
+# something is actually wrong (expired token, vault unlinked, disk full), and
+# the unit should stay dead and visible rather than churn. `systemctl --user
+# status obsidian-sync` is then the honest answer to "why is my phone edit not
+# here".
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# This service's entire job is writing to ~/vault, so ProtectHome=read-only --
+# used by the sibling council-roster unit -- would break it outright. It also
+# needs ~/.config/obsidian-headless for its auth token and sync state.
+# ProtectSystem=strict still keeps it out of everything outside $HOME.
+ProtectSystem=strict
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

@@ -276,7 +276,34 @@ def notify(text: str) -> None:
         print(f"warning: telegram notify failed: {exc}", file=sys.stderr)
 
 
+def open_publish_pr() -> str | None:
+    """The number of an already-open vault-sync PR, if there is one.
+
+    Without this check a timer firing every ten minutes against a red CI opens
+    a fresh branch and PR on every tick, burying the one that actually needs
+    looking at. One outstanding publish at a time; the next tick waits.
+    """
+    proc = run(["gh", "pr", "list", "--json", "number,headRefName"], check=False)
+    if proc.returncode != 0:
+        return None
+    try:
+        for pr in json.loads(proc.stdout or "[]"):
+            if pr.get("headRefName", "").startswith("vault-sync/"):
+                return str(pr["number"])
+    except json.JSONDecodeError:
+        return None
+    return None
+
+
 def do_publish(count: int, dry: bool) -> int:
+    existing = open_publish_pr()
+    if existing:
+        print(
+            f"a vault-sync PR is already open (#{existing}); not opening another. "
+            "Merge or close it, then re-run."
+        )
+        return 1
+
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     branch = f"vault-sync/{stamp}"
 
