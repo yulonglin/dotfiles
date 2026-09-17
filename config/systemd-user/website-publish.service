@@ -33,8 +33,22 @@ SuccessExitStatus=0 1
 TimeoutStartSec=20min
 
 # Writes the repo under ~/code, the vault under ~/vault, and its own state, so
-# ProtectHome=read-only is not available here. ProtectSystem=strict still keeps
-# it out of everything outside $HOME.
+# ProtectHome=read-only is not available here.
+# ProtectSystem=strict, plus an explicit ReadWritePaths rather than trusting an
+# implicit exemption. Measured on this box 2026-09-17 with `systemd-run --user
+# --wait -p ProtectSystem=strict`: writes to ~/vault, ~/code, ~/.local/state and
+# ~/.cache all succeed, because for a USER manager strict does not remount $HOME
+# read-only. Writes to ~/scratch FAIL under the same setting -- it is a symlink
+# to /workspace, a separate disk, which strict does lock. So the exemption is
+# real but it is an exemption for $HOME specifically, not for "anything the user
+# owns", and it is not something to build on silently. Naming the paths means a
+# systemd change or a path moved onto /workspace fails loudly at start rather
+# than silently writing nothing.
+#
+# ~/.cache is in the list for bun's and uv's caches, and ~/.config for the gh
+# token; a publish that cannot read its GitHub credentials cannot open the PR
+# that is the entire point of the run.
 ProtectSystem=strict
+ReadWritePaths=%h/vault %h/code %h/.local/state %h/.cache %h/.config
 NoNewPrivileges=true
 PrivateTmp=true
