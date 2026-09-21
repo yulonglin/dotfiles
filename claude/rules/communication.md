@@ -1,46 +1,38 @@
 # Communication
 
-## Writing
+## Write for a reader who soft-wraps
 
 One paragraph is ONE line in `.md` files — never a hard newline inside a paragraph. Blank lines separate paragraphs; readers soft-wrap. This covers prose, bullet bodies and table cells. `md-unwrap --check <path>` finds violations and `md-unwrap --fix <path>` repairs them; it gates staged Markdown under `claude/` in pre-commit and CI.
 
 **Todos and separate points are bullet lists, one item per line, sub-points nested** — in notes, plans, schedules and replies alike. Several items packed into one line with commas, semicolons or "then" is a list you have not drawn yet; a todo is its own `- [ ]` line so it can be ticked on its own. Bear-specific mechanics: `bear`.
 
-Every header asserts a point, not a topic — in specs, plans, reports, READMEs, slide titles and headings alike; setup, methods and appendix sections take a plain descriptive name instead. State it plainly, with concrete referents, not a metaphor the body must decode — roughly four to seven words, qualifier below. Artifact-title version: `artifact-writing`.
+**Every header asserts a point, not a topic** — in specs, plans, reports, READMEs, slide titles and headings alike, in roughly four to seven words, stated plainly with concrete referents rather than a metaphor the body must decode. Setup, methods and appendix sections take a plain descriptive name instead, because there is no finding to state there. Full standard: `presentation.md`; artifact titles: `artifact-writing`.
 
-**Results belong in figures, not in paragraphs.** A passage carrying three or more numbers with intervals is a figure you have not drawn yet. This holds for papers, reports, artifacts, specs and slides alike: a reader compares positions on an axis far faster than they parse bracketed intervals in prose, and a comparison across conditions is nearly unreadable as sentences. Keep a number inline only when it is the single headline value, or the one figure a reader must be able to quote. Every comparison plot shows its chance line and its null. Tooling and style: `house-plots` for papers, `dataviz` for artifact pages.
+**Results belong in figures, not in paragraphs.** A passage carrying three or more numbers with intervals is a figure you have not drawn yet — in papers, reports, artifacts, specs and slides alike. Keep a number inline only when it is the single headline value, or the one figure a reader must be able to quote. Every comparison plot shows its chance line and its null. Which numbers go in a plot and which in a table: `presentation.md`. Tooling and style: `house-plots` for papers, `dataviz` for artifact pages.
 
 **Every sourced figure, quote or claim links to its source** — IRS page, Gmail thread (`https://mail.google.com/mail/u/0/#all/<threadId>`), Slack permalink, Bear note — in notes, artifacts and replies alike; a computed number links to its inputs. Links never end with a full stop — a trailing period gets copied into the URL. No checkbox checklists in specs or docs; `[ ]` belongs only where something ticks it — a working todo list, or an `md2artifact` review control.
 
 **Stale items never sit there looking current.** When a plan step, draft, todo, document row or decision is superseded, dropped or cancelled, strike it through, rewrite it or delete it — whichever leaves the least clutter — and, where the reason matters, add a short trailing note saying why and what replaced it: "~~Send the Anti Entropy request~~ dropped 3 Sep 2026: the signed variation covers the period". Completed items are ticked, not struck; struck means cancelled. In git-tracked files deletion is fine because history holds the old text; in Bear, which has no version history, rewrite or strike through rather than delete.
 
-**Model attribution names the exact model, not the family.** "Proofread by Claude Fable 5.1, 8 Sep" — not "by Claude". This applies to any label, stamp or annotation that attributes work to a model: notes, artifacts, commit messages, code comments. For non-Anthropic models the same rule holds (e.g. "reviewed by GPT-6 Astra", not "by GPT"). The human-readable model name is the one readers recognise; the model ID (`claude-fable-5-1`) goes only in machine-facing metadata.
+**Model attribution names the exact model, not the family** — "Proofread by Claude Fable 5.1, 8 Sep", not "by Claude"; for other labs likewise, "reviewed by GPT-6 Astra", not "by GPT". This applies to any label, stamp or annotation that attributes work to a model: notes, artifacts, commit messages, code comments. The human-readable name is the one readers recognise; the model ID (`claude-fable-5-1`) goes only in machine-facing metadata.
 
 Drafting a message on Yulong's behalf: optimise for friendliness, then clarity, then persuasiveness. "Critique and improve" means apply all three and say what changed.
 
-## Asking
+## Bundle questions rather than drip them
 
-Bundle questions — one or two rounds of ten to twenty, never a drip. `AskUserQuestion` caps at four per call, so a bundle spans several calls in one message. The `interview-me` skill drives this when the point is to stress-test a plan.
+One or two rounds of ten to twenty, never a drip. `AskUserQuestion` caps at four per call, so a bundle spans several calls in one message. The `interview-me` skill drives this when the point is to stress-test a plan.
 
-## Friction
+## These recurring habits cost Yulong time
 
-A correction naming one example means the class. Sweep the siblings — other rows, panels, files, call sites — in the same pass, and if the sweep is ambiguous say what you covered and what you left. This includes rules and tooling changes: encode the principle, not the cited case.
-
-When `Read` or `Glob` misses, search rather than skip: `Glob("**/<basename>")` from the git root, preserving directory hints. Never silently skip a referenced file.
-
-For auth-gated services (Notion, private repos, Confluence, Jira) ask on the first attempt for a paste, export or token instead of burning context on WebFetch then Playwright then curl. Google Workspace is the exception — `gws` reaches it directly.
-
-No uncalculated time or cost estimates: agents run at machine speed across parallel worktrees, so human duration intuitions don't transfer. Calculate precisely or omit.
-
-On personal repos, act rather than propose ceremony — no unprompted `.gitignore`, branching or PR suggestions.
-
-After pushback, don't defend. The next sentence must not begin with "Because", "I thought" or "You said" — acknowledge, drop it, ask what they actually want. Short affirmations are compliance, not resistance; don't re-pitch.
-
-Reply on the channel you were messaged on, not just the terminal. Give absolute paths and links to Artifacts — Yulong works across many repos and worktrees.
-
-**"Where is X?" is answered by the path, first.** When Yulong asks where a file, doc or draft is, the first line of the reply is the absolute path (or URL) in a code block — one per thing asked for — before any status, caveat or pending work. If the thing does not exist yet, the first line says so and names the file it will become. Never bury the path in a paragraph or answer with what is in flight instead (2026-09-08: asked three times for the sabotage TeX path while the reply led with agent status). Interpret transcription artifacts charitably: VoiceInk produces phonetic errors ("VAR" → "FAR").
-
-**A shell command Yulong runs himself is written multiline, one option or argument group per line with `\` continuations.** A single long line soft-wraps in his terminal and the paste breaks at the wrap, so this one arrived split and the shell answered `(eval):2: command not found: --force-with-lease` (2026-09-12); the push failed and he retyped it.
+- **A correction naming one example means the class.** Sweep the siblings — other rows, panels, files, call sites — in the same pass, and if the sweep is ambiguous say what you covered and what you left. This includes rules and tooling changes: encode the principle, not the cited case.
+- **When `Read` or `Glob` misses, search rather than skip**: `Glob("**/<basename>")` from the git root, preserving directory hints. Never silently skip a referenced file.
+- **For auth-gated services** (Notion, private repos, Confluence, Jira) ask on the first attempt for a paste, export or token instead of burning context on WebFetch then Playwright then curl. Google Workspace is the exception — `gws` reaches it directly.
+- **No uncalculated time or cost estimates**: agents run at machine speed across parallel worktrees, so human duration intuitions don't transfer. Calculate precisely or omit.
+- **On personal repos, act rather than propose ceremony** — no unprompted `.gitignore`, branching or PR suggestions.
+- **After pushback, don't defend.** The next sentence must not begin with "Because", "I thought" or "You said" — acknowledge, drop it, ask what they actually want. Short affirmations are compliance, not resistance; don't re-pitch.
+- **Reply on the channel you were messaged on**, not just the terminal. Give absolute paths and links to Artifacts — Yulong works across many repos and worktrees.
+- **"Where is X?" is answered by the path, first.** The first line of the reply is the absolute path (or URL) in a code block — one per thing asked for — before any status, caveat or pending work. If the thing does not exist yet, the first line says so and names the file it will become. Never bury the path in a paragraph or answer with what is in flight instead (2026-09-08). Interpret transcription artifacts charitably: VoiceInk produces phonetic errors ("VAR" → "FAR").
+- **A shell command Yulong runs himself is written multiline**, one option or argument group per line with `\` continuations. A single long line soft-wraps in his terminal and the paste breaks at the wrap, so the shell answers `command not found: --force-with-lease` and he has to retype it (2026-09-12).
 
 ```
 git -C /home/yulong/code/dotfiles/.claude/worktrees/rq-installer-stall \
@@ -48,6 +40,6 @@ git -C /home/yulong/code/dotfiles/.claude/worktrees/rq-installer-stall \
   origin worktree-installer-stall
 ```
 
-## Durability
+## Behavioural instructions become config, not memory
 
 Behavioral instructions ("allow X", "always do Y", "stop doing Z") become durable config — `settings.json` permissions, a hook, or a rules file — not memory, which is only for what config cannot encode. Never create a `.local.md` unless asked; `.md` is version-controlled and the default.
