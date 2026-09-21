@@ -140,7 +140,10 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 
 ### Both scripts wait for you, and `--non-interactive` is how you tell them not to
 
-Two deadlines bound how long a run waits for an answer before it gives up and takes the safe default. `DOTFILES_MENU_TIMEOUT` (60s) is the component menu and `app-picker`; its clock resets on every keystroke, so it only fires on a menu nobody has touched, and on expiry the profile's committed set is used. `DOTFILES_PROMPT_TIMEOUT` (60s) covers the `sudo`, `chsh` and htop prompts; on expiry the step that needed it is skipped and says so. Both are seconds, and `0` disables the deadline entirely.
+Two deadlines bound how long a run waits for an answer before it gives up and takes the safe default. Both are in seconds, and `0` disables the deadline entirely.
+
+- `DOTFILES_MENU_TIMEOUT` (60s) drives the two full-screen menus, but **not with the same semantics**. The component menu (`claude-tools select`) treats it as an *idle* timeout: the clock resets on every keystroke, so it only fires on a menu nobody has touched, and expiry keeps the profile's set. `app-picker` gets it as a **hard wall-clock kill** instead, so a run spent longer than 60s browsing the app list is killed mid-selection and falls back to the committed Brewfile. If you use `app-picker` interactively, raise this.
+- `DOTFILES_PROMPT_TIMEOUT` (60s) covers the `sudo`, `chsh` and htop prompts. On expiry the step that needed it is skipped, and says which one it was.
 
 These bound how long the script waits **for** a human — they are not a pause imposed on you, and there is no countdown to Ctrl-C. So shortening them only makes an *attended* run more likely to lose a step you wanted: 60s is already well short of sudo's own `passwd_timeout`, which is unlimited by default on macOS. If the wait you want to avoid is an unattended one, pass `--non-interactive`, which skips every prompt immediately rather than waiting each one out.
 

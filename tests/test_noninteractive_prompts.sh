@@ -25,6 +25,17 @@
 # answers" case is reproduced deterministically instead of depending on whether
 # this machine happens to have a cached sudo ticket.
 #
+# Coverage, stated plainly: three of the four sites are timed against the
+# shipped code (front_load_sudo and set_zsh_default are sourced from
+# helpers.sh; _vpn_sudo_ready is extracted verbatim from deploy.sh). The
+# fourth, install.sh's mas sudo pre-warm, is inline in the Brewfile branch and
+# would need a Homebrew fixture to time, so it is covered only by the static
+# check at the end — which is the check that actually catches the realistic
+# regression anyway, a new prompt gating on `[[ -t 0 ]]` alone.
+#
+# This suite is bash, not the house zsh, to match the pty-suite siblings it
+# shares the harness with (test_installers_silent_pty.sh, test_no_stall.sh).
+#
 # --mutate reverts the four gates to `[[ -t 0 ]]` in a scratch copy of the repo
 # and requires every check to go RED. A guard that cannot fail proves nothing.
 #
@@ -82,10 +93,16 @@ trap 'rm -rf "$SCRATCH"' EXIT
 # ─── Stubs: a sudo and a chsh that behave like an unanswered prompt ──────────
 # `sudo -n` fails (no cached ticket), and any prompting form blocks. That is
 # exactly the state the guards are supposed to notice and refuse to enter.
-mkdir -p "$SCRATCH/bin"
+mkdir -p "$SCRATCH/bin" "$SCRATCH/home"
 cat > "$SCRATCH/bin/sudo" <<'STUB'
 #!/usr/bin/env bash
-[[ "${1:-}" == "-n" ]] && exit 1   # no cached credentials
+# STUB_SUDO_CACHED=1 makes `sudo -n` succeed. set_zsh_default only reaches the
+# gate in front of chsh when sudo is already cached, so without this mode the
+# chsh check would return early at the sudo probe and never test its own gate.
+if [[ "${1:-}" == "-n" ]]; then
+    [[ "${STUB_SUDO_CACHED:-0}" == "1" ]] && exit 0
+    exit 1                         # no cached credentials
+fi
 sleep 300                          # a password prompt nobody answers
 STUB
 cat > "$SCRATCH/bin/chsh" <<'STUB'
@@ -128,6 +145,8 @@ probe_elapsed() {
     json=$(python3 "$DRIVE" --deadline "$DEADLINE" \
         --env "PATH=$SCRATCH/bin:$PATH" \
         --env "HOME=$SCRATCH/home" \
+        --env "STUB_SUDO_CACHED=${STUB_SUDO_CACHED:-0}" \
+        --env "SHELL=/bin/bash" \
         --env "NON_INTERACTIVE=true" \
         --env "DOTFILES_PROMPT_TIMEOUT=$PROMPT_TIMEOUT" \
         --env "DOTFILES_MENU_TIMEOUT=$PROMPT_TIMEOUT" \
@@ -160,22 +179,27 @@ echo "── NON_INTERACTIVE must suppress the prompt, not wait it out ──"
 # 1. The sudo pre-warm, shared by install.sh and deploy.sh.
 check_skips_fast "front_load_sudo" "front_load_sudo"
 
-# 2. The default-shell change: chsh prompts PAM for the user's own password.
-#    set_default_shell only reaches chsh when `sudo -n` succeeds, and the stub
-#    makes that false, so drive the guarded call directly — the gate under test
-#    is the one in front of chsh, not the sudo probe ahead of it.
-check_skips_fast "the chsh guard" \
-    'if ! can_prompt; then log_warning "skip"; else run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" chsh -s /bin/zsh; fi'
+# 2. The REAL set_zsh_default from helpers.sh, not a reconstruction of it.
+#    It only reaches the gate in front of chsh once `sudo -n` succeeds, hence
+#    STUB_SUDO_CACHED — the gate under test is the one before chsh, not the
+#    sudo probe ahead of it. Under NON_INTERACTIVE it returns before touching
+#    /etc/shells, so nothing on this machine is modified.
+#    SHELL is forced to /bin/bash in probe_elapsed for the same reason: the
+#    function's first line returns early when SHELL already contains "zsh",
+#    which is true on the machine most likely to run this suite. --mutate
+#    caught that as a check which stayed green with the gate reverted.
+STUB_SUDO_CACHED=1 check_skips_fast "set_zsh_default (the chsh guard)" "set_zsh_default || true"
 
-# 3. deploy.sh's VPN gate, sourced as a function so no deploy actually runs.
-check_skips_fast "_vpn_sudo_ready (deploy.sh)" \
-    "$(printf '%s\n' '_vpn_sudo_ready() {' \
-        '    sudo -n true 2>/dev/null && return 0' \
-        '    if ! can_prompt; then log_warning "unattended"; return 1; fi' \
-        '    run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v && return 0' \
-        '    return 1' \
-        '}' \
-        '_vpn_sudo_ready || true')"
+# 3. deploy.sh's VPN gate. Extracted verbatim from the shipped file and eval'd,
+#    so this tests deploy.sh's own code rather than a copy of it that could
+#    drift — while running none of the deploy around it.
+VPN_FN=$(sed -n '/^_vpn_sudo_ready()/,/^}/p' "$TREE/deploy.sh")
+if [[ -z "$VPN_FN" ]]; then
+    fail "could not extract _vpn_sudo_ready from deploy.sh" "the function was renamed — update this suite"
+else
+    check_skips_fast "_vpn_sudo_ready (deploy.sh)" "$VPN_FN
+_vpn_sudo_ready || true"
+fi
 
 # 4. The component menu: same gate, and the one an attended user actually sees.
 check_skips_fast "show_component_menu" "show_component_menu deploy || true"
