@@ -515,7 +515,7 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
         cmd_exists gum || brew_install gum
 
         brewfile="$DOT_DIR/config/Brewfile"
-        if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; then
+        if ! can_prompt; then
             log_info "Non-interactive: using committed Brewfile (run 'app-picker' to customise)"
         else
             # Interactive: let the user toggle apps, regenerating the Brewfile.
@@ -543,7 +543,10 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             # internal sudo no way to read a password. Pre-warm the credential (interactive
             # TTY only) for any mas lines that remain (belt-and-suspenders after mas-get).
             sudo_keepalive_pid=""
-            if [[ -t 0 ]] && grep -q '^mas ' "$brewfile" 2>/dev/null; then
+            if ! can_prompt && grep -q '^mas ' "$brewfile" 2>/dev/null; then
+                log_warning "Unattended run — not prompting for sudo; App Store (mas) apps may be skipped"
+            fi
+            if can_prompt && grep -q '^mas ' "$brewfile" 2>/dev/null; then
                 log_info "App Store installs (mas) need sudo — caching your credential…"
                 if run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v; then
                     # Capture parent PID before subshell so $$ resolves correctly in both

@@ -172,9 +172,8 @@ guard_nonempty_components() {
 show_component_menu() {
     local mode="$1"
 
-    [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 0
-    # No terminal on both fd 0 (keys) and fd 2 (drawing): nobody to ask.
-    [[ -t 0 && -t 2 ]] || return 0
+    # fd 0 carries keys, fd 2 carries the drawing: both must be a terminal.
+    can_prompt && [[ -t 2 ]] || return 0
     if ! cmd_exists claude-tools || ! claude-tools --version >/dev/null 2>&1; then
         log_warning "Component menu unavailable: no claude-tools binary for $(uname -s)-$(uname -m) — using the profile's set (adjust with --<component> / --no-<component>)"
         return 0
@@ -344,6 +343,22 @@ _watchdog_run() {
     wait "$_pid"
 }
 
+# May this run block on a human? A TTY is necessary but NOT sufficient: the
+# `--non-interactive` flag (NON_INTERACTIVE=true, exported by the arg parser)
+# is a promise that nobody is at the keyboard, so a prompt must not be reached
+# at all rather than waiting out DOTFILES_PROMPT_TIMEOUT and then skipping
+# anyway. Four sudo/chsh prompts used to gate on `[[ -t 0 ]]` alone, so
+# `./deploy.sh --non-interactive` in a tmux pane burned the deadline at each
+# one in turn. Callers fall through to the same skip they already take with no
+# TTY, so this only changes HOW LONG an unattended run takes, never WHAT it does.
+#
+# This is deliberately not a knob. The deadline itself is the knob:
+# DOTFILES_PROMPT_TIMEOUT and DOTFILES_MENU_TIMEOUT (seconds; 0 disables).
+can_prompt() {
+    [[ "${NON_INTERACTIVE:-false}" == "true" ]] && return 1
+    [[ -t 0 ]]
+}
+
 # Cache sudo credentials once, up front, so privileged steps later in the run
 # don't block on a password prompt mid-install. A background keepalive refreshes
 # the timestamp until the calling script exits. No-op if sudo is already cached,
@@ -352,8 +367,14 @@ _watchdog_run() {
 # skip.)
 front_load_sudo() {
     cmd_exists sudo || return 0
-    [[ -t 0 ]] || return 0
+    # Order matters: `sudo -n` never prompts, so asking it first keeps an
+    # unattended run that ALREADY has cached credentials completely silent —
+    # it has nothing to warn about.
     sudo -n true 2>/dev/null && return 0   # already cached — no prompt needed
+    if ! can_prompt; then
+        log_warning "Unattended run — not prompting for sudo; privileged steps will be skipped"
+        return 0
+    fi
     log_info "Some steps need administrator access — caching sudo credentials up front."
     # A TTY is no proof anyone is watching it (tmux pane, agent pty), so the
     # prompt itself carries a deadline; unanswered, sudo-needing steps skip.
@@ -885,8 +906,8 @@ set_zsh_default() {
         # chsh prompts PAM for the USER's password on Linux even when
         # passwordless sudo works, so it runs only attended and with a
         # deadline — a TTY nobody is watching must not hang the install.
-        if ! [[ -t 0 ]]; then
-            log_warning "Skipping default-shell change (no TTY for chsh's password prompt) — run: chsh -s $zsh_path"
+        if ! can_prompt; then
+            log_warning "Skipping default-shell change (unattended run — chsh needs a password) — run: chsh -s $zsh_path"
             return 0
         fi
         log_info "Setting ZSH as default shell..."
