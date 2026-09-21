@@ -69,6 +69,18 @@ Hooks for automating task and agent management workflows.
 
 **Tests:** `tests/test_advisor_skipped.py`.
 
+### pr_after_push.sh / pr_body_model.py
+
+**Purpose:** After a successful push of a non-default branch, open a draft PR that a reviewer can actually read.
+
+**Behavior:**
+- `pr_after_push.sh` (`PostToolUse`, `Bash`) opens the draft PR when the branch has none, and injects the review-then-merge-if-simple instruction. Silent on a non-push, a failed push, a delete, a tags-only push, a push of `main`, or with no `gh`.
+- `pr_body_model.py` writes the body with an OpenAI model (`astra`, falling back to `sol`) through the model-router gateway: motivation, implementation with the files and symbols touched, the tests the **session transcript** shows were run with their output, and a Mermaid diagram only when the change has interacting parts. The prompt forbids inventing a test result; with no test runs in the transcript the model must say so. The body ends with a line naming the model that wrote it.
+- **The PR never depends on the gateway.** No ingress token, a stopped router, an HTTP error or a slow answer all fall back to `gh pr create --fill`, and the hook's message says which body the PR got. The call is synchronous, so a push waits for it — hence `"timeout": 90` on this hook in `settings.json` and a 45 s deadline inside the generator.
+- Flags: `git.pr-after-push`, and `git.pr-after-push.model-body` for the body alone.
+
+**Tests:** `tests/test_pr_after_push.sh` (a fake router stands in for the gateway; the refusing and absent cases are asserted, not just the happy one).
+
 ### simplify_mark_dirty.sh / simplify_track_reuse.py / simplify_nudge.sh
 
 **Purpose:** Suggest a `/simplify` pass when the session produced work worth one. Two independent signals feed one `Stop` message; both are soft nudges (`systemMessage`) that never continue the turn.
