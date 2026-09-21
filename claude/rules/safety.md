@@ -8,7 +8,7 @@ A restore or git operation that failed under the sandbox is intact — retry wit
 
 Hooks enforce some of this independently: `block_destructive_git.sh` refuses `reset --hard`, `checkout -- <path>`, `clean -f`, bare `stash` and `stash pop`.
 
-## A quarantine block is the defense working
+## A quarantine or malware-check block is the defense working
 
 Name the package, version and guard, then stop. Never bypass it, and never do any of these without explicit approval — adding a third-party Homebrew tap, installing from an arbitrary URL or git repo, re-enabling lifecycle scripts, bypassing `min-release-age`, unsetting `UV_MALWARE_CHECK`, or passing `--no-quarantine`.
 
