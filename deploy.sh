@@ -1384,6 +1384,20 @@ queue_scheduled_job() {
         queue_scheduled_job kill-sky-cua "$DOT_DIR/scripts/cleanup/setup_kill_sky_cua.sh"
     fi
 
+    # Holds a caffeinate assertion so a remote ssh/mosh session is not cut off by
+    # idle sleep. AC-only, so the laptop still suspends on battery. Opting out
+    # unloads it for the same reason as alfred-watchdog above: leaving a power
+    # assertion running after --no-caffeinate-ssh would keep the Mac awake
+    # indefinitely, which is the opposite of what was asked. Gated on an explicit
+    # opt-out rather than on the flag being false, so --only and --minimal do not
+    # tear down a component they were never asked about.
+    if [[ "$DEPLOY_CAFFEINATE_SSH" == "true" ]] && is_macos; then
+        queue_scheduled_job caffeinate-ssh "$DOT_DIR/scripts/power/setup_caffeinate_ssh.sh"
+    elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)CAFFEINATE_SSH]} )); then
+        [[ -f "$DOT_DIR/scripts/power/setup_caffeinate_ssh.sh" ]] && \
+            "$DOT_DIR/scripts/power/setup_caffeinate_ssh.sh" --uninstall >/dev/null 2>&1 || true
+    fi
+
     if [[ "$DEPLOY_HIDE_IDLE_APPS" == "true" ]] && is_macos; then
         # Provenance, not the resolved boolean, decides whether this run may MINT
         # the escalation token. DEPLOY_HIDE_IDLE_APPS=true can come from a CLI
