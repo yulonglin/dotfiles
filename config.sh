@@ -89,6 +89,7 @@ DEPLOY_REGISTRY=(
     "file-apps|Default editor for coding file types|macos|true|macOS"
     "keyboard|Keyboard repeat rate enforcement at login|macos|true|macOS"
     "kill-sky-cua|Kill OpenAI Sky Computer Use helpers (AX-polling lag watchdog)|macos|true|macOS"
+    "caffeinate-ssh|Hold this Mac awake on AC so remote ssh/mosh sessions survive (still sleeps on battery)|macos|true|macOS"
     "bedtime|Bedtime timezone enforcement|macos|true|macOS"
     "text-replacements|Sync macOS + Alfred text replacements|macos|true|macOS"
     "mouseless|Keyboard-driven mouse control|macos|true|macOS"
