@@ -79,7 +79,9 @@ ONLY what the session transcript below shows was actually run, with its result.
 Quote the command and say whether it passed. If the TEST RUNS section is empty
 or shows nothing conclusive, write exactly this sentence and nothing else under
 this heading: No test runs found in the session transcript.
-Never invent a test, a count or a result.
+Never invent a test, a count or a result. When the same command ran several
+times, report its LAST run: an earlier failure that a later run fixed is noise,
+not evidence.
 
 ## Diagram
 Include a Mermaid diagram ONLY when the change has two or more components that
