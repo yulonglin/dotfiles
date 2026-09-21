@@ -138,6 +138,12 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 
 **Flags are additive** — e.g., `./deploy.sh --mouseless` deploys defaults + mouseless. Use `--minimal` to disable all defaults, then specify only what you want.
 
+### Both scripts wait for you, and `--non-interactive` is how you tell them not to
+
+Two deadlines bound how long a run waits for an answer before it gives up and takes the safe default. `DOTFILES_MENU_TIMEOUT` (60s) is the component menu and `app-picker`; its clock resets on every keystroke, so it only fires on a menu nobody has touched, and on expiry the profile's committed set is used. `DOTFILES_PROMPT_TIMEOUT` (60s) covers the `sudo`, `chsh` and htop prompts; on expiry the step that needed it is skipped and says so. Both are seconds, and `0` disables the deadline entirely.
+
+These bound how long the script waits **for** a human — they are not a pause imposed on you, and there is no countdown to Ctrl-C. So shortening them only makes an *attended* run more likely to lose a step you wanted: 60s is already well short of sudo's own `passwd_timeout`, which is unlimited by default on macOS. If the wait you want to avoid is an unattended one, pass `--non-interactive`, which skips every prompt immediately rather than waiting each one out.
+
 ## Adopting These Dotfiles
 
 This repo is highly personal — it reflects one person's workflow, opinions, and tooling choices. The best way to use it is to **point a coding agent at this repo and ask it to extract the parts you find useful** into your own dotfiles.
