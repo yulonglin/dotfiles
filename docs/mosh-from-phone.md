@@ -1,34 +1,43 @@
 # Mosh into this Mac from the phone
 
-This machine (`m5pro`, tailnet `100.80.44.37`) is reachable from `iphone-14` over Tailscale. Everything below was measured on 2026-09-21; the parts needing root are listed separately because they are the only steps a Claude Code session cannot do for you.
+This machine (`m5pro`, tailnet `100.80.44.37`) already accepts ssh from `iphone-14` over Tailscale. Everything below was measured on 2026-09-21.
 
-Read the diagnosis section first if the question is "why is ssh from my phone so patchy" — the answer is mostly not about this Mac, which until today was not accepting ssh at all.
+## The patchy sessions are this Mac sleeping, after one minute
 
-## Mosh replaces ssh here because the phone's problem is TCP, not bandwidth
+`pmset -g` reports `sleep 1`. The Mac suspends after a single idle minute, and every ssh session dies with it. That is the whole cause — not the network, not the phone, not Tailscale. The one-line fix:
 
-An ssh session is one TCP connection pinned to a 4-tuple. Three things routinely invalidate that tuple on a phone, and each one hangs the session rather than closing it cleanly, which is what "patchy" feels like from the client end:
+```
+sudo pmset -c sleep 0
+```
 
-- **iOS suspends the app.** Backgrounding Termius stops it servicing the socket; the peer eventually resets it. The session is dead before you look at the screen again.
-- **The phone roams.** Wi-Fi to cellular, or one cell tower to the next, changes the phone's source address. The old tuple is gone and ssh freezes.
-- **A NAT idles the mapping out.** Carrier NATs drop idle mappings aggressively, so a session left alone for a few minutes is silently unmapped.
+That stops sleep only while on AC, so unplugged behaviour is unchanged. Reverse with `sudo pmset -c sleep 1`. Nothing else in this document matters as much as this line.
 
-Mosh is built for exactly these: it runs over UDP with its own session key, so roaming changes nothing, and it keeps the authoritative screen state on the server, so a suspended client resynchronises instead of reconnecting. It also echoes your keystrokes locally, which is what removes the typing lag on a slow path.
+Two things made the cause harder to see than it should have been. `displaysleep` is also `1`, so the screen going dark looks like the same event as the machine suspending. And something on this box frequently holds a `caffeinate`, so the Mac stays up for unpredictable stretches and the failures look random rather than periodic.
 
-Mosh does not fix a *sleeping* server — see the `pmset` step below.
+## Mosh survives the sleep, which is why it is worth setting up anyway
 
-## The patchy sessions were to hetzner, and hetzner has two fixable faults
+Fixing `pmset` removes the cause. Mosh is still worth having, because it changes what happens when the Mac *does* go down — on battery, on a lid close, or on any future sleep.
 
-This Mac's sshd was **not listening** until the steps below were run, so no ssh session from the phone has ever terminated here. The patchiness is on the path to `hetzner`, and measuring from hetzner itself found two things.
+macOS freezes processes on sleep rather than killing them. An ssh session cannot survive that: its TCP connection is reset or times out while the machine is unreachable, and the client comes back to a dead prompt. A mosh session has no connection state to lose — the client keeps sending UDP datagrams into the void, the server resumes on wake with its screen state intact, and the session picks up where it stopped. The same holds for the phone roaming between Wi-Fi and cellular, which changes the phone's address and kills ssh's 4-tuple while mosh simply carries on.
 
-**No server-side keepalive.** `/etc/ssh/sshd_config` and its drop-ins set neither `ClientAliveInterval` nor `TCPKeepAlive`, so both sit at the OpenSSH defaults — and the default `ClientAliveInterval 0` means the server never probes the client at all. When the phone suspends or roams, nothing detects it: the server holds the session open indefinitely and the client hangs rather than failing fast. Setting an interval does not stop the disconnect, but it converts a silent hang into a prompt, honest death, and it keeps the NAT mapping warm so idle sessions stop being reaped in the first place.
+So `pmset` stops the sessions dying, and mosh means the ones that still die come back by themselves.
 
-**A cross-continent relay.** Tailscale places the phone's home relay in San Francisco and hetzner's in Nuremberg, and hetzner has no direct path to the phone — `tailscale ping iphone-14` from hetzner timed out on every probe while the phone was simultaneously listed as `active`. So a phone session addressed to hetzner's tailnet IP (`100.116.158.30`, which is what `Host hn*` in `~/.ssh/config` resolves to) is relayed between two DERP regions on opposite sides of the Atlantic.
+## What ssh is missing, and it is not why sessions dropped
 
-That matters because **DERP is a TCP relay**. An ssh session across it is TCP inside TCP: one lost packet stalls everything queued behind it in *both* the inner and outer stream, which is the head-of-line blocking that turns ordinary cellular loss into a visibly stuttering shell.
+This Mac's sshd sets neither `ClientAliveInterval` nor `TCPKeepAlive`, so both sit at OpenSSH defaults, and `ClientAliveInterval 0` means the server never probes the client. This does not cause disconnects. It decides how an already-dead session presents: with no probe the server holds it open indefinitely and the client hangs, rather than being told promptly that it is gone.
 
-Mosh does not escape the relay's outer TCP, and it is worth being precise that its packets head-of-line block too. What it avoids is stacking a *second* retransmitting, ordered stream on top of the first, and it holds screen state server-side while echoing locally — so a relay stall shows up as lag that catches up, not as a session that silently dies. **`mosh-server` 1.4.0 is already installed on hetzner** at `/usr/bin/mosh-server`, so switching that connection to mosh needs no install, only the `Use Mosh` toggle in the host entry.
+Worth setting as a comfort fix rather than a cure:
 
-## This Mac's own path to the phone is relayed too, probably because of NordVPN
+```
+sudo tee /etc/ssh/sshd_config.d/60-keepalive.conf >/dev/null <<'CONF'
+ClientAliveInterval 30
+ClientAliveCountMax 6
+CONF
+```
+
+No restart is needed and no live session is disturbed: `/System/Library/LaunchDaemons/ssh.plist` declares `Sockets` with `inetdCompatibility` and `Wait = false`, so launchd spawns a fresh sshd per connection and each one reads the config anew. `/etc/ssh/sshd_config` carries `Include /etc/ssh/sshd_config.d/*`, so the drop-in is picked up as written.
+
+## The phone path is DERP-relayed, which costs latency and nothing else
 
 `tailscale ping` from this Mac, 2026-09-21:
 
@@ -37,51 +46,35 @@ Mosh does not escape the relay's outer TCP, and it is worth being precise that i
 | `iphone-14` | DERP relay (sfo) — `direct connection not established` | 9–17 ms |
 | `hetzner` | direct, `5.75.164.68:41641` | 165 ms |
 
-Hetzner goes direct because it has a public address and needs no hole-punching. The phone does not, and **the likely reason is local, though this is a hypothesis rather than a measured cause**: NordVPN holds this Mac's default route (`utun7`, `10.5.0.2`, MTU 1420), so Tailscale's UDP discovery leaves through the NordVPN exit, and `netcheck` reports an empty `PortMapping:` line — no UPnP, NAT-PMP or PCP. With the Mac's endpoint masked behind a shared VPN exit and the phone behind carrier CGNAT, neither side can hole-punch.
+Hetzner goes direct because it has a public address and needs no hole-punching. The phone does not, and **the likely reason is local, though this is a hypothesis rather than a measured cause**: NordVPN holds this Mac's default route (`utun7`, `10.5.0.2`, MTU 1420), so Tailscale's UDP discovery leaves through the NordVPN exit and `netcheck` reports an empty `PortMapping:` line — no UPnP, NAT-PMP or PCP. With the Mac's endpoint masked behind a shared VPN exit and the phone behind carrier CGNAT, neither side can hole-punch.
 
-Carrier CGNAT alone is capable of forcing a relay, so NordVPN may not be the operative cause. Falsifying it takes half a minute: turn NordVPN off and re-run `tailscale ping iphone-14`. If `direct connection established` appears, NordVPN was the cause and a split-tunnel exclusion for Tailscale fixes it permanently; if it stays on DERP, the phone's NAT is responsible and NordVPN is irrelevant here.
+Carrier CGNAT alone can force a relay, so NordVPN may not be the operative cause. Falsifying it takes half a minute: turn NordVPN off and re-run `tailscale ping iphone-14`. If `direct connection established` appears, NordVPN was the cause and a split-tunnel exclusion for Tailscale fixes it permanently.
 
-Either way, 9–17 ms over the SFO relay is perfectly usable, so **you do not need to change anything about NordVPN to make mosh work**. This only decides whether the Mac path is relayed or direct.
+At 9–17 ms this is a latency detail, not a fault, and it was **not** why sessions were dropping. A relayed path does make ssh feel worse under loss, because DERP is a TCP relay and ssh across it is TCP inside TCP, where one lost packet stalls everything queued behind it. Mosh does not escape that outer TCP either — its packets head-of-line block too — but it does not stack a second ordered, retransmitting stream on top, and it echoes locally, so a stall reads as lag that catches up rather than a frozen terminal.
 
 ## Steps that need root
 
-These four are the entire manual part on this Mac. Run them together; each is one command and each reverses cleanly.
+sshd is **already running** and Remote Login is already on, so there is nothing to enable. Checking that with `lsof -nP -iTCP:22 -sTCP:LISTEN` as a normal user is misleading: it cannot see root-owned listening sockets and prints nothing on a perfectly healthy machine. Use `netstat -an | grep '\.22'`, which needs no privilege and also shows the live sessions.
 
 ```
-sudo systemsetup -setremotelogin on
+sudo pmset -c sleep 0
+
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw \
   --add /opt/homebrew/bin/mosh-server
+
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw \
   --unblockapp /opt/homebrew/bin/mosh-server
-sudo pmset -c sleep 0
 ```
 
-What each one is for:
-
-- **`setremotelogin on`** starts sshd, which was not listening — this is why nothing could reach the Mac. If it refuses with a Full Disk Access error (recent macOS restricts `systemsetup` to terminals holding FDA), use System Settings → General → Sharing → **Remote Login** instead; the effect is identical. Your account is already in the `com.apple.access_ssh` ACL group, so no allow-list edit is needed afterwards.
-- **The two `socketfilterfw` lines** add `mosh-server` to the application firewall, which is on. Mosh binds a UDP port in 60000–61000 per session. An unsigned Homebrew binary launched over ssh may either raise a GUI prompt on the Mac's own screen — useless when you are holding the phone — or have its traffic dropped outright; the allow rule pre-empts both. The symptom it prevents is mosh hanging at `Connecting...` *after* a successful ssh handshake. Stealth mode is off, so nothing else needs changing.
-- **`pmset -c sleep 0`** stops the Mac sleeping while on AC. It sleeps after 1 minute idle and was only awake because something held a `caffeinate`. Mosh survives a dropped network but not a server that has gone to sleep. Battery behaviour is untouched, so unplugged it still sleeps normally. Reverse with `sudo pmset -c sleep 1`.
-
-The hetzner keepalive fix is separate and also needs root, on that host:
-
-```
-ssh hn
-sudo tee /etc/ssh/sshd_config.d/60-keepalive.conf <<'CONF'
-ClientAliveInterval 30
-ClientAliveCountMax 6
-CONF
-sudo systemctl reload ssh
-```
-
-That probes an idle client every 30 s and gives up after 6 missed replies, so a genuinely dead phone session is closed in about 3 minutes instead of never.
+The two `socketfilterfw` lines add `mosh-server` to the application firewall, which is on. Mosh binds a UDP port in 60000–61000 per session. An unsigned Homebrew binary launched over ssh may either raise a GUI prompt on the Mac's own screen — useless when you are holding the phone — or have its traffic dropped outright; the allow rule pre-empts both. The symptom it prevents is mosh hanging at `Connecting...` *after* a successful ssh handshake. Stealth mode is off, so nothing else needs changing.
 
 ## Termius needs no new keys
 
-Termius supports mosh on iOS — its own documentation covers the mobile setup and states that [mosh 1.3.0 and newer are supported](https://docs.termius.com/organize-and-connect-to-hosts/connecting-to-a-server), and both this Mac and hetzner run 1.4.0. Which pricing tier exposes it is not stated in those docs, so check the app rather than trusting a number from anywhere else. Your `~/.ssh/authorized_keys` already carries several Termius-labelled keys, so the phone should authenticate without adding anything.
+Termius supports mosh on iOS — its own documentation covers the mobile setup and states that [mosh 1.3.0 and newer are supported](https://docs.termius.com/organize-and-connect-to-hosts/connecting-to-a-server), and this Mac runs 1.4.0. Which pricing tier exposes it is not stated in those docs, so check the app rather than trusting a number from anywhere else. Your `~/.ssh/authorized_keys` already carries several Termius-labelled keys and the phone connects today, so authentication needs nothing new.
 
 In the host entry on the phone, enable the **Use Mosh** setting, then:
 
-- **Address** `100.80.44.37` — the tailnet IP, not the MagicDNS name. [docs/romp-tailnet-access.md](romp-tailnet-access.md) records that this phone has had "Use Tailscale DNS" switched off, which makes every `.ts.net` name fail to resolve while the 100.x address keeps working. Fixing the toggle is the better end state; the IP is what works regardless.
+- **Address** `100.80.44.37` — the tailnet IP, not the MagicDNS name. [docs/romp-tailnet-access.md](romp-tailnet-access.md) records that this phone has had "Use Tailscale DNS" switched off, which makes every `.ts.net` name fail to resolve while the 100.x address keeps working.
 - **Username** `yulong`
 - Leave the mosh-server path and any custom port range empty — `config/zshenv.sh` puts the Homebrew prefix on the PATH of non-interactive shells, so a bare `mosh-server` resolves, and the default 60000–61000 range is what the firewall rule above allows. Termius documents a `mosh-server new -s -l LANG=en_US.UTF-8 -p <from>:<to>` form if you ever need to pin the range; pinning it means narrowing the firewall rule to match.
 
@@ -91,23 +84,21 @@ Mosh does not run a login shell. It runs `mosh-server` through a non-interactive
 
 `config/zshenv.sh` fixes it server-side, once, for every client and device. `deploy.sh` appends a `source` line for it to `~/.zshenv` behind a `grep` guard — not through `$OP`, which is `>` unless `--append` and would drop the rustup line that also lives in that file.
 
-## Verifying it, in the order that isolates the fault
-
-Run these on the Mac after the sudo block. Each clears a distinct failure, so a break tells you which step did not take.
+## Verifying it
 
 ```bash
-lsof -nP -iTCP:22 -sTCP:LISTEN          # sshd actually listening?
-ssh localhost 'command -v mosh-server'  # PATH fix visible to a non-interactive shell?
+netstat -an | grep '\.22'                 # sshd listening, and who is connected
+ssh localhost 'command -v mosh-server'    # PATH fix visible to a non-interactive shell?
 ssh localhost 'mosh-server new -s -c 256 -l LANG=en_US.UTF-8'   # prints MOSH CONNECT <port> <key>
+pmset -g | grep ' sleep'                  # must read 0 after the pmset step
 ```
 
-The third prints a port and a one-time key and leaves a detached server behind; kill it by the pid it reports. A `MOSH CONNECT` line means everything except the firewall is right — the firewall cannot fail here, because loopback is not filtered.
-
-Then, from the phone, connect once and confirm it survives a deliberate network change: start a session, switch Wi-Fi off, and check the shell resumes on cellular rather than hanging. That round-trip is the only test covering the firewall rule and the relay path together, and it cannot be run from this machine.
+The third prints a port and a one-time key and leaves a detached server behind; kill it by the pid it reports. It cannot exercise the firewall rule, because loopback is not filtered — only a real connection from the phone tests that.
 
 ## Traps already paid for
 
-- **Do not probe these ports from inside the Claude Code sandbox.** Loopback and most outbound sockets are blocked there, so a healthy sshd reads as connection-refused. Use `dangerouslyDisableSandbox: true`, as [docs/romp-tailnet-access.md](romp-tailnet-access.md) already records for romp.
+- **`lsof -i` lies about sshd when you are not root.** It reported no listener on a machine that had three live phone sessions at that moment, which sent the first pass of this investigation to the wrong host entirely. `netstat -an` needs no privilege and shows both the listener and the sessions.
+- **Do not probe these ports from inside the Claude Code sandbox.** Loopback and most outbound sockets are blocked there, and `netstat` is refused outright, so a healthy sshd reads as absent. Use `dangerouslyDisableSandbox: true`, as [docs/romp-tailnet-access.md](romp-tailnet-access.md) already records for romp.
 - **`mosh` is aliased** to `LANG=en_US.UTF-8 mosh --no-init` in `config/aliases/net.sh`, which preserves scrollback. That is the outbound client on this Mac and is unrelated to serving.
 - **OSC 52 clipboard is broken under mosh** (upstream PRs #1054/#1104 unmerged as of 2026), so tmux copy-to-system-clipboard will not work from a phone session. `config/tmux.conf` documents the two workarounds.
 - **Truecolor is suppressed under mosh** by `config/zshrc.sh`, deliberately — mosh 1.4.0 garbles 24-bit SGR sequences, so `COLORTERM` is left unset and apps fall back to 256 colours.
