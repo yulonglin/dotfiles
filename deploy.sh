@@ -333,6 +333,16 @@ PROFILE
         RC_FILE="$HOME/.zshrc"
     fi
 
+    # ~/.zshenv is the ONLY startup file a non-interactive ssh shell reads, so a
+    # remote `mosh-server` lookup depends on it alone. Deploy it whenever zsh is
+    # installed, independently of the active shell, because the login shell is
+    # what sshd spawns. Appended behind a grep guard rather than via $OP: $OP is
+    # ">" unless --append, and ~/.zshenv commonly carries lines this repo does
+    # not own (rustup writes the cargo env there), which a rewrite would drop.
+    if cmd_exists zsh && ! grep -q "config/zshenv.sh" "$HOME/.zshenv" 2>/dev/null; then
+        echo "source $DOT_DIR/config/zshenv.sh" >> "$HOME/.zshenv"
+    fi
+
     # Append additional aliases
     if [[ ${#DEPLOY_ALIASES[@]} -gt 0 ]]; then
         log_info "Adding aliases: ${DEPLOY_ALIASES[*]}"
