@@ -50,13 +50,13 @@ What each one is for:
 
 ## Termius needs no new keys
 
-Termius supports mosh on iOS on the free Starter plan, using its own mosh-compatible implementation rather than the GPL upstream. Your `~/.ssh/authorized_keys` already carries several Termius-labelled keys, so the phone should authenticate without adding anything.
+Termius supports mosh on iOS — its own documentation covers the mobile setup and states that [mosh 1.3.0 and newer are supported](https://docs.termius.com/organize-and-connect-to-hosts/connecting-to-a-server), and this Mac has 1.4.0. Which pricing tier exposes it is not stated in those docs, so check the app rather than trusting a number from anywhere else. Your `~/.ssh/authorized_keys` already carries several Termius-labelled keys, so the phone should authenticate without adding anything.
 
-In the host entry on the phone:
+In the host entry on the phone, enable the **Use Mosh** setting, then:
 
 - **Address** `100.80.44.37` — the tailnet IP, not the MagicDNS name. [docs/romp-tailnet-access.md](romp-tailnet-access.md) records that this phone has had "Use Tailscale DNS" switched off, which makes every `.ts.net` name fail to resolve while the 100.x address keeps working. Fixing the toggle is the better end state; the IP is what works regardless.
 - **Username** `yulong`
-- **Mosh** enabled. Leave the mosh-server path empty — `config/zshenv.sh` puts the Homebrew prefix on the PATH of non-interactive shells, so a bare `mosh-server` resolves.
+- Leave the mosh-server path and any custom port range empty — `config/zshenv.sh` puts the Homebrew prefix on the PATH of non-interactive shells, so a bare `mosh-server` resolves, and the default 60000–61000 range is what the firewall rule above allows. Termius documents a `mosh-server new -s -l LANG=en_US.UTF-8 -p <from>:<to>` form if you ever need to pin the range; pinning it means narrowing the firewall rule to match.
 
 ## Why the PATH fix lives in `~/.zshenv`
 
