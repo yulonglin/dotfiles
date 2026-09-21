@@ -12,6 +12,10 @@ sudo pmset -c sleep 0
 
 That stops sleep only while on AC, so unplugged behaviour is unchanged. Reverse with `sudo pmset -c sleep 1`. Nothing else in this document matters as much as this line.
 
+macOS has a setting for exactly this problem, and the one-minute timer is what defeats it. `ttyskeepawake` is already `1` here, and `man pmset` defines it as preventing idle sleep while any tty — "e.g. remote login session" — is active, where **a tty counts as inactive once its idle time exceeds the system sleep timer**. With that timer at one minute, pausing to read output for sixty seconds marks your own live ssh session idle and lets the machine sleep. The guard is working exactly as documented; the timer is simply too short for it to ever engage.
+
+That also gives a gentler fix than disabling sleep, for battery use where you do want the Mac to suspend eventually: raise the timer rather than removing it, with `sudo pmset -b sleep 30`. `ttyskeepawake` then holds the machine up for as long as a session is genuinely connected, and it still sleeps half an hour after the last one goes away.
+
 Two things made the cause harder to see than it should have been. `displaysleep` is also `1`, so the screen going dark looks like the same event as the machine suspending. And something on this box frequently holds a `caffeinate`, so the Mac stays up for unpredictable stretches and the failures look random rather than periodic.
 
 ## Mosh survives the sleep, which is why it is worth setting up anyway
