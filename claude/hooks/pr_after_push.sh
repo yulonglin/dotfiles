@@ -96,7 +96,7 @@ print(json.dumps({"hookSpecificOutput": {
     exit 0
 }
 
-NEXT="Next, per coding-conventions: rewrite the PR body if --fill left it thin (what, why, review points), run a review (/code-review, or codex-companion review --base main), then merge it yourself with \`gh pr merge <n> --squash --delete-branch\` only if it is simple: docs, rules or a single file, tests green, nothing under claude/settings.json, claude/hooks/ or secrets. Otherwise ask the user with AskUserQuestion and put the merge command in the closing summary."
+NEXT="Next, per coding-conventions: read the PR body and rewrite it if it is thin (what, why, review points), run a review (/code-review, or codex-companion review --base main), then merge it yourself with \`gh pr merge <n> --squash --delete-branch\` only if it is simple: docs, rules or a single file, tests green, nothing under claude/settings.json, claude/hooks/ or secrets. Otherwise ask the user with AskUserQuestion and put the merge command in the closing summary."
 
 EXISTING=$(cd "$CWD" && gh pr list --head "$BRANCH" --state open --json number \
     --jq '.[0].number' 2>/dev/null || true)

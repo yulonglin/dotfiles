@@ -16,7 +16,9 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/pr-after-push-test.XXXXXX")"
 ROUTER_PID=""
 # A failed assertion must not leave the fake router behind: it would outlive
 # the suite and hold the runner's pipes open.
-trap 'kill "${ROUTER_PID:-0}" 2>/dev/null || true; command rm -rf "$WORK"' EXIT
+# `kill 0` would signal the whole process group, so an unset PID must not reach
+# kill at all: an early failure would otherwise take the test runner with it.
+trap '[ -z "$ROUTER_PID" ] || kill "$ROUTER_PID" 2>/dev/null || true; command rm -rf "$WORK"' EXIT
 
 PASS=0
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -63,7 +65,7 @@ run_hook() {
         CLAUDE_HOOK_FEATURES_FILE="$FEATCONF" \
         CLAUDE_PR_BODY_TOKEN_FILE="${PR_BODY_TOKEN_FILE:-$WORK/absent-token}" \
         CLAUDE_PR_BODY_BASE_URL="${PR_BODY_BASE_URL:-}" \
-        CLAUDE_PR_BODY_TIMEOUT=5 \
+        CLAUDE_PR_BODY_TIMEOUT="${PR_BODY_TIMEOUT:-20}" \
         bash "$HOOK" 2>/dev/null || true
 import json, sys
 cmd, resp, cwd, transcript = sys.argv[1:5]
@@ -135,11 +137,12 @@ ok
 # ═══════════════════════════════════════════════════════════════════════════
 
 cat > "$WORK/fake_router.py" <<'PY'
-import json, sys, threading
+import json, sys, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 status = int(sys.argv[1])
 record = sys.argv[2]
+delay = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -147,6 +150,8 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length)
         with open(record, "ab") as fh:
             fh.write(raw + b"\n")
+        if delay:
+            time.sleep(delay)
         if status != 200:
             self.send_response(status)
             self.end_headers()
@@ -179,11 +184,11 @@ print(server.server_address[1], flush=True)
 server.serve_forever()
 PY
 
-start_router() {  # $1 = http status to answer with
+start_router() {  # $1 = http status to answer with, $2 = seconds to stall first
     command rm -f "$WORK/router-requests"
     # Both streams go to files: a background process still holding the parent's
     # stdout keeps every enclosing $(...) open, which reads exactly like a hang.
-    python3 "$WORK/fake_router.py" "$1" "$WORK/router-requests" \
+    python3 "$WORK/fake_router.py" "$1" "$WORK/router-requests" "${2:-0}" \
         > "$WORK/router-port" 2>/dev/null &
     ROUTER_PID=$!
     for _ in $(seq 1 50); do
@@ -241,7 +246,8 @@ grep -q "pr create .*--body-file" "$GH_LOG" || fail "model body not passed to gh
 grep -q -- "--fill" "$GH_LOG" && fail "--fill used alongside a model-written body"
 grep -q "## Motivation" "$GH_BODY" || fail "body has no motivation section: $(cat "$GH_BODY")"
 grep -q "## Implementation" "$GH_BODY" || fail "body has no implementation section"
-grep -qi "drafted by astra" "$GH_BODY" || fail "body does not name the model that wrote it"
+# The attribution names the model, not the routing alias (rules/communication.md).
+grep -q "drafted by GPT-6 Astra" "$GH_BODY" || fail "body does not name the exact model that wrote it: $(tail -2 "$GH_BODY")"
 grep -qi "model-written summary" <<<"$OUT" || fail "nudge does not say the body was model-written: $OUT"
 # The prompt is ours, so it IS assertable: the four required sections, the
 # transcript's test evidence, and the bar on inventing any of it.
@@ -263,6 +269,21 @@ OUT="$(run_hook "git push -u origin feature-x" "branch set up" "$WORK/transcript
 grep -q "pull/42" <<<"$OUT" || fail "no PR opened when the gateway refused: $OUT"
 grep -q "pr create .*--fill" "$GH_LOG" || fail "did not fall back to --fill on a 429: $(cat "$GH_LOG")"
 grep -q -- "--body-file" "$GH_LOG" && fail "passed an empty body file after a gateway failure"
+stop_router
+ok
+
+# --- a slow gateway is bounded by the budget, not by the hook's own timeout --
+# Two per-attempt timeouts could outlast the 90s hook timeout in settings.json,
+# and a hook killed mid-flight opens NO PR. The budget is total, so the whole
+# generator gives up inside it and the push still ends in a draft PR.
+: > "$GH_PR_LIST"
+start_router 200 30
+SECONDS=0
+OUT="$(PR_BODY_TIMEOUT=8 run_hook "git push -u origin feature-x" "branch set up" "$WORK/transcript.jsonl")"
+ELAPSED=$SECONDS
+grep -q "pull/42" <<<"$OUT" || fail "no PR opened when the gateway stalled: $OUT"
+grep -q "pr create .*--fill" "$GH_LOG" || fail "a stalled gateway did not fall back to --fill"
+[ "$ELAPSED" -le 20 ] || fail "the generator ran for ${ELAPSED}s against an 8s budget"
 stop_router
 ok
 

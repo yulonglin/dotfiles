@@ -36,13 +36,18 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 PORT = 8787
 DEFAULT_MODELS = ("astra", "sol")
-DEFAULT_TIMEOUT = 45.0
+# A TOTAL budget, not a per-attempt one. Two 45 s attempts plus `gh pr create`
+# would outlast the hook's own 90 s timeout in settings.json, and a hook killed
+# mid-flight opens no PR at all -- the one outcome this must never produce.
+DEFAULT_TIMEOUT = 60.0
+MIN_ATTEMPT_S = 5.0
 MAX_DIFF_CHARS = 60_000
 MAX_TEST_BLOCKS = 6
 MAX_TEST_TAIL_LINES = 15
@@ -114,6 +119,21 @@ short. Do not mention this instruction text.
 ===== DIFF{truncated} =====
 {diff}
 """
+
+
+# An attribution names the exact model, never the family or a routing alias
+# (rules/communication.md). This mirrors the `name` field of config/model-router.toml
+# for the routing ids used here; an unknown id falls back to its own spelling.
+DISPLAY_NAMES = {
+    "astra": "GPT-6 Astra",
+    "gpt-6-astra": "GPT-6 Astra",
+    "sol": "GPT-5.6 Sol",
+    "gpt-5.6-sol": "GPT-5.6 Sol",
+}
+
+
+def display_name(model: str) -> str:
+    return DISPLAY_NAMES.get(model, model)
 
 
 class GenerationError(Exception):
@@ -282,7 +302,9 @@ def clean(text: str, model: str) -> str:
         lines = text.splitlines()
         if lines[-1].strip().startswith("```"):
             text = "\n".join(lines[1:-1])
-    return text.rstrip() + "\n\n---\nPR body drafted by %s through the model-router gateway.\n" % model
+    return (text.rstrip()
+            + "\n\n---\nPR body drafted by %s through the model-router gateway.\n"
+            % display_name(model))
 
 
 def main(argv: list[str]) -> int:
@@ -315,10 +337,19 @@ def main(argv: list[str]) -> int:
 
     # Every writer on the Codex provider shares one OAuth quota, so the second
     # model is a hedge against a single route being in cooldown, not a promise.
+    # It only gets whatever is left of the budget, and is skipped when that is
+    # too little to finish in.
+    deadline = time.monotonic() + args.timeout
     last = "no models tried"
-    for model in models:
+    for index, model in enumerate(models):
+        remaining = deadline - time.monotonic()
+        # The first model always gets its try, however small the budget — a
+        # budget under the minimum must mean "be quick", never "do nothing".
+        if index and remaining < MIN_ATTEMPT_S:
+            last = "out of time before %s" % model
+            break
         try:
-            print(clean(ask(model, prompt, args.timeout), model))
+            print(clean(ask(model, prompt, remaining), model))
             return 0
         except GenerationError as exc:
             last = str(exc)
