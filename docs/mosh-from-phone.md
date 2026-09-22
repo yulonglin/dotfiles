@@ -64,19 +64,17 @@ At 9–17 ms this is a latency detail, not a fault, and it was **not** why sessi
 
 ## Steps that need root
 
-sshd is **already running** and Remote Login is already on, so there is nothing to enable. Checking that with `lsof -nP -iTCP:22 -sTCP:LISTEN` as a normal user is misleading: it cannot see root-owned listening sockets and prints nothing on a perfectly healthy machine. Use `netstat -an | grep '\.22'`, which needs no privilege and also shows the live sessions.
+Both of these now live in `scripts/macos_sudo_extras.sh`, which is the repo's home for system settings that need elevation, so a fresh Mac gets them from one run rather than from this document:
 
 ```
-sudo pmset -c sleep 30
-
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw \
-  --add /opt/homebrew/bin/mosh-server
-
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw \
-  --unblockapp /opt/homebrew/bin/mosh-server
+sudo ./scripts/macos_sudo_extras.sh
 ```
 
-The two `socketfilterfw` lines add `mosh-server` to the application firewall, which is on. Mosh binds a UDP port in 60000–61000 per session. An unsigned Homebrew binary launched over ssh may either raise a GUI prompt on the Mac's own screen — useless when you are holding the phone — or have its traffic dropped outright; the allow rule pre-empts both. The symptom it prevents is mosh hanging at `Connecting...` *after* a successful ssh handshake. Stealth mode is off, so nothing else needs changing.
+It raises the AC sleep timer to 30 minutes and adds `mosh-server` to the application-firewall allow list. Both are idempotent and neither downgrades prior tuning — a machine already pinned to `sleep 0`, or to anything above 30, is left alone, and `tests/test_macos_sudo_extras_sleep.sh` pins that so a re-run cannot quietly cut a deliberate never-sleep back to 30.
+
+The firewall rule matters more than it looks. Mosh binds a UDP port in 60000–61000 per session, and an unsigned Homebrew binary launched over ssh either has its traffic dropped or raises a GUI prompt on the Mac's own screen — useless when the connection is coming from a phone. The symptom is mosh hanging at `Connecting...` *after* a successful ssh handshake, which reads as a mosh bug rather than a firewall one.
+
+sshd itself needs nothing: it is **already running** and Remote Login is already on. Checking that with `lsof -nP -iTCP:22 -sTCP:LISTEN` as a normal user is misleading — it cannot see root-owned listening sockets and prints nothing on a perfectly healthy machine, which is exactly how this investigation went to the wrong host for an hour. Use `netstat -an | grep '\.22'`, which needs no privilege and also shows the live sessions.
 
 ## Termius needs no new keys
 
