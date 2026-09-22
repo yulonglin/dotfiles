@@ -4,23 +4,25 @@ This machine (`m5pro`, tailnet `100.80.44.37`) already accepts ssh from `iphone-
 
 ## The patchy sessions are this Mac sleeping, after one minute
 
-`pmset -g` reports `sleep 1`. The Mac suspends after a single idle minute, and every ssh session dies with it. That is the whole cause — not the network, not the phone, not Tailscale. The one-line fix:
+`pmset -g` reports `sleep 1`. The Mac suspends after a single idle minute, and every ssh session dies with it. That is the whole cause — not the network, not the phone, not Tailscale.
+
+The one-minute value was set for **screen lock**, and pmset's `sleep` key took it too. Locking is configured separately, so raising the sleep timer costs nothing there: `displaysleep` stays at 1 and macOS locks on its own schedule.
 
 ```
-sudo pmset -c sleep 0
+sudo pmset -c sleep 30
 ```
 
-That stops sleep only while on AC, so unplugged behaviour is unchanged. Reverse with `sudo pmset -c sleep 1`. Nothing else in this document matters as much as this line.
+## Raising the timer is the fix because macOS already does session-aware wake
 
-**This is already handled without root.** `pmset` needs a password, which a deploy run does not have, so the same result is reached by holding a power assertion instead: the `caffeinate-ssh` component installs a launchd user agent running `caffeinate -s`, which `man caffeinate` defines as valid **only on AC power**, so the laptop still sleeps normally on battery. It is on by default on macOS, installed by `scripts/power/setup_caffeinate_ssh.sh`, and removed with `--no-caffeinate-ssh` (which unloads it rather than merely skipping it, since a leftover assertion would keep the Mac awake indefinitely). `tests/test_caffeinate_ssh_agent.zsh` pins the registration and the AC-only flag.
+The instinct is to disable sleep outright, or to park a `caffeinate` process on the machine. Neither is right, and the reason is that macOS already solves this: `ttyskeepawake` is `1` here, and `man pmset` defines it as preventing idle system sleep while any tty — "e.g. remote login session" — is active.
 
-The one-minute timer itself was set for **screen lock**, not sleep, and pmset's `sleep` key took it too. Locking is configured separately — `displaysleep` stays at 1 and macOS locks on its own schedule — so holding the system awake costs nothing there.
+It has never helped, and the same sentence says why: **a tty counts as inactive once its idle time exceeds the system sleep timer**. At one minute, pausing to read output for sixty seconds marks your own live session idle and lets the machine sleep. The guard works exactly as documented; the timer is simply too short for it ever to engage.
 
-macOS has a setting for exactly this problem, and the one-minute timer is what defeats it. `ttyskeepawake` is already `1` here, and `man pmset` defines it as preventing idle sleep while any tty — "e.g. remote login session" — is active, where **a tty counts as inactive once its idle time exceeds the system sleep timer**. With that timer at one minute, pausing to read output for sixty seconds marks your own live ssh session idle and lets the machine sleep. The guard is working exactly as documented; the timer is simply too short for it to ever engage.
+So the whole fix is to make the timer longer than a reading pause. At `sleep 30` the Mac stays awake for as long as a session is genuinely connected, and sleeps half an hour after the last one disconnects. No process to supervise, no assertion to leak, and it still sleeps when the machine is actually idle.
 
-That also gives a gentler fix than disabling sleep, for battery use where you do want the Mac to suspend eventually: raise the timer rather than removing it, with `sudo pmset -b sleep 30`. `ttyskeepawake` then holds the machine up for as long as a session is genuinely connected, and it still sleeps half an hour after the last one goes away.
+**An always-on `caffeinate` was tried here and removed.** A launchd agent holding `caffeinate -s` was deployed on 2026-09-21 and reverted the same day: it worked, but it holds the assertion unconditionally, so the Mac never sleeps on AC whether or not anyone is connected — one instance ran for nearly 17 hours with a single ssh session against it. An unbounded power assertion installed by default on every machine is the wrong shape for a problem the OS already scopes to live sessions. If a machine ever genuinely needs it, `caffeinate -s` on demand is the honest way to ask, and it ends when you end it.
 
-Two things made the cause harder to see than it should have been. `displaysleep` is also `1`, so the screen going dark looks like the same event as the machine suspending. And something on this box frequently holds a `caffeinate`, so the Mac stays up for unpredictable stretches and the failures look random rather than periodic.
+On battery the timer is left short deliberately, so an unplugged laptop still suspends promptly. That does mean a remote session on battery dies quickly; `sudo pmset -b sleep 10` is the middle ground if that matters more than the charge.
 
 ## Mosh survives the sleep, which is why it is worth setting up anyway
 
@@ -65,7 +67,7 @@ At 9–17 ms this is a latency detail, not a fault, and it was **not** why sessi
 sshd is **already running** and Remote Login is already on, so there is nothing to enable. Checking that with `lsof -nP -iTCP:22 -sTCP:LISTEN` as a normal user is misleading: it cannot see root-owned listening sockets and prints nothing on a perfectly healthy machine. Use `netstat -an | grep '\.22'`, which needs no privilege and also shows the live sessions.
 
 ```
-sudo pmset -c sleep 0
+sudo pmset -c sleep 30
 
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw \
   --add /opt/homebrew/bin/mosh-server
@@ -98,7 +100,7 @@ Mosh does not run a login shell. It runs `mosh-server` through a non-interactive
 netstat -an | grep '\.22'                 # sshd listening, and who is connected
 ssh localhost 'command -v mosh-server'    # PATH fix visible to a non-interactive shell?
 ssh localhost 'mosh-server new -s -c 256 -l LANG=en_US.UTF-8'   # prints MOSH CONNECT <port> <key>
-pmset -g | grep ' sleep'                  # must read 0 after the pmset step
+pmset -g | grep ' sleep'                  # must read 30, not 1, after the pmset step
 ```
 
 The third prints a port and a one-time key and leaves a detached server behind; kill it by the pid it reports. It cannot exercise the firewall rule, because loopback is not filtered — only a real connection from the phone tests that.
