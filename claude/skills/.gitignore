@@ -38,6 +38,19 @@
 .system/
 .system/**
 
+# Skills synced down from the claude.ai account (Anthropic-authored: morning,
+# learn, pdf, xlsx, theme-factory, docs, ...). Claude Code writes them into a
+# bucket directory named after the account and workspace UUIDs, so the path
+# differs per machine and the content is not ours to version. 329 files, ~10 MB.
+#
+# Left untracked-but-not-ignored, these broke `dotfiles-sync` outright: the
+# pre-commit hard-wrap gate covers every staged '^claude/.*\.md$', and 42 of the
+# vendored SKILL.md files are hard-wrapped, so the auto-commit was rejected on
+# every run. DOTFILES_SYNC_HOLD_BACK only ever retries without
+# claude/settings.json, so nothing recovered it.
+synced/
+synced/**
+
 # Skill dev/eval artifacts (A/B output comparisons, not skill definitions)
 anthropic-style-workspace/
 anthropic-style-workspace/**
