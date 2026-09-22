@@ -611,7 +611,7 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
             if ! diff -q "$HTOP_LOCAL" "$HTOP_DOTFILES" >/dev/null 2>&1; then
                 log_warning "Local htop config differs from dotfiles (htop overwrites symlinks)"
                 local htop_choice=""
-                if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; then
+                if ! can_prompt; then
                     log_info "Non-interactive — skipping htop (use --force to overwrite)"
                     htop_choice="s"
                 else
@@ -1487,7 +1487,11 @@ _vpn_sudo_ready() {
     # there is no TTY to answer the password prompt ("a terminal is required").
     # Proceed only with cached credentials, or a successful attended prompt.
     sudo -n true 2>/dev/null && return 0
-    [[ -t 0 ]] && run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v && return 0
+    if ! can_prompt; then
+        log_warning "Unattended run — not prompting for sudo for the VPN split tunnel daemon"
+        return 1
+    fi
+    run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v && return 0
     return 1
 }
 
