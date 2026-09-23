@@ -46,8 +46,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-VAULT = Path(os.environ.get("WEBSITE_VAULT", "/home/yulong/vault/writing/website"))
-REPO = Path(os.environ.get("WEBSITE_REPO", "/home/yulong/code/yulonglin.github.io"))
+VAULT = Path(os.environ.get("WEBSITE_VAULT", Path.home() / "vault/writing/website"))
+REPO = Path(os.environ.get("WEBSITE_REPO", Path.home() / "code/yulonglin.github.io"))
 STATE = Path(
     os.environ.get(
         "WEBSITE_PUBLISH_STATE",

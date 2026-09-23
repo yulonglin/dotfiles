@@ -21,7 +21,7 @@ Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 # even be seen; continuous mode means the vault on this box is the vault.
 # The vault path is passed explicitly rather than relying on cwd, which for a
 # systemd unit is /.
-ExecStart=/home/yulong/.bun/bin/ob sync --continuous --path %h/vault
+ExecStart=%h/.bun/bin/ob sync --continuous --path %h/vault
 
 # Sync is a network client: it will lose its connection, and the remote will
 # occasionally refuse. Restarting is the correct response to all of it. The
