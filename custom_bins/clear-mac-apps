@@ -115,26 +115,31 @@ load_config() {
 #
 # The unix id rides along because a NAME is not an address: the actions below
 # resolve each process by unix id, since two processes can share a name. Its
-# read is guarded: if it fails, every id is empty and ps_ref falls back to the
-# name, rather than one unreadable id failing the whole inventory.
+# read is guarded: if the bulk read throws, every id is empty and ps_ref falls
+# back to the name, rather than failing the whole inventory. That is coarser
+# than the old per-process guard, which blanked only the one unreadable id.
 get_running_apps() {
     osascript -e 'tell application "System Events"
         set nm to name of every process whose background only is false
         set bids to bundle identifier of every process whose background only is false
-        set ids to {}
+        set haveIds to true
         try
             set ids to unix id of every process whose background only is false
+        on error
+            set haveIds to false
         end try
         set nm2 to name of every process whose background only is false
         if nm is not nm2 then error "process list changed during inventory"
         if (count of nm) is not (count of bids) then error "process list changed during inventory"
-        set haveIds to ((count of ids) is (count of nm))
+        if haveIds and (count of nm) is not (count of ids) then error "process list changed during inventory"
         set output to ""
         repeat with i from 1 to count of nm
             set procBID to item i of bids
             if procBID is missing value then set procBID to ""
             set procPID to ""
-            if haveIds then set procPID to (item i of ids) as text
+            if haveIds then
+                if item i of ids is not missing value then set procPID to (item i of ids) as text
+            end if
             set output to output & (item i of nm) & "|" & procBID & "|" & procPID & linefeed
         end repeat
         return output
