@@ -109,37 +109,30 @@ load_config() {
 #   queued on System Events' single event thread.
 #
 # The bulk lists are separate events, so an app launching or quitting between
-# them would misalign the columns. Names are read twice and the counts compared,
-# as hide-idle-apps does; a mismatch fails the inventory, which main() treats
-# as "do nothing" - a rerun is cheap, a shifted bundle id quits the wrong app.
+# them would misalign the columns. The name and bundle-id reads are bracketed by
+# two unix-id reads that must match exactly: identity, not names, because two
+# Safari web apps share a name and one restarting mid-read would swap columns
+# with every name check still passing. Any mismatch, or an id list that cannot
+# be read, fails the inventory, which main() treats as "do nothing" - a rerun
+# is cheap, a shifted bundle id or pid acts on the wrong app.
 #
 # The unix id rides along because a NAME is not an address: the actions below
-# resolve each process by unix id, since two processes can share a name. Its
-# read is guarded: if the bulk read throws, every id is empty and ps_ref falls
-# back to the name, rather than failing the whole inventory. That is coarser
-# than the old per-process guard, which blanked only the one unreadable id.
+# resolve each process by unix id, since two processes can share a name.
 get_running_apps() {
     osascript -e 'tell application "System Events"
+        set ids to unix id of every process whose background only is false
         set nm to name of every process whose background only is false
         set bids to bundle identifier of every process whose background only is false
-        set haveIds to true
-        try
-            set ids to unix id of every process whose background only is false
-        on error
-            set haveIds to false
-        end try
-        set nm2 to name of every process whose background only is false
-        if nm is not nm2 then error "process list changed during inventory"
-        if (count of nm) is not (count of bids) then error "process list changed during inventory"
-        if haveIds and (count of nm) is not (count of ids) then error "process list changed during inventory"
+        set ids2 to unix id of every process whose background only is false
+        if ids is not ids2 then error "process list changed during inventory"
+        if (count of nm) is not (count of ids) then error "process list changed during inventory"
+        if (count of bids) is not (count of ids) then error "process list changed during inventory"
         set output to ""
         repeat with i from 1 to count of nm
             set procBID to item i of bids
             if procBID is missing value then set procBID to ""
             set procPID to ""
-            if haveIds then
-                if item i of ids is not missing value then set procPID to (item i of ids) as text
-            end if
+            if item i of ids is not missing value then set procPID to (item i of ids) as text
             set output to output & (item i of nm) & "|" & procBID & "|" & procPID & linefeed
         end repeat
         return output

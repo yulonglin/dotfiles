@@ -669,8 +669,9 @@ INVENTORY=$(sed -n '/^get_running_apps()/,/^}/p' "$REPO/custom_bins/clear-mac-ap
 check_not "no stored process list"   "$INVENTORY" "set procList to"
 check_not "no per-element iteration" "$INVENTORY" "repeat with proc in"
 check     "names read in bulk"       "$INVENTORY" "set nm to name of every process whose background only is false"
-check     "and the unix id is kept"  "$INVENTORY" "unix id of every process whose background only is false"
-check     "and misalignment fails"   "$INVENTORY" "if nm is not nm2 then error"
+check     "and the unix id is kept"  "$INVENTORY" "set ids to unix id of every process whose background only is false"
+check     "ids re-read after"        "$INVENTORY" "set ids2 to unix id of every process whose background only is false"
+check     "and misalignment fails by identity" "$INVENTORY" "if ids is not ids2 then error"
 
 # --- 24. a delimiter inside a process name cannot redirect an action -------
 # The inventory is pipe-separated and entries are tab-joined, so either
