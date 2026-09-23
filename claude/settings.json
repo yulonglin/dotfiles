@@ -199,7 +199,7 @@
           {
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run git.pr-after-push -- $HOME/.claude/hooks/pr_after_push.sh",
-            "timeout": 30
+            "timeout": 90
           },
           {
             "type": "command",
@@ -236,6 +236,16 @@
             "command": "bash $HOME/.claude/hooks/nudge_artifact_index.sh",
             "timeout": 10,
             "statusMessage": "Checking the artifact is recorded in ARTIFACTS.md"
+          }
+        ]
+      },
+      {
+        "matcher": "advisor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/advisor_seen.py",
+            "timeout": 5
           }
         ]
       }
@@ -624,6 +634,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.vault-lint -- bash $HOME/.claude/hooks/nudge_vault_lint.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.advisor-skipped -- python3 $HOME/.claude/hooks/nudge_advisor_skipped.py",
+            "timeout": 10
           }
         ]
       }

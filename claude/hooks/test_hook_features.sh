@@ -120,6 +120,7 @@ external = {
     "check_git_root.sh",
     "check_venv.sh",
     "anthropic_keycheck.py",
+    "nudge_advisor_skipped.py",
 }
 mixed = {
     "session_rename_commit.sh": (
@@ -131,7 +132,7 @@ mixed = {
         '[[ "$feature_rc" -eq 1 ]] && advisory_enabled=false',
     ),
 }
-state_only = {"simplify_track_reuse.py", "simplify_mark_dirty.sh"}
+state_only = {"simplify_track_reuse.py", "simplify_mark_dirty.sh", "advisor_seen.py"}
 safety = {
     "block_destructive_git.sh",
     "block_email_send.sh",
@@ -160,6 +161,9 @@ operational = {
     "inject_vault_layout.sh",
     "mark_failed_sync.sh",
     "network_audit.py",
+    # Gated by git.pr-after-push rather than a nudges.* flag, and its point is
+    # the side effect (a draft PR), so it is operational and not an advisory.
+    "pr_after_push.sh",
     "reap_jobs.sh",
     "session_rename_auto.sh",
     "session_start_notes.sh",

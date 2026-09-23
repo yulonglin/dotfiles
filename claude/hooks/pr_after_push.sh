@@ -8,9 +8,11 @@
 # it is not. This hook covers the "pushed → PR" edge, which is the one a session
 # most often forgets, and injects the review/merge instruction for the rest.
 #
-# Side effect: creates a DRAFT PR via `gh pr create --draft --fill` when the
-# branch has no open PR. Draft, so nothing is requested of anyone; --fill, so
-# the title and body come from the commits and Claude is told to rewrite them.
+# Side effect: creates a DRAFT PR when the branch has no open PR. Draft, so
+# nothing is requested of anyone. The body is written by an OpenAI model through
+# the model-router gateway (pr_body_model.py, flag git.pr-after-push.model-body)
+# and falls back to `--fill` from the commit messages whenever the gateway is
+# unreachable, in cooldown or slow — the PR opens either way.
 #
 # Quiet when there is nothing to do: not a push, a push that failed, a push of
 # main/master, a delete, a tags-only push, no gh, or no GitHub remote.
@@ -64,12 +66,13 @@ for holder in (p, resp):
     if isinstance(holder, dict) and holder.get("is_error"):
         failed = True
 cwd = p.get("cwd") or ""
-print((cwd if isinstance(cwd, str) else "") + "\t" + ("1" if failed else "0"))
+tp = p.get("transcript_path") or ""
+print("\t".join([cwd if isinstance(cwd, str) else "", "1" if failed else "0",
+                 tp if isinstance(tp, str) else ""]))
 ' 2>/dev/null) || exit 0
 [ -n "$PARSED" ] || exit 0
 
-CWD="${PARSED%%$'\t'*}"
-FAILED="${PARSED##*$'\t'}"
+IFS=$'\t' read -r CWD FAILED TRANSCRIPT <<< "$PARSED"
 [ "$FAILED" = "0" ] || exit 0
 
 [ -n "$CWD" ] && [ -d "$CWD" ] || CWD="$PWD"
@@ -93,7 +96,7 @@ print(json.dumps({"hookSpecificOutput": {
     exit 0
 }
 
-NEXT="Next, per coding-conventions: rewrite the PR body if --fill left it thin (what, why, review points), run a review (/code-review, or codex-companion review --base main), then merge it yourself with \`gh pr merge <n> --squash --delete-branch\` only if it is simple: docs, rules or a single file, tests green, nothing under claude/settings.json, claude/hooks/ or secrets. Otherwise ask the user with AskUserQuestion and put the merge command in the closing summary."
+NEXT="Next, per coding-conventions: read the PR body and rewrite it if it is thin (what, why, review points), run a review (/code-review, or codex-companion review --base main), then merge it yourself with \`gh pr merge <n> --squash --delete-branch\` only if it is simple: docs, rules or a single file, tests green, nothing under claude/settings.json, claude/hooks/ or secrets. Otherwise ask the user with AskUserQuestion and put the merge command in the closing summary."
 
 EXISTING=$(cd "$CWD" && gh pr list --head "$BRANCH" --state open --json number \
     --jq '.[0].number' 2>/dev/null || true)
@@ -110,8 +113,39 @@ fi
 TITLE=$(git -C "$CWD" log -1 --format=%s 2>/dev/null)
 TITLE_ARG=()
 [ -n "$TITLE" ] && TITLE_ARG=(--title "$TITLE")
-if ! CREATED=$(cd "$CWD" && gh pr create --draft --fill "${TITLE_ARG[@]}" --head "$BRANCH" 2>&1); then
-    emit "Pushed $BRANCH but no PR exists and \`gh pr create --draft --fill\` failed: ${CREATED//$'\n'/ }. Open one with gh pr create (title + body), then: $NEXT"
+
+# The body is written by an OpenAI model through the model-router gateway
+# (pr_body_model.py): motivation, implementation with the files and symbols
+# touched, the tests the transcript shows actually ran, and a diagram when the
+# change has interacting parts. The gateway is best-effort — a stopped router,
+# a quota cooldown or a slow answer falls through to `--fill`, so the PR opens
+# either way and the only difference is a plainer body.
+BODY_FILE=""
+BODY_SOURCE="the commit messages"
+if [ -r "$HOOK_DIR/hook_feature.py" ] && \
+   python3 "$HOOK_DIR/hook_feature.py" enabled git.pr-after-push.model-body 2>/dev/null; then
+    TRANSCRIPT_ARG=()
+    [ -n "${TRANSCRIPT:-}" ] && TRANSCRIPT_ARG=(--transcript "$TRANSCRIPT")
+    CANDIDATE=$(mktemp "${TMPDIR:-/tmp}/pr-body.XXXXXX" 2>/dev/null) || CANDIDATE=""
+    if [ -n "$CANDIDATE" ]; then
+        if python3 "$HOOK_DIR/pr_body_model.py" --repo "$CWD" --branch "$BRANCH" \
+               "${TRANSCRIPT_ARG[@]}" > "$CANDIDATE" 2>/dev/null \
+           && [ -s "$CANDIDATE" ]; then
+            BODY_FILE="$CANDIDATE"
+            BODY_SOURCE="a model-written summary (motivation, implementation, tests)"
+        else
+            rm -f "$CANDIDATE"
+        fi
+    fi
 fi
+
+BODY_ARG=(--fill)
+[ -n "$BODY_FILE" ] && BODY_ARG=(--body-file "$BODY_FILE")
+
+if ! CREATED=$(cd "$CWD" && gh pr create --draft "${BODY_ARG[@]}" "${TITLE_ARG[@]}" --head "$BRANCH" 2>&1); then
+    [ -n "$BODY_FILE" ] && rm -f "$BODY_FILE"
+    emit "Pushed $BRANCH but no PR exists and \`gh pr create --draft\` failed: ${CREATED//$'\n'/ }. Open one with gh pr create (title + body), then: $NEXT"
+fi
+[ -n "$BODY_FILE" ] && rm -f "$BODY_FILE"
 URL=$(grep -oE 'https://github\.com/[^ ]+/pull/[0-9]+' <<< "$CREATED" | head -1)
-emit "Pushed $BRANCH and opened draft PR ${URL:-(url not parsed)} from the commit messages. $NEXT"
+emit "Pushed $BRANCH and opened draft PR ${URL:-(url not parsed)} with $BODY_SOURCE. $NEXT"
