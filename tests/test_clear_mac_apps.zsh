@@ -661,12 +661,17 @@ rm -f "$ROOT/config/safari_web_apps.local"
 # against `lsappinfo` - reading a property per element off a STORED whose-result
 # returns the FIRST same-named process every time, for `process` and for
 # `application process`, by element and by index. Pinned at the source, which is
-# the only place the property can be checked without a window server.
-print -r -- "23. the inventory iterates its whose-result inline"
+# the only place the property can be checked without a window server. Inline
+# iteration avoids the aliasing but re-runs the whose-filter per property read,
+# which took minutes with ~1300 processes (2026-09-23), so the bulk form it is.
+print -r -- "23. the inventory reads its whose-result in bulk"
 INVENTORY=$(sed -n '/^get_running_apps()/,/^}/p' "$REPO/custom_bins/clear-mac-apps")
-check_not "no stored process list"  "$INVENTORY" "set procList to"
-check     "iterated inline"         "$INVENTORY" "repeat with proc in (every process"
-check     "and the unix id is kept" "$INVENTORY" "unix id of proc"
+check_not "no stored process list"   "$INVENTORY" "set procList to"
+check_not "no per-element iteration" "$INVENTORY" "repeat with proc in"
+check     "names read in bulk"       "$INVENTORY" "set nm to name of every process whose background only is false"
+check     "and the unix id is kept"  "$INVENTORY" "set ids to unix id of every process whose background only is false"
+check     "ids re-read after"        "$INVENTORY" "set ids2 to unix id of every process whose background only is false"
+check     "and misalignment fails by identity" "$INVENTORY" "if ids is not ids2 then error"
 
 # --- 24. a delimiter inside a process name cannot redirect an action -------
 # The inventory is pipe-separated and entries are tab-joined, so either
