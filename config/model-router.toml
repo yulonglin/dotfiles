@@ -162,9 +162,46 @@ slug = "meta/muse-spark-1.3"
 context-window = 1048576
 
 [[models]]
-id = "grok-4.6"
+id = "grok-4.7"
 aliases = ["grok"]
-name = "Grok 4.6"
+name = "Grok 4.7"
 provider = "openrouter"
-slug = "x-ai/grok-4.6"
+slug = "x-ai/grok-4.7"
 context-window = 500000
+
+[[models]]
+id = "gemini-3.7-flash"
+aliases = ["gemini"]
+name = "Gemini 3.7 Flash"
+provider = "openrouter"
+slug = "google/gemini-3.7-flash"
+context-window = 1048576
+
+[[models]]
+id = "qwen3.8-max"
+aliases = ["qwen"]
+name = "Qwen3.8 Max"
+provider = "openrouter"
+slug = "qwen/qwen3.8-max-0902"
+context-window = 1000000
+
+[[models]]
+id = "deepseek-v4.1-flash"
+aliases = ["deepseek"]
+name = "DeepSeek V4.1 Flash"
+provider = "openrouter"
+slug = "deepseek/deepseek-v4.1-flash"
+context-window = 1048576
+
+# GPT-6 Sol through OpenRouter, pay-per-token, as a deliberate exception to the
+# "never through OpenRouter" rule above: model-router 0.1.20 pins CLIProxyAPI
+# 7.2.154, which answers "unknown provider for model gpt-6-sol" (measured
+# 2026-09-22); upstream CLIProxyAPI 7.3.x knows it. When model-router ships a
+# newer pin, move this to provider = "codex" and hand it the `sol` alias.
+[[models]]
+id = "gpt-6-sol"
+aliases = ["sol6"]
+name = "GPT-6 Sol"
+provider = "openrouter"
+slug = "openai/gpt-6-sol"
+context-window = 1050000
