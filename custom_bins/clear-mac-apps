@@ -90,40 +90,52 @@ load_config() {
 
 # Get list of running GUI apps as "name|bundle_id|unix_id" per line.
 #
-# The whose-result is iterated INLINE and never stored in a variable first.
-# That is not a style choice. Reading a property per element off a STORED
-# element list resolves every same-named process to the FIRST process of that
-# name, so two Safari web apps - they all run the one shared `Web App` binary
-# and so share the process name - came back carrying the same bundle
-# identifier. The second was then classified as the first, and an app asking
-# for `hide` or `minimise` was quit because the app it was mistaken for was
-# unlisted. Measured 2026-09-16 against `lsappinfo`: every stored-list form
-# aliases (generic `process` and `application process`, by element or by
-# index); inline and bulk parallel-list forms report each process correctly.
-# hide-idle-apps reads the bulk form, which is why it never had this fault.
+# Each property is read in BULK, one Apple event per property, as parallel
+# lists. Two other forms are wrong:
+#
+# - A STORED element list aliases. Reading a property per element off it
+#   resolves every same-named process to the FIRST process of that name, so two
+#   Safari web apps - they all run the one shared `Web App` binary and so share
+#   the process name - came back carrying the same bundle identifier, and an app
+#   asking for `hide` or `minimise` was quit as the unlisted app it was mistaken
+#   for. Measured 2026-09-16 against `lsappinfo`: every stored-list form aliases
+#   (generic `process` and `application process`, by element or by index);
+#   inline and bulk parallel-list forms report each process correctly.
+# - INLINE iteration (`repeat with proc in (every process whose ...)`) is
+#   correct but hangs. Each `proc` is a live reference, so every property read
+#   re-runs the whose-filter over ALL processes, each costing a LaunchServices
+#   lookup. Measured 2026-09-23 with ~1300 processes: 5.3 s for 10 apps against
+#   0.6 s in bulk, and about two minutes with more apps open and three runs
+#   queued on System Events' single event thread.
+#
+# The bulk lists are separate events, so an app launching or quitting between
+# them would misalign the columns. Names are read twice and the counts compared,
+# as hide-idle-apps does; a mismatch fails the inventory, which main() treats
+# as "do nothing" - a rerun is cheap, a shifted bundle id quits the wrong app.
 #
 # The unix id rides along because a NAME is not an address: the actions below
-# resolve each process by unix id, since two processes can share a name.
+# resolve each process by unix id, since two processes can share a name. Its
+# read is guarded: if it fails, every id is empty and ps_ref falls back to the
+# name, rather than one unreadable id failing the whole inventory.
 get_running_apps() {
     osascript -e 'tell application "System Events"
+        set nm to name of every process whose background only is false
+        set bids to bundle identifier of every process whose background only is false
+        set ids to {}
+        try
+            set ids to unix id of every process whose background only is false
+        end try
+        set nm2 to name of every process whose background only is false
+        if nm is not nm2 then error "process list changed during inventory"
+        if (count of nm) is not (count of bids) then error "process list changed during inventory"
+        set haveIds to ((count of ids) is (count of nm))
         set output to ""
-        repeat with proc in (every process whose background only is false)
-            set procName to name of proc
-            set procBID to bundle identifier of proc
+        repeat with i from 1 to count of nm
+            set procBID to item i of bids
             if procBID is missing value then set procBID to ""
-            -- Guarded like the bundle id above, and for a blunter reason: this
-            -- expression sits inside the loop that builds the WHOLE inventory,
-            -- so one process whose unix id could not be read would fail the
-            -- enumeration outright - and main() treats an unreadable inventory
-            -- as "do nothing", so a single odd process would silently turn the
-            -- entire Shortcut into a no-op. An empty id costs that one process
-            -- its precise address and nothing else: ps_ref falls back to the
-            -- name, which is what every rung did before this change.
             set procPID to ""
-            try
-                set procPID to (unix id of proc) as text
-            end try
-            set output to output & procName & "|" & procBID & "|" & procPID & linefeed
+            if haveIds then set procPID to (item i of ids) as text
+            set output to output & (item i of nm) & "|" & procBID & "|" & procPID & linefeed
         end repeat
         return output
     end tell'
