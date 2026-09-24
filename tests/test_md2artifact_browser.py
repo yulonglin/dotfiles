@@ -1285,22 +1285,36 @@ READER_MARKS_IN_SAVED = """() => {
 }"""
 
 
-def test_download_is_hidden_outside_the_viewer(page) -> None:
-    """No `window.claude`: no capability, and no blob fallback, so no button."""
-    expect(page.locator("#anPageCopy")).to_be_visible()
-    page.wait_for_timeout(300)  # absence: past any async reveal
-    expect(page.locator("#anPageDownload")).to_be_hidden()
+def test_a_local_copy_downloads_itself(page) -> None:
+    """No `window.claude`: the page is a local file, where `<a download>` works."""
+    button = page.locator("#anPageDownload")
+    expect(button).to_be_enabled()
+    with page.expect_download() as info:
+        button.click()
+    download = info.value
+    assert download.suggested_filename == "review-sample.html"
+    html = Path(download.path()).read_text(encoding="utf-8")
+    assert html.startswith("<!DOCTYPE html>")
+    assert "The first paragraph of the document" in html
 
 
-def test_download_stays_hidden_when_the_capability_is_not_granted(browser, site) -> None:
-    ctx = browser.new_context()
+def test_download_shows_disabled_when_the_capability_is_not_granted(browser, site) -> None:
+    """A public-link viewer sees the button, disabled, pointing at Copy HTML."""
+    ctx = browser.new_context(accept_downloads=True)
     try:
         p = ctx.new_page()
+        downloads: list[object] = []
+        p.on("download", lambda d: downloads.append(d))
         p.add_init_script(NO_DOWNLOADS_STUB)
         p.goto(site)
-        expect(p.locator("#anPageCopy")).to_be_visible()
-        p.wait_for_timeout(300)  # absence
-        expect(p.locator("#anPageDownload")).to_be_hidden()
+        button = p.locator("#anPageDownload")
+        expect(button).to_be_visible()
+        expect(button).to_be_disabled()
+        expect(button).to_contain_text("not available here")
+        expect(p.locator("#anPageCopy")).to_be_enabled()
+        p.evaluate("() => document.getElementById('anPageDownload').click()")
+        p.wait_for_timeout(300)  # absence: no blob save in the viewer
+        assert downloads == []
     finally:
         ctx.close()
 

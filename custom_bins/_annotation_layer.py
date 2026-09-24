@@ -50,9 +50,10 @@ Behaviour, all of which the tests guard:
   suggested edit or restored tick touches the DOM, so the file is the clean
   page with this layer still in it. In the Artifact viewer, Download goes
   through the `downloads` capability, which exists only when the publish
-  declared `capabilities: {downloads: true}`; without it the button stays
-  hidden: a plain `<a download>` is inert in the viewer's sandbox, and a blob
-  save makes every publish warn that the page offers a file, so there is none.
+  declared `capabilities: {downloads: true}` and reaches the owner only;
+  without it the button shows disabled and points at Copy HTML, because a
+  plain `<a download>` is inert in the viewer's sandbox. A downloaded copy
+  opened as a local file has no viewer, and there `<a download>` works.
   Copy HTML needs no capability and is always shown. Neither touches the
   comments' export state: saving the page is not exporting the feedback;
 - per-comment export state. A copy that actually happened stamps `copiedAt` on
@@ -1456,20 +1457,37 @@ function pageToast(html, ms){
   var t = $("anPageToast"); t.innerHTML = html;
   setTimeout(function(){ t.innerHTML = ""; }, ms || 2400);
 }
-// `claude.use("downloads")` is the one save that works in the viewer, and it
-// resolves null unless the publish declared the capability. The button stays
-// hidden until it resolves, so it is never a dead control. There is no
-// `<a download>` path: it is inert in the viewer's sandbox, and a page carrying
-// one makes every publish warn that it offers the viewer a file. A local copy
-// of the page has Copy HTML.
-var downloads = null;
+// Three places the page can be read, three behaviours for one button:
+// - in the viewer with the `downloads` capability (the owner, on a page
+//   published with it): a real save through the viewer's confirmation;
+// - in the viewer without it (a public-link viewer, or a page published
+//   before the capability was declared): shown DISABLED and saying so, so the
+//   reader learns Copy HTML is the route rather than finding no button at all.
+//   An `<a download>` is inert in the viewer's sandbox, so nothing else works;
+// - with no `window.claude` at all, the page is a local file -- a downloaded
+//   copy -- where an ordinary `<a download>` works.
+var downloads = null, dlBtn = $("anPageDownload");
+function downloadUnavailable(){
+  dlBtn.hidden = false; dlBtn.disabled = true;
+  dlBtn.textContent = "Download HTML (not available here)";
+  dlBtn.title = "This viewer does not let the page save files. Copy HTML works everywhere.";
+}
+function saveLocally(){
+  var url = URL.createObjectURL(new Blob([PAGE_HTML], { type: "text/html" }));
+  var a = document.createElement("a");
+  a.href = url; a.download = pageFilename();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 10000);
+}
 if (window.claude && typeof window.claude.use === "function") {
   Promise.resolve().then(function(){ return window.claude.use("downloads"); })
-    .then(function(d){ if (d) { downloads = d; $("anPageDownload").hidden = false; } },
-          function(){});
+    .then(function(d){ if (d) { downloads = d; dlBtn.hidden = false; } else downloadUnavailable(); },
+          downloadUnavailable);
+} else {
+  dlBtn.hidden = false;
 }
-$("anPageDownload").onclick = async function(){
-  if (!downloads) return;
+dlBtn.onclick = async function(){
+  if (!downloads) { if (!dlBtn.disabled) saveLocally(); return; }
   try {
     var r = await downloads.save({ filename: pageFilename(), data: PAGE_HTML });
     if (r && r.status === "saved") pageToast('<span class="anok">saved</span>');
@@ -1477,7 +1495,7 @@ $("anPageDownload").onclick = async function(){
     var code = e && e.code;
     if (code === "declined") return;
     if (code === "rate_limited") { pageToast('<span class="anwarn">a save prompt is already open</span>', 3000); return; }
-    this.hidden = true;
+    downloadUnavailable();
     pageToast('<span class="anwarn">download unavailable here \u2014 use Copy HTML</span>', 4000);
   }
 };

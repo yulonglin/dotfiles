@@ -186,21 +186,21 @@ def test_storage_stays_readable_by_older_deployed_layers() -> None:
 
 
 def test_no_download_path() -> None:
-    """Comments have no file download, and the page downloads only through
-    the viewer's `downloads` capability.
+    """Comments have no file download; the page's own Download HTML uses the
+    viewer's `downloads` capability, and a blob save only outside the viewer.
 
-    A page-initiated blob save is inert in the Artifact viewer's sandbox, while
-    still making every publish warn that the page offers the viewer a file.
-    Copy all is the single export of the comments, with the selectable textarea
-    as its fallback. The page's own Download HTML goes through
-    `claude.use("downloads")` and nothing else.
+    A page-initiated blob save is inert in the Artifact viewer's sandbox, so in
+    the viewer the page must go through `claude.use("downloads")`. Copy all is
+    the single export of the comments, with the selectable textarea as its
+    fallback.
     """
     mod = _layer_module()
     js, html = mod.JS, mod.HTML
     assert "tryDownload" not in js, "download path reintroduced"
-    assert "createObjectURL" not in js, "blob save reintroduced"
-    assert ".download =" not in js, "anchor download reintroduced"
     assert 'use("downloads")' in js
+    # The blob save is reachable only when there is no viewer at all.
+    assert js.count("saveLocally();") == 1
+    assert "if (!downloads) { if (!dlBtn.disabled) saveLocally(); return; }" in js
     assert 'id="anDownload"' not in html and 'id="anExportBtn"' not in html
     # The bar is exactly two controls; per-comment edit and delete carry the rest.
     assert 'id="anCopy"' in html and 'id="anClear"' in html
