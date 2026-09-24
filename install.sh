@@ -511,9 +511,8 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
     if ! cmd_exists brew; then
         log_warning "Homebrew required for apps — skipping"
     else
-        # gum drives app-picker; bootstrap it (tiny formula) if missing.
-        cmd_exists gum || brew_install gum
-
+        # app-picker's TUI is `claude-tools select`, the same committed binary as
+        # the component menu above — nothing to bootstrap.
         brewfile="$DOT_DIR/config/Brewfile"
         if ! can_prompt; then
             log_info "Non-interactive: using committed Brewfile (run 'app-picker' to customise)"
