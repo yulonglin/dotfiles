@@ -1342,7 +1342,9 @@ def test_download_saves_the_clean_page_without_the_readers_marks(browser, site) 
         # The layer travels with the page, both markers intact, so the copy is
         # still annotatable and `annotate-html --force` can still replace it.
         assert "<!-- annotation-layer v2 -->" in html
-        assert "<!-- /annotation-layer -->" in html
+        # The real closing marker, after the script, not the text of one
+        # inside it -- the script's own source is part of the snapshot.
+        assert html.rfind("<!-- /annotation-layer -->") > html.rfind("</script>")
         assert "zqx reader note" not in html and "replacement words" not in html
         assert p.evaluate(READER_MARKS_IN_SAVED) == 0
         # Saving the page is not exporting the feedback.
@@ -1362,6 +1364,6 @@ def test_copy_html_puts_the_page_on_the_clipboard(browser, site) -> None:
         text = p.evaluate("() => navigator.clipboard.readText()")
         assert text.startswith("<!DOCTYPE html>")
         assert "The first paragraph of the document" in text
-        assert "<!-- /annotation-layer -->" in text
+        assert text.rfind("<!-- /annotation-layer -->") > text.rfind("</script>")
     finally:
         ctx.close()

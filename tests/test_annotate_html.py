@@ -90,6 +90,20 @@ def test_inject_is_idempotent_unless_forced(page: Path) -> None:
     assert html.count("<script>") == 1
 
 
+def test_strip_undoes_inject_exactly() -> None:
+    """`strip_layer` bounds its removal at the first closing marker, so the
+    layer's own CSS, HTML and JS must never contain that marker's text. A
+    literal in the script once cut the strip off mid-script, which left
+    `annotate-html --force` writing half a layer onto every page.
+    """
+    mod = _layer_module()
+    for page in ("<p>hi</p>\n", "<html><body><p>hi</p></body></html>\n"):
+        assert mod.strip_layer(mod.inject(page)) == page
+    for part in (mod.CSS, mod.HTML, mod.JS):
+        assert mod.MARKER_CLOSE not in part
+        assert "annotation-layer v" not in part
+
+
 def test_layer_goes_before_body_close_when_there_is_one(tmp_path: Path) -> None:
     p = tmp_path / "full.html"
     p.write_text(PAGE_WITH_BODY, encoding="utf-8")

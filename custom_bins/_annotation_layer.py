@@ -369,14 +369,14 @@ var root = document.querySelector("[data-annotation-layer]");
 // The page as parsed, taken before this script adds a highlight, a suggested
 // edit or a restored tick: those are one reader's work, and baked into the
 // file they would corrupt every quote anchor for the next reader. The closing
-// marker sits after this script and is not parsed yet, so it is put back.
+// marker sits after this script and is never parsed yet, so it is always put
+// back. Its text is split because `strip_layer` ends its removal at the first
+// whole copy: one inside this script would cut the strip off mid-script.
 var PAGE_HTML = (function(){
   var h = document.documentElement.outerHTML;
-  var close = "<!-- /annotation-layer -->";
-  if (h.indexOf(close) < 0) {
-    var at = h.lastIndexOf("</body>");
-    h = at < 0 ? h + "\n" + close : h.slice(0, at) + close + "\n" + h.slice(at);
-  }
+  var close = "<!-- /annotation-" + "layer -->";
+  var at = h.lastIndexOf("</body>");
+  h = at < 0 ? h + "\n" + close : h.slice(0, at) + close + "\n" + h.slice(at);
   return "<!DOCTYPE html>\n" + h;
 })();
 var KEY = (root && root.dataset.key) || ("annot:" + document.title);
