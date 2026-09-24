@@ -90,6 +90,20 @@ def test_inject_is_idempotent_unless_forced(page: Path) -> None:
     assert html.count("<script>") == 1
 
 
+def test_strip_undoes_inject_exactly() -> None:
+    """`strip_layer` bounds its removal at the first closing marker, so the
+    layer's own CSS, HTML and JS must never contain that marker's text. A
+    literal in the script once cut the strip off mid-script, which left
+    `annotate-html --force` writing half a layer onto every page.
+    """
+    mod = _layer_module()
+    for page in ("<p>hi</p>\n", "<html><body><p>hi</p></body></html>\n"):
+        assert mod.strip_layer(mod.inject(page)) == page
+    for part in (mod.CSS, mod.HTML, mod.JS):
+        assert mod.MARKER_CLOSE not in part
+        assert "annotation-layer v" not in part
+
+
 def test_layer_goes_before_body_close_when_there_is_one(tmp_path: Path) -> None:
     p = tmp_path / "full.html"
     p.write_text(PAGE_WITH_BODY, encoding="utf-8")
@@ -172,17 +186,21 @@ def test_storage_stays_readable_by_older_deployed_layers() -> None:
 
 
 def test_no_download_path() -> None:
-    """The layer offers no file download, deliberately.
+    """Comments have no file download; the page's own Download HTML uses the
+    viewer's `downloads` capability, and a blob save only outside the viewer.
 
-    The Artifact viewer never grants a page download permission, so a Download
-    button was inert exactly where these pages are read, while still making
-    every publish warn that the page offers the viewer a file. Copy all is the
-    single export, with the selectable textarea as its fallback.
+    A page-initiated blob save is inert in the Artifact viewer's sandbox, so in
+    the viewer the page must go through `claude.use("downloads")`. Copy all is
+    the single export of the comments, with the selectable textarea as its
+    fallback.
     """
     mod = _layer_module()
     js, html = mod.JS, mod.HTML
     assert "tryDownload" not in js, "download path reintroduced"
-    assert "createObjectURL" not in js, "blob save reintroduced"
+    assert 'use("downloads")' in js
+    # The blob save is reachable only when there is no viewer at all.
+    assert js.count("saveLocally();") == 1
+    assert "if (!downloads) { if (!dlBtn.disabled) saveLocally(); return; }" in js
     assert 'id="anDownload"' not in html and 'id="anExportBtn"' not in html
     # The bar is exactly two controls; per-comment edit and delete carry the rest.
     assert 'id="anCopy"' in html and 'id="anClear"' in html

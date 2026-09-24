@@ -1,221 +1,103 @@
-"""The md2artifact annotation layer, as one shared block of CSS + HTML + JS.
+<title>Download probe</title>
+<style>
+:root {
+  --bg:#faf9f7; --panel:#fff; --ink:#1a1a1a; --soft:#5d5a55; --rule:#e4dfd7;
+  --accent:#bd5d3a; --accent-bg:#f7e9e2; --good:#2f6b4f; --good-bg:#e4f0e9;
+  --bad:#a33f2a; --bad-bg:#f9e4de; --code:#f4f2ee; --mark:#fbe6a2;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+} }
+:root[data-theme="dark"] {
+  --bg:#17181a; --panel:#1f2124; --ink:#eceae6; --soft:#a9a59e; --rule:#34373c;
+  --accent:#e08a63; --accent-bg:#35251f; --good:#7fc39c; --good-bg:#1d2b24;
+  --bad:#e08a75; --bad-bg:#33211d; --code:#191b1e; --mark:#5c4a15;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);margin:0;padding:2.5rem 1rem 6rem;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;line-height:1.65}
+.shell{max-width:48rem;margin:0 auto}
+.shell.has-toc{display:grid;grid-template-columns:15rem minmax(0,1fr);gap:2.4rem;max-width:72rem}
+.toc{position:sticky;top:1.5rem;align-self:start;max-height:calc(100vh - 3rem);overflow:auto;
+ font-size:.84rem;border-right:1px solid var(--rule);padding-right:.9rem}
+.toc h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+ margin:0 0 .45rem;font-weight:700}
+.toc a{display:block;color:var(--soft);text-decoration:none;padding:.22rem .45rem;
+ border-radius:5px;border-left:2px solid transparent}
+.toc a.lvl3{padding-left:1.2rem;font-size:.8rem}
+.toc a:hover{background:var(--code);color:var(--ink)}
+.toc a.on{color:var(--ink);background:var(--code);border-left-color:var(--accent);font-weight:600}
+.doc{min-width:0}
+h1{font-size:1.75rem;line-height:1.25;margin:0 0 .8rem;letter-spacing:-.015em}
+h2{font-size:1.2rem;margin:2.4rem 0 .7rem;padding-bottom:.32rem;border-bottom:1px solid var(--rule)}
+h3{font-size:1.02rem;margin:1.7rem 0 .45rem}
+p,li{margin:0 0 .85rem}
+ul,ol{padding-left:1.35rem}
+blockquote{margin:1rem 0;padding:.1rem 1rem;border-left:3px solid var(--accent);
+ background:var(--accent-bg);border-radius:0 6px 6px 0}
+pre{background:var(--code);border:1px solid var(--rule);border-radius:7px;padding:.75rem .9rem;
+ overflow-x:auto;font-size:.83rem;line-height:1.5}
+code{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+p code,li code,td code,h2 code,h3 code{background:var(--code);padding:.06rem .32rem;border-radius:4px;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:.9rem;margin:1rem 0;display:block;overflow-x:auto}
+th,td{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}
+th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
+.doc svg{max-width:100%;height:auto}
+p.svg-note{color:var(--bad);background:var(--bad-bg);border-radius:6px;
+ padding:.4rem .7rem;font-size:.85rem}
+a{color:var(--accent)}
+details{border:1px solid var(--rule);border-radius:7px;background:var(--panel);
+ margin:1rem 0;padding:.55rem .9rem}
+details>summary{cursor:pointer;font-weight:600;margin:-.55rem -.9rem;padding:.55rem .9rem;
+ border-radius:7px;list-style-position:inside}
+details>summary:hover{color:var(--accent)}
+details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 0 0;
+ margin-bottom:.8rem;background:var(--code)}
+@media (max-width:56rem){
+  .shell.has-toc{display:block}
+  .toc{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--rule);
+   padding:0 0 .8rem;margin-bottom:1.4rem}
+  .toc a{display:inline-block;margin:.15rem .3rem .15rem 0;border-left:0}
+  .toc a.lvl3{padding-left:.45rem}
+}
+</style>
+<div class="shell">
 
-This is the single copy of the select-to-comment layer that
-the `artifact-writing` skill requires on every reviewable page. Two
-callers use it:
+<div class="doc">
+<h1 id="download-probe">Download probe</h1>
+<p>This page tests the Download HTML and Copy HTML buttons at the end of the page, under &quot;This page&quot;.</p>
+<ol>
+<li>Scroll to the end. If <strong>Download HTML</strong> shows, click it and accept the prompt.</li>
+<li>Open the saved file in a browser. It should look like this page, with no comments in it.</li>
+<li>Open this link in a private window as a viewer who is not the owner, and do the same.</li>
+</ol>
 
-- `md2artifact` renders Markdown into a page and appends the layer.
-- `annotate-html` injects the layer into any existing HTML page (an Artifact
-  built by hand, a report from another tool), which is what the
-  `block_unannotated_artifact.sh` hook checks for before a publish.
+</div>
+</div>
 
-The layer is self-contained: its CSS defines its own `--an-*` tokens, switched
-by `prefers-color-scheme` and `[data-theme]`, so it never depends on the host
-page's variables. It fetches nothing. Every element id and class is prefixed
-`an` so it cannot collide with the host page.
-
-Behaviour, all of which the tests guard:
-
-- opens the note box from a debounced `selectionchange` (iOS fires no
-  `mouseup` for a touch drag) as well as from `mouseup`;
-- does not steal focus on the touch path (focusing while iOS shows selection
-  handles collapses the selection);
-- once open, the note box is never closed by a selection event — only by
-  Enter/Save, Escape/Cancel, or a press outside it while it is still empty.
-  Nothing the browser does to the selection (including the focus that opening
-  the box itself causes) can make the box flicker away;
-- nothing implicit ever writes a comment. A press outside a box with words in
-  it leaves the box open rather than committing or discarding it, because the
-  gestures that land there are ordinary ones: right-clicking your own
-  selection, grabbing the scrollbar, cancelling a confirm dialog;
-- Enter saves, Shift+Enter is a newline, Escape discards; Save is the first
-  and primary button, Delete is pushed away from it;
-- stores comments in localStorage keyed by the page `<title>` (or an explicit
-  `data-key` on the layer root), restores highlights on reload, and reopens a
-  comment for edit/delete when its highlight is clicked;
-- survives a forced refresh: the half-typed note is autosaved as a draft on
-  every keystroke and the box reopens on it. A republish is survived by the
-  key being fixed from the filename by the generator rather than derived from
-  the title. Comments are written as a bare JSON array, which every generation
-  of this layer can read — an older deployed page calls `.reduce()` on the
-  parsed value and its whole script dies on anything else;
-- an end-of-page "Your comments" panel with three controls: Copy all
-  (Markdown, `> quote`), Delete copied, and Delete all. Comments have no
-  download button, only clipboard routes: when the clipboard itself refuses,
-  Copy all opens a selectable textarea as its fallback. Only a copy that
-  actually happened clears the "not yet copied out" state;
-- a "This page" row under the comments with Download HTML and Copy HTML, so a
-  reader can take the page itself somewhere the Artifact link does not reach.
-  The HTML is snapshotted when the layer script starts, before any highlight,
-  suggested edit or restored tick touches the DOM, so the file is the clean
-  page with this layer still in it. In the Artifact viewer, Download goes
-  through the `downloads` capability, which exists only when the publish
-  declared `capabilities: {downloads: true}` and reaches the owner only;
-  without it the button shows disabled and points at Copy HTML, because a
-  plain `<a download>` is inert in the viewer's sandbox. A downloaded copy
-  opened as a local file has no viewer, and there `<a download>` works.
-  Copy HTML needs no capability and is always shown. Neither touches the
-  comments' export state: saving the page is not exporting the feedback;
-- per-comment export state. A copy that actually happened stamps `copiedAt` on
-  the comments it carried, and the page-level "not copied out yet" is derived
-  from whether any comment lacks one; the legacy `an-dirty:` key is still
-  written in lockstep for tabs running an older layer. Editing a comment drops
-  its stamp, because the copy that happened carried the previous wording.
-  "Delete copied" prunes the stamped set, so the next Copy all sends only fresh
-  feedback. There is deliberately NO "delete the uncopied" counterpart: every
-  comment predating this key reads as uncopied, so that button would have wiped
-  every existing page the first time it ran. On upgrade, comments are stamped
-  only when the legacy key reads an explicit "0" -- evidence that a copy really
-  happened. A missing key is not evidence and is left alone;
-- every destructive control in the comments panel asks twice in the page
-  itself, never through a blocking dialog. (The one exception is the Delete
-  inside the note popup, which acts on a single comment the user has just
-  opened and is reached only for a comment that already exists -- the popup's
-  CSS hides it while composing, and it sits at the far end of the row so it is
-  never the near miss. The list's own per-row delete does arm.) The Artifact viewer runs the page in a sandboxed iframe
-  with no `allow-modals` keyword, so `window.confirm` returns false without
-  ever asking and the browser only logs "Ignored call to ...". A delete
-  guarded that way is a dead button exactly where these pages are read;
-- a `beforeunload` guard while comments exist that have not been copied out,
-  or while any write has been refused, which also saves the draft on the way
-  out. It no longer attempts a download, and it protects an ordinary tab
-  rather than a published page: the same
-  sandbox that suppresses `confirm` excludes the document from unload
-  prompting, so the comments' real safety net is that they are already in
-  localStorage;
-- a fixed count badge that jumps to the panel.
-
-Layer v2 adds a second mode, **Suggest edit**, to the same box. Comment stays
-the default, so select-type-Enter means exactly what it meant before. The
-additions, all of which the tests guard:
-
-- the box carries two mode buttons above the textarea. Entering edit mode
-  pre-fills the textarea with the selection; the user edits it into the
-  replacement. The prefill is NOT user work: draft autosave and the "a box with
-  words in it refuses to close" invariant key on a `dirty` flag set by the
-  first user modification, never on non-emptiness, because otherwise every
-  opened edit box is an unclosable phantom draft. Mode resets to Comment on
-  every fresh selection, so the default cannot go sticky;
-- an empty replacement is a suggested deletion, rendered as pure strikethrough.
-  It is reachable only by actively clearing the prefill, which is deliberate;
-- a saved edit renders the original struck through with the replacement
-  inserted after it, in the good/insert colour rather than the comment
-  highlight's yellow. Clicking either part reopens the box on the stored
-  replacement. Its Delete arms first, unlike a comment's -- a replacement is
-  written text plus an anchor, and there is no undo;
-- **layer-inserted text is marked `data-an-inserted` and excluded from every
-  quote scan.** Re-anchoring matches original document text only. Without this
-  the first saved edit corrupts the anchor of every comment after it: the
-  replacement's words are searched too, so a later quote matches inside the
-  insertion and the highlight lands early in the page in the wrong place;
-- a selection overlapping an existing edit is declined -- the box points at
-  that edit instead of opening a second one, because overlapping edits cannot
-  be exported appliably;
-- a page may carry toggle controls in its body -- a task-list checkbox, or a
-  button cycling a declared state set such as approve / approve-pending-edits
-  / deny. Any element wearing `data-an-state-id` is wired, persisted under
-  one key of its own, `an-state:<key>:<id>`, and exported in a `## Checklist`
-  section of Copy all. One key per control is what makes two tabs safe: they
-  write different keys and cannot collide. A page with no such element behaves
-  exactly as it did. A refused write raises
-  the same badge, panel line and unload guard a refused comment write raises:
-  a review queue is all checklist and no prose, so a tick lost to blocked site
-  data would otherwise be the one loss this layer never reports;
-- entries gained `type: "comment" | "edit"`. An entry with no `type` is a
-  comment, so every page's existing comments load unchanged; the key, the bare
-  array and the loud `setItem` failure are all as they were. Edits store the
-  quote, its section, and the replacement;
-- Copy all gains a numbered "Suggested edits" section of `Replace:` /`With:`
-  blockquotes, before the unchanged comments section. The quotes are RENDERED
-  text while the source is Markdown, so the export promises no mechanical
-  application: a session locates each quote in the source and adapts the
-  markup. A page with no edits exports exactly what it did under v1.
-
-Deliberately absent, each having been built and then removed for causing a
-worse failure than it prevented: an IndexedDB mirror (a save racing its own
-asynchronous recovery destroyed the comments being recovered), a rolling
-backup key (it resurrected comments the user had deliberately cleared, flagged
-unexported and unremovable), and a scan of neighbouring localStorage keys to
-survive a retitle (it adopted a *different* document's comments, and copied
-them into this document's storage and exports, whenever one quote happened to
-appear on both pages).
-"""
-
-from __future__ import annotations
-
-import json
-import re
-
-LAYER_VERSION = "v2"
-MARKER_OPEN = f"<!-- annotation-layer {LAYER_VERSION} -->"
-MARKER_CLOSE = "<!-- /annotation-layer -->"
-ROOT_ATTR = "data-annotation-layer"
-
-# Accepts this module's marker and the earlier hand-ported spelling
-# (`<!-- annotation-layer -->`, no version) so pages patched before the CLI
-# existed are recognised rather than double-injected.
-_PRESENT_RE = re.compile(
-    r"<!--\s*annotation-layer(\s+v\d+)?\s*-->|" + re.escape(ROOT_ATTR) + r"=",
-)
-# Matches ANY version's open marker, not this module's. Pinned to MARKER_OPEN,
-# `strip_layer` stopped matching the moment LAYER_VERSION was bumped, so
-# `--force` on a deployed page of the previous version stripped nothing and
-# injected a second layer: two scripts, two note boxes, two writers of one key.
-_BLOCK_RE = re.compile(
-    r"<!--\s*annotation-layer(?:\s+v\d+)?\s*-->.*?" + re.escape(MARKER_CLOSE) + r"\n?",
-    re.S,
-)
-_BODY_CLOSE_RE = re.compile(r"</body\s*>", re.I)
-
-
-def has_layer(page: str) -> bool:
-    """Whether the page already carries an annotation layer of any version."""
-    return _PRESENT_RE.search(page) is not None
-
-
-def strip_layer(page: str) -> str:
-    """Remove a layer injected by this module, of any version.
-
-    A hand port that carries no closing marker is left alone: there is nothing
-    to bound the removal with, and guessing an end would eat the page.
-    """
-    return _BLOCK_RE.sub("", page)
-
-
-def layer_html(key: str | None = None) -> str:
-    """The complete layer block, markers included.
-
-    `key` fixes the localStorage key; when None the page's `<title>` is used at
-    runtime, so republishing under the same title keeps the comments.
-    """
-    key_attr = f' data-key="{_attr(key)}"' if key else ""
-    return (
-        f"{MARKER_OPEN}\n<style>{CSS}</style>\n"
-        f'<div {ROOT_ATTR}="{LAYER_VERSION}"{key_attr}>{HTML}</div>\n'
-        f"<script>{JS}</script>\n{MARKER_CLOSE}\n"
-    )
-
-
-def inject(page: str, key: str | None = None) -> str:
-    """Return the page with the layer added before `</body>`, else appended.
-
-    Artifact files carry no `<body>` tag (the viewer wraps them), so the
-    append path is the common one.
-    """
-    block = layer_html(key)
-    matches = list(_BODY_CLOSE_RE.finditer(page))
-    if matches:
-        at = matches[-1].start()
-        return page[:at] + block + page[at:]
-    sep = "" if page.endswith("\n") or not page else "\n"
-    return page + sep + block
-
-
-def _attr(value: str) -> str:
-    return json.dumps(value)[1:-1].replace('"', "&quot;")
-
-
-CSS = r"""
+<script>
+const tocLinks = Array.from(document.querySelectorAll(".toc a"));
+const targets = tocLinks
+  .map((a) => ({ a, el: document.getElementById(a.getAttribute("href").slice(1)) }))
+  .filter((t) => t.el);
+if ("IntersectionObserver" in window && targets.length) {
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      const hit = targets.find((t) => t.el === e.target);
+      if (!hit) return;
+      tocLinks.forEach((a) => a.classList.remove("on"));
+      hit.a.classList.add("on");
+    });
+  }, { rootMargin: "-12% 0px -75% 0px" });
+  targets.forEach((t) => io.observe(t.el));
+}
+</script>
+<!-- annotation-layer v2 -->
+<style>
 :root{--an-bg:#fff;--an-ink:#1a1a1a;--an-soft:#5d5a55;--an-rule:#d9d4cc;--an-accent:#bd5d3a;
  --an-mark:#fbe6a2;--an-bad:#a33f2a;--an-good:#2f6b4f;--an-good-bg:#e4f0e9;--an-field:#faf9f7}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--an-bg:#1f2124;--an-ink:#eceae6;
@@ -317,9 +199,8 @@ ul>li.antask{list-style:none}
  border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
  font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
 #anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
-"""
-
-HTML = r"""
+</style>
+<div data-annotation-layer="v2" data-key="review-download-probe">
 <section id="anComments">
 <h2 id="your-comments">Your comments</h2>
 <p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
@@ -360,9 +241,8 @@ HTML = r"""
   <textarea id="anExportText" readonly></textarea>
 </div>
 <button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
-"""
-
-JS = r"""
+</div>
+<script>
 (function(){
 "use strict";
 var $ = function(id){ return document.getElementById(id); };
@@ -1538,4 +1418,5 @@ restoreHighlights();
 render();
 restoreDraft();
 })();
-"""
+</script>
+<!-- /annotation-layer -->
