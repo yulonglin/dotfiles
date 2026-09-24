@@ -172,17 +172,21 @@ def test_storage_stays_readable_by_older_deployed_layers() -> None:
 
 
 def test_no_download_path() -> None:
-    """The layer offers no file download, deliberately.
+    """Comments have no file download, and the page downloads only through
+    the viewer's `downloads` capability.
 
-    The Artifact viewer never grants a page download permission, so a Download
-    button was inert exactly where these pages are read, while still making
-    every publish warn that the page offers the viewer a file. Copy all is the
-    single export, with the selectable textarea as its fallback.
+    A page-initiated blob save is inert in the Artifact viewer's sandbox, while
+    still making every publish warn that the page offers the viewer a file.
+    Copy all is the single export of the comments, with the selectable textarea
+    as its fallback. The page's own Download HTML goes through
+    `claude.use("downloads")` and nothing else.
     """
     mod = _layer_module()
     js, html = mod.JS, mod.HTML
     assert "tryDownload" not in js, "download path reintroduced"
     assert "createObjectURL" not in js, "blob save reintroduced"
+    assert ".download =" not in js, "anchor download reintroduced"
+    assert 'use("downloads")' in js
     assert 'id="anDownload"' not in html and 'id="anExportBtn"' not in html
     # The bar is exactly two controls; per-comment edit and delete carry the rest.
     assert 'id="anCopy"' in html and 'id="anClear"' in html

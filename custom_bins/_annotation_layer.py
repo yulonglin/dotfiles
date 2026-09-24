@@ -40,13 +40,21 @@ Behaviour, all of which the tests guard:
   of this layer can read — an older deployed page calls `.reduce()` on the
   parsed value and its whole script dies on anything else;
 - an end-of-page "Your comments" panel with three controls: Copy all
-  (Markdown, `> quote`), Delete copied, and Delete all. There is no download button: the
-  Artifact viewer blocks any page-initiated file save, so one was a button
-  that did nothing wherever these pages are read. When the clipboard itself
-  refuses, Copy all opens a selectable textarea as its fallback — that box is
-  still here, it just has no button of its own. Both routes out are therefore
-  clipboard copies, and only a copy that actually happened clears the "not yet
-  copied out" state;
+  (Markdown, `> quote`), Delete copied, and Delete all. Comments have no
+  download button, only clipboard routes: when the clipboard itself refuses,
+  Copy all opens a selectable textarea as its fallback. Only a copy that
+  actually happened clears the "not yet copied out" state;
+- a "This page" row under the comments with Download HTML and Copy HTML, so a
+  reader can take the page itself somewhere the Artifact link does not reach.
+  The HTML is snapshotted when the layer script starts, before any highlight,
+  suggested edit or restored tick touches the DOM, so the file is the clean
+  page with this layer still in it. In the Artifact viewer, Download goes
+  through the `downloads` capability, which exists only when the publish
+  declared `capabilities: {downloads: true}`; without it the button stays
+  hidden: a plain `<a download>` is inert in the viewer's sandbox, and a blob
+  save makes every publish warn that the page offers a file, so there is none.
+  Copy HTML needs no capability and is always shown. Neither touches the
+  comments' export state: saving the page is not exporting the feedback;
 - per-comment export state. A copy that actually happened stamps `copiedAt` on
   the comments it carried, and the page-level "not copied out yet" is derived
   from whether any comment lacks one; the legacy `an-dirty:` key is still
@@ -322,6 +330,12 @@ HTML = r"""
   <span id="anToast"></span>
 </div>
 <div id="anList"></div>
+<div class="anbar" id="anPageBar">
+  <span class="ancount">This page</span>
+  <button class="anbtn ghost" id="anPageDownload" type="button" hidden>Download HTML</button>
+  <button class="anbtn ghost" id="anPageCopy" type="button">Copy HTML</button>
+  <span id="anPageToast"></span>
+</div>
 </section>
 <div id="anPop" role="dialog" aria-label="Comment">
   <div class="anmodebar" role="group" aria-label="Annotation mode">
@@ -352,6 +366,19 @@ JS = r"""
 "use strict";
 var $ = function(id){ return document.getElementById(id); };
 var root = document.querySelector("[data-annotation-layer]");
+// The page as parsed, taken before this script adds a highlight, a suggested
+// edit or a restored tick: those are one reader's work, and baked into the
+// file they would corrupt every quote anchor for the next reader. The closing
+// marker sits after this script and is not parsed yet, so it is put back.
+var PAGE_HTML = (function(){
+  var h = document.documentElement.outerHTML;
+  var close = "<!-- /annotation-layer -->";
+  if (h.indexOf(close) < 0) {
+    var at = h.lastIndexOf("</body>");
+    h = at < 0 ? h + "\n" + close : h.slice(0, at) + close + "\n" + h.slice(at);
+  }
+  return "<!DOCTYPE html>\n" + h;
+})();
 var KEY = (root && root.dataset.key) || ("annot:" + document.title);
 // Namespaced with a PREFIX, never a suffix. With `KEY + "-draft"`, a page
 // titled "Spec-draft" owns the same key as the draft of a page titled "Spec",
@@ -1333,10 +1360,9 @@ function exportText(){
   return out + (notes.length ? markdown(notes) + "\n" : "");
 }
 function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
-// There is deliberately no download path. The Artifact viewer never grants a
-// page download permission, so a Download button was inert exactly where these
-// pages are read, while still making every publish warn about an offered file.
-// Copy all is the one export, with the textarea below as its fallback.
+// Comments have no download path: Copy all is their one export, with the
+// textarea below as its fallback. (The page itself can be downloaded -- see
+// "this page as HTML" below -- which is a different thing from the feedback.)
 // What the textarea currently holds. The box can sit open while the page is
 // edited behind it, so the copy event stamps the snapshot the text was built
 // from, not whatever the list happens to be when the user finally hits copy.
@@ -1420,6 +1446,57 @@ $("anClear").onclick = function(){
   comments.slice().forEach(function(c){ unwrap(c.id); });
   comments = []; markClean(); persist(); render();
 };
+// ---- this page as HTML ---------------------------------------------------
+function pageFilename(){
+  var slug = (document.title || "page").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  return (slug || "page") + ".html";
+}
+function pageToast(html, ms){
+  var t = $("anPageToast"); t.innerHTML = html;
+  setTimeout(function(){ t.innerHTML = ""; }, ms || 2400);
+}
+// `claude.use("downloads")` is the one save that works in the viewer, and it
+// resolves null unless the publish declared the capability. The button stays
+// hidden until it resolves, so it is never a dead control. There is no
+// `<a download>` path: it is inert in the viewer's sandbox, and a page carrying
+// one makes every publish warn that it offers the viewer a file. A local copy
+// of the page has Copy HTML.
+var downloads = null;
+if (window.claude && typeof window.claude.use === "function") {
+  Promise.resolve().then(function(){ return window.claude.use("downloads"); })
+    .then(function(d){ if (d) { downloads = d; $("anPageDownload").hidden = false; } },
+          function(){});
+}
+$("anPageDownload").onclick = async function(){
+  if (!downloads) return;
+  try {
+    var r = await downloads.save({ filename: pageFilename(), data: PAGE_HTML });
+    if (r && r.status === "saved") pageToast('<span class="anok">saved</span>');
+  } catch (e) {
+    var code = e && e.code;
+    if (code === "declined") return;
+    if (code === "rate_limited") { pageToast('<span class="anwarn">a save prompt is already open</span>', 3000); return; }
+    this.hidden = true;
+    pageToast('<span class="anwarn">download unavailable here \u2014 use Copy HTML</span>', 4000);
+  }
+};
+$("anPageCopy").onclick = async function(){
+  var ok = false;
+  try { await navigator.clipboard.writeText(PAGE_HTML); ok = true; }
+  catch (e) {
+    var ta = document.createElement("textarea");
+    ta.value = PAGE_HTML;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  pageToast(ok ? '<span class="anok">page HTML copied</span>'
+               : '<span class="anwarn">clipboard blocked here</span>', ok ? 2400 : 4000);
+};
+
 badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
 
 // A host page may bind single-key shortcuts on document or window -- a triage

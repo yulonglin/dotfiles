@@ -1260,3 +1260,108 @@ def test_a_new_comment_is_stored_with_its_type(page) -> None:
     page.press("#anTxt", "Enter")
     stored = page.evaluate("() => JSON.parse(localStorage.getItem('review-sample') || '[]')")
     assert stored and stored[-1]["type"] == "comment"
+
+
+# --- the page itself as HTML ------------------------------------------------
+# Download HTML exists only through the viewer's `downloads` capability. The
+# stub below stands in for that capability to test the PAGE's side -- when the
+# button shows, and what file it hands over. It is not the `confirm`-stub trap:
+# nothing here supplies a permission the test then relies on the viewer to
+# grant; whether the viewer grants `downloads` is a publish-time fact.
+
+DOWNLOADS_STUB = """
+window.__saved = [];
+window.claude = { use: async (name) => name === "downloads"
+  ? { save: async (req) => { window.__saved.push(req); return { status: "saved" }; } }
+  : null };
+"""
+
+NO_DOWNLOADS_STUB = "window.claude = { use: async () => null };"
+
+# Parse the saved file and count anything one reader's session put into it.
+READER_MARKS_IN_SAVED = """() => {
+  const doc = new DOMParser().parseFromString(window.__saved[0].data, "text/html");
+  return doc.querySelectorAll("mark.note, mark.anedit, span.anins, [data-an-inserted]").length;
+}"""
+
+
+def test_download_is_hidden_outside_the_viewer(page) -> None:
+    """No `window.claude`: no capability, and no blob fallback, so no button."""
+    expect(page.locator("#anPageCopy")).to_be_visible()
+    page.wait_for_timeout(300)  # absence: past any async reveal
+    expect(page.locator("#anPageDownload")).to_be_hidden()
+
+
+def test_download_stays_hidden_when_the_capability_is_not_granted(browser, site) -> None:
+    ctx = browser.new_context()
+    try:
+        p = ctx.new_page()
+        p.add_init_script(NO_DOWNLOADS_STUB)
+        p.goto(site)
+        expect(p.locator("#anPageCopy")).to_be_visible()
+        p.wait_for_timeout(300)  # absence
+        expect(p.locator("#anPageDownload")).to_be_hidden()
+    finally:
+        ctx.close()
+
+
+def test_download_saves_the_clean_page_without_the_readers_marks(browser, site) -> None:
+    """The file is the page as published, not one reader's annotated copy.
+
+    A comment and a suggested edit are saved, then the page is reloaded so both
+    are restored from storage before the download: the snapshot must predate
+    the restore, or the next reader's quote anchors land inside this reader's
+    insertions.
+    """
+    ctx = browser.new_context()
+    try:
+        p = ctx.new_page()
+        p.add_init_script(DOWNLOADS_STUB)
+        p.goto(site)
+        p.evaluate(SELECT_JS)
+        p.wait_for_function(POP_OPEN, timeout=3000)
+        p.fill("#anTxt", "zqx reader note")
+        p.press("#anTxt", "Enter")
+        p.evaluate(SELECT_SECOND_JS)
+        p.wait_for_function(POP_OPEN, timeout=3000)
+        p.click("#anModeEdit")
+        p.fill("#anTxt", "replacement words")
+        p.press("#anTxt", "Enter")
+        p.reload()
+        expect(p.locator("mark.note")).to_have_count(1)
+        expect(p.locator("mark.anedit")).to_have_count(1)
+
+        expect(p.locator("#anPageDownload")).to_be_visible()
+        p.click("#anPageDownload")
+        p.wait_for_function("() => window.__saved.length === 1", timeout=3000)
+        req = p.evaluate("() => window.__saved[0]")
+        assert req["filename"] == "review-sample.html"
+        html = req["data"]
+        assert html.startswith("<!DOCTYPE html>")
+        assert "The first paragraph of the document" in html
+        # The layer travels with the page, both markers intact, so the copy is
+        # still annotatable and `annotate-html --force` can still replace it.
+        assert "<!-- annotation-layer v2 -->" in html
+        assert "<!-- /annotation-layer -->" in html
+        assert "zqx reader note" not in html and "replacement words" not in html
+        assert p.evaluate(READER_MARKS_IN_SAVED) == 0
+        # Saving the page is not exporting the feedback.
+        stored = p.evaluate("() => JSON.parse(localStorage.getItem('review-sample') || '[]')")
+        assert len(stored) == 2 and not any(c.get("copiedAt") for c in stored)
+    finally:
+        ctx.close()
+
+
+def test_copy_html_puts_the_page_on_the_clipboard(browser, site) -> None:
+    ctx = browser.new_context(permissions=["clipboard-read", "clipboard-write"])
+    try:
+        p = ctx.new_page()
+        p.goto(site)
+        p.click("#anPageCopy")
+        expect(p.locator("#anPageToast")).to_contain_text("copied")
+        text = p.evaluate("() => navigator.clipboard.readText()")
+        assert text.startswith("<!DOCTYPE html>")
+        assert "The first paragraph of the document" in text
+        assert "<!-- /annotation-layer -->" in text
+    finally:
+        ctx.close()
