@@ -27,6 +27,7 @@ export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:$PATH"
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRY_RUN=false
 LOCK_FILE="$HOME/.update-packages.lock"
 BREW_CLEANUP_PRUNE_DAYS=30
@@ -91,12 +92,45 @@ run() {
 
 # ─── Package Manager Implementations ─────────────────────────────────────────
 
+# A cask upgrade quits a running app or swaps its bundle underneath it; on
+# 2026-09-24 that preceded a CoreAudio wedge (docs/macos-media-wedge.md). So on
+# macOS, casks whose app is running are skipped. An app that is always open is
+# therefore never upgraded here; it relies on its own updater or a manual run.
+upgrade_brew_skipping_running_apps() {
+    local running="" safe=""
+    if ! running="$("$SCRIPT_DIR/brew-running-casks" --names)" \
+        || ! safe="$("$SCRIPT_DIR/brew-running-casks" --outdated-names)"; then
+        log_err "brew-running-casks failed; upgrading formulae only, no casks this run"
+        running="" safe=""
+    fi
+
+    log "Upgrading formulae..."
+    NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --formula 2>&1
+    if [[ -n "$safe" ]]; then
+        log "Upgrading casks that are not running..."
+        # shellcheck disable=SC2086  # one token per line, no spaces in cask tokens
+        NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --cask $safe 2>&1
+    fi
+    if [[ -n "$running" ]]; then
+        log "Skipped running apps: ${running//$'\n'/ }"
+    fi
+    log_ok "Packages upgraded"
+
+    if [[ -x "$SCRIPT_DIR/reset-mac-media" ]]; then
+        "$SCRIPT_DIR/reset-mac-media" --check --since 15 2>&1 \
+            || log_err "media health check did not pass; see docs/macos-media-wedge.md"
+    fi
+}
+
 update_brew() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log "Would run: brew update && brew upgrade && brew cleanup --prune=$BREW_CLEANUP_PRUNE_DAYS"
         echo ""
         log "Currently outdated:"
         HOMEBREW_NO_AUTO_UPDATE=1 brew outdated 2>&1 || true
+        if [[ "$(uname -s)" == Darwin && -x "$SCRIPT_DIR/brew-running-casks" ]]; then
+            log "Would skip (app running): $("$SCRIPT_DIR/brew-running-casks" --names | tr '\n' ' ')"
+        fi
         return 0
     fi
 
@@ -104,9 +138,13 @@ update_brew() {
     NONINTERACTIVE=1 brew update 2>&1
     log_ok "Index updated"
 
-    log "Upgrading all packages..."
-    NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade 2>&1
-    log_ok "Packages upgraded"
+    if [[ "$(uname -s)" == Darwin && -x "$SCRIPT_DIR/brew-running-casks" ]]; then
+        upgrade_brew_skipping_running_apps
+    else
+        log "Upgrading all packages..."
+        NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade 2>&1
+        log_ok "Packages upgraded"
+    fi
 
     log "Cleaning up old versions (>${BREW_CLEANUP_PRUNE_DAYS} days)..."
     HOMEBREW_NO_AUTO_UPDATE=1 brew cleanup --prune="$BREW_CLEANUP_PRUNE_DAYS" 2>&1

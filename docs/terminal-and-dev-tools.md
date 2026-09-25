@@ -157,7 +157,7 @@ Test: `uv add --dev pdbpp && python -c "import pdb; pdb.set_trace()" <<< "c"` sh
 
 ## macOS Media Recovery
 
-If Spotify, FaceTime, FineTune, or other audio apps hang together, use the manual `reset-mac-media` helper. It saves a private diagnostic bundle before restarting only CoreAudio and FaceTime's supporting services; it does not quit the affected GUI apps or restart Bluetooth or WindowServer.
+If Spotify, FaceTime, FineTune, or other audio apps hang together — or browsers stop loading pages while the terminal's network is fine — run `reset-mac-media --check` first (read-only, exit 1 means wedged), then the manual `reset-mac-media` helper. Symptoms, the incident history and the upgrade guard are in [`macos-media-wedge.md`](macos-media-wedge.md). It saves a private diagnostic bundle before restarting only CoreAudio and FaceTime's supporting services; it does not quit the affected GUI apps or restart Bluetooth or WindowServer.
 
 ```bash
 reset-mac-media --dry-run   # Preview the bounded action

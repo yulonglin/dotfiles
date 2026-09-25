@@ -139,10 +139,15 @@ printf '%s\n' \
     '        [[ "${1:-}" == avconferenced && "${STUB_AV_DORMANT:-1}" == 1 ]] && exit 1' \
     '        ;;' \
     '    sleep) ;;' \
+    '    system_profiler)' \
+    '        if [[ "${STUB_PROFILER_HANG:-0}" == 1 ]]; then exec /bin/sleep 30; fi' \
+    '        if [[ "${STUB_PROFILER_FAIL:-0}" == 1 ]]; then exit 1; fi' \
+    '        printf "Audio:\n"' \
+    '        ;;' \
     'esac' > "$STUB"
 chmod +x "$STUB"
 
-for command_name in uname date id sw_vers uptime vm_stat df pmset ps log sample pgrep launchctl sudo killall sleep; do
+for command_name in uname date id sw_vers uptime vm_stat df pmset ps log sample pgrep launchctl sudo killall sleep system_profiler; do
     ln -s command-stub "$BIN/$command_name"
 done
 
@@ -158,7 +163,8 @@ setup_case() {
     : > "$STUB_EVENTS"
     export STUB_STATE STUB_REPORT_ROOT STUB_EVENTS
     unset STUB_UNAME STUB_LOG_FAIL STUB_SAMPLE_FAIL STUB_SUDO_FAIL \
-        STUB_STALE_PROCESS STUB_DORMANT_PROCESS STUB_CRASHED_PROCESS
+        STUB_STALE_PROCESS STUB_DORMANT_PROCESS STUB_CRASHED_PROCESS \
+        STUB_PROFILER_HANG STUB_PROFILER_FAIL CASE_SLEEP_BIN
     export STUB_AV_DORMANT=1
 }
 
@@ -179,7 +185,9 @@ run_helper() {
         RMM_PGREP_BIN="$BIN/pgrep" \
         RMM_LAUNCHCTL_BIN="$BIN/launchctl" \
         RMM_USER_KILLALL_BIN="$BIN/killall" \
-        RMM_SLEEP_BIN="$BIN/sleep" \
+        RMM_SLEEP_BIN="${CASE_SLEEP_BIN:-$BIN/sleep}" \
+        RMM_SYSTEM_PROFILER_BIN="$BIN/system_profiler" \
+        RMM_PROBE_TIMEOUT=2 \
         RMM_USER_DIAGNOSTIC_DIR="$STUB_USER_DIAGNOSTICS" \
         RMM_SYSTEM_DIAGNOSTIC_DIR="$STUB_SYSTEM_DIAGNOSTICS" \
         TEST_SUDO_BIN="$BIN/sudo" \
@@ -319,6 +327,52 @@ export STUB_AV_DORMANT=0 STUB_CRASHED_PROCESS=avconferenced
 run_helper --yes --report-dir "$STUB_REPORT_ROOT"
 assert_failure "nonzero avconferenced exit fails recovery verification"
 assert_contains "crash verification names avconferenced" "$RUN_OUT" "avconferenced"
+
+echo "11. --check reports healthy without authenticating or restarting"
+setup_case
+export CASE_SLEEP_BIN=/bin/sleep
+run_helper --check
+assert_success "healthy check exits 0"
+assert_contains "healthy check says so" "$RUN_OUT" "healthy"
+EVENTS="$(<"$STUB_EVENTS")"
+assert_not_contains "check never authenticates" "$EVENTS" "sudo"
+assert_not_contains "check never kills" "$EVENTS" "killall"
+
+echo "12. --check flags a CoreAudio probe that never answers"
+setup_case
+export CASE_SLEEP_BIN=/bin/sleep STUB_PROFILER_HANG=1
+run_helper --check
+if (( RUN_RC == 1 )); then pass "wedged check exits 1"; else fail "wedged check exit was $RUN_RC"; fi
+assert_contains "wedged check names the state" "$RUN_OUT" "WEDGED"
+assert_contains "wedged check points at the fix" "$RUN_OUT" "fix: reset-mac-media"
+assert_not_contains "wedged check still restarts nothing" "$(<"$STUB_EVENTS")" "killall"
+
+echo "13. --check warns on recent media-daemon crashes and ignores old ones"
+setup_case
+export CASE_SLEEP_BIN=/bin/sleep
+printf 'x\n' > "$STUB_USER_DIAGNOSTICS/avconferenced-new.ips"
+printf 'x\n' > "$STUB_SYSTEM_DIAGNOSTICS/coreaudiod-new.ips"
+printf 'x\n' > "$STUB_USER_DIAGNOSTICS/avconferenced-old.ips"
+/usr/bin/touch -A -020000 "$STUB_USER_DIAGNOSTICS/avconferenced-old.ips"
+printf 'x\n' > "$STUB_USER_DIAGNOSTICS/Safari-new.ips"
+run_helper --check --since 30
+if (( RUN_RC == 3 )); then pass "crash warning exits 3"; else fail "crash warning exit was $RUN_RC"; fi
+assert_contains "recent crash counted across both directories" "$RUN_OUT" "2 media-daemon crash report(s)"
+assert_not_contains "crash older than the window is ignored" "$RUN_OUT" "avconferenced-old"
+assert_not_contains "non-media crash is ignored" "$RUN_OUT" "Safari-new"
+
+echo "13b. --check reports a probe that errors out as inconclusive, not healthy"
+setup_case
+export CASE_SLEEP_BIN=/bin/sleep STUB_PROFILER_FAIL=1
+run_helper --check
+if (( RUN_RC == 4 )); then pass "failed probe exits 4"; else fail "failed probe exit was $RUN_RC"; fi
+assert_contains "failed probe says inconclusive" "$RUN_OUT" "INCONCLUSIVE"
+assert_not_contains "failed probe never claims healthy" "$RUN_OUT" "healthy"
+
+echo "14. --since rejects a non-number"
+setup_case
+run_helper --check --since soon
+if (( RUN_RC == 2 )); then pass "bad --since exits 2"; else fail "bad --since exit was $RUN_RC"; fi
 
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
