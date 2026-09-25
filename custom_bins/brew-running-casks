@@ -1,0 +1,130 @@
+#!/usr/bin/env zsh
+# List outdated Homebrew casks whose app is running right now.
+#
+# `brew upgrade` swaps a cask's .app bundle on disk without quitting the running
+# copy (the casks on this Mac declare no `quit` stanza). The running process
+# then loads helpers and resources from a bundle that is gone. On 2026-09-24 a
+# 17:04 cask upgrade was followed 28 s later by an avconferenced crash loop that
+# wedged CoreAudio (docs/macos-media-wedge.md). Upgrading only casks that are
+# not running avoids replacing a bundle under a live process.
+#
+# Output: one line per running outdated cask, tab-separated:
+#   <token> TAB <app path> TAB <pids> TAB <audio|->
+# "audio" means one of its processes holds a CoreAudio session at this moment
+# (from `pmset -g assertions`), the riskiest case.
+
+emulate -L zsh
+setopt no_unset pipe_fail extended_glob
+
+BRC_BREW_BIN="${BRC_BREW_BIN:-brew}"
+BRC_PS_BIN="${BRC_PS_BIN:-/bin/ps}"
+BRC_PMSET_BIN="${BRC_PMSET_BIN:-/usr/bin/pmset}"
+BRC_APPS_DIR="${BRC_APPS_DIR:-/Applications}"
+
+usage() {
+    cat <<'EOF'
+Usage: brew-running-casks [--greedy] [--names] [--outdated-names]
+
+List outdated Homebrew casks whose app is running, so an upgrade can skip them.
+
+Options:
+  --greedy          Include casks that declare auto_updates (as brew upgrade --greedy does).
+  --names           Print only the running cask tokens, one per line.
+  --outdated-names  Print outdated cask tokens that are NOT running (safe to upgrade).
+  -h, --help        Show this help.
+
+Exit status: 0 on success (even when some are running), 1 on error.
+EOF
+}
+
+greedy=()
+mode=table
+while (( $# > 0 )); do
+    case "$1" in
+        --greedy) greedy=(--greedy); shift ;;
+        --names) mode=names; shift ;;
+        --outdated-names) mode=safe; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) print -u2 "brew-running-casks: unknown option: $1"; usage >&2; exit 1 ;;
+    esac
+done
+
+export HOMEBREW_NO_AUTO_UPDATE=1
+
+outdated_json="$("$BRC_BREW_BIN" outdated --cask --json=v2 "${greedy[@]}")" || {
+    print -u2 "brew-running-casks: brew outdated failed"; exit 1
+}
+tokens=("${(@f)$(print -r -- "$outdated_json" | /usr/bin/python3 -c '
+import json, sys
+for c in json.load(sys.stdin).get("casks", []):
+    print(c["name"])
+')}")
+tokens=(${tokens:#})
+(( ${#tokens} )) || exit 0
+
+# token TAB app-path, one line per .app artifact. Casks installed from a pkg
+# have no app artifact; fall back to /Applications/<display name>.app.
+app_map="$("$BRC_BREW_BIN" info --cask --json=v2 "${tokens[@]}" | BRC_APPS_DIR="$BRC_APPS_DIR" /usr/bin/python3 -c '
+import json, os, sys
+apps_dir = os.environ["BRC_APPS_DIR"]
+for c in json.load(sys.stdin).get("casks", []):
+    apps = []
+    for art in c.get("artifacts", []):
+        for entry in art.get("app", []):
+            if isinstance(entry, str):
+                apps.append(entry)
+            elif isinstance(entry, dict) and entry.get("target"):
+                apps.append(entry["target"])
+    if not apps:
+        apps = [n + ".app" for n in c.get("name", [])[:1]]
+    for a in apps:
+        path = a if a.startswith("/") else os.path.join(apps_dir, os.path.basename(a))
+        print(c["token"] + "\t" + path)
+')"
+
+procs="$("$BRC_PS_BIN" -Axo pid=,comm=)"
+
+# PIDs that coreaudiod currently holds an audio session for.
+audio_pids=("${(@f)$("$BRC_PMSET_BIN" -g assertions 2>/dev/null | /usr/bin/awk '
+    /^[[:space:]]*pid [0-9]+\(coreaudiod\)/ { in_ca = 1; next }
+    /^[[:space:]]*pid [0-9]+\(/ { in_ca = 0 }
+    in_ca && /Created for PID:/ { gsub(/[^0-9]/, "", $NF); print $NF }
+')}")
+audio_pids=(${audio_pids:#})
+
+typeset -A running_pids app_of
+local token app pid comm
+for line in "${(@f)app_map}"; do
+    [[ -n "$line" ]] || continue
+    token="${line%%$'\t'*}"
+    app="${line#*$'\t'}"
+    for pline in "${(@f)procs}"; do
+        pid="${${pline## #}%% *}"
+        comm="${pline## #}"
+        comm="${comm#* }"
+        if [[ "$comm" == "$app"/* ]]; then
+            running_pids[$token]="${running_pids[$token]:-}${running_pids[$token]:+,}$pid"
+        fi
+    done
+    running_pids[$token]="${running_pids[$token]:-}"
+    app_of[$token]="$app"
+done
+
+local pids flag p
+for token in "${tokens[@]}"; do
+    pids="${running_pids[$token]:-}"
+    if [[ -z "$pids" ]]; then
+        if [[ "$mode" == safe ]]; then print -r -- "$token"; fi
+        continue
+    fi
+    if [[ "$mode" == safe ]]; then continue; fi
+    if [[ "$mode" == names ]]; then
+        print -r -- "$token"
+        continue
+    fi
+    flag=-
+    for p in ${(s:,:)pids}; do
+        if (( ${audio_pids[(Ie)$p]} )); then flag=audio; fi
+    done
+    print -r -- "$token"$'\t'"${app_of[$token]}"$'\t'"$pids"$'\t'"$flag"
+done
