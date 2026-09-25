@@ -22,7 +22,8 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         if [[ -n "${HOMEBREW_UPGRADE_GREEDY:-}" ]]; then greedy=(--greedy); fi
         for arg in "$@"; do
             case "$arg" in
-                --greedy|--greedy-latest|--greedy-auto-updates) greedy+=("$arg") ;;
+                -g|--greedy) greedy+=(--greedy) ;;
+                --greedy-latest|--greedy-auto-updates) greedy+=("$arg") ;;
                 --cask|--casks) only=cask ;;
                 --formula|--formulae) only=formula ;;
                 -*) flags+=("$arg") ;;

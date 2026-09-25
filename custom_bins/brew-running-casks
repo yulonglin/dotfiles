@@ -21,6 +21,7 @@ BRC_BREW_BIN="${BRC_BREW_BIN:-brew}"
 BRC_PS_BIN="${BRC_PS_BIN:-/bin/ps}"
 BRC_PMSET_BIN="${BRC_PMSET_BIN:-/usr/bin/pmset}"
 BRC_PKGUTIL_BIN="${BRC_PKGUTIL_BIN:-/usr/sbin/pkgutil}"
+BRC_CASKROOM="${BRC_CASKROOM:-$("$BRC_BREW_BIN" --caskroom 2>/dev/null)}"
 # Honour a custom --appdir from HOMEBREW_CASK_OPTS, as brew itself does.
 _appdir=/Applications
 for _opt in ${=HOMEBREW_CASK_OPTS:-}; do
@@ -76,7 +77,7 @@ tokens=(${tokens:#})
 # has no app artifact, so its bundles come from the pkg receipts its uninstall
 # stanza names (pkgutil --files). A cask whose bundle cannot be found prints
 # "?" and is treated as running: unknown must never read as safe.
-app_map="$("$BRC_BREW_BIN" info --cask --json=v2 "${tokens[@]}" | BRC_APPS_DIR="$BRC_APPS_DIR" BRC_PKGUTIL_BIN="$BRC_PKGUTIL_BIN" /usr/bin/python3 -c '
+app_map="$("$BRC_BREW_BIN" info --cask --json=v2 "${tokens[@]}" | BRC_APPS_DIR="$BRC_APPS_DIR" BRC_PKGUTIL_BIN="$BRC_PKGUTIL_BIN" BRC_CASKROOM="$BRC_CASKROOM" /usr/bin/python3 -c '
 import json, os, re, subprocess, sys
 apps_dir = os.environ["BRC_APPS_DIR"]
 pkgutil = os.environ["BRC_PKGUTIL_BIN"]
@@ -91,9 +92,21 @@ def pkg_bundles(ids):
                 found.append("/Applications/" + m.group(2))
     return found
 
+caskroom = os.environ.get("BRC_CASKROOM", "")
+
+def cask_appdir(token):
+    # brew upgrade reuses an --appdir given at install time, saved per cask.
+    try:
+        with open(os.path.join(caskroom, token, ".metadata", "config.json")) as f:
+            saved = json.load(f).get("explicit", {}).get("appdir")
+    except (OSError, ValueError):
+        saved = None
+    return os.path.expanduser(saved) if saved else apps_dir
+
 for c in json.load(sys.stdin).get("casks", []):
     apps = []
     pkg_ids = []
+    cask_dir = cask_appdir(c["token"])
     for art in c.get("artifacts", []):
         # {"app": ["Source.app"]} or {"app": ["Source.app", {"target": "Dest.app"}]}
         args = art.get("app")
@@ -112,7 +125,7 @@ for c in json.load(sys.stdin).get("casks", []):
         print(c["token"] + "\t-")  # no app at all (CLI, font...): nothing can be running
     for a in apps:
         a = os.path.expanduser(a)
-        path = a if a.startswith("/") else os.path.join(apps_dir, os.path.basename(a))
+        path = a if a.startswith("/") else os.path.join(cask_dir, os.path.basename(a))
         print(c["token"] + "\t" + path)
 ' 2>/dev/null)" || { print -u2 "brew-running-casks: brew info lookup failed"; exit 1; }
 

@@ -190,6 +190,18 @@ ev="$(cat "$EVENTS")"
 has "scan keeps both greedy flags" "$ev" "brew outdated --cask --json=v2 --greedy-latest --greedy-auto-updates"
 has "upgrade keeps both greedy flags" "$ev" "brew upgrade --cask --greedy-latest --greedy-auto-updates slack"
 
+print "14. wrapper treats -g as --greedy"
+run_wrapper q 'upgrade -g' >/dev/null
+has "-g scans the greedy set" "$(cat "$EVENTS")" "brew outdated --cask --json=v2 --greedy"
+
+print "15. an --appdir saved at install time is honoured without HOMEBREW_CASK_OPTS"
+mkdir -p "$WORK/Caskroom/slack/.metadata"
+print '{"default":{"appdir":"/Applications"},"env":{},"explicit":{"appdir":"/Users/me/Apps"}}' \
+    > "$WORK/Caskroom/slack/.metadata/config.json"
+out="$(BRC_CASKROOM="$WORK/Caskroom" run_helper)"
+has "slack found under its saved appdir" "$out" $'slack\t/Users/me/Apps/Slack.app\t40002'
+has "casks without a saved appdir keep the default" "$out" $'telegram\t/Applications/Telegram.app\t8737'
+
 print ""
 print "PASS=$PASS FAIL=$FAIL"
 (( FAIL == 0 ))
