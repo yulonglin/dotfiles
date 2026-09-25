@@ -19,16 +19,23 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         local arg
         local -a greedy=() flags=()
         local only=""
-        [[ -n "${HOMEBREW_UPGRADE_GREEDY:-}" ]] && greedy=(--greedy)
+        if [[ -n "${HOMEBREW_UPGRADE_GREEDY:-}" ]]; then greedy=(--greedy); fi
         for arg in "$@"; do
             case "$arg" in
-                --greedy|--greedy-latest|--greedy-auto-updates) greedy=("$arg") ;;
+                --greedy|--greedy-latest|--greedy-auto-updates) greedy+=("$arg") ;;
                 --cask|--casks) only=cask ;;
                 --formula|--formulae) only=formula ;;
                 -*) flags+=("$arg") ;;
                 *) command brew upgrade "$@"; return ;;
             esac
         done
+
+        # Refresh once, then scan and upgrade against the same metadata, so the
+        # upgrade cannot auto-update into a new version the scan never saw.
+        if [[ -z "${HOMEBREW_NO_AUTO_UPDATE:-}" ]]; then
+            command brew update || return
+        fi
+        local -x HOMEBREW_NO_AUTO_UPDATE=1
 
         local running=""
         if [[ "$only" != formula ]] && ! running="$(brew-running-casks "${greedy[@]}")"; then
@@ -46,6 +53,8 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         print -r -- "$running" | while IFS=$'\t' read -r token app pids audio; do
             if [[ "$audio" == audio ]]; then
                 print "  $token  (${app:t})  <- using audio right now"
+            elif [[ "$audio" == unknown ]]; then
+                print "  $token  $app  <- cannot tell if it is running; treated as running"
             else
                 print "  $token  (${app:t})"
             fi

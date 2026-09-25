@@ -27,10 +27,13 @@ EVENTS="$WORK/events"
 cat > "$BIN/brew" <<'EOF'
 #!/bin/zsh
 print -r -- "brew $*" >> "$STUB_EVENTS"
+if [[ "$1" == upgrade ]]; then
+  print -r -- "  auto-update-off=${HOMEBREW_NO_AUTO_UPDATE:-no}" >> "$STUB_EVENTS"
+fi
 case "$1 $2" in
   "outdated --cask")
     if [[ "$*" == *--greedy* ]]; then
-      print '{"formulae":[],"casks":[{"name":"telegram"},{"name":"zoom"},{"name":"slack"},{"name":"chatgpt"}]}'
+      print '{"formulae":[],"casks":[{"name":"telegram"},{"name":"zoom"},{"name":"slack"},{"name":"chatgpt"},{"name":"mystery"},{"name":"ghost"},{"name":"clitool"}]}'
     else
       print '{"formulae":[],"casks":[{"name":"telegram"},{"name":"slack"}]}'
     fi ;;
@@ -38,7 +41,9 @@ case "$1 $2" in
     [[ "${STUB_BREW_INFO_FAIL:-0}" == 1 ]] && exit 1
     print '{"casks":[
       {"token":"telegram","name":["Telegram for macOS"],"artifacts":[{"app":["Telegram.app"]}]},
-      {"token":"zoom","name":["Zoom"],"artifacts":[{"pkg":["zoomusInstallerFull.pkg"]}]},
+      {"token":"zoom","name":["Zoom"],"artifacts":[{"uninstall":[{"quit":"us.zoom.xos","pkgutil":"us.zoom.pkg.videomeeting"}]},{"pkg":["zoomusInstallerFull.pkg"]}]},
+      {"token":"clitool","name":["CLI Tool"],"artifacts":[{"binary":["bin/clitool"]}]},
+      {"token":"mystery","name":["Mystery"],"artifacts":[{"uninstall":[{"pkgutil":["com.example.unknown"]}]},{"pkg":["Mystery.pkg"]}]},
       {"token":"slack","name":["Slack"],"artifacts":[{"app":["Slack.app"]}]},
       {"token":"chatgpt","name":["ChatGPT"],"artifacts":[{"app":["ChatGPT.app",{"target":"/Applications/Utilities/ChatGPT Beta.app"}]}]}
     ]}' ;;
@@ -49,7 +54,7 @@ EOF
 cat > "$BIN/ps" <<'EOF'
 #!/bin/zsh
 print ' 8737 /Applications/Telegram.app/Contents/MacOS/Telegram'
-print '12969 /Applications/Zoom.app/Contents/MacOS/zoom.us'
+print '12969 /Applications/zoom.us.app/Contents/MacOS/zoom.us'
 print '31737 /Applications/Utilities/ChatGPT Beta.app/Contents/MacOS/ChatGPT'
 print '40001 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT'
 print '40002 /Users/me/Apps/Slack.app/Contents/MacOS/Slack'
@@ -67,7 +72,17 @@ print '	Created for PID: 12969.'
 print '	Resources: audio-out BuiltInSpeakerDevice'
 print '   pid 362(powerd): [0x3] 00:01:53 PreventUserIdleSystemSleep named: "display"'
 EOF
+# pkgutil: Zoom's receipt installs /Applications/zoom.us.app; Mystery's has no bundle.
+cat > "$BIN/pkgutil" <<'EOF'
+#!/bin/zsh
+if [[ "$1 $2" == "--files us.zoom.pkg.videomeeting" ]]; then
+  print 'Applications/zoom.us.app'
+  print 'Applications/zoom.us.app/Contents'
+  print 'Applications/zoom.us.app/Contents/MacOS/zoom.us'
+fi
+EOF
 chmod +x "$BIN"/*
+export BRC_PKGUTIL_BIN="$BIN/pkgutil"
 
 run_helper() {
     STUB_EVENTS="$EVENTS" BRC_BREW_BIN="$BIN/brew" BRC_PS_BIN="$BIN/ps" \
@@ -79,22 +94,24 @@ out="$(run_helper)"
 has "telegram listed as running" "$out" $'telegram\t/Applications/Telegram.app\t8737\t-'
 lacks "slack is not running (only a look-alike path)" "$out" "slack"
 
-print "2. greedy set: pkg cask resolved by display name, audio flagged from pmset"
+print "2. greedy set: pkg cask resolved from its receipt, audio flagged from pmset"
 out="$(run_helper --greedy)"
-has "zoom (pkg cask) mapped via /Applications/Zoom.app and flagged audio" "$out" $'zoom\t/Applications/Zoom.app\t12969\taudio'
+has "zoom (pkg cask) found at its receipt path zoom.us.app and flagged audio" "$out" $'zoom\t/Applications/zoom.us.app\t12969\taudio'
+has "pkg cask with no bundle in its receipt is unknown, not safe" "$out" $'mystery\t(bundle not found)\t?\tunknown'
+has "cask missing from brew info is unknown, not safe" "$out" $'ghost\t(missing from brew info)\t?\tunknown'
 has "chatgpt matched at its artifact target, not its source name" "$out" $'chatgpt\t/Applications/Utilities/ChatGPT Beta.app\t31737\t-'
 lacks "a non-coreaudiod assertion PID is not flagged audio" "$out" $'31737\taudio'
 
 print "3. --names and --outdated-names partition the outdated set"
-has "--names lists running tokens" "$(run_helper --greedy --names)" $'telegram\nzoom\nchatgpt'
-[[ "$(run_helper --greedy --outdated-names)" == slack ]] \
+has "--names lists running and unknown tokens" "$(run_helper --greedy --names)" $'telegram\nzoom\nchatgpt\nmystery\nghost'
+[[ "$(run_helper --greedy --outdated-names)" == $'slack\nclitool' ]] \
     && pass "--outdated-names lists only the non-running cask" \
     || fail "--outdated-names was: $(run_helper --greedy --outdated-names)"
 
 print "4. wrapper: skip path keeps flags and upgrades only non-running casks"
 cat > "$BIN/brew-running-casks" <<EOF
 #!/bin/zsh
-exec env STUB_EVENTS="$EVENTS" BRC_BREW_BIN="$BIN/brew" BRC_PS_BIN="$BIN/ps" BRC_PMSET_BIN="$BIN/pmset" "$HELPER" "\$@"
+exec env STUB_EVENTS="$EVENTS" BRC_BREW_BIN="$BIN/brew" BRC_PS_BIN="$BIN/ps" BRC_PMSET_BIN="$BIN/pmset" BRC_PKGUTIL_BIN="$BIN/pkgutil" "$HELPER" "\$@"
 EOF
 cat > "$BIN/reset-mac-media" <<EOF
 #!/bin/zsh
@@ -105,12 +122,16 @@ chmod +x "$BIN/brew-running-casks" "$BIN/reset-mac-media"
 run_wrapper() {
     : > "$EVENTS"
     print -r -- "$1" | PATH="$BIN:/usr/bin:/bin" OSTYPE=darwin25 STUB_EVENTS="$EVENTS" \
-        zsh -fc "source '$WRAPPER'; brew ${2}" 2>&1
+        HOMEBREW_NO_AUTO_UPDATE= zsh -fc "source '$WRAPPER'; brew ${2}" 2>&1
 }
 
 out="$(run_wrapper y 'upgrade --greedy --dry-run')"
 ev="$(cat "$EVENTS")"
-has "prompt names the audio user" "$out" "zoom  (Zoom.app)  <- using audio right now"
+[[ "${ev%%$'\n'*}" == "brew update" ]] && pass "metadata refreshed before the scan" \
+    || fail "first event was: ${ev%%$'\n'*}"
+lacks "no upgrade may auto-update past the scan" "$ev" "auto-update-off=no"
+has "prompt names the audio user" "$out" "zoom  (zoom.us.app)  <- using audio right now"
+has "prompt flags apps it cannot place" "$out" "mystery  (bundle not found)  <- cannot tell if it is running"
 has "formulae upgraded with the pass-through flag" "$ev" "brew upgrade --formula --dry-run"
 has "only the non-running cask is upgraded, flags kept" "$ev" "brew upgrade --cask --greedy --dry-run slack"
 lacks "running telegram is never upgraded" "$(print -r -- "$ev" | rg '^brew upgrade')" "telegram"
@@ -162,6 +183,12 @@ print "12. HOMEBREW_CASK_OPTS --appdir moves the app directory"
 out="$(STUB_EVENTS="$EVENTS" BRC_BREW_BIN="$BIN/brew" BRC_PS_BIN="$BIN/ps" BRC_PMSET_BIN="$BIN/pmset" \
     HOMEBREW_CASK_OPTS="--no-quarantine --appdir=/Users/me/Apps" "$HELPER" 2>&1)"
 has "slack found under the custom appdir" "$out" $'slack\t/Users/me/Apps/Slack.app\t40002'
+
+print "13. wrapper keeps combined greedy flags"
+run_wrapper y 'upgrade --greedy-latest --greedy-auto-updates' >/dev/null
+ev="$(cat "$EVENTS")"
+has "scan keeps both greedy flags" "$ev" "brew outdated --cask --json=v2 --greedy-latest --greedy-auto-updates"
+has "upgrade keeps both greedy flags" "$ev" "brew upgrade --cask --greedy-latest --greedy-auto-updates slack"
 
 print ""
 print "PASS=$PASS FAIL=$FAIL"
