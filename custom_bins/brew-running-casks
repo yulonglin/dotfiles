@@ -100,7 +100,8 @@ def cask_appdir(token):
     try:
         with open(os.path.join(caskroom, token, ".metadata", "config.json")) as f:
             cfg = json.load(f)
-        saved = cfg.get("explicit", {}).get("appdir") or cfg.get("env", {}).get("appdir")
+        saved = (cfg.get("explicit", {}).get("appdir") or cfg.get("env", {}).get("appdir")
+                 or cfg.get("default", {}).get("appdir"))
     except (OSError, ValueError, AttributeError):
         saved = None
     return os.path.expanduser(saved) if saved else apps_dir

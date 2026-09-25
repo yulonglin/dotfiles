@@ -205,6 +205,12 @@ print '{"default":{"appdir":"/Applications"},"env":{"appdir":"/Users/me/Apps"},"
     > "$WORK/Caskroom/slack/.metadata/config.json"
 out="$(BRC_CASKROOM="$WORK/Caskroom" run_helper)"
 has "an appdir saved from the environment is honoured too" "$out" $'slack\t/Users/me/Apps/Slack.app\t40002'
+mkdir -p "$WORK/Caskroom/telegram/.metadata"
+print '{"default":{"appdir":"/Applications"},"env":{},"explicit":{}}' \
+    > "$WORK/Caskroom/telegram/.metadata/config.json"
+out="$(BRC_CASKROOM="$WORK/Caskroom" HOMEBREW_CASK_OPTS="--appdir=/Users/me/Apps" \
+    STUB_EVENTS="$EVENTS" BRC_BREW_BIN="$BIN/brew" BRC_PS_BIN="$BIN/ps" BRC_PMSET_BIN="$BIN/pmset" "$HELPER" 2>&1)"
+has "the saved install directory beats a changed HOMEBREW_CASK_OPTS" "$out" $'telegram\t/Applications/Telegram.app\t8737'
 
 print ""
 print "PASS=$PASS FAIL=$FAIL"
