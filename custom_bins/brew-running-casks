@@ -20,21 +20,28 @@ setopt no_unset pipe_fail extended_glob
 BRC_BREW_BIN="${BRC_BREW_BIN:-brew}"
 BRC_PS_BIN="${BRC_PS_BIN:-/bin/ps}"
 BRC_PMSET_BIN="${BRC_PMSET_BIN:-/usr/bin/pmset}"
-BRC_APPS_DIR="${BRC_APPS_DIR:-/Applications}"
+# Honour a custom --appdir from HOMEBREW_CASK_OPTS, as brew itself does.
+_appdir=/Applications
+for _opt in ${=HOMEBREW_CASK_OPTS:-}; do
+    if [[ "$_opt" == --appdir=* ]]; then _appdir="${_opt#--appdir=}"; fi
+done
+BRC_APPS_DIR="${BRC_APPS_DIR:-$_appdir}"
 
 usage() {
     cat <<'EOF'
-Usage: brew-running-casks [--greedy] [--names] [--outdated-names]
+Usage: brew-running-casks [--greedy|--greedy-latest|--greedy-auto-updates]
+                          [--names] [--outdated-names]
 
 List outdated Homebrew casks whose app is running, so an upgrade can skip them.
 
 Options:
-  --greedy          Include casks that declare auto_updates (as brew upgrade --greedy does).
+  --greedy*         Passed to brew outdated, so the scan covers what brew upgrade would.
   --names           Print only the running cask tokens, one per line.
   --outdated-names  Print outdated cask tokens that are NOT running (safe to upgrade).
   -h, --help        Show this help.
 
-Exit status: 0 on success (even when some are running), 1 on error.
+Exit status: 0 on success (even when some are running), 1 if any lookup fails.
+Callers must treat 1 as "unknown", never as "nothing running".
 EOF
 }
 
@@ -42,7 +49,7 @@ greedy=()
 mode=table
 while (( $# > 0 )); do
     case "$1" in
-        --greedy) greedy=(--greedy); shift ;;
+        --greedy|--greedy-latest|--greedy-auto-updates) greedy=("$1"); shift ;;
         --names) mode=names; shift ;;
         --outdated-names) mode=safe; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -55,11 +62,12 @@ export HOMEBREW_NO_AUTO_UPDATE=1
 outdated_json="$("$BRC_BREW_BIN" outdated --cask --json=v2 "${greedy[@]}")" || {
     print -u2 "brew-running-casks: brew outdated failed"; exit 1
 }
-tokens=("${(@f)$(print -r -- "$outdated_json" | /usr/bin/python3 -c '
+tokens_out="$(print -r -- "$outdated_json" | /usr/bin/python3 -c '
 import json, sys
 for c in json.load(sys.stdin).get("casks", []):
     print(c["name"])
-')}")
+' 2>/dev/null)" || { print -u2 "brew-running-casks: could not parse brew outdated output"; exit 1; }
+tokens=("${(@f)tokens_out}")
 tokens=(${tokens:#})
 (( ${#tokens} )) || exit 0
 
@@ -71,19 +79,21 @@ apps_dir = os.environ["BRC_APPS_DIR"]
 for c in json.load(sys.stdin).get("casks", []):
     apps = []
     for art in c.get("artifacts", []):
-        for entry in art.get("app", []):
-            if isinstance(entry, str):
-                apps.append(entry)
-            elif isinstance(entry, dict) and entry.get("target"):
-                apps.append(entry["target"])
+        # {"app": ["Source.app"]} or {"app": ["Source.app", {"target": "Dest.app"}]}
+        args = art.get("app")
+        if not args:
+            continue
+        target = next((a["target"] for a in args if isinstance(a, dict) and a.get("target")), None)
+        apps.append(target or args[0])
     if not apps:
         apps = [n + ".app" for n in c.get("name", [])[:1]]
     for a in apps:
+        a = os.path.expanduser(a)
         path = a if a.startswith("/") else os.path.join(apps_dir, os.path.basename(a))
         print(c["token"] + "\t" + path)
-')"
+' 2>/dev/null)" || { print -u2 "brew-running-casks: brew info lookup failed"; exit 1; }
 
-procs="$("$BRC_PS_BIN" -Axo pid=,comm=)"
+procs="$("$BRC_PS_BIN" -Axo pid=,comm=)" || { print -u2 "brew-running-casks: ps failed"; exit 1; }
 
 # PIDs that coreaudiod currently holds an audio session for.
 audio_pids=("${(@f)$("$BRC_PMSET_BIN" -g assertions 2>/dev/null | /usr/bin/awk '

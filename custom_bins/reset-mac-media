@@ -47,7 +47,8 @@ recovered them. Running it interrupts active audio and video calls.
 
 --check is read-only and needs no sudo: it asks CoreAudio for its device list
 with a timeout and counts recent media-daemon crash reports. Exit 0 = healthy,
-1 = wedged (run reset-mac-media), 3 = crash reports seen but audio answers.
+1 = wedged (run reset-mac-media), 3 = crash reports seen but audio answers,
+4 = inconclusive (the probe exited with an error instead of answering).
 
 Options:
   --check           Diagnose only; restart nothing.
@@ -461,8 +462,8 @@ probe_coreaudio() {
     pid=$!
     while (( elapsed < RMM_PROBE_TIMEOUT )); do
         if ! kill -0 "$pid" 2>/dev/null; then
-            wait "$pid" 2>/dev/null || true
             printf '%s\n' "$elapsed"
+            wait "$pid" 2>/dev/null || return 4
             return 0
         fi
         "$RMM_SLEEP_BIN" 1
@@ -490,8 +491,14 @@ run_check() {
     local crashes=""
     local crash_count=0
     local probe_ok=true
+    local probe_rc=0
 
-    elapsed="$(probe_coreaudio)" || probe_ok=false
+    elapsed="$(probe_coreaudio)" || probe_rc=$?
+    if (( probe_rc == 4 )); then
+        log "INCONCLUSIVE: the CoreAudio probe exited with an error instead of answering"
+        return 4
+    fi
+    (( probe_rc == 0 )) || probe_ok=false
     crashes="$(recent_media_crashes | /usr/bin/sort)"
     [[ -n "$crashes" ]] && crash_count="$(printf '%s\n' "$crashes" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
 

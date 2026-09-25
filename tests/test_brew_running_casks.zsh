@@ -35,11 +35,12 @@ case "$1 $2" in
       print '{"formulae":[],"casks":[{"name":"telegram"},{"name":"slack"}]}'
     fi ;;
   "info --cask")
+    [[ "${STUB_BREW_INFO_FAIL:-0}" == 1 ]] && exit 1
     print '{"casks":[
       {"token":"telegram","name":["Telegram for macOS"],"artifacts":[{"app":["Telegram.app"]}]},
       {"token":"zoom","name":["Zoom"],"artifacts":[{"pkg":["zoomusInstallerFull.pkg"]}]},
       {"token":"slack","name":["Slack"],"artifacts":[{"app":["Slack.app"]}]},
-      {"token":"chatgpt","name":["ChatGPT"],"artifacts":[{"app":[["ChatGPT.app",{"target":"/Applications/ChatGPT.app"}]]}]}
+      {"token":"chatgpt","name":["ChatGPT"],"artifacts":[{"app":["ChatGPT.app",{"target":"/Applications/Utilities/ChatGPT Beta.app"}]}]}
     ]}' ;;
 esac
 EOF
@@ -49,7 +50,9 @@ cat > "$BIN/ps" <<'EOF'
 #!/bin/zsh
 print ' 8737 /Applications/Telegram.app/Contents/MacOS/Telegram'
 print '12969 /Applications/Zoom.app/Contents/MacOS/zoom.us'
-print '31737 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT'
+print '31737 /Applications/Utilities/ChatGPT Beta.app/Contents/MacOS/ChatGPT'
+print '40001 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT'
+print '40002 /Users/me/Apps/Slack.app/Contents/MacOS/Slack'
 print '  421 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer'
 print '  500 /Applications/Slack Helper.app/Contents/MacOS/Slack Helper'
 EOF
@@ -79,7 +82,7 @@ lacks "slack is not running (only a look-alike path)" "$out" "slack"
 print "2. greedy set: pkg cask resolved by display name, audio flagged from pmset"
 out="$(run_helper --greedy)"
 has "zoom (pkg cask) mapped via /Applications/Zoom.app and flagged audio" "$out" $'zoom\t/Applications/Zoom.app\t12969\taudio'
-has "chatgpt target-form app artifact resolved" "$out" $'chatgpt\t/Applications/ChatGPT.app\t31737\t-'
+has "chatgpt matched at its artifact target, not its source name" "$out" $'chatgpt\t/Applications/Utilities/ChatGPT Beta.app\t31737\t-'
 lacks "a non-coreaudiod assertion PID is not flagged audio" "$out" $'31737\taudio'
 
 print "3. --names and --outdated-names partition the outdated set"
@@ -134,6 +137,31 @@ print "8. wrapper: HOMEBREW_UPGRADE_GREEDY scans the greedy set"
 out="$(HOMEBREW_UPGRADE_GREEDY=1 run_wrapper q 'upgrade')"
 has "greedy env surfaces an auto_updates app" "$out" "zoom"
 has "greedy env passes --greedy to the scan" "$(cat "$EVENTS")" "brew outdated --cask --json=v2 --greedy"
+
+print "9. helper fails closed when a lookup fails"
+STUB_BREW_INFO_FAIL=1 run_helper --greedy >/dev/null
+rc=$?
+(( rc == 1 )) && pass "brew info failure exits 1" || fail "brew info failure exited $rc"
+out="$(STUB_EVENTS="$EVENTS" STUB_BREW_INFO_FAIL=1 BRC_BREW_BIN="$BIN/brew" BRC_PS_BIN="$BIN/ps" \
+    BRC_PMSET_BIN="$BIN/pmset" "$HELPER" --greedy --outdated-names 2>/dev/null)"
+[[ -z "$out" ]] && pass "failed lookup never reports casks as safe" || fail "failed lookup printed: $out"
+
+print "10. wrapper fails closed when the scan fails"
+out="$(STUB_BREW_INFO_FAIL=1 run_wrapper y 'upgrade --greedy')"
+lacks "no upgrade runs after a failed scan" "$(cat "$EVENTS")" "brew upgrade"
+has "failure is explained" "$out" "could not tell which apps are running"
+
+print "11. wrapper keeps the exact greedy flag"
+run_wrapper y 'upgrade --greedy-latest' >/dev/null
+ev="$(cat "$EVENTS")"
+has "scan uses --greedy-latest" "$ev" "brew outdated --cask --json=v2 --greedy-latest"
+has "upgrade uses --greedy-latest" "$ev" "brew upgrade --cask --greedy-latest slack"
+lacks "flag is not widened to --greedy" "$ev" "--greedy "
+
+print "12. HOMEBREW_CASK_OPTS --appdir moves the app directory"
+out="$(STUB_EVENTS="$EVENTS" BRC_BREW_BIN="$BIN/brew" BRC_PS_BIN="$BIN/ps" BRC_PMSET_BIN="$BIN/pmset" \
+    HOMEBREW_CASK_OPTS="--no-quarantine --appdir=/Users/me/Apps" "$HELPER" 2>&1)"
+has "slack found under the custom appdir" "$out" $'slack\t/Users/me/Apps/Slack.app\t40002'
 
 print ""
 print "PASS=$PASS FAIL=$FAIL"

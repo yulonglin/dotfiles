@@ -15,7 +15,7 @@ On 2026-09-24 the first symptoms were read as a network problem and cost about 1
 ## Confirm it in thirty seconds
 
 ```bash
-reset-mac-media --check              # exit 0 healthy, 1 wedged, 3 recent crashes but audio answers
+reset-mac-media --check              # exit 0 healthy, 1 wedged, 3 recent crashes but audio answers, 4 probe errored
 reset-mac-media --check --since 240  # widen the crash-report window (minutes)
 ```
 
@@ -49,9 +49,11 @@ Every incident has the same crash site: `avconferenced` terminating itself from 
 | 2026-09-22 | AirPods broke CoreAudio's Bluetooth route before a call (session notes; verification was left pending) | FineTune suspected | `killall` of the media daemons |
 | 2026-09-24 | A cask upgrade quit or replaced 15 running apps from 17:04:00 (AlDente and Alfred first); first `avconferenced` crash at 17:04:28 | FineTune crashed 17:05:16 | `killall` of the media daemons |
 
-The 2026-09-24 stack may already have been degraded before the upgrade. NordVPN Shield's `secd` errors began at 15:59:29, the second the camera came on for a FaceTime call, and at 17:03 `avconferenced` was still logging RTCP timeouts for a call participant although the call had ended normally. The upgrade may have tipped over a stack that was already failing, so the guard below might not have prevented this incident on its own.
+On 2026-09-24 the FaceTime call ended at about 17:03, one minute before the upgrade began, and `avconferenced` was still logging RTCP timeouts from its teardown at 17:03:08. NordVPN Shield's `secd` errors had begun at 15:59:29, the second the camera came on for that call. So brew quit AlDente and Alfred while the call was still being torn down, on a stack that may already have been strained; the upgrade guard alone might not have prevented it.
 
-The common thread is a sudden change under CoreAudio's feet — a device vanishing, or a running app's bundle disappearing — with a third-party CoreAudio hook (Alfred's switcher, then FineTune) present each time. That link is a pattern across three cases, not a proven cause. Which bundle swap set off the 2026-09-24 loop is unproven: AlDente, Alfred, Codex and Conductor were replaced in the 28 seconds before it, and Discord and Claude were not running.
+A call is present in all three incidents: during it on 2026-08-24, just before it on 2026-09-22, and in its teardown on 2026-09-24. That is the strongest common factor.
+
+The other common thread is a sudden change under CoreAudio's feet — a device vanishing, or a running app's bundle disappearing — with a third-party CoreAudio hook (Alfred's switcher, then FineTune) present each time. That link is a pattern across three cases, not a proven cause. Which bundle swap set off the 2026-09-24 loop is unproven: AlDente, Alfred, Codex and Conductor were replaced in the 28 seconds before it, and Discord and Claude were not running.
 
 ## Prevention: skip running apps on upgrade, and limit FineTune
 
@@ -69,7 +71,9 @@ brew-running-casks            # running outdated casks: token, app, pids, audio 
 brew-running-casks --greedy   # include casks that update themselves
 ```
 
-FineTune appears in two of the three incidents. The earlier advice still stands — add FaceTime to FineTune's ignore list, and use the MacBook microphone when Bluetooth call routing is unstable. Removing FineTune is the stronger option if a fourth incident follows.
+**Wait a few minutes after a call ends before running `brew upgrade`**, and do not start one during a call.
+
+**Add FaceTime to FineTune's ignore list** (decided 2026-09-24). FineTune's GitHub issues document friction with calls specifically, not a general fault: about ten FaceTime reports, five still open, where FineTune's audio tap fights FaceTime's voice-processing mode and leaves call audio near-silent or crackling ([#113](https://github.com/ronitsingh10/FineTune/issues/113), [#156](https://github.com/ronitsingh10/FineTune/issues/156), [#262](https://github.com/ronitsingh10/FineTune/issues/262)), plus a cluster on AirPods and Bluetooth routing ([#185](https://github.com/ronitsingh10/FineTune/issues/185), [#255](https://github.com/ronitsingh10/FineTune/issues/255), [#316](https://github.com/ronitsingh10/FineTune/issues/316), [#326](https://github.com/ronitsingh10/FineTune/issues/326)). No issue reports a system-wide `coreaudiod` wedge (searched 2026-09-24). On 2026-09-24 FineTune crashed 48 s after the loop began, in its window code rather than its audio path, so it may have been a victim that day rather than the trigger. Use the MacBook microphone when Bluetooth call routing is unstable, and remove FineTune if a fourth incident follows.
 
 ## Diagnosis steps that worked, in order
 

@@ -141,6 +141,7 @@ printf '%s\n' \
     '    sleep) ;;' \
     '    system_profiler)' \
     '        if [[ "${STUB_PROFILER_HANG:-0}" == 1 ]]; then exec /bin/sleep 30; fi' \
+    '        if [[ "${STUB_PROFILER_FAIL:-0}" == 1 ]]; then exit 1; fi' \
     '        printf "Audio:\n"' \
     '        ;;' \
     'esac' > "$STUB"
@@ -163,7 +164,7 @@ setup_case() {
     export STUB_STATE STUB_REPORT_ROOT STUB_EVENTS
     unset STUB_UNAME STUB_LOG_FAIL STUB_SAMPLE_FAIL STUB_SUDO_FAIL \
         STUB_STALE_PROCESS STUB_DORMANT_PROCESS STUB_CRASHED_PROCESS \
-        STUB_PROFILER_HANG CASE_SLEEP_BIN
+        STUB_PROFILER_HANG STUB_PROFILER_FAIL CASE_SLEEP_BIN
     export STUB_AV_DORMANT=1
 }
 
@@ -359,6 +360,14 @@ if (( RUN_RC == 3 )); then pass "crash warning exits 3"; else fail "crash warnin
 assert_contains "recent crash counted across both directories" "$RUN_OUT" "2 media-daemon crash report(s)"
 assert_not_contains "crash older than the window is ignored" "$RUN_OUT" "avconferenced-old"
 assert_not_contains "non-media crash is ignored" "$RUN_OUT" "Safari-new"
+
+echo "13b. --check reports a probe that errors out as inconclusive, not healthy"
+setup_case
+export CASE_SLEEP_BIN=/bin/sleep STUB_PROFILER_FAIL=1
+run_helper --check
+if (( RUN_RC == 4 )); then pass "failed probe exits 4"; else fail "failed probe exit was $RUN_RC"; fi
+assert_contains "failed probe says inconclusive" "$RUN_OUT" "INCONCLUSIVE"
+assert_not_contains "failed probe never claims healthy" "$RUN_OUT" "healthy"
 
 echo "14. --since rejects a non-number"
 setup_case

@@ -22,7 +22,7 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         [[ -n "${HOMEBREW_UPGRADE_GREEDY:-}" ]] && greedy=(--greedy)
         for arg in "$@"; do
             case "$arg" in
-                --greedy|--greedy-latest|--greedy-auto-updates) greedy=(--greedy) ;;
+                --greedy|--greedy-latest|--greedy-auto-updates) greedy=("$arg") ;;
                 --cask|--casks) only=cask ;;
                 --formula|--formulae) only=formula ;;
                 -*) flags+=("$arg") ;;
@@ -31,7 +31,11 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         done
 
         local running=""
-        [[ "$only" == formula ]] || running="$(brew-running-casks "${greedy[@]}")"
+        if [[ "$only" != formula ]] && ! running="$(brew-running-casks "${greedy[@]}")"; then
+            print -u2 "brew: could not tell which apps are running; not upgrading."
+            print -u2 "      'brew upgrade --formula' is safe; 'command brew upgrade' bypasses this guard."
+            return 1
+        fi
         if [[ -z "$running" ]]; then
             command brew upgrade "$@" || return
             reset-mac-media --check --since 15
@@ -55,7 +59,12 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
                 if [[ "$only" != cask ]]; then
                     command brew upgrade --formula "${flags[@]}" || return
                 fi
-                local -a safe=("${(@f)$(brew-running-casks "${greedy[@]}" --outdated-names)}")
+                local safe_out=""
+                if ! safe_out="$(brew-running-casks "${greedy[@]}" --outdated-names)"; then
+                    print -u2 "brew: running-app scan failed; skipped all cask upgrades."
+                    return 1
+                fi
+                local -a safe=("${(@f)safe_out}")
                 safe=(${safe:#})
                 if (( ${#safe} )); then
                     command brew upgrade --cask "${greedy[@]}" "${flags[@]}" "${safe[@]}" || return
