@@ -157,7 +157,51 @@
     "ask": [],
     "defaultMode": "auto"
   },
-  "model": "fable",
+  "model": "opus",
+  "modelPicker": {
+    "options": [
+      {
+        "model": "claude-opus-4-6",
+        "label": "Opus 4.6"
+      },
+      {
+        "model": "astra",
+        "label": "GPT-6 Astra"
+      },
+      {
+        "model": "sol",
+        "label": "GPT-5.6 Sol"
+      },
+      {
+        "model": "kimi",
+        "label": "Kimi K3"
+      },
+      {
+        "model": "glm",
+        "label": "GLM 5.3"
+      },
+      {
+        "model": "muse-spark",
+        "label": "Muse Spark 1.3"
+      },
+      {
+        "model": "grok",
+        "label": "Grok 4.7"
+      },
+      {
+        "model": "qwen",
+        "label": "Qwen3.8 Max"
+      },
+      {
+        "model": "deepseek",
+        "label": "DeepSeek V4.1 Flash"
+      },
+      {
+        "model": "sol6",
+        "label": "GPT-6 Sol"
+      }
+    ]
+  },
   "skillOverrides": {
     "claude-api": "off"
   },
@@ -814,6 +858,7 @@
         "~/projects",
         "~/scratch",
         "~/vault",
+        "~/Documents",
         "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli",
         "~/Downloads",
         "/workspace"
@@ -870,7 +915,7 @@
   "promptCacheTtl": "1h",
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
-  "advisorModel": "fable",
+  "advisorModel": "opus",
   "showClearContextOnPlanAccept": true,
   "dialogExpiry": "never",
   "plansDirectory": "plans/",
