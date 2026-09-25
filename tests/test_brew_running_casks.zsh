@@ -45,7 +45,7 @@ case "$1 $2" in
       {"token":"clitool","name":["CLI Tool"],"artifacts":[{"binary":["bin/clitool"]}]},
       {"token":"mystery","name":["Mystery"],"artifacts":[{"uninstall":[{"pkgutil":["com.example.unknown"]}]},{"pkg":["Mystery.pkg"]}]},
       {"token":"slack","name":["Slack"],"artifacts":[{"app":["Slack.app"]}]},
-      {"token":"chatgpt","name":["ChatGPT"],"artifacts":[{"app":["ChatGPT.app",{"target":"/Applications/Utilities/ChatGPT Beta.app"}]}]}
+      {"token":"chatgpt","name":["ChatGPT"],"artifacts":[{"app":["ChatGPT.app",{"target":"Utilities/ChatGPT Beta.app"}]}]}
     ]}' ;;
 esac
 EOF
@@ -201,6 +201,10 @@ print '{"default":{"appdir":"/Applications"},"env":{},"explicit":{"appdir":"/Use
 out="$(BRC_CASKROOM="$WORK/Caskroom" run_helper)"
 has "slack found under its saved appdir" "$out" $'slack\t/Users/me/Apps/Slack.app\t40002'
 has "casks without a saved appdir keep the default" "$out" $'telegram\t/Applications/Telegram.app\t8737'
+print '{"default":{"appdir":"/Applications"},"env":{"appdir":"/Users/me/Apps"},"explicit":{}}' \
+    > "$WORK/Caskroom/slack/.metadata/config.json"
+out="$(BRC_CASKROOM="$WORK/Caskroom" run_helper)"
+has "an appdir saved from the environment is honoured too" "$out" $'slack\t/Users/me/Apps/Slack.app\t40002'
 
 print ""
 print "PASS=$PASS FAIL=$FAIL"

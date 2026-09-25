@@ -95,11 +95,13 @@ def pkg_bundles(ids):
 caskroom = os.environ.get("BRC_CASKROOM", "")
 
 def cask_appdir(token):
-    # brew upgrade reuses an --appdir given at install time, saved per cask.
+    # brew upgrade reuses the --appdir saved at install time, with its own
+    # precedence: explicit flag, then HOMEBREW_CASK_OPTS at the time.
     try:
         with open(os.path.join(caskroom, token, ".metadata", "config.json")) as f:
-            saved = json.load(f).get("explicit", {}).get("appdir")
-    except (OSError, ValueError):
+            cfg = json.load(f)
+        saved = cfg.get("explicit", {}).get("appdir") or cfg.get("env", {}).get("appdir")
+    except (OSError, ValueError, AttributeError):
         saved = None
     return os.path.expanduser(saved) if saved else apps_dir
 
@@ -111,8 +113,10 @@ for c in json.load(sys.stdin).get("casks", []):
         # {"app": ["Source.app"]} or {"app": ["Source.app", {"target": "Dest.app"}]}
         args = art.get("app")
         if args:
+            # A target keeps its relative subfolder (Utilities/Foo.app); a bare
+            # source lands directly in the app directory.
             target = next((a["target"] for a in args if isinstance(a, dict) and a.get("target")), None)
-            apps.append(target or args[0])
+            apps.append(target if target else os.path.basename(args[0]))
         for step in art.get("uninstall", []):
             ids = step.get("pkgutil") if isinstance(step, dict) else None
             pkg_ids += [ids] if isinstance(ids, str) else (ids or [])
@@ -125,7 +129,7 @@ for c in json.load(sys.stdin).get("casks", []):
         print(c["token"] + "\t-")  # no app at all (CLI, font...): nothing can be running
     for a in apps:
         a = os.path.expanduser(a)
-        path = a if a.startswith("/") else os.path.join(cask_dir, os.path.basename(a))
+        path = a if a.startswith("/") else os.path.join(cask_dir, a)
         print(c["token"] + "\t" + path)
 ' 2>/dev/null)" || { print -u2 "brew-running-casks: brew info lookup failed"; exit 1; }
 
