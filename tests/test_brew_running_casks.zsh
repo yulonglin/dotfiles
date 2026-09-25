@@ -130,6 +130,11 @@ out="$(run_wrapper '' 'upgrade --formula')"
 has "formula-only upgrade runs as asked" "$(cat "$EVENTS")" "brew upgrade --formula"
 lacks "formula-only upgrade skips the cask scan" "$(cat "$EVENTS")" "outdated --cask"
 
+print "8. wrapper: HOMEBREW_UPGRADE_GREEDY scans the greedy set"
+out="$(HOMEBREW_UPGRADE_GREEDY=1 run_wrapper q 'upgrade')"
+has "greedy env surfaces an auto_updates app" "$out" "zoom"
+has "greedy env passes --greedy to the scan" "$(cat "$EVENTS")" "brew outdated --cask --json=v2 --greedy"
+
 print ""
 print "PASS=$PASS FAIL=$FAIL"
 (( FAIL == 0 ))

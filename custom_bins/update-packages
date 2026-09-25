@@ -92,13 +92,17 @@ run() {
 
 # ─── Package Manager Implementations ─────────────────────────────────────────
 
-# A cask upgrade swaps the .app bundle under a running process; on 2026-09-24
-# that preceded a CoreAudio wedge (docs/macos-media-wedge.md). So on macOS,
-# casks whose app is running are skipped and picked up on a later run.
+# A cask upgrade quits a running app or swaps its bundle underneath it; on
+# 2026-09-24 that preceded a CoreAudio wedge (docs/macos-media-wedge.md). So on
+# macOS, casks whose app is running are skipped. An app that is always open is
+# therefore never upgraded here; it relies on its own updater or a manual run.
 upgrade_brew_skipping_running_apps() {
     local running="" safe=""
-    running="$("$SCRIPT_DIR/brew-running-casks" --names)" || running=""
-    safe="$("$SCRIPT_DIR/brew-running-casks" --outdated-names)" || safe=""
+    if ! running="$("$SCRIPT_DIR/brew-running-casks" --names)" \
+        || ! safe="$("$SCRIPT_DIR/brew-running-casks" --outdated-names)"; then
+        log_err "brew-running-casks failed; upgrading formulae only, no casks this run"
+        running="" safe=""
+    fi
 
     log "Upgrading formulae..."
     NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --formula 2>&1

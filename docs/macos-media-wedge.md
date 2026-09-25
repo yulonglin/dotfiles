@@ -46,17 +46,21 @@ Every incident has the same crash site: `avconferenced` terminating itself from 
 | Date | What happened just before | Other crash | Fixed by |
 |---|---|---|---|
 | 2026-08-24 | FaceTime call with a broken peer; Alfred's audio-device switcher crashed on a vanished CoreAudio device | `audiomxd` abort | Hard reboot |
-| 2026-09-22 | AirPods broke CoreAudio's Bluetooth route before a call | FineTune suspected | `killall` of the media daemons |
-| 2026-09-24 | `brew upgrade` replaced 15 app bundles from 17:04:00; first `avconferenced` crash at 17:04:28. A FaceTime call earlier that afternoon had ended normally | FineTune crashed 17:05:16 | `killall` of the media daemons |
+| 2026-09-22 | AirPods broke CoreAudio's Bluetooth route before a call (session notes; verification was left pending) | FineTune suspected | `killall` of the media daemons |
+| 2026-09-24 | A cask upgrade quit or replaced 15 running apps from 17:04:00 (AlDente and Alfred first); first `avconferenced` crash at 17:04:28 | FineTune crashed 17:05:16 | `killall` of the media daemons |
+
+The 2026-09-24 stack may already have been degraded before the upgrade. NordVPN Shield's `secd` errors began at 15:59:29, the second the camera came on for a FaceTime call, and at 17:03 `avconferenced` was still logging RTCP timeouts for a call participant although the call had ended normally. The upgrade may have tipped over a stack that was already failing, so the guard below might not have prevented this incident on its own.
 
 The common thread is a sudden change under CoreAudio's feet — a device vanishing, or a running app's bundle disappearing — with a third-party CoreAudio hook (Alfred's switcher, then FineTune) present each time. That link is a pattern across three cases, not a proven cause. Which bundle swap set off the 2026-09-24 loop is unproven: AlDente, Alfred, Codex and Conductor were replaced in the 28 seconds before it, and Discord and Claude were not running.
 
 ## Prevention: skip running apps on upgrade, and limit FineTune
 
-Homebrew does not quit a running app before upgrading its cask; none of the casks on this Mac declare a `quit` stanza. It swaps the bundle on disk and the old process keeps running against files that are gone. Two guards now avoid that:
+A cask upgrade takes a running app away mid-session. Casks that declare an uninstall `quit` stanza (AlDente, Alfred, Spark, WhatsApp, superwhisper, VS Code and most others here) are quit by Homebrew; the rest (Chrome, Cursor, Conductor, RemNote) have their bundle swapped under the live process. Two guards now skip running apps:
 
 - **Interactive:** a bare `brew upgrade` (zsh wrapper in `config/aliases/brew.sh`) lists outdated apps that are running, marks the ones holding a live audio session, and offers to skip them. It runs `reset-mac-media --check --since 15` afterwards. `command brew upgrade` bypasses the wrapper; an upgrade that names packages passes straight through.
-- **Unattended:** the weekly `update-packages` run upgrades formulae and only the casks whose app is not running, logs the ones it skipped, and runs the same health check.
+- **Unattended:** the weekly `update-packages` run upgrades formulae and only the casks whose app is not running, logs the ones it skipped, and runs the same health check. The cost: an app that is always open (Telegram, Dropbox, ChatGPT, Tailscale) is never upgraded by this run and relies on its own updater. The weekly job is not installed on this Mac as of 2026-09-24.
+
+All 15 casks upgraded on 2026-09-24 declare `auto_updates`, which Homebrew 7 skips unless the upgrade is greedy (`--greedy` or `HOMEBREW_UPGRADE_GREEDY`). The only upgrades in shell history that day are plain `brew upgrade`, and nothing on this Mac sets greedy mode, so how they were upgraded is unexplained. Since these apps update themselves, the simplest prevention is to not run greedy upgrades at all. The wrapper honours `HOMEBREW_UPGRADE_GREEDY` when it is set.
 
 Both use `brew-running-casks`, which maps each outdated cask to its `.app`, matches running processes by executable path, and reads `pmset -g assertions` to flag audio use. Run it directly to see what an upgrade would touch:
 

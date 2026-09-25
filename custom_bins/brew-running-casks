@@ -1,12 +1,13 @@
 #!/usr/bin/env zsh
 # List outdated Homebrew casks whose app is running right now.
 #
-# `brew upgrade` swaps a cask's .app bundle on disk without quitting the running
-# copy (the casks on this Mac declare no `quit` stanza). The running process
-# then loads helpers and resources from a bundle that is gone. On 2026-09-24 a
-# 17:04 cask upgrade was followed 28 s later by an avconferenced crash loop that
-# wedged CoreAudio (docs/macos-media-wedge.md). Upgrading only casks that are
-# not running avoids replacing a bundle under a live process.
+# A cask upgrade takes a running app away mid-session: casks with an uninstall
+# `quit` stanza (Alfred, AlDente, Spark, WhatsApp...) are quit by brew, the rest
+# (Chrome, Cursor, Conductor...) have their bundle swapped under the live
+# process. On 2026-09-24 brew quit AlDente and Alfred at 17:04:00-01 and an
+# avconferenced crash loop that wedged CoreAudio began at 17:04:28
+# (docs/macos-media-wedge.md). Upgrading only casks that are not running avoids
+# pulling an app out from under an active audio or camera session.
 #
 # Output: one line per running outdated cask, tab-separated:
 #   <token> TAB <app path> TAB <pids> TAB <audio|->

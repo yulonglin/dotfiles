@@ -1,6 +1,6 @@
 # aliases/brew.sh — `brew upgrade` that leaves running apps alone
 #
-# A cask upgrade swaps an app's bundle on disk under the running process. On
+# A cask upgrade quits a running app or swaps its bundle underneath it. On
 # 2026-09-24 that was followed by an avconferenced crash loop that wedged
 # CoreAudio and, through it, Safari, Chrome and Spark (docs/macos-media-wedge.md).
 # This wrapper only changes a bare `brew upgrade` on macOS: it lists outdated
@@ -19,6 +19,7 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         local arg
         local -a greedy=() flags=()
         local only=""
+        [[ -n "${HOMEBREW_UPGRADE_GREEDY:-}" ]] && greedy=(--greedy)
         for arg in "$@"; do
             case "$arg" in
                 --greedy|--greedy-latest|--greedy-auto-updates) greedy=(--greedy) ;;
