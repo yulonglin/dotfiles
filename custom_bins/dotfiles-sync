@@ -354,14 +354,25 @@ main() {
     mkdir -p "$STATE_DIR"
     # One run at a time: a 08:00 run still waiting on a slow push must not race
     # a manual one. The lock dir carries the pid so a stale lock is detectable.
+    # The sync and the prune share this lock. After a sleep, launchd fires every
+    # missed calendar job at once, so Sunday's prune lands on the same instant
+    # as the daily sync and would lose the race (measured: two Sundays in a row
+    # it logged "another dotfiles-sync is running; exiting" and never pruned).
+    # So wait for a live holder, up to DOTFILES_SYNC_LOCK_WAIT seconds, instead
+    # of giving up; a dead holder's lock is reclaimed at once.
     LOCK_DIR="$STATE_DIR/lock.d"
-    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    local waited=0 lock_wait="${DOTFILES_SYNC_LOCK_WAIT:-900}"
+    until mkdir "$LOCK_DIR" 2>/dev/null; do
         local pid; pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-            log "another dotfiles-sync (pid $pid) is running; exiting"; return 1
+        if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+            rm -rf "$LOCK_DIR"; continue
         fi
-        rm -rf "$LOCK_DIR"; mkdir "$LOCK_DIR" || return 1
-    fi
+        if (( waited >= lock_wait )); then
+            log "another dotfiles-sync (pid $pid) still running after ${waited}s; giving up"; return 1
+        fi
+        (( waited == 0 )) && log "another dotfiles-sync (pid $pid) is running; waiting up to ${lock_wait}s"
+        sleep 5; waited=$(( waited + 5 ))
+    done
     echo $$ >"$LOCK_DIR/pid"
     trap 'rm -rf "$LOCK_DIR"' EXIT
 

@@ -168,6 +168,27 @@ git -C "$WORK/prunedry" worktree add -q -b worktree-m "$WORK/prunedry/.claude/wo
 [ ! -e "$DOTFILES_SYNC_STATE_DIR/prunedry.prune.json" ] || fail "prune dry-run wrote state"
 pass "prune dry-run is inert"
 
+# 9. A live lock holder is waited for, not bailed on; a dead holder is reclaimed.
+fresh_remote lockwait
+mkdir -p "$DOTFILES_SYNC_STATE_DIR/lock.d"
+( sleep 8 ) & holder=$!
+echo "$holder" >"$DOTFILES_SYNC_STATE_DIR/lock.d/pid"
+start=$(date +%s)
+DOTFILES_SYNC_LOCK_WAIT=60 "$SYNC" "$WORK/lockwait" >"$WORK/lockwait.log" 2>&1 || fail "lock-wait run exited non-zero: $(cat "$WORK/lockwait.log")"
+(( $(date +%s) - start >= 5 )) || fail "did not wait for the live lock holder"
+grep -q 'is running; waiting' "$WORK/lockwait.log" || fail "no waiting message: $(cat "$WORK/lockwait.log")"
+[ "$(state_field lockwait status)" = ok ] || fail "run after lock release did not sync"
+wait "$holder" 2>/dev/null || true
+mkdir -p "$DOTFILES_SYNC_STATE_DIR/lock.d"; echo 999999 >"$DOTFILES_SYNC_STATE_DIR/lock.d/pid"
+start=$(date +%s)
+"$SYNC" "$WORK/lockwait" >/dev/null 2>&1 || fail "dead-lock run exited non-zero"
+(( $(date +%s) - start < 5 )) || fail "waited on a dead lock holder"
+mkdir -p "$DOTFILES_SYNC_STATE_DIR/lock.d"; ( sleep 20 ) & holder=$!; echo "$holder" >"$DOTFILES_SYNC_STATE_DIR/lock.d/pid"
+if DOTFILES_SYNC_LOCK_WAIT=5 "$SYNC" "$WORK/lockwait" >"$WORK/lockwait2.log" 2>&1; then fail "gave up should exit non-zero"; fi
+grep -q 'giving up' "$WORK/lockwait2.log" || fail "no giving-up message"
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null || true; rm -rf "$DOTFILES_SYNC_STATE_DIR/lock.d"
+pass "lock: waits for a live holder, reclaims a dead one, gives up at the cap"
+
 # The nudge hook reads the state files written above: conflict must surface, noop must not.
 NUDGE="$REPO_ROOT/claude/hooks/nudge_dotfiles_sync.sh"
 out="$(CLAUDE_HOOK_FEATURES_FILE=/dev/null bash "$NUDGE" </dev/null)"
