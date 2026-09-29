@@ -1,0 +1,21 @@
+[Unit]
+Description=Check every ten minutes for vault writing edits to publish
+
+[Timer]
+# A calendar expression rather than OnUnitActiveSec, for the same reason as
+# council-roster: a monotonic interval restarts its clock at every boot and
+# drifts. At ten-minute granularity the drift barely matters, but the failure
+# mode of a timer that quietly stops firing does.
+OnCalendar=*:0/10
+
+# Deliberately absent: Persistent=true. Catching up a missed ten-minute window
+# on boot is pointless -- the next tick is at most ten minutes away, and a
+# catch-up run firing during startup competes with the sync client for the
+# vault it is about to read.
+
+# The tick is not synchronised with anything, but a little jitter keeps it from
+# landing on the same second as every other timer on the box.
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
