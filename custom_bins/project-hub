@@ -48,6 +48,7 @@ from pathlib import Path
 import tomllib
 
 BULK = ("data", "runs", "external", "archive")
+TIER_MARKER = ".project-hub-tier-source"
 HOME = Path(os.environ.get("HOME", "~")).expanduser()
 PROJECTS = HOME / "projects"
 DOT_DIR = Path(os.environ.get("DOT_DIR", HOME / "code/dotfiles"))
@@ -112,14 +113,26 @@ def encodings(path: Path) -> tuple[str, ...]:
 WORKTREE_SUFFIXES = ("--claude-worktrees-", "-.claude-worktrees-")
 
 
+def plain_name(kind: str, value: str) -> None:
+    if not value or "/" in value or value.startswith("."):
+        fail(f"{kind} must be a plain directory name, got {value!r}")
+
+
 # ------------------------------------------------------------------- new ----
 def cmd_new(args: argparse.Namespace) -> None:
-    if not args.name or "/" in args.name or args.name.startswith("."):
-        fail(f"name must be a plain directory name, got {args.name!r}")
+    plain_name("name", args.name)
     hub = PROJECTS / args.name
     volume = storage_volume()
-    hub.mkdir(parents=True, exist_ok=True)
     use_volume = tiered(volume) and not args.no_volume
+    if use_volume and (volume / "projects").resolve().is_relative_to(
+        PROJECTS.resolve()
+    ):
+        # The retired forward link /workspace/projects -> ~/projects would put the
+        # "volume" copy of each bulk dir inside the hub itself.
+        fail(
+            f"{volume / 'projects'} resolves into {PROJECTS}; remove that forward link first"
+        )
+    hub.mkdir(parents=True, exist_ok=True)
     for d in BULK:
         target = hub / d
         if target.exists() or target.is_symlink():
@@ -223,8 +236,7 @@ def cmd_adopt(args: argparse.Namespace) -> None:
             fail(f"expected role=path, got {spec!r}")
         role, path = spec.split("=", 1)
         src = Path(path).expanduser().resolve()
-        if not role or "/" in role or role.startswith("."):
-            fail(f"role must be a plain directory name, got {role!r}")
+        plain_name("role", role)
         if role in BULK:
             fail(f"{role} is a bulk dir; use `project-hub tier`")
         if not src.is_dir():
@@ -298,6 +310,8 @@ def recent_writes(d: Path, minutes: int) -> int:
 
 def cmd_tier(args: argparse.Namespace) -> None:
     name, _, role = args.target.partition("/")
+    plain_name("name", name)
+    plain_name("role", role)
     hub = PROJECTS / name
     repo = hub / role
     if not repo.is_dir():
@@ -315,6 +329,7 @@ def cmd_tier(args: argparse.Namespace) -> None:
         ):
             fail(f"{sub!r} is not inside {repo}")
         sub = os.path.relpath(src, repo)  # normalise ./data, data/ and nested forms
+        src = repo / sub
         if (repo / ".git").exists():
             tracked = git("ls-files", "--", sub, cwd=repo).stdout.splitlines()
             if tracked:
@@ -332,21 +347,38 @@ def cmd_tier(args: argparse.Namespace) -> None:
         dest = hub / bucket / src.name
         dest.parent.mkdir(parents=True, exist_ok=True)
         rel = os.path.relpath(hub / bucket / src.name, start=src.parent)
-        if same_fs(src, dest.parent):
+        # PROJECT_HUB_FORCE_COPY=1 takes the cross-filesystem path in tests.
+        if (
+            same_fs(src, dest.parent)
+            and os.environ.get("PROJECT_HUB_FORCE_COPY") != "1"
+        ):
             if dest.exists():
                 fail(f"{dest} already exists")
             src.rename(dest)
         else:
-            # A partial copy from an interrupted run is resumed, not refused: rsync
-            # skips what already arrived and unlinks each source file after transfer.
+            # A partial copy from an interrupted run is resumed: rsync skips what
+            # already arrived and unlinks each source file after transfer. The
+            # marker names the source, so an unrelated dest of the same name (another
+            # repo's logs/) is refused instead of being merged into and overwritten.
+            marker = dest / TIER_MARKER
             if dest.exists():
+                if not marker.is_file() or marker.read_text().strip() != str(src):
+                    fail(
+                        f"{dest} already exists and is not an interrupted tier of {src}"
+                    )
                 say(f"  resuming into existing {dest}")
+            else:
+                dest.mkdir()
+            marker.write_text(f"{src}\n")
             r = subprocess.run(
                 ["rsync", "-aH", "--remove-source-files", f"{src}/", f"{dest}/"],
                 check=False,
             )
             if r.returncode:
-                fail(f"rsync failed for {src}; the source is intact")
+                fail(
+                    f"rsync failed for {src}; nothing was lost (moved files are in {dest}), "
+                    "rerun `tier` to resume"
+                )
             for root, dirs, _files in os.walk(src, topdown=False):
                 for d in dirs:
                     try:
@@ -360,6 +392,7 @@ def cmd_tier(args: argparse.Namespace) -> None:
                     f"{src} not empty after the move (a writer appeared); left in place, "
                     f"copy at {dest}; rerun `tier` when it is quiet to resume"
                 )
+            marker.unlink()
         src.symlink_to(rel)
         say(f"{src} -> {rel}  ({dest})")
 

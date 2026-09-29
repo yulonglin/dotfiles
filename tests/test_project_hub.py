@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -25,7 +26,10 @@ def enc(path: Path) -> str:
 
 class ProjectHubTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.tmp = Path(tempfile.mkdtemp(prefix="project-hub-"))
+        # resolve(): on macOS /tmp is a symlink to /private/tmp, and the tool
+        # works on canonical paths, so an unresolved HOME never matches.
+        self.tmp = Path(tempfile.mkdtemp(prefix="project-hub-")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.home = self.tmp / "home"
         self.volume = self.tmp / "volume"
         (self.home / "projects").mkdir(parents=True)
@@ -189,6 +193,60 @@ class ProjectHubTest(unittest.TestCase):
         self.assertEqual((code / "logs/a.eval").read_text(), "cold")
         self.assertTrue((self.volume / "projects/proj/runs/logs/a.eval").is_file())
         self.assertEqual(self.git("status", "--porcelain", cwd=code), "")
+
+    def test_tier_cross_fs_refuses_to_merge_into_another_repos_dir(self) -> None:
+        # Hetzner path: repo on NVMe, runs/ on the volume, so tier copies with rsync.
+        env = {**self.env, "PROJECT_HUB_FORCE_COPY": "1"}
+        self.run_hub("new", "proj")
+        hub = self.home / "projects/proj"
+        for role in ("code", "code-sprint"):
+            src = self.make_repo(self.home / f"code/{role}")
+            (src / "logs/a.eval").write_text(role)
+            os.utime(src / "logs/a.eval", (0, 0))
+            self.run_hub("adopt", "proj", f"{role}={src}", "--no-sync")
+        self.run_hub("tier", "proj/code", "logs", env=env)
+        runs_logs = self.volume / "projects/proj/runs/logs"
+        self.assertEqual((runs_logs / "a.eval").read_text(), "code")
+        self.assertFalse((runs_logs / ".project-hub-tier-source").exists())
+        self.assertEqual(os.readlink(hub / "code/logs"), "../runs/logs")
+        r = self.run_hub("tier", "proj/code-sprint", "logs", env=env, ok=False)
+        self.assertIn("not an interrupted tier", r.stderr)
+        self.assertEqual((runs_logs / "a.eval").read_text(), "code")
+        sprint_logs = hub / "code-sprint/logs"
+        self.assertTrue(sprint_logs.is_dir() and not sprint_logs.is_symlink())
+        self.assertEqual((sprint_logs / "a.eval").read_text(), "code-sprint")
+
+    def test_tier_cross_fs_resumes_an_interrupted_copy(self) -> None:
+        env = {**self.env, "PROJECT_HUB_FORCE_COPY": "1"}
+        self.run_hub("new", "proj")
+        src = self.make_repo(self.home / "code/thing")
+        self.run_hub("adopt", "proj", f"code={src}", "--no-sync")
+        code = self.home / "projects/proj/code"
+        (code / "logs/b.eval").write_text("late")
+        for f in ("a.eval", "b.eval"):
+            os.utime(code / "logs" / f, (0, 0))
+        # State an interrupted run leaves: marker written, a.eval already moved.
+        dest = self.volume / "projects/proj/runs/logs"
+        dest.mkdir(parents=True)
+        (dest / ".project-hub-tier-source").write_text(f"{code / 'logs'}\n")
+        (code / "logs/a.eval").rename(dest / "a.eval")
+        self.run_hub("tier", "proj/code", "./logs/", env=env)
+        self.assertEqual(os.readlink(code / "logs"), "../runs/logs")
+        self.assertEqual(
+            sorted(p.name for p in (code / "logs").iterdir()), ["a.eval", "b.eval"]
+        )
+
+    def test_tier_refuses_names_that_escape_the_hub(self) -> None:
+        self.run_hub("new", "proj")
+        for target in ("../x/code", "proj/", "proj/../proj"):
+            r = self.run_hub("tier", target, "logs", ok=False)
+            self.assertIn("plain directory name", r.stderr, target)
+
+    def test_new_refuses_when_volume_projects_links_back_into_home(self) -> None:
+        (self.volume / "projects").symlink_to(self.home / "projects")
+        r = self.run_hub("new", "proj", ok=False)
+        self.assertIn("forward link", r.stderr)
+        self.assertFalse((self.home / "projects/proj").exists())
 
     def test_status_reports_links(self) -> None:
         self.run_hub("new", "proj")
