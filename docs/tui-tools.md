@@ -23,14 +23,14 @@ Two tools, one each for the two jobs a script actually has. A **menu** is a shor
 | **`claude-tools select`** (ratatui, ours) | Menus: pick one row (`--single`) or toggle several | `install.sh`/`deploy.sh` component menu, `app-picker`, the bare `secrets` menu |
 | **fzf** | Search: type to narrow a long list, with a preview pane | `secrets envrc`, `secrets edit`, `secrets use`, `tmux-restore`, `modern_tools.sh` (git/history/cd helpers), the `ctrl-r`/`ctrl-t` shell widgets |
 
-`claude-tools select` is a committed binary for darwin-arm64, linux-x86_64 and linux-aarch64, so it exists before Homebrew does — on a fresh Mac, in `install.sh` before brew runs, and on a RunPod box where `scripts/cloud/setup.sh` never installs brew at all. That is why the menus use it and not a brew-installed tool. fzf is brew-only, which is acceptable because every fzf use is either a shell widget in an interactive login shell or a picker that degrades to defaults when fzf is absent.
+`claude-tools select` is a committed binary for darwin-arm64, linux-x86_64 and linux-aarch64, so it exists before Homebrew does — on a fresh Mac, in `install.sh` before brew runs, and on a RunPod box where `scripts/cloud/setup.sh` never installs brew at all. That is why the menus use it and not a brew-installed tool. fzf comes from the package manager (`PACKAGES_CORE`, so apt on Linux and brew on macOS) rather than the repo, which is acceptable because every fzf use is either a shell widget in an interactive login shell or a picker that degrades to defaults when fzf is absent.
 
 ### Decision Tree
 
 ```
 Need interactive terminal UI?
 ├─ Short known list, arrow and pick/toggle? → claude-tools select
-│   (stdin rows, works pre-brew, --single for one pick)
+│   (--items FILE, works pre-brew, --single for one pick)
 │
 ├─ Long list the user types to narrow? → fzf
 │   (pipe stdin, get selections out, preview pane)
@@ -43,7 +43,7 @@ Need interactive terminal UI?
 
 ### Retired: gum
 
-gum (Go, brew-only) was used only for `gum choose`, which `claude-tools select` already did, and it never reached a cloud box: `scripts/cloud/setup.sh` installs no Homebrew, so on a RunPod machine the picker simply was not there. Retired 2026-09-12, its last caller being `app-picker`. The landscape table above keeps it for reference in other projects. An earlier revision of this page claimed gum drove the `install.sh` component menu; it never did, that menu has always been `claude-tools select`.
+gum (Go, brew-only) was used only for `gum choose`, which `claude-tools select` already did, and it never reached a cloud box: `scripts/cloud/setup.sh` installs no Homebrew, so on a RunPod machine the picker simply was not there. Its last caller was `app-picker`. The landscape table above keeps it for reference in other projects. An earlier revision of this page claimed gum drove the `install.sh` component menu; it never did, that menu has always been `claude-tools select`.
 
 **Not used:** skim (unnecessary alongside fzf), bubbletea (no Go TUI apps), textual (no Python TUI apps), television (optional, see below).
 
