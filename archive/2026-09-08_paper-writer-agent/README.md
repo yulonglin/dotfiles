@@ -1,6 +1,6 @@
 # paper-writer agent, retired 2026-09-08
 
-`paper-writer.md` was a `model: inherit` agent, so it drafted paper sections as whatever Claude model ran the session — Fable or Opus 5 in practice. Yulong banned Opus 4.8, Opus 5 and Fable from writing artifacts and paper prose on 2026-09-08 because their writing is impenetrable to him; paper sections now go through the `delegate-writing` skill, which dispatches the prose to `sol(high)` from a session-built skeleton.
+`paper-writer.md` was a `model: inherit` agent, so it drafted paper sections as whatever Claude model ran the session — Fable or Opus 5 in practice. Yulong banned Opus 4.8, Opus 5 and Fable from writing artifacts and paper prose on 2026-09-08 because their writing is impenetrable to him; paper sections now go through the `write-prose` skill, which dispatches the prose from a session-built skeleton to the model that `writer-priority` in `config/model-router.toml` ranks first.
 
 Before retiring it, the agent was compared against `claude/checklists/writing.md`. Almost everything it said was already there in a stronger form (claim calibration, fair positioning, honest limitations, the abstract and intro carrying the reading). Four things were not, and were folded into the checklist rather than lost:
 
