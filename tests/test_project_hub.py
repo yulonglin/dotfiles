@@ -248,6 +248,16 @@ class ProjectHubTest(unittest.TestCase):
         self.assertIn("forward link", r.stderr)
         self.assertFalse((self.home / "projects/proj").exists())
 
+    def test_new_makes_plain_dirs_when_the_hub_itself_links_onto_the_volume(
+        self,
+    ) -> None:
+        real = self.volume / "projects/onvol"
+        real.mkdir(parents=True)
+        (self.home / "projects/onvol").symlink_to(real)
+        self.run_hub("new", "onvol")
+        for d in ("data", "runs", "external", "archive"):
+            self.assertTrue((real / d).is_dir() and not (real / d).is_symlink(), d)
+
     def test_status_reports_links(self) -> None:
         self.run_hub("new", "proj")
         out = self.run_hub("status", "proj").stdout

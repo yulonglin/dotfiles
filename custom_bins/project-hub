@@ -133,6 +133,8 @@ def cmd_new(args: argparse.Namespace) -> None:
             f"{volume / 'projects'} resolves into {PROJECTS}; remove that forward link first"
         )
     hub.mkdir(parents=True, exist_ok=True)
+    if use_volume and hub.resolve() == (volume / "projects" / args.name).resolve():
+        use_volume = False  # the hub already lives on the volume: plain dirs
     for d in BULK:
         target = hub / d
         if target.exists() or target.is_symlink():
