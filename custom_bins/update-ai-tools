@@ -242,6 +242,16 @@ if command -v ty &>/dev/null && command -v uv &>/dev/null; then
     fi
 fi
 
+# Global Python (install.sh: uv 3.13 as the macOS default) — latest 3.13 patch release
+if [[ "$(uname)" == "Darwin" && -x "$HOME/.local/bin/python3" ]] && command -v uv &>/dev/null; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "[DRY RUN] Would run: uv python upgrade 3.13"
+    else
+        log "Updating Python 3.13..."
+        uv python upgrade 3.13 2>&1 || log_err "python 3.13 upgrade failed"
+    fi
+fi
+
 set -e
 
 log "═══ AI Tools Update Complete ═══"
