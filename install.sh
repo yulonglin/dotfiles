@@ -257,16 +257,6 @@ if cmd_exists uv; then
         log_info "Installing ruff..."
         uv tool install ruff 2>/dev/null || log_warning "ruff installation failed"
     fi
-
-    # Global Python on macOS: uv's 3.13 as `python`/`python3` in ~/.local/bin, which sits
-    # ahead of Apple's Command Line Tools 3.9 (/usr/bin/python3, too old for gcloud and
-    # never to be modified). macOS only: on Linux GPU boxes it would shadow the image's
-    # torch-carrying python3. update-ai-tools keeps it on the latest 3.13 patch.
-    if is_macos && [ ! -x "$HOME/.local/bin/python3" ]; then
-        log_info "Installing Python 3.13 as the global default (uv)..."
-        uv python install 3.13 --default --preview-features python-install-default 2>/dev/null ||
-            log_warning "uv python install failed — python3 stays Apple's 3.9"
-    fi
 fi
 
 # ─── Node.js LTS (global runtime — see install_node in helpers.sh) ────────────
@@ -571,15 +561,6 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
 
             log_info "Installing remaining apps from Brewfile (this can take a while)..."
             env "${BREW_NONINTERACTIVE_ENV[@]}" brew bundle --file="$brewfile" </dev/null || true
-
-            # gcloud-cli depends on python@3.x, whose unversioned python3 in /opt/homebrew/bin
-            # would shadow the uv default in ~/.local/bin (brew's bin is earlier on PATH).
-            # Unlink it; gcloud then runs on the uv python3 (checked 2026-09-29).
-            if [[ -x "$HOME/.local/bin/python3" ]]; then
-                for keg in $(brew list --formula | grep '^python@3'); do
-                    brew unlink "$keg" >/dev/null 2>&1 && log_info "Unlinked $keg so uv's python3 stays first on PATH"
-                done
-            fi
 
             [[ -n "$sudo_keepalive_pid" ]] && kill "$sudo_keepalive_pid" 2>/dev/null
 
