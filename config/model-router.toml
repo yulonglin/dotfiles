@@ -105,17 +105,48 @@ provider = "codex"
 context-window = 258400
 agent = "high"
 
+# `sol` moved here from gpt-5.6-sol on 2026-10-01. Router 0.1.23 serves
+# gpt-6.1-sol through the account (released 2026-09-29, listed by the managed
+# CLIProxyAPI 7.3.16 child with no pin change), and the plugin's own
+# adversarial-code-reviewer, plan-reviewer and gpt-6.1-sol(medium|high) agents
+# call this id -- without the route they fail with model_not_found.
+[[models]]
+id = "gpt-6.1-sol"
+aliases = ["sol"]
+name = "GPT-6.1 Sol"
+provider = "codex"
+context-window = 258400
+agent = "high"
+
+# GPT-6 Sol on the account. It went through OpenRouter while the router pinned
+# CLIProxyAPI 7.2.154, which answered "unknown provider for model gpt-6-sol"
+# (measured 2026-09-22); router 0.1.21 moved the pin to 7.3.16, which serves it.
+[[models]]
+id = "gpt-6-sol"
+aliases = ["sol6"]
+name = "GPT-6 Sol"
+provider = "codex"
+context-window = 258400
+
+# The plugin ships gpt-6-luna(high); the route keeps that agent from failing.
+[[models]]
+id = "gpt-6-luna"
+name = "GPT-6 Luna"
+provider = "codex"
+context-window = 258400
+picker = false
+agent = false
+
 [[models]]
 id = "gpt-5.6-sol"
-aliases = ["sol"]
 writer-priority = 1
 name = "GPT-5.6 Sol"
 provider = "codex"
 context-window = 258400
-agent = "high"           # the plugin also ships gpt-5.6-sol(medium|high) on the long id
+picker = false           # `sol` in the picker is now GPT-6.1 Sol
+agent = "high"
 
-# The plugin ships agents for these two; keeping the routes stops those agents
-# failing on first use. Off the picker until wanted.
+# Kept so anything still naming these ids gets an answer. Off the picker until wanted.
 [[models]]
 id = "gpt-5.6-terra"
 name = "GPT-5.6 Terra"
@@ -198,16 +229,3 @@ name = "DeepSeek V4.1 Flash"
 provider = "openrouter"
 slug = "deepseek/deepseek-v4.1-flash"
 context-window = 1000000
-
-# GPT-6 Sol through OpenRouter, pay-per-token, as a deliberate exception to the
-# "never through OpenRouter" rule above: model-router 0.1.20 pins CLIProxyAPI
-# 7.2.154, which answers "unknown provider for model gpt-6-sol" (measured
-# 2026-09-22); upstream CLIProxyAPI 7.3.x knows it. When model-router ships a
-# newer pin, move this to provider = "codex" and hand it the `sol` alias.
-[[models]]
-id = "gpt-6-sol"
-aliases = ["sol6"]
-name = "GPT-6 Sol"
-provider = "openrouter"
-slug = "openai/gpt-6-sol"
-context-window = 1050000
