@@ -5,7 +5,7 @@ macOS asks again for Documents, Downloads, Desktop and "data from other apps" af
 ## Why it happens
 
 - The native installer puts each release at its own path, `~/.local/share/claude/versions/<ver>`, and points `~/.local/bin/claude` at it.
-- On upgrade the background daemon restarts itself and respawns its workers as their own TCC-responsible process. The daemon log says `self-restarting for upgrade` and then `respawned N/N stale workers`.
+- Some Claude Code process runs as its own TCC-responsible process, not under the terminal. The likely one is the background daemon after an upgrade: it logs `self-restarting for upgrade`, then `respawned N/N stale workers`. On 2026-10-01 the respawn was at 20:11:00 UTC and the 2.1.287 prompt row at 20:11:04. This rests on timing only, and the exact process was not pinned down (the workers running at check time were attributed to Ghostty).
 - For a bare binary, TCC records the grant against that path (`client_type = 1`), so every release is a new client. On this Mac the user TCC.db held rows for 33 distinct version paths between 2026-06-28 and 2026-10-01.
 - Claude Code already ships a fix attempt: `~/.local/share/claude/ClaudeCode.app` (bundle ID `com.anthropic.claude-code`, hard-linked to the current version), which the pty host re-execs through with responsibility disclaimed. The per-version rows show that the upgrade-respawn path still lands on the versioned path. The real fix is upstream.
 

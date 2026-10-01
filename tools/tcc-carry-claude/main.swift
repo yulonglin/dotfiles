@@ -87,20 +87,19 @@ do {
 }
 
 var db: OpaquePointer?
-let openFlags = dryRun ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE
-guard sqlite3_open_v2(dbPath, &db, openFlags, nil) == SQLITE_OK else {
-    fail("cannot open \(dbPath): \(String(cString: sqlite3_errmsg(db)))")
-}
-defer { sqlite3_close(db) }
-sqlite3_busy_timeout(db, 5000)
 
 func dbFail(_ what: String) -> Never {
     fail("""
         \(what) failed on \(dbPath): \(String(cString: sqlite3_errmsg(db)))
-        "authorization denied" means this binary lacks Full Disk Access:
+        "unable to open" or "authorization denied" means this binary lacks Full Disk Access:
         System Settings > Privacy & Security > Full Disk Access > + \(CommandLine.arguments[0])
         """)
 }
+
+let openFlags = dryRun ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE
+guard sqlite3_open_v2(dbPath, &db, openFlags, nil) == SQLITE_OK else { dbFail("open") }
+defer { sqlite3_close(db) }
+sqlite3_busy_timeout(db, 5000)
 
 let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
