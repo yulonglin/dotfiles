@@ -85,8 +85,16 @@ USER_STRIP_ENV = GATEWAY_ENV + ("ANTHROPIC_CUSTOM_MODEL_OPTION", "ANTHROPIC_CUST
 CLAUDE_ALIASES = {"sonnet", "opus", "haiku", "fable", "inherit"}
 # A Claude model the router forwards to Anthropic unchanged: a picker row and
 # nothing else (no route, no agent file). Claude Code hides its own legacy rows
-# on the first-party provider, so this is how an older Claude gets into /model.
+# on the first-party provider, so this is how an older Claude gets into /model,
+# and with picker-replace-built-in it is how any Claude row gets there.
 PASSTHROUGH = "anthropic"
+# The picker row's second line: who bills for the model. A [[models]]
+# `description` overrides it; a custom [providers.<name>] falls back to its name.
+PROVIDER_DESCRIPTION = {
+    PASSTHROUGH: "Claude subscription",
+    "codex": "ChatGPT subscription (Codex)",
+    "openrouter": "OpenRouter, pay per token",
+}
 
 
 # ---- source --------------------------------------------------------------
@@ -249,8 +257,19 @@ def render_user(src: dict, settings: dict, base_url: str | None) -> dict:
     else:
         env["ANTHROPIC_BASE_URL"] = base_url
         env["_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL"] = "1"
-    new["modelPicker"] = {"options": [{"model": canonical(m), "label": m["name"]} for m in enabled(src) if m.get("picker", True)]}
+    picker = {"options": [picker_row(m) for m in enabled(src) if m.get("picker", True)]}
+    if src.get("picker-replace-built-in"):
+        picker["replaceBuiltInOptions"] = True
+    new["modelPicker"] = picker
     return new
+
+
+def picker_row(m: dict) -> dict:
+    return {
+        "model": canonical(m),
+        "label": m["name"],
+        "description": m.get("description") or PROVIDER_DESCRIPTION.get(m["provider"], m["provider"]),
+    }
 
 
 def strip_user_settings(settings: dict) -> tuple[dict, list[str]]:
