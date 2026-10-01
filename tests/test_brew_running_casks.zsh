@@ -29,13 +29,28 @@ cat > "$BIN/brew" <<'EOF'
 print -r -- "brew $*" >> "$STUB_EVENTS"
 if [[ "$1" == upgrade ]]; then
   print -r -- "  auto-update-off=${HOMEBREW_NO_AUTO_UPDATE:-no}" >> "$STUB_EVENTS"
+  # Remember upgraded casks so a later `outdated` no longer lists them.
+  if [[ "$2" == --cask && "$*" != *--dry-run* ]]; then
+    for a in "${@:3}"; do [[ "$a" == -* ]] || print -r -- "$a" >> "$STUB_EVENTS.upgraded"; done
+  fi
 fi
 case "$1 $2" in
   "outdated --cask")
     if [[ "$*" == *--greedy* ]]; then
-      print '{"formulae":[],"casks":[{"name":"telegram"},{"name":"zoom"},{"name":"slack"},{"name":"chatgpt"},{"name":"mystery"},{"name":"ghost"},{"name":"clitool"}]}'
+      names=(telegram zoom slack chatgpt mystery ghost clitool)
     else
-      print '{"formulae":[],"casks":[{"name":"telegram"},{"name":"slack"}]}'
+      names=(telegram slack)
+    fi
+    if [[ -s "$STUB_EVENTS.upgraded" ]]; then
+      done_list=("${(@f)$(<"$STUB_EVENTS.upgraded")}")
+      names=(${names:|done_list})
+    fi
+    if [[ "$*" == *--quiet* ]]; then
+      print -rl -- $names
+    else
+      json=()
+      for n in $names; do json+=("{\"name\":\"$n\"}"); done
+      print -r -- "{\"formulae\":[],\"casks\":[${(j:,:)json}]}"
     fi ;;
   "info --cask")
     [[ "${STUB_BREW_INFO_FAIL:-0}" == 1 ]] && exit 1
@@ -51,9 +66,14 @@ esac
 EOF
 
 # ps: right-aligned PIDs of mixed width, as the real `ps -Axo pid=,comm=` prints.
+# STUB_PS_QUIT_AFTER_FIRST: Telegram runs at the first scan only, as when the
+# user quits it at the wrapper's prompt.
 cat > "$BIN/ps" <<'EOF'
 #!/bin/zsh
-print ' 8737 /Applications/Telegram.app/Contents/MacOS/Telegram'
+if [[ -z "${STUB_PS_QUIT_AFTER_FIRST:-}" || ! -e "$STUB_EVENTS.ps-seen" ]]; then
+  print ' 8737 /Applications/Telegram.app/Contents/MacOS/Telegram'
+fi
+[[ -n "${STUB_EVENTS:-}" ]] && : > "$STUB_EVENTS.ps-seen"
 print '12969 /Applications/zoom.us.app/Contents/MacOS/zoom.us'
 print '31737 /Applications/Utilities/ChatGPT Beta.app/Contents/MacOS/ChatGPT'
 print '40001 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT'
@@ -121,8 +141,11 @@ chmod +x "$BIN/brew-running-casks" "$BIN/reset-mac-media"
 
 run_wrapper() {
     : > "$EVENTS"
+    /bin/rm -f "$EVENTS.upgraded" "$EVENTS.ps-seen"
     print -r -- "$1" | PATH="$BIN:/usr/bin:/bin" OSTYPE=darwin25 STUB_EVENTS="$EVENTS" \
         HOMEBREW_NO_AUTO_UPDATE= zsh -fc "source '$WRAPPER'; brew ${2}" 2>&1
+    # Later helper calls must see the fixture's full outdated set again.
+    /bin/rm -f "$EVENTS.upgraded"
 }
 
 out="$(run_wrapper y 'upgrade --greedy --dry-run')"
@@ -211,6 +234,17 @@ print '{"default":{"appdir":"/Applications"},"env":{},"explicit":{}}' \
 out="$(BRC_CASKROOM="$WORK/Caskroom" HOMEBREW_CASK_OPTS="--appdir=/Users/me/Apps" \
     STUB_EVENTS="$EVENTS" BRC_BREW_BIN="$BIN/brew" BRC_PS_BIN="$BIN/ps" BRC_PMSET_BIN="$BIN/pmset" "$HELPER" 2>&1)"
 has "the saved install directory beats a changed HOMEBREW_CASK_OPTS" "$out" $'telegram\t/Applications/Telegram.app\t8737'
+
+print "16. wrapper reports what brew still calls outdated, not the first scan"
+out="$(run_wrapper y 'upgrade --greedy')"
+report="${out#*Not upgraded}"
+[[ "$report" != "$out" ]] && pass "a not-upgraded report is printed" || fail "no report in: $out"
+has "running telegram is reported" "$report" "  telegram"
+lacks "upgraded slack is not reported" "$report" "  slack"
+out="$(STUB_PS_QUIT_AFTER_FIRST=1 run_wrapper y 'upgrade --greedy')"
+has "an app quit at the prompt is upgraded" "$(cat "$EVENTS")" "brew upgrade --cask --greedy telegram slack"
+has "telegram was in the first scan's prompt" "${out%%Not upgraded*}" "  telegram"
+lacks "but is not reported as not upgraded" "${out#*Not upgraded}" "  telegram"
 
 print ""
 print "PASS=$PASS FAIL=$FAIL"
