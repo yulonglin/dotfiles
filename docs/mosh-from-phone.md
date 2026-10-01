@@ -62,6 +62,12 @@ Carrier CGNAT alone can force a relay, so NordVPN may not be the operative cause
 
 At 9–17 ms this is a latency detail, not a fault, and it was **not** why sessions were dropping. A relayed path does make ssh feel worse under loss, because DERP is a TCP relay and ssh across it is TCP inside TCP, where one lost packet stalls everything queued behind it. Mosh does not escape that outer TCP either — its packets head-of-line block too — but it does not stack a second ordered, retransmitting stream on top, and it echoes locally, so a stall reads as lag that catches up rather than a frozen terminal.
 
+## A dead Wi-Fi link took this Mac offline once
+
+On 2026-09-30 this Mac showed `offline` on the tailnet while its internet worked. Tailscale kept dialling out from `en0` after Wi-Fi stopped passing traffic, so every control-plane and DERP connection sat in `SYN_SENT`, while Ethernet and the NordVPN tunnel reached the same servers fine. In that incident it did not re-pick its interface while the dead one still had an address and a route. Quitting Tailscale from the menu bar and reopening it fixed it at once. An offline Mac with working internet can have other causes too (an expired login, a control-plane outage), which is why the check below reports what it measured rather than assuming this one.
+
+`tailscale-check` (in `custom_bins/`) prints those facts in one run and names the fix: online state and health warnings, which interfaces reach the control plane, and which interface Tailscale's own connections come from. Run it outside the Claude Code sandbox, which refuses `netstat`. It only reports; it never restarts anything. A watchdog that restarts Tailscale automatically was considered and not built, because the Mac is rarely reached remotely; revisit that if remote access starts to matter.
+
 ## Steps that need root
 
 Both of these now live in `scripts/macos_sudo_extras.sh`, which is the repo's home for system settings that need elevation, so a fresh Mac gets them from one run rather than from this document:
