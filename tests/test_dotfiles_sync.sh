@@ -14,8 +14,9 @@
 #   5b-5e. codex    : the same for codex/config.toml (alone, together with
 #                     settings.json, an accepted edit that is not held, and a
 #                     held codex config that must not starve settings.json)
-#   5f. zed         : config/zed/settings.json with ssh_connections is held back
-#                     by the real pre-commit hook
+#   5f. zed         : with the zed-ssh clean filter, a Zed edit carrying
+#                     ssh_connections ships without the block, nothing held
+#   5g. zed, no filter: the real pre-commit hook rejects and the sync fails
 #   6. dry-run      : nothing changes anywhere
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -206,21 +207,40 @@ git -C "$WORK/starve.git" show main:codex/config.toml | grep -q projects && fail
 [ "$(git -C "$WORK/starve.git" rev-list --count main)" = 3 ] || fail "expected one sync commit, not one per retried file"
 pass "a held codex/config.toml does not starve an accepted settings.json edit"
 
-# 5f. config/zed/settings.json is on the default list too. This case runs the
-# REAL pre-commit hook, so it also proves the Zed guard and the hold-back agree.
-fresh_remote zed
-mkdir -p "$WORK/zed/config/zed"
-printf '{\n  // editor\n  "vim_mode": true,\n}\n' >"$WORK/zed/config/zed/settings.json"
-git -C "$WORK/zed" add config && git -C "$WORK/zed" commit -q -m base && git -C "$WORK/zed" push -q
-git -C "$WORK/zed" config core.hooksPath "$REPO_ROOT/config/git-hooks"
-printf '{\n  // editor\n  "vim_mode": true,\n  "ssh_connections": [{ "host": "example-host", "projects": [] }],\n}\n' >"$WORK/zed/config/zed/settings.json"
-echo docs >"$WORK/zed/README.md"
-"$SYNC" "$WORK/zed" >/dev/null || fail "zed held-back run exited non-zero"
-git -C "$WORK/zed.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside held Zed settings"
+# 5f. config/zed/settings.json is NOT on the default list: the zed-ssh clean
+# filter strips ssh_connections before git stores the file, so the rest of a
+# Zed edit ships. These cases run the REAL pre-commit hook and filter.
+zed_repo() {
+    # $1 = name; a repo with the real .gitattributes line and a Zed settings file
+    fresh_remote "$1"
+    mkdir -p "$WORK/$1/config/zed"
+    grep -F 'filter=zed-ssh' "$REPO_ROOT/.gitattributes" >"$WORK/$1/.gitattributes"
+    printf '{\n  // editor\n  "vim_mode": true,\n}\n' >"$WORK/$1/config/zed/settings.json"
+    git -C "$WORK/$1" add .gitattributes config && git -C "$WORK/$1" commit -q -m base && git -C "$WORK/$1" push -q
+    git -C "$WORK/$1" config core.hooksPath "$REPO_ROOT/config/git-hooks"
+    printf '{\n  // editor\n  "vim_mode": false,\n  "ssh_connections": [{ "host": "example-host", "projects": [] }],\n}\n' >"$WORK/$1/config/zed/settings.json"
+    echo docs >"$WORK/$1/README.md"
+}
+zed_repo zed
+git -C "$WORK/zed" config filter.zed-ssh.clean "$REPO_ROOT/scripts/git-filters/zed-strip-ssh-connections"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed filtered run exited non-zero"
+git -C "$WORK/zed.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside the Zed settings"
+git -C "$WORK/zed.git" show main:config/zed/settings.json | grep -q '"vim_mode": false' || fail "the Zed vim_mode edit did not ship"
 git -C "$WORK/zed.git" show main:config/zed/settings.json | grep -q ssh_connections && fail "ssh_connections reached the remote"
-git -C "$WORK/zed" status --porcelain | grep -q 'config/zed/settings.json' || fail "Zed settings no longer dirty locally"
-[ "$(state_field zed held_back)" = config/zed/settings.json ] || fail "state held_back should name the Zed settings, got: $(state_field zed held_back)"
-pass "Zed settings with ssh_connections are held back by the real hook, everything else ships"
+grep -q example-host "$WORK/zed/config/zed/settings.json" || fail "the local Zed settings lost their ssh_connections"
+[ -z "$(git -C "$WORK/zed" status --porcelain)" ] || fail "tree not clean after sync: $(git -C "$WORK/zed" status --porcelain)"
+[ "$(state_field zed status)" = ok ] || fail "filtered Zed run should be ok"
+[ -z "$(state_field zed held_back)" ] || fail "nothing should be held, got: $(state_field zed held_back)"
+pass "with the clean filter, a Zed edit ships without ssh_connections and nothing is held"
+
+# 5g. Without the filter configured the guard rejects, and since the Zed file
+# is no longer a hold-back path, the whole sync commit fails and nothing ships.
+zed_repo zednofilter
+"$SYNC" "$WORK/zednofilter" >/dev/null 2>&1 && fail "unfiltered Zed run should fail"
+[ "$(state_field zednofilter status)" = failed ] || fail "unfiltered Zed run state should be failed"
+[ "$(git -C "$WORK/zednofilter.git" rev-list --count main)" = 2 ] || fail "something was pushed despite the rejected commit"
+grep -q example-host "$WORK/zednofilter/config/zed/settings.json" || fail "the rejected run touched the local Zed settings"
+pass "without the clean filter, the guard fails the sync and nothing reaches the remote"
 
 # 6. dry-run changes nothing
 fresh_remote dry

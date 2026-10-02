@@ -268,11 +268,11 @@ _validate_no_attribution_optout() {
 # === ZED SSH-CONNECTIONS CHECK ===
 #
 # Blocks committing Zed's ssh_connections list. config/zed/ is symlinked to
-# ~/.config/zed/, and Zed writes every server added in its Remote Projects
-# dialog into that file, so personal hostnames and remote project paths would
-# otherwise land in this public repo. Hosts belong in ~/.ssh/config, which the
-# gist sync shares across machines and Zed reads (read_ssh_config, default on).
-# dotfiles-sync holds the file back when this check rejects it.
+# ~/.config/zed/, and Zed writes the servers opened as remote projects into
+# that file, so personal hostnames and remote project paths would otherwise
+# land in this public repo. The zed-ssh clean filter (.gitattributes, wired by
+# deploy.sh --git-config) strips the block before git stores the file, so this
+# check only fires in a clone where that filter is not configured.
 #
 # The staged blob is parsed as JSON with comments; if that fails, a plain
 # "ssh_connections" key match on the comment-stripped text decides.
@@ -326,12 +326,13 @@ print("yes" if hit else "")
     echo ""
     echo "⛔  Pre-commit: ${file} carries an ssh_connections block"
     echo ""
-    echo "    Zed writes the servers you add in its Remote Projects dialog here;"
-    echo "    the hostnames and remote paths are personal and must not reach a"
-    echo "    public repo. Put hosts in ~/.ssh/config instead (gist-synced, and"
-    echo "    Zed reads it). To fix the commit, either:"
-    echo "      - remove the \"ssh_connections\" block from ${file} and re-stage, or"
-    echo "      - unstage just that hunk:  git reset -p -- ${file}"
+    echo "    Zed writes the servers opened as remote projects here; the hostnames"
+    echo "    and remote paths are personal and must not reach a public repo. The"
+    echo "    zed-ssh clean filter strips them, but this clone does not have it"
+    echo "    configured. Set it up once, then re-stage the file through it:"
+    echo "      git config --local filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections"
+    echo "      git add --renormalize -- ${file}"
+    echo "    (./deploy.sh --git-config sets the same config.)"
     echo ""
     echo "    To bypass (only if these hosts are genuinely shareable):"
     echo "      git commit --no-verify"

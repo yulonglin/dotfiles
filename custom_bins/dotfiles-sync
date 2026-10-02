@@ -12,9 +12,10 @@
 #      hook on its own, and only the ones it still rejects are held back.
 #      Each one is a file whose
 #      working copy can carry a per-machine diff that a guard exists to keep
-#      out of the public repo: claude/settings.json (gateway env),
-#      codex/config.toml (Codex's [projects."<path>"] trust tables) and
-#      config/zed/settings.json (Zed's ssh_connections hosts).
+#      out of the public repo: claude/settings.json (gateway env) and
+#      codex/config.toml (Codex's [projects."<path>"] trust tables).
+#      config/zed/settings.json is not held: the zed-ssh clean filter strips
+#      Zed's ssh_connections before git stores it, so its other edits ship.
 #   3. rebase onto the upstream. A conflict is aborted, never resolved here.
 #   4. push. Never --force.
 #
@@ -42,7 +43,7 @@ STATE_DIR="${DOTFILES_SYNC_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/dotf
 NOTIFY="${DOTFILES_SYNC_NOTIFY:-1}"
 # Paths (space-separated) held back from the sync commit when the pre-commit
 # hook rejects it. Paths here never contain spaces.
-HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json codex/config.toml config/zed/settings.json}"
+HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json codex/config.toml}"
 read -r -a HOLD_BACK_PATHS <<<"$HOLD_BACK"
 DRY_RUN=0
 PRUNE=0
@@ -72,8 +73,7 @@ Environment:
   DOTFILES_SYNC_NOTIFY=0    Suppress the macOS notification on failure.
   DOTFILES_SYNC_HOLD_BACK   Space-separated paths unstaged and retried without
                             when the pre-commit hook rejects (default
-                            "claude/settings.json codex/config.toml
-                            config/zed/settings.json").
+                            "claude/settings.json codex/config.toml").
   DOTFILES_SYNC_STALE_DAYS  Age (last commit) after which an unmerged worktree
                             is reported as stale by --prune (default 14).
 EOF

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Pins the Zed ssh_connections guard in config/git-hooks/pre-commit.
 #
-# config/zed/ is symlinked to ~/.config/zed/, and Zed writes every server added
-# in its Remote Projects dialog into settings.json as ssh_connections. Without
-# this hook a routine `git add config/zed/settings.json` (or the daily
-# dotfiles-sync) publishes personal hostnames and remote project paths.
+# config/zed/ is symlinked to ~/.config/zed/, and Zed writes the servers opened
+# as remote projects into settings.json as ssh_connections. The zed-ssh clean
+# filter strips them before git stores the file; this hook is the safety net
+# for a clone without that filter, where a routine `git add` (or the daily
+# dotfiles-sync) would publish personal hostnames and remote project paths.
 #
 # Both directions are asserted, and the fixtures use JSON with comments and
 # trailing commas, because the real file does.
@@ -61,8 +62,10 @@ expect_blocked() {
         || fail "$1: commit count changed despite the guard firing"
     printf '%s\n' "$out" | grep -q 'ssh_connections block' \
         || fail "$1: rejected, but not by the ssh_connections guard: $out"
-    printf '%s\n' "$out" | grep -q "git reset -p -- $F" \
-        || fail "$1: error message does not say how to unstage the hunk"
+    printf '%s\n' "$out" | grep -q "git config --local filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections" \
+        || fail "$1: error message does not give the filter setup command"
+    printf '%s\n' "$out" | grep -q "git add --renormalize -- $F" \
+        || fail "$1: error message does not say how to re-stage through the filter"
     git restore --staged "$F"
 }
 
@@ -105,4 +108,24 @@ git commit -qm index-only >/dev/null 2>&1 \
 git show "HEAD:$F" | grep -q '"ssh_connections"' \
     && fail "the unstaged ssh_connections block reached the commit"
 
-echo "PASS: zed guard blocks ssh_connections and allows clean settings.json"
+# --- Case 7: with the clean filter configured, the guard never sees the block
+# The real .gitattributes line and filter config, as deploy.sh --git-config
+# sets them: the commit goes through, without the block, through the real hook.
+mkdir -p scripts/git-filters
+cp "$REPO_ROOT/scripts/git-filters/zed-strip-ssh-connections" scripts/git-filters/
+grep -F 'filter=zed-ssh' "$REPO_ROOT/.gitattributes" > .gitattributes
+git add .gitattributes scripts
+git commit -qm filter-script --no-verify
+git config filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections
+write_settings '  "ssh_connections": [{ "host": "example-host", "projects": [] }],
+  "theme": "Gruvbox",'
+git add "$F"
+git commit -qm filtered >/dev/null 2>&1 \
+    || fail "a filtered settings.json was still blocked by the guard"
+git show "HEAD:$F" | grep -q '"ssh_connections"' \
+    && fail "ssh_connections reached the commit with the filter configured"
+git show "HEAD:$F" | grep -q '"theme": "Gruvbox"' \
+    || fail "the theme change did not reach the commit"
+grep -q example-host "$F" || fail "the working copy lost its ssh_connections"
+
+echo "PASS: zed guard blocks ssh_connections, allows clean settings.json, and agrees with the clean filter"
