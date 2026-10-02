@@ -11,6 +11,8 @@
 #   5. held back    : pre-commit rejects claude/settings.json -> the other file
 #                     is committed and pushed, settings.json stays dirty, state
 #                     records held_back
+#   5b-5d. codex    : the same for codex/config.toml (alone, together with
+#                     settings.json, and an accepted edit that is not held)
 #   6. dry-run      : nothing changes anywhere
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -121,6 +123,54 @@ git -C "$WORK/held" status --porcelain | grep -q 'claude/settings.json' || fail 
 [ "$(state_field held held_back)" = claude/settings.json ] || fail "state held_back not recorded"
 [ "$(state_field held status)" = ok ] || fail "held-back run should still be ok"
 pass "rejected settings.json is held back, everything else ships"
+
+# 5b-5d. codex/config.toml is on the same hold-back list. The fake hook stands
+# in for the real trust-table guard: it rejects a staged [projects. table only.
+fresh_remote codex
+mkdir -p "$WORK/codex/claude" "$WORK/codex/codex" "$WORK/codex/.hooks"
+echo '{"a":1}' >"$WORK/codex/claude/settings.json"
+printf 'model = "m"\n' >"$WORK/codex/codex/config.toml"
+git -C "$WORK/codex" add claude codex && git -C "$WORK/codex" commit -q -m base && git -C "$WORK/codex" push -q
+cat >"$WORK/codex/.hooks/pre-commit" <<'H'
+#!/bin/sh
+staged=$(git diff --cached --name-only)
+echo "$staged" | grep -qx claude/settings.json && { echo "gateway guard: refusing claude/settings.json" >&2; exit 1; }
+if echo "$staged" | grep -qx codex/config.toml && git show :codex/config.toml | grep -q '^\[projects\.'; then
+    echo "trust-table guard: refusing codex/config.toml" >&2; exit 1
+fi
+exit 0
+H
+chmod +x "$WORK/codex/.hooks/pre-commit"
+git -C "$WORK/codex" config core.hooksPath .hooks
+
+# 5b. only codex/config.toml is rejected -> held back alone, the rest ships
+printf 'model = "m"\n\n[projects."/home/example/p"]\ntrust_level = "trusted"\n' >"$WORK/codex/codex/config.toml"
+echo docs >"$WORK/codex/README.md"
+"$SYNC" "$WORK/codex" >/dev/null || fail "codex held-back run exited non-zero"
+git -C "$WORK/codex.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside held codex config"
+git -C "$WORK/codex.git" show main:codex/config.toml | grep -q projects && fail "trust table reached the remote"
+git -C "$WORK/codex" status --porcelain | grep -q 'codex/config.toml' || fail "codex/config.toml no longer dirty locally"
+[ "$(state_field codex held_back)" = codex/config.toml ] || fail "state held_back should name codex/config.toml, got: $(state_field codex held_back)"
+[ "$(state_field codex status)" = ok ] || fail "codex held-back run should still be ok"
+pass "rejected codex/config.toml is held back, everything else ships"
+
+# 5c. both dirty and the hook rejects -> both held back, both recorded
+echo '{"a":2}' >"$WORK/codex/claude/settings.json"
+echo more >>"$WORK/codex/README.md"
+"$SYNC" "$WORK/codex" >/dev/null || fail "two-file held-back run exited non-zero"
+[ "$(git -C "$WORK/codex.git" show main:README.md | tail -1)" = more ] || fail "README edit not pushed while both files were held"
+[ "$(git -C "$WORK/codex.git" show main:claude/settings.json)" = '{"a":1}' ] || fail "settings.json reached the remote"
+[ "$(state_field codex held_back)" = "claude/settings.json codex/config.toml" ] \
+    || fail "state held_back should list both paths, got: $(state_field codex held_back)"
+pass "both hold-back files are held when the hook rejects"
+
+# 5d. a codex/config.toml edit the hook accepts is committed, not held
+git -C "$WORK/codex" restore claude/settings.json
+printf 'model = "m2"\n' >"$WORK/codex/codex/config.toml"
+"$SYNC" "$WORK/codex" >/dev/null || fail "clean codex run exited non-zero"
+[ "$(git -C "$WORK/codex.git" show main:codex/config.toml)" = 'model = "m2"' ] || fail "accepted codex/config.toml edit was not pushed"
+[ "$(state_field codex held_back)" = "" ] || fail "nothing should be held when the hook accepts"
+pass "an accepted codex/config.toml edit ships"
 
 # 6. dry-run changes nothing
 fresh_remote dry

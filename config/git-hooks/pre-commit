@@ -265,12 +265,61 @@ _validate_no_attribution_optout() {
     return 1
 }
 
+# === CODEX TRUST-TABLE CHECK ===
+#
+# Blocks committing Codex's per-directory trust tables. Codex appends a
+# [projects."<absolute path>"] table to config.toml whenever it trusts a
+# directory, and codex/ is symlinked to ~/.codex/, so every trusted path on the
+# machine lands in the working copy of this public repo. Those paths name
+# private projects; they belong to the machine, not the repo. dotfiles-sync
+# holds the file back when this check rejects it (DOTFILES_SYNC_HOLD_BACK).
+#
+# The STAGED blob is what is checked, so a cleaned working tree with a stale
+# index still fails. Anything else in the file (projects_dir = ..., comments)
+# is allowed: only a TOML table header whose first key is `projects` matches.
+
+_validate_no_codex_trust_tables() {
+    local file="$1"
+
+    local staged_content
+    staged_content=$(git show ":${file}" 2>/dev/null) || return 0
+
+    local headers
+    if ! headers=$(printf '%s\n' "${staged_content}" | grep -nE '^[[:space:]]*\[\[?[[:space:]]*"?projects"?[[:space:]]*[].]'); then
+        return 0
+    fi
+
+    local count
+    count=$(printf '%s\n' "${headers}" | wc -l | tr -d ' ')
+
+    echo ""
+    echo "⛔  Pre-commit: ${file} carries ${count} Codex trust table(s) ([projects.\"<path>\"])"
+    echo "    First at staged line $(printf '%s\n' "${headers}" | head -1 | cut -d: -f1)."
+    echo ""
+    echo "    Codex writes one per trusted directory; the paths are machine-local"
+    echo "    and must not reach a public repo. Keep them in the working tree only."
+    echo ""
+    echo "    To commit the file's other changes, unstage just the table hunks:"
+    echo "      git reset -p -- ${file}"
+    echo ""
+    echo "    Or take the whole file out of the index (working copy untouched):"
+    echo "      git restore --staged ${file}"
+    echo ""
+    echo "    To bypass (only if these paths are genuinely shareable):"
+    echo "      git commit --no-verify"
+    echo ""
+    return 1
+}
+
 while IFS= read -r _staged_file; do
     case "${_staged_file}" in
         claude/settings.json|.claude/settings.json)
             _validate_claude_settings "${_staged_file}" || exit 1
             _validate_no_local_gateway "${_staged_file}" || exit 1
             _validate_no_attribution_optout "${_staged_file}" || exit 1
+            ;;
+        codex/config.toml)
+            _validate_no_codex_trust_tables "${_staged_file}" || exit 1
             ;;
     esac
 done < <(git diff --cached --name-only 2>/dev/null)

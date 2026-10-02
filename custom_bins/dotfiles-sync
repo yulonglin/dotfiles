@@ -7,10 +7,11 @@
 #   1. fetch the branch's upstream
 #   2. commit the dirty tree as "sync: <host> <utc>" -- THROUGH the pre-commit
 #      hook, never --no-verify, so the settings.json key guard and gitleaks stay
-#      live. If the hook rejects and claude/settings.json is staged, that one
-#      file is held back and the commit retried once: the working copy of that
-#      file carries a deliberate per-machine diff (gateway env) that the guard
-#      exists to keep out of the public repo.
+#      live. If the hook rejects and any hold-back path is staged, those paths
+#      are held back and the commit retried once. Each one is a file whose
+#      working copy can carry a per-machine diff that a guard exists to keep
+#      out of the public repo: claude/settings.json (gateway env) and
+#      codex/config.toml (Codex's [projects."<path>"] trust tables).
 #   3. rebase onto the upstream. A conflict is aborted, never resolved here.
 #   4. push. Never --force.
 #
@@ -36,8 +37,10 @@ DOT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 
 STATE_DIR="${DOTFILES_SYNC_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-sync}"
 NOTIFY="${DOTFILES_SYNC_NOTIFY:-1}"
-# Pathspec held back from the sync commit when the pre-commit hook rejects it.
-HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json}"
+# Paths (space-separated) held back from the sync commit when the pre-commit
+# hook rejects it. Paths here never contain spaces.
+HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json codex/config.toml}"
+read -r -a HOLD_BACK_PATHS <<<"$HOLD_BACK"
 DRY_RUN=0
 PRUNE=0
 STALE_DAYS="${DOTFILES_SYNC_STALE_DAYS:-14}"
@@ -64,8 +67,9 @@ Environment:
   DOTFILES_SYNC_STATE_DIR   Where <repo>.json outcome files go
                             (default \$XDG_STATE_HOME/dotfiles-sync).
   DOTFILES_SYNC_NOTIFY=0    Suppress the macOS notification on failure.
-  DOTFILES_SYNC_HOLD_BACK   Pathspec unstaged and retried without when the
-                            pre-commit hook rejects (default claude/settings.json).
+  DOTFILES_SYNC_HOLD_BACK   Space-separated paths unstaged and retried without
+                            when the pre-commit hook rejects (default
+                            "claude/settings.json codex/config.toml").
   DOTFILES_SYNC_STALE_DAYS  Age (last commit) after which an unmerged worktree
                             is reported as stale by --prune (default 14).
 EOF
@@ -114,6 +118,18 @@ stage_dirty() {
     return 0
 }
 
+# staged_hold_back: the hold-back paths currently staged, space-separated in
+# HOLD_BACK order; empty when none are. A single string because the state file's
+# held_back field, and the nudge hook that reads it, take one.
+staged_hold_back() {
+    local staged p out=()
+    staged="$(git diff --cached --name-only)"
+    for p in "${HOLD_BACK_PATHS[@]}"; do
+        grep -qxF -- "$p" <<<"$staged" && out+=("$p")
+    done
+    printf '%s' "${out[*]}"
+}
+
 fail_repo() {
     # fail_repo NAME MESSAGE PULLED PUSHED HELD
     log "$1: FAILED: $2"
@@ -160,15 +176,18 @@ sync_repo() {
                 log "$name: dirty tree but nothing stageable"
             elif git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
                 committed=1
-            elif [[ -n "$HOLD_BACK" ]] && git diff --cached --name-only | grep -qxF "$HOLD_BACK"; then
-                # The hook said no. Hold the known per-machine file back once.
-                git reset -q -- "$HOLD_BACK"
-                held="$HOLD_BACK"
+            elif held="$(staged_hold_back)" && [[ -n "$held" ]]; then
+                # The hook said no. Hold every staged per-machine file back once:
+                # the hook does not say which file it objected to, and a clean
+                # one held back here just ships on the next run.
+                local -a held_paths
+                read -r -a held_paths <<<"$held"
+                git reset -q -- "${held_paths[@]}"
                 if git diff --cached --quiet; then
-                    log "$name: only $HOLD_BACK was dirty and the pre-commit hook rejected it; held back"
+                    log "$name: only $held was dirty and the pre-commit hook rejected it; held back"
                 elif git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
                     committed=1
-                    log "$name: committed without $HOLD_BACK (pre-commit rejected it)"
+                    log "$name: committed without $held (pre-commit rejected it)"
                 else
                     git reset -q
                     fail_repo "$name" "pre-commit rejected the sync commit: $(tail -1 "$STATE_DIR/$name.commit.err" 2>/dev/null)"; return 1
