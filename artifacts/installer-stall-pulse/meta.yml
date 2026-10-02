@@ -1,0 +1,26 @@
+title: Installer Stall Pulse
+url: https://claude.ai/code/artifact/bec10f45-5d95-4937-a8eb-2b2de7c893e5
+org: unknown
+first_published: 2026-09-04
+last_updated: 2026-09-04
+status: live
+status_note: >-
+  note 2026-10-02: PR #95 merged 2026-09-12, so the page's "not yet in main" status and its merge
+  decision are stale; its CI section and timings table describe the branch, because main's
+  workflows run no silent-pty suite, no select contract test, no mutation runs and no cargo cache
+  (PR #134 landed the harness as tests only); the menu contract it describes still holds on main
+
+summary: >-
+  the eleven-week install.sh/deploy.sh black screen was a shell-to-binary contract drift (`--items`
+  lost in a merge, binary ignored it and read the keyboard) masked by deadline-only checks; fixed by
+  hardening the contract and driving the real menu on a silent pty in CI; timings of both workflows
+  and the decisions left open
+
+source: pulse.md
+built: pulse.html   # committed beside the source per artifacts/README.md
+builds_with: |
+  uv run --python 3.12 --with markdown-it-py custom_bins/md2artifact artifacts/installer-stall-pulse/pulse.md -o artifacts/installer-stall-pulse/pulse.html
+notes: |
+  Pulse check requested by Yulong mid-fix (2026-09-04 20:09 PDT). CI timings are
+  from run 33940859410 (no-stall.yml) and 33940859412 (build-claude-tools.yml)
+  on branch worktree-installer-stall; they are a snapshot, not regenerable.
