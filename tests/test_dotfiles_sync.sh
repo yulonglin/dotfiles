@@ -14,6 +14,8 @@
 #   5b-5e. codex    : the same for codex/config.toml (alone, together with
 #                     settings.json, an accepted edit that is not held, and a
 #                     held codex config that must not starve settings.json)
+#   5f. zed         : config/zed/settings.json with ssh_connections is held back
+#                     by the real pre-commit hook
 #   6. dry-run      : nothing changes anywhere
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -203,6 +205,22 @@ git -C "$WORK/starve.git" show main:codex/config.toml | grep -q projects && fail
 [ "$(state_field starve held_back)" = codex/config.toml ] || fail "only codex/config.toml should be held, got: $(state_field starve held_back)"
 [ "$(git -C "$WORK/starve.git" rev-list --count main)" = 3 ] || fail "expected one sync commit, not one per retried file"
 pass "a held codex/config.toml does not starve an accepted settings.json edit"
+
+# 5f. config/zed/settings.json is on the default list too. This case runs the
+# REAL pre-commit hook, so it also proves the Zed guard and the hold-back agree.
+fresh_remote zed
+mkdir -p "$WORK/zed/config/zed"
+printf '{\n  // editor\n  "vim_mode": true,\n}\n' >"$WORK/zed/config/zed/settings.json"
+git -C "$WORK/zed" add config && git -C "$WORK/zed" commit -q -m base && git -C "$WORK/zed" push -q
+git -C "$WORK/zed" config core.hooksPath "$REPO_ROOT/config/git-hooks"
+printf '{\n  // editor\n  "vim_mode": true,\n  "ssh_connections": [{ "host": "example-host", "projects": [] }],\n}\n' >"$WORK/zed/config/zed/settings.json"
+echo docs >"$WORK/zed/README.md"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed held-back run exited non-zero"
+git -C "$WORK/zed.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside held Zed settings"
+git -C "$WORK/zed.git" show main:config/zed/settings.json | grep -q ssh_connections && fail "ssh_connections reached the remote"
+git -C "$WORK/zed" status --porcelain | grep -q 'config/zed/settings.json' || fail "Zed settings no longer dirty locally"
+[ "$(state_field zed held_back)" = config/zed/settings.json ] || fail "state held_back should name the Zed settings, got: $(state_field zed held_back)"
+pass "Zed settings with ssh_connections are held back by the real hook, everything else ships"
 
 # 6. dry-run changes nothing
 fresh_remote dry
