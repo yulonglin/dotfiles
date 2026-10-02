@@ -11,8 +11,9 @@
 #   5. held back    : pre-commit rejects claude/settings.json -> the other file
 #                     is committed and pushed, settings.json stays dirty, state
 #                     records held_back
-#   5b-5d. codex    : the same for codex/config.toml (alone, together with
-#                     settings.json, and an accepted edit that is not held)
+#   5b-5e. codex    : the same for codex/config.toml (alone, together with
+#                     settings.json, an accepted edit that is not held, and a
+#                     held codex config that must not starve settings.json)
 #   6. dry-run      : nothing changes anywhere
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -171,6 +172,37 @@ printf 'model = "m2"\n' >"$WORK/codex/codex/config.toml"
 [ "$(git -C "$WORK/codex.git" show main:codex/config.toml)" = 'model = "m2"' ] || fail "accepted codex/config.toml edit was not pushed"
 [ "$(state_field codex held_back)" = "" ] || fail "nothing should be held when the hook accepts"
 pass "an accepted codex/config.toml edit ships"
+
+# 5e. a permanently dirty codex/config.toml must not starve settings.json. Here
+# the hook rejects settings.json only when it carries the "secret" marker, as
+# the real gateway guard rejects only the gateway keys. Both files are dirty, the
+# hook rejects the whole commit, and the settings.json edit must still ship.
+fresh_remote starve
+mkdir -p "$WORK/starve/claude" "$WORK/starve/codex" "$WORK/starve/.hooks"
+echo '{"a":1}' >"$WORK/starve/claude/settings.json"
+printf 'model = "m"\n' >"$WORK/starve/codex/config.toml"
+git -C "$WORK/starve" add claude codex && git -C "$WORK/starve" commit -q -m base && git -C "$WORK/starve" push -q
+cat >"$WORK/starve/.hooks/pre-commit" <<'H'
+#!/bin/sh
+staged=$(git diff --cached --name-only)
+if echo "$staged" | grep -qx claude/settings.json && git show :claude/settings.json | grep -q secret; then
+    echo "gateway guard: refusing claude/settings.json" >&2; exit 1
+fi
+if echo "$staged" | grep -qx codex/config.toml && git show :codex/config.toml | grep -q '^\[projects\.'; then
+    echo "trust-table guard: refusing codex/config.toml" >&2; exit 1
+fi
+exit 0
+H
+chmod +x "$WORK/starve/.hooks/pre-commit"
+git -C "$WORK/starve" config core.hooksPath .hooks
+printf 'model = "m"\n\n[projects."/home/example/p"]\ntrust_level = "trusted"\n' >"$WORK/starve/codex/config.toml"
+echo '{"a":2}' >"$WORK/starve/claude/settings.json"
+"$SYNC" "$WORK/starve" >/dev/null || fail "starvation run exited non-zero"
+[ "$(git -C "$WORK/starve.git" show main:claude/settings.json)" = '{"a":2}' ] || fail "clean settings.json edit was starved by a held codex/config.toml"
+git -C "$WORK/starve.git" show main:codex/config.toml | grep -q projects && fail "trust table reached the remote"
+[ "$(state_field starve held_back)" = codex/config.toml ] || fail "only codex/config.toml should be held, got: $(state_field starve held_back)"
+[ "$(git -C "$WORK/starve.git" rev-list --count main)" = 3 ] || fail "expected one sync commit, not one per retried file"
+pass "a held codex/config.toml does not starve an accepted settings.json edit"
 
 # 6. dry-run changes nothing
 fresh_remote dry

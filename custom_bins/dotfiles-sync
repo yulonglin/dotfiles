@@ -8,7 +8,9 @@
 #   2. commit the dirty tree as "sync: <host> <utc>" -- THROUGH the pre-commit
 #      hook, never --no-verify, so the settings.json key guard and gitleaks stay
 #      live. If the hook rejects and any hold-back path is staged, those paths
-#      are held back and the commit retried once. Each one is a file whose
+#      are unstaged and the commit retried once; each is then offered to the
+#      hook on its own, and only the ones it still rejects are held back.
+#      Each one is a file whose
 #      working copy can carry a per-machine diff that a guard exists to keep
 #      out of the public repo: claude/settings.json (gateway env) and
 #      codex/config.toml (Codex's [projects."<path>"] trust tables).
@@ -127,7 +129,7 @@ staged_hold_back() {
     for p in "${HOLD_BACK_PATHS[@]}"; do
         grep -qxF -- "$p" <<<"$staged" && out+=("$p")
     done
-    printf '%s' "${out[*]}"
+    printf '%s' "${out[*]:-}"
 }
 
 fail_repo() {
@@ -177,20 +179,41 @@ sync_repo() {
             elif git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
                 committed=1
             elif held="$(staged_hold_back)" && [[ -n "$held" ]]; then
-                # The hook said no. Hold every staged per-machine file back once:
-                # the hook does not say which file it objected to, and a clean
-                # one held back here just ships on the next run.
+                # The hook said no, and does not say which file it objected to.
+                # Unstage every per-machine file, commit the rest, then offer
+                # each held file to the hook on its own: only the ones it still
+                # rejects stay held. Without that second pass a permanently dirty
+                # codex/config.toml would starve every settings.json edit.
                 local -a held_paths
+                local p still_held=()
                 read -r -a held_paths <<<"$held"
                 git reset -q -- "${held_paths[@]}"
-                if git diff --cached --quiet; then
-                    log "$name: only $held was dirty and the pre-commit hook rejected it; held back"
-                elif git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
-                    committed=1
+                if ! git diff --cached --quiet; then
+                    if git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
+                        committed=1
+                    else
+                        git reset -q
+                        fail_repo "$name" "pre-commit rejected the sync commit: $(tail -1 "$STATE_DIR/$name.commit.err" 2>/dev/null)"; return 1
+                    fi
+                fi
+                for p in "${held_paths[@]}"; do
+                    git add -- "$p"
+                    if (( committed )) && git commit --quiet --amend --no-edit >/dev/null 2>&1; then
+                        :
+                    elif (( ! committed )) && git commit --quiet -m "$msg" >/dev/null 2>&1; then
+                        committed=1
+                    else
+                        git reset -q -- "$p"
+                        still_held+=("$p")
+                    fi
+                done
+                held="${still_held[*]:-}"
+                if [[ -z "$held" ]]; then
+                    : # every file passed on its own; nothing is held
+                elif (( committed )); then
                     log "$name: committed without $held (pre-commit rejected it)"
                 else
-                    git reset -q
-                    fail_repo "$name" "pre-commit rejected the sync commit: $(tail -1 "$STATE_DIR/$name.commit.err" 2>/dev/null)"; return 1
+                    log "$name: only $held was dirty and the pre-commit hook rejected it; held back"
                 fi
             else
                 git reset -q
