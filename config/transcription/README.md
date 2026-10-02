@@ -1,1 +1,3 @@
 The directory includes the system prompts and settings that we include for description, that is like text to speech services. So that includes things like granola and voice ink currently primarily on both my phone and my Mac for voice ink and then just universally for granola. 
+
+The identity files — `granola/company-description.md`, `voiceink/macOS/vocab/people-and-orgs.md` and `voiceink/macOS/vocab/personal.md` — are not in this public repo. They live in `~/vault/tooling/dotfiles/personal-transcription/` under the same subpaths, and their paths here are gitignored. No script reads them; paste them into VoiceInk or Granola by hand, as with the tracked files here.

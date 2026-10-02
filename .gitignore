@@ -23,6 +23,13 @@ docs/CLAUDE_TASKS.md
 docs/interview-prep-*.md
 docs/machine-restart-handover.md
 docs/plans/
+# Transcription identity files (real names, affiliations, personal network).
+# Home: ~/vault/tooling/dotfiles/personal-transcription/ (same subpaths), since
+# no dotfiles-personal clone exists on the Mac. Pasted into VoiceInk/Granola by
+# hand; nothing in this repo reads them.
+config/transcription/granola/company-description.md
+config/transcription/voiceink/macOS/vocab/people-and-orgs.md
+config/transcription/voiceink/macOS/vocab/personal.md
 docs/slack-channel-summaries/
 
 # Claude runtime state (local operational artifacts)
