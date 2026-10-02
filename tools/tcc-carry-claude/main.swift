@@ -1,21 +1,19 @@
-// tcc-carry-claude: give every installed Claude Code version the same folder decisions.
+// tcc-carry-claude: give every installed Claude Code version the privacy answers you gave the last one.
 //
 // The native installer puts each release at its own path, ~/.local/share/claude/versions/<ver>,
-// and macOS keys a bare binary's privacy grants by path. The background daemon respawns its
-// workers on every upgrade as their own responsible process, so each release asks again for
-// Documents, Downloads and Desktop. This writes one fixed decision per folder for each
-// installed version that has none. Rows already present, whoever wrote them, are left alone.
+// and macOS keys a bare binary's privacy grants by path, so each release asks again for
+// Documents, Downloads, data from other apps and the rest. For each installed version this copies,
+// per service and target, the most recent answer you gave any other version (allow or deny), and
+// always denies Desktop. Rows already present, whoever wrote them, are left alone.
 //
-// Writing the user TCC database needs Full Disk Access for this binary.
+// Writing the user TCC database needs Full Disk Access for this binary. Full Disk Access itself
+// lives in the SIP-protected system database, which this does not touch.
 import Foundation
 import Security
 import SQLite3
 
-let policy: [(service: String, folder: String, allow: Bool)] = [
-    ("kTCCServiceSystemPolicyDocumentsFolder", "Documents", true),
-    ("kTCCServiceSystemPolicyDownloadsFolder", "Downloads", true),
-    ("kTCCServiceSystemPolicyDesktopFolder", "Desktop", false),
-]
+// Services answered this way whatever was answered before.
+let overrides: [String: Int32] = ["kTCCServiceSystemPolicyDesktopFolder": 0]
 
 // Only binaries Anthropic signed get a row. A half-downloaded or swapped file fails this.
 let anthropicRequirement =
@@ -29,8 +27,9 @@ var dryRun = false
 let usage = """
     usage: tcc-carry-claude [--dry-run] [--db PATH] [--versions-dir PATH]
 
-    Insert Documents=allow, Downloads=allow, Desktop=deny into the user TCC database for
-    every Anthropic-signed binary in the versions directory that has no row for that folder.
+    For every Anthropic-signed binary in the versions directory, copy into the user TCC database
+    the latest answer you gave any other version for each service it has no row for. Desktop is
+    always denied.
 
       --dry-run           print what would be inserted; open the database read-only
       --db PATH           TCC database (default: \(dbPath))
@@ -48,6 +47,7 @@ while let arg = args.popFirst() {
     default: fail("unknown argument: \(arg)\n\(usage)", code: 2)
     }
 }
+let clientPrefix = versionsDir + "/"
 
 func fail(_ message: String, code: Int32 = 1) -> Never {
     FileHandle.standardError.write(Data((message + "\n").utf8))
@@ -103,54 +103,118 @@ sqlite3_busy_timeout(db, 5000)
 
 let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-func existingServices(for client: String) -> Set<String> {
+func prepare(_ sql: String, _ binds: [String]) -> OpaquePointer? {
     var stmt: OpaquePointer?
-    guard sqlite3_prepare_v2(db, "SELECT service FROM access WHERE client = ? AND client_type = 1", -1, &stmt, nil) == SQLITE_OK
-    else { dbFail("query") }
+    guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { dbFail("prepare") }
+    for (i, value) in binds.enumerated() {
+        sqlite3_bind_text(stmt, Int32(i + 1), value, -1, SQLITE_TRANSIENT)
+    }
+    return stmt
+}
+
+/// The latest answer per (service, target) given to any other version, still keyed as the
+/// access table keys it. auth_reason 2 is an answered prompt and 3 a choice made in System
+/// Settings, either directly or through a row this tool copied. Rows tccd set for other reasons
+/// are not repeated.
+let candidates = """
+    SELECT a.rowid FROM access a
+    WHERE a.client_type = 1 AND a.auth_reason IN (2, 3)
+      AND substr(a.client, 1, length(?1)) = ?1 AND a.client != ?2
+      AND a.last_modified = (
+        SELECT max(b.last_modified) FROM access b
+        WHERE b.client_type = 1 AND b.auth_reason IN (2, 3)
+          AND substr(b.client, 1, length(?1)) = ?1 AND b.client != ?2
+          AND b.service = a.service AND b.indirect_object_identifier = a.indirect_object_identifier)
+      AND NOT EXISTS (
+        SELECT 1 FROM access c
+        WHERE c.client = ?2 AND c.client_type = 1
+          AND c.service = a.service AND c.indirect_object_identifier = a.indirect_object_identifier)
+    """
+
+/// Overridden services the version has no row for, whether or not anything was answered before.
+func missingOverrides(for client: String) -> [String] {
+    overrides.keys.sorted().filter { service in
+        let stmt = prepare("SELECT 1 FROM access WHERE client = ?1 AND client_type = 1 AND service = ?2", [client, service])
+        defer { sqlite3_finalize(stmt) }
+        return sqlite3_step(stmt) != SQLITE_ROW
+    }
+}
+
+func pending(for client: String) -> [(service: String, target: String)] {
+    let stmt = prepare("SELECT service, indirect_object_identifier FROM access WHERE rowid IN (\(candidates))",
+                       [clientPrefix, client])
     defer { sqlite3_finalize(stmt) }
-    sqlite3_bind_text(stmt, 1, client, -1, SQLITE_TRANSIENT)
-    var found = Set<String>()
+    var rows = [(service: String, target: String)]()
+    while sqlite3_step(stmt) == SQLITE_ROW {
+        rows.append((String(cString: sqlite3_column_text(stmt, 0)), String(cString: sqlite3_column_text(stmt, 1))))
+    }
+    let carried = Set(rows.map(\.service))
+    return rows + missingOverrides(for: client).filter { !carried.contains($0) }.map { ($0, "UNUSED") }
+}
+
+func describe(_ service: String, _ target: String, _ authValue: Int32) -> String {
+    let name = service.replacingOccurrences(of: "kTCCService", with: "")
+    let decision = switch authValue { case 0: "deny"; case 2: "allow"; default: "auth_value \(authValue)" }
+    return target == "UNUSED" ? "\(decision) \(name)" : "\(decision) \(name) -> \(target)"
+}
+
+func carry(to client: String, csreq: Data, label: String) {
+    // Copy every candidate row with the new client and its own csreq; overrides replace auth_value.
+    let overrideCase = overrides.map { "WHEN '\($0.key)' THEN \($0.value)" }.joined(separator: " ")
+    let copy = """
+        INSERT OR IGNORE INTO access
+          (service, client, client_type, auth_value, auth_reason, auth_version, csreq, policy_id,
+           indirect_object_identifier_type, indirect_object_identifier, indirect_object_code_identity,
+           flags, last_modified, last_reminded)
+        SELECT service, ?2, 1, CASE service \(overrideCase) ELSE auth_value END, auth_reason, auth_version, ?3, policy_id,
+               indirect_object_identifier_type, indirect_object_identifier, indirect_object_code_identity,
+               flags, CAST(strftime('%s','now') AS INTEGER), 0
+        FROM access WHERE rowid IN (\(candidates))
+        RETURNING service, indirect_object_identifier, auth_value
+        """
+    let fresh = """
+        INSERT OR IGNORE INTO access
+          (service, client, client_type, auth_value, auth_reason, auth_version, csreq, flags, last_modified, last_reminded)
+        VALUES (?1, ?2, 1, ?3, 2, 1, ?4, 0, CAST(strftime('%s','now') AS INTEGER), 0)
+        """
+    let stmt = prepare(copy, [clientPrefix, client])
+    _ = csreq.withUnsafeBytes { sqlite3_bind_blob(stmt, 3, $0.baseAddress, Int32(csreq.count), SQLITE_TRANSIENT) }
     while true {
         let rc = sqlite3_step(stmt)
         if rc == SQLITE_DONE { break }
-        guard rc == SQLITE_ROW else { dbFail("query") }
-        found.insert(String(cString: sqlite3_column_text(stmt, 0)))
+        guard rc == SQLITE_ROW else { dbFail("insert") }
+        let row = describe(String(cString: sqlite3_column_text(stmt, 0)),
+                           String(cString: sqlite3_column_text(stmt, 1)),
+                           sqlite3_column_int(stmt, 2))
+        print("\(row) for \(label)")
     }
-    return found
-}
-
-func insert(service: String, client: String, allow: Bool, csreq: Data) {
-    var stmt: OpaquePointer?
-    // auth_reason 2 is user consent, the value tccd writes when the prompt is answered.
-    let sql = """
-        INSERT OR IGNORE INTO access
-          (service, client, client_type, auth_value, auth_reason, auth_version, csreq, flags, last_modified, last_reminded)
-        VALUES (?, ?, 1, ?, 2, 1, ?, 0, CAST(strftime('%s','now') AS INTEGER), 0)
-        """
-    guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { dbFail("insert") }
-    defer { sqlite3_finalize(stmt) }
-    sqlite3_bind_text(stmt, 1, service, -1, SQLITE_TRANSIENT)
-    sqlite3_bind_text(stmt, 2, client, -1, SQLITE_TRANSIENT)
-    sqlite3_bind_int(stmt, 3, allow ? 2 : 0)
-    _ = csreq.withUnsafeBytes { sqlite3_bind_blob(stmt, 4, $0.baseAddress, Int32(csreq.count), SQLITE_TRANSIENT) }
-    guard sqlite3_step(stmt) == SQLITE_DONE else { dbFail("insert") }
+    sqlite3_finalize(stmt)
+    for service in missingOverrides(for: client) {
+        let value = overrides[service]!
+        let ins = prepare(fresh, [service, client])
+        sqlite3_bind_int(ins, 3, value)
+        _ = csreq.withUnsafeBytes { sqlite3_bind_blob(ins, 4, $0.baseAddress, Int32(csreq.count), SQLITE_TRANSIENT) }
+        guard sqlite3_step(ins) == SQLITE_DONE else { dbFail("insert") }
+        sqlite3_finalize(ins)
+        print("\(describe(service, "UNUSED", value)) for \(label)")
+    }
 }
 
 for version in versions {
     let client = versionsDir + "/" + version
-    let missing = policy.filter { !existingServices(for: client).contains($0.service) }
-    if missing.isEmpty { continue }
+    let todo = pending(for: client)
+    if todo.isEmpty { continue }
     guard let blob = csreq(for: client, requirement: requirement) else {
         print("skip \(version): not a valid Anthropic-signed binary")
         continue
     }
-    for entry in missing {
-        let decision = entry.allow ? "allow" : "deny"
-        if dryRun {
-            print("would \(decision) \(entry.folder) for \(version)")
-        } else {
-            insert(service: entry.service, client: client, allow: entry.allow, csreq: blob)
-            print("\(decision) \(entry.folder) for \(version)")
+    if dryRun {
+        for row in todo {
+            let name = row.service.replacingOccurrences(of: "kTCCService", with: "")
+            let target = row.target == "UNUSED" ? "" : " -> \(row.target)"
+            print("would carry \(name)\(target) to \(version)")
         }
+    } else {
+        carry(to: client, csreq: blob, label: version)
     }
 }
