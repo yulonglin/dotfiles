@@ -52,7 +52,9 @@ expect_same() {
 
 # === Part 1: the filter on its own ===========================================
 
-cp "$REPO_ROOT/config/zed/settings.json" "$WORK/in"
+# The committed blob, not the working copy: in a live checkout the working copy
+# is Zed's own file and may hold an ssh_connections block right now.
+git -C "$REPO_ROOT" show HEAD:config/zed/settings.json >"$WORK/in"
 expect_same "the committed Zed settings pass through byte-identical"
 
 cat >"$WORK/in" <<'EOF'
