@@ -115,20 +115,21 @@ func prepare(_ sql: String, _ binds: [String]) -> OpaquePointer? {
 /// The latest answer per (service, target) given to any other version, still keyed as the
 /// access table keys it. auth_reason 2 is an answered prompt and 3 a choice made in System
 /// Settings, either directly or through a row this tool copied. Rows tccd set for other reasons
-/// are not repeated.
+/// are not repeated. Copies keep the answer's own last_modified, so they never outrank it.
+/// Answers in the same second cannot be ordered, so the lowest auth_value, a denial, wins.
 let candidates = """
-    SELECT a.rowid FROM access a
-    WHERE a.client_type = 1 AND a.auth_reason IN (2, 3)
-      AND substr(a.client, 1, length(?1)) = ?1 AND a.client != ?2
-      AND a.last_modified = (
-        SELECT max(b.last_modified) FROM access b
-        WHERE b.client_type = 1 AND b.auth_reason IN (2, 3)
-          AND substr(b.client, 1, length(?1)) = ?1 AND b.client != ?2
-          AND b.service = a.service AND b.indirect_object_identifier = a.indirect_object_identifier)
-      AND NOT EXISTS (
-        SELECT 1 FROM access c
-        WHERE c.client = ?2 AND c.client_type = 1
-          AND c.service = a.service AND c.indirect_object_identifier = a.indirect_object_identifier)
+    SELECT rid FROM (
+      SELECT a.rowid AS rid, row_number() OVER (
+               PARTITION BY a.service, a.indirect_object_identifier
+               ORDER BY a.last_modified DESC, a.auth_value ASC, a.rowid ASC) AS rank
+      FROM access a
+      WHERE a.client_type = 1 AND a.auth_reason IN (2, 3)
+        AND substr(a.client, 1, length(?1)) = ?1 AND a.client != ?2
+        AND NOT EXISTS (
+          SELECT 1 FROM access c
+          WHERE c.client = ?2 AND c.client_type = 1
+            AND c.service = a.service AND c.indirect_object_identifier = a.indirect_object_identifier))
+    WHERE rank = 1
     """
 
 /// Overridden services the version has no row for, whether or not anything was answered before.
@@ -168,7 +169,7 @@ func carry(to client: String, csreq: Data, label: String) {
            flags, last_modified, last_reminded)
         SELECT service, ?2, 1, CASE service \(overrideCase) ELSE auth_value END, auth_reason, auth_version, ?3, policy_id,
                indirect_object_identifier_type, indirect_object_identifier, indirect_object_code_identity,
-               flags, CAST(strftime('%s','now') AS INTEGER), 0
+               flags, last_modified, 0
         FROM access WHERE rowid IN (\(candidates))
         RETURNING service, indirect_object_identifier, auth_value
         """
