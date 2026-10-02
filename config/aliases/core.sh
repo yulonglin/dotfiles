@@ -33,6 +33,8 @@ function add_to_path() {
 #-------------------------------------------------------------
 # env
 #-------------------------------------------------------------
+# Homebrew python (config/apps.conf) ships python3 but no bare python
+command -v python >/dev/null 2>&1 || alias python=python3
 alias sv="source .venv/bin/activate"
 alias de="deactivate"
 
