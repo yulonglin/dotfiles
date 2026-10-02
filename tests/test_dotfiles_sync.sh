@@ -11,6 +11,11 @@
 #   5. held back    : pre-commit rejects claude/settings.json -> the other file
 #                     is committed and pushed, settings.json stays dirty, state
 #                     records held_back
+#   5b-5e. codex    : the same for codex/config.toml (alone, together with
+#                     settings.json, an accepted edit that is not held, and a
+#                     held codex config that must not starve settings.json)
+#   5f. zed         : config/zed/settings.json with ssh_connections is held back
+#                     by the real pre-commit hook
 #   6. dry-run      : nothing changes anywhere
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -121,6 +126,101 @@ git -C "$WORK/held" status --porcelain | grep -q 'claude/settings.json' || fail 
 [ "$(state_field held held_back)" = claude/settings.json ] || fail "state held_back not recorded"
 [ "$(state_field held status)" = ok ] || fail "held-back run should still be ok"
 pass "rejected settings.json is held back, everything else ships"
+
+# 5b-5d. codex/config.toml is on the same hold-back list. The fake hook stands
+# in for the real trust-table guard: it rejects a staged [projects. table only.
+fresh_remote codex
+mkdir -p "$WORK/codex/claude" "$WORK/codex/codex" "$WORK/codex/.hooks"
+echo '{"a":1}' >"$WORK/codex/claude/settings.json"
+printf 'model = "m"\n' >"$WORK/codex/codex/config.toml"
+git -C "$WORK/codex" add claude codex && git -C "$WORK/codex" commit -q -m base && git -C "$WORK/codex" push -q
+cat >"$WORK/codex/.hooks/pre-commit" <<'H'
+#!/bin/sh
+staged=$(git diff --cached --name-only)
+echo "$staged" | grep -qx claude/settings.json && { echo "gateway guard: refusing claude/settings.json" >&2; exit 1; }
+if echo "$staged" | grep -qx codex/config.toml && git show :codex/config.toml | grep -q '^\[projects\.'; then
+    echo "trust-table guard: refusing codex/config.toml" >&2; exit 1
+fi
+exit 0
+H
+chmod +x "$WORK/codex/.hooks/pre-commit"
+git -C "$WORK/codex" config core.hooksPath .hooks
+
+# 5b. only codex/config.toml is rejected -> held back alone, the rest ships
+printf 'model = "m"\n\n[projects."/home/example/p"]\ntrust_level = "trusted"\n' >"$WORK/codex/codex/config.toml"
+echo docs >"$WORK/codex/README.md"
+"$SYNC" "$WORK/codex" >/dev/null || fail "codex held-back run exited non-zero"
+git -C "$WORK/codex.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside held codex config"
+git -C "$WORK/codex.git" show main:codex/config.toml | grep -q projects && fail "trust table reached the remote"
+git -C "$WORK/codex" status --porcelain | grep -q 'codex/config.toml' || fail "codex/config.toml no longer dirty locally"
+[ "$(state_field codex held_back)" = codex/config.toml ] || fail "state held_back should name codex/config.toml, got: $(state_field codex held_back)"
+[ "$(state_field codex status)" = ok ] || fail "codex held-back run should still be ok"
+pass "rejected codex/config.toml is held back, everything else ships"
+
+# 5c. both dirty and the hook rejects -> both held back, both recorded
+echo '{"a":2}' >"$WORK/codex/claude/settings.json"
+echo more >>"$WORK/codex/README.md"
+"$SYNC" "$WORK/codex" >/dev/null || fail "two-file held-back run exited non-zero"
+[ "$(git -C "$WORK/codex.git" show main:README.md | tail -1)" = more ] || fail "README edit not pushed while both files were held"
+[ "$(git -C "$WORK/codex.git" show main:claude/settings.json)" = '{"a":1}' ] || fail "settings.json reached the remote"
+[ "$(state_field codex held_back)" = "claude/settings.json codex/config.toml" ] \
+    || fail "state held_back should list both paths, got: $(state_field codex held_back)"
+pass "both hold-back files are held when the hook rejects"
+
+# 5d. a codex/config.toml edit the hook accepts is committed, not held
+git -C "$WORK/codex" restore claude/settings.json
+printf 'model = "m2"\n' >"$WORK/codex/codex/config.toml"
+"$SYNC" "$WORK/codex" >/dev/null || fail "clean codex run exited non-zero"
+[ "$(git -C "$WORK/codex.git" show main:codex/config.toml)" = 'model = "m2"' ] || fail "accepted codex/config.toml edit was not pushed"
+[ "$(state_field codex held_back)" = "" ] || fail "nothing should be held when the hook accepts"
+pass "an accepted codex/config.toml edit ships"
+
+# 5e. a permanently dirty codex/config.toml must not starve settings.json. Here
+# the hook rejects settings.json only when it carries the "secret" marker, as
+# the real gateway guard rejects only the gateway keys. Both files are dirty, the
+# hook rejects the whole commit, and the settings.json edit must still ship.
+fresh_remote starve
+mkdir -p "$WORK/starve/claude" "$WORK/starve/codex" "$WORK/starve/.hooks"
+echo '{"a":1}' >"$WORK/starve/claude/settings.json"
+printf 'model = "m"\n' >"$WORK/starve/codex/config.toml"
+git -C "$WORK/starve" add claude codex && git -C "$WORK/starve" commit -q -m base && git -C "$WORK/starve" push -q
+cat >"$WORK/starve/.hooks/pre-commit" <<'H'
+#!/bin/sh
+staged=$(git diff --cached --name-only)
+if echo "$staged" | grep -qx claude/settings.json && git show :claude/settings.json | grep -q secret; then
+    echo "gateway guard: refusing claude/settings.json" >&2; exit 1
+fi
+if echo "$staged" | grep -qx codex/config.toml && git show :codex/config.toml | grep -q '^\[projects\.'; then
+    echo "trust-table guard: refusing codex/config.toml" >&2; exit 1
+fi
+exit 0
+H
+chmod +x "$WORK/starve/.hooks/pre-commit"
+git -C "$WORK/starve" config core.hooksPath .hooks
+printf 'model = "m"\n\n[projects."/home/example/p"]\ntrust_level = "trusted"\n' >"$WORK/starve/codex/config.toml"
+echo '{"a":2}' >"$WORK/starve/claude/settings.json"
+"$SYNC" "$WORK/starve" >/dev/null || fail "starvation run exited non-zero"
+[ "$(git -C "$WORK/starve.git" show main:claude/settings.json)" = '{"a":2}' ] || fail "clean settings.json edit was starved by a held codex/config.toml"
+git -C "$WORK/starve.git" show main:codex/config.toml | grep -q projects && fail "trust table reached the remote"
+[ "$(state_field starve held_back)" = codex/config.toml ] || fail "only codex/config.toml should be held, got: $(state_field starve held_back)"
+[ "$(git -C "$WORK/starve.git" rev-list --count main)" = 3 ] || fail "expected one sync commit, not one per retried file"
+pass "a held codex/config.toml does not starve an accepted settings.json edit"
+
+# 5f. config/zed/settings.json is on the default list too. This case runs the
+# REAL pre-commit hook, so it also proves the Zed guard and the hold-back agree.
+fresh_remote zed
+mkdir -p "$WORK/zed/config/zed"
+printf '{\n  // editor\n  "vim_mode": true,\n}\n' >"$WORK/zed/config/zed/settings.json"
+git -C "$WORK/zed" add config && git -C "$WORK/zed" commit -q -m base && git -C "$WORK/zed" push -q
+git -C "$WORK/zed" config core.hooksPath "$REPO_ROOT/config/git-hooks"
+printf '{\n  // editor\n  "vim_mode": true,\n  "ssh_connections": [{ "host": "example-host", "projects": [] }],\n}\n' >"$WORK/zed/config/zed/settings.json"
+echo docs >"$WORK/zed/README.md"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed held-back run exited non-zero"
+git -C "$WORK/zed.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside held Zed settings"
+git -C "$WORK/zed.git" show main:config/zed/settings.json | grep -q ssh_connections && fail "ssh_connections reached the remote"
+git -C "$WORK/zed" status --porcelain | grep -q 'config/zed/settings.json' || fail "Zed settings no longer dirty locally"
+[ "$(state_field zed held_back)" = config/zed/settings.json ] || fail "state held_back should name the Zed settings, got: $(state_field zed held_back)"
+pass "Zed settings with ssh_connections are held back by the real hook, everything else ships"
 
 # 6. dry-run changes nothing
 fresh_remote dry

@@ -61,6 +61,14 @@ jobs:
       - name: Pre-commit gateway guard
         run: bash tests/test_pre_commit_gateway_guard.sh
 
+      # The guard that keeps Codex's per-directory trust paths out of it too.
+      - name: Pre-commit Codex trust-table guard
+        run: bash tests/test_pre_commit_codex_trust_guard.sh
+
+      # And Zed's ssh_connections hosts.
+      - name: Pre-commit Zed ssh_connections guard
+        run: bash tests/test_pre_commit_zed_ssh_guard.sh
+
       # The extractor that fed the approval classifier an empty string for five
       # months. These pin the real transcript line shapes.
       - name: Approval classifier context
