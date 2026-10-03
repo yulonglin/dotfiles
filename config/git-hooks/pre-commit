@@ -272,7 +272,8 @@ _validate_no_attribution_optout() {
 # that file, so personal hostnames and remote project paths would otherwise
 # land in this public repo. The zed-ssh clean filter (.gitattributes, wired by
 # deploy.sh --git-config) strips the block before git stores the file, so this
-# check only fires in a clone where that filter is not configured.
+# check only fires in a clone where that filter is not configured, and there
+# dotfiles-sync holds the file back and ships the rest.
 #
 # The staged blob is parsed as JSON with comments; if that fails, a plain
 # "ssh_connections" key match on the comment-stripped text decides.

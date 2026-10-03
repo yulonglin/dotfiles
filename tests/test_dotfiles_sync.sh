@@ -16,7 +16,10 @@
 #                     held codex config that must not starve settings.json)
 #   5f. zed         : with the zed-ssh clean filter, a Zed edit carrying
 #                     ssh_connections ships without the block, nothing held
-#   5g. zed, no filter: the real pre-commit hook rejects and the sync fails
+#   5g. zed, no filter: the real pre-commit hook rejects, only the Zed file is
+#                     held back and the rest ships
+#   5h-5j. zed rebase : a pulled Zed change keeps the local ssh_connections; no
+#                     Zed change is byte-identical; a failed restore keeps the backup
 #   6. dry-run      : nothing changes anywhere
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -233,14 +236,52 @@ grep -q example-host "$WORK/zed/config/zed/settings.json" || fail "the local Zed
 [ -z "$(state_field zed held_back)" ] || fail "nothing should be held, got: $(state_field zed held_back)"
 pass "with the clean filter, a Zed edit ships without ssh_connections and nothing is held"
 
-# 5g. Without the filter configured the guard rejects, and since the Zed file
-# is no longer a hold-back path, the whole sync commit fails and nothing ships.
+# 5g. Without the filter configured the guard rejects; the Zed file is still a
+# hold-back path as a fallback, so only it is held and the rest ships.
 zed_repo zednofilter
-"$SYNC" "$WORK/zednofilter" >/dev/null 2>&1 && fail "unfiltered Zed run should fail"
-[ "$(state_field zednofilter status)" = failed ] || fail "unfiltered Zed run state should be failed"
-[ "$(git -C "$WORK/zednofilter.git" rev-list --count main)" = 2 ] || fail "something was pushed despite the rejected commit"
-grep -q example-host "$WORK/zednofilter/config/zed/settings.json" || fail "the rejected run touched the local Zed settings"
-pass "without the clean filter, the guard fails the sync and nothing reaches the remote"
+"$SYNC" "$WORK/zednofilter" >/dev/null || fail "unfiltered Zed run exited non-zero"
+git -C "$WORK/zednofilter.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside the held Zed settings"
+git -C "$WORK/zednofilter.git" show main:config/zed/settings.json | grep -q ssh_connections && fail "ssh_connections reached the remote"
+grep -q example-host "$WORK/zednofilter/config/zed/settings.json" || fail "the held run touched the local Zed settings"
+[ "$(state_field zednofilter held_back)" = config/zed/settings.json ] || fail "state held_back should name only the Zed settings, got: $(state_field zednofilter held_back)"
+pass "without the clean filter, only the Zed settings are held and the rest ships"
+
+# 5h-5j. The rebase keeps the local ssh_connections. Clone B pushes changes and
+# the filtered clone from 5f syncs them in; its block exists only on disk.
+ZA="$WORK/zed/config/zed/settings.json"
+ZBAK="$DOTFILES_SYNC_STATE_DIR/zed.zed-ssh-connections.json"
+git -C "$WORK/zed-b" pull -q --rebase
+b_push() {  # $1 = commit subject; the change is already in clone B's tree
+    git -C "$WORK/zed-b" add -A && git -C "$WORK/zed-b" commit -q -m "$1" && git -C "$WORK/zed-b" push -q
+}
+
+# 5h. B changes a Zed setting: the rebase rewrites A's file without the block.
+printf '{\n  // editor\n  "vim_mode": false,\n  "theme": "Ayu",\n}\n' >"$WORK/zed-b/config/zed/settings.json"
+b_push "zed theme"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed pull run exited non-zero"
+grep -q '"theme": "Ayu"' "$ZA" || fail "the pulled Zed change did not land"
+grep -q example-host "$ZA" || fail "the rebase dropped the local ssh_connections"
+grep -q example-host "$ZBAK" || fail "no backup of the block in the state dir"
+git -C "$WORK/zed" diff --quiet || fail "the restored block shows up in git diff"
+pass "a sync that pulls a Zed change keeps the local ssh_connections, with a backup"
+
+# 5i. B changes something else: A's Zed file is byte-identical afterwards.
+cp "$ZA" "$WORK/zed-before.json"
+echo more >>"$WORK/zed-b/README.md"
+b_push "readme"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed no-change run exited non-zero"
+cmp -s "$ZA" "$WORK/zed-before.json" || fail "a sync without a Zed change altered the Zed settings"
+pass "a sync with no Zed change leaves the Zed settings byte-identical"
+
+# 5j. B pushes a Zed file the restore cannot parse: A's file is left as the
+# rebase wrote it, the backup stays, and the state says so.
+printf '{\n  "vim_mode": tru\n' >"$WORK/zed-b/config/zed/settings.json"
+b_push "broken zed"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed failed-restore run exited non-zero"
+cmp -s "$ZA" "$WORK/zed-b/config/zed/settings.json" || fail "a failed restore modified the Zed settings"
+grep -q example-host "$ZBAK" || fail "a failed restore lost the backup"
+state_field zed message | grep -q "not restored" || fail "state message does not report the failed restore: $(state_field zed message)"
+pass "a failed restore leaves the file alone and keeps the backup"
 
 # 6. dry-run changes nothing
 fresh_remote dry

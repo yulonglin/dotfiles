@@ -177,6 +177,70 @@ expect_same "invalid UTF-8: passed through untouched"
 : >"$WORK/in"
 expect_same "empty input: empty output"
 
+# === Part 1b: --extract and --restore, used by dotfiles-sync =================
+
+# run_mode EXPECTED_RC ARGS...: filter $WORK/in in a mode into $WORK/out
+run_mode() {
+    local want="$1" rc=0
+    shift
+    "$FILTER" "$@" <"$WORK/in" >"$WORK/out" || rc=$?
+    [ "$rc" = "$want" ] || fail "$* exited $rc, expected $want"
+}
+
+cat >"$WORK/in" <<'EOF'
+{
+  "vim_mode": true,
+  "ssh_connections": [
+    { "host": "saved.example.invalid", "projects": [{ "paths": ["/srv/a, {b}"] }] },
+  ],
+  "buffer_font_size": 14,
+}
+EOF
+cp "$WORK/in" "$WORK/withblock"
+run_mode 0 --extract
+printf '"ssh_connections": [\n    { "host": "saved.example.invalid", "projects": [{ "paths": ["/srv/a, {b}"] }] },\n  ]' >"$WORK/want"
+cmp -s "$WORK/out" "$WORK/want" || fail "--extract printed: $(cat "$WORK/out")"
+cp "$WORK/out" "$WORK/member"
+pass "--extract prints exactly the member's text"
+
+printf '{\n  "vim_mode": true,\n}\n' >"$WORK/in"
+run_mode 1 --extract
+printf '{\n  "vim_mode": true,\n  "ssh_connections": [\n' >"$WORK/in"
+run_mode 2 --extract
+pass "--extract exits 1 when absent and 2 on a broken file"
+
+# restore(x) then strip must give x back byte for byte, in each layout.
+restore_roundtrip() {
+    # $1 = label; $WORK/in holds a file without the key
+    cp "$WORK/in" "$WORK/before"
+    run_mode 0 --restore "$WORK/member"
+    grep -q saved.example.invalid "$WORK/out" || fail "$1: member not restored"
+    "$FILTER" <"$WORK/out" >"$WORK/stripped"
+    cmp -s "$WORK/stripped" "$WORK/before" || { diff "$WORK/before" "$WORK/stripped" >&2 || true; fail "$1: strip(restore(x)) != x"; }
+    pass "--restore then strip is the identity: $1"
+}
+git -C "$REPO_ROOT" show HEAD:config/zed/settings.json >"$WORK/in"
+restore_roundtrip "the committed Zed settings"
+printf '{\n  // c\n  "vim_mode": true,\n  "theme": "Ayu",\n}\n' >"$WORK/in"
+restore_roundtrip "trailing-comma JSONC"
+printf '{\n  "vim_mode": true\n}\n' >"$WORK/in"
+restore_roundtrip "strict JSON"
+printf '{"vim_mode": true}' >"$WORK/in"
+restore_roundtrip "one line"
+printf '{\n}\n' >"$WORK/in"
+restore_roundtrip "empty object"
+
+cp "$WORK/withblock" "$WORK/in"
+run_mode 1 --restore "$WORK/member"
+[ -s "$WORK/out" ] && fail "--restore printed output although the key is present"
+printf '{\n  "vim_mode": tru\n' >"$WORK/in"
+run_mode 2 --restore "$WORK/member"
+[ -s "$WORK/out" ] && fail "--restore printed output for a broken file"
+printf '"theme": "Ayu"' >"$WORK/notmember"
+printf '{\n  "vim_mode": true\n}\n' >"$WORK/in"
+run_mode 2 --restore "$WORK/notmember"
+pass "--restore never overwrites a present key and prints nothing when unsure"
+
 # === Part 2: the filter wired into git =======================================
 #
 # The filter is copied into the throwaway repo at its real repo-relative path
@@ -272,7 +336,9 @@ pass "already staged before the filter: plain git add keeps the block, git add -
 
 # A pull that changes the file rewrites the working copy from the stripped
 # blob. git sees the file as clean, so nothing protects the local block, and
-# there is no smudge filter to restore it. Pinned so the trade-off stays visible.
+# there is no smudge filter to restore it. dotfiles-sync saves and restores the
+# block around its own rebase (tests/test_dotfiles_sync.sh 5h-5j); a manual
+# pull does not, which is what this case pins.
 git init -q --bare -b main "$WORK/remote.git"
 git -C "$R" remote add origin "$WORK/remote.git"
 git -C "$R" push -q -u origin main
@@ -286,6 +352,6 @@ grep -q '"vim_mode": false' "$S" || fail "the pulled change did not land"
 if grep -q remote.example.invalid "$S"; then
     fail "pull kept the local ssh_connections; update this case and the docs, the trade-off is gone"
 fi
-pass "known trade-off: a pull that changes the file drops the local ssh_connections"
+pass "a manual pull that changes the file drops the local ssh_connections (dotfiles-sync restores it)"
 
 echo "All $passed zed-strip-ssh-connections checks passed."
