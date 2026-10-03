@@ -15,7 +15,7 @@ The failure is easy to walk into. A page built in `tmp/` publishes perfectly and
 ```
 artifacts/
   <slug>/                 slug matches the artifact's title, kebab-case
-    meta.yml              url, title, org, status, dates, summary — and the ARTIFACTS.md row
+    meta.yml              url, title, org, status, dates, summary, author_model — and the ARTIFACTS.md row
     <source>              what rebuilds the page: .md, .html, or a build script
     <slug>.html           the built page, committed beside the source
     build/                gitignored — intermediates and scratch only
@@ -26,7 +26,7 @@ artifacts/
 
 An input that is itself ephemeral — a scan of the live environment, a query result, an API response — cannot be regenerated later because the thing it measured has moved on. Snapshot that alongside the source and say in `meta.yml` when it was taken.
 
-`meta.yml` carries what the gallery cannot: the **publishing org**, which is unrecoverable afterwards and is exactly what breaks when accounts change.
+`meta.yml` carries what the gallery cannot: the **publishing org**, which is unrecoverable afterwards and is exactly what breaks when accounts change, and the **author_model** that wrote the prose. Opus 4.8, Opus 5 and Fable do not write these pages (Yulong, 2026-09-08); the writer comes from `writer-priority` in `config/model-router.toml`, and `block_claude_authored_artifact.sh` refuses a publish whose `meta.yml` has no `author_model` or names a banned model. `author_model: generated` marks a page a script emits from structured data. The procedure is the `write-prose` skill.
 
 ## `meta.yml` is the row, so two publishes never conflict
 
