@@ -14,8 +14,12 @@
 #   5b-5e. codex    : the same for codex/config.toml (alone, together with
 #                     settings.json, an accepted edit that is not held, and a
 #                     held codex config that must not starve settings.json)
-#   5f. zed         : config/zed/settings.json with ssh_connections is held back
-#                     by the real pre-commit hook
+#   5f. zed         : with the zed-ssh clean filter, a Zed edit carrying
+#                     ssh_connections ships without the block, nothing held
+#   5g. zed, no filter: the real pre-commit hook rejects, only the Zed file is
+#                     held back and the rest ships
+#   5h-5j. zed rebase : a pulled Zed change keeps the local ssh_connections; no
+#                     Zed change is byte-identical; a failed restore keeps the backup
 #   6. dry-run      : nothing changes anywhere
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -206,21 +210,78 @@ git -C "$WORK/starve.git" show main:codex/config.toml | grep -q projects && fail
 [ "$(git -C "$WORK/starve.git" rev-list --count main)" = 3 ] || fail "expected one sync commit, not one per retried file"
 pass "a held codex/config.toml does not starve an accepted settings.json edit"
 
-# 5f. config/zed/settings.json is on the default list too. This case runs the
-# REAL pre-commit hook, so it also proves the Zed guard and the hold-back agree.
-fresh_remote zed
-mkdir -p "$WORK/zed/config/zed"
-printf '{\n  // editor\n  "vim_mode": true,\n}\n' >"$WORK/zed/config/zed/settings.json"
-git -C "$WORK/zed" add config && git -C "$WORK/zed" commit -q -m base && git -C "$WORK/zed" push -q
-git -C "$WORK/zed" config core.hooksPath "$REPO_ROOT/config/git-hooks"
-printf '{\n  // editor\n  "vim_mode": true,\n  "ssh_connections": [{ "host": "example-host", "projects": [] }],\n}\n' >"$WORK/zed/config/zed/settings.json"
-echo docs >"$WORK/zed/README.md"
-"$SYNC" "$WORK/zed" >/dev/null || fail "zed held-back run exited non-zero"
-git -C "$WORK/zed.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside held Zed settings"
+# 5f. config/zed/settings.json is NOT on the default list: the zed-ssh clean
+# filter strips ssh_connections before git stores the file, so the rest of a
+# Zed edit ships. These cases run the REAL pre-commit hook and filter.
+zed_repo() {
+    # $1 = name; a repo with the real .gitattributes line and a Zed settings file
+    fresh_remote "$1"
+    mkdir -p "$WORK/$1/config/zed"
+    grep -F 'filter=zed-ssh' "$REPO_ROOT/.gitattributes" >"$WORK/$1/.gitattributes"
+    printf '{\n  // editor\n  "vim_mode": true,\n}\n' >"$WORK/$1/config/zed/settings.json"
+    git -C "$WORK/$1" add .gitattributes config && git -C "$WORK/$1" commit -q -m base && git -C "$WORK/$1" push -q
+    git -C "$WORK/$1" config core.hooksPath "$REPO_ROOT/config/git-hooks"
+    printf '{\n  // editor\n  "vim_mode": false,\n  "ssh_connections": [{ "host": "example-host", "projects": [] }],\n}\n' >"$WORK/$1/config/zed/settings.json"
+    echo docs >"$WORK/$1/README.md"
+}
+zed_repo zed
+git -C "$WORK/zed" config filter.zed-ssh.clean "$REPO_ROOT/scripts/git-filters/zed-strip-ssh-connections"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed filtered run exited non-zero"
+git -C "$WORK/zed.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside the Zed settings"
+git -C "$WORK/zed.git" show main:config/zed/settings.json | grep -q '"vim_mode": false' || fail "the Zed vim_mode edit did not ship"
 git -C "$WORK/zed.git" show main:config/zed/settings.json | grep -q ssh_connections && fail "ssh_connections reached the remote"
-git -C "$WORK/zed" status --porcelain | grep -q 'config/zed/settings.json' || fail "Zed settings no longer dirty locally"
-[ "$(state_field zed held_back)" = config/zed/settings.json ] || fail "state held_back should name the Zed settings, got: $(state_field zed held_back)"
-pass "Zed settings with ssh_connections are held back by the real hook, everything else ships"
+grep -q example-host "$WORK/zed/config/zed/settings.json" || fail "the local Zed settings lost their ssh_connections"
+[ -z "$(git -C "$WORK/zed" status --porcelain)" ] || fail "tree not clean after sync: $(git -C "$WORK/zed" status --porcelain)"
+[ "$(state_field zed status)" = ok ] || fail "filtered Zed run should be ok"
+[ -z "$(state_field zed held_back)" ] || fail "nothing should be held, got: $(state_field zed held_back)"
+pass "with the clean filter, a Zed edit ships without ssh_connections and nothing is held"
+
+# 5g. Without the filter configured the guard rejects; the Zed file is still a
+# hold-back path as a fallback, so only it is held and the rest ships.
+zed_repo zednofilter
+"$SYNC" "$WORK/zednofilter" >/dev/null || fail "unfiltered Zed run exited non-zero"
+git -C "$WORK/zednofilter.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside the held Zed settings"
+git -C "$WORK/zednofilter.git" show main:config/zed/settings.json | grep -q ssh_connections && fail "ssh_connections reached the remote"
+grep -q example-host "$WORK/zednofilter/config/zed/settings.json" || fail "the held run touched the local Zed settings"
+[ "$(state_field zednofilter held_back)" = config/zed/settings.json ] || fail "state held_back should name only the Zed settings, got: $(state_field zednofilter held_back)"
+pass "without the clean filter, only the Zed settings are held and the rest ships"
+
+# 5h-5j. The rebase keeps the local ssh_connections. Clone B pushes changes and
+# the filtered clone from 5f syncs them in; its block exists only on disk.
+ZA="$WORK/zed/config/zed/settings.json"
+ZBAK="$DOTFILES_SYNC_STATE_DIR/zed.zed-ssh-connections.json"
+git -C "$WORK/zed-b" pull -q --rebase
+b_push() {  # $1 = commit subject; the change is already in clone B's tree
+    git -C "$WORK/zed-b" add -A && git -C "$WORK/zed-b" commit -q -m "$1" && git -C "$WORK/zed-b" push -q
+}
+
+# 5h. B changes a Zed setting: the rebase rewrites A's file without the block.
+printf '{\n  // editor\n  "vim_mode": false,\n  "theme": "Ayu",\n}\n' >"$WORK/zed-b/config/zed/settings.json"
+b_push "zed theme"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed pull run exited non-zero"
+grep -q '"theme": "Ayu"' "$ZA" || fail "the pulled Zed change did not land"
+grep -q example-host "$ZA" || fail "the rebase dropped the local ssh_connections"
+grep -q example-host "$ZBAK" || fail "no backup of the block in the state dir"
+git -C "$WORK/zed" diff --quiet || fail "the restored block shows up in git diff"
+pass "a sync that pulls a Zed change keeps the local ssh_connections, with a backup"
+
+# 5i. B changes something else: A's Zed file is byte-identical afterwards.
+cp "$ZA" "$WORK/zed-before.json"
+echo more >>"$WORK/zed-b/README.md"
+b_push "readme"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed no-change run exited non-zero"
+cmp -s "$ZA" "$WORK/zed-before.json" || fail "a sync without a Zed change altered the Zed settings"
+pass "a sync with no Zed change leaves the Zed settings byte-identical"
+
+# 5j. B pushes a Zed file the restore cannot parse: A's file is left as the
+# rebase wrote it, the backup stays, and the state says so.
+printf '{\n  "vim_mode": tru\n' >"$WORK/zed-b/config/zed/settings.json"
+b_push "broken zed"
+"$SYNC" "$WORK/zed" >/dev/null || fail "zed failed-restore run exited non-zero"
+cmp -s "$ZA" "$WORK/zed-b/config/zed/settings.json" || fail "a failed restore modified the Zed settings"
+grep -q example-host "$ZBAK" || fail "a failed restore lost the backup"
+state_field zed message | grep -q "not restored" || fail "state message does not report the failed restore: $(state_field zed message)"
+pass "a failed restore leaves the file alone and keeps the backup"
 
 # 6. dry-run changes nothing
 fresh_remote dry
