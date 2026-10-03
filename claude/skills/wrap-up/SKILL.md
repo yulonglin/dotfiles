@@ -62,6 +62,10 @@ git rev-parse --abbrev-ref HEAD
    - **What's done** — what now works that did not before. Not a file list; `gh pr diff` already shows files.
    - **What's left** — known gaps, deferred decisions, and any paths left unstaged because you could not attribute them. "Nothing" is a valid answer, said explicitly rather than dropping the section.
    - **How it was tested** — the command you ran and what it returned. If the suite failed, or you ran none, say so here. Never write "tested" without naming what was run.
+
+   **Run it as its own command, never chained onto the push.** `quality_pr_gate.sh` runs *before* the command does, so `git push && gh pr create` would have it inspect the pre-push state; it refuses the whole line rather than answer the wrong question. Push in item 5, create here.
+
+   **If `gh pr create` is denied, that is the code-review gate, not a bug.** `quality_pr_gate.sh` blocks the command when the branch changes code files and `superpowers:requesting-code-review` has not run on it. Run that skill over the branch diff and re-run the command — the review is the point. The deny message prints a ready-to-run `mkdir -p … && touch …` bypass for branches a review genuinely does not apply to; using it is a judgement call to state in the PR body. It also refuses `--head` outright (check out the branch instead) and `--base` on an unreviewed branch.
 7. **If push or PR creation fails** — no remote, auth expired, a protected branch — do **not** exit as done: the commit exists but nobody can see it. Classify as **blocked** (Step 3), name the failure, and say where the commit is.
 8. Rename the session (Step 5), then **end your turn.**
 
