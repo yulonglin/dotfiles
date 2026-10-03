@@ -21,7 +21,9 @@ Unless the user asks otherwise, a fork writes the debrief (Agent with `subagent_
 - **Skip `hive debrief preflight`.** It needs the session-start commit stamp that only the hive plugin's SessionStart hook writes, and that plugin is deliberately not enabled (it pings alignment-hive.com on every session start). The `!` line above is the preflight.
 - **`base` is mandatory in the front matter**, for the same reason. Never use `git merge-base HEAD main`: once the branch is merged into `main` it returns HEAD and the diff comes out empty.
   - Work on a branch the session created (EnterWorktree, `cw`): the commit the branch was created from, the last line of `git reflog show --format='%h %gs' <branch>` ("branch: Created from …"). This holds after a merge, as long as the branch still exists.
-  - Work on a branch that existed before, or a deleted branch: HEAD at the time of the first entry in `hive local outline <session>`, from `git rev-list -1 --before="<that time>" HEAD`.
+  - Branch already squash-merged and deleted: the parent of the squash commit (`git log --oneline main`, matched by PR number), with `head:` set to that squash commit.
+  - Work directly on a branch that existed before the session: HEAD at the time of the first entry in `hive local outline <session>`, from `git rev-list -1 --before="<that time>" HEAD`.
+  - A later round reuses round 1's `base`.
   - Then run `git log --format='%h %s' <base>..HEAD`. It must list every commit the transcript records; an empty or short range means the base is wrong, so stop and fix it. Another session's commits in the range belong in the `landing` item, named as not this session's.
 - **Fact-checker from another family**: an agent type routed through the model-router gateway, `sol(high)` first, `astra(high)` if that fails. Name the model on the page ("fact-checked by GPT-6.1 Sol").
 - **House writing rules apply on the page** — `~/.claude/rules/communication.md` and `sensitive-content.md`. The page is shareable, so no payloads, credentials, hosts or injection strings: describe the mechanism and cite the transcript locator instead.
