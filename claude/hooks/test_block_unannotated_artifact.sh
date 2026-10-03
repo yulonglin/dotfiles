@@ -64,13 +64,32 @@ test_case "file that does not exist yet (publish fails on its own)" \
     "{\"tool_name\":\"Artifact\",\"tool_input\":{\"file_path\":\"$WORK/absent.html\"}}" 0
 test_case "different tool name" \
     "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$BARE\"}}" 0
-mkdir -p "$WORK/debrief/sess/round-1" "$WORK/debrief-sibling"
-cp "$BARE" "$WORK/debrief/sess/round-1/page.html"
+D="$WORK/debrief"
+mkdir -p "$D/sess/round-1" "$D/sess/no-manifest" "$D/sess/link" "$WORK/debrief-sibling" "$WORK/outside"
+cp "$BARE" "$D/sess/round-1/page.html"
+printf '{}' > "$D/sess/round-1/manifest.json"
+cp "$BARE" "$D/sess/round-1/other.html"
+cp "$BARE" "$D/sess/no-manifest/page.html"
 cp "$BARE" "$WORK/debrief-sibling/page.html"
-DEBRIEF_DATA_DIR="$WORK/debrief" test_case "debrief page under the debrief data dir" \
-    "{\"tool_name\":\"Artifact\",\"tool_input\":{\"file_path\":\"$WORK/debrief/sess/round-1/page.html\"}}" 0
-DEBRIEF_DATA_DIR="$WORK/debrief" test_case "bare page in a sibling dir sharing the prefix still blocks" \
-    "{\"tool_name\":\"Artifact\",\"tool_input\":{\"file_path\":\"$WORK/debrief-sibling/page.html\"}}" 2
+printf '{}' > "$WORK/debrief-sibling/manifest.json"
+cp "$BARE" "$WORK/outside/page.html"
+printf '{}' > "$WORK/outside/manifest.json"
+ln -s "$WORK/outside/page.html" "$D/sess/link/page.html"
+printf '{}' > "$D/sess/link/manifest.json"
+ln -s "$WORK/outside" "$D/sess/escape"
+pub() { printf '{"tool_name":"Artifact","tool_input":{"file_path":"%s"}}' "$1"; }
+DEBRIEF_DATA_DIR="$D" test_case "debrief page.html with manifest under the data dir" \
+    "$(pub "$D/sess/round-1/page.html")" 0
+DEBRIEF_DATA_DIR="$D" test_case "other html beside a manifest still blocks" \
+    "$(pub "$D/sess/round-1/other.html")" 2
+DEBRIEF_DATA_DIR="$D" test_case "page.html without manifest still blocks" \
+    "$(pub "$D/sess/no-manifest/page.html")" 2
+DEBRIEF_DATA_DIR="$D" test_case "page in a sibling dir sharing the prefix still blocks" \
+    "$(pub "$WORK/debrief-sibling/page.html")" 2
+DEBRIEF_DATA_DIR="$D" test_case "file symlink escaping the data dir still blocks" \
+    "$(pub "$D/sess/link/page.html")" 2
+DEBRIEF_DATA_DIR="$D" test_case "directory symlink escaping the data dir still blocks" \
+    "$(pub "$D/sess/escape/page.html")" 2
 test_case "unparseable payload" "not json" 0
 test_case "empty payload" "" 0
 
