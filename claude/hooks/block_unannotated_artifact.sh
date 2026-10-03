@@ -64,9 +64,10 @@ FILE="${DECISION#*$'\t'}"
 
 # A debrief page (the `debrief` skill, rendered by `hive debrief render` into
 # its data dir) is reviewed through the platform's own artifact comments, so it
-# carries no select-to-comment layer by design. The exemption is for renderer
-# output only: the fully resolved file (symlinks followed) must be a page.html
-# inside the data dir with the renderer's manifest.json beside it.
+# carries no select-to-comment layer by design. The check is on layout, not
+# provenance: the fully resolved file (symlinks followed) must be a page.html
+# inside the data dir with a manifest.json beside it, which is what the
+# renderer writes. Anything placed there by hand in that shape also passes.
 if python3 - "$FILE" "${DEBRIEF_DATA_DIR:-$HOME/.cache/debrief}" <<'PY' 2>/dev/null
 import os, sys
 page, root = os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])
