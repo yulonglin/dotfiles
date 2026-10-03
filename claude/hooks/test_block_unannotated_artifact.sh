@@ -64,6 +64,13 @@ test_case "file that does not exist yet (publish fails on its own)" \
     "{\"tool_name\":\"Artifact\",\"tool_input\":{\"file_path\":\"$WORK/absent.html\"}}" 0
 test_case "different tool name" \
     "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$BARE\"}}" 0
+mkdir -p "$WORK/debrief/sess/round-1" "$WORK/debrief-sibling"
+cp "$BARE" "$WORK/debrief/sess/round-1/page.html"
+cp "$BARE" "$WORK/debrief-sibling/page.html"
+DEBRIEF_DATA_DIR="$WORK/debrief" test_case "debrief page under the debrief data dir" \
+    "{\"tool_name\":\"Artifact\",\"tool_input\":{\"file_path\":\"$WORK/debrief/sess/round-1/page.html\"}}" 0
+DEBRIEF_DATA_DIR="$WORK/debrief" test_case "bare page in a sibling dir sharing the prefix still blocks" \
+    "{\"tool_name\":\"Artifact\",\"tool_input\":{\"file_path\":\"$WORK/debrief-sibling/page.html\"}}" 2
 test_case "unparseable payload" "not json" 0
 test_case "empty payload" "" 0
 

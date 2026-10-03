@@ -62,6 +62,15 @@ FILE="${DECISION#*$'\t'}"
 # A path that does not exist yet fails at publish time on its own; not ours.
 [ -f "$FILE" ] || exit 0
 
+# A debrief page (the `debrief` skill, rendered by `hive debrief render` into
+# its data dir) is reviewed through the platform's own artifact comments, so it
+# carries no select-to-comment layer by design.
+DEBRIEF_ROOT=$(cd "${DEBRIEF_DATA_DIR:-$HOME/.cache/debrief}" 2>/dev/null && pwd -P)
+FILE_REAL=$(cd "$(dirname "$FILE")" 2>/dev/null && pwd -P)
+if [ -n "$DEBRIEF_ROOT" ] && [ -n "$FILE_REAL" ] && [[ "$FILE_REAL/" == "$DEBRIEF_ROOT/"* ]]; then
+    exit 0
+fi
+
 CHECKER=""
 if command -v annotate-html >/dev/null 2>&1; then
     CHECKER=$(command -v annotate-html)
