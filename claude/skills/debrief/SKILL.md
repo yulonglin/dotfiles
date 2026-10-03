@@ -50,8 +50,12 @@ The renderer is the hive CLI release binary — no `install.sh`, no sign-in, no 
 curl -fSL -o ~/.cache/hive/v0.2.2/hive \
   --create-dirs \
   https://github.com/Crazytieguy/alignment-hive/releases/download/hive-cli-v0.2.2/hive-cli-darwin-arm64
+echo "dfb530d2e960595b4747a206631da963639f7fb0dd4469c1644bd07c73d321b3  $HOME/.cache/hive/v0.2.2/hive" \
+  | shasum -a 256 -c
 chmod +x ~/.cache/hive/v0.2.2/hive
 ln -sf ~/.cache/hive/v0.2.2/hive ~/.local/bin/hive
 ```
+
+Upstream publishes no checksum or signature, so the darwin-arm64 hash above is trust-on-first-use (downloaded 2026-10-02): it catches a changed asset under the same tag, not a bad first download. Stop if the check fails.
 
 On Linux the asset is `hive-cli-linux-x64` or `hive-cli-linux-arm64`. On a version bump, re-copy `references/authoring.md` from the marketplace clone at `~/.claude/plugins/marketplaces/alignment-hive/plugins/debrief/references/` and update its header and this section together.

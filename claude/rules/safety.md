@@ -18,6 +18,8 @@ Hooks enforce some of this independently: `block_destructive_git.sh` refuses `re
 
 Name the package, version and guard, then stop. Never bypass it, and never do any of these without explicit approval — adding a third-party Homebrew tap, installing from an arbitrary URL or git repo, re-enabling lifecycle scripts, bypassing `min-release-age`, unsetting `UV_MALWARE_CHECK`, or passing `--no-quarantine`.
 
+**Verify a downloaded binary against the publisher's signature or checksum**, stopping on a mismatch; if none is published, say so, pin its sha256 where the install is documented, and check reinstalls against it.
+
 Keys are reached through one command, `secrets`, backed by Bitwarden Secrets Manager as the single source of truth. Nothing is exported ambiently, so a postinstall script finds an empty environment. `.envrc` is a convenience, not a boundary — `secrets get`/`secrets run` reach any key from any directory; the gate is this machine's BWS token, and a leaked key is closed by rotating it.
 
 ## In Google Workspace, never delete and never send
