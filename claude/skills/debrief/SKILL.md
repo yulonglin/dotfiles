@@ -30,13 +30,15 @@ Unless the user asks otherwise, a fork writes the debrief (Agent with `subagent_
 
 ## Publish and iterate
 
+After the final render, run `python3 ~/.claude/skills/debrief/scripts/add_comment_entry.py <page.html>`. The renderer leaves commenting to claude.ai's comment mode, which the reader must switch on first; this adds select-text-then-"Comment", opening the shell's own composer on the selection.
+
 Publish each round's `page.html` with the Artifact tool. The first round passes `icon: "report"` and
 
 ```json
-{"db": {"rules": [{"path": "seen", "read": "admin", "write": "owner"}, {"path": "seen/{self}", "read": "interact", "write": "interact"}]}, "user": {}}
+{"db": {"rules": [{"path": "seen", "read": "admin", "write": "owner"}, {"path": "seen/{self}", "read": "interact", "write": "interact"}]}, "user": {}, "comments": {"composer_only": true}}
 ```
 
-as `capabilities`, which keeps each reader's seen marks in the artifact database. Later rounds pass the first round's `url` and omit `capabilities`, so seen marks and open sections carry over. Post the link and the "Left for you" lines in chat. The Artifact is the page's only home: no vault copy, and no `ARTIFACTS.md` row unless the debrief is the report of record for a result.
+as `capabilities`: seen marks in the artifact database, and the composer entry point (no consent prompt; the page writes nothing). Later rounds pass the first round's `url` and omit `capabilities`, so seen marks and open sections carry over. Post the link and the "Left for you" lines in chat. The Artifact is the page's only home: no vault copy, and no `ARTIFACTS.md` row unless the debrief is the report of record for a result.
 
 Read comments with `ArtifactComments`. A comment that asks for a change to the work is yours to act on before the next round. Then send the fork every comment, each with what it was placed on, and the new round number; spawn a fresh fork instead if the session has compacted or much has happened since the last round.
 
