@@ -64,6 +64,17 @@ has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL || fail "phase 1 stripped the user
 has_top "$CLAUDE_SETTINGS" modelPicker || fail "phase 1 removed modelPicker from the user file (the rows belong there)"
 python3 -c 'import json,sys; rows=[o["model"] for o in json.load(open(sys.argv[1])).get("modelPicker",{}).get("options",[])]; sys.exit(0 if rows and "old" not in rows else 1)' "$CLAUDE_SETTINGS" \
   || fail "phase 1 did not re-render the picker rows into the user file"
+# The picker replaces the built-in lineup, and every row's second line names who bills for it.
+python3 - "$CLAUDE_SETTINGS" <<'PY' || fail "picker rows lack replaceBuiltInOptions or a billing description"
+import json, sys
+p = json.load(open(sys.argv[1]))["modelPicker"]
+assert p.get("replaceBuiltInOptions") is True, p
+desc = {o["model"]: o.get("description") for o in p["options"]}
+assert desc["astra"] == "ChatGPT subscription (Codex)", desc
+assert desc["kimi"] == "OpenRouter, pay per token", desc
+assert desc["claude-opus-5-5"] == "Claude subscription", desc
+assert [o["model"] for o in p["options"]][:3] == ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"], p
+PY
 "$WIRE" status | grep -q 'not wired' && fail "status calls the gateway off while the user file carries it"
 [ -f "$MODEL_ROUTER_CONFIG" ] || fail "router config not rendered"
 [ -f "$MODEL_ROUTER_MANAGED" ] && fail "apply wrote the managed path itself (it must go through sudo)"

@@ -63,7 +63,6 @@ DIRS = {
     "research": "src/content/research",
     "jobs": "src/content/jobs",
 }
-FILES = {"resume.pdf": "public/resume.pdf"}
 
 SITE = "https://yulonglin.com"
 
@@ -214,8 +213,6 @@ def pairs() -> list[tuple[str, Path, Path]]:
         names = {p.name for p in vroot.glob("*.md")} | {p.name for p in rroot.glob("*.md")}
         for name in sorted(names):
             out.append((f"{vdir}/{name}", vroot / name, rroot / name))
-    for vname, rname in FILES.items():
-        out.append((vname, VAULT / vname, REPO / rname))
     return out
 
 
@@ -319,10 +316,6 @@ def write_readme() -> None:
             where = "not published" if state == "draft" else url
             out.append(f"| [[{stem}]] | {state} | {where} |")
         out.append("")
-    resume = VAULT / "resume.pdf"
-    if resume.exists():
-        out.append("## CV\n")
-        out.append(f"`resume.pdf` is published at {SITE}/resume.pdf. Replace the file to update it.\n")
     (VAULT / "README.md").write_text("\n".join(out))
 
 
@@ -458,7 +451,7 @@ def do_publish(count: int, dry: bool) -> int:
     run(["git", "checkout", "main"])
     run(["git", "pull", "--ff-only"])
 
-    dirty = run(["git", "status", "--porcelain", "--", "src/", "public/"]).stdout.strip()
+    dirty = run(["git", "status", "--porcelain", "--", "src/"]).stdout.strip()
     if not dirty:
         print("nothing staged for the site; vault changes did not alter the repo")
         return 0
@@ -479,7 +472,7 @@ def do_publish(count: int, dry: bool) -> int:
 
     run(["git", "checkout", "-b", branch])
     try:
-        run(["git", "add", "--", "src/", "public/"])
+        run(["git", "add", "--", "src/"])
         run(["git", "commit", "-m", f"Publish vault edits ({stamp})"])
         run(["git", "push", "-u", "origin", branch])
         pr = run(

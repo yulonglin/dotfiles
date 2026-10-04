@@ -97,11 +97,10 @@ run() {
 # macOS, casks whose app is running are skipped. An app that is always open is
 # therefore never upgraded here; it relies on its own updater or a manual run.
 upgrade_brew_skipping_running_apps() {
-    local running="" safe=""
-    if ! running="$("$SCRIPT_DIR/brew-running-casks" --names)" \
-        || ! safe="$("$SCRIPT_DIR/brew-running-casks" --outdated-names)"; then
+    local safe="" still=""
+    if ! safe="$("$SCRIPT_DIR/brew-running-casks" --outdated-names)"; then
         log_err "brew-running-casks failed; upgrading formulae only, no casks this run"
-        running="" safe=""
+        safe=""
     fi
 
     log "Upgrading formulae..."
@@ -111,8 +110,9 @@ upgrade_brew_skipping_running_apps() {
         # shellcheck disable=SC2086  # one token per line, no spaces in cask tokens
         NONINTERACTIVE=1 HOMEBREW_NO_AUTO_UPDATE=1 brew upgrade --cask $safe 2>&1
     fi
-    if [[ -n "$running" ]]; then
-        log "Skipped running apps: ${running//$'\n'/ }"
+    # What brew still calls outdated, not a separate scan that can disagree with $safe.
+    if still="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --cask --quiet)" && [[ -n "$still" ]]; then
+        log "Casks not upgraded (app running or upgrade failed): ${still//$'\n'/ }"
     fi
     log_ok "Packages upgraded"
 

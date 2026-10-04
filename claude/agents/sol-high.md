@@ -1,6 +1,6 @@
 ---
 name: sol(high)
-description: General-purpose agent driven by GPT-5.6 Sol at high reasoning effort through the model-router gateway via the OpenAI account (Codex OAuth). Use for a task that should be done by this model inside the Claude Code loop with repo tools.
+description: General-purpose agent driven by GPT-6.1 Sol at high reasoning effort through the model-router gateway via the OpenAI account (Codex OAuth). Use for a task that should be done by this model inside the Claude Code loop with repo tools.
 model: sol
 effort: high
 ---

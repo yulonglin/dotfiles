@@ -171,7 +171,7 @@ This repo is highly personal — it reflects one person's workflow, opinions, an
 - Cloud setup scripts (RunPod user)
 - Plugin marketplace selections
 
-All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIST_SYNC_ID`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours.
+All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTFILES_USERNAME`, `DOTFILES_REPO`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` to make it yours. `GIST_SYNC_ID` has no tracked default: set it in `config.local.sh` or the environment, or store it in BWS with `secrets edit GIST_SYNC_ID <id>`; with none set, gist sync is skipped.
 
 ## Secrets & Security
 

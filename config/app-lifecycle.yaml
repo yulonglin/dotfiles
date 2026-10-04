@@ -22,9 +22,12 @@
 #     plus Shield.systemextension 205 MB), so the connection survives.
 #     Tailscale has since been pulled back to `close` below: the reasoning
 #     above says quitting is SAFE, not that it is wanted, and reopening the
-#     menu bar app is the friction this avoids. NordVPN and Codex still quit.
+#     menu bar app is the friction this avoids. NordVPN still quits. Codex
+#     now ships as ChatGPT.app (bundle com.openai.codex), which is `close`.
 #   Claude, Granola - the one change that will actually be felt, and the point
 #     of the exercise: closing their windows left the processes resident.
+#   ChatGPT, FineTune - Yulong 2026-10-02: keep ChatGPT and FineTune running;
+#     close windows only.
 
 defaults:
   manual: quit
@@ -51,6 +54,8 @@ apps:
   Mouseless:             {manual: close}
   Antinote:              {manual: close}
   Tailscale:             {manual: close}
+  ChatGPT:               {manual: close}
+  FineTune:              {manual: close}
   Spark Desktop:         {slow: true}      # ignores keystrokes; poll up to 30 s
   FaceTime:              {manual: quit, auto: skip}   # never touched automatically
 
