@@ -2,7 +2,7 @@
 
 Main context is for decomposition, dispatch, decisions and synthesis — not file dumps, search output, logs or diffs. Delegate anything whose tool output you need only the conclusion of, and reach for it before the first bulk read rather than after. When in doubt, spawn.
 
-**Delegate**: wide sweeps over many files or unknown locations; bulk reads of logs, transcripts, long diffs, unbounded PDFs; scoped implementation chunks; verbose runs where you need only pass/fail plus failing lines; multi-page web research.
+**Delegate**: wide sweeps over many files or unknown locations; bulk reads of logs, transcripts, long diffs, unbounded PDFs; scoped implementation chunks; verbose runs where you need only pass/fail plus failing lines; multi-page web research; **artifact and paper prose** (`write-prose`).
 
 An MCP search call (Gmail `search_threads`, Slack search, Drive `search_files`) is a sweep even when it reads like a single lookup: one default page spills tens of thousands of characters. Run it in a subagent and page there; inline only with a narrowed query and a page size of at most 10 — `block_bulky_mcp_search.sh` refuses anything larger. Load the connector skill (`gmail-connector` and siblings) before the first search, not after the first spill.
 
