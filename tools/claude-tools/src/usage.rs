@@ -80,18 +80,18 @@ struct WeeklyScopedEntry {
 
 // --- Public entry point ---
 
-/// Append usage gauges (or error) to output as a third statusline line.
-pub fn format_usage(output: &mut String) {
+/// Claude subscription usage as layout groups for statusline::pack_groups:
+/// this account's windows first, then the other account's countdowns. An
+/// error or an all-empty response still yields a group, so the usage line
+/// never silently disappears.
+pub fn usage_groups() -> Vec<Vec<String>> {
     match fetch_cached_usage() {
-        Ok(usage) => format_usage_line(output, &usage),
-        Err(e) => {
-            output.push('\n');
-            let _ = write!(output, "\x1b[2m\x1b[31m{}\x1b[0m", e);
-        }
+        Ok(usage) => usage_line_groups(&usage),
+        Err(e) => vec![vec![format!("\x1b[2m\x1b[31m{}\x1b[0m", e)]],
     }
 }
 
-fn format_usage_line(output: &mut String, usage: &UsageResponse) {
+fn usage_line_groups(usage: &UsageResponse) -> Vec<Vec<String>> {
     let five = usage.five_hour.as_ref().and_then(|b| b.utilization);
     let seven = usage.seven_day.as_ref().and_then(|b| b.utilization);
 
@@ -103,52 +103,49 @@ fn format_usage_line(output: &mut String, usage: &UsageResponse) {
         upsert_account_snapshot(email, usage);
     }
 
+    let mut own = Vec::new();
     if five.is_none() && seven.is_none() {
-        output.push('\n');
-        let _ = write!(output, "\x1b[2m\u{2014}\x1b[0m"); // dim em-dash placeholder
-        if let Some(email) = current_email.as_deref() {
-            render_other_account(output, email);
+        own.push("\x1b[2m\u{2014}\x1b[0m".to_string()); // dim em-dash placeholder
+    } else {
+        if let Some(pct) = five {
+            let pct = pct.round().clamp(0.0, 100.0) as u8;
+            let resets_at = usage.five_hour.as_ref().and_then(|b| b.resets_at.as_deref());
+            own.push(bucket_segment("5h", pct, resets_at, 5.0 * 3600.0));
         }
-        return;
-    }
-
-    output.push('\n');
-
-    if let Some(pct) = five {
-        let pct = pct.round().clamp(0.0, 100.0) as u8;
-        let resets_at = usage.five_hour.as_ref().and_then(|b| b.resets_at.as_deref());
-        render_bucket(output, "5h", pct, resets_at, 5.0 * 3600.0);
-    }
-
-    if let Some(pct) = seven {
-        let pct = pct.round().clamp(0.0, 100.0) as u8;
-        if five.is_some() {
-            output.push_str(" \u{00b7} ");
+        if let Some(pct) = seven {
+            let pct = pct.round().clamp(0.0, 100.0) as u8;
+            let resets_at = usage.seven_day.as_ref().and_then(|b| b.resets_at.as_deref());
+            own.push(bucket_segment("7d", pct, resets_at, SEVEN_DAY_SECS));
         }
-        let resets_at = usage.seven_day.as_ref().and_then(|b| b.resets_at.as_deref());
-        render_bucket(output, "7d", pct, resets_at, SEVEN_DAY_SECS);
+
+        // Model-scoped weekly limits (e.g. Fable) — separate quota from the
+        // aggregate 7d bucket above, surfaced by the API as `weekly_scoped`.
+        for limit in usage.limits.iter().filter(|l| l.kind.as_deref() == Some("weekly_scoped")) {
+            let Some(pct) = limit.percent else { continue };
+            let Some(name) = limit
+                .scope
+                .as_ref()
+                .and_then(|s| s.model.as_ref())
+                .and_then(|m| m.display_name.as_deref())
+            else {
+                continue;
+            };
+            let pct = pct.round().clamp(0.0, 100.0) as u8;
+            own.push(bucket_segment(name, pct, limit.resets_at.as_deref(), SEVEN_DAY_SECS));
+        }
     }
 
-    // Model-scoped weekly limits (e.g. Fable) — separate quota from the
-    // aggregate 7d bucket above, surfaced by the API as `weekly_scoped`.
-    for limit in usage.limits.iter().filter(|l| l.kind.as_deref() == Some("weekly_scoped")) {
-        let Some(pct) = limit.percent else { continue };
-        let Some(name) = limit
-            .scope
-            .as_ref()
-            .and_then(|s| s.model.as_ref())
-            .and_then(|m| m.display_name.as_deref())
-        else {
-            continue;
-        };
-        let pct = pct.round().clamp(0.0, 100.0) as u8;
-        output.push_str(" \u{00b7} ");
-        render_bucket(output, name, pct, limit.resets_at.as_deref(), SEVEN_DAY_SECS);
+    let mut groups = vec![own];
+    if let Some(other) = current_email.as_deref().and_then(other_account_group) {
+        groups.push(other);
     }
+    groups
+}
 
-    if let Some(email) = current_email.as_deref() {
-        render_other_account(output, email);
-    }
+fn bucket_segment(label: &str, pct: u8, resets_at: Option<&str>, window_secs: f64) -> String {
+    let mut segment = String::new();
+    render_bucket(&mut segment, label, pct, resets_at, window_secs);
+    segment
 }
 
 /// Render one rate-limit bucket: gauge + pace indicator, colored by pace (not
@@ -252,7 +249,7 @@ fn format_pace(output: &mut String, delta: i16, remaining_secs: f64, color: &str
 }
 
 /// Format remaining seconds as a compact countdown: "2h30m" / "45m" / "5d3h".
-fn fmt_time_remaining(secs: f64) -> String {
+pub(crate) fn fmt_time_remaining(secs: f64) -> String {
     let mins = (secs / 60.0).round() as u32;
     let h = mins / 60;
     let m = mins % 60;
@@ -417,12 +414,13 @@ fn upsert_account_snapshot(email: &str, usage: &UsageResponse) {
 
 /// Surface the other (logged-out) account's last-known usage windows (5h,
 /// 7d, weekly-scoped) as an always-on compact indicator: one "label
-/// countdown"/"label ready" segment per window with cached data, joined by
-/// "·". No-op if no other account has ever synced. Picks the other account
-/// whose 5h window synced most recently, in case more than one exists.
-fn render_other_account(output: &mut String, current_email: &str) {
+/// countdown"/"label ready" segment per window with cached data, the first
+/// one marked with a dim "⇄". None if no other account has ever synced. Picks
+/// the other account whose 5h window synced most recently, in case more than
+/// one exists.
+fn other_account_group(current_email: &str) -> Option<Vec<String>> {
     let accounts = read_accounts_cache();
-    let other = accounts
+    let entry = accounts
         .iter()
         .filter(|(email, _)| email.as_str() != current_email)
         .filter_map(|(_, entry)| {
@@ -430,9 +428,7 @@ fn render_other_account(output: &mut String, current_email: &str) {
             Some((epoch, entry))
         })
         .max_by_key(|(epoch, _)| *epoch)
-        .map(|(_, entry)| entry);
-
-    let Some(entry) = other else { return };
+        .map(|(_, entry)| entry)?;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -449,26 +445,23 @@ fn render_other_account(output: &mut String, current_email: &str) {
         windows.push((name.clone(), w.resets_at.clone()));
     }
 
-    let mut rendered = String::new();
+    let mut segments = Vec::new();
     for (label, resets_at) in &windows {
         let Some(epoch) = resets_at.as_deref().and_then(parse_iso_epoch) else { continue };
-        if !rendered.is_empty() {
-            rendered.push_str(" \u{00b7} ");
+        let mut segment = String::new();
+        if segments.is_empty() {
+            segment.push_str("\x1b[2m\u{21c4}\x1b[0m ");
         }
         if epoch > now {
             let remaining = (epoch - now) as f64;
-            let _ = write!(rendered, "\x1b[2m{} {}\x1b[0m", label, fmt_time_remaining(remaining));
+            let _ = write!(segment, "\x1b[2m{} {}\x1b[0m", label, fmt_time_remaining(remaining));
         } else {
-            let _ = write!(rendered, "\x1b[32m{} ready\x1b[0m", label);
+            let _ = write!(segment, "\x1b[32m{} ready\x1b[0m", label);
         }
+        segments.push(segment);
     }
 
-    if rendered.is_empty() {
-        return;
-    }
-
-    output.push_str("  \x1b[2m\u{21c4}\x1b[0m ");
-    output.push_str(&rendered);
+    (!segments.is_empty()).then_some(segments)
 }
 
 // --- Caching ---

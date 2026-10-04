@@ -126,6 +126,8 @@ class CodexUsageTests(unittest.TestCase):
             PATH=f"{self.bin}:{os.environ['PATH']}",
             CLAUDE_CODE_OAUTH_TOKEN="",
         )
+        # The caller's terminal width must not decide where the row wraps.
+        self.env.pop("COLUMNS", None)
         (self.codex / "auth.json").write_text("{}")  # metadata only; not a token
         (self.codex / "mode").write_text("success")
         self.set_response(response(bucket(window(64, 10080))))
@@ -165,10 +167,13 @@ class CodexUsageTests(unittest.TestCase):
         )
         self.assertEqual(process.stderr, "")
         output = ANSI.sub("", process.stdout)
-        self.assertEqual(output.splitlines()[2], "5h ◔ 25% · 7d ◑ 50%")
-        codex = "\n".join(
-            line for line in output.splitlines() if line.startswith("Codex")
-        )
+        # Claude and Codex share the usage row (line 3) when it fits; COLUMNS is
+        # unset here, so it always does. Codex is the group from its label on.
+        usage = output.splitlines()[2]
+        self.assertTrue(usage.startswith("5h ◔ 25% · 7d ◑ 50%"), usage)
+        rest = usage[len("5h ◔ 25% · 7d ◑ 50%") :]
+        codex = rest[len("  ") :] if rest.startswith("  Codex") else ""
+        self.assertEqual(len(output.splitlines()), 3, "no row beyond usage")
         return codex, output
 
     def count_calls(self) -> int:
@@ -323,6 +328,27 @@ class CodexUsageTests(unittest.TestCase):
         self.assertEqual(self.render()[0], "")
         self.assertEqual(self.count_calls(), 1)
 
+    def test_narrow_terminal_moves_codex_to_its_own_line(self) -> None:
+        # COLUMNS=30 leaves 26 usable columns: the Claude group (19) fits, the
+        # Codex group (14) does not fit beside it, so it moves down whole.
+        self.render()  # warm the Codex cache through the normal path
+        process = subprocess.run(
+            [str(BINARY), "statusline"],
+            env=dict(self.env, COLUMNS="30"),
+            input=json.dumps(
+                {
+                    "workspace": {"current_dir": str(self.root)},
+                    "model": {"display_name": "Opus"},
+                }
+            ),
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+        lines = ANSI.sub("", process.stdout).splitlines()
+        self.assertEqual(lines[2:], ["5h ◔ 25% · 7d ◑ 50%", "Codex 7d ◕ 64%"])
+
     def test_missing_executable_omits_line(self) -> None:
         (self.bin / "codex").unlink()
         for name in ("bash", "uname", "dirname"):
@@ -342,7 +368,8 @@ class CodexUsageTests(unittest.TestCase):
         )
         line, raw = self.render()
         self.assertEqual(line, "Codex 5h ○ 5%")
-        self.assertEqual(len(raw.splitlines()), 4)
+        # Location, session, and the shared usage row: no injected line break.
+        self.assertEqual(len(raw.splitlines()), 3)
 
     def test_process_errors_are_bounded_and_reaped(self) -> None:
         # Each mode is isolated; failure backoff must not hide the next case.
