@@ -41,6 +41,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `check-bib-references` | Verifying BibTeX citations aren't LLM-fabricated |
 | `strategic-communication` | Messages needing negotiation or persuasion — rentals, salary, declining an offer |
 | `externalise-handover` | Handing this conversation to another person or agent — next tasks, what ran, bugs, open uncertainties |
+| `debrief` | "debrief", "what did you do while I was away" — one commentable review page of a finished session, rendered by the hive CLI, iterated in rounds |
 
 ## Artifacts, specs and slides
 

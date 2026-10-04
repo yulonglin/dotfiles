@@ -114,6 +114,8 @@ fi
 
 # ─── Machine inventory (casks, requested formulae, App Store receipts, taps) ──
 typeset -A INST_CASK INST_FORMULA INST_MAS   # INST_MAS: app stem → bundle id
+typeset -A FORMULA_ALIAS                     # alias → formula name (python → python@3.14)
+typeset -A FORMULA_NEEDED                    # requested formulae another formula depends on
 typeset -a INST_TAPS
 INVENTORIED=false
 BREW_OK=false
@@ -124,7 +126,21 @@ inventory() {
     BREW_OK=true
     local t
     for t in $(brew list --cask 2>/dev/null); do INST_CASK[$t]=1; done
-    for t in $(brew leaves --installed-on-request 2>/dev/null); do INST_FORMULA[${t:t}]=$t; done
+    # Requested formulae from `brew info`, not `brew leaves`: leaves hides a requested formula
+    # once something else depends on it (python@3.14 under gcloud-cli). Aliases let a registry
+    # id such as `python` match whichever python@3.x it currently resolves to.
+    local name full needed aliases a
+    while read -r name full needed aliases; do
+        INST_FORMULA[$name]=$full
+        [[ "$needed" == "1" ]] && FORMULA_NEEDED[$name]=1
+        for a in ${=aliases}; do FORMULA_ALIAS[$a]=$name; done
+    done < <(brew info --json=v2 --installed 2>/dev/null | python3 -c '
+import json, sys
+fs = json.load(sys.stdin)["formulae"]
+deps = {d["full_name"].split("/")[-1] for f in fs for i in f["installed"] for d in i.get("runtime_dependencies") or []}
+for f in fs:
+    if any(i.get("installed_on_request") for i in f["installed"]):
+        print(f["name"], f["full_name"], int(f["name"] in deps), " ".join(f.get("aliases") or []))' 2>/dev/null)
     for t in $(brew tap 2>/dev/null); do [[ "$t" == homebrew/* ]] || INST_TAPS+=("$t"); done
     local app stem
     setopt local_options null_glob
@@ -151,7 +167,7 @@ mas_stem_for() {  # <registry name> → installed app stem, or nothing
 is_installed_app() {  # <method> <id> <name> → 0 if installed on this Mac
     case "$1" in
         cask) [[ -n "${INST_CASK[$2]+_}" ]] ;;
-        brew) [[ -n "${INST_FORMULA[$2]+_}" ]] ;;
+        brew) [[ -n "${INST_FORMULA[${FORMULA_ALIAS[$2]:-$2}]+_}" ]] ;;
         mas)  [[ -n "$(mas_stem_for "$3")" ]] ;;
         *)    return 1 ;;
     esac
@@ -160,7 +176,7 @@ uninstall_cmd_app() {  # <method> <id> <name> → the command that removes it (p
     local stem
     case "$1" in
         cask) print -r -- "brew uninstall --cask $2" ;;
-        brew) print -r -- "brew uninstall ${INST_FORMULA[$2]:-$2}" ;;
+        brew) print -r -- "brew uninstall ${INST_FORMULA[${FORMULA_ALIAS[$2]:-$2}]:-$2}" ;;
         mas)  stem="$(mas_stem_for "$3")"
               print -r -- "sudo mas uninstall $2    # or Trash \"$APPS_DIR/${stem:-$3}.app\"" ;;
     esac
@@ -379,13 +395,14 @@ audit() {
         print -rl -- "${UNREGISTERED_LINES[@]/#/  }"
     fi
 
-    # E. requested formulae nobody declares
+    # E. requested formulae nobody declares — skipping any another formula needs, since
+    #    `brew uninstall` would refuse those (the old `brew leaves` behaviour)
     typeset -A reg_brew
-    for (( i=1; i<=n; i++ )); do [[ "${A_METHOD[i]}" == "brew" ]] && reg_brew[${A_ID[i]}]=1; done
-    for (( i=1; i<=xn; i++ )); do [[ "${X_METHOD[i]}" == "brew" ]] && reg_brew[${X_ID[i]}]=1; done
+    for (( i=1; i<=n; i++ )); do [[ "${A_METHOD[i]}" == "brew" ]] && reg_brew[${FORMULA_ALIAS[${A_ID[i]}]:-${A_ID[i]}}]=1; done
+    for (( i=1; i<=xn; i++ )); do [[ "${X_METHOD[i]}" == "brew" ]] && reg_brew[${FORMULA_ALIAS[${X_ID[i]}]:-${X_ID[i]}}]=1; done
     out=""
     for t in "${(ko)INST_FORMULA[@]}"; do
-        [[ "$t" == "mas" || -n "${reg_brew[$t]+_}" ]] && continue
+        [[ "$t" == "mas" || -n "${reg_brew[$t]+_}" || -n "${FORMULA_NEEDED[$t]+_}" ]] && continue
         declared_elsewhere "$t" && continue
         out+="  ${INST_FORMULA[$t]}"$'\n'
     done

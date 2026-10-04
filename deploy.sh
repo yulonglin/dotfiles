@@ -372,11 +372,19 @@ if [[ "$DEPLOY_SECRETS" == "true" ]]; then
     log_section "SYNCING GIST"
     # SSH config (synced from gist) uses ControlPath ~/.ssh/controlmasters/
     mkdir -p "$HOME/.ssh/controlmasters"
-    sync_gist || log_warning "Gist sync failed (continuing anyway)"
+    # No tracked gist ID: resolve it once (env, config.local.sh, then BWS). With
+    # none configured, skip both the sync and the daily job, which would only
+    # fail every morning.
+    if GIST_SYNC_ID="$(gist_sync_id)"; then
+        export GIST_SYNC_ID
+        sync_gist || log_warning "Gist sync failed (continuing anyway)"
 
-    # Install automated daily sync
-    log_info "Setting up automated daily gist sync..."
-    "$DOT_DIR/scripts/cleanup/setup_gist_sync.sh" || log_warning "Failed to setup automated gist sync"
+        # Install automated daily sync
+        log_info "Setting up automated daily gist sync..."
+        "$DOT_DIR/scripts/cleanup/setup_gist_sync.sh" || log_warning "Failed to setup automated gist sync"
+    else
+        gist_sync_unset_message
+    fi
 fi
 
 # ─── Secrets (BWS) ───────────────────────────────────────────────────────────
@@ -418,6 +426,16 @@ if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     # Global gitattributes
     safe_symlink "$DOT_DIR/config/gitattributes_global" "$HOME/.gitattributes"
     git config --global core.attributesFile "$HOME/.gitattributes"
+
+    # Clean filter named in this repo's .gitattributes: strips Zed's
+    # ssh_connections from config/zed/settings.json before git stores it. Git
+    # runs filter commands from the top of the working tree, so the relative
+    # path works in every worktree. Not marked required, so a clone without
+    # this config still checks out; the pre-commit guard covers that case.
+    if git -C "$DOT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+        git -C "$DOT_DIR" config --local filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections
+        log_success "Configured the zed-ssh clean filter for $DOT_DIR"
+    fi
 fi
 
 # ─── Git Hooks ────────────────────────────────────────────────────────────────

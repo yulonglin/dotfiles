@@ -6,11 +6,19 @@ Prefer `archive/` over `trash` over `rm`, and don't `rm -rf` unless asked. The g
 
 A restore or git operation that failed under the sandbox is intact — retry with `dangerouslyDisableSandbox: true`. Sandbox failure modes and their fixes are in the `jobs` skill.
 
+## Keep one copy of each document
+
+A document Yulong reads or edits — a draft, writeup, plan or note — lives in exactly one place: the Bear note, the repo file or the Google Doc he named. Never keep a mirror in a second place and "sync" between them: mirrors drift, and syncing one over the other destroyed his edits (2026-09-30). Pick the home when the document is created, name it in the reply, and write only there. Publishing elsewhere (a Google Doc, an Artifact, the vault snapshot in `vault-deliverables.md`) happens once, from that home, and the published copy is never edited or synced back. A raw backup taken before a destructive tidy is fine, labelled as a backup and never edited.
+
+Before any write to a document Yulong may have touched, re-read it and keep his changes exactly where he put them: never relocate, condense or restore text he added or removed. A `cp -i` "overwrite?" prompt means stop and diff, never `cp -f`.
+
 Hooks enforce some of this independently: `block_destructive_git.sh` refuses `reset --hard`, `checkout -- <path>`, `clean -f`, bare `stash` and `stash pop`.
 
 ## A quarantine or malware-check block is the defense working
 
 Name the package, version and guard, then stop. Never bypass it, and never do any of these without explicit approval — adding a third-party Homebrew tap, installing from an arbitrary URL or git repo, re-enabling lifecycle scripts, bypassing `min-release-age`, unsetting `UV_MALWARE_CHECK`, or passing `--no-quarantine`.
+
+**Verify a downloaded binary against the publisher's signature or checksum**, stopping on a mismatch; if none is published, say so, pin its sha256 where the install is documented, and check reinstalls against it.
 
 Keys are reached through one command, `secrets`, backed by Bitwarden Secrets Manager as the single source of truth. Nothing is exported ambiently, so a postinstall script finds an empty environment. `.envrc` is a convenience, not a boundary — `secrets get`/`secrets run` reach any key from any directory; the gate is this machine's BWS token, and a leaked key is closed by rotating it.
 

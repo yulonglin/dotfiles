@@ -57,22 +57,46 @@ jobs:
       - name: Always-on byte budget
         run: python -m pytest tests/test_memory_tier_budget.py -q
 
+      # Each guard below carries `if: ${{ !cancelled() }}`: a step is skipped
+      # once an earlier one fails, so a red budget would otherwise silence
+      # every security guard after it. The job still fails on the budget.
+
       # The guard that keeps the tokened loopback URL out of a public repo.
       - name: Pre-commit gateway guard
+        if: ${{ !cancelled() }}
         run: bash tests/test_pre_commit_gateway_guard.sh
+
+      # The guard that keeps Codex's per-directory trust paths out of it too.
+      - name: Pre-commit Codex trust-table guard
+        if: ${{ !cancelled() }}
+        run: bash tests/test_pre_commit_codex_trust_guard.sh
+
+      # And Zed's ssh_connections hosts, in a clone without the clean filter.
+      - name: Pre-commit Zed ssh_connections guard
+        if: ${{ !cancelled() }}
+        run: bash tests/test_pre_commit_zed_ssh_guard.sh
+
+      # The clean filter that strips that block before git stores the file.
+      - name: Zed ssh_connections clean filter
+        if: ${{ !cancelled() }}
+        run: bash tests/test_zed_strip_ssh_connections.sh
 
       # The extractor that fed the approval classifier an empty string for five
       # months. These pin the real transcript line shapes.
       - name: Approval classifier context
+        if: ${{ !cancelled() }}
         run: python -m pytest tests/test_approval_classifier_context.py -q
 
       - name: Settings shape
+        if: ${{ !cancelled() }}
         run: python -m pytest tests/test_validate_claude_settings.py -q
 
       - name: Secrets stay out of the ambient environment
+        if: ${{ !cancelled() }}
         run: bash tests/test_secrets_global_scope.sh
 
       - name: Artifacts are not built in throwaway paths
+        if: ${{ !cancelled() }}
         run: bash tests/test_block_throwaway_artifact_path.sh
 
       # A guard that cannot fail proves nothing. The budget gate is derived from

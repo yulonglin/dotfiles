@@ -142,7 +142,12 @@ DOTFILES_USERNAME="${DOTFILES_USERNAME:-yulong}"
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/yulonglin/dotfiles.git}"
 GIT_USER_NAME="yulonglin"
 GIT_USER_EMAIL="30549145+yulonglin@users.noreply.github.com"
-GIST_SYNC_ID="${GIST_SYNC_ID:-3cc239f160a2fe8c9e6a14829d85a371}"  # Gist used for config sync (SSH, git identity)
+# Gist used for config sync (SSH config, authorized_keys, git identity). No
+# tracked default: the ID is the read capability of an unlisted gist, so it
+# stays out of this public repo. Supply it per machine with GIST_SYNC_ID in the
+# environment or config.local.sh, or store it in BWS (`secrets edit`, key
+# GIST_SYNC_ID). Unset everywhere, gist sync is skipped. See gist_sync_id().
+GIST_SYNC_ID="${GIST_SYNC_ID:-}"
 
 # ─── AI Tools Configuration ───────────────────────────────────────────────────
 # Portable Codex ownership policy shared by Zsh installers and Bash updaters.

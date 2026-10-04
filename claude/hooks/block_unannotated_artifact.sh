@@ -62,6 +62,25 @@ FILE="${DECISION#*$'\t'}"
 # A path that does not exist yet fails at publish time on its own; not ours.
 [ -f "$FILE" ] || exit 0
 
+# A debrief page (the `debrief` skill, rendered by `hive debrief render` into
+# its data dir) is reviewed through the platform's own artifact comments, so it
+# carries no select-to-comment layer by design. The check is on layout, not
+# provenance: the fully resolved file (symlinks followed) must be a page.html
+# inside the data dir with a manifest.json beside it, which is what the
+# renderer writes. Anything placed there by hand in that shape also passes.
+if python3 - "$FILE" "${DEBRIEF_DATA_DIR:-$HOME/.cache/debrief}" <<'PY' 2>/dev/null
+import os, sys
+page, root = os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])
+inside = os.path.commonpath([page, root]) == root and page != root
+manifest = os.path.join(os.path.dirname(page), "manifest.json")
+ok = inside and os.path.basename(page) == "page.html" and os.path.isfile(manifest) \
+    and os.path.commonpath([os.path.realpath(manifest), root]) == root
+sys.exit(0 if ok else 1)
+PY
+then
+    exit 0
+fi
+
 CHECKER=""
 if command -v annotate-html >/dev/null 2>&1; then
     CHECKER=$(command -v annotate-html)
