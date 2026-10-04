@@ -246,6 +246,81 @@ class ProjectHubTest(unittest.TestCase):
         self.assertEqual((hub / "code-sprint/logs/a.eval").read_text(), "code-sprint")
         self.assertFalse((runs / "logs-sprint/.project-hub-tier-source").exists())
 
+    def adopted_code(self) -> Path:
+        self.run_hub("new", "proj")
+        src = self.make_repo(self.home / "code/thing")
+        self.run_hub("adopt", "proj", f"code={src}", "--no-sync")
+        code = self.home / "projects/proj/code"
+        os.utime(code / "logs/a.eval", (0, 0))
+        return code
+
+    def test_tier_cross_fs_refuses_while_a_file_is_open_for_writing(self) -> None:
+        # A writer idle past --quiet-minutes still holds its fd; rsync
+        # --remove-source-files would unlink the file under it and lose later writes.
+        env = {**self.env, "PROJECT_HUB_FORCE_COPY": "1"}
+        code = self.adopted_code()
+        holder = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import sys, time; f = open(sys.argv[1], 'a'); print('open', flush=True); time.sleep(120)",
+                str(code / "logs/a.eval"),
+            ],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        self.addCleanup(holder.kill)
+        self.assertEqual(holder.stdout.readline().strip(), "open")
+        os.utime(code / "logs/a.eval", (0, 0))
+        r = self.run_hub("tier", "proj/code", "logs", env=env, ok=False)
+        self.assertIn("open for writing", r.stderr)
+        self.assertIn(str(holder.pid), r.stderr)
+        self.assertTrue((code / "logs").is_dir() and not (code / "logs").is_symlink())
+        self.assertEqual((code / "logs/a.eval").read_text(), "cold")
+        self.assertFalse((self.volume / "projects/proj/runs/logs").exists())
+        holder.kill()
+        holder.wait()
+        self.run_hub("tier", "proj/code", "logs", env=env)
+        self.assertEqual(os.readlink(code / "logs"), "../runs/logs")
+
+    def test_tier_cross_fs_without_a_handle_checker_needs_offline(self) -> None:
+        env = {
+            **self.env,
+            "PROJECT_HUB_FORCE_COPY": "1",
+            "PROJECT_HUB_HANDLE_CHECK": "none",
+        }
+        code = self.adopted_code()
+        r = self.run_hub("tier", "proj/code", "logs", env=env, ok=False)
+        self.assertIn("--offline", r.stderr)
+        self.assertFalse((code / "logs").is_symlink())
+        self.run_hub("tier", "proj/code", "logs", "--offline", env=env)
+        self.assertEqual(os.readlink(code / "logs"), "../runs/logs")
+
+    def test_tier_refuses_relative_links_that_escape_the_dir(self) -> None:
+        for path in ("rename", "copy"):
+            with self.subTest(path=path):
+                self.setUp()
+                env = dict(self.env)
+                if path == "copy":
+                    env["PROJECT_HUB_FORCE_COPY"] = "1"
+                code = self.adopted_code()
+                (code / "metrics.csv").write_text("m")
+                logs = code / "logs"
+                (logs / "metrics.csv").symlink_to("../metrics.csv")
+                (logs / "sub").mkdir()
+                (logs / "sub/up").symlink_to("../../README.md")
+                (logs / "latest").symlink_to("a.eval")  # internal: moves with it
+                r = self.run_hub("tier", "proj/code", "logs", env=env, ok=False)
+                self.assertIn("metrics.csv -> ../metrics.csv", r.stderr)
+                self.assertIn("sub/up -> ../../README.md", r.stderr)
+                self.assertNotIn("latest", r.stderr)
+                self.assertTrue(logs.is_dir() and not logs.is_symlink())
+                (logs / "metrics.csv").unlink()
+                (logs / "sub/up").unlink()
+                self.run_hub("tier", "proj/code", "logs", env=env)
+                self.assertEqual(os.readlink(logs), "../runs/logs")
+                self.assertEqual((logs / "latest").read_text(), "cold")
+
     def test_tier_cross_fs_resumes_an_interrupted_copy(self) -> None:
         env = {**self.env, "PROJECT_HUB_FORCE_COPY": "1"}
         self.run_hub("new", "proj")

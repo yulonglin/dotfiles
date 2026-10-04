@@ -33,7 +33,15 @@ volume they are plain directories. Repos link their own bulk dirs relatively
 
 Never deletes user data. A move that is not a same-filesystem rename is refused
 (use the rsync procedure in the server-storage-tiering skill). `tier` refuses a
-dir with tracked files, recent writes, or that git does not ignore.
+dir with tracked files, recent writes, or that git does not ignore, and a dir
+holding a relative symlink that points outside it (the link would dangle once
+moved).
+
+Stop the producers before `tier`. A cross-filesystem tier copies, then unlinks
+each source file; a process still holding one open would keep writing to the
+unlinked inode and lose that output. So the copy is refused while any process
+has a file under the dir open for writing (/proc on Linux, lsof elsewhere). With
+neither available it is refused unless --offline asserts nothing writes there.
 """
 
 from __future__ import annotations
@@ -312,6 +320,88 @@ def recent_writes(d: Path, minutes: int) -> int:
     return n
 
 
+def escaping_links(d: Path) -> list[str]:
+    """Relative symlinks under d whose target lies outside d; they break when d moves.
+
+    Absolute links still resolve after the move, and links inside d move with it.
+    """
+    root = os.path.normpath(d)
+    bad = []
+    for cur, dirs, files in os.walk(d):
+        for n in dirs + files:
+            link = os.path.join(cur, n)
+            if not os.path.islink(link):
+                continue
+            target = os.readlink(link)
+            if os.path.isabs(target):
+                continue
+            to = os.path.normpath(os.path.join(cur, target))
+            if os.path.commonpath([root, to]) != root:
+                bad.append(f"{os.path.relpath(link, d)} -> {target}")
+    return sorted(bad)
+
+
+def open_writers(d: Path) -> list[str] | None:
+    """Processes holding a file under d open for writing, as "pid path" lines.
+
+    None when no checker is available (no /proc and no lsof): the caller fails
+    closed. PROJECT_HUB_HANDLE_CHECK=none simulates that in tests.
+    """
+    if os.environ.get("PROJECT_HUB_HANDLE_CHECK") == "none":
+        return None
+    prefix = str(d.resolve()) + "/"
+    found: list[str] = []
+    if Path("/proc/self/fdinfo").is_dir():
+        for pid_dir in Path("/proc").iterdir():
+            if not pid_dir.name.isdigit():
+                continue
+            try:
+                fds = list((pid_dir / "fd").iterdir())
+            except OSError:
+                continue  # another user's process, or gone
+            for fd in fds:
+                try:
+                    target = os.readlink(fd)
+                    if not target.startswith(prefix):
+                        continue
+                    info = (pid_dir / "fdinfo" / fd.name).read_text()
+                except OSError:
+                    continue
+                flags = next(
+                    (
+                        int(line.split()[1], 8)
+                        for line in info.splitlines()
+                        if line.startswith("flags:")
+                    ),
+                    0,
+                )
+                if flags & 0o3:  # O_WRONLY or O_RDWR
+                    found.append(f"{pid_dir.name} {target}")
+        return found
+    if not shutil.which("lsof"):
+        return None
+    r = subprocess.run(
+        ["lsof", "-w", "-n", "-P", "-u", str(os.getuid()), "-Fpan"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if r.returncode or not r.stdout:
+        return None
+    pid, mode = "", ""
+    for line in r.stdout.splitlines():
+        tag, val = line[:1], line[1:]
+        if tag == "p":
+            pid = val
+        elif tag == "f":
+            mode = ""
+        elif tag == "a":
+            mode = val
+        elif tag == "n" and mode in ("w", "u") and val.startswith(prefix):
+            found.append(f"{pid} {val}")
+    return found
+
+
 def cmd_tier(args: argparse.Namespace) -> None:
     name, _, role = args.target.partition("/")
     plain_name("name", name)
@@ -346,6 +436,13 @@ def cmd_tier(args: argparse.Namespace) -> None:
                 )
             if git("check-ignore", "-q", "--no-index", sub, cwd=repo).returncode != 0:
                 fail(f"{src}: git does not ignore it; a tiered dir must be gitignored")
+        links = escaping_links(src)
+        if links:
+            fail(
+                f"{src}: {len(links)} relative symlinks point outside it and would break "
+                f"when moved: {', '.join(links[:5])}"
+                + (" ..." if len(links) > 5 else "")
+            )
         n = recent_writes(src, args.quiet_minutes)
         if n:
             fail(
@@ -364,6 +461,18 @@ def cmd_tier(args: argparse.Namespace) -> None:
                 fail(f"{dest} already exists; pass --as <other-name>")
             src.rename(dest)
         else:
+            writers = open_writers(src)
+            if writers is None and not args.offline:
+                fail(
+                    f"{src}: no open-file checker (/proc or lsof) to prove nothing writes "
+                    "there; stop its producers and pass --offline"
+                )
+            if writers:
+                fail(
+                    f"{src}: open for writing by {len(writers)} handle(s), e.g. "
+                    f"pid {writers[0]}; stop the producer first (the copy unlinks "
+                    "source files, so its later writes would be lost)"
+                )
             # A partial copy from an interrupted run is resumed: rsync skips what
             # already arrived and unlinks each source file after transfer. The
             # marker names the source, so an unrelated dest of the same name (another
@@ -574,7 +683,14 @@ def main(argv: list[str] | None = None) -> None:
     )
     p.set_defaults(fn=cmd_adopt)
     p = sub.add_parser(
-        "tier", help="move cold gitignored dirs of <name>/<role> to runs/ or data/"
+        "tier",
+        help="move cold gitignored dirs of <name>/<role> to runs/ or data/",
+        description="Move cold gitignored dirs of <name>/<role> to runs/ or data/ and "
+        "leave a relative symlink. Stop the dir's producers first: a cross-filesystem "
+        "move unlinks each source file after copying it, so a writer that still holds "
+        "one open would lose its later output. The move is refused while any file "
+        "under the dir is open for writing, and when no checker (/proc, lsof) exists "
+        "unless --offline is passed.",
     )
     p.add_argument("target", metavar="name/role")
     p.add_argument("dirs", nargs="+")
@@ -589,6 +705,11 @@ def main(argv: list[str] | None = None) -> None:
         dest="as_name",
         metavar="dest",
         help="name under runs/ or data/ (default: the dir's own name); one dir only",
+    )
+    p.add_argument(
+        "--offline",
+        action="store_true",
+        help="no open-file checker here: assert the dir's producers are stopped",
     )
     p.set_defaults(fn=cmd_tier)
     p = sub.add_parser(
