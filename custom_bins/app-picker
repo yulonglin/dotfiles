@@ -237,10 +237,27 @@ select_apps() {
             # hand back byte-identical strings for the parse below.
             print -r -- "${A_CAT[j]}|${rows[j]}||$checked"
         done > "$items_file"
-        chosen=$(claude-tools select --title "$header" --items "$items_file")
+        # install.sh bounds this run with a wall-clock deadline and passes an idle
+        # deadline shorter than it, so an unanswered menu closes itself and
+        # restores the terminal before the outer kill. Run by hand, no deadline.
+        local -a idle_args=()
+        [[ "${APP_PICKER_IDLE_TIMEOUT:-0}" == <1-> ]] && idle_args=(--idle-timeout "$APP_PICKER_IDLE_TIMEOUT")
+        # The outer kill (`timeout --foreground`, _watchdog_run) signals only this
+        # script. Left alone, the selector would be orphaned holding the terminal
+        # raw on the alternate screen, so pass the signal on; zsh then finishes
+        # waiting for it, and the selector restores the terminal as it exits.
+        trap 'pkill -TERM -P $$ 2>/dev/null' TERM INT HUP
+        chosen=$(claude-tools select --title "$header" --items "$items_file" "${idle_args[@]}")
         local rc=$?
+        trap - TERM INT HUP
         rm -f "$items_file"
-        (( rc == 0 )) || { echo "Cancelled — Brewfile unchanged." >&2; exit 0; }
+        case $rc in
+            0) ;;
+            1) echo "Cancelled — Brewfile unchanged." >&2; exit 0 ;;
+            3) echo "No answer within ${APP_PICKER_IDLE_TIMEOUT}s — Brewfile unchanged." >&2; exit 0 ;;
+            <128->) echo "Menu ended by signal — Brewfile unchanged." >&2; exit "$rc" ;;
+            *) echo "Menu failed (claude-tools select exit $rc) — Brewfile unchanged." >&2; exit 0 ;;
+        esac
     fi
 
     local line

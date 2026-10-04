@@ -523,7 +523,13 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             # DOTFILES_MENU_TIMEOUT is the app-picker deadline (the name
             # predates the component menu's removal). On expiry the committed
             # Brewfile is used, exactly as in the non-interactive branch above.
-            run_with_timeout "${DOTFILES_MENU_TIMEOUT:-60}" "$DOT_DIR/custom_bins/app-picker" \
+            # APP_PICKER_IDLE_TIMEOUT closes an untouched menu before that kill,
+            # through the selector's own exit, so the terminal is restored
+            # rather than left raw. 0 (no deadline) stays 0.
+            menu_secs="${DOTFILES_MENU_TIMEOUT:-60}"
+            run_with_timeout "$menu_secs" \
+                env APP_PICKER_IDLE_TIMEOUT=$(( menu_secs > 15 ? menu_secs - 10 : (menu_secs + 1) / 2 )) \
+                "$DOT_DIR/custom_bins/app-picker" \
                 || log_warning "app-picker cancelled or unanswered — using existing Brewfile"
         fi
 

@@ -9,6 +9,8 @@ pub struct AppState {
     pub confirmed: bool,
     pub cancelled: bool,
     pub idle: bool,
+    /// Exit code when a signal or the caller's death ended the menu.
+    pub terminated: Option<i32>,
     /// `--single`: Enter picks the row under the cursor and nothing else.
     pub single: bool,
 }
@@ -25,6 +27,7 @@ impl AppState {
             confirmed: false,
             cancelled: false,
             idle: false,
+            terminated: None,
             single,
         }
     }

@@ -1,6 +1,8 @@
 pub mod state;
 
 use std::io::{self, BufRead};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -19,6 +21,8 @@ use crate::context::tui::theme;
 //   1  cancelled (q / Esc)
 //   2  usage or contract error — message on stderr, nothing drawn
 //   3  idle deadline passed with no keystroke — nothing on stdout
+//   128+N  terminated by signal N (TERM, INT, HUP), or 129 when the parent
+//          died — terminal restored first, nothing on stdout
 pub const EXIT_CANCELLED: i32 = 1;
 pub const EXIT_USAGE: i32 = 2;
 pub const EXIT_IDLE: i32 = 3;
@@ -111,19 +115,32 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut state = AppState::new(items, single);
 
+    // A caller's deadline must not leave the terminal raw. The restore below
+    // runs only when run_loop returns, so a default-action SIGTERM from a
+    // timeout wrapper killed us mid-loop with raw mode on, no echo and the
+    // alternate screen still up. The handlers only record the signal; the
+    // loop sees it within one poll slice and leaves through the restore.
+    let signalled = Arc::new(AtomicUsize::new(0));
+    for sig in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT, signal_hook::consts::SIGHUP] {
+        signal_hook::flag::register_usize(sig, Arc::clone(&signalled), sig as usize)?;
+    }
+
     // Render TUI to stderr so stdout stays clean for selected-names output.
     // This is critical: deploy.sh captures our stdout in result=$(...) and
     // uses each line as a variable name — any escape codes there cause errors.
     enable_raw_mode()?;
     io::stderr().execute(EnterAlternateScreen)?;
 
-    let result = run_loop(&mut state, &title, idle_timeout);
+    let result = run_loop(&mut state, &title, idle_timeout, &signalled);
 
     let _ = disable_raw_mode();
     let _ = io::stderr().execute(LeaveAlternateScreen);
 
     result?;
 
+    if let Some(code) = state.terminated {
+        std::process::exit(code);
+    }
     if state.cancelled {
         std::process::exit(EXIT_CANCELLED);
     }
@@ -144,14 +161,25 @@ pub fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_loop(state: &mut AppState, title: &str, idle_timeout: Option<Duration>) -> Result<(), Box<dyn std::error::Error>> {
+fn run_loop(
+    state: &mut AppState,
+    title: &str,
+    idle_timeout: Option<Duration>,
+    signalled: &AtomicUsize,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Backend on stderr; raw mode + alternate screen are managed by the caller.
     let backend = CrosstermBackend::new(std::io::stderr());
     let mut terminal = Terminal::new(backend)?;
 
-    // Slow idle tick: forces a full repaint to self-heal mosh smearing while idle.
-    // 1.5 s is infrequent enough that it won't visibly strobe even over a slow link.
-    const IDLE_TICK: Duration = Duration::from_millis(1500);
+    // Poll in short slices so a signal or a dead parent is noticed promptly;
+    // ratatui only writes cells that changed, so an idle redraw costs nothing.
+    const POLL_SLICE: Duration = Duration::from_millis(200);
+
+    // `timeout --foreground` signals only its direct child. When that child is
+    // a script that ran us in $(...), the script dies and we are reparented
+    // with nobody left to signal us, still holding the terminal raw and still
+    // reading its keystrokes. A changed parent pid means our caller is gone.
+    let parent = std::os::unix::process::parent_id();
 
     // The first draw happens before the first read, always: a menu that can
     // wait must be visible while it waits.
@@ -160,6 +188,15 @@ fn run_loop(state: &mut AppState, title: &str, idle_timeout: Option<Duration>) -
     loop {
         terminal.draw(|f| render(f, state, title))?;
 
+        match signalled.load(Ordering::Relaxed) {
+            0 => {}
+            sig => { state.terminated = Some(128 + sig as i32); break; }
+        }
+        if std::os::unix::process::parent_id() != parent {
+            state.terminated = Some(128 + signal_hook::consts::SIGHUP);
+            break;
+        }
+
         if let Some(limit) = idle_timeout {
             if last_key.elapsed() >= limit {
                 state.idle = true;
@@ -167,13 +204,18 @@ fn run_loop(state: &mut AppState, title: &str, idle_timeout: Option<Duration>) -
             }
         }
 
-        if event::poll(IDLE_TICK)? {
+        if event::poll(POLL_SLICE)? {
             match event::read()? {
                 Event::Key(key) => {
                     if key.kind != KeyEventKind::Press { continue; }
                     last_key = Instant::now();
                     match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => { state.cancelled = true; break; }
+                        // Raw mode turns Ctrl-C into a key, not SIGINT; honour it as cancel.
+                        KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                            state.cancelled = true;
+                            break;
+                        }
                         KeyCode::Enter => {
                             if state.single { state.select_cursor_only(); }
                             state.confirmed = true;
