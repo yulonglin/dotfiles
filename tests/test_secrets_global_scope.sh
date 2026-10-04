@@ -260,22 +260,40 @@ echo "=== the conf resolves to the MAIN checkout, not a worktree copy ==="
 # to its own tree would find nothing and hard-error on every ambiguous name.
 # setup-envrc also bakes this binary's absolute path into a repo's .envrc, so a
 # worktree-relative answer outlives the worktree that produced it.
+#
+# The fixture lives under this repo's own tmp/, so any git step that misses the
+# fixture's .git walks up and acts on the dotfiles checkout instead. That is how
+# a sandboxed run whose `git init` failed once committed this fixture onto main
+# (via `git add -f`, past the tmp/ ignore) and created a stray wt-branch. So:
+# the ceiling stops discovery at the fixture, inherited GIT_* overrides are
+# cleared, every step uses an explicit path, and the first failed step aborts
+# before anything is committed.
 WT_ROOT="$FIXTURE/wt-test"
 mkdir -p "$WT_ROOT/main"
-(
-    cd "$WT_ROOT/main" || exit 1
-    git init -q .
-    git config user.email t@example.com
-    git config user.name t
-    mkdir -p custom_bins scripts/helpers config
-    cp "$BIN" custom_bins/dotfiles-secrets
-    cp "$(dirname "$(dirname "$BIN")")/scripts/helpers/dotfiles_secrets.sh" scripts/helpers/
-    git add -f custom_bins scripts >/dev/null 2>&1
-    git commit -qm init >/dev/null 2>&1
-    git worktree add -q ../wt -b wt-branch >/dev/null 2>&1
-) >/dev/null 2>&1
+WT_MAIN="$(cd "$WT_ROOT/main" && pwd -P)"
+wt_fixture_err=$(
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    GIT_CEILING_DIRECTORIES="$(cd "$WT_ROOT" && pwd -P)"
+    export GIT_CEILING_DIRECTORIES
+    step() { "$@" >/dev/null 2>&1 || { echo "fixture step failed: $*"; exit 1; }; }
+    step git init -q "$WT_MAIN"
+    top=$(git -C "$WT_MAIN" rev-parse --show-toplevel 2>/dev/null)
+    [[ "$top" == "$WT_MAIN" ]] || {
+        echo "fixture repo toplevel is '${top:-<none>}', not $WT_MAIN"; exit 1; }
+    step git -C "$WT_MAIN" config user.email t@example.com
+    step git -C "$WT_MAIN" config user.name t
+    step mkdir -p "$WT_MAIN/custom_bins" "$WT_MAIN/scripts/helpers" "$WT_MAIN/config"
+    step cp "$BIN" "$WT_MAIN/custom_bins/dotfiles-secrets"
+    step cp "$(dirname "$(dirname "$BIN")")/scripts/helpers/dotfiles_secrets.sh" \
+        "$WT_MAIN/scripts/helpers/"
+    step git -C "$WT_MAIN" add -f custom_bins scripts
+    step git -C "$WT_MAIN" commit -qm init
+    step git -C "$WT_MAIN" worktree add -q "$WT_ROOT/wt" -b wt-branch
+)
 
-if [[ -x "$WT_ROOT/wt/custom_bins/dotfiles-secrets" ]]; then
+if [[ -n "$wt_fixture_err" ]]; then
+    echo "  SKIP: could not create a git worktree fixture ($wt_fixture_err)"
+elif [[ -x "$WT_ROOT/wt/custom_bins/dotfiles-secrets" ]]; then
     got=$(DOTFILES_SECRETS_BACKEND=fixture \
           "$WT_ROOT/wt/custom_bins/dotfiles-secrets" scope-conf-path 2>/dev/null)
     # Resolve symlinks on the expectation: macOS /var -> /private/var.
