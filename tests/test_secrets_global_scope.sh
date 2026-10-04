@@ -275,7 +275,12 @@ wt_fixture_err=$(
     unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
     GIT_CEILING_DIRECTORIES="$(cd "$WT_ROOT" && pwd -P)"
     export GIT_CEILING_DIRECTORIES
-    step() { "$@" >/dev/null 2>&1 || { echo "fixture step failed: $*"; exit 1; }; }
+    step() {
+        local err
+        err=$("$@" 2>&1 >/dev/null) && return 0
+        echo "fixture step failed: $* -- $(printf '%s' "$err" | head -1)"
+        exit 1
+    }
     step git init -q "$WT_MAIN"
     top=$(git -C "$WT_MAIN" rev-parse --show-toplevel 2>/dev/null)
     [[ "$top" == "$WT_MAIN" ]] || {
@@ -291,8 +296,18 @@ wt_fixture_err=$(
     step git -C "$WT_MAIN" worktree add -q "$WT_ROOT/wt" -b wt-branch
 )
 
+# A broken fixture fails the suite: a silent SKIP would drop both resolution
+# checks and still exit 0. The one allowed SKIP is the known local restriction,
+# detected positively: `git init` itself refused with EPERM (the Claude Code
+# sandbox denies writes under .git/), and never in CI.
 if [[ -n "$wt_fixture_err" ]]; then
-    echo "  SKIP: could not create a git worktree fixture ($wt_fixture_err)"
+    if [[ -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" \
+          && "$wt_fixture_err" == "fixture step failed: git init "*"Operation not permitted"* ]]; then
+        echo "  SKIP: sandbox denied git init for the worktree fixture ($wt_fixture_err)"
+    else
+        FAIL=$((FAIL + 1))
+        echo "FAIL: could not create a git worktree fixture ($wt_fixture_err)"
+    fi
 elif [[ -x "$WT_ROOT/wt/custom_bins/dotfiles-secrets" ]]; then
     got=$(DOTFILES_SECRETS_BACKEND=fixture \
           "$WT_ROOT/wt/custom_bins/dotfiles-secrets" scope-conf-path 2>/dev/null)
@@ -304,7 +319,8 @@ elif [[ -x "$WT_ROOT/wt/custom_bins/dotfiles-secrets" ]]; then
           "$WT_ROOT/main/custom_bins/dotfiles-secrets" scope-conf-path 2>/dev/null)
     check "main checkout resolves to itself"   "$got" "$want"
 else
-    echo "  SKIP: could not create a git worktree fixture"
+    FAIL=$((FAIL + 1))
+    echo "FAIL: worktree fixture built but has no executable dotfiles-secrets"
 fi
 
 # --- duplicate-warning suppression follows the machine conf -----------------
