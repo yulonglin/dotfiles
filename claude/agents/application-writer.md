@@ -1,6 +1,6 @@
 ---
 name: application-writer
-description: Drafts job and fellowship applications with compelling personal narrative, strategic positioning, and concise responses within word limits. Pulls from past applications, references, and CV to maintain consistent messaging while adapting to each organization's values.
+description: Draft job and fellowship applications within word limits, reusing past applications, references and the CV so the story stays consistent while each answer fits the organization's values. Use when writing or adapting an application or its short answers.
 model: inherit
 tools: Read,Write,Edit
 ---

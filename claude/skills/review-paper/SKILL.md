@@ -1,6 +1,6 @@
 ---
 name: review-paper
-description: This skill should be used when the user asks to "review a paper", "critique a manuscript", "give feedback on a draft", "review this write-up", "analyze paper quality", or wants constructive feedback on ML/AI research writing based on Neel Nanda's paper-writing criteria.
+description: Critique an ML/AI research paper or draft against Neel Nanda's paper-writing criteria and return specific, actionable feedback. Use when asked to "review a paper", "critique a manuscript", "give feedback on a draft", "review this write-up" or "analyze paper quality", or for constructive feedback on ML/AI research writing.
 ---
 
 # Review Paper

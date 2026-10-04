@@ -1,6 +1,6 @@
 ---
 name: debugger
-description: MUST BE USED when encountering errors, exceptions, bugs, test failures, or unexpected behavior. Use PROACTIVELY for any debugging tasks - automatically invoke when error messages appear, tests fail, or code produces incorrect output. Automatically invoke for intermittent failures, logic bugs, KeyErrors, TypeErrors, or any "something is broken" situations. Applies systematic debugging methodology to identify root causes.
+description: "Debug an error, exception, failing test, intermittent failure or wrong output: reproduce it, form and test hypotheses, find the root cause, then fix and verify. Use proactively when an error message or stack trace appears, a test fails, or code gives incorrect output — KeyErrors, TypeErrors, logic bugs, \"something is broken\"."
 model: inherit
 ---
 

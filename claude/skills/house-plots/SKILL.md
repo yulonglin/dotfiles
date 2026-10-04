@@ -1,6 +1,6 @@
 ---
 name: house-plots
-description: House chart style — pastel matplotlib defaults, palette, overlap checking. Use for any figure, chart or plot.
+description: House chart style — pastel matplotlib defaults, palette, overlap checking. Use for any figure, chart or plot; for a chart on an Artifact page it routes to native SVG through `dataviz`.
 ---
 
 # House Plots
