@@ -1,0 +1,24 @@
+title: Awake While Connected
+url: https://claude.ai/artifact/Q9BXWYU6CTYG84Tdj3nsg2   # from the commit message of #199 (92b3228a); matches the gallery listing
+org: lin.yulong@gmail.com's Organization   # as recorded in the ARTIFACTS.md row #199 added
+first_published: 2026-09-22
+last_updated: 2026-09-22
+status: live
+
+summary: >-
+  visual summary of why ssh from the phone kept dying on this Mac and what changed. The cause
+  was a 1-minute AC sleep timer set for screen lock, which also defeated `ttyskeepawake`: man
+  pmset counts a tty as inactive once its idle time exceeds the sleep timer, so a 60 s reading
+  pause slept the machine under a live session. Fix is AC sleep 30 (battery and lock unchanged),
+  shipped in `scripts/macos_sudo_extras.sh` alongside the mosh-server firewall rule (#198); an
+  always-on `caffeinate -s` agent was tried and reverted (#195/#196) after it held a sleep
+  assertion for 16h52m against one session.
+
+source: index.html
+built: index.html   # hand-written HTML, no build step: the source is the page
+builds_with: |
+  Nothing to build — index.html is published directly.
+
+notes: |
+  This row was written on 2026-10-03 from the line #199 added to ARTIFACTS.md by hand, which
+  the next regeneration of the generated table would otherwise have dropped.
