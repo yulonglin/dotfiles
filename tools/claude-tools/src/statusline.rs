@@ -4,8 +4,15 @@
 //! and tests/test_statusline_usage_gauge.sh, which pin the output to literal
 //! expected strings. Rebuild every platform asset you can and check
 //! scripts/check-claude-tools-fresh.sh — the committed binary is what runs.
+//!
+//! Layout: line 1 is location (machine, profiles, directory, branch); then the
+//! session segments; then every coding agent's usage (Claude, the other Claude
+//! account, Codex). The session and usage rows are packed to the terminal width
+//! by pack_groups, so they stay one line each on a wide screen and wrap at
+//! segment boundaries on a phone. The only square brackets are the model's.
 
 use serde::Deserialize;
+use unicode_width::UnicodeWidthStr;
 use std::fmt::Write;
 use std::io::Read;
 
@@ -18,6 +25,7 @@ struct Input {
     cost: Option<Cost>,
     context_window: Option<ContextWindow>,
     effort: Option<Effort>,
+    prompt_cache: Option<PromptCache>,
 }
 
 #[derive(Deserialize)]
@@ -33,6 +41,22 @@ struct Workspace {
 #[derive(Deserialize)]
 struct Cost {
     total_duration_ms: Option<u64>,
+    /// Client-side estimate at list price, not the bill; resets on /clear.
+    total_cost_usd: Option<f64>,
+}
+
+/// Main-conversation prompt cache, computed by Claude Code from the API's cache
+/// token counts (v2.1.251+, absent until the first response). Claude Code
+/// re-runs the statusline when a warm cache reaches `expires_at`, so the cold
+/// flip lands on time; between events the countdown is as of the last run.
+/// `ttl` is the cached prefix's lifetime, "1h" or "5m" — the 5m case is what
+/// usage overage drops to, so it is the one worth seeing.
+#[derive(Deserialize)]
+struct PromptCache {
+    warm: Option<bool>,
+    caching_observed: Option<bool>,
+    ttl: Option<String>,
+    expires_at: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -101,33 +125,134 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // 4. Git branch + dirty status
     format_git_info(&mut output, cwd);
 
-    // Line 2: session state (collect parts, join with " · ")
-    let mut session_parts: Vec<String> = Vec::new();
-    if let Some(s) = format_model_str(input.model.as_ref(), input.effort.as_ref()) {
-        session_parts.push(s);
-    }
-    if let Some(s) = format_context_usage_str(input.context_window.as_ref()) {
-        session_parts.push(s);
-    }
-    if let Some(s) = format_duration_str(&input.cost) {
-        session_parts.push(s);
-    }
-    if let Some(s) = format_classifier_str() {
-        session_parts.push(s);
-    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
+    let width = available_width(std::env::var("COLUMNS").ok().as_deref());
+
+    // Session state: one group, so it splits only between segments.
+    let session_parts: Vec<String> = [
+        format_model_str(input.model.as_ref(), input.effort.as_ref()),
+        format_context_usage_str(input.context_window.as_ref()),
+        format_duration_str(&input.cost),
+        format_cost_str(input.cost.as_ref()),
+        format_prompt_cache_str(input.prompt_cache.as_ref(), now),
+        format_classifier_str(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
     if !session_parts.is_empty() {
-        output.push('\n');
-        output.push_str(&session_parts.join(" \u{00b7} "));
+        for line in pack_groups(&[session_parts], width) {
+            output.push('\n');
+            output.push_str(&line);
+        }
     }
 
-    // Line 3: API usage (5h + 7d rate limits)
-    crate::usage::format_usage(&mut output);
-
-    // Separate provider line; Codex window durations come from its API.
-    crate::codex_usage::format_usage(&mut output);
+    // Every coding agent's usage on one row: Claude (plus the other account),
+    // then Codex, whose window durations come from its own API.
+    let mut usage_groups = crate::usage::usage_groups();
+    usage_groups.extend(crate::codex_usage::usage_group());
+    for line in pack_groups(&usage_groups, width) {
+        output.push('\n');
+        output.push_str(&line);
+    }
 
     print!("{}", output);
     Ok(())
+}
+
+// --- Width-aware layout ---
+
+/// Joins segments inside a group.
+const SEGMENT_SEP: &str = " \u{00b7} ";
+/// Joins groups (Claude, the other account, Codex) on a shared line. Each
+/// group after the first carries its own label ("⇄", "Codex"), so plain space
+/// is enough to separate them.
+const GROUP_SEP: &str = "  ";
+/// Columns Claude Code takes from COLUMNS before the script's text: the
+/// `statusLine.padding` of 1 in claude/settings.json plus its own built-in
+/// indent, which the docs do not size. Over-reserving only wraps a little early;
+/// under-reserving lets Claude Code cut the line's tail.
+const WIDTH_MARGIN: usize = 4;
+
+/// Usable columns from Claude Code's `COLUMNS`. Claude Code captures the
+/// script's stdout, so `tput cols` and a tty query see no terminal; the docs
+/// say it sets `COLUMNS`/`LINES` to the terminal size before every run
+/// (code.claude.com/docs/en/statusline, "Sizing output to the terminal").
+/// None — no wrapping — when it is unset or unparsable.
+fn available_width(columns: Option<&str>) -> Option<usize> {
+    let cols: usize = columns?.trim().parse().ok().filter(|c| *c > 0)?;
+    Some(cols.saturating_sub(WIDTH_MARGIN).max(1))
+}
+
+/// Terminal columns a string occupies, ignoring ANSI CSI sequences.
+fn visible_width(s: &str) -> usize {
+    let mut plain = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            if chars.next() == Some('[') {
+                // Parameters and intermediates run until a final byte in @..~.
+                for c in chars.by_ref() {
+                    if ('@'..='~').contains(&c) {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        plain.push(c);
+    }
+    UnicodeWidthStr::width(plain.as_str())
+}
+
+/// Lay groups of segments out in as few lines as fit `width`. A group moves
+/// whole to the next line rather than being split, so a continuation never
+/// starts with an orphaned "7d ready" whose label stayed behind; only a group
+/// wider than a full line is broken, and then only between segments. A single
+/// segment wider than the line is left for the terminal to cut. `None` width
+/// puts everything on one line.
+fn pack_groups(groups: &[Vec<String>], width: Option<usize>) -> Vec<String> {
+    let limit = width.unwrap_or(usize::MAX);
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    let mut used = 0usize;
+
+    for group in groups.iter().filter(|g| !g.is_empty()) {
+        let joined = group.join(SEGMENT_SEP);
+        let joined_width = visible_width(&joined);
+        let sep_width = if line.is_empty() { 0 } else { visible_width(GROUP_SEP) };
+        if used + sep_width + joined_width <= limit {
+            if !line.is_empty() {
+                line.push_str(GROUP_SEP);
+            }
+            line.push_str(&joined);
+            used += sep_width + joined_width;
+            continue;
+        }
+        if !line.is_empty() {
+            lines.push(std::mem::take(&mut line));
+            used = 0;
+        }
+        for segment in group {
+            let segment_width = visible_width(segment);
+            if !line.is_empty() && used + visible_width(SEGMENT_SEP) + segment_width > limit {
+                lines.push(std::mem::take(&mut line));
+                used = 0;
+            }
+            if !line.is_empty() {
+                line.push_str(SEGMENT_SEP);
+                used += visible_width(SEGMENT_SEP);
+            }
+            line.push_str(segment);
+            used += segment_width;
+        }
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
 }
 
 // --- Section formatters ---
@@ -157,7 +282,8 @@ fn format_machine_name(output: &mut String) {
     }
 }
 
-/// Extract context profiles from .claude/context.yaml and display as [profiles].
+/// Extract context profiles from .claude/context.yaml and display them in cyan,
+/// unbracketed — square brackets are reserved for the model name.
 fn format_context_profiles(output: &mut String, cwd: &str) {
     let context_path = format!("{}/.claude/context.yaml", cwd);
     let content = match std::fs::read_to_string(&context_path) {
@@ -167,7 +293,7 @@ fn format_context_profiles(output: &mut String, cwd: &str) {
 
     let profiles = extract_profiles_from_yaml(&content);
     if !profiles.is_empty() {
-        let _ = write!(output, "[\x1b[36m{}\x1b[0m] ", profiles);
+        let _ = write!(output, "\x1b[36m{}\x1b[0m ", profiles);
     }
 }
 
@@ -459,5 +585,191 @@ fn format_duration_str(cost: &Option<Cost>) -> Option<String> {
         format!("{}m", total_mins)
     };
     Some(format!("\x1b[2m{}\x1b[0m", display))
+}
+
+/// Session price so far from `cost.total_cost_usd`: "$7.42". Omitted until the
+/// first billable response, like the duration.
+fn format_cost_str(cost: Option<&Cost>) -> Option<String> {
+    let usd = cost?.total_cost_usd.filter(|c| c.is_finite() && *c > 0.0)?;
+    Some(format!("\x1b[2m${:.2}\x1b[0m", usd))
+}
+
+/// Prompt cache state: "cache 42m" while warm (time left before it goes cold),
+/// "cache cold" once expired. A 5-minute TTL renders yellow with "(5m ttl)",
+/// because it means the session has fallen back from the 1h TTL (usage overage)
+/// and the cache now lapses between ordinary pauses. Omitted when Claude Code has
+/// not seen caching at all, so a provider without it shows nothing rather than a
+/// permanent "cold". `now` is a parameter so tests are deterministic.
+fn format_prompt_cache_str(cache: Option<&PromptCache>, now: i64) -> Option<String> {
+    let cache = cache?;
+    if cache.caching_observed == Some(false) {
+        return None;
+    }
+    let remaining = cache
+        .expires_at
+        .filter(|_| cache.warm == Some(true))
+        .map(|at| at - now)
+        .filter(|secs| *secs > 0);
+    let Some(secs) = remaining else {
+        return Some("\x1b[33mcache cold\x1b[0m".to_string());
+    };
+    let left = if secs < 60 {
+        "<1m".to_string()
+    } else {
+        crate::usage::fmt_time_remaining(secs as f64)
+    };
+    Some(match cache.ttl.as_deref() {
+        Some("5m") => format!("\x1b[33mcache {} (5m ttl)\x1b[0m", left),
+        _ => format!("\x1b[32mcache {}\x1b[0m", left),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cache(warm: bool, ttl: &str, expires_at: Option<i64>) -> PromptCache {
+        PromptCache {
+            warm: Some(warm),
+            caching_observed: Some(true),
+            ttl: Some(ttl.to_string()),
+            expires_at,
+        }
+    }
+
+    #[test]
+    fn prompt_cache_warm_shows_time_left() {
+        let now = 1_000_000;
+        let c = cache(true, "1h", Some(now + 42 * 60 + 10));
+        assert_eq!(
+            format_prompt_cache_str(Some(&c), now).unwrap(),
+            "\x1b[32mcache 42m\x1b[0m"
+        );
+        let c = cache(true, "1h", Some(now + 30));
+        assert_eq!(
+            format_prompt_cache_str(Some(&c), now).unwrap(),
+            "\x1b[32mcache <1m\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn prompt_cache_five_minute_ttl_is_flagged() {
+        let now = 1_000_000;
+        let c = cache(true, "5m", Some(now + 190));
+        assert_eq!(
+            format_prompt_cache_str(Some(&c), now).unwrap(),
+            "\x1b[33mcache 3m (5m ttl)\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn prompt_cache_cold_when_not_warm_or_expired() {
+        let now = 1_000_000;
+        let cold = "\x1b[33mcache cold\x1b[0m";
+        // Not warm, even with a future expiry on record.
+        let c = cache(false, "1h", Some(now + 600));
+        assert_eq!(format_prompt_cache_str(Some(&c), now).unwrap(), cold);
+        // Warm flag from the last run, but expires_at has passed since.
+        let c = cache(true, "1h", Some(now - 1));
+        assert_eq!(format_prompt_cache_str(Some(&c), now).unwrap(), cold);
+        // Last response reported no cache tokens: expires_at is null.
+        let c = cache(true, "1h", None);
+        assert_eq!(format_prompt_cache_str(Some(&c), now).unwrap(), cold);
+    }
+
+    #[test]
+    fn prompt_cache_hidden_without_caching() {
+        assert_eq!(format_prompt_cache_str(None, 0), None);
+        let mut c = cache(false, "1h", None);
+        c.caching_observed = Some(false);
+        assert_eq!(format_prompt_cache_str(Some(&c), 0), None);
+    }
+
+    #[test]
+    fn prompt_cache_parses_documented_payload() {
+        let input: Input = serde_json::from_str(
+            r#"{"prompt_cache":{"warm":true,"caching_observed":true,"ttl":"1h",
+                "expires_at":1738429200,"requests":14,"hit_ratio":0.91}}"#,
+        )
+        .unwrap();
+        let c = input.prompt_cache.unwrap();
+        assert_eq!(c.expires_at, Some(1_738_429_200));
+        assert_eq!(c.ttl.as_deref(), Some("1h"));
+    }
+
+    #[test]
+    fn cost_renders_two_decimals_and_hides_zero() {
+        let cost = |usd: Option<f64>| Cost { total_duration_ms: None, total_cost_usd: usd };
+        assert_eq!(format_cost_str(Some(&cost(Some(7.4213)))).unwrap(), "\x1b[2m$7.42\x1b[0m");
+        assert_eq!(format_cost_str(Some(&cost(Some(0.0)))), None);
+        assert_eq!(format_cost_str(Some(&cost(None))), None);
+        assert_eq!(format_cost_str(None), None);
+    }
+
+    #[test]
+    fn available_width_reads_columns() {
+        assert_eq!(available_width(Some("120")), Some(120 - WIDTH_MARGIN));
+        assert_eq!(available_width(Some(" 50\n")), Some(50 - WIDTH_MARGIN));
+        assert_eq!(available_width(Some("2")), Some(1));
+        assert_eq!(available_width(Some("0")), None);
+        assert_eq!(available_width(Some("wide")), None);
+        assert_eq!(available_width(None), None);
+    }
+
+    #[test]
+    fn visible_width_ignores_ansi_and_counts_wide_glyphs() {
+        assert_eq!(visible_width("\x1b[2m\x1b[36mabc\x1b[0m"), 3);
+        assert_eq!(visible_width("\x1b[38;2;255;176;85m5h \u{25D4} 24%\x1b[0m"), 8);
+        assert_eq!(visible_width("\x1b[31m🔴auto\x1b[0m"), 6);
+    }
+
+    fn groups(spec: &[&[&str]]) -> Vec<Vec<String>> {
+        spec.iter().map(|g| g.iter().map(|s| s.to_string()).collect()).collect()
+    }
+
+    #[test]
+    fn pack_keeps_everything_on_one_line_when_it_fits() {
+        let g = groups(&[&["5h 4%", "7d 9%"], &["⇄ 5h 2h"], &["Codex 7d 1%"]]);
+        assert_eq!(pack_groups(&g, None), vec!["5h 4% · 7d 9%  ⇄ 5h 2h  Codex 7d 1%"]);
+        assert_eq!(pack_groups(&g, Some(35)), vec!["5h 4% · 7d 9%  ⇄ 5h 2h  Codex 7d 1%"]);
+    }
+
+    #[test]
+    fn pack_moves_whole_groups_before_splitting_one() {
+        let g = groups(&[&["5h 4%", "7d 9%"], &["⇄ 5h 2h", "7d ready"], &["Codex 7d 1%"]]);
+        // "⇄ 5h 2h · 7d ready" would fit after the Claude group only in part:
+        // it moves down whole instead of leaving "7d ready" orphaned.
+        assert_eq!(
+            pack_groups(&g, Some(24)),
+            vec!["5h 4% · 7d 9%", "⇄ 5h 2h · 7d ready", "Codex 7d 1%"]
+        );
+    }
+
+    #[test]
+    fn pack_splits_a_group_wider_than_the_line_between_segments() {
+        let g = groups(&[&["model", "ctx:129k/1.0M (13%)", "1h 5m", "$7.42", "cache 42m"]]);
+        assert_eq!(
+            pack_groups(&g, Some(30)),
+            vec!["model · ctx:129k/1.0M (13%)", "1h 5m · $7.42 · cache 42m"]
+        );
+    }
+
+    #[test]
+    fn pack_measures_without_ansi() {
+        let g = groups(&[&["\x1b[32mabc\x1b[0m"], &["\x1b[2mdef\x1b[0m"]]);
+        assert_eq!(pack_groups(&g, Some(8)).len(), 1);
+        assert_eq!(pack_groups(&g, Some(7)).len(), 2);
+    }
+
+    #[test]
+    fn profiles_render_without_brackets() {
+        let dir = std::env::temp_dir().join(format!("statusline-profiles-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".claude")).unwrap();
+        std::fs::write(dir.join(".claude/context.yaml"), "profiles: [code, python]\n").unwrap();
+        let mut out = String::new();
+        format_context_profiles(&mut out, dir.to_str().unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(out, "\x1b[36mcode python\x1b[0m ");
+    }
 }
 
