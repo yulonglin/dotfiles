@@ -216,6 +216,36 @@ class ProjectHubTest(unittest.TestCase):
         self.assertTrue(sprint_logs.is_dir() and not sprint_logs.is_symlink())
         self.assertEqual((sprint_logs / "a.eval").read_text(), "code-sprint")
 
+    def test_tier_as_gives_a_same_named_dir_its_own_destination(self) -> None:
+        # code/logs and code-sprint/logs both default to runs/logs; --as splits them.
+        env = {**self.env, "PROJECT_HUB_FORCE_COPY": "1"}
+        self.run_hub("new", "proj")
+        hub = self.home / "projects/proj"
+        for role in ("code", "code-sprint"):
+            src = self.make_repo(self.home / f"code/{role}")
+            (src / "logs/a.eval").write_text(role)
+            os.utime(src / "logs/a.eval", (0, 0))
+            self.run_hub("adopt", "proj", f"{role}={src}", "--no-sync")
+        self.run_hub("tier", "proj/code", "logs", env=env)
+        r = self.run_hub("tier", "proj/code-sprint", "logs", env=env, ok=False)
+        self.assertIn("--as", r.stderr)
+        for bad in ("../x", ".hidden", "a/b"):
+            r = self.run_hub(
+                "tier", "proj/code-sprint", "logs", "--as", bad, env=env, ok=False
+            )
+            self.assertIn("plain directory name", r.stderr, bad)
+        r = self.run_hub(
+            "tier", "proj/code-sprint", "logs", "out", "--as", "x", env=env, ok=False
+        )
+        self.assertIn("one dir at a time", r.stderr)
+        self.run_hub("tier", "proj/code-sprint", "logs", "--as", "logs-sprint", env=env)
+        runs = self.volume / "projects/proj/runs"
+        self.assertEqual((runs / "logs/a.eval").read_text(), "code")
+        self.assertEqual((runs / "logs-sprint/a.eval").read_text(), "code-sprint")
+        self.assertEqual(os.readlink(hub / "code-sprint/logs"), "../runs/logs-sprint")
+        self.assertEqual((hub / "code-sprint/logs/a.eval").read_text(), "code-sprint")
+        self.assertFalse((runs / "logs-sprint/.project-hub-tier-source").exists())
+
     def test_tier_cross_fs_resumes_an_interrupted_copy(self) -> None:
         env = {**self.env, "PROJECT_HUB_FORCE_COPY": "1"}
         self.run_hub("new", "proj")

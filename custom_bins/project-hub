@@ -24,7 +24,9 @@ volume they are plain directories. Repos link their own bulk dirs relatively
                                               git worktrees, rename Claude/remember
                                               dirs, re-allow direnv, rebuild the venv
   project-hub tier <name>/<role> <dir> ...    move a cold, untracked dir to the volume,
-                                              leave a relative symlink behind
+                                              leave a relative symlink behind; --as <dest>
+                                              names it under runs/ or data/ when another
+                                              repo already tiered a dir of the same name
   project-hub status [name]                   what is real, what is linked, and where
   project-hub doctor [name]                   friction checks: interpreter start-up and
                                               project import times, placement, bind mount
@@ -318,6 +320,10 @@ def cmd_tier(args: argparse.Namespace) -> None:
     repo = hub / role
     if not repo.is_dir():
         fail(f"{repo} is not a directory (expected <name>/<role>)")
+    if args.as_name is not None:
+        plain_name("--as", args.as_name)
+        if len(args.dirs) != 1:
+            fail("--as names one destination; tier one dir at a time with it")
     for sub in args.dirs:
         src = repo / sub
         if src.is_symlink():
@@ -346,16 +352,16 @@ def cmd_tier(args: argparse.Namespace) -> None:
                 f"{src}: {n} files written in the last {args.quiet_minutes} min; a live dir is not moved"
             )
         bucket = "data" if src.name == "data" else "runs"
-        dest = hub / bucket / src.name
+        dest = hub / bucket / (args.as_name or src.name)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        rel = os.path.relpath(hub / bucket / src.name, start=src.parent)
+        rel = os.path.relpath(dest, start=src.parent)
         # PROJECT_HUB_FORCE_COPY=1 takes the cross-filesystem path in tests.
         if (
             same_fs(src, dest.parent)
             and os.environ.get("PROJECT_HUB_FORCE_COPY") != "1"
         ):
             if dest.exists():
-                fail(f"{dest} already exists")
+                fail(f"{dest} already exists; pass --as <other-name>")
             src.rename(dest)
         else:
             # A partial copy from an interrupted run is resumed: rsync skips what
@@ -366,7 +372,8 @@ def cmd_tier(args: argparse.Namespace) -> None:
             if dest.exists():
                 if not marker.is_file() or marker.read_text().strip() != str(src):
                     fail(
-                        f"{dest} already exists and is not an interrupted tier of {src}"
+                        f"{dest} already exists and is not an interrupted tier of {src}; "
+                        "pass --as <other-name>"
                     )
                 say(f"  resuming into existing {dest}")
             else:
@@ -576,6 +583,12 @@ def main(argv: list[str] | None = None) -> None:
         type=int,
         default=15,
         help="refuse if written within this window",
+    )
+    p.add_argument(
+        "--as",
+        dest="as_name",
+        metavar="dest",
+        help="name under runs/ or data/ (default: the dir's own name); one dir only",
     )
     p.set_defaults(fn=cmd_tier)
     p = sub.add_parser(
