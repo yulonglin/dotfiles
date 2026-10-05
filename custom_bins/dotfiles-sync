@@ -173,29 +173,33 @@ order_hold_back() {
 # public repo even if the hook never runs. Any checker failure, a missing
 # checker included, counts as a leak: this fails closed. Blobs are what git
 # stores, after the clean filter, so a Zed file the zed-ssh filter stripped
-# passes.
+# passes. Prints the checker's one-line reason, which never quotes the value.
 blob_leak() {
-    ! git cat-file blob "$1" 2>/dev/null | "$LEAK_CHECK" "$2" >/dev/null 2>&1
+    local out
+    out="$(git cat-file blob "$1" 2>/dev/null | "$LEAK_CHECK" "$2" 2>/dev/null)" && return 1
+    out="${out%%$'\n'*}"
+    printf '%s' "${out:-the leak checker failed}"
+    return 0
 }
 
 # staged_leak PATH: blob_leak on the staged copy of PATH; fails when none is staged.
 staged_leak() {
     git cat-file -e ":$1" 2>/dev/null || return 1
-    blob_leak ":$1" "$1"
+    blob_leak ":$1" "$1" >/dev/null
 }
 
-# outgoing_leak UPSTREAM: "<short sha> <path>" for the first commit in
-# UPSTREAM..HEAD (every outgoing commit, not just the tip, so a value a later
+# outgoing_leak UPSTREAM: "<short sha>\t<path>\t<reason>" for the first commit
+# in UPSTREAM..HEAD (every outgoing commit, not just the tip, so a value a later
 # commit removed still counts) whose hold-back blob differs from UPSTREAM's and
 # leaks; empty when none does. A blob identical to UPSTREAM's is already public.
 outgoing_leak() {
-    local up="$1" c p blob
+    local up="$1" c p blob reason
     for c in $(git rev-list "$up..HEAD"); do
         for p in "${HOLD_BACK_PATHS[@]}"; do
             blob="$(git rev-parse -q --verify "$c:$p" 2>/dev/null)" || continue
             [[ "$blob" == "$(git rev-parse -q --verify "$up:$p" 2>/dev/null)" ]] && continue
-            if blob_leak "$blob" "$p"; then
-                printf '%s %s' "$(git rev-parse --short "$c")" "$p"
+            if reason="$(blob_leak "$blob" "$p")"; then
+                printf '%s\t%s\t%s' "$(git rev-parse --short "$c")" "$p" "$reason"
                 return 0
             fi
         done
@@ -431,7 +435,7 @@ sync_repo() {
 
     # ── 3. push ──────────────────────────────────────────────────────────────
     ahead="$(git rev-list --count "$upstream..HEAD")"
-    local pushed=0 leak
+    local pushed=0 leak leak_sha leak_path leak_why
     if (( ahead > 0 )); then
         # The commit step guards only the commit it makes. Commits already ahead
         # of the upstream (made with --no-verify, or on a machine with no hook)
@@ -439,7 +443,8 @@ sync_repo() {
         # is never rewritten automatically.
         leak="$(outgoing_leak "$upstream")"
         if [[ -n "$leak" ]]; then
-            leak="outgoing commit ${leak% *} carries per-machine content in ${leak#* }; nothing pushed. Remove it from local history by hand (git rebase -i $remote/$branch), then rerun"
+            IFS=$'\t' read -r leak_sha leak_path leak_why <<<"$leak"
+            leak="outgoing commit $leak_sha carries per-machine content in $leak_path ($leak_why); nothing pushed. Remove it from local history by hand (git rebase -i $remote/$branch), then rerun"
             if (( DRY_RUN )); then log "$name: would refuse: $leak"; return 1; fi
             fail_repo "$name" "$leak" "$pulled" 0 "$held"; return 1
         fi

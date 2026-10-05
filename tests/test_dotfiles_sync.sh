@@ -172,7 +172,8 @@ assert_not_pushed() {  # $1 = repo, $2 = expected remote commit count, $3 = path
     if "$SYNC" "$WORK/$n" >/dev/null 2>&1; then fail "$n: run exited 0 with a leaking outgoing commit"; fi
     [ "$(git -C "$WORK/$n.git" rev-list --count main)" = "$2" ] || fail "$n: something reached the remote"
     [ "$(state_field "$n" status)" = failed ] || fail "$n: state not failed"
-    state_field "$n" message | grep -qF "per-machine content in $3; nothing pushed" || fail "$n: message wrong: $(state_field "$n" message)"
+    state_field "$n" message | grep -qF "per-machine content in $3 (" || fail "$n: message wrong: $(state_field "$n" message)"
+    state_field "$n" message | grep -qF "nothing pushed" || fail "$n: message does not say nothing was pushed"
     state_field "$n" message | grep -qF "$GATEWAY_URL" && fail "$n: the state message quotes the token"
     return 0
 }
