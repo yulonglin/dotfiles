@@ -27,6 +27,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 | Add an interactive menu or picker to a script | Short known list → `claude-tools select --items FILE` (`group\|name\|description\|checked`, `--single` for one pick); long list you type to narrow → `fzf`. Never pipe items on stdin: that makes fd 0 a pipe and forces crossterm onto its `/dev/tty` fallback. Conventions in [`docs/tui-tools.md`](docs/tui-tools.md) |
 | Add an encrypted secret | `secrets edit` (interactive fzf editor) |
 | Add, remove or switch off a foreign model (picker row, agent, route), or put an older Claude model in `/model` (`provider = "anthropic"`) | Edit `config/model-router.toml` → `model-router-wire apply` (renders router config, picker rows and `claude/agents/` files; `status` shows drift) → `tests/test_model_router_gateway.sh` |
+| Start or adopt a research project hub (`~/projects/<name>/{code,paper,data,runs,…}`) | `project-hub new <name>`, `project-hub adopt <name> code=<path>`, `project-hub tier <name>/code logs`, `project-hub doctor` — layout in the `server-storage-tiering` skill |
 | Run an experiment with resource caps | `jexp uv run python -m ...` (Linux: needs pueue + systemd user session) |
 | Check or repair hard-wrapped Markdown | `md-unwrap --check claude/` (gated in pre-commit and CI); `md-unwrap --fix <path>` |
 | Find a cloud resource left running | `cloud-spend-check --days 14` (daily timer + session nudge; flags flat daily spend) — [`docs/cloud-spend-check.md`](docs/cloud-spend-check.md) |
