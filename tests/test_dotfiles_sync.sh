@@ -112,6 +112,8 @@ printf '{"env":{"ANTHROPIC_BASE_URL":"%s"}}\n' "$GATEWAY_URL" >"$WORK/nohook/cla
 echo two >"$WORK/nohook/file.txt"
 if "$SYNC" "$WORK/nohook" >/dev/null 2>&1; then fail "no-hook run exited 0"; fi
 assert_refused nohook
+# deploy.sh sets the global core.hooksPath, which a local one outranks.
+state_field nohook message | grep -qF 'config --unset core.hooksPath' || fail "message does not say to unset the local core.hooksPath"
 pass "no pre-commit hook: abort before staging, nothing committed or pushed"
 
 # 2c. A pre-commit that is not the guard hook (here one that accepts anything).

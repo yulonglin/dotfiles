@@ -65,7 +65,7 @@ for path in sorted(glob.glob(os.path.join(os.environ["STATE_DIR"], "*.json"))):
         continue
     if st.get("held_back"):
         lines.append(f"{name}: {st['held_back']} was held back from the sync commit"
-                     " because it carries per-machine content; commit a stripped copy"
+                     " (per-machine content, or the pre-commit hook rejected it); commit a stripped copy"
                      " by hand if its other changes should ship (.claude/rules/dotfiles-settings.md).")
     if age_h <= 24 and int(st.get("pulled") or 0) > 0:
         lines.append(f"{name}: dotfiles-sync pulled {st['pulled']} commit(s) {age_h:.0f} h ago;"

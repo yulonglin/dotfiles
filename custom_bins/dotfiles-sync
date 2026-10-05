@@ -311,6 +311,9 @@ sync_repo() {
     hook_err="$(hook_problem)"
     if [[ -n "$hook_err" ]]; then
         hook_err="pre-commit guard hook missing ($hook_err); nothing committed. Fix: ./deploy.sh --git-hooks"
+        # A repo-local core.hooksPath outranks the global one deploy.sh sets.
+        git config --local --get core.hooksPath >/dev/null 2>&1 \
+            && hook_err="$hook_err, then git -C $repo config --unset core.hooksPath"
         if (( DRY_RUN )); then log "$name: would refuse: $hook_err"; return 1; fi
         fail_repo "$name" "$hook_err"; return 1
     fi
@@ -434,7 +437,7 @@ sync_repo() {
     (( DRY_RUN )) && return 0
     local summary="in sync"
     (( pulled > 0 || pushed > 0 )) && summary="pulled $pulled, pushed $pushed"
-    [[ -n "$held" ]] && summary="$summary; $held held back (per-machine content)"
+    [[ -n "$held" ]] && summary="$summary; $held held back (per-machine content or rejected by pre-commit)"
     [[ -n "$ZED_NOTE" ]] && summary="$summary; $ZED_NOTE"
     log "$name: $summary"
     write_state "$name" ok "$summary" "$pulled" "$pushed" "$held"
