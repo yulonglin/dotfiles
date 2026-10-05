@@ -6,6 +6,11 @@
 #   1. no-op        : clean and in sync -> nothing committed, nothing pushed
 #   2. dirty        : dirty tree -> one "sync: <host> <utc>" commit reaches the remote
 #   3. behind       : remote moved -> local rebased, local commit pushed on top
+#   2b-2e. hook gate: no hook (hn's core.hooksPath=.git/hooks) and a foreign
+#                     hook abort before staging; the real hook through a
+#                     ~/.git-hooks-style symlink proceeds; with the gate met by
+#                     a hook that accepts everything, the script's own screen
+#                     still holds back a tokened settings.json
 #   4. conflict     : both sides edit one line -> rebase aborted, tree untouched,
 #                     state file says failed, exit 1
 #   5. held back    : pre-commit rejects claude/settings.json -> the other file
@@ -35,6 +40,8 @@ export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com
 export GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 # The user's global hooks (core.hooksPath) must not fire on these throwaway repos.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+# No git command here may walk up out of the scratch dir into a real checkout.
+export GIT_CEILING_DIRECTORIES="$WORK"
 # An empty template: `git init`/`clone` otherwise copy sample hooks into .git/hooks,
 # and the Claude Code sandbox refuses every write under a .git/hooks directory.
 mkdir -p "$WORK/template"
@@ -57,6 +64,10 @@ fresh_remote() {
     git -C "$WORK/$n" commit -q -m init
     git -C "$WORK/$n" push -q -u origin main
     git clone -q "$WORK/$n.git" "$WORK/$n-b" 2>/dev/null
+    # dotfiles-sync refuses a repo whose pre-commit is not the real guard hook.
+    # Fixture commits made by hand after this pass --no-verify: the hook under
+    # test is the one the sync's own commit runs.
+    git -C "$WORK/$n" config core.hooksPath "$REPO_ROOT/config/git-hooks"
 }
 
 # 1. no-op
@@ -79,6 +90,69 @@ git -C "$WORK/dirty.git" ls-tree --name-only main | grep -qx a-fifo && fail "fif
 [ -z "$(git -C "$WORK/dirty" status --porcelain --untracked-files=no)" ] || fail "tree still dirty after sync"
 [ "$(state_field dirty pushed)" = 1 ] || fail "state pushed != 1"
 pass "dirty tree becomes one sync commit on the remote"
+
+# 2b-2e. The hook gate. A tokened gateway URL like model-router's, built here so
+# no literal token sits in this file.
+GATEWAY_URL="http://127.0.0.1:8317/t/$(printf '%032d' 0 | tr 0 a)"
+assert_refused() {  # $1 = repo name; the sync must have touched nothing
+    local n="$1"
+    [ "$(git -C "$WORK/$n.git" rev-list --count main)" = 1 ] || fail "$n: something reached the remote"
+    [ "$(git -C "$WORK/$n" rev-list --count HEAD)" = 1 ] || fail "$n: a commit was made"
+    git -C "$WORK/$n" diff --cached --quiet || fail "$n: the index was left staged"
+    git -C "$WORK/$n" status --porcelain | grep -q 'file.txt' || fail "$n: the local edit was lost"
+    [ "$(state_field "$n" status)" = failed ] || fail "$n: state not failed"
+    state_field "$n" message | grep -qF 'deploy.sh --git-hooks' || fail "$n: message does not name the fix: $(state_field "$n" message)"
+}
+
+# 2b. hn on 2026-10-04: core.hooksPath=.git/hooks with no pre-commit in it.
+fresh_remote nohook
+git -C "$WORK/nohook" config core.hooksPath .git/hooks
+mkdir -p "$WORK/nohook/claude"
+printf '{"env":{"ANTHROPIC_BASE_URL":"%s"}}\n' "$GATEWAY_URL" >"$WORK/nohook/claude/settings.json"
+echo two >"$WORK/nohook/file.txt"
+if "$SYNC" "$WORK/nohook" >/dev/null 2>&1; then fail "no-hook run exited 0"; fi
+assert_refused nohook
+pass "no pre-commit hook: abort before staging, nothing committed or pushed"
+
+# 2c. A pre-commit that is not the guard hook (here one that accepts anything).
+fresh_remote foreign
+mkdir -p "$WORK/foreign/.hooks"
+printf '#!/bin/sh\nexit 0\n' >"$WORK/foreign/.hooks/pre-commit"
+chmod +x "$WORK/foreign/.hooks/pre-commit"
+git -C "$WORK/foreign" config core.hooksPath .hooks
+echo two >"$WORK/foreign/file.txt"
+if "$SYNC" "$WORK/foreign" >/dev/null 2>&1; then fail "foreign-hook run exited 0"; fi
+assert_refused foreign
+pass "a foreign pre-commit hook: abort before staging, nothing committed or pushed"
+
+# 2d. The deployed shape: core.hooksPath=~/.git-hooks, whose pre-commit is a
+# symlink to config/git-hooks/pre-commit. The sync proceeds.
+fresh_remote righthook
+mkdir -p "$WORK/git-hooks"
+ln -sf "$REPO_ROOT/config/git-hooks/pre-commit" "$WORK/git-hooks/pre-commit"
+git -C "$WORK/righthook" config core.hooksPath "$WORK/git-hooks"
+echo two >"$WORK/righthook/file.txt"
+"$SYNC" "$WORK/righthook" >/dev/null 2>&1 || fail "correct-hook run exited non-zero: $(state_field righthook message)"
+[ "$(git -C "$WORK/righthook.git" show main:file.txt)" = two ] || fail "the edit did not reach the remote"
+[ "$(state_field righthook status)" = ok ] || fail "correct-hook state not ok"
+pass "the guard hook through a symlinked hooks dir: the sync proceeds"
+
+# 2e. Defense in depth: even when the hook accepts everything, the sync's own
+# screen holds back a settings.json whose staged copy carries the gateway URL.
+fresh_remote screen
+mkdir -p "$WORK/screen/claude" "$WORK/screen/.hooks"
+echo '{"a":1}' >"$WORK/screen/claude/settings.json"
+git -C "$WORK/screen" add claude && git -C "$WORK/screen" commit -q --no-verify -m settings && git -C "$WORK/screen" push -q
+printf '#!/bin/sh\nexit 0\n' >"$WORK/screen/.hooks/pre-commit"
+chmod +x "$WORK/screen/.hooks/pre-commit"
+git -C "$WORK/screen" config core.hooksPath .hooks
+printf '{"a":2,"env":{"ANTHROPIC_BASE_URL":"%s"}}\n' "$GATEWAY_URL" >"$WORK/screen/claude/settings.json"
+echo docs >"$WORK/screen/README.md"
+DOTFILES_SYNC_REQUIRED_HOOK="$WORK/screen/.hooks/pre-commit" "$SYNC" "$WORK/screen" >/dev/null || fail "screen run exited non-zero"
+git -C "$WORK/screen.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside the screened settings.json"
+[ "$(git -C "$WORK/screen.git" show main:claude/settings.json)" = '{"a":1}' ] || fail "the gateway URL reached the remote"
+[ "$(state_field screen held_back)" = claude/settings.json ] || fail "state held_back should name settings.json, got: $(state_field screen held_back)"
+pass "with a permissive hook, the sync's own screen still holds back the gateway URL"
 
 # 3. behind -> rebase -> push
 fresh_remote behind
@@ -113,7 +187,7 @@ pass "conflict aborts the rebase and leaves the tree untouched"
 fresh_remote held
 mkdir -p "$WORK/held/claude" "$WORK/held/.hooks"
 echo '{"a":1}' >"$WORK/held/claude/settings.json"
-git -C "$WORK/held" add claude && git -C "$WORK/held" commit -q -m settings && git -C "$WORK/held" push -q
+git -C "$WORK/held" add claude && git -C "$WORK/held" commit -q --no-verify -m settings &&git -C "$WORK/held" push -q
 cat >"$WORK/held/.hooks/pre-commit" <<'H'
 #!/bin/sh
 git diff --cached --name-only | grep -qx claude/settings.json && { echo "gateway guard: refusing claude/settings.json" >&2; exit 1; }
@@ -123,7 +197,7 @@ chmod +x "$WORK/held/.hooks/pre-commit"
 git -C "$WORK/held" config core.hooksPath .hooks
 echo '{"a":2,"secret":true}' >"$WORK/held/claude/settings.json"
 echo docs >"$WORK/held/README.md"
-"$SYNC" "$WORK/held" >/dev/null || fail "held-back run exited non-zero"
+DOTFILES_SYNC_REQUIRED_HOOK="$WORK/held/.hooks/pre-commit" "$SYNC" "$WORK/held" >/dev/null || fail "held-back run exited non-zero"
 git -C "$WORK/held.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed"
 [ "$(git -C "$WORK/held.git" show main:claude/settings.json)" = '{"a":1}' ] || fail "settings.json reached the remote"
 git -C "$WORK/held" status --porcelain | grep -q 'claude/settings.json' || fail "settings.json no longer dirty locally"
@@ -137,7 +211,7 @@ fresh_remote codex
 mkdir -p "$WORK/codex/claude" "$WORK/codex/codex" "$WORK/codex/.hooks"
 echo '{"a":1}' >"$WORK/codex/claude/settings.json"
 printf 'model = "m"\n' >"$WORK/codex/codex/config.toml"
-git -C "$WORK/codex" add claude codex && git -C "$WORK/codex" commit -q -m base && git -C "$WORK/codex" push -q
+git -C "$WORK/codex" add claude codex && git -C "$WORK/codex" commit -q --no-verify -m base &&git -C "$WORK/codex" push -q
 cat >"$WORK/codex/.hooks/pre-commit" <<'H'
 #!/bin/sh
 staged=$(git diff --cached --name-only)
@@ -153,7 +227,7 @@ git -C "$WORK/codex" config core.hooksPath .hooks
 # 5b. only codex/config.toml is rejected -> held back alone, the rest ships
 printf 'model = "m"\n\n[projects."/home/example/p"]\ntrust_level = "trusted"\n' >"$WORK/codex/codex/config.toml"
 echo docs >"$WORK/codex/README.md"
-"$SYNC" "$WORK/codex" >/dev/null || fail "codex held-back run exited non-zero"
+DOTFILES_SYNC_REQUIRED_HOOK="$WORK/codex/.hooks/pre-commit" "$SYNC" "$WORK/codex" >/dev/null || fail "codex held-back run exited non-zero"
 git -C "$WORK/codex.git" ls-tree --name-only main | grep -qx README.md || fail "README not pushed alongside held codex config"
 git -C "$WORK/codex.git" show main:codex/config.toml | grep -q projects && fail "trust table reached the remote"
 git -C "$WORK/codex" status --porcelain | grep -q 'codex/config.toml' || fail "codex/config.toml no longer dirty locally"
@@ -164,7 +238,7 @@ pass "rejected codex/config.toml is held back, everything else ships"
 # 5c. both dirty and the hook rejects -> both held back, both recorded
 echo '{"a":2}' >"$WORK/codex/claude/settings.json"
 echo more >>"$WORK/codex/README.md"
-"$SYNC" "$WORK/codex" >/dev/null || fail "two-file held-back run exited non-zero"
+DOTFILES_SYNC_REQUIRED_HOOK="$WORK/codex/.hooks/pre-commit" "$SYNC" "$WORK/codex" >/dev/null || fail "two-file held-back run exited non-zero"
 [ "$(git -C "$WORK/codex.git" show main:README.md | tail -1)" = more ] || fail "README edit not pushed while both files were held"
 [ "$(git -C "$WORK/codex.git" show main:claude/settings.json)" = '{"a":1}' ] || fail "settings.json reached the remote"
 [ "$(state_field codex held_back)" = "claude/settings.json codex/config.toml" ] \
@@ -174,7 +248,7 @@ pass "both hold-back files are held when the hook rejects"
 # 5d. a codex/config.toml edit the hook accepts is committed, not held
 git -C "$WORK/codex" restore claude/settings.json
 printf 'model = "m2"\n' >"$WORK/codex/codex/config.toml"
-"$SYNC" "$WORK/codex" >/dev/null || fail "clean codex run exited non-zero"
+DOTFILES_SYNC_REQUIRED_HOOK="$WORK/codex/.hooks/pre-commit" "$SYNC" "$WORK/codex" >/dev/null || fail "clean codex run exited non-zero"
 [ "$(git -C "$WORK/codex.git" show main:codex/config.toml)" = 'model = "m2"' ] || fail "accepted codex/config.toml edit was not pushed"
 [ "$(state_field codex held_back)" = "" ] || fail "nothing should be held when the hook accepts"
 pass "an accepted codex/config.toml edit ships"
@@ -187,7 +261,7 @@ fresh_remote starve
 mkdir -p "$WORK/starve/claude" "$WORK/starve/codex" "$WORK/starve/.hooks"
 echo '{"a":1}' >"$WORK/starve/claude/settings.json"
 printf 'model = "m"\n' >"$WORK/starve/codex/config.toml"
-git -C "$WORK/starve" add claude codex && git -C "$WORK/starve" commit -q -m base && git -C "$WORK/starve" push -q
+git -C "$WORK/starve" add claude codex && git -C "$WORK/starve" commit -q --no-verify -m base &&git -C "$WORK/starve" push -q
 cat >"$WORK/starve/.hooks/pre-commit" <<'H'
 #!/bin/sh
 staged=$(git diff --cached --name-only)
@@ -203,7 +277,7 @@ chmod +x "$WORK/starve/.hooks/pre-commit"
 git -C "$WORK/starve" config core.hooksPath .hooks
 printf 'model = "m"\n\n[projects."/home/example/p"]\ntrust_level = "trusted"\n' >"$WORK/starve/codex/config.toml"
 echo '{"a":2}' >"$WORK/starve/claude/settings.json"
-"$SYNC" "$WORK/starve" >/dev/null || fail "starvation run exited non-zero"
+DOTFILES_SYNC_REQUIRED_HOOK="$WORK/starve/.hooks/pre-commit" "$SYNC" "$WORK/starve" >/dev/null || fail "starvation run exited non-zero"
 [ "$(git -C "$WORK/starve.git" show main:claude/settings.json)" = '{"a":2}' ] || fail "clean settings.json edit was starved by a held codex/config.toml"
 git -C "$WORK/starve.git" show main:codex/config.toml | grep -q projects && fail "trust table reached the remote"
 [ "$(state_field starve held_back)" = codex/config.toml ] || fail "only codex/config.toml should be held, got: $(state_field starve held_back)"
@@ -219,7 +293,7 @@ zed_repo() {
     mkdir -p "$WORK/$1/config/zed"
     grep -F 'filter=zed-ssh' "$REPO_ROOT/.gitattributes" >"$WORK/$1/.gitattributes"
     printf '{\n  // editor\n  "vim_mode": true,\n}\n' >"$WORK/$1/config/zed/settings.json"
-    git -C "$WORK/$1" add .gitattributes config && git -C "$WORK/$1" commit -q -m base && git -C "$WORK/$1" push -q
+    git -C "$WORK/$1" add .gitattributes config && git -C "$WORK/$1" commit -q --no-verify -m base &&git -C "$WORK/$1" push -q
     git -C "$WORK/$1" config core.hooksPath "$REPO_ROOT/config/git-hooks"
     printf '{\n  // editor\n  "vim_mode": false,\n  "ssh_connections": [{ "host": "example-host", "projects": [] }],\n}\n' >"$WORK/$1/config/zed/settings.json"
     echo docs >"$WORK/$1/README.md"
