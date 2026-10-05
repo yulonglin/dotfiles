@@ -1,6 +1,6 @@
 ---
 name: jobs
-description: Submit experiments or agent jobs with resource limits, check queue status, pause/resume workloads, troubleshoot slow machine
+description: "Submit experiments or agent jobs with resource limits (Pueue queue with cgroup caps: `jexp`, `jagent`), check queue status, pause or resume workloads, troubleshoot a slow machine or sandbox failures. For work over ~2 GB RSS or ~1 h, not pure API fan-out."
 ---
 
 # Job Management (Pueue + systemd)

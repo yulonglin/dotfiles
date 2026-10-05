@@ -1,6 +1,6 @@
 ---
 name: research-skeptic
-description: MUST BE USED to critically evaluate research findings and assumptions. Use PROACTIVELY when reviewing experimental results, especially surprisingly good/bad results. Automatically invoke to red-team findings, identify confounds and alternative explanations, question assumptions, and prevent confirmation bias. Questions convenient results, identifies confounds, and resists confirmation bias to catch research validity errors before they become publications.
+description: "Red-team research findings before they are reported: question assumptions, find confounds and alternative explanations, check for data leakage, mock data and metrics that miss their target, and resist confirmation bias. Use proactively when reviewing experimental results, especially a surprisingly good or bad one, and when questioning a design's assumptions."
 model: inherit
 tools: Read
 ---

@@ -1,6 +1,6 @@
 ---
 name: fact-checker
-description: Fact-checker for technical writing. Verifies claims, flags unsupported assertions, finds citations.
+description: "Fact-check a draft: verify claims against sources, flag unsupported assertions, find citations, and say \"unable to verify\" rather than invent a source. Part of `review-draft`; use alone for a facts-only pass."
 model: inherit
 tools: Read,WebSearch,WebFetch,mcp__context7__resolve-library-id,mcp__context7__query-docs
 ---

@@ -142,7 +142,7 @@ Deploy configurations (sources aliases for .zshrc, applies oh-my-zsh settings, e
 
 Two deadlines bound how long a run waits for an answer before it gives up and takes the safe default. Both are in seconds, and `0` disables the deadline entirely.
 
-- `DOTFILES_MENU_TIMEOUT` (60s) drives the two full-screen menus, but **not with the same semantics**. The component menu (`claude-tools select`) treats it as an *idle* timeout: the clock resets on every keystroke, so it only fires on a menu nobody has touched, and expiry keeps the profile's set. `app-picker` gets it as a **hard wall-clock kill** instead, so a run spent longer than 60s browsing the app list is killed mid-selection and falls back to the committed Brewfile. If you use `app-picker` interactively, raise this.
+- `DOTFILES_MENU_TIMEOUT` (60s) drives the two full-screen menus, but **not with the same semantics**. The component menu (`claude-tools select`) treats it as an *idle* timeout: the clock resets on every keystroke, so it only fires on a menu nobody has touched, and expiry keeps the profile's set. `app-picker` gets it as a **hard wall-clock kill** instead, so a run spent longer than 60s browsing the app list is killed mid-selection and falls back to the committed Brewfile; an untouched menu closes itself 10s before that kill (half the deadline when it is 15s or less). Either way the terminal is restored. If you use `app-picker` interactively, raise this.
 - `DOTFILES_PROMPT_TIMEOUT` (60s) covers the `sudo`, `chsh` and htop prompts. On expiry the step that needed it is skipped, and says which one it was.
 
 These bound how long the script waits **for** a human — they are not a pause imposed on you, and there is no countdown to Ctrl-C. So shortening them only makes an *attended* run more likely to lose a step you wanted: 60s is already well short of sudo's own `passwd_timeout`, which is unlimited by default on macOS. If the wait you want to avoid is an unattended one, pass `--non-interactive`, which skips every prompt immediately rather than waiting each one out.
@@ -179,7 +179,7 @@ All personal values are centralized in [`config.sh`](./config.sh) — edit `DOTF
 
 API keys are stored in [Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/) (BWS) — a hosted, team-shareable secrets vault. The CLI (`bws`) fetches secrets on demand; nothing is written to disk except a machine access token (at `~/.config/bws/token`).
 
-**One command, `secrets`.** Typing it bare prints a status header — backend, token path, this repo's bindings, ambiguous env names, permission problems — and then offers a menu, but only at an interactive terminal with `gum` installed. Piped or scripted (`secrets | cat`), it prints the header and exits 0, so a hook or CI job can call it unconditionally.
+**One command, `secrets`.** Typing it bare prints a status header — backend, token path, this repo's bindings, ambiguous env names, permission problems — and then offers a menu (`claude-tools select`, a committed binary, so nothing to install), but only at an interactive terminal. Piped or scripted (`secrets | cat`), it prints the header and exits 0, so a hook or CI job can call it unconditionally.
 
 ```bash
 secrets                  # Status header, plus a menu at an interactive terminal

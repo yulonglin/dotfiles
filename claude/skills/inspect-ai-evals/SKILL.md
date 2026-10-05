@@ -1,6 +1,6 @@
 ---
 name: inspect-ai-evals
-description: "Silent failure modes running inspect_ai evals against vLLM/Modal/RunPod endpoints: max_samples, max_connections, stop_reason, eval log."
+description: "Silent failure modes running inspect_ai evals against vLLM/Modal/RunPod endpoints: preflight, max_samples, max_connections, stop_reason, eval log. Use before launching an eval, or when a finished run's numbers may be wrong."
 ---
 
 # Inspect AI evals: silent failure modes

@@ -1,6 +1,6 @@
 ---
 name: write-prose
-description: Use when drafting or revising human-facing prose — artifacts, reports, specs, skills, rules and PR descriptions. Select the writer from the router config.
+description: Use when drafting or revising human-facing prose — artifacts, reports, specs, skills, rules and PR descriptions. Commissions the writer model that `config/model-router.toml` selects, then checks the text against the sources.
 ---
 
 # Commission prose before drafting it
