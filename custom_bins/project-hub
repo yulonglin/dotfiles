@@ -40,8 +40,12 @@ moved).
 Stop the producers before `tier`. A cross-filesystem tier copies, then unlinks
 each source file; a process still holding one open would keep writing to the
 unlinked inode and lose that output. So the copy is refused while any process
-has a file under the dir open for writing (/proc on Linux, lsof elsewhere). With
-neither available it is refused unless --offline asserts nothing writes there.
+has a file under the dir open for writing (/proc on Linux, lsof elsewhere).
+When the check is incomplete (no checker, or processes whose descriptors this
+user may not read, such as root's on Linux) it is refused unless --offline
+asserts the producers are stopped; a writer the check can see is refused even
+then. On macOS, lsof silently omits processes it may not inspect, so other
+users' writers there are a stated limit, not a checked one.
 """
 
 from __future__ import annotations
@@ -321,11 +325,15 @@ def recent_writes(d: Path, minutes: int) -> int:
 
 
 def escaping_links(d: Path) -> list[str]:
-    """Relative symlinks under d whose target lies outside d; they break when d moves.
+    """Relative symlinks under d that resolve outside d; they break when d moves.
 
-    Absolute links still resolve after the move, and links inside d move with it.
+    Each link is resolved with real symlink expansion, so a chain such as
+    `jump -> .` plus `ref -> jump/../x` is judged by where the kernel lands, not
+    by its spelling. A missing final target is judged by the path it would have;
+    a loop or any other resolution error counts as escaping (fail closed).
+    Absolute links are skipped: they resolve the same after the move.
     """
-    root = os.path.normpath(d)
+    root = os.path.realpath(d)
     bad = []
     for cur, dirs, files in os.walk(d):
         for n in dirs + files:
@@ -335,59 +343,87 @@ def escaping_links(d: Path) -> list[str]:
             target = os.readlink(link)
             if os.path.isabs(target):
                 continue
-            to = os.path.normpath(os.path.join(cur, target))
-            if os.path.commonpath([root, to]) != root:
+            try:
+                to = os.path.realpath(link, strict=True)
+            except FileNotFoundError:
+                to = os.path.realpath(link)
+            except (OSError, RuntimeError) as e:
+                bad.append(
+                    f"{os.path.relpath(link, d)} -> {target} ({e.strerror or e})"
+                )
+                continue
+            if to != root and not to.startswith(root + os.sep):
                 bad.append(f"{os.path.relpath(link, d)} -> {target}")
     return sorted(bad)
 
 
-def open_writers(d: Path) -> list[str] | None:
-    """Processes holding a file under d open for writing, as "pid path" lines.
+def proc_uid(pid_dir: Path) -> str:
+    try:
+        for line in (pid_dir / "status").read_text().splitlines():
+            if line.startswith("Uid:"):
+                return line.split()[2]  # effective uid
+    except OSError:
+        pass
+    return "?"
 
-    None when no checker is available (no /proc and no lsof): the caller fails
-    closed. PROJECT_HUB_HANDLE_CHECK=none simulates that in tests.
+
+def open_writers(d: Path) -> tuple[list[str], list[str]] | None:
+    """Scan for processes holding a file under d open for writing.
+
+    Returns (writers, unchecked): "pid path" for each writable handle seen, and
+    "pid (uid N)" for each process whose descriptors could not be read, so a
+    writer among them cannot be ruled out. A process that exits mid-scan is
+    skipped. None when there is no checker at all (no /proc and no lsof).
+
+    lsof, the non-Linux path, silently omits processes it may not inspect; it
+    reports only its own errors, so on macOS other users' processes are a stated
+    limit rather than a counted gap. Test hooks: PROJECT_HUB_HANDLE_CHECK=none
+    simulates no checker; PROJECT_HUB_PROC=<dir> scans a fake /proc tree.
     """
     if os.environ.get("PROJECT_HUB_HANDLE_CHECK") == "none":
         return None
     prefix = str(d.resolve()) + "/"
-    found: list[str] = []
-    if Path("/proc/self/fdinfo").is_dir():
-        for pid_dir in Path("/proc").iterdir():
+    writers: list[str] = []
+    unchecked: list[str] = []
+    proc = os.environ.get("PROJECT_HUB_PROC")
+    if proc or Path("/proc/self/fdinfo").is_dir():
+        for pid_dir in sorted(Path(proc or "/proc").iterdir()):
             if not pid_dir.name.isdigit():
                 continue
             try:
                 fds = list((pid_dir / "fd").iterdir())
+            except FileNotFoundError:
+                continue  # exited
             except OSError:
-                continue  # another user's process, or gone
+                unchecked.append(f"{pid_dir.name} (uid {proc_uid(pid_dir)})")
+                continue
             for fd in fds:
                 try:
                     target = os.readlink(fd)
                     if not target.startswith(prefix):
                         continue
                     info = (pid_dir / "fdinfo" / fd.name).read_text()
+                except FileNotFoundError:
+                    continue  # closed or exited
                 except OSError:
-                    continue
+                    unchecked.append(f"{pid_dir.name} (uid {proc_uid(pid_dir)})")
+                    break
                 flags = next(
                     (
                         int(line.split()[1], 8)
                         for line in info.splitlines()
                         if line.startswith("flags:")
                     ),
-                    0,
+                    0o2,  # unreadable access mode: assume writable
                 )
                 if flags & 0o3:  # O_WRONLY or O_RDWR
-                    found.append(f"{pid_dir.name} {target}")
-        return found
+                    writers.append(f"{pid_dir.name} {target}")
+        return writers, unchecked
     if not shutil.which("lsof"):
         return None
     r = subprocess.run(
-        ["lsof", "-w", "-n", "-P", "-u", str(os.getuid()), "-Fpan"],
-        capture_output=True,
-        text=True,
-        check=False,
+        ["lsof", "-n", "-P", "-Fpan"], capture_output=True, text=True, check=False
     )
-    if r.returncode or not r.stdout:
-        return None
     pid, mode = "", ""
     for line in r.stdout.splitlines():
         tag, val = line[:1], line[1:]
@@ -398,8 +434,11 @@ def open_writers(d: Path) -> list[str] | None:
         elif tag == "a":
             mode = val
         elif tag == "n" and mode in ("w", "u") and val.startswith(prefix):
-            found.append(f"{pid} {val}")
-    return found
+            writers.append(f"{pid} {val}")
+    if r.returncode or not r.stdout or r.stderr.strip():
+        err = (r.stderr.strip().splitlines() or [f"exit {r.returncode}"])[0]
+        unchecked.append(f"lsof failed: {err}")
+    return writers, unchecked
 
 
 def cmd_tier(args: argparse.Namespace) -> None:
@@ -461,17 +500,34 @@ def cmd_tier(args: argparse.Namespace) -> None:
                 fail(f"{dest} already exists; pass --as <other-name>")
             src.rename(dest)
         else:
-            writers = open_writers(src)
-            if writers is None and not args.offline:
+            scan = open_writers(src)
+            if scan is None and not args.offline:
                 fail(
                     f"{src}: no open-file checker (/proc or lsof) to prove nothing writes "
                     "there; stop its producers and pass --offline"
                 )
-            if writers:
+            writers, unchecked = scan or ([], [])
+            if writers:  # --offline never waives a writer that can be seen
                 fail(
                     f"{src}: open for writing by {len(writers)} handle(s), e.g. "
                     f"pid {writers[0]}; stop the producer first (the copy unlinks "
                     "source files, so its later writes would be lost)"
+                )
+            if unchecked and not args.offline:
+                fail(
+                    f"{src}: open-file check incomplete, {len(unchecked)} processes "
+                    f"could not be inspected (e.g. {', '.join(unchecked[:5])}), so a "
+                    "writer among them cannot be ruled out; stop the producers, then "
+                    "pass --offline (writers that can be seen still refuse)"
+                )
+            if (
+                scan is not None
+                and not os.environ.get("PROJECT_HUB_PROC")
+                and not Path("/proc/self/fdinfo").is_dir()
+            ):
+                say(
+                    "  note: lsof sees only processes this user may inspect; "
+                    "other users' writers are not ruled out"
                 )
             # A partial copy from an interrupted run is resumed: rsync skips what
             # already arrived and unlinks each source file after transfer. The
@@ -689,8 +745,10 @@ def main(argv: list[str] | None = None) -> None:
         "leave a relative symlink. Stop the dir's producers first: a cross-filesystem "
         "move unlinks each source file after copying it, so a writer that still holds "
         "one open would lose its later output. The move is refused while any file "
-        "under the dir is open for writing, and when no checker (/proc, lsof) exists "
-        "unless --offline is passed.",
+        "under the dir is open for writing. When the check is incomplete (no "
+        "checker, or processes whose descriptors this user cannot read) it is refused "
+        "unless --offline is passed; a visible writer refuses even then. On macOS lsof "
+        "omits processes it may not inspect, so other users' writers are not checked.",
     )
     p.add_argument("target", metavar="name/role")
     p.add_argument("dirs", nargs="+")
@@ -709,7 +767,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument(
         "--offline",
         action="store_true",
-        help="no open-file checker here: assert the dir's producers are stopped",
+        help="assert the dir's producers are stopped when the open-file check is "
+        "incomplete; visible writers still refuse",
     )
     p.set_defaults(fn=cmd_tier)
     p = sub.add_parser(

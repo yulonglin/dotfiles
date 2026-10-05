@@ -44,6 +44,15 @@ class ProjectHubTest(unittest.TestCase):
             "DOT_DIR": str(self.tmp / "dotfiles"),
             "PROJECT_HUB_FORCE_TIERED": "1",
         }
+        # Cross-filesystem path against an empty fake /proc: a complete scan that
+        # finds no writer, on any OS. Tests of the real checker drop PROJECT_HUB_PROC.
+        self.proc = self.tmp / "proc"
+        self.proc.mkdir()
+        self.copy_env = {
+            **self.env,
+            "PROJECT_HUB_FORCE_COPY": "1",
+            "PROJECT_HUB_PROC": str(self.proc),
+        }
 
     def run_hub(
         self, *args: str, env: dict | None = None, ok: bool = True
@@ -196,7 +205,7 @@ class ProjectHubTest(unittest.TestCase):
 
     def test_tier_cross_fs_refuses_to_merge_into_another_repos_dir(self) -> None:
         # Hetzner path: repo on NVMe, runs/ on the volume, so tier copies with rsync.
-        env = {**self.env, "PROJECT_HUB_FORCE_COPY": "1"}
+        env = self.copy_env
         self.run_hub("new", "proj")
         hub = self.home / "projects/proj"
         for role in ("code", "code-sprint"):
@@ -218,7 +227,7 @@ class ProjectHubTest(unittest.TestCase):
 
     def test_tier_as_gives_a_same_named_dir_its_own_destination(self) -> None:
         # code/logs and code-sprint/logs both default to runs/logs; --as splits them.
-        env = {**self.env, "PROJECT_HUB_FORCE_COPY": "1"}
+        env = self.copy_env
         self.run_hub("new", "proj")
         hub = self.home / "projects/proj"
         for role in ("code", "code-sprint"):
@@ -272,7 +281,7 @@ class ProjectHubTest(unittest.TestCase):
         self.addCleanup(holder.kill)
         self.assertEqual(holder.stdout.readline().strip(), "open")
         os.utime(code / "logs/a.eval", (0, 0))
-        r = self.run_hub("tier", "proj/code", "logs", env=env, ok=False)
+        r = self.run_hub("tier", "proj/code", "logs", "--offline", env=env, ok=False)
         self.assertIn("open for writing", r.stderr)
         self.assertIn(str(holder.pid), r.stderr)
         self.assertTrue((code / "logs").is_dir() and not (code / "logs").is_symlink())
@@ -280,7 +289,8 @@ class ProjectHubTest(unittest.TestCase):
         self.assertFalse((self.volume / "projects/proj/runs/logs").exists())
         holder.kill()
         holder.wait()
-        self.run_hub("tier", "proj/code", "logs", env=env)
+        # --offline: on Linux as non-root, root's descriptors are unreadable.
+        self.run_hub("tier", "proj/code", "logs", "--offline", env=env)
         self.assertEqual(os.readlink(code / "logs"), "../runs/logs")
 
     def test_tier_cross_fs_without_a_handle_checker_needs_offline(self) -> None:
@@ -300,29 +310,88 @@ class ProjectHubTest(unittest.TestCase):
         for path in ("rename", "copy"):
             with self.subTest(path=path):
                 self.setUp()
-                env = dict(self.env)
-                if path == "copy":
-                    env["PROJECT_HUB_FORCE_COPY"] = "1"
+                env = self.copy_env if path == "copy" else self.env
                 code = self.adopted_code()
                 (code / "metrics.csv").write_text("m")
                 logs = code / "logs"
                 (logs / "metrics.csv").symlink_to("../metrics.csv")
                 (logs / "sub").mkdir()
                 (logs / "sub/up").symlink_to("../../README.md")
+                # Chained: jump is internal, but ref expands through it to code/.
+                (logs / "jump").symlink_to(".")
+                (logs / "ref").symlink_to("jump/../metrics.csv")
+                (logs / "gone").symlink_to("jump/../missing.csv")  # dangling, escapes
+                (logs / "loop").symlink_to("loop")  # unresolvable: fail closed
                 (logs / "latest").symlink_to("a.eval")  # internal: moves with it
+                (logs / "inner").symlink_to("jump/sub")  # chained but internal
                 r = self.run_hub("tier", "proj/code", "logs", env=env, ok=False)
-                self.assertIn("metrics.csv -> ../metrics.csv", r.stderr)
-                self.assertIn("sub/up -> ../../README.md", r.stderr)
-                self.assertNotIn("latest", r.stderr)
+                for shown in (
+                    "metrics.csv -> ../metrics.csv",
+                    "sub/up -> ../../README.md",
+                    "ref -> jump/../metrics.csv",
+                    "gone -> jump/../missing.csv",
+                    "loop -> loop",
+                ):
+                    self.assertIn(shown, r.stderr)
+                for kept in ("latest", "jump -> .", "inner"):
+                    self.assertNotIn(kept, r.stderr)
                 self.assertTrue(logs.is_dir() and not logs.is_symlink())
-                (logs / "metrics.csv").unlink()
-                (logs / "sub/up").unlink()
+                for n in ("metrics.csv", "sub/up", "ref", "gone", "loop"):
+                    (logs / n).unlink()
                 self.run_hub("tier", "proj/code", "logs", env=env)
                 self.assertEqual(os.readlink(logs), "../runs/logs")
                 self.assertEqual((logs / "latest").read_text(), "cold")
+                self.assertEqual((logs / "inner").resolve(), (logs / "sub").resolve())
+
+    def fake_pid(self, pid: int, uid: int, fds: dict[int, tuple[Path, str]]) -> Path:
+        """A /proc/<pid> entry: fd/<n> links to a path, fdinfo/<n> carries flags."""
+        d = self.proc / str(pid)
+        (d / "fd").mkdir(parents=True)
+        (d / "fdinfo").mkdir()
+        (d / "status").write_text(f"Name:\tfake\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n")
+        for n, (target, flags) in fds.items():
+            (d / "fd" / str(n)).symlink_to(target)
+            (d / "fdinfo" / str(n)).write_text(f"pos:\t0\nflags:\t{flags}\n")
+        return d
+
+    def test_tier_refuses_when_a_descriptor_table_is_unreadable(self) -> None:
+        # Linux as non-root: another user's /proc/<pid>/fd raises EACCES. That
+        # process may be the writer, so the scan is incomplete, not clean.
+        code = self.adopted_code()
+        self.fake_pid(4000, 1000, {})  # readable, nothing open
+        locked = self.fake_pid(4242, 0, {})
+        (locked / "fd").chmod(0)
+        self.addCleanup((locked / "fd").chmod, 0o755)
+        (self.proc / "4343").mkdir()  # exited mid-scan: no fd dir, skipped
+        if os.access(locked / "fd", os.R_OK):
+            self.skipTest("running as root: chmod 0 does not block reads")
+        r = self.run_hub("tier", "proj/code", "logs", env=self.copy_env, ok=False)
+        self.assertIn("could not be inspected", r.stderr)
+        self.assertIn("4242 (uid 0)", r.stderr)
+        self.assertNotIn("4343", r.stderr)
+        self.assertNotIn("4000", r.stderr)
+        self.assertFalse((code / "logs").is_symlink())
+        self.run_hub("tier", "proj/code", "logs", "--offline", env=self.copy_env)
+        self.assertEqual(os.readlink(code / "logs"), "../runs/logs")
+
+    def test_tier_refuses_a_writer_under_another_uid(self) -> None:
+        # A readable table (as root sees every process) with a write handle held
+        # by uid 1234: refused even with --offline. A read-only handle is not.
+        code = self.adopted_code()
+        held = code / "logs/a.eval"
+        self.fake_pid(5151, 1234, {3: (held, "0100001")})  # O_WRONLY|O_LARGEFILE
+        self.fake_pid(5152, 1234, {4: (held, "0100000")})  # O_RDONLY
+        r = self.run_hub(
+            "tier", "proj/code", "logs", "--offline", env=self.copy_env, ok=False
+        )
+        self.assertIn("open for writing by 1 handle", r.stderr)
+        self.assertIn(f"5151 {held}", r.stderr)
+        self.assertNotIn("5152", r.stderr)
+        self.assertFalse((code / "logs").is_symlink())
+        self.assertEqual(held.read_text(), "cold")
 
     def test_tier_cross_fs_resumes_an_interrupted_copy(self) -> None:
-        env = {**self.env, "PROJECT_HUB_FORCE_COPY": "1"}
+        env = self.copy_env
         self.run_hub("new", "proj")
         src = self.make_repo(self.home / "code/thing")
         self.run_hub("adopt", "proj", f"code={src}", "--no-sync")
