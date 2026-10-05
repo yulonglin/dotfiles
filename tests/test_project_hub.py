@@ -306,6 +306,39 @@ class ProjectHubTest(unittest.TestCase):
         self.run_hub("tier", "proj/code", "logs", "--offline", env=env)
         self.assertEqual(os.readlink(code / "logs"), "../runs/logs")
 
+    def test_tier_lsof_scan_as_non_root_is_incomplete(self) -> None:
+        # macOS: unprivileged lsof exits 0, prints nothing on stderr, and lists
+        # none of other users' processes, so a clean-looking scan proves nothing.
+        if not shutil.which("lsof"):
+            self.skipTest("lsof not installed")
+        env = {
+            **self.env,
+            "PROJECT_HUB_FORCE_COPY": "1",
+            "PROJECT_HUB_HANDLE_CHECK": "lsof",
+            "PROJECT_HUB_EUID": "501",
+        }
+        code = self.adopted_code()
+        r = self.run_hub("tier", "proj/code", "logs", env=env, ok=False)
+        self.assertIn("check incomplete", r.stderr)
+        self.assertIn("other users' processes", r.stderr)
+        self.assertIn("--offline", r.stderr)
+        self.assertFalse((code / "logs").is_symlink())
+        self.run_hub("tier", "proj/code", "logs", "--offline", env=env)
+        self.assertEqual(os.readlink(code / "logs"), "../runs/logs")
+
+    def test_tier_lsof_scan_as_root_is_complete(self) -> None:
+        if not shutil.which("lsof"):
+            self.skipTest("lsof not installed")
+        env = {
+            **self.env,
+            "PROJECT_HUB_FORCE_COPY": "1",
+            "PROJECT_HUB_HANDLE_CHECK": "lsof",
+            "PROJECT_HUB_EUID": "0",
+        }
+        code = self.adopted_code()
+        self.run_hub("tier", "proj/code", "logs", env=env)
+        self.assertEqual(os.readlink(code / "logs"), "../runs/logs")
+
     def test_tier_refuses_relative_links_that_escape_the_dir(self) -> None:
         for path in ("rename", "copy"):
             with self.subTest(path=path):

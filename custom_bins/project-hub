@@ -44,8 +44,9 @@ has a file under the dir open for writing (/proc on Linux, lsof elsewhere).
 When the check is incomplete (no checker, or processes whose descriptors this
 user may not read, such as root's on Linux) it is refused unless --offline
 asserts the producers are stopped; a writer the check can see is refused even
-then. On macOS, lsof silently omits processes it may not inspect, so other
-users' writers there are a stated limit, not a checked one.
+then. On macOS an unprivileged lsof silently lists none of other users'
+processes, so a scan there is complete only as root: tiering on macOS as a
+normal user always needs --offline, after stopping the producers.
 """
 
 from __future__ import annotations
@@ -375,18 +376,22 @@ def open_writers(d: Path) -> tuple[list[str], list[str]] | None:
     writer among them cannot be ruled out. A process that exits mid-scan is
     skipped. None when there is no checker at all (no /proc and no lsof).
 
-    lsof, the non-Linux path, silently omits processes it may not inspect; it
-    reports only its own errors, so on macOS other users' processes are a stated
-    limit rather than a counted gap. Test hooks: PROJECT_HUB_HANDLE_CHECK=none
-    simulates no checker; PROJECT_HUB_PROC=<dir> scans a fake /proc tree.
+    lsof, the non-Linux path, exits 0 with no warning while listing none of
+    other users' processes when run unprivileged (macOS: 0 of 217 root
+    processes), so its scan counts as complete only when euid is 0.
+
+    Test hooks: PROJECT_HUB_HANDLE_CHECK=none simulates no checker and =lsof
+    forces the lsof path; PROJECT_HUB_PROC=<dir> scans a fake /proc tree;
+    PROJECT_HUB_EUID overrides the effective uid.
     """
-    if os.environ.get("PROJECT_HUB_HANDLE_CHECK") == "none":
+    check = os.environ.get("PROJECT_HUB_HANDLE_CHECK")
+    if check == "none":
         return None
     prefix = str(d.resolve()) + "/"
     writers: list[str] = []
     unchecked: list[str] = []
     proc = os.environ.get("PROJECT_HUB_PROC")
-    if proc or Path("/proc/self/fdinfo").is_dir():
+    if check != "lsof" and (proc or Path("/proc/self/fdinfo").is_dir()):
         for pid_dir in sorted(Path(proc or "/proc").iterdir()):
             if not pid_dir.name.isdigit():
                 continue
@@ -438,6 +443,8 @@ def open_writers(d: Path) -> tuple[list[str], list[str]] | None:
     if r.returncode or not r.stdout or r.stderr.strip():
         err = (r.stderr.strip().splitlines() or [f"exit {r.returncode}"])[0]
         unchecked.append(f"lsof failed: {err}")
+    if int(os.environ.get("PROJECT_HUB_EUID", os.geteuid())) != 0:
+        unchecked.append("all other users' processes (unprivileged lsof lists none)")
     return writers, unchecked
 
 
@@ -515,19 +522,12 @@ def cmd_tier(args: argparse.Namespace) -> None:
                 )
             if unchecked and not args.offline:
                 fail(
-                    f"{src}: open-file check incomplete, {len(unchecked)} processes "
-                    f"could not be inspected (e.g. {', '.join(unchecked[:5])}), so a "
+                    f"{src}: open-file check incomplete, these could not be inspected: "
+                    f"{', '.join(unchecked[:5])}"
+                    + (f" and {len(unchecked) - 5} more" if len(unchecked) > 5 else "")
+                    + "; so a "
                     "writer among them cannot be ruled out; stop the producers, then "
                     "pass --offline (writers that can be seen still refuse)"
-                )
-            if (
-                scan is not None
-                and not os.environ.get("PROJECT_HUB_PROC")
-                and not Path("/proc/self/fdinfo").is_dir()
-            ):
-                say(
-                    "  note: lsof sees only processes this user may inspect; "
-                    "other users' writers are not ruled out"
                 )
             # A partial copy from an interrupted run is resumed: rsync skips what
             # already arrived and unlinks each source file after transfer. The
@@ -747,8 +747,10 @@ def main(argv: list[str] | None = None) -> None:
         "one open would lose its later output. The move is refused while any file "
         "under the dir is open for writing. When the check is incomplete (no "
         "checker, or processes whose descriptors this user cannot read) it is refused "
-        "unless --offline is passed; a visible writer refuses even then. On macOS lsof "
-        "omits processes it may not inspect, so other users' writers are not checked.",
+        "unless --offline is passed; a visible writer refuses even then. On macOS as a "
+        "normal user the check is always incomplete (unprivileged lsof lists no other "
+        "user's processes), so tiering there needs --offline after stopping the "
+        "producers; on Linux as non-root, root's processes make it incomplete too.",
     )
     p.add_argument("target", metavar="name/role")
     p.add_argument("dirs", nargs="+")
