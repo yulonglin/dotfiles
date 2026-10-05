@@ -107,21 +107,17 @@ fn write_cache(path: &Path, cache: &Cache) {
     let _ = std::fs::remove_file(temporary);
 }
 
-/// Append a separate line; the Claude line and its cache are untouched.
-pub fn format_usage(output: &mut String) {
+/// Codex quota as one layout group for statusline::pack_groups, its first
+/// segment labelled "Codex". None when Codex is not installed or not logged in.
+/// The Claude usage and its cache are untouched.
+pub fn usage_group() -> Option<Vec<String>> {
     let home = std::env::var_os("CODEX_HOME")
         .filter(|p| !p.is_empty())
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".codex")));
-    let Some(home) = home.and_then(|p| p.canonicalize().ok()) else {
-        return;
-    };
-    let Some(stamp) = auth_stamp(&home) else {
-        return;
-    };
-    let Some(executable) = codex_executable() else {
-        return;
-    };
+    let home = home.and_then(|p| p.canonicalize().ok())?;
+    let stamp = auth_stamp(&home)?;
+    let executable = codex_executable()?;
     let path = cache_path(&home);
     let mut cache: Cache = path
         .as_ref()
@@ -150,21 +146,23 @@ pub fn format_usage(output: &mut String) {
         }
         // A login/logout during the query must not publish old-account data.
         if auth_stamp(&home).as_deref() != Some(&stamp) {
-            return;
+            return None;
         }
         if let Some(path) = path.as_ref() {
             write_cache(path, &cache);
         }
     }
-    output.push_str("\nCodex ");
-    if let Some(quotas) = cache.quotas.as_ref() {
-        let stale = now()
-            .checked_sub(cache.fetched_at)
-            .is_none_or(|age| age >= CACHE_TTL);
-        render(output, quotas, now() as i64, stale);
-    } else {
-        output.push_str("usage unavailable");
-    }
+    let mut segments = match cache.quotas.as_ref() {
+        Some(quotas) => {
+            let stale = now()
+                .checked_sub(cache.fetched_at)
+                .is_none_or(|age| age >= CACHE_TTL);
+            render(quotas, now() as i64, stale)
+        }
+        None => vec!["usage unavailable".to_string()],
+    };
+    segments[0].insert_str(0, "Codex ");
+    Some(segments)
 }
 
 /// Own the child for every exit path, including malformed JSON and timeouts.
@@ -278,17 +276,16 @@ fn aggregate_bucket(quotas: &Quotas) -> Option<&Bucket> {
     }
 }
 
-fn render(output: &mut String, quotas: &Quotas, timestamp: i64, stale: bool) {
-    let mut count = 0;
+/// One segment per window, never empty: "usage unavailable" stands in when the
+/// aggregate bucket has no windows, and " (stale)" rides on the last segment.
+fn render(quotas: &Quotas, timestamp: i64, stale: bool) -> Vec<String> {
+    let mut segments = Vec::new();
     if let Some(bucket) = aggregate_bucket(quotas) {
         for window in [bucket.primary.as_ref(), bucket.secondary.as_ref()]
             .into_iter()
             .flatten()
         {
-            if count > 0 {
-                output.push_str(" · ");
-            }
-            count += 1;
+            let mut output = String::new();
             let label = duration_label(window.window_duration_mins);
             let pct = window.used_percent.clamp(0, 100) as u8;
             let expired = window.resets_at.is_some_and(|reset| reset <= timestamp);
@@ -303,16 +300,20 @@ fn render(output: &mut String, quotas: &Quotas, timestamp: i64, stale: bool) {
                 .window_duration_mins
                 .filter(|m| *m > 0)
                 .map(|m| m as f64 * 60.0);
-            crate::usage::render_epoch_bucket(output, &label, pct, reset, seconds, timestamp);
+            crate::usage::render_epoch_bucket(&mut output, &label, pct, reset, seconds, timestamp);
             if expired {
                 output.push_str(" (expired)");
             }
+            segments.push(output);
         }
     }
-    if count == 0 {
-        output.push_str("usage unavailable");
+    if segments.is_empty() {
+        segments.push("usage unavailable".to_string());
     }
     if stale {
-        output.push_str(" (stale)");
+        if let Some(last) = segments.last_mut() {
+            last.push_str(" (stale)");
+        }
     }
+    segments
 }
