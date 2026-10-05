@@ -351,8 +351,20 @@ print("yes" if hit else "")
 # holds the file back when this check rejects it (DOTFILES_SYNC_HOLD_BACK).
 #
 # The STAGED blob is what is checked, so a cleaned working tree with a stale
-# index still fails. Anything else in the file (projects_dir = ..., comments)
-# is allowed: only a TOML table header whose first key is `projects` matches.
+# index still fails. The blob is parsed as TOML by the shared checker
+# scripts/git-guards/per-machine-leak (also used by dotfiles-sync), which
+# rejects any top-level `projects` key whatever its syntax: [projects."p"],
+# ['projects'], [[projects]], projects = {...}. Anything else in the file
+# (projects_dir = ..., comments) is allowed. Unparseable TOML, a missing
+# checker or a checker error all reject: the check fails closed.
+
+_leak_checker() {
+    # The hook is usually reached through the ~/.git-hooks symlink, so resolve
+    # it to find the dotfiles checkout it lives in.
+    local self
+    self=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}" 2>/dev/null) || return 1
+    printf '%s/../../scripts/git-guards/per-machine-leak' "$(dirname "${self}")"
+}
 
 _validate_no_codex_trust_tables() {
     local file="$1"
@@ -360,17 +372,18 @@ _validate_no_codex_trust_tables() {
     local staged_content
     staged_content=$(git show ":${file}" 2>/dev/null) || return 0
 
-    local headers
-    if ! headers=$(printf '%s\n' "${staged_content}" | grep -nE '^[[:space:]]*\[\[?[[:space:]]*"?projects"?[[:space:]]*[].]'); then
-        return 0
+    local checker reason
+    checker=$(_leak_checker) || checker=""
+    if [ -n "${checker}" ] && [ -x "${checker}" ]; then
+        reason=$(printf '%s\n' "${staged_content}" | "${checker}" "${file}" 2>&1) && return 0
+        reason="${reason:-the checker failed}"
+    else
+        reason="checker not found next to this hook (${checker:-unresolved}); failing closed"
     fi
 
-    local count
-    count=$(printf '%s\n' "${headers}" | wc -l | tr -d ' ')
-
     echo ""
-    echo "⛔  Pre-commit: ${file} carries ${count} Codex trust table(s) ([projects.\"<path>\"])"
-    echo "    First at staged line $(printf '%s\n' "${headers}" | head -1 | cut -d: -f1)."
+    echo "⛔  Pre-commit: ${file} blocked by the Codex trust table check"
+    echo "    ${reason}"
     echo ""
     echo "    Codex writes one per trusted directory; the paths are machine-local"
     echo "    and must not reach a public repo. Keep them in the working tree only."

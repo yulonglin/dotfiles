@@ -29,7 +29,9 @@
 #   3. rebase onto the upstream. A conflict is aborted, never resolved here.
 #      Zed's ssh_connections exists only in the working copy, so it is saved
 #      to the state dir first and put back afterwards if the rebase dropped it.
-#   4. push. Never --force.
+#   4. push. Never --force. First every outgoing commit is screened: if any
+#      one of them stores a hold-back blob that scripts/git-guards/per-machine-leak
+#      rejects, nothing is pushed and the repo fails. History is not rewritten.
 #
 # Every outcome lands in $DOTFILES_SYNC_STATE_DIR/<repo>.json, which the
 # nudge_dotfiles_sync.sh session-start hook reads, because a log file nobody
@@ -59,6 +61,8 @@ HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json codex/config.toml con
 read -r -a HOLD_BACK_PATHS <<<"$HOLD_BACK"
 # The hook every synced repo must run before the sync may commit.
 REQUIRED_HOOK="${DOTFILES_SYNC_REQUIRED_HOOK:-$DOT_DIR/config/git-hooks/pre-commit}"
+# Decides whether a protected file's blob is safe to publish; shared with the hook.
+LEAK_CHECK="$DOT_DIR/scripts/git-guards/per-machine-leak"
 DRY_RUN=0
 PRUNE=0
 STALE_DAYS="${DOTFILES_SYNC_STALE_DAYS:-14}"
@@ -163,32 +167,39 @@ order_hold_back() {
     printf '%s' "${out[*]:-}"
 }
 
-# staged_leak PATH: succeeds when the staged blob of PATH carries a per-machine
-# value that a pre-commit guard exists to block. These are copies of the
-# guards' signatures in config/git-hooks/pre-commit, so a hold-back path stays
-# out of the public repo even if the hook never runs. The staged blob is the
-# post-clean-filter one, so a Zed file the zed-ssh filter stripped passes.
+# blob_leak OBJECT PATH: succeeds when blob OBJECT, stored at PATH, carries a
+# per-machine value. The decision is scripts/git-guards/per-machine-leak, the
+# checker the pre-commit hook also calls, so a hold-back path stays out of the
+# public repo even if the hook never runs. Any checker failure, a missing
+# checker included, counts as a leak: this fails closed. Blobs are what git
+# stores, after the clean filter, so a Zed file the zed-ssh filter stripped
+# passes.
+blob_leak() {
+    ! git cat-file blob "$1" 2>/dev/null | "$LEAK_CHECK" "$2" >/dev/null 2>&1
+}
+
+# staged_leak PATH: blob_leak on the staged copy of PATH; fails when none is staged.
 staged_leak() {
-    local blob
-    blob="$(git show ":$1" 2>/dev/null)" || return 1
-    case "$1" in
-        claude/settings.json)
-            python3 -c '
-import json, re, sys
-text = sys.stdin.read()
-loop = re.compile(r"https?://(?:127\.0\.0\.1|localhost|\[::1\])(?::[0-9]+)?/\S*[0-9a-fA-F]{16,}")
-try:
-    env = json.loads(text).get("env") or {}
-    hit = any(k == "ANTHROPIC_BASE_URL" or (isinstance(v, str) and loop.search(v)) for k, v in env.items())
-except Exception:
-    hit = "ANTHROPIC_BASE_URL" in text or bool(loop.search(text))
-sys.exit(0 if hit else 1)' <<<"$blob" ;;
-        codex/config.toml)
-            grep -qE '^[[:space:]]*\[\[?[[:space:]]*"?projects"?[[:space:]]*[].]' <<<"$blob" ;;
-        config/zed/settings.json)
-            grep -qE '"ssh_connections"[[:space:]]*:' <<<"$blob" ;;
-        *) return 1 ;;
-    esac
+    git cat-file -e ":$1" 2>/dev/null || return 1
+    blob_leak ":$1" "$1"
+}
+
+# outgoing_leak UPSTREAM: "<short sha> <path>" for the first commit in
+# UPSTREAM..HEAD (every outgoing commit, not just the tip, so a value a later
+# commit removed still counts) whose hold-back blob differs from UPSTREAM's and
+# leaks; empty when none does. A blob identical to UPSTREAM's is already public.
+outgoing_leak() {
+    local up="$1" c p blob
+    for c in $(git rev-list "$up..HEAD"); do
+        for p in "${HOLD_BACK_PATHS[@]}"; do
+            blob="$(git rev-parse -q --verify "$c:$p" 2>/dev/null)" || continue
+            [[ "$blob" == "$(git rev-parse -q --verify "$up:$p" 2>/dev/null)" ]] && continue
+            if blob_leak "$blob" "$p"; then
+                printf '%s %s' "$(git rev-parse --short "$c")" "$p"
+                return 0
+            fi
+        done
+    done
 }
 
 # screen_hold_back: unstage each staged hold-back path whose staged blob leaks,
@@ -420,8 +431,18 @@ sync_repo() {
 
     # ── 3. push ──────────────────────────────────────────────────────────────
     ahead="$(git rev-list --count "$upstream..HEAD")"
-    local pushed=0
+    local pushed=0 leak
     if (( ahead > 0 )); then
+        # The commit step guards only the commit it makes. Commits already ahead
+        # of the upstream (made with --no-verify, or on a machine with no hook)
+        # are screened here, every one of them, before anything leaves. History
+        # is never rewritten automatically.
+        leak="$(outgoing_leak "$upstream")"
+        if [[ -n "$leak" ]]; then
+            leak="outgoing commit ${leak% *} carries per-machine content in ${leak#* }; nothing pushed. Remove it from local history by hand (git rebase -i $remote/$branch), then rerun"
+            if (( DRY_RUN )); then log "$name: would refuse: $leak"; return 1; fi
+            fail_repo "$name" "$leak" "$pulled" 0 "$held"; return 1
+        fi
         if (( DRY_RUN )); then
             log "$name: would push $ahead commit(s) to $remote/$branch"
         elif run_with_timeout 120 git push --quiet "$remote" "HEAD:refs/heads/$branch" 2>"$STATE_DIR/$name.push.err"; then

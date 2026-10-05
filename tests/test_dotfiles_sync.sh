@@ -11,6 +11,9 @@
 #                     ~/.git-hooks-style symlink proceeds; with the gate met by
 #                     a hook that accepts everything, the script's own screen
 #                     still holds back a tokened settings.json
+#   2f-2i. outgoing : a leaking commit already ahead of the upstream is never
+#                     pushed: clean tree, dirty tree, moved upstream, and a
+#                     later commit that removed the value again
 #   4. conflict     : both sides edit one line -> rebase aborted, tree untouched,
 #                     state file says failed, exit 1
 #   5. held back    : pre-commit rejects claude/settings.json -> the other file
@@ -155,6 +158,60 @@ git -C "$WORK/screen.git" ls-tree --name-only main | grep -qx README.md || fail 
 [ "$(git -C "$WORK/screen.git" show main:claude/settings.json)" = '{"a":1}' ] || fail "the gateway URL reached the remote"
 [ "$(state_field screen held_back)" = claude/settings.json ] || fail "state held_back should name settings.json, got: $(state_field screen held_back)"
 pass "with a permissive hook, the sync's own screen still holds back the gateway URL"
+
+# 2f-2i. Commits already ahead of the upstream, made without the hook. Every
+# outgoing commit is screened before the push; nothing is rewritten.
+leaked_commit() {  # $1 = repo; commit a tokened settings.json past the hook
+    mkdir -p "$WORK/$1/claude"
+    printf '{"env":{"ANTHROPIC_BASE_URL":"%s"}}\n' "$GATEWAY_URL" >"$WORK/$1/claude/settings.json"
+    git -C "$WORK/$1" add claude && git -C "$WORK/$1" commit -q --no-verify -m leak
+    git -C "$WORK/$1" rev-parse --short HEAD
+}
+assert_not_pushed() {  # $1 = repo, $2 = expected remote commit count, $3 = path the message must name
+    local n="$1"
+    if "$SYNC" "$WORK/$n" >/dev/null 2>&1; then fail "$n: run exited 0 with a leaking outgoing commit"; fi
+    [ "$(git -C "$WORK/$n.git" rev-list --count main)" = "$2" ] || fail "$n: something reached the remote"
+    [ "$(state_field "$n" status)" = failed ] || fail "$n: state not failed"
+    state_field "$n" message | grep -qF "per-machine content in $3; nothing pushed" || fail "$n: message wrong: $(state_field "$n" message)"
+    state_field "$n" message | grep -qF "$GATEWAY_URL" && fail "$n: the state message quotes the token"
+    return 0
+}
+
+# 2f. A committed leak and a clean tree: the old push-what-is-ahead path.
+fresh_remote outclean
+sha="$(leaked_commit outclean)"
+assert_not_pushed outclean 1 claude/settings.json
+state_field outclean message | grep -qF "$sha" || fail "outclean: message does not name commit $sha"
+[ "$(git -C "$WORK/outclean" rev-parse --short HEAD)" = "$sha" ] || fail "outclean: local history was rewritten"
+pass "a leaking commit already ahead, clean tree: nothing pushed, history kept"
+
+# 2g. The same with unrelated dirty changes, and the leak in an inline-table
+# Codex trust table, which a header regex would not see.
+fresh_remote outdirty
+mkdir -p "$WORK/outdirty/codex"
+printf 'projects = { "/home/example/p" = { trust_level = "trusted" } }\nmodel = "m"\n' >"$WORK/outdirty/codex/config.toml"
+git -C "$WORK/outdirty" add codex && git -C "$WORK/outdirty" commit -q --no-verify -m leak
+echo two >"$WORK/outdirty/file.txt"
+assert_not_pushed outdirty 1 codex/config.toml
+pass "a leaking commit ahead plus a dirty tree: the new sync commit does not carry it out"
+
+# 2h. Upstream moved: the sync rebases, then still refuses to push.
+fresh_remote outdiverge
+echo remote-only >"$WORK/outdiverge-b/other.txt"
+git -C "$WORK/outdiverge-b" add other.txt && git -C "$WORK/outdiverge-b" commit -q -m remote && git -C "$WORK/outdiverge-b" push -q
+leaked_commit outdiverge >/dev/null
+assert_not_pushed outdiverge 2 claude/settings.json
+[ "$(git -C "$WORK/outdiverge.git" log -1 --format=%s main)" = remote ] || fail "outdiverge: the remote tip moved"
+pass "a leaking commit ahead of a moved upstream: rebased locally, nothing pushed"
+
+# 2i. A later commit removed the value: the intermediate commit still leaks it.
+fresh_remote outcleanup
+sha="$(leaked_commit outcleanup)"
+echo '{"a":1}' >"$WORK/outcleanup/claude/settings.json"
+git -C "$WORK/outcleanup" commit -q --no-verify -am cleanup
+assert_not_pushed outcleanup 1 claude/settings.json
+state_field outcleanup message | grep -qF "$sha" || fail "outcleanup: message names the wrong commit: $(state_field outcleanup message)"
+pass "a value removed by a later commit still blocks the push of the commit that added it"
 
 # 3. behind -> rebase -> push
 fresh_remote behind
