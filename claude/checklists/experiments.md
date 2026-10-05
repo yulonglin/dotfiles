@@ -30,6 +30,8 @@ Debug on one-sample runs or fixtures — never by relaunching the full run with 
 
 **Spend gate.** Estimate from actual rates. Under $100, run now and report the estimate with the result. $100 or more, propose and wait. Pre-paid cluster allocations skip it.
 
+**A run of a night or longer gets its own review before launch.** Spec and report all the work up to pressing play, iterate until Yulong is happy with what is about to run, then launch. While it runs, sanity-check the outputs yourself instead of asking him to watch; if he wants to see the run, the spec asks for a short script that shows it in a separate terminal.
+
 ## Resource choices are decided and recorded
 
 Concurrency is a decision about what else shares the box, not a number to maximise — so the manifest states the concurrency level chosen and what else was running on the box while the run held it. A level nobody wrote down cannot be blamed for the OOM afterwards.
