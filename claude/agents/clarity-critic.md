@@ -1,6 +1,6 @@
 ---
 name: clarity-critic
-description: Clarity critic for technical writing. Flags vague pronouns, hedging, run-ons, jargon, passive voice, buried ledes.
+description: "Critique a draft's clarity sentence by sentence, without rewriting it: vague pronouns, hedging, run-ons, jargon, passive voice, buried ledes. Part of `review-draft`; use alone for a clarity-only pass."
 model: inherit
 tools: Read
 ---

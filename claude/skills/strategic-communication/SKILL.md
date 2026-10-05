@@ -1,6 +1,6 @@
 ---
 name: strategic-communication
-description: Guide for effective communication in situations requiring negotiation, persuasion, or strategic thinking. Built on Chris Voss's FBI negotiation approach - tactical empathy and emotion labeling as primary tools. Use when drafting messages for rentals, salary discussions, work requests, declining offers, or any situation where you need to be both warm and strategically clear.
+description: Draft or refine a message that must negotiate, persuade or say no while staying warm, using Chris Voss's tactical empathy and emotion labelling. Use for rentals, salary discussions, work requests, declining offers, changing plans, a tense exchange, or a draft that reads off-tone.
 ---
 
 # Strategic Communication Skill

@@ -1,6 +1,6 @@
 ---
 name: red-team
-description: Red-team critic for technical writing. Finds counterexamples, unstated assumptions, and strongest objections.
+description: "Red-team a draft's argument: counterexamples, unstated assumptions and the strongest objections, each with a way to answer it. Part of `review-draft`; use alone for an adversarial pass."
 model: inherit
 tools: Read,WebSearch,mcp__context7__resolve-library-id,mcp__context7__query-docs
 ---

@@ -1,6 +1,6 @@
 ---
 name: transcript-reviewer
-description: MUST BE USED after experiments complete to review sampled transcripts for scorer misconfiguration, eval awareness, refusals, tool errors, and format parsing failures. Use PROACTIVELY after any eval run — returns concise issue report with severity ratings, not raw transcript dumps. Automatically invoke after experiment completion to catch issues that aggregate metrics hide.
+description: Review sampled eval transcripts for problems that aggregate metrics hide — scorer misconfiguration, eval awareness, refusals, tool errors, format-parsing failures — and return an issue report with severity ratings, not transcript dumps. Use proactively after every experiment or eval run. Reads `check-transcripts` output or plain JSONL/text logs, not raw `.eval` files.
 model: inherit
 tools: Read,Grep
 ---

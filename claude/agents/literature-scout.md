@@ -1,6 +1,6 @@
 ---
 name: literature-scout
-description: Efficient literature reviewer for AI safety research. Reads papers using multi-pass strategy, extracts key insights, identifies related work, and positions research in context.
+description: "Review AI safety literature in a separate context: read papers in multiple passes, extract key insights, find related work and position a project in it, returning structured summaries. Use when reading one or more papers, finding related work, or positioning research in the literature."
 model: inherit
 tools: Read,WebFetch
 ---

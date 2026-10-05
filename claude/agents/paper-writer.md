@@ -1,6 +1,6 @@
 ---
 name: paper-writer
-description: Academic writer for AI safety research papers. Drafts paper sections with proper scientific conventions, honest limitations, and clear research narratives following publication standards.
+description: Draft sections of an AI safety research paper from available results and specs, with academic conventions, honest limitations, calibrated uncertainty and a clear narrative. Use when drafting paper sections, including early drafts written while final experiments run.
 model: inherit
 tools: Read,Write
 ---

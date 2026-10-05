@@ -1,6 +1,6 @@
 ---
 name: my-insights
-description: Run custom usage analytics on all Claude Code sessions
+description: Analyze every Claude Code session with Gemini — goals, outcomes, friction — and build an HTML report with per-project breakdowns. User-invoked as `/my-insights`.
 user-invocable: true
 disable-model-invocation: true
 ---
