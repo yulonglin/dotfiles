@@ -239,6 +239,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "signal-hook",
+ "unicode-width",
  "ureq",
 ]
 

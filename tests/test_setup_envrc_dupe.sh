@@ -287,13 +287,27 @@ mkdir -p "$E2E_REPO"
 # root, and TEST_HOME lives under the dotfiles repo's own tmp/. Without its own
 # root the fixture would resolve to the dotfiles checkout and write a real
 # .envrc there — the test would corrupt the working tree it is testing.
-git -C "$E2E_REPO" init -q 2>/dev/null || true
+# A failed init must stop the block, never carry on into the dotfiles checkout:
+# the ceiling keeps git discovery inside TEST_HOME for every step below, and the
+# toplevel check refuses to run setup-envrc unless E2E_REPO is its own root.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+GIT_CEILING_DIRECTORIES="$(cd "$TEST_HOME" && pwd -P)"
+export GIT_CEILING_DIRECTORIES
+E2E_REPO_REAL="$(cd "$E2E_REPO" && pwd -P)"
+e2e_top=""
+git -C "$E2E_REPO" init -q \
+  && e2e_top=$(git -C "$E2E_REPO" rev-parse --show-toplevel 2>/dev/null) || true
 printf 'OPENAI_API_KEY = OPENAI_API_KEY - mats\n' > "$E2E_CONF"
 
-( cd "$E2E_REPO" && DOTFILES_SECRETS_GLOBAL_CONF="$E2E_CONF" \
-    "$DOT_DIR/custom_bins/setup-envrc" OPENAI_API_KEY ) >/dev/null 2>&1 || true
+if [[ "$e2e_top" == "$E2E_REPO_REAL" ]]; then
+  ( cd "$E2E_REPO" && DOTFILES_SECRETS_GLOBAL_CONF="$E2E_CONF" \
+      "$DOT_DIR/custom_bins/setup-envrc" OPENAI_API_KEY ) >/dev/null 2>&1 || true
+fi
 
-if [[ ! -f "$E2E_REPO/.envrc" ]]; then
+if [[ "$e2e_top" != "$E2E_REPO_REAL" ]]; then
+  echo "  FAIL e2e fixture is not its own git root (toplevel: '${e2e_top:-<none>}')"
+  fail=$((fail+1))
+elif [[ ! -f "$E2E_REPO/.envrc" ]]; then
   echo "  FAIL setup-envrc wrote no .envrc"; fail=$((fail+1))
 else
   # No exact BWS key may appear anywhere in the file — that is what "follow" means.
