@@ -9,10 +9,14 @@ pub struct AppState {
     pub confirmed: bool,
     pub cancelled: bool,
     pub idle: bool,
+    /// Exit code when a signal or the caller's death ended the menu.
+    pub terminated: Option<i32>,
+    /// `--single`: Enter picks the row under the cursor and nothing else.
+    pub single: bool,
 }
 
 impl AppState {
-    pub fn new(items: Vec<ListItem>) -> Self {
+    pub fn new(items: Vec<ListItem>, single: bool) -> Self {
         let first_component = items.iter()
             .position(|i| matches!(i, ListItem::Component { .. }))
             .unwrap_or(0);
@@ -23,12 +27,24 @@ impl AppState {
             confirmed: false,
             cancelled: false,
             idle: false,
+            terminated: None,
+            single,
         }
     }
 
     pub fn toggle(&mut self) {
         if let Some(ListItem::Component { selected, .. }) = self.items.get_mut(self.cursor) {
             *selected = !*selected;
+        }
+    }
+
+    /// Single-select: the cursor row becomes the only selected item.
+    pub fn select_cursor_only(&mut self) {
+        let cursor = self.cursor;
+        for (i, item) in self.items.iter_mut().enumerate() {
+            if let ListItem::Component { selected, .. } = item {
+                *selected = i == cursor;
+            }
         }
     }
 
