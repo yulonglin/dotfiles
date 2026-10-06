@@ -56,6 +56,15 @@ Beta paragraph.
 ## Gamma
 
 Gamma paragraph.
+
+```diff
+--- a/app.py
++++ b/app.py
+@@ -1,3 +1,3 @@
+ keep this line
+-remove this line
++add this line
+```
 """
 
 POP_OPEN = "() => getComputedStyle(document.getElementById('anPop')).display === 'block'"
@@ -422,3 +431,27 @@ def test_a_comment_under_an_h3_is_labelled_with_the_h3(ctx, site):
     page.wait_for_function(f"() => (JSON.parse(localStorage.getItem('{KEY}') || '[]')).length === 1")
     stored = json.loads(page.evaluate(f"() => localStorage.getItem('{KEY}')"))
     assert stored[0]["where"] == "Alpha detail"
+
+
+def test_a_comment_across_diff_rows_comes_back_after_a_reload(ctx, site):
+    """The layer re-finds a quote in the page's raw text with whitespace
+    collapsed. Selection text breaks lines between block rows, so the rows
+    must carry a real newline or a multi-row quote never matches again."""
+    base, _ = site
+    page = _open(ctx, base + "index.html")
+    quote = page.evaluate(
+        """() => {
+          const rows = document.querySelectorAll('pre.diff .dl .dc');
+          const r = document.createRange();
+          r.setStart(rows[0].firstChild, 5); r.setEnd(rows[2].firstChild, 8);
+          const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+          return s.toString();
+        }"""
+    )
+    assert "\n" in quote
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "a note on the diff")
+    page.press("#anTxt", "Enter")
+    expect(page.locator("mark.note")).not_to_have_count(0)
+    page.reload()
+    expect(page.locator("mark.note")).not_to_have_count(0)

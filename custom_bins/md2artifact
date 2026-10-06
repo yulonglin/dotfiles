@@ -1009,9 +1009,13 @@ def _diff_rows_html(rows: list[tuple]) -> str:
             for n in (old, new)
         )
         sign_html = f'<span class="ds">{html.escape(sign) or " "}</span>' if kind in {"add", "del", "ctx"} else ""
+        # The trailing newline is real text on purpose. The annotation layer
+        # re-finds a quote by joining the page's text nodes, while a selection
+        # breaks lines between block rows; without a newline in the text the
+        # two never match and a comment spanning rows is lost on reload.
         out.append(
             f'<span class="dl dl-{kind}">{nums}{sign_html}'
-            f'<span class="dc">{html.escape(text, quote=False)}</span></span>'
+            f'<span class="dc">{html.escape(text, quote=False)}</span>\n</span>'
         )
     return '<pre class="diff"><code>' + "".join(out) + "</code></pre>"
 
@@ -1344,13 +1348,14 @@ def _section_tokens(section: list[Token], slug: str, digest: str) -> list[Token]
         _details_html_token(
             f'<div class="sec" data-sec="{slug}" data-hash="{digest}">'
             f'<button type="button" class="sec-toggle" aria-expanded="true" '
-            f'aria-controls="{body}" aria-label="Show section"></button>'
+            f'aria-controls="{body}" aria-labelledby="{slug}"></button>'
         ),
         *section[:3],
         _details_html_token(
             '<div class="sec-tools">'
             '<span class="chip seen-badge" hidden></span>'
-            '<button type="button" class="seen-btn" aria-pressed="false" data-label="Mark seen"></button>'
+            f'<button type="button" class="seen-btn" aria-pressed="false" aria-describedby="{slug}" '
+            'data-label="Mark seen"></button>'
             f'</div><div class="sec-body" id="{body}">'
         ),
     ]
