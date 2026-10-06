@@ -8,6 +8,12 @@ task-list items that keep their state across a reload and travel with the
 export, an unexported-comments guard on tab close, and clipboard export. There is no
 file export: a page-initiated download is inert in the Artifact viewer.
 
+For review it also renders ```diff fences as numbered unified diffs, folds
+each H2 section, marks each section New / Changed / seen per reader, turns a
+heading's ` {judgement}` / ` {lower}` tag into a "Your call" badge or a folded
+"Lower priority" tray, and offers a page-level comment button. The seen marks
+and the button need the capabilities `--capabilities` prints.
+
 Markdown artifacts cannot carry JavaScript, so a spec or report published as
 raw `.md` silently loses all of that. Run it through here first.
 
@@ -15,6 +21,7 @@ raw `.md` silently loses all of that. Run it through here first.
     md2artifact spec.md -o /tmp/out.html
     md2artifact spec.md --title "P1 spec" --no-toc
     md2artifact spec.md --states approve,approve-pending-edits,deny
+    md2artifact --capabilities           # JSON to pass when publishing
 
 The output is a fragment (no <html>/<head>/<body>), which is what the Artifact
 tool expects; it is also viewable directly in a browser.
@@ -23,6 +30,7 @@ tool expects; it is also viewable directly in a browser.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import re
@@ -892,6 +900,163 @@ def svg_passthrough(tokens: list[Token]) -> list[Token]:
         out.append(tok)
     return out
 
+HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$")
+GIT_HEADER_RE = re.compile(r"^diff --git a/(.+?) b/(.+)$")
+# Header lines git prints between `diff --git` and the first hunk. Shown muted
+# rather than dropped, so a mode change or a binary-file note stays visible.
+DIFF_META_PREFIXES = (
+    "index ", "new file mode", "deleted file mode", "old mode", "new mode",
+    "similarity index", "dissimilarity index", "rename from", "rename to",
+    "copy from", "copy to", "Binary files",
+)
+
+
+def _diff_path(spec: str, prefix: str) -> str:
+    spec = spec.split("\t", 1)[0].strip()
+    return spec.removeprefix(prefix)
+
+
+def parse_diff(source: str) -> list[dict]:
+    """Split a unified diff into files, each a list of numbered rows.
+
+    A row is (kind, old, new, sign, text) with kind one of add, del, ctx,
+    hunk, meta; old/new are line numbers or None. Hunk bodies are walked by
+    the counts in their `@@` header, so a deleted line that happens to read
+    `--- x` is never mistaken for the next file's header. Lines outside any
+    counted hunk — a hand-written snippet with no headers — are classified by
+    their first character and left unnumbered.
+    """
+    lines = source.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    files: list[dict] = []
+    cur: dict | None = None
+    old_no = new_no = old_left = new_left = 0
+
+    def start(old: str | None = None, new: str | None = None) -> dict:
+        f = {"old": old, "new": new, "rows": [], "hunks": 0}
+        files.append(f)
+        return f
+
+    for i, line in enumerate(lines):
+        if old_left > 0 or new_left > 0:
+            sign, text = line[:1], line[1:]
+            if sign == "\\":
+                cur["rows"].append(("meta", None, None, "", line))
+            elif sign == "-":
+                cur["rows"].append(("del", old_no, None, "-", text))
+                old_no, old_left = old_no + 1, old_left - 1
+            elif sign == "+":
+                cur["rows"].append(("add", None, new_no, "+", text))
+                new_no, new_left = new_no + 1, new_left - 1
+            else:
+                # Some tools strip the trailing space of an empty context line.
+                cur["rows"].append(("ctx", old_no, new_no, " ", text))
+                old_no, new_no = old_no + 1, new_no + 1
+                old_left, new_left = old_left - 1, new_left - 1
+            continue
+        nxt = lines[i + 1] if i + 1 < len(lines) else ""
+        if m := GIT_HEADER_RE.match(line):
+            cur = start(m.group(1), m.group(2))
+        elif line.startswith("--- ") and nxt.startswith("+++ "):
+            if cur is None or cur["hunks"] or (cur["old"] is None and cur["rows"]):
+                cur = start()
+            cur["old"] = _diff_path(line[4:], "a/")
+        elif line.startswith("+++ ") and cur is not None and not cur["hunks"]:
+            cur["new"] = _diff_path(line[4:], "b/")
+        elif m := HUNK_RE.match(line):
+            if cur is None:
+                cur = start()
+            old_no, new_no = int(m.group(1)), int(m.group(3))
+            old_left = int(m.group(2)) if m.group(2) is not None else 1
+            new_left = int(m.group(4)) if m.group(4) is not None else 1
+            cur["hunks"] += 1
+            cur["rows"].append(("hunk", None, None, "", line))
+        elif cur is not None and not cur["hunks"] and line.startswith(DIFF_META_PREFIXES):
+            cur["rows"].append(("meta", None, None, "", line))
+        else:
+            if cur is None:
+                cur = start()
+            sign = line[:1]
+            if line.startswith("@@"):
+                cur["rows"].append(("hunk", None, None, "", line))
+            elif sign in {"+", "-"}:
+                cur["rows"].append(("add" if sign == "+" else "del", None, None, sign, line[1:]))
+            else:
+                cur["rows"].append(("ctx", None, None, " ", line[1:] if sign == " " else line))
+    return files
+
+
+def _diff_file_name(f: dict) -> str | None:
+    old, new = f["old"], f["new"]
+    if new and new != "/dev/null":
+        if old and old not in {"/dev/null", new}:
+            return f"{old} → {new}"
+        return new
+    if old and old != "/dev/null":
+        return old
+    return None
+
+
+def _diff_rows_html(rows: list[tuple]) -> str:
+    out = []
+    for kind, old, new, sign, text in rows:
+        # Line numbers live in data-n and are drawn by CSS, so a selection or a
+        # copy of the code never picks them up. The sign is real text: it is
+        # part of the diff, and the cue that does not depend on colour.
+        nums = "".join(
+            f'<span class="ln" data-n="{n}"></span>' if n is not None else '<span class="ln"></span>'
+            for n in (old, new)
+        )
+        sign_html = f'<span class="ds">{html.escape(sign) or " "}</span>' if kind in {"add", "del", "ctx"} else ""
+        out.append(
+            f'<span class="dl dl-{kind}">{nums}{sign_html}'
+            f'<span class="dc">{html.escape(text, quote=False)}</span></span>'
+        )
+    return '<pre class="diff"><code>' + "".join(out) + "</code></pre>"
+
+
+def diff_html(source: str) -> str:
+    """A ```diff fence as a numbered, coloured unified diff, one <details> per file.
+
+    Pure build-time rendering: every byte of the fence reaches the page as
+    entity-escaped text, so this passthrough can no more inject markup than a
+    plain code fence can.
+    """
+    files = parse_diff(source)
+    named = [f for f in files if _diff_file_name(f)]
+    if not named:
+        rows = [r for f in files for r in f["rows"]]
+        return '<div class="diff-wrap">' + _diff_rows_html(rows) + "</div>"
+    parts = []
+    for f in files:
+        name = _diff_file_name(f) or "(no file header)"
+        adds = sum(r[0] == "add" for r in f["rows"])
+        dels = sum(r[0] == "del" for r in f["rows"])
+        parts.append(
+            '<details class="diff-file" open><summary><code>'
+            # An entity, not the character: the page is a fragment with no
+            # charset of its own, so only ASCII survives every way it is served.
+            + html.escape(name, quote=False).replace("→", "&rarr;")
+            + f'</code> <span class="diff-stat"><span class="dsa">+{adds}</span> '
+            f'<span class="dsd">&minus;{dels}</span></span></summary>'
+            + _diff_rows_html(f["rows"])
+            + "</details>"
+        )
+    return '<div class="diff-wrap">' + "".join(parts) + "</div>"
+
+
+def diff_passthrough(tokens: list[Token]) -> list[Token]:
+    """Render a ```diff fence as a unified diff. Other fences are untouched."""
+    out: list[Token] = []
+    for tok in tokens:
+        if tok.type == "fence" and tok.info.strip().split()[:1] == ["diff"]:
+            out.append(Token("html_block", "", 0, content=diff_html(tok.content) + "\n", block=True))
+            continue
+        out.append(tok)
+    return out
+
+
 TASK_RE = re.compile(r"^\[([ xX])\]\s+")
 
 # A state is written into the brackets of a Markdown task line by Copy all
@@ -1025,7 +1190,180 @@ def task_list_controls(tokens: list[Token], states: list[str] | None) -> list[To
 # which is exactly what a plain fence did before. So the property the whole
 # registry exists to hold — a Markdown document you did not write cannot put
 # script into your published page — is unchanged.
-PASSTHROUGHS = [mermaid_passthrough, details_passthrough, svg_passthrough]
+#
+# ```diff builds its markup itself and emits the fence body only as escaped
+# text, so it is the same kind of entry as mermaid, not svg.
+PASSTHROUGHS = [mermaid_passthrough, details_passthrough, svg_passthrough, diff_passthrough]
+
+
+# ─── Review structure: priority tags, H2 sections, seen hashes ────────────────
+# A heading may end in one of these tags. The tag is removed from the text and
+# recorded on the heading token's meta; any other `{...}` suffix stays as text.
+# `{lower}` means something only below H2, so on H1/H2 it is left visible.
+PRIORITY_TAG_RE = re.compile(r"\s+\{(judgement|lower)\}\s*$")
+
+
+def strip_priority_tags(text: str, level: int = 3) -> tuple[str, set[str]]:
+    """The heading text without its trailing tags, and the tags removed."""
+    tags: set[str] = set()
+    while (m := PRIORITY_TAG_RE.search(text)) and (m.group(1) != "lower" or level >= 3):
+        tags.add(m.group(1))
+        text = text[: m.start()]
+    return text, tags
+
+
+def priority_tags(tokens: list[Token]) -> list[Token]:
+    """Strip `{judgement}` / `{lower}` off headings into `heading_open.meta["tags"]`."""
+    for i, tok in enumerate(tokens):
+        if tok.type != "heading_open":
+            continue
+        inline = tokens[i + 1]
+        kids = inline.children or []
+        if not kids or kids[-1].type != "text":
+            continue
+        text, tags = strip_priority_tags(kids[-1].content, int(tok.tag[1]))
+        if not tags:
+            continue
+        kids[-1].content = text
+        inline.content, _ = strip_priority_tags(inline.content, int(tok.tag[1]))
+        tok.meta = {**(tok.meta or {}), "tags": tags}
+        if "judgement" in tags:
+            kids.append(
+                Token("html_inline", "", 0, content='<span class="chip chip-call" data-label="Your call"></span>')
+            )
+    return tokens
+
+
+def _details_delta(tok: Token) -> int:
+    if tok.type != "html_block":
+        return 0
+    text = tok.content.strip()
+    if text.startswith("<details"):
+        return 1
+    if text == "</details>":
+        return -1
+    return 0
+
+
+def _is_top_heading(tok: Token, depth: int) -> bool:
+    """A heading at block level 0 and outside every <details>: a structural boundary."""
+    return tok.type == "heading_open" and tok.level == 0 and depth == 0
+
+
+def split_sections(tokens: list[Token]) -> tuple[list[Token], list[list[Token]]]:
+    """(preamble, sections): each section starts at a top-level H2.
+
+    An H2 inside a blockquote, a list or a <details> is not a boundary, so a
+    section never closes in the middle of an element it did not open.
+    """
+    preamble: list[Token] = []
+    sections: list[list[Token]] = []
+    cur, depth = preamble, 0
+    for tok in tokens:
+        if _is_top_heading(tok, depth) and tok.tag == "h2":
+            cur = []
+            sections.append(cur)
+        cur.append(tok)
+        depth += _details_delta(tok)
+    return preamble, sections
+
+
+def gather_lower(region: list[Token]) -> list[Token]:
+    """Move each `{lower}` subsection to a folded tray at the end of the region.
+
+    A subsection runs from its heading to the next top-level heading of the
+    same or a higher rank. Only headings outside every <details> start or end
+    one, so a moved range always holds whole <details> elements and the page
+    stays balanced.
+    """
+    depths, depth = [], 0
+    for tok in region:
+        depths.append(depth)
+        depth += _details_delta(tok)
+    kept: list[Token] = []
+    moved: list[list[Token]] = []
+    i = 0
+    while i < len(region):
+        tok = region[i]
+        if _is_top_heading(tok, depths[i]) and "lower" in (tok.meta or {}).get("tags", ()):
+            rank = int(tok.tag[1])
+            j = i + 1
+            while j < len(region) and not (
+                _is_top_heading(region[j], depths[j]) and int(region[j].tag[1]) <= rank
+            ):
+                j += 1
+            moved.append(region[i:j])
+            i = j
+            continue
+        kept.append(tok)
+        i += 1
+    if not moved:
+        return region
+    tray = [
+        _details_html_token(
+            f'<details class="lower-tray"><summary>Lower priority ({len(moved)})</summary>'
+        )
+    ]
+    for chunk in moved:
+        tray.extend(chunk)
+    tray.append(_details_html_token("</details>"))
+    return kept + tray
+
+
+def section_hash(md: MarkdownIt, section: list[Token]) -> str:
+    """A short hash of the section as rendered, with every id left out.
+
+    Ids are allocated across the whole document — heading ids, and the
+    task-list control ids derived from each item's label — so a duplicate
+    heading or checklist item added in ANOTHER section would otherwise mark
+    this one Changed although nothing in it changed.
+    """
+    rendered = md.renderer.render(section, md.options, {})
+    rendered = ID_ATTR_RE.sub("", rendered)
+    return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:12]
+
+
+ID_ATTR_RE = re.compile(r' (?:id|data-an-state-id)="[^"]*"')
+
+
+def _section_tokens(section: list[Token], slug: str, digest: str) -> list[Token]:
+    """Wrap one section in its collapsible container and controls.
+
+    A <div>, not a <section>: the annotation layer labels a comment with the
+    heading of its closest <section>, so a <section> here would report every
+    comment under an H3 as belonging to the H2. With a div the layer's
+    sibling walk still finds the nearest H3, and the H2 for prose directly
+    under it, because the H2 stays the body's previous heading sibling.
+
+    Every label on these controls is CSS generated content from data-label,
+    never a text node: the layer re-anchors a comment by searching the page's
+    text, and a badge whose words change must not be part of that text.
+    """
+    body = f"{slug}--body"
+    head = [
+        _details_html_token(
+            f'<div class="sec" data-sec="{slug}" data-hash="{digest}">'
+            f'<button type="button" class="sec-toggle" aria-expanded="true" '
+            f'aria-controls="{body}" aria-label="Show section"></button>'
+        ),
+        *section[:3],
+        _details_html_token(
+            '<div class="sec-tools">'
+            '<span class="chip seen-badge" hidden></span>'
+            '<button type="button" class="seen-btn" aria-pressed="false" data-label="Mark seen"></button>'
+            f'</div><div class="sec-body" id="{body}">'
+        ),
+    ]
+    return head + section[3:] + [_details_html_token("</div></div>")]
+
+
+PAGE_TOOLS = (
+    '<div class="page-tools">'
+    '<a class="unseen-sum" hidden></a>'
+    '<button type="button" class="page-comment" hidden '
+    'data-label="Comment on this page" aria-label="Comment on this page"></button>'
+    "</div>"
+)
 
 
 def render(
@@ -1039,21 +1377,36 @@ def render(
     # Not in PASSTHROUGHS: that list is token passes of one argument, and this
     # one is parameterised by the document's declared state set.
     tokens = task_list_controls(tokens, states)
+    tokens = priority_tags(tokens)
+
+    preamble, sections = split_sections(tokens)
+    preamble = gather_lower(preamble)
+    sections = [gather_lower(s) for s in sections]
+    digests = [section_hash(md, s) for s in sections]
 
     headings: list[tuple[int, str, str]] = []
     used: set[str] = set()
-    for i, tok in enumerate(tokens):
+    for i, tok in enumerate(flat := preamble + [t for s in sections for t in s]):
         if tok.type != "heading_open":
             continue
         level = int(tok.tag[1])
         if level > 3:
             continue
-        text = tokens[i + 1].content
+        text = flat[i + 1].content
         slug = _allocate_id(slugify(text), used)
         tok.attrSet("id", slug)
         headings.append((level, slug, text))
 
-    return md.renderer.render(tokens, md.options, {}), headings
+    # The page tools sit right under the title when the page opens with one.
+    tools = _details_html_token(PAGE_TOOLS)
+    at = 0
+    if len(preamble) >= 3 and preamble[0].type == "heading_open" and preamble[0].tag == "h1":
+        at = 3
+    out = preamble[:at] + [tools] + preamble[at:]
+    for section, digest in zip(sections, digests):
+        out += _section_tokens(section, section[0].attrGet("id"), digest)
+
+    return md.renderer.render(out, md.options, {}), headings
 
 
 def toc_html(headings: list[tuple[int, str, str]]) -> str:
@@ -1081,7 +1434,270 @@ def build(
         shell_open=shell_open,
         body=body,
     )
-    return page + _annotation_layer.layer_html(key)
+    return page + REVIEW_ASSETS + _annotation_layer.layer_html(key)
+
+
+# What a publish of this page should declare, for the seen marks (db + user)
+# and the page-level comment button (comments, composer only). Everything
+# degrades without it: seen marks fall back to localStorage, and the comment
+# button stays hidden. `seen/{self}` is each reader's own document; the rule
+# at the `seen` prefix opens the siblings to `admin` readers only, so one
+# reader never sees another's marks.
+CAPABILITIES = {
+    "db": {
+        "rules": [
+            {"path": "seen", "read": "admin", "write": "owner"},
+            {"path": "seen/{self}", "read": "interact", "write": "interact"},
+        ]
+    },
+    "user": {},
+    "comments": {"composer_only": True},
+}
+
+
+# Collapsible sections, seen marks, link reveal and the page comment button.
+# Kept out of TEMPLATE so it needs no doubled braces. Every feature works with
+# no `window.claude` at all; the capabilities only light things up.
+REVIEW_ASSETS = r"""<style>
+.page-tools{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;margin:0 0 1.4rem;font-size:.86rem}
+.page-tools:not(:has(> :not([hidden]))){display:none}
+.unseen-sum,.page-comment,.seen-btn,.chip{font:inherit}
+.unseen-sum::after,.page-comment::after,.seen-btn::after,.chip::after{content:attr(data-label)}
+.unseen-sum{color:var(--soft);text-decoration:none}
+.unseen-sum[href]{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.page-comment,.seen-btn{background:var(--panel);color:var(--soft);border:1px solid var(--rule);
+ border-radius:999px;padding:.12rem .7rem;cursor:pointer;font-size:.78rem;line-height:1.5}
+.page-comment:hover,.seen-btn:hover{border-color:var(--accent);color:var(--accent)}
+.seen-btn[aria-pressed="true"]{color:var(--good);border-color:var(--good);background:var(--good-bg)}
+.chip{display:inline-block;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+ padding:.06rem .5rem;border-radius:999px;vertical-align:middle;line-height:1.6;margin-left:.5rem}
+.chip-call{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
+.seen-badge[data-state="new"]{background:var(--good-bg);color:var(--good);border:1px solid var(--good)}
+.seen-badge[data-state="changed"]{background:var(--mark);color:var(--ink);border:1px solid var(--rule)}
+.sec{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:.4rem;align-items:center;
+ border-top:1px solid var(--rule);margin-top:2.4rem;padding-top:.3rem}
+.sec>h2{margin:.5rem 0;padding:0;border:0}
+.sec>.sec-body{grid-column:1/-1;min-width:0}
+.sec-tools{display:flex;gap:.3rem;align-items:center;justify-self:end}
+.sec-toggle{width:1.6rem;height:1.6rem;border:0;background:none;color:var(--soft);cursor:pointer;
+ border-radius:5px;padding:0;font-size:.85rem}
+.sec-toggle::before{content:"\25BE";display:inline-block;transition:transform .12s}
+.sec-toggle[aria-expanded="false"]::before{transform:rotate(-90deg)}
+.sec-toggle:hover{background:var(--code);color:var(--ink)}
+.sec-toggle:focus-visible,.seen-btn:focus-visible,.page-comment:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* An author display rule beats the user-agent [hidden] rule, so restate it. */
+.sec-body[hidden],.chip[hidden],.page-comment[hidden],.unseen-sum[hidden]{display:none}
+@media print{.sec-body[hidden]{display:block}.sec-toggle,.sec-tools,.page-tools{display:none}}
+details.lower-tray>summary{color:var(--soft);font-weight:600}
+.diff-wrap{margin:1rem 0}
+.diff-wrap details.diff-file{padding:0;overflow:hidden}
+.diff-wrap details.diff-file>summary{margin:0;font-weight:600}
+.diff-wrap details.diff-file[open]>summary{margin:0}
+.diff-wrap details.diff-file>summary code{background:none;padding:0;font-size:.85rem}
+.diff-stat{font-size:.78rem;font-weight:600;margin-left:.4rem}
+.diff-stat .dsa{color:var(--good)} .diff-stat .dsd{color:var(--bad)}
+pre.diff{padding:0;margin:0;font-size:.8rem;line-height:1.45}
+.diff-wrap>pre.diff{border-radius:7px}
+details.diff-file pre.diff{border:0;border-radius:0}
+pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
+.dl{display:block;padding-right:.9rem;white-space:pre}
+.dl .ln{display:inline-block;width:3.4em;padding-right:.55em;text-align:right;color:var(--soft);
+ user-select:none;-webkit-user-select:none;opacity:.75}
+.dl .ln::before{content:attr(data-n)}
+.dl .ds{display:inline-block;width:1.5em;text-align:center;font-weight:700}
+.dl-add{background:var(--good-bg)} .dl-add .ds{color:var(--good)}
+.dl-del{background:var(--bad-bg)} .dl-del .ds{color:var(--bad)}
+.dl-hunk{background:var(--panel);color:var(--accent);padding-left:.6rem;
+ border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.dl-hunk .ln{display:none}
+.dl-meta{color:var(--soft);font-style:italic;padding-left:.6rem}
+.dl-meta .ln{display:none}
+</style>
+<script>
+(function () {
+  "use strict";
+  function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+  function lsDel(k) { try { window.localStorage.removeItem(k); } catch (e) {} }
+  function capability(name) {
+    // `use()` resolves a namespace or null; a page with no viewer has no
+    // window.claude at all. Every capability member is reached through it.
+    var c = window.claude;
+    if (!c || typeof c.use !== "function") return Promise.resolve(null);
+    try { return Promise.resolve(c.use(name)).catch(function () { return null; }); }
+    catch (e) { return Promise.resolve(null); }
+  }
+
+  function init() {
+    // The annotation layer's key, read at run time (it is user input, so it
+    // is never interpolated into this script), with the layer's own fallback.
+    var layer = document.querySelector("[data-annotation-layer]");
+    var KEY = (layer && layer.dataset.key) || ("annot:" + document.title);
+    var FOLD = "md2a-fold:" + KEY + ":";
+    var SEEN = "md2a-seen:" + KEY;
+    var secs = Array.prototype.slice.call(document.querySelectorAll(".doc .sec[data-sec]"));
+    function part(sec, sel) { return sec.querySelector(":scope > " + sel); }
+
+    // -- Collapsible sections --
+    function setOpen(sec, open, remember) {
+      part(sec, ".sec-body").hidden = !open;
+      part(sec, ".sec-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+      if (!remember) return;
+      if (open) lsDel(FOLD + sec.dataset.sec); else lsSet(FOLD + sec.dataset.sec, "closed");
+    }
+    function isOpen(sec) { return !part(sec, ".sec-body").hidden; }
+    secs.forEach(function (sec) {
+      // Set every section explicitly: a saved copy of the page may carry the
+      // state it was saved in, and a reader with no storage starts open.
+      setOpen(sec, lsGet(FOLD + sec.dataset.sec) !== "closed", false);
+      part(sec, ".sec-toggle").addEventListener("click", function () { setOpen(sec, !isOpen(sec), true); });
+    });
+
+    // A link into a closed section or a folded tray opens what hides it,
+    // before the browser scrolls, so the jump lands.
+    function reveal(el) {
+      for (var n = el; n && n !== document.body; n = n.parentElement) {
+        if (n.tagName === "DETAILS" && !n.open) n.open = true;
+        if (n.classList && n.classList.contains("sec") && !isOpen(n)) setOpen(n, true, true);
+      }
+    }
+    function targetOf(hash) {
+      if (!hash || hash.length < 2) return null;
+      try { return document.getElementById(decodeURIComponent(hash.slice(1))); } catch (e) { return null; }
+    }
+    document.addEventListener("click", function (ev) {
+      var a = ev.target.closest && ev.target.closest('a[href^="#"]');
+      var t = a && targetOf(a.getAttribute("href"));
+      if (t) reveal(t);
+    }, true);
+    function revealHash() { var t = targetOf(location.hash); if (t) { reveal(t); t.scrollIntoView(); } }
+    window.addEventListener("hashchange", revealHash);
+    revealHash();
+
+    // -- Seen marks: {sectionId: hash} per reader --
+    function clean(v) {
+      if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+      var out = {};
+      Object.keys(v).forEach(function (k) { if (typeof v[k] === "string") out[k] = v[k]; });
+      return out;
+    }
+    var marks = {};
+    try { marks = clean(JSON.parse(lsGet(SEEN) || "null")) || {}; } catch (e) {}
+    var summary = document.querySelector(".doc .unseen-sum");
+    function stateOf(sec) {
+      var m = marks[sec.dataset.sec];
+      return m === undefined ? "new" : m === sec.dataset.hash ? "seen" : "changed";
+    }
+    function paint() {
+      var todo = [], counts = { "new": 0, changed: 0 };
+      secs.forEach(function (sec) {
+        var st = stateOf(sec), badge = part(sec, ".sec-tools .seen-badge"), btn = part(sec, ".sec-tools .seen-btn");
+        sec.dataset.seen = st;
+        badge.dataset.state = st;
+        badge.dataset.label = st === "new" ? "New" : st === "changed" ? "Changed" : "";
+        badge.hidden = st === "seen";
+        btn.setAttribute("aria-pressed", st === "seen" ? "true" : "false");
+        btn.dataset.label = st === "seen" ? "Seen" : "Mark seen";
+        btn.setAttribute("aria-label", st === "seen" ? "Seen. Click to mark unseen" : "Mark seen");
+        if (st !== "seen") { todo.push(sec); counts[st]++; }
+      });
+      if (!summary || !secs.length) return;
+      summary.hidden = false;
+      if (!todo.length) {
+        summary.removeAttribute("href");
+        summary.dataset.label = "All sections seen";
+      } else {
+        var bits = [];
+        if (counts["new"]) bits.push(counts["new"] + " new");
+        if (counts.changed) bits.push(counts.changed + " changed");
+        summary.href = "#" + todo[0].dataset.sec;
+        summary.dataset.label = bits.join(", ") + " \u00b7 go to the first";
+      }
+      summary.setAttribute("aria-label", summary.dataset.label);
+    }
+
+    // Storage: the reader's own db document when db and user both resolve and
+    // the reader has an id; localStorage otherwise. The db is read through one
+    // subscription and written only from a click, one write at a time.
+    var ref = null, writing = false, again = false, early = {}, connected = false;
+    var ready = Promise.all([capability("db"), capability("user")]).then(function (r) {
+      var db = r[0], user = r[1];
+      if (!db || !user || typeof db.doc !== "function" || typeof user.id !== "function") return null;
+      return user.id().then(function (uid) {
+        if (typeof uid !== "string" || !uid) return null;
+        var doc;
+        try { doc = db.doc("seen/" + uid); } catch (e) { return null; }
+        return new Promise(function (resolve) {
+          var first = true;
+          doc.onSnapshot(function (snap) {
+            var data = snap.exists ? clean((snap.data() || {}).marks) : null;
+            if (first) {
+              first = false;
+              // The db is the record from here on. Clicks made while it was
+              // connecting are laid over it, and written by the click's own
+              // queued save below, never from this callback.
+              if (data) marks = data;
+              Object.keys(early).forEach(function (k) { if (early[k] === null) delete marks[k]; else marks[k] = early[k]; });
+              ref = doc; connected = true;
+              paint();
+              resolve(doc);
+              return;
+            }
+            if (writing || (snap.metadata && snap.metadata.hasPendingWrites) || !data) return;
+            marks = data;
+            paint();
+          }, function () { ref = null; if (first) { first = false; resolve(null); } });
+        });
+      });
+    }).catch(function () { return null; });
+
+    function saveRemote() {
+      if (!ref) { lsSet(SEEN, JSON.stringify(marks)); return; }
+      if (writing) { again = true; return; }
+      writing = true;
+      ref.set({ marks: JSON.parse(JSON.stringify(marks)) }).then(function () {
+        writing = false;
+        if (again) { again = false; saveRemote(); }
+      }, function () {
+        // A refused write (a view-only reader, a revoked view) keeps the mark
+        // in this browser instead, and stops using the db for this visit.
+        writing = false; again = false; ref = null;
+        lsSet(SEEN, JSON.stringify(marks));
+      });
+    }
+    secs.forEach(function (sec) {
+      part(sec, ".sec-tools .seen-btn").addEventListener("click", function () {
+        var id = sec.dataset.sec;
+        if (stateOf(sec) === "seen") delete marks[id]; else marks[id] = sec.dataset.hash;
+        paint();
+        if (!connected) {
+          early[id] = marks[id] === undefined ? null : marks[id];
+          lsSet(SEEN, JSON.stringify(marks));
+        }
+        ready.then(function (doc) { if (doc) saveRemote(); });
+      });
+    });
+    paint();
+
+    // -- Page-level comment --
+    var cbtn = document.querySelector(".doc .page-comment");
+    if (cbtn) capability("comments").then(function (comments) {
+      if (!comments || typeof comments.openComposer !== "function") return;
+      cbtn.hidden = false;
+      cbtn.addEventListener("click", function () {
+        var target = document.querySelector(".doc h1") || document.querySelector(".doc");
+        Promise.resolve().then(function () { return comments.openComposer({ element: target }); })
+          .catch(function (e) { if (e && e.code === "unavailable") cbtn.hidden = true; });
+      });
+    });
+  }
+  // After DOMContentLoaded, so the layer's page snapshot (taken as its script
+  // starts) is the clean page rather than this reader's folded state.
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+</script>
+"""
 
 
 TEMPLATE = """<title>{title}</title>
@@ -1182,11 +1798,27 @@ if ("IntersectionObserver" in window && targets.length) {{
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__.splitlines()[0],
-        epilog="Checklist state is keyed by a slug of the item's own label, so "
-        "reordering or inserting items keeps every tick, while rewording an item "
-        "resets that one item to its source default.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Checklist state is keyed by a slug of the item's own label, so\n"
+        "reordering or inserting items keeps every tick, while rewording an item\n"
+        "resets that one item to its source default.\n\n"
+        "Review features: a ```diff fence renders as a numbered unified diff, one\n"
+        "folding block per file. Each H2 section folds, and carries a seen mark\n"
+        "(New / Changed / seen) keyed by a hash of its content. A heading ending in\n"
+        "{judgement} gets a 'Your call' badge; an H3 or lower ending in {lower}\n"
+        "moves into a folded 'Lower priority' tray at the end of its H2 section.\n"
+        "Seen marks use the reader's own db document when the page is published\n"
+        "with the --capabilities JSON, else localStorage; the 'Comment on this\n"
+        "page' button appears only with the comments capability.",
     )
-    ap.add_argument("source", type=Path, help="Markdown file to wrap")
+    ap.add_argument("source", type=Path, nargs="?", help="Markdown file to wrap")
+    ap.add_argument(
+        "--capabilities",
+        action="store_true",
+        help="print the capabilities JSON to pass when publishing the page "
+        "(db + user for seen marks, comments composer for the page comment "
+        "button) and exit",
+    )
     ap.add_argument("-o", "--output", type=Path, help="output HTML (default: <source>.review.html)")
     ap.add_argument("--title", help="page title (default: first H1, else the filename stem)")
     ap.add_argument("--no-toc", action="store_true", help="omit the table of contents")
@@ -1205,6 +1837,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
+    if args.capabilities:
+        print(json.dumps(CAPABILITIES, separators=(",", ":")))
+        return 0
+    if args.source is None:
+        ap.error("the source Markdown file is required")
     if not args.source.is_file():
         ap.error(f"no such file: {args.source}")
 
@@ -1228,7 +1865,7 @@ def main(argv: list[str] | None = None) -> int:
     title = args.title
     if not title:
         m = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
-        title = m.group(1).strip() if m else args.source.stem
+        title = strip_priority_tags(m.group(1).strip(), 1)[0] if m else args.source.stem
 
     out = args.output or args.source.with_suffix(".review.html")
     key = args.key or storage_key(args.source)
