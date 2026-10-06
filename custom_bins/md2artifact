@@ -1579,19 +1579,62 @@ pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
     window.addEventListener("hashchange", revealHash);
     revealHash();
 
+    // A selection that crosses a folded section or a closed <details> opens
+    // it before the annotation layer reads the selection. Folded text is left
+    // out of the selected text but kept in the text the layer searches on a
+    // reload, so a quote taken across a fold could never be found again.
+    function unfoldSelection() {
+      var sel = window.getSelection && window.getSelection();
+      if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+      var r = sel.getRangeAt(0);
+      secs.forEach(function (sec) {
+        if (!isOpen(sec) && r.intersectsNode(part(sec, ".sec-body"))) setOpen(sec, true, true);
+      });
+      Array.prototype.forEach.call(document.querySelectorAll(".doc details:not([open])"), function (d) {
+        for (var c = d.firstElementChild; c; c = c.nextElementSibling) {
+          if (c.tagName !== "SUMMARY" && r.intersectsNode(c)) { d.open = true; return; }
+        }
+      });
+    }
+    // The layer reads a selection on a debounced selectionchange, or on a
+    // mouseup that this capture listener on window runs ahead of.
+    document.addEventListener("selectionchange", unfoldSelection);
+    window.addEventListener("mouseup", unfoldSelection, true);
+
     // -- Seen marks: {sectionId: hash} per reader --
+    // "" is the unseen tombstone: a merge write can set a key but not delete
+    // one, so marking a section unseen writes "" and every read treats "" as
+    // no mark.
     function clean(v) {
-      if (!v || typeof v !== "object" || Array.isArray(v)) return null;
       var out = {};
+      if (!v || typeof v !== "object" || Array.isArray(v)) return out;
       Object.keys(v).forEach(function (k) { if (typeof v[k] === "string") out[k] = v[k]; });
       return out;
     }
-    var marks = {};
-    try { marks = clean(JSON.parse(lsGet(SEEN) || "null")) || {}; } catch (e) {}
+    function readMarks(k) { try { return clean(JSON.parse(lsGet(k) || "null")); } catch (e) { return {}; } }
+    function over(base, top) {
+      var out = {}, k;
+      for (k in base) out[k] = base[k];
+      for (k in top) out[k] = top[k];
+      return out;
+    }
+    // mode: "connecting" until the db answers, then "db", or "local" when
+    // there is no db for this reader or the db refused a write.
+    var mode = "connecting", local = readMarks(SEEN);
+    // remote: the reader's db document as last delivered. pending: clicks not
+    // yet confirmed by the db. overrides: marks the db refused, kept per
+    // reader and laid over the db document on every later visit.
+    var remote = {}, pending = {}, overrides = {}, OVER = null, doc = null, unsub = null, writing = false;
+    var HOLDER = "md2a-" + Math.random().toString(36).slice(2);
+    function current() {
+      if (mode === "connecting") return over(local, pending);
+      if (mode === "local" && !OVER) return local;
+      return over(over(remote, overrides), pending);
+    }
     var summary = document.querySelector(".doc .unseen-sum");
     function stateOf(sec) {
-      var m = marks[sec.dataset.sec];
-      return m === undefined ? "new" : m === sec.dataset.hash ? "seen" : "changed";
+      var m = current()[sec.dataset.sec];
+      return !m ? "new" : m === sec.dataset.hash ? "seen" : "changed";
     }
     function paint() {
       var todo = [], counts = { "new": 0, changed: 0 };
@@ -1620,66 +1663,105 @@ pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
       }
       summary.setAttribute("aria-label", summary.dataset.label);
     }
+    function setLocal(id, v) {
+      if (v) local[id] = v; else delete local[id];
+      lsSet(SEEN, JSON.stringify(local));
+    }
 
-    // Storage: the reader's own db document when db and user both resolve and
-    // the reader has an id; localStorage otherwise. The db is read through one
-    // subscription and written only from a click, one write at a time.
-    var ref = null, writing = false, again = false, early = {}, connected = false;
-    var ready = Promise.all([capability("db"), capability("user")]).then(function (r) {
+    // The db document is read through one subscription that keeps every
+    // snapshot, and written only from a click, one write at a time, as a
+    // merge of just the keys that changed -- so two devices marking
+    // different sections never undo each other.
+    function useLocal() {
+      // A refused write: keep this reader's marks in this browser from now
+      // on, and stop listening, so no later snapshot takes them back.
+      mode = "local";
+      if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+      overrides = over(overrides, pending);
+      pending = {};
+      if (OVER) lsSet(OVER, JSON.stringify(overrides));
+      paint();
+    }
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function writeDelta(delta) {
+      return doc.update({ marks: delta }).catch(function (e) {
+        if (!e || e.code !== "invalid_argument") throw e;
+        // No document yet (update needs one). Create it under a short lease,
+        // the store's set-if-absent pattern, so two devices creating it at
+        // once cannot replace each other's first mark.
+        return doc.acquire({ holder: HOLDER, ttlMs: 3000 }).then(function (r) {
+          if (!r || !r.acquired) return wait(1500).then(function () { return doc.update({ marks: delta }); });
+          return doc.get().then(function (snap) {
+            return snap.exists ? doc.update({ marks: delta }) : doc.set({ marks: delta });
+          });
+        });
+      });
+    }
+    function pump() {
+      if (mode !== "db" || writing || !Object.keys(pending).length) return;
+      var delta = over({}, pending);
+      writing = true;
+      Promise.resolve().then(function () { return writeDelta(delta); }).then(function () {
+        writing = false;
+        var changed = false;
+        Object.keys(delta).forEach(function (k) {
+          if (pending[k] === delta[k]) delete pending[k];
+          if (k in overrides) { delete overrides[k]; changed = true; }
+        });
+        if (changed && OVER) lsSet(OVER, JSON.stringify(overrides));
+        pump();
+      }, function () { writing = false; useLocal(); });
+    }
+    Promise.all([capability("db"), capability("user")]).then(function (r) {
       var db = r[0], user = r[1];
       if (!db || !user || typeof db.doc !== "function" || typeof user.id !== "function") return null;
       return user.id().then(function (uid) {
         if (typeof uid !== "string" || !uid) return null;
-        var doc;
         try { doc = db.doc("seen/" + uid); } catch (e) { return null; }
+        OVER = "md2a-seen-over:" + KEY + ":" + uid;
+        overrides = readMarks(OVER);
         return new Promise(function (resolve) {
-          var first = true;
-          doc.onSnapshot(function (snap) {
-            var data = snap.exists ? clean((snap.data() || {}).marks) : null;
-            if (first) {
-              first = false;
-              // The db is the record from here on. Clicks made while it was
-              // connecting are laid over it, and written by the click's own
-              // queued save below, never from this callback.
-              if (data) marks = data;
-              Object.keys(early).forEach(function (k) { if (early[k] === null) delete marks[k]; else marks[k] = early[k]; });
-              ref = doc; connected = true;
-              paint();
-              resolve(doc);
-              return;
+          unsub = doc.onSnapshot(function (snap) {
+            if (mode === "local") return;
+            remote = snap.exists ? clean((snap.data() || {}).marks) : {};
+            if (mode === "connecting") {
+              mode = "db";
+              resolve(true);
+              // Clicks made while connecting are written now, outside this
+              // callback; they are still the reader's own gestures.
+              setTimeout(pump, 0);
             }
-            if (writing || (snap.metadata && snap.metadata.hasPendingWrites) || !data) return;
-            marks = data;
             paint();
-          }, function () { ref = null; if (first) { first = false; resolve(null); } });
+          }, function () {
+            if (mode === "connecting") { doc = null; OVER = null; resolve(null); }
+            else if (mode === "db") useLocal();
+          });
         });
       });
-    }).catch(function () { return null; });
+    }).catch(function () { return null; }).then(function (ok) {
+      if (ok || mode !== "connecting") return;
+      mode = "local";
+      OVER = null;
+      pending = {};
+      paint();
+    });
 
-    function saveRemote() {
-      if (!ref) { lsSet(SEEN, JSON.stringify(marks)); return; }
-      if (writing) { again = true; return; }
-      writing = true;
-      ref.set({ marks: JSON.parse(JSON.stringify(marks)) }).then(function () {
-        writing = false;
-        if (again) { again = false; saveRemote(); }
-      }, function () {
-        // A refused write (a view-only reader, a revoked view) keeps the mark
-        // in this browser instead, and stops using the db for this visit.
-        writing = false; again = false; ref = null;
-        lsSet(SEEN, JSON.stringify(marks));
-      });
-    }
     secs.forEach(function (sec) {
       part(sec, ".sec-tools .seen-btn").addEventListener("click", function () {
-        var id = sec.dataset.sec;
-        if (stateOf(sec) === "seen") delete marks[id]; else marks[id] = sec.dataset.hash;
-        paint();
-        if (!connected) {
-          early[id] = marks[id] === undefined ? null : marks[id];
-          lsSet(SEEN, JSON.stringify(marks));
+        var id = sec.dataset.sec, v = stateOf(sec) === "seen" ? "" : sec.dataset.hash;
+        if (mode === "local" && OVER) {
+          overrides[id] = v;
+          lsSet(OVER, JSON.stringify(overrides));
+        } else if (mode === "local") {
+          setLocal(id, v);
+        } else {
+          pending[id] = v;
+          // Until the db answers, the plain local copy is the record, so a
+          // reload before then keeps the click.
+          if (mode === "connecting") setLocal(id, v);
+          pump();
         }
-        ready.then(function (doc) { if (doc) saveRemote(); });
+        paint();
       });
     });
     paint();
