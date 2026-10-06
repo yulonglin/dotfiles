@@ -68,12 +68,21 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#status-merged-as-c947b3a-but-not-live-in-the-working-checkout" class="lvl2">Status: merged as c947b3a, but not live in the working checkout</a><a href="#goal-and-motivation" class="lvl2">Goal and motivation</a><a href="#next-tasks" class="lvl2">Next tasks</a><a href="#what-was-accomplished" class="lvl2">What was accomplished</a><a href="#the-feature-as-merged" class="lvl3">The feature as merged</a><a href="#commits-worktree-branch-worktree-artifact-download-html-rebased-onto-origin-main-at-c2b56fc" class="lvl3">Commits (worktree branch `worktree-artifact-download-html`, rebased onto `origin/main` at `c2b56fc`)</a><a href="#commands-that-matter" class="lvl3">Commands that matter</a><a href="#bugs-hit" class="lvl2">Bugs hit</a><a href="#uncertainties" class="lvl2">Uncertainties</a><a href="#yulong-s-instructions-cleaned-up" class="lvl2">Yulong&#x27;s instructions, cleaned up</a></nav>
 <div class="doc">
 <h1 id="handover-download-html-and-copy-html-on-annotated-artifacts-session-55c231ff">Handover: Download HTML and Copy HTML on annotated artifacts (session 55c231ff)</h1>
+<div class="page-tools"><a class="unseen-sum" hidden></a><button type="button" class="page-comment" hidden data-label="Comment on this page" aria-label="Comment on this page"></button></div>
 <p>Format: a Markdown file, not an Artifact, because the reader is an agent comparing it with a debrief of the same session. Written 2026-10-01 from the transcript <code>/home/yulong/.claude/projects/-home-yulong-code-dotfiles--claude-worktrees-artifact-download-html/55c231ff-61a7-424b-b0dd-11bf8a30c5ce.jsonl</code> (session ran 2026-09-24 01:48–06:35 UTC) and from git as it stands today. Locators such as <code>55c231ff:148</code> are <code>hive local</code> entry numbers. The session started no subagents; its advisor calls are at <code>55c231ff:22</code>–<code>24</code> (approach; advice reflected at <code>55c231ff:26</code>) and <code>55c231ff:142</code>–<code>143</code> (final review).</p>
+<div class="sec" data-sec="status-merged-as-c947b3a-but-not-live-in-the-working-checkout" data-hash="2b863855b10d"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="status-merged-as-c947b3a-but-not-live-in-the-working-checkout--body" aria-labelledby="status-merged-as-c947b3a-but-not-live-in-the-working-checkout"></button>
 <h2 id="status-merged-as-c947b3a-but-not-live-in-the-working-checkout">Status: merged as c947b3a, but not live in the working checkout</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="status-merged-as-c947b3a-but-not-live-in-the-working-checkout" data-label="Mark seen"></button></div><div class="sec-body" id="status-merged-as-c947b3a-but-not-live-in-the-working-checkout--body">
 <p>The work is done and merged: PR https://github.com/yulonglin/dotfiles/pull/203 was squash-merged into <code>main</code> as <code>c947b3a</code> (<code>55c231ff:203</code>), and <code>c947b3a</code> is an ancestor of <code>origin/main</code>. However, as of 2026-10-01 the main checkout <code>/home/yulong/code/dotfiles</code> is on branch <code>website-vault-publish</code>, which does not contain <code>c947b3a</code>; <code>grep -c anPageCopy custom_bins/_annotation_layer.py</code> there returns 0. Because <code>claude/</code> and <code>custom_bins/</code> are used live from that checkout, the <code>md2artifact</code> on PATH still builds pages without the new buttons, and the <code>artifact-writing</code> skill that loads still has the old text. The session's closing claim that the change &quot;takes effect once your main checkout pulls <code>c947b3a</code>; the daily <code>dotfiles-sync</code> job will do that&quot; (<code>55c231ff:207</code>) does not hold while the checkout is on another branch.</p>
+</div></div>
+<div class="sec" data-sec="goal-and-motivation" data-hash="0a32f465cc3b"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="goal-and-motivation--body" aria-labelledby="goal-and-motivation"></button>
 <h2 id="goal-and-motivation">Goal and motivation</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="goal-and-motivation" data-label="Mark seen"></button></div><div class="sec-body" id="goal-and-motivation--body">
 <p>Yulong wanted every artifact to carry a &quot;download / copy as HTML&quot; button, so that a reader can take the page itself to someone who has no permission to open the Artifact link (<code>55c231ff:1</code>). The shared injection point is the annotation layer, <code>custom_bins/_annotation_layer.py</code>, which <code>md2artifact</code> and <code>annotate-html</code> put on every reviewable page, so the button went there (<code>55c231ff:6</code>).</p>
+</div></div>
+<div class="sec" data-sec="next-tasks" data-hash="b9e98836bc7f"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="next-tasks--body" aria-labelledby="next-tasks"></button>
 <h2 id="next-tasks">Next tasks</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="next-tasks" data-label="Mark seen"></button></div><div class="sec-body" id="next-tasks--body">
 <ul>
 <li>Bring the change into the live checkout. Either merge <code>main</code> into <code>website-vault-publish</code> or finish that branch and switch the main tree back to <code>main</code>. This needs Yulong's choice, because the main tree carries a dirty working copy, including the permanent gateway diff on <code>claude/settings.json</code>.</li>
 <li>Free the <code>main</code> branch. <code>git worktree list</code> shows <code>/home/yulong/code/dotfiles/.claude/worktrees/artifact-download-html c947b3a [main]</code>: <code>gh pr merge --delete-branch</code> (<code>55c231ff:203</code>) left <code>main</code> checked out in the worktree, so no other tree can check out <code>main</code>. Local <code>main</code> is also 7 commits behind <code>origin/main</code>. Remove the worktree (it is clean) or switch it off <code>main</code>.</li>
@@ -82,7 +91,10 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <li>Optional, offered and not yet answered (<code>55c231ff:207</code>): rebuild and republish existing artifacts with <code>capabilities: {&quot;downloads&quot;: true}</code> so they get the buttons. Pages published before this change show no &quot;This page&quot; row until rebuilt.</li>
 <li>Optional: have Yulong open probe version 3 from the public link to confirm the greyed-out Download button (see Uncertainties).</li>
 </ul>
+</div></div>
+<div class="sec" data-sec="what-was-accomplished" data-hash="342eb885818c"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="what-was-accomplished--body" aria-labelledby="what-was-accomplished"></button>
 <h2 id="what-was-accomplished">What was accomplished</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="what-was-accomplished" data-label="Mark seen"></button></div><div class="sec-body" id="what-was-accomplished--body">
 <h3 id="the-feature-as-merged">The feature as merged</h3>
 <p>Every annotated page now ends with a &quot;This page&quot; row under the comments panel, with two buttons:</p>
 <ul>
@@ -142,7 +154,10 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </code></pre>
 <p>Results: 175 pass / 4 fail on the first run (<code>55c231ff:43</code>), 267 pass / 3 fail after the rebase (<code>55c231ff:132</code>), and 4–5 failures per run after the final change, all in the flaky suggested-edit group (<code>55c231ff:192</code>, <code>55c231ff:193</code>). <code>--with markdown</code> is wrong; md2artifact needs <code>markdown-it-py</code> (<code>55c231ff:42</code>).</p>
 <p>Probe build and publish: <code>custom_bins/md2artifact artifacts/download-probe/download-probe.md -o artifacts/download-probe/download-probe.html</code>, then the Artifact tool with <code>capabilities: {&quot;downloads&quot;: true}</code> on the first publish only. Probe URL https://claude.ai/artifact/DHxg1ZG6BqraAdXUJtr5n6 — version 1 at <code>55c231ff:79</code>, version 2 (marker fix) at <code>55c231ff:165</code>, version 3 (disabled button and blob path) at <code>55c231ff:197</code>. Later publishes omitted <code>capabilities</code>, and the result confirmed the declaration carried forward.</p>
+</div></div>
+<div class="sec" data-sec="bugs-hit" data-hash="e47588c1f934"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="bugs-hit--body" aria-labelledby="bugs-hit"></button>
 <h2 id="bugs-hit">Bugs hit</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="bugs-hit" data-label="Mark seen"></button></div><div class="sec-body" id="bugs-hit--body">
 <ul>
 <li><strong>Closing-marker literal in the layer JS</strong> (found by the advisor at <code>55c231ff:142</code>, confirmed by a failing round-trip test at <code>55c231ff:147</code>, fixed in <code>8adbf5b</code>). The JS contained the whole string <code>&lt;!-- /annotation-layer --&gt;</code>, so <code>strip_layer</code> stopped mid-script and <code>annotate-html --force</code> would have written half a layer onto pages. Fix: split the literal and always re-add the marker to the snapshot.</li>
 <li><strong>Flaky suggested-edit Playwright tests</strong> (<code>test_inserted_text_is_invisible_to_re_anchoring</code>, <code>test_a_fresh_selection_comes_back_in_comment_mode</code>, <code>test_the_badge_and_the_count_include_edits</code>, <code>test_the_export_carries_a_suggested_edits_section</code>, <code>test_a_selection_overlapping_an_edit_points_at_it</code>). They fail intermittently on unchanged <code>main</code> too (2 of 4 at <code>55c231ff:46</code>), so they predate this work. Not fixed.</li>
@@ -152,7 +167,10 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <li><strong>Branch base:</strong> the worktree forked from <code>website-vault-publish</code> (base <code>ec2ad5c</code>), carrying unrelated commits. It was rebased with <code>git rebase --onto origin/main ec2ad5c</code> (<code>55c231ff:115</code>). The index script's <code>URL_RE</code> fix for short <code>claude.ai/artifact/&lt;id&gt;</code> URLs conflicted because <code>main</code> had already made the same fix; the session took main's version (<code>55c231ff:117</code>–<code>55c231ff:128</code>).</li>
 <li><strong>Index republish aborted on purpose:</strong> a diff of the live index page against the worktree rebuild showed the worktree would drop rows that exist only on the live page (<code>55c231ff:108</code>–<code>55c231ff:110</code>), so the index page was not republished.</li>
 </ul>
+</div></div>
+<div class="sec" data-sec="uncertainties" data-hash="5b1d71cd3d5a"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="uncertainties--body" aria-labelledby="uncertainties"></button>
 <h2 id="uncertainties">Uncertainties</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="uncertainties" data-label="Mark seen"></button></div><div class="sec-body" id="uncertainties--body">
 <ul>
 <li><strong>Which outcomes Yulong observed, and which only tests show.</strong> Yulong's report at <code>55c231ff:175</code> (&quot;owner download works, public Copy works, public Download doesn't, the downloaded copy has no Download button&quot;) was against probe version 2. The version 3 behaviour — a greyed-out Download for public viewers and a working blob download in a local copy — is shown only by stubbed Playwright tests; Yulong sent no message after <code>55c231ff:184</code>, so no human has seen version 3.</li>
 <li><strong>&quot;The viewer grants the save only to the owner&quot;</strong> (<code>55c231ff:207</code>, skill text in <code>f120eee</code>) is an inference from that one observation, not a documented platform rule.</li>
@@ -161,12 +179,16 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <li><strong>Remote branch:</strong> a local remote-tracking ref <code>origin/worktree-artifact-download-html</code> still exists; whether <code>--delete-branch</code> removed it on GitHub was not checked.</li>
 <li><strong><code>dotfiles-sync</code> interaction:</strong> it is unknown whether the daily sync job, which commits and pushes this repo, will move the main checkout onto <code>main</code> or leave it on <code>website-vault-publish</code>.</li>
 </ul>
+</div></div>
+<div class="sec" data-sec="yulong-s-instructions-cleaned-up" data-hash="82025ddcfeea"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="yulong-s-instructions-cleaned-up--body" aria-labelledby="yulong-s-instructions-cleaned-up"></button>
 <h2 id="yulong-s-instructions-cleaned-up">Yulong's instructions, cleaned up</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="yulong-s-instructions-cleaned-up" data-label="Mark seen"></button></div><div class="sec-body" id="yulong-s-instructions-cleaned-up--body">
 <ol>
 <li>(<code>55c231ff:1</code>) Add a &quot;Download / Copy as HTML&quot; button to artifacts, so the page can be shared with people who cannot open the Artifact itself.</li>
 <li>(<code>55c231ff:175</code>) Report: it works; the downloaded HTML has no Download button (&quot;I guess it's not needed?&quot;); as a public-link viewer (&quot;public member&quot;), Copy HTML works but Download HTML does not. Approval: &quot;Sure you can merge.&quot;</li>
 <li>(<code>55c231ff:180</code>, <code>55c231ff:184</code>, read together) Show the Download HTML button to public viewers too, even where it cannot work. The session read this as: show it disabled with an explanation in the public viewer, and make it work in a downloaded local copy (<code>55c231ff:186</code>). That reading is an assumption; Yulong did not confirm it.</li>
 </ol>
+</div></div>
 
 </div>
 </div>
@@ -188,6 +210,245 @@ if ("IntersectionObserver" in window && targets.length) {
   }, { rootMargin: "-12% 0px -75% 0px" });
   targets.forEach((t) => io.observe(t.el));
 }
+</script>
+<style>
+.page-tools{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;margin:0 0 1.4rem;font-size:.86rem}
+.page-tools:not(:has(> :not([hidden]))){display:none}
+.unseen-sum,.page-comment,.seen-btn,.chip{font:inherit}
+.unseen-sum::after,.page-comment::after,.seen-btn::after,.chip::after{content:attr(data-label)}
+.unseen-sum{color:var(--soft);text-decoration:none}
+.unseen-sum[href]{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.page-comment,.seen-btn{background:var(--panel);color:var(--soft);border:1px solid var(--rule);
+ border-radius:999px;padding:.12rem .7rem;cursor:pointer;font-size:.78rem;line-height:1.5}
+.page-comment:hover,.seen-btn:hover{border-color:var(--accent);color:var(--accent)}
+.seen-btn[aria-pressed="true"]{color:var(--good);border-color:var(--good);background:var(--good-bg)}
+.chip{display:inline-block;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+ padding:.06rem .5rem;border-radius:999px;vertical-align:middle;line-height:1.6;margin-left:.5rem}
+.chip-call{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
+.seen-badge[data-state="new"]{background:var(--good-bg);color:var(--good);border:1px solid var(--good)}
+.seen-badge[data-state="changed"]{background:var(--mark);color:var(--ink);border:1px solid var(--rule)}
+.sec{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:.4rem;align-items:center;
+ border-top:1px solid var(--rule);margin-top:2.4rem;padding-top:.3rem}
+.sec>h2{margin:.5rem 0;padding:0;border:0}
+.sec>.sec-body{grid-column:1/-1;min-width:0}
+.sec-tools{display:flex;gap:.3rem;align-items:center;justify-self:end}
+.sec-toggle{width:1.6rem;height:1.6rem;border:0;background:none;color:var(--soft);cursor:pointer;
+ border-radius:5px;padding:0;font-size:.85rem}
+.sec-toggle::before{content:"\25BE";display:inline-block;transition:transform .12s}
+.sec-toggle[aria-expanded="false"]::before{transform:rotate(-90deg)}
+.sec-toggle:hover{background:var(--code);color:var(--ink)}
+.sec-toggle:focus-visible,.seen-btn:focus-visible,.page-comment:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* An author display rule beats the user-agent [hidden] rule, so restate it. */
+.sec-body[hidden],.chip[hidden],.page-comment[hidden],.unseen-sum[hidden]{display:none}
+@media print{.sec-body[hidden]{display:block}.sec-toggle,.sec-tools,.page-tools{display:none}}
+details.lower-tray>summary{color:var(--soft);font-weight:600}
+.diff-wrap{margin:1rem 0}
+.diff-wrap details.diff-file{padding:0;overflow:hidden}
+.diff-wrap details.diff-file>summary{margin:0;font-weight:600}
+.diff-wrap details.diff-file[open]>summary{margin:0}
+.diff-wrap details.diff-file>summary code{background:none;padding:0;font-size:.85rem}
+.diff-stat{font-size:.78rem;font-weight:600;margin-left:.4rem}
+.diff-stat .dsa{color:var(--good)} .diff-stat .dsd{color:var(--bad)}
+pre.diff{padding:0;margin:0;font-size:.8rem;line-height:1.45}
+.diff-wrap>pre.diff{border-radius:7px}
+details.diff-file pre.diff{border:0;border-radius:0}
+pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
+.dl{display:block;padding-right:.9rem;white-space:pre}
+.dl .ln{display:inline-block;width:3.4em;padding-right:.55em;text-align:right;color:var(--soft);
+ user-select:none;-webkit-user-select:none;opacity:.75}
+.dl .ln::before{content:attr(data-n)}
+.dl .ds{display:inline-block;width:1.5em;text-align:center;font-weight:700}
+.dl-add{background:var(--good-bg)} .dl-add .ds{color:var(--good)}
+.dl-del{background:var(--bad-bg)} .dl-del .ds{color:var(--bad)}
+.dl-hunk{background:var(--panel);color:var(--accent);padding-left:.6rem;
+ border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.dl-hunk .ln{display:none}
+.dl-meta{color:var(--soft);font-style:italic;padding-left:.6rem}
+.dl-meta .ln{display:none}
+</style>
+<script>
+(function () {
+  "use strict";
+  function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+  function lsDel(k) { try { window.localStorage.removeItem(k); } catch (e) {} }
+  function capability(name) {
+    // `use()` resolves a namespace or null; a page with no viewer has no
+    // window.claude at all. Every capability member is reached through it.
+    var c = window.claude;
+    if (!c || typeof c.use !== "function") return Promise.resolve(null);
+    try { return Promise.resolve(c.use(name)).catch(function () { return null; }); }
+    catch (e) { return Promise.resolve(null); }
+  }
+
+  function init() {
+    // The annotation layer's key, read at run time (it is user input, so it
+    // is never interpolated into this script), with the layer's own fallback.
+    var layer = document.querySelector("[data-annotation-layer]");
+    var KEY = (layer && layer.dataset.key) || ("annot:" + document.title);
+    var FOLD = "md2a-fold:" + KEY + ":";
+    var SEEN = "md2a-seen:" + KEY;
+    var secs = Array.prototype.slice.call(document.querySelectorAll(".doc .sec[data-sec]"));
+    function part(sec, sel) { return sec.querySelector(":scope > " + sel); }
+
+    // -- Collapsible sections --
+    function setOpen(sec, open, remember) {
+      part(sec, ".sec-body").hidden = !open;
+      part(sec, ".sec-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+      if (!remember) return;
+      if (open) lsDel(FOLD + sec.dataset.sec); else lsSet(FOLD + sec.dataset.sec, "closed");
+    }
+    function isOpen(sec) { return !part(sec, ".sec-body").hidden; }
+    secs.forEach(function (sec) {
+      // Set every section explicitly: a saved copy of the page may carry the
+      // state it was saved in, and a reader with no storage starts open.
+      setOpen(sec, lsGet(FOLD + sec.dataset.sec) !== "closed", false);
+      part(sec, ".sec-toggle").addEventListener("click", function () { setOpen(sec, !isOpen(sec), true); });
+    });
+
+    // A link into a closed section or a folded tray opens what hides it,
+    // before the browser scrolls, so the jump lands.
+    function reveal(el) {
+      for (var n = el; n && n !== document.body; n = n.parentElement) {
+        if (n.tagName === "DETAILS" && !n.open) n.open = true;
+        if (n.classList && n.classList.contains("sec") && !isOpen(n)) setOpen(n, true, true);
+      }
+    }
+    function targetOf(hash) {
+      if (!hash || hash.length < 2) return null;
+      try { return document.getElementById(decodeURIComponent(hash.slice(1))); } catch (e) { return null; }
+    }
+    document.addEventListener("click", function (ev) {
+      var a = ev.target.closest && ev.target.closest('a[href^="#"]');
+      var t = a && targetOf(a.getAttribute("href"));
+      if (t) reveal(t);
+    }, true);
+    function revealHash() { var t = targetOf(location.hash); if (t) { reveal(t); t.scrollIntoView(); } }
+    window.addEventListener("hashchange", revealHash);
+    revealHash();
+
+    // -- Seen marks: {sectionId: hash} per reader --
+    function clean(v) {
+      if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+      var out = {};
+      Object.keys(v).forEach(function (k) { if (typeof v[k] === "string") out[k] = v[k]; });
+      return out;
+    }
+    var marks = {};
+    try { marks = clean(JSON.parse(lsGet(SEEN) || "null")) || {}; } catch (e) {}
+    var summary = document.querySelector(".doc .unseen-sum");
+    function stateOf(sec) {
+      var m = marks[sec.dataset.sec];
+      return m === undefined ? "new" : m === sec.dataset.hash ? "seen" : "changed";
+    }
+    function paint() {
+      var todo = [], counts = { "new": 0, changed: 0 };
+      secs.forEach(function (sec) {
+        var st = stateOf(sec), badge = part(sec, ".sec-tools .seen-badge"), btn = part(sec, ".sec-tools .seen-btn");
+        sec.dataset.seen = st;
+        badge.dataset.state = st;
+        badge.dataset.label = st === "new" ? "New" : st === "changed" ? "Changed" : "";
+        badge.hidden = st === "seen";
+        btn.setAttribute("aria-pressed", st === "seen" ? "true" : "false");
+        btn.dataset.label = st === "seen" ? "Seen" : "Mark seen";
+        btn.setAttribute("aria-label", st === "seen" ? "Seen. Click to mark unseen" : "Mark seen");
+        if (st !== "seen") { todo.push(sec); counts[st]++; }
+      });
+      if (!summary || !secs.length) return;
+      summary.hidden = false;
+      if (!todo.length) {
+        summary.removeAttribute("href");
+        summary.dataset.label = "All sections seen";
+      } else {
+        var bits = [];
+        if (counts["new"]) bits.push(counts["new"] + " new");
+        if (counts.changed) bits.push(counts.changed + " changed");
+        summary.href = "#" + todo[0].dataset.sec;
+        summary.dataset.label = bits.join(", ") + " \u00b7 go to the first";
+      }
+      summary.setAttribute("aria-label", summary.dataset.label);
+    }
+
+    // Storage: the reader's own db document when db and user both resolve and
+    // the reader has an id; localStorage otherwise. The db is read through one
+    // subscription and written only from a click, one write at a time.
+    var ref = null, writing = false, again = false, early = {}, connected = false;
+    var ready = Promise.all([capability("db"), capability("user")]).then(function (r) {
+      var db = r[0], user = r[1];
+      if (!db || !user || typeof db.doc !== "function" || typeof user.id !== "function") return null;
+      return user.id().then(function (uid) {
+        if (typeof uid !== "string" || !uid) return null;
+        var doc;
+        try { doc = db.doc("seen/" + uid); } catch (e) { return null; }
+        return new Promise(function (resolve) {
+          var first = true;
+          doc.onSnapshot(function (snap) {
+            var data = snap.exists ? clean((snap.data() || {}).marks) : null;
+            if (first) {
+              first = false;
+              // The db is the record from here on. Clicks made while it was
+              // connecting are laid over it, and written by the click's own
+              // queued save below, never from this callback.
+              if (data) marks = data;
+              Object.keys(early).forEach(function (k) { if (early[k] === null) delete marks[k]; else marks[k] = early[k]; });
+              ref = doc; connected = true;
+              paint();
+              resolve(doc);
+              return;
+            }
+            if (writing || (snap.metadata && snap.metadata.hasPendingWrites) || !data) return;
+            marks = data;
+            paint();
+          }, function () { ref = null; if (first) { first = false; resolve(null); } });
+        });
+      });
+    }).catch(function () { return null; });
+
+    function saveRemote() {
+      if (!ref) { lsSet(SEEN, JSON.stringify(marks)); return; }
+      if (writing) { again = true; return; }
+      writing = true;
+      ref.set({ marks: JSON.parse(JSON.stringify(marks)) }).then(function () {
+        writing = false;
+        if (again) { again = false; saveRemote(); }
+      }, function () {
+        // A refused write (a view-only reader, a revoked view) keeps the mark
+        // in this browser instead, and stops using the db for this visit.
+        writing = false; again = false; ref = null;
+        lsSet(SEEN, JSON.stringify(marks));
+      });
+    }
+    secs.forEach(function (sec) {
+      part(sec, ".sec-tools .seen-btn").addEventListener("click", function () {
+        var id = sec.dataset.sec;
+        if (stateOf(sec) === "seen") delete marks[id]; else marks[id] = sec.dataset.hash;
+        paint();
+        if (!connected) {
+          early[id] = marks[id] === undefined ? null : marks[id];
+          lsSet(SEEN, JSON.stringify(marks));
+        }
+        ready.then(function (doc) { if (doc) saveRemote(); });
+      });
+    });
+    paint();
+
+    // -- Page-level comment --
+    var cbtn = document.querySelector(".doc .page-comment");
+    if (cbtn) capability("comments").then(function (comments) {
+      if (!comments || typeof comments.openComposer !== "function") return;
+      cbtn.hidden = false;
+      cbtn.addEventListener("click", function () {
+        var target = document.querySelector(".doc h1") || document.querySelector(".doc");
+        Promise.resolve().then(function () { return comments.openComposer({ element: target }); })
+          .catch(function (e) { if (e && e.code === "unavailable") cbtn.hidden = true; });
+      });
+    });
+  }
+  // After DOMContentLoaded, so the layer's page snapshot (taken as its script
+  // starts) is the clean page rather than this reader's folded state.
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
 </script>
 <!-- annotation-layer v2 -->
 <style>
