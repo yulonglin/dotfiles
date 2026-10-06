@@ -1579,7 +1579,7 @@ pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
     window.addEventListener("hashchange", revealHash);
     revealHash();
 
-    // A selection that crosses a folded section or a closed <details> opens
+    // A selection that crosses a folded section or a closed details element opens
     // it before the annotation layer reads the selection. Folded text is left
     // out of the selected text but kept in the text the layer searches on a
     // reload, so a quote taken across a fold could never be found again.
@@ -1709,6 +1709,9 @@ pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
           if (k in overrides) { delete overrides[k]; changed = true; }
         });
         if (changed && OVER) lsSet(OVER, JSON.stringify(overrides));
+        // A snapshot that arrived during the write was masked by the pending
+        // mark; once that mark is acknowledged, the snapshot is what shows.
+        paint();
         pump();
       }, function () { writing = false; useLocal(); });
     }

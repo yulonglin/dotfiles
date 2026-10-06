@@ -452,6 +452,25 @@ def test_another_devices_mark_during_a_write_is_kept_on_both_sides(ctx, site):
         assert _seen_state(page, sec) == "seen"
 
 
+def test_another_devices_unmark_of_the_same_section_shows_once_the_write_lands(ctx, site):
+    """A snapshot masked by this page's pending mark must show once that mark
+    is acknowledged, or the next click would undo the other device's change."""
+    base, _ = site
+    page = _open(ctx, base + "index.html", _fake('{"marks": {}}'))
+    page.wait_for_function("() => window.__log.subs === 1")
+    page.wait_for_timeout(50)
+    page.evaluate("() => { window.__log.hold = true; }")
+    page.click('.sec[data-sec="alpha"] .seen-btn')
+    page.wait_for_function("() => !!window.__log.finish")
+    page.evaluate("() => window.__log.remote({marks: {alpha: ''}})")
+    assert _seen_state(page, "alpha") == "seen"  # still masked by the pending mark
+    page.evaluate("() => window.__log.finish()")
+    page.wait_for_function("() => document.querySelector('.sec[data-sec=\"alpha\"]').dataset.seen === 'new'")
+    page.click('.sec[data-sec="alpha"] .seen-btn')
+    page.wait_for_function("() => window.__log.ops.length === 2")
+    assert _ops(page)[-1] == ["update", {"marks": {"alpha": _hash(page, "alpha")}}]
+
+
 def test_a_refused_write_stays_local_and_survives_a_reload(ctx, site):
     base, _ = site
     page = _open(ctx, base + "index.html", _fake('{"marks": {}}'))
