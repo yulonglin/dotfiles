@@ -1,0 +1,20 @@
+title: Download HTML session handover
+url: https://claude.ai/artifact/MZGF7FLXh4pCw6EzMiGmg9
+org: lin.yulong@gmail.com's Organization   # session auth, 2026-10-06
+first_published: 2026-10-06
+last_updated: 2026-10-06
+status: done
+
+summary: >-
+  handover of session 55c231ff (the annotation layer's Download HTML and Copy HTML buttons),
+  written with the externalise-handover skill by a Claude Opus 5.5 subagent, for comparison
+  with the debrief-trial-55c231ff page
+
+source: handover.md
+built: handover.html
+builds_with: |
+  md2artifact artifacts/handover-trial-55c231ff/handover.md -o artifacts/handover-trial-55c231ff/handover.html
+
+established: |
+  Written from the transcript on 2026-10-01. It found the same unmerged c947b3a gap as the
+  debrief. Not fact-checked by another model family.

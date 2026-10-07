@@ -1,0 +1,26 @@
+title: Download HTML session debrief
+url: https://claude.ai/artifact/E2o1qcjbkrifRzu34t1yyd
+org: lin.yulong@gmail.com's Organization   # session auth, 2026-10-06
+first_published: 2026-10-06
+last_updated: 2026-10-06
+status: done
+
+summary: >-
+  trial of alignment-hive's `debrief` plugin on session 55c231ff (the annotation layer's
+  Download HTML and Copy HTML buttons), written by a Claude Opus 5.5 subagent and fact-checked
+  by GPT-6 Astra; compare with handover-trial-55c231ff
+
+source: debrief.md
+built: debrief.html
+builds_with: |
+  hive debrief render --session 55c231ff-61a7-424b-b0dd-11bf8a30c5ce --round 1 \
+    --data /home/yulong/.claude/plugins/data/debrief-alignment-hive
+  (run from /home/yulong/code/dotfiles/.claude/worktrees/artifact-download-html; hive-cli 0.2.1)
+  then copy round-1/page.html here as debrief.html. captures/ snapshot `hive debrief capture`
+  output taken 2026-10-01.
+
+established: |
+  The debrief renderer covered all 1727 changed lines in 7 files. The writer and the separately
+  written handover both found that the merge c947b3a was not in the live checkout on 2026-10-01.
+  The fact-check made 11 corrections, mostly claims stated more strongly than the transcript
+  supports.
