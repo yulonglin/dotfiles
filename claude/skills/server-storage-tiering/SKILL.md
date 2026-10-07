@@ -20,12 +20,23 @@ Two jobs, often at once: **(A) organize storage with portable conventions**, and
 Goal: the same paths resolve on every box, so projects and configs don't care which machine they're on.
 
 ### Expose the volume at `/workspace`
+`/workspace` is the RunPod convention; adopting it everywhere gives path parity. It must be a **symlink or a bind mount, never a hard link**: Linux refuses hard links to directories, and no hard link crosses filesystems.
+
+**Preferred (persistent machine): a bind mount in fstab.** Paths stay `/workspace/...` under `realpath`, and tools that refuse symlinks still work. This is what the Hetzner box runs (fstab lines 12–13 there):
 ```bash
 sudo chown "$USER:$USER" /mnt/<VOLUME>          # cloud volumes mount root:root — you can't write until this
-sudo ln -s /mnt/<VOLUME> /workspace             # reversible; no fstab edit needed for the symlink itself
-mkdir -p /workspace/{cache,share,outputs,archive,hf,torch,bun,projects-data}
+sudo mkdir /workspace
+# Append under the provider's own volume line, which must come first:
+#   /mnt/<VOLUME> /workspace none bind,nofail,x-systemd.requires-mounts-for=/mnt/<VOLUME> 0 0
+sudo mount -a && findmnt /workspace             # check before any reboot: a bad fstab line can block boot
 ```
-`/workspace` is the RunPod convention; adopting it everywhere gives path parity.
+`nofail` lets the box boot without the volume; `x-systemd.requires-mounts-for` stops the bind from running before the volume is mounted, which would bind the empty root-disk directory instead.
+
+**Quick (no fstab edit):** `sudo ln -s /mnt/<VOLUME> /workspace`. Reversible and enough for a short-lived box.
+
+Then lay out the tree: `mkdir -p /workspace/{cache,share,outputs,archive,hf,torch,bun,projects-data}`.
+
+This stays a manual step on purpose: it needs sudo, the device line differs by provider, a wrong fstab line can block boot, and it runs once per machine. `storage-setup` detects the result.
 
 **Prefer a bind mount over a symlink for `/workspace`**: `mount --bind /mnt/<VOLUME> /workspace` plus the fstab line `/mnt/<VOLUME> /workspace none bind,nofail,x-systemd.requires-mounts-for=/mnt/<VOLUME> 0 0` (then `systemctl daemon-reload`). With a symlink every canonical path — `pwd -P`, Claude Code's project keys, the sandbox allowlist, `lsof` — reads `/mnt/<VOLUME>/...`, so `~/.claude/projects` grows a second `-mnt-HC-Volume-...` key for the same repo and the sandbox `allowWrite` entry for `/workspace` never matches. `project-hub doctor` flags the symlink form.
 
@@ -69,6 +80,7 @@ export HF_HOME=/workspace/hf
 export TORCH_HOME=/workspace/torch
 # Leave UV_CACHE_DIR / PIP_CACHE_DIR at local defaults — they're latency-sensitive and may host live venvs.
 ```
+uv has one more reason to stay local: it hard-links packages from its cache into each `.venv`, which works only on the same filesystem. With projects on root and the cache on the volume, uv copies every package into every venv instead, which uses more space, not less.
 
 **Already in dotfiles:** `config/aliases/storage.sh` (sourced by zshrc on every interactive shell) does this automatically when the volume exists — no manual profile edit needed. It deliberately **skips the export when the default cache path is already a symlink onto the volume** (a relocated `~/.cache/huggingface` redirects transparently; re-pointing `HF_HOME` would orphan the moved cache and force re-downloads), so an unset `HF_HOME` on a tiered box is correct, not a gap. The same file prints a one-line warning on shell start when root runs low. Scope boundary: zshrc-sourced env reaches interactive shells only — pueue daemons, cron and systemd services won't see it.
 
