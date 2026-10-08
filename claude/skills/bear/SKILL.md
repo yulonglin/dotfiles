@@ -12,11 +12,11 @@ Bear is Yulong's note app. Treat its notes the way you'd treat source files. **D
 | Claude Code tool | Bear MCP equivalent | Notes |
 |---|---|---|
 | `Read` | `mcp__plugin_bear-mcp_bear__get_note` (metadata first), then `read_note_content` | `get_note` returns `length` in bytes; over ~15 KB, `read_note_outline` then `read_note_content(address=…)` — see **Read playbook** below. Content reads return the `hash` you pass as `baseHash` |
-| `Edit` (find/replace, insert) | `mcp__plugin_bear-mcp_bear__edit_note` (with `edits: [...]`) | Each edit object: `find` + one of `replace`/`insertAfter`/`insertBefore`. Per-edit flags: `all`, `ignoreCase`, `word`. Atomic — any unmatched `find` aborts the whole call |
-| `Write` (full rewrite) | `mcp__plugin_bear-mcp_bear__overwrite_note` (with `baseHash`) | MCP **mandates** `baseHash` — you cannot silently clobber |
-| (new file) | `mcp__plugin_bear-mcp_bear__create_note` | Returns `id` and `contentHash` — capture both |
+| `Edit` (find/replace, insert) | `mcp__plugin_bear-mcp_bear__edit_note` (with `edits: [...]`) | Each edit object: `find` + one of `replace`/`insertAfter`/`insertBefore`/`delete: true`. Per-edit flags: `all`, `ignoreCase`, `word`. Atomic — any unmatched `find` aborts the whole call |
+| `Write` (full rewrite) | `mcp__plugin_bear-mcp_bear__overwrite_note` (with `baseHash`) | Whole note, or one section with `address`. MCP **mandates** `baseHash` — you cannot silently clobber |
+| (new file) | `mcp__plugin_bear-mcp_bear__create_note` | Returns the note's metadata and stored content, but **no hash** — a hash comes only from `read_note_content` |
 
-**One rule, agent-facing:** if you didn't capture a `contentHash` in this session, you didn't read the note — re-read before writing.
+**One rule, agent-facing:** if you didn't capture a `hash` from `read_note_content` in this session, you didn't read the note — re-read before writing. `get_note` and `create_note` return no hash (checked live 2026-10-08).
 
 ## Before the first call: load the schemas
 
@@ -103,25 +103,28 @@ mcp__plugin_bear-mcp_bear__edit_note(id=ID, edits=[{ find: "task", replace: "TAS
 **Properties — same as Claude Code's `Edit`:**
 - Default rejects ambiguous matches: error names N locations → add context to `find` or pass `all: true`.
 - Default rejects missing matches: edit fails atomically, note untouched.
-- `\n \t \r \\` are interpreted in `find` / `replace` / `insertAfter` / `insertBefore`.
+- Over MCP, put real newlines in the JSON strings (`\n` in JSON). The CLI's `--find`/`--replace`/`--insert-*` flags interpret `\n \t \r \\`; whether the MCP server also unescapes a literal backslash-n is unverified.
+- The CLI names the section flag `--section`; over MCP it is `address`. Mixing them up is how a `section=` guess happens.
 - `edit_note` returns only the metadata fields that changed — inspect the response to catch unintended drops (e.g. a tag).
 
 **Locate before editing** when you're unsure: `mcp__plugin_bear-mcp_bear__search_in_note(id=ID, string="task")` returns offset + snippet for each hit.
 
 ## Full-rewrite playbook (when `edit_note` won't do)
 
-Reach for `overwrite_note` only when the change is structural (reordering sections, generating from a template). It replaces the entire note, so:
+Reach for `overwrite_note` only when the change is structural (reordering sections, generating from a template). Without `address` it replaces the entire note; with `address` it replaces one section — its heading and everything nested under it — so the content must start with a same-level heading (address the section's `preamble` to replace only the body). Either way:
 
 ```
-# 1. Read — metadata response always includes contentHash
-{ contentHash } = mcp__plugin_bear-mcp_bear__get_note(id=ID)
+# 1. Read — read_note_content returns the hash (get_note does not)
+{ hash } = mcp__plugin_bear-mcp_bear__read_note_content(id=ID)            # whole note
+{ hash } = mcp__plugin_bear-mcp_bear__read_note_content(id=ID, address=A) # one section
 
-# 2. Write with baseHash — fails if note changed since
+# 2. Write with baseHash — fails if the target changed since
 mcp__plugin_bear-mcp_bear__overwrite_note(
   id=ID,
-  baseHash=contentHash,
+  baseHash=hash,
   content=f"# {title}\n\n{body}\n\n{inline_tags}",
 )
+mcp__plugin_bear-mcp_bear__overwrite_note(id=ID, address=A, baseHash=hash, content="## Tasks\n- [ ] new\n")
 ```
 
 **Mandatory invariants when rebuilding content:**
@@ -134,7 +137,8 @@ MCP **requires** `baseHash` — you can't silently clobber. (The CLI lets you om
 ## Create a new note
 
 ```
-{ id, contentHash } = mcp__plugin_bear-mcp_bear__create_note(
+# Returns metadata + stored content, but no hash
+{ id } = mcp__plugin_bear-mcp_bear__create_note(
   title="Note title",
   content="Body",
   tags=["work", "draft"],
@@ -157,6 +161,7 @@ Tags are inserted at Bear's configured top-or-bottom position; inline `#hashtag`
 | Trash (soft-delete, restorable) | `mcp__plugin_bear-mcp_bear__trash_note` |
 | Restore from trash/archive | `mcp__plugin_bear-mcp_bear__restore_note` |
 | Open in Bear UI (steals focus — avoid unless user asked) | `mcp__plugin_bear-mcp_bear__app_open_note` |
+| What the user has selected in Bear ("this", "what I highlighted") | `mcp__plugin_bear-mcp_bear__app_get_selection` — returns the selection plus the note's id and metadata |
 | Append text to end of note | `mcp__plugin_bear-mcp_bear__append_to_note` |
 | Attachments: list / delete / add from an HTTPS URL | `mcp__plugin_bear-mcp_bear__list_attachments`, `delete_attachment`, `add_attachment_from_url` — reading attachment bytes has no MCP tool; use `bearcli attachments save` ([`references/cli.md`](references/cli.md)) |
 
@@ -205,7 +210,7 @@ Pass `includeContent: true` on either to also pull each note's raw Markdown body
 
 | # | Failure | Mitigation |
 |---|---|---|
-| 1 | **Concurrent clobber risk** | MCP `overwrite_note` requires `baseHash` — pass it from a recent `get_note`. Stale hash → call fails with "Note has changed since last read" |
+| 1 | **Concurrent clobber risk** | MCP `overwrite_note` requires `baseHash` — pass the `hash` from a recent `read_note_content` (`get_note` returns none). Stale hash → call fails with "Note has changed since last read" |
 | 2 | **Ambiguous `find`** | Add surrounding context, or pass `all: true` (+ `word: true` for whole-word) |
 | 3 | **Find string missing** | `search_in_note` first to confirm presence |
 | 4 | **Attachment-removal gate** | `edit_note`/`overwrite_note` refuses to drop inline attachment links. Preserve them, or declare the intended drops via `expectedRemovedAttachments: ["name.ext", ...]`. For pure deletes prefer `delete_attachment` |
