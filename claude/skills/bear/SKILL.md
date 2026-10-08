@@ -103,7 +103,8 @@ mcp__plugin_bear-mcp_bear__edit_note(id=ID, edits=[{ find: "task", replace: "TAS
 **Properties — same as Claude Code's `Edit`:**
 - Default rejects ambiguous matches: error names N locations → add context to `find` or pass `all: true`.
 - Default rejects missing matches: edit fails atomically, note untouched.
-- Over MCP, put real newlines in the JSON strings (`\n` in JSON). The CLI's `--find`/`--replace`/`--insert-*` flags interpret `\n \t \r \\`; whether the MCP server also unescapes a literal backslash-n is unverified.
+- Over MCP, put real newlines in the JSON strings (`\n` in JSON). The CLI's `--find`/`--replace`/`--insert-*` flags interpret `\n \t \r \\`; the MCP server does **not** — a JSON `"\\n"` (literal backslash-n) is stored as those two characters (probed 2026-10-08).
+- `insertAfter` / `insertBefore` add no separator: inserting `"LINE1"` after `ANCHOR` gives `ANCHORLINE1`. Put the newline in the inserted text.
 - The CLI names the section flag `--section`; over MCP it is `address`. Mixing them up is how a `section=` guess happens.
 - `edit_note` returns only the metadata fields that changed — inspect the response to catch unintended drops (e.g. a tag).
 
@@ -183,7 +184,7 @@ Pass `includeContent: true` on either to also pull each note's raw Markdown body
 
 | Category | Operators |
 |---|---|
-| Text | `keyword`, `"exact phrase"`, `word1 or word2`, `-negation` |
+| Text | `keyword`, `"exact phrase"`, `word1 or word2` (OR; a space means AND), `-negation`. Terms match substrings, so `or` also matches inside "ANCHOR" — test with a term that cannot occur |
 | Tags | `#tag` (incl. children), `!#tag` (exact, no children), `#*/tag` (children only) |
 | Modified | `@today`, `@yesterday`, `@lastNdays`, `@date(YYYY-MM-DD)`, `@date(<2026-01-01)` |
 | Created | `@ctoday`, `@createdNdays`, `@cdate(YYYY-MM-DD)` |
@@ -215,7 +216,7 @@ Pass `includeContent: true` on either to also pull each note's raw Markdown body
 | 3 | **Find string missing** | `search_in_note` first to confirm presence |
 | 4 | **Attachment-removal gate** | `edit_note`/`overwrite_note` refuses to drop inline attachment links. Preserve them, or declare the intended drops via `expectedRemovedAttachments: ["name.ext", ...]`. For pure deletes prefer `delete_attachment` |
 | 5 | **`overwrite_note` strips title/tags** | Title regenerates from first `# heading`; missing inline `#tag` lines drop tags. Re-include both in new content |
-| 6 | **Note lookup miss** | Resolve via `search_notes` if title fuzzy. Trash/archive lookups need ID, not title |
+| 6 | **Note lookup miss** | Resolve via `search_notes` if title fuzzy. Title lookup searches active notes only: for an archived or trashed note, `get_note`, `restore_note` and the rest fail with `note_not_found … use the note ID for trash/archive` — pass `id` (probed 2026-10-08). Find the id with `search_notes(query="@title \"…\"", location="trash", limit=5)` (or `location="archive"`) |
 | 7 | **Encrypted note** | Reads return metadata only; edit/overwrite refuse. Filter `locked` from list results before bulk ops |
 | 8 | **MCP tools missing from tool list** | They are deferred first: `ToolSearch("bear")` waits for a still-connecting server. If still absent, check `enabledPlugins` in `~/.claude/settings.json` has `"bear-mcp@productivity-tools": true`, then restart Claude Code. As a one-off, you can boot manually via `bearcli mcp-server` |
 | 9 | **Full Disk Access** | Reads from a fresh terminal app fail opaquely. Grant Full Disk Access in System Settings → Privacy & Security |
