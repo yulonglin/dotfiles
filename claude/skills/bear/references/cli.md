@@ -25,8 +25,7 @@ Mirrors how `Edit` works on source files.
 
 ```bash
 # 1. Read — capture hash for later concurrency check
-bearcli show "$ID" --format json --fields content,hash > /tmp/note.json
-HASH=$(jq -r .hash /tmp/note.json)
+HASH=$(bearcli cat "$ID" --format json | jq -r .hash)   # `show` has no hash field
 
 # 2. Edit — anchored find/replace, must match a unique location
 bearcli edit "$ID" --find "## Notes\n\n- old bullet" \
@@ -49,7 +48,7 @@ bearcli edit "$ID" --find "task" --replace "TASK" --all --word
 - Default rejects ambiguous matches: `Error: String matches N locations …` → add context or pass `--all`.
 - Default rejects missing matches: edit fails, note untouched.
 - Escape sequences `\n \t \r \\` are interpreted in `--find` / `--replace` / `--insert-*` (text flags) but **not** in stdin.
-- `edit` is **silent on success** — exit code is the signal. Re-read with `show --fields content` if you need to verify.
+- `edit` is **silent on success** — exit code is the signal. Re-read with `bearcli cat "$ID"` if you need to verify.
 
 **Locate before editing** when you're unsure:
 
@@ -63,7 +62,7 @@ Reach for `overwrite` only when the change is structural (reordering sections, g
 
 ```bash
 # 1. Read hash
-HASH=$(bearcli show "$ID" --format json --fields hash | jq -r .hash)
+HASH=$(bearcli cat "$ID" --format json | jq -r .hash)   # reading is the only source of a hash
 
 # 2. Write with --base — fails (exit 1) if note changed since
 printf '# %s\n\n%s\n\n%s' "$TITLE" "$BODY" "$INLINE_TAGS" \
@@ -80,7 +79,7 @@ Without `--base`, `overwrite` is an unconditional clobber — verified empirical
 ## Create a new note
 
 ```bash
-# Returns {id,title,tags}; add --fields id,hash for follow-up edits
+# Returns {id,title,tags}; no hash — run `bearcli cat --format json` before an overwrite
 ID=$(bearcli create "Note title" --content "Body" --tags "work,draft" \
        --format json --fields id | jq -r .id)
 
