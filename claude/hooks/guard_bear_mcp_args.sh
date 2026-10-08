@@ -54,9 +54,10 @@ done
 
 if [[ $name == search_notes || $name == list_notes ]]; then
     cap=$(print -r -- "$input" | jq -r --argjson max $MAX --argjson maxc $MAX_CONTENT '
-        (.tool_input.limit | if . == null then null else (tonumber? // null) end) as $n
+        .tool_input.limit as $n
         | (.tool_input.includeContent == true) as $c
         | if $n == null then "limit is unset; pass limit <= \($max) (0 returns only the count)"
+          elif ($n | type) != "number" or ($n | floor) != $n then "limit is \($n | tojson); pass an integer limit <= \($max)"
           elif $n < 0 or $n > $max then "limit is \($n); pass limit <= \($max)"
           elif $c and $n > $maxc then "includeContent with limit \($n); pass limit <= \($maxc) when pulling note bodies"
           else "" end' 2>/dev/null) || exit 0

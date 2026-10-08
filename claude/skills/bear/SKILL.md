@@ -160,7 +160,7 @@ Tags are inserted at Bear's configured top-or-bottom position; inline `#hashtag`
 | Append text to end of note | `mcp__plugin_bear-mcp_bear__append_to_note` |
 | Attachments: list / delete / add from an HTTPS URL | `mcp__plugin_bear-mcp_bear__list_attachments`, `delete_attachment`, `add_attachment_from_url` — reading attachment bytes has no MCP tool; use `bearcli attachments save` ([`references/cli.md`](references/cli.md)) |
 
-`rename_tag` with `force: true` MERGES tags irreversibly — check both populations first via `list_notes(tag=...)`.
+`rename_tag` with `force: true` MERGES tags irreversibly — check both populations first via `list_notes(tag=..., limit=0)` (counts only).
 
 ## Search
 
@@ -169,9 +169,9 @@ Tags are inserted at Bear's configured top-or-bottom position; inline `#hashtag`
 **Always pass `limit`** (at most 10; `limit: 0` returns only the count). Without it every match comes back: loose words like `working with me` matched 98 notes on 2026-10-08 when the lookup needed one title. **To find a note by name, search the title for an exact phrase** — `query="@title \"work-with-me\""` — not common words that recur in note bodies. A sweep across many notes belongs in a subagent (`rules/delegation.md`).
 
 ```
-mcp__plugin_bear-mcp_bear__search_notes(query="@today @todo meeting -cancelled")
+mcp__plugin_bear-mcp_bear__search_notes(query="@today @todo meeting -cancelled", limit=10)
 mcp__plugin_bear-mcp_bear__search_notes(query="@title Mars", limit=5)
-mcp__plugin_bear-mcp_bear__list_notes(tag="work", sort="modified:desc", limit=20)
+mcp__plugin_bear-mcp_bear__list_notes(tag="work", sort="modified:desc", limit=10)
 ```
 
 Pass `includeContent: true` on either to also pull each note's raw Markdown body (excludes locked notes).
@@ -235,11 +235,11 @@ Bear's own FAQ omits the colour encoding, so Yulong's copied-from-Bear examples 
 
 **Nothing separates the colour emoji from the text it marks** — `==🔴not recorded==`, never `==🔴 not recorded==`. The dot is a marker glued to the front of the span, not a word inside it, and a stray space renders as a gap in the highlight. This holds for every colour, not only 🔴.
 
-**Wikilinks are how the vault cross-references itself.** A link to another note is `[[Note Title]]`, and it resolves by **title**, not by ID — the same title lookup the rest of this skill uses, so it is case-insensitive and matches the note's first `# Heading` (Bear derives the title from that line). `search_notes(query="@wikilinks")` finds notes that contain one and `@backlinks` finds notes that are linked to, so both are searchable state, not decoration.
+**Wikilinks are how the vault cross-references itself.** A link to another note is `[[Note Title]]`, and it resolves by **title**, not by ID — the same title lookup the rest of this skill uses, so it is case-insensitive and matches the note's first `# Heading` (Bear derives the title from that line). `search_notes(query="@wikilinks", limit=10)` finds notes that contain one and `@backlinks` finds notes that are linked to, so both are searchable state, not decoration.
 
 Two consequences for editing:
 
-- **`overwrite_note` that changes the first `# Heading` changes the note's title, and therefore what every inbound `[[...]]` was pointing at.** Before rewriting a heading, run `search_notes(query="@wikilinks")` plus the old title to see who links in. This skill does not document whether Bear repairs those links itself — check the affected notes rather than assuming either way.
+- **`overwrite_note` that changes the first `# Heading` changes the note's title, and therefore what every inbound `[[...]]` was pointing at.** Before rewriting a heading, run `search_notes(query="@wikilinks \"Old Title\"", limit=10)` to see who links in. This skill does not document whether Bear repairs those links itself — check the affected notes rather than assuming either way.
 - `[[Note Title]]` is a `find` anchor like any other string, so `edit_note` can retarget links in bulk (`{ find: "[[Old Title]]", replace: "[[New Title]]", all: true }`).
 
 As with `==` and `~text~`, `[[...]]` does not link in files that render as plain GitHub Markdown.

@@ -41,6 +41,12 @@ test_case "search_notes limit 50" \
 test_case "search_notes includeContent with limit 10" \
     '{"tool_name":"'${B}'search_notes","tool_input":{"query":"x","limit":10,"includeContent":true}}' 2
 
+test_case "search_notes limit as a string" \
+    '{"tool_name":"'${B}'search_notes","tool_input":{"query":"x","limit":"5"}}' 2
+
+test_case "search_notes fractional limit" \
+    '{"tool_name":"'${B}'search_notes","tool_input":{"query":"x","limit":1.5}}' 2
+
 test_case "list_notes with no limit" \
     '{"tool_name":"'${B}'list_notes","tool_input":{"tag":"wen"}}' 2
 
