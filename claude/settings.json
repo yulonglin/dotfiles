@@ -475,6 +475,16 @@
         ]
       },
       {
+        "matcher": "mcp__plugin_bear-mcp_bear__(get_note|read_note_content|read_note_outline|search_in_note|search_notes|list_notes|edit_note|overwrite_note|append_to_note|create_note)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "zsh $HOME/.claude/hooks/guard_bear_mcp_args.sh",
+            "timeout": 3
+          }
+        ]
+      },
+      {
         "matcher": "EnterPlanMode",
         "hooks": [
           {
