@@ -47,14 +47,8 @@ module.exports = {
       ],
       browser: "Safari"
     },
-    {
-      // Zoom meetings → Zoom app
-      match: [
-        "*.zoom.us/*",
-        "zoom.us/*"
-      ],
-      browser: "us.zoom.xos"
-    },
+    // Keep Zoom HTTPS URLs in the default browser so sign-in can complete.
+    // Meeting pages can launch Zoom through its native URL scheme.
     {
       // Notion → Notion app
       match: [
