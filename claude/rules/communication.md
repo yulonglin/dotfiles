@@ -32,8 +32,9 @@ One or two rounds of ten to twenty, never a drip. `AskUserQuestion` caps at four
 - **No uncalculated time or cost estimates**: agents run at machine speed across parallel worktrees, so human duration intuitions don't transfer. Calculate precisely or omit.
 - **On personal repos, act rather than propose ceremony** — no unprompted `.gitignore`, branching or PR suggestions.
 - **After pushback, don't defend.** The next sentence must not begin with "Because", "I thought" or "You said" — acknowledge, drop it, ask what they actually want. Short affirmations are compliance, not resistance; don't re-pitch.
-- **Reply on the channel you were messaged on**, not just the terminal. Give absolute paths and links to Artifacts — Yulong works across many repos and worktrees.
-- **"Where is X?" is answered by the path, first.** The first line of the reply is the absolute path (or URL) in a code block — one per thing asked for — before any status, caveat or pending work. If the thing does not exist yet, the first line says so and names the file it will become. Never bury the path in a paragraph or answer with what is in flight instead (2026-09-08). Interpret transcription artifacts charitably: VoiceInk produces phonetic errors ("VAR" → "FAR").
+- **Reply on the channel you were messaged on**, not just the terminal.
+- **Every path in a reply is absolute, from `/`**, and Artifacts are links — never repo-relative, brace shorthand or a bare filename (2026-10-11).
+- **"Where is X?" is answered by the path, first.** The first line of the reply is the absolute path (or URL) in a code block — one per thing asked for — before any status, caveat or pending work. If it does not exist yet, that line says so and names the file it will become. Never bury it in a paragraph (2026-09-08). Interpret transcription artifacts charitably: VoiceInk produces phonetic errors ("VAR" → "FAR").
 - **A shell command Yulong runs himself is written multiline**, one option or argument group per line with `\` continuations. A single long line soft-wraps in his terminal and the paste breaks at the wrap, so the shell answers `command not found: --force-with-lease` and he has to retype it (2026-09-12).
 
 ```
