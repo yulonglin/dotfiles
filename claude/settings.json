@@ -156,7 +156,10 @@
       "Bash(* | node -)",
       "Bash(* | node - *)"
     ],
-    "ask": [],
+    "ask": [
+      "Bash(claude rm *--discard-unpushed*)",
+      "Bash(claude rm *--force-remove-worktree*)"
+    ],
     "defaultMode": "auto"
   },
   "modelPicker": {
@@ -998,6 +1001,5 @@
     "enabled": true
   },
   "installMethod": "native",
-  "mcpServers": {},
-  "crossSessionInbound": "accept"
+  "mcpServers": {}
 }
