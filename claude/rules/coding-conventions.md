@@ -10,7 +10,7 @@ Invoke via `uv run` (`--no-sync` when deps are unchanged); read `.eval` logs wit
 
 **Parallelize embarrassingly parallel loops by default** — background N independent iterations and wait (`asyncio.gather`, `Promise.all`, `cmd & … wait`). Sequential only for real ordering dependencies, shared mutable state, or OS-level exclusivity.
 
-**Deliver as commit → push → PR → review → merge.** A pushed branch gets a draft PR from the `pr_after_push` hook; review it, then merge it yourself when it is simple (docs, rules, one file, tests green, nothing under settings, hooks or secrets), else ask.
+**Deliver as commit → push → PR → review → merge.** A pushed branch gets a draft PR from the `pr_after_push` hook; review it, then merge it yourself when it is simple (docs, rules, one file, tests green, nothing under settings, hooks or secrets), else ask. **Review is 1–2 rounds per change, then merge.** Must-fix means it changes real outputs (a label, a reported number, what a user or monitor sees) or is a real security risk, shown on real data; an attack the reviewer constructs is a follow-up, listed in the PR. Never let merges block getting results (2026-10-07: five review rounds on one PR moved no result).
 
 **Shell scripts are zsh** (`#!/usr/bin/env zsh`): it is modern on every target without Homebrew, which bash 5 is not on a Mac. Existing bash scripts convert when touched, not en masse; the cloud bootstrap stays bash because it is what installs zsh. `shellcheck` bash files before committing; it cannot parse zsh, so a zsh file gets `zsh -n` (the pre-commit hook runs it) and never a `# shellcheck shell=bash` line, which only lies to the linter. The idioms that differ, because agents default to bash:
 
