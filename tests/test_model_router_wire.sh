@@ -147,11 +147,23 @@ PY
 if "$WIRE" apply --check --install >"$WORK/check3.txt" 2>&1; then fail "--check --install was accepted"; fi
 grep -q 'cannot run with --check' "$WORK/check3.txt" || fail "--check --install did not explain the refusal: $(cat "$WORK/check3.txt")"
 
-# A failed sudo leaves the gateway in the user file, so no session loses it.
-out="$(SUDO_FAIL=1 "$WIRE" apply --install --no-restart </dev/null)"
+# A failed sudo fails closed: nonzero exit, and the user file keeps the gateway
+# it already carried but is never given one it did not have.
+if out="$(SUDO_FAIL=1 "$WIRE" apply --install --no-restart </dev/null)"; then fail "a failed --install exited 0"; fi
 printf '%s' "$out" | grep -q -- '--install: .* failed' || fail "a failed sudo step was not reported: $out"
 has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL || fail "a failed --install stripped the user file anyway"
 [ -f "$MODEL_ROUTER_MANAGED" ] && fail "a failed sudo step left a drop-in behind"
+cp "$CLAUDE_SETTINGS" "$WORK/carrying.json"
+python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+for k in ("ANTHROPIC_BASE_URL", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL"): d["env"].pop(k, None)
+json.dump(d, open(p, "w"))
+PY
+if SUDO_FAIL=1 "$WIRE" apply --install --no-restart </dev/null >/dev/null; then fail "a failed --install on a clean user file exited 0"; fi
+has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL && fail "a failed --install wrote the router token into a clean user file"
+has_key "$CLAUDE_SETTINGS" _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL && fail "a failed --install wrote the first-party flag into a clean user file"
+cp "$WORK/carrying.json" "$CLAUDE_SETTINGS"
 
 : >"$SUDO_LOG"
 out="$("$WIRE" apply --install --no-restart </dev/null)"

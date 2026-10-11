@@ -207,9 +207,16 @@ show_component_menu deploy
 # The model-router gateway drop-in is root-owned, so the Claude step needs sudo
 # only where the router is installed and `model-router-wire apply --check`
 # reports drift (a missing or stale drop-in, or anything else it renders).
+# Wanted only where the router is installed AND the gateway is on: `apply` writes
+# the staged drop-in and `model-router-wire off` deletes it, so a machine turned
+# off on purpose is never wired back by a deploy.
+_router_gateway_wanted() {
+    [[ -f "$HOME/.local/state/model-router/ingress-token" \
+        && -f "${MODEL_ROUTER_STAGED:-$HOME/.config/model-router/managed-settings.json}" \
+        && -x "$DOT_DIR/custom_bins/model-router-wire" ]]
+}
 _router_dropin_needs_sudo() {
-    [[ "${DEPLOY_CLAUDE:-false}" == "true" && -f "$HOME/.local/state/model-router/ingress-token" \
-        && -x "$DOT_DIR/custom_bins/model-router-wire" ]] || return 1
+    [[ "${DEPLOY_CLAUDE:-false}" == "true" ]] && _router_gateway_wanted || return 1
     ! "$DOT_DIR/custom_bins/model-router-wire" apply --check >/dev/null 2>&1
 }
 
@@ -937,14 +944,15 @@ else:
 
         # Model-router gateway: the router token belongs in the root-owned
         # managed drop-in, never in the symlinked (public) settings.json. Only
-        # where the router is installed; a first deploy usually precedes the
-        # plugin's router setup, and the SessionStart nudge in
-        # check_model_router_update.py covers that machine until the next deploy.
-        # `apply --install` with no terminal runs `sudo -n` on the credentials
-        # front_load_sudo cached, so it never hangs; success is judged by a
-        # fresh --check, since apply reports a failed sudo step but exits 0.
+        # where the router is installed and its gateway is on (see
+        # _router_gateway_wanted); a first deploy usually precedes the plugin's
+        # router setup, and the SessionStart nudge in check_model_router_update.py
+        # covers that machine until the next deploy. `apply --install` with no
+        # terminal runs `sudo -n` on the credentials front_load_sudo cached, so it
+        # never hangs; a failed install exits nonzero without writing the token
+        # into settings.json, and success is judged by a fresh --check.
         wire="$DOT_DIR/custom_bins/model-router-wire"
-        if [[ -f "$HOME/.local/state/model-router/ingress-token" && -x "$wire" ]]; then
+        if _router_gateway_wanted; then
             if "$wire" apply --check >/dev/null 2>&1; then
                 log_info "Model router: gateway drop-in and rendered files are current"
             elif [[ $EUID -eq 0 ]] || sudo -n true 2>/dev/null; then

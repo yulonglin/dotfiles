@@ -214,8 +214,11 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertIsNone(nudge())
         managed.write_text(json.dumps({"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:1/t/stale"}}))
         self.assertIn("differs from the last render", nudge())
-        # Gateway turned off on purpose: no drop-in, no keys, router still installed.
+        # Staged but never installed (a failed --install, which writes no keys).
         managed.unlink()
+        self.assertIn("staged but its drop-in is not installed", nudge())
+        # Gateway turned off on purpose: `off` deletes the staged file too.
+        staged.unlink()
         self.assertIsNone(nudge())
         (self.state / "ingress-token").unlink()
         self.settings.write_text(json.dumps(render))
