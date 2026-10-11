@@ -56,6 +56,31 @@ Hooks for automating task and agent management workflows.
 - Blocks tool call when `AUTO_AGENT_DEPTH >= AUTO_AGENT_MAX_DEPTH`.
 - Intended to cap recursive delegation chains.
 
+### advisor_seen.py / nudge_advisor_skipped.py
+
+**Purpose:** Catch a session that changed real files and never consulted the advisor — the stronger reviewer that reads the whole transcript.
+
+**Behavior:**
+- `advisor_seen.py` (`PostToolUse`, matcher `advisor`) writes `~/.cache/claude-advisor/seen-<session_id>`. It exists because an `advisor()` call leaves **no** `tool_use` or `tool_result` row in the transcript (measured 2026-09-20); only the availability attachment `advisor_tool` is recorded, so a marker is the only usable channel.
+- `nudge_advisor_skipped.py` (`Stop`) blocks once, with `{"decision":"block"}`, when the transcript says the advisor tool was available, no marker says it was called, and the session did substantive work — three or more file-modifying operations, or a `git commit` plus at least two. `Write`/`Edit`/`NotebookEdit` and Bash edits (`sed -i`, `tee`, `cat >`, heredoc writes) both count, since auto mode edits through Bash; a plain output redirect does not.
+- One-shot: the guard file is written **before** the block, so the retry always passes and no session can be trapped. Silent on a small session, a withdrawn advisor tool, a missing transcript or garbage input.
+- The before-work leg of the advisor contract is deliberately unenforced — no event can observe it without firing on trivial turns. Detail and the unverified part of the design: `.claude/rules/dotfiles-settings.md`.
+- Flag: `nudges.advisor-skipped` (on explicitly, since the `nudges` family is off).
+
+**Tests:** `tests/test_advisor_skipped.py`.
+
+### pr_after_push.sh / pr_body_model.py
+
+**Purpose:** After a successful push of a non-default branch, open a draft PR that a reviewer can actually read.
+
+**Behavior:**
+- `pr_after_push.sh` (`PostToolUse`, `Bash`) opens the draft PR when the branch has none, and injects the review-then-merge-if-simple instruction. Silent on a non-push, a failed push, a delete, a tags-only push, a push of `main`, or with no `gh`.
+- `pr_body_model.py` writes the body with an OpenAI model (`astra`, falling back to `sol`) through the model-router gateway: motivation, implementation with the files and symbols touched, the tests the **session transcript** shows were run with their output, and a Mermaid diagram only when the change has interacting parts. The prompt forbids inventing a test result; with no test runs in the transcript the model must say so. The body ends with a line naming the model that wrote it.
+- **The PR never depends on the gateway.** No ingress token, a stopped router, an HTTP error or a slow answer all fall back to `gh pr create --fill`, and the hook's message says which body the PR got. The call is synchronous, so a push waits for it — hence `"timeout": 90` on this hook in `settings.json` against a **total** 60 s budget in the generator, shared across both model attempts so the two can never outlast the hook itself.
+- Flags: `git.pr-after-push`, and `git.pr-after-push.model-body` for the body alone.
+
+**Tests:** `tests/test_pr_after_push.sh` (a fake router stands in for the gateway; the refusing and absent cases are asserted, not just the happy one).
+
 ### simplify_mark_dirty.sh / simplify_track_reuse.py / simplify_nudge.sh
 
 **Purpose:** Suggest a `/simplify` pass when the session produced work worth one. Two independent signals feed one `Stop` message; both are soft nudges (`systemMessage`) that never continue the turn.
