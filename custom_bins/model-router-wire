@@ -457,9 +457,13 @@ def cmd_apply(args: argparse.Namespace) -> int:
         p.unlink()
     # --install runs the sudo step here, between staging and the user-file write,
     # so one apply both installs the drop-in and strips the keys it now carries.
+    # A failed install fails closed: the token is never newly written into the
+    # public user file, which keeps whatever gateway URL it already carried.
+    install_failed = False
     if args.install and not installed:
         installed = install_managed() and managed_installed(want_managed)
-        want_user = render_user(src, settings, None if installed else base_url)
+        install_failed = not installed
+        want_user = render_user(src, settings, None if installed else settings.get("env", {}).get("ANTHROPIC_BASE_URL"))
     rows = [canonical(m) for m in enabled(src) if m.get("picker", True)]
     print(f"routes:  {', '.join(rid for m in routed(enabled(src)) for rid in ids(m))}")
     print(f"picker:  {', '.join(rows) or 'none'}")
@@ -480,12 +484,15 @@ def cmd_apply(args: argparse.Namespace) -> int:
     else:
         print(f"managed drop-in {'differs from the staged file' if MANAGED.exists() else 'not installed'}. Install it as root, or rerun with --install to have this command do it:")
         print(f"  {sudo_install_line()}")
-        print(f"until then the gateway stays in {SETTINGS} and everything works as it does today; rerun `model-router-wire apply` after the sudo step to strip it")
+        if install_failed:
+            print(f"--install failed, so {SETTINGS} was not given the gateway keys; sessions here stay off the gateway until the line above is run")
+        else:
+            print(f"until then the gateway stays in {SETTINGS} and everything works as it does today; rerun `model-router-wire apply` after the sudo step to strip it")
         print("after installing, start a fresh session and check /status names 'Enterprise managed settings (drop-ins)' -- or '(file + drop-ins)' if a managed-settings.json sits beside it -- and /model lists the routed rows")
     print("restart Claude Code sessions to see the rows")
     if args.no_restart:
-        return 0
-    return restart_and_report()
+        return 1 if install_failed else 0
+    return restart_and_report() or (1 if install_failed else 0)
 
 
 def cmd_off(_: argparse.Namespace) -> int:

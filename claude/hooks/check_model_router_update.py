@@ -58,20 +58,24 @@ def drop_in_nudge(home, env):
     of the user settings file, where the pre-commit guard would hold that file
     back from every commit. Setup order varies by machine (the router comes from
     the plugin after deploy.sh), so the session is the one place sure to see it.
-    A router whose gateway was turned off (`model-router-wire off`) stays silent."""
+    A router whose gateway was turned off (`model-router-wire off`, which deletes
+    the staged file `apply` writes) stays silent."""
     try:
         if not (home / ".local/state/model-router/ingress-token").is_file():
             return None
         user_env = read_json(home / ".claude/settings.json").get("env", {})
         in_user = isinstance(user_env, dict) and any(k in user_env for k in GATEWAY_ENV)
         drop_in = managed_path(env)
-        if not drop_in.exists():
-            if not in_user:
-                return None
-            return ("Model router: the gateway drop-in is not installed, so the router token sits in"
-                    " ~/.claude/settings.json and the pre-commit guard holds that file back."
-                    " Run `model-router-wire apply --install` once (it asks for sudo).")
         staged = read_json(Path(env.get("MODEL_ROUTER_STAGED") or home / ".config/model-router/managed-settings.json"))
+        if not drop_in.exists():
+            if in_user:
+                return ("Model router: the gateway drop-in is not installed, so the router token sits in"
+                        " ~/.claude/settings.json and the pre-commit guard holds that file back."
+                        " Run `model-router-wire apply --install` once (it asks for sudo).")
+            if staged:
+                return ("Model router: the gateway is staged but its drop-in is not installed, so sessions here"
+                        " bypass the router. Run `model-router-wire apply --install` once (it asks for sudo).")
+            return None
         if staged and read_json(drop_in) != staged:
             return ("Model router: the gateway drop-in at " + str(drop_in) + " differs from the last render;"
                     " run `model-router-wire apply --install`.")
