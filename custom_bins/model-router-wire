@@ -6,7 +6,7 @@
 
 One source, three outputs, one command:
 
-  model-router-wire apply [--check] [--no-restart]
+  model-router-wire apply [--check] [--no-restart] [--install]
       config/model-router.toml  ->  ~/.config/model-router/config.toml (routes)
                                 ->  ~/.config/model-router/managed-settings.json
                                     (staged: the two gateway env keys, nothing else)
@@ -16,6 +16,8 @@ One source, three outputs, one command:
                                 ->  claude/agents/<id>.md (generated, marked)
       then `service restart` and a doctor summary. --check renders in memory and
       exits 1 if any output differs from what is on disk (nothing written).
+      --install also runs the sudo step below and strips the user file in the
+      same pass (sudo -n without a terminal, so it never hangs a deploy).
   model-router-wire off
       strip the gateway keys from ~/.claude/settings.json, drop the staged file
       and print the sudo line that removes the managed one (direct Anthropic
@@ -53,6 +55,7 @@ import os
 import platform
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -298,9 +301,35 @@ def managed_installed(want: dict) -> bool:
         return False
 
 
+def install_cmds(prefix: list[str]) -> list[list[str]]:
+    return [prefix + ["install", "-d", "-m", "0755", str(MANAGED.parent)],
+            prefix + ["install", "-m", "0644", "-o", "root", "-g", ROOT_GROUP, str(STAGED), str(MANAGED)]]
+
+
 def sudo_install_line() -> str:
-    q = shlex.quote
-    return f"sudo install -d -m 0755 {q(str(MANAGED.parent))} && sudo install -m 0644 -o root -g {ROOT_GROUP} {q(str(STAGED))} {q(str(MANAGED))}"
+    # Derived from the argv --install runs, so the printed line and the run one cannot drift.
+    return " && ".join(shlex.join(c) for c in install_cmds(["sudo"]))
+
+
+def install_managed() -> bool:
+    """The sudo step, for `apply --install`. On a terminal sudo may prompt; with no
+    terminal it runs `sudo -n`, which uses cached credentials or fails at once
+    rather than hanging an unattended deploy. MODEL_ROUTER_SUDO swaps the sudo
+    binary (tests point it at a stub)."""
+    override = os.environ.get("MODEL_ROUTER_SUDO")
+    if override is None and os.geteuid() == 0:
+        prefix: list[str] = []
+    else:
+        sudo = override or shutil.which("sudo")
+        if not sudo:
+            print("--install: no sudo on PATH; run the line below as root")
+            return False
+        prefix = [sudo] + ([] if sys.stdin.isatty() else ["-n"])
+    for cmd in install_cmds(prefix):
+        if subprocess.run(cmd, check=False).returncode != 0:
+            print(f"--install: `{shlex.join(cmd)}` failed" + ("" if sys.stdin.isatty() else " (no terminal, so sudo needed cached credentials)"))
+            return False
+    return True
 
 
 def sudo_remove_line() -> str:
@@ -378,6 +407,8 @@ def known_base_url(settings: dict) -> str | None:
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
+    if args.check and args.install:
+        sys.exit("--install writes the managed drop-in, so it cannot run with --check")
     src = load_source()
     settings = load_settings()
     known = known_base_url(settings)
@@ -394,7 +425,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if not ROUTER_CONFIG.exists() or ROUTER_CONFIG.read_text() != want_router:
         drift.append(str(ROUTER_CONFIG))
     if not installed:
-        drift.append(f"{MANAGED} ({'differs from the rendered drop-in' if MANAGED.exists() else 'not installed'}; run: model-router-wire apply, then the sudo line it prints)")
+        drift.append(f"{MANAGED} ({'differs from the rendered drop-in' if MANAGED.exists() else 'not installed'}; run: model-router-wire apply --install)")
     # Parsed dicts, not bytes: want_user is a copy of the live file with only this
     # command's keys rewritten, so Claude Code's own serializer and any key it
     # added since are invisible here.
@@ -424,6 +455,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
         p.write_text(text)
     for p in stale_agents:
         p.unlink()
+    # --install runs the sudo step here, between staging and the user-file write,
+    # so one apply both installs the drop-in and strips the keys it now carries.
+    if args.install and not installed:
+        installed = install_managed() and managed_installed(want_managed)
+        want_user = render_user(src, settings, None if installed else base_url)
     rows = [canonical(m) for m in enabled(src) if m.get("picker", True)]
     print(f"routes:  {', '.join(rid for m in routed(enabled(src)) for rid in ids(m))}")
     print(f"picker:  {', '.join(rows) or 'none'}")
@@ -442,7 +478,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         print(f"managed drop-in matches; removed {', '.join(gone)} from {SETTINGS} (it is committable again)" if gone
               else f"managed drop-in {MANAGED} is current")
     else:
-        print(f"managed drop-in {'differs from the staged file' if MANAGED.exists() else 'not installed'}. Install it as root:")
+        print(f"managed drop-in {'differs from the staged file' if MANAGED.exists() else 'not installed'}. Install it as root, or rerun with --install to have this command do it:")
         print(f"  {sudo_install_line()}")
         print(f"until then the gateway stays in {SETTINGS} and everything works as it does today; rerun `model-router-wire apply` after the sudo step to strip it")
         print("after installing, start a fresh session and check /status names 'Enterprise managed settings (drop-ins)' -- or '(file + drop-ins)' if a managed-settings.json sits beside it -- and /model lists the routed rows")
@@ -488,7 +524,7 @@ def cmd_status(_: argparse.Namespace) -> int:
     if managed_url and user_carries_gateway(settings):
         print(f"WARNING:  {SETTINGS} still carries the gateway keys as well as the drop-in (not committable); rerun `model-router-wire apply` to strip them")
     elif user_carries_gateway(settings):
-        print(f"note:     the gateway is in {SETTINGS}, the arrangement before the drop-in; the pre-commit guard holds that file back until the sudo step below is run")
+        print(f"note:     the gateway is in {SETTINGS}, the arrangement before the drop-in; the pre-commit guard holds that file back until `model-router-wire apply --install` moves it into the drop-in")
     if SOURCE.exists():
         src = load_source()
         print(f"routes:   {', '.join(rid for m in routed(enabled(src)) for rid in ids(m))}")
@@ -496,7 +532,7 @@ def cmd_status(_: argparse.Namespace) -> int:
         if off:
             print(f"disabled: {', '.join(off)}")
         print(f"agents:   {', '.join(p.name for p in generated_agent_files()) or 'none generated'}")
-    ns = argparse.Namespace(check=True, no_restart=True)
+    ns = argparse.Namespace(check=True, no_restart=True, install=False)
     return cmd_apply(ns) if SOURCE.exists() else 0
 
 
@@ -506,6 +542,7 @@ def main() -> int:
     ap = sub.add_parser("apply", help="render the source into router config, settings and agent files")
     ap.add_argument("--check", action="store_true", help="report drift and exit 1; write nothing")
     ap.add_argument("--no-restart", action="store_true", help="skip the service restart and doctor")
+    ap.add_argument("--install", action="store_true", help="also run the sudo step that installs the managed drop-in (sudo -n without a terminal)")
     ap.set_defaults(fn=cmd_apply)
     sub.add_parser("off", help="remove the settings keys and picker rows").set_defaults(fn=cmd_off)
     sub.add_parser("status", help="show what is live and any drift").set_defaults(fn=cmd_status)
