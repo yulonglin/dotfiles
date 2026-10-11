@@ -91,7 +91,9 @@
       "mcp__claude_ai_Notion__notion-create-database",
       "mcp__claude_ai_Notion__notion-create-comment",
       "mcp__claude_ai_Notion__notion-duplicate-page",
-      "Agent"
+      "mcp__plugin_bear-mcp_bear__read_note_content",
+      "Agent",
+      "Bash(claude rm:*)"
     ],
     "deny": [
       "Bash(shred *)",
@@ -157,50 +159,70 @@
     "ask": [],
     "defaultMode": "auto"
   },
-  "model": "opus",
   "modelPicker": {
     "options": [
       {
+        "model": "claude-opus-5-5",
+        "label": "Opus 5.5",
+        "description": "Claude subscription"
+      },
+      {
+        "model": "claude-fable-5-1",
+        "label": "Fable 5.1",
+        "description": "Claude subscription"
+      },
+      {
+        "model": "claude-sonnet-5-5",
+        "label": "Sonnet 5.5",
+        "description": "Claude subscription"
+      },
+      {
         "model": "claude-opus-4-6",
-        "label": "Opus 4.6"
+        "label": "Opus 4.6",
+        "description": "Claude subscription"
       },
       {
         "model": "astra",
-        "label": "GPT-6 Astra"
+        "label": "GPT-6 Astra",
+        "description": "ChatGPT subscription (Codex)"
       },
       {
         "model": "sol",
-        "label": "GPT-5.6 Sol"
+        "label": "GPT-6.1 Sol",
+        "description": "ChatGPT subscription (Codex)"
       },
       {
         "model": "kimi",
-        "label": "Kimi K3"
+        "label": "Kimi K3",
+        "description": "OpenRouter, pay per token"
       },
       {
         "model": "glm",
-        "label": "GLM 5.3"
+        "label": "GLM 5.3",
+        "description": "OpenRouter, pay per token"
       },
       {
         "model": "muse-spark",
-        "label": "Muse Spark 1.3"
+        "label": "Muse Spark 1.3",
+        "description": "OpenRouter, pay per token"
       },
       {
         "model": "grok",
-        "label": "Grok 4.7"
+        "label": "Grok 4.7",
+        "description": "OpenRouter, pay per token"
       },
       {
         "model": "qwen",
-        "label": "Qwen3.8 Max"
+        "label": "Qwen3.8 Max",
+        "description": "OpenRouter, pay per token"
       },
       {
         "model": "deepseek",
-        "label": "DeepSeek V4.1 Flash"
-      },
-      {
-        "model": "sol6",
-        "label": "GPT-6 Sol"
+        "label": "DeepSeek V4.1 Flash",
+        "description": "OpenRouter, pay per token"
       }
-    ]
+    ],
+    "replaceBuiltInOptions": true
   },
   "skillOverrides": {
     "claude-api": "off"
@@ -738,7 +760,8 @@
     "viz@ai-safety-plugins": false,
     "workflow@ai-safety-plugins": false,
     "writing@ai-safety-plugins": false,
-    "frontend-design@claude-plugins-official": true
+    "frontend-design@claude-plugins-official": true,
+    "cc-plugin-you-should-know@builtin": true
   },
   "extraKnownMarketplaces": {
     "alignment-hive": {
@@ -871,6 +894,7 @@
         "~/Documents",
         "~/Library/Group Containers/3L68KQB4HG.group.s3s/cli",
         "~/Downloads",
+        "~/Screenshots",
         "/workspace"
       ],
       "denyRead": [
@@ -925,10 +949,19 @@
   "promptCacheTtl": "1h",
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
   "advisorModel": "opus",
   "showClearContextOnPlanAccept": true,
   "dialogExpiry": "never",
   "plansDirectory": "plans/",
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
@@ -941,6 +974,7 @@
     "**/.cache/**"
   ],
   "theme": "auto",
+  "editorMode": "normal",
   "verbose": true,
   "teammateMode": "in-process",
   "remoteControlAtStartup": false,
@@ -964,5 +998,6 @@
     "enabled": true
   },
   "installMethod": "native",
-  "mcpServers": {}
+  "mcpServers": {},
+  "crossSessionInbound": "accept"
 }
