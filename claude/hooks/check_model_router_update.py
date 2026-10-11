@@ -3,6 +3,8 @@
 
 No upgrades, service changes or model-generation requests. SessionStart runs this
 asynchronously; --force is the explicit post-update check used by the updater.
+Both also name a gateway drop-in that is missing, stale or doubled by the user
+settings file (drop_in_nudge); that line never changes the exit status.
 """
 import argparse
 import fcntl
@@ -24,6 +26,7 @@ import urllib.request
 
 MAX_REPORT = 32768
 COOLDOWN = 300
+GATEWAY_ENV = ("ANTHROPIC_BASE_URL", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL")
 
 
 def managed_env(env):
@@ -35,15 +38,49 @@ def managed_env(env):
     gateway keys moved to the root-owned drop-in the user settings file no
     longer carries them either, so read the drop-in before falling back to it.
     """
-    path = env.get("MODEL_ROUTER_MANAGED") or (
-        "/Library/Application Support/ClaudeCode/managed-settings.d/50-model-router.json"
-        if sys.platform == "darwin"
-        else "/etc/claude-code/managed-settings.d/50-model-router.json")
     try:
-        block = json.loads(Path(path).read_text()).get("env")
+        block = json.loads(managed_path(env).read_text()).get("env")
     except (OSError, ValueError):
         return {}
     return block if isinstance(block, dict) else {}
+
+
+def managed_path(env):
+    return Path(env.get("MODEL_ROUTER_MANAGED") or (
+        "/Library/Application Support/ClaudeCode/managed-settings.d/50-model-router.json"
+        if sys.platform == "darwin"
+        else "/etc/claude-code/managed-settings.d/50-model-router.json"))
+
+
+def drop_in_nudge(home, env):
+    """One line when this machine runs the router but the gateway keys are not
+    where `model-router-wire` puts them: in a current root-owned drop-in and out
+    of the user settings file, where the pre-commit guard would hold that file
+    back from every commit. Setup order varies by machine (the router comes from
+    the plugin after deploy.sh), so the session is the one place sure to see it.
+    A router whose gateway was turned off (`model-router-wire off`) stays silent."""
+    try:
+        if not (home / ".local/state/model-router/ingress-token").is_file():
+            return None
+        user_env = read_json(home / ".claude/settings.json").get("env", {})
+        in_user = isinstance(user_env, dict) and any(k in user_env for k in GATEWAY_ENV)
+        drop_in = managed_path(env)
+        if not drop_in.exists():
+            if not in_user:
+                return None
+            return ("Model router: the gateway drop-in is not installed, so the router token sits in"
+                    " ~/.claude/settings.json and the pre-commit guard holds that file back."
+                    " Run `model-router-wire apply --install` once (it asks for sudo).")
+        staged = read_json(Path(env.get("MODEL_ROUTER_STAGED") or home / ".config/model-router/managed-settings.json"))
+        if staged and read_json(drop_in) != staged:
+            return ("Model router: the gateway drop-in at " + str(drop_in) + " differs from the last render;"
+                    " run `model-router-wire apply --install`.")
+        if in_user:
+            return ("Model router: ~/.claude/settings.json still carries the gateway keys the drop-in now holds;"
+                    " run `model-router-wire apply` to strip them.")
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return None
 
 
 def read_json(path):
@@ -269,6 +306,9 @@ def main():
             print(json.dumps({"systemMessage": "Model router: invalid hook input; infrastructure validation skipped."}))
             return 0
     status, message = check_update(force=args.force)
+    # The drop-in nudge is advisory: it joins the message but never the exit status.
+    nudge = None if os.environ.get("MODEL_ROUTER_UPDATE_CHECK") == "1" else drop_in_nudge(Path.home(), dict(os.environ))
+    message = " ".join(m for m in (nudge, message) if m) or None
     if message:
         print(message if args.force else json.dumps({"systemMessage": message}))
     return status if args.force else 0

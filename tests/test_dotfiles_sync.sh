@@ -352,9 +352,17 @@ pass "lock: waits for a live holder, reclaims a dead one, gives up at the cap"
 
 # The nudge hook reads the state files written above: conflict must surface, noop must not.
 NUDGE="$REPO_ROOT/claude/hooks/nudge_dotfiles_sync.sh"
-out="$(CLAUDE_HOOK_FEATURES_FILE=/dev/null bash "$NUDGE" </dev/null)"
+echo '{"env":{"TMPDIR":"/tmp/claude"}}' >"$WORK/user-settings.json"
+out="$(CLAUDE_SETTINGS="$WORK/user-settings.json" CLAUDE_HOOK_FEATURES_FILE=/dev/null bash "$NUDGE" </dev/null)"
 echo "$out" | grep -q 'conflict: last dotfiles-sync FAILED' || fail "nudge did not report the failed repo: $out"
 echo "$out" | grep -q 'held: claude/settings.json was held back' || fail "nudge did not report the held-back file"
+echo "$out" | grep -q 'commit a stripped copy' || fail "nudge dropped the generic held-back advice: $out"
+# With the router token still in the user file, the fix is the drop-in, not a hand-stripped copy.
+echo '{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:8787/t/0123456789abcdef0123456789abcdef"}}' >"$WORK/user-settings.json"
+tokened="$(CLAUDE_SETTINGS="$WORK/user-settings.json" CLAUDE_HOOK_FEATURES_FILE=/dev/null bash "$NUDGE" </dev/null)"
+echo "$tokened" | grep -q 'held: claude/settings.json was held back .*model-router-wire apply --install' \
+    || fail "nudge did not point a token-held settings.json at apply --install: $tokened"
+echo "$tokened" | grep -q '0123456789abcdef' && fail "nudge printed the router token"
 echo "$out" | grep -q 'prune: 1 worktree(s) with unmerged commits older than' || fail "nudge did not report the stale worktree: $out"
 echo "$out" | grep -q '"hookEventName": "SessionStart"' || fail "nudge output is not a SessionStart payload"
 echo "$out" | grep -q 'noop:' && fail "nudge mentioned the healthy repo"

@@ -43,7 +43,10 @@ class UpdateCheckTests(unittest.TestCase):
                               'echo run >> "$HOME/runs"\n' + body)
 
     def check(self, **kwargs):
-        env = {"HOME": str(self.home), "PATH": os.environ["PATH"]}
+        # The default drop-in path is machine-wide; once a real one is installed it
+        # would override every fixture URL here, so point it into the temp home.
+        env = {"HOME": str(self.home), "PATH": os.environ["PATH"],
+               "MODEL_ROUTER_MANAGED": str(self.home / "no-managed-drop-in.json")}
         env.update(kwargs.pop("env", {}))
         return self.mod.check_update(home=self.home, repo=self.repo, env=env, **kwargs)
 
@@ -189,6 +192,44 @@ class UpdateCheckTests(unittest.TestCase):
         self.settings.unlink()
         self.assertEqual(self.check(), (0, None))
         self.assertEqual(self.runs(), 0)
+
+    def test_drop_in_nudge_names_each_misplacement_and_never_the_token(self):
+        managed = self.home / "managed-settings.d/50-model-router.json"
+        staged = self.home / "staged.json"
+        env = {"MODEL_ROUTER_MANAGED": str(managed), "MODEL_ROUTER_STAGED": str(staged)}
+        render = {"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787/t/private-ingress",
+                          "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1"}}
+        seen = []
+
+        def nudge():
+            seen.append(self.mod.drop_in_nudge(self.home, env))
+            return seen[-1]
+        # Keys in the user file and no drop-in: the pre-drop-in arrangement.
+        self.assertIn("apply --install", nudge())
+        staged.write_text(json.dumps(render))
+        managed.parent.mkdir(parents=True)
+        managed.write_text(json.dumps(render))
+        self.assertIn("to strip them", nudge())
+        self.settings.write_text(json.dumps({"env": {"TMPDIR": "/tmp/claude"}}))
+        self.assertIsNone(nudge())
+        managed.write_text(json.dumps({"env": {"ANTHROPIC_BASE_URL": "http://127.0.0.1:1/t/stale"}}))
+        self.assertIn("differs from the last render", nudge())
+        # Gateway turned off on purpose: no drop-in, no keys, router still installed.
+        managed.unlink()
+        self.assertIsNone(nudge())
+        (self.state / "ingress-token").unlink()
+        self.settings.write_text(json.dumps(render))
+        self.assertIsNone(nudge())
+        for message in filter(None, seen):
+            self.assertNotIn("private-ingress", message)
+
+    def test_main_adds_the_nudge_without_changing_the_exit_status(self):
+        with patch.object(self.mod, "check_update", return_value=(0, None)), \
+             patch.object(self.mod, "drop_in_nudge", return_value="Model router: nudge"), \
+             patch("sys.argv", ["hook", "--force"]), \
+             patch("builtins.print") as printed:
+            self.assertEqual(self.mod.main(), 0)
+        printed.assert_called_once_with("Model router: nudge")
 
 
 if __name__ == "__main__":

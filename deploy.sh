@@ -204,11 +204,22 @@ export PATH="$DOT_DIR/custom_bins:$PATH"
 # see show_component_menu for the contract with the binary.
 show_component_menu deploy
 
+# The model-router gateway drop-in is root-owned, so the Claude step needs sudo
+# only where the router is installed and `model-router-wire apply --check`
+# reports drift (a missing or stale drop-in, or anything else it renders).
+_router_dropin_needs_sudo() {
+    [[ "${DEPLOY_CLAUDE:-false}" == "true" && -f "$HOME/.local/state/model-router/ingress-token" \
+        && -x "$DOT_DIR/custom_bins/model-router-wire" ]] || return 1
+    ! "$DOT_DIR/custom_bins/model-router-wire" apply --check >/dev/null 2>&1
+}
+
 # Cache sudo once up front if a privileged component is selected (VPN daemon,
-# Bear CLI symlink into /usr/local/bin, or Linux pueue systemd setup), so the
-# password is requested once here rather than blocking mid-deploy.
+# Bear CLI symlink into /usr/local/bin, Linux pueue systemd setup, or the
+# model-router drop-in), so the password is requested once here rather than
+# blocking mid-deploy.
 if [[ "${DEPLOY_VPN:-false}" == "true" || "${DEPLOY_BEARCLI:-false}" == "true" \
-    || ( "$(uname -s)" == "Linux" && "${DEPLOY_PUEUE:-false}" == "true" ) ]]; then
+    || ( "$(uname -s)" == "Linux" && "${DEPLOY_PUEUE:-false}" == "true" ) ]] \
+    || _router_dropin_needs_sudo; then
     front_load_sudo
 fi
 
@@ -921,6 +932,30 @@ else:
                     already-patched) log_info "Remember handoff patch already applied" ;;
                     *)               log_warning "Remember handoff patch skipped ($remember_result) — upstream shape changed, re-check $remember_hook" ;;
                 esac
+            fi
+        fi
+
+        # Model-router gateway: the router token belongs in the root-owned
+        # managed drop-in, never in the symlinked (public) settings.json. Only
+        # where the router is installed; a first deploy usually precedes the
+        # plugin's router setup, and the SessionStart nudge in
+        # check_model_router_update.py covers that machine until the next deploy.
+        # `apply --install` with no terminal runs `sudo -n` on the credentials
+        # front_load_sudo cached, so it never hangs; success is judged by a
+        # fresh --check, since apply reports a failed sudo step but exits 0.
+        wire="$DOT_DIR/custom_bins/model-router-wire"
+        if [[ -f "$HOME/.local/state/model-router/ingress-token" && -x "$wire" ]]; then
+            if "$wire" apply --check >/dev/null 2>&1; then
+                log_info "Model router: gateway drop-in and rendered files are current"
+            elif [[ $EUID -eq 0 ]] || sudo -n true 2>/dev/null; then
+                "$wire" apply --install </dev/null || true
+                if "$wire" apply --check >/dev/null 2>&1; then
+                    log_success "Model router: rendered files and gateway drop-in installed"
+                else
+                    log_warning "Model router: apply --install left drift; run by hand: model-router-wire apply --install"
+                fi
+            else
+                log_warning "Model router: gateway drop-in missing or stale and no sudo cached (unattended run); run: model-router-wire apply --install"
             fi
         fi
 
