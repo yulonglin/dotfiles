@@ -4,10 +4,19 @@
 # Installed as a daily job by scripts/cleanup/setup_dotfiles_sync.sh (launchd on
 # macOS, cron on Linux), and runnable by hand. For each repo, in order:
 #
+#   0. preflight: the effective pre-commit hook (core.hooksPath, else the
+#      repo's hooks dir) must be executable and resolve to this checkout's
+#      config/git-hooks/pre-commit. Otherwise the repo is failed before anything
+#      is staged: the hold-back below only works when that hook rejects, and on
+#      a machine without it (hn, 2026-10-04: core.hooksPath=.git/hooks, empty)
+#      the gateway token and Codex trust tables would be committed and pushed.
 #   1. fetch the branch's upstream
 #   2. commit the dirty tree as "sync: <host> <utc>" -- THROUGH the pre-commit
 #      hook, never --no-verify, so the settings.json key guard and gitleaks stay
-#      live. If the hook rejects and any hold-back path is staged, those paths
+#      live. Before that, each staged hold-back path whose staged blob carries a
+#      known per-machine leak (gateway URL, trust table, ssh_connections) is
+#      unstaged by the script itself, so holding back does not depend on the
+#      hook alone. If the hook rejects and any hold-back path is staged, those paths
 #      are unstaged and the commit retried once; each is then offered to the
 #      hook on its own, and only the ones it still rejects are held back.
 #      Each one is a file whose
@@ -20,7 +29,9 @@
 #   3. rebase onto the upstream. A conflict is aborted, never resolved here.
 #      Zed's ssh_connections exists only in the working copy, so it is saved
 #      to the state dir first and put back afterwards if the rebase dropped it.
-#   4. push. Never --force.
+#   4. push. Never --force. First every outgoing commit is screened: if any
+#      one of them stores a hold-back blob that scripts/git-guards/per-machine-leak
+#      rejects, nothing is pushed and the repo fails. History is not rewritten.
 #
 # Every outcome lands in $DOTFILES_SYNC_STATE_DIR/<repo>.json, which the
 # nudge_dotfiles_sync.sh session-start hook reads, because a log file nobody
@@ -48,6 +59,10 @@ NOTIFY="${DOTFILES_SYNC_NOTIFY:-1}"
 # hook rejects it. Paths here never contain spaces.
 HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json codex/config.toml config/zed/settings.json}"
 read -r -a HOLD_BACK_PATHS <<<"$HOLD_BACK"
+# The hook every synced repo must run before the sync may commit.
+REQUIRED_HOOK="${DOTFILES_SYNC_REQUIRED_HOOK:-$DOT_DIR/config/git-hooks/pre-commit}"
+# Decides whether a protected file's blob is safe to publish; shared with the hook.
+LEAK_CHECK="$DOT_DIR/scripts/git-guards/per-machine-leak"
 DRY_RUN=0
 PRUNE=0
 STALE_DAYS="${DOTFILES_SYNC_STALE_DAYS:-14}"
@@ -78,6 +93,10 @@ Environment:
                             when the pre-commit hook rejects (default
                             "claude/settings.json codex/config.toml
                             config/zed/settings.json").
+  DOTFILES_SYNC_REQUIRED_HOOK
+                            The pre-commit hook each repo's effective hooks dir
+                            must resolve to, or the repo is not synced (default
+                            this checkout's config/git-hooks/pre-commit).
   DOTFILES_SYNC_STALE_DAYS  Age (last commit) after which an unmerged worktree
                             is reported as stale by --prune (default 14).
 EOF
@@ -136,6 +155,90 @@ staged_hold_back() {
         grep -qxF -- "$p" <<<"$staged" && out+=("$p")
     done
     printf '%s' "${out[*]:-}"
+}
+
+# order_hold_back "PATHS": the hold-back paths named in PATHS, de-duplicated and
+# in HOLD_BACK order.
+order_hold_back() {
+    local p out=()
+    for p in "${HOLD_BACK_PATHS[@]}"; do
+        [[ " $1 " == *" $p "* ]] && out+=("$p")
+    done
+    printf '%s' "${out[*]:-}"
+}
+
+# blob_leak OBJECT PATH: succeeds when blob OBJECT, stored at PATH, carries a
+# per-machine value. The decision is scripts/git-guards/per-machine-leak, the
+# checker the pre-commit hook also calls, so a hold-back path stays out of the
+# public repo even if the hook never runs. Any checker failure, a missing
+# checker included, counts as a leak: this fails closed. Blobs are what git
+# stores, after the clean filter, so a Zed file the zed-ssh filter stripped
+# passes. Prints the checker's one-line reason, which never quotes the value.
+blob_leak() {
+    local out
+    out="$(git cat-file blob "$1" 2>/dev/null | "$LEAK_CHECK" "$2" 2>/dev/null)" && return 1
+    out="${out%%$'\n'*}"
+    printf '%s' "${out:-the leak checker failed}"
+    return 0
+}
+
+# staged_leak PATH: blob_leak on the staged copy of PATH; fails when none is staged.
+staged_leak() {
+    git cat-file -e ":$1" 2>/dev/null || return 1
+    blob_leak ":$1" "$1" >/dev/null
+}
+
+# outgoing_leak UPSTREAM: "<short sha>\t<path>\t<reason>" for the first commit
+# in UPSTREAM..HEAD (every outgoing commit, not just the tip, so a value a later
+# commit removed still counts) whose hold-back blob differs from UPSTREAM's and
+# leaks; empty when none does. A blob identical to UPSTREAM's is already public.
+outgoing_leak() {
+    local up="$1" c p blob reason
+    for c in $(git rev-list "$up..HEAD"); do
+        for p in "${HOLD_BACK_PATHS[@]}"; do
+            blob="$(git rev-parse -q --verify "$c:$p" 2>/dev/null)" || continue
+            [[ "$blob" == "$(git rev-parse -q --verify "$up:$p" 2>/dev/null)" ]] && continue
+            if reason="$(blob_leak "$blob" "$p")"; then
+                printf '%s\t%s\t%s' "$(git rev-parse --short "$c")" "$p" "$reason"
+                return 0
+            fi
+        done
+    done
+}
+
+# screen_hold_back: unstage each staged hold-back path whose staged blob leaks,
+# and print those paths space-separated.
+screen_hold_back() {
+    local p out=() staged
+    read -r -a staged <<<"$(staged_hold_back)"
+    for p in "${staged[@]}"; do
+        if staged_leak "$p"; then
+            git reset -q -- "$p"
+            out+=("$p")
+        fi
+    done
+    printf '%s' "${out[*]:-}"
+}
+
+# hook_problem: why this repo's effective pre-commit hook is not REQUIRED_HOOK,
+# or nothing when it is. The effective hooks dir is core.hooksPath (relative to
+# the top level, as git resolves it), else the common git dir's hooks/.
+hook_problem() {
+    local dir hook
+    dir="$(git config --path core.hooksPath 2>/dev/null || true)"
+    if [[ -z "$dir" ]]; then
+        dir="$(git rev-parse --git-common-dir)/hooks"
+    elif [[ "$dir" != /* ]]; then
+        dir="$(git rev-parse --show-toplevel)/$dir"
+    fi
+    hook="$dir/pre-commit"
+    if [[ ! -e "$hook" ]]; then
+        printf 'no pre-commit hook at %s' "$hook"
+    elif [[ ! -x "$hook" ]]; then
+        printf '%s is not executable' "$hook"
+    elif ! python3 -c 'import os, sys; sys.exit(os.path.realpath(sys.argv[1]) != os.path.realpath(sys.argv[2]))' "$hook" "$REQUIRED_HOOK"; then
+        printf '%s is not %s' "$hook" "$REQUIRED_HOOK"
+    fi
 }
 
 # Zed's ssh_connections lives only in the working copy: the zed-ssh clean filter
@@ -218,6 +321,18 @@ sync_repo() {
         [[ -e "$git_dir/$s" ]] && { fail_repo "$name" "$s present: an operation is in progress, skipped"; return 1; }
     done
 
+    # ── 0. preflight: the guard hook must be the one that runs ──────────────
+    local hook_err
+    hook_err="$(hook_problem)"
+    if [[ -n "$hook_err" ]]; then
+        hook_err="pre-commit guard hook missing ($hook_err); nothing committed. Fix: ./deploy.sh --git-hooks"
+        # A repo-local core.hooksPath outranks the global one deploy.sh sets.
+        git config --local --get core.hooksPath >/dev/null 2>&1 \
+            && hook_err="$hook_err, then git -C $repo config --unset core.hooksPath"
+        if (( DRY_RUN )); then log "$name: would refuse: $hook_err"; return 1; fi
+        fail_repo "$name" "$hook_err"; return 1
+    fi
+
     local branch remote upstream
     branch="$(git symbolic-ref --short -q HEAD)" || { fail_repo "$name" "detached HEAD, skipped"; return 1; }
     remote="$(git config "branch.$branch.remote" 2>/dev/null || true)"
@@ -230,13 +345,15 @@ sync_repo() {
     git rev-parse -q --verify "$upstream" >/dev/null || { fail_repo "$name" "no $remote/$branch to sync with"; return 1; }
 
     # ── 1. commit ────────────────────────────────────────────────────────────
-    local held="" dirty_after=0 committed=0 msg
+    local held="" screened="" dirty_after=0 committed=0 msg
     msg="sync: $(hostname -s 2>/dev/null || hostname) $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
         if (( DRY_RUN )); then
             log "$name: would commit:"; git status --short | sed 's/^/    /'
         else
             stage_dirty
+            screened="$(screen_hold_back)"
+            [[ -n "$screened" ]] && log "$name: holding back $screened (staged copy carries a per-machine value)"
             if git diff --cached --quiet; then
                 log "$name: dirty tree but nothing stageable"
             elif git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
@@ -283,6 +400,7 @@ sync_repo() {
                 fail_repo "$name" "pre-commit rejected the sync commit: $(tail -1 "$STATE_DIR/$name.commit.err" 2>/dev/null)"; return 1
             fi
             rm -f "$STATE_DIR/$name.commit.err"
+            held="$(order_hold_back "$screened $held")"
             (( committed )) && log "$name: committed '$msg'"
         fi
     fi
@@ -317,8 +435,19 @@ sync_repo() {
 
     # ── 3. push ──────────────────────────────────────────────────────────────
     ahead="$(git rev-list --count "$upstream..HEAD")"
-    local pushed=0
+    local pushed=0 leak leak_sha leak_path leak_why
     if (( ahead > 0 )); then
+        # The commit step guards only the commit it makes. Commits already ahead
+        # of the upstream (made with --no-verify, or on a machine with no hook)
+        # are screened here, every one of them, before anything leaves. History
+        # is never rewritten automatically.
+        leak="$(outgoing_leak "$upstream")"
+        if [[ -n "$leak" ]]; then
+            IFS=$'\t' read -r leak_sha leak_path leak_why <<<"$leak"
+            leak="outgoing commit $leak_sha carries per-machine content in $leak_path ($leak_why); nothing pushed. Remove it from local history by hand (git rebase -i $remote/$branch), then rerun"
+            if (( DRY_RUN )); then log "$name: would refuse: $leak"; return 1; fi
+            fail_repo "$name" "$leak" "$pulled" 0 "$held"; return 1
+        fi
         if (( DRY_RUN )); then
             log "$name: would push $ahead commit(s) to $remote/$branch"
         elif run_with_timeout 120 git push --quiet "$remote" "HEAD:refs/heads/$branch" 2>"$STATE_DIR/$name.push.err"; then
@@ -334,7 +463,7 @@ sync_repo() {
     (( DRY_RUN )) && return 0
     local summary="in sync"
     (( pulled > 0 || pushed > 0 )) && summary="pulled $pulled, pushed $pushed"
-    [[ -n "$held" ]] && summary="$summary; $held held back (pre-commit rejected it)"
+    [[ -n "$held" ]] && summary="$summary; $held held back (per-machine content or rejected by pre-commit)"
     [[ -n "$ZED_NOTE" ]] && summary="$summary; $ZED_NOTE"
     log "$name: $summary"
     write_state "$name" ok "$summary" "$pulled" "$pushed" "$held"

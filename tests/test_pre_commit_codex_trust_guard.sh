@@ -72,6 +72,30 @@ expect_blocked indented-multi-table
 printf '%s\n[projects]\n"/srv/c" = { trust_level = "trusted" }\n' "$BASE" > codex/config.toml
 expect_blocked bare-projects-table
 
+# --- Case 3b: a literal-quoted ['projects'] header ---------------------------
+printf "%s\n['projects']\n\"/srv/d\" = { trust_level = \"trusted\" }\n" "$BASE" > codex/config.toml
+expect_blocked literal-quoted-header
+
+# --- Case 3c: an inline table, no header at all -----------------------------
+# Must precede the first [table], or it would be a key of that table instead.
+printf 'projects = { "/srv/e" = { trust_level = "trusted" } }\n%s' "$BASE" > codex/config.toml
+expect_blocked inline-table
+
+# --- Case 3d: a top-level dotted key ----------------------------------------
+printf 'projects."/srv/f".trust_level = "trusted"\n%s' "$BASE" > codex/config.toml
+expect_blocked dotted-key
+
+# --- Case 3e: malformed TOML fails closed -----------------------------------
+printf '%s\nmodel = \n' "$BASE" > codex/config.toml
+expect_blocked malformed-toml
+
+# --- Case 3f: the model-only config Codex ships with commits -----------------
+printf 'model = "gpt-5"\n' > codex/config.toml
+git add codex/config.toml
+git commit -qm model-only >/dev/null 2>&1 \
+    || fail "a model-only config.toml was blocked (false positive)"
+baseline_count="$(git rev-list --count HEAD)"
+
 # --- Case 4: other edits to the file still commit ---------------------------
 # projects_dir and a comment naming the tables must not trip the guard.
 printf '%s\n# [projects."..."] tables are kept local by the pre-commit hook\n[tui]\nnotifications = true\n' "$BASE" > codex/config.toml
