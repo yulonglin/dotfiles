@@ -160,6 +160,9 @@ operational = {
     "inject_vault_layout.sh",
     "mark_failed_sync.sh",
     "network_audit.py",
+    # Gated by git.pr-after-push rather than a nudges.* flag, and its point is
+    # the side effect (a draft PR), so it is operational and not an advisory.
+    "pr_after_push.sh",
     "reap_jobs.sh",
     "session_rename_auto.sh",
     "session_start_notes.sh",
