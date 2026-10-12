@@ -1166,6 +1166,32 @@ def test_a_stored_draft_waits_out_the_off_state(page) -> None:
     assert page.input_value("#anTxt") == "drafted before switching off"
 
 
+def test_a_panel_edit_while_off_cannot_lose_the_waiting_draft(page) -> None:
+    """Found in review: the panel's edit opened a box the off CSS hid, and the
+    next press outside that "open, unmodified" box closed it and deleted the
+    draft. Asking to edit now switches the layer on first, which restores the
+    draft and lets openEdit's guard protect it."""
+    page.evaluate(SELECT_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "the only copy of this thought")
+    page.dispatch_event("#anTxt", "input")
+    page.evaluate(
+        "() => { localStorage.setItem('review-sample', JSON.stringify("
+        "  [{id: 7, where: 'x', quote: 'text gone after a republish', note: 'orphan'}]));"
+        "  localStorage.setItem('an-off:review-sample', '1'); }"
+    )
+    page.reload()
+    page.click("#anList .anbtn:has-text('edit')")
+    expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "true")
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.mouse.click(5, 5)
+    page.wait_for_timeout(300)
+    assert page.input_value("#anTxt") == "the only copy of this thought"
+    assert "the only copy of this thought" in (
+        page.evaluate("() => localStorage.getItem('an-draft:review-sample')") or ""
+    )
+
+
 def test_the_export_carries_a_suggested_edits_section(browser, site) -> None:
     ctx = browser.new_context(permissions=["clipboard-read", "clipboard-write"])
     try:

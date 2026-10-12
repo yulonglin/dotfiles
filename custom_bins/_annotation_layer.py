@@ -606,6 +606,9 @@ $("anModeComment").onclick = function(){ switchMode("comment"); };
 $("anModeEdit").onclick = function(){ switchMode("edit"); };
 
 function openEdit(c, anchor, focus){
+  // Off, the box is hidden by CSS but would still count as open, and the next
+  // press outside an unmodified open box closes it and deletes the draft.
+  if (layerOff()) return;
   if (isOpen() && editingId !== c.id && dirty) { nudge(focus); return; }
   editingId = c.id; pending = null;
   setModeState(isEdit(c) ? "edit" : "comment");
@@ -1327,6 +1330,10 @@ function render(){
     } else n.textContent = c.note;
     var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
     a.onclick = function(){
+      // Asking to edit is asking for the layer. Switch it on the normal way
+      // first, so a draft waiting out the off state is restored -- and then
+      // guarded by openEdit -- rather than lost under a box nobody can see.
+      if (layerOff()) layerOn();
       var m = document.querySelector('mark[data-cid="' + c.id + '"]');
       if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
       else openEdit(c, null);
@@ -1565,12 +1572,13 @@ toggle.onclick = function(){
     if (isOpen()) closePop();
     setLayerOff(true);
     lsSet(OFF, "1");
-  } else {
-    setLayerOff(false);
-    lsDel(OFF);
-    if (!isOpen()) restoreDraft();
-  }
+  } else layerOn();
 };
+function layerOn(){
+  setLayerOff(false);
+  lsDel(OFF);
+  if (!isOpen()) restoreDraft();
+}
 setLayerOff(lsGet(OFF) === "1");
 
 // A host page may bind single-key shortcuts on document or window -- a triage
