@@ -120,7 +120,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </table>
 <p>Nothing existing records a run index, and nothing caps GPU dollars: the Modal apps set <code>timeout</code> and some set <code>scaledown_window</code>, but no launch path carries a dollar cap.</p>
 </div></div>
-<div class="sec" data-sec="requirements" data-hash="a5d1b639e18a"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="requirements--body" aria-labelledby="requirements"></button>
+<div class="sec" data-sec="requirements" data-hash="546aab96c87a"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="requirements--body" aria-labelledby="requirements"></button>
 <h2 id="requirements">Requirements</h2>
 <div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="requirements" data-label="Mark seen"></button></div><div class="sec-body" id="requirements--body">
 <h3 id="r1-every-launch-writes-a-manifest-and-an-index-line">R1. Every launch writes a manifest and an index line</h3>
@@ -130,7 +130,8 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <li>The <code>launch</code> object MUST hold: <code>schema</code> (<code>run-launch/1</code>), <code>run_id</code>, <code>slug</code>, <code>backend</code>, <code>argv</code>, <code>cwd</code>, <code>host</code>, <code>git_sha</code>, <code>git_dirty</code>, <code>config</code> (each <code>--config</code> file copied into the run directory, with its sha256), <code>caps</code> (cost cap, burn rate, max idle, timeout, API cap), <code>started_at</code>, <code>heartbeat_at</code>, <code>ended_at</code>, <code>status</code>, <code>exit_code</code>, <code>spend</code> (GPU estimate, API upper bound), and <code>progress</code> (done, expected).</li>
 <li><code>status</code> takes one of: <code>running</code>, <code>succeeded</code>, <code>failed</code>, <code>stopped:cost</code>, <code>stopped:idle</code>, <code>stopped:timeout</code>, <code>stopped:api</code>, <code>interrupted</code>. The board adds <code>lost</code> for a <code>running</code> run whose heartbeat is older than three intervals, which is what a killed wrapper, an OOM kill or a host reboot leaves behind. A dropped ssh session sends SIGHUP, which <code>runrec</code> handles as <code>interrupted</code>.</li>
 <li>On Linux the command MUST die with the wrapper: it is started with <code>PR_SET_PDEATHSIG</code>, so a SIGKILLed <code>runrec</code> takes <code>modal run</code> with it, and <code>modal run</code> stops its app when it exits.</li>
-<li><code>&lt;out-root&gt;/runs.jsonl</code> MUST receive one <code>launch</code> event at start and one <code>finish</code> event at end, each a single locked append. The index plus <code>launch.json</code>, not the manifest, is what the board reads.</li>
+<li><code>&lt;out-root&gt;/runs.jsonl</code> MUST receive one <code>launch</code> event at start and one <code>finish</code> event at end, each a single locked append. The index plus <code>launch.json</code>, not the manifest, is what the board reads. A <code>launch.json</code> overlays only the index record with the same <code>run_id</code>, so a resumed <code>--run-dir</code> keeps its earlier runs distinct.</li>
+<li>Only one launch at a time MUST own a run directory: <code>runrec</code> holds an exclusive lock on <code>RUN_DIR/.runrec.lock</code>, and a second launch into a busy <code>--run-dir</code> is refused.</li>
 <li>The child MUST receive <code>RUN_ID</code>, <code>RUN_DIR</code>, <code>RUN_COST_CAP_USD</code> and <code>RUN_API_CAP_USD</code>, and its stdout and stderr MUST be teed to <code>RUN_DIR/launch.log</code>.</li>
 </ul>
 <h3 id="r2-a-gpu-launch-without-caps-is-refused-and-a-running-one-is-stopped-at-its-cap">R2. A GPU launch without caps is refused, and a running one is stopped at its cap</h3>
@@ -147,6 +148,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <li><strong>Timeout:</strong> <code>--timeout</code> has elapsed.</li>
 </ul>
 </li>
+<li>The run MUST stay supervised until the whole process group is gone, not just the direct child. A leader that exits while its workers keep calling paid APIs is still a live run, and the manifest merge waits for it. So a command that leaves a daemon behind holds the run open until <code>--timeout</code> or an idle stop.</li>
 <li>A RunPod launch is bounded only as far as the wrapped command: <code>runrec</code> stops the process, not the pod. The pod's teardown must live inside the command, as the EXIT trap in <code>runpod/launch_rl.sh</code> does. The board says so on every RunPod row.</li>
 </ul>
 <h3 id="r3-llm-credit-is-checked-before-launch-and-tracked-during-the-run">R3. LLM credit is checked before launch and tracked during the run</h3>
@@ -170,6 +172,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <li>Progress MUST count only what this run adds: the count at launch is recorded as a baseline and subtracted, so a resumed <code>--run-dir</code> does not credit old lines as new work.</li>
 <li>If <code>&lt;out-root&gt;/runrec.json</code> names a <code>board</code> path, <code>runrec</code> MUST rewrite that file atomically on launch, every 5 minutes while running, and at finish. For nla-vs-cot on hn that path is <code>~/vault/research/monitorability/docs/run-board.md</code>. hn's vault syncs bidirectionally (checked 2026-10-12), so the board reaches the phone.</li>
 <li>Nothing rewrites the board after the last wrapper dies, so the page MUST lead with its &quot;as of&quot; time and say that a page older than 5 minutes with running rows means a dead wrapper. A periodic <code>runrec board --write</code> on hn would close this; it is a follow-up.</li>
+<li>The board path comes from <code>runrec.json</code>, which a cloned repo could ship, so <code>runrec</code> MUST write only to a <code>.md</code> path that is new or already starts with <code># Run board:</code>, and never through a symlink.</li>
 <li><code>runrec ls</code> SHOULD print the same running and recent rows as a terminal table.</li>
 </ul>
 <h3 id="deliberately-out-of-scope">Deliberately out of scope</h3>
@@ -180,7 +183,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <li>The stage-0 dataset-sanity gate, which is the next item in the tier.</li>
 </ul>
 </div></div>
-<div class="sec" data-sec="acceptance-criteria" data-hash="c39532b635ec"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="acceptance-criteria--body" aria-labelledby="acceptance-criteria"></button>
+<div class="sec" data-sec="acceptance-criteria" data-hash="4d690af1bc8b"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="acceptance-criteria--body" aria-labelledby="acceptance-criteria"></button>
 <h2 id="acceptance-criteria">Acceptance Criteria</h2>
 <div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="acceptance-criteria" data-label="Mark seen"></button></div><div class="sec-body" id="acceptance-criteria--body">
 <h3 id="tests-prove-each-refusal-and-each-stop">Tests prove each refusal and each stop</h3>
@@ -192,6 +195,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <li>a script that overwrites <code>manifest.json</code> mid-run keeps its own keys and gains <code>launch</code> at finish;</li>
 <li>a resumed <code>--run-dir</code> counts only new progress lines;</li>
 <li>an account with no credit refuses even when the key has headroom;</li>
+<li>workers that outlive their leader stay supervised and under the caps, a resumed <code>--run-dir</code> keeps both runs on the board, a busy run directory refuses a second launch, and the board never overwrites a non-board file or follows a symlink;</li>
 <li>four concurrent launches into one out-root produce exactly eight well-formed index lines;</li>
 <li>the board renders <code>lost</code> for a run with a stale heartbeat, and &quot;no ETA&quot; without a denominator.</li>
 </ul>
@@ -205,6 +209,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <h3 id="review-is-cross-family">Review is cross-family</h3>
 <p>The PR is reviewed by GPT-6.1 Sol through <code>model-router:adversarial-code-reviewer</code> before merge. It stays a draft unless that review is clean and the change is limited to the script, its tests and its doc.</p>
 <p>GPT-6.1 Sol also reviewed this spec before the build, on 2026-10-12, and found six defects; this version carries the fixes. Mid-run manifest writes could revert a research script's own update, so the live record moved to <code>launch.json</code>. The API cap was described as enforced when it is advisory, so R3 now says so. The OpenRouter key endpoint reports a key ceiling, not account credit, so the preflight also reads <code>/credits</code>. The wrapper's own writes and log chatter could reset the idle clock, so idle now has a defined signal. A resumed run directory would credit old progress lines, so progress has a baseline. And a frozen board looks current after its last writer dies, so it leads with its age.</p>
+<p>GPT-6.1 Sol then reviewed the code (PR 248) and found two more defects, both fixed with regression tests that fail on the earlier commit. Supervision ended when the direct child exited, so workers it left behind ran uncapped; it now lasts until the whole process group is gone. And a resumed run directory made every older run on the board a copy of the newest; records now overlay only by matching <code>run_id</code>, and a run directory is locked while in use. A background security review separately flagged that a cloned repo's <code>runrec.json</code> could aim the board at any file, which the <code>.md</code>-and-board-header rule closes.</p>
 </div></div>
 
 </div>
