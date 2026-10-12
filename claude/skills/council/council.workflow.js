@@ -77,6 +77,8 @@ const RANKING = {
   required: ['order', 'injection', 'rationale'],
 }
 const LETTERS = 'ABCDEFGHIJKLMNOP'
+// Ballot letters come from model output, so 'toString' must not resolve through the prototype.
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
 
 // Each ranker sees the others' answers under neutral letters, rotated by its index to spread position bias.
 phase('Rank')
@@ -98,10 +100,10 @@ const borda = Object.fromEntries(labels.map(l => [l, 0]))
 const flagged = Object.fromEntries(labels.map(l => [l, []]))
 const spoiled = []
 for (const b of ballots.filter(Boolean)) {
-  const valid = b.order.length === Object.keys(b.key).length && b.order.every(x => x in b.key) && new Set(b.order).size === b.order.length
+  const valid = b.order.length === Object.keys(b.key).length && b.order.every(x => own(b.key, x)) && new Set(b.order).size === b.order.length
   if (!valid) { spoiled.push(b.ranker); continue }
   b.order.forEach((letter, pos) => { borda[labels[b.key[letter]]] += b.order.length - 1 - pos })
-  for (const letter of b.injection) if (letter in b.key) flagged[labels[b.key[letter]]].push(b.ranker)
+  for (const letter of b.injection) if (own(b.key, letter)) flagged[labels[b.key[letter]]].push(b.ranker)
 }
 if (missingBallots.length || spoiled.length) log(`ranking incomplete: missing ${missingBallots.join(', ') || 'none'}; spoiled ${spoiled.join(', ') || 'none'}`)
 
@@ -112,6 +114,6 @@ return {
     missing: missingBallots,
     spoiled,
     borda: Object.entries(borda).sort((x, y) => y[1] - x[1]).map(([seat, points]) => ({ seat, points, injection_flagged_by: flagged[seat] })),
-    ballots: ballots.filter(Boolean).map(b => ({ ranker: b.ranker, order: b.order.map(l => labels[b.key[l]] ?? `?${l}`), rationale: b.rationale })),
+    ballots: ballots.filter(Boolean).map(b => ({ ranker: b.ranker, order: b.order.map(l => (own(b.key, l) ? labels[b.key[l]] : `?${l}`)), rationale: b.rationale })),
   },
 }
