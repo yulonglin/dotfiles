@@ -246,9 +246,12 @@ alias = "gpt55pro"
 #
 # Ranking data comes from `openrouter-cli council refresh`:
 #   - Epoch Capabilities Index -- CC-BY, no key needed, credit Epoch AI.
-#   - Artificial Analysis intelligence index -- needs AA_API_KEY, free tier
-#     1000 req/day. Their licence REQUIRES attribution to artificialanalysis.ai
-#     wherever these numbers are shown.
-# When both are available the seat score is the mean of the per-index
-# normalised scores; with only Epoch present it is the Epoch score, and the
-# roster table says so.
+#   - Artificial Analysis intelligence index -- the API with AA_API_KEY (free
+#     tier, 1000 req/day; the sanctioned path), else read from the public
+#     model pages, looking up each candidate the current-models list omits.
+#     Their licence REQUIRES attribution to artificialanalysis.ai wherever
+#     these numbers are shown.
+# When both are available the seat score is the mean of the per-index scores,
+# each min-max normalised over the candidate models (so 0-1, not Epoch
+# points); with only Epoch present it is the Epoch score, and the roster table
+# says so. The Epoch points quoted in comments above are Epoch's alone.
