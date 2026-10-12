@@ -609,7 +609,9 @@ function openEdit(c, anchor, focus){
   // Off, the box is hidden by CSS but would still count as open, and the next
   // press outside an unmodified open box closes it and deletes the draft.
   if (layerOff()) return;
-  if (isOpen() && editingId !== c.id && dirty) { nudge(focus); return; }
+  // The same entry too: reopening it would reload its saved body over the
+  // revision being typed -- or one just restored from a draft.
+  if (isOpen() && dirty) { nudge(focus); return; }
   editingId = c.id; pending = null;
   setModeState(isEdit(c) ? "edit" : "comment");
   txt.value = bodyOf(c);

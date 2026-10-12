@@ -1192,6 +1192,40 @@ def test_a_panel_edit_while_off_cannot_lose_the_waiting_draft(page) -> None:
     )
 
 
+@pytest.mark.parametrize("anchored", [True, False], ids=["anchored", "orphan"])
+def test_a_panel_edit_of_the_comment_being_revised_keeps_the_revision(page, anchored) -> None:
+    """Found in the second review round: turning the layer on restored a draft
+    revising comment N, then the panel edit reopened N itself and reloaded its
+    saved body over the revision. A dirty box now declines every reopen."""
+    if anchored:
+        add_comment(page, SELECT_SECOND_JS, "saved wording")
+        page.click("mark.note")
+        page.wait_for_function(POP_OPEN, timeout=3000)
+        page.fill("#anTxt", "revised but not saved")
+        page.dispatch_event("#anTxt", "input")
+        page.evaluate("() => localStorage.setItem('an-off:review-sample', '1')")
+    else:
+        # Off first: an on page's pagehide save would delete a draft planted
+        # under its closed box before the reload ever reads it.
+        page.click("#anToggle")
+        page.evaluate(
+            "() => { localStorage.setItem('review-sample', JSON.stringify("
+            "  [{id: 7, where: 'x', quote: 'text gone after a republish', note: 'saved wording'}]));"
+            "  localStorage.setItem('an-draft:review-sample', JSON.stringify("
+            "  {note: 'revised but not saved', editingId: 7, mode: 'comment'})); }"
+        )
+    page.reload()
+    page.click("#anList .anbtn:has-text('edit')")
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    assert page.input_value("#anTxt") == "revised but not saved"
+    page.mouse.click(5, 5)
+    page.wait_for_timeout(300)
+    assert page.input_value("#anTxt") == "revised but not saved"
+    assert "revised but not saved" in (
+        page.evaluate("() => localStorage.getItem('an-draft:review-sample')") or ""
+    )
+
+
 def test_the_export_carries_a_suggested_edits_section(browser, site) -> None:
     ctx = browser.new_context(permissions=["clipboard-read", "clipboard-write"])
     try:
