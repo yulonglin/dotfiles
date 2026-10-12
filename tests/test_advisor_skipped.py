@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pins the advisor gate: claude/hooks/nudge_advisor_skipped.py + advisor_seen.py.
+"""Pins the advisor reminder: claude/hooks/nudge_advisor_skipped.py.
 
 Run: python3 tests/test_advisor_skipped.py   (or via pytest / tests/run-all.sh)
 
@@ -8,6 +8,11 @@ turn gets switched off, so the tests below spend most of their length proving
 that a small session, a session where the advisor was already called, and a
 session where the tool was never offered all pass through with no output. The
 one-shot property is tested by calling the hook twice with the same session id.
+Every firing case also asserts the output carries no `decision` key: the hook is
+a user-facing reminder and must never block a stop.
+
+Advisor calls are synthesised the way Claude Code 2.1.296 records them: an
+assistant `server_tool_use` block named `advisor`, then an `advisor_tool_result`.
 """
 
 from __future__ import annotations
@@ -21,7 +26,6 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 GATE = REPO / "claude" / "hooks" / "nudge_advisor_skipped.py"
-SEEN = REPO / "claude" / "hooks" / "advisor_seen.py"
 
 
 def tool_use(name: str, **inputs) -> dict:
@@ -31,6 +35,21 @@ def tool_use(name: str, **inputs) -> dict:
             {"type": "tool_use", "id": "t", "name": name, "input": inputs},
         ]},
     }
+
+
+def advisor_call(sidechain: bool = False) -> list[dict]:
+    rows = [
+        {"type": "assistant", "isSidechain": sidechain, "message": {
+            "role": "assistant", "content": [
+                {"type": "server_tool_use", "id": "srvtoolu_x", "name": "advisor",
+                 "input": {}}]}},
+        {"type": "assistant", "isSidechain": sidechain, "message": {
+            "role": "assistant", "content": [
+                {"type": "advisor_tool_result", "tool_use_id": "srvtoolu_x",
+                 "content": {"type": "advisor_redacted_result",
+                             "encrypted_content": "x"}}]}},
+    ]
+    return rows
 
 
 def advisor_offered(available: bool = True, change: str = "add") -> dict:
@@ -79,15 +98,21 @@ class AdvisorGateTest(unittest.TestCase):
             tool_use("Bash", command="git commit -m done"),
         ]
 
-    # --- it fires -----------------------------------------------------------
-    def test_blocks_a_substantive_session_with_no_advisor_call(self) -> None:
-        out = self.stop(self.substantive_rows())
+    def assert_reminder(self, out: str) -> None:
         payload = json.loads(out)
-        self.assertEqual(payload["decision"], "block")
-        self.assertIn("advisor()", payload["reason"])
-        # The reason must tell a model that DID call advisor how to get out,
-        # because the marker channel can fail.
-        self.assertIn("one-shot", payload["reason"])
+        self.assertNotIn("decision", payload, "the reminder must never block a stop")
+        self.assertNotIn("hookSpecificOutput", payload,
+                         "additionalContext would continue the turn; not yet")
+        self.assertIn("advisor()", payload["systemMessage"])
+
+    # --- it fires -----------------------------------------------------------
+    def test_warns_on_a_substantive_session_with_no_advisor_call(self) -> None:
+        self.assert_reminder(self.stop(self.substantive_rows()))
+
+    def test_a_subagent_advisor_call_does_not_count(self) -> None:
+        """Only the main agent's own consultation satisfies its own contract."""
+        rows = self.substantive_rows() + advisor_call(sidechain=True)
+        self.assert_reminder(self.stop(rows))
 
     def test_bash_heredoc_edits_count_as_substantive(self) -> None:
         """Auto mode edits through Bash, so Edit/Write counts alone undercount."""
@@ -97,7 +122,7 @@ class AdvisorGateTest(unittest.TestCase):
             tool_use("Bash", command="sed -i '' s/a/b/ /tmp/two.py"),
             tool_use("Bash", command="tee /tmp/three.txt <<'EOF'\nx\nEOF"),
         ]
-        self.assertTrue(self.stop(rows), "three Bash edits should trip the gate")
+        self.assert_reminder(self.stop(rows))
 
     def test_plain_output_redirects_do_not_count_as_edits(self) -> None:
         """Deliberately conservative: a scratch file is not a change to the repo."""
@@ -108,6 +133,19 @@ class AdvisorGateTest(unittest.TestCase):
         self.assertEqual(self.stop(rows), "")
 
     # --- it stays silent ----------------------------------------------------
+    def test_silent_when_the_transcript_shows_an_advisor_call(self) -> None:
+        rows = self.substantive_rows()
+        self.assertEqual(self.stop(rows[:2] + advisor_call() + rows[2:]), "")
+
+    def test_silent_when_the_advisor_was_called_at_the_end(self) -> None:
+        self.assertEqual(self.stop(self.substantive_rows() + advisor_call()), "")
+
+    def test_another_server_tool_is_not_an_advisor_call(self) -> None:
+        rows = self.substantive_rows() + [{"type": "assistant", "message": {
+            "content": [{"type": "server_tool_use", "name": "web_search",
+                         "id": "srvtoolu_y", "input": {}}]}}]
+        self.assert_reminder(self.stop(rows))
+
     def test_silent_on_a_small_session(self) -> None:
         rows = [advisor_offered(), tool_use("Read", file_path="/a"),
                 tool_use("Edit", file_path="/a"),
@@ -147,26 +185,9 @@ class AdvisorGateTest(unittest.TestCase):
     # --- one-shot -----------------------------------------------------------
     def test_second_stop_passes(self) -> None:
         rows = self.substantive_rows()
-        self.assertTrue(self.stop(rows, session="one-shot"))
+        self.assert_reminder(self.stop(rows, session="one-shot"))
         self.assertEqual(self.stop(rows, session="one-shot"), "",
                          "the gate must never fire twice in one session")
-
-    # --- the marker channel -------------------------------------------------
-    def test_marker_from_the_posttooluse_hook_suppresses_the_gate(self) -> None:
-        self.run_hook(SEEN, {"tool_name": "advisor", "session_id": "marked",
-                             "tool_input": {}, "tool_response": {}})
-        self.assertTrue((self.state / "seen-marked").exists())
-        self.assertEqual(self.stop(self.substantive_rows(), session="marked"), "")
-
-    def test_marker_hook_ignores_other_tools(self) -> None:
-        self.run_hook(SEEN, {"tool_name": "Bash", "session_id": "other"})
-        self.assertFalse((self.state / "seen-other").exists())
-
-    def test_marker_hook_survives_garbage(self) -> None:
-        proc = subprocess.run([sys.executable, str(SEEN)], input="{",
-                              capture_output=True, text=True)
-        self.assertEqual(proc.returncode, 0)
-        self.assertEqual(proc.stdout, "")
 
 
 if __name__ == "__main__":

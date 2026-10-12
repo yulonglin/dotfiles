@@ -1,34 +1,34 @@
 #!/usr/bin/env python3
-"""Stop hook: catch a substantive session that never consulted the advisor.
+"""Stop hook: tell the user when a substantive session never consulted the advisor.
 
-WHAT IS ACTUALLY OBSERVABLE. The advisor is meant to be called before
-substantive work and again before declaring a task done. Neither leg can be
-watched where you would expect:
+WHAT IS OBSERVABLE. The advisor is a server-side tool, and the session
+transcript records each call: an assistant content block
+`{"type":"server_tool_use","name":"advisor","id":"srvtoolu_..."}` followed by
+an `advisor_tool_result` block (measured on Claude Code 2.1.296, 2026-10-12, in
+a live session's own JSONL, and in two transcripts from 2026-10-08). Whether
+the tool was offered is the `{"type":"advisor_tool","available":true,...}`
+attachment. So both "offered" and "called" are read from the transcript; no
+PostToolUse marker is involved, and none is needed (whether PostToolUse fires
+for a server-side tool was never shown, and nothing here depends on it).
 
-  * The transcript does not record advisor calls at all (measured 2026-09-20
-    on a live session's JSONL: no tool_use row, no tool_result row). The only
-    advisor record there is the availability attachment
-    `{"type":"advisor_tool","available":true,...}`. So "was it called" has to
-    come from a marker written by a PostToolUse(advisor) hook —
-    advisor_seen.py — and this hook reads that marker.
-  * The before-work leg cannot be gated by any event without firing on every
-    session. A PreToolUse gate on the first Write/Edit fires on trivial turns
-    too, and a gate that fires on trivial turns gets switched off within a day,
-    which is worse than no gate. So only the completion leg is enforced here;
-    the reason text names the before-work leg rather than policing it.
+The before-work leg (consult before substantive work) is not policed: no event
+can observe it without firing on every trivial session. This hook covers the
+completion leg only.
 
 WHEN IT FIRES. At Stop, once per session, only when ALL of:
   * the transcript says the advisor tool was available in this session;
-  * no PostToolUse marker says it was called;
+  * the transcript holds no advisor call from the main agent;
   * the session did substantive work: three or more file-modifying operations,
     or a `git commit` plus at least two. A one-line fix and its commit stays
     silent on purpose.
 
-SOFT AND ONE-SHOT. It emits {"decision":"block","reason":...} once and writes
-its own guard file first, so the retry always passes and no session can be
-trapped. The marker channel is unverified upstream (whether PostToolUse fires
-for the advisor tool could not be tested from inside a session), so the reason
-tells the model what to do if the call WAS made and this hook could not see it.
+NON-BLOCKING. It prints {"systemMessage": ...}, a warning shown to the user;
+Claude stops as normal and does not see it. To hand the reminder to the model
+instead, emit {"hookSpecificOutput": {"hookEventName": "Stop",
+"additionalContext": MESSAGE}} -- a one-line change, which keeps the
+conversation going one more turn as non-error feedback. Use that only once the
+reminder has proven accurate in practice. A guard file written before the
+message keeps it to once per session.
 
 Fail-quiet everywhere: a missing transcript, an unparseable payload or an
 unwritable state directory exits 0 with no output.
@@ -58,27 +58,11 @@ REDIRECT_TO_NULL = re.compile(r">\s*/dev/null")
 EDITS_ALONE = 3
 EDITS_WITH_COMMIT = 2
 
-REASON = """\
-You are about to end a session that changed real files and never called advisor().
-
-The advisor sees this whole transcript and is a stronger reviewer than you. It is
-meant to be consulted twice: once BEFORE substantive work, so the approach is
-checked before it hardens, and once when you believe the task is COMPLETE. This
-session did neither, and the completion call is the one that is still possible.
-
-Do this now, in order:
-
-1. Make the deliverable durable first — write the file, save the result, commit
-   the change. The advisor call takes time and an unwritten result does not
-   survive the session ending.
-2. Call advisor(). It takes no arguments.
-3. Act on what comes back, or say plainly why you are not.
-
-If you DID call advisor and this gate still fired, it could not see it: the call
-leaves no trace in the transcript and the marker file is written by a separate
-hook. Say so in one line and stop — do not call it twice to satisfy the hook.
-
-This gate is one-shot. Your next stop goes through whatever you decide."""
+MESSAGE = (
+    "Advisor skipped: this session changed real files and never called advisor(), "
+    "though it was on offer. Ask Claude to call it now if the work needs a second "
+    "look before you rely on it. (Shown once per session; nothing was blocked.)"
+)
 
 
 def state_dir() -> Path:
@@ -103,6 +87,24 @@ def rows(path: Path):
                     yield row
     except OSError:
         return
+
+
+def advisor_called(transcript_rows) -> bool:
+    """True when the main agent's transcript holds a server_tool_use for the advisor."""
+    for row in transcript_rows:
+        if row.get("isSidechain"):
+            continue
+        message = row.get("message")
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if (isinstance(block, dict) and block.get("type") == "server_tool_use"
+                    and block.get("name") == "advisor"):
+                return True
+    return False
 
 
 def advisor_available(transcript_rows) -> bool | None:
@@ -187,8 +189,6 @@ def main() -> int:
         return 0
 
     directory = state_dir()
-    if (directory / ("seen-" + session)).exists():
-        return 0
     guard = directory / ("nudged-" + session)
     if guard.exists():
         return 0
@@ -196,19 +196,21 @@ def main() -> int:
     transcript_rows = list(rows(path))
     if advisor_available(transcript_rows) is not True:
         return 0
+    if advisor_called(transcript_rows):
+        return 0
     edits, committed = work_signals(transcript_rows)
     if not substantive(edits, committed):
         return 0
 
-    # The one-shot promise rests on this file. If it cannot be written the block
-    # would repeat at every stop and trap the session, so no guard means no block.
+    # The one-shot promise rests on this file. If it cannot be written the
+    # warning would repeat at every stop, so no guard means no warning.
     try:
         directory.mkdir(parents=True, exist_ok=True)
         guard.touch()
     except OSError:
         return 0
 
-    print(json.dumps({"decision": "block", "reason": REASON}))
+    print(json.dumps({"systemMessage": MESSAGE}))
     return 0
 
 
