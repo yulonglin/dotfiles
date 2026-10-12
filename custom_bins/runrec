@@ -121,6 +121,25 @@ def write_text_atomic(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+BOARD_HEADER = "# Run board: "
+
+
+def write_board_file(path: Path, text: str) -> None:
+    """Write the board, but only to a .md file that is new or already a board.
+
+    The path comes from runrec.json, which a cloned repo could ship, so a board
+    path naming ~/.zshrc or any other file must not overwrite it."""
+    if path.suffix != ".md":
+        raise Refused(f"board path {path} must end in .md")
+    if path.exists():
+        with path.open(errors="replace") as f:
+            if not f.readline().startswith(BOARD_HEADER):
+                raise Refused(
+                    f"{path} exists and is not a runrec board; not overwriting it"
+                )
+    write_text_atomic(path, text)
+
+
 def git(cwd: Path, *args: str) -> str | None:
     try:
         out = subprocess.run(
@@ -557,10 +576,10 @@ class Run:
         target = self.a.board or self.cfg.get("board")
         if target:
             try:
-                write_text_atomic(
+                write_board_file(
                     Path(target).expanduser(), render_board(self.out_root, self.cfg)
                 )
-            except OSError as exc:
+            except (OSError, Refused) as exc:
                 print(f"runrec: board not written: {exc}", file=sys.stderr)
 
     def event(self, kind: str) -> dict:
@@ -850,7 +869,7 @@ def render_board(out_root: Path, cfg: dict, recent: int = 20) -> str:
     done = [v for v in views if v["status"] not in ("running", "lost")]
     week = [v for v in views if v["started"] and (t - v["started"]).days < 7]
     lines = [
-        f"# Run board: {project}",
+        f"{BOARD_HEADER}{project}",
         "",
         (
             f"**As of {iso(t)}.** {len(running)} running, {len(lost)} lost, {len(done)} finished. "
@@ -1031,7 +1050,7 @@ def main(argv: list[str] | None = None) -> int:
                 target = a.write or cfg.get("board")
                 if not target:
                     raise Refused("no PATH given and no 'board' in runrec.json")
-                write_text_atomic(Path(target).expanduser(), text)
+                write_board_file(Path(target).expanduser(), text)
                 print(Path(target).expanduser())
             return 0
         if a.cmd_name == "ls":

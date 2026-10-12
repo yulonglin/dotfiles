@@ -705,3 +705,22 @@ def test_board_file_is_written_from_runrec_json(out: Path, tmp_path: Path) -> No
     )
     text = board.read_text()
     assert "`b` | succeeded" in text
+
+
+@pytest.mark.parametrize(
+    "name, content", [("notes.md", "# My notes\n"), ("zshrc", None)]
+)
+def test_board_never_overwrites_a_file_that_is_not_a_board(
+    out: Path, tmp_path: Path, name: str, content: str | None
+) -> None:
+    out.mkdir()
+    target = tmp_path / name
+    if content is not None:
+        target.write_text(content)
+    (out / "runrec.json").write_text(json.dumps({"board": str(target)}))
+    r = launch(out, "--slug", "b", "--backend", "local", "--api-cap", "0", "--", "true")
+    assert r.returncode == 0 and "board not written" in r.stderr
+    if content is None:
+        assert not target.exists()
+    else:
+        assert target.read_text() == content
