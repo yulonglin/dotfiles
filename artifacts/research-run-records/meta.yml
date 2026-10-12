@@ -1,0 +1,29 @@
+title: Research Run Records
+url: https://claude.ai/artifact/RKXV7RT4bXVs3mUArR8MU7
+org: lin.yulong@gmail.com's Organization
+first_published: 2026-10-12
+last_updated: 2026-10-12
+status: live
+
+public: no
+
+summary: >-
+  the spec for `runrec`, tier 0 of the 2026-10-04 research-loop priorities: every launch writes a
+  run directory, a live `launch.json` and a line in the repo's `out/runs.jsonl` before it spends; a
+  Modal or RunPod launch with no cost cap, burn rate or idle limit is refused, `modal deploy` and
+  `--detach` are refused because no in-run stop can reach them, and an OpenRouter balance below the
+  declared API cap refuses the launch; a running command is stopped on estimated cost, idle or
+  deadline; one Markdown board per project is kept in the vault. Reviewed before the build by
+  GPT-6.1 Sol, whose six defects (mid-run manifest races, an API cap described as enforced when it
+  is advisory, key ceiling mistaken for account credit, self-resetting idle clock, resumed progress,
+  frozen board) the page records with their fixes
+
+source: spec.md
+built: spec.html
+builds_with: |
+  md2artifact spec.md -o spec.html
+evidence: |
+  hn survey 2026-10-12 (read-only): nla-vs-cot out/ manifests, run-manifest/1 schema on branch
+  yulong/results-format-f1, monitorability-evals v2_rerun/spend_gate.py, vault
+  research/monitorability/docs/2026-09-17-progress-watchdog-design.md; pilot results in
+  docs/runrec.md

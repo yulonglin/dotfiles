@@ -68,12 +68,15 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#artifacts" class="lvl2">Artifacts</a><a href="#other-resources" class="lvl2">Other resources</a><a href="#publishing-a-page-publicly-is-an-org-decision-not-a-local-one" class="lvl2">Publishing a page publicly is an org decision, not a local one</a></nav>
 <div class="doc">
 <h1 id="artifacts-and-resources-for-dotfiles">Artifacts and Resources for dotfiles</h1>
+<div class="page-tools"><a class="unseen-sum" hidden></a><button type="button" class="page-comment" hidden data-label="Comment on this page" aria-label="Comment on this page"></button></div>
 <p>The pages this repo's work has produced, and where the things it depends on live. Every row states what the page established, so this file can be read instead of opened.</p>
 <p>Maintained per <code>~/.claude/skills/artifacts-sync/SKILL.md</code> — rows are written at publish time, because neither the repo nor the publishing org can be recovered from the gallery afterwards. Run <code>/artifacts-sync</code> to reconcile.</p>
 <p><strong>The table is generated; edit the YAML, never the Markdown.</strong> Each row comes from one file — <code>artifacts/&lt;slug&gt;/meta.yml</code> for a page whose source is kept, <code>artifacts/index-rows/&lt;slug&gt;.yml</code> for one whose source was not — and <code>python3 scripts/build_artifacts_index.py</code> rewrites the block between the two markers below. Two publishes now touch two different files instead of the same table line, so they no longer conflict; a conflict inside the generated block is resolved by taking either side and re-running the script. Everything outside the markers is hand-written and is never touched.</p>
 <p><strong>Live index page:</strong> https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107 — published 2026-09-10 under <code>lin.yulong@gmail.com's Organization</code> from <code>artifacts/index/index.html</code>.</p>
 <p><strong>The index is republished to that same URL after every artifact publish</strong> (Yulong, 2026-09-10), which replaces the earlier &quot;republish only on request&quot; rule: rebuild <code>artifacts/index/index.html</code> from this file and publish it with <code>url</code> set to the address above, in the same turn as the row you just wrote. <code>claude/hooks/nudge_artifact_index.sh</code> reads that URL out of this header and reminds the session; it never publishes anything itself. The old rule existed because the two previous hosted copies — the org-locked original (<a href="https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802">8ad029a9</a>) and its replacement (<a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">8d035fe5</a>), deleted the same day it was published — were both removed shortly after publication, so treat a 404 on the live URL as a signal to publish a fresh page and re-stamp this line rather than as a reason to stop.</p>
+<div class="sec" data-sec="artifacts" data-hash="6183f8df900a"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="artifacts--body" aria-labelledby="artifacts"></button>
 <h2 id="artifacts">Artifacts</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="artifacts" data-label="Mark seen"></button></div><div class="sec-body" id="artifacts--body">
 <table>
 <thead>
 <tr>
@@ -86,6 +89,54 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><a href="https://claude.ai/artifact/RKXV7RT4bXVs3mUArR8MU7">Research Run Records</a> — the spec for <code>runrec</code>, tier 0 of the 2026-10-04 research-loop priorities: every launch writes a run directory, a live <code>launch.json</code> and a line in the repo's <code>out/runs.jsonl</code> before it spends; a Modal or RunPod launch with no cost cap, burn rate or idle limit is refused, <code>modal deploy</code> and <code>--detach</code> are refused because no in-run stop can reach them, and an OpenRouter balance below the declared API cap refuses the launch; a running command is stopped on estimated cost, idle or deadline; one Markdown board per project is kept in the vault. Reviewed before the build by GPT-6.1 Sol, whose six defects (mid-run manifest races, an API cap described as enforced when it is advisory, key ceiling mistaken for account credit, self-resetting idle clock, resumed progress, frozen board) the page records with their fixes</td>
+<td>lin.yulong@gmail.com's Organization</td>
+<td>live</td>
+<td><code>artifacts/research-run-records/</code></td>
+<td>no</td>
+<td>2026-10-12</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/artifact/MZGF7FLXh4pCw6EzMiGmg9">Download HTML session handover</a> — handover of session 55c231ff (the annotation layer's Download HTML and Copy HTML buttons), written with the externalise-handover skill by a Claude Opus 5.5 subagent, for comparison with the debrief-trial-55c231ff page</td>
+<td>lin.yulong@gmail.com's Organization</td>
+<td>done</td>
+<td><code>artifacts/handover-trial-55c231ff/</code></td>
+<td>no</td>
+<td>2026-10-06</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/artifact/E2o1qcjbkrifRzu34t1yyd">Download HTML session debrief</a> — trial of alignment-hive's <code>debrief</code> plugin on session 55c231ff (the annotation layer's Download HTML and Copy HTML buttons), written by a Claude Opus 5.5 subagent and fact-checked by GPT-6 Astra; compare with handover-trial-55c231ff</td>
+<td>lin.yulong@gmail.com's Organization</td>
+<td>done</td>
+<td><code>artifacts/debrief-trial-55c231ff/</code></td>
+<td>no</td>
+<td>2026-10-06</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/artifact/DHxg1ZG6BqraAdXUJtr5n6">The page can be downloaded as HTML</a> — a probe page for the annotation layer's &quot;This page&quot; row — Download HTML through the viewer's <code>downloads</code> capability, and Copy HTML through the clipboard. Published with <code>capabilities: {downloads: true}</code> to check whether the viewer grants that capability to the owner and to a non-owner viewer</td>
+<td>lin.yulong@gmail.com's Organization</td>
+<td>done</td>
+<td><code>artifacts/download-probe/</code></td>
+<td>no</td>
+<td>2026-09-24</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/artifact/Q9BXWYU6CTYG84Tdj3nsg2">Awake While Connected</a> — visual summary of why ssh from the phone kept dying on this Mac and what changed. The cause was a 1-minute AC sleep timer set for screen lock, which also defeated <code>ttyskeepawake</code>: man pmset counts a tty as inactive once its idle time exceeds the sleep timer, so a 60 s reading pause slept the machine under a live session. Fix is AC sleep 30 (battery and lock unchanged), shipped in <code>scripts/macos_sudo_extras.sh</code> alongside the mosh-server firewall rule (#198); an always-on <code>caffeinate -s</code> agent was tried and reverted (#195/#196) after it held a sleep assertion for 16h52m against one session.</td>
+<td>lin.yulong@gmail.com's Organization</td>
+<td>live</td>
+<td><code>artifacts/awake-while-connected/</code></td>
+<td>no</td>
+<td>2026-09-22</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/artifact/Su5RQcCp6eQWNwHVVVyDkP">The Watchdog That Wouldn't Stop</a> — a health-check watchdog polling every 180s against a 300s Modal <code>scaledown_window</code> held one H100 awake for 31 days and $3,060, which was 96.7% of all Modal spend in the period; the poll interval sitting inside the idle window made the health check itself the load, so the container could never scale to zero. Establishes that flatness, not magnitude, is the detectable signature: simulated against the real 61-day series a &quot;any day over $50&quot; threshold fires two days earlier but on six days of legitimate eval work, while &quot;three consecutive days within 5% variance&quot; scores zero false positives — though the data cannot separate that rule from &quot;three days running over $50&quot;, since the sample holds no legitimate 3-day run above $50/day. Also records that the three guards built afterwards sit at different distances from the mistake, and that the deadline nudge needed four tool-having model reviewers before it was safe to ship, each finding a distinct defect that would have killed it. Version 2 adds the sharper reframing, checked against the installed Modal 1.4.3 <code>@app.function</code> signature: the defect was not a missing deadline but an external control loop standing in for a declarative setting — <code>min_containers</code> is the whole watchdog in one auditable line, <code>timeout</code> (300 s default, 12 h here) would have killed the wedged request, and <code>max_inputs</code> recycles a container instead of redeploying it. Two gaps are genuine: <code>modal.Probe</code> is Sandbox-only so a deployed function has no liveness probe, and no parameter declares an expected duration.</td>
+<td>lin.yulong@gmail.com's Organization</td>
+<td>live</td>
+<td><code>artifacts/modal-watchdog-burn/</code></td>
+<td>no</td>
+<td>2026-09-16</td>
+</tr>
 <tr>
 <td><a href="https://claude.ai/code/artifact/8d0af943-a622-4228-814a-9d5a4a0d6510">Relocate the Learnings section, and drop most of it</a> — the destination-per-entry contract for emptying <code>CLAUDE.md</code>'s <code>## Learnings</code> section, which had reached 37.5 KB inside a file four times over its 11,100-byte ceiling. The finding that set the shape: the section was doing two jobs under one heading — operational state Claude acts on, and incident forensics — and only the first earns a slot in a file that loads every session. So the axis is relocate-or-drop rather than prune, biased to drop because git history is the archive. Of 28 entries, 7 produce a surviving line elsewhere and 23 drop, six of them already stated verbatim at their destination. Every destination is under <code>docs/</code> or a skill, never <code>claude/rules/</code>, because six other files in the same budget suite are also over ceiling and a relocation into one would deepen a second failure. Published as a review page: each entry is a cycling control, approve / veto-keep / veto-relocate, for Yulong to veto entry by entry before anything is edited</td>
 <td>lin.yulong@gmail.com's Organization</td>
@@ -189,6 +240,14 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <td><code>artifacts/model-routing-decision/</code></td>
 <td>no</td>
 <td>2026-09-06</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/code/artifact/bec10f45-5d95-4937-a8eb-2b2de7c893e5">Installer Stall Pulse</a> — the eleven-week install.sh/deploy.sh black screen was a shell-to-binary contract drift (<code>--items</code> lost in a merge, binary ignored it and read the keyboard) masked by deadline-only checks; fixed by hardening the contract and driving the real menu on a silent pty in CI; timings of both workflows and the decisions left open</td>
+<td>unknown</td>
+<td>live — note 2026-10-02: PR #95 merged 2026-09-12, so the page's &quot;not yet in main&quot; status and its merge decision are stale; its CI section and timings table describe the branch, because main's workflows run no silent-pty suite, no select contract test, no mutation runs and no cargo cache (PR #134 landed the harness as tests only); the menu contract it describes still holds on main</td>
+<td><code>artifacts/installer-stall-pulse/</code></td>
+<td>no</td>
+<td>2026-09-04</td>
 </tr>
 <tr>
 <td><a href="https://claude.ai/code/artifact/d224e859-2f4d-452c-9781-5ab3941e57cf">Remote Control and Foreign Models</a> — native Remote Control and a non-Claude <code>/model</code> menu are mutually exclusive in one process by construction; an unrecognised model ID silently answers from the default Claude model; route at the tool layer, and the one workaround worth a test moves the endpoint without breaking TLS</td>
@@ -320,12 +379,15 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </tr>
 </tbody>
 </table>
-<p>29 rows: 14 live, 12 done, 2 archived, 1 superseded.</p>
+<p>36 rows: 18 live, 15 done, 2 archived, 1 superseded.</p>
 <p><strong>Status vocabulary.</strong> <code>live</code> — still being updated, cite it. <code>done</code> — the work is finished and its conclusions stand, still quotable. <code>archived</code> — deliberately retired, do not cite, row kept for its history and comment threads. <code>superseded</code> — replaced by a specific newer page, and the row links to it. <code>elsewhere</code> — published under an org this machine is not signed into. <code>done</code> is an achievement and <code>archived</code> is a retirement; only <code>superseded</code> implies a successor exists. Nothing is ever deleted from this table.</p>
 <p><strong>What the table holds today.</strong> The tally under the table is generated with it, so it cannot go stale. The two <code>archived</code> rows are pages deleted upstream, so their links 404: the 2026-08-31 hosted index and <em>README Trimmed; Two Proposals Await</em>. The single <code>superseded</code> row is this index's org-locked original, replaced rather than retired. Nothing has ever been removed.</p>
 <p><strong>Org, and why most rows still say &quot;see note&quot;.</strong> Every row above appeared in the <code>Artifact action: list</code> result of 2026-08-29. Whether that <em>means</em> they are in the currently signed-in org depends on the listing being org-scoped, which the Claude Code docs nowhere state — so read &quot;see note&quot; as genuinely unknown rather than as a name I merely failed to type. The org's <em>name</em> is missing only because <code>claude auth status</code> returned <code>orgName: null</code> on the session that wrote this file — while reporting <code>authMethod: &quot;claude.ai&quot;</code> and publishing the index page without trouble. A null org therefore diagnoses nothing about how the session is authenticated; it is simply a field that is sometimes unpopulated. The field <em>is</em> populated on this machine as of 2026-09-10, which is where the index row's <code>lin.yulong@gmail.com's Organization</code> comes from — but reading today's org says nothing about which org published a page in August, so the older rows keep &quot;see note&quot; rather than being back-filled from it, and every row written from now on carries the org read at its own publish time.</p>
 <p><strong>These eight rows are retro-attributed.</strong> They were matched to this repo by subject matter against the Learnings section of <code>CLAUDE.md</code>, not by a source file on disk, because no built HTML was kept for any of them. Every row published from now on gets its source path recorded at publish time. Treat the two least certain — <em>Two Files Earn Their Keep</em> and <em>Tool-Backed Agents</em> — as provisional until confirmed.</p>
+</div></div>
+<div class="sec" data-sec="other-resources" data-hash="86cc52558751"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="other-resources--body" aria-labelledby="other-resources"></button>
 <h2 id="other-resources">Other resources</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="other-resources" data-label="Mark seen"></button></div><div class="sec-body" id="other-resources--body">
 <table>
 <thead>
 <tr>
@@ -357,9 +419,13 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </tr>
 </tbody>
 </table>
+</div></div>
+<div class="sec" data-sec="publishing-a-page-publicly-is-an-org-decision-not-a-local-one" data-hash="6118e2512550"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="publishing-a-page-publicly-is-an-org-decision-not-a-local-one--body" aria-labelledby="publishing-a-page-publicly-is-an-org-decision-not-a-local-one"></button>
 <h2 id="publishing-a-page-publicly-is-an-org-decision-not-a-local-one">Publishing a page publicly is an org decision, not a local one</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="publishing-a-page-publicly-is-an-org-decision-not-a-local-one" data-label="Mark seen"></button></div><div class="sec-body" id="publishing-a-page-publicly-is-an-org-decision-not-a-local-one--body">
 <p>Under a Team or Enterprise org, public sharing is off until an <strong>Owner</strong> enables External sharing. Re-disabling it blocks access through every existing public link at once, without changing any artifact's audience — access resumes if it is turned back on, so the links are suspended rather than destroyed. The risk is an outage nobody here can fix, not permanent loss.</p>
 <p>So the Public column above is <code>no</code> throughout. Two fallbacks: a self-hosted mirror of the built HTML, which no org toggle can reach; or publishing outward-facing pages from a personal Pro/Max account, where public is the only sharing mode — though that second one does <strong>not</strong> rescue a connector-backed page, which stays private on every plan. The full policy, including why no stored token can publish into another org, is in the <code>artifacts-sync</code> skill.</p>
+</div></div>
 
 </div>
 </div>
@@ -381,6 +447,330 @@ if ("IntersectionObserver" in window && targets.length) {
   }, { rootMargin: "-12% 0px -75% 0px" });
   targets.forEach((t) => io.observe(t.el));
 }
+</script>
+<style>
+.page-tools{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;margin:0 0 1.4rem;font-size:.86rem}
+.page-tools:not(:has(> :not([hidden]))){display:none}
+.unseen-sum,.page-comment,.seen-btn,.chip{font:inherit}
+.unseen-sum::after,.page-comment::after,.seen-btn::after,.chip::after{content:attr(data-label)}
+.unseen-sum{color:var(--soft);text-decoration:none}
+.unseen-sum[href]{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.page-comment,.seen-btn{background:var(--panel);color:var(--soft);border:1px solid var(--rule);
+ border-radius:999px;padding:.12rem .7rem;cursor:pointer;font-size:.78rem;line-height:1.5}
+.page-comment:hover,.seen-btn:hover{border-color:var(--accent);color:var(--accent)}
+.seen-btn[aria-pressed="true"]{color:var(--good);border-color:var(--good);background:var(--good-bg)}
+.chip{display:inline-block;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+ padding:.06rem .5rem;border-radius:999px;vertical-align:middle;line-height:1.6;margin-left:.5rem}
+.chip-call{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
+.seen-badge[data-state="new"]{background:var(--good-bg);color:var(--good);border:1px solid var(--good)}
+.seen-badge[data-state="changed"]{background:var(--mark);color:var(--ink);border:1px solid var(--rule)}
+.sec{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:.4rem;align-items:center;
+ border-top:1px solid var(--rule);margin-top:2.4rem;padding-top:.3rem}
+.sec>h2{margin:.5rem 0;padding:0;border:0}
+.sec>.sec-body{grid-column:1/-1;min-width:0}
+.sec-tools{display:flex;gap:.3rem;align-items:center;justify-self:end}
+.sec-toggle{width:1.6rem;height:1.6rem;border:0;background:none;color:var(--soft);cursor:pointer;
+ border-radius:5px;padding:0;font-size:.85rem}
+.sec-toggle::before{content:"\25BE";display:inline-block;transition:transform .12s}
+.sec-toggle[aria-expanded="false"]::before{transform:rotate(-90deg)}
+.sec-toggle:hover{background:var(--code);color:var(--ink)}
+.sec-toggle:focus-visible,.seen-btn:focus-visible,.page-comment:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* An author display rule beats the user-agent [hidden] rule, so restate it. */
+.sec-body[hidden],.chip[hidden],.page-comment[hidden],.unseen-sum[hidden]{display:none}
+@media print{.sec-body[hidden]{display:block}.sec-toggle,.sec-tools,.page-tools{display:none}}
+details.lower-tray>summary{color:var(--soft);font-weight:600}
+.diff-wrap{margin:1rem 0}
+.diff-wrap details.diff-file{padding:0;overflow:hidden}
+.diff-wrap details.diff-file>summary{margin:0;font-weight:600}
+.diff-wrap details.diff-file[open]>summary{margin:0}
+.diff-wrap details.diff-file>summary code{background:none;padding:0;font-size:.85rem}
+.diff-stat{font-size:.78rem;font-weight:600;margin-left:.4rem}
+.diff-stat .dsa{color:var(--good)} .diff-stat .dsd{color:var(--bad)}
+pre.diff{padding:0;margin:0;font-size:.8rem;line-height:1.45}
+.diff-wrap>pre.diff{border-radius:7px}
+details.diff-file pre.diff{border:0;border-radius:0}
+pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
+.dl{display:block;padding-right:.9rem;white-space:pre}
+.dl .ln{display:inline-block;width:3.4em;padding-right:.55em;text-align:right;color:var(--soft);
+ user-select:none;-webkit-user-select:none;opacity:.75}
+.dl .ln::before{content:attr(data-n)}
+.dl .ds{display:inline-block;width:1.5em;text-align:center;font-weight:700}
+.dl-add{background:var(--good-bg)} .dl-add .ds{color:var(--good)}
+.dl-del{background:var(--bad-bg)} .dl-del .ds{color:var(--bad)}
+.dl-hunk{background:var(--panel);color:var(--accent);padding-left:.6rem;
+ border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.dl-hunk .ln{display:none}
+.dl-meta{color:var(--soft);font-style:italic;padding-left:.6rem}
+.dl-meta .ln{display:none}
+</style>
+<script>
+(function () {
+  "use strict";
+  function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+  function lsDel(k) { try { window.localStorage.removeItem(k); } catch (e) {} }
+  function capability(name) {
+    // `use()` resolves a namespace or null; a page with no viewer has no
+    // window.claude at all. Every capability member is reached through it.
+    var c = window.claude;
+    if (!c || typeof c.use !== "function") return Promise.resolve(null);
+    try { return Promise.resolve(c.use(name)).catch(function () { return null; }); }
+    catch (e) { return Promise.resolve(null); }
+  }
+
+  function init() {
+    // The annotation layer's key, read at run time (it is user input, so it
+    // is never interpolated into this script), with the layer's own fallback.
+    var layer = document.querySelector("[data-annotation-layer]");
+    var KEY = (layer && layer.dataset.key) || ("annot:" + document.title);
+    var FOLD = "md2a-fold:" + KEY + ":";
+    var SEEN = "md2a-seen:" + KEY;
+    var secs = Array.prototype.slice.call(document.querySelectorAll(".doc .sec[data-sec]"));
+    function part(sec, sel) { return sec.querySelector(":scope > " + sel); }
+
+    // -- Collapsible sections --
+    function setOpen(sec, open, remember) {
+      part(sec, ".sec-body").hidden = !open;
+      part(sec, ".sec-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+      if (!remember) return;
+      if (open) lsDel(FOLD + sec.dataset.sec); else lsSet(FOLD + sec.dataset.sec, "closed");
+    }
+    function isOpen(sec) { return !part(sec, ".sec-body").hidden; }
+    secs.forEach(function (sec) {
+      // Set every section explicitly: a saved copy of the page may carry the
+      // state it was saved in, and a reader with no storage starts open.
+      setOpen(sec, lsGet(FOLD + sec.dataset.sec) !== "closed", false);
+      part(sec, ".sec-toggle").addEventListener("click", function () { setOpen(sec, !isOpen(sec), true); });
+    });
+
+    // A link into a closed section or a folded tray opens what hides it,
+    // before the browser scrolls, so the jump lands.
+    function reveal(el) {
+      for (var n = el; n && n !== document.body; n = n.parentElement) {
+        if (n.tagName === "DETAILS" && !n.open) n.open = true;
+        if (n.classList && n.classList.contains("sec") && !isOpen(n)) setOpen(n, true, true);
+      }
+    }
+    function targetOf(hash) {
+      if (!hash || hash.length < 2) return null;
+      try { return document.getElementById(decodeURIComponent(hash.slice(1))); } catch (e) { return null; }
+    }
+    document.addEventListener("click", function (ev) {
+      var a = ev.target.closest && ev.target.closest('a[href^="#"]');
+      var t = a && targetOf(a.getAttribute("href"));
+      if (t) reveal(t);
+    }, true);
+    function revealHash() { var t = targetOf(location.hash); if (t) { reveal(t); t.scrollIntoView(); } }
+    window.addEventListener("hashchange", revealHash);
+    revealHash();
+
+    // A selection that crosses a folded section or a closed details element opens
+    // it before the annotation layer reads the selection. Folded text is left
+    // out of the selected text but kept in the text the layer searches on a
+    // reload, so a quote taken across a fold could never be found again.
+    function unfoldSelection() {
+      var sel = window.getSelection && window.getSelection();
+      if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+      var r = sel.getRangeAt(0);
+      secs.forEach(function (sec) {
+        if (!isOpen(sec) && r.intersectsNode(part(sec, ".sec-body"))) setOpen(sec, true, true);
+      });
+      Array.prototype.forEach.call(document.querySelectorAll(".doc details:not([open])"), function (d) {
+        for (var c = d.firstElementChild; c; c = c.nextElementSibling) {
+          if (c.tagName !== "SUMMARY" && r.intersectsNode(c)) { d.open = true; return; }
+        }
+      });
+    }
+    // The layer reads a selection on a debounced selectionchange, or on a
+    // mouseup that this capture listener on window runs ahead of.
+    document.addEventListener("selectionchange", unfoldSelection);
+    window.addEventListener("mouseup", unfoldSelection, true);
+
+    // -- Seen marks: {sectionId: hash} per reader --
+    // "" is the unseen tombstone: a merge write can set a key but not delete
+    // one, so marking a section unseen writes "" and every read treats "" as
+    // no mark.
+    function clean(v) {
+      var out = {};
+      if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+      Object.keys(v).forEach(function (k) { if (typeof v[k] === "string") out[k] = v[k]; });
+      return out;
+    }
+    function readMarks(k) { try { return clean(JSON.parse(lsGet(k) || "null")); } catch (e) { return {}; } }
+    function over(base, top) {
+      var out = {}, k;
+      for (k in base) out[k] = base[k];
+      for (k in top) out[k] = top[k];
+      return out;
+    }
+    // mode: "connecting" until the db answers, then "db", or "local" when
+    // there is no db for this reader or the db refused a write.
+    var mode = "connecting", local = readMarks(SEEN);
+    // remote: the reader's db document as last delivered. pending: clicks not
+    // yet confirmed by the db. overrides: marks the db refused, kept per
+    // reader and laid over the db document on every later visit.
+    var remote = {}, pending = {}, overrides = {}, OVER = null, doc = null, unsub = null, writing = false;
+    var HOLDER = "md2a-" + Math.random().toString(36).slice(2);
+    function current() {
+      if (mode === "connecting") return over(local, pending);
+      if (mode === "local" && !OVER) return local;
+      return over(over(remote, overrides), pending);
+    }
+    var summary = document.querySelector(".doc .unseen-sum");
+    function stateOf(sec) {
+      var m = current()[sec.dataset.sec];
+      return !m ? "new" : m === sec.dataset.hash ? "seen" : "changed";
+    }
+    function paint() {
+      var todo = [], counts = { "new": 0, changed: 0 };
+      secs.forEach(function (sec) {
+        var st = stateOf(sec), badge = part(sec, ".sec-tools .seen-badge"), btn = part(sec, ".sec-tools .seen-btn");
+        sec.dataset.seen = st;
+        badge.dataset.state = st;
+        badge.dataset.label = st === "new" ? "New" : st === "changed" ? "Changed" : "";
+        badge.hidden = st === "seen";
+        btn.setAttribute("aria-pressed", st === "seen" ? "true" : "false");
+        btn.dataset.label = st === "seen" ? "Seen" : "Mark seen";
+        btn.setAttribute("aria-label", st === "seen" ? "Seen. Click to mark unseen" : "Mark seen");
+        if (st !== "seen") { todo.push(sec); counts[st]++; }
+      });
+      if (!summary || !secs.length) return;
+      summary.hidden = false;
+      if (!todo.length) {
+        summary.removeAttribute("href");
+        summary.dataset.label = "All sections seen";
+      } else {
+        var bits = [];
+        if (counts["new"]) bits.push(counts["new"] + " new");
+        if (counts.changed) bits.push(counts.changed + " changed");
+        summary.href = "#" + todo[0].dataset.sec;
+        summary.dataset.label = bits.join(", ") + " \u00b7 go to the first";
+      }
+      summary.setAttribute("aria-label", summary.dataset.label);
+    }
+    function setLocal(id, v) {
+      if (v) local[id] = v; else delete local[id];
+      lsSet(SEEN, JSON.stringify(local));
+    }
+
+    // The db document is read through one subscription that keeps every
+    // snapshot, and written only from a click, one write at a time, as a
+    // merge of just the keys that changed -- so two devices marking
+    // different sections never undo each other.
+    function useLocal() {
+      // A refused write: keep this reader's marks in this browser from now
+      // on, and stop listening, so no later snapshot takes them back.
+      mode = "local";
+      if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+      overrides = over(overrides, pending);
+      pending = {};
+      if (OVER) lsSet(OVER, JSON.stringify(overrides));
+      paint();
+    }
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function writeDelta(delta) {
+      return doc.update({ marks: delta }).catch(function (e) {
+        if (!e || e.code !== "invalid_argument") throw e;
+        // No document yet (update needs one). Create it under a short lease,
+        // the store's set-if-absent pattern, so two devices creating it at
+        // once cannot replace each other's first mark.
+        return doc.acquire({ holder: HOLDER, ttlMs: 3000 }).then(function (r) {
+          if (!r || !r.acquired) return wait(1500).then(function () { return doc.update({ marks: delta }); });
+          return doc.get().then(function (snap) {
+            return snap.exists ? doc.update({ marks: delta }) : doc.set({ marks: delta });
+          });
+        });
+      });
+    }
+    function pump() {
+      if (mode !== "db" || writing || !Object.keys(pending).length) return;
+      var delta = over({}, pending);
+      writing = true;
+      Promise.resolve().then(function () { return writeDelta(delta); }).then(function () {
+        writing = false;
+        var changed = false;
+        Object.keys(delta).forEach(function (k) {
+          if (pending[k] === delta[k]) delete pending[k];
+          if (k in overrides) { delete overrides[k]; changed = true; }
+        });
+        if (changed && OVER) lsSet(OVER, JSON.stringify(overrides));
+        // A snapshot that arrived during the write was masked by the pending
+        // mark; once that mark is acknowledged, the snapshot is what shows.
+        paint();
+        pump();
+      }, function () { writing = false; useLocal(); });
+    }
+    Promise.all([capability("db"), capability("user")]).then(function (r) {
+      var db = r[0], user = r[1];
+      if (!db || !user || typeof db.doc !== "function" || typeof user.id !== "function") return null;
+      return user.id().then(function (uid) {
+        if (typeof uid !== "string" || !uid) return null;
+        try { doc = db.doc("seen/" + uid); } catch (e) { return null; }
+        OVER = "md2a-seen-over:" + KEY + ":" + uid;
+        overrides = readMarks(OVER);
+        return new Promise(function (resolve) {
+          unsub = doc.onSnapshot(function (snap) {
+            if (mode === "local") return;
+            remote = snap.exists ? clean((snap.data() || {}).marks) : {};
+            if (mode === "connecting") {
+              mode = "db";
+              resolve(true);
+              // Clicks made while connecting are written now, outside this
+              // callback; they are still the reader's own gestures.
+              setTimeout(pump, 0);
+            }
+            paint();
+          }, function () {
+            if (mode === "connecting") { doc = null; OVER = null; resolve(null); }
+            else if (mode === "db") useLocal();
+          });
+        });
+      });
+    }).catch(function () { return null; }).then(function (ok) {
+      if (ok || mode !== "connecting") return;
+      mode = "local";
+      OVER = null;
+      pending = {};
+      paint();
+    });
+
+    secs.forEach(function (sec) {
+      part(sec, ".sec-tools .seen-btn").addEventListener("click", function () {
+        var id = sec.dataset.sec, v = stateOf(sec) === "seen" ? "" : sec.dataset.hash;
+        if (mode === "local" && OVER) {
+          overrides[id] = v;
+          lsSet(OVER, JSON.stringify(overrides));
+        } else if (mode === "local") {
+          setLocal(id, v);
+        } else {
+          pending[id] = v;
+          // Until the db answers, the plain local copy is the record, so a
+          // reload before then keeps the click.
+          if (mode === "connecting") setLocal(id, v);
+          pump();
+        }
+        paint();
+      });
+    });
+    paint();
+
+    // -- Page-level comment --
+    var cbtn = document.querySelector(".doc .page-comment");
+    if (cbtn) capability("comments").then(function (comments) {
+      if (!comments || typeof comments.openComposer !== "function") return;
+      cbtn.hidden = false;
+      cbtn.addEventListener("click", function () {
+        var target = document.querySelector(".doc h1") || document.querySelector(".doc");
+        Promise.resolve().then(function () { return comments.openComposer({ element: target }); })
+          .catch(function (e) { if (e && e.code === "unavailable") cbtn.hidden = true; });
+      });
+    });
+  }
+  // After DOMContentLoaded, so the layer's page snapshot (taken as its script
+  // starts) is the clean page rather than this reader's folded state.
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
 </script>
 <!-- annotation-layer v2 -->
 <style>
@@ -498,6 +888,12 @@ ul>li.antask{list-style:none}
   <span id="anToast"></span>
 </div>
 <div id="anList"></div>
+<div class="anbar" id="anPageBar">
+  <span class="ancount">This page</span>
+  <button class="anbtn ghost" id="anPageDownload" type="button" hidden>Download HTML</button>
+  <button class="anbtn ghost" id="anPageCopy" type="button">Copy HTML</button>
+  <span id="anPageToast"></span>
+</div>
 </section>
 <div id="anPop" role="dialog" aria-label="Comment">
   <div class="anmodebar" role="group" aria-label="Annotation mode">
@@ -527,6 +923,19 @@ ul>li.antask{list-style:none}
 "use strict";
 var $ = function(id){ return document.getElementById(id); };
 var root = document.querySelector("[data-annotation-layer]");
+// The page as parsed, taken before this script adds a highlight, a suggested
+// edit or a restored tick: those are one reader's work, and baked into the
+// file they would corrupt every quote anchor for the next reader. The closing
+// marker sits after this script and is never parsed yet, so it is always put
+// back. Its text is split because `strip_layer` ends its removal at the first
+// whole copy: one inside this script would cut the strip off mid-script.
+var PAGE_HTML = (function(){
+  var h = document.documentElement.outerHTML;
+  var close = "<!-- /annotation-" + "layer -->";
+  var at = h.lastIndexOf("</body>");
+  h = at < 0 ? h + "\n" + close : h.slice(0, at) + close + "\n" + h.slice(at);
+  return "<!DOCTYPE html>\n" + h;
+})();
 var KEY = (root && root.dataset.key) || ("annot:" + document.title);
 // Namespaced with a PREFIX, never a suffix. With `KEY + "-draft"`, a page
 // titled "Spec-draft" owns the same key as the draft of a page titled "Spec",
@@ -1508,10 +1917,9 @@ function exportText(){
   return out + (notes.length ? markdown(notes) + "\n" : "");
 }
 function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
-// There is deliberately no download path. The Artifact viewer never grants a
-// page download permission, so a Download button was inert exactly where these
-// pages are read, while still making every publish warn about an offered file.
-// Copy all is the one export, with the textarea below as its fallback.
+// Comments have no download path: Copy all is their one export, with the
+// textarea below as its fallback. (The page itself can be downloaded -- see
+// "this page as HTML" below -- which is a different thing from the feedback.)
 // What the textarea currently holds. The box can sit open while the page is
 // edited behind it, so the copy event stamps the snapshot the text was built
 // from, not whatever the list happens to be when the user finally hits copy.
@@ -1595,6 +2003,74 @@ $("anClear").onclick = function(){
   comments.slice().forEach(function(c){ unwrap(c.id); });
   comments = []; markClean(); persist(); render();
 };
+// ---- this page as HTML ---------------------------------------------------
+function pageFilename(){
+  var slug = (document.title || "page").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  return (slug || "page") + ".html";
+}
+function pageToast(html, ms){
+  var t = $("anPageToast"); t.innerHTML = html;
+  setTimeout(function(){ t.innerHTML = ""; }, ms || 2400);
+}
+// Three places the page can be read, three behaviours for one button:
+// - in the viewer with the `downloads` capability (the owner, on a page
+//   published with it): a real save through the viewer's confirmation;
+// - in the viewer without it (a public-link viewer, or a page published
+//   before the capability was declared): shown DISABLED and saying so, so the
+//   reader learns Copy HTML is the route rather than finding no button at all.
+//   An `<a download>` is inert in the viewer's sandbox, so nothing else works;
+// - with no `window.claude` at all, the page is a local file -- a downloaded
+//   copy -- where an ordinary `<a download>` works.
+var downloads = null, dlBtn = $("anPageDownload");
+function downloadUnavailable(){
+  dlBtn.hidden = false; dlBtn.disabled = true;
+  dlBtn.textContent = "Download HTML (not available here)";
+  dlBtn.title = "This viewer does not let the page save files. Copy HTML works everywhere.";
+}
+function saveLocally(){
+  var url = URL.createObjectURL(new Blob([PAGE_HTML], { type: "text/html" }));
+  var a = document.createElement("a");
+  a.href = url; a.download = pageFilename();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 10000);
+}
+if (window.claude && typeof window.claude.use === "function") {
+  Promise.resolve().then(function(){ return window.claude.use("downloads"); })
+    .then(function(d){ if (d) { downloads = d; dlBtn.hidden = false; } else downloadUnavailable(); },
+          downloadUnavailable);
+} else {
+  dlBtn.hidden = false;
+}
+dlBtn.onclick = async function(){
+  if (!downloads) { if (!dlBtn.disabled) saveLocally(); return; }
+  try {
+    var r = await downloads.save({ filename: pageFilename(), data: PAGE_HTML });
+    if (r && r.status === "saved") pageToast('<span class="anok">saved</span>');
+  } catch (e) {
+    var code = e && e.code;
+    if (code === "declined") return;
+    if (code === "rate_limited") { pageToast('<span class="anwarn">a save prompt is already open</span>', 3000); return; }
+    downloadUnavailable();
+    pageToast('<span class="anwarn">download unavailable here \u2014 use Copy HTML</span>', 4000);
+  }
+};
+$("anPageCopy").onclick = async function(){
+  var ok = false;
+  try { await navigator.clipboard.writeText(PAGE_HTML); ok = true; }
+  catch (e) {
+    var ta = document.createElement("textarea");
+    ta.value = PAGE_HTML;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  pageToast(ok ? '<span class="anok">page HTML copied</span>'
+               : '<span class="anwarn">clipboard blocked here</span>', ok ? 2400 : 4000);
+};
+
 badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
 
 // A host page may bind single-key shortcuts on document or window -- a triage

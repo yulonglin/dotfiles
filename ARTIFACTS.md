@@ -16,6 +16,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 
 | Artifact | Org | Status | Source | Public | Updated |
 |---|---|---|---|---|---|
+| [Research Run Records](https://claude.ai/artifact/RKXV7RT4bXVs3mUArR8MU7) — the spec for `runrec`, tier 0 of the 2026-10-04 research-loop priorities: every launch writes a run directory, a live `launch.json` and a line in the repo's `out/runs.jsonl` before it spends; a Modal or RunPod launch with no cost cap, burn rate or idle limit is refused, `modal deploy` and `--detach` are refused because no in-run stop can reach them, and an OpenRouter balance below the declared API cap refuses the launch; a running command is stopped on estimated cost, idle or deadline; one Markdown board per project is kept in the vault. Reviewed before the build by GPT-6.1 Sol, whose six defects (mid-run manifest races, an API cap described as enforced when it is advisory, key ceiling mistaken for account credit, self-resetting idle clock, resumed progress, frozen board) the page records with their fixes | lin.yulong@gmail.com's Organization | live | `artifacts/research-run-records/` | no | 2026-10-12 |
 | [Download HTML session handover](https://claude.ai/artifact/MZGF7FLXh4pCw6EzMiGmg9) — handover of session 55c231ff (the annotation layer's Download HTML and Copy HTML buttons), written with the externalise-handover skill by a Claude Opus 5.5 subagent, for comparison with the debrief-trial-55c231ff page | lin.yulong@gmail.com's Organization | done | `artifacts/handover-trial-55c231ff/` | no | 2026-10-06 |
 | [Download HTML session debrief](https://claude.ai/artifact/E2o1qcjbkrifRzu34t1yyd) — trial of alignment-hive's `debrief` plugin on session 55c231ff (the annotation layer's Download HTML and Copy HTML buttons), written by a Claude Opus 5.5 subagent and fact-checked by GPT-6 Astra; compare with handover-trial-55c231ff | lin.yulong@gmail.com's Organization | done | `artifacts/debrief-trial-55c231ff/` | no | 2026-10-06 |
 | [The page can be downloaded as HTML](https://claude.ai/artifact/DHxg1ZG6BqraAdXUJtr5n6) — a probe page for the annotation layer's "This page" row — Download HTML through the viewer's `downloads` capability, and Copy HTML through the clipboard. Published with `capabilities: {downloads: true}` to check whether the viewer grants that capability to the owner and to a non-owner viewer | lin.yulong@gmail.com's Organization | done | `artifacts/download-probe/` | no | 2026-09-24 |
@@ -52,7 +53,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 | [Alias Audit](https://claude.ai/code/artifact/739598b0-362d-4aaa-a8c2-c77775be5eb4) — alias files fight over names by source order; the set was cut 161 → ~110 against two months of shell history | see note | done | — | no | 2026-08-18 |
 | [Tool-Backed Agents](https://claude.ai/code/artifact/4c124679-7346-4dc5-9cb4-75889320aaf4) — which agents actually invoke their CLI rather than answering from their own reasoning | see note | done | — | no | 2026-08-18 |
 
-35 rows: 17 live, 15 done, 2 archived, 1 superseded.
+36 rows: 18 live, 15 done, 2 archived, 1 superseded.
 
 [//]: # (END GENERATED ARTIFACTS TABLE)
 
