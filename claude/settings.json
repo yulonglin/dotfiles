@@ -358,6 +358,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.codex-code-review -- node $HOME/.claude/hooks/codex_code_review_reminder.mjs",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/quality_mark_skill_ran.sh",
+            "timeout": 5
           }
         ]
       },
@@ -368,6 +373,12 @@
             "type": "command",
             "command": "$HOME/.claude/hooks/check_loop_bypass.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/quality_pr_gate.sh",
+            "timeout": 10,
+            "statusMessage": "Checking branch was reviewed before PR"
           },
           {
             "type": "command",
