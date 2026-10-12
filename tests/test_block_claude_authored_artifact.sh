@@ -92,6 +92,44 @@ check "another tool's payload is ignored" 0 \
   "$(run "$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s/fable/page.html"}}' "$FIX")")"
 check "malformed json does not block work" 0 "$(run 'not json at all')"
 
+# --- publishes through `files` (no file_path) ---
+U=https://claude.ai/code/artifact/abc
+files_pub() { # files_pub <files-json> [extra-json-fields] -> json
+  printf '{"tool_name":"Artifact","cwd":"%s","tool_input":{"url":"%s","files":%s%s}}' "$REPO" "$U" "$1" "${2:-}"
+}
+# Sources come from printf over single-quoted templates: bash 3.2 parses
+# \" inside nested "$(...)" differently, which silently changed the JSON.
+# shellcheck disable=SC2059  # the template is the format, by design
+f1() { printf "$1" "$FIX"; }
+# shellcheck disable=SC2059
+f2() { printf "$1" "$FIX" "$FIX"; }
+check "files: banned author" 2 "$(run "$(files_pub "$(f1 '{"p.html":"%s/fable/page.html"}')")")"
+check "files: missing author" 2 "$(run "$(files_pub "$(f1 '{"p.html":"%s/missing-field/page.html"}')")")"
+check "files: allowed author" 0 "$(run "$(files_pub "$(f1 '{"p.html":"%s/sol/page.html"}')")")"
+check "files: {from:} object form, banned" 2 \
+  "$(run "$(files_pub "$(f1 '{"p.html":{"from":"%s/fable/page.html","contentType":"text/html"}}')")")"
+check "files: {from:} object form, allowed" 0 \
+  "$(run "$(files_pub "$(f1 '{"p.html":{"from":"%s/astra/page.html"}}')")")"
+check "files: root-relative source, banned" 2 \
+  "$(run "$(files_pub '{"p.html":"fable/page.html"}' ',"root":"tests/fixtures/artifact-author"')")"
+check "files: root-relative source, allowed" 0 \
+  "$(run "$(files_pub '{"p.html":"kimi/page.html"}' ',"root":"tests/fixtures/artifact-author"')")"
+check "files: cwd-relative source, banned" 2 \
+  "$(run "$(files_pub '{"p.html":"tests/fixtures/artifact-author/fable/page.html"}')")"
+check "files: one bad source among good ones" 2 \
+  "$(run "$(files_pub "$(f2 '{"a.html":"%s/sol/page.html","b.json":"%s/fable/data.json"}')")")"
+check "files: list form, banned" 2 \
+  "$(run "$(files_pub "$(f1 '[{"path":"%s/fable/page.html"}]')")")"
+check "files: {artifact,path} server-side copy" 0 \
+  "$(run "$(files_pub '{"app.js":{"artifact":"https://claude.ai/code/artifact/def","path":"app.js"}}')")"
+check "files: null removal" 0 "$(run "$(files_pub '{"old.html":null}')")"
+check "files: image beside a banned page is not prose" 0 \
+  "$(run "$(files_pub "$(f1 '{"fig.png":"%s/fable/fig.png"}')")")"
+check "file_path and files both checked" 2 \
+  "$(run "$(printf '{"tool_input":{"file_path":"%s/sol/page.html","files":{"b.html":"%s/opus5/page.html"}}}' "$FIX" "$FIX")")"
+check "type_url create, no local source" 0 \
+  "$(run '{"tool_input":{"type_url":"https://claude.ai/code/artifact-type/x","title":"T"}}')"
+
 # An untracked directory cannot claim legacy, whatever the cutover.
 UNTRACKED="$REPO/tmp/artifact-author-untracked"
 mkdir -p "$UNTRACKED"
