@@ -65,7 +65,7 @@ DEFAULT_TIMEOUT = 60.0
 MIN_ATTEMPT_S = 5.0
 MAX_DIFF_CHARS = 60_000
 MAX_TEST_BLOCKS = 6
-MAX_TEST_TAIL_LINES = 15
+MAX_TEST_TAIL_LINES = 5
 MAX_BODY_CHARS = 60_000
 
 TEST_COMMAND_RE = re.compile(
@@ -73,6 +73,25 @@ TEST_COMMAND_RE = re.compile(
     r"|shellcheck|npm\s+(run\s+)?test|bun\s+test|just\s+test|cargo\s+test|go\s+test"
     r"|ruff\b|md-unwrap\s+--check)"
 )
+# The prompt leaves the machine, so anything secret-shaped is masked before it
+# goes: the diff and the test tails both pass through redact(). Over-masking a
+# `max_tokens = 2000` line costs nothing; leaking a key costs a rotation.
+SECRET_RES = (
+    re.compile(r"\bsk-[A-Za-z0-9_-]{16,}"),
+    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),
+    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+    re.compile(r"\bxox[abposr]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{30,}"),
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{12,}"),
+    re.compile(r"/t/[0-9A-Za-z_-]{16,}"),  # the router's tokened base URL
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
+)
+ASSIGNMENT_RE = re.compile(
+    r"(?i)\b([A-Za-z0-9_]*(?:key|token|secret|passw(?:or)?d|credential|auth)[A-Za-z0-9_]*)"
+    r"(\s*[=:]\s*)(\"[^\"\n]*\"|'[^'\n]*'|[^\s,;]+)"
+)
+REDACTED = "[REDACTED]"
+
 SYMBOL_RE = re.compile(
     r"^([+-])\s*(?:export\s+|async\s+)?"
     r"(class|def|function|func|fn|deploy_\w+|[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{)"
@@ -166,6 +185,15 @@ def display_name(model: str, models: list[dict]) -> str:
         if model in (m.get("id"), m.get("slug"), *(m.get("aliases") or [])):
             return m.get("name") or model
     return model
+
+
+def redact(text: str, extra: tuple[str, ...] = ()) -> str:
+    for literal in extra:
+        if literal:
+            text = text.replace(literal, REDACTED)
+    for pattern in SECRET_RES:
+        text = pattern.sub(REDACTED, text)
+    return ASSIGNMENT_RE.sub(lambda m: m.group(1) + m.group(2) + REDACTED, text)
 
 
 class GenerationError(Exception):
@@ -301,6 +329,7 @@ def endpoint() -> tuple[str, str]:
 def ask(model: str, prompt: str, timeout: float) -> tuple[str, str]:
     """The body text, and the model the gateway says answered."""
     base, token = endpoint()
+    prompt = redact(prompt, (token,))
     body = json.dumps({
         "model": model,
         "max_tokens": 2000,

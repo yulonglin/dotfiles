@@ -201,7 +201,7 @@ start_router() {  # $1 = http status, $2 = seconds to stall first, $3 = answerin
         sleep 0.1
     done
     [ -n "$PORT" ] || fail "fake router did not start"
-    echo tok > "$WORK/token"
+    printf '%s' "$INGRESS_TOKEN" > "$WORK/token"
     export PR_BODY_TOKEN_FILE="$WORK/token"
     export PR_BODY_BASE_URL="http://127.0.0.1:$PORT/t/tok"
 }
@@ -211,17 +211,33 @@ stop_router() {
     unset PR_BODY_TOKEN_FILE PR_BODY_BASE_URL
 }
 
+# A runtime-only ingress token: long enough to be worth masking, never in git.
+INGRESS_TOKEN="$(python3 -c 'print("ing" + "ress" + "0f9e" * 6)')"
+
 # A transcript holding one test run, which is where the Tests section's facts
-# have to come from: git cannot know what was run.
-python3 - "$WORK/transcript.jsonl" <<'PY'
+# have to come from: git cannot know what was run. Its output also carries
+# planted secret-shaped strings, each assembled here from fragments so no
+# credential-shaped literal is ever committed; none may reach the gateway.
+python3 - "$WORK/transcript.jsonl" "$WORK/planted" "$INGRESS_TOKEN" <<'PY'
 import json, sys
+planted = [
+    "sk" + "-" + "proj" + "Q7" * 12,
+    "gh" + "p_" + "Zx9" * 10,
+    "AK" + "IA" + "TESTFAKE" + "00000000",
+    "Bear" + "er " + "eyJ" + "hbGci" * 4,
+    "ROUTER_" + "API_KEY=" + "plainvalue" + "123",
+    sys.argv[3],
+]
+with open(sys.argv[2], "w") as fh:
+    fh.write("\n".join(planted) + "\n")
+leaky = "\n".join(["collected 15 items"] + planted + ["Ran 15 tests in 1.5s", "", "OK"])
 rows = [
     {"type": "assistant", "message": {"content": [
         {"type": "tool_use", "id": "t1", "name": "Bash",
          "input": {"command": "python3 tests/test_advisor_skipped.py"}}]}},
     {"type": "user", "message": {"content": [
         {"type": "tool_result", "tool_use_id": "t1",
-         "content": "Ran 15 tests in 1.5s\n\nOK"}]}},
+         "content": leaky}]}},
     {"type": "assistant", "message": {"content": [
         {"type": "tool_use", "id": "t2", "name": "Bash",
          "input": {"command": "ls -la"}}]}},
@@ -239,7 +255,10 @@ class Widget:
     def render(self):
         return 1
 PY
-git -C "$REPO" add widget.py
+# The same planted strings ride in the diff too: the test tail is cut to its
+# last lines, so the diff is the path that would carry every one of them.
+cp "$WORK/planted" "$REPO/local.env"
+git -C "$REPO" add widget.py local.env
 git -C "$REPO" -c user.name=t -c user.email=t@t commit -q -m "Add the widget"
 
 # --- a reachable gateway writes the body ------------------------------------
@@ -264,6 +283,17 @@ grep -q "Mermaid diagram ONLY when" "$REQ" || fail "diagram is not conditional"
 grep -q "widget.py" "$REQ" || fail "the diff never reached the model"
 grep -q "Widget" "$REQ" || fail "the changed class never reached the model"
 grep -q "Add the widget" "$REQ" || fail "the commit subjects never reached the model"
+# Secret-shaped strings from the transcript are masked before the prompt leaves.
+python3 - "$REQ" "$WORK/planted" <<'PY' || fail "a planted secret reached the gateway"
+import sys
+sent = open(sys.argv[1]).read()
+leaked = [p for p in open(sys.argv[2]).read().split("\n") if p and p.split()[-1].split("=")[-1] in sent]
+assert not leaked, leaked
+assert "[REDACTED]" in sent
+PY
+# Model-written text never comes back into the session: the hook's context
+# carries the PR URL and a fixed description, not the body.
+grep -q "nobody could review" <<<"$OUT" && fail "model-written body text was echoed into the session context"
 stop_router
 ok
 
