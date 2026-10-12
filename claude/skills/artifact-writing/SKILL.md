@@ -49,6 +49,8 @@ Pages built before v2 are frozen at v1 per the rule below and gain the mode only
 
 Known edges, reviewed by council 2026-09-02 and left as they are because none loses a stored entry: a comment made *before* an edit whose struck span later contains it re-anchors as "missed" (still stored, still exported); a replacement identical to its quote saves a no-op edit; and because the comment key is derived from the artifact directory, a page rebuilt from a scratch copy under `build/` derives a different key — build in place, or pass `--key`.
 
+**A reader can switch the layer off from the page.** The viewer has its own comments on the same select-text gesture, so a **Highlights on/off** button sits beside the 💬 badge. Off hides and never deletes: highlights and suggested edits render as plain text, a selection opens no box, and the comments stay stored, counted, guarded and exported. A box holding typed words declines the switch and points at them, and a stored draft waits in storage until the layer is on again. The choice is per reader and per page, under `an-off:<key>`. Pages published before this need a rebuild (`md2artifact`, or `annotate-html --force`) and a republish to gain the button.
+
 - **A comment stays readable and editable after it is written** — clicking its highlight reopens it with the existing text, to reread, revise or delete. A note that survives only as a `title` tooltip is effectively gone the moment it is written.
 - **Unexported comments block destructive transitions**: track whether anything changed since the last copy or export, and guard `beforeunload` while it has.
 - **A half-typed note is already the user's work**: autosave it as a draft on every keystroke and reopen the box on it, so a forced refresh costs nothing.

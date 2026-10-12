@@ -83,7 +83,13 @@ Behaviour, all of which the tests guard:
   sandbox that suppresses `confirm` excludes the document from unload
   prompting, so the comments' real safety net is that they are already in
   localStorage;
-- a fixed count badge that jumps to the panel.
+- a fixed count badge that jumps to the panel, with an on/off switch beside
+  it. The Artifact viewer has native commenting on the same select-text
+  gesture, so a reader can switch the highlights and the note box off. Off
+  only hides: comments stay stored, counted, guarded and exported, a dirty
+  box declines the switch rather than lose its words, and a stored draft
+  waits for the layer to come back on. The choice is kept per page under
+  `an-off:<key>`.
 
 Layer v2 adds a second mode, **Suggest edit**, to the same box. Comment stays
 the default, so select-type-Enter means exactly what it meant before. The
@@ -312,11 +318,21 @@ ul>li.antask{list-style:none}
  white-space:nowrap;cursor:pointer}
 .anstatebtn:hover{border-color:var(--an-accent);color:var(--an-accent)}
 .anstatebtn:focus-visible,.anstatebox:focus-visible{outline:2px solid var(--an-accent);outline-offset:2px}
-#anBadge{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
- bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;background:var(--an-bg);color:var(--an-ink);
+#anDock{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
+ bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;display:flex;gap:.4rem;align-items:center}
+#anBadge,#anToggle{background:var(--an-bg);color:var(--an-ink);
  border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
  font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+#anToggle{font-size:.78rem;color:var(--an-soft)}
+#anToggle[aria-pressed="false"]{border-style:dashed}
 #anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
+/* Switched off, the page reads as if the layer were not there, so the
+   viewer's own commenting gets the selection and the original text. The
+   comments are kept, still counted and still exported; only their marks and
+   the box go quiet. */
+html.an-off mark.note{background:none;border-bottom:0;cursor:inherit}
+html.an-off mark.anedit{color:inherit;text-decoration:none;cursor:inherit}
+html.an-off .anins,html.an-off #anPop{display:none!important}
 """
 
 HTML = r"""
@@ -359,7 +375,10 @@ HTML = r"""
   </div>
   <textarea id="anExportText" readonly></textarea>
 </div>
+<div id="anDock">
+<button id="anToggle" type="button" aria-pressed="true" title="Switch this page's highlights and comment box off, to use the viewer's own comments. Your comments are kept.">Highlights on</button>
 <button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
+</div>
 """
 
 JS = r"""
@@ -387,6 +406,7 @@ var KEY = (root && root.dataset.key) || ("annot:" + document.title);
 var DIRTY = "an-dirty:" + KEY;
 var DRAFT = "an-draft:" + KEY;
 var STATES = "an-states:" + KEY;
+var OFF = "an-off:" + KEY;
 
 // ---- storage -------------------------------------------------------------
 // localStorage, and nothing else. An IndexedDB mirror, a backup key and a
@@ -463,7 +483,7 @@ function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
   comments.forEach(function(c){ if (!c.copiedAt) { c.copiedAt = now; touched = true; } });
   if (touched) persist();
 })();
-var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
+var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge"), toggle = $("anToggle");
 var pending = null, editingId = null;
 // The box has two modes and one dirty flag. `dirty` is set by the first user
 // modification and by nothing else: an edit box OPENS with the selection
@@ -598,6 +618,7 @@ function openEdit(c, anchor, focus){
 // Both parts of a suggested edit carry the entry id, as a comment highlight
 // does, so clicking the strikethrough or the replacement reopens the same box.
 document.addEventListener("click", function(ev){
+  if (layerOff()) return;
   var m = ev.target.closest && ev.target.closest("[data-cid]");
   if (!m || pop.contains(ev.target)) return;
   var c = comments.find(function(x){ return x.id === Number(m.dataset.cid); });
@@ -774,6 +795,7 @@ function openForSelection(autofocus){
 // Synchronous, so the focus stays inside the user gesture — Safari only
 // raises the soft keyboard for a focus() called within one.
 document.addEventListener("mouseup", function(ev){
+  if (layerOff()) return;
   if (pop.contains(ev.target)) return;
   if (ev.target.closest && ev.target.closest("[data-cid]")) return;
   clearTimeout(selTimer);
@@ -798,6 +820,7 @@ document.addEventListener("mousedown", function(ev){
 // fires on every platform; debounce it so it runs once the selection settles.
 var selTimer = null;
 document.addEventListener("selectionchange", function(){
+  if (layerOff()) return;
   if (document.activeElement === txt) return;
   if (editingId !== null) return;
   // Same test as openForSelection: modified work stays, an untouched prefill
@@ -843,6 +866,10 @@ function discard(){ closePop(); }
 // suggest a deletion, and a refresh before Enter must bring that back. In
 // comment mode an empty box is nothing to keep.
 function saveDraft(){
+  // Off, the box is shut but a draft from an earlier visit may be waiting in
+  // storage for the layer to come back on; the pagehide save must not take
+  // that closed box as "nothing to keep" and delete it.
+  if (layerOff()) return;
   if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
   lsSet(DRAFT, JSON.stringify({
     note: txt.value, editingId: editingId, mode: mode,
@@ -1517,6 +1544,35 @@ $("anPageCopy").onclick = async function(){
 
 badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
 
+// ---- on/off switch -------------------------------------------------------
+// The Artifact viewer has its own commenting, and both answer the same
+// select-text gesture, so a reader can switch this layer's highlights and box
+// off. Off hides; it never deletes: the comments, their count, the badge's
+// warning, the unload guard and Copy all carry on as before, and a draft is
+// left in storage for the next time the layer is on. One reader's choice,
+// kept per page under its own prefixed key.
+function layerOff(){ return document.documentElement.classList.contains("an-off"); }
+function setLayerOff(off){
+  document.documentElement.classList.toggle("an-off", off);
+  toggle.setAttribute("aria-pressed", off ? "false" : "true");
+  toggle.textContent = off ? "Highlights off" : "Highlights on";
+}
+toggle.onclick = function(){
+  if (!layerOff()) {
+    // Words the reader typed are work, and closePop would delete their draft.
+    // Decline and point at them, as every other overwriting control does.
+    if (isOpen() && dirty) { nudge(); return; }
+    if (isOpen()) closePop();
+    setLayerOff(true);
+    lsSet(OFF, "1");
+  } else {
+    setLayerOff(false);
+    lsDel(OFF);
+    if (!isOpen()) restoreDraft();
+  }
+};
+setLayerOff(lsGet(OFF) === "1");
+
 // A host page may bind single-key shortcuts on document or window -- a triage
 // console where `d` means delete, a slideshow where `j` means next. Typing a
 // note would fire them: the keystroke bubbles out of this textarea and reaches
@@ -1536,6 +1592,7 @@ badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth",
 wireStates();
 restoreHighlights();
 render();
-restoreDraft();
+// Off on load: the draft stays stored and comes back when the layer is on.
+if (!layerOff()) restoreDraft();
 })();
 """

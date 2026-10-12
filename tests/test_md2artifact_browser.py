@@ -126,6 +126,9 @@ def _chromium_path() -> str | None:
         found = shutil.which(name)
         if found:
             return found
+    mac_chrome = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    if mac_chrome.is_file():
+        return str(mac_chrome)
     return None
 
 
@@ -1089,6 +1092,78 @@ def test_the_badge_and_the_count_include_edits(page) -> None:
     count = page.locator("#anCount").inner_text()
     assert "suggested edit" in count, count
     assert "not yet copied out" in count, count
+
+
+# ---- on/off switch -----------------------------------------------------------
+# The Artifact viewer has native commenting on the same select-text gesture, so
+# the reader can switch this layer off. Off hides; it must never lose work.
+
+
+def test_switched_off_a_selection_opens_no_box_and_highlights_go_quiet(page) -> None:
+    add_comment(page, SELECT_SECOND_JS, "kept while off")
+    page.click("#anToggle")
+    expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "false")
+    assert page.evaluate("() => document.documentElement.classList.contains('an-off')")
+    assert page.evaluate(
+        "() => getComputedStyle(document.querySelector('mark.note')).backgroundColor"
+    ) in ("rgba(0, 0, 0, 0)", "transparent")
+    page.evaluate(SELECT_JS)
+    page.mouse.click(5, 5)  # a mouseup too, the desktop path
+    page.evaluate(SELECT_JS)
+    page.wait_for_timeout(400)  # absence: past the debounce
+    assert not page.evaluate(POP_OPEN)
+    # Hidden, not deleted: the comment is still counted.
+    expect(page.locator("#anBadge")).to_contain_text("1")
+
+
+def test_switched_off_hides_a_suggested_edits_inserted_text(page) -> None:
+    add_edit(page, "INSERTED WORDS")
+    page.click("#anToggle")
+    expect(page.locator(".anins")).to_be_hidden()
+    assert page.evaluate(
+        "() => getComputedStyle(document.querySelector('mark.anedit')).textDecorationLine"
+    ) == "none"
+
+
+def test_the_switch_survives_a_reload_and_switches_back_on(page) -> None:
+    page.click("#anToggle")
+    page.reload()
+    expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "false")
+    page.click("#anToggle")
+    expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "true")
+    assert page.evaluate("() => localStorage.getItem('an-off:review-sample')") is None
+    page.evaluate(SELECT_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+
+
+def test_switching_off_declines_while_the_box_holds_typed_words(page) -> None:
+    page.evaluate(SELECT_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "half a thought")
+    page.dispatch_event("#anTxt", "input")
+    page.click("#anToggle")
+    expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "true")
+    assert page.evaluate(POP_OPEN)
+    assert page.input_value("#anTxt") == "half a thought"
+
+
+def test_a_stored_draft_waits_out_the_off_state(page) -> None:
+    page.evaluate(SELECT_JS)
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    page.fill("#anTxt", "drafted before switching off")
+    page.dispatch_event("#anTxt", "input")
+    page.evaluate("() => localStorage.setItem('an-off:review-sample', '1')")
+    page.reload()
+    page.wait_for_timeout(400)
+    assert not page.evaluate(POP_OPEN)
+    # The pagehide save must not read the shut box as "nothing to keep".
+    page.reload()
+    assert "drafted before switching off" in (
+        page.evaluate("() => localStorage.getItem('an-draft:review-sample')") or ""
+    )
+    page.click("#anToggle")
+    page.wait_for_function(POP_OPEN, timeout=3000)
+    assert page.input_value("#anTxt") == "drafted before switching off"
 
 
 def test_the_export_carries_a_suggested_edits_section(browser, site) -> None:
