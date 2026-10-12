@@ -1,0 +1,103 @@
+name: Claude subscription auth probe
+
+# Step zero of the PR loop in artifacts/gha-pr-loop/spec.md: before any fixer is built, prove that
+# Claude Code on a GitHub-hosted runner answers on Yulong's subscription through the
+# CLAUDE_CODE_OAUTH_TOKEN secret (minted by `claude setup-token`), and never falls through to API
+# billing. Nothing else in the loop is worth building if this leg is red.
+#
+# Credential precedence puts ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN above
+# CLAUDE_CODE_OAUTH_TOKEN, and in -p mode an API key is used without asking
+# (code.claude.com/docs/en/authentication#authentication-precedence). So the probe refuses to call
+# the model while either is set, and then asserts the CLI's own report of where its credential
+# came from. `--bare` is not used: bare mode does not read CLAUDE_CODE_OAUTH_TOKEN.
+#
+# A missing secret fails at the precheck with a named reason, not at the model call, so a red run
+# says which of the two things is wrong.
+#
+# No actions beyond actions/*, matching this repo's supply-chain posture. The CLI comes from npm,
+# pinned to the `stable` dist-tag version, which clears the 7-day min-release-age in config/npmrc.
+
+on:
+  push:
+    branches: [worktree-gha-pr-loop]
+    paths:
+      - '.github/workflows/claude-auth-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claude-auth-probe
+  cancel-in-progress: true
+
+env:
+  CLAUDE_CODE_VERSION: 2.1.287
+
+jobs:
+  probe:
+    name: Subscription token answers, API key absent
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    steps:
+      - name: Precheck — token present, no higher-precedence credential
+        run: |
+          if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN secret is not set on this repo. Run 'claude setup-token' locally, then 'gh secret set CLAUDE_CODE_OAUTH_TOKEN'."
+            exit 1
+          fi
+          for v in ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY; do
+            if [ -n "${!v:-}" ]; then
+              echo "::error::$v is set; it outranks CLAUDE_CODE_OAUTH_TOKEN and would bill the API instead of the subscription."
+              exit 1
+            fi
+          done
+          echo "Token present (${#CLAUDE_CODE_OAUTH_TOKEN} chars); no higher-precedence credential in the environment."
+
+      # Lifecycle scripts stay on for this one package: its postinstall (install.cjs) is what moves
+      # the platform binary from the optional dependency into bin/claude.exe.
+      - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }}
+        run: |
+          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          claude --version
+
+      # Leg 1: a plain answer. Asserts the sentinel, no error, and that the CLI did not source its
+      # credential from an API key. Locally under /login this field reads "none".
+      - name: Leg 1 — model answers on the subscription
+        working-directory: ${{ runner.temp }}
+        run: |
+          echo "Reply with exactly: PROBE_OK" \
+            | claude -p --output-format stream-json --verbose --max-turns 1 > leg1.jsonl
+          python3 - leg1.jsonl <<'PY'
+          import json, sys
+          init = result = None
+          for line in open(sys.argv[1]):
+              d = json.loads(line)
+              if d.get("type") == "system" and d.get("subtype") == "init":
+                  init = d
+              elif d.get("type") == "result":
+                  result = d
+          assert init and result, "stream-json had no init or no result message"
+          src = init.get("apiKeySource")
+          print(f"model={init.get('model')} apiKeySource={src} version={init.get('claude_code_version')}")
+          print(f"subtype={result.get('subtype')} is_error={result.get('is_error')} result={result.get('result')!r}")
+          assert src not in ("ANTHROPIC_API_KEY", "apiKeyHelper"), f"credential came from {src}, not the OAuth token"
+          assert not result.get("is_error"), "result is an error"
+          assert (result.get("result") or "").strip() == "PROBE_OK", "sentinel missing"
+          print("::notice::Leg 1 passed: subscription token answered headless on a hosted runner.")
+          PY
+
+      # Leg 2: the fixer needs to edit files headless. Grants only Write, in acceptEdits mode, in an
+      # empty scratch directory, and checks the file landed with the expected bytes.
+      - name: Leg 2 — headless file edit with a scoped tool grant
+        working-directory: ${{ runner.temp }}
+        run: |
+          mkdir -p leg2 && cd leg2
+          echo "Create a file named probe.txt whose entire content is the single line FIXER_OK. Do nothing else." \
+            | claude -p --output-format json --max-turns 3 \
+                --permission-mode acceptEdits --allowedTools Write > ../leg2.json
+          python3 -c 'import json;d=json.load(open("../leg2.json"));print({k:d.get(k) for k in ("subtype","is_error","num_turns")})'
+          test "$(cat probe.txt)" = "FIXER_OK" || { echo "::error::probe.txt missing or wrong"; ls -la; exit 1; }
+          echo "::notice::Leg 2 passed: headless Write under acceptEdits works on the runner."
