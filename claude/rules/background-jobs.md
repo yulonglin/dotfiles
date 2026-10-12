@@ -1,6 +1,6 @@
 # Background Jobs
 
-In a background job (`~/.claude/jobs/`) a prose question reaches nobody — it renders into a job list that fires no notification, so the session just looks stalled. Every decision point goes through `AskUserQuestion`, followed by `needs input:` on its own line. Confirmations, option menus and "OK to proceed?" are decision points too.
+In a background job (`~/.claude/jobs/`) a prose question reaches nobody: it renders into a job list that fires no notification, so the session looks stalled. Every decision point goes through `AskUserQuestion`, followed by `needs input:` on its own line. Confirmations, option menus and "OK to proceed?" are decision points too.
 
 The escape hatch is not asking in prose — it is not asking: when the decision is scoped, low-risk and reversible, take the default, state the assumption, and keep working.
 
