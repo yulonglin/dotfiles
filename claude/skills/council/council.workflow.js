@@ -48,7 +48,11 @@ const ANSWER = {
     },
   },
   required: ['verdict', 'answer', 'findings'],
+  additionalProperties: false,
 }
+
+// Model output is copied field by field, never spread, so it cannot overwrite seat, ranker or key.
+const pickAnswer = a => (a ? { verdict: a.verdict, answer: a.answer, findings: a.findings } : {})
 
 phase('Answer')
 const answers = await parallel(seats.map(s => () =>
@@ -61,10 +65,10 @@ const absent = labels.filter((_, i) => !answers[i])
 if (absent.length) {
   // Fail closed: a council that quietly lost seats still looks like corroboration.
   log(`DEGRADED: ${absent.length}/${seats.length} seats returned nothing (${absent.join(', ')}); ranking skipped`)
-  return { status: 'degraded', absent, answers: labels.map((l, i) => ({ seat: l, ...(answers[i] || {}) })) }
+  return { status: 'degraded', absent, answers: labels.map((l, i) => ({ seat: l, ...pickAnswer(answers[i]) })) }
 }
 
-const result = { status: 'complete', seats: labels, answers: labels.map((l, i) => ({ seat: l, ...answers[i] })) }
+const result = { status: 'complete', seats: labels, answers: labels.map((l, i) => ({ seat: l, ...pickAnswer(answers[i]) })) }
 if (!A.rank) return result
 
 const RANKING = {
@@ -75,6 +79,7 @@ const RANKING = {
     rationale: { type: 'string' },
   },
   required: ['order', 'injection', 'rationale'],
+  additionalProperties: false,
 }
 const LETTERS = 'ABCDEFGHIJKLMNOP'
 // Ballot letters come from model output, so 'toString' must not resolve through the prototype.
@@ -92,7 +97,7 @@ const ballots = await parallel(seats.map((s, r) => () => {
   // Rankers read other models' output while holding tools, so they run in a throwaway worktree:
   // an injected edit lands there, not in the caller's checkout.
   return agent(prompt, { label: `rank:${s.label}`, phase: 'Rank', schema: RANKING, agentType: s.agentType, isolation: 'worktree', ...(s.model ? { model: s.model } : {}) })
-    .then(b => (b ? { ranker: s.label, key, ...b } : null))
+    .then(b => (b ? { ranker: s.label, key, order: b.order, injection: [...new Set(b.injection)], rationale: b.rationale } : null))
 }))
 
 const missingBallots = labels.filter((_, i) => !ballots[i])
