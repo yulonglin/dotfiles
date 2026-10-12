@@ -474,7 +474,12 @@ test_menu_carries_its_own_deadline() {
 test_chsh_is_attended_only() {
     local out
     out=$(helper_probe 'functions set_zsh_default' 2>&1)
-    if [[ "$out" == *"-t 0"* && "$out" == *"run_with_timeout"* ]]; then
+    # `can_prompt`, not a bare `-t 0`: the gate now refuses on an unattended run
+    # (NON_INTERACTIVE) as well as on a missing TTY, which is strictly stronger.
+    # This check asserted the literal `-t 0` and so went red on the fix rather
+    # than on a regression — the property is "the prompt is gated and bounded",
+    # not "it is gated by that exact expression".
+    if [[ "$out" == *"can_prompt"* && "$out" == *"run_with_timeout"* ]]; then
         pass "chsh runs only attended and under a deadline"
     else
         fail "chsh can block on a PAM password prompt" "hangs mid-install where zsh is not the login shell"

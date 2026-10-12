@@ -3,3 +3,7 @@ custom_bins/claude-tools-darwin-arm64  binary
 custom_bins/claude-tools-darwin-x86_64 binary
 custom_bins/claude-tools-linux-x86_64  binary
 custom_bins/claude-tools-linux-aarch64 binary
+
+# Zed writes remote hosts into settings.json as ssh_connections; the clean
+# filter keeps them out of the repo. deploy.sh --git-config wires the driver.
+config/zed/settings.json filter=zed-ssh

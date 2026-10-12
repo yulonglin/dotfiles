@@ -41,6 +41,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `check-bib-references` | Verifying BibTeX citations aren't LLM-fabricated |
 | `strategic-communication` | Messages needing negotiation or persuasion — rentals, salary, declining an offer |
 | `externalise-handover` | Handing this conversation to another person or agent — next tasks, what ran, bugs, open uncertainties |
+| `debrief` | "debrief", "what did you do while I was away" — one commentable review page of a finished session, rendered by the hive CLI, iterated in rounds |
 
 ## Artifacts, specs and slides
 
@@ -133,6 +134,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | Skill | Use when |
 |---|---|
 | `bear` | Reading or editing Bear notes (macOS) |
+| `evidence-packs` | Assembling attachments for a visa, insurance or expense claim, audit or employer request — source-system printouts only, never text transcriptions |
 | `gmail-connector` | Pulling receipts, invoices or attachments out of Gmail via the claude.ai connector — the RAW-MIME route for attachments, search operators, read-only rules |
 | `things3` | Reading or managing Things 3 tasks, projects, areas, tags |
 | `setup-channel` | Setting up Telegram, iMessage or Things Cloud for a project |

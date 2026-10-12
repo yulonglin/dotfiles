@@ -64,16 +64,17 @@
 # question "who synthesises", so the split bought nothing and gave the config a
 # second place to drift. One synthesiser, named once.
 #
-# Fable 5 chairs while also holding the anthropic seat. That is a deliberate
-# accepted trade, not an oversight: it tops the index at 162.5, and benching the
-# strongest model to keep the chair neutral costs more than the bias it avoids.
+# Opus 5.5 chairs while also holding the anthropic seat. That is a deliberate
+# accepted trade, not an oversight: it tops the index at 167.3 (2026-10-12), and
+# benching the strongest model to keep the chair neutral costs more than the
+# bias it avoids.
 # The blind ranking round already excludes a ranker's own answer from its
 # ballot, so the self-preference is confined to the synthesis step. Weigh the
 # chair's summary accordingly where it favours its own contribution.
 #
 # PINNED, not floating. Every seat here is a concrete slug on purpose -- see
 # the provenance note at the bottom of this file.
-chair = "anthropic/claude-fable-5"
+chair = "anthropic/claude-opus-5.5"
 
 # One seat per family, in the order seats are picked. Adding a family here
 # without removing another overflows fusion's 8-model panel and `council
@@ -96,7 +97,7 @@ families = [
 #
 # Families, not slugs, so this stays index-driven: whoever holds the anthropic
 # and openai seats after a refresh becomes the advisor pair automatically. Today
-# that is gpt-6-astra and claude-fable-5, the two highest-scoring models in the
+# that is claude-opus-5.5 and gpt-6-astra, the two highest-scoring models in the
 # catalogue under the price cap.
 advisor_families = ["anthropic", "openai"]
 
@@ -104,14 +105,14 @@ advisor_families = ["anthropic", "openai"]
 # which models can be seated, so both are spend decisions: a council run costs
 # roughly the sum of its seats.
 #
-# 60.0 output admits `gpt-6-astra` and `claude-fable-5` at $50 and excludes
+# 60.0 output admits `gpt-6-astra` and `claude-fable-5.1` at $50 and excludes
 # `gpt-5.5-pro` at $180.
 #
 # The INPUT cap exists because an output-only cap misprices this workload. The
 # `--rank` round sends every seat the other seven answers, so input dominates
 # there -- a model at $59/M output but $200/M input would pass an output-only
 # check and then cost more than anything it displaced. 15.0 admits the current
-# roster (dearest inputs are gpt-6-astra and claude-fable-5 at $10) with headroom.
+# roster (dearest input is gpt-6-astra at $10) with headroom.
 max_input_price = 15.0
 max_output_price = 60.0
 
@@ -121,7 +122,7 @@ review_days = 14
 
 # Stamped by `council refresh --apply`. A date in the past by more than
 # `review_days` is what makes the nudge fire.
-reviewed = "2026-09-16"
+reviewed = "2026-10-12"
 
 # Everything between the markers is REWRITTEN mechanically by
 # `openrouter-cli council refresh --apply`. Edit by hand only to force a seat;
@@ -136,14 +137,14 @@ reviewed = "2026-09-16"
 #
 # BEGIN council-auto
 seats = [
-  { alias = "gpt", slug = "openai/gpt-6-astra", family = "openai", score = 166.3, basis = "eci" },
-  { alias = "fable", slug = "anthropic/claude-fable-5.1", family = "anthropic", score = 164.5, basis = "eci" },
-  { alias = "kimi", slug = "moonshotai/kimi-k3", family = "moonshotai", score = 157.6, basis = "eci" },
-  { alias = "gemini", slug = "google/gemini-3.7-flash", family = "google", score = 157.4, basis = "eci" },
-  { alias = "grok", slug = "x-ai/grok-4.6", family = "x-ai", score = 156.3, basis = "eci" },
-  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 155.2, basis = "eci" },
-  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 155.2, basis = "eci" },
-  { alias = "muse", slug = "meta/muse-spark-1.3", family = "meta", score = 0.0, basis = "newest-in-line" },
+  { alias = "opus", slug = "anthropic/claude-opus-5.5", family = "anthropic", score = 167.3, basis = "eci" },
+  { alias = "gpt", slug = "openai/gpt-6-astra", family = "openai", score = 166.4, basis = "eci" },
+  { alias = "kimi", slug = "moonshotai/kimi-k3", family = "moonshotai", score = 157.4, basis = "eci" },
+  { alias = "gemini", slug = "google/gemini-3.7-flash", family = "google", score = 157.3, basis = "eci" },
+  { alias = "muse", slug = "meta/muse-spark-1.3", family = "meta", score = 156.8, basis = "eci" },
+  { alias = "grok", slug = "x-ai/grok-4.6", family = "x-ai", score = 156.4, basis = "eci" },
+  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 155.6, basis = "eci" },
+  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 155.1, basis = "eci" },
 ]
 # END council-auto
 
@@ -161,13 +162,41 @@ max_completion_tokens = 16000
 # Aliases reachable by name but NOT seated on the council, so they never enter a
 # fan-out by accident. `resolve()` checks council seats first, then these.
 
-# BENCHED. deepseek/deepseek-v4-pro-0813 scores 155.2 -- level with the meta
-# seat and cheaper -- and lost its seat only because the council is capped at
+# BENCHED. deepseek/deepseek-v4-pro-0813 scores 155.3 -- level with the z-ai and
+# qwen seats, and cheaper -- and lost its seat only because the council is capped at
 # eight families and this one was cut. Kept addressable so a question that wants
 # a ninth opinion can name it: `openrouter-cli ask deepseek "..."`.
 [[models]]
 slug = "deepseek/deepseek-v4-pro-0813"
 alias = "deepseek"
+
+# CHEAP DEEPSEEK TIER. V4.1 Flash ($0.30/$1.20 per M) -- a flash tier, so it
+# never takes a seat (the tier-demotion guard above), but it is the newest
+# DeepSeek release and worth a fast ninth opinion: `openrouter-cli ask
+# deepseek-flash "..."`.
+[[models]]
+slug = "deepseek/deepseek-v4.1-flash"
+alias = "deepseek-flash"
+
+# FABLE 5.1. Held the anthropic seat until 2026-10-12, when Opus 5.5 (167.3)
+# overtook it (164.7) at under half the price ($4/$20 vs $10/$50). Kept so the
+# `fable` alias still answers: `openrouter-cli ask fable "..."`.
+[[models]]
+slug = "anthropic/claude-fable-5.1"
+alias = "fable"
+
+# GPT-6.1 SOL. Scores 166.1 against the seated gpt-6-astra's 166.4 at a fifth of
+# the price ($2/$10 vs $10/$50); the seat goes by score, so astra keeps it.
+# The cheap way to ask the strongest OpenAI tier: `openrouter-cli ask sol "..."`.
+[[models]]
+slug = "openai/gpt-6.1-sol"
+alias = "sol"
+
+# GPT-6 SOL. Superseded by gpt-6.1-sol (162.7 vs 166.1); kept addressable for
+# anything still naming it: `openrouter-cli ask sol6 "..."`.
+[[models]]
+slug = "openai/gpt-6-sol"
+alias = "sol6"
 
 # EXPENSIVE: $30/M input, $180/M output -- ~15x the seated OpenAI model for 0.6
 # index points. Excluded from the council by the price caps, which it breaches

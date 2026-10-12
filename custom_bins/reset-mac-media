@@ -18,11 +18,15 @@ RMM_PGREP_BIN="${RMM_PGREP_BIN:-/usr/bin/pgrep}"
 RMM_LAUNCHCTL_BIN="${RMM_LAUNCHCTL_BIN:-/bin/launchctl}"
 RMM_USER_KILLALL_BIN="${RMM_USER_KILLALL_BIN:-/usr/bin/killall}"
 RMM_SLEEP_BIN="${RMM_SLEEP_BIN:-/bin/sleep}"
+RMM_SYSTEM_PROFILER_BIN="${RMM_SYSTEM_PROFILER_BIN:-/usr/sbin/system_profiler}"
+RMM_PROBE_TIMEOUT="${RMM_PROBE_TIMEOUT:-20}"
 RMM_USER_DIAGNOSTIC_DIR="${RMM_USER_DIAGNOSTIC_DIR:-${HOME}/Library/Logs/DiagnosticReports}"
 RMM_SYSTEM_DIAGNOSTIC_DIR="${RMM_SYSTEM_DIAGNOSTIC_DIR:-/Library/Logs/DiagnosticReports}"
 
 DRY_RUN=false
 ASSUME_YES=false
+CHECK=false
+CHECK_SINCE_MIN=30
 REPORT_ROOT="${HOME}/Library/Logs/reset-mac-media"
 REPORT_DIR=""
 COLLECTOR_ERRORS=""
@@ -35,12 +39,20 @@ AVCONFERENCE_LABEL=""
 usage() {
     cat <<'EOF'
 Usage: reset-mac-media [--yes] [--dry-run] [--report-dir DIR]
+       reset-mac-media --check [--since MIN]
 
 Capture a small macOS audio/video diagnostic bundle, restart only the four
 media services implicated in CoreAudio/FaceTime hangs, and verify launchd
 recovered them. Running it interrupts active audio and video calls.
 
+--check is read-only and needs no sudo: it asks CoreAudio for its device list
+with a timeout and counts recent media-daemon crash reports. Exit 0 = healthy,
+1 = wedged (run reset-mac-media), 3 = crash reports seen but audio answers,
+4 = inconclusive (the probe exited with an error instead of answering).
+
 Options:
+  --check           Diagnose only; restart nothing.
+  --since MIN       Crash-report window for --check, in minutes. Default: 30.
   --yes             Skip the confirmation prompt.
   --dry-run         Print the plan without writing files or restarting services.
   --report-dir DIR  Put the timestamped bundle under DIR.
@@ -67,6 +79,18 @@ parse_args() {
             --dry-run)
                 DRY_RUN=true
                 shift
+                ;;
+            --check)
+                CHECK=true
+                shift
+                ;;
+            --since)
+                if (( $# < 2 )) || [[ ! "$2" =~ ^[0-9]+$ ]]; then
+                    echo "reset-mac-media: --since needs a number of minutes" >&2
+                    return 2
+                fi
+                CHECK_SINCE_MIN="$2"
+                shift 2
                 ;;
             --report-dir)
                 if (( $# < 2 )) || [[ -z "$2" ]]; then
@@ -429,6 +453,76 @@ verify_recovery() {
     log "media services recovered and verified"
 }
 
+# Ask CoreAudio for its device list. A wedged coreaudiod never answers, so the
+# probe hangs; a healthy one answers in about a second. Prints elapsed seconds.
+probe_coreaudio() {
+    local pid=""
+    local elapsed=0
+    "$RMM_SYSTEM_PROFILER_BIN" SPAudioDataType > /dev/null 2>&1 &
+    pid=$!
+    while (( elapsed < RMM_PROBE_TIMEOUT )); do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            printf '%s\n' "$elapsed"
+            wait "$pid" 2>/dev/null || return 4
+            return 0
+        fi
+        "$RMM_SLEEP_BIN" 1
+        elapsed=$((elapsed + 1))
+    done
+    kill "$pid" 2>/dev/null || true
+    printf '%s\n' "$elapsed"
+    return 1
+}
+
+recent_media_crashes() {
+    local source_dir=""
+    for source_dir in "$RMM_USER_DIAGNOSTIC_DIR" "$RMM_SYSTEM_DIAGNOSTIC_DIR"; do
+        [[ -d "$source_dir" ]] || continue
+        /usr/bin/find "$source_dir" -maxdepth 1 -type f -mmin "-$CHECK_SINCE_MIN" \
+            \( -name 'avconferenced*.ips' \
+            -o -name 'audiomxd*.ips' \
+            -o -name 'coreaudiod*.ips' \) \
+            -print 2>/dev/null
+    done
+}
+
+run_check() {
+    local elapsed=""
+    local crashes=""
+    local crash_count=0
+    local probe_ok=true
+    local probe_rc=0
+
+    elapsed="$(probe_coreaudio)" || probe_rc=$?
+    if (( probe_rc == 4 )); then
+        log "INCONCLUSIVE: the CoreAudio probe exited with an error instead of answering"
+        return 4
+    fi
+    (( probe_rc == 0 )) || probe_ok=false
+    crashes="$(recent_media_crashes | /usr/bin/sort)"
+    [[ -n "$crashes" ]] && crash_count="$(printf '%s\n' "$crashes" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+
+    if ! $probe_ok; then
+        log "WEDGED: CoreAudio did not answer within ${RMM_PROBE_TIMEOUT}s"
+    else
+        log "CoreAudio answered in ${elapsed}s"
+    fi
+    if (( crash_count > 0 )); then
+        log "$crash_count media-daemon crash report(s) in the last ${CHECK_SINCE_MIN} min:"
+        printf '%s\n' "$crashes" | /usr/bin/sed 's|^.*/|  |'
+    fi
+
+    if ! $probe_ok; then
+        log "fix: reset-mac-media   (runbook: docs/macos-media-wedge.md)"
+        return 1
+    fi
+    if (( crash_count > 0 )); then
+        log "audio answers, but the daemons crashed recently; re-check if apps hang"
+        return 3
+    fi
+    log "healthy"
+}
+
 print_dry_run() {
     cat <<EOF
 reset-mac-media: dry run
@@ -449,6 +543,11 @@ main() {
     if [[ "$("$RMM_UNAME_BIN" -s)" != Darwin ]]; then
         echo "reset-mac-media: macOS only" >&2
         return 1
+    fi
+
+    if $CHECK; then
+        run_check
+        return
     fi
 
     if $DRY_RUN; then

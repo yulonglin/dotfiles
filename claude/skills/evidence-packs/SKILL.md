@@ -1,3 +1,8 @@
+---
+name: evidence-packs
+description: "What counts as evidence in a pack submitted to a government, employer, visa office, insurer or auditor — source-system printouts only, never text transcriptions; where text captures live; how a missing printout is listed as a gap. Use when assembling attachments or a submission folder for a visa, insurance or expense claim, reimbursement, audit, tax or employer request, or when about to attach a saved email body or text file to one."
+---
+
 # Evidence
 
 **Anything attached to or submitted with an official or third-party request — government, employer, visa, insurance claim, audit — is in the form the source system produced**: a PDF or image printout, download or screenshot from that system (Gmail print-to-PDF, a portal download, the DocuSign or HelloSign PDF, a bank-app screenshot). Never a `.txt`, `.md` or self-rendered transcription: a text file can be written by anyone, so it proves nothing and reads as fabricated, however faithful it is.

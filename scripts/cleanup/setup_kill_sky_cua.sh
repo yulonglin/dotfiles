@@ -12,12 +12,32 @@
 # The plist invokes pkill directly (no repo-path dependency), so it keeps
 # working if the dotfiles checkout moves. pkill exits 1 when nothing matched;
 # that is the normal idle case, not a failure.
+#
+# THE PATTERN ROTS SILENTLY WHEN UPSTREAM RENAMES A HELPER, so it is pinned by
+# tests/test_kill_sky_cua_pattern.sh. ChatGPT.app 26.915.31945 (installed
+# 2026-09-18 17:28) moved the helper from SkyComputerUseService to
+# Contents/Resources/cua_node/bin/node{,_repl}. The old pattern then matched
+# nothing and the watchdog became a no-op: its log shows a last kill at
+# 2026-09-18 16:42 PDT and zero kills afterwards, while eight cua_node
+# processes ran free for two days.
+#
+# Found while investigating a whole-desktop freeze on 2026-09-20, but NOT its
+# cause: the unified log for that window clears this helper entirely, showing
+# an input-path stall in WindowServer whose sender the log never names. See
+# ~/vault/tooling/dotfiles/desktop-freeze-2026-09-20.md. The exposure fixed
+# here is real and independent of that incident.
+#
+# Nothing warns when pkill stops matching, so the test is the only guard: add
+# a new path here AND to the test.
 set -euo pipefail
 
 LABEL="com.user.kill-sky-cua"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-# Matches SkyComputerUseService, SkyComputerUseClient, CUALockScreenGuardian.
-PATTERN="SkyComputerUse|CUALockScreenGuardian"
+# Matches, in order: the pre-2026-09-18 SkyComputerUseService/Client, the lock
+# screen guardian, the current ChatGPT.app cua_node helpers, and the
+# ~/.codex/computer-use install. Path fragments are slash-delimited so they
+# cannot match ChatGPT.app's own binary or the codex CLI beside them.
+PATTERN="SkyComputerUse|CUALockScreenGuardian|/cua_node/|/computer-use/"
 
 [[ "$(uname -s)" != "Darwin" ]] && exit 0
 

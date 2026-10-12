@@ -1,6 +1,6 @@
 ---
 name: llm-judge
-description: Build an LLM judge that scores text by meaning — intent, deception, tone — covering prompt design, blinding, fan-out, JSONL persistence.
+description: Build an LLM judge that scores text by meaning — intent, deception, tone — covering prompt design, blinding, fan-out, JSONL persistence. Use whenever text must be classified by meaning rather than by a regex or keyword list.
 ---
 
 # LLM Judges

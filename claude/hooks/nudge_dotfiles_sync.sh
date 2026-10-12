@@ -35,6 +35,19 @@ cat >/dev/null 2>&1 || true
 MSG=$(STATE_DIR="$STATE_DIR" python3 <<'PY' 2>/dev/null
 import datetime, glob, json, os, sys
 
+GATEWAY_ENV = ("ANTHROPIC_BASE_URL", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL")
+
+
+def gateway_in_settings():
+    path = os.environ.get("CLAUDE_SETTINGS") or os.path.expanduser("~/.claude/settings.json")
+    try:
+        with open(path) as fh:
+            env = json.load(fh).get("env", {})
+    except (OSError, ValueError, AttributeError):
+        return False
+    return isinstance(env, dict) and any(k in env for k in GATEWAY_ENV)
+
+
 now = datetime.datetime.now(datetime.timezone.utc)
 lines = []
 for path in sorted(glob.glob(os.path.join(os.environ["STATE_DIR"], "*.json"))):
@@ -64,9 +77,18 @@ for path in sorted(glob.glob(os.path.join(os.environ["STATE_DIR"], "*.json"))):
                      " Fix it by hand (git status there), then `dotfiles-sync` to confirm.")
         continue
     if st.get("held_back"):
-        lines.append(f"{name}: {st['held_back']} was held back from the sync commit"
-                     " because the pre-commit hook rejected it; commit a stripped copy"
-                     " by hand if its other changes should ship (.claude/rules/dotfiles-settings.md).")
+        if "claude/settings.json" in st["held_back"].split() and gateway_in_settings():
+            # The usual cause: the router token is still in the user file because
+            # this machine never got the managed drop-in. Moving it there makes the
+            # file committable for good, so say that rather than hand-strip each time.
+            lines.append(f"{name}: claude/settings.json was held back from the sync commit"
+                         " because it still carries the router token; run"
+                         " `model-router-wire apply --install` once so the managed drop-in holds it"
+                         " and the file commits normally (.claude/rules/dotfiles-settings.md).")
+        else:
+            lines.append(f"{name}: {st['held_back']} was held back from the sync commit"
+                         " because the pre-commit hook rejected it; commit a stripped copy"
+                         " by hand if its other changes should ship (.claude/rules/dotfiles-settings.md).")
     if age_h <= 24 and int(st.get("pulled") or 0) > 0:
         lines.append(f"{name}: dotfiles-sync pulled {st['pulled']} commit(s) {age_h:.0f} h ago;"
                      " run ./deploy.sh if an installed (non-symlinked) component changed.")

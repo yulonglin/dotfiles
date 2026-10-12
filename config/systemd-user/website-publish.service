@@ -1,0 +1,54 @@
+[Unit]
+Description=Publish vault writing edits to yulonglin.com when CI passes
+Documentation=file:%h/vault/tooling/yulonglin.github.io/2026-09-17-vault-website-publish-design.md
+
+# The vault has to be current before there is any point comparing it. This is
+# ordering only, not a hard dependency: if sync is down, the run still happens
+# and simply finds nothing new, which is the right degraded behaviour.
+After=obsidian-sync.service
+
+[Service]
+Type=oneshot
+
+# bun (the Astro build), gh (the PR and its checks), git and uv all live outside
+# a user unit's default PATH. Any one of them missing turns this into an exit
+# 127 that looks like "nothing to publish".
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+# Astro's telemetry tries to create ~/.config/astro on first run and aborts the
+# build if it cannot. Harmless to disable; fatal to leave.
+Environment=ASTRO_TELEMETRY_DISABLED=1
+
+ExecStart=%h/code/dotfiles/scripts/vault/website_publish.py publish
+
+# Exit 1 is "there were conflicts, or CI was red, or a publish PR is already
+# open" -- all normal outcomes of a working check, not a unit failure. Treating
+# them as failure would make `systemctl --user status` useless for spotting the
+# case that actually matters, which is the script failing to run at all.
+SuccessExitStatus=0 1
+
+# A Lighthouse run inside CI is the slow part, and this waits for it. Twenty
+# minutes is generous for a five-page audit plus a build; past that something is
+# wedged and the next tick should get a clean start.
+TimeoutStartSec=20min
+
+# Writes the repo under ~/code, the vault under ~/vault, and its own state, so
+# ProtectHome=read-only is not available here.
+# ProtectSystem=strict, plus an explicit ReadWritePaths rather than trusting an
+# implicit exemption. Measured on this box 2026-09-17 with `systemd-run --user
+# --wait -p ProtectSystem=strict`: writes to ~/vault, ~/code, ~/.local/state and
+# ~/.cache all succeed, because for a USER manager strict does not remount $HOME
+# read-only. Writes to ~/scratch FAIL under the same setting -- it is a symlink
+# to /workspace, a separate disk, which strict does lock. So the exemption is
+# real but it is an exemption for $HOME specifically, not for "anything the user
+# owns", and it is not something to build on silently. Naming the paths means a
+# systemd change or a path moved onto /workspace fails loudly at start rather
+# than silently writing nothing.
+#
+# ~/.cache is in the list for bun's and uv's caches, and ~/.config for the gh
+# token; a publish that cannot read its GitHub credentials cannot open the PR
+# that is the entire point of the run.
+ProtectSystem=strict
+ReadWritePaths=%h/vault %h/code %h/.local/state %h/.cache %h/.config
+NoNewPrivileges=true
+PrivateTmp=true

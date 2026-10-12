@@ -1,0 +1,197 @@
+#!/usr/bin/env zsh
+# List outdated Homebrew casks whose app is running right now.
+#
+# A cask upgrade takes a running app away mid-session: casks with an uninstall
+# `quit` stanza (Alfred, AlDente, Spark, WhatsApp...) are quit by brew, the rest
+# (Chrome, Cursor, Conductor...) have their bundle swapped under the live
+# process. On 2026-09-24 brew quit AlDente and Alfred at 17:04:00-01 and an
+# avconferenced crash loop that wedged CoreAudio began at 17:04:28
+# (docs/macos-media-wedge.md). Upgrading only casks that are not running avoids
+# pulling an app out from under an active audio or camera session.
+#
+# Output: one line per running outdated cask, tab-separated:
+#   <token> TAB <app path> TAB <pids> TAB <audio|->
+# "audio" means one of its processes holds a CoreAudio session at this moment
+# (from `pmset -g assertions`), the riskiest case.
+
+emulate -L zsh
+setopt no_unset pipe_fail extended_glob
+
+BRC_BREW_BIN="${BRC_BREW_BIN:-brew}"
+BRC_PS_BIN="${BRC_PS_BIN:-/bin/ps}"
+BRC_PMSET_BIN="${BRC_PMSET_BIN:-/usr/bin/pmset}"
+BRC_PKGUTIL_BIN="${BRC_PKGUTIL_BIN:-/usr/sbin/pkgutil}"
+BRC_CASKROOM="${BRC_CASKROOM:-$("$BRC_BREW_BIN" --caskroom 2>/dev/null)}"
+# Honour a custom --appdir from HOMEBREW_CASK_OPTS, as brew itself does.
+_appdir=/Applications
+for _opt in ${=HOMEBREW_CASK_OPTS:-}; do
+    if [[ "$_opt" == --appdir=* ]]; then _appdir="${_opt#--appdir=}"; fi
+done
+BRC_APPS_DIR="${BRC_APPS_DIR:-$_appdir}"
+
+usage() {
+    cat <<'EOF'
+Usage: brew-running-casks [--greedy|--greedy-latest|--greedy-auto-updates]
+                          [--names] [--outdated-names]
+
+List outdated Homebrew casks whose app is running, so an upgrade can skip them.
+
+Options:
+  --greedy*         Passed to brew outdated, so the scan covers what brew upgrade would.
+  --names           Print only the running cask tokens, one per line.
+  --outdated-names  Print outdated cask tokens that are NOT running (safe to upgrade).
+  -h, --help        Show this help.
+
+Exit status: 0 on success (even when some are running), 1 if any lookup fails.
+Callers must treat 1 as "unknown", never as "nothing running".
+EOF
+}
+
+greedy=()
+mode=table
+while (( $# > 0 )); do
+    case "$1" in
+        --greedy|--greedy-latest|--greedy-auto-updates) greedy+=("$1"); shift ;;
+        --names) mode=names; shift ;;
+        --outdated-names) mode=safe; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) print -u2 "brew-running-casks: unknown option: $1"; usage >&2; exit 1 ;;
+    esac
+done
+
+export HOMEBREW_NO_AUTO_UPDATE=1
+
+outdated_json="$("$BRC_BREW_BIN" outdated --cask --json=v2 "${greedy[@]}")" || {
+    print -u2 "brew-running-casks: brew outdated failed"; exit 1
+}
+tokens_out="$(print -r -- "$outdated_json" | /usr/bin/python3 -c '
+import json, sys
+for c in json.load(sys.stdin).get("casks", []):
+    print(c["name"])
+' 2>/dev/null)" || { print -u2 "brew-running-casks: could not parse brew outdated output"; exit 1; }
+tokens=("${(@f)tokens_out}")
+tokens=(${tokens:#})
+(( ${#tokens} )) || exit 0
+
+# token TAB app-path, one line per .app artifact. A cask installed from a pkg
+# has no app artifact, so its bundles come from the pkg receipts its uninstall
+# stanza names (pkgutil --files). A cask whose bundle cannot be found prints
+# "?" and is treated as running: unknown must never read as safe.
+app_map="$("$BRC_BREW_BIN" info --cask --json=v2 "${tokens[@]}" | BRC_APPS_DIR="$BRC_APPS_DIR" BRC_PKGUTIL_BIN="$BRC_PKGUTIL_BIN" BRC_CASKROOM="$BRC_CASKROOM" /usr/bin/python3 -c '
+import json, os, re, subprocess, sys
+apps_dir = os.environ["BRC_APPS_DIR"]
+pkgutil = os.environ["BRC_PKGUTIL_BIN"]
+
+def pkg_bundles(ids):
+    found = []
+    for pkg_id in ids:
+        out = subprocess.run([pkgutil, "--files", pkg_id], capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            m = re.fullmatch(r"(?:\./)?(Applications/)?([^/]+\.app)", line)
+            if m:
+                found.append("/Applications/" + m.group(2))
+    return found
+
+caskroom = os.environ.get("BRC_CASKROOM", "")
+
+def cask_appdir(token):
+    # brew upgrade reuses the --appdir saved at install time, with its own
+    # precedence: explicit flag, then HOMEBREW_CASK_OPTS at the time.
+    try:
+        with open(os.path.join(caskroom, token, ".metadata", "config.json")) as f:
+            cfg = json.load(f)
+        saved = (cfg.get("explicit", {}).get("appdir") or cfg.get("env", {}).get("appdir")
+                 or cfg.get("default", {}).get("appdir"))
+    except (OSError, ValueError, AttributeError):
+        saved = None
+    return os.path.expanduser(saved) if saved else apps_dir
+
+for c in json.load(sys.stdin).get("casks", []):
+    apps = []
+    pkg_ids = []
+    cask_dir = cask_appdir(c["token"])
+    for art in c.get("artifacts", []):
+        # {"app": ["Source.app"]} or {"app": ["Source.app", {"target": "Dest.app"}]}
+        args = art.get("app")
+        if args:
+            # A target keeps its relative subfolder (Utilities/Foo.app); a bare
+            # source lands directly in the app directory.
+            target = next((a["target"] for a in args if isinstance(a, dict) and a.get("target")), None)
+            apps.append(target if target else os.path.basename(args[0]))
+        for step in art.get("uninstall", []):
+            ids = step.get("pkgutil") if isinstance(step, dict) else None
+            pkg_ids += [ids] if isinstance(ids, str) else (ids or [])
+    has_pkg = any("pkg" in art for art in c.get("artifacts", []))
+    if not apps and has_pkg:
+        apps = pkg_bundles(pkg_ids)
+        if not apps:
+            print(c["token"] + "\t?")
+    elif not apps:
+        print(c["token"] + "\t-")  # no app at all (CLI, font...): nothing can be running
+    for a in apps:
+        a = os.path.expanduser(a)
+        path = a if a.startswith("/") else os.path.join(cask_dir, a)
+        print(c["token"] + "\t" + path)
+' 2>/dev/null)" || { print -u2 "brew-running-casks: brew info lookup failed"; exit 1; }
+
+procs="$("$BRC_PS_BIN" -Axo pid=,comm=)" || { print -u2 "brew-running-casks: ps failed"; exit 1; }
+
+# PIDs that coreaudiod currently holds an audio session for.
+audio_pids=("${(@f)$("$BRC_PMSET_BIN" -g assertions 2>/dev/null | /usr/bin/awk '
+    /^[[:space:]]*pid [0-9]+\(coreaudiod\)/ { in_ca = 1; next }
+    /^[[:space:]]*pid [0-9]+\(/ { in_ca = 0 }
+    in_ca && /Created for PID:/ { gsub(/[^0-9]/, "", $NF); print $NF }
+')}")
+audio_pids=(${audio_pids:#})
+
+typeset -A running_pids app_of
+local token app pid comm
+for line in "${(@f)app_map}"; do
+    [[ -n "$line" ]] || continue
+    token="${line%%$'\t'*}"
+    app="${line#*$'\t'}"
+    if [[ "$app" == "?" ]]; then
+        running_pids[$token]="?"
+        app_of[$token]="(bundle not found)"
+        continue
+    fi
+    if [[ "$app" == "-" ]]; then
+        running_pids[$token]="${running_pids[$token]:-}"
+        app_of[$token]="(no app)"
+        continue
+    fi
+    for pline in "${(@f)procs}"; do
+        pid="${${pline## #}%% *}"
+        comm="${pline## #}"
+        comm="${comm#* }"
+        if [[ "$comm" == "$app"/* ]]; then
+            running_pids[$token]="${running_pids[$token]:-}${running_pids[$token]:+,}$pid"
+        fi
+    done
+    running_pids[$token]="${running_pids[$token]:-}"
+    app_of[$token]="$app"
+done
+
+local pids flag p
+for token in "${tokens[@]}"; do
+    if (( ! ${+app_of[$token]} )); then
+        running_pids[$token]="?"
+        app_of[$token]="(missing from brew info)"
+    fi
+    pids="${running_pids[$token]:-}"
+    if [[ -z "$pids" ]]; then
+        if [[ "$mode" == safe ]]; then print -r -- "$token"; fi
+        continue
+    fi
+    if [[ "$mode" == safe ]]; then continue; fi
+    if [[ "$mode" == names ]]; then
+        print -r -- "$token"
+        continue
+    fi
+    flag=-
+    if [[ "$pids" == "?" ]]; then flag=unknown; fi
+    for p in ${(s:,:)pids}; do
+        if (( ${audio_pids[(Ie)$p]} )); then flag=audio; fi
+    done
+    print -r -- "$token"$'\t'"${app_of[$token]}"$'\t'"$pids"$'\t'"$flag"
+done

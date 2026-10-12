@@ -1,6 +1,6 @@
 ---
 name: commit-push-sync
-description: This skill should be used when the user asks to "commit and push", "commit push", "sync changes", "push changes", "commit and sync", or "update remote". Handles the full workflow of committing changes, pulling with rebase, and pushing to remote.
+description: Commit local changes, fetch the tracked remote, sync with a rebase when that is cheap and safe or a merge otherwise, then push. Use when the user says "commit and push", "commit push", "sync changes", "push changes", "commit and sync" or "update remote"; for a commit alone, use `commit`.
 version: 0.2.0
 ---
 

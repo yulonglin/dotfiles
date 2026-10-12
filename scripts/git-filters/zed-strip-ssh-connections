@@ -1,0 +1,297 @@
+#!/usr/bin/env python3
+"""Git clean filter: drop Zed's top-level "ssh_connections" member.
+
+Wired by `.gitattributes` (config/zed/settings.json filter=zed-ssh) plus
+`git config --local filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections`,
+which `deploy.sh --git-config` sets. Zed writes the servers opened as remote
+projects into settings.json, which is symlinked from this public repo; the
+filter keeps that block out of every blob git stores while Zed keeps writing
+it to the working copy.
+
+Reads the file on stdin and writes it to stdout. The member is removed
+textually, so comments, formatting and key order survive byte for byte. The
+output is the input unchanged whenever the key is absent or anything looks
+wrong: git stores whatever a clean filter prints, so a damaged result would be
+committed. The pre-commit guard is the backstop for that passthrough.
+
+Two more modes serve dotfiles-sync, which saves the block before a rebase that
+could rewrite the file and puts it back afterwards:
+
+  --extract           print the member's own text ("ssh_connections": [...]).
+                      Exit 0 found, 1 absent, 2 not sure of the file.
+  --restore MEMBER    read the file on stdin and print it with the member text
+                      in the file MEMBER appended as the last top-level member.
+                      Exit 0 restored, 1 the key is already present (nothing
+                      printed, never overwritten), 2 not sure: nothing printed.
+"""
+
+import json
+import re
+import sys
+
+KEY = "ssh_connections"
+SCALAR = re.compile(r'[^\s{}\[\],:"/]+')
+PUNCT = "{}[],:"
+
+
+class Doubt(Exception):
+    """The input is not a JSONC object this filter is sure it understands."""
+
+
+def tokenize(text):
+    """Return [(kind, start, end)] with kind in ws, comment, str, punct, scalar."""
+    toks, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in " \t\r\n" or (i == 0 and c == "﻿"):
+            j = i + 1
+            while j < n and text[j] in " \t\r\n":
+                j += 1
+            kind = "ws"
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            kind = "comment"
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            if j < 0:
+                raise Doubt("unterminated block comment")
+            j += 2
+            kind = "comment"
+        elif c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                if text[j] == "\n":
+                    raise Doubt("newline inside a string")
+                j += 2 if text[j] == "\\" else 1
+            if j >= n:
+                raise Doubt("unterminated string")
+            j += 1
+            kind = "str"
+        elif c in PUNCT:
+            j = i + 1
+            kind = "punct"
+        else:
+            m = SCALAR.match(text, i)
+            if not m:
+                raise Doubt(f"unexpected character at offset {i}")
+            j = m.end()
+            kind = "scalar"
+        toks.append((kind, i, j))
+        i = j
+    return toks
+
+
+def top_level_members(text, toks):
+    """List the root object's members as dicts of token indices.
+
+    Each member: key (decoded name), key_tok, value_end_tok, comma_before,
+    comma_after (token indices or None). Raises Doubt on any structural surprise.
+    """
+    sig = [k for k, t in enumerate(toks) if t[0] not in ("ws", "comment")]
+    if not sig or text[toks[sig[0]][1]] != "{":
+        raise Doubt("root is not an object")
+
+    def at(p):
+        kind, s, e = toks[sig[p]]
+        return kind, text[s:e]
+
+    def skip_value(p):
+        """Return the sig position of the last token of the value starting at p."""
+        kind, val = at(p)
+        if kind in ("str", "scalar"):
+            return p
+        if val not in "{[":
+            raise Doubt(f"unexpected {val!r} where a value belongs")
+        stack = [val]
+        while stack:
+            p += 1
+            if p >= len(sig):
+                raise Doubt("unbalanced brackets")
+            kind, val = at(p)
+            if kind != "punct":
+                continue
+            if val in "{[":
+                stack.append(val)
+            elif val in "}]" and {"{": "}", "[": "]"}[stack.pop()] != val:
+                raise Doubt("mismatched brackets")
+        return p
+
+    members, p, prev_comma = [], 1, None
+    while True:
+        if p >= len(sig):
+            raise Doubt("root object is not closed")
+        kind, val = at(p)
+        if kind == "punct" and val == "}":
+            break
+        if kind != "str":
+            raise Doubt("object key is not a string")
+        key = json.loads(val)
+        if p + 2 >= len(sig) or at(p + 1) != ("punct", ":"):
+            raise Doubt("key without a colon")
+        end = skip_value(p + 2)
+        member = {"key": key, "key_tok": sig[p], "value_end_tok": sig[end],
+                  "comma_before": prev_comma, "comma_after": None}
+        members.append(member)
+        p = end + 1
+        if p >= len(sig):
+            raise Doubt("root object is not closed")
+        kind, val = at(p)
+        if (kind, val) == ("punct", ","):
+            member["comma_after"] = sig[p]
+            prev_comma = sig[p]
+            p += 1
+        elif (kind, val) != ("punct", "}"):
+            raise Doubt("members not separated by a comma")
+    if p != len(sig) - 1:
+        raise Doubt("content after the root object")
+    return members
+
+
+def remove_member(text, toks, m):
+    """Delete one member, its own comma, and its line when it sits alone on it."""
+    start = toks[m["key_tok"]][1]
+    end = toks[m["comma_after"] if m["comma_after"] is not None else m["value_end_tok"]][2]
+    # Last member: the comma before it would otherwise dangle. Removing it
+    # keeps a strict-JSON file strict.
+    cb = None
+    if m["comma_after"] is None and m["comma_before"] is not None:
+        cb = toks[m["comma_before"]][1]
+
+    spans = []
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    line_end = len(text) if line_end < 0 else line_end
+    if not text[line_start:start].strip(" \t") and not text[end:line_end].strip(" \t"):
+        start, end = line_start, min(line_end + 1, len(text))
+    elif m["comma_after"] is not None:
+        while end < len(text) and text[end] in " \t":
+            end += 1
+    elif cb is not None and not text[cb + 1:start].strip(" \t"):
+        start, cb = cb, None  # same line: take the comma and the gap with it
+    if cb is not None:
+        spans.append((cb, cb + 1))
+    spans.append((start, end))
+
+    for s, e in sorted(spans, reverse=True):
+        text = text[:s] + text[e:]
+    return text
+
+
+def strict_pairs(text):
+    """Parse JSONC into nested key/value pair lists, so order is compared too."""
+    toks = tokenize(text)
+    sig = [text[s:e] for kind, s, e in toks if kind not in ("ws", "comment")]
+    kept = [v for k, v in enumerate(sig)
+            if not (v == "," and k + 1 < len(sig) and sig[k + 1] in ("}", "]"))]
+    return json.loads(" ".join(kept), object_pairs_hook=lambda pairs: pairs)
+
+
+def strip(text):
+    original = strict_pairs(text)  # Doubt or ValueError: not ours to edit
+    for _ in range(64):  # duplicate keys: remove every top-level copy
+        toks = tokenize(text)
+        hit = next((m for m in top_level_members(text, toks) if m["key"] == KEY), None)
+        if hit is None:
+            break
+        text = remove_member(text, toks, hit)
+    else:
+        raise Doubt("too many ssh_connections members")
+    if strict_pairs(text) != [pair for pair in original if pair[0] != KEY]:
+        raise Doubt("result does not equal the input minus ssh_connections")
+    return text
+
+
+def extract(text):
+    """Return the member's own text, or None when the key is absent."""
+    strict_pairs(text)
+    toks = tokenize(text)
+    hits = [m for m in top_level_members(text, toks) if m["key"] == KEY]
+    if not hits:
+        return None
+    if len(hits) > 1:
+        raise Doubt("more than one ssh_connections member")
+    return text[toks[hits[0]["key_tok"]][1]:toks[hits[0]["value_end_tok"]][2]]
+
+
+def restore(text, member):
+    """Append member as the last top-level member; None when the key is present."""
+    pair = strict_pairs("{" + member + "}")
+    if len(pair) != 1 or pair[0][0] != KEY:
+        raise Doubt("saved text is not a single ssh_connections member")
+    original = strict_pairs(text)
+    if any(k == KEY for k, _ in original):
+        return None
+    toks = tokenize(text)
+    members = top_level_members(text, toks)
+    close = max(k for k, t in enumerate(toks) if t[0] not in ("ws", "comment"))
+    close_at = toks[close][1]
+    last = members[-1] if members else None
+
+    inserts = []
+    if last is not None and last["comma_after"] is None:
+        inserts.append((toks[last["value_end_tok"]][2], ","))
+    line_start = text.rfind("\n", 0, close_at) + 1
+    if line_start > 0 and not text[line_start:close_at].strip(" \t"):
+        indent = "  "
+        if last is not None:
+            key_at = toks[last["key_tok"]][1]
+            key_line = text.rfind("\n", 0, key_at) + 1
+            if not text[key_line:key_at].strip(" \t"):
+                indent = text[key_line:key_at]
+        trailing = "," if last is not None and last["comma_after"] is not None else ""
+        inserts.append((line_start, indent + member + trailing + "\n"))
+    else:
+        gap = "" if last is None or text[close_at - 1] in " \t" else " "
+        inserts.append((close_at, gap + member))
+
+    # Back to front; at a tie the member goes in first so the comma lands
+    # before it ({"a": 1} -> {"a": 1, "ssh_connections": ...}).
+    order = sorted(range(len(inserts)), key=lambda k: (inserts[k][0], k), reverse=True)
+    for k in order:
+        at, s = inserts[k]
+        text = text[:at] + s + text[at:]
+    if strict_pairs(text) != original + pair:
+        raise Doubt("result does not equal the input plus ssh_connections")
+    return text
+
+
+def main(argv):
+    data = sys.stdin.buffer.read()
+    if argv[:1] == ["--extract"]:
+        try:
+            found = extract(data.decode("utf-8"))
+        except Exception:  # noqa: BLE001 - report doubt, never guess
+            return 2
+        if found is None:
+            return 1
+        sys.stdout.buffer.write(found.encode("utf-8"))
+        return 0
+    if argv[:1] == ["--restore"] and len(argv) == 2:
+        try:
+            with open(argv[1], encoding="utf-8") as fh:
+                result = restore(data.decode("utf-8"), fh.read())
+        except Exception:  # noqa: BLE001 - report doubt, never guess
+            return 2
+        if result is None:
+            return 1
+        sys.stdout.buffer.write(result.encode("utf-8"))
+        return 0
+    if argv:
+        sys.stderr.write("usage: zed-strip-ssh-connections [--extract | --restore MEMBER_FILE] < settings.json\n")
+        return 64
+
+    out = data
+    try:
+        text = data.decode("utf-8")
+        if f'"{KEY}"' in text or "\\u" in text:
+            out = strip(text).encode("utf-8")
+    except Exception:  # noqa: BLE001 - any failure must pass the input through
+        out = data
+    sys.stdout.buffer.write(out)
+    sys.stdout.buffer.flush()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,131 @@
+#!/usr/bin/env zsh
+# tailscale-check — one-run diagnosis for "this machine shows offline on the tailnet".
+#
+# Written for the 2026-09-30 failure: Tailscale kept dialling out from en0 after Wi-Fi
+# stopped passing traffic. Every control-plane and DERP dial sat in SYN_SENT, the node
+# went offline, and curl bound to any other interface reached the same servers fine.
+# Quitting and reopening Tailscale made it re-pick its egress interface. This prints the
+# facts that diagnosed it and the fix; it never restarts anything.
+#
+# Needs to run outside the Claude Code sandbox: netstat and per-interface curl are
+# refused inside it, which makes a healthy machine read as broken.
+#
+# Exit codes: 0 healthy, 1 unhealthy, 2 Tailscale not found or not running.
+
+emulate -L zsh
+setopt pipe_fail
+
+CONTROL_URL="https://controlplane.tailscale.com/"
+
+case "$1" in
+  -h|--help)
+    print "usage: tailscale-check
+
+Reports whether this machine is online on the tailnet and, if not, whether Tailscale
+is stuck dialling out from an interface that cannot reach its coordination server
+while another interface can. Read-only.
+
+Exit codes: 0 healthy, 1 unhealthy, 2 Tailscale not found or not running."
+    exit 0 ;;
+  "") ;;
+  *) print -u2 "tailscale-check: unknown argument: $1 (try --help)"; exit 2 ;;
+esac
+
+if (( $+commands[tailscale] )); then
+  ts=tailscale
+elif [[ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]]; then
+  ts=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+else
+  print -u2 "tailscale-check: no tailscale CLI on PATH or in /Applications"
+  exit 2
+fi
+
+status_json=$($ts status --json 2>/dev/null)
+backend=$(jq -r '.BackendState // "unknown"' <<<"$status_json" 2>/dev/null)
+if [[ "$backend" != Running ]]; then
+  print "Tailscale backend: ${backend:-not responding} — open Tailscale and connect first."
+  exit 2
+fi
+online=$(jq -r '.Self.Online' <<<"$status_json")
+health=("${(@f)$(jq -r '.Health // [] | .[]' <<<"$status_json")}")
+health=(${health:#})
+ts_ips=(${(f)"$(jq -r '.Self.TailscaleIPs // [] | .[]' <<<"$status_json")"})
+
+print "online: $online"
+for h in $health; do print "health: $h"; done
+
+# IPv4 address -> interface, from ifconfig. Tailscale's own interface is skipped by its
+# exact address, not by prefix: an ISP or hotspot can hand a real link a 100.64/10 address.
+typeset -A ifc_of
+typeset -a ifcs
+for line in ${(f)"$(ifconfig 2>/dev/null | awk '/^[a-z]/{i=$1; sub(":","",i)} /inet /{print $2, i}')"}; do
+  ip=${line%% *}; ifc=${line##* }
+  [[ $ifc == lo* || ${ts_ips[(Ie)$ip]} -gt 0 ]] && continue
+  ifc_of[$ip]=$ifc
+  ifcs+=($ifc)
+done
+ifcs=(${(u)ifcs})
+
+# Can each interface reach the control plane? Any HTTP status counts; 000 means no.
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/tailscale-check.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+for ifc in $ifcs; do
+  curl -sS -4 -m 5 --interface $ifc -o /dev/null -w '%{http_code}' "$CONTROL_URL" \
+    >"$tmp/$ifc" 2>/dev/null &
+done
+wait
+typeset -A reach
+print "\ncontrol plane reachable, per interface:"
+for ifc in $ifcs; do
+  code=$(<"$tmp/$ifc")
+  if [[ -n $code && $code != 000 ]]; then reach[$ifc]=yes; else reach[$ifc]=no; fi
+  printf '  %-8s %s\n' $ifc $reach[$ifc]
+done
+
+# Which interface is Tailscale itself dialling from, and do those dials complete?
+typeset -A src_state
+if [[ $OSTYPE == darwin* ]]; then
+  for line in ${(f)"$(netstat -anv -p tcp 2>/dev/null | awk '/io\.tailscale/ && $6 ~ /ESTABLISHED|SYN_SENT/ {print $4, $6}')"}; do
+    ip=${${line%% *}%.*}; state=${line##* }
+    [[ $ip == 127.* ]] && continue
+    src_state[$ip]+="$state "
+  done
+fi
+# Stuck: new dials (SYN_SENT) from an interface whose probe fails. An ESTABLISHED socket
+# on that same interface can outlive the link, so it does not clear it; one on an
+# interface that does reach the control plane means Tailscale has a working path.
+stuck_ifc=""
+path_elsewhere=0
+print "\nTailscale's own outbound TCP, by source:"
+if (( ${#src_state} == 0 )); then
+  print "  none seen (macOS only; needs to run outside the sandbox)"
+fi
+for ip in ${(k)src_state}; do
+  states=(${=src_state[$ip]})
+  est=${#${(M)states:#ESTABLISHED}}; syn=${#${(M)states:#SYN_SENT}}
+  ifc=${ifc_of[$ip]:-?}
+  printf '  %-16s %-8s established=%d syn_sent=%d\n' $ip $ifc $est $syn
+  (( syn > 0 )) && [[ ${reach[$ifc]} == no ]] && stuck_ifc=$ifc
+  (( est > 0 )) && [[ ${reach[$ifc]} == yes ]] && path_elsewhere=1
+done
+
+working=(${(k)reach[(R)yes]})
+print
+if [[ "$online" == true && ${#health} -eq 0 ]]; then
+  print "OK: online, no health warnings."
+  exit 0
+elif [[ "$online" != true && -n $stuck_ifc && ${#working} -gt 0 ]] && (( ! path_elsewhere )); then
+  print "STUCK: Tailscale dials out from $stuck_ifc, which cannot reach the control plane;"
+  print "       ${(j:, :)working} can. Tailscale has not re-picked its interface."
+  print "FIX:   quit Tailscale from the menu bar and reopen it (re-picks the interface),"
+  print "       or turn off $stuck_ifc if it is a link you are not using."
+elif (( ${#ifcs} == 0 )); then
+  print "INCONCLUSIVE: no IPv4 interface to probe from."
+elif (( ${#working} == 0 )); then
+  print "NO EGRESS: no IPv4 interface reached $CONTROL_URL (IPv6 untested)."
+  print "           Check the network, DNS or a firewall before suspecting Tailscale."
+else
+  print "UNHEALTHY: the control plane is reachable but Tailscale reports the warnings above."
+  print "           Quitting and reopening Tailscale is the cheap first step."
+fi
+exit 1

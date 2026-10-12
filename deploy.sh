@@ -204,11 +204,29 @@ export PATH="$DOT_DIR/custom_bins:$PATH"
 # see show_component_menu for the contract with the binary.
 show_component_menu deploy
 
+# The model-router gateway drop-in is root-owned, so the Claude step needs sudo
+# only where the router is installed and `model-router-wire apply --check`
+# reports drift (a missing or stale drop-in, or anything else it renders).
+# Wanted only where the router is installed AND the gateway is on: `apply` writes
+# the staged drop-in and `model-router-wire off` deletes it, so a machine turned
+# off on purpose is never wired back by a deploy.
+_router_gateway_wanted() {
+    [[ -f "$HOME/.local/state/model-router/ingress-token" \
+        && -f "${MODEL_ROUTER_STAGED:-$HOME/.config/model-router/managed-settings.json}" \
+        && -x "$DOT_DIR/custom_bins/model-router-wire" ]]
+}
+_router_dropin_needs_sudo() {
+    [[ "${DEPLOY_CLAUDE:-false}" == "true" ]] && _router_gateway_wanted || return 1
+    ! "$DOT_DIR/custom_bins/model-router-wire" apply --check >/dev/null 2>&1
+}
+
 # Cache sudo once up front if a privileged component is selected (VPN daemon,
-# Bear CLI symlink into /usr/local/bin, or Linux pueue systemd setup), so the
-# password is requested once here rather than blocking mid-deploy.
+# Bear CLI symlink into /usr/local/bin, Linux pueue systemd setup, or the
+# model-router drop-in), so the password is requested once here rather than
+# blocking mid-deploy.
 if [[ "${DEPLOY_VPN:-false}" == "true" || "${DEPLOY_BEARCLI:-false}" == "true" \
-    || ( "$(uname -s)" == "Linux" && "${DEPLOY_PUEUE:-false}" == "true" ) ]]; then
+    || ( "$(uname -s)" == "Linux" && "${DEPLOY_PUEUE:-false}" == "true" ) ]] \
+    || _router_dropin_needs_sudo; then
     front_load_sudo
 fi
 
@@ -333,6 +351,16 @@ PROFILE
         RC_FILE="$HOME/.zshrc"
     fi
 
+    # ~/.zshenv is the ONLY startup file a non-interactive ssh shell reads, so a
+    # remote `mosh-server` lookup depends on it alone. Deploy it whenever zsh is
+    # installed, independently of the active shell, because the login shell is
+    # what sshd spawns. Appended behind a grep guard rather than via $OP: $OP is
+    # ">" unless --append, and ~/.zshenv commonly carries lines this repo does
+    # not own (rustup writes the cargo env there), which a rewrite would drop.
+    if cmd_exists zsh && ! grep -q "config/zshenv.sh" "$HOME/.zshenv" 2>/dev/null; then
+        echo "source $DOT_DIR/config/zshenv.sh" >> "$HOME/.zshenv"
+    fi
+
     # Append additional aliases
     if [[ ${#DEPLOY_ALIASES[@]} -gt 0 ]]; then
         log_info "Adding aliases: ${DEPLOY_ALIASES[*]}"
@@ -362,11 +390,19 @@ if [[ "$DEPLOY_SECRETS" == "true" ]]; then
     log_section "SYNCING GIST"
     # SSH config (synced from gist) uses ControlPath ~/.ssh/controlmasters/
     mkdir -p "$HOME/.ssh/controlmasters"
-    sync_gist || log_warning "Gist sync failed (continuing anyway)"
+    # No tracked gist ID: resolve it once (env, config.local.sh, then BWS). With
+    # none configured, skip both the sync and the daily job, which would only
+    # fail every morning.
+    if GIST_SYNC_ID="$(gist_sync_id)"; then
+        export GIST_SYNC_ID
+        sync_gist || log_warning "Gist sync failed (continuing anyway)"
 
-    # Install automated daily sync
-    log_info "Setting up automated daily gist sync..."
-    "$DOT_DIR/scripts/cleanup/setup_gist_sync.sh" || log_warning "Failed to setup automated gist sync"
+        # Install automated daily sync
+        log_info "Setting up automated daily gist sync..."
+        "$DOT_DIR/scripts/cleanup/setup_gist_sync.sh" || log_warning "Failed to setup automated gist sync"
+    else
+        gist_sync_unset_message
+    fi
 fi
 
 # ─── Secrets (BWS) ───────────────────────────────────────────────────────────
@@ -408,6 +444,16 @@ if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     # Global gitattributes
     safe_symlink "$DOT_DIR/config/gitattributes_global" "$HOME/.gitattributes"
     git config --global core.attributesFile "$HOME/.gitattributes"
+
+    # Clean filter named in this repo's .gitattributes: strips Zed's
+    # ssh_connections from config/zed/settings.json before git stores it. Git
+    # runs filter commands from the top of the working tree, so the relative
+    # path works in every worktree. Not marked required, so a clone without
+    # this config still checks out; the pre-commit guard covers that case.
+    if git -C "$DOT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+        git -C "$DOT_DIR" config --local filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections
+        log_success "Configured the zed-ssh clean filter for $DOT_DIR"
+    fi
 fi
 
 # ─── Git Hooks ────────────────────────────────────────────────────────────────
@@ -601,7 +647,7 @@ if [[ "$DEPLOY_HTOP" == "true" ]]; then
             if ! diff -q "$HTOP_LOCAL" "$HTOP_DOTFILES" >/dev/null 2>&1; then
                 log_warning "Local htop config differs from dotfiles (htop overwrites symlinks)"
                 local htop_choice=""
-                if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; then
+                if ! can_prompt; then
                     log_info "Non-interactive — skipping htop (use --force to overwrite)"
                     htop_choice="s"
                 else
@@ -896,6 +942,31 @@ else:
             fi
         fi
 
+        # Model-router gateway: the router token belongs in the root-owned
+        # managed drop-in, never in the symlinked (public) settings.json. Only
+        # where the router is installed and its gateway is on (see
+        # _router_gateway_wanted); a first deploy usually precedes the plugin's
+        # router setup, and the SessionStart nudge in check_model_router_update.py
+        # covers that machine until the next deploy. `apply --install` with no
+        # terminal runs `sudo -n` on the credentials front_load_sudo cached, so it
+        # never hangs; a failed install exits nonzero without writing the token
+        # into settings.json, and success is judged by a fresh --check.
+        wire="$DOT_DIR/custom_bins/model-router-wire"
+        if _router_gateway_wanted; then
+            if "$wire" apply --check >/dev/null 2>&1; then
+                log_info "Model router: gateway drop-in and rendered files are current"
+            elif [[ $EUID -eq 0 ]] || sudo -n true 2>/dev/null; then
+                "$wire" apply --install </dev/null || true
+                if "$wire" apply --check >/dev/null 2>&1; then
+                    log_success "Model router: rendered files and gateway drop-in installed"
+                else
+                    log_warning "Model router: apply --install left drift; run by hand: model-router-wire apply --install"
+                fi
+            else
+                log_warning "Model router: gateway drop-in missing or stale and no sudo cached (unattended run); run: model-router-wire apply --install"
+            fi
+        fi
+
         log_success "Claude Code configuration deployed"
         log_info "  Config: CLAUDE.md, settings.json, agents/, hooks/, skills/"
         log_info "  Plugins: declared in settings.json enabledPlugins (7 retired ones tombstoned false)"
@@ -1135,6 +1206,8 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     model-router-cooldown.service model-router-cooldown.timer \
                     codex-token-refresh.service codex-token-refresh.timer \
                     cloud-spend-check.service cloud-spend-check.timer \
+                    obsidian-sync.service \
+                    website-publish.service website-publish.timer \
                     romp-tailnet-proxy.service; do
             local unit_src="$DOT_DIR/config/systemd-user/$unit"
             # -f: installed units are copies, not symlinks into the repo, so a
@@ -1463,7 +1536,11 @@ _vpn_sudo_ready() {
     # there is no TTY to answer the password prompt ("a terminal is required").
     # Proceed only with cached credentials, or a successful attended prompt.
     sudo -n true 2>/dev/null && return 0
-    [[ -t 0 ]] && run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v && return 0
+    if ! can_prompt; then
+        log_warning "Unattended run — not prompting for sudo for the VPN split tunnel daemon"
+        return 1
+    fi
+    run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v && return 0
     return 1
 }
 

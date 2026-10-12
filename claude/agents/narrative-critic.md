@@ -1,6 +1,6 @@
 ---
 name: narrative-critic
-description: Narrative critic for technical writing. Evaluates argument structure, flow, hooks, and conclusions.
+description: "Critique a draft's narrative without rewriting it: argument structure, flow, opening hook, conclusion. Part of `review-draft`; use alone for a structure-only pass."
 model: inherit
 tools: Read
 ---

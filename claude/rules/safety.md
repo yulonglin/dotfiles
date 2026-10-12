@@ -1,23 +1,31 @@
 # Safety
 
-## Irreversible actions
+## Prefer the reversible option
 
 Prefer `archive/` over `trash` over `rm`, and don't `rm -rf` unless asked. The git stash stack is shared across worktrees, so `stash push -u -m '<tag>'` then `apply <sha>` — never bare `stash` or `pop`, and `stash show -p` before dropping. Never commit API keys, tokens or credentials. When `Edit` fails with "file modified since read", re-read and retry rather than `Write` over the file. Never `git add -A` in-sandbox: on Linux, denied paths are masked as phantom character devices that it would stage — use explicit pathspecs.
 
 A restore or git operation that failed under the sandbox is intact — retry with `dangerouslyDisableSandbox: true`. Sandbox failure modes and their fixes are in the `jobs` skill.
 
+## Keep one copy of each document
+
+A document Yulong reads or edits — a draft, writeup, plan or note — lives in exactly one place: the Bear note, the repo file or the Google Doc he named. Never keep a mirror in a second place and "sync" between them: mirrors drift, and syncing one over the other destroyed his edits (2026-09-30). Pick the home when the document is created, name it in the reply, and write only there. Publishing elsewhere (a Google Doc, an Artifact, the vault snapshot in `vault-deliverables.md`) happens once, from that home, and the published copy is never edited or synced back. A raw backup taken before a destructive tidy is fine, labelled as a backup and never edited.
+
+Before any write to a document Yulong may have touched, re-read it and keep his changes exactly where he put them: never relocate, condense or restore text he added or removed. A `cp -i` "overwrite?" prompt means stop and diff, never `cp -f`.
+
 Hooks enforce some of this independently: `block_destructive_git.sh` refuses `reset --hard`, `checkout -- <path>`, `clean -f`, bare `stash` and `stash pop`.
 
-## Supply chain
+## A quarantine or malware-check block is the defense working
 
-A quarantine or malware-check block is the defense working, not a bug: name the package, version and guard, then stop. Never bypass it, and never do any of these without explicit approval — adding a third-party Homebrew tap, installing from an arbitrary URL or git repo, re-enabling lifecycle scripts, bypassing `min-release-age`, unsetting `UV_MALWARE_CHECK`, or passing `--no-quarantine`.
+Name the package, version and guard, then stop. Never bypass it, and never do any of these without explicit approval — adding a third-party Homebrew tap, installing from an arbitrary URL or git repo, re-enabling lifecycle scripts, bypassing `min-release-age`, unsetting `UV_MALWARE_CHECK`, or passing `--no-quarantine`.
+
+**Verify a downloaded binary against the publisher's signature or checksum**, stopping on a mismatch; if none is published, say so, pin its sha256 where the install is documented, and check reinstalls against it.
 
 Keys are reached through one command, `secrets`, backed by Bitwarden Secrets Manager as the single source of truth. Nothing is exported ambiently, so a postinstall script finds an empty environment. `.envrc` is a convenience, not a boundary — `secrets get`/`secrets run` reach any key from any directory; the gate is this machine's BWS token, and a leaked key is closed by rotating it.
 
-## Google Workspace
+## In Google Workspace, never delete and never send
 
-Never delete, only trash — deletions across Workspace are irreversible, so if something must be permanently gone the user does it in the UI. Never send email, only draft, even when told to send it. Hooks match the Bash `gws` path only, so MCP tool calls are governed by this file alone.
+Only trash — deletions across Workspace are irreversible, so if something must be permanently gone the user does it in the UI. Only draft email, even when told to send it. Hooks match the Bash `gws` path only, so MCP tool calls are governed by this file alone.
 
-## Desktop
+## Ask before anything that seizes the desktop
 
 Ask before anything that launches a GUI app, moves focus or the cursor, types keystrokes, or rearranges windows — keystrokes land wherever focus is, and authorization is per-task. Read-only screenshots and listing calls need no permission. `dangerouslyDisableSandbox` grants filesystem access, never permission to seize the cursor; the sandbox cannot tell whether the user is at the machine. Prefer the CLI or MCP path when one exists, which removes the question entirely.

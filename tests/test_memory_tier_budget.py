@@ -57,13 +57,17 @@ def breakdown(files: list[Path]) -> str:
 # eight of them failing at once said nothing a reader could act on. Where the
 # weight sits is a diagnostic, printed on failure, not an assertion.
 #
-# Set to today's measured 35,326 rounded up, so the gate blocks growth from the
-# moment it is wired rather than being red on arrival. It only ever goes DOWN:
-# lower it whenever the tier shrinks. The standing target is 29,900, which is
-# where it was set when the tier measured 26,632; the 5,426-byte gap between
-# that and today is the backlog this gate stops from widening.
+# Set to the measured total rounded up, so the gate blocks growth rather than
+# being red on arrival. It only ever goes DOWN: lower it whenever the tier
+# shrinks -- 35,500 on 2026-09-15, 35,300 on 2026-09-20 after the rules were
+# cut back to what the checklists do not already own. Rounded up rather than
+# set to the measured total, because a gate with 20 bytes of headroom fires on
+# the next clause anyone adds to any rule, which teaches people to raise it.
+# The standing target is 29,900, which is where it was set when the tier
+# measured 26,632; the gap between that and today is the backlog this gate
+# stops from widening.
 ALWAYS_ON_TARGET = 29900
-ALWAYS_ON_CEILING = 35500
+ALWAYS_ON_CEILING = 35300
 
 # Loaded on top of the always-on tier, for sessions in this repo only, so it gets
 # its own budget rather than sharing the global one -- a different blast radius
@@ -158,6 +162,26 @@ def test_protected_sandbox_table_survived_move_byte_identical() -> None:
     old = sandbox_table(tagged(SANDBOX_TABLE_WAS), f"{TAG}:{SANDBOX_TABLE_WAS}")
     new = sandbox_table((REPO / SANDBOX_TABLE_HOME).read_text(), SANDBOX_TABLE_HOME)
     assert old == new
+
+
+EVIDENCE_WAS = "claude/rules/evidence.md"
+EVIDENCE_WAS_AT = "031db2c3"  # last commit with the rule always-on
+EVIDENCE_HOME = "claude/skills/evidence-packs/SKILL.md"
+
+
+def test_evidence_rule_survived_move_byte_identical() -> None:
+    """evidence.md left the always-on tier on 2026-10-03; every byte came along."""
+    old = subprocess.run(
+        ["git", "-C", str(REPO), "show", f"{EVIDENCE_WAS_AT}:{EVIDENCE_WAS}"],
+        capture_output=True,
+        check=True,
+    ).stdout.decode()
+    assert old.strip() in (REPO / EVIDENCE_HOME).read_text()
+
+
+def test_rules_still_point_at_evidence_packs() -> None:
+    """Moving content out of the always-on tier is only safe if it stays findable."""
+    assert "`evidence-packs`" in (REPO / "claude/rules/communication.md").read_text()
 
 
 def test_rules_still_point_at_the_moved_sandbox_table() -> None:

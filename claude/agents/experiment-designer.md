@@ -1,6 +1,6 @@
 ---
 name: experiment-designer
-description: Expert experimental designer for AI safety research. Creates rigorous experimental plans with de-risking strategies, confound identification, and hypothesis testing following CLAUDE.md or RESEARCH_SPEC.md research methodology.
+description: "Design an AI safety experiment before it is built: hypotheses and predicted results, the fewest variables changed, confounds, and de-risking steps, following CLAUDE.md or RESEARCH_SPEC.md. Use when planning a new experiment or the next run in a series; returns a plan, not code."
 model: inherit
 tools: Read,Write
 ---

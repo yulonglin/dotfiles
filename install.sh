@@ -511,11 +511,10 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
     if ! cmd_exists brew; then
         log_warning "Homebrew required for apps — skipping"
     else
-        # gum drives app-picker; bootstrap it (tiny formula) if missing.
-        cmd_exists gum || brew_install gum
-
+        # app-picker's TUI is `claude-tools select`, the same committed binary as
+        # the component menu above — nothing to bootstrap.
         brewfile="$DOT_DIR/config/Brewfile"
-        if [[ "${NON_INTERACTIVE:-false}" == "true" ]] || ! [[ -t 0 ]]; then
+        if ! can_prompt; then
             log_info "Non-interactive: using committed Brewfile (run 'app-picker' to customise)"
         else
             # Interactive: let the user toggle apps, regenerating the Brewfile.
@@ -524,7 +523,13 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             # DOTFILES_MENU_TIMEOUT is the app-picker deadline (the name
             # predates the component menu's removal). On expiry the committed
             # Brewfile is used, exactly as in the non-interactive branch above.
-            run_with_timeout "${DOTFILES_MENU_TIMEOUT:-60}" "$DOT_DIR/custom_bins/app-picker" \
+            # APP_PICKER_IDLE_TIMEOUT closes an untouched menu before that kill,
+            # through the selector's own exit, so the terminal is restored
+            # rather than left raw. 0 (no deadline) stays 0.
+            menu_secs="${DOTFILES_MENU_TIMEOUT:-60}"
+            run_with_timeout "$menu_secs" \
+                env APP_PICKER_IDLE_TIMEOUT=$(( menu_secs > 15 ? menu_secs - 10 : (menu_secs + 1) / 2 )) \
+                "$DOT_DIR/custom_bins/app-picker" \
                 || log_warning "app-picker cancelled or unanswered — using existing Brewfile"
         fi
 
@@ -543,7 +548,10 @@ if [[ "$INSTALL_APPS" == "true" ]] && is_macos; then
             # internal sudo no way to read a password. Pre-warm the credential (interactive
             # TTY only) for any mas lines that remain (belt-and-suspenders after mas-get).
             sudo_keepalive_pid=""
-            if [[ -t 0 ]] && grep -q '^mas ' "$brewfile" 2>/dev/null; then
+            if ! can_prompt && grep -q '^mas ' "$brewfile" 2>/dev/null; then
+                log_warning "Unattended run — not prompting for sudo; App Store (mas) apps may be skipped"
+            fi
+            if can_prompt && grep -q '^mas ' "$brewfile" 2>/dev/null; then
                 log_info "App Store installs (mas) need sudo — caching your credential…"
                 if run_with_timeout "${DOTFILES_PROMPT_TIMEOUT:-60}" sudo -v; then
                     # Capture parent PID before subshell so $$ resolves correctly in both

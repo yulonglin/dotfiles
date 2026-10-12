@@ -11,6 +11,8 @@
 brew "mas"
 
 # ── CLI formulae ──
+brew "googleworkspace-cli"
+brew "python"
 brew "switchaudio-osx"
 
 # ── Casks (official Homebrew casks) ──
@@ -28,6 +30,7 @@ cask "dropbox"
 cask "finetune"
 cask "finicky"
 cask "font-fira-code"
+cask "gcloud-cli"
 cask "ghostty"
 cask "google-chrome"
 cask "google-drive"

@@ -49,8 +49,11 @@
 #   context-window  the model's real window at that provider; the router rescales
 #                   usage so auto-compaction fires there (only windows larger than
 #                   declared-context-window can be scaled)
+#   description     the picker row's second line; defaults to who bills for the
+#                   model: "Claude subscription", "ChatGPT subscription (Codex)",
+#                   "OpenRouter, pay per token"
 #   enabled         default true
-#   picker          default true: a row in /model
+#   picker          default true: a row in /model, in this file's block order
 #   agent           default true: an agent file; a string sets the effort
 #                   (low|medium|high|xhigh) for models that honour it; false = none
 #   writer-priority optional positive integer: eligible writers, lowest first.
@@ -66,6 +69,12 @@
 # What Claude Code believes every routed model's window is (set in settings env
 # as CLAUDE_CODE_MAX_CONTEXT_TOKENS); 258400 is the Codex backend's input limit.
 declared-context-window = 258400
+
+# /model shows only the picker rows below (plus Claude Code's own Default row and
+# the session's current model), not the built-in lineup. Rows follow block order.
+# The Claude rows at the top pin exact versions, so a new Claude release needs
+# its id bumped here before it appears.
+picker-replace-built-in = true
 
 [providers.openrouter]
 base-url = "https://openrouter.ai/api/v1"
@@ -85,10 +94,26 @@ base-url = "https://openrouter.ai/api/v1"
 #   https://github.com/router-for-me/CLIProxyAPI/issues/5005
 #   https://github.com/router-for-me/CLIProxyAPI/pull/5669
 
-# ---- Older Claude models, passed straight through to Anthropic -----------
-# Active until at least 2027-02-05 (deprecations page, 2026-09-07). Opus 3 is
-# not addable: retired on the API 2026-01-05 and gone from OpenRouter too.
+# ---- Claude models, passed straight through to Anthropic -----------------
+# The current lineup, first in the picker: Opus, Fable, then Sonnet.
 
+[[models]]
+id = "claude-opus-5-5"
+name = "Opus 5.5"
+provider = "anthropic"
+
+[[models]]
+id = "claude-fable-5-1"
+name = "Fable 5.1"
+provider = "anthropic"
+
+[[models]]
+id = "claude-sonnet-5-5"
+name = "Sonnet 5.5"
+provider = "anthropic"
+
+# Opus 4.6 is active until at least 2027-02-05 (deprecations page, 2026-09-07).
+# Opus 3 is not addable: retired on the API 2026-01-05 and gone from OpenRouter too.
 [[models]]
 id = "claude-opus-4-6"
 name = "Opus 4.6"
@@ -105,17 +130,49 @@ provider = "codex"
 context-window = 258400
 agent = "high"
 
+# `sol` moved here from gpt-5.6-sol on 2026-10-01. Router 0.1.23 serves
+# gpt-6.1-sol through the account (released 2026-09-29, listed by the managed
+# CLIProxyAPI 7.3.16 child with no pin change), and the plugin's own
+# adversarial-code-reviewer, plan-reviewer and gpt-6.1-sol(medium|high) agents
+# call this id -- without the route they fail with model_not_found.
+[[models]]
+id = "gpt-6.1-sol"
+aliases = ["sol"]
+name = "GPT-6.1 Sol"
+provider = "codex"
+context-window = 258400
+agent = "high"
+
+# GPT-6 Sol on the account. It went through OpenRouter while the router pinned
+# CLIProxyAPI 7.2.154, which answered "unknown provider for model gpt-6-sol"
+# (measured 2026-09-22); router 0.1.21 moved the pin to 7.3.16, which serves it.
+[[models]]
+id = "gpt-6-sol"
+aliases = ["sol6"]
+name = "GPT-6 Sol"
+provider = "codex"
+context-window = 258400
+picker = false           # superseded in the picker by GPT-6.1 Sol; route and agent stay
+
+# The plugin ships gpt-6-luna(high); the route keeps that agent from failing.
+[[models]]
+id = "gpt-6-luna"
+name = "GPT-6 Luna"
+provider = "codex"
+context-window = 258400
+picker = false
+agent = false
+
 [[models]]
 id = "gpt-5.6-sol"
-aliases = ["sol"]
 writer-priority = 1
 name = "GPT-5.6 Sol"
 provider = "codex"
 context-window = 258400
-agent = "high"           # the plugin also ships gpt-5.6-sol(medium|high) on the long id
+picker = false           # `sol` in the picker is now GPT-6.1 Sol
+agent = "high"
 
-# The plugin ships agents for these two; keeping the routes stops those agents
-# failing on first use. Off the picker until wanted.
+# Kept so anything still naming these ids gets an answer. Off the picker until wanted.
 [[models]]
 id = "gpt-5.6-terra"
 name = "GPT-5.6 Terra"
@@ -134,7 +191,7 @@ agent = false
 
 # ---- Other families, through OpenRouter ---------------------------------
 # Slugs match the council roster in config/openrouter-models.toml; windows are
-# the host's guaranteed figure from `verify-providers` on 2026-09-06.
+# the host's guaranteed figure from `verify-providers` on 2026-10-12.
 
 [[models]]
 id = "kimi-k3"
@@ -143,7 +200,7 @@ writer-priority = 3
 name = "Kimi K3"
 provider = "openrouter"
 slug = "moonshotai/kimi-k3"
-context-window = 1048576
+context-window = 250000   # host limit; the catalogue's 1048576 failed verify-providers
 
 [[models]]
 id = "glm-5.3"
@@ -151,7 +208,7 @@ aliases = ["glm"]
 name = "GLM 5.3"
 provider = "openrouter"
 slug = "z-ai/glm-5.3"
-context-window = 262144
+context-window = 262124
 
 [[models]]
 id = "muse-spark-1.3"
@@ -161,6 +218,8 @@ provider = "openrouter"
 slug = "meta/muse-spark-1.3"
 context-window = 1048576
 
+# Grok 4.6, not the newer 4.7: the Epoch index scores 4.6 at 156.4 and 4.7 at
+# 153.5 (2026-10-12), so the council seats 4.6 and this route follows it.
 [[models]]
 id = "grok-4.6"
 aliases = ["grok"]
@@ -168,3 +227,33 @@ name = "Grok 4.6"
 provider = "openrouter"
 slug = "x-ai/grok-4.6"
 context-window = 500000
+
+# Agent and picker off: the text call and minimal tool/thinking requests work,
+# but a full Claude Code request through the gateway returns "400 Provider
+# returned error" (tests/test_model_router_gateway.sh --routes gemini,
+# 2026-09-22), cause not yet found. The route stays so the probe can be rerun.
+[[models]]
+id = "gemini-3.7-flash"
+aliases = ["gemini"]
+name = "Gemini 3.7 Flash"
+provider = "openrouter"
+slug = "google/gemini-3.7-flash"
+context-window = 1048576
+picker = false
+agent = false
+
+[[models]]
+id = "qwen3.8-max"
+aliases = ["qwen"]
+name = "Qwen3.8 Max"
+provider = "openrouter"
+slug = "qwen/qwen3.8-max-0902"
+context-window = 1000000
+
+[[models]]
+id = "deepseek-v4.1-flash"
+aliases = ["deepseek"]
+name = "DeepSeek V4.1 Flash"
+provider = "openrouter"
+slug = "deepseek/deepseek-v4.1-flash"
+context-window = 1000000

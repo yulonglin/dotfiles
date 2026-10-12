@@ -1,7 +1,7 @@
 # Vault Deliverables
 
-Anything Yulong will read away from this machine gets a copy in `~/vault`, which Obsidian Sync carries to his phone and Mac: reports, specs, plans, handoffs and status docs (`.md`); figures, rendered pages and screenshots (`.png`, `.jpg`); papers, decks, submissions and built reports (`.pdf`). Copy it there as part of delivering, not as a follow-up, and give the vault path in the closing summary. Code, data, logs, `.eval` files and build trees never go in.
+**Every deliverable has one reader-facing home**; a second copy drifts and nobody can tell which is current. If it already lives where Yulong reads on his phone — a Bear note, an Artifact, a Google Doc, a PR — that is its only home: no copy in `~/vault`. If it would otherwise exist only on this machine or a server (a report, figure, rendered page or PDF), put it in `~/vault`, which Obsidian Sync carries to his phone and Mac, as part of delivering. Code, data, logs, `.eval` files and build trees never go in. Give the one path or link in the closing summary.
 
-Place it where the layout hook allows: research work under `research/<topic>/` in `specs/`, `plans/`, `docs/`, `runs/<YYYY-MM-DD-slug>/` or `assets/` (images); tool work under `tooling/<repo>/`. A batch of binaries gets a `README.md` beside it naming each file, what it is for, and the source path and commit it was copied from.
+Place it where the layout hook allows: research under `research/<topic>/` in `specs/`, `plans/`, `docs/`, `runs/<YYYY-MM-DD-slug>/` or `assets/`; tool work under `tooling/<repo>/`. A batch of binaries gets a `README.md` naming each file and its source path and commit.
 
-Sync carries only markdown, images and PDF, and per-file size is capped (keep under ~5 MB; split or downsample anything larger). Copy, never symlink — a symlink inside a synced vault can read as a deletion and propagate it. The vault copy is a snapshot: the source of truth stays in the repo, and a rebuild means a re-copy.
+Sync carries only markdown, images and PDF, under ~5 MB per file. Copy, never symlink — a symlink inside a synced vault can read as a deletion and propagate it.

@@ -33,6 +33,7 @@ cask|alpha|misc|1|true|Alpha|Default on; installed|none
 cask|beta|misc|2|false|Beta|Default off; installed|none
 cask|gamma|misc|2|true|Gamma|Default on; NOT installed|login
 brew|toolx|misc|2|true|ToolX|Formula; installed|none
+brew|python|misc|1|false|Python|Alias row; installed as python@3.14, which toolx depends on|none
 mas|111|text|2|true|Notes App|Installed as "Notes App.app"|none
 mas|222|text|2|true|Things 3|Installed as "Things.app" — first-word match|none
 EOF
@@ -51,7 +52,6 @@ cat > "$WORK/bin/brew" <<'EOF'
 #!/usr/bin/env zsh
 case "$1 $2" in
     "list --cask")  print -l alpha beta omega declared-cli stray-cask ;;
-    "leaves --installed-on-request") print -l toolx declared-cli acme/tap/orphan ok/tap/keeper ;;
     "tap ")         print -l homebrew/core homebrew/cask acme/tap ok/tap ;;
     "desc --cask")  shift 2; for t in "$@"; do print -r -- "$t: (Desc) fake"; done ;;
     "info --json=v2") cat "$(dirname "$0")/installed.json" ;;
@@ -59,11 +59,17 @@ case "$1 $2" in
 esac
 EOF
 chmod +x "$WORK/bin/brew"
-# Provenance fixture: toolx (requested, in the registry) needs libfoo; declared-cli
-# (requested, named in config.sh) needs nothing; libbar is an orphaned dependency.
+# Inventory + provenance fixture: toolx (requested, in the registry) needs libfoo and
+# python@3.14; declared-cli (requested, named in config.sh) needs nothing; libbar is an
+# orphaned dependency. python@3.14 is requested AND a dependency (so `brew leaves` would
+# hide it) and is registered under its alias `python`. The two tap formulae are requested.
 cat > "$WORK/bin/installed.json" <<'EOF'
 {"formulae":[
- {"name":"toolx","full_name":"toolx","desc":"Tool X","installed":[{"installed_on_request":true,"runtime_dependencies":[{"full_name":"libfoo"}]}]},
+ {"name":"toolx","full_name":"toolx","desc":"Tool X","installed":[{"installed_on_request":true,"runtime_dependencies":[{"full_name":"libfoo"},{"full_name":"python@3.14"},{"full_name":"sharedlib"}]}]},
+ {"name":"sharedlib","full_name":"sharedlib","desc":"Requested, unregistered, but toolx needs it","installed":[{"installed_on_request":true,"runtime_dependencies":[]}]},
+ {"name":"python@3.14","full_name":"python@3.14","aliases":["python","python3"],"desc":"Python","installed":[{"installed_on_request":true,"runtime_dependencies":[]}]},
+ {"name":"orphan","full_name":"acme/tap/orphan","desc":"Orphan","installed":[{"installed_on_request":true,"runtime_dependencies":[]}]},
+ {"name":"keeper","full_name":"ok/tap/keeper","desc":"Keeper","installed":[{"installed_on_request":true,"runtime_dependencies":[]}]},
  {"name":"declared-cli","full_name":"declared-cli","desc":"Declared","installed":[{"installed_on_request":true,"runtime_dependencies":[]}]},
  {"name":"libfoo","full_name":"libfoo","desc":"lib","installed":[{"installed_on_request":false,"runtime_dependencies":[]}]},
  {"name":"libbar","full_name":"libbar","desc":"lib","installed":[{"installed_on_request":false,"runtime_dependencies":[]}]}
@@ -101,6 +107,7 @@ check    "installed default=false cask selected" "$bf" 'cask "beta"'
 check_not "default=true but absent cask NOT selected" "$bf" 'cask "gamma"'
 check_not "installed rejected cask still kept out" "$bf" 'cask "omega"'
 check    "installed formula selected"       "$bf" 'brew "toolx"'
+check    "alias row matches dependency-hidden python@3.14" "$bf" 'brew "python"'
 check    "mas exact-stem match"             "$bf" 'id: 111'
 check    "mas first-word match (Things 3 ↔ Things.app)" "$bf" 'id: 222'
 check_not "installed rejected mas still kept out" "$bf" 'id: 333'
@@ -112,6 +119,7 @@ out="$(run --audit)"
 check_not "Brewfile lines all resolve to registry rows" "$out" "no registry row"
 check_not "selected+installed cask gets no uninstall cmd" "$out" "brew uninstall --cask alpha"
 check_not "selected+installed formula gets no uninstall cmd" "$out" "brew uninstall toolx"
+check_not "alias row not reported missing or unregistered" "$out" "python@3.14"
 check    "selected but absent cask → install hint"  "$out" "Gamma (gamma)"
 check    "rejected+installed cask → uninstall cmd" "$out" "brew uninstall --cask omega"
 check    "rejected section names the file"         "$out" "Rejected in apps-excluded.conf, still installed"
@@ -125,6 +133,7 @@ check_not "cask declared in config.sh not reported" "$out" "declared-cli:"
 check    "unregistered App Store app → row template" "$out" "mas|?|<category>|2|false|Mystery|"
 check_not "non-store app ignored"           "$out" "NotFromStore"
 check    "orphan formula reported with tap prefix" "$out" "acme/tap/orphan"
+check_not "requested formula another one needs is not called undeclared" "$out" "  sharedlib"
 check    "third-party tap reported"         "$out" $'\n  acme/tap'
 check    "sanctioned tap listed as exception" "$out" "exception on record"
 check_not "sanctioned tap not under policy breach" "$out" $'policy: none'$'\n  ok/tap'

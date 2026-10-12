@@ -352,6 +352,7 @@ alias resume='claude --resume'
 # position even inside interactively-typed loops, so the alias would hijack them.
 alias cont='claude --continue'
 alias yn='yolo -t'  # yn <name>: yolo with task name
+alias cad='claude agents --allow-dangerously-skip-permissions'
 
 # Artifact dirs checked across worktree commands (port, remove, clean)
 _CW_ARTIFACT_DIRS=(out logs data results experiments)

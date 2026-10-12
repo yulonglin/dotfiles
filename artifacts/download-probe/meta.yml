@@ -1,0 +1,22 @@
+title: The page can be downloaded as HTML
+url: https://claude.ai/artifact/DHxg1ZG6BqraAdXUJtr5n6
+org: lin.yulong@gmail.com's Organization   # session auth, 2026-09-24
+first_published: 2026-09-24
+last_updated: 2026-09-24
+status: done
+
+summary: >-
+  a probe page for the annotation layer's "This page" row — Download HTML through the viewer's
+  `downloads` capability, and Copy HTML through the clipboard. Published with
+  `capabilities: {downloads: true}` to check whether the viewer grants that capability to
+  the owner and to a non-owner viewer
+
+source: download-probe.md
+built: download-probe.html
+builds_with: |
+  md2artifact artifacts/download-probe/download-probe.md -o artifacts/download-probe/download-probe.html
+
+established: |
+  The publish accepted the `downloads` declaration (contract 0.2.54). Checked by Yulong on
+  2026-09-24: the owner can download, a public-link viewer cannot (Copy HTML works for both),
+  and the downloaded copy shows only Copy HTML, since a local file has no viewer.
