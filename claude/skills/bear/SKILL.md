@@ -37,7 +37,7 @@ Reach for `bearcli` only when:
 - You're composing with `jq` / pipes
 - The user explicitly asks for CLI
 
-When that happens, load [`references/cli.md`](references/cli.md) — full playbooks (surgical edit, full rewrite, create, tags/pins, search, attachments) + CLI-only gotchas (sandbox SIGABRT, PATH in cron, stdin/escape). The MCP tool surface maps 1:1 to CLI subcommands, so the playbooks transfer directly.
+When that happens, load [`references/cli.md`](references/cli.md) — full playbooks (surgical edit, full rewrite, create, tags/pins, search, attachments, moving a block between notes) + CLI-only gotchas (sandbox SIGABRT, PATH in cron, stdin/escape). The MCP tool surface maps 1:1 to CLI subcommands, so the playbooks transfer directly.
 
 ## Read playbook: check size, then outline, then sections
 
@@ -168,6 +168,32 @@ Tags are inserted at Bear's configured top-or-bottom position; inline `#hashtag`
 
 `rename_tag` with `force: true` MERGES tags irreversibly — check both populations first via `list_notes(tag=..., limit=0)` (counts only).
 
+## Attachments playbook: replace a file in place
+
+To swap an attachment for a newer version of the same filename (a refreshed CV PDF, say) and keep its position in the note — verified live 2026-10-12:
+
+```
+# 1. Back up the old bytes (CLI, outside the sandbox — see references/cli.md)
+bearcli attachments save ID --filename cv.pdf > backup.pdf
+
+# 2. Remove the old file and its link
+mcp__plugin_bear-mcp_bear__delete_attachment(id=ID, filename="cv.pdf")
+
+# 3. Add the new bytes — Bear appends the link at the END of the note
+bearcli attachments add ID --filename cv.pdf < new.pdf
+
+# 4. Move the link back with ONE edit_note call: delete the appended line, insert it at the target
+mcp__plugin_bear-mcp_bear__edit_note(id=ID, edits=[
+  { find: "\n[cv.pdf](cv.pdf)<!-- {\"embed\":\"true\", \"preview\":\"true\"} -->", delete: true },
+  { find: "## CV\n", insertAfter: "[cv.pdf](cv.pdf)<!-- {\"embed\":\"true\", \"preview\":\"true\"} -->\n" },
+])
+```
+
+- Delete before you add. If the old file is still there, Bear renames the new one to `cv 2.pdf`.
+- Put the delete and the insert in one `edit_note` call. They apply together, so the link is never missing and the attachment-removal gate (failure mode 4) does not fire.
+- The `<!-- {"embed":"true", "preview":"true"} -->` comment makes a PDF render inline as a preview. Keep it on the moved link.
+- Verify: `list_attachments` shows the new size, and `bearcli attachments save` piped through `pdftotext` shows the new text.
+
 ## Search
 
 `mcp__plugin_bear-mcp_bear__search_notes` accepts Bear's full app-search syntax. Returns notes with per-note match counts.
@@ -249,3 +275,5 @@ Two consequences for editing:
 - `[[Note Title]]` is a `find` anchor like any other string, so `edit_note` can retarget links in bulk (`{ find: "[[Old Title]]", replace: "[[New Title]]", all: true }`).
 
 As with `==` and `~text~`, `[[...]]` does not link in files that render as plain GitHub Markdown.
+
+**A folded (collapsed) section is its heading line with `<!-- {"fold":true} -->` appended**, for example `#### Raw notes<!-- {"fold":true} -->`. Writing that line with `edit_note` gives a collapsed section (verified 2026-10-12). A folded heading hides everything up to the next heading of the same or higher level, so put content you want hidden at the END of its parent section. The comment is part of the heading's address — `### Bio\n#### Raw notes<!-- {"fold":true} -->` — so take addresses from `read_note_outline` rather than typing them.
