@@ -77,6 +77,37 @@ class TestPickSeat:
     def test_absent_family_returns_none(self):
         assert orc.pick_seat("nope", [row("x/a", 5, 100)], {}, 60.0) is None
 
+    def test_newer_sibling_within_the_interval_wins(self):
+        """The grok-4.7 / gemini-3.8-flash case: a lower point score whose
+        interval overlaps the older model's is a tie, and recency breaks it."""
+        rows = [row("x/thing-4.6", 6, 100), row("x/thing-4.7", 6, 200)]
+        scores = {"thing46": 156.4, "thing47": 153.5}
+        cis = {"thing46": (154.5, 159.0), "thing47": (151.8, 155.9)}
+        got = orc.pick_seat("x", rows, scores, 60.0, cis=cis)
+        assert got["slug"] == "x/thing-4.7"
+        assert got["basis"] == "newest-within-ci"
+        assert got["score"] == 153.5
+
+    def test_older_sibling_clearly_ahead_keeps_the_seat(self):
+        rows = [row("x/thing-4.6", 6, 100), row("x/thing-4.7", 6, 200)]
+        scores = {"thing46": 160.0, "thing47": 150.0}
+        cis = {"thing46": (158.0, 162.0), "thing47": (148.0, 152.0)}
+        got = orc.pick_seat("x", rows, scores, 60.0, cis=cis)
+        assert got["slug"] == "x/thing-4.6" and got["basis"] == "eci"
+
+    def test_overlap_with_a_different_line_does_not_win(self):
+        rows = [row("x/thing-4.6", 6, 100), row("x/thing-4.7-flash", 1, 200)]
+        scores = {"thing46": 156.4, "thing47flash": 156.0}
+        cis = {"thing46": (154.5, 159.0), "thing47flash": (154.0, 158.0)}
+        got = orc.pick_seat("x", rows, scores, 60.0, cis=cis)
+        assert got["slug"] == "x/thing-4.6"
+
+    def test_no_interval_for_the_best_means_no_tiebreak(self):
+        rows = [row("x/thing-4.6", 6, 100), row("x/thing-4.7", 6, 200)]
+        scores = {"thing46": 0.9, "thing47": 0.8}
+        got = orc.pick_seat("x", rows, scores, 60.0, cis={"thing47": (151.8, 155.9)})
+        assert got["slug"] == "x/thing-4.6"
+
     def test_all_unscored_falls_back_to_newest(self):
         rows = [row("x/a", 5, 100), row("x/b", 5, 300)]
         got = orc.pick_seat("x", rows, {}, 60.0)

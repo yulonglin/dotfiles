@@ -218,26 +218,25 @@ provider = "openrouter"
 slug = "meta/muse-spark-1.3"
 context-window = 1048576
 
-# Grok 4.6, not the newer 4.7: the Epoch index scores 4.6 at 156.4 and 4.7 at
-# 153.5 (2026-10-12), so the council seats 4.6 and this route follows it.
 [[models]]
-id = "grok-4.6"
+id = "grok-4.7"
 aliases = ["grok"]
-name = "Grok 4.6"
+name = "Grok 4.7"
 provider = "openrouter"
-slug = "x-ai/grok-4.6"
+slug = "x-ai/grok-4.7"
 context-window = 500000
 
 # Agent and picker off: the text call and minimal tool/thinking requests work,
 # but a full Claude Code request through the gateway returns "400 Provider
 # returned error" (tests/test_model_router_gateway.sh --routes gemini,
-# 2026-09-22), cause not yet found. The route stays so the probe can be rerun.
+# 2026-09-22, on 3.7 Flash), cause not yet found. The route stays so the probe
+# can be rerun.
 [[models]]
-id = "gemini-3.7-flash"
+id = "gemini-3.8-flash"
 aliases = ["gemini"]
-name = "Gemini 3.7 Flash"
+name = "Gemini 3.8 Flash"
 provider = "openrouter"
-slug = "google/gemini-3.7-flash"
+slug = "google/gemini-3.8-flash"
 context-window = 1048576
 picker = false
 agent = false

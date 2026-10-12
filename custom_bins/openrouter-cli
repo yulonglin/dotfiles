@@ -452,8 +452,13 @@ def cmd_models(args, cfg) -> None:
             die(f"{bad} configured slug(s) are not in the catalogue", 3)
 
 
+# 95% intervals from the last fetch_eci(), keyed like its scores. pick_seat()
+# reads them to tell a real gap between sibling checkpoints from noise.
+ECI_CI: dict[str, tuple[float, float]] = {}
+
+
 def fetch_eci() -> dict[str, float]:
-    """Epoch Capabilities Index, keyed by normalised model name."""
+    """Epoch Capabilities Index, keyed by normalised model name. Fills ECI_CI."""
     req = urllib.request.Request(EPOCH_ZIP)
     with urllib.request.urlopen(req, timeout=120) as r:
         blob = r.read()
@@ -471,6 +476,11 @@ def fetch_eci() -> dict[str, float]:
         except ValueError:
             continue
         # Several reasoning-effort variants share one Model name; keep the best.
+        if val >= out.get(norm(name), val):
+            try:
+                ECI_CI[norm(name)] = (float(row["eci_ci_low"]), float(row["eci_ci_high"]))
+            except (KeyError, TypeError, ValueError):
+                ECI_CI.pop(norm(name), None)
         out[norm(name)] = max(out.get(norm(name), val), val)
     return out
 
@@ -983,7 +993,8 @@ def index_scores() -> tuple[dict[str, float], list[str]]:
 
 
 def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
-              cap: float, in_cap: float = float("inf")) -> dict | None:
+              cap: float, in_cap: float = float("inf"),
+              cis: dict[str, tuple[float, float]] | None = None) -> dict | None:
     """The best seat for one family under both price caps, or None.
 
     Both caps, not just output: the `--rank` round sends every seat the other
@@ -1015,6 +1026,21 @@ def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
     if newer:
         cand = max(newer, key=lambda r: r["created"])
         return {**cand, "score": 0.0, "basis": "newest-in-line"}
+    # A newer SCORED sibling whose interval overlaps the best's is a tie, not a
+    # loss, so recency breaks it: gemini-3.8-flash trailed 3.7 by 0.6 and
+    # grok-4.7 trailed 4.6 by 2.9, both inside overlapping 95% intervals
+    # (2026-10-12), and Artificial Analysis ranked the newer one higher. The
+    # older model keeps the seat only when its whole interval is above.
+    # Intervals are in raw ECI units, so both ends must come from them, never
+    # from `score` (min-max normalised once the AA index is in the mix).
+    cis = ECI_CI if cis is None else cis
+    lo = cis.get(norm(best["tail"]), (float("inf"),))[0]
+    tied = [(r, s) for r, s in have
+            if stem(r["slug"]) == line and r["created"] > best["created"]
+            and norm(r["tail"]) in cis and cis[norm(r["tail"])][1] >= lo]
+    if tied:
+        cand, cs = max(tied, key=lambda rs: rs[0]["created"])
+        return {**cand, "score": round(cs, 1), "basis": "newest-within-ci"}
     return {**best, "score": round(score, 1), "basis": "eci"}
 
 
