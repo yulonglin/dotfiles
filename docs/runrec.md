@@ -26,7 +26,7 @@ runrec launch --slug capture-qwen --backend modal \
 | `--run-dir` | Record into an existing directory the script already chose |
 | `--config` | Snapshot a config file into `<run dir>/config/` with its sha256 |
 
-Stopping sends SIGINT to the whole process group (which makes `modal run` stop its app), then SIGTERM, then SIGKILL, until the group is gone. Exit code: the command's own code; 2 when refused; 124 when stopped or interrupted.
+Stopping sends SIGINT to the whole process group (which makes `modal run` stop its app), then SIGTERM, then SIGKILL, until the group is gone. The run is not over until the whole group is gone either: a leader that exits while its workers keep going is still supervised, so a command that leaves a daemon behind keeps the run open until `--timeout` or an idle stop. One launch at a time may use a run directory; a second `--run-dir` launch into a busy directory is refused. Exit code: the command's own code; 2 when refused; 124 when stopped or interrupted.
 
 The command sees `RUN_ID`, `RUN_DIR`, `RUN_COST_CAP_USD` and `RUN_API_CAP_USD` in its environment.
 
