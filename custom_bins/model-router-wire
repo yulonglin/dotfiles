@@ -175,9 +175,6 @@ def render_router_config(src: dict) -> str:
         "# repo; edits here are overwritten on the next `model-router-wire apply`.",
         "",
     ]
-    declared = src.get("declared-context-window")
-    if declared:
-        out += [f"declared-context-window = {declared}", ""]
     for m in enabled(src):
         if m["provider"] != "codex":
             continue
@@ -203,7 +200,6 @@ def render_router_config(src: dict) -> str:
                     f'name = "{m.get("slug", m["id"])}"',
                     f'routing-id = "{rid}"',
                     f'display-name = "{m["name"]}"',
-                    "context-window-scaling = true",
                     f"context-window = {m['context-window']}",
                     "",
                 ]
@@ -264,7 +260,20 @@ def render_user(src: dict, settings: dict, base_url: str | None) -> dict:
     if src.get("picker-replace-built-in"):
         picker["replaceBuiltInOptions"] = True
     new["modelPicker"] = picker
+    windows = {k: v for k, v in new.get("modelSettings", {}).items() if k.startswith("claude-")}
+    windows.update(compact_windows(src))
+    new["modelSettings"] = windows
     return new
+
+
+def compact_windows(src: dict) -> dict:
+    """One modelSettings entry per routing ID, so each route compacts at its own
+    real window: Claude Code keys the setting by the ID the session runs on and
+    uses min(declared window, setting). Entries for non-claude- IDs are this
+    script's to replace wholesale; claude-* entries (written by /autocompact on
+    a Claude model) are kept. The setting's range is 100000-1000000."""
+    return {rid: {"autoCompactWindow": max(100_000, min(m["context-window"], 1_000_000))}
+            for m in routed(enabled(src)) for rid in ids(m)}
 
 
 def picker_row(m: dict) -> dict:
@@ -283,6 +292,10 @@ def strip_user_settings(settings: dict) -> tuple[dict, list[str]]:
     removed = [k for k in USER_STRIP_ENV if env.pop(k, None) is not None]
     if new.pop("modelPicker", None) is not None:
         removed.append("modelPicker")
+    ms = new.get("modelSettings", {})
+    if any(not k.startswith("claude-") for k in ms):
+        new["modelSettings"] = {k: v for k, v in ms.items() if k.startswith("claude-")}
+        removed.append("modelSettings (routed IDs)")
     return new, removed
 
 

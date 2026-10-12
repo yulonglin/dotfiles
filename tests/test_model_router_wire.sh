@@ -75,6 +75,19 @@ assert desc["kimi"] == "OpenRouter, pay per token", desc
 assert desc["claude-opus-5-5"] == "Claude subscription", desc
 assert [o["model"] for o in p["options"]][:3] == ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"], p
 PY
+# Each routing ID compacts at its own window; usage scaling is gone from the router config.
+python3 - "$CLAUDE_SETTINGS" "$MODEL_ROUTER_CONFIG" <<'PY' || fail "per-route compaction windows missing or scaling still rendered"
+import json, sys
+s = json.load(open(sys.argv[1]))
+ms = s["modelSettings"]
+assert ms["kimi"] == {"autoCompactWindow": 250000}, ms.get("kimi")
+assert ms["astra"] == {"autoCompactWindow": 258400}, ms.get("astra")
+assert all(100000 <= v["autoCompactWindow"] <= 1000000 for v in ms.values()), ms
+assert not any(k.startswith("claude-") for k in ms), "passthrough Claude rows got a routed window"
+assert s["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "1000000", s["env"]
+router = open(sys.argv[2]).read()
+assert "context-window-scaling" not in router and "declared-context-window" not in router
+PY
 "$WIRE" status | grep -q 'not wired' && fail "status calls the gateway off while the user file carries it"
 [ -f "$MODEL_ROUTER_CONFIG" ] || fail "router config not rendered"
 [ -f "$MODEL_ROUTER_MANAGED" ] && fail "apply wrote the managed path itself (it must go through sudo)"

@@ -543,3 +543,67 @@ class TestLivenessRecord:
         monkeypatch.setattr(orc, "LIVENESS", target)
         orc.write_liveness(None)
         assert target.read_text() == "previous\n"
+
+
+def aa_record(slug, release, score, estimated=False):
+    """One model record shaped like the ones artificialanalysis.ai embeds, with
+    the escaped quotes of its streamed page payload."""
+    body = (f'{{"id":"00000000-0000-0000-0000-{abs(hash(slug)) % 10**12:012d}",'
+            f'"slug":"{slug}","name":"{slug}","release":{{"slug":"{release}","name":"x"}},'
+            f'"deprecated":false,"intelligenceIndex":{score},'
+            f'"intelligenceIndexIsEstimated":{"true" if estimated else "false"}}}')
+    return body.replace('"', '\\"')
+
+
+class TestArtificialAnalysisPages:
+    """Without a key the index comes from the public pages, and /models drops
+    superseded releases -- the 2026-10-12 miss that made Grok 4.6 and Gemini
+    3.7 Flash look unlisted while AA still scored both."""
+
+    def test_best_effort_variant_stands_for_the_release(self):
+        html = aa_record("grok-4-6", "grok-4-6", 44.3) + aa_record("grok-4-6-low", "grok-4-6", 35.1)
+        assert orc.aa_page_scores(html) == {"grok46": 44.3}
+
+    def test_release_slug_normalises_onto_the_openrouter_tail(self):
+        html = aa_record("qwen3-8-max", "qwen3-8-max-0902", 45.4)
+        assert orc.norm("qwen3.8-max-0902") in orc.aa_page_scores(html)
+
+    def test_estimated_scores_are_skipped(self):
+        assert orc.aa_page_scores(aa_record("x-1", "x-1", 50.0, estimated=True)) == {}
+
+    def test_a_candidate_missing_from_the_list_is_fetched_from_its_own_page(self, monkeypatch):
+        pages = {orc.AA_PAGE: aa_record("grok-4-7", "grok-4-7", 46.4),
+                 f"{orc.AA_PAGE}/grok-4-6": aa_record("grok-4-6", "grok-4-6", 44.3)}
+        asked = []
+        monkeypatch.setattr(orc, "get_page", lambda url: asked.append(url) or pages.get(url))
+        got = orc.fetch_aa_pages(["grok-4.7", "grok-4.6"])
+        assert got == {"grok47": 46.4, "grok46": 44.3}
+        assert asked == [orc.AA_PAGE, f"{orc.AA_PAGE}/grok-4-6"], "a listed model must not be refetched"
+
+
+class TestPickerFollowsCouncil:
+    ROUTER = {"models": [
+        {"id": "claude-opus-5-5", "provider": "anthropic"},
+        {"id": "gpt-6-astra", "provider": "codex"},
+        {"id": "grok-4.7", "slug": "x-ai/grok-4.7", "provider": "openrouter"},
+        {"id": "gemini-3.8-flash", "slug": "google/gemini-3.8-flash", "picker": False},
+    ]}
+
+    def test_matching_seats_report_nothing(self):
+        seated = [{"slug": "anthropic/claude-opus-5.5"}, {"slug": "openai/gpt-6-astra"},
+                  {"slug": "x-ai/grok-4.7"}]
+        assert orc.picker_gaps(seated, self.ROUTER) == []
+
+    def test_a_moved_seat_and_a_hidden_row_are_both_reported(self):
+        gaps = orc.picker_gaps([{"slug": "x-ai/grok-4.8"}, {"slug": "google/gemini-3.8-flash"}],
+                               self.ROUTER)
+        assert gaps == ["x-ai/grok-4.8: no route in model-router.toml",
+                        "google/gemini-3.8-flash: routed but picker = false"]
+
+    def test_every_live_seat_has_a_route(self):
+        """The committed configs: a refresh that moves a seat must move its route too."""
+        import tomllib
+        cfg = tomllib.loads(orc.CONFIG.read_text())
+        router = tomllib.loads(orc.ROUTER_CONFIG.read_text())
+        missing = [g for g in orc.picker_gaps(orc.seats(cfg), router) if "no route" in g]
+        assert missing == []
