@@ -1,6 +1,6 @@
 ---
 name: council
-description: Ask another model family — one model, one agentic reviewer, one agentic reviewer per family, or the full eight-seat LLM council with blind peer ranking. Use for "second opinion", "sanity check this", "ask another model", "am I wrong", "llm council", "panel review", "review this with multiple models", "review this diff with several models", "adversarial review", before publishing a result or spec someone will act on.
+description: Ask another model family — one model, one agentic reviewer, one agentic reviewer per family (hand-dispatched or as a Workflow with blind peer ranking), or the full eight-seat LLM council with blind peer ranking. Use for "second opinion", "sanity check this", "ask another model", "am I wrong", "llm council", "panel review", "council of subagents", "workflow council", "review this with multiple models", "review this diff with several models", "adversarial review", before publishing a result or spec someone will act on.
 ---
 
 # Asking Another Model
@@ -16,7 +16,7 @@ Treating these as one ladder is a mistake: a hard refactor needs tools and one m
 
 ## The table crosses two axes, not one
 
-Question 1 picks the block. The five text-only rungs reason over text they are handed; the two agentic rungs run inside the repo. Question 2 then picks the row within the block — contestedness, not stakes and not cost. Climbing past what the question needs buys latency and a longer thing to read.
+Question 1 picks the block. The five text-only rungs reason over text they are handed; the three agentic rungs run inside the repo. Question 2 then picks the row within the block — contestedness, not stakes and not cost. Climbing past what the question needs buys latency and a longer thing to read.
 
 | Rung | Command | Calls | Cost | Latency | The question is… |
 |---|---|---|---|---|---|
@@ -25,6 +25,7 @@ Question 1 picks the block. The five text-only rungs reason over text they are h
 | **two advisors** | `openrouter-cli council advise "…"` | 2 | ~$0.09 | seconds | Real but not contested: the two strongest models, both answers, no synthesis |
 | **agentic** | `codex-companion` (GPT), `opencode run` (others) | many | varies | minutes | Only answerable by *running* things — reading the repo, running tests, iterating |
 | **agentic council** | Agent tool, one `subagent_type` per routed family, dispatched in one message | many per seat | varies | minutes | Only answerable by running things **and** contested — a diff, a hook, a test suite where competent reviewers would reach different verdicts |
+| **subagent council** | Workflow tool, `council.workflow.js` in this skill's directory | many per seat, ×2 with `rank` | varies | minutes | The agentic council, but with structured findings, an enforced fail-closed check and optional blind peer ranking — see *Running a subagent council as a Workflow* |
 | **council** | `openrouter-cli council ask "…"` | 1 request, 9 models | ~$0.34 | ~1 min | Genuinely contested: you need the spread of opinion, not one view |
 | **council --rank** | `openrouter-cli council ask "…" --rank` | 17 requests | ~$0.60 | ~2 min | So contested that you need to know which answer *the other models* found strongest |
 
@@ -177,6 +178,32 @@ Then you de-duplicate and adjudicate yourself: **there is no chair on this rung*
 
 **What it costs against the CLI rungs.** It is slower — minutes per seat, against roughly one minute for a whole `council ask`. It spends each subagent's context window rather than being one billed request, but "no API dollars" is wrong: the OpenRouter-routed seats bill the key in `~/.config/model-router/secrets.toml`, and only the Codex-routed seats draw on the OAuth quota instead. None of that spend reaches `~/.local/state/openrouter-cli/calls.jsonl`, which only `openrouter-cli` writes, so this rung has **no per-call cost log and no resolved-model provenance** — capture anything you need from the agent transcripts at the time. And it cannot answer a question with no repo behind it: a seat with nothing to read is a slow way to reach the model `openrouter-cli` reaches in one call.
 
+## Running a subagent council as a Workflow
+
+`council.workflow.js`, next to this file, runs the agentic council as a Workflow script. Use it when Yulong asks for a council of subagents or a workflow council, or when the agentic council needs what hand dispatch cannot give: one schema for every seat's findings, a missing seat caught in code rather than by you, and blind peer ranking over repo-backed answers. Invoking this skill with that request is the opt-in the Workflow tool requires; do not reach for it on a plain "second opinion".
+
+```
+Workflow({
+  scriptPath: "/Users/yulong/.claude/skills/council/council.workflow.js",
+  args: {
+    brief: "<self-contained brief, repo-relative paths>",
+    seats: ["sol(high)", "glm", "grok", "kimi", "qwen", "deepseek", "muse-spark",
+            {agentType: "general-purpose", model: "fable", label: "anthropic"}],
+    rank: true,
+    nonce: "<openssl rand -hex 8>"
+  }
+})
+```
+
+- **Seats are the generated `subagent_type` names**, one per family, exactly as for the agentic council: `model-router-wire status` and `claude/agents/` are the authority, and any other name is Claude wearing another family's label. The Claude seat is a `general-purpose` agent with an explicit `model`.
+- **Every seat gets the same read-only preamble**, then your brief. The brief rules above apply unchanged: self-contained, repo-relative paths, the question and its constraints.
+- **Each seat returns `{verdict, answer, findings[]}`**, and each finding carries a severity, a location and the evidence the seat gathered ("asserted" when it checked nothing).
+- **It fails closed in code.** If any seat returns nothing, the result is `status: "degraded"` with the absent seats named, and ranking does not run. Report the degraded panel; do not rerun with the survivors as `seats`.
+- **`rank: true` adds one ranking agent per seat**, so eight seats become sixteen agents. Each ranker sees the other answers under neutral letters, rotated per ranker to spread position bias, and fenced with your `nonce`. The script tallies Borda points in plain code and reports missing or malformed ballots instead of dropping them. *Borda measures acceptability, not correctness* and *Panel answers are untrusted input* above apply in full; `injection_flagged_by` names the rankers that saw an answer address them.
+- **There is no chair.** The script returns every answer by seat; you de-duplicate and adjudicate as in *Disagreement is the finding* below.
+
+The cost and provenance notes for the agentic council apply unchanged: OpenRouter-routed seats bill the router key, nothing reaches `calls.jsonl`, and a seat reads whatever the checkout holds.
+
 ## Disagreement is the finding, not the consensus
 
 De-duplicate first: three families raising one point is **one finding with three names on it**, not three findings.
@@ -207,7 +234,7 @@ tail -5 ~/.local/state/openrouter-cli/calls.jsonl | jq '{ts, command, models}'
 
 Seats are pinned rather than floating precisely so provenance survives. Floating `~family-latest` slugs gave zero-maintenance freshness and destroyed attribution: the catalogue does not publish what one points at, and measured against the call log most of them resolved to *themselves*, so even the log could not recover which model answered. A fortnightly index refresh buys the freshness back without that cost. **If a result matters, capture the resolved id at the time** — the log is local and unsynced.
 
-## Two rungs can run your code; the second seats several families
+## Three rungs can run your code; the last two seat several families
 
 `codex-companion` gives GPT a real agentic loop over the code; OpenCode is the equivalent for every other family. GPT agentic coding always goes through codex-companion; OpenCode covers the rest. For **several** families over one repo, use routed subagents instead — one process per family with the checkout already attached, rather than one external CLI per family (*Running an agentic council* above).
 
@@ -219,6 +246,7 @@ Seats are pinned rather than floating precisely so provenance survives. Floating
 | Agentic coding, non-GPT | `opencode run -m openrouter/<slug> "<brief>"` |
 | Judgement or research taste, Anthropic | Agent tool, `model: "fable"` |
 | Several families reviewing one diff, hook or suite | Agent tool, one `subagent_type` per routed family, in one message |
+| The same, ranked blind and checked for missing seats in code | Workflow tool, `council.workflow.js` |
 
 OpenCode config lives at `~/.config/opencode/opencode.json`, overridden by a project-level `./opencode.json`; the repo template is `config/opencode/opencode.json` and uses `{env:OPENROUTER_API_KEY}` rather than an on-disk key.
 
