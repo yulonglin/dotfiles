@@ -724,3 +724,154 @@ def test_board_never_overwrites_a_file_that_is_not_a_board(
         assert not target.exists()
     else:
         assert target.read_text() == content
+
+
+def test_board_refuses_a_symlink(tmp_path: Path) -> None:
+    real = tmp_path / "real.md"
+    real.write_text("# Run board: x\n")
+    link = tmp_path / "board.md"
+    link.symlink_to(real)
+    with pytest.raises(runrec.Refused):
+        runrec.write_board_file(link, "# Run board: y\n")
+    assert real.read_text() == "# Run board: x\n"
+
+
+# --- found by the GPT-6.1 Sol code review ----------------------------------------
+
+
+def test_workers_outliving_the_leader_are_still_supervised(out: Path) -> None:
+    # The leader exits at once; its background worker finishes 2 s later. The run is
+    # not finished until the worker is, so the manifest merge sees the worker's file.
+    # The worker drops stdout, so the log pipe closing cannot stand in for supervision.
+    script = '(sleep 2; echo done > "$RUN_DIR/worker") >/dev/null 2>&1 & exit 0'
+    t0 = time.time()
+    r = launch(
+        out,
+        "--slug",
+        "lead",
+        "--backend",
+        "local",
+        "--api-cap",
+        "0",
+        "--",
+        "sh",
+        "-c",
+        script,
+    )
+    assert r.returncode == 0, r.stderr
+    assert time.time() - t0 >= 2
+    assert (only_run_dir(out) / "worker").read_text().strip() == "done"
+
+
+def test_caps_still_apply_after_the_leader_fails(out: Path, tmp_path: Path) -> None:
+    pidfile = tmp_path / "pid"
+    script = f"sleep 60 & echo $! > {pidfile}; exit 3"
+    r = launch(
+        out,
+        "--slug",
+        "orph",
+        "--backend",
+        "local",
+        "--timeout",
+        "1s",
+        "--api-cap",
+        "0",
+        "--",
+        "sh",
+        "-c",
+        script,
+    )
+    assert r.returncode == 124, r.stderr
+    assert events(out)[-1]["status"] == "stopped:timeout"
+    _assert_group_gone(pidfile)
+
+
+def test_resumed_run_dir_keeps_both_runs_on_the_board(
+    out: Path, tmp_path: Path
+) -> None:
+    run_dir = tmp_path / "shared"
+    run_dir.mkdir()
+    first = launch(
+        out,
+        "--slug",
+        "r1",
+        "--backend",
+        "local",
+        "--run-dir",
+        str(run_dir),
+        "--api-cap",
+        "0",
+        "--",
+        "sh",
+        "-c",
+        "exit 3",
+    )
+    second = launch(
+        out,
+        "--slug",
+        "r2",
+        "--backend",
+        "local",
+        "--run-dir",
+        str(run_dir),
+        "--api-cap",
+        "0",
+        "--",
+        "true",
+    )
+    assert (first.returncode, second.returncode) == (3, 0)
+    runs = {r["slug"]: r for r in runrec.read_runs(out)}
+    assert runs["r1"]["status"] == "failed" and runs["r2"]["status"] == "succeeded"
+    assert runs["r1"]["run_id"] != runs["r2"]["run_id"]
+
+
+def test_second_launch_into_a_busy_run_dir_is_refused(
+    out: Path, tmp_path: Path
+) -> None:
+    run_dir = tmp_path / "busy"
+    run_dir.mkdir()
+    e = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith(("RUNREC_", "OPENROUTER"))
+    }
+    e.update(FAST)
+    p = subprocess.Popen(
+        [
+            sys.executable,
+            str(RUNREC),
+            "launch",
+            "--out-root",
+            str(out),
+            "--slug",
+            "a",
+            "--backend",
+            "local",
+            "--run-dir",
+            str(run_dir),
+            "--api-cap",
+            "0",
+            "--",
+            "sleep",
+            "3",
+        ],
+        env=e,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(1)
+    r = launch(
+        out,
+        "--slug",
+        "b",
+        "--backend",
+        "local",
+        "--run-dir",
+        str(run_dir),
+        "--api-cap",
+        "0",
+        "--",
+        "true",
+    )
+    assert r.returncode == 2 and "in use" in r.stderr
+    assert p.wait(timeout=15) == 0

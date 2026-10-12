@@ -59,7 +59,7 @@ SCAN_S = float(os.environ.get("RUNREC_SCAN", "30"))
 GRACE_INT_S = float(os.environ.get("RUNREC_GRACE_INT", "30"))
 GRACE_TERM_S = float(os.environ.get("RUNREC_GRACE_TERM", "10"))
 LOST_AFTER_HEARTBEATS = 3
-OWN_TMP_PREFIXES = (".launch.json.", ".manifest.json.")
+OWN_TMP_PREFIXES = (".launch.json.", ".manifest.json.", ".runrec.lock")
 
 
 class Refused(Exception):
@@ -131,6 +131,8 @@ def write_board_file(path: Path, text: str) -> None:
     path naming ~/.zshrc or any other file must not overwrite it."""
     if path.suffix != ".md":
         raise Refused(f"board path {path} must end in .md")
+    if path.is_symlink():
+        raise Refused(f"board path {path} is a symlink; not following it")
     if path.exists():
         with path.open(errors="replace") as f:
             if not f.readline().startswith(BOARD_HEADER):
@@ -208,9 +210,12 @@ def read_runs(out_root: Path) -> list[dict]:
         live = Path(rec.get("run_dir", "")) / "launch.json"
         if live.exists():
             try:
-                rec = {**rec, **json.loads(live.read_text())}
+                cur = json.loads(live.read_text())
             except json.JSONDecodeError:
-                pass
+                cur = {}
+            # A resumed --run-dir holds the newest run's record; older runs keep their events.
+            if cur.get("run_id") == rec["run_id"]:
+                rec = {**rec, **cur}
         out.append(rec)
     out.sort(key=lambda r: r.get("started_at") or "", reverse=True)
     return out
@@ -454,6 +459,16 @@ def die_with_parent() -> None:
         ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
 
 
+def group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
 def finish_manifest(run_dir: Path, launch: dict) -> None:
     """Merge `launch` into manifest.json once the command has exited, touching no other key."""
     p = run_dir / "manifest.json"
@@ -490,6 +505,16 @@ class Run:
                 raise Refused(
                     f"{self.run_dir} already exists; pick another --slug"
                 ) from None
+        # One live run per directory: a second launch into a --run-dir still in use is refused.
+        self.lock_fd = os.open(
+            self.run_dir / ".runrec.lock", os.O_WRONLY | os.O_CREAT, 0o644
+        )
+        try:
+            fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Refused(
+                f"{self.run_dir} is in use by another runrec launch"
+            ) from None
         cwd = Path.cwd()
         configs = []
         for c in a.config or []:
@@ -657,16 +682,6 @@ class Run:
         """SIGINT first (it makes `modal run` stop its app), then SIGTERM, then SIGKILL, until
         the whole process group is gone: a background grandchild ignores SIGINT and would
         otherwise outlive a direct child that exited promptly."""
-
-        def group_alive() -> bool:
-            try:
-                os.killpg(proc.pid, 0)
-                return True
-            except ProcessLookupError:
-                return False
-            except PermissionError:
-                return True
-
         for sig, grace in (
             (signal.SIGINT, GRACE_INT_S),
             (signal.SIGTERM, GRACE_TERM_S),
@@ -679,7 +694,7 @@ class Run:
             deadline = time.monotonic() + grace
             while time.monotonic() < deadline:
                 proc.poll()
-                if not group_alive():
+                if not group_alive(proc.pid):
                     return
                 time.sleep(0.1)
         proc.poll()
@@ -723,7 +738,9 @@ class Run:
         own = {self.run_dir / "launch.json", self.log_path}
         t0 = time.monotonic()
         last_hb = last_board = last_api = last_scan = t0
-        while proc.poll() is None:
+        # Supervise until the whole process group is gone, not just the direct child: a
+        # leader that exits while its workers keep calling paid APIs is still a live run.
+        while proc.poll() is None or group_alive(proc.pid):
             time.sleep(TICK_S)
             tm = time.monotonic()
             elapsed = tm - t0
