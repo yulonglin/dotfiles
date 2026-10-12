@@ -218,19 +218,35 @@ INGRESS_TOKEN="$(python3 -c 'print("ing" + "ress" + "0f9e" * 6)')"
 # have to come from: git cannot know what was run. Its output also carries
 # planted secret-shaped strings, each assembled here from fragments so no
 # credential-shaped literal is ever committed; none may reach the gateway.
+# $WORK/planted holds the lines; $WORK/planted-values holds the secret part of
+# each, which is what the leak check searches the outgoing request for.
 python3 - "$WORK/transcript.jsonl" "$WORK/planted" "$INGRESS_TOKEN" <<'PY'
 import json, sys
-planted = [
-    "sk" + "-" + "proj" + "Q7" * 12,
-    "gh" + "p_" + "Zx9" * 10,
-    "AK" + "IA" + "TESTFAKE" + "00000000",
-    "Bear" + "er " + "eyJ" + "hbGci" * 4,
-    "ROUTER_" + "API_KEY=" + "plainvalue" + "123",
-    sys.argv[3],
+opaque = lambda tag: "opaque" + tag + "Vx7" * 5  # no provider prefix to key on
+pairs = [  # (line as it appears, the secret value inside it)
+    ("sk" + "-" + "proj" + "Q7" * 12,) * 2,
+    ("gh" + "p_" + "Zx9" * 10,) * 2,
+    ("AK" + "IA" + "TESTFAKE" + "00000000",) * 2,
+    ("Bear" + "er " + "eyJ" + "hbGci" * 4, "eyJ" + "hbGci" * 4),
+    ("ROUTER_" + "API_KEY=" + "plainvalue" + "123", "plainvalue" + "123"),
+    ('{"pass' + 'word": "' + opaque("Pw") + '", "user": "ci"}', opaque("Pw")),
+    ('"api_' + 'token":"' + opaque("Tk") + '"', opaque("Tk")),
+    (sys.argv[3],) * 2,
 ]
+planted = [line for line, _ in pairs]
 with open(sys.argv[2], "w") as fh:
     fh.write("\n".join(planted) + "\n")
+with open(sys.argv[2] + "-values", "w") as fh:
+    fh.write("\n".join(value for _, value in pairs) + "\n")
 leaky = "\n".join(["collected 15 items"] + planted + ["Ran 15 tests in 1.5s", "", "OK"])
+# A second run whose FINAL lines are quoted JSON secret fields, so the tail
+# that is sent carries them.
+json_tail = "\n".join(["running", "config dump:", planted[5], planted[6], "done"])
+# A long failing run: hundreds of passing lines, the failure only at the end,
+# and the tool's own error flag. Both must reach the writer.
+long_fail = "\n".join(["tests/test_widget.py::test_%d PASSED" % i for i in range(400)]
+                      + ["FAILED tests/test_widget.py::test_render - AssertionError: 1 != 2",
+                         "===== 1 failed, 400 passed in 9.81s ====="])
 rows = [
     {"type": "assistant", "message": {"content": [
         {"type": "tool_use", "id": "t1", "name": "Bash",
@@ -241,6 +257,18 @@ rows = [
     {"type": "assistant", "message": {"content": [
         {"type": "tool_use", "id": "t2", "name": "Bash",
          "input": {"command": "ls -la"}}]}},
+    {"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "t3", "name": "Bash",
+         "input": {"command": "python3 tests/test_config_dump.py"}}]}},
+    {"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "t3",
+         "content": [{"type": "text", "text": json_tail}]}]}},
+    {"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "t4", "name": "Bash",
+         "input": {"command": "pytest tests/test_widget.py"}}]}},
+    {"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "t4", "is_error": True,
+         "content": long_fail}]}},
 ]
 with open(sys.argv[1], "w") as fh:
     for r in rows:
@@ -284,13 +312,16 @@ grep -q "widget.py" "$REQ" || fail "the diff never reached the model"
 grep -q "Widget" "$REQ" || fail "the changed class never reached the model"
 grep -q "Add the widget" "$REQ" || fail "the commit subjects never reached the model"
 # Secret-shaped strings from the transcript are masked before the prompt leaves.
-python3 - "$REQ" "$WORK/planted" <<'PY' || fail "a planted secret reached the gateway"
-import sys
-sent = open(sys.argv[1]).read()
-leaked = [p for p in open(sys.argv[2]).read().split("\n") if p and p.split()[-1].split("=")[-1] in sent]
+python3 - "$REQ" "$WORK/planted-values" <<'PY' || fail "a planted secret reached the gateway"
+import json, sys
+sent = "\n".join(json.loads(l)["messages"][0]["content"] for l in open(sys.argv[1]))
+leaked = [v for v in open(sys.argv[2]).read().split("\n") if v and v in sent]
 assert not leaked, leaked
-assert "[REDACTED]" in sent
+assert sent.count("[REDACTED]") >= 8, sent.count("[REDACTED]")
 PY
+# A long failing run reaches the writer by its real last lines and its error flag.
+grep -q "1 failed, 400 passed" "$REQ" || fail "the failure summary of a long run never reached the model"
+grep -q "FAILED (tool_result is_error)" "$REQ" || fail "the tool's error flag never reached the model"
 # Model-written text never comes back into the session: the hook's context
 # carries the PR URL and a fixed description, not the body.
 grep -q "nobody could review" <<<"$OUT" && fail "model-written body text was echoed into the session context"

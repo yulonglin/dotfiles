@@ -66,6 +66,7 @@ MIN_ATTEMPT_S = 5.0
 MAX_DIFF_CHARS = 60_000
 MAX_TEST_BLOCKS = 6
 MAX_TEST_TAIL_LINES = 5
+MAX_TAIL_LINE_CHARS = 300
 MAX_BODY_CHARS = 60_000
 
 TEST_COMMAND_RE = re.compile(
@@ -86,9 +87,14 @@ SECRET_RES = (
     re.compile(r"/t/[0-9A-Za-z_-]{16,}"),  # the router's tokened base URL
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
 )
+# A secret-named key and its value, in env (`API_KEY=x`), YAML (`token: x`),
+# JSON (`"password": "x"`) or JSON already escaped inside a string
+# (`\"api_token\": \"x\"`). The key's own quoting must close the same way.
 ASSIGNMENT_RE = re.compile(
-    r"(?i)\b([A-Za-z0-9_]*(?:key|token|secret|passw(?:or)?d|credential|auth)[A-Za-z0-9_]*)"
-    r"(\s*[=:]\s*)(\"[^\"\n]*\"|'[^'\n]*'|[^\s,;]+)"
+    r"(?i)(?P<q>\\?[\"']?)"
+    r"(?P<key>[A-Za-z0-9_.-]*(?:key|token|secret|passw(?:or)?d|credential|auth)[A-Za-z0-9_.-]*)"
+    r"(?P=q)(?P<sep>\s*[=:]\s*)"
+    r"(?P<value>\\\"(?:[^\"\\\n]|\\[^\"\n])*\\\"|\"(?:[^\"\\\n]|\\.)*\"|'[^'\n]*'|[^\s,;}\]]+)"
 )
 REDACTED = "[REDACTED]"
 
@@ -193,7 +199,14 @@ def redact(text: str, extra: tuple[str, ...] = ()) -> str:
             text = text.replace(literal, REDACTED)
     for pattern in SECRET_RES:
         text = pattern.sub(REDACTED, text)
-    return ASSIGNMENT_RE.sub(lambda m: m.group(1) + m.group(2) + REDACTED, text)
+    return ASSIGNMENT_RE.sub(_mask_assignment, text)
+
+
+def _mask_assignment(match: re.Match) -> str:
+    value = match.group("value")
+    quote = next((q for q in ('\\"', '"', "'") if value.startswith(q)), "")
+    return (match.group("q") + match.group("key") + match.group("q") + match.group("sep")
+            + quote + REDACTED + quote)
 
 
 class GenerationError(Exception):
@@ -246,7 +259,7 @@ def test_runs(transcript: str | None) -> str:
     if not path.is_file():
         return ""
     commands: dict[str, str] = {}
-    results: dict[str, str] = {}
+    results: dict[str, tuple[str, bool]] = {}
     order: list[str] = []
     try:
         with path.open(encoding="utf-8", errors="replace") as handle:
@@ -273,22 +286,38 @@ def test_runs(transcript: str | None) -> str:
                     elif block.get("type") == "tool_result":
                         key = block.get("tool_use_id") or ""
                         if key in commands:
-                            results[key] = json.dumps(block.get("content"))[:4000]
+                            results[key] = (result_text(block.get("content")),
+                                            block.get("is_error") is True)
     except OSError:
         return ""
 
+    # The real final lines of the WHOLE output, so a long failing run reaches the
+    # writer by its failure summary, and the tool's own error flag beside them.
     blocks = []
     for key in order[-MAX_TEST_BLOCKS:]:
-        raw = results.get(key, "(no output captured)")
-        text = raw.encode().decode("unicode_escape", errors="replace")
-        tail = "\n".join(text.splitlines()[-MAX_TEST_TAIL_LINES:])
-        blocks.append("$ %s\n%s" % (commands[key], tail))
+        if key not in results:
+            blocks.append("$ %s\n[status: unknown -- no output captured]" % commands[key])
+            continue
+        text, is_error = results[key]
+        tail = [line[:MAX_TAIL_LINE_CHARS] for line in text.rstrip().splitlines()[-MAX_TEST_TAIL_LINES:]]
+        status = "FAILED (tool_result is_error)" if is_error else "exited 0 (no error flag)"
+        blocks.append(redact("$ %s\n[status: %s]\n%s" % (commands[key], status, "\n".join(tail))))
     return "\n\n".join(blocks)
+
+
+def result_text(content) -> str:
+    """The text of a tool_result, whether a plain string or a list of text blocks."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(b.get("text", "") for b in content
+                         if isinstance(b, dict) and isinstance(b.get("text"), str))
+    return ""
 
 
 def build_prompt(repo: str, branch: str, base: str, transcript: str | None) -> str:
     span = "%s...HEAD" % base
-    diff = git(repo, "diff", span)
+    diff = redact(git(repo, "diff", span))
     truncated = ""
     if len(diff) > MAX_DIFF_CHARS:
         diff = diff[:MAX_DIFF_CHARS]
