@@ -62,8 +62,12 @@ fi
 # Prints the action, then one absolute path per local source the publish
 # sends: file_path, and every `files` source (a string or {from: ...},
 # resolved against `root` when given, else the working directory). Server-side
-# copies ({artifact, path}) and removals (null) send no local text. Media and
-# fonts are skipped: they carry no prose and often live outside the layout.
+# copies ({artifact, path}) and removals (null) send no local text. A raster
+# image or font is skipped only when the published key AND the source both
+# have such an extension and any explicit contentType is image/* (not SVG) or
+# font/*: the API serves by the published path or contentType, so a png
+# source published as x.html, or typed text/html, is still a page. SVG and
+# PDF are never skipped, because they can carry prose.
 read_json() {
   python3 -c '
 import json, os, sys
@@ -88,28 +92,38 @@ if action != "publish":
 cwd = d.get("cwd") if isinstance(d.get("cwd"), str) else os.getcwd()
 root = ti.get("root") if isinstance(ti.get("root"), str) else ""
 base = os.path.join(cwd, root) if root else cwd
-SKIP = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg", ".pdf",
-        ".mp4", ".webm", ".mov", ".mp3", ".wav", ".woff", ".woff2", ".ttf", ".otf"}
+BINARY = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico",
+          ".woff", ".woff2", ".ttf", ".otf"}
+def ext(path):
+    return os.path.splitext(path)[1].lower()
+def binary(key, src, ctype):
+    if ext(key) not in BINARY or ext(src) not in BINARY:
+        return False
+    if ctype is None:
+        return True
+    ctype = str(ctype).lower().strip()
+    return (ctype.startswith("image/") and not ctype.startswith("image/svg")) \
+        or ctype.startswith("font/")
 out = []
 fp = ti.get("file_path")
 if isinstance(fp, str) and fp:
     out.append(os.path.join(cwd, fp))
 files = ti.get("files")
-srcs = []
+srcs = []  # (published key, source, contentType or None)
 if isinstance(files, dict):
     for key, v in files.items():
         if isinstance(v, str):
-            srcs.append(v)
+            srcs.append((key, v, None))
         elif isinstance(v, dict) and isinstance(v.get("from"), str) and "artifact" not in v:
-            srcs.append(v["from"])
+            srcs.append((key, v["from"], v.get("contentType")))
 elif isinstance(files, list):
     for v in files:
         if isinstance(v, dict) and isinstance(v.get("path"), str):
-            srcs.append(v["path"])
+            srcs.append((v["path"], v["path"], v.get("contentType")))
         elif isinstance(v, str):
-            srcs.append(v)
-for src in srcs:
-    if os.path.splitext(src)[1].lower() in SKIP:
+            srcs.append((v, v, None))
+for key, src, ctype in srcs:
+    if binary(str(key), src, ctype):
         continue
     out.append(os.path.join(base, src))
 seen = set()

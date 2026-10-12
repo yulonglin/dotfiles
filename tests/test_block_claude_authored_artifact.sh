@@ -123,8 +123,18 @@ check "files: list form, banned" 2 \
 check "files: {artifact,path} server-side copy" 0 \
   "$(run "$(files_pub '{"app.js":{"artifact":"https://claude.ai/code/artifact/def","path":"app.js"}}')")"
 check "files: null removal" 0 "$(run "$(files_pub '{"old.html":null}')")"
-check "files: image beside a banned page is not prose" 0 \
+check "files: png -> png key, no contentType, is not prose" 0 \
   "$(run "$(files_pub "$(f1 '{"fig.png":"%s/fable/fig.png"}')")")"
+check "files: font -> font key, font/ contentType" 0 \
+  "$(run "$(files_pub "$(f1 '{"f.woff2":{"from":"%s/fable/f.woff2","contentType":"font/woff2"}}')")")"
+check "files: png source published as html" 2 \
+  "$(run "$(files_pub "$(f1 '{"x.html":"%s/fable/page.png"}')")")"
+check "files: png -> png key typed text/html" 2 \
+  "$(run "$(files_pub "$(f1 '{"x.png":{"from":"%s/fable/page.png","contentType":"text/html"}}')")")"
+check "files: svg is never exempt" 2 \
+  "$(run "$(files_pub "$(f1 '{"fig.svg":"%s/fable/fig.svg"}')")")"
+check "files: pdf is never exempt" 2 \
+  "$(run "$(files_pub "$(f1 '{"doc.pdf":"%s/fable/doc.pdf"}')")")"
 check "file_path and files both checked" 2 \
   "$(run "$(printf '{"tool_input":{"file_path":"%s/sol/page.html","files":{"b.html":"%s/opus5/page.html"}}}' "$FIX" "$FIX")")"
 check "type_url create, no local source" 0 \
