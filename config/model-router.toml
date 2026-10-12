@@ -231,11 +231,14 @@ provider = "openrouter"
 slug = "x-ai/grok-4.7"
 context-window = 500000
 
-# Agent and picker off: the text call and minimal tool/thinking requests work,
-# but a full Claude Code request through the gateway returns "400 Provider
-# returned error" (tests/test_model_router_gateway.sh --routes gemini,
-# 2026-09-22, on 3.7 Flash), cause not yet found. The route stays so the probe
-# can be rerun.
+# Back in the picker and as an agent on 2026-10-12. Off since 2026-09-22, when a
+# full Claude Code request on 3.7 Flash returned "400 Provider returned error"
+# with no upstream body kept. Not reproduced on 2026-10-12: the captured full
+# request (12 tools, max_tokens 32000, reasoning high, streamed), a 100-tool
+# ~90k-token request and long MCP-style tool names all pass on 3.7 and 3.8
+# Flash, pinned to AI Studio and to Vertex; the CLIProxyAPI that failed and the
+# current one translate the request identically. If it recurs, keep the
+# upstream error.metadata.raw.
 [[models]]
 id = "gemini-3.8-flash"
 aliases = ["gemini"]
@@ -243,8 +246,6 @@ name = "Gemini 3.8 Flash"
 provider = "openrouter"
 slug = "google/gemini-3.8-flash"
 context-window = 1048576
-picker = false
-agent = false
 
 [[models]]
 id = "qwen3.8-max"
