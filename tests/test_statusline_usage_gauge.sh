@@ -58,7 +58,7 @@ usage_line() { sed -n '3p'; }
 # checks the env var before the keychain and the credentials file, and a real
 # token here would let a live fetch replace the fixture.
 render_rust() {
-    printf '%s' "$STATUS_INPUT" | env HOME="$FAKE/home" CODEX_HOME="$FAKE/home/.codex" TMPDIR="$FAKE/tmp" \
+    printf '%s' "$STATUS_INPUT" | env -u COLUMNS HOME="$FAKE/home" CODEX_HOME="$FAKE/home/.codex" TMPDIR="$FAKE/tmp" \
         CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null | strip_ansi | usage_line
 }
 
@@ -136,6 +136,14 @@ else
     PASS=$((PASS + 1))
     printf '  ok   line carries no multi-cell bar\n'
 fi
+
+echo "== a narrow terminal wraps the usage row between buckets =="
+# COLUMNS=14 leaves 10 usable columns: room for one bucket per line, so 7d
+# moves to line 4 whole instead of being cut mid-gauge.
+write_cache 24 50
+narrow="$(printf '%s' "$STATUS_INPUT" | env HOME="$FAKE/home" CODEX_HOME="$FAKE/home/.codex" TMPDIR="$FAKE/tmp" \
+    COLUMNS=14 CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null | strip_ansi | sed -n '3,4p' | tr '\n' '|')"
+check "5h and 7d on separate lines" "5h ◔ 24%|7d ◑ 50%" "$narrow"
 
 echo
 printf 'passed: %d  failed: %d\n' "$PASS" "$FAIL"

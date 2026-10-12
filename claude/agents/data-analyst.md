@@ -1,6 +1,6 @@
 ---
 name: data-analyst
-description: MUST BE USED when analyzing experiment results, parsing outputs, or computing statistics. Use PROACTIVELY after experiments complete to parse JSONL outputs, compute statistics with confidence intervals, create visualizations, and flag surprising results. Automatically invoke when experiment data needs analysis - returns concise findings with statistical rigor, not raw data dumps.
+description: "Analyze experiment results: parse JSONL and other outputs, compute statistics with confidence intervals and significance tests, draw plots, and flag surprising results — returning concise findings, not raw data. Use proactively when an experiment finishes or its data needs analysis."
 model: inherit
 tools: Read,Write,Bash
 ---

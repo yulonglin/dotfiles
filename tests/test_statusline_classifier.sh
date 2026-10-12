@@ -77,7 +77,7 @@ strip_ansi() { sed -e "s/${ESC}\[[0-9;]*m//g"; }
 # shared /tmp/claude when the var is unset, which is another machine's state.
 render_rust() {
     printf '%s' "$STATUS_INPUT" | \
-        env HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
+        env -u COLUMNS HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
         CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null
 }
 
@@ -257,7 +257,7 @@ check "fresh dead is red" "$(render_rust | classifier_segment_raw)" \
 # fixtures rather than by files on disk.
 
 render_rust_with() {
-    printf '%s' "$1" | env HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
+    printf '%s' "$1" | env -u COLUMNS HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
         CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null
 }
 
@@ -435,6 +435,56 @@ check_segment "effort absent" '"context_window":{"used_percentage":0}' "$MODEL" 
 check "no trailing separator" "$(render_rust_with "$no_effort" | strip_ansi | sed -n 2p | sed 's/[[:space:]]*$//')" "[Opus]"
 check "bare bracket bytes" "$(render_rust_with "$no_effort" | segment_raw "$MODEL")" \
     $'\033[34m[Opus]\033[0m'
+
+# ---------------------------------------------------------------------------
+# Session price and prompt cache (cost.total_cost_usd, prompt_cache.*)
+# ---------------------------------------------------------------------------
+
+# session_input pins its own "cost" object, so fixtures that set cost are built
+# whole here — a second "cost" key would be a duplicate and fail to parse.
+costed_input() {  # cost_json, context_json
+    printf '{"model":{"display_name":"Opus"},"workspace":{"current_dir":"%s"},"cost":%s,"context_window":%s}' \
+        "$FAKE" "$1" "$2"
+}
+
+echo "=== session price renders as dollars to the cent ==="
+check "cost" \
+    "$(render_rust_with "$(costed_input '{"total_cost_usd":7.4213}' '{"used_percentage":0}')" | segment '\$')" \
+    '$7.42'
+
+echo "=== a warm cache shows time left; a cold one says so ==="
+NOW=$(date +%s)
+check_segment "warm 1h cache" \
+    "\"context_window\":{\"used_percentage\":0},\"prompt_cache\":{\"warm\":true,\"caching_observed\":true,\"ttl\":\"1h\",\"expires_at\":$((NOW + 42 * 60 + 10))}" \
+    'cache' 'cache 42m'
+check_segment "warm 5m cache is flagged" \
+    "\"context_window\":{\"used_percentage\":0},\"prompt_cache\":{\"warm\":true,\"caching_observed\":true,\"ttl\":\"5m\",\"expires_at\":$((NOW + 3 * 60 + 10))}" \
+    'cache' 'cache 3m (5m ttl)'
+check_segment "cold cache" \
+    '"context_window":{"used_percentage":0},"prompt_cache":{"warm":false,"caching_observed":true,"ttl":"1h","expires_at":null}' \
+    'cache' 'cache cold'
+check "no cache segment without caching" \
+    "$(render_rust_with "$(session_input '"context_window":{"used_percentage":0},"prompt_cache":{"warm":false,"caching_observed":false}')" | strip_ansi | grep -c 'cache')" \
+    "0"
+
+echo "=== square brackets appear only around the model name ==="
+mkdir -p "$FAKE/.claude"
+printf 'profiles: [code, python]\n' > "$FAKE/.claude/context.yaml"
+check "profiles are unbracketed" \
+    "$(render_rust_with "$no_effort" | strip_ansi | tr -d '\n' | grep -o '\[[^]]*\]' | tr '\n' ' ')" \
+    "[Opus] "
+rm -f "$FAKE/.claude/context.yaml"
+
+echo "=== a narrow COLUMNS wraps the session row between segments ==="
+narrow_input=$(costed_input '{"total_duration_ms":3900000,"total_cost_usd":7.42}' \
+    '{"used_percentage":12,"total_input_tokens":129000,"context_window_size":1000000}')
+check "wide keeps one session row" \
+    "$(render_rust_with "$narrow_input" | strip_ansi | sed -n 2p)" \
+    "[Opus] · ctx:129k/1.0M (12%) · 1h 5m · \$7.42"
+check "narrow splits it at a segment boundary" \
+    "$(printf '%s' "$narrow_input" | env HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
+        COLUMNS=34 CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null | strip_ansi | sed -n '2,3p' | tr '\n' '|')" \
+    "[Opus] · ctx:129k/1.0M (12%)|1h 5m · \$7.42|"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

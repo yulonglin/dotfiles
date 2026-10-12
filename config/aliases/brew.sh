@@ -79,8 +79,13 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
                 if (( ${#safe} )); then
                     command brew upgrade --cask "${greedy[@]}" "${flags[@]}" "${safe[@]}" || return
                 fi
-                print "Skipped while running (quit them, then 'brew upgrade --cask <name>'):"
-                print -r -- "$running" | cut -f1 | sed 's/^/  /'
+                # Ask brew what is still outdated rather than reprinting the first
+                # scan: an app quit at the prompt is upgraded by the second scan.
+                local still=""
+                if still="$(command brew outdated --cask --quiet "${greedy[@]}")" && [[ -n "$still" ]]; then
+                    print "Not upgraded (quit them, then 'brew upgrade --cask <name>'):"
+                    print -r -- "$still" | sed 's/^/  /'
+                fi
                 ;;
         esac
         reset-mac-media --check --since 15

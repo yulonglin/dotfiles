@@ -1,6 +1,6 @@
 ---
 name: wrap-up
-description: Drives a stalled session to a terminating end state - land the work, state the blocker, or take one step (dotfiles trial, manual-only)
+description: Bring a stalled session to an end state — land the work, state the blocker, or take one step. Typed by the hourly tmux-resume nudge after a rate limit; commits only in dotfiles. Manual-only.
 disable-model-invocation: true
 ---
 

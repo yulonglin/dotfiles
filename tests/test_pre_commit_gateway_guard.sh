@@ -51,9 +51,11 @@ baseline_count="$(git rev-list --count HEAD)"
 write_settings claude/settings.json \
     '"ANTHROPIC_BASE_URL":"http://127.0.0.1:8787/t/0123456789abcdef0123456789abcdef"'
 git add claude/settings.json
-if git commit -qm with-token >/dev/null 2>&1; then
+if git commit -qm with-token >"$WORK/guard.out" 2>&1; then
     fail "tokened ANTHROPIC_BASE_URL was committed; guard did not fire"
 fi
+grep -q 'model-router-wire apply --install' "$WORK/guard.out" \
+    || fail "guard did not name the lasting fix (model-router-wire apply --install)"
 [ "$(git rev-list --count HEAD)" = "$baseline_count" ] \
     || fail "commit count changed despite the guard firing"
 

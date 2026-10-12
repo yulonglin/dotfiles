@@ -1414,8 +1414,33 @@ ensure_local_key_in_authorized_keys() {
 # Bidirectional sync with GitHub gist (SSH config, authorized_keys, git identity)
 # WARNING: Secret gists are unlisted, not encrypted — anyone with the URL can read them.
 # Do NOT add secrets (API keys, private keys, tokens) to this sync.
+# Print the gist ID used for config sync, or return 1 when none is configured.
+# Order: GIST_SYNC_ID (environment or config.local.sh), then the BWS key
+# GIST_SYNC_ID via dotfiles-secrets. There is deliberately no tracked default.
+gist_sync_id() {
+    if [[ -n "${GIST_SYNC_ID:-}" ]]; then
+        printf '%s\n' "$GIST_SYNC_ID"
+        return 0
+    fi
+    local secrets_bin="${DOT_DIR:-}/custom_bins/dotfiles-secrets" id=""
+    if [[ -x "$secrets_bin" ]]; then
+        id="$("$secrets_bin" get-value GIST_SYNC_ID 2>/dev/null)" || id=""
+    fi
+    [[ -n "$id" ]] || return 1
+    printf '%s\n' "$id"
+}
+
+gist_sync_unset_message() {
+    log_warning "GIST_SYNC_ID is not set - skipping gist sync (SSH config, authorized_keys, git identity)"
+    log_info "  Set GIST_SYNC_ID=<id> in config.local.sh or the environment, or store it in BWS: secrets edit GIST_SYNC_ID <id>"
+}
+
 sync_gist() {
-    local gist_id="${GIST_SYNC_ID:-3cc239f160a2fe8c9e6a14829d85a371}"
+    local gist_id
+    if ! gist_id="$(gist_sync_id)"; then
+        gist_sync_unset_message
+        return 1
+    fi
 
     if ! gh auth status &>/dev/null 2>&1; then
         log_warning "gh not authenticated - run 'gh auth login' to sync gist"

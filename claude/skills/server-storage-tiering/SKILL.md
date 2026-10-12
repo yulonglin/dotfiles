@@ -20,16 +20,47 @@ Two jobs, often at once: **(A) organize storage with portable conventions**, and
 Goal: the same paths resolve on every box, so projects and configs don't care which machine they're on.
 
 ### Expose the volume at `/workspace`
+`/workspace` is the RunPod convention; adopting it everywhere gives path parity. It must be a **symlink or a bind mount, never a hard link**: Linux refuses hard links to directories, and no hard link crosses filesystems.
+
+**Preferred (persistent machine): a bind mount in fstab.** Paths stay `/workspace/...` under `realpath`, and tools that refuse symlinks still work. This is what the Hetzner box runs (fstab lines 12–13 there):
 ```bash
 sudo chown "$USER:$USER" /mnt/<VOLUME>          # cloud volumes mount root:root — you can't write until this
-sudo ln -s /mnt/<VOLUME> /workspace             # reversible; no fstab edit needed for the symlink itself
-mkdir -p /workspace/{cache,share,outputs,archive,hf,torch,bun,projects-data}
+sudo mkdir /workspace
+# Append under the provider's own volume line, which must come first:
+#   /mnt/<VOLUME> /workspace none bind,nofail,x-systemd.requires-mounts-for=/mnt/<VOLUME> 0 0
+sudo mount -a && findmnt /workspace             # check before any reboot: a bad fstab line can block boot
 ```
-`/workspace` is the RunPod convention; adopting it everywhere gives path parity.
+`nofail` lets the box boot without the volume; `x-systemd.requires-mounts-for` stops the bind from running before the volume is mounted, which would bind the empty root-disk directory instead.
 
-### Code/projects parity (direction flips by platform)
-- **Hetzner / bare-metal (root persists):** real dirs live in `$HOME`, add forward links for parity: `ln -s ~/code /workspace/code`, `ln -s ~/projects /workspace/projects`.
-- **RunPod (container disk is ephemeral, `/workspace` persists):** real dirs live under `/workspace`, and `~/code` → `/workspace/code`. The direction is reversed but **both paths resolve in both environments.**
+**Quick (no fstab edit):** `sudo ln -s /mnt/<VOLUME> /workspace`. Reversible and enough for a short-lived box.
+
+Then lay out the tree: `mkdir -p /workspace/{cache,share,outputs,archive,hf,torch,bun,projects-data}`.
+
+This stays a manual step on purpose: it needs sudo, the device line differs by provider, a wrong fstab line can block boot, and it runs once per machine. `storage-setup` detects the result.
+
+**Prefer a bind mount over a symlink for `/workspace`**: `mount --bind /mnt/<VOLUME> /workspace` plus the fstab line `/mnt/<VOLUME> /workspace none bind,nofail,x-systemd.requires-mounts-for=/mnt/<VOLUME> 0 0` (then `systemctl daemon-reload`). With a symlink every canonical path — `pwd -P`, Claude Code's project keys, the sandbox allowlist, `lsof` — reads `/mnt/<VOLUME>/...`, so `~/.claude/projects` grows a second `-mnt-HC-Volume-...` key for the same repo and the sandbox `allowWrite` entry for `/workspace` never matches. `project-hub doctor` flags the symlink form.
+
+### Research projects: one hub per project, hot on the fast disk, bulk on the volume
+
+`~/projects/<name>/` is the unit — the same path on the Mac, a Hetzner box and a RunPod pod — and `project-hub` (`custom_bins/`) creates and maintains it:
+
+```
+~/projects/<name>/
+├── code/  paper/  poster/     git repos, .venv inside      fast disk (NVMe)
+├── data/                      inputs, weights at rest       volume
+├── runs/                      eval logs, run outputs        volume
+├── external/                  upstream clones               volume
+└── archive/                   retired material              volume
+```
+
+- **Hetzner / bare-metal:** `~/projects` is a real dir on the root NVMe; the four bulk dirs are real under `$STORAGE_VOLUME/projects/<name>/` and the hub holds symlinks to them. Interpreter start-up, git and pytest stay on local IOPS; eval logs and weights sit on the big disk.
+- **RunPod / Vast (ephemeral root):** `~/projects -> /workspace/projects`, everything real on the volume; `project-hub new` then makes plain dirs.
+- **Mac:** no volume, plain dirs. `project-hub` reads `config/storage.conf` and decides per machine.
+- **Inside a repo, bulk subdirs link relatively** — `code/logs -> ../runs/logs`, `code/data -> ../data/data` — so the checkout works unchanged on every box. `project-hub tier <name>/code logs data` makes the link after checking the dir is gitignored, has **no tracked files** (an `out/` that git ignores as a directory can still carry committed artifacts — that one stays in the repo) and had no writes in the last 15 minutes. **Stop the dir's producers before tiering**: quiet mtimes do not prove a process has let go, and a cross-filesystem tier unlinks each source file after copying it, so a writer still holding one open would keep writing to the unlinked inode and lose that output. The copy is therefore refused while any file under the dir is open for writing (`/proc` on Linux, `lsof` elsewhere), and a writer the check can see is refused even with `--offline`. When the check is incomplete it is refused unless `--offline` asserts the producers are stopped. The check is incomplete when no checker exists, or when some processes' descriptors cannot be read. On a Linux box as non-root that is always the case: root's processes (168 on hn, 2026-10-04) cannot be read, so expect to pass `--offline` there once the producers are stopped. On macOS the same holds: an unprivileged `lsof` exits cleanly yet lists none of other users' processes (0 of 217 root processes, 2026-10-04). So the check is complete only as root, and **tiering on macOS as a normal user always needs `--offline`, after you stop the producers**. A dir holding a relative symlink that resolves outside it is refused too, naming the links, because the link would dangle after the move. Resolution is real symlink expansion, so a chain like `jump -> .` plus `ref -> jump/../metrics.csv` is caught, and a loop counts as escaping. Two repos cannot tier a same-named dir: `code/logs` and `code-sprint/logs` both map to `runs/logs`, and the second is refused rather than merged — give it its own name with `--as`: `project-hub tier <name>/code-sprint logs --as logs-sprint` links `code-sprint/logs -> ../runs/logs-sprint`.
+- **No `hub` symlink inside repos.** With the siblings in one directory `..` is the hub; Claude Code loads the hub's `CLAUDE.md` from the parent. A tracked absolute `hub -> /Users/...` link is a committed cross-machine bug.
+- **Adopting existing repos:** `project-hub adopt <name> code=~/code/x paper=~/writing/y` renames on the same filesystem (never a cross-fs copy), runs `git worktree repair` for `.claude/worktrees/*`, renames `~/.claude/projects` and `~/.remember` encodings (leaving a compat symlink so `--resume` and old job records keep working), re-allows direnv and rebuilds the venv, whose console-script shebangs carry the absolute path.
+- **Friction check:** `project-hub doctor` times interpreter start-up and the project import per repo and flags a venv on the volume; when it flags, point uv at a local env (`UV_PROJECT_ENVIRONMENT`) or move the repo to the fast disk rather than living with it.
+- The forward link `/workspace/code -> ~/code` stays for path parity; the old `/workspace/projects -> ~/projects` direction is replaced by the hub layout above.
 
 ### Relocate-with-symlink-back (the core move)
 ```bash
@@ -49,6 +80,7 @@ export HF_HOME=/workspace/hf
 export TORCH_HOME=/workspace/torch
 # Leave UV_CACHE_DIR / PIP_CACHE_DIR at local defaults — they're latency-sensitive and may host live venvs.
 ```
+uv has one more reason to stay local: it hard-links packages from its cache into each `.venv`, which works only on the same filesystem. With projects on root and the cache on the volume, uv copies every package into every venv instead, which uses more space, not less.
 
 **Already in dotfiles:** `config/aliases/storage.sh` (sourced by zshrc on every interactive shell) does this automatically when the volume exists — no manual profile edit needed. It deliberately **skips the export when the default cache path is already a symlink onto the volume** (a relocated `~/.cache/huggingface` redirects transparently; re-pointing `HF_HOME` would orphan the moved cache and force re-downloads), so an unset `HF_HOME` on a tiered box is correct, not a gap. The same file prints a one-line warning on shell start when root runs low. Scope boundary: zshrc-sourced env reaches interactive shells only — pueue daemons, cron and systemd services won't see it.
 

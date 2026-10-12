@@ -1,6 +1,6 @@
 ---
 name: tooling-engineer
-description: MUST BE USED for well-scoped research support tools, utilities, and integrations. Use PROACTIVELY when implementing API clients, data processors, parsers, documentation fetchers, or automation scripts that SUPPORT research workflows. Automatically invoke for focused implementations that bridge research and engineering - building reusable tools researchers can immediately use. Specializes in async patterns, caching strategies, and performance optimization for utilities.
+description: Build a well-scoped tool that supports research — an API client, data processor, parser, documentation fetcher or automation script — with async patterns, caching and performance work where they pay. Use proactively for a focused, reusable utility; code that runs the experiment itself goes to research-engineer.
 model: inherit
 ---
 

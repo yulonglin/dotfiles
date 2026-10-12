@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: MUST BE USED after implementing ANY function, class, module, or feature. Use PROACTIVELY to review code immediately after writing or modifying code - DO NOT wait to be asked. Automatically invoke after significant code changes. Catches CRITICAL CLAUDE.md violations (git commit agent mentions, mock data, broad try/except), research validity issues, correctness bugs, and security vulnerabilities. Provides prioritized feedback (CRITICAL/IMPORTANT/SUGGESTION).
+description: Review code just written or changed — correctness bugs, research validity (mock data, broad try/except, missing seeds or logging), CLAUDE.md violations, security holes — and return feedback ranked CRITICAL, IMPORTANT or SUGGESTION. Use proactively right after writing or modifying any code — a function, class, module or feature — without waiting to be asked.
 model: inherit
 tools: Read,Glob,Grep
 ---

@@ -64,6 +64,17 @@ has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL || fail "phase 1 stripped the user
 has_top "$CLAUDE_SETTINGS" modelPicker || fail "phase 1 removed modelPicker from the user file (the rows belong there)"
 python3 -c 'import json,sys; rows=[o["model"] for o in json.load(open(sys.argv[1])).get("modelPicker",{}).get("options",[])]; sys.exit(0 if rows and "old" not in rows else 1)' "$CLAUDE_SETTINGS" \
   || fail "phase 1 did not re-render the picker rows into the user file"
+# The picker replaces the built-in lineup, and every row's second line names who bills for it.
+python3 - "$CLAUDE_SETTINGS" <<'PY' || fail "picker rows lack replaceBuiltInOptions or a billing description"
+import json, sys
+p = json.load(open(sys.argv[1]))["modelPicker"]
+assert p.get("replaceBuiltInOptions") is True, p
+desc = {o["model"]: o.get("description") for o in p["options"]}
+assert desc["astra"] == "ChatGPT subscription (Codex)", desc
+assert desc["kimi"] == "OpenRouter, pay per token", desc
+assert desc["claude-opus-5-5"] == "Claude subscription", desc
+assert [o["model"] for o in p["options"]][:3] == ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"], p
+PY
 "$WIRE" status | grep -q 'not wired' && fail "status calls the gateway off while the user file carries it"
 [ -f "$MODEL_ROUTER_CONFIG" ] || fail "router config not rendered"
 [ -f "$MODEL_ROUTER_MANAGED" ] && fail "apply wrote the managed path itself (it must go through sudo)"
@@ -114,4 +125,57 @@ has_top "$CLAUDE_SETTINGS" modelPicker && fail "off left the picker rows in the 
 printf '%s' "$out" | grep -q 'sudo rm -f' || fail "off did not print the sudo rm line while the drop-in exists: $out"
 [ -f "$MODEL_ROUTER_MANAGED" ] || fail "off removed the managed path itself"
 
-echo "PASS: model-router-wire stages the two gateway keys, keeps the rows and the rest in the user file, waits for the sudo step, then strips only those two"
+# --- apply --install: one command installs the drop-in and strips the user file ---
+# The stub stands in for sudo: it logs its argv and runs the install without the
+# root ownership flags, which a non-root test cannot satisfy.
+cat >"$WORK/sudo" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >>"$SUDO_LOG"
+[ "${SUDO_FAIL:-}" = 1 ] && exit 1
+[ "$1" = -n ] && shift
+args=()
+while [ $# -gt 0 ]; do case "$1" in -o|-g) shift 2 ;; *) args+=("$1"); shift ;; esac; done
+exec "${args[@]}"
+EOF
+chmod +x "$WORK/sudo"
+export MODEL_ROUTER_SUDO="$WORK/sudo" SUDO_LOG="$WORK/sudo.log"
+rm -rf "$(dirname "$MODEL_ROUTER_MANAGED")"
+python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["env"].update({"ANTHROPIC_BASE_URL": "http://127.0.0.1:8787/t/0123456789abcdef0123456789abcdef", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1"}); json.dump(d, open(p, "w"))
+PY
+if "$WIRE" apply --check --install >"$WORK/check3.txt" 2>&1; then fail "--check --install was accepted"; fi
+grep -q 'cannot run with --check' "$WORK/check3.txt" || fail "--check --install did not explain the refusal: $(cat "$WORK/check3.txt")"
+
+# A failed sudo fails closed: nonzero exit, and the user file keeps the gateway
+# it already carried but is never given one it did not have.
+if out="$(SUDO_FAIL=1 "$WIRE" apply --install --no-restart </dev/null)"; then fail "a failed --install exited 0"; fi
+printf '%s' "$out" | grep -q -- '--install: .* failed' || fail "a failed sudo step was not reported: $out"
+has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL || fail "a failed --install stripped the user file anyway"
+[ -f "$MODEL_ROUTER_MANAGED" ] && fail "a failed sudo step left a drop-in behind"
+cp "$CLAUDE_SETTINGS" "$WORK/carrying.json"
+python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+for k in ("ANTHROPIC_BASE_URL", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL"): d["env"].pop(k, None)
+json.dump(d, open(p, "w"))
+PY
+if SUDO_FAIL=1 "$WIRE" apply --install --no-restart </dev/null >/dev/null; then fail "a failed --install on a clean user file exited 0"; fi
+has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL && fail "a failed --install wrote the router token into a clean user file"
+has_key "$CLAUDE_SETTINGS" _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL && fail "a failed --install wrote the first-party flag into a clean user file"
+cp "$WORK/carrying.json" "$CLAUDE_SETTINGS"
+
+: >"$SUDO_LOG"
+out="$("$WIRE" apply --install --no-restart </dev/null)"
+grep -q '^-n install -d -m 0755 ' "$SUDO_LOG" || fail "--install without a terminal did not use sudo -n: $(cat "$SUDO_LOG")"
+grep -q -- '-o root -g ' "$SUDO_LOG" || fail "--install did not ask for root ownership: $(cat "$SUDO_LOG")"
+cmp -s "$MODEL_ROUTER_STAGED" "$MODEL_ROUTER_MANAGED" || fail "--install did not install the staged file"
+printf '%s' "$out" | grep -q 'committable again' || fail "--install did not strip the user file in the same pass: $out"
+has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL && fail "--install left ANTHROPIC_BASE_URL in the user file"
+"$WIRE" apply --check >/dev/null 2>&1 || fail "--check fails after --install: $("$WIRE" apply --check 2>&1)"
+# Once current, --install does not touch sudo again.
+: >"$SUDO_LOG"
+"$WIRE" apply --install --no-restart </dev/null >/dev/null
+[ -s "$SUDO_LOG" ] && fail "--install ran sudo with the drop-in already current"
+
+echo "PASS: model-router-wire stages the two gateway keys, keeps the rows and the rest in the user file, waits for the sudo step, then strips only those two, and --install does both steps in one pass"

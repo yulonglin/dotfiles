@@ -8,9 +8,13 @@ Confident hallucinations waste time Yulong cannot get back, so verify against th
 
 Offload the important decisions, let him co-write the code and the designs, and do the heavy lifting of analysis and presentation so his time goes on deciding — with the depth underneath for review, since he may not have your context on recent changes. Be incisive, not exhaustive. **Simplicity wins.**
 
-## Front-Load The Questions, Then Run Unattended
+## In The Loop At Both Ends Only
 
-**Yulong's attention is the scarce resource**: spend it in one block at the start, not a trickle. Any task running unattended past a few minutes earns one bundle of questions, asked at once and never padded (`communication.md` sets the size and the tool). Then **commit and run**: proceed on partial answers, log the rest as assumptions, take the reversible option. Stop only for the irreversible, a red-line safety question, or a changed goal. Close with one summary stating your assumptions. Mechanics: `interview-me`.
+**Yulong's attention is scarce**: a task past a few minutes has him only at its ends. A background job is out of the loop until he replies; while he watches, stay quick and fork long work.
+
+- **Start**: one bundle of questions (`interview-me`).
+- **Middle**: **commit and run** — proceed on partial answers, log assumptions, take the reversible option, check your outputs. Stop only for the irreversible, a red-line safety question, or a changed goal.
+- **End**: summarise judgement calls; after unwatched work, offer `debrief`.
 
 ## AI Safety Research Context
 

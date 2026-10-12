@@ -69,18 +69,22 @@ How it works: (1) looks up your public IP against `~/.ssh/config` `HostName` ent
 
 Customization: `SERVER_NAME` env var overrides everything; `MACHINE_EMOJI` overrides the auto-assigned emoji.
 
-## Statusline separates session and provider usage
+## Statusline puts all agent usage on one row
 
 Configured in `claude/settings.json` (`statusLine.command = "claude-tools statusline"`), with the renderer in [`tools/claude-tools/src/statusline.rs`](../tools/claude-tools/src/statusline.rs).
 
 - The first line shows the machine (SSH only), active context profiles, directory, and Git branch.
-- The session line shows the model, effort, context usage, duration, and classifier state when available.
-- The Claude usage line shows subscription quota gauges and reset pacing, including model-specific limits when reported.
-- The Codex usage line shows Codex subscription quotas for the signed-in ChatGPT account. These are Codex limits, not ChatGPT conversation counts or OpenAI API spend. Window labels come from the reported durations; the primary window is not assumed to be five hours. Only the aggregate Codex quota is rendered: per-model allowances that Codex reports beside it (Spark) are separate limits and are not shown.
+- The session row shows the model, effort, context usage, duration, session price, prompt cache, and classifier state when available.
+- The usage row shows every coding agent's quota: Claude's subscription gauges and reset pacing (model-specific limits included), the other Claude account's countdowns after `⇄`, then `Codex` and its quotas.
+- Codex quotas are for the signed-in ChatGPT account. These are Codex limits, not ChatGPT conversation counts or OpenAI API spend. Window labels come from the reported durations; the primary window is not assumed to be five hours. Only the aggregate Codex quota is rendered: per-model allowances that Codex reports beside it (Spark) are separate limits and are not shown.
 
-Context usage is color-coded. Quota gauges show the percentage **used**, not remaining; their pace indicator compares usage with elapsed time in the quota window.
+Square brackets appear only around the model name. Context usage is color-coded. Quota gauges show the percentage **used**, not remaining; their pace indicator compares usage with elapsed time in the quota window.
 
-Codex usage comes from the installed CLI's read-only `account/rateLimits/read` app-server method, implemented in [`codex_usage.rs`](../tools/claude-tools/src/codex_usage.rs). Successful snapshots are cached for five minutes; failed refreshes back off for one minute and keep old data visibly marked as stale. The collector honors `CODEX_HOME` (default `~/.codex`) and invalidates the cache when login-file metadata changes. It requires an `auth.json` file: keyring-only logins are not detected, and no Codex line is shown when that file is absent. API-key authentication does not expose ChatGPT subscription quotas; it shows `Codex usage unavailable` with the same one-minute retry backoff.
+The session price is `cost.total_cost_usd` from Claude Code's statusline input: a client-side estimate at list price, not the bill. The prompt cache segment comes from the input's `prompt_cache` object: `cache 42m` is the time left before the cached prefix goes cold, `cache cold` means the next request re-caches it, and a yellow `(5m ttl)` means the session has dropped from the 1-hour TTL to 5 minutes (usage overage). Claude Code re-runs the statusline when a warm cache expires, so the flip to cold lands on time, but between events the countdown is as of the last run; a `statusLine.refreshInterval` keeps it ticking.
+
+The session and usage rows each stay on one line when they fit and wrap at segment boundaries on a narrow terminal such as a phone. Claude Code captures the script's stdout, so `tput cols` sees no terminal; the width comes from the `COLUMNS` variable that Claude Code sets before each run, less a four-column margin for its own padding. A group (Claude, the other account, Codex) moves to the next line whole before it is split, so a wrapped line never starts with a label-less window.
+
+Codex usage comes from the installed CLI's read-only `account/rateLimits/read` app-server method, implemented in [`codex_usage.rs`](../tools/claude-tools/src/codex_usage.rs). Successful snapshots are cached for five minutes; failed refreshes back off for one minute and keep old data visibly marked as stale. The collector honors `CODEX_HOME` (default `~/.codex`) and invalidates the cache when login-file metadata changes. It requires an `auth.json` file: keyring-only logins are not detected, and no Codex group is shown when that file is absent. API-key authentication does not expose ChatGPT subscription quotas; it shows `Codex usage unavailable` with the same one-minute retry backoff.
 
 `ccusage statusline` is deliberately not wired into the live Claude hook path because it can OOM on large local histories; guard logic still uses lightweight `ccusage blocks --active --json` where available.
 

@@ -7,11 +7,19 @@
 #   1. fetch the branch's upstream
 #   2. commit the dirty tree as "sync: <host> <utc>" -- THROUGH the pre-commit
 #      hook, never --no-verify, so the settings.json key guard and gitleaks stay
-#      live. If the hook rejects and claude/settings.json is staged, that one
-#      file is held back and the commit retried once: the working copy of that
-#      file carries a deliberate per-machine diff (gateway env) that the guard
-#      exists to keep out of the public repo.
+#      live. If the hook rejects and any hold-back path is staged, those paths
+#      are unstaged and the commit retried once; each is then offered to the
+#      hook on its own, and only the ones it still rejects are held back.
+#      Each one is a file whose
+#      working copy can carry a per-machine diff that a guard exists to keep
+#      out of the public repo: claude/settings.json (gateway env),
+#      codex/config.toml (Codex's [projects."<path>"] trust tables) and
+#      config/zed/settings.json (Zed's ssh_connections hosts). The Zed file is
+#      only a fallback: where the zed-ssh clean filter is configured it strips
+#      the block before git stores it, the hook never rejects, and it ships.
 #   3. rebase onto the upstream. A conflict is aborted, never resolved here.
+#      Zed's ssh_connections exists only in the working copy, so it is saved
+#      to the state dir first and put back afterwards if the rebase dropped it.
 #   4. push. Never --force.
 #
 # Every outcome lands in $DOTFILES_SYNC_STATE_DIR/<repo>.json, which the
@@ -36,8 +44,10 @@ DOT_DIR="$(cd -P "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 
 STATE_DIR="${DOTFILES_SYNC_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-sync}"
 NOTIFY="${DOTFILES_SYNC_NOTIFY:-1}"
-# Pathspec held back from the sync commit when the pre-commit hook rejects it.
-HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json}"
+# Paths (space-separated) held back from the sync commit when the pre-commit
+# hook rejects it. Paths here never contain spaces.
+HOLD_BACK="${DOTFILES_SYNC_HOLD_BACK:-claude/settings.json codex/config.toml config/zed/settings.json}"
+read -r -a HOLD_BACK_PATHS <<<"$HOLD_BACK"
 DRY_RUN=0
 PRUNE=0
 STALE_DAYS="${DOTFILES_SYNC_STALE_DAYS:-14}"
@@ -64,8 +74,10 @@ Environment:
   DOTFILES_SYNC_STATE_DIR   Where <repo>.json outcome files go
                             (default \$XDG_STATE_HOME/dotfiles-sync).
   DOTFILES_SYNC_NOTIFY=0    Suppress the macOS notification on failure.
-  DOTFILES_SYNC_HOLD_BACK   Pathspec unstaged and retried without when the
-                            pre-commit hook rejects (default claude/settings.json).
+  DOTFILES_SYNC_HOLD_BACK   Space-separated paths unstaged and retried without
+                            when the pre-commit hook rejects (default
+                            "claude/settings.json codex/config.toml
+                            config/zed/settings.json").
   DOTFILES_SYNC_STALE_DAYS  Age (last commit) after which an unmerged worktree
                             is reported as stale by --prune (default 14).
 EOF
@@ -114,6 +126,74 @@ stage_dirty() {
     return 0
 }
 
+# staged_hold_back: the hold-back paths currently staged, space-separated in
+# HOLD_BACK order; empty when none are. A single string because the state file's
+# held_back field, and the nudge hook that reads it, take one.
+staged_hold_back() {
+    local staged p out=()
+    staged="$(git diff --cached --name-only)"
+    for p in "${HOLD_BACK_PATHS[@]}"; do
+        grep -qxF -- "$p" <<<"$staged" && out+=("$p")
+    done
+    printf '%s' "${out[*]:-}"
+}
+
+# Zed's ssh_connections lives only in the working copy: the zed-ssh clean filter
+# strips it from every blob, so git sees the file as clean and a rebase that
+# brings in a Zed settings change rewrites it without the block. zed_save copies
+# the member to the state dir before the rebase and zed_restore appends it back
+# afterwards if the file now lacks it. A block still present is never touched,
+# and on any doubt the file is left as it is and the saved copy stays.
+ZED_SETTINGS="config/zed/settings.json"
+ZED_FILTER="$DOT_DIR/scripts/git-filters/zed-strip-ssh-connections"
+ZED_SAVED=""
+ZED_NOTE=""
+
+zed_save() {
+    # zed_save NAME -> sets ZED_SAVED to the saved member's path, or ""
+    ZED_SAVED=""
+    [[ -f "$ZED_SETTINGS" && -x "$ZED_FILTER" ]] || return 0
+    mkdir -p "$STATE_DIR"
+    local backup="$STATE_DIR/$1.zed-ssh-connections.json" tmp rc=0
+    tmp="$(mktemp "$STATE_DIR/.zed-extract.XXXXXX")" || return 0
+    "$ZED_FILTER" --extract <"$ZED_SETTINGS" >"$tmp" 2>/dev/null || rc=$?
+    case "$rc" in
+        0) mv -f "$tmp" "$backup" && ZED_SAVED="$backup" ;;
+        1) rm -f "$tmp" ;;
+        *)
+            rm -f "$tmp"
+            cp -p "$ZED_SETTINGS" "$STATE_DIR/$1.zed-settings.backup.json"
+            log "$1: WARNING: could not read ssh_connections from $ZED_SETTINGS; whole file copied to $STATE_DIR/$1.zed-settings.backup.json"
+            ;;
+    esac
+    return 0
+}
+
+zed_restore() {
+    # zed_restore NAME: after a rebase, put ZED_SAVED back if the key is gone
+    [[ -n "$ZED_SAVED" ]] || return 0
+    local tmp rc=0
+    if [[ -f "$ZED_SETTINGS" ]] && tmp="$(mktemp "$STATE_DIR/.zed-restore.XXXXXX")"; then
+        "$ZED_FILTER" --restore "$ZED_SAVED" <"$ZED_SETTINGS" >"$tmp" 2>/dev/null || rc=$?
+    else
+        rc=2
+    fi
+    case "$rc" in
+        0)
+            # Write through the existing file so its mode and inode are kept.
+            cat "$tmp" >"$ZED_SETTINGS"
+            log "$1: restored Zed ssh_connections after the rebase"
+            ;;
+        1) : ;;  # still present after the rebase: never overwritten
+        *)
+            ZED_NOTE="Zed ssh_connections not restored; saved at $ZED_SAVED"
+            log "$1: WARNING: $ZED_NOTE"
+            ;;
+    esac
+    rm -f "${tmp:-}"
+    return 0
+}
+
 fail_repo() {
     # fail_repo NAME MESSAGE PULLED PUSHED HELD
     log "$1: FAILED: $2"
@@ -130,6 +210,7 @@ sync_repo() {
         return 0
     fi
     cd "$repo" || return 1
+    ZED_SAVED="" ZED_NOTE=""
 
     local git_dir s
     git_dir="$(git rev-parse --git-dir)"
@@ -160,18 +241,42 @@ sync_repo() {
                 log "$name: dirty tree but nothing stageable"
             elif git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
                 committed=1
-            elif [[ -n "$HOLD_BACK" ]] && git diff --cached --name-only | grep -qxF "$HOLD_BACK"; then
-                # The hook said no. Hold the known per-machine file back once.
-                git reset -q -- "$HOLD_BACK"
-                held="$HOLD_BACK"
-                if git diff --cached --quiet; then
-                    log "$name: only $HOLD_BACK was dirty and the pre-commit hook rejected it; held back"
-                elif git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
-                    committed=1
-                    log "$name: committed without $HOLD_BACK (pre-commit rejected it)"
+            elif held="$(staged_hold_back)" && [[ -n "$held" ]]; then
+                # The hook said no, and does not say which file it objected to.
+                # Unstage every per-machine file, commit the rest, then offer
+                # each held file to the hook on its own: only the ones it still
+                # rejects stay held. Without that second pass a permanently dirty
+                # codex/config.toml would starve every settings.json edit.
+                local -a held_paths
+                local p still_held=()
+                read -r -a held_paths <<<"$held"
+                git reset -q -- "${held_paths[@]}"
+                if ! git diff --cached --quiet; then
+                    if git commit --quiet -m "$msg" >/dev/null 2>"$STATE_DIR/$name.commit.err"; then
+                        committed=1
+                    else
+                        git reset -q
+                        fail_repo "$name" "pre-commit rejected the sync commit: $(tail -1 "$STATE_DIR/$name.commit.err" 2>/dev/null)"; return 1
+                    fi
+                fi
+                for p in "${held_paths[@]}"; do
+                    git add -- "$p"
+                    if (( committed )) && git commit --quiet --amend --no-edit >/dev/null 2>&1; then
+                        :
+                    elif (( ! committed )) && git commit --quiet -m "$msg" >/dev/null 2>&1; then
+                        committed=1
+                    else
+                        git reset -q -- "$p"
+                        still_held+=("$p")
+                    fi
+                done
+                held="${still_held[*]:-}"
+                if [[ -z "$held" ]]; then
+                    : # every file passed on its own; nothing is held
+                elif (( committed )); then
+                    log "$name: committed without $held (pre-commit rejected it)"
                 else
-                    git reset -q
-                    fail_repo "$name" "pre-commit rejected the sync commit: $(tail -1 "$STATE_DIR/$name.commit.err" 2>/dev/null)"; return 1
+                    log "$name: only $held was dirty and the pre-commit hook rejected it; held back"
                 fi
             else
                 git reset -q
@@ -196,12 +301,15 @@ sync_repo() {
             # and, if re-applying conflicts, keeps it in the stash rather than
             # dropping it.
             (( dirty_after )) && rb+=(--autostash)
+            zed_save "$name"
             if ! "${rb[@]}" "$upstream" >/dev/null 2>"$STATE_DIR/$name.rebase.err"; then
                 git rebase --abort >/dev/null 2>&1 || true
+                zed_restore "$name"
                 fail_repo "$name" "rebase onto $remote/$branch conflicted; aborted, tree untouched ($ahead local vs $behind remote commits)" 0 0 "$held"
                 return 1
             fi
             rm -f "$STATE_DIR/$name.rebase.err"
+            zed_restore "$name"
             pulled="$behind"
             log "$name: rebased onto $remote/$branch (+$behind)"
         fi
@@ -227,6 +335,7 @@ sync_repo() {
     local summary="in sync"
     (( pulled > 0 || pushed > 0 )) && summary="pulled $pulled, pushed $pushed"
     [[ -n "$held" ]] && summary="$summary; $held held back (pre-commit rejected it)"
+    [[ -n "$ZED_NOTE" ]] && summary="$summary; $ZED_NOTE"
     log "$name: $summary"
     write_state "$name" ok "$summary" "$pulled" "$pushed" "$held"
     return 0

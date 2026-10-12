@@ -164,6 +164,26 @@ def test_protected_sandbox_table_survived_move_byte_identical() -> None:
     assert old == new
 
 
+EVIDENCE_WAS = "claude/rules/evidence.md"
+EVIDENCE_WAS_AT = "031db2c3"  # last commit with the rule always-on
+EVIDENCE_HOME = "claude/skills/evidence-packs/SKILL.md"
+
+
+def test_evidence_rule_survived_move_byte_identical() -> None:
+    """evidence.md left the always-on tier on 2026-10-03; every byte came along."""
+    old = subprocess.run(
+        ["git", "-C", str(REPO), "show", f"{EVIDENCE_WAS_AT}:{EVIDENCE_WAS}"],
+        capture_output=True,
+        check=True,
+    ).stdout.decode()
+    assert old.strip() in (REPO / EVIDENCE_HOME).read_text()
+
+
+def test_rules_still_point_at_evidence_packs() -> None:
+    """Moving content out of the always-on tier is only safe if it stays findable."""
+    assert "`evidence-packs`" in (REPO / "claude/rules/communication.md").read_text()
+
+
 def test_rules_still_point_at_the_moved_sandbox_table() -> None:
     """Moving content out of the always-on tier is only safe if it stays findable."""
     safety = (REPO / "claude/rules/safety.md").read_text()

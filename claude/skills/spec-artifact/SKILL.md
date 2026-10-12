@@ -1,6 +1,6 @@
 ---
 name: spec-artifact
-description: Write and publish a spec or plan — the three mandatory sections, what to leave out, per-requirement variables, the editable-commentable publish round-trip, and where plans come from.
+description: Write and publish a spec or plan — the three mandatory sections, what to leave out, per-requirement variables, the editable-commentable publish round-trip, and where plans come from. Also use to apply a review export of comments and suggested edits back to a spec.
 ---
 
 # Writing A Spec
