@@ -26,7 +26,7 @@ artifacts/
 
 An input that is itself ephemeral — a scan of the live environment, a query result, an API response — cannot be regenerated later because the thing it measured has moved on. Snapshot that alongside the source and say in `meta.yml` when it was taken.
 
-`meta.yml` carries what the gallery cannot: the **publishing org**, which is unrecoverable afterwards and is exactly what breaks when accounts change, and the **author_model** that wrote the prose. Opus 4.8, Opus 5 and Fable do not write these pages (Yulong, 2026-09-08); the writer comes from `writer-priority` in `config/model-router.toml`, and `block_claude_authored_artifact.sh` refuses a publish whose `meta.yml` has no `author_model` or names a banned model. `author_model: generated` marks a page a script emits from structured data. The procedure is the `write-prose` skill.
+`meta.yml` carries what the gallery cannot: the **publishing org**, which is unrecoverable afterwards and is exactly what breaks when accounts change, and the **author_model** that wrote the prose. Opus 4.8, Opus 5 and Fable do not write these pages (Yulong, 2026-09-08), and Opus 5.5 writes only after Sol and Astra; the writer comes from `writer-priority` in `config/model-router.toml`, and `block_claude_authored_artifact.sh` refuses a publish whose `meta.yml` has no `author_model` or names a banned model. `author_model: generated` marks a page a script emits from structured data, and `author_model: legacy` a page whose directory was first committed before the guard shipped (the hook checks the git date). The procedure is the `write-prose` skill.
 
 ## `meta.yml` is the row, so two publishes never conflict
 

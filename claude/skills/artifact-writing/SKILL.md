@@ -11,7 +11,7 @@ Yulong's primary reading surface is the Artifact, not terminal scrollback. For a
 
 **Deliverables live in git first.** A page that exists only as a successful `Artifact` call is lost when publishing breaks, so write the source and the built HTML under `artifacts/<slug>/`, **commit both**, and let the publish be the last step — the layout and the commit-the-HTML rule are in `artifacts/README.md`.
 
-**The session does not write the prose.** Opus 4.8, Opus 5 and Fable draft pages Yulong cannot read (2026-09-08), so the session builds a skeleton and the `writer-priority` model writes the sentences — the loop, the brief and the fallback order are in `write-prose`. `meta.yml` records who wrote in `author_model`, and the PreToolUse hook `block_claude_authored_artifact.sh` refuses a publish whose `meta.yml` lacks the field or names a banned model. Applying Yulong's exported comments and suggested edits word-for-word stays with the session; a comment asking for a new or rewritten paragraph goes back to the writer.
+**The session does not write the prose.** Opus 4.8, Opus 5 and Fable draft pages Yulong cannot read (2026-09-08), and Opus 5.5 ranks after Sol and Astra, so the session builds a skeleton and the `writer-priority` model writes the sentences — the loop, the brief and the fallback order are in `write-prose`. `meta.yml` records who wrote in `author_model`, and the PreToolUse hook `block_claude_authored_artifact.sh` refuses a publish whose `meta.yml` lacks the field or names a banned model. Applying Yulong's exported comments and suggested edits word-for-word stays with the session; a comment asking for a new or rewritten paragraph goes back to the writer.
 
 ## `md2artifact` builds the page; raw `.md` drops everything
 
