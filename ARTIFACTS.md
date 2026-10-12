@@ -16,6 +16,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 
 | Artifact | Org | Status | Source | Public | Updated |
 |---|---|---|---|---|---|
+| [One Actions loop gates every PR](https://claude.ai/artifact/L7xUr4NE5SoJVcPhxeDZ13) — spec for the GitHub Actions PR loop that replaces PR 207's local gate: GPT reviews each head via codex exec, a Claude Code fixer on the subscription token patches and a separate job pushes, every changed commit is re-reviewed up to two fix rounds, run-all.sh runs on every head, and only simple ready PRs auto-merge while hooks, settings, secrets and the loop itself go to Yulong. Awaiting review; only the subscription-auth probe is built | lin.yulong@gmail.com's Organization | live | `artifacts/gha-pr-loop/` | no | 2026-10-12 |
 | [Download HTML session handover](https://claude.ai/artifact/MZGF7FLXh4pCw6EzMiGmg9) — handover of session 55c231ff (the annotation layer's Download HTML and Copy HTML buttons), written with the externalise-handover skill by a Claude Opus 5.5 subagent, for comparison with the debrief-trial-55c231ff page | lin.yulong@gmail.com's Organization | done | `artifacts/handover-trial-55c231ff/` | no | 2026-10-06 |
 | [Download HTML session debrief](https://claude.ai/artifact/E2o1qcjbkrifRzu34t1yyd) — trial of alignment-hive's `debrief` plugin on session 55c231ff (the annotation layer's Download HTML and Copy HTML buttons), written by a Claude Opus 5.5 subagent and fact-checked by GPT-6 Astra; compare with handover-trial-55c231ff | lin.yulong@gmail.com's Organization | done | `artifacts/debrief-trial-55c231ff/` | no | 2026-10-06 |
 | [The page can be downloaded as HTML](https://claude.ai/artifact/DHxg1ZG6BqraAdXUJtr5n6) — a probe page for the annotation layer's "This page" row — Download HTML through the viewer's `downloads` capability, and Copy HTML through the clipboard. Published with `capabilities: {downloads: true}` to check whether the viewer grants that capability to the owner and to a non-owner viewer | lin.yulong@gmail.com's Organization | done | `artifacts/download-probe/` | no | 2026-09-24 |
@@ -52,7 +53,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 | [Alias Audit](https://claude.ai/code/artifact/739598b0-362d-4aaa-a8c2-c77775be5eb4) — alias files fight over names by source order; the set was cut 161 → ~110 against two months of shell history | see note | done | — | no | 2026-08-18 |
 | [Tool-Backed Agents](https://claude.ai/code/artifact/4c124679-7346-4dc5-9cb4-75889320aaf4) — which agents actually invoke their CLI rather than answering from their own reasoning | see note | done | — | no | 2026-08-18 |
 
-35 rows: 17 live, 15 done, 2 archived, 1 superseded.
+36 rows: 18 live, 15 done, 2 archived, 1 superseded.
 
 [//]: # (END GENERATED ARTIFACTS TABLE)
 

@@ -1,0 +1,29 @@
+title: One Actions loop gates every PR
+url: https://claude.ai/artifact/L7xUr4NE5SoJVcPhxeDZ13
+org: lin.yulong@gmail.com's Organization   # claude auth status, 2026-10-12 (subscriptionType max)
+first_published: 2026-10-12
+last_updated: 2026-10-12
+status: live
+
+public: no
+
+summary: >-
+  spec for the GitHub Actions PR loop that replaces PR 207's local gate: GPT reviews each head
+  via codex exec, a Claude Code fixer on the subscription token patches and a separate job
+  pushes, every changed commit is re-reviewed up to two fix rounds, run-all.sh runs on every
+  head, and only simple ready PRs auto-merge while hooks, settings, secrets and the loop itself
+  go to Yulong. Awaiting review; only the subscription-auth probe is built
+
+source: spec.md
+built: spec.html
+builds_with: |
+  md2artifact artifacts/gha-pr-loop/spec.md -o artifacts/gha-pr-loop/spec.html
+
+related: https://github.com/yulonglin/dotfiles/pull/207
+
+established: |
+  Measured: headless claude -p under a /login session reports apiKeySource "none" (local run,
+  2026-10-12); run-all.sh --list discovers 121 suites and the workflows name 15 test files.
+  Read from docs: CLAUDE_CODE_OAUTH_TOKEN precedence and scope, GITHUB_TOKEN dispatch
+  exceptions, Codex CI auth guidance. Not yet observed: the token answering on a hosted runner
+  (the probe is pushed but the secret is not set).
