@@ -1,5 +1,6 @@
 """custom_bins/work-budget and claude/hooks/enforce_work_budget.py, against a temp state dir."""
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -41,23 +42,45 @@ def hook(env, event):
     return json.loads(r.stdout) if r.stdout.strip() else None
 
 
-def bash_event(who, command, stdout):
-    return {
-        "hook_event_name": "PostToolUse",
+_calls = iter(range(1, 10**6))
+
+
+def bash_event(kind, who, command, call, stdout=""):
+    ev = {
+        "hook_event_name": kind,
         "tool_name": "Bash",
         "tool_input": {"command": command},
-        "tool_response": {"stdout": stdout, "stderr": "", "interrupted": False},
+        "tool_use_id": call,
         **who,
     }
+    if kind == "PostToolUse":
+        ev["tool_response"] = {"stdout": stdout, "stderr": "", "interrupted": False}
+    return ev
+
+
+def run_bash(env, who, command, run):
+    """Fire PreToolUse, run `run()` for stdout, fire PostToolUse, as Claude Code does."""
+    call = f"toolu_{next(_calls)}"
+    hook(env, bash_event("PreToolUse", who, command, call))
+    stdout = run()
+    hook(env, bash_event("PostToolUse", who, command, call, stdout))
+    return stdout
 
 
 def start(env, who, *args):
-    """Run `work-budget start` as `who` and fire the PostToolUse claim; return (id, stdout)."""
-    r = cli(env, "start", *args)
-    assert r.returncode == 0, r.stderr
-    if who is not None:
-        hook(env, bash_event(who, "work-budget start " + " ".join(args), r.stdout))
-    return r.stdout.split()[0], r.stdout
+    """Run `work-budget start` as `who` through the Bash hooks; return (id, stdout)."""
+
+    def run():
+        r = cli(env, "start", *args)
+        assert r.returncode == 0, r.stderr
+        return r.stdout
+
+    stdout = (
+        run()
+        if who is None
+        else run_bash(env, who, "work-budget start " + " ".join(args), run)
+    )
+    return stdout.split()[0], stdout
 
 
 def budget(env, bid):
@@ -84,11 +107,35 @@ def test_owner_is_held_with_goal_and_count(env):
 
 def test_seeing_the_start_line_is_not_ownership(env):
     _, stdout = start(env, MAIN, "30m")
-    # Another session pastes the whole start output, or runs a command that prints it.
-    hook(env, bash_event(OTHER, "cat run.log", stdout))
-    hook(env, bash_event(OTHER, "work-budget start 1h # copy of their log", stdout))
+    # Another session pastes the whole start output, or re-prints it.
+    run_bash(env, OTHER, "cat run.log", lambda: stdout)
+    run_bash(env, OTHER, "work-budget start 1h", lambda: stdout)
     assert hook(env, stop(OTHER)) is None
     assert hook(env, stop(MAIN))["decision"] == "block", "the owner is unchanged"
+
+
+def test_inspecting_an_unclaimed_budget_does_not_claim_it(env):
+    bid, stdout = start(env, None, "30m")  # started outside Claude Code
+    run_bash(env, OTHER, 'rg -C2 "work-budget start" run.log', lambda: stdout)
+    run_bash(env, OTHER, "work-budget start 1h --goal x | tee log", lambda: stdout)
+    run_bash(env, OTHER, "echo log; work-budget start 1h", lambda: stdout)
+    assert "owner" not in json.loads(budget(env, bid).read_text())
+    assert hook(env, stop(OTHER)) is None
+
+
+def test_a_real_start_claims_only_what_it_created(env):
+    old, old_out = start(env, None, "30m")
+    rec = json.loads(budget(env, old).read_text())
+    rec["created"] = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+    budget(env, old).write_text(json.dumps(rec))
+
+    def run():
+        r = cli(env, "start", "1h")
+        return old_out + r.stdout  # the old start line is in this call's output too
+
+    new = run_bash(env, MAIN, "work-budget start 1h", run).splitlines()[-2].split()[0]
+    assert "owner" not in json.loads(budget(env, old).read_text())
+    assert json.loads(budget(env, new).read_text())["owner"]["session_id"] == "s-main"
 
 
 def test_parent_and_child_are_different_owners(env):
@@ -97,16 +144,31 @@ def test_parent_and_child_are_different_owners(env):
     assert hook(env, stop(MAIN)) is None, "the parent did not start it"
 
 
-def test_unclaimed_or_late_claimed_budget_holds_nobody(env):
-    bid, stdout = start(env, None, "30m")
-    assert hook(env, stop(MAIN)) is None, "no PostToolUse claim, no owner"
-    rec = json.loads(budget(env, bid).read_text())
-    rec["start"] = (datetime.now(timezone.utc) - timedelta(minutes=11)).isoformat()
-    budget(env, bid).write_text(json.dumps(rec))
-    hook(env, bash_event(MAIN, "work-budget start 30m", stdout))
-    assert "owner" not in json.loads(budget(env, bid).read_text()), (
-        "claim window passed"
-    )
+def test_unclaimed_budget_holds_nobody(env):
+    start(env, None, "30m")
+    assert hook(env, stop(MAIN)) is None
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("work-budget start 2h --goal 'a; b | c'", True),
+        ("FOO=1 work-budget start 1h", True),
+        ("/Users/x/code/dotfiles/custom_bins/work-budget start 45m", True),
+        ("work-budget status", False),
+        ('rg "work-budget start" log', False),
+        ("work-budget start 1h | tee log", False),
+        ("cat log; work-budget start 1h", False),
+        ("work-budget start 1h > out", False),
+        ("echo $(work-budget start 1h)", False),
+        ("work-budget start 'unterminated", False),
+    ],
+)
+def test_only_a_plain_start_command_counts(command, expected):
+    spec = importlib.util.spec_from_file_location("ewb", HOOK)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.is_start_call(command) is expected
 
 
 def test_stop_expiry_cap_and_kill_release(env):

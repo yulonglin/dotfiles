@@ -58,6 +58,7 @@ def cmd_start(a: argparse.Namespace) -> int:
     rec = {
         "id": bid,
         "start": now.isoformat(timespec="seconds"),
+        "created": now.isoformat(),
         "until": (now + a.duration).isoformat(timespec="seconds"),
         "goal": a.goal,
         "max_blocks": a.max_blocks,
