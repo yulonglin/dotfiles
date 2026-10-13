@@ -46,9 +46,11 @@
 #                   another name = an [providers.<name>] block below (OpenAI-
 #                                  compatible host; key under that name in secrets.toml)
 #   slug            the provider's exact model ID (defaults to id)
-#   context-window  the model's real window at that provider; the router rescales
-#                   usage so auto-compaction fires there (only windows larger than
-#                   declared-context-window can be scaled)
+#   context-window  where Claude Code compacts this route: rendered as
+#                   modelSettings.<routing id>.autoCompactWindow (clamped to
+#                   100000-1000000). Use the host's real window from
+#                   `verify-providers`; GPT routes use 258400 by choice (input
+#                   past 272K bills at a higher rate)
 #   description     the picker row's second line; defaults to who bills for the
 #                   model: "Claude subscription", "ChatGPT subscription (Codex)",
 #                   "OpenRouter, pay per token"
@@ -66,9 +68,12 @@
 # provider. Other failures skip only the failed writer. If no writer remains,
 # report the blocker rather than silently choosing an unlisted model.
 
-# What Claude Code believes every routed model's window is (set in settings env
-# as CLAUDE_CODE_MAX_CONTEXT_TOKENS); 258400 is the Codex backend's input limit.
-declared-context-window = 258400
+# The ceiling Claude Code assumes for every routed (non-claude-) model, set in
+# settings env as CLAUDE_CODE_MAX_CONTEXT_TOKENS. Each route then compacts at
+# min(this, its own context-window), so this sits at the per-model setting's
+# 1000000 maximum and the per-route windows do the work. Claude's own models
+# ignore it. Replaced the router's usage scaling, deprecated in router 0.1.37.
+declared-context-window = 1000000
 
 # /model shows only the picker rows below (plus Claude Code's own Default row and
 # the session's current model), not the built-in lineup. Rows follow block order.
@@ -226,11 +231,14 @@ provider = "openrouter"
 slug = "x-ai/grok-4.7"
 context-window = 500000
 
-# Agent and picker off: the text call and minimal tool/thinking requests work,
-# but a full Claude Code request through the gateway returns "400 Provider
-# returned error" (tests/test_model_router_gateway.sh --routes gemini,
-# 2026-09-22, on 3.7 Flash), cause not yet found. The route stays so the probe
-# can be rerun.
+# Back in the picker and as an agent on 2026-10-12. Off since 2026-09-22, when a
+# full Claude Code request on 3.7 Flash returned "400 Provider returned error"
+# with no upstream body kept. Not reproduced on 2026-10-12: the captured full
+# request (12 tools, max_tokens 32000, reasoning high, streamed), a 100-tool
+# ~90k-token request and long MCP-style tool names all pass on 3.7 and 3.8
+# Flash, pinned to AI Studio and to Vertex; the CLIProxyAPI that failed and the
+# current one translate the request identically. If it recurs, keep the
+# upstream error.metadata.raw.
 [[models]]
 id = "gemini-3.8-flash"
 aliases = ["gemini"]
@@ -238,8 +246,6 @@ name = "Gemini 3.8 Flash"
 provider = "openrouter"
 slug = "google/gemini-3.8-flash"
 context-window = 1048576
-picker = false
-agent = false
 
 [[models]]
 id = "qwen3.8-max"

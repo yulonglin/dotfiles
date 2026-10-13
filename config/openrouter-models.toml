@@ -148,14 +148,14 @@ reviewed = "2026-10-12"
 #
 # BEGIN council-auto
 seats = [
-  { alias = "opus", slug = "anthropic/claude-opus-5.5", family = "anthropic", score = 167.3, basis = "eci" },
-  { alias = "gpt", slug = "openai/gpt-6-astra", family = "openai", score = 166.4, basis = "eci" },
-  { alias = "kimi", slug = "moonshotai/kimi-k3", family = "moonshotai", score = 157.4, basis = "eci" },
-  { alias = "muse", slug = "meta/muse-spark-1.3", family = "meta", score = 156.8, basis = "eci" },
-  { alias = "gemini", slug = "google/gemini-3.8-flash", family = "google", score = 156.7, basis = "newest-within-ci" },
-  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 155.6, basis = "eci" },
-  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 155.1, basis = "eci" },
-  { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 153.5, basis = "newest-within-ci" },
+  { alias = "opus", slug = "anthropic/claude-opus-5.5", family = "anthropic", score = 1.0, basis = "eci" },
+  { alias = "gpt", slug = "openai/gpt-6-astra", family = "openai", score = 0.95, basis = "eci" },
+  { alias = "muse", slug = "meta/muse-spark-1.3", family = "meta", score = 0.87, basis = "eci" },
+  { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 0.84, basis = "newest-within-ci" },
+  { alias = "kimi", slug = "moonshotai/kimi-k3", family = "moonshotai", score = 0.83, basis = "eci" },
+  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 0.83, basis = "eci" },
+  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 0.83, basis = "eci" },
+  { alias = "gemini", slug = "google/gemini-3.8-flash", family = "google", score = 0.8, basis = "eci" },
 ]
 # END council-auto
 
@@ -246,9 +246,12 @@ alias = "gpt55pro"
 #
 # Ranking data comes from `openrouter-cli council refresh`:
 #   - Epoch Capabilities Index -- CC-BY, no key needed, credit Epoch AI.
-#   - Artificial Analysis intelligence index -- needs AA_API_KEY, free tier
-#     1000 req/day. Their licence REQUIRES attribution to artificialanalysis.ai
-#     wherever these numbers are shown.
-# When both are available the seat score is the mean of the per-index
-# normalised scores; with only Epoch present it is the Epoch score, and the
-# roster table says so.
+#   - Artificial Analysis intelligence index -- the API with AA_API_KEY (free
+#     tier, 1000 req/day; the sanctioned path), else read from the public
+#     model pages, looking up each candidate the current-models list omits.
+#     Their licence REQUIRES attribution to artificialanalysis.ai wherever
+#     these numbers are shown.
+# When both are available the seat score is the mean of the per-index scores,
+# each min-max normalised over the candidate models (so 0-1, not Epoch
+# points); with only Epoch present it is the Epoch score, and the roster table
+# says so. The Epoch points quoted in comments above are Epoch's alone.

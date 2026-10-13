@@ -11,7 +11,7 @@ OpenRouter slug, not only the routed ones.
     openrouter-cli models                 # configured models
     openrouter-cli models --check         # ...cross-checked against the catalogue
     openrouter-cli drift                  # every configured slug vs the catalogue
-    openrouter-cli refresh                # rank via Epoch ECI (+ AA if keyed)
+    openrouter-cli refresh                # rank via Epoch ECI + Artificial Analysis
     openrouter-cli ask glm "question"     # one model
     openrouter-cli fusion "question"      # panel in parallel + chair synthesis
     openrouter-cli council roster --check # is the seated roster still the best?
@@ -33,6 +33,7 @@ import argparse
 import csv
 import datetime
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -64,6 +65,7 @@ ECI_CSV_LEGACY = "epoch_capabilities_index.csv"
 
 # Resolved relative to this script so the tool works from any cwd.
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "openrouter-models.toml"
+ROUTER_CONFIG = CONFIG.with_name("model-router.toml")
 
 
 def die(msg: str, code: int = 1) -> None:
@@ -459,9 +461,16 @@ ECI_CI: dict[str, tuple[float, float]] = {}
 
 def fetch_eci() -> dict[str, float]:
     """Epoch Capabilities Index, keyed by normalised model name. Fills ECI_CI."""
-    req = urllib.request.Request(EPOCH_ZIP)
-    with urllib.request.urlopen(req, timeout=120) as r:
-        blob = r.read()
+    # Epoch's server truncates this zip now and then (IncompleteRead, seen
+    # twice on 2026-10-12); a second try has always completed.
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(EPOCH_ZIP), timeout=120) as r:
+                blob = r.read()
+            break
+        except http.client.IncompleteRead:
+            if attempt == 2:
+                raise
     z = zipfile.ZipFile(io.BytesIO(blob))
     member = ECI_CSV if ECI_CSV in z.namelist() else ECI_CSV_LEGACY
     rows = csv.DictReader(io.StringIO(z.read(member).decode("utf-8", "replace")))
@@ -485,17 +494,74 @@ def fetch_eci() -> dict[str, float]:
     return out
 
 
-def fetch_aa() -> dict[str, float]:
-    """Artificial Analysis intelligence index, or {} when unkeyed."""
+AA_PAGE = "https://artificialanalysis.ai/models"
+# One model record as the site embeds it: id, slug, name, then (within the same
+# record) the release it belongs to and its index. A release has one record per
+# reasoning effort; the best effort stands for the release.
+AA_RECORD = re.compile(
+    r'\{"id":"[0-9a-f-]{36}","slug":"[a-z0-9.-]+","name":"[^"]+"(.*?)'
+    r'(?=\{"id":"[0-9a-f-]{36}","slug"|$)', re.S)
+
+
+def aa_page_scores(html: str) -> dict[str, float]:
+    """Best intelligence index per release, keyed by normalised release slug
+    (`grok-4-6` -> `grok46`, which is also norm() of OpenRouter's `grok-4.6`).
+    Estimated scores are skipped: they are AA's guess, not a measurement."""
+    out: dict[str, float] = {}
+    for m in AA_RECORD.finditer(html.replace('\\"', '"')):
+        body = m.group(1)[:6000]
+        rel = re.search(r'"release":\{"slug":"([a-z0-9.-]+)"', body)
+        ii = re.search(r'"intelligenceIndex":([0-9.]+),"intelligenceIndexIsEstimated":(true|false)', body)
+        if rel and ii and ii.group(2) == "false":
+            k = norm(rel.group(1))
+            out[k] = max(out.get(k, 0.0), float(ii.group(1)))
+    return out
+
+
+def get_page(url: str) -> str | None:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    for _ in range(3):  # multi-MB pages arrive truncated now and then
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.read().decode("utf-8", "replace")
+        except http.client.IncompleteRead:
+            continue
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            return None
+    return None
+
+
+def fetch_aa_pages(candidates: list[str]) -> dict[str, float]:
+    """Artificial Analysis without a key, from its public model pages.
+
+    /models lists only current releases: a release AA has superseded
+    (`deprecatedTo`) drops off it, which is how Grok 4.6 and Gemini 3.7 Flash
+    came to look unlisted on 2026-10-12 while AA still scored both. So each
+    candidate not on that list is looked up on its own page, /models/<slug>,
+    which still carries its record (and the full catalogue, so one lookup
+    usually covers the rest)."""
+    out = aa_page_scores(get_page(AA_PAGE) or "")
+    lookups = 0
+    for tail in candidates:
+        if norm(tail) in out or lookups >= 40:
+            continue
+        lookups += 1
+        html = get_page(f"{AA_PAGE}/{tail.lower().replace('.', '-')}")
+        if html:
+            out.update({k: v for k, v in aa_page_scores(html).items() if k not in out})
+    return out
+
+
+def fetch_aa(candidates: list[str] | None = None) -> dict[str, float]:
+    """Artificial Analysis intelligence index: the API with AA_API_KEY, else the
+    public model pages for `candidates` (OpenRouter tails), else {}."""
     key = os.environ.get("AA_API_KEY")
     if not key:
-        print(
-            "note: AA_API_KEY unset - skipping Artificial Analysis, using Epoch only.\n"
-            "      Get a free key (1000 req/day) at artificialanalysis.ai, then\n"
-            "      add it with `secrets edit`.",
-            file=sys.stderr,
-        )
-        return {}
+        out = fetch_aa_pages(candidates or [])
+        if not out:
+            print("note: Artificial Analysis pages unreadable and AA_API_KEY unset - using Epoch only.",
+                  file=sys.stderr)
+        return out
     data = get_json(AA_URL, headers={"x-api-key": key}).get("data", [])
     out: dict[str, float] = {}
     for m in data:
@@ -963,22 +1029,32 @@ def catalog_rows(data: list[dict] | None = None) -> list[dict]:
     return rows
 
 
-def index_scores() -> tuple[dict[str, float], list[str]]:
+def index_scores(candidates: list[str] | None = None) -> tuple[dict[str, float], list[str]]:
     """Capability score per normalised model name, plus attribution lines.
 
-    Epoch alone when AA_API_KEY is unset. With both, each index is min-max
-    normalised before averaging: the two use different scales, so a raw mean
-    would silently let whichever has the wider range dominate the ranking.
+    Epoch alone when Artificial Analysis is unreachable. With both, each index
+    is min-max normalised before averaging: the two use different scales, so a
+    raw mean would silently let whichever has the wider range dominate the
+    ranking. `candidates` (OpenRouter tails) are the models looked up on AA's
+    pages when there is no API key.
     """
     eci = fetch_eci()
-    aa = fetch_aa()
+    aa = fetch_aa(candidates)
     credits = ["Epoch AI Capabilities Index (CC-BY)"]
     if not aa:
         return eci, credits
     credits.append("artificialanalysis.ai intelligence index")
 
+    # The scaling range comes from the candidates only. AA's page payload holds
+    # 26 models or ~130 depending on which pages a run happened to fetch, and
+    # a range over "whatever came back" would move every seat's score with no
+    # model having changed.
+    keys = {norm(t) for t in candidates or []}
+
     def unit(d: dict[str, float]) -> dict[str, float]:
-        vals = list(d.values())
+        vals = [v for k, v in d.items() if k in keys]
+        if len(vals) < 2:
+            vals = list(d.values())
         lo, hi = min(vals), max(vals)
         if hi == lo:
             return {k: 1.0 for k in d}
@@ -1040,8 +1116,8 @@ def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
             and norm(r["tail"]) in cis and cis[norm(r["tail"])][1] >= lo]
     if tied:
         cand, cs = max(tied, key=lambda rs: rs[0]["created"])
-        return {**cand, "score": round(cs, 1), "basis": "newest-within-ci"}
-    return {**best, "score": round(score, 1), "basis": "eci"}
+        return {**cand, "score": round(cs, 2), "basis": "newest-within-ci"}
+    return {**best, "score": round(score, 2), "basis": "eci"}
 
 
 def alias_for(cfg: dict, family: str, slug: str) -> str:
@@ -1068,7 +1144,12 @@ def propose_roster(cfg: dict, rows: list[dict] | None = None) -> tuple[list[dict
         die(f"council has {len(families)} families; fusion panels take at most 8")
     if rows is None:
         rows = catalog_rows()
-    scores, credits = index_scores()
+    # Newest first: page lookups are capped, and past the first page or two the
+    # merged catalogue usually already holds the rest.
+    pool = sorted((r for r in rows if r["family"] in families
+                   and r["out"] <= cap and r["in"] <= in_cap),
+                  key=lambda r: -r["created"])
+    scores, credits = index_scores([r["tail"] for r in pool])
     picked, gaps = [], []
     for fam in families:
         best = pick_seat(fam, rows, scores, cap, in_cap)
@@ -1150,8 +1231,9 @@ def cmd_council_roster(args, cfg) -> None:
     for s in current:
         # Read `basis`, never the magnitude: a normalised score can legitimately
         # be 0.0, so "score == 0 means unscored" would hide a real measurement.
-        sc = "-" if s.get("basis") == "newest-in-line" else f"{s.get('score', 0):.1f}"
+        sc = "-" if s.get("basis") == "newest-in-line" else f"{s.get('score', 0):.2f}"
         print(f"{s['alias']:<8} {s['slug']:<32} {sc:>6}  {s.get('basis', '?')}")
+    report_picker_gaps(current)
     if not args.check:
         return
 
@@ -1192,19 +1274,52 @@ def cmd_council_refresh(args, cfg) -> None:
         die("index-driven pick produced no seats - refusing to empty the roster")
     print(f"{'family':<11} {'slug':<32} {'score':>6} {'out$/M':>7}  basis")
     for s in picked:
-        sc = "-" if s["basis"] == "newest-in-line" else f"{s['score']:.1f}"
+        sc = "-" if s["basis"] == "newest-in-line" else f"{s['score']:.2f}"
         print(f"{s['family']:<11} {s['slug']:<32} {sc:>6} {s['out']:7.2f}  {s['basis']}")
     for fam in gaps:
         print(f"{fam:<11} (no model under the price caps)", file=sys.stderr)
     print("\nScores: " + "; ".join(credits) + ". Attribution required.")
-    if not os.environ.get("AA_API_KEY"):
-        print("note: AA_API_KEY unset - ranked on Epoch alone. `secrets edit` to add it.",
-              file=sys.stderr)
+    if len(credits) == 1:
+        print("note: ranked on Epoch alone - Artificial Analysis was unreachable.", file=sys.stderr)
     if not args.apply:
         print("\n(dry run - pass --apply to write the config)")
         return
     rewrite_seats(CONFIG, picked, datetime.date.today().isoformat())
     print(f"\nwrote {len(picked)} seats to {CONFIG}")
+    report_picker_gaps(picked)
+
+
+def picker_gaps(seated: list[dict], router: dict) -> list[str]:
+    """Council seats the /model picker does not offer, one line each.
+
+    The picker is rendered from config/model-router.toml, so a refresh that
+    moves a seat leaves the picker on the old model until that file follows.
+    A seat matches a router entry when the normalised tails agree:
+    `anthropic/claude-opus-5.5` ~ id `claude-opus-5-5`, `x-ai/grok-4.7` ~ slug
+    `x-ai/grok-4.7`, `openai/gpt-6-astra` ~ codex id `gpt-6-astra`."""
+    entries = [m for m in router.get("models", []) if m.get("enabled", True)]
+    out = []
+    for s in seated:
+        want = norm(s["slug"].split("/", 1)[-1])
+        hit = [m for m in entries
+               if norm(str(m.get("slug", m["id"])).split("/", 1)[-1]) == want]
+        if not hit:
+            out.append(f"{s['slug']}: no route in model-router.toml")
+        elif not any(m.get("picker", True) for m in hit):
+            out.append(f"{s['slug']}: routed but picker = false")
+    return out
+
+
+def report_picker_gaps(seated: list[dict]) -> None:
+    import tomllib
+    if not ROUTER_CONFIG.is_file():
+        return
+    gaps = picker_gaps(seated, tomllib.loads(ROUTER_CONFIG.read_text()))
+    if gaps:
+        print(f"\nthe /model picker is out of step with the council ({ROUTER_CONFIG.name}):")
+        for g in gaps:
+            print(f"  ! {g}")
+        print("edit that file, then `model-router-wire apply`.")
 
 
 def read_context(paths: list[str]) -> str:
