@@ -1731,6 +1731,20 @@
 
   # ============================================================================
 
+  # Terminal.app has no Nerd Font fallback (Ghostty bundles one), so every
+  # private-use glyph above renders blank there: icons and powerline separators.
+  # Fall back to ascii icons and flat segments; the box-drawing frame still renders.
+  if [[ $TERM_PROGRAM == Apple_Terminal ]]; then
+    typeset -g POWERLEVEL9K_MODE=ascii
+    typeset -g POWERLEVEL9K_LEFT_SEGMENT_SEPARATOR=''
+    typeset -g POWERLEVEL9K_RIGHT_SEGMENT_SEPARATOR=''
+    typeset -g POWERLEVEL9K_LEFT_SUBSEGMENT_SEPARATOR='%246F|'
+    typeset -g POWERLEVEL9K_RIGHT_SUBSEGMENT_SEPARATOR='%246F|'
+    typeset -g POWERLEVEL9K_LEFT_PROMPT_LAST_SEGMENT_END_SYMBOL=''
+    typeset -g POWERLEVEL9K_RIGHT_PROMPT_FIRST_SEGMENT_START_SYMBOL=''
+    typeset -g POWERLEVEL9K_VCS_BRANCH_ICON=''
+  fi
+
   # If p10k is already loaded, reload configuration.
   # This works even with POWERLEVEL9K_DISABLE_HOT_RELOAD=true.
   (( ! $+functions[p10k] )) || p10k reload

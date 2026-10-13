@@ -1,0 +1,1398 @@
+[
+  {
+    "id": "D01",
+    "check": "Prediction and planned n written in a manifest before the first scored call; design for two-sided surprise (either outcome updates someone); research question phrased falsifiably or labelled exploratory",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:7",
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:47",
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:17",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:120",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:141",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:109",
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:11-13"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "stops post-hoc storytelling; one line written by the agent",
+    "risk": "L",
+    "risk_reason": "one line, no wait",
+    "disposition": "keep",
+    "disposition_why": "near-free; merge the six statements into checklists/research.md:7 and point at it"
+  },
+  {
+    "id": "D02",
+    "check": "Measurement must be defined before an idea is ready ('how would I score this?'); metric extraction is programmatic",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:9",
+      "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:41-53"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "an unscorable idea wastes days, not minutes",
+    "risk": "L",
+    "risk_reason": "kills ideas early, speeds the queue",
+    "disposition": "keep",
+    "disposition_why": "directly serves iteration speed"
+  },
+  {
+    "id": "D03",
+    "check": "Sort ideas by time-to-first-signal (day-test); babble-and-prune loop",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:11",
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:29-31"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "L",
+    "value_reason": "a prioritisation heuristic, not an error check",
+    "risk": "L",
+    "risk_reason": "pro-iteration",
+    "disposition": "keep",
+    "disposition_why": "it is the owner's stated priority written as a rule"
+  },
+  {
+    "id": "D04",
+    "check": "Name the embarrassingly simple baseline (linear probe, just ask the model, random/majority) before proposing a method",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:17",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:35",
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:46-49",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:121"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "a trivial baseline matching the method voids the result",
+    "risk": "L",
+    "risk_reason": "usually one extra cheap condition",
+    "disposition": "keep",
+    "disposition_why": "cheap and frequently decisive"
+  },
+  {
+    "id": "D05",
+    "check": "Threat-model paragraph written before design, naming who controls the prompt",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:19"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "kills or sharpens ill-posed monitor/defence ideas",
+    "risk": "L",
+    "risk_reason": "one paragraph",
+    "disposition": "keep",
+    "disposition_why": "cheap; scoped to defence/monitor work by nature"
+  },
+  {
+    "id": "D06",
+    "check": "Spend about an hour attacking your own defence/monitor with the simplest adaptive attack; report the adaptive condition beside the static one; an unattacked detector is untested",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:19",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:80-82"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "H",
+    "value": "H",
+    "value_reason": "detectors collapse under adaptation (89%->2%, 74%->3.4% recorded)",
+    "risk": "M",
+    "risk_reason": "an hour-long timebox and a second condition per detector, if read as per-iteration",
+    "disposition": "soften",
+    "disposition_why": "require it before a detector claim is quoted or published, not on every exploratory iteration"
+  },
+  {
+    "id": "D07",
+    "check": "Name independent variable(s) and levels including accidental ones (changed prompt, renderer, model version), dependent variable, unit of analysis, aggregation and the null",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:47",
+      "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:52",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:13-15"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "accidental IVs (prompt format 23-30pp; one-sentence inoculation) can be the whole effect",
+    "risk": "L",
+    "risk_reason": "a short list the agent writes",
+    "disposition": "keep",
+    "disposition_why": "highest value-per-minute design check"
+  },
+  {
+    "id": "D08",
+    "check": "Every causal contrast declares factors changed and its matched control; one factor at a time by default; randomised factorial where an interaction is plausible",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:17",
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:49",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:18"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "M",
+    "value_reason": "one-factor sweeps can misattribute interactions",
+    "risk": "M",
+    "risk_reason": "factorial designs multiply condition count",
+    "disposition": "soften",
+    "disposition_why": "keep one-factor default and the declaration; make the factorial opt-in when an interaction is the question"
+  },
+  {
+    "id": "D09",
+    "check": "Name alternative explanations and plan the ablation that separates them with the experiment, not after the headline",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:51",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:127",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:29-34",
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:34-36"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "H",
+    "value_reason": "an un-ablatable alternative becomes a permanent caveat",
+    "risk": "L",
+    "risk_reason": "adds conditions but planned up front",
+    "disposition": "keep",
+    "disposition_why": "core of the method; merge agent copies into research.md:51"
+  },
+  {
+    "id": "D10",
+    "check": "Narrow finetune organisms need at least one confound-matched or scrambled-label control beside the headline (dataset cues, length, format, verbalised eval awareness)",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:15",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:23"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "H",
+    "value_reason": "narrow finetunes are where length/format confounds dominate",
+    "risk": "M",
+    "risk_reason": "an extra finetune per organism",
+    "disposition": "keep",
+    "disposition_why": "scoped to finetune work already; the cost buys the causal claim"
+  },
+  {
+    "id": "D11",
+    "check": "Statistical power / sample-size planning (n ~ 8 Var/delta^2, power > 0.8; ~1000 questions for 3pp); nulls reported with CI of the difference and detectable effect at N",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:63-76",
+      "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:107-112",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:27",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:52-53",
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:73-78",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:45"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "prevents reading an underpowered null as no effect",
+    "risk": "M",
+    "risk_reason": "pushes toward large n, which slows each iteration",
+    "disposition": "soften",
+    "disposition_why": "report the detectable effect at the n you chose instead of mandating n for power 0.8"
+  },
+  {
+    "id": "D12",
+    "check": "Research spec interview (15 categories, 2-4 questions per round, resources checked inline) before an experiment is built; spec published as an Artifact",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/SKILL.md:8-26",
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md",
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-spec-template.md"
+    ],
+    "stage": "design",
+    "enforced": "advisory (skill, user-invoked)",
+    "effort": "H",
+    "value": "M",
+    "value_reason": "surfaces confounds and baselines before code",
+    "risk": "M",
+    "risk_reason": "multiple human rounds; only fires when invoked",
+    "disposition": "keep",
+    "disposition_why": "opt-in by trigger; reserve for a new research line, not each run"
+  },
+  {
+    "id": "D13",
+    "check": "research-engineer pre-run BLOCKING spec validation: 9 items (hyperparams with justification, output path, hypothesis, metrics, datasets, graphs planned, caching, concurrency, error handling); STOP and wait for the user to edit the spec; warnings ask Y/n",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:89",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:99-167"
+    ],
+    "stage": "design",
+    "enforced": "advisory (agent prompt, written as blocking)",
+    "effort": "H",
+    "value": "L",
+    "value_reason": "most items are bookkeeping (graphs planned, concurrency) that do not change a result",
+    "risk": "H",
+    "risk_reason": "human wait before any code; contradicts 'commit and run'",
+    "disposition": "drop",
+    "disposition_why": "replace with the agent filling these into the manifest itself, logging assumptions, and proceeding"
+  },
+  {
+    "id": "D14",
+    "check": "verification-planning: EnterPlanMode before running an experiment, analysing results or verifying; require_plan_approval hook then tells Claude to ask the user before entering plan mode",
+    "locations": [
+      "/Users/yulong/code/dotfiles/.claude/skills/verification-planning/SKILL.md:8-30",
+      "/Users/yulong/code/dotfiles/CLAUDE.md:16",
+      "/Users/yulong/code/dotfiles/claude/hooks/require_plan_approval.sh:1-10",
+      "/Users/yulong/code/dotfiles/claude/settings.json:513-520"
+    ],
+    "stage": "design",
+    "enforced": "hook-nudge (systemMessage on EnterPlanMode) + project skill",
+    "effort": "H",
+    "value": "L",
+    "value_reason": "planning verification is good, but plan mode plus approval adds no check on the result",
+    "risk": "H",
+    "risk_reason": "two human gates per experiment/analysis in this repo",
+    "disposition": "soften",
+    "disposition_why": "dotfiles-repo only today; drop the 'running an experiment' and 'analysing results' rows so it never spreads to research repos"
+  },
+  {
+    "id": "D15",
+    "check": "Research-loop: mandatory 15-question interview (4 gates, reject vague answers), readiness check, spec approval, then pilot before the autonomous loop",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:10",
+      "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:22-72",
+      "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:144-146"
+    ],
+    "stage": "design",
+    "enforced": "advisory (skill)",
+    "effort": "H",
+    "value": "H",
+    "value_reason": "a vague answer costs a whole unattended night",
+    "risk": "L",
+    "risk_reason": "paid once per loop, not per iteration; the loop itself then runs without a human",
+    "disposition": "keep",
+    "disposition_why": "front-loads the human so the overnight loop iterates freely"
+  },
+  {
+    "id": "D16",
+    "check": "A run of a night or longer gets its own pre-launch review, iterated until Yulong is happy, then launch",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:33"
+    ],
+    "stage": "design",
+    "enforced": "advisory",
+    "effort": "H",
+    "value": "H",
+    "value_reason": "a night of compute on a wrong config is the costliest single miss",
+    "risk": "M",
+    "risk_reason": "human gate; can delay a launch by hours if Yulong is away",
+    "disposition": "soften",
+    "disposition_why": "keep the review, but allow launch on a stated default after a timeout when the run is cheap and reversible"
+  },
+  {
+    "id": "P01",
+    "check": "Two-stage pilot, both hard gates: stage 1 n=1-2 every stage end-to-end and eyeballed; stage 2 n>=4 watching peak RSS and longest input; nothing to full scale before both pass",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/rules/experiments.md:3",
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:9-15",
+      "/Users/yulong/code/dotfiles/claude/CLAUDE.md:38",
+      "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:146",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:97",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:29-33",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:122",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:143"
+    ],
+    "stage": "pilot",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "H",
+    "value_reason": "catches pipeline bugs and OOM before spend",
+    "risk": "L",
+    "risk_reason": "two short runs; saves far more than it costs",
+    "disposition": "keep-but-automate",
+    "disposition_why": "one --pilot flag in the runner that does both stages and prints RSS and longest input; stage 2 can fold into stage 1 for cheap API-only runs"
+  },
+  {
+    "id": "P02",
+    "check": "Every spending stage has a --dry-run you actually read; Inspect preflight (engine idle, endpoint answers /v1/models, dry-run completes) before every launch",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:17",
+      "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:10-20",
+      "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:107-110"
+    ],
+    "stage": "pilot",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "launch-blocking faults found in about 90 s instead of about 2 h (recorded)",
+    "risk": "L",
+    "risk_reason": "fail-fast by design",
+    "disposition": "keep-but-automate",
+    "disposition_why": "build once per harness; then it costs seconds"
+  },
+  {
+    "id": "P03",
+    "check": "Audit inputs for truncation, chrome and placeholder tokens, with counts, before any stage consumes them",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:17"
+    ],
+    "stage": "pilot",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "silently corrupted inputs change every downstream number",
+    "risk": "L",
+    "risk_reason": "a short script",
+    "disposition": "keep-but-automate",
+    "disposition_why": "make it a reusable input-audit step"
+  },
+  {
+    "id": "P04",
+    "check": "Fail-fast preflight: endpoint health, disk for 3x output, memory vs reader budgets, auth; estimate $, GPU-h, peak RSS, tokens out loud; resources validated inline during spec",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:27",
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:47",
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/SKILL.md:18",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:119-121"
+    ],
+    "stage": "pilot",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "L",
+    "value_reason": "protects run survival, not result correctness",
+    "risk": "L",
+    "risk_reason": "seconds",
+    "disposition": "keep-but-automate",
+    "disposition_why": "fold into the dry-run preflight (P02)"
+  },
+  {
+    "id": "P05",
+    "check": "Contamination: record dataset/split hashes; state the check run (canary, n-gram/embedding overlap) or state none was possible; few-shot pool disjoint from test; never reuse a test item across compared conditions",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:19-23",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:33",
+      "/Users/yulong/code/dotfiles/.claude/skills/verification-planning/SKILL.md:24",
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:57",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:38"
+    ],
+    "stage": "pilot",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "H for finetune/few-shot work; the stated caveat is cheap",
+    "risk": "L",
+    "risk_reason": "stating 'none possible' satisfies it",
+    "disposition": "keep",
+    "disposition_why": "the disjointness rules are free; actual overlap scans only for finetune work. Merge the two checklist copies"
+  },
+  {
+    "id": "P06",
+    "check": "Spend gate: estimate from actual rates; under $100 run and report; $100 or more propose and wait; cluster allocations exempt",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/rules/experiments.md:5",
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:31",
+      "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:44"
+    ],
+    "stage": "pilot",
+    "enforced": "advisory",
+    "effort": "H",
+    "value": "L",
+    "value_reason": "cost control, not correctness",
+    "risk": "M",
+    "risk_reason": "human wait above $100; zero cost below",
+    "disposition": "keep",
+    "disposition_why": "the threshold already keeps most iterations ungated; the rules/ restatement is deliberate (always-on tier) but costs always-on budget, so it is a trim candidate"
+  },
+  {
+    "id": "U01",
+    "check": "Debug on one-sample runs or fixtures; never relaunch the full run with a print added",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:29"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "avoids hour-long debug cycles",
+    "risk": "L",
+    "risk_reason": "saves time",
+    "disposition": "keep",
+    "disposition_why": "pro-iteration"
+  },
+  {
+    "id": "U02",
+    "check": "Validate outputs as they land (stream checks), not after the run",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:29",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:176"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "a broken scorer found at row 10 instead of row 10,000",
+    "risk": "L",
+    "risk_reason": "pro-iteration",
+    "disposition": "keep-but-automate",
+    "disposition_why": "a per-row validator in the runner"
+  },
+  {
+    "id": "U03",
+    "check": "Append-only resumable pipelines; resume and cache keys include prompt, model, sampling params and config hashes",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:29",
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:46",
+      "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:26",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:58-67"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "an under-keyed cache silently reuses stale rows after a prompt edit",
+    "risk": "L",
+    "risk_reason": "speeds reruns",
+    "disposition": "keep",
+    "disposition_why": "pays for itself on the second run"
+  },
+  {
+    "id": "U04",
+    "check": "Route by shape: >2 GB RSS or >1 h to the jexp queue; API fan-out backgrounded from main; never detached inside a subagent; outputs on /workspace; never leave GPUs idle",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/rules/experiments.md:7",
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:41-60",
+      "/Users/yulong/code/dotfiles/claude/skills/jobs/SKILL.md:10",
+      "/Users/yulong/code/dotfiles/claude/rules/delegation.md:19",
+      "/Users/yulong/code/dotfiles/claude/CLAUDE.md:38",
+      "/Users/yulong/code/dotfiles/claude/hooks/nudge_experiment_jobs.sh",
+      "/Users/yulong/code/dotfiles/claude/settings.json:424",
+      "/Users/yulong/code/dotfiles/claude/hooks/features.conf:4"
+    ],
+    "stage": "run",
+    "enforced": "advisory (nudge_experiment_jobs wired but disabled by nudges = off)",
+    "effort": "L",
+    "value": "L",
+    "value_reason": "infrastructure; orphaned subagent jobs do mis-report success",
+    "risk": "M",
+    "risk_reason": "queue adds latency for small jobs",
+    "disposition": "keep",
+    "disposition_why": "not a rigour rule; leave as is; decide whether to delete the dead nudge"
+  },
+  {
+    "id": "U05",
+    "check": "Analysis readers past ~2 GB run under `capped` (MemoryMax, one heavy reader per box, fails closed)",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/skills/jobs/SKILL.md:75-79",
+      "/Users/yulong/code/dotfiles/custom_bins/capped",
+      "/Users/yulong/code/dotfiles/claude/hooks/nudge_uncapped_reader.sh",
+      "/Users/yulong/code/dotfiles/claude/hooks/features.conf:5",
+      "/Users/yulong/code/dotfiles/claude/settings.json:430"
+    ],
+    "stage": "run",
+    "enforced": "hook-nudge + tool fails closed",
+    "effort": "L",
+    "value": "L",
+    "value_reason": "protects the host, not the numbers",
+    "risk": "M",
+    "risk_reason": "the exclusive lock serialises analysis; fail-closed can stop a read",
+    "disposition": "keep",
+    "disposition_why": "cheap insurance against losing every run on the box"
+  },
+  {
+    "id": "U06",
+    "check": "Inspect AI: read sampling config back from persisted ModelEvent requests; set max_samples explicitly and confirm from server logs; provider fields via extra_body; guard stop_reason; post-run validator against a pinned fingerprint; do not edit digest-bearing files mid-run",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:22-54",
+      "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:91-95",
+      "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:107-116"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "H",
+    "value_reason": "config surface and wire bytes differ silently (dropped top_k, 1-way concurrency)",
+    "risk": "M",
+    "risk_reason": "fail-closed validator and digest rule can void a finished run",
+    "disposition": "keep-but-automate",
+    "disposition_why": "one shared validator; keep the digest rule but warn before editing fingerprinted files"
+  },
+  {
+    "id": "U07",
+    "check": "Hosted models drift under a fixed name: compared conditions run in the same window; a changed judge, endpoint or snapshot is an instrument change",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:82"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "cross-week comparisons can measure provider drift",
+    "risk": "L",
+    "risk_reason": "a scheduling constraint only",
+    "disposition": "keep",
+    "disposition_why": "cheap"
+  },
+  {
+    "id": "U08",
+    "check": "Stochastic results quoted need >=2 seeds with variance reported, or temperature 0, and the report says which; exploration sizes breadth before depth",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:66",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:11",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:119",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:140",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:183",
+      "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:94",
+      "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:53-61",
+      "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:101-105",
+      "/Users/yulong/code/dotfiles/claude/hooks/nudge_hyperparam_provenance.py (unwired; covers n_seeds)"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "M",
+    "value_reason": "a single T>0 draw quoted as a result can be noise",
+    "risk": "M",
+    "risk_reason": "doubles compute and wall-clock for anything quoted",
+    "disposition": "soften",
+    "disposition_why": "apply only to quoted/confirmatory numbers; exploration stays single-seed breadth-first (as inspect-ai-evals says); make 2 the one number across all files"
+  },
+  {
+    "id": "U09",
+    "check": "Label each run exploratory or confirmatory; a sweep or loop winner, or anything that survived deletion, is a hypothesis needing fresh episodes before it is quoted; each finding labelled pre-specified or discovered, with slice/comparison counts",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:62-64",
+      "/Users/yulong/code/dotfiles/claude/rules/research-core.md:11",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:105",
+      "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:169",
+      "/Users/yulong/code/dotfiles/claude/checklists/research.md:17"
+    ],
+    "stage": "run",
+    "enforced": "advisory (always-on rule)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "selection over many variants is the main false-positive source",
+    "risk": "L",
+    "risk_reason": "a label during iteration; the rerun is only due before quoting",
+    "disposition": "keep",
+    "disposition_why": "it is what lets exploration stay fast and loose safely"
+  },
+  {
+    "id": "U10",
+    "check": "Keep pinned revisions, seeds, prompt hashes, rendered inputs, git commit and hyperparameters with every run",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:68",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:179-183",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:208",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:67",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:109",
+      "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:34",
+      "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:90",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:191-192"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "needed to reproduce or explain a number later",
+    "risk": "L",
+    "risk_reason": "automatic once in the runner",
+    "disposition": "merge-with-D01",
+    "disposition_why": "same artefact as the run manifest; record once"
+  },
+  {
+    "id": "U11",
+    "check": "Use existing validated code for experiments (correct hyperparams, full data, validated metrics); ad-hoc only for dry runs",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/CLAUDE.md:37",
+      "/Users/yulong/code/dotfiles/claude/hooks/guard_existing_code.sh (unwired)",
+      "/Users/yulong/code/dotfiles/scripts/setup/wire_harness_hooks.py:112"
+    ],
+    "stage": "run",
+    "enforced": "advisory (hook exists, unwired)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "an ad-hoc reimplementation silently measures something else",
+    "risk": "L",
+    "risk_reason": "faster than writing new code",
+    "disposition": "keep-but-automate",
+    "disposition_why": "wire guard_existing_code.sh (nudge only) with wire_harness_hooks.py --apply"
+  },
+  {
+    "id": "U12",
+    "check": "No hardcoded hyperparameters: CLI args/config only; flag bare numeric literals for lr, temperature, n_seeds etc.",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:79",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:206",
+      "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:87",
+      "/Users/yulong/code/dotfiles/claude/hooks/nudge_hyperparam_provenance.py (unwired)",
+      "/Users/yulong/code/dotfiles/scripts/setup/wire_harness_hooks.py:114"
+    ],
+    "stage": "run",
+    "enforced": "advisory (hook exists, unwired)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "a plausible typed number replaces the configured one",
+    "risk": "L",
+    "risk_reason": "nudge only",
+    "disposition": "keep-but-automate",
+    "disposition_why": "wire the existing nudge"
+  },
+  {
+    "id": "U13",
+    "check": "No mock or synthetic data outside unit tests; if data is unavailable, ask",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/CLAUDE.md:38",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:173",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:204",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:102",
+      "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:86",
+      "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:91",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:95",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:240",
+      "/Users/yulong/code/dotfiles/claude/hooks/nudge_synthetic_data.py (unwired)",
+      "/Users/yulong/code/dotfiles/scripts/setup/wire_harness_hooks.py:113"
+    ],
+    "stage": "run",
+    "enforced": "advisory (hook exists, unwired)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "fabricated stand-in data reported as measured is the worst-case error",
+    "risk": "L",
+    "risk_reason": "nudge only",
+    "disposition": "keep-but-automate",
+    "disposition_why": "stated in five agent prompts; the only always-on statement is CLAUDE.md:38 (test on real data); wire the hook and add one line to checklists/experiments.md"
+  },
+  {
+    "id": "U14",
+    "check": "No broad try/except in experiment code",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:175",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:205",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:104",
+      "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:89",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:55"
+    ],
+    "stage": "run",
+    "enforced": "advisory (agent prompts only)",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "swallowed errors become silent missing rows",
+    "risk": "L",
+    "risk_reason": "fail-fast helps iteration",
+    "disposition": "keep",
+    "disposition_why": "put once in checklists/experiments.md; agents point at it"
+  },
+  {
+    "id": "U15",
+    "check": "Research code conventions: JSONL outputs, CLI args, logging to file, checkpointing",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:25-30",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:93-95",
+      "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:207",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:68",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:107",
+      "/Users/yulong/code/dotfiles/claude/rules/coding-conventions.md:7",
+      "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:35"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "L",
+    "value_reason": "conventions, rarely result-changing",
+    "risk": "L",
+    "risk_reason": "agents write it by default",
+    "disposition": "keep",
+    "disposition_why": "harmless with agents; soften 'always' wording"
+  },
+  {
+    "id": "U16",
+    "check": "Transcript review after every run: check-transcripts Tier-1 deterministic checks, then transcript-reviewer agent; sampled deliberately (~40% fail, 30% pass, 30% random), labels exported as rejoinable JSONL; CRITICAL marks the experiment INVALID",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:72-76",
+      "/Users/yulong/code/dotfiles/claude/agents/transcript-reviewer.md:3",
+      "/Users/yulong/code/dotfiles/claude/agents/transcript-reviewer.md:92-101",
+      "/Users/yulong/code/dotfiles/claude/docs/transcript-review-checklist.md",
+      "/Users/yulong/code/dotfiles/custom_bins/check-transcripts",
+      "/Users/yulong/code/dotfiles/claude/agents/autonomous-researcher.md:77-80",
+      "/Users/yulong/code/dotfiles/claude/agents/autonomous-researcher.md:102",
+      "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:165"
+    ],
+    "stage": "run",
+    "enforced": "advisory (tool exists; automatic only inside autonomous-researcher)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "scorer misconfiguration is the commonest silent result-changer (e.g. 13% read where 69% was true)",
+    "risk": "L",
+    "risk_reason": "Tier 1 is seconds; the agent runs in parallel with the next run",
+    "disposition": "keep-but-automate",
+    "disposition_why": "run Tier 1 automatically at the end of every run; agent review only before quoting"
+  },
+  {
+    "id": "U17",
+    "check": "Check what the scorer/judge actually consumed (last message, final answer only, CoT vs action); screen organisms on reasoning, not only final answer; state the judge's surface",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:64-68",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/jlens.md:39-41",
+      "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:18"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "scorer reading the wrong message changed 69% to 13% (recorded)",
+    "risk": "L",
+    "risk_reason": "one inspection",
+    "disposition": "merge-with-U16",
+    "disposition_why": "cheap and high-yield; fold into the Tier-1 transcript checks"
+  },
+  {
+    "id": "U18",
+    "check": "Every surprise named carries a linked follow-up or a stated reason not to pursue; investigate, do not explain away; perfect results get more scrutiny",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:74",
+      "/Users/yulong/code/dotfiles/claude/rules/research-core.md:9",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:96-99",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:144"
+    ],
+    "stage": "run",
+    "enforced": "advisory (always-on rule)",
+    "effort": "M",
+    "value": "H",
+    "value_reason": "surprises are where bugs show",
+    "risk": "M",
+    "risk_reason": "can derail iteration into chasing every anomaly",
+    "disposition": "soften",
+    "disposition_why": "log each surprise with a one-line disposition; a follow-up is required only when the surprise touches a quoted number"
+  },
+  {
+    "id": "U19",
+    "check": "Delete guard machinery that broke more of the last ten runs than it caught, counted from the run log; 'delete freely' for checklist items nobody has failed in a year",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:68",
+      "/Users/yulong/code/dotfiles/claude/checklists/README.md:40"
+    ],
+    "stage": "run",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "meta-check that keeps the other checks honest",
+    "risk": "L",
+    "risk_reason": "removes friction",
+    "disposition": "keep",
+    "disposition_why": "this review is that rule being applied; add a run-log field for 'guard fired / guard broke run' so it can be counted"
+  },
+  {
+    "id": "A01",
+    "check": "Every number ships with its null (chance band at that n, degenerate constant predictor) and its ceiling; chance-corrected effects (kappa, lift) beside raw; base rate and positive class named; chance line on every comparison plot",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:5-7",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:27-31",
+      "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:22-35",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:25-33",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/jlens.md:29-33",
+      "/Users/yulong/code/dotfiles/claude/rules/communication.md:11",
+      "/Users/yulong/code/dotfiles/claude/checklists/presentation.md:46",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:100",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:147"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "trivial baselines are often most of a rate (TPR 1.0 for always-flag)",
+    "risk": "L",
+    "risk_reason": "a few lines of code",
+    "disposition": "keep",
+    "disposition_why": "the single highest-value analysis rule"
+  },
+  {
+    "id": "A02",
+    "check": "Permutation (marginal-preserving) null with resolution floor 1/(N+1), where cheap",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:28"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "M",
+    "value_reason": "catches structure the closed-form null misses",
+    "risk": "L",
+    "risk_reason": "compute only",
+    "disposition": "keep",
+    "disposition_why": "already scoped to 'where cheap'"
+  },
+  {
+    "id": "A03",
+    "check": "Behaviour-free (scaffold-only: lengths, counts, condition metadata) baseline reported separately from chance, labelled as a diagnostic of the organism",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:15",
+      "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:29",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:31"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "H",
+    "value_reason": "a length-only predictor once hit AUROC 1.000 on a sabotage dataset",
+    "risk": "L",
+    "risk_reason": "one small classifier",
+    "disposition": "keep",
+    "disposition_why": "required for detection claims; reconcile the wording across the three files (see notes)"
+  },
+  {
+    "id": "A04",
+    "check": "Every estimate has an interval naming what variation it covers and omits and the bias direction; unit of analysis and n at that unit beside it (cluster over questions, not seeds/tokens/rollouts)",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:9-11",
+      "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:18-20",
+      "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:9-13",
+      "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:38-51",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:56-58",
+      "/Users/yulong/code/dotfiles/claude/checklists/presentation.md:24",
+      "/Users/yulong/code/dotfiles/claude/checklists/presentation.md:49",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:31",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:36",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:44"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "n=seeds instead of n=questions gives intervals that are too narrow (clustered SE up to ~3x per ci-standards)",
+    "risk": "L",
+    "risk_reason": "automatic with a shared stats helper",
+    "disposition": "keep-but-automate",
+    "disposition_why": "one stats helper used by data-analyst and results pages"
+  },
+  {
+    "id": "A05",
+    "check": "Which interval/test: Wilson for proportions (never normal approximation); paired interval or exact test on paired data; bootstrap otherwise; small denominators as counts (0/7)",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:14-16",
+      "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:15-28",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:32"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "normal approximation misbehaves near 0 and 1",
+    "risk": "L",
+    "risk_reason": "library call",
+    "disposition": "merge-with-A04",
+    "disposition_why": "and delete the conflicting normal-approximation formula in ci-standards.md"
+  },
+  {
+    "id": "A06",
+    "check": "Every comparison names its test, effect size in metric units and n per condition; practical vs statistical significance",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:13",
+      "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:35",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:262",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:276"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "a p-value alone overstates small effects",
+    "risk": "L",
+    "risk_reason": "a few words",
+    "disposition": "keep",
+    "disposition_why": "cheap"
+  },
+  {
+    "id": "A07",
+    "check": "Multiple-comparison correction (Bonferroni, FDR) when testing many hypotheses",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:33",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:214",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:243",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:336",
+      "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:54",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:47"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (agent prompts only)",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "guards against p-hacking across slices",
+    "risk": "L",
+    "risk_reason": "compute only",
+    "disposition": "merge-with-U09",
+    "disposition_why": "checklists ask for disclosure of comparison counts, not correction; pick one policy"
+  },
+  {
+    "id": "A08",
+    "check": "Sensitivity check for every main finding (drop top/bottom 5%, alternative aggregation, subset); flag FRAGILE if it flips",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:264",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:345-350",
+      "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:98-105"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (agent prompt, 'MANDATORY')",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "catches outlier-driven conclusions",
+    "risk": "L",
+    "risk_reason": "minutes for an agent",
+    "disposition": "keep",
+    "disposition_why": "cheap; lives only in data-analyst and ci-standards, consider moving to results-analysis.md"
+  },
+  {
+    "id": "A09",
+    "check": "Slice by factors that could reverse or hide the finding (Simpson's paradox); per-threat-model breakdown rather than an average",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:37-39",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:84-86"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "pooled numbers across unequal strata can reverse",
+    "risk": "M",
+    "risk_reason": "every slice is another comparison (tension with U09)",
+    "disposition": "keep",
+    "disposition_why": "pair with disclosed slice counts"
+  },
+  {
+    "id": "A10",
+    "check": "Deterministic scorer where the construct has an exact surface form; LLM judge only for meaning, never regex/keywords for meaning; report the deterministic baseline beside the judge",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:35",
+      "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:8"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "keyword matching misses paraphrase and counts quotations, both in the hypothesis's direction",
+    "risk": "L",
+    "risk_reason": "chooses the cheaper tool where valid",
+    "disposition": "keep",
+    "disposition_why": "two files agree; keep one statement"
+  },
+  {
+    "id": "A11",
+    "check": "Judge hygiene: one sample per prompt; rationale before verdict; verbatim quote for positives; absence-fields hand-validated; blinded to labels, condition, other judges and hypothesis; prompts versioned with sha256; append-only JSONL with rendered input; parse failures counted",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:12-28",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:31",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:37",
+      "/Users/yulong/code/dotfiles/claude/rules/research-core.md:7"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "batched or unblinded judging leaks between samples and toward the hypothesis",
+    "risk": "L",
+    "risk_reason": "a reusable harness makes it free",
+    "disposition": "keep-but-automate",
+    "disposition_why": "ship a shared judge harness that enforces these by construction"
+  },
+  {
+    "id": "A12",
+    "check": "Judge validation: agreement against a human-labelled gold subset (n and statistic named); paired comparisons in both orders or position bias measured; judge identity in provenance",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:39",
+      "/Users/yulong/code/dotfiles/claude/agents/transcript-reviewer.md:40",
+      "/Users/yulong/code/dotfiles/claude/docs/transcript-review-checklist.md:118-125"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "H",
+    "value": "H",
+    "value_reason": "the judge is the measuring instrument",
+    "risk": "M",
+    "risk_reason": "human labelling is a gate per judge",
+    "disposition": "soften",
+    "disposition_why": "validate once per judge-prompt version and reuse; before publication, not per iteration"
+  },
+  {
+    "id": "A13",
+    "check": "Condition labels come from design, never the measured quantity; scoring blind to labels and condition; analysis joins; no circular steps",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/rules/research-core.md:5-7",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:111-117",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:60-62",
+      "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:20",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:27"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (always-on rule)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "outcome-derived labels make any correlation forced by construction",
+    "risk": "L",
+    "risk_reason": "no extra work if designed in",
+    "disposition": "keep",
+    "disposition_why": "red line; keep always-on"
+  },
+  {
+    "id": "A14",
+    "check": "Outcome codebook built on a named discovery slice, frozen, and prevalence estimated only on episodes that did not form it",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/rules/research-core.md:7",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:115",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/monitoring.md:7",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/monitoring.md:14"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (always-on rule)",
+    "effort": "M",
+    "value": "H",
+    "value_reason": "discovering and counting categories on the same rollouts is HARKing",
+    "risk": "M",
+    "risk_reason": "needs held-out episodes before prevalence can be stated",
+    "disposition": "keep",
+    "disposition_why": "applies only when a prevalence is reported; exploration can browse freely"
+  },
+  {
+    "id": "A15",
+    "check": "Every eligible sample is in the computation; anything redacted or withheld logged with its reason; parse failures reported as a number",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:84",
+      "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:28",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:240"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "quiet cohort shrinkage biases rates",
+    "risk": "L",
+    "risk_reason": "a count",
+    "disposition": "keep",
+    "disposition_why": "cheap"
+  },
+  {
+    "id": "A16",
+    "check": "Report every condition including failures, nulls and outliers; nothing quietly dropped",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/rules/research-core.md:9",
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:72-74",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:103",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:61",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:206"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (always-on rule)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "selective reporting is the classic integrity failure",
+    "risk": "L",
+    "risk_reason": "listing, not rerunning",
+    "disposition": "keep",
+    "disposition_why": "red line; stated three times, keep research-core as the home"
+  },
+  {
+    "id": "A17",
+    "check": "Reviewer test: before any methodological shortcut ask if a reviewer would find it suspect; no 'just a quick analysis' exception",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/rules/research-core.md:3",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:119"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (always-on rule)",
+    "effort": "M",
+    "value": "M",
+    "value_reason": "catches shortcuts that change conclusions",
+    "risk": "H",
+    "risk_reason": "read literally, it forbids quick exploratory analysis, the core of fast iteration",
+    "disposition": "soften",
+    "disposition_why": "allow quick analyses labelled exploratory (U09); apply the reviewer test before a number is quoted"
+  },
+  {
+    "id": "A18",
+    "check": "Independent skeptic review of findings (research-skeptic agent; cross-family council before publishing a result someone will act on; same-family self-check discouraged)",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:3",
+      "/Users/yulong/code/dotfiles/claude/CLAUDE.md:7",
+      "/Users/yulong/code/dotfiles/claude/rules/delegation.md:13-15",
+      "/Users/yulong/code/dotfiles/claude/skills/council/SKILL.md:3"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "M",
+    "value_reason": "an outside reader catches confounds the author misses",
+    "risk": "L",
+    "risk_reason": "runs async in parallel",
+    "disposition": "keep",
+    "disposition_why": "reserve for results about to be quoted"
+  },
+  {
+    "id": "A19",
+    "check": "Sandbagging: organism = prompt + model pair; log prompt format; diff rendered prompts between runs; measure rather than assume instructed level",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:7-17"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (domain)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "format alone moved accuracy 23-30pp; one sentence removed the effect",
+    "risk": "L",
+    "risk_reason": "a diff",
+    "disposition": "keep",
+    "disposition_why": "domain-specific and cheap"
+  },
+  {
+    "id": "A20",
+    "check": "Sandbagging: achieved test FPR beside every recall; dev/test disjointness asserted in landed logs; compared methods share k; thin negative groups not quoted as ratios",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:35-45"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (domain)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "100% recall came with 84.8% FPR on an honest model (recorded)",
+    "risk": "L",
+    "risk_reason": "reads existing outputs",
+    "disposition": "keep",
+    "disposition_why": "domain-specific and cheap"
+  },
+  {
+    "id": "A21",
+    "check": "Sandbagging: run the honest-wrong control (detector on honest models' incorrect answers) beside the headline",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:70-72",
+      "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:146"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (domain)",
+    "effort": "M",
+    "value": "H",
+    "value_reason": "separates sandbagging detection from error detection",
+    "risk": "L",
+    "risk_reason": "one extra condition on existing data",
+    "disposition": "keep",
+    "disposition_why": "the decisive control for this line of work"
+  },
+  {
+    "id": "A22",
+    "check": "Sandbagging: check which pipeline produced an 'SE'; degenerate sqrt(p(1-p)) intervals are not quoted, point estimate alone with a note",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:47-54"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (domain)",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "39% of split-mode intervals on disk were [0,1]",
+    "risk": "L",
+    "risk_reason": "a lookup",
+    "disposition": "keep",
+    "disposition_why": "domain-specific"
+  },
+  {
+    "id": "A23",
+    "check": "J-Lens: evidencedTP/TP beside every TPR; noise floor from n=7 negatives (gaps < ~0.06 are noise); action-monitor ceiling on every plot; teacher-forced vs generation-time capture stated; manifest token totals reconciled",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/jlens.md:17-49"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (domain)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "aggregate CoT parity was hollow (9/115 evidenced)",
+    "risk": "L",
+    "risk_reason": "reads existing outputs",
+    "disposition": "keep",
+    "disposition_why": "domain-specific; the file is dated 2026-07-31, re-verify numbers"
+  },
+  {
+    "id": "A24",
+    "check": "Monitoring analysis: monitor errors first, disagreements, comparative advantage, emergent taxonomy with prevalence on held-out episodes",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/monitoring.md:5-14"
+    ],
+    "stage": "analysis",
+    "enforced": "advisory (domain prompt)",
+    "effort": "M",
+    "value": "M",
+    "value_reason": "surfaces failure modes aggregates hide",
+    "risk": "L",
+    "risk_reason": "analysis-time only",
+    "disposition": "keep",
+    "disposition_why": "usable as a prompt; no iteration cost"
+  },
+  {
+    "id": "W01",
+    "check": "Show the ingredients: full prompts and templates, complete example transcripts (positive and negative), affordances, environment, held-constant vs varied, complete I/O for every model",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:43-56"
+    ],
+    "stage": "reporting",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "M",
+    "value_reason": "readers can spot errors only in what they see",
+    "risk": "L",
+    "risk_reason": "publication-time only",
+    "disposition": "keep-but-automate",
+    "disposition_why": "generate from the manifest and JSONL rather than by hand"
+  },
+  {
+    "id": "W02",
+    "check": "Every aggregate one click from its examples; sortable/filterable tables; transcripts readable at a glance; 10-20 examples comfortable to review",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:58-70"
+    ],
+    "stage": "reporting",
+    "enforced": "advisory",
+    "effort": "M",
+    "value": "M",
+    "value_reason": "manual inspection catches what metrics hide",
+    "risk": "L",
+    "risk_reason": "publication-time; heavy UX only on first build",
+    "disposition": "soften",
+    "disposition_why": "required for published results pages; interim updates can link raw JSONL"
+  },
+  {
+    "id": "W03",
+    "check": "Provenance travels with every example: model, tokenizer/template, dataset/split, prompt version, sampling params, judge model and prompt hash, endpoint, date, training hyperparams",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:78-80",
+      "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:24-26"
+    ],
+    "stage": "reporting",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "needed to attribute and reproduce",
+    "risk": "L",
+    "risk_reason": "automatic from the manifest",
+    "disposition": "merge-with-D01",
+    "disposition_why": "same data as the run manifest (D01/U10)"
+  },
+  {
+    "id": "W04",
+    "check": "HTML Artifact must carry the annotation layer (comments, export, labels); publish blocked otherwise",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:90-97",
+      "/Users/yulong/code/dotfiles/claude/hooks/block_unannotated_artifact.sh",
+      "/Users/yulong/code/dotfiles/claude/settings.json:523-529",
+      "/Users/yulong/code/dotfiles/claude/hooks/features.conf:32-34"
+    ],
+    "stage": "reporting",
+    "enforced": "hook-block",
+    "effort": "L",
+    "value": "L",
+    "value_reason": "review UX, not correctness",
+    "risk": "L",
+    "risk_reason": "md2artifact adds it; blocks only hand-built pages",
+    "disposition": "keep",
+    "disposition_why": "the only blocking hook in scope; not a rigour check"
+  },
+  {
+    "id": "W05",
+    "check": "Results page fixed shape: at most three highlighted claims, claim -> figure -> caption -> setup -> implications -> caveats -> next steps; every condition linked",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:99-109"
+    ],
+    "stage": "reporting",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "L",
+    "value_reason": "presentation discipline",
+    "risk": "L",
+    "risk_reason": "publication-time",
+    "disposition": "keep",
+    "disposition_why": "no iteration cost"
+  },
+  {
+    "id": "W06",
+    "check": "Causal register matches the evidence; no pre-registration framing without a checkable registration",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:21-23"
+    ],
+    "stage": "reporting",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "overclaiming is a common reviewer objection",
+    "risk": "L",
+    "risk_reason": "wording",
+    "disposition": "keep",
+    "disposition_why": "free"
+  },
+  {
+    "id": "W07",
+    "check": "A number appears only where it discriminates; one measured quantity per paragraph; limitations stated once in one place",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:17-19",
+      "/Users/yulong/code/dotfiles/claude/checklists/presentation.md:24",
+      "/Users/yulong/code/dotfiles/claude/rules/communication.md:11"
+    ],
+    "stage": "reporting",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "L",
+    "value_reason": "readability, not correctness",
+    "risk": "L",
+    "risk_reason": "wording",
+    "disposition": "keep",
+    "disposition_why": "free"
+  },
+  {
+    "id": "W08",
+    "check": "Scan scripts, transcripts, prompts and configs for keys, endpoints, payloads and personal data before publishing",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:86"
+    ],
+    "stage": "reporting",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "L",
+    "value_reason": "security, not result correctness",
+    "risk": "L",
+    "risk_reason": "one scan",
+    "disposition": "keep",
+    "disposition_why": "irreversible failure class"
+  },
+  {
+    "id": "W09",
+    "check": "Output directory explains the experiment on its own; analysis/plotting scripts saved with the results",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:70",
+      "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:88",
+      "/Users/yulong/code/dotfiles/claude/CLAUDE.md:39",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:244",
+      "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:266"
+    ],
+    "stage": "reporting",
+    "enforced": "advisory",
+    "effort": "L",
+    "value": "M",
+    "value_reason": "lets a colleague (or you next week) check the result",
+    "risk": "L",
+    "risk_reason": "a README and saved scripts",
+    "disposition": "keep",
+    "disposition_why": "cheap with agents"
+  },
+  {
+    "id": "W10",
+    "check": "Numbers carry provenance: no stated number without a tool call or source; computed numbers link to inputs; state confidence",
+    "locations": [
+      "/Users/yulong/code/dotfiles/claude/CLAUDE.md:7",
+      "/Users/yulong/code/dotfiles/claude/CLAUDE.md:32",
+      "/Users/yulong/code/dotfiles/claude/rules/communication.md:13",
+      "/Users/yulong/code/dotfiles/claude/rules/verify-before-instructing.md",
+      "/Users/yulong/code/dotfiles/claude/hooks/nudge_number_provenance.py (unwired)",
+      "/Users/yulong/code/dotfiles/scripts/setup/wire_harness_hooks.py:117"
+    ],
+    "stage": "reporting",
+    "enforced": "advisory (hook exists, unwired)",
+    "effort": "L",
+    "value": "H",
+    "value_reason": "hallucinated numbers stated with measured-number confidence",
+    "risk": "L",
+    "risk_reason": "nudge only, fires only on zero-tool turns",
+    "disposition": "keep-but-automate",
+    "disposition_why": "wire the Stop-hook nudge"
+  }
+]

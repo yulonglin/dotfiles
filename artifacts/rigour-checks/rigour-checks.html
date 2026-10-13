@@ -1,0 +1,1652 @@
+<title>Rigour Checks Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a lab ledger. Decision summary first, then the value-by-cost grid, the conflicts, and the full register you decide in. */
+:root {
+  --bg: #f6f7f8; --surface: #ffffff; --fg: #1d2329; --muted: #5b6672; --line: #d9dee3;
+  --accent: #1f6f78; --accent-soft: #dcefef;
+  --risk-l: #2f855a; --risk-m: #b7791f; --risk-h: #c53030;
+  --chip-l: #e3f2e8; --chip-m: #fbf0d9; --chip-h: #fbe3e3;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161a; --surface: #1a2026; --fg: #e3e8ec; --muted: #9aa6b2; --line: #2c353e;
+  --accent: #5fb8c0; --accent-soft: #1d3638;
+  --risk-l: #68c48f; --risk-m: #e0b057; --risk-h: #f07a7a;
+  --chip-l: #1d3326; --chip-m: #3a2f17; --chip-h: #3d1e1e; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161a; --surface: #1a2026; --fg: #e3e8ec; --muted: #9aa6b2; --line: #2c353e;
+  --accent: #5fb8c0; --accent-soft: #1d3638;
+  --risk-l: #68c48f; --risk-m: #e0b057; --risk-h: #f07a7a;
+  --chip-l: #1d3326; --chip-m: #3a2f17; --chip-h: #3d1e1e; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px; display: grid; gap: 32px; }
+h1, h2 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: .005em; }
+h1 { font-size: 2rem; line-height: 1.15; }
+h2 { font-size: 1.3rem; }
+p { margin: 0; max-width: 68ch; }
+.meta { color: var(--muted); font: 13px/1.4 var(--mono); }
+.lede { display: grid; gap: 10px; }
+ul.bluf { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 72ch; }
+section { display: grid; gap: 12px; min-width: 0; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; min-width: 0; }
+
+/* value x cost grid */
+.grid-wrap { overflow-x: auto; }
+.vc { display: grid; grid-template-columns: 64px repeat(3, minmax(180px, 1fr)); gap: 6px; min-width: 620px; }
+.vc .ax { font: 600 12px/1.2 var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; justify-content: center; text-align: center; }
+.vc .cell { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 8px; display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; min-height: 64px; }
+.vc .cell.win { background: var(--accent-soft); }
+.vc .cell.cost { outline: 2px dashed var(--risk-h); outline-offset: -3px; }
+.idchip { font: 500 12px/1 var(--mono); padding: 5px 6px; border-radius: 3px; border: 1px solid transparent; cursor: pointer; background: var(--chip-l); color: var(--fg); }
+.idchip[data-r="M"] { background: var(--chip-m); }
+.idchip[data-r="H"] { background: var(--chip-h); }
+.idchip.decided { text-decoration: line-through; opacity: .55; }
+.idchip:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 13px; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.legend .l::before { background: var(--chip-l); border: 1px solid var(--risk-l); }
+.legend .m::before { background: var(--chip-m); border: 1px solid var(--risk-m); }
+.legend .h::before { background: var(--chip-h); border: 1px solid var(--risk-h); }
+
+/* conflicts */
+.conflicts { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.conflicts li { border-left: 3px solid var(--risk-m); padding: 4px 0 4px 12px; }
+.conflicts li.hard { border-left-color: var(--risk-h); }
+.conflicts b { font-weight: 600; }
+
+/* register */
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.controls label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+select, input[type="text"] { font: 14px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; }
+.progress { font: 13px var(--mono); color: var(--muted); }
+.status { font-size: 13px; color: var(--muted); }
+.rows { display: grid; gap: 8px; }
+.row { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: grid; grid-template-columns: 56px minmax(0, 1fr) 220px; gap: 6px 14px; scroll-margin-top: 16px; }
+.row.flash { box-shadow: 0 0 0 2px var(--accent); }
+.row .rid { font: 600 14px/1.3 var(--mono); color: var(--accent); }
+.row .txt { min-width: 0; display: grid; gap: 6px; }
+.row .check { font-weight: 600; }
+.row .why { color: var(--muted); font-size: 14px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; font: 12px/1 var(--mono); }
+.tag { padding: 4px 6px; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); }
+.tag.lvl-H { color: var(--risk-h); border-color: var(--risk-h); }
+.tag.lvl-M { color: var(--risk-m); border-color: var(--risk-m); }
+.tag.lvl-L { color: var(--risk-l); border-color: var(--risk-l); }
+.tag.val.lvl-H { color: var(--risk-l); border-color: var(--risk-l); }
+.tag.val.lvl-L { color: var(--risk-h); border-color: var(--risk-h); }
+.tag.enf { color: var(--fg); }
+.tag.lean { background: var(--accent-soft); color: var(--fg); border-color: transparent; }
+details { font-size: 13px; }
+details summary { cursor: pointer; color: var(--muted); }
+details ul { margin: 6px 0 0; padding-left: 1.2em; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.decide { display: grid; gap: 6px; align-content: start; }
+.decide select, .decide input { width: 100%; box-sizing: border-box; }
+.decide .who { font-size: 12px; color: var(--muted); min-height: 1em; }
+@media (max-width: 720px) {
+  .row { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: no-preference) { .row { transition: box-shadow .3s; } }
+</style>
+
+<div class="wrap">
+  <header class="lede">
+    <div class="meta">dotfiles @ <a href="https://github.com/yulonglin/dotfiles/tree/96c350bd">96c350bd</a> · inventory of 12 Oct 2026 · <span id="n-total"></span> checks</div>
+    <h1>Rigour Checks Review</h1>
+    <p>Every rigour, reproducibility and research-integrity check the harness asks of an experiment, with one row per distinct check and every place it is stated. Each row is rated for what it costs an experiment iteration and what it catches, with a suggested disposition. Set a decision on each row; Claude reads the decisions back and edits the rules, checklists, skills and agents to match.</p>
+  </header>
+
+  <section>
+    <h2>Most checks are text, and five cost the most</h2>
+    <ul class="bluf">
+      <li><b>Only 3 of 75 checks run as code.</b> Four guards are built and tested but not wired into the live settings (existing code, synthetic data, hyperparameter provenance, number provenance). <code>nudge_experiment_jobs</code> is wired but switched off. Wiring them is cheap and turns text into enforcement.</li>
+      <li><b>Five checks cost iteration speed most</b>, all human waits: <a href="#D13">D13</a> research-engineer's blocking spec gate (lean drop), <a href="#D14">D14</a> two plan-mode gates per experiment (lean soften), <a href="#D06">D06</a> an hour attacking each detector (lean: only before quoting a number), <a href="#D16">D16</a> the overnight pre-launch review (lean: go on a stated default after a timeout), and <a href="#P06">P06</a> the spend gate at $100 (lean keep). Runner-up: <a href="#U08">U08</a>, two seeds for a quoted result.</li>
+      <li><b>Five pairs of files contradict each other</b>, listed below. Each needs one answer, not a vote per row.</li>
+      <li><b>Suggested dispositions:</b> <span id="disp-counts"></span>. The ratings and leans come from a Claude Opus 5.5 sweep and are a starting point, not a verdict.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Two thirds cost under five minutes an iteration</h2>
+    <p class="status">Each chip is one check, placed by what it catches (value, rows) against what it adds to an iteration with coding agents doing the work (effort, columns: L under 5 min, M 5–30 min, H over 30 min or a human gate). Colour is the risk that it stalls or breaks a run. Click a chip to jump to its row; decided checks are struck through.</p>
+    <div class="legend"><span class="l">risk low</span><span class="m">risk medium</span><span class="h">risk high</span></div>
+    <div class="grid-wrap"><div class="vc" id="vc"></div></div>
+  </section>
+
+  <section>
+    <h2>Five contradictions need one answer each</h2>
+    <ul class="conflicts">
+      <li class="hard"><b>Interval formula.</b> <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/docs/ci-standards.md#L17-L20">ci-standards.md:17-20</a> uses mean ± 1.96 SE for every score; <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/skills/results-artifact/SKILL.md#L14">results-artifact:14</a> says Wilson for proportions, never the normal approximation. The same pair disagrees on whether non-overlapping intervals can stand in for a test. data-analyst, research-skeptic and experiment-designer all point at ci-standards.</li>
+      <li class="hard"><b>Point estimate without an interval.</b> <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/agents/data-analyst.md#L274">data-analyst:274</a> says never; <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/checklists/results-analysis/sandbagging.md#L54">sandbagging.md:54</a> says give the point estimate alone when the only interval is degenerate.</li>
+      <li class="hard"><b>Seed count.</b> The checklists set at least 2 seeds for any quoted result (<a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/checklists/experiments.md#L66">experiments.md:66</a>); research-engineer only warns and suggests 5; inspect-ai-evals makes extra seeds a second phase once a signal shows. Reconcilable as explore versus quote, but no file says so.</li>
+      <li class="hard"><b>Human gates against "commit and run".</b> CLAUDE.md says proceed on partial answers; <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/agents/research-engineer.md#L99-L167">research-engineer:99-167</a> stops and waits for the user, and verification-planning plus <code>require_plan_approval.sh</code> add two gates per experiment in this repo.</li>
+      <li class="hard"><b>Multiple comparisons.</b> data-analyst and experiment-designer require Bonferroni or FDR correction; <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/rules/research-core.md#L11">research-core:11</a> asks only that the number of slices and comparisons be stated.</li>
+      <li><b>Softer tensions:</b> sandbagging.md:31 reads the behaviour-free baseline as the detector's bar; the transcript checklist triages by keyword while llm-judge forbids keywords for meaning (fine as triage, unlabelled); spec-interview-research points at a pilot gate that moved to experiments.md; three checklists still say "arm". Full notes: <code>artifacts/rigour-checks/notes.md</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Decide each check here</h2>
+    <div class="controls">
+      <label for="f-stage">Stage <select id="f-stage"><option value="">all</option><option>design</option><option>pilot</option><option>run</option><option>analysis</option><option>reporting</option></select></label>
+      <label for="f-lean">Suggested <select id="f-lean"><option value="">all</option></select></label>
+      <label for="f-dec">Decision <select id="f-dec"><option value="">all</option><option value="none">not decided</option><option value="any">decided</option></select></label>
+      <span class="progress" id="progress"></span>
+    </div>
+    <p class="status" id="db-status">Decisions save for everyone who opens this page once it connects.</p>
+    <div class="rows" id="rows"></div>
+  </section>
+</div>
+
+<script>
+const CHECKS = [{"id": "D01", "check": "Prediction and planned n written in a manifest before the first scored call; design for two-sided surprise (either outcome updates someone); research question phrased falsifiably or labelled exploratory", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:7", "/Users/yulong/code/dotfiles/claude/checklists/research.md:47", "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:17", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:120", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:141", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:109", "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:11-13"], "stage": "design", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "stops post-hoc storytelling; one line written by the agent", "risk": "L", "risk_reason": "one line, no wait", "disposition": "keep", "disposition_why": "near-free; merge the six statements into checklists/research.md:7 and point at it"}, {"id": "D02", "check": "Measurement must be defined before an idea is ready ('how would I score this?'); metric extraction is programmatic", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:9", "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:41-53"], "stage": "design", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "an unscorable idea wastes days, not minutes", "risk": "L", "risk_reason": "kills ideas early, speeds the queue", "disposition": "keep", "disposition_why": "directly serves iteration speed"}, {"id": "D03", "check": "Sort ideas by time-to-first-signal (day-test); babble-and-prune loop", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:11", "/Users/yulong/code/dotfiles/claude/checklists/research.md:29-31"], "stage": "design", "enforced": "advisory", "effort": "L", "value": "L", "value_reason": "a prioritisation heuristic, not an error check", "risk": "L", "risk_reason": "pro-iteration", "disposition": "keep", "disposition_why": "it is the owner's stated priority written as a rule"}, {"id": "D04", "check": "Name the embarrassingly simple baseline (linear probe, just ask the model, random/majority) before proposing a method", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:17", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:35", "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:46-49", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:121"], "stage": "design", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "a trivial baseline matching the method voids the result", "risk": "L", "risk_reason": "usually one extra cheap condition", "disposition": "keep", "disposition_why": "cheap and frequently decisive"}, {"id": "D05", "check": "Threat-model paragraph written before design, naming who controls the prompt", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:19"], "stage": "design", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "kills or sharpens ill-posed monitor/defence ideas", "risk": "L", "risk_reason": "one paragraph", "disposition": "keep", "disposition_why": "cheap; scoped to defence/monitor work by nature"}, {"id": "D06", "check": "Spend about an hour attacking your own defence/monitor with the simplest adaptive attack; report the adaptive condition beside the static one; an unattacked detector is untested", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:19", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:80-82"], "stage": "design", "enforced": "advisory", "effort": "H", "value": "H", "value_reason": "detectors collapse under adaptation (89%->2%, 74%->3.4% recorded)", "risk": "M", "risk_reason": "an hour-long timebox and a second condition per detector, if read as per-iteration", "disposition": "soften", "disposition_why": "require it before a detector claim is quoted or published, not on every exploratory iteration"}, {"id": "D07", "check": "Name independent variable(s) and levels including accidental ones (changed prompt, renderer, model version), dependent variable, unit of analysis, aggregation and the null", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:47", "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:52", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:13-15"], "stage": "design", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "accidental IVs (prompt format 23-30pp; one-sentence inoculation) can be the whole effect", "risk": "L", "risk_reason": "a short list the agent writes", "disposition": "keep", "disposition_why": "highest value-per-minute design check"}, {"id": "D08", "check": "Every causal contrast declares factors changed and its matched control; one factor at a time by default; randomised factorial where an interaction is plausible", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:17", "/Users/yulong/code/dotfiles/claude/checklists/research.md:49", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:18"], "stage": "design", "enforced": "advisory", "effort": "M", "value": "M", "value_reason": "one-factor sweeps can misattribute interactions", "risk": "M", "risk_reason": "factorial designs multiply condition count", "disposition": "soften", "disposition_why": "keep one-factor default and the declaration; make the factorial opt-in when an interaction is the question"}, {"id": "D09", "check": "Name alternative explanations and plan the ablation that separates them with the experiment, not after the headline", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:51", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:127", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:29-34", "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:34-36"], "stage": "design", "enforced": "advisory", "effort": "M", "value": "H", "value_reason": "an un-ablatable alternative becomes a permanent caveat", "risk": "L", "risk_reason": "adds conditions but planned up front", "disposition": "keep", "disposition_why": "core of the method; merge agent copies into research.md:51"}, {"id": "D10", "check": "Narrow finetune organisms need at least one confound-matched or scrambled-label control beside the headline (dataset cues, length, format, verbalised eval awareness)", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/research.md:15", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:23"], "stage": "design", "enforced": "advisory", "effort": "M", "value": "H", "value_reason": "narrow finetunes are where length/format confounds dominate", "risk": "M", "risk_reason": "an extra finetune per organism", "disposition": "keep", "disposition_why": "scoped to finetune work already; the cost buys the causal claim"}, {"id": "D11", "check": "Statistical power / sample-size planning (n ~ 8 Var/delta^2, power > 0.8; ~1000 questions for 3pp); nulls reported with CI of the difference and detectable effect at N", "locations": ["/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:63-76", "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:107-112", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:27", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:52-53", "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:73-78", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:45"], "stage": "design", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "prevents reading an underpowered null as no effect", "risk": "M", "risk_reason": "pushes toward large n, which slows each iteration", "disposition": "soften", "disposition_why": "report the detectable effect at the n you chose instead of mandating n for power 0.8"}, {"id": "D12", "check": "Research spec interview (15 categories, 2-4 questions per round, resources checked inline) before an experiment is built; spec published as an Artifact", "locations": ["/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/SKILL.md:8-26", "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md", "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-spec-template.md"], "stage": "design", "enforced": "advisory (skill, user-invoked)", "effort": "H", "value": "M", "value_reason": "surfaces confounds and baselines before code", "risk": "M", "risk_reason": "multiple human rounds; only fires when invoked", "disposition": "keep", "disposition_why": "opt-in by trigger; reserve for a new research line, not each run"}, {"id": "D13", "check": "research-engineer pre-run BLOCKING spec validation: 9 items (hyperparams with justification, output path, hypothesis, metrics, datasets, graphs planned, caching, concurrency, error handling); STOP and wait for the user to edit the spec; warnings ask Y/n", "locations": ["/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:89", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:99-167"], "stage": "design", "enforced": "advisory (agent prompt, written as blocking)", "effort": "H", "value": "L", "value_reason": "most items are bookkeeping (graphs planned, concurrency) that do not change a result", "risk": "H", "risk_reason": "human wait before any code; contradicts 'commit and run'", "disposition": "drop", "disposition_why": "replace with the agent filling these into the manifest itself, logging assumptions, and proceeding"}, {"id": "D14", "check": "verification-planning: EnterPlanMode before running an experiment, analysing results or verifying; require_plan_approval hook then tells Claude to ask the user before entering plan mode", "locations": ["/Users/yulong/code/dotfiles/.claude/skills/verification-planning/SKILL.md:8-30", "/Users/yulong/code/dotfiles/CLAUDE.md:16", "/Users/yulong/code/dotfiles/claude/hooks/require_plan_approval.sh:1-10", "/Users/yulong/code/dotfiles/claude/settings.json:513-520"], "stage": "design", "enforced": "hook-nudge (systemMessage on EnterPlanMode) + project skill", "effort": "H", "value": "L", "value_reason": "planning verification is good, but plan mode plus approval adds no check on the result", "risk": "H", "risk_reason": "two human gates per experiment/analysis in this repo", "disposition": "soften", "disposition_why": "dotfiles-repo only today; drop the 'running an experiment' and 'analysing results' rows so it never spreads to research repos"}, {"id": "D15", "check": "Research-loop: mandatory 15-question interview (4 gates, reject vague answers), readiness check, spec approval, then pilot before the autonomous loop", "locations": ["/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:10", "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:22-72", "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:144-146"], "stage": "design", "enforced": "advisory (skill)", "effort": "H", "value": "H", "value_reason": "a vague answer costs a whole unattended night", "risk": "L", "risk_reason": "paid once per loop, not per iteration; the loop itself then runs without a human", "disposition": "keep", "disposition_why": "front-loads the human so the overnight loop iterates freely"}, {"id": "D16", "check": "A run of a night or longer gets its own pre-launch review, iterated until Yulong is happy, then launch", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:33"], "stage": "design", "enforced": "advisory", "effort": "H", "value": "H", "value_reason": "a night of compute on a wrong config is the costliest single miss", "risk": "M", "risk_reason": "human gate; can delay a launch by hours if Yulong is away", "disposition": "soften", "disposition_why": "keep the review, but allow launch on a stated default after a timeout when the run is cheap and reversible"}, {"id": "P01", "check": "Two-stage pilot, both hard gates: stage 1 n=1-2 every stage end-to-end and eyeballed; stage 2 n>=4 watching peak RSS and longest input; nothing to full scale before both pass", "locations": ["/Users/yulong/code/dotfiles/claude/rules/experiments.md:3", "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:9-15", "/Users/yulong/code/dotfiles/claude/CLAUDE.md:38", "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:146", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:97", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:29-33", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:122", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:143"], "stage": "pilot", "enforced": "advisory", "effort": "M", "value": "H", "value_reason": "catches pipeline bugs and OOM before spend", "risk": "L", "risk_reason": "two short runs; saves far more than it costs", "disposition": "keep-but-automate", "disposition_why": "one --pilot flag in the runner that does both stages and prints RSS and longest input; stage 2 can fold into stage 1 for cheap API-only runs"}, {"id": "P02", "check": "Every spending stage has a --dry-run you actually read; Inspect preflight (engine idle, endpoint answers /v1/models, dry-run completes) before every launch", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:17", "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:10-20", "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:107-110"], "stage": "pilot", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "launch-blocking faults found in about 90 s instead of about 2 h (recorded)", "risk": "L", "risk_reason": "fail-fast by design", "disposition": "keep-but-automate", "disposition_why": "build once per harness; then it costs seconds"}, {"id": "P03", "check": "Audit inputs for truncation, chrome and placeholder tokens, with counts, before any stage consumes them", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:17"], "stage": "pilot", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "silently corrupted inputs change every downstream number", "risk": "L", "risk_reason": "a short script", "disposition": "keep-but-automate", "disposition_why": "make it a reusable input-audit step"}, {"id": "P04", "check": "Fail-fast preflight: endpoint health, disk for 3x output, memory vs reader budgets, auth; estimate $, GPU-h, peak RSS, tokens out loud; resources validated inline during spec", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:27", "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:47", "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/SKILL.md:18", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:119-121"], "stage": "pilot", "enforced": "advisory", "effort": "L", "value": "L", "value_reason": "protects run survival, not result correctness", "risk": "L", "risk_reason": "seconds", "disposition": "keep-but-automate", "disposition_why": "fold into the dry-run preflight (P02)"}, {"id": "P05", "check": "Contamination: record dataset/split hashes; state the check run (canary, n-gram/embedding overlap) or state none was possible; few-shot pool disjoint from test; never reuse a test item across compared conditions", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:19-23", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:33", "/Users/yulong/code/dotfiles/.claude/skills/verification-planning/SKILL.md:24", "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:57", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:38"], "stage": "pilot", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "H for finetune/few-shot work; the stated caveat is cheap", "risk": "L", "risk_reason": "stating 'none possible' satisfies it", "disposition": "keep", "disposition_why": "the disjointness rules are free; actual overlap scans only for finetune work. Merge the two checklist copies"}, {"id": "P06", "check": "Spend gate: estimate from actual rates; under $100 run and report; $100 or more propose and wait; cluster allocations exempt", "locations": ["/Users/yulong/code/dotfiles/claude/rules/experiments.md:5", "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:31", "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:44"], "stage": "pilot", "enforced": "advisory", "effort": "H", "value": "L", "value_reason": "cost control, not correctness", "risk": "M", "risk_reason": "human wait above $100; zero cost below", "disposition": "keep", "disposition_why": "the threshold already keeps most iterations ungated; the rules/ restatement is deliberate (always-on tier) but costs always-on budget, so it is a trim candidate"}, {"id": "U01", "check": "Debug on one-sample runs or fixtures; never relaunch the full run with a print added", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:29"], "stage": "run", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "avoids hour-long debug cycles", "risk": "L", "risk_reason": "saves time", "disposition": "keep", "disposition_why": "pro-iteration"}, {"id": "U02", "check": "Validate outputs as they land (stream checks), not after the run", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:29", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:176"], "stage": "run", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "a broken scorer found at row 10 instead of row 10,000", "risk": "L", "risk_reason": "pro-iteration", "disposition": "keep-but-automate", "disposition_why": "a per-row validator in the runner"}, {"id": "U03", "check": "Append-only resumable pipelines; resume and cache keys include prompt, model, sampling params and config hashes", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:29", "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:46", "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:26", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:58-67"], "stage": "run", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "an under-keyed cache silently reuses stale rows after a prompt edit", "risk": "L", "risk_reason": "speeds reruns", "disposition": "keep", "disposition_why": "pays for itself on the second run"}, {"id": "U04", "check": "Route by shape: >2 GB RSS or >1 h to the jexp queue; API fan-out backgrounded from main; never detached inside a subagent; outputs on /workspace; never leave GPUs idle", "locations": ["/Users/yulong/code/dotfiles/claude/rules/experiments.md:7", "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:41-60", "/Users/yulong/code/dotfiles/claude/skills/jobs/SKILL.md:10", "/Users/yulong/code/dotfiles/claude/rules/delegation.md:19", "/Users/yulong/code/dotfiles/claude/CLAUDE.md:38", "/Users/yulong/code/dotfiles/claude/hooks/nudge_experiment_jobs.sh", "/Users/yulong/code/dotfiles/claude/settings.json:424", "/Users/yulong/code/dotfiles/claude/hooks/features.conf:4"], "stage": "run", "enforced": "advisory (nudge_experiment_jobs wired but disabled by nudges = off)", "effort": "L", "value": "L", "value_reason": "infrastructure; orphaned subagent jobs do mis-report success", "risk": "M", "risk_reason": "queue adds latency for small jobs", "disposition": "keep", "disposition_why": "not a rigour rule; leave as is; decide whether to delete the dead nudge"}, {"id": "U05", "check": "Analysis readers past ~2 GB run under `capped` (MemoryMax, one heavy reader per box, fails closed)", "locations": ["/Users/yulong/code/dotfiles/claude/skills/jobs/SKILL.md:75-79", "/Users/yulong/code/dotfiles/custom_bins/capped", "/Users/yulong/code/dotfiles/claude/hooks/nudge_uncapped_reader.sh", "/Users/yulong/code/dotfiles/claude/hooks/features.conf:5", "/Users/yulong/code/dotfiles/claude/settings.json:430"], "stage": "run", "enforced": "hook-nudge + tool fails closed", "effort": "L", "value": "L", "value_reason": "protects the host, not the numbers", "risk": "M", "risk_reason": "the exclusive lock serialises analysis; fail-closed can stop a read", "disposition": "keep", "disposition_why": "cheap insurance against losing every run on the box"}, {"id": "U06", "check": "Inspect AI: read sampling config back from persisted ModelEvent requests; set max_samples explicitly and confirm from server logs; provider fields via extra_body; guard stop_reason; post-run validator against a pinned fingerprint; do not edit digest-bearing files mid-run", "locations": ["/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:22-54", "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:91-95", "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:107-116"], "stage": "run", "enforced": "advisory", "effort": "M", "value": "H", "value_reason": "config surface and wire bytes differ silently (dropped top_k, 1-way concurrency)", "risk": "M", "risk_reason": "fail-closed validator and digest rule can void a finished run", "disposition": "keep-but-automate", "disposition_why": "one shared validator; keep the digest rule but warn before editing fingerprinted files"}, {"id": "U07", "check": "Hosted models drift under a fixed name: compared conditions run in the same window; a changed judge, endpoint or snapshot is an instrument change", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:82"], "stage": "run", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "cross-week comparisons can measure provider drift", "risk": "L", "risk_reason": "a scheduling constraint only", "disposition": "keep", "disposition_why": "cheap"}, {"id": "U08", "check": "Stochastic results quoted need >=2 seeds with variance reported, or temperature 0, and the report says which; exploration sizes breadth before depth", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:66", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:11", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:119", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:140", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:183", "/Users/yulong/code/dotfiles/claude/skills/spec-interview-research/references/research-interview-guide.md:94", "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:53-61", "/Users/yulong/code/dotfiles/claude/skills/inspect-ai-evals/SKILL.md:101-105", "/Users/yulong/code/dotfiles/claude/hooks/nudge_hyperparam_provenance.py (unwired; covers n_seeds)"], "stage": "run", "enforced": "advisory", "effort": "M", "value": "M", "value_reason": "a single T>0 draw quoted as a result can be noise", "risk": "M", "risk_reason": "doubles compute and wall-clock for anything quoted", "disposition": "soften", "disposition_why": "apply only to quoted/confirmatory numbers; exploration stays single-seed breadth-first (as inspect-ai-evals says); make 2 the one number across all files"}, {"id": "U09", "check": "Label each run exploratory or confirmatory; a sweep or loop winner, or anything that survived deletion, is a hypothesis needing fresh episodes before it is quoted; each finding labelled pre-specified or discovered, with slice/comparison counts", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:62-64", "/Users/yulong/code/dotfiles/claude/rules/research-core.md:11", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:105", "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:169", "/Users/yulong/code/dotfiles/claude/checklists/research.md:17"], "stage": "run", "enforced": "advisory (always-on rule)", "effort": "L", "value": "H", "value_reason": "selection over many variants is the main false-positive source", "risk": "L", "risk_reason": "a label during iteration; the rerun is only due before quoting", "disposition": "keep", "disposition_why": "it is what lets exploration stay fast and loose safely"}, {"id": "U10", "check": "Keep pinned revisions, seeds, prompt hashes, rendered inputs, git commit and hyperparameters with every run", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:68", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:179-183", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:208", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:67", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:109", "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:34", "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:90", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:191-192"], "stage": "run", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "needed to reproduce or explain a number later", "risk": "L", "risk_reason": "automatic once in the runner", "disposition": "merge-with-D01", "disposition_why": "same artefact as the run manifest; record once"}, {"id": "U11", "check": "Use existing validated code for experiments (correct hyperparams, full data, validated metrics); ad-hoc only for dry runs", "locations": ["/Users/yulong/code/dotfiles/claude/CLAUDE.md:37", "/Users/yulong/code/dotfiles/claude/hooks/guard_existing_code.sh (unwired)", "/Users/yulong/code/dotfiles/scripts/setup/wire_harness_hooks.py:112"], "stage": "run", "enforced": "advisory (hook exists, unwired)", "effort": "L", "value": "H", "value_reason": "an ad-hoc reimplementation silently measures something else", "risk": "L", "risk_reason": "faster than writing new code", "disposition": "keep-but-automate", "disposition_why": "wire guard_existing_code.sh (nudge only) with wire_harness_hooks.py --apply"}, {"id": "U12", "check": "No hardcoded hyperparameters: CLI args/config only; flag bare numeric literals for lr, temperature, n_seeds etc.", "locations": ["/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:79", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:206", "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:87", "/Users/yulong/code/dotfiles/claude/hooks/nudge_hyperparam_provenance.py (unwired)", "/Users/yulong/code/dotfiles/scripts/setup/wire_harness_hooks.py:114"], "stage": "run", "enforced": "advisory (hook exists, unwired)", "effort": "L", "value": "H", "value_reason": "a plausible typed number replaces the configured one", "risk": "L", "risk_reason": "nudge only", "disposition": "keep-but-automate", "disposition_why": "wire the existing nudge"}, {"id": "U13", "check": "No mock or synthetic data outside unit tests; if data is unavailable, ask", "locations": ["/Users/yulong/code/dotfiles/claude/CLAUDE.md:38", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:173", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:204", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:102", "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:86", "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:91", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:95", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:240", "/Users/yulong/code/dotfiles/claude/hooks/nudge_synthetic_data.py (unwired)", "/Users/yulong/code/dotfiles/scripts/setup/wire_harness_hooks.py:113"], "stage": "run", "enforced": "advisory (hook exists, unwired)", "effort": "L", "value": "H", "value_reason": "fabricated stand-in data reported as measured is the worst-case error", "risk": "L", "risk_reason": "nudge only", "disposition": "keep-but-automate", "disposition_why": "stated in five agent prompts; the only always-on statement is CLAUDE.md:38 (test on real data); wire the hook and add one line to checklists/experiments.md"}, {"id": "U14", "check": "No broad try/except in experiment code", "locations": ["/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:175", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:205", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:104", "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:89", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:55"], "stage": "run", "enforced": "advisory (agent prompts only)", "effort": "L", "value": "M", "value_reason": "swallowed errors become silent missing rows", "risk": "L", "risk_reason": "fail-fast helps iteration", "disposition": "keep", "disposition_why": "put once in checklists/experiments.md; agents point at it"}, {"id": "U15", "check": "Research code conventions: JSONL outputs, CLI args, logging to file, checkpointing", "locations": ["/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:25-30", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:93-95", "/Users/yulong/code/dotfiles/claude/agents/research-engineer.md:207", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:68", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:107", "/Users/yulong/code/dotfiles/claude/rules/coding-conventions.md:7", "/Users/yulong/code/dotfiles/claude/agents/code-reviewer.md:35"], "stage": "run", "enforced": "advisory", "effort": "L", "value": "L", "value_reason": "conventions, rarely result-changing", "risk": "L", "risk_reason": "agents write it by default", "disposition": "keep", "disposition_why": "harmless with agents; soften 'always' wording"}, {"id": "U16", "check": "Transcript review after every run: check-transcripts Tier-1 deterministic checks, then transcript-reviewer agent; sampled deliberately (~40% fail, 30% pass, 30% random), labels exported as rejoinable JSONL; CRITICAL marks the experiment INVALID", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:72-76", "/Users/yulong/code/dotfiles/claude/agents/transcript-reviewer.md:3", "/Users/yulong/code/dotfiles/claude/agents/transcript-reviewer.md:92-101", "/Users/yulong/code/dotfiles/claude/docs/transcript-review-checklist.md", "/Users/yulong/code/dotfiles/custom_bins/check-transcripts", "/Users/yulong/code/dotfiles/claude/agents/autonomous-researcher.md:77-80", "/Users/yulong/code/dotfiles/claude/agents/autonomous-researcher.md:102", "/Users/yulong/code/dotfiles/claude/skills/research-loop/SKILL.md:165"], "stage": "run", "enforced": "advisory (tool exists; automatic only inside autonomous-researcher)", "effort": "L", "value": "H", "value_reason": "scorer misconfiguration is the commonest silent result-changer (e.g. 13% read where 69% was true)", "risk": "L", "risk_reason": "Tier 1 is seconds; the agent runs in parallel with the next run", "disposition": "keep-but-automate", "disposition_why": "run Tier 1 automatically at the end of every run; agent review only before quoting"}, {"id": "U17", "check": "Check what the scorer/judge actually consumed (last message, final answer only, CoT vs action); screen organisms on reasoning, not only final answer; state the judge's surface", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:64-68", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/jlens.md:39-41", "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:18"], "stage": "run", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "scorer reading the wrong message changed 69% to 13% (recorded)", "risk": "L", "risk_reason": "one inspection", "disposition": "merge-with-U16", "disposition_why": "cheap and high-yield; fold into the Tier-1 transcript checks"}, {"id": "U18", "check": "Every surprise named carries a linked follow-up or a stated reason not to pursue; investigate, do not explain away; perfect results get more scrutiny", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:74", "/Users/yulong/code/dotfiles/claude/rules/research-core.md:9", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:96-99", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:144"], "stage": "run", "enforced": "advisory (always-on rule)", "effort": "M", "value": "H", "value_reason": "surprises are where bugs show", "risk": "M", "risk_reason": "can derail iteration into chasing every anomaly", "disposition": "soften", "disposition_why": "log each surprise with a one-line disposition; a follow-up is required only when the surprise touches a quoted number"}, {"id": "U19", "check": "Delete guard machinery that broke more of the last ten runs than it caught, counted from the run log; 'delete freely' for checklist items nobody has failed in a year", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:68", "/Users/yulong/code/dotfiles/claude/checklists/README.md:40"], "stage": "run", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "meta-check that keeps the other checks honest", "risk": "L", "risk_reason": "removes friction", "disposition": "keep", "disposition_why": "this review is that rule being applied; add a run-log field for 'guard fired / guard broke run' so it can be counted"}, {"id": "A01", "check": "Every number ships with its null (chance band at that n, degenerate constant predictor) and its ceiling; chance-corrected effects (kappa, lift) beside raw; base rate and positive class named; chance line on every comparison plot", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:5-7", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:27-31", "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:22-35", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:25-33", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/jlens.md:29-33", "/Users/yulong/code/dotfiles/claude/rules/communication.md:11", "/Users/yulong/code/dotfiles/claude/checklists/presentation.md:46", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:100", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:147"], "stage": "analysis", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "trivial baselines are often most of a rate (TPR 1.0 for always-flag)", "risk": "L", "risk_reason": "a few lines of code", "disposition": "keep", "disposition_why": "the single highest-value analysis rule"}, {"id": "A02", "check": "Permutation (marginal-preserving) null with resolution floor 1/(N+1), where cheap", "locations": ["/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:28"], "stage": "analysis", "enforced": "advisory", "effort": "M", "value": "M", "value_reason": "catches structure the closed-form null misses", "risk": "L", "risk_reason": "compute only", "disposition": "keep", "disposition_why": "already scoped to 'where cheap'"}, {"id": "A03", "check": "Behaviour-free (scaffold-only: lengths, counts, condition metadata) baseline reported separately from chance, labelled as a diagnostic of the organism", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:15", "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:29", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:31"], "stage": "analysis", "enforced": "advisory", "effort": "M", "value": "H", "value_reason": "a length-only predictor once hit AUROC 1.000 on a sabotage dataset", "risk": "L", "risk_reason": "one small classifier", "disposition": "keep", "disposition_why": "required for detection claims; reconcile the wording across the three files (see notes)"}, {"id": "A04", "check": "Every estimate has an interval naming what variation it covers and omits and the bias direction; unit of analysis and n at that unit beside it (cluster over questions, not seeds/tokens/rollouts)", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:9-11", "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:18-20", "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:9-13", "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:38-51", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:56-58", "/Users/yulong/code/dotfiles/claude/checklists/presentation.md:24", "/Users/yulong/code/dotfiles/claude/checklists/presentation.md:49", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:31", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:36", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:44"], "stage": "analysis", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "n=seeds instead of n=questions gives intervals that are too narrow (clustered SE up to ~3x per ci-standards)", "risk": "L", "risk_reason": "automatic with a shared stats helper", "disposition": "keep-but-automate", "disposition_why": "one stats helper used by data-analyst and results pages"}, {"id": "A05", "check": "Which interval/test: Wilson for proportions (never normal approximation); paired interval or exact test on paired data; bootstrap otherwise; small denominators as counts (0/7)", "locations": ["/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:14-16", "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:15-28", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:32"], "stage": "analysis", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "normal approximation misbehaves near 0 and 1", "risk": "L", "risk_reason": "library call", "disposition": "merge-with-A04", "disposition_why": "and delete the conflicting normal-approximation formula in ci-standards.md"}, {"id": "A06", "check": "Every comparison names its test, effect size in metric units and n per condition; practical vs statistical significance", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:13", "/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:35", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:262", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:276"], "stage": "analysis", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "a p-value alone overstates small effects", "risk": "L", "risk_reason": "a few words", "disposition": "keep", "disposition_why": "cheap"}, {"id": "A07", "check": "Multiple-comparison correction (Bonferroni, FDR) when testing many hypotheses", "locations": ["/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:33", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:214", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:243", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:336", "/Users/yulong/code/dotfiles/claude/agents/experiment-designer.md:54", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:47"], "stage": "analysis", "enforced": "advisory (agent prompts only)", "effort": "L", "value": "M", "value_reason": "guards against p-hacking across slices", "risk": "L", "risk_reason": "compute only", "disposition": "merge-with-U09", "disposition_why": "checklists ask for disclosure of comparison counts, not correction; pick one policy"}, {"id": "A08", "check": "Sensitivity check for every main finding (drop top/bottom 5%, alternative aggregation, subset); flag FRAGILE if it flips", "locations": ["/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:264", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:345-350", "/Users/yulong/code/dotfiles/claude/docs/ci-standards.md:98-105"], "stage": "analysis", "enforced": "advisory (agent prompt, 'MANDATORY')", "effort": "L", "value": "M", "value_reason": "catches outlier-driven conclusions", "risk": "L", "risk_reason": "minutes for an agent", "disposition": "keep", "disposition_why": "cheap; lives only in data-analyst and ci-standards, consider moving to results-analysis.md"}, {"id": "A09", "check": "Slice by factors that could reverse or hide the finding (Simpson's paradox); per-threat-model breakdown rather than an average", "locations": ["/Users/yulong/code/dotfiles/claude/skills/results-artifact/SKILL.md:37-39", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:84-86"], "stage": "analysis", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "pooled numbers across unequal strata can reverse", "risk": "M", "risk_reason": "every slice is another comparison (tension with U09)", "disposition": "keep", "disposition_why": "pair with disclosed slice counts"}, {"id": "A10", "check": "Deterministic scorer where the construct has an exact surface form; LLM judge only for meaning, never regex/keywords for meaning; report the deterministic baseline beside the judge", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:35", "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:8"], "stage": "analysis", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "keyword matching misses paraphrase and counts quotations, both in the hypothesis's direction", "risk": "L", "risk_reason": "chooses the cheaper tool where valid", "disposition": "keep", "disposition_why": "two files agree; keep one statement"}, {"id": "A11", "check": "Judge hygiene: one sample per prompt; rationale before verdict; verbatim quote for positives; absence-fields hand-validated; blinded to labels, condition, other judges and hypothesis; prompts versioned with sha256; append-only JSONL with rendered input; parse failures counted", "locations": ["/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:12-28", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:31", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:37", "/Users/yulong/code/dotfiles/claude/rules/research-core.md:7"], "stage": "analysis", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "batched or unblinded judging leaks between samples and toward the hypothesis", "risk": "L", "risk_reason": "a reusable harness makes it free", "disposition": "keep-but-automate", "disposition_why": "ship a shared judge harness that enforces these by construction"}, {"id": "A12", "check": "Judge validation: agreement against a human-labelled gold subset (n and statistic named); paired comparisons in both orders or position bias measured; judge identity in provenance", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:39", "/Users/yulong/code/dotfiles/claude/agents/transcript-reviewer.md:40", "/Users/yulong/code/dotfiles/claude/docs/transcript-review-checklist.md:118-125"], "stage": "analysis", "enforced": "advisory", "effort": "H", "value": "H", "value_reason": "the judge is the measuring instrument", "risk": "M", "risk_reason": "human labelling is a gate per judge", "disposition": "soften", "disposition_why": "validate once per judge-prompt version and reuse; before publication, not per iteration"}, {"id": "A13", "check": "Condition labels come from design, never the measured quantity; scoring blind to labels and condition; analysis joins; no circular steps", "locations": ["/Users/yulong/code/dotfiles/claude/rules/research-core.md:5-7", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:111-117", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:60-62", "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:20", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:27"], "stage": "analysis", "enforced": "advisory (always-on rule)", "effort": "L", "value": "H", "value_reason": "outcome-derived labels make any correlation forced by construction", "risk": "L", "risk_reason": "no extra work if designed in", "disposition": "keep", "disposition_why": "red line; keep always-on"}, {"id": "A14", "check": "Outcome codebook built on a named discovery slice, frozen, and prevalence estimated only on episodes that did not form it", "locations": ["/Users/yulong/code/dotfiles/claude/rules/research-core.md:7", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:115", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/monitoring.md:7", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis/monitoring.md:14"], "stage": "analysis", "enforced": "advisory (always-on rule)", "effort": "M", "value": "H", "value_reason": "discovering and counting categories on the same rollouts is HARKing", "risk": "M", "risk_reason": "needs held-out episodes before prevalence can be stated", "disposition": "keep", "disposition_why": "applies only when a prevalence is reported; exploration can browse freely"}, {"id": "A15", "check": "Every eligible sample is in the computation; anything redacted or withheld logged with its reason; parse failures reported as a number", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:84", "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:28", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:240"], "stage": "analysis", "enforced": "advisory", "effort": "L", "value": "H", "value_reason": "quiet cohort shrinkage biases rates", "risk": "L", "risk_reason": "a count", "disposition": "keep", "disposition_why": "cheap"}, {"id": "A16", "check": "Report every condition including failures, nulls and outliers; nothing quietly dropped", "locations": ["/Users/yulong/code/dotfiles/claude/rules/research-core.md:9", "/Users/yulong/code/dotfiles/claude/checklists/experiments.md:72-74", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:103", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:61", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:206"], "stage": "analysis", "enforced": "advisory (always-on rule)", "effort": "L", "value": "H", "value_reason": "selective reporting is the classic integrity failure", "risk": "L", "risk_reason": "listing, not rerunning", "disposition": "keep", "disposition_why": "red line; stated three times, keep research-core as the home"}, {"id": "A17", "check": "Reviewer test: before any methodological shortcut ask if a reviewer would find it suspect; no 'just a quick analysis' exception", "locations": ["/Users/yulong/code/dotfiles/claude/rules/research-core.md:3", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:119"], "stage": "analysis", "enforced": "advisory (always-on rule)", "effort": "M", "value": "M", "value_reason": "catches shortcuts that change conclusions", "risk": "H", "risk_reason": "read literally, it forbids quick exploratory analysis, the core of fast iteration", "disposition": "soften", "disposition_why": "allow quick analyses labelled exploratory (U09); apply the reviewer test before a number is quoted"}, {"id": "A18", "check": "Independent skeptic review of findings (research-skeptic agent; cross-family council before publishing a result someone will act on; same-family self-check discouraged)", "locations": ["/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:3", "/Users/yulong/code/dotfiles/claude/CLAUDE.md:7", "/Users/yulong/code/dotfiles/claude/rules/delegation.md:13-15", "/Users/yulong/code/dotfiles/claude/skills/council/SKILL.md:3"], "stage": "analysis", "enforced": "advisory", "effort": "M", "value": "M", "value_reason": "an outside reader catches confounds the author misses", "risk": "L", "risk_reason": "runs async in parallel", "disposition": "keep", "disposition_why": "reserve for results about to be quoted"}, {"id": "A19", "check": "Sandbagging: organism = prompt + model pair; log prompt format; diff rendered prompts between runs; measure rather than assume instructed level", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:7-17"], "stage": "analysis", "enforced": "advisory (domain)", "effort": "L", "value": "H", "value_reason": "format alone moved accuracy 23-30pp; one sentence removed the effect", "risk": "L", "risk_reason": "a diff", "disposition": "keep", "disposition_why": "domain-specific and cheap"}, {"id": "A20", "check": "Sandbagging: achieved test FPR beside every recall; dev/test disjointness asserted in landed logs; compared methods share k; thin negative groups not quoted as ratios", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:35-45"], "stage": "analysis", "enforced": "advisory (domain)", "effort": "L", "value": "H", "value_reason": "100% recall came with 84.8% FPR on an honest model (recorded)", "risk": "L", "risk_reason": "reads existing outputs", "disposition": "keep", "disposition_why": "domain-specific and cheap"}, {"id": "A21", "check": "Sandbagging: run the honest-wrong control (detector on honest models' incorrect answers) beside the headline", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:70-72", "/Users/yulong/code/dotfiles/claude/agents/research-skeptic.md:146"], "stage": "analysis", "enforced": "advisory (domain)", "effort": "M", "value": "H", "value_reason": "separates sandbagging detection from error detection", "risk": "L", "risk_reason": "one extra condition on existing data", "disposition": "keep", "disposition_why": "the decisive control for this line of work"}, {"id": "A22", "check": "Sandbagging: check which pipeline produced an 'SE'; degenerate sqrt(p(1-p)) intervals are not quoted, point estimate alone with a note", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis/sandbagging.md:47-54"], "stage": "analysis", "enforced": "advisory (domain)", "effort": "L", "value": "M", "value_reason": "39% of split-mode intervals on disk were [0,1]", "risk": "L", "risk_reason": "a lookup", "disposition": "keep", "disposition_why": "domain-specific"}, {"id": "A23", "check": "J-Lens: evidencedTP/TP beside every TPR; noise floor from n=7 negatives (gaps < ~0.06 are noise); action-monitor ceiling on every plot; teacher-forced vs generation-time capture stated; manifest token totals reconciled", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis/jlens.md:17-49"], "stage": "analysis", "enforced": "advisory (domain)", "effort": "L", "value": "H", "value_reason": "aggregate CoT parity was hollow (9/115 evidenced)", "risk": "L", "risk_reason": "reads existing outputs", "disposition": "keep", "disposition_why": "domain-specific; the file is dated 2026-07-31, re-verify numbers"}, {"id": "A24", "check": "Monitoring analysis: monitor errors first, disagreements, comparative advantage, emergent taxonomy with prevalence on held-out episodes", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis/monitoring.md:5-14"], "stage": "analysis", "enforced": "advisory (domain prompt)", "effort": "M", "value": "M", "value_reason": "surfaces failure modes aggregates hide", "risk": "L", "risk_reason": "analysis-time only", "disposition": "keep", "disposition_why": "usable as a prompt; no iteration cost"}, {"id": "W01", "check": "Show the ingredients: full prompts and templates, complete example transcripts (positive and negative), affordances, environment, held-constant vs varied, complete I/O for every model", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:43-56"], "stage": "reporting", "enforced": "advisory", "effort": "M", "value": "M", "value_reason": "readers can spot errors only in what they see", "risk": "L", "risk_reason": "publication-time only", "disposition": "keep-but-automate", "disposition_why": "generate from the manifest and JSONL rather than by hand"}, {"id": "W02", "check": "Every aggregate one click from its examples; sortable/filterable tables; transcripts readable at a glance; 10-20 examples comfortable to review", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:58-70"], "stage": "reporting", "enforced": "advisory", "effort": "M", "value": "M", "value_reason": "manual inspection catches what metrics hide", "risk": "L", "risk_reason": "publication-time; heavy UX only on first build", "disposition": "soften", "disposition_why": "required for published results pages; interim updates can link raw JSONL"}, {"id": "W03", "check": "Provenance travels with every example: model, tokenizer/template, dataset/split, prompt version, sampling params, judge model and prompt hash, endpoint, date, training hyperparams", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:78-80", "/Users/yulong/code/dotfiles/claude/skills/llm-judge/SKILL.md:24-26"], "stage": "reporting", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "needed to attribute and reproduce", "risk": "L", "risk_reason": "automatic from the manifest", "disposition": "merge-with-D01", "disposition_why": "same data as the run manifest (D01/U10)"}, {"id": "W04", "check": "HTML Artifact must carry the annotation layer (comments, export, labels); publish blocked otherwise", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:90-97", "/Users/yulong/code/dotfiles/claude/hooks/block_unannotated_artifact.sh", "/Users/yulong/code/dotfiles/claude/settings.json:523-529", "/Users/yulong/code/dotfiles/claude/hooks/features.conf:32-34"], "stage": "reporting", "enforced": "hook-block", "effort": "L", "value": "L", "value_reason": "review UX, not correctness", "risk": "L", "risk_reason": "md2artifact adds it; blocks only hand-built pages", "disposition": "keep", "disposition_why": "the only blocking hook in scope; not a rigour check"}, {"id": "W05", "check": "Results page fixed shape: at most three highlighted claims, claim -> figure -> caption -> setup -> implications -> caveats -> next steps; every condition linked", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:99-109"], "stage": "reporting", "enforced": "advisory", "effort": "L", "value": "L", "value_reason": "presentation discipline", "risk": "L", "risk_reason": "publication-time", "disposition": "keep", "disposition_why": "no iteration cost"}, {"id": "W06", "check": "Causal register matches the evidence; no pre-registration framing without a checkable registration", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:21-23"], "stage": "reporting", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "overclaiming is a common reviewer objection", "risk": "L", "risk_reason": "wording", "disposition": "keep", "disposition_why": "free"}, {"id": "W07", "check": "A number appears only where it discriminates; one measured quantity per paragraph; limitations stated once in one place", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:17-19", "/Users/yulong/code/dotfiles/claude/checklists/presentation.md:24", "/Users/yulong/code/dotfiles/claude/rules/communication.md:11"], "stage": "reporting", "enforced": "advisory", "effort": "L", "value": "L", "value_reason": "readability, not correctness", "risk": "L", "risk_reason": "wording", "disposition": "keep", "disposition_why": "free"}, {"id": "W08", "check": "Scan scripts, transcripts, prompts and configs for keys, endpoints, payloads and personal data before publishing", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:86"], "stage": "reporting", "enforced": "advisory", "effort": "L", "value": "L", "value_reason": "security, not result correctness", "risk": "L", "risk_reason": "one scan", "disposition": "keep", "disposition_why": "irreversible failure class"}, {"id": "W09", "check": "Output directory explains the experiment on its own; analysis/plotting scripts saved with the results", "locations": ["/Users/yulong/code/dotfiles/claude/checklists/experiments.md:70", "/Users/yulong/code/dotfiles/claude/checklists/results-analysis.md:88", "/Users/yulong/code/dotfiles/claude/CLAUDE.md:39", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:244", "/Users/yulong/code/dotfiles/claude/agents/data-analyst.md:266"], "stage": "reporting", "enforced": "advisory", "effort": "L", "value": "M", "value_reason": "lets a colleague (or you next week) check the result", "risk": "L", "risk_reason": "a README and saved scripts", "disposition": "keep", "disposition_why": "cheap with agents"}, {"id": "W10", "check": "Numbers carry provenance: no stated number without a tool call or source; computed numbers link to inputs; state confidence", "locations": ["/Users/yulong/code/dotfiles/claude/CLAUDE.md:7", "/Users/yulong/code/dotfiles/claude/CLAUDE.md:32", "/Users/yulong/code/dotfiles/claude/rules/communication.md:13", "/Users/yulong/code/dotfiles/claude/rules/verify-before-instructing.md", "/Users/yulong/code/dotfiles/claude/hooks/nudge_number_provenance.py (unwired)", "/Users/yulong/code/dotfiles/scripts/setup/wire_harness_hooks.py:117"], "stage": "reporting", "enforced": "advisory (hook exists, unwired)", "effort": "L", "value": "H", "value_reason": "hallucinated numbers stated with measured-number confidence", "risk": "L", "risk_reason": "nudge only, fires only on zero-tool turns", "disposition": "keep-but-automate", "disposition_why": "wire the Stop-hook nudge"}];
+const COMMIT = "96c350bd";
+const DECISIONS = ["", "keep", "keep-but-automate", "soften", "merge", "drop"];
+const decided = {};   // id -> {decision, note}
+let db = null, user = null;
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function locLink(loc) {
+  const m = loc.match(/^\/Users\/yulong\/code\/dotfiles\/(.+?)(?::([\d,\-]+))?$/);
+  if (!m) return esc(loc);
+  const rel = m[1], lines = m[2] || "";
+  const first = lines.split(/[,-]/)[0], range = lines.includes("-") && !lines.includes(",") ? lines.split("-") : null;
+  const anchor = range ? `#L${range[0]}-L${range[1]}` : first ? `#L${first}` : "";
+  return `<a href="https://github.com/yulonglin/dotfiles/blob/${COMMIT}/${esc(rel)}${anchor}">${esc(rel)}${lines ? ":" + esc(lines) : ""}</a>`;
+}
+const leanLabel = d => d.startsWith("merge") ? "merge" : d;
+
+function renderGrid() {
+  const vc = document.getElementById("vc");
+  const lv = ["H", "M", "L"], ef = ["L", "M", "H"];
+  let html = `<div></div>` + ef.map(e => `<div class="ax">effort ${e}</div>`).join("");
+  for (const v of lv) {
+    html += `<div class="ax">value ${v}</div>`;
+    for (const e of ef) {
+      const items = CHECKS.filter(c => c.value === v && c.effort === e);
+      const cls = (v === "H" && e === "L") ? "cell win" : (v === "L" && e === "H") ? "cell cost" : "cell";
+      html += `<div class="${cls}">` + items.map(c =>
+        `<button class="idchip${decided[c.id]?.decision ? " decided" : ""}" data-r="${c.risk}" data-id="${c.id}" title="${esc(c.check)}">${c.id}</button>`).join("") + `</div>`;
+    }
+  }
+  vc.innerHTML = html;
+}
+
+function rowHtml(c) {
+  const d = decided[c.id] || {};
+  const opts = DECISIONS.map(x => `<option value="${x}"${(d.decision || "") === x ? " selected" : ""}>${x || "undecided"}</option>`).join("");
+  return `<article class="row" id="${c.id}">
+    <div class="rid">${c.id}</div>
+    <div class="txt">
+      <div class="check">${esc(c.check)}</div>
+      <div class="tags">
+        <span class="tag">${esc(c.stage)}</span>
+        <span class="tag enf">${esc(c.enforced)}</span>
+        <span class="tag lvl-${c.effort}" title="effort per iteration">effort ${c.effort}</span>
+        <span class="tag val lvl-${c.value}" title="${esc(c.value_reason)}">value ${c.value}</span>
+        <span class="tag lvl-${c.risk}" title="${esc(c.risk_reason)}">risk ${c.risk}</span>
+        <span class="tag lean">suggested: ${esc(c.disposition)}</span>
+      </div>
+      <div class="why">Value: ${esc(c.value_reason)}. Risk: ${esc(c.risk_reason)}. Why this lean: ${esc(c.disposition_why)}</div>
+      <details><summary>${c.locations.length} location${c.locations.length > 1 ? "s" : ""}</summary><ul>${c.locations.map(l => `<li>${locLink(l)}</li>`).join("")}</ul></details>
+    </div>
+    <div class="decide">
+      <label class="status" for="dec-${c.id}">Decision</label>
+      <select id="dec-${c.id}" data-id="${c.id}" ${db ? "" : "disabled"}>${opts}</select>
+      <input type="text" id="note-${c.id}" data-id="${c.id}" placeholder="note (optional)" value="${esc(d.note || "")}" ${db ? "" : "disabled"}>
+      <div class="who" id="who-${c.id}"></div>
+    </div>
+  </article>`;
+}
+
+function renderRows() {
+  const st = document.getElementById("f-stage").value, ln = document.getElementById("f-lean").value, dc = document.getElementById("f-dec").value;
+  const shown = CHECKS.filter(c => (!st || c.stage === st) && (!ln || leanLabel(c.disposition) === ln)
+    && (!dc || (dc === "none" ? !decided[c.id]?.decision : !!decided[c.id]?.decision)));
+  document.getElementById("rows").innerHTML = shown.map(rowHtml).join("") || `<p class="status">No checks match these filters.</p>`;
+  const n = CHECKS.filter(c => decided[c.id]?.decision).length;
+  document.getElementById("progress").textContent = `${n} of ${CHECKS.length} decided`;
+}
+
+function render() { renderGrid(); renderRows(); }
+
+document.getElementById("n-total").textContent = CHECKS.length;
+const counts = {};
+CHECKS.forEach(c => { const k = leanLabel(c.disposition); counts[k] = (counts[k] || 0) + 1; });
+document.getElementById("disp-counts").textContent = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(", ");
+document.getElementById("f-lean").insertAdjacentHTML("beforeend", Object.keys(counts).sort().map(k => `<option>${esc(k)}</option>`).join(""));
+["f-stage", "f-lean", "f-dec"].forEach(id => document.getElementById(id).addEventListener("change", renderRows));
+document.getElementById("vc").addEventListener("click", e => {
+  const b = e.target.closest(".idchip"); if (!b) return;
+  const f = ["f-stage", "f-lean", "f-dec"].some(id => document.getElementById(id).value);
+  if (f) { ["f-stage", "f-lean", "f-dec"].forEach(id => document.getElementById(id).value = ""); renderRows(); }
+  const row = document.getElementById(b.dataset.id);
+  if (row) { row.scrollIntoView({behavior: "smooth", block: "start"}); row.classList.add("flash"); setTimeout(() => row.classList.remove("flash"), 1600); }
+});
+document.querySelectorAll('a[href^="#"]').forEach(a => a.addEventListener("click", () => {
+  ["f-stage", "f-lean", "f-dec"].forEach(id => document.getElementById(id).value = ""); renderRows();
+}));
+
+async function save(id) {
+  if (!db) return;
+  const decision = document.getElementById("dec-" + id).value;
+  const note = document.getElementById("note-" + id).value.trim();
+  const who = document.getElementById("who-" + id);
+  try {
+    const by = user ? await user.id() : null;
+    await db.collection("decisions").doc(id).set({decision, note, by, at: new Date().toISOString()});
+    who.textContent = "Saved";
+  } catch (e) { who.textContent = "Not saved: " + (e?.message || e?.code || "error"); }
+}
+document.getElementById("rows").addEventListener("change", e => {
+  const id = e.target.dataset.id; if (id) save(id);
+});
+
+render();
+
+(async () => {
+  try { db = await window.claude?.use?.("db"); user = await window.claude?.use?.("user"); } catch { db = null; }
+  const status = document.getElementById("db-status");
+  if (!db) { status.textContent = "Decisions cannot be saved in this view (signed out or offline). Ratings and leans still read in full."; return; }
+  status.textContent = "Decisions save for everyone who opens this page; Claude reads them back.";
+  db.collection("decisions").onSnapshot(snap => {
+    for (const d of snap.docs) { const v = d.data(); if (v) decided[d.id] = {decision: v.decision || "", note: v.note || ""}; }
+    const active = document.activeElement;
+    const keep = active && active.id && active.id.startsWith("note-") ? {id: active.id, val: active.value, pos: active.selectionStart} : null;
+    render();
+    if (keep) { const el = document.getElementById(keep.id); if (el) { el.value = keep.val; el.focus(); el.setSelectionRange(keep.pos, keep.pos); } }
+  }, err => { status.textContent = "Lost the connection to saved decisions: " + (err?.code || "error"); });
+  renderRows();
+})();
+</script>
+<!-- annotation-layer v2 -->
+<style>
+:root{--an-bg:#fff;--an-ink:#1a1a1a;--an-soft:#5d5a55;--an-rule:#d9d4cc;--an-accent:#bd5d3a;
+ --an-mark:#fbe6a2;--an-bad:#a33f2a;--an-good:#2f6b4f;--an-good-bg:#e4f0e9;--an-field:#faf9f7}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--an-bg:#1f2124;--an-ink:#eceae6;
+ --an-soft:#a9a59e;--an-rule:#3a3d42;--an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;
+ --an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}}
+:root[data-theme="dark"]{--an-bg:#1f2124;--an-ink:#eceae6;--an-soft:#a9a59e;--an-rule:#3a3d42;
+ --an-accent:#e08a63;--an-mark:#5c4a15;--an-bad:#e08a75;--an-good:#7fc39c;--an-good-bg:#1d2b24;--an-field:#17181a}
+mark.note{background:var(--an-mark);color:inherit;border-bottom:2px solid var(--an-accent);cursor:pointer;border-radius:2px}
+/* A suggested edit must not read as a comment highlight: the original is
+   struck rather than filled, and the replacement carries the insert colour. */
+mark.anedit{background:transparent;color:var(--an-soft);text-decoration:line-through;
+ text-decoration-color:var(--an-bad);text-decoration-thickness:2px;cursor:pointer;border-radius:2px}
+.anins{background:var(--an-good-bg);color:var(--an-good);border-bottom:2px solid var(--an-good);
+ border-radius:2px;padding:0 .12em;cursor:pointer}
+[data-annotation-layer]{font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif;color:var(--an-ink);line-height:1.5}
+[data-annotation-layer] *{box-sizing:border-box}
+#anPop{position:absolute;z-index:1050;display:none;background:var(--an-bg);border:1px solid var(--an-rule);
+ border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.18);padding:.6rem;width:min(20rem,calc(100vw - 1.5rem));
+ max-height:min(80vh,26rem);overflow:auto}
+/* A control that would overwrite unsaved words points at them instead. */
+#anPop.nudge{outline:2px solid var(--an-accent);outline-offset:2px}
+/* iOS zooms the whole page when a focused field is under 16px. */
+@media (pointer:coarse){#anPop textarea,#anExportText{font-size:16px}}
+#anPop textarea{width:100%;min-height:4.5rem;border:1px solid var(--an-rule);border-radius:5px;
+ background:var(--an-field);color:var(--an-ink);padding:.4rem;font:inherit;font-size:.86rem;resize:vertical}
+.anbtn{background:var(--an-accent);color:#fff;border:0;border-radius:5px;padding:.35rem .8rem;
+ font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}
+.anbtn.ghost{background:transparent;color:var(--an-soft);border:1px solid var(--an-rule)}
+.anbtn.ghost.danger,.anbtn.ghost.tiny.danger{color:var(--an-bad);border-color:var(--an-bad)}
+.anbtn[disabled]{opacity:.42;cursor:default}
+/* A copied comment is marked by taking its accent AWAY, never by adding a
+   chip: after the first round most of the list is copied, so anything
+   additive becomes noise on the majority. The fresh ones keep the accent and
+   are what the eye lands on. */
+.cmt.ancopied{border-left-color:var(--an-rule)}
+/* An armed control must not look like the button that just did nothing, so it
+   fills: the second click is visibly a different act from the first. */
+.anbtn.anarmed,.anbtn.ghost.danger.anarmed,.anbtn.ghost.tiny.danger.anarmed{
+ background:var(--an-bad);color:#fff;border-color:var(--an-bad)}
+.anbtn.tiny{padding:.12rem .5rem;font-size:.76rem;margin-top:.4rem}
+#anPop:not(.editing) #anDelete{display:none}
+/* The mode strip is deliberately NOT in .anrow: Save has to stay the first
+   control of that row, which is also its tab order. */
+.anmodebar{display:flex;gap:.3rem;margin-bottom:.45rem}
+.anmode{flex:1;background:transparent;color:var(--an-soft);border:1px solid var(--an-rule);
+ border-radius:5px;padding:.22rem .5rem;font:inherit;font-size:.78rem;font-weight:600;cursor:pointer}
+.anmode.ansel{background:var(--an-accent);color:#fff;border-color:var(--an-accent)}
+/* Reopening an existing note is not the place to change what it is. */
+#anPop.editing .anmodebar{display:none}
+.cmt.ansuggest{border-left-color:var(--an-good)}
+.cmt .q.struck{text-decoration:line-through}
+.cmt .ins{color:var(--an-good)}
+/* Save leads: it is the first button in the DOM, so it is also first in tab
+   order. Delete is pushed to the far end so it is never the near miss. */
+.anrow{display:flex;gap:.4rem;align-items:center;margin-top:.45rem;flex-wrap:wrap}
+#anDelete{margin-left:auto}
+.anhint{color:var(--an-soft);font-size:.72rem;margin-top:.35rem}
+.anhint kbd{font:inherit;font-size:.95em;border:1px solid var(--an-rule);border-bottom-width:2px;
+ border-radius:4px;padding:0 .25rem;background:var(--an-field)}
+#anComments{max-width:48rem;margin:3rem auto 5rem;padding:0 1rem}
+#anComments h2{font-size:1.2rem;margin:0 0 .5rem;padding-bottom:.32rem;border-bottom:1px solid var(--an-rule)}
+#anComments .anscope{color:var(--an-soft);font-size:.86rem;margin:0 0 .6rem}
+.anbar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem}
+.anacts{display:flex;gap:.4rem;margin-top:.4rem}
+.ancount{color:var(--an-soft);font-size:.87rem}
+.ancount.warn{color:var(--an-bad);font-weight:650}
+.cmt{background:var(--an-bg);border:1px solid var(--an-rule);border-left:3px solid var(--an-accent);
+ border-radius:0 7px 7px 0;padding:.6rem .8rem;margin:.5rem 0;font-size:.88rem;overflow-wrap:anywhere}
+.cmt .q{color:var(--an-soft);font-style:italic;margin-bottom:.3rem}
+.cmt .where{font-size:.72rem;color:var(--an-soft);text-transform:uppercase;letter-spacing:.06em}
+.cmt .orphan{font-size:.74rem;color:var(--an-bad)}
+#anExport{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1060;
+ background:var(--an-bg);border:1px solid var(--an-rule);border-radius:10px;padding:.9rem;
+ width:min(46rem,92vw);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+#anExport .exphead{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap}
+#anExport .exphint{color:var(--an-soft);font-size:.8rem}
+#anExport .anbtn{margin-left:auto}
+#anExportText{width:100%;height:min(24rem,55vh);border:1px solid var(--an-rule);border-radius:6px;
+ background:var(--an-field);color:var(--an-ink);padding:.6rem;font-family:ui-monospace,Menlo,monospace;
+ font-size:.82rem;resize:vertical}
+.anok{background:var(--an-good-bg);color:var(--an-good);padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+.anwarn{background:var(--an-bad);color:#fff;padding:.2rem .55rem;border-radius:5px;font-size:.83rem}
+/* Toggle controls. The generator emits the markup; this styles it, so a
+   hand-written page that emits the same `data-an-state-id` wrapper gets the
+   look, the persistence and the export without copying any CSS.
+   The bullet is dropped only inside an UNORDERED list: a bare `li.antask`
+   also reaches an ordered checklist, where `list-style:none` deletes the step
+   numbers the author wrote the list as a numbered one to keep. */
+ul>li.antask{list-style:none}
+.anstate{display:inline-flex;align-items:baseline;gap:.45em}
+.anstatebox{flex:none;align-self:center;width:1em;height:1em;accent-color:var(--an-accent);cursor:pointer}
+.anstatebtn{flex:none;background:var(--an-field);color:var(--an-ink);border:1px solid var(--an-rule);
+ border-radius:999px;padding:.05em .6em;font:inherit;font-size:.8em;font-weight:650;
+ white-space:nowrap;cursor:pointer}
+.anstatebtn:hover{border-color:var(--an-accent);color:var(--an-accent)}
+.anstatebtn:focus-visible,.anstatebox:focus-visible{outline:2px solid var(--an-accent);outline-offset:2px}
+#anDock{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
+ bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;display:flex;gap:.4rem;align-items:center}
+#anBadge,#anToggle{background:var(--an-bg);color:var(--an-ink);
+ border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
+ font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+#anToggle{font-size:.78rem;color:var(--an-soft)}
+#anToggle[aria-pressed="false"]{border-style:dashed}
+#anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
+/* Switched off, the page reads as if the layer were not there, so the
+   viewer's own commenting gets the selection and the original text. The
+   comments are kept, still counted and still exported; only their marks and
+   the box go quiet. */
+html.an-off mark.note{background:none;border-bottom:0;cursor:inherit}
+html.an-off mark.anedit{color:inherit;text-decoration:none;cursor:inherit}
+html.an-off .anins,html.an-off #anPop{display:none!important}
+</style>
+<div data-annotation-layer="v2" data-key="review-rigour-checks">
+<section id="anComments">
+<h2 id="your-comments">Your comments</h2>
+<p class="anscope">Select any text on this page to attach a note, then press Enter. Switch the box to <strong>Suggest edit</strong> to propose replacement wording instead. Both are saved in this browser and survive a refresh or a republish of this page &mdash; copy them to keep them anywhere else.</p>
+<div class="anbar">
+  <span class="ancount" id="anCount">No comments yet</span>
+  <button class="anbtn" id="anCopy">Copy all</button>
+  <button class="anbtn ghost danger" id="anClearCopied">Delete copied</button>
+  <button class="anbtn ghost danger" id="anClear">Delete all</button>
+  <span id="anToast"></span>
+</div>
+<div id="anList"></div>
+<div class="anbar" id="anPageBar">
+  <span class="ancount">This page</span>
+  <button class="anbtn ghost" id="anPageDownload" type="button" hidden>Download HTML</button>
+  <button class="anbtn ghost" id="anPageCopy" type="button">Copy HTML</button>
+  <span id="anPageToast"></span>
+</div>
+</section>
+<div id="anPop" role="dialog" aria-label="Comment">
+  <div class="anmodebar" role="group" aria-label="Annotation mode">
+    <button class="anmode ansel" type="button" id="anModeComment" aria-pressed="true">Comment</button>
+    <button class="anmode" type="button" id="anModeEdit" aria-pressed="false">Suggest edit</button>
+  </div>
+  <textarea id="anTxt" placeholder="What do you think?"></textarea>
+  <div class="anrow">
+    <button class="anbtn" id="anSave">Save</button>
+    <button class="anbtn ghost" id="anCancel">Cancel</button>
+    <button class="anbtn ghost danger" id="anDelete">Delete</button>
+  </div>
+  <div class="anhint"><kbd>Enter</kbd> saves &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> newline &middot; <kbd>Esc</kbd> discards &middot; <kbd>Ctrl</kbd>+<kbd>E</kbd> switches mode</div>
+</div>
+<div id="anExport" role="dialog" aria-label="Export comments">
+  <div class="exphead">
+    <strong>Your comments as Markdown</strong>
+    <span class="exphint">already selected &mdash; copy with your usual shortcut</span>
+    <button class="anbtn ghost tiny" id="anExportClose">Close</button>
+  </div>
+  <textarea id="anExportText" readonly></textarea>
+</div>
+<div id="anDock">
+<button id="anToggle" type="button" aria-pressed="true" title="Switch this page's highlights and comment box off, to use the viewer's own comments. Your comments are kept.">Highlights on</button>
+<button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
+</div>
+</div>
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var root = document.querySelector("[data-annotation-layer]");
+// The page as parsed, taken before this script adds a highlight, a suggested
+// edit or a restored tick: those are one reader's work, and baked into the
+// file they would corrupt every quote anchor for the next reader. The closing
+// marker sits after this script and is never parsed yet, so it is always put
+// back. Its text is split because `strip_layer` ends its removal at the first
+// whole copy: one inside this script would cut the strip off mid-script.
+var PAGE_HTML = (function(){
+  var h = document.documentElement.outerHTML;
+  var close = "<!-- /annotation-" + "layer -->";
+  var at = h.lastIndexOf("</body>");
+  h = at < 0 ? h + "\n" + close : h.slice(0, at) + close + "\n" + h.slice(at);
+  return "<!DOCTYPE html>\n" + h;
+})();
+var KEY = (root && root.dataset.key) || ("annot:" + document.title);
+// Namespaced with a PREFIX, never a suffix. With `KEY + "-draft"`, a page
+// titled "Spec-draft" owns the same key as the draft of a page titled "Spec",
+// so pressing Escape on one deletes the other's comments outright.
+var DIRTY = "an-dirty:" + KEY;
+var DRAFT = "an-draft:" + KEY;
+var STATES = "an-states:" + KEY;
+var OFF = "an-off:" + KEY;
+
+// ---- storage -------------------------------------------------------------
+// localStorage, and nothing else. An IndexedDB mirror, a backup key and a
+// scan of neighbouring keys all lived here and all came out: the mirror let a
+// save that raced its own asynchronous recovery destroy the comments it was
+// recovering; the backup key resurrected comments the user had deliberately
+// cleared; and the neighbour scan adopted a different document's comments
+// whenever one quote happened to appear on this page. The republish they were
+// meant to survive is already covered, because the generator fixes the key
+// (`data-key`) from the filename rather than the title.
+// `getItem` cannot say WHY it returned null: a missing key and a read the
+// browser refused look identical, and reading a refusal as "nothing stored"
+// overwrites the page with an assumed-empty value. A read that cares takes
+// lsRead and compares against FAILED.
+var FAILED = {};
+function lsRead(k){ try { return localStorage.getItem(k); } catch (e) { return FAILED; } }
+function lsGet(k){ var v = lsRead(k); return v === FAILED ? null : v; }
+function lsSet(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
+
+// Stored as a bare array, which every generation of this layer can read. An
+// older deployed page does `JSON.parse(...).reduce(...)` on this value and
+// throws on an object, and that kills its whole script: no handlers, no
+// saving, a page that looks fine and silently does nothing.
+function readComments(){
+  var d; try { d = JSON.parse(lsGet(KEY) || "[]"); } catch (e) { return []; }
+  if (Array.isArray(d)) return d;
+  if (d && Array.isArray(d.comments)) return d.comments;  // envelope from a newer layer
+  return [];
+}
+// Not a per-tab counter: two tabs on one page would both hand out id 1.
+function newId(){ return Date.now() * 1000 + Math.floor(Math.random() * 1000); }
+
+var comments = readComments(), notesUnsaved = false, statesUnsaved = false;
+// One refused-write signal for two writers. A lost tick is as lost as a lost
+// note -- on a page that is all checklist and no prose, which is what a review
+// queue is, the tick IS the work -- so both raise the same badge, the same
+// panel line and the same unload guard. Each writer clears only its own flag:
+// a `persist()` that succeeded says nothing about whether any state got
+// stored. `statesUnsaved` is not set from a write's return value at all -- it
+// is `pendingStates` being non-empty, one entry per control, and an entry
+// leaves that set only on evidence read back out of that control's own key.
+// See THE WRITE RULE in the toggle-state section.
+function unsaved(){ return notesUnsaved || statesUnsaved; }
+comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+
+// Per-comment export state. `copiedAt` is stamped only where the page-level
+// flag was cleared before -- a clipboard write that resolved, or a real copy
+// event on the fallback textarea -- so its absence means "never left this
+// browser". The asymmetry is deliberate: an unstamped comment can never fall
+// into the delete-copied set, so a miss costs one redundant copy rather than
+// a page of lost notes. That is also why there is no "delete the uncopied"
+// action: every comment predating this key reads as uncopied, so such a
+// button would have wiped every existing page on first run.
+function isCopied(c){ return !!c.copiedAt; }
+function copiedSet(){ return comments.filter(isCopied); }
+function freshCount(){ return comments.length - copiedSet().length; }
+function isDirty(){ return freshCount() > 0; }
+// The legacy page-level key is still written, in lockstep, because a stale tab
+// running an older layer reads it and would otherwise raise or stand down its
+// unload guard against state it cannot see.
+function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
+
+// One-time migration for comments written before `copiedAt` existed. Without
+// it every upgraded page announces "N of N not yet copied out" and re-arms the
+// unload guard for someone who copied everything out yesterday: a false alarm
+// on every page in existence, which is how a warning stops being read.
+// The legacy flag is EVIDENCE, not an inference -- an explicit "0" was written
+// by a copy that actually happened. A key that is MISSING is not evidence and
+// is left alone, so absence can never manufacture a safe state.
+(function migrateFromLegacyFlag(){
+  if (lsGet(DIRTY) !== "0" || !comments.length) return;
+  var now = Date.now(), touched = false;
+  comments.forEach(function(c){ if (!c.copiedAt) { c.copiedAt = now; touched = true; } });
+  if (touched) persist();
+})();
+var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge"), toggle = $("anToggle");
+var pending = null, editingId = null;
+// The box has two modes and one dirty flag. `dirty` is set by the first user
+// modification and by nothing else: an edit box OPENS with the selection
+// already in its textarea, so keying the draft autosave and the "a box with
+// words in it refuses to close" invariant on non-emptiness would turn every
+// opened edit box into an unclosable phantom draft nobody typed.
+var mode = "comment", dirty = false;
+// An entry written before v2 carries no `type`, so absence means comment.
+function isEdit(c){ return c && c.type === "edit"; }
+function bodyOf(c){ return isEdit(c) ? (c.replacement || "") : (c.note || ""); }
+
+window.addEventListener("pagehide", saveDraft);
+document.addEventListener("visibilitychange", function(){
+  if (document.visibilityState === "hidden") saveDraft();
+});
+window.addEventListener("beforeunload", function(e){
+  saveDraft();
+  // Two reasons to stop someone. Comments that exist and have not been copied
+  // out are the ordinary one -- they are in localStorage, and this warns only
+  // that nothing outside this browser has them yet. A refused write is the
+  // other, and it is the one that would otherwise be silent on a page carrying
+  // only a checklist: the ticks are not in localStorage at all, and closing
+  // the tab is when they stop existing.
+  if (!unsaved() && (!isDirty() || !comments.length)) return;
+  e.preventDefault(); e.returnValue = ""; return "";
+});
+// A second tab on the same page used to be last-writer-wins. Take its write
+// instead — unless a note is open here, because nothing may pull the DOM out
+// from under a range the user is still typing against.
+//
+// NOT FIXED HERE, and stated rather than implied: this is the wholesale
+// replace the toggle states used to carry, so a comment THIS tab wrote while
+// the store was refusing is dropped from `comments` when the other tab writes,
+// and the next `persist()` that succeeds clears `notesUnsaved` over its grave.
+// The toggle-state fix -- one localStorage key per item, so two writers
+// touching different items never touch the same key -- is the right shape here
+// too, and it does not transfer as written. A state is one value under one id
+// the document itself supplies; a comment is a member of an ordered array with
+// an id this layer mints at random, and the array is the unit that add, edit,
+// delete, `copiedAt` and delete-copied all operate on. Per-comment keys mean
+// enumerating the store by prefix to read them back, a tombstone to express a
+// delete, and a compatibility break with every deployed layer generation,
+// which reads this key as a bare array. That is its own project with its own
+// tests, not a copy of this one.
+window.addEventListener("storage", function(e){
+  if (e.key !== KEY || isOpen()) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = readComments();
+  comments.forEach(function(c){ if (!c.id) c.id = newId(); });
+  restoreHighlights(); render();
+});
+
+function inLayer(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  return !!(node && node.closest && node.closest("[data-annotation-layer]"));
+}
+function sectionOf(node){
+  while (node && node.nodeType === 3) node = node.parentNode;
+  var sec = node && node.closest ? node.closest("section") : null;
+  if (sec) { var h = sec.querySelector("h1,h2,h3"); if (h) return h.textContent.trim(); }
+  while (node && node !== document.body) {
+    var p = node.previousElementSibling;
+    while (p) { if (/^H[1-3]$/.test(p.tagName)) return p.textContent.trim(); p = p.previousElementSibling; }
+    node = node.parentNode;
+  }
+  return "document";
+}
+function isOpen(){ return pop.style.display === "block"; }
+function hasText(){ return !!txt.value.trim(); }
+// `rect` is viewport-relative. Measure the box while it is laid out but not
+// yet painted, so it never appears at the wrong place for one frame — that
+// single-frame jump is itself a flicker.
+function placePop(rect){
+  pop.style.visibility = "hidden";
+  pop.style.display = "block";
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  var top = rect.bottom + 8;
+  if (top + h > vh - 8) top = rect.top - h - 8;             // no room below: flip above
+  top = Math.max(8, Math.min(top, Math.max(8, vh - h - 8))); // and keep it on screen either way
+  pop.style.left = (Math.max(8, Math.min(rect.left, vw - w - 12)) + window.scrollX) + "px";
+  pop.style.top = (top + window.scrollY) + "px";
+  pop.style.visibility = "";
+}
+// Words the user has not saved are not something another control may
+// overwrite: clicking a second highlight used to replace the text outright.
+// `focus` is false on the touch path, where focusing a field while iOS shows
+// its selection handles collapses the selection.
+function nudge(focus){
+  if (focus !== false) txt.focus();
+  pop.classList.add("nudge");
+  setTimeout(function(){ pop.classList.remove("nudge"); }, 700);
+}
+// Applies a mode WITHOUT touching the textarea. The prefill belongs to the
+// user-driven switch below; the restore paths (an existing entry, a recovered
+// draft) supply their own text and must not have it overwritten.
+function setModeState(next){
+  mode = next;
+  var isE = mode === "edit";
+  $("anModeComment").classList.toggle("ansel", !isE);
+  $("anModeEdit").classList.toggle("ansel", isE);
+  $("anModeComment").setAttribute("aria-pressed", isE ? "false" : "true");
+  $("anModeEdit").setAttribute("aria-pressed", isE ? "true" : "false");
+  txt.placeholder = isE ? "Replacement text; an empty box suggests deleting it"
+                        : "What do you think?";
+}
+// The user-driven switch rewrites the textarea, so it declines while there are
+// unsaved words and points at them instead, exactly as a second highlight
+// click does. Reopening an existing entry is not the place to change its kind,
+// so the strip is hidden then and this is a no-op.
+function switchMode(next){
+  if (mode === next || editingId !== null) return;
+  if (dirty) { nudge(); return; }
+  setModeState(next);
+  txt.value = (next === "edit" && pending) ? pending.quote : "";
+  dirty = false;
+  txt.focus();
+}
+$("anModeComment").onclick = function(){ switchMode("comment"); };
+$("anModeEdit").onclick = function(){ switchMode("edit"); };
+
+function openEdit(c, anchor, focus){
+  // Off, the box is hidden by CSS but would still count as open, and the next
+  // press outside an unmodified open box closes it and deletes the draft.
+  if (layerOff()) return;
+  // The same entry too: reopening it would reload its saved body over the
+  // revision being typed -- or one just restored from a draft.
+  if (isOpen() && dirty) { nudge(focus); return; }
+  editingId = c.id; pending = null;
+  setModeState(isEdit(c) ? "edit" : "comment");
+  txt.value = bodyOf(c);
+  dirty = false;
+  pop.classList.add("editing");
+  placePop(anchor ? anchor.getBoundingClientRect() : { left: 16, top: 100, bottom: 100 });
+  if (focus !== false) txt.focus();
+}
+// Both parts of a suggested edit carry the entry id, as a comment highlight
+// does, so clicking the strikethrough or the replacement reopens the same box.
+document.addEventListener("click", function(ev){
+  if (layerOff()) return;
+  var m = ev.target.closest && ev.target.closest("[data-cid]");
+  if (!m || pop.contains(ev.target)) return;
+  var c = comments.find(function(x){ return x.id === Number(m.dataset.cid); });
+  if (!c) return;
+  ev.preventDefault(); openEdit(c, m);
+});
+
+// Wraps a range in a highlight. surroundContents refuses a range that crosses
+// element boundaries, so fall back to lifting the contents out and wrapping.
+function wrapRange(range, id, title, cls){
+  var m = document.createElement("mark");
+  m.className = cls || "note"; m.title = title; m.dataset.cid = String(id);
+  try { range.surroundContents(m); }
+  catch (e) { m.appendChild(range.extractContents()); range.insertNode(m); }
+  return m;
+}
+// The ONE place the replacement span is created, rewritten or removed. Three
+// call sites need it (save a new edit, revise one, restore one on load) and
+// they drift apart if each does its own DOM work: an edit revised to empty has
+// to lose its span and become pure strikethrough again.
+function renderEditInline(c){
+  var m = document.querySelector('mark.anedit[data-cid="' + c.id + '"]');
+  if (!m) return;
+  m.title = c.replacement ? "suggested: " + c.replacement : "suggested deletion";
+  var s = document.querySelector('span.anins[data-cid="' + c.id + '"]');
+  if (!c.replacement) { if (s) s.remove(); return; }
+  if (!s) {
+    s = document.createElement("span");
+    s.className = "anins"; s.dataset.cid = String(c.id);
+    // The marker docTextNodes() looks for. Without it the first saved edit
+    // corrupts the anchor of every comment after it, because the replacement's
+    // words join the text that quotes are searched in.
+    s.setAttribute("data-an-inserted", "1");
+    m.parentNode.insertBefore(s, m.nextSibling);
+  }
+  s.textContent = c.replacement;
+}
+// Every text node of the page, skipping the layer's own UI, existing
+// highlights, and anything the layer itself put on the page. Re-anchoring
+// matches ORIGINAL document text only.
+function docTextNodes(){
+  var host = document.querySelector(".doc") || document.querySelector("main") || document.body;
+  var walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, { acceptNode: function(n){
+    var p = n.parentNode;
+    if (!p || !p.closest) return NodeFilter.FILTER_ACCEPT;
+    // `.anstatebtn` holds the state WORD, which the layer wrote and the reader
+    // did not: letting it join the searched text anchors a quote onto the
+    // control, where the next cycle overwrites the highlight.
+    if (p.closest("mark.note") || p.closest("mark.anedit") || p.closest("[data-an-inserted]") ||
+        p.closest(".anstatebtn") ||
+        p.closest("[data-annotation-layer]") || p.closest("script,style")) return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT;
+  }});
+  var out = [], n;
+  while ((n = walker.nextNode())) out.push(n);
+  return out;
+}
+// Collapses runs of whitespace to one space, and records where each kept
+// character sits in the raw text, so a match can be mapped back to real nodes.
+function collapsedIndex(nodes){
+  var norm = "", rawAt = [], raw = 0, lastWasSpace = false;
+  for (var k = 0; k < nodes.length; k++) {
+    var v = nodes[k].nodeValue;
+    for (var i = 0; i < v.length; i++, raw++) {
+      var isSpace = /\s/.test(v[i]);
+      if (isSpace && lastWasSpace) continue;
+      norm += isSpace ? " " : v[i];
+      rawAt.push(raw);
+      lastWasSpace = isSpace;
+    }
+  }
+  return { norm: norm, rawAt: rawAt };
+}
+// Finds a stored quote again after a reload. Selection.toString() gives
+// rendered text, where a newline inside a paragraph reads as a single space,
+// so the comparison has to collapse whitespace.
+function rangeForQuote(quote){
+  if (!quote) return null;
+  var nodes = docTextNodes();
+  if (!nodes.length) return null;
+  var starts = [], raw = 0;
+  for (var k = 0; k < nodes.length; k++) { starts.push(raw); raw += nodes[k].nodeValue.length; }
+  var idx = collapsedIndex(nodes);
+  var needle = quote.replace(/\s+/g, " ").trim();
+  if (!needle) return null;
+  var at = idx.norm.indexOf(needle);
+  if (at < 0) return null;
+  var rawFrom = idx.rawAt[at], rawTo = idx.rawAt[at + needle.length - 1] + 1;
+  function locate(offset, isEnd){
+    for (var j = 0; j < nodes.length; j++) {
+      var base = starts[j], end = base + nodes[j].nodeValue.length;
+      if (isEnd ? (offset > base && offset <= end) : (offset >= base && offset < end)) return [nodes[j], offset - base];
+    }
+    return null;
+  }
+  var s = locate(rawFrom, false), f = locate(rawTo, true);
+  if (!s || !f) return null;
+  var r = document.createRange(); r.setStart(s[0], s[1]); r.setEnd(f[0], f[1]);
+  return r;
+}
+// A reload rebuilds the DOM, so saved highlights are gone while the comments
+// survive in localStorage. Put the marks back, or a comment cannot be clicked
+// open to edit or delete. Quotes no longer on the page stay listed as orphans.
+function restoreHighlights(){
+  var missed = 0;
+  comments.forEach(function(c){
+    if (document.querySelector('mark[data-cid="' + c.id + '"]')) return;
+    var r = rangeForQuote(c.quote);
+    if (!r) { missed++; return; }
+    try {
+      if (isEdit(c)) { wrapRange(r, c.id, "", "anedit"); renderEditInline(c); }
+      else wrapRange(r, c.id, c.note, "note");
+    } catch (e) { missed++; }
+  });
+  return missed;
+}
+function hasMark(c){ return !!document.querySelector('mark[data-cid="' + c.id + '"]'); }
+// A selection touching an existing suggested edit, if there is one. Overlapping
+// edits cannot be exported appliably, and a quote that spans inserted text can
+// never be re-anchored, so such a selection is declined rather than annotated.
+function editOverlapping(range){
+  var els = document.querySelectorAll('mark.anedit[data-cid], span.anins[data-cid]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i], hit = false;
+    try { hit = range.intersectsNode(el); } catch (e) { hit = false; }
+    if (!hit) continue;
+    var cid = Number(el.dataset.cid);
+    var c = comments.find(function(x){ return x.id === cid; });
+    if (c) return { entry: c, el: el };
+  }
+  return null;
+}
+
+// Opens the note box for the current selection. autofocus is false on touch:
+// focusing a textarea while iOS is showing its selection handles collapses the
+// selection before the user has typed anything.
+//
+// This function only ever OPENS. Nothing about the selection closes the box —
+// that asymmetry is the whole flicker fix. Opening the box focuses the
+// textarea, focusing collapses the document selection, and the old code read
+// that collapse back as "the user deselected" and closed the box it had just
+// opened. The box now closes only on Save, Cancel/Escape, or a press outside
+// it while it is still empty.
+function openForSelection(autofocus){
+  if (editingId !== null) return false;
+  var sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  var text = sel.toString().trim();
+  if (!text) return false;
+  if (inLayer(sel.anchorNode) || inLayer(sel.focusNode)) return false;
+  // Already open on this exact selection: do not wipe a half-typed note.
+  if (pending && pending.quote === text && isOpen()) return true;
+  // Open on some other selection the user has MODIFIED: leave it be rather
+  // than throwing away work. The test is `dirty`, not non-emptiness: an
+  // untouched prefilled edit box yields to a fresh selection, and a dirty
+  // EMPTY edit box (a pending deletion) is work and must not be overwritten.
+  if (isOpen() && dirty) return true;
+  var range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
+  // Overlaps an existing suggested edit: point at that edit rather than open a
+  // second box on the range.
+  var hit = editOverlapping(range);
+  if (hit) { openEdit(hit.entry, hit.el, autofocus); nudge(autofocus); return true; }
+  editingId = null; pop.classList.remove("editing");
+  // Comment is the default on every fresh selection. A mode that stayed where
+  // it was last left would silently change what select-type-Enter means.
+  setModeState("comment");
+  pending = { quote: text, where: sectionOf(sel.anchorNode), range: range.cloneRange() };
+  placePop(rect);
+  txt.value = "";
+  dirty = false;
+  if (autofocus) txt.focus();
+  return true;
+}
+// Synchronous, so the focus stays inside the user gesture — Safari only
+// raises the soft keyboard for a focus() called within one.
+document.addEventListener("mouseup", function(ev){
+  if (layerOff()) return;
+  if (pop.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest("[data-cid]")) return;
+  clearTimeout(selTimer);
+  openForSelection(true);
+});
+// A press outside closes a box the user has not modified. A box with words the
+// user put there stays open: no gesture the user did not mean as "save" may
+// commit anything, and plenty of ordinary ones land here — right-clicking your
+// own selection to copy it, grabbing the scrollbar to reread the passage, or
+// pressing Clear all and then cancelling the confirm.
+//
+// The test is the dirty flag, NOT emptiness, because an edit box opens with
+// the selection already in it. Keyed on emptiness, opening one and changing
+// your mind would leave a box that cannot be dismissed.
+document.addEventListener("mousedown", function(ev){
+  if (!isOpen() || pop.contains(ev.target)) return;
+  if (dirty) return;
+  closePop();
+});
+// iOS Safari fires no mouseup for a touch selection drag, so a mouseup-only
+// handler makes the page uncommentable on iPhone and iPad. selectionchange
+// fires on every platform; debounce it so it runs once the selection settles.
+var selTimer = null;
+document.addEventListener("selectionchange", function(){
+  if (layerOff()) return;
+  if (document.activeElement === txt) return;
+  if (editingId !== null) return;
+  // Same test as openForSelection: modified work stays, an untouched prefill
+  // does not hold the page hostage.
+  if (isOpen() && dirty) return;
+  clearTimeout(selTimer);
+  selTimer = setTimeout(function(){ openForSelection(false); }, 250);
+});
+
+txt.addEventListener("keydown", function(ev){
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.altKey && !ev.isComposing) { ev.preventDefault(); save(); }
+  else if (ev.key === "Escape") { ev.preventDefault(); discard(); }
+  // A CHORD, never a bare letter. A single-key binding on a control that lives
+  // inside a textarea fires on the note being typed: on the context-ledger
+  // page, `d` in a comment marked the selected row dropped.
+  else if ((ev.ctrlKey || ev.metaKey) && (ev.key === "e" || ev.key === "E")) {
+    ev.preventDefault(); switchMode(mode === "edit" ? "comment" : "edit");
+  }
+});
+// The user touched the text: from here the box holds work, whether or not the
+// prefill it opened with is still in it.
+txt.addEventListener("input", function(){ dirty = true; saveDraft(); });
+document.addEventListener("keydown", function(ev){
+  if (ev.key === "Escape" && isOpen() && document.activeElement !== txt) discard();
+});
+
+function closePop(){
+  // #anDelete is one element reused by every entry: an arm left live here
+  // would confirm on the next opened entry's first click.
+  disarm();
+  pop.style.display = "none"; pending = null; editingId = null;
+  pop.classList.remove("editing"); pop.classList.remove("nudge");
+  setModeState("comment"); dirty = false;
+  txt.value = ""; lsDel(DRAFT);
+}
+function discard(){ closePop(); }
+// The in-progress note, saved on every keystroke, so a forced refresh reopens
+// the box where it was instead of losing what was typed into it.
+// `dirty` gates this, not emptiness: an edit box opens pre-filled with the
+// selection, and autosaving that would leave a draft nobody typed, which then
+// reopens the box on the next load for a note that was never begun.
+// In edit mode an EMPTY dirty box is meaningful: the prefill was cleared to
+// suggest a deletion, and a refresh before Enter must bring that back. In
+// comment mode an empty box is nothing to keep.
+function saveDraft(){
+  // Off, the box is shut but a draft from an earlier visit may be waiting in
+  // storage for the layer to come back on; the pagehide save must not take
+  // that closed box as "nothing to keep" and delete it.
+  if (layerOff()) return;
+  if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
+  lsSet(DRAFT, JSON.stringify({
+    note: txt.value, editingId: editingId, mode: mode,
+    quote: pending ? pending.quote : null, where: pending ? pending.where : null
+  }));
+}
+function restoreDraft(){
+  var d = unpackDraft();
+  if (!d) return;
+  if (d.editingId != null) {
+    var c = comments.find(function(x){ return x.id === d.editingId; });
+    // The comment was deleted elsewhere. Drop the draft rather than leave it
+    // to reattach itself to whichever comment is handed that id next.
+    if (!c) { lsDel(DRAFT); return; }
+    openEdit(c, document.querySelector('mark[data-cid="' + c.id + '"]'));
+    txt.value = d.note; dirty = true;
+    return;
+  }
+  var r = rangeForQuote(d.quote);
+  if (!r) return;
+  var sel = window.getSelection();
+  if (sel) { try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {} }
+  editingId = null; pop.classList.remove("editing");
+  setModeState(d.mode === "edit" ? "edit" : "comment");
+  pending = { quote: d.quote, where: d.where || sectionOf(r.startContainer), range: r.cloneRange() };
+  placePop(r.getBoundingClientRect());
+  // Restored words ARE user work, whatever they started as.
+  txt.value = d.note; dirty = true;
+}
+function unpackDraft(){
+  var d = null; try { d = JSON.parse(lsGet(DRAFT) || "null"); } catch (e) {}
+  if (!d || typeof d.note !== "string") return null;
+  // An empty note is a draft only for an edit that still knows its target: a
+  // pending deletion of `quote`, or a revision of an existing edit.
+  if (!d.note.trim() && !(d.mode === "edit" && (d.quote || d.editingId != null))) return null;
+  return d;
+}
+// These keep their names and every existing call site; what changed is that
+// the state lives on the comments now and the page-level key is derived from
+// it. Renaming them to say "copied out" is a separate no-behaviour commit.
+function markDirty(){ syncLegacyFlag(); }
+// A snapshot of exactly what went into the copied text, so a comment edited
+// while an async clipboard write was in flight is not stamped as copied. The
+// copy carried the OLD wording; the comment now holds new wording that has
+// never left the page, and stamping it would put unsent words in the
+// delete-copied set.
+function copySnapshot(){
+  return comments.map(function(c){
+    return { id: c.id, where: c.where, quote: c.quote, note: bodyOf(c) };
+  });
+}
+function markClean(snap){
+  var now = Date.now(), by = {};
+  (snap || copySnapshot()).forEach(function(x){ by[x.id] = x; });
+  comments.forEach(function(c){
+    var x = by[c.id];
+    if (x && x.where === c.where && x.quote === c.quote && x.note === bodyOf(c)) c.copiedAt = now;
+  });
+  persist(); syncLegacyFlag();
+}
+
+// ---- toggle state controls ------------------------------------------------
+// A page may carry toggle controls in its body: a task-list checkbox, or a
+// button cycling a declared state set such as approve / approve-pending-edits
+// / deny. Both wear one wrapper, `[data-an-state-id]`, so this layer needs no
+// configuration and a page with none of them is untouched.
+//
+// ONE KEY PER CONTROL. Each control's state lives under its own localStorage
+// key, `an-state:<page key>:<control id>`, prefix-namespaced exactly as the
+// draft and dirty keys are, so nothing here can collide with the comment array
+// -- which every layer generation parses as a bare array and dies on anything
+// else.
+//
+// This replaces a shared document holding every control at once, and with it
+// the reconciliation six rounds built on top of that document. It rested on
+// "an untick is said by REMOVING a key, and a merge-style write cannot say
+// it", which is false: an untick is an explicit " ", as a tick is an explicit
+// "x". Once a value can say not-ticked, nothing needs to replace a document,
+// and the read-modify-write -- unfixable here, because localStorage offers no
+// compare-and-set -- is gone rather than reconciled. So: two tabs touching
+// DIFFERENT controls write DIFFERENT keys and cannot collide, which is the
+// shape of every reproduction that beat the previous rounds (A ticks item 1
+// while B ticks item 3); no write is derived from a read, so a stale or failed
+// read cannot clobber; a refused write for one control cannot reach another's
+// value, so the loss flag is per control. Two tabs touching the SAME control
+// resolve last-writer-wins, which is correct and is not a bug to file: they
+// disagree about one value and the last to speak decides.
+//
+// The lesson the previous round's 16-state enumeration got wrong, recorded so
+// it is not rediscovered: "localStorage is synchronous and the page is
+// single-threaded, so read -> merge -> write -> read-back is one indivisible
+// step" holds WITHIN a tab and says nothing ACROSS tabs. Single-threaded stops
+// this tab's handlers interleaving; a second tab is a separate process.
+var STATE_PREFIX = "an-state:" + KEY + ":";
+
+function stateKeyOf(id){ return STATE_PREFIX + id; }
+function stateIdOf(key){
+  return (typeof key === "string" && key.indexOf(STATE_PREFIX) === 0)
+    ? key.slice(STATE_PREFIX.length) : null;
+}
+// The control's OWN key: a write reads this back for evidence that it landed,
+// so the fallback below must not be allowed to answer for it.
+function readStateKey(id){ return lsRead(stateKeyOf(id)); }
+// State written by the shared-document layer migrates LAZILY, here, one control
+// at a time: an id with no per-item value falls back to that document, which is
+// READ where it lies and never written or deleted, so a rolled-back page still
+// finds every tick. There is no copy pass, so nothing has to answer "did every
+// item land?" -- which a store that refuses one write in three cannot be asked,
+// and the marker that answered "yes" regardless abandoned the rest for good.
+function readState(id){
+  var v = readStateKey(id);
+  if (v !== null) return v;                   // a stored value, or FAILED
+  var raw = lsRead(STATES), d = null;
+  if (raw === FAILED) return FAILED;
+  try { d = JSON.parse(raw || "null"); } catch (e) {}
+  return (d && typeof d === "object" && !Array.isArray(d) && typeof d[id] === "string") ? d[id] : null;
+}
+
+var pendingStates = {};   // id -> value this tab wrote that the store did not take
+var stateDefaults = {};   // id -> the value the document itself shipped
+
+function hasPending(){ return Object.keys(pendingStates).length > 0; }
+// THE WRITE RULE, now one rule instead of three: write the one key this
+// control owns, then read that one key back. `setItem` returning without
+// throwing is not evidence -- a browser that silently no-ops the write would
+// stand the warning down over work that never left the page -- so the flag
+// comes from what the store holds after. No other control is touched, and the
+// render is for the refused-write line, the only place a lost tick is visible.
+function writeState(id, value){
+  var was = statesUnsaved;
+  lsSet(stateKeyOf(id), value);
+  if (readStateKey(id) === value) delete pendingStates[id];
+  else pendingStates[id] = value;
+  statesUnsaved = hasPending();
+  paintStateId(id);
+  if (statesUnsaved || was) render();
+}
+// Pending over stored over the document's own value. The last of those three
+// is what keeps an id the store has dropped from going on being displayed as
+// ticked, and a `[x]` the author wrote from being blanked when it does.
+function paintState(u){
+  var id = u.dataset.anStateId;
+  // A control this tab has never wired -- one injected after load -- has been
+  // touched by nobody, so what it is showing now IS the value it shipped.
+  if (!stateDefaults.hasOwnProperty(id)) stateDefaults[id] = stateValue(u);
+  var v = pendingStates.hasOwnProperty(id) ? pendingStates[id] : readState(id);
+  // A read that FAILED says nothing about the stored value, so what the reader
+  // is looking at stays: blanking it would show an untick nobody made.
+  if (v === FAILED) return;
+  if (typeof v !== "string" || !applyState(u, v)) applyState(u, stateDefaults[id]);
+}
+function paintStateId(id){
+  stateUnits().forEach(function(u){ if (u.dataset.anStateId === id) paintState(u); });
+}
+function syncStateDom(){ stateUnits().forEach(paintState); }
+function stateUnits(){ return Array.prototype.slice.call(document.querySelectorAll("[data-an-state-id]")); }
+function stateSetOf(unit){
+  var raw = unit.getAttribute("data-an-states");
+  if (!raw) return null;
+  var a; try { a = JSON.parse(raw); } catch (e) { return null; }
+  return (Array.isArray(a) && a.length) ? a : null;
+}
+// The reader-visible text of the item, which is also the control's accessible
+// name. Read from the DOM rather than written by the generator, so it is the
+// rendered text a screen reader would reach anyway.
+function stateLabel(unit){
+  var l = unit.querySelector(".anstatelabel");
+  return ((l ? l.textContent : unit.textContent) || "").trim().replace(/\s+/g, " ");
+}
+function stateValue(unit){
+  var box = unit.querySelector(".anstatebox");
+  if (box) return box.checked ? "x" : " ";
+  var b = unit.querySelector(".anstatebtn");
+  return b ? (b.dataset.anState || "") : "";
+}
+// Applies a state to the DOM and to nothing else. A value outside the declared
+// set is refused rather than shown: a rebuilt page can meet a key written
+// under a different state set, and rendering `maybe` on a control that has no
+// such state leaves a button whose next click has nowhere to go.
+function applyState(unit, value){
+  var box = unit.querySelector(".anstatebox");
+  // A checkbox has a declared set too -- it is `x` and a space -- so a stored
+  // value from some other state set is refused here rather than silently read
+  // as "not x" and shown as an untick the reader never made.
+  if (box) {
+    if (value !== "x" && value !== " ") return false;
+    box.checked = value === "x";
+    return true;
+  }
+  var b = unit.querySelector(".anstatebtn"), set = stateSetOf(unit);
+  if (!b || !set || set.indexOf(value) < 0) return false;
+  b.dataset.anState = value;
+  b.textContent = value;
+  b.setAttribute("aria-label", stateLabel(unit) + ": " + value);
+  return true;
+}
+function wireStates(){
+  stateUnits().forEach(function(unit){
+    var id = unit.dataset.anStateId;
+    var box = unit.querySelector(".anstatebox"), btn = unit.querySelector(".anstatebtn");
+    // Read BEFORE anything stored is applied, so this is the author's own
+    // marker -- the `[x]` in the source -- and not whatever the store held.
+    stateDefaults[id] = stateValue(unit);
+    if (box) {
+      // A real checkbox: the browser supplies the role, Space toggles it, and
+      // the name is the item's own text.
+      box.setAttribute("aria-label", stateLabel(unit));
+      box.addEventListener("change", function(){
+        writeState(id, box.checked ? "x" : " ");
+      });
+      return;
+    }
+    if (!btn) return;
+    var set = stateSetOf(unit) || [];
+    if (set.length && set.indexOf(stateDefaults[id]) < 0) stateDefaults[id] = set[0];
+    // A <button> is focusable and fires click on Enter and Space, so cycling
+    // works from the keyboard with no key handler here at all.
+    btn.addEventListener("click", function(){
+      if (!set.length) return;
+      var at = set.indexOf(btn.dataset.anState);
+      var next = set[(at + 1) % set.length];
+      if (!applyState(unit, next)) return;
+      writeState(id, next);
+    });
+  });
+  // One path paints the controls, on load and on every later change alike.
+  syncStateDom();
+}
+// Plain text, one shape for both kinds of control: the state sits in the
+// brackets a Markdown task list already uses, so a two-state page exports a
+// task list that can be pasted straight back into the source.
+function stateMarkdown(){
+  return stateUnits().map(function(u){
+    return "- [" + (stateValue(u) || " ") + "] " + stateLabel(u);
+  }).join("\n");
+}
+// A second tab's write is authoritative for the ONE control it carried. The
+// event names a single key, so there is no incoming map to merge and no way
+// for it to speak for a control it did not change -- which is what two earlier
+// rounds got wrong, first by replacing the in-memory map wholesale and then by
+// reconciling one map against the other.
+window.addEventListener("storage", function(e){
+  // A null key is `localStorage.clear()` from the other tab, which takes every
+  // one of these keys with it; ignoring it left controls showing values gone
+  // from the store.
+  var id = stateIdOf(e.key);
+  if (e.key !== null && id === null) return;
+  var was = statesUnsaved;
+  // Nothing is pending once the store holds it, whoever put it there. Only the
+  // ids this event could have changed: one of them, or all on a clear.
+  (id === null ? Object.keys(pendingStates) : [id]).forEach(function(k){
+    if (pendingStates.hasOwnProperty(k) && readStateKey(k) === pendingStates[k]) {
+      delete pendingStates[k];
+    }
+  });
+  statesUnsaved = hasPending();
+  if (id === null) syncStateDom(); else paintStateId(id);
+  if (statesUnsaved || was) render();
+});
+
+// ---- destructive controls ------------------------------------------------
+// No blocking dialog appears here, and none may be added. The Artifact viewer
+// runs the page inside a sandboxed iframe with no `allow-modals` keyword, so
+// `window.confirm` returns false without ever asking -- the browser just logs
+// "Ignored call to ...". Every delete guarded that way returned early on a
+// refusal the reviewer never saw: a dead button in the one place these pages
+// are read, and working perfectly in a local tab, which is why it survived.
+//
+// The guard is in the page instead. A first click arms the button and makes it
+// say what a second click will destroy; it disarms after ARM_MS, on Escape, or
+// on any re-render. Buttons are focusable, so Enter and Space arm and confirm
+// exactly like the pointer does.
+var ARM_MS = 4000;
+var WARN_CHANGED = '<span class="anwarn">the comments changed \u2014 nothing deleted</span>';
+var armedBtn = null, armedLabel = "", armedTimer = 0, armedBinding = null;
+function disarm(){
+  if (!armedBtn) return;
+  // render() may already have thrown this button away; restoring a detached
+  // node is harmless but pointless.
+  if (armedBtn.isConnected) { armedBtn.textContent = armedLabel; armedBtn.classList.remove("anarmed"); }
+  clearTimeout(armedTimer);
+  armedBtn = null; armedLabel = ""; armedTimer = 0; armedBinding = null;
+}
+// What an arm was armed AGAINST: the exact comments, plus enough of their
+// content to notice a change. A second tab's write can land inside the four
+// seconds an arm is live, and the `storage` handler only rebuilds when no note
+// is open -- so the confirming click has to prove the set is still the one the
+// label described, rather than trust that nothing moved under it.
+function bindingOf(list){
+  return list.map(function(c){
+    return c.id + ":" + (c.copiedAt || 0) + ":" + bodyOf(c).length + ":" + c.quote.length;
+  }).join(",");
+}
+// True only on the confirming click, and only while the set it was armed
+// against is unchanged. On any other click it arms `btn` and the caller must
+// return without destroying anything.
+function arm(btn, label, binding){
+  if (armedBtn === btn) {
+    var stale = armedBinding !== null && armedBinding !== binding;
+    disarm();
+    if (stale) { render(); toast(WARN_CHANGED, 4000); return false; }
+    return true;
+  }
+  disarm();
+  armedBtn = btn; armedLabel = btn.textContent;
+  armedBinding = binding === undefined ? null : binding;
+  btn.textContent = label;
+  btn.classList.add("anarmed");
+  armedTimer = setTimeout(disarm, ARM_MS);
+  return false;
+}
+// Escape cancels, whether focus sits on the armed button or anywhere else.
+// Both listeners are needed: the layer root stops key events from bubbling out
+// to the host page, so the document listener never sees a keystroke aimed at
+// the button, and a listener on the root alone would miss one aimed outside.
+function escDisarm(ev){ if (ev.key === "Escape") disarm(); }
+root.addEventListener("keydown", escDisarm);
+document.addEventListener("keydown", escDisarm);
+// A refused write is the one failure the page must not hide: with the quota
+// full, the panel would otherwise count a comment that is already gone.
+function persist(){
+  notesUnsaved = !lsSet(KEY, JSON.stringify(comments));
+}
+function unwrap(id){
+  var s = document.querySelector('span.anins[data-cid="' + id + '"]');
+  if (s) s.remove();
+  var m = document.querySelector('mark[data-cid="' + id + '"]');
+  if (m) { while (m.firstChild) m.parentNode.insertBefore(m.firstChild, m); m.remove(); }
+}
+
+function save(){
+  if (mode === "edit") { saveEdit(txt.value.trim()); return; }
+  var note = txt.value.trim();
+  if (!note) { closePop(); return; }
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    // Reopened to reread and closed unchanged: not an edit, so it must not
+    // reset the export state and re-arm the unload prompt.
+    if (c && c.note === note) { closePop(); return; }
+    // The copy that happened carried the previous wording, so the stamp no
+    // longer describes this comment. Without this, "delete copied" destroys
+    // the only copy of the edit and the next Copy all silently omits it.
+    if (c) { c.note = note; delete c.copiedAt; }
+    var m = document.querySelector('mark.note[data-cid="' + editingId + '"]');
+    if (m) m.title = note;
+  } else if (pending) {
+    var id = newId();
+    try { wrapRange(pending.range, id, note, "note"); } catch (e) {}
+    comments.push({ id: id, type: "comment", where: pending.where, quote: pending.quote, note: note });
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+// An empty replacement is a suggested DELETION, so there is no empty-means-
+// cancel shortcut here: the comment path's `if (!note) closePop()` would throw
+// away exactly the edit the reader worked to express.
+function saveEdit(replacement){
+  if (editingId !== null) {
+    var c = comments.find(function(x){ return x.id === editingId; });
+    if (c && c.replacement === replacement) { closePop(); return; }
+    if (c) { c.replacement = replacement; delete c.copiedAt; renderEditInline(c); }
+  } else if (pending) {
+    // The prefill is not user work: an untouched box saves nothing, so Enter
+    // on a box still holding the selection verbatim is a close, not an entry
+    // proposing to replace the text with itself.
+    if (!dirty) { closePop(); return; }
+    var id = newId();
+    var fresh = { id: id, type: "edit", where: pending.where,
+                  quote: pending.quote, replacement: replacement };
+    try { wrapRange(pending.range, id, "", "anedit"); } catch (e) {}
+    comments.push(fresh);
+    renderEditInline(fresh);
+  }
+  markDirty(); persist(); render(); closePop();
+  var sel = window.getSelection(); if (sel) sel.removeAllRanges();
+}
+
+$("anCancel").onclick = discard;
+$("anDelete").onclick = function(){
+  if (editingId === null) { closePop(); return; }
+  var id = editingId;
+  var c = comments.find(function(x){ return x.id === id; });
+  // A comment's Delete stays immediate -- the popup's CSS hides it while
+  // composing, it sits at the far end of the row, and it acts on one note the
+  // reader has just opened. A suggested edit arms first: it is written
+  // replacement text plus an anchor, and one stray click takes both.
+  if (isEdit(c) && !arm(this, "click again")) return;
+  comments = comments.filter(function(x){ return x.id !== id; });
+  unwrap(id);
+  markDirty(); persist(); render(); closePop();
+};
+$("anSave").onclick = save;
+
+// Builds into a fragment and swaps once, so the list never blanks between
+// clearing and refilling.
+function render(){
+  // Any armed row button is about to be replaced, and an arm left standing on
+  // a list this rebuild has changed would confirm a different comment.
+  disarm();
+  var list = $("anList"), count = $("anCount");
+  // Kept in step with the list on every rebuild, and disabled rather than
+  // hidden: a control that vanishes and reappears is harder to aim at than one
+  // that greys out, and its count is the only place the copied total is shown.
+  var nCopied = copiedSet().length, clearCopied = $("anClearCopied");
+  clearCopied.textContent = "Delete copied (" + nCopied + ")";
+  clearCopied.disabled = !nCopied;
+  var fresh = freshCount();
+  badge.textContent = "\uD83D\uDCAC " + comments.length;
+  badge.className = unsaved() || (isDirty() && comments.length) ? "warn" : "";
+  if (!comments.length) {
+    // A page with no comments still has somewhere to report a refused write:
+    // on a checklist-only page this line is the ONLY place the reader is told
+    // the ticks did not survive, so it outranks the empty-state wording.
+    count.textContent = statesUnsaved
+      ? "This browser refused to store the checklist \u2014 copy it out now"
+      : notesUnsaved
+        ? "This browser refused to store the change \u2014 copy your work out now"
+        : "No comments yet";
+    count.className = "ancount" + (unsaved() ? " warn" : "");
+    var empty = document.createElement("p");
+    empty.className = "anscope"; empty.textContent = "Select any text above to comment.";
+    list.replaceChildren(empty);
+    return;
+  }
+  // Once the list can be part copied and part not, a single verdict is a lie
+  // for one half of it. The split form appears only when the list is actually
+  // mixed, so the common uniform cases stay as short as they were. The same
+  // applies to the noun: "N comments" is wrong for half a mixed page, and the
+  // plain wording is kept for the comment-only page, which is most of them.
+  var nEdits = comments.filter(isEdit).length;
+  var what = nEdits
+    ? comments.length + (comments.length === 1 ? " item (" : " items (") +
+      nEdits + (nEdits === 1 ? " suggested edit)" : " suggested edits)")
+    : comments.length + (comments.length === 1 ? " comment" : " comments");
+  count.textContent = what +
+    (unsaved() ? " \u2014 this browser refused to store them, copy them now"
+               : !fresh ? " \u2014 copied out"
+               : fresh === comments.length ? " \u2014 not yet copied out"
+               : " \u2014 " + fresh + " of " + comments.length + " not yet copied out");
+  count.className = "ancount" + (unsaved() || isDirty() ? " warn" : "");
+  var frag = document.createDocumentFragment();
+  comments.forEach(function(c){
+    var d = document.createElement("div");
+    d.className = "cmt" + (isCopied(c) ? " ancopied" : "") + (isEdit(c) ? " ansuggest" : "");
+    var w = document.createElement("div"); w.className = "where"; w.textContent = c.where;
+    var q = document.createElement("div");
+    q.className = isEdit(c) ? "q struck" : "q";
+    q.textContent = "\u201C" + c.quote + "\u201D";
+    var n = document.createElement("div");
+    if (isEdit(c)) {
+      n.className = "ins";
+      n.textContent = c.replacement
+        ? "\u2192 " + c.replacement
+        : "\u2192 delete this text";
+    } else n.textContent = c.note;
+    var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
+    a.onclick = function(){
+      // Asking to edit is asking for the layer. Switch it on the normal way
+      // first, so a draft waiting out the off state is restored -- and then
+      // guarded by openEdit -- rather than lost under a box nobody can see.
+      if (layerOff()) layerOn();
+      var m = document.querySelector('mark[data-cid="' + c.id + '"]');
+      if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
+      else openEdit(c, null);
+    };
+    // Deleting one comment used to require opening its popup first, which is a
+    // detour for the commonest correction. It asks twice, because the note
+    // itself is the only copy and there is no undo.
+    var x = document.createElement("button");
+    x.className = "anbtn ghost tiny danger"; x.textContent = "delete";
+    x.onclick = function(){
+      if (!arm(x, "click again")) return;
+      comments = comments.filter(function(y){ return y.id !== c.id; });
+      unwrap(c.id);
+      if (editingId === c.id) closePop();
+      markDirty(); persist(); render();
+    };
+    d.append(w, q, n);
+    if (!hasMark(c)) { var o = document.createElement("div"); o.className = "orphan"; o.textContent = "quoted text not found on this version of the page"; d.append(o); }
+    var acts = document.createElement("div"); acts.className = "anacts";
+    acts.append(a, x);
+    d.append(acts); frag.appendChild(d);
+  });
+  list.replaceChildren(frag);
+}
+
+function markdown(list){
+  return list.map(function(c){
+    return "- **" + c.where + "** \u2014 " + c.note + "\n  > " + c.quote.replace(/\n/g, "\n  > ");
+  }).join("\n");
+}
+// Numbered, so a session applying them can say which one it could not place.
+function editMarkdown(list){
+  return list.map(function(c, i){
+    return (i + 1) + ". **" + c.where + "**" +
+      "\n   Replace:\n   > " + c.quote.replace(/\n/g, "\n   > ") +
+      "\n   With:" + (c.replacement
+        ? "\n   > " + c.replacement.replace(/\n/g, "\n   > ")
+        : " _(nothing \u2014 delete this text)_");
+  }).join("\n\n");
+}
+// The quotes are RENDERED text and the source is Markdown, so emphasis
+// markers, links and code spans differ between the two. The note below says so
+// in the export itself, because the export leaves this page and is read
+// without it. Nobody builds a sed loop over this format.
+var APPLY_NOTE = "These quotes are the page's RENDERED text; the source is Markdown. " +
+  "Locate each quote in the source and adapt the markup \u2014 do not apply these " +
+  "blocks byte-for-byte.";
+// A page with no suggested edits exports exactly what it did under v1: no
+// headings appear, so every existing paste-into-a-session habit still works.
+function exportText(){
+  var edits = comments.filter(isEdit);
+  var notes = comments.filter(function(c){ return !isEdit(c); });
+  var units = stateUnits();
+  var out = "# Comments \u2014 " + document.title + "\n\n";
+  // The checklist leads: it is the verdict, and the notes explain it.
+  if (units.length) out += "## Checklist\n\n" + stateMarkdown() + "\n\n";
+  if (edits.length) out += "## Suggested edits\n\n" + APPLY_NOTE + "\n\n" + editMarkdown(edits) + "\n\n";
+  if ((units.length || edits.length) && notes.length) out += "## Comments\n\n";
+  return out + (notes.length ? markdown(notes) + "\n" : "");
+}
+function toast(html, ms){ var t = $("anToast"); t.innerHTML = html; setTimeout(function(){ t.innerHTML = ""; }, ms || 1800); }
+// Comments have no download path: Copy all is their one export, with the
+// textarea below as its fallback. (The page itself can be downloaded -- see
+// "this page as HTML" below -- which is a different thing from the feedback.)
+// What the textarea currently holds. The box can sit open while the page is
+// edited behind it, so the copy event stamps the snapshot the text was built
+// from, not whatever the list happens to be when the user finally hits copy.
+var exportSnap = null;
+function openExport(){
+  var ta = $("anExportText"); ta.value = exportText();
+  exportSnap = copySnapshot();
+  $("anExport").style.display = "block";
+  ta.focus(); ta.select();
+}
+
+// Only a copy that actually happened may clear the export state — otherwise
+// the panel says the comments are safely out of the browser, and the unload
+// guard stands down, when nothing left it.
+$("anCopy").onclick = async function(){
+  // A page can be all checklist and no notes, and copying it out is the whole
+  // point of the checklist.
+  if (!comments.length && !stateUnits().length) { toast('<span class="anok">nothing to copy</span>', 1600); return; }
+  var ok = false;
+  // Both taken before the await: the clipboard promise can resolve after an
+  // edit has landed, and the text that went out is this one.
+  var snap = copySnapshot(), text = exportText();
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (e) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  // Clipboard refused: fall back to the selectable textarea. Opening it is not
+  // exporting -- the state clears when the text is actually copied out of it.
+  if (!ok) { openExport(); toast('<span class="anwarn">clipboard blocked \u2014 copy from the box</span>', 4000); return; }
+  markClean(snap); render();
+  toast('<span class="anok">copied ' + (comments.length || "the checklist") + '</span>');
+};
+$("anExportText").addEventListener("copy", function(){
+  // A copy of PART of the box carried part of the Markdown, so it did not
+  // take every comment out of the browser. Stamping them all would drop
+  // comments the user never copied into the "Delete copied" set, which is now
+  // a set something deletes. The whole-blob case is the normal one: the box
+  // opens with everything already selected.
+  var ta = this;
+  if (ta.selectionStart !== 0 || ta.selectionEnd !== ta.value.length) {
+    toast('<span class="anwarn">partial copy \u2014 nothing marked copied out</span>', 4000);
+    return;
+  }
+  markClean(exportSnap); render();
+  toast('<span class="anok">copied ' + comments.length + '</span>');
+});
+$("anExportClose").onclick = function(){ $("anExport").style.display = "none"; };
+// The safe prune, and the reason the literal request was inverted: this
+// deletes only what a copy actually carried out of the browser, so the next
+// Copy all sends fresh feedback rather than re-sending an actioned list.
+$("anClearCopied").onclick = function(){
+  var set = copiedSet();
+  if (!set.length) return;
+  if (!arm(this, "Click again to delete " + set.length + " copied out", bindingOf(set))) return;
+  var doomed = {};
+  set.forEach(function(c){ doomed[c.id] = true; unwrap(c.id); });
+  comments = comments.filter(function(c){ return !doomed[c.id]; });
+  if (editingId !== null && doomed[editingId]) closePop();
+  persist(); syncLegacyFlag(); render();
+};
+$("anClear").onclick = function(){
+  if (!comments.length) return;
+  // "Not copied out yet" is the whole reason this control asks twice, so the
+  // warning goes on the armed button, where it is read, rather than into a
+  // dialog the viewer never shows.
+  // The armed label carries the warning, because the dialog that would
+  // otherwise carry it never appears in the viewer. Naming the unsent count
+  // separately from the total is the whole point: "delete all 12" and "3 of
+  // these have never left this browser" are different facts.
+  var fresh = freshCount();
+  var warn = fresh
+    ? fresh + " not yet copied out \u2014 click again to delete all " + comments.length
+    : "All copied out \u2014 click again to delete all " + comments.length;
+  if (!arm(this, warn, bindingOf(comments))) return;
+  comments.slice().forEach(function(c){ unwrap(c.id); });
+  comments = []; markClean(); persist(); render();
+};
+// ---- this page as HTML ---------------------------------------------------
+function pageFilename(){
+  var slug = (document.title || "page").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  return (slug || "page") + ".html";
+}
+function pageToast(html, ms){
+  var t = $("anPageToast"); t.innerHTML = html;
+  setTimeout(function(){ t.innerHTML = ""; }, ms || 2400);
+}
+// Three places the page can be read, three behaviours for one button:
+// - in the viewer with the `downloads` capability (the owner, on a page
+//   published with it): a real save through the viewer's confirmation;
+// - in the viewer without it (a public-link viewer, or a page published
+//   before the capability was declared): shown DISABLED and saying so, so the
+//   reader learns Copy HTML is the route rather than finding no button at all.
+//   An `<a download>` is inert in the viewer's sandbox, so nothing else works;
+// - with no `window.claude` at all, the page is a local file -- a downloaded
+//   copy -- where an ordinary `<a download>` works.
+var downloads = null, dlBtn = $("anPageDownload");
+function downloadUnavailable(){
+  dlBtn.hidden = false; dlBtn.disabled = true;
+  dlBtn.textContent = "Download HTML (not available here)";
+  dlBtn.title = "This viewer does not let the page save files. Copy HTML works everywhere.";
+}
+function saveLocally(){
+  var url = URL.createObjectURL(new Blob([PAGE_HTML], { type: "text/html" }));
+  var a = document.createElement("a");
+  a.href = url; a.download = pageFilename();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 10000);
+}
+if (window.claude && typeof window.claude.use === "function") {
+  Promise.resolve().then(function(){ return window.claude.use("downloads"); })
+    .then(function(d){ if (d) { downloads = d; dlBtn.hidden = false; } else downloadUnavailable(); },
+          downloadUnavailable);
+} else {
+  dlBtn.hidden = false;
+}
+dlBtn.onclick = async function(){
+  if (!downloads) { if (!dlBtn.disabled) saveLocally(); return; }
+  try {
+    var r = await downloads.save({ filename: pageFilename(), data: PAGE_HTML });
+    if (r && r.status === "saved") pageToast('<span class="anok">saved</span>');
+  } catch (e) {
+    var code = e && e.code;
+    if (code === "declined") return;
+    if (code === "rate_limited") { pageToast('<span class="anwarn">a save prompt is already open</span>', 3000); return; }
+    downloadUnavailable();
+    pageToast('<span class="anwarn">download unavailable here \u2014 use Copy HTML</span>', 4000);
+  }
+};
+$("anPageCopy").onclick = async function(){
+  var ok = false;
+  try { await navigator.clipboard.writeText(PAGE_HTML); ok = true; }
+  catch (e) {
+    var ta = document.createElement("textarea");
+    ta.value = PAGE_HTML;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "0"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy") === true; } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  pageToast(ok ? '<span class="anok">page HTML copied</span>'
+               : '<span class="anwarn">clipboard blocked here</span>', ok ? 2400 : 4000);
+};
+
+badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+// ---- on/off switch -------------------------------------------------------
+// The Artifact viewer has its own commenting, and both answer the same
+// select-text gesture, so a reader can switch this layer's highlights and box
+// off. Off hides; it never deletes: the comments, their count, the badge's
+// warning, the unload guard and Copy all carry on as before, and a draft is
+// left in storage for the next time the layer is on. One reader's choice,
+// kept per page under its own prefixed key.
+function layerOff(){ return document.documentElement.classList.contains("an-off"); }
+function setLayerOff(off){
+  document.documentElement.classList.toggle("an-off", off);
+  toggle.setAttribute("aria-pressed", off ? "false" : "true");
+  toggle.textContent = off ? "Highlights off" : "Highlights on";
+}
+toggle.onclick = function(){
+  if (!layerOff()) {
+    // Words the reader typed are work, and closePop would delete their draft.
+    // Decline and point at them, as every other overwriting control does.
+    if (isOpen() && dirty) { nudge(); return; }
+    if (isOpen()) closePop();
+    setLayerOff(true);
+    lsSet(OFF, "1");
+  } else layerOn();
+};
+function layerOn(){
+  setLayerOff(false);
+  lsDel(OFF);
+  if (!isOpen()) restoreDraft();
+}
+setLayerOff(lsGet(OFF) === "1");
+
+// A host page may bind single-key shortcuts on document or window -- a triage
+// console where `d` means delete, a slideshow where `j` means next. Typing a
+// note would fire them: the keystroke bubbles out of this textarea and reaches
+// those listeners, so the page acts on every letter of the comment.
+//
+// Attached at the layer root in the BUBBLE phase, which is the only position
+// that separates the two. Handlers inside the layer (the textarea's own Enter
+// and Escape) sit deeper and have already run; document- and window-level
+// handlers sit higher and never see the event. A capture-phase listener on
+// window would be too early and would kill this layer's own keys as well.
+["keydown", "keypress", "keyup"].forEach(function(type){
+  root.addEventListener(type, function(ev){ ev.stopPropagation(); });
+});
+
+// Before restoreHighlights: a restored state word changes the page text that
+// quotes are re-anchored against, so it has to be settled first.
+wireStates();
+restoreHighlights();
+render();
+// Off on load: the draft stays stored and comes back when the layer is on.
+if (!layerOff()) restoreDraft();
+})();
+</script>
+<!-- /annotation-layer -->

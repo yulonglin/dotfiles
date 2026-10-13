@@ -46,6 +46,8 @@ In general, it would be good to present to the user ideas/thoughts scored by pla
 
 State the research question in one sentence, phrased so that it's falsifiable, and an outcome could contradict it — otherwise call the work exploratory and say so. Name the independent variable and its levels, **including anything varied by accident**: a changed prompt, renderer or model version is an independent variable whether or not you meant it to be. Name the dependent variable, its unit of analysis and how it aggregates. Name the null.
 
+**Research questions are the north star: every experiment names the one it answers.** Keep the project's open questions as a short numbered list at the top of its spec or `LOG.md`. Each experiment's spec and run record cite the question number, and each result updates that question's status — answered, narrowed or still open. A run that answers no listed question is either a new question to add to the list, or not worth running.
+
 **Every causal contrast declares which factors it changed and what its matched control is.** One factor at a time is the default and it is usually right, but it cannot see an interaction: model, prompt, scaffold and monitor move together often enough that a one-factor sweep can hand the whole effect to whichever factor happened to move first. Where an interaction is plausible, run a randomised factorial small enough to afford and report main effects and interactions separately, rather than reading a stack of one-factor rows as if they added up.
 
 **Ask what alternative explanations exist, and design the ablation that separates them** — an alternative explanation you cannot ablate away is a caveat the result will carry forever. Plan the ablations with the experiment, not after the headline number.
