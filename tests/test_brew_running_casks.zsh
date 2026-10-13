@@ -275,6 +275,13 @@ out="$(__CFBundleIdentifier=com.example.host quit_one "$WORK/Host.app" 99999)"
 has "an app whose bundle ID this shell inherited is left running" "$out" "host: hosts this shell, left running"
 out="$(__CFBundleIdentifier=com.example.other quit_one "$WORK/Host.app" 99999)"
 has "any other app is quit" "$out" "quitting Host"
+# Through tmux the pane's ancestors end at the tmux server and the inherited
+# bundle ID is whichever terminal started that server, so terminals never quit.
+: > "$EVENTS"
+out="$(PATH="$BIN:/usr/bin:/bin" OSTYPE=darwin25 BREW_QUIT_WAIT=0 zsh -fc \
+    "source '$WRAPPER'; _brew_quit_running ghostty\$'\t'/Applications/Ghostty.app\$'\t'99999\$'\t-'" 2>&1)"
+has "a terminal app is left running" "$out" "ghostty: a terminal app, left running"
+lacks "and never sent a quit" "$(cat "$EVENTS")" "Ghostty"
 
 print ""
 print "PASS=$PASS FAIL=$FAIL"

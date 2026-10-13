@@ -113,6 +113,13 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         local token app pids pid hosting
         local -a waiting=()
         while IFS=$'\t' read -r token app pids _; do
+            # A tmux pane's parent is the tmux server, not the terminal attached
+            # to it now, so neither check below can find that terminal. Never
+            # quit a terminal app; the rescan reports it as not upgraded.
+            if [[ "$token" == (ghostty|iterm2|warp|kitty|wezterm|alacritty|tabby|hyper)* ]]; then
+                print "  $token: a terminal app, left running"
+                continue
+            fi
             hosting=0
             for pid in ${(s:,:)pids}; do
                 (( ${ancestors[(Ie)$pid]} )) && hosting=1
