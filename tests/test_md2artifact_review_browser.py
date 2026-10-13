@@ -112,6 +112,9 @@ def _chromium_path() -> str | None:
     for name in ("chromium", "chromium-browser", "google-chrome"):
         if found := shutil.which(name):
             return found
+    mac_chrome = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    if mac_chrome.is_file():
+        return str(mac_chrome)
     return None
 
 
