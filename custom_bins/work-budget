@@ -5,11 +5,11 @@
     work-budget stop  ID|--all REASON
     work-budget status
 
-`start` prints a budget ID. The Stop/SubagentStop hook
-(claude/hooks/enforce_work_budget.py) refuses to let the session that printed
-that ID stop before the deadline, at most --max-blocks times. The ID binds the
-budget to a session: the hook looks for it in the stopping session's
-transcript, so a budget never traps another session.
+`start` prints a budget ID. The hook in claude/hooks/enforce_work_budget.py
+records the session (and subagent) whose Bash call ran `start` as the owner,
+then refuses that owner's stops before the deadline, at most --max-blocks
+times. No other session is held, and a budget started outside Claude Code
+holds nobody.
 
 Paper behind it: arXiv 2610.09944 (AgentTime) - told to "work for N hours",
 agents mostly stop early or idle. Kill switch for every budget at once:
