@@ -139,7 +139,15 @@ They may be asleep. Work autonomously until:
 - Budget exhausted → write the final summary
 - Strategy queue empty → attempt up to 3 combinations, then stop
 - Manually interrupted
+
+Wall-clock budget: [duration, or "none"]. If set, the loop's first command is
+`work-budget start [duration] --goal "[metric target]"`. While the budget runs,
+a stop is refused and handed back with the time left. Finish early only with
+`work-budget stop <ID> "<why the goal is met or blocked>"`. The deadline is a
+cap, not a target: a met success criterion is a reason to stop.
 ````
+
+**A prompt alone does not hold an agent to a duration.** Told to "work for a full N hours", Claude agents stopped early on most runs, and even the most punctual model sometimes idled or re-checked finished work to fill the time ([AgentTime, arXiv 2610.09944](https://arxiv.org/abs/2610.09944), Table 3 and section 4.1). So a spec with a wall-clock budget declares it with `work-budget` (in `custom_bins/`). The `enforce_work_budget.py` Stop and SubagentStop hook then holds only the session that started the budget. The hook is behind `guards.work-budget` in `claude/hooks/features.conf`, which stays off until one piloted research-loop run shows it helps. Leave the budget line as "none" for a closed task: one with a done-check gains little from more time (16× the time left the score unchanged on 62–64% of the paper's tasks).
 
 **Show the completed spec to the user for approval before launching.** They should read it and confirm it matches their intent.
 
