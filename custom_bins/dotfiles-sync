@@ -122,7 +122,11 @@ fetch_with_retry() {
 notify() {
     [[ "$NOTIFY" == "1" ]] || return 0
     [[ "$(uname -s)" == "Darwin" ]] || return 0
-    osascript -e "display notification \"$1\" with title \"dotfiles-sync\"" >/dev/null 2>&1 || true
+    # The message carries git's own error text, so it goes in as an argument,
+    # never spliced into the AppleScript source where a quote would end the string.
+    osascript -e 'on run argv' \
+        -e 'display notification (item 1 of argv) with title "dotfiles-sync"' \
+        -e 'end run' "$1" >/dev/null 2>&1 || true
 }
 
 # write_state NAME STATUS MESSAGE PULLED PUSHED HELD
