@@ -60,6 +60,10 @@ This deliberately pulls against `writing.md`, which says chains of "because A, t
 
 Bold follows the same genre split. In papers, bold is scarce: defined terms at first use, headline numbers, and paragraph leads of at most ~6 words — never a whole claim sentence. A page with ten bolded sentences has zero emphasised ones.
 
+## Findings arrive rated, so fixing is a choice
+
+A review, audit or backlog handed to Yulong rates each item on **value, risk and effort** (H/M/L) and recommends fix now, follow up, or drop. Effort is coding-agent wall-clock plus Yulong's review time; risk is the chance the change breaks something, adds a bug or slows experiment iteration. Past about eight items, plot them — value against effort, risk as colour — so the quick wins and the costly low-value tail show at a glance. There is almost always something left to address, and each fix can bring a new bug, so another review round is itself an item with a cost: run it only when the last round found something that changes a real output (`coding-conventions.md`).
+
 ## Manage attention deliberately
 
 Callouts, bolding and colour draw the eye to what matters; syntax highlighting on code. Show the high-level takeaway first; collapse transcripts, prompts, logs and JSON by default, expandable on demand. Progressive disclosure is the default — full transparency without cognitive overload.

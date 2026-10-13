@@ -267,6 +267,15 @@ Bear's own FAQ omits the colour encoding, so Yulong's copied-from-Bear examples 
 
 **Nothing separates the colour emoji from the text it marks** — `==🔴not recorded==`, never `==🔴 not recorded==`. The dot is a marker glued to the front of the span, not a word inside it, and a stray space renders as a gap in the highlight. This holds for every colour, not only 🔴.
 
+**Callouts come in five types: `NOTE`, `TIP`, `IMPORTANT`, `WARNING` and `CAUTION`** (listed in the Bear MCP server's own instructions). A callout is a block quote whose first line is the type marker, and every following line carries its own `>`, because Bear disables lazy continuation:
+
+```
+> [!IMPORTANT]
+> Merge PR 233 before installing the cron on hn.
+```
+
+Use them sparingly, for the one line a reader must not miss, not as a substitute for a highlight on a single phrase.
+
 **Wikilinks are how the vault cross-references itself.** A link to another note is `[[Note Title]]`, and it resolves by **title**, not by ID — the same title lookup the rest of this skill uses, so it is case-insensitive and matches the note's first `# Heading` (Bear derives the title from that line). `search_notes(query="@wikilinks", limit=10)` finds notes that contain one and `@backlinks` finds notes that are linked to, so both are searchable state, not decoration.
 
 Two consequences for editing:
