@@ -66,6 +66,7 @@ Options:
 Status indicators:
   *ACTIVE*        Process in foreground terminal (likely in use)
   tmux            Process belongs to a tmux session (preserved by default)
+  bg_job          Background-job daemon, pty host or session (preserved; the daemon owns its lifecycle)
   idle>=${IDLE_THRESHOLD_HOURS}h  No output activity for ${IDLE_THRESHOLD_HOURS}h
   recent          Output activity within last ${IDLE_THRESHOLD_HOURS}h
   orphaned        Parent is dead, zombie (Z), or reparented to init (ppid=1) - KILLED by default
@@ -100,23 +101,42 @@ is_in_tmux() {
     return 1
 }
 
-# Check if process has any children with active CPU (>= 1%)
-# Used to detect stuck sessions where parent + all children are idle
-has_active_children() {
-    local ppid="$1"
-    local child_pid
+# Background-job daemon (`claude daemon run`), its pty hosts (`--bg-pty-host`) and the
+# job sessions they run (`--bg-spare`). The daemon owns their lifecycle; killing it
+# SIGTERMs every live background job (daemon.log: cause=signal at 17:00 UTC, Oct 2026).
+is_bg_job_process() {
+    local args
+    args=$(ps -p "$1" -o args= 2>/dev/null) || return 1
+    [[ "$args" =~ (^|[[:space:]])(--bg-[a-z-]+|daemon[[:space:]]+run)([[:space:]]|$) ]]
+}
 
-    # Check all child processes
+# Signal a target's direct children (e.g. orphaned MCP servers), sparing any
+# background-job daemon it spawned: a transient daemon stays the spawning
+# session's child until that session exits.
+signal_children() {
+    local sig="$1" child_pid
+    while IFS= read -r child_pid; do
+        [[ -z "$child_pid" ]] && continue
+        is_bg_job_process "$child_pid" && continue
+        kill -s "$sig" "$child_pid" 2>/dev/null || true
+    done < <(pgrep -P "$2" 2>/dev/null)
+}
+
+# Check if any descendant (not just a direct child) has CPU >= 1%.
+# Experiments launched from a session are grandchildren (claude -> zsh -> python),
+# so direct children alone would miss them. ps %cpu is the lifetime average on Linux.
+has_active_descendants() {
+    local child_pid
     while IFS= read -r child_pid; do
         [[ -z "$child_pid" ]] && continue
         local child_cpu=$(ps_field "$child_pid" "%cpu")
         if [[ -n "$child_cpu" && "${child_cpu%.*}" != "" ]]; then
             local child_cpu_int="10#${child_cpu%.*}"
-            (( child_cpu_int >= 1 )) && return 0  # Found active child
+            (( child_cpu_int >= 1 )) && return 0
         fi
-    done < <(pgrep -P "$ppid" 2>/dev/null)
-
-    return 1  # No active children found
+        has_active_descendants "$child_pid" && return 0
+    done < <(pgrep -P "$1" 2>/dev/null)
+    return 1
 }
 
 get_process_tty() {
@@ -249,11 +269,12 @@ is_orphaned() {
 
         # If we hit init (PID 1)
         if [[ "$ppid" == "1" ]]; then
-            # If the process IMMEDIATELY under PID 1 is a shell or common terminal wrapper,
-            # and the original process has a TTY, it's a ghost from a closed terminal.
-            if [[ "$pcomm" == *"zsh"* || "$pcomm" == *"bash"* || "$pcomm" == *"sh"* || "$pcomm" == "-"* ]]; then
-                return 0
-            fi
+            # If the process IMMEDIATELY under PID 1 is a shell, it's a ghost from a
+            # closed terminal. Match names exactly: a substring glob on "sh" also
+            # matched mosh-server and sshd, so every live mosh/ssh session was "orphaned".
+            case "$pcomm" in
+                zsh|bash|sh|dash|ksh|fish|tcsh|-*) return 0 ;;
+            esac
             # Otherwise, it might be a legitimate daemon or background agent
             return 1
         fi
@@ -296,7 +317,11 @@ is_process_old() {
 get_process_status() {
     local pid="$1"
 
-    # Check tmux ancestry first (requires walking parent chain)
+    # Background jobs first: a daemon spawned from a tmux session must not fall
+    # into TMUX, which --force kills
+    is_bg_job_process "$pid" && { echo "BGJOB"; return; }
+
+    # Check tmux ancestry (requires walking parent chain)
     is_in_tmux "$pid" && { echo "TMUX"; return; }
 
     # Get stat in one call
@@ -307,6 +332,10 @@ get_process_status() {
 
     # Zombie process - always killable
     [[ "$stat" == *"Z"* ]] && { echo "ORPHANED"; return; }
+
+    # A busy descendant (an experiment launched from this session) means in use,
+    # whatever the session's own CPU, TTY or parent chain looks like.
+    has_active_descendants "$pid" && { echo "ACTIVE"; return; }
 
     # Orphaned process: parent is dead or reparented to init
     if is_orphaned "$pid"; then
@@ -439,6 +468,7 @@ status_label() {
     case "$1" in
         ACTIVE)        echo "*ACTIVE*" ;;
         TMUX)          echo "tmux" ;;
+        BGJOB)         echo "bg_job" ;;
         IDLE)          echo "idle>=${IDLE_THRESHOLD_HOURS}h" ;;
         RECENT)        echo "recent" ;;
         ORPHANED)      echo "orphaned" ;;
@@ -509,7 +539,7 @@ show_status() {
     echo "$LINE"
 
     # Counters as associative-style with simple variables
-    local count=0 active_count=0 tmux_count=0 idle_count=0 recent_count=0
+    local count=0 active_count=0 tmux_count=0 bgjob_count=0 idle_count=0 recent_count=0
     local orphaned_count=0 stopped_count=0 stale_unknown_count=0 unknown_count=0 ghost_count=0
     local unknown_pids=()
 
@@ -529,6 +559,7 @@ show_status() {
         case "$proc_status" in
             ACTIVE)        ((active_count++)) || true ;;
             TMUX)          ((tmux_count++)) || true ;;
+            BGJOB)         ((bgjob_count++)) || true ;;
             IDLE)          ((idle_count++)) || true ;;
             RECENT)        ((recent_count++)) || true ;;
             ORPHANED)      ((orphaned_count++)) || true ;;
@@ -543,7 +574,7 @@ show_status() {
     done < <(get_claude_ps_lines)
 
     echo "$LINE"
-    echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, idle: $idle_count, recent: $recent_count, orphaned: $orphaned_count, stopped: $stopped_count, stale_unknown: $stale_unknown_count, unknown: $unknown_count"
+    echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, bg_job: $bgjob_count, idle: $idle_count, recent: $recent_count, orphaned: $orphaned_count, stopped: $stopped_count, stale_unknown: $stale_unknown_count, unknown: $unknown_count"
 
     # Status-specific notes
     [[ $active_count -gt 0 ]] && echo -e "\n⚠️  Warning: $active_count process(es) appear to be in active use.\n   Use --dry-run to preview before killing."
@@ -626,7 +657,8 @@ fi
 PIDS_TO_KILL=()
 SKIPPED_CURRENT=false
 # Counters (simple vars for bash 3.2 compatibility)
-SKIPPED_ACTIVE=0 SKIPPED_TMUX=0 SKIPPED_RECENT=0 SKIPPED_UNKNOWN=0
+SKIPPED_ACTIVE=0 SKIPPED_TMUX=0 SKIPPED_BGJOB=0 SKIPPED_RECENT=0 SKIPPED_UNKNOWN=0
+KILL_REASONS=()
 KILLING_ORPHANED=0 KILLING_STOPPED=0 KILLING_IDLE=0 KILLING_STALE_UNKNOWN=0 KILLING_GHOST=0
 KILLING_ACTIVE=0 KILLING_TMUX=0 KILLING_RECENT=0 KILLING_UNKNOWN=0
 
@@ -638,6 +670,12 @@ for pid in "${PIDS[@]}"; do
     fi
 
     proc_status=$(get_process_status "$pid")
+
+    # Background jobs survive even --force; only --all takes them
+    if [[ "$proc_status" == "BGJOB" && "$KILL_ALL" == "false" ]]; then
+        ((SKIPPED_BGJOB++)) || true
+        continue
+    fi
 
     # Skip active processes unless --force
     if [[ "$FORCE" == "false" ]]; then
@@ -665,6 +703,7 @@ for pid in "${PIDS[@]}"; do
     esac
 
     PIDS_TO_KILL+=("$pid")
+    KILL_REASONS+=("$(status_label "$proc_status")")
 done
 
 KILL_COUNT=${#PIDS_TO_KILL[@]}
@@ -675,21 +714,23 @@ build_skip_msg() {
     [[ "$SKIPPED_CURRENT" == "true" ]] && msg="$msg (current session preserved)"
     [[ $SKIPPED_ACTIVE -gt 0 ]] && msg="$msg ($SKIPPED_ACTIVE active preserved, use --force to kill)"
     [[ $SKIPPED_TMUX -gt 0 ]] && msg="$msg ($SKIPPED_TMUX tmux preserved)"
+    [[ $SKIPPED_BGJOB -gt 0 ]] && msg="$msg ($SKIPPED_BGJOB background-job processes preserved)"
     [[ $SKIPPED_RECENT -gt 0 ]] && msg="$msg ($SKIPPED_RECENT recent output preserved)"
     [[ $SKIPPED_UNKNOWN -gt 0 ]] && msg="$msg ($SKIPPED_UNKNOWN background agents preserved)"
     echo "$msg"
 }
 
 if [[ $KILL_COUNT -eq 0 ]]; then
-    echo "No Claude Code processes to kill$(build_skip_msg)"
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] No Claude Code processes to kill$(build_skip_msg)"
     exit 0
 fi
 
 # Show what we're doing
-echo "Found $TOTAL Claude Code process(es)"
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Found $TOTAL Claude Code process(es)"
 [[ "$SKIPPED_CURRENT" == "true" ]] && echo "  Preserving current session (PID $CURRENT_PID)"
 [[ $SKIPPED_ACTIVE -gt 0 ]] && echo "  Preserving $SKIPPED_ACTIVE active process(es)"
 [[ $SKIPPED_TMUX -gt 0 ]] && echo "  Preserving $SKIPPED_TMUX tmux process(es)"
+[[ $SKIPPED_BGJOB -gt 0 ]] && echo "  Preserving $SKIPPED_BGJOB background-job process(es)"
 [[ $SKIPPED_RECENT -gt 0 ]] && echo "  Preserving $SKIPPED_RECENT process(es) with recent output"
 [[ $SKIPPED_UNKNOWN -gt 0 ]] && echo "  Preserving $SKIPPED_UNKNOWN background process(es) with living parent"
 
@@ -744,11 +785,17 @@ else
     failed_pids=()
     stubborn_pids=()
 
+    # Record each target before it dies, so a lost session can be traced to this run
+    for i in "${!PIDS_TO_KILL[@]}"; do
+        pid="${PIDS_TO_KILL[$i]}"
+        echo "  kill pid=$pid reason=${KILL_REASONS[$i]} etime=$(ps_field "$pid" etime) cwd=$(readlink /proc/"$pid"/cwd 2>/dev/null || echo ?) parents=$(get_parent_chain "$pid") args=$(ps -p "$pid" -o args= 2>/dev/null | cut -c1-160)"
+    done
+
     # First pass: SIGTERM to children then parent
     # NEVER use kill -- -$pgid (process group kill) — an orphaned process can share
     # a PGID with a live tmux session, causing collateral kills.
     for pid in "${PIDS_TO_KILL[@]}"; do
-        pkill -P "$pid" 2>/dev/null || true
+        signal_children TERM "$pid"
         kill "$pid" 2>/dev/null || true
     done
 
@@ -758,7 +805,7 @@ else
     # Second pass: check survivors, SIGKILL stubborn ones
     for pid in "${PIDS_TO_KILL[@]}"; do
         # Kill any remaining children with -9
-        pkill -9 -P "$pid" 2>/dev/null || true
+        signal_children KILL "$pid"
 
         if ps -p "$pid" >/dev/null 2>&1; then
             # Still alive, use SIGKILL
