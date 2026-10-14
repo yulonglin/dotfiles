@@ -216,11 +216,11 @@ slug = "z-ai/glm-5.3"
 context-window = 262124
 
 [[models]]
-id = "muse-spark-1.3"
-aliases = ["muse-spark", "muse"]
-name = "Muse Spark 1.3"
+id = "muse-wonder"
+aliases = ["muse"]
+name = "Muse Wonder"
 provider = "openrouter"
-slug = "meta/muse-spark-1.3"
+slug = "meta/muse-wonder"
 context-window = 1048576
 
 [[models]]
@@ -231,20 +231,15 @@ provider = "openrouter"
 slug = "x-ai/grok-4.7"
 context-window = 500000
 
-# Back in the picker and as an agent on 2026-10-12. Off since 2026-09-22, when a
-# full Claude Code request on 3.7 Flash returned "400 Provider returned error"
-# with no upstream body kept. Not reproduced on 2026-10-12: the captured full
-# request (12 tools, max_tokens 32000, reasoning high, streamed), a 100-tool
-# ~90k-token request and long MCP-style tool names all pass on 3.7 and 3.8
-# Flash, pinned to AI Studio and to Vertex; the CLIProxyAPI that failed and the
-# current one translate the request identically. If it recurs, keep the
-# upstream error.metadata.raw.
+# Gemini 3.7 Flash once returned "400 Provider returned error" on a full Claude
+# Code request (2026-09-22), not reproduced on 3.7 or 3.8 Flash on 2026-10-12.
+# If a 400 recurs on any Gemini, keep the upstream error.metadata.raw.
 [[models]]
-id = "gemini-3.8-flash"
+id = "gemini-4-argon"
 aliases = ["gemini"]
-name = "Gemini 3.8 Flash"
+name = "Gemini 4 Argon"
 provider = "openrouter"
-slug = "google/gemini-3.8-flash"
+slug = "google/gemini-4-argon"
 context-window = 1048576
 
 [[models]]

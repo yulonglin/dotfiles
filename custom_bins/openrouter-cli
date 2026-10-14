@@ -1029,6 +1029,13 @@ def catalog_rows(data: list[dict] | None = None) -> list[dict]:
     return rows
 
 
+# Names the last index_scores() scored from Artificial Analysis alone, because
+# Epoch had not reached them. pick_seat() labels such a seat "aa-only" rather
+# than "eci", which on 2026-10-13 it wrongly wrote for gemini-4-argon and
+# muse-wonder.
+AA_ONLY: set[str] = set()
+
+
 def index_scores(candidates: list[str] | None = None) -> tuple[dict[str, float], list[str]]:
     """Capability score per normalised model name, plus attribution lines.
 
@@ -1040,6 +1047,7 @@ def index_scores(candidates: list[str] | None = None) -> tuple[dict[str, float],
     """
     eci = fetch_eci()
     aa = fetch_aa(candidates)
+    AA_ONLY.clear()
     credits = ["Epoch AI Capabilities Index (CC-BY)"]
     if not aa:
         return eci, credits
@@ -1061,6 +1069,7 @@ def index_scores(candidates: list[str] | None = None) -> tuple[dict[str, float],
         return {k: (v - lo) / (hi - lo) for k, v in d.items()}
 
     ne, na = unit(eci), unit(aa)
+    AA_ONLY.update(set(na) - set(ne))
     out = {}
     for name in set(ne) | set(na):
         parts = [d[name] for d in (ne, na) if name in d]
@@ -1070,7 +1079,8 @@ def index_scores(candidates: list[str] | None = None) -> tuple[dict[str, float],
 
 def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
               cap: float, in_cap: float = float("inf"),
-              cis: dict[str, tuple[float, float]] | None = None) -> dict | None:
+              cis: dict[str, tuple[float, float]] | None = None,
+              aa_only: set[str] | None = None) -> dict | None:
     """The best seat for one family under both price caps, or None.
 
     Both caps, not just output: the `--rank` round sends every seat the other
@@ -1117,7 +1127,9 @@ def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
     if tied:
         cand, cs = max(tied, key=lambda rs: rs[0]["created"])
         return {**cand, "score": round(cs, 2), "basis": "newest-within-ci"}
-    return {**best, "score": round(score, 2), "basis": "eci"}
+    aa_only = AA_ONLY if aa_only is None else aa_only
+    basis = "aa-only" if norm(best["tail"]) in aa_only else "eci"
+    return {**best, "score": round(score, 2), "basis": basis}
 
 
 def alias_for(cfg: dict, family: str, slug: str) -> str:
@@ -1281,6 +1293,10 @@ def cmd_council_refresh(args, cfg) -> None:
     print("\nScores: " + "; ".join(credits) + ". Attribution required.")
     if len(credits) == 1:
         print("note: ranked on Epoch alone - Artificial Analysis was unreachable.", file=sys.stderr)
+        # Epoch lags releases by weeks, so an Epoch-only pick quietly reseats
+        # the previous generation under a confident "eci" label.
+        if args.apply and not args.epoch_only:
+            die("refusing to --apply an Epoch-only ranking; retry, or pass --epoch-only to accept it")
     if not args.apply:
         print("\n(dry run - pass --apply to write the config)")
         return
@@ -1823,6 +1839,8 @@ def main() -> None:
         help="re-pick every seat from the capability indices (dry run by default)")
     cf_.add_argument("--apply", action="store_true",
                      help="write the new seats into the config")
+    cf_.add_argument("--epoch-only", action="store_true",
+                     help="let --apply proceed when Artificial Analysis is unreachable")
     cf_.set_defaults(fn=cmd_council_refresh)
 
     cv = csub.add_parser(
