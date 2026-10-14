@@ -110,6 +110,18 @@ is_bg_job_process() {
     [[ "$args" =~ (^|[[:space:]])(--bg-[a-z-]+|daemon[[:space:]]+run)([[:space:]]|$) ]]
 }
 
+# Signal a target's direct children (e.g. orphaned MCP servers), sparing any
+# background-job daemon it spawned: a transient daemon stays the spawning
+# session's child until that session exits.
+signal_children() {
+    local sig="$1" child_pid
+    while IFS= read -r child_pid; do
+        [[ -z "$child_pid" ]] && continue
+        is_bg_job_process "$child_pid" && continue
+        kill -s "$sig" "$child_pid" 2>/dev/null || true
+    done < <(pgrep -P "$2" 2>/dev/null)
+}
+
 # Check if any descendant (not just a direct child) has CPU >= 1%.
 # Experiments launched from a session are grandchildren (claude -> zsh -> python),
 # so direct children alone would miss them. ps %cpu is the lifetime average on Linux.
@@ -781,7 +793,7 @@ else
     # NEVER use kill -- -$pgid (process group kill) — an orphaned process can share
     # a PGID with a live tmux session, causing collateral kills.
     for pid in "${PIDS_TO_KILL[@]}"; do
-        pkill -P "$pid" 2>/dev/null || true
+        signal_children TERM "$pid"
         kill "$pid" 2>/dev/null || true
     done
 
@@ -791,7 +803,7 @@ else
     # Second pass: check survivors, SIGKILL stubborn ones
     for pid in "${PIDS_TO_KILL[@]}"; do
         # Kill any remaining children with -9
-        pkill -9 -P "$pid" 2>/dev/null || true
+        signal_children KILL "$pid"
 
         if ps -p "$pid" >/dev/null 2>&1; then
             # Still alive, use SIGKILL
