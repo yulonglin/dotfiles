@@ -1274,6 +1274,9 @@ def cmd_council_roster(args, cfg) -> None:
             print(f"  ! {fam:<11} no model under the price caps")
         print("\napply with: openrouter-cli council refresh --apply")
     print("\nScores: " + "; ".join(credits) + ". Attribution required.")
+    if len(credits) == 1:
+        print("note: ranked on Epoch alone - Artificial Analysis was unreachable, so "
+              "models Epoch has not scored yet cannot win a seat.", file=sys.stderr)
     if age is not None and age > due:
         raise SystemExit(3)
     if now != was:
