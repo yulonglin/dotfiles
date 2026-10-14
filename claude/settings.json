@@ -205,8 +205,8 @@
         "description": "OpenRouter, pay per token"
       },
       {
-        "model": "muse-spark",
-        "label": "Muse Spark 1.3",
+        "model": "muse",
+        "label": "Muse Wonder",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -216,7 +216,7 @@
       },
       {
         "model": "gemini",
-        "label": "Gemini 3.8 Flash",
+        "label": "Gemini 4 Argon",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -1003,10 +1003,7 @@
     "glm": {
       "autoCompactWindow": 262124
     },
-    "muse-spark-1.3": {
-      "autoCompactWindow": 1000000
-    },
-    "muse-spark": {
+    "muse-wonder": {
       "autoCompactWindow": 1000000
     },
     "muse": {
@@ -1018,7 +1015,7 @@
     "grok": {
       "autoCompactWindow": 500000
     },
-    "gemini-3.8-flash": {
+    "gemini-4-argon": {
       "autoCompactWindow": 1000000
     },
     "gemini": {

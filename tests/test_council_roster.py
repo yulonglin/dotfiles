@@ -18,6 +18,7 @@ the institutional memory of why each guard exists, so losing it to a serialiser
 round-trip would be a real defect rather than a cosmetic one.
 """
 
+import argparse
 import re
 import importlib.machinery
 import importlib.util
@@ -112,6 +113,51 @@ class TestPickSeat:
         rows = [row("x/a", 5, 100), row("x/b", 5, 300)]
         got = orc.pick_seat("x", rows, {}, 60.0)
         assert got["slug"] == "x/b" and got["basis"] == "newest-in-line"
+
+    def test_a_seat_only_aa_has_scored_says_so(self):
+        """The gemini-4-argon case: Epoch had no score, yet the seat read "eci"."""
+        rows = [row("x/new-line", 10, 200), row("x/old-flash", 4, 100)]
+        scores = {"newline": 0.9, "oldflash": 0.5}
+        got = orc.pick_seat("x", rows, scores, 60.0, aa_only={"newline"})
+        assert got["slug"] == "x/new-line" and got["basis"] == "aa-only"
+
+
+class TestIndexScores:
+    def test_records_names_only_aa_scored(self, monkeypatch):
+        monkeypatch.setattr(orc, "AA_ONLY", set())
+        monkeypatch.setattr(orc, "fetch_eci", lambda: {"a": 150.0, "b": 160.0})
+        monkeypatch.setattr(orc, "fetch_aa", lambda _: {"a": 40.0, "b": 50.0, "c": 55.0})
+        orc.index_scores(["a", "b", "c"])
+        assert orc.AA_ONLY == {"c"}
+
+    def test_aa_unreachable_leaves_nothing_aa_only(self, monkeypatch):
+        monkeypatch.setattr(orc, "AA_ONLY", {"stale"})
+        monkeypatch.setattr(orc, "fetch_eci", lambda: {"a": 150.0})
+        monkeypatch.setattr(orc, "fetch_aa", lambda _: {})
+        _, credits = orc.index_scores(["a"])
+        assert len(credits) == 1 and orc.AA_ONLY == set()
+
+
+class TestRefreshApplyGuard:
+    """Epoch lags releases by weeks, so an Epoch-only --apply would reseat the
+    previous generation under a confident "eci" label."""
+
+    def _apply(self, monkeypatch, epoch_only):
+        seat = {"alias": "x", "slug": "x/old", "family": "x", "score": 1.0,
+                "basis": "eci", "in": 1.0, "out": 1.0}
+        monkeypatch.setattr(orc, "propose_roster", lambda cfg: ([seat], [], ["Epoch only"]))
+        writes = []
+        monkeypatch.setattr(orc, "rewrite_seats", lambda *a: writes.append(a))
+        monkeypatch.setattr(orc, "report_picker_gaps", lambda picked: None)
+        orc.cmd_council_refresh(argparse.Namespace(apply=True, epoch_only=epoch_only), {})
+        return writes
+
+    def test_refuses_without_the_flag(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._apply(monkeypatch, epoch_only=False)
+
+    def test_writes_with_the_flag(self, monkeypatch):
+        assert len(self._apply(monkeypatch, epoch_only=True)) == 1
 
 
 class TestRenderSeats:
