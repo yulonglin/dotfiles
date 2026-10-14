@@ -317,10 +317,12 @@ is_process_old() {
 get_process_status() {
     local pid="$1"
 
-    # Check tmux ancestry first (requires walking parent chain)
-    is_in_tmux "$pid" && { echo "TMUX"; return; }
-
+    # Background jobs first: a daemon spawned from a tmux session must not fall
+    # into TMUX, which --force kills
     is_bg_job_process "$pid" && { echo "BGJOB"; return; }
+
+    # Check tmux ancestry (requires walking parent chain)
+    is_in_tmux "$pid" && { echo "TMUX"; return; }
 
     # Get stat in one call
     local stat=$(ps_field "$pid" "stat")
