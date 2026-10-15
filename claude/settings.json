@@ -739,7 +739,8 @@
       "node_modules",
       "target",
       ".git/lfs"
-    ]
+    ],
+    "baseRef": "head"
   },
   "statusLine": {
     "type": "command",
