@@ -121,6 +121,12 @@ class TestPickSeat:
         got = orc.pick_seat("x", rows, scores, 60.0, aa_only={"newline"})
         assert got["slug"] == "x/new-line" and got["basis"] == "aa-only"
 
+    def test_a_seat_resting_on_an_aa_estimate_says_so(self):
+        rows = [row("x/new-line", 10, 200), row("x/old-flash", 4, 100)]
+        scores = {"newline": 0.9, "oldflash": 0.5}
+        got = orc.pick_seat("x", rows, scores, 60.0, aa_only={"newline"}, aa_estimated={"newline"})
+        assert got["basis"] == "aa-estimated"
+
 
 class TestIndexScores:
     def test_records_names_only_aa_scored(self, monkeypatch):
@@ -608,14 +614,35 @@ class TestArtificialAnalysisPages:
 
     def test_best_effort_variant_stands_for_the_release(self):
         html = aa_record("grok-4-6", "grok-4-6", 44.3) + aa_record("grok-4-6-low", "grok-4-6", 35.1)
-        assert orc.aa_page_scores(html) == {"grok46": 44.3}
+        assert orc.aa_page_records(html) == ({"grok46": 44.3}, {})
 
     def test_release_slug_normalises_onto_the_openrouter_tail(self):
         html = aa_record("qwen3-8-max", "qwen3-8-max-0902", 45.4)
-        assert orc.norm("qwen3.8-max-0902") in orc.aa_page_scores(html)
+        assert orc.norm("qwen3.8-max-0902") in orc.aa_page_records(html)[0]
 
-    def test_estimated_scores_are_skipped(self):
-        assert orc.aa_page_scores(aa_record("x-1", "x-1", 50.0, estimated=True)) == {}
+    def test_estimates_are_kept_apart_from_measurements(self):
+        html = aa_record("x-1", "x-1", 50.0, estimated=True) + aa_record("y-1", "y-1", 40.0)
+        assert orc.aa_page_records(html) == ({"y1": 40.0}, {"x1": 50.0})
+
+    def test_an_estimate_stands_in_only_until_aa_measures_the_release(self, monkeypatch):
+        """The case raised on 2026-10-14: AA estimates a new model before
+        measuring it, and skipping estimates left that model with no AA score."""
+        pages = {orc.AA_PAGE: aa_record("new-1", "new-1", 55.0, estimated=True)
+                 + aa_record("old-1-low", "old-1", 30.0, estimated=True)
+                 + aa_record("old-1", "old-1", 41.0)}
+        monkeypatch.setattr(orc, "get_page", lambda url: pages.get(url))
+        monkeypatch.setattr(orc, "AA_ESTIMATED", set())
+        got = orc.fetch_aa_pages(["new-1", "old-1"])
+        assert got == {"new1": 55.0, "old1": 41.0}
+        assert orc.AA_ESTIMATED == {"new1"}
+
+    def test_a_measurement_on_a_later_page_replaces_an_estimate(self, monkeypatch):
+        pages = {orc.AA_PAGE: aa_record("new-1", "new-1", 55.0, estimated=True),
+                 f"{orc.AA_PAGE}/new-1": aa_record("new-1", "new-1", 52.0)}
+        monkeypatch.setattr(orc, "get_page", lambda url: pages.get(url))
+        monkeypatch.setattr(orc, "AA_ESTIMATED", set())
+        assert orc.fetch_aa_pages(["new-1"]) == {"new1": 52.0}
+        assert orc.AA_ESTIMATED == set()
 
     def test_a_candidate_missing_from_the_list_is_fetched_from_its_own_page(self, monkeypatch):
         pages = {orc.AA_PAGE: aa_record("grok-4-7", "grok-4-7", 46.4),

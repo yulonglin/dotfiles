@@ -131,7 +131,7 @@ review_days = 14
 
 # Stamped by `council refresh --apply`. A date in the past by more than
 # `review_days` is what makes the nudge fire.
-reviewed = "2026-10-13"
+reviewed = "2026-10-14"
 
 # Everything between the markers is REWRITTEN mechanically by
 # `openrouter-cli council refresh --apply`. Edit by hand only to force a seat;
@@ -141,7 +141,8 @@ reviewed = "2026-10-13"
 # `basis` records why a seat was chosen, and it is not decoration: "eci" means
 # Epoch scored the model (with Artificial Analysis averaged in when it has a
 # score too), "aa-only" means only Artificial Analysis has scored it so far,
-# because Epoch lags releases by weeks, "newest-in-line" means it is seated on
+# because Epoch lags releases by weeks, "aa-estimated" means even AA has only
+# estimated it (a measured AA score always replaces the estimate), "newest-in-line" means it is seated on
 # recency alone because no index has reached it yet, and "newest-within-ci"
 # means a newer checkpoint in the same line was seated over a higher point
 # score because the two Epoch 95% intervals overlap. A roster where several
@@ -151,13 +152,13 @@ reviewed = "2026-10-13"
 # BEGIN council-auto
 seats = [
   { alias = "opus", slug = "anthropic/claude-opus-5.5", family = "anthropic", score = 1.0, basis = "eci" },
-  { alias = "gpt", slug = "openai/gpt-6-astra", family = "openai", score = 0.94, basis = "eci" },
-  { alias = "gemini", slug = "google/gemini-4-argon", family = "google", score = 0.9, basis = "aa-only" },
-  { alias = "muse", slug = "meta/muse-wonder", family = "meta", score = 0.89, basis = "aa-only" },
-  { alias = "kimi", slug = "moonshotai/kimi-k3", family = "moonshotai", score = 0.73, basis = "eci" },
-  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 0.72, basis = "eci" },
-  { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 0.72, basis = "newest-within-ci" },
-  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 0.72, basis = "eci" },
+  { alias = "gpt", slug = "openai/gpt-6-astra", family = "openai", score = 0.95, basis = "eci" },
+  { alias = "gemini", slug = "google/gemini-4-argon", family = "google", score = 0.92, basis = "eci" },
+  { alias = "muse", slug = "meta/muse-wonder", family = "meta", score = 0.9, basis = "aa-only" },
+  { alias = "kimi", slug = "moonshotai/kimi-k3", family = "moonshotai", score = 0.75, basis = "eci" },
+  { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 0.74, basis = "newest-within-ci" },
+  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 0.74, basis = "eci" },
+  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 0.73, basis = "eci" },
 ]
 # END council-auto
 
