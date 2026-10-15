@@ -130,7 +130,7 @@ if [ "$skip_probes" -eq 0 ]; then
   model_probe() {
     env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDECODE ANTHROPIC_BASE_URL="$probe_url" \
       timeout 150 "$CLAUDE_BIN" -p 'Which model are you? Reply with your model family and version in at most six words.' \
-      --model "$1" --max-budget-usd 0.5 --output-format json 2>/dev/null \
+      --model "$1" --max-budget-usd 1.5 --output-format json 2>/dev/null \
       | python3 -c 'import json,sys
 t=sys.stdin.read().strip()
 try:
@@ -139,8 +139,11 @@ except Exception:
     print("NO-JSON " + t[:160].replace("\n"," ")); sys.exit()
 if isinstance(d, list):  # some versions emit the message stream as an array
     d=next((m for m in d if isinstance(m, dict) and m.get("type")=="result"), d[-1] if d else {})
-print("ERROR " + str(d.get("result") or d.get("error") or "")[:120] if d.get("is_error") else (d.get("result") or "EMPTY").replace("\n"," ")[:120])'
+print("ERROR " + str(d.get("result") or d.get("error") or d.get("errors") or d.get("subtype") or "")[:120] if d.get("is_error") else (d.get("result") or "EMPTY").replace("\n"," ")[:120])'
   }
+  # 1.5, not 0.5: one probe carries the whole Claude Code system prompt and
+  # tool list, and on Fable 5.1 that alone cost $0.59 (2026-10-14), so the
+  # old cap failed it with an empty "ERROR" (the reason sat in `errors`).
   for id in $routes; do
     before="$(wc -l < "$LOG" 2>/dev/null || echo 0)"
     answer="$(model_probe "$id")"
