@@ -503,19 +503,28 @@ AA_RECORD = re.compile(
     r'(?=\{"id":"[0-9a-f-]{36}","slug"|$)', re.S)
 
 
-def aa_page_scores(html: str) -> dict[str, float]:
-    """Best intelligence index per release, keyed by normalised release slug
-    (`grok-4-6` -> `grok46`, which is also norm() of OpenRouter's `grok-4.6`).
-    Estimated scores are skipped: they are AA's guess, not a measurement."""
-    out: dict[str, float] = {}
+# Releases whose AA score in the last fetch_aa_pages() is an estimate, because
+# AA had not measured them yet. pick_seat() labels such a seat "aa-estimated".
+AA_ESTIMATED: set[str] = set()
+
+
+def aa_page_records(html: str) -> tuple[dict[str, float], dict[str, float]]:
+    """(measured, estimated): the best intelligence index per release, keyed by
+    normalised release slug (`grok-4-6` -> `grok46`, which is also norm() of
+    OpenRouter's `grok-4.6`). AA publishes an estimate for a release it has not
+    measured on the current suite, which can be a new model's only AA signal for
+    its first days; estimates are kept apart so a measurement always wins."""
+    meas: dict[str, float] = {}
+    est: dict[str, float] = {}
     for m in AA_RECORD.finditer(html.replace('\\"', '"')):
         body = m.group(1)[:6000]
         rel = re.search(r'"release":\{"slug":"([a-z0-9.-]+)"', body)
         ii = re.search(r'"intelligenceIndex":([0-9.]+),"intelligenceIndexIsEstimated":(true|false)', body)
-        if rel and ii and ii.group(2) == "false":
+        if rel and ii:
+            d = est if ii.group(2) == "true" else meas
             k = norm(rel.group(1))
-            out[k] = max(out.get(k, 0.0), float(ii.group(1)))
-    return out
+            d[k] = max(d.get(k, 0.0), float(ii.group(1)))
+    return meas, est
 
 
 def get_page(url: str) -> str | None:
@@ -540,16 +549,20 @@ def fetch_aa_pages(candidates: list[str]) -> dict[str, float]:
     candidate not on that list is looked up on its own page, /models/<slug>,
     which still carries its record (and the full catalogue, so one lookup
     usually covers the rest)."""
-    out = aa_page_scores(get_page(AA_PAGE) or "")
+    meas, est = aa_page_records(get_page(AA_PAGE) or "")
     lookups = 0
     for tail in candidates:
-        if norm(tail) in out or lookups >= 40:
+        if norm(tail) in meas or lookups >= 40:
             continue
         lookups += 1
         html = get_page(f"{AA_PAGE}/{tail.lower().replace('.', '-')}")
         if html:
-            out.update({k: v for k, v in aa_page_scores(html).items() if k not in out})
-    return out
+            m2, e2 = aa_page_records(html)
+            meas.update({k: v for k, v in m2.items() if k not in meas})
+            est.update({k: v for k, v in e2.items() if k not in est})
+    AA_ESTIMATED.clear()
+    AA_ESTIMATED.update(set(est) - set(meas))
+    return {**est, **meas}
 
 
 def fetch_aa(candidates: list[str] | None = None) -> dict[str, float]:
@@ -1080,7 +1093,8 @@ def index_scores(candidates: list[str] | None = None) -> tuple[dict[str, float],
 def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
               cap: float, in_cap: float = float("inf"),
               cis: dict[str, tuple[float, float]] | None = None,
-              aa_only: set[str] | None = None) -> dict | None:
+              aa_only: set[str] | None = None,
+              aa_estimated: set[str] | None = None) -> dict | None:
     """The best seat for one family under both price caps, or None.
 
     Both caps, not just output: the `--rank` round sends every seat the other
@@ -1128,7 +1142,9 @@ def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
         cand, cs = max(tied, key=lambda rs: rs[0]["created"])
         return {**cand, "score": round(cs, 2), "basis": "newest-within-ci"}
     aa_only = AA_ONLY if aa_only is None else aa_only
-    basis = "aa-only" if norm(best["tail"]) in aa_only else "eci"
+    aa_estimated = AA_ESTIMATED if aa_estimated is None else aa_estimated
+    key = norm(best["tail"])
+    basis = "eci" if key not in aa_only else "aa-estimated" if key in aa_estimated else "aa-only"
     return {**best, "score": round(score, 2), "basis": basis}
 
 
