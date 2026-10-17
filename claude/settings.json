@@ -708,6 +708,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.vault-lint -- bash $HOME/.claude/hooks/nudge_vault_lint.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.advisor-skipped -- python3 $HOME/.claude/hooks/nudge_advisor_skipped.py",
+            "timeout": 10
           }
         ]
       }
