@@ -137,6 +137,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `evidence-packs` | Assembling attachments for a visa, insurance or expense claim, audit or employer request — source-system printouts only, never text transcriptions |
 | `gmail-connector` | Pulling receipts, invoices or attachments out of Gmail via the claude.ai connector — the RAW-MIME route for attachments, search operators, read-only rules |
 | `things3` | Reading or managing Things 3 tasks, projects, areas, tags |
+| `use-spark` | Searching or reading email across every account and inbox through the Spark CLI — read-only, no send, archive or delete |
 | `setup-channel` | Setting up Telegram, iMessage or Things Cloud for a project |
 
 ## Self-reflection and meta
