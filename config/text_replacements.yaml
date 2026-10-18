@@ -9,7 +9,11 @@ _meta:
     prefix: cc.
   personal:
     prefix: my.
+  productivity:
+    prefix: pr.
 default:
+- shortcut: fm.jog
+  phrase: turning off my video to head to the office. internet might be patchy, but will check in at the end!
 - shortcut: omw
   phrase: on my way
   uid: 785E7704-6FA7-437C-A1CE-25402841A249
@@ -62,6 +66,22 @@ coding-agents:
 
     </context>
   uid: 145A5AED-D890-418C-8970-79475219F993
+- shortcut: msg
+  phrase: |
+    Critique and improve the following text message. Friendly and informal is fine, but prioritise clarity, persuasiveness, and directness. Preserve and mimic my style — don't change my voice.
+
+    <context>
+
+    </context>
+
+    <draft>
+
+    </draft>
+
+    <history>
+
+    </history>
+  uid: 9EC59F35-776E-4068-87CF-0EA69942678B
 - shortcut: plan
   phrase: |
     Define criteria for a good plan for this task, then draft one. Use appropriate subagents — including both GPT (Codex) and Claude models — to critique and improve it against those criteria.
@@ -86,22 +106,6 @@ coding-agents:
 
     </text>
   uid: AC7FD1C1-92AB-46C8-8717-24F419273D1D
-- shortcut: msg
-  phrase: |
-    Critique and improve the following text message. Friendly and informal is fine, but prioritise clarity, persuasiveness, and directness. Preserve and mimic my style — don't change my voice.
-
-    <context>
-
-    </context>
-
-    <draft>
-
-    </draft>
-
-    <history>
-
-    </history>
-  uid: 9EC59F35-776E-4068-87CF-0EA69942678B
 emojis:
 - shortcut: canc
   phrase: 🚫
@@ -109,12 +113,12 @@ emojis:
 - shortcut: done
   phrase: ✅
   uid: 202E9AF3-B041-44BA-AD20-71931C26C251
-- shortcut: inprog
-  phrase: ⏳
-  uid: 8A8372A9-AAFB-4FEE-83B9-45E4256D88A3
 - shortcut: fire
   phrase: 🔥
   uid: A7D71EAB-62A0-4F1A-89E7-B41C9CE18497
+- shortcut: inprog
+  phrase: ⏳
+  uid: 8A8372A9-AAFB-4FEE-83B9-45E4256D88A3
 focusmate:
 - shortcut: atb
   phrase: nice! well all the best then, see you at the end :)
@@ -128,12 +132,12 @@ focusmate:
 - shortcut: how
   phrase: hey! how was it for you?
   uid: E07CEB9B-2775-4AE1-A144-AD4E7625343A
-- shortcut: yay
-  phrase: nice! great job on that
-  uid: E9744F96-9416-43F0-ABD6-FE44EE1CD945
 - shortcut: sorry
   phrase: ohno I'm sorry to hear that. is there anything that can make next session better?
   uid: C29EB68B-AF4E-4B55-88ED-B1C7A6C7D598
+- shortcut: yay
+  phrase: nice! great job on that
+  uid: E9744F96-9416-43F0-ABD6-FE44EE1CD945
 links:
 - shortcut: jibed
   phrase: jibe_dualist_0b@icloud.com
@@ -143,8 +147,7 @@ personal:
   phrase: |
     Planning
     1. Goal
-    2. What's the fastest way to get there?
-    3. Anything I'm being dumb about? What are the blockers?
-    4. Next steps?
-    5. Status
+    2. Steps
+    3. Now
+    4. Status
   uid: EFAB93FC-C180-47BB-B4DA-57BA751EE918
