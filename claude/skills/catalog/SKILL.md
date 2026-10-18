@@ -120,7 +120,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 |---|---|
 | `docs-search` | Grep-based search across docs, specs and CLAUDE.md files with `fd` + `rg` |
 | `fast-cli` | Which modern CLI to reach for — `eza`, `fd`, `rg`, `bat`, `dust`, `duf`, `fzf`, `jq`, `delta` |
-| `fetch-walled-web` | Reading X posts and profiles (`xpost`), LessWrong comments (greaterwrong) or transcript pages that block scripted reads, and verifying a quote before stating it |
+| `fetch-walled-web` | Reading X posts (`xpost`), Reddit (Arctic Shift), LessWrong comments (GraphQL, greaterwrong), arXiv text and PDFs, or transcript pages that block scripted reads, and verifying a quote before stating it |
 
 ## Browser automation
 

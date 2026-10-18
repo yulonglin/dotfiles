@@ -1,6 +1,6 @@
 ---
 name: fetch-walled-web
-description: Read public pages that refuse scripted reads — X/Twitter posts and profiles (via `xpost` and the fxtwitter API), LessWrong and Alignment Forum comment threads (via greaterwrong), podcast transcript pages — with plain curl from the sandbox, and verify a quote before stating it. Use when a WebFetch or curl of x.com, twitter.com, xcancel or nitter fails or returns a login wall, when you need someone's tweets or LessWrong comments verbatim, when a search snippet is the only evidence of a post, or when researching what a person has said in public.
+description: Read public pages that refuse or garble scripted reads — X/Twitter posts and profiles (via `xpost` and the fxtwitter API), Reddit posts and comments (via the Arctic Shift archive), LessWrong and Alignment Forum comments (via GraphQL or greaterwrong), arXiv full text and PDFs, podcast transcript pages — from the sandbox, and verify a quote before stating it. Use when WebFetch or curl of x.com, twitter.com, reddit.com, xcancel or nitter fails or returns a login wall or 403, when WebFetch cannot read a PDF, when you need someone's tweets, Reddit posts or LessWrong comments verbatim, when a search snippet is the only evidence of a post, or when researching what a person has said in public.
 ---
 
 # Fetch Walled Web
@@ -29,9 +29,41 @@ In the sandbox, pass `allowed_domains: ["api.fxtwitter.com"]`. Raw form, if the 
 
 A post you saw only as a search snippet is "unverified" until `xpost` returns its text.
 
-## LessWrong and the Alignment Forum: use greaterwrong
+## Reddit: use the Arctic Shift archive
 
-`www.greaterwrong.com` serves the same posts and comment threads as static HTML. Swap the host and keep the path: `https://www.greaterwrong.com/posts/<id>/<slug>`, and a comment is `.../comment/<commentId>`. lesswrong.com pages also work with curl for the post body, but comments load late, so greaterwrong is the reliable route for "what did X say in the comments". A user's comment history: `https://www.greaterwrong.com/users/<slug>?show=comments`.
+reddit.com refuses this server: www, old and `.json` all return 403, even with a custom user agent, and WebFetch reports it "unable to fetch". Pullpush sits behind a Cloudflare challenge. The Arctic Shift API answers plain curl with JSON (`allowed_domains: ["arctic-shift.photon-reddit.com"]`):
+
+```
+A=https://arctic-shift.photon-reddit.com/api
+curl -s "$A/posts/ids?ids=<postId>"                                # one post; the ID is the part after /comments/ in the URL
+curl -s "$A/posts/search?subreddit=<sub>&limit=25&sort=desc"       # recent posts; add before=/after=YYYY-MM-DD
+curl -s "$A/comments/search?link_id=<postId>&limit=100"            # a post's comments
+curl -s "$A/posts/search?author=<user>&limit=25"                   # a user's posts
+```
+
+New posts appear within minutes, but comments on a brand-new post can come back empty for a while. Deleted or removed text shows as `[deleted]` or `[removed]`. Say that the text came from an archive, not from Reddit.
+
+## LessWrong and the Alignment Forum: any2md, GraphQL, greaterwrong
+
+- **Post body:** `any2md <post URL>` gives clean Markdown, and plain curl of lesswrong.com also works.
+- **Comments as data:** the GraphQL endpoint returns plain text with authors and IDs, no scraping needed:
+
+```
+curl -s https://www.lesswrong.com/graphql -H 'Content-Type: application/json' \
+  -d '{"query":"{ comments(input:{terms:{view:\"postCommentsTop\",postId:\"<postId>\",limit:50}}){ results{ _id postedAt user{displayName} contents{plaintextMainText} } } }"}'
+```
+
+- **Reading a thread or a user's history:** `www.greaterwrong.com` serves the same pages as static HTML. Swap the host and keep the path (`/posts/<id>/<slug>`, a comment is `.../comment/<commentId>`). A user's comment history: `https://www.greaterwrong.com/users/<slug>?show=comments`.
+
+The Alignment Forum shares the LessWrong database, so the same post IDs work on all three.
+
+## arXiv: any2md for text, the Read tool for PDFs
+
+arxiv.org answers plain curl for `/abs/`, `/html/` and `/pdf/`.
+
+- **Full text:** `any2md <arxiv id or URL>` returns Markdown. It goes through arxiv2md.org, so in the sandbox pass `allowed_domains: ["arxiv.org", "arxiv2md.org"]`.
+- **HTML version:** `https://arxiv.org/html/<id>` (add `v2` etc. for a version) is the best source for grepping an exact quote with the snippet below. Older papers may have no HTML version.
+- **PDF:** WebFetch cannot read the compressed text of an arXiv PDF, but it saves the file and prints the path. Open that path, or a curl-downloaded PDF, with the Read tool and its `pages` parameter. `pdftotext` is not installed on every machine.
 
 ## Podcast and transcript pages
 
