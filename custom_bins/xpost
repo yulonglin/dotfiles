@@ -134,6 +134,8 @@ def main() -> int:
         help="print one JSON object per line instead of text",
     )
     args = ap.parse_args()
+    if args.parents < 0:
+        ap.error("--parents must be non-negative")
 
     try:
         jobs = [classify(a) for a in args.targets]
