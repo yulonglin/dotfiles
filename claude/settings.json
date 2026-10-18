@@ -745,7 +745,8 @@
   "statusLine": {
     "type": "command",
     "command": "claude-tools statusline",
-    "padding": 1
+    "padding": 1,
+    "refreshInterval": 60
   },
   "enabledPlugins": {
     "bear-mcp@productivity-tools": true,
