@@ -17,7 +17,7 @@
 
 # -------------------------------------------------------------------
 # Curated dark themes — visually distinct from each other and from
-# the default Catppuccin Mocha. Edit this list to customize.
+# the default black-background TokyoNight Black. Edit this list to customize.
 # Names must match `ghostty +list-themes` output exactly.
 # -------------------------------------------------------------------
 SSH_THEME_LIST=(
@@ -37,7 +37,7 @@ SSH_THEME_LIST=(
 )
 
 # Default theme (must match ghostty.conf)
-SSH_DEFAULT_THEME="Catppuccin Mocha"
+SSH_DEFAULT_THEME="TokyoNight Black"
 
 # Manual overrides: host pattern → theme name (checked before hash)
 # Supports zsh glob patterns (e.g., prod* matches prod1, prod-web, etc.)
@@ -55,7 +55,9 @@ _SSH_THEME_DIR="/Applications/Ghostty.app/Contents/Resources/ghostty/themes"
 # -------------------------------------------------------------------
 _ssh_theme_to_osc() {
   local theme_name="$1"
-  local theme_file="$_SSH_THEME_DIR/$theme_name"
+  # User themes first, matching Ghostty's own search order
+  local theme_file="${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/themes/$theme_name"
+  [[ -f "$theme_file" ]] || theme_file="$_SSH_THEME_DIR/$theme_name"
 
   if [[ ! -f "$theme_file" ]]; then
     # Theme file not found — skip silently

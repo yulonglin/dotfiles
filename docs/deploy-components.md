@@ -12,7 +12,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - Git config - Smart conflict resolution with user prompts
 - VSCode/Cursor/Antigravity settings - Merges with existing settings
 - Finicky - Browser routing (macOS only, symlinked)
-- Ghostty - Terminal emulator configuration (symlinked to platform-specific path)
+- Ghostty - Terminal emulator configuration (symlinked to platform-specific path); custom themes in `config/ghostty-themes/` symlinked to `~/.config/ghostty/themes`
 - Zed - Editor config (settings + keymap, symlinked to ~/.config/zed/)
 - gitui - Theme (symlinked to ~/.config/gitui/theme.ron). Theme-reactive: uses named ANSI colors so gitui inherits whichever Ghostty theme the active window uses (default, g0-g9, SSH themes). Fixes gitui's default `disabled_fg: DarkGray`, which is unreadable on Catppuccin Mocha and similar dark backgrounds.
 - Claude Code - AI assistant configuration (symlinked)

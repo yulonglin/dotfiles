@@ -4,7 +4,7 @@ Operational detail for the terminal/shell/dev-tool components, moved out of the 
 
 ## Ghostty Theme Aliases
 
-Default Ghostty config uses Catppuccin Mocha. The `g0`–`g9` aliases launch a **single fresh window** (no tab restoration) with a different theme — useful for visually distinguishing contexts:
+Default Ghostty config uses `TokyoNight Black`, a custom theme in `config/ghostty-themes/` (symlinked to `~/.config/ghostty/themes`) that puts TokyoNight Night's palette on a pure black background, so a maximised window blends into the MacBook notch; `Catppuccin Mocha Black` beside it does the same for the previous default. A black background is set in the theme file rather than with `background =` in `ghostty.conf`, since that key would override every theme below as well. The `g0`–`g9` aliases launch a **single fresh window** (no tab restoration) with a different theme — useful for visually distinguishing contexts:
 
 | Alias | Theme                          | Character                        |
 | ----- | ------------------------------ | -------------------------------- |

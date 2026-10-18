@@ -597,6 +597,8 @@ if [[ "$DEPLOY_GHOSTTY" == "true" ]]; then
         mkdir -p "$GHOSTTY_DIR"
         safe_symlink "$DOT_DIR/config/ghostty.conf" "$GHOSTTY_DIR/config"
         log_info "  Key bindings: Shift+Enter (newline), Cmd+C (copy)"
+        # Ghostty searches ~/.config/ghostty/themes for custom themes on every OS
+        safe_symlink "$DOT_DIR/config/ghostty-themes" "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/themes"
     else
         log_warning "Ghostty config not found"
     fi
