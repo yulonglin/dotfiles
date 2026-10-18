@@ -26,6 +26,7 @@ struct Input {
     context_window: Option<ContextWindow>,
     effort: Option<Effort>,
     prompt_cache: Option<PromptCache>,
+    transcript_path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -129,12 +130,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
     let width = available_width(std::env::var("COLUMNS").ok().as_deref());
+    let transcript = input.transcript_path.as_deref().map(std::path::Path::new);
+    let started = transcript.and_then(transcript_started_at);
+    let last_active = transcript.and_then(transcript_last_active_at);
 
     // Session state: one group, so it splits only between segments.
     let session_parts: Vec<String> = [
         format_model_str(input.model.as_ref(), input.effort.as_ref()),
         format_context_usage_str(input.context_window.as_ref()),
         format_duration_str(&input.cost),
+        format_since_str("age", started, now),
+        format_since_str("idle", last_active, now),
         format_cost_str(input.cost.as_ref()),
         format_prompt_cache_str(input.prompt_cache.as_ref(), now),
         format_classifier_str(),
@@ -587,6 +593,101 @@ fn format_duration_str(cost: &Option<Cost>) -> Option<String> {
     Some(format!("\x1b[2m{}\x1b[0m", display))
 }
 
+/// The fields of a transcript line that date it. Every line is one JSON object;
+/// the metadata lines at the head (title, mode, file-history snapshot) carry no
+/// timestamp and are rewritten in place, so the file's mtime says nothing about
+/// when the conversation was last used.
+#[derive(Deserialize)]
+struct TranscriptEntry {
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    timestamp: Option<String>,
+    #[serde(rename = "isMeta")]
+    is_meta: Option<bool>,
+}
+
+/// Lines read from the head before giving up on finding a timestamp.
+const TRANSCRIPT_HEAD_LINES: usize = 200;
+/// First tail read; quadrupled on a miss up to the cap. Tool results make single
+/// lines run to hundreds of KB, so the last user/assistant line can sit well
+/// back from the end.
+const TRANSCRIPT_TAIL_CHUNK: u64 = 256 * 1024;
+const TRANSCRIPT_TAIL_MAX: u64 = 16 * 1024 * 1024;
+
+/// When the conversation started: the first timestamped line. Resumes append to
+/// the same file and compaction writes into it, so this spans both; `/clear`
+/// starts a new transcript and so a new age.
+fn transcript_started_at(path: &std::path::Path) -> Option<i64> {
+    use std::io::BufRead;
+    let file = std::fs::File::open(path).ok()?;
+    std::io::BufReader::new(file)
+        .lines()
+        .take(TRANSCRIPT_HEAD_LINES)
+        .map_while(Result::ok)
+        .filter_map(|line| serde_json::from_str::<TranscriptEntry>(&line).ok())
+        .find_map(|e| e.timestamp.as_deref().and_then(parse_utc_timestamp))
+}
+
+/// When the conversation was last used: the newest user or assistant line.
+/// Attachments, system lines and meta user lines are skipped because a resume
+/// writes them before anyone types, which would zero the idle time at exactly
+/// the moment it is worth reading.
+fn transcript_last_active_at(path: &std::path::Path) -> Option<i64> {
+    use std::io::{Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let mut chunk = TRANSCRIPT_TAIL_CHUNK;
+    loop {
+        let start = len.saturating_sub(chunk);
+        file.seek(SeekFrom::Start(start)).ok()?;
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf).ok()?;
+        let text = String::from_utf8_lossy(&buf);
+        // Mid-file, the first line is a fragment.
+        let whole = if start == 0 { &text[..] } else { text.split_once('\n').map_or("", |(_, rest)| rest) };
+        let found = whole
+            .lines()
+            .rev()
+            .filter_map(|line| serde_json::from_str::<TranscriptEntry>(line).ok())
+            .filter(|e| matches!(e.kind.as_deref(), Some("user" | "assistant")) && e.is_meta != Some(true))
+            .find_map(|e| e.timestamp.as_deref().and_then(parse_utc_timestamp));
+        if found.is_some() || start == 0 || chunk >= TRANSCRIPT_TAIL_MAX {
+            return found;
+        }
+        chunk *= 4;
+    }
+}
+
+/// "2026-10-14T04:59:26.105Z" → Unix seconds, in-process: the statusline runs
+/// on a timer in every session, so spawning `date` like usage.rs does is too
+/// dear. Only the UTC `Z` form Claude Code writes is accepted.
+fn parse_utc_timestamp(s: &str) -> Option<i64> {
+    let (date, time) = s.strip_suffix('Z')?.split_once('T')?;
+    let mut d = date.splitn(3, '-').map(|p| p.parse::<i64>().ok());
+    let (y, m, day) = (d.next()??, d.next()??, d.next()??);
+    let mut t = time.split('.').next()?.splitn(3, ':').map(|p| p.parse::<i64>().ok());
+    let (h, min, sec) = (t.next()??, t.next()??, t.next()??);
+    // Days since 1970-01-01 (Howard Hinnant's days_from_civil).
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * ((m + 9) % 12) + 2) / 5 + day - 1;
+    let days = era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468;
+    Some(days * 86_400 + h * 3_600 + min * 60 + sec)
+}
+
+/// "age 2d3h" (since the conversation started) or "idle 12m" (since it was last
+/// used). Omitted under a minute, so an active session shows no "idle 0m".
+/// Between events the value is as of the last run, which is why the statusLine
+/// in claude/settings.json sets a refreshInterval.
+fn format_since_str(label: &str, at: Option<i64>, now: i64) -> Option<String> {
+    let secs = now - at?;
+    if secs < 60 {
+        return None;
+    }
+    Some(format!("\x1b[2m{} {}\x1b[0m", label, crate::usage::fmt_time_remaining(secs as f64)))
+}
+
 /// Session price so far from `cost.total_cost_usd`: "$7.42". Omitted until the
 /// first billable response, like the duration.
 fn format_cost_str(cost: Option<&Cost>) -> Option<String> {
@@ -770,6 +871,46 @@ mod tests {
         format_context_profiles(&mut out, dir.to_str().unwrap());
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(out, "\x1b[36mcode python\x1b[0m ");
+    }
+
+    #[test]
+    fn utc_timestamps_parse_to_unix_seconds() {
+        assert_eq!(parse_utc_timestamp("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(parse_utc_timestamp("2026-10-14T04:59:26.105Z"), Some(1_791_953_966));
+        assert_eq!(parse_utc_timestamp("2024-02-29T12:00:00Z"), Some(1_709_208_000));
+        assert_eq!(parse_utc_timestamp("2026-10-14T04:59:26+01:00"), None);
+        assert_eq!(parse_utc_timestamp("garbage"), None);
+    }
+
+    #[test]
+    fn since_renders_age_and_idle_and_hides_under_a_minute() {
+        assert_eq!(format_since_str("age", Some(0), 2 * 86_400 + 3 * 3_600).unwrap(), "\x1b[2mage 2d3h\x1b[0m");
+        assert_eq!(format_since_str("idle", Some(100), 100 + 12 * 60).unwrap(), "\x1b[2midle 12m\x1b[0m");
+        assert_eq!(format_since_str("idle", Some(100), 159), None);
+        assert_eq!(format_since_str("idle", None, 159), None);
+    }
+
+    #[test]
+    fn transcript_times_skip_metadata_and_resume_lines() {
+        let path = std::env::temp_dir().join(format!("statusline-transcript-{}.jsonl", std::process::id()));
+        // Untimestamped metadata first; after the last real turn, a resume's
+        // attachment, system line and meta user line, which must not count.
+        let filler = "x".repeat(300 * 1024);
+        let lines = [
+            r#"{"type":"ai-title","title":"t"}"#.to_string(),
+            r#"{"type":"attachment","timestamp":"2026-10-12T07:44:37.735Z"}"#.to_string(),
+            r#"{"type":"user","timestamp":"2026-10-12T07:45:00.000Z","message":{"role":"user"}}"#.to_string(),
+            r#"{"type":"assistant","timestamp":"2026-10-14T04:59:29.770Z"}"#.to_string(),
+            format!(r#"{{"type":"attachment","timestamp":"2026-10-17T20:00:00.000Z","pad":"{}"}}"#, filler),
+            r#"{"type":"system","timestamp":"2026-10-17T20:00:01.000Z"}"#.to_string(),
+            r#"{"type":"user","isMeta":true,"timestamp":"2026-10-17T20:00:02.000Z"}"#.to_string(),
+        ];
+        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+        let started = transcript_started_at(&path);
+        let last = transcript_last_active_at(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(started, parse_utc_timestamp("2026-10-12T07:44:37Z"));
+        assert_eq!(last, parse_utc_timestamp("2026-10-14T04:59:29Z"));
     }
 }
 
