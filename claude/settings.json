@@ -233,7 +233,16 @@
     "replaceBuiltInOptions": true
   },
   "skillOverrides": {
-    "claude-api": "off"
+    "claude-api": "off",
+    "learn-quiz": "off",
+    "deslop": "off",
+    "docs-search": "off",
+    "review-pr-queue": "off",
+    "mv-repo": "off",
+    "setup-channel": "off",
+    "ship": "off",
+    "auto-mode-probe": "off",
+    "update-auto-mode": "off"
   },
   "disableBundledSkills": false,
   "hooks": {
@@ -757,21 +766,28 @@
     "hookify@claude-plugins-official": true,
     "llms-fetch-mcp@alignment-hive": true,
     "model-router@alignment-hive": true,
-    "playground@claude-plugins-official": true,
+    "playground@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": false,
     "remember@claude-plugins-official": true,
     "research@ai-safety-plugins": false,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "things-mcp@productivity-tools": true,
-    "typescript-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": false,
     "viz@ai-safety-plugins": false,
     "workflow@ai-safety-plugins": false,
     "writing@ai-safety-plugins": false,
-    "frontend-design@claude-plugins-official": true,
-    "cc-plugin-you-should-know@builtin": true
+    "frontend-design@claude-plugins-official": false,
+    "cc-plugin-you-should-know@builtin": true,
+    "figma@synced": false,
+    "engineering@synced": false,
+    "exa@synced": false,
+    "pdf-viewer@synced": false,
+    "design@synced": false,
+    "product-management@synced": false,
+    "productivity@synced": false
   },
   "extraKnownMarketplaces": {
     "alignment-hive": {
