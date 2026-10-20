@@ -135,6 +135,7 @@ DEPLOY_ALIASES=()               # Additional alias scripts: ("inspect") — arra
 # ─── Deploy Modifiers ─────────────────────────────────────────────────────────
 DEPLOY_APPEND=false             # Append to existing configs instead of overwrite
 DEPLOY_ASCII_FILE=""            # Shell-startup art: name in config/ascii_arts/, or "none" to remove. Empty leaves the current choice
+DEPLOY_CLAUDE_MEMORY=""         # Global Claude memory tier: full, minimal or none (custom_bins/claude-memory). Empty leaves the current choice
 
 # ─── Identity & Secrets ───────────────────────────────────────────────────────
 # Edit these values for your setup. Everything else should work out of the box.
