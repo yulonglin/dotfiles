@@ -1,0 +1,89 @@
+#!/usr/bin/env zsh
+# reddit-consensus - ask what Reddit agrees on, via Codex's built-in web search.
+# Claude Code's WebSearch/WebFetch are refused on reddit.com and Reddit's
+# logged-out JSON returns 403, so this goes through `codex --search exec`
+# (OpenAI web search, billed to the Codex/ChatGPT login).
+
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: reddit-consensus [options] "<question>"
+
+Search Reddit threads with Codex web search and report where commenters agree,
+how strongly, and the main dissent, with the thread links it opened.
+
+Options:
+  -r, --subreddit NAME   Restrict to a subreddit (repeatable; with or without r/)
+  -n, --threads N        Minimum distinct threads to open (default: 6)
+  -o, --out FILE         Also write the report to FILE
+  -v, --verbose          Show Codex's progress log on stderr
+  -h, --help             Show this help
+
+Exit codes: 0 report printed, 1 Codex failed or returned nothing, 2 usage error.
+
+Inside a Claude Code sandbox on macOS, codex exec crashes; run it unsandboxed.
+EOF
+}
+
+typeset -a SUBS=()
+THREADS=6
+OUT=""
+VERBOSE=false
+QUESTION=""
+
+while (( $# )); do
+    case "$1" in
+        -r|--subreddit) [[ -n "${2:-}" ]] || { echo "$1 needs a name" >&2; exit 2; }
+            SUBS+=("${2#r/}"); shift 2 ;;
+        -n|--threads) [[ "${2:-}" == <1-> ]] || { echo "$1 needs a positive integer" >&2; exit 2; }
+            THREADS=$2; shift 2 ;;
+        -o|--out) [[ -n "${2:-}" ]] || { echo "$1 needs a file" >&2; exit 2; }
+            OUT=$2; shift 2 ;;
+        -v|--verbose) VERBOSE=true; shift ;;
+        -h|--help) usage; exit 0 ;;
+        -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+        *) [[ -z "$QUESTION" ]] || { echo "Give the question as one quoted argument" >&2; exit 2; }
+            QUESTION=$1; shift ;;
+    esac
+done
+[[ -n "$QUESTION" ]] || { usage >&2; exit 2; }
+command -v codex >/dev/null || { echo "codex not found on PATH" >&2; exit 1; }
+
+scope="reddit.com"
+(( ${#SUBS} )) && scope="these subreddits only: ${(j:, :)${SUBS/#/r/}}"
+
+prompt="Find the Reddit consensus on this question: ${QUESTION}
+
+Rules:
+- Search ${scope}. Use site:reddit.com queries and vary the wording.
+- Open at least ${THREADS} distinct threads before concluding. Prefer recent threads unless the question is timeless, and note each thread's year.
+- Weigh a view by how many separate threads repeat it and by comment upvotes, not by one loud comment.
+- Only cite threads you actually opened. If the threads disagree or are thin, say there is no consensus.
+
+Reply in Markdown, briefly:
+1. One-sentence headline answer.
+2. A table: pick or view | threads supporting it (k of N opened) | upvote support (high/medium/low) | main dissent.
+3. Confidence (low/medium/high) and why.
+4. Threads opened: one bullet each with title, year and URL."
+
+workdir=$(mktemp -d)
+trap 'rm -rf "$workdir"' EXIT
+log="$workdir/codex.log"
+
+if ! codex --search exec \
+        -s read-only \
+        --skip-git-repo-check \
+        --ephemeral \
+        -C "$workdir" \
+        -o "$workdir/report.md" \
+        "$prompt" >"$log" 2>&1 </dev/null; then
+    echo "codex exec failed; last lines of its log:" >&2
+    tail -20 "$log" >&2
+    exit 1
+fi
+$VERBOSE && cat "$log" >&2
+
+[[ -s "$workdir/report.md" ]] || { echo "codex returned no report" >&2; tail -20 "$log" >&2; exit 1; }
+cat "$workdir/report.md"
+[[ -z "$OUT" ]] || cp "$workdir/report.md" "$OUT"
