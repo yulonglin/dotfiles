@@ -162,6 +162,7 @@
     ],
     "defaultMode": "auto"
   },
+  "model": "opus",
   "modelPicker": {
     "options": [
       {
@@ -177,6 +178,11 @@
       {
         "model": "claude-sonnet-5-5",
         "label": "Sonnet 5.5",
+        "description": "Claude subscription"
+      },
+      {
+        "model": "claude-haiku-5-5",
+        "label": "Haiku 5.5",
         "description": "Claude subscription"
       },
       {
