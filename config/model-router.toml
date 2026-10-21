@@ -117,6 +117,13 @@ id = "claude-sonnet-5-5"
 name = "Sonnet 5.5"
 provider = "anthropic"
 
+# Haiku 5.5 completes the 5.5 family (released 2026-10-07): the small, fast
+# row for cheap subagents and high-volume work ($0.10/$0.50 per M).
+[[models]]
+id = "claude-haiku-5-5"
+name = "Haiku 5.5"
+provider = "anthropic"
+
 # Opus 4.6 is active until at least 2027-02-05 (deprecations page, 2026-09-07).
 # Opus 3 is not addable: retired on the API 2026-01-05 and gone from OpenRouter too.
 [[models]]

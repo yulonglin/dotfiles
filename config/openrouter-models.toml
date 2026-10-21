@@ -199,6 +199,25 @@ alias = "deepseek-flash"
 slug = "anthropic/claude-fable-5.1"
 alias = "fable"
 
+# XIAOMI MIMO. New family, released 2026-09-21: MiMo-V2.6-Pro is a 1.02T
+# omni-modal reasoning flagship (1M ctx, MIT, $0.43/$0.87). Addressable but NOT
+# seated: the council is capped at 8 families and every current seat is still
+# its family's newest flagship, so no seat is displaced to make room. Reach it
+# explicitly: `openrouter-cli ask mimo "..."`. A `-flash` tier (309B-A15B) also
+# exists; the Pro is the flagship and the one worth a ninth opinion.
+[[models]]
+slug = "xiaomi/mimo-v2.6-pro"
+alias = "mimo"
+
+# MINIMAX. New family: MiniMax-M3 (released 2026-06, 1M ctx, multimodal,
+# $0.30/$1.20, 80.5% SWE-bench per vendor). Addressable but NOT seated for the
+# same 8-family cap reason. M2 was never seated. Reach it: `openrouter-cli ask
+# minimax "..."`. A newer M3.1-Flash exists (2026-10-19) but only as a `:free`
+# tier, so the Pro-line M3 is the addressable one.
+[[models]]
+slug = "minimax/minimax-m3"
+alias = "minimax"
+
 # GPT-6.1 SOL. Scores 166.1 against the seated gpt-6-astra's 166.4 at a fifth of
 # the price ($2/$10 vs $10/$50); the seat goes by score, so astra keeps it.
 # The cheap way to ask the strongest OpenAI tier: `openrouter-cli ask sol "..."`.
