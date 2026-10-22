@@ -49,7 +49,7 @@ reset() {  # reset <tz>: fresh machine, daemon's first run seeds the cache
     print -r -- 1000000 > "$FAKE/now"
     daemon
 }
-daemon() { ENFORCE_TZ_STATE_DIR="$STATE" PATH="$BIN:$PATH" "$SCRIPT" >/dev/null 2>&1 }
+daemon() { ENFORCE_TZ_STATE_DIR="$STATE" PATH="$BIN:$PATH" "$SCRIPT" "$@" >/dev/null 2>&1 }
 tick() { print -r -- $(( $(<"$FAKE/now") + $1 )) > "$FAKE/now" }
 os_sets() { print -r -- "$1" > "$FAKE/tz" }   # locationd (or a person) sets the TZ
 tz() { cat "$FAKE/tz" }
@@ -95,6 +95,40 @@ for z in Asia/Tokyo Asia/Seoul Asia/Tokyo Asia/Seoul Asia/Tokyo Asia/Seoul Asia/
 done
 eq "locationd restarted at most 5 times in 10 min" "$(count killall locationd)" 5
 eq "rate limit logged" "$(( $(count log 'Rate limit hit') > 0 ))" 1
+
+print "5. --pause lets you switch ahead of a flight, then re-arms by itself"
+reset America/Los_Angeles
+daemon --pause
+os_sets Asia/Singapore                        # set the destination TZ by hand
+for _ in 1 2 3; do tick 3600; daemon; done
+eq "not reverted while paused" "$(tz)" Asia/Singapore
+eq "cache untouched while paused" "$(cache)" America/Los_Angeles
+tick $(( 48 * 3600 )); daemon                 # first run past the 48 h
+eq "re-arms and adopts the TZ set then" "$(cache)" Asia/Singapore
+eq "re-arming reverts nothing" "$(count log Reverting)" 0
+eq "re-arm logged" "$(count log 'Pause ended')" 1
+tick 30; os_sets Asia/Tokyo; daemon
+eq "enforces again after the pause" "$(tz)" Asia/Singapore
+
+print "6. --pause accepts 1-48 hours, nothing else"
+reset America/Los_Angeles
+daemon --pause 49; eq "49 h refused" "$?" 1
+daemon --pause 0;  eq "0 h refused" "$?" 1
+daemon --pause x;  eq "non-number refused" "$?" 1
+tick 30; os_sets Asia/Tokyo; daemon
+eq "a refused pause does not pause" "$(tz)" America/Los_Angeles
+daemon --pause 2
+tick $(( 2 * 3600 - 60 )); os_sets Asia/Tokyo; daemon
+eq "a 2 h pause holds at 1h59m" "$(tz)" Asia/Tokyo
+tick 120; daemon
+eq "and ends after 2 h" "$(cache)" Asia/Tokyo
+
+print "7. --resume ends a pause early"
+reset America/Los_Angeles
+daemon --pause
+daemon --resume
+tick 30; os_sets Asia/Tokyo; daemon
+eq "enforcing right after --resume" "$(tz)" America/Los_Angeles
 
 print "\npassed: $PASS   failed: $FAIL"
 (( FAIL == 0 ))

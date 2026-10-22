@@ -7,10 +7,11 @@
 #
 # Travel: when locationd sets the same new TZ on SIGHTINGS_TO_ACCEPT separate
 # runs within SIGHTING_WINDOW, it is accepted as real travel. To switch ahead of
-# a flight there is deliberately no override — a TZ that disagrees with your
-# location is exactly what this blocks. Uninstall instead, and redeploy on arrival:
-#   scripts/cleanup/setup_bedtime_enforce.sh --uninstall   (sudoes itself)
-#   ./deploy.sh --only bedtime
+# a flight, pause it, then set the destination TZ by hand:
+#   sudo enforce-timezone --pause [HOURS]   (default and maximum PAUSE_MAX_HOURS)
+# The first run after the pause ends adopts whatever TZ is set then and resumes
+# every check, auto-timezone included, so a wrong guess is corrected by locationd
+# through the travel path above. `sudo enforce-timezone --resume` ends it early.
 #
 # Commands are called by bare name: launchd gives daemons PATH=/usr/bin:/bin:/usr/sbin:/sbin
 # and sudo uses secure_path, so only tests/test_enforce_timezone.zsh puts stubs first.
@@ -20,6 +21,8 @@ STATE_DIR="${ENFORCE_TZ_STATE_DIR:-/var/db}"
 CACHE_FILE="$STATE_DIR/enforce-timezone.last"
 RESTART_FILE="$STATE_DIR/enforce-timezone.restarts"
 CONSISTENT_FILE="$STATE_DIR/enforce-timezone.consistent"
+PAUSE_FILE="$STATE_DIR/enforce-timezone.paused-until"
+PAUSE_MAX_HOURS=48
 RATE_LIMIT=5
 RATE_WINDOW=600  # 10 minutes in seconds
 SIGHTINGS_TO_ACCEPT=3
@@ -38,8 +41,21 @@ get_current_tz() {
     echo "$tz"
 }
 
+now=$(date +%s)
+
+# End a pause: adopt the TZ set now as last known-good and start counting afresh.
+end_pause() {
+    local tz
+    tz=$(get_current_tz)
+    [[ -n "$tz" ]] && echo "$tz" > "$CACHE_FILE"
+    rm -f "$PAUSE_FILE" "$RESTART_FILE" "$CONSISTENT_FILE"
+    log "Pause ended ($1); enforcing again with ${tz:-<unknown>} as the timezone."
+}
+
 # ─── Status: print current state for debugging ──────────────────────────────
 if [[ "${1:-}" == "--status" ]]; then
+    paused_until=$(cat "$PAUSE_FILE" 2>/dev/null)
+    echo "Paused:      $([[ -n "$paused_until" ]] && date -r "$paused_until" 2>/dev/null || echo 'no')"
     echo "Cache TZ:    $(cat "$CACHE_FILE" 2>/dev/null || echo '<none>')"
     echo "Current TZ:  $(get_current_tz)"
     echo "Restarts:    $(wc -l < "$RESTART_FILE" 2>/dev/null || echo 0)"
@@ -62,7 +78,33 @@ if [[ "${1:-}" == "--set-timezone" ]]; then
     exit 0
 fi
 
-now=$(date +%s)
+# ─── Pause: switch ahead of a flight; re-arms by itself ──────────────────────
+if [[ "${1:-}" == "--pause" ]]; then
+    hours="${2:-$PAUSE_MAX_HOURS}"
+    if ! [[ "$hours" =~ ^[0-9]+$ ]] || (( hours < 1 || hours > PAUSE_MAX_HOURS )); then
+        echo "Error: --pause takes 1-$PAUSE_MAX_HOURS hours, not '$hours'" >&2
+        exit 1
+    fi
+    until_ts=$(( now + hours * 3600 ))
+    echo "$until_ts" > "$PAUSE_FILE"
+    log "Paused for ${hours}h, until $until_ts."
+    echo "Paused until $(date -r "$until_ts"). Set the destination timezone by hand now."
+    exit 0
+fi
+
+if [[ "${1:-}" == "--resume" ]]; then
+    [[ -f "$PAUSE_FILE" ]] && end_pause "resumed by hand"
+    exit 0
+fi
+
+# ─── While paused, check nothing; the first run past the deadline re-arms ───
+if [[ -f "$PAUSE_FILE" ]]; then
+    paused_until=$(cat "$PAUSE_FILE" 2>/dev/null)
+    if [[ "$paused_until" =~ ^[0-9]+$ ]] && (( now < paused_until )); then
+        exit 0
+    fi
+    end_pause "deadline passed"
+fi
 
 # ─── Rate limiting ───────────────────────────────────────────────────────────
 # Returns 0 if under limit, 1 if over. Appends a timestamp on success.
