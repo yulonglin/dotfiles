@@ -229,6 +229,17 @@ _reset_terminal_modes() {
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd _reset_terminal_modes_soft
+
+# Drop a VIRTUAL_ENV whose directory is gone, so p10k stops showing it. Typical
+# source: a shell inherited it from a `uv run` ephemeral env
+# (~/.cache/uv/builds-v0/.tmpXXXXXX) that uv deleted afterwards.
+_drop_stale_venv() {
+    [[ -n $VIRTUAL_ENV && ! -d $VIRTUAL_ENV ]] || return 0
+    path=(${path:#$VIRTUAL_ENV/bin})
+    unset VIRTUAL_ENV VIRTUAL_ENV_PROMPT
+}
+# Prepend so it runs before p10k's own precmd renders the prompt
+precmd_functions=(_drop_stale_venv ${precmd_functions:#_drop_stale_venv})
 # Exit alt screen once at shell startup (recovers scrollback after SSH disconnect;
 # mid-session kill -9 of alt-screen apps needs manual fix-term)
 _reset_terminal_modes
