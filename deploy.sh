@@ -114,7 +114,7 @@ COMPONENTS:
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
     --hide-idle-apps  Hide, then close, then quit apps left covered up, per config/app-lifecycle.yaml (macOS only, off by default)
     --file-apps       Set default editor for coding file types (macOS only)
-    --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
+    --bedtime         Install bedtime timezone enforcement (macOS only, off by default)
     --bearcli         Symlink Bear CLI → /usr/local/bin (macOS only, for cron/scripts)
     --vpn             Install NordVPN+Tailscale split tunnel daemon (macOS only)
     --pueue           Deploy Pueue + systemd resource management (Linux only)
