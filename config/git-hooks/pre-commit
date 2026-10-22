@@ -77,11 +77,35 @@ if [ -n "$LOCKFILE_CHANGED" ]; then
     fi
 
     # pip-audit (Python lockfiles)
-    if command -v pip-audit &>/dev/null && echo "$LOCKFILE_CHANGED" | grep -qE '^(uv\.lock|poetry\.lock|Pipfile\.lock)'; then
-        if ! pip-audit 2>/dev/null; then
-            echo "Pre-commit: pip-audit found vulnerabilities. Review above."
-            echo "  To bypass: git commit --no-verify"
-            exit 1
+    # Audit the repo's uv.lock, not the environment pip-audit runs in — a bare
+    # `pip-audit` audits its own tool venv, so it flagged the same urllib3 in
+    # every repo. Exit 1 means findings and blocks; any other failure (sandboxed
+    # cache dir, network, export error) is a broken tool run, so warn and skip,
+    # as the socket block above does.
+    if command -v pip-audit &>/dev/null && command -v uv &>/dev/null && echo "$LOCKFILE_CHANGED" | grep -qE '^uv\.lock'; then
+        PA_REQ=$(mktemp "${TMPDIR:-/tmp}/pip-audit-req.XXXXXX")
+        if uv export -q --frozen --no-hashes --no-emit-project --all-extras --all-groups --format requirements-txt -o "$PA_REQ" 2>/dev/null; then
+            # Explicit status capture: a failing command substitution would abort under `set -e`.
+            PA_OUT=$(pip-audit -r "$PA_REQ" --no-deps --disable-pip --progress-spinner off \
+                --cache-dir "${XDG_CACHE_HOME:-$HOME/.cache}/pip-audit" 2>&1) && PA_RC=0 || PA_RC=$?
+            rm -f "$PA_REQ"
+            # Only a finding with a fix version blocks: one with no fix yet would
+            # block every uv.lock commit in the repo with nothing to upgrade to.
+            PA_FIXABLE=$(sed -n '/^-------/,$p' <<<"$PA_OUT" | awk 'NR>1 && NF>=4')
+            if [ $PA_RC -eq 1 ] && grep -qE '^Name +Version +ID' <<<"$PA_OUT"; then
+                echo "$PA_OUT" | sed -n '/^Name /,$p'
+                if [ -n "$PA_FIXABLE" ]; then
+                    echo "Pre-commit: pip-audit found vulnerabilities with fixes in uv.lock. Review above."
+                    echo "  To bypass: git commit --no-verify"
+                    exit 1
+                fi
+                echo "Pre-commit: pip-audit findings above have no fix release yet — not blocking."
+            elif [ $PA_RC -ne 0 ]; then
+                echo "Pre-commit: pip-audit did not run cleanly on uv.lock (exit $PA_RC) — skipping. Last line: $(echo "$PA_OUT" | tail -1)"
+            fi
+        else
+            rm -f "$PA_REQ"
+            echo "Pre-commit: 'uv export --frozen' failed on uv.lock — skipping pip-audit."
         fi
     fi
 fi
