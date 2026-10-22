@@ -656,28 +656,20 @@ install_direnv() {
     fi
 }
 
-# Rust toolchain (cargo) via rustup. macOS: official Homebrew formula (sha-pinned,
-# reviewed) provides `rustup-init`; run it non-interactively. Linux: keep the upstream
-# rustup installer but pin TLS (--proto '=https' --tlsv1.2) — no brew dependency.
-# See claude/rules/safety.md § curl|bash Installers.
+# Rust toolchain (cargo) via the upstream rustup installer, TLS-pinned
+# (--proto '=https' --tlsv1.2), on every OS. One rustup per machine, self-managed
+# in ~/.cargo/bin and updated with `rustup self update`. Not the Homebrew formula:
+# it dropped `rustup-init`, is keg-only (its proxies are off PATH unless the keg
+# bin is added), and alongside this install it gave macOS two `rustup` binaries
+# sharing one ~/.rustup (2026-10-21).
 install_rust_toolchain() {
     if is_installed cargo; then
         source "$HOME/.cargo/env" 2>/dev/null || true
         return 0
     fi
     log_info "Installing Rust toolchain (user-level, no root needed)..."
-    if is_macos && cmd_exists brew; then
-        # Official formula ships `rustup-init`; install the default stable toolchain.
-        brew_install rustup
-        if cmd_exists rustup-init; then
-            rustup-init -y --quiet 2>/dev/null || log_warning "rustup-init failed"
-        elif cmd_exists rustup; then
-            rustup default stable 2>/dev/null || log_warning "rustup default stable failed"
-        fi
-    else
-        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 \
-            https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
-    fi
+    curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 \
+        https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
     source "$HOME/.cargo/env" 2>/dev/null || true
 }
 
