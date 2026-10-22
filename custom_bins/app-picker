@@ -495,13 +495,20 @@ rev = {}
 for n, i in inst.items():
     for dep in i.get('runtime_dependencies') or []:
         rev.setdefault(dep['full_name'].split('/')[-1], set()).add(n)
+# A cask's formula dependency (gcloud-cli → python@3.13) roots it too; brew autoremove keeps it.
+top = set(req)
+for c in d.get('casks') or []:
+    label = f"{c['token']} (cask)"
+    top.add(label)
+    for dep in (c.get('depends_on') or {}).get('formula') or []:
+        rev.setdefault(dep.split('/')[-1], set()).add(label)
 def roots(n, seen=None):
     seen = set() if seen is None else seen
     out = set()
     for u in rev.get(n, ()):
         if u in seen: continue
         seen.add(u)
-        out |= {u} if u in req else roots(u, seen)
+        out |= {u} if u in top else roots(u, seen)
     return out
 reg = set()
 for line in open(conf, encoding='utf-8'):
@@ -512,7 +519,7 @@ for rel in ('config.sh', 'scripts/shared/helpers.sh'):
     try: texts[rel] = open(f'{dot}/{rel}', encoding='utf-8').read()
     except OSError: texts[rel] = ''
 def declared(n, full):
-    if n in reg: return 'apps.conf'
+    if n in reg or reg & set(f[n].get('aliases') or ()): return 'apps.conf'  # `python` → python@3.x
     for rel, t in texts.items():
         if re.search(r'(?<![\w/@.-])' + re.escape(full) + r'(?![\w@.-])', t) or \
            re.search(r'(?<![\w/@.-])' + re.escape(n) + r'(?![\w@.-])', t): return rel
