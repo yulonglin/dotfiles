@@ -837,6 +837,8 @@
         "github.com",
         "api.github.com",
         "raw.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "objects.githubusercontent.com",
         "mcp.linear.app",
         "export.arxiv.org",
         "arxiv.org",
