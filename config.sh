@@ -230,6 +230,8 @@ PACKAGES_EXTRAS_MACOS=(
     "hyperfine"
     "gitui"
     "terminal-notifier"
+    "exiftool"    # read/write photo and file metadata
+    "qpdf"        # PDF merge, split, decrypt, inspect (poppler covers text and rendering)
 )
 
 PACKAGES_EXTRAS_LINUX=(
@@ -245,6 +247,7 @@ PACKAGES_EXTRAS_LINUX=(
 PACKAGES_TRIAL_MACOS=(
     "hunk"                  # review-first terminal diff viewer for agent-authored changes (trial from 2026-09-03)
     "codersauce/tap/red"    # modal Rust editor — third-party tap, Yulong's exception 2026-09-03
+    "libimobiledevice"      # iPhone over USB: ~/scratch/watchpat/capture.zsh logs Bluetooth HCI (from 2026-10-14); uninstall when that project ends
     # "micro"               # candidate terminal editor, not installed yet
 )
 
