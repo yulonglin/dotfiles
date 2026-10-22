@@ -53,7 +53,9 @@ Reviewers should never have to guess what the model actually saw or produced. Fo
 - sample size, and whether anything was resampled
 - for a model organism: its setup, training, scaffolding and scoring
 
-Show the **complete** model input and **complete** model output — for monitors, judges and every other model involved, not only the target model.
+Show the **complete** model input and **complete** model output — for monitors, judges and every other model involved, not only the target model. In a review or results artifact this is per sample and on by default: each card carries the monitor or judge input for every condition beside that condition's output and rationale (`rules/research-core.md`).
+
+**Break a descriptive statistic down by label as ratios, drawn as bars.** For lengths, coverage, counts or any per-sample statistic, show each label group relative to the overall value (positive ÷ all, negative ÷ all) per span and per dataset, as a bar plot beside the raw medians — a ratio near 1 for both groups says the statistic carries no label signal, and a skew away from 1 flags a confound at a glance (Yulong, 2026-10-07).
 
 ## Every aggregate is one click from its evidence
 
