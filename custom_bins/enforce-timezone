@@ -1,17 +1,29 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 # Bedtime timezone enforcement daemon
 # Detects and reverts timezone bypass attempts (manual TZ change, NTP disable, auto-TZ disable)
 # Runs as root via LaunchDaemon every 2 min + on /etc/localtime changes
-# NOTE: No set -eo pipefail — daemon must never crash, always exit 0
+# NOTE: No errexit/pipefail — daemon must never crash, always exit 0
 # Using set -u to catch variable typos (safe — doesn't cause crashes, just errors on undefined vars)
+#
+# Travel: when locationd sets the same new TZ on SIGHTINGS_TO_ACCEPT separate
+# runs within SIGHTING_WINDOW, it is accepted as real travel. To switch ahead of
+# a flight there is deliberately no override — a TZ that disagrees with your
+# location is exactly what this blocks. Uninstall instead, and redeploy on arrival:
+#   scripts/cleanup/setup_bedtime_enforce.sh --uninstall   (sudoes itself)
+#   ./deploy.sh --only bedtime
+#
+# Commands are called by bare name: launchd gives daemons PATH=/usr/bin:/bin:/usr/sbin:/sbin
+# and sudo uses secure_path, so only tests/test_enforce_timezone.zsh puts stubs first.
 set -u
 
-CACHE_FILE="/var/db/enforce-timezone.last"
-RESTART_FILE="/var/db/enforce-timezone.restarts"
-CONSISTENT_FILE="/var/db/enforce-timezone.consistent"
+STATE_DIR="${ENFORCE_TZ_STATE_DIR:-/var/db}"
+CACHE_FILE="$STATE_DIR/enforce-timezone.last"
+RESTART_FILE="$STATE_DIR/enforce-timezone.restarts"
+CONSISTENT_FILE="$STATE_DIR/enforce-timezone.consistent"
 RATE_LIMIT=5
 RATE_WINDOW=600  # 10 minutes in seconds
-AUTO_ACCEPT_THRESHOLD=3  # consecutive consistent runs to auto-accept new TZ
+SIGHTINGS_TO_ACCEPT=3
+SIGHTING_WINDOW=1800  # a sighting older than this no longer counts toward travel
 TAG="enforce-timezone"
 
 log() { logger -t "$TAG" "$1"; }
@@ -19,9 +31,9 @@ log() { logger -t "$TAG" "$1"; }
 # ─── Resolve current timezone robustly ───────────────────────────────────────
 get_current_tz() {
     local tz
-    tz=$(/usr/bin/readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
+    tz=$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
     if [[ -z "$tz" ]]; then
-        tz=$(/usr/sbin/systemsetup -gettimezone 2>/dev/null | sed 's/.*: //')
+        tz=$(systemsetup -gettimezone 2>/dev/null | sed 's/.*: //')
     fi
     echo "$tz"
 }
@@ -31,7 +43,7 @@ if [[ "${1:-}" == "--status" ]]; then
     echo "Cache TZ:    $(cat "$CACHE_FILE" 2>/dev/null || echo '<none>')"
     echo "Current TZ:  $(get_current_tz)"
     echo "Restarts:    $(wc -l < "$RESTART_FILE" 2>/dev/null || echo 0)"
-    echo "Consistent:  $(cat "$CONSISTENT_FILE" 2>/dev/null || echo '<none>')"
+    echo "Sightings:   $(cat "$CONSISTENT_FILE" 2>/dev/null || echo '<none>') (tz:count:last-seen)"
     echo "Auto-TZ:     $(defaults read /Library/Preferences/com.apple.timezone.auto Active 2>/dev/null || echo '?')"
     echo "NTP:         $(systemsetup -getusingnetworktime 2>/dev/null | sed 's/.*: //' || echo '?')"
     exit 0
@@ -50,20 +62,19 @@ if [[ "${1:-}" == "--set-timezone" ]]; then
     exit 0
 fi
 
+now=$(date +%s)
+
 # ─── Rate limiting ───────────────────────────────────────────────────────────
 # Returns 0 if under limit, 1 if over. Appends a timestamp on success.
 check_rate_limit() {
-    local now
-    now=$(date +%s)
-
     if [[ ! -f "$RESTART_FILE" ]]; then
         echo "$now" > "$RESTART_FILE"
         return 0
     fi
 
     # Count recent restarts within window, prune old entries
-    local count=0
-    local new_entries=()
+    local count=0 ts
+    local -a new_entries=()
     while IFS= read -r ts; do
         # Skip malformed lines
         [[ "$ts" =~ ^[0-9]+$ ]] || continue
@@ -119,29 +130,30 @@ else
 fi
 
 if [[ -n "$cached_tz" && "$current_tz" != "$cached_tz" ]]; then
-    # Track consecutive runs seeing the same new TZ (travel auto-accept)
-    consistent_entry=$(cat "$CONSISTENT_FILE" 2>/dev/null || echo "")
-    consistent_tz="${consistent_entry%%:*}"
-    consistent_count="${consistent_entry##*:}"
-    [[ "$consistent_count" =~ ^[0-9]+$ ]] || consistent_count=0
+    # Count separate runs that see the same new TZ (travel auto-accept). The
+    # count survives the clean runs in between — every revert rewrites
+    # /etc/localtime, which wakes this daemon again to a clean run — and expires
+    # only once the last sighting is older than SIGHTING_WINDOW.
+    sighting=("${(@s.:.)$(cat "$CONSISTENT_FILE" 2>/dev/null)}")
+    seen_tz="${sighting[1]:-}" seen_count="${sighting[2]:-0}" seen_at="${sighting[3]:-0}"
+    [[ "$seen_count" =~ ^[0-9]+$ && "$seen_at" =~ ^[0-9]+$ ]] || { seen_count=0; seen_at=0; }
 
-    if [[ "$current_tz" == "$consistent_tz" ]]; then
-        consistent_count=$((consistent_count + 1))
+    if [[ "$current_tz" == "$seen_tz" ]] && (( now - seen_at < SIGHTING_WINDOW )); then
+        seen_count=$((seen_count + 1))
     else
-        consistent_tz="$current_tz"
-        consistent_count=1
+        seen_count=1
     fi
-    echo "${consistent_tz}:${consistent_count}" > "$CONSISTENT_FILE"
+    echo "${current_tz}:${seen_count}:${now}" > "$CONSISTENT_FILE"
 
-    if (( consistent_count >= AUTO_ACCEPT_THRESHOLD )); then
+    if (( seen_count >= SIGHTINGS_TO_ACCEPT )); then
         # locationd keeps setting the same new TZ — this is real travel, not a bypass
-        log "Auto-accepting timezone $current_tz (consistent for $consistent_count runs)."
+        log "Auto-accepting timezone $current_tz (seen on $seen_count runs)."
         echo "$current_tz" > "$CACHE_FILE"
         rm -f "$RESTART_FILE" "$CONSISTENT_FILE"
         # No revert, no restart — accept the new timezone
     else
         log "Timezone changed from $cached_tz to $current_tz. Reverting to $cached_tz."
-        /usr/sbin/systemsetup -settimezone "$cached_tz" 2>/dev/null || true
+        systemsetup -settimezone "$cached_tz" 2>/dev/null || true
         CHANGED=1
         # DON'T update cache — leave as last known-good value
     fi
@@ -149,9 +161,11 @@ fi
 
 # ─── Post-check actions ─────────────────────────────────────────────────────
 if (( CHANGED == 0 )); then
-    # Clean run — update cache and reset counters
+    # Clean run — refresh the cache only. The restart and sighting counters
+    # expire on their own windows; clearing them here let every revert's own
+    # follow-up run reset them, so travel was never accepted and the rate
+    # limit never engaged.
     echo "$current_tz" > "$CACHE_FILE"
-    rm -f "$RESTART_FILE" "$CONSISTENT_FILE"
 else
     # Something was changed — check rate limit once, then restart services
     if check_rate_limit; then
