@@ -114,7 +114,7 @@ fi
 
 # ─── Machine inventory (casks, requested formulae, App Store receipts, taps) ──
 typeset -A INST_CASK INST_FORMULA INST_MAS   # INST_MAS: app stem → bundle id
-typeset -A FORMULA_ALIAS                     # alias → formula name (python → python@3.14)
+typeset -A FORMULA_ALIAS                     # alias → formula name (python → python@3.15)
 typeset -A FORMULA_NEEDED                    # requested formulae another formula depends on
 typeset -a INST_TAPS
 INVENTORIED=false
@@ -127,7 +127,7 @@ inventory() {
     local t
     for t in $(brew list --cask 2>/dev/null); do INST_CASK[$t]=1; done
     # Requested formulae from `brew info`, not `brew leaves`: leaves hides a requested formula
-    # once something else depends on it (python@3.14 under gcloud-cli). Aliases let a registry
+    # once something else depends on it (a python@3.x that a cask also needs). Aliases let a registry
     # id such as `python` match whichever python@3.x it currently resolves to.
     local name full needed aliases a
     while read -r name full needed aliases; do
