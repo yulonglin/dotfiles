@@ -1,0 +1,1088 @@
+#!/usr/bin/env python3
+"""runrec - record, cap and board research runs.
+
+Every launch gets a run directory, a launch record and an index line before it
+spends anything; a Modal or RunPod launch with no cost cap, burn rate or idle
+limit is refused; and one Markdown board per project shows what runs where,
+progress, ETA and cost so far. Spec: artifacts/research-run-records/spec.md.
+
+  runrec launch --slug pilot --backend local --api-cap 0 -- python -m pkg.run
+  runrec launch --slug capture --backend modal --cost-cap 20 --rate 4 \\
+      --max-idle 15m --api-cap 0 -- modal run modal_apps/capture.py
+  runrec board [--write]        Markdown board for this repo's out/
+  runrec ls                     running and recent runs, one line each
+
+Files, under <out-root> (default <git toplevel>/out):
+  runs.jsonl                    the index: one launch and one finish event per run
+  <date>_<slug>/launch.json     live record, rewritten every heartbeat
+  <date>_<slug>/manifest.json   gets a `launch` key merged in at finish
+  <date>_<slug>/launch.log      the command's stdout and stderr
+  runrec.json                   optional: {"project": "...", "board": "path.md"}
+
+Exit codes: the command's own code when it ends by itself; 2 refused before
+launch; 124 stopped by runrec (cost, idle, timeout, api) or interrupted.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+SCHEMA = "run-launch/1"
+STOPPED_EXIT = 124
+REFUSED_EXIT = 2
+GPU_BACKENDS = ("modal", "runpod")
+OPENROUTER = "https://openrouter.ai/api/v1"
+
+# Intervals are environment-tunable so the tests can run in seconds.
+HEARTBEAT_S = float(os.environ.get("RUNREC_HEARTBEAT", "60"))
+TICK_S = float(os.environ.get("RUNREC_TICK", "2"))
+BOARD_S = float(os.environ.get("RUNREC_BOARD_INTERVAL", "300"))
+API_POLL_S = float(os.environ.get("RUNREC_API_POLL", "300"))
+SCAN_S = float(os.environ.get("RUNREC_SCAN", "30"))
+GRACE_INT_S = float(os.environ.get("RUNREC_GRACE_INT", "30"))
+GRACE_TERM_S = float(os.environ.get("RUNREC_GRACE_TERM", "10"))
+LOST_AFTER_HEARTBEATS = 3
+OWN_TMP_PREFIXES = (".launch.json.", ".manifest.json.", ".runrec.lock")
+
+
+class Refused(Exception):
+    pass
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def iso(dt: datetime | None) -> str | None:
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ") if dt else None
+
+
+def parse_iso(s: str | None) -> datetime | None:
+    return (
+        datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        if s
+        else None
+    )
+
+
+def parse_duration(s: str) -> float:
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*", s)
+    if not m:
+        raise argparse.ArgumentTypeError(
+            f"not a duration: {s!r} (use 90s, 15m, 2h, 1d)"
+        )
+    return float(m[1]) * {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}[m[2]]
+
+
+def fmt_duration(seconds: float | None) -> str:
+    if seconds is None:
+        return "-"
+    s = int(seconds)
+    if s < 120:
+        return f"{s}s"
+    if s < 7200:
+        return f"{s // 60}m"
+    if s < 172800:
+        return f"{s // 3600}h{(s % 3600) // 60:02d}m"
+    return f"{s // 86400}d{(s % 86400) // 3600}h"
+
+
+def fmt_usd(v: float | None) -> str:
+    return "-" if v is None else f"${v:.2f}"
+
+
+def write_json_atomic(path: Path, obj: object) -> None:
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(obj, indent=2, sort_keys=False) + "\n")
+    os.replace(tmp, path)
+
+
+def write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
+BOARD_HEADER = "# Run board: "
+
+
+def write_board_file(path: Path, text: str) -> None:
+    """Write the board, but only to a .md file that is new or already a board.
+
+    The path comes from runrec.json, which a cloned repo could ship, so a board
+    path naming ~/.zshrc or any other file must not overwrite it."""
+    if path.suffix != ".md":
+        raise Refused(f"board path {path} must end in .md")
+    if path.is_symlink():
+        raise Refused(f"board path {path} is a symlink; not following it")
+    if path.exists():
+        with path.open(errors="replace") as f:
+            if not f.readline().startswith(BOARD_HEADER):
+                raise Refused(
+                    f"{path} exists and is not a runrec board; not overwriting it"
+                )
+    write_text_atomic(path, text)
+
+
+def git(cwd: Path, *args: str) -> str | None:
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(cwd), *args],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
+
+
+def resolve_out_root(arg: str | None) -> Path:
+    if arg or os.environ.get("RUNREC_OUT_ROOT"):
+        return Path(arg or os.environ["RUNREC_OUT_ROOT"]).expanduser().resolve()
+    top = git(Path.cwd(), "rev-parse", "--show-toplevel")
+    if not top:
+        raise Refused("not inside a git repo: pass --out-root or set RUNREC_OUT_ROOT")
+    return Path(top) / "out"
+
+
+def load_cfg(out_root: Path) -> dict:
+    p = out_root / "runrec.json"
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except json.JSONDecodeError as exc:
+        raise Refused(f"{p} is not valid JSON: {exc}") from exc
+
+
+# --- index -------------------------------------------------------------------
+
+
+def append_event(out_root: Path, event: dict) -> None:
+    out_root.mkdir(parents=True, exist_ok=True)
+    line = (json.dumps(event, sort_keys=False) + "\n").encode()
+    fd = os.open(out_root / "runs.jsonl", os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        os.write(fd, line)
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def read_runs(out_root: Path) -> list[dict]:
+    """Fold the index into one record per run, overlaid with each live launch.json."""
+    idx = out_root / "runs.jsonl"
+    runs: dict[str, dict] = {}
+    if not idx.exists():
+        return []
+    for n, line in enumerate(idx.read_text().splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            print(f"runrec: {idx}:{n} is not JSON, skipped", file=sys.stderr)
+            continue
+        runs.setdefault(ev["run_id"], {}).update(ev)
+    out = []
+    for rec in runs.values():
+        live = Path(rec.get("run_dir", "")) / "launch.json"
+        if live.exists():
+            try:
+                cur = json.loads(live.read_text())
+            except json.JSONDecodeError:
+                cur = {}
+            # A resumed --run-dir holds the newest run's record; older runs keep their events.
+            if cur.get("run_id") == rec["run_id"]:
+                rec = {**rec, **cur}
+        out.append(rec)
+    out.sort(key=lambda r: r.get("started_at") or "", reverse=True)
+    return out
+
+
+# --- refusals ----------------------------------------------------------------
+
+
+def command_words(cmd: list[str]) -> list[str]:
+    """Every whitespace-separated word, so `bash -c "modal run x.py"` is seen too."""
+    return [w for tok in cmd for w in tok.split()]
+
+
+def detect_backend_tools(cmd: list[str]) -> set[str]:
+    found = set()
+    for w in command_words(cmd):
+        base = os.path.basename(w)
+        if base == "modal":
+            found.add("modal")
+        if base == "runpodctl":
+            found.add("runpod")
+    return found
+
+
+def modal_escapes(cmd: list[str]) -> str | None:
+    words = command_words(cmd)
+    for i, w in enumerate(words):
+        if os.path.basename(w) != "modal":
+            continue
+        rest = words[i + 1 :]
+        if rest[:1] == ["deploy"]:
+            return "`modal deploy` leaves an app running after runrec exits"
+        if rest[:1] == ["run"] and any(a in ("-d", "--detach") for a in rest):
+            return (
+                "`modal run --detach` keeps the app alive after the local process dies"
+            )
+    return None
+
+
+def _int_expr(text: str) -> float | None:
+    text = text.replace("_", "").strip()
+    if not re.fullmatch(r"[\d\s*+.]+", text):
+        return None
+    try:
+        total = 0.0
+        for term in text.split("+"):
+            prod = 1.0
+            for f in term.split("*"):
+                prod *= float(f)
+            total += prod
+        return total
+    except ValueError:
+        return None
+
+
+def decorator_calls(src: str) -> list[str]:
+    """The argument text of each @app.function(...) / @app.cls(...) decorator."""
+    out = []
+    for m in re.finditer(r"@\w+\.(?:function|cls)\s*\(", src):
+        depth, i = 1, m.end()
+        while i < len(src) and depth:
+            depth += {"(": 1, ")": -1}.get(src[i], 0)
+            i += 1
+        out.append(src[m.end() : i - 1])
+    return out
+
+
+def scan_modal_files(cmd: list[str], max_idle: float) -> tuple[list[str], list[str]]:
+    """Refusals and warnings from the Modal app files named on the command line."""
+    refusals, warnings = [], []
+    for w in command_words(cmd):
+        path = Path(w.split("::")[0])
+        if path.suffix != ".py" or not path.is_file():
+            continue
+        src = path.read_text(errors="replace")
+        for m in re.finditer(r"scaledown_window\s*=\s*([^,)\n]+)", src):
+            val = _int_expr(m[1])
+            line = src.count("\n", 0, m.start()) + 1
+            if val is None:
+                warnings.append(
+                    f"{path}:{line}: scaledown_window={m[1].strip()} is not a literal; not checked"
+                )
+            elif val > max_idle:
+                refusals.append(
+                    f"{path}:{line}: scaledown_window={val:g}s exceeds --max-idle {max_idle:g}s; "
+                    "an idle container would bill longer than the run is allowed to idle"
+                )
+        for args in decorator_calls(src):
+            if "timeout" not in args:
+                warnings.append(
+                    f"{path}: a Modal function sets no timeout= (Modal's default is 300 s)"
+                )
+                break
+    return refusals, warnings
+
+
+def openrouter_get(path: str, key: str) -> dict | None:
+    req = urllib.request.Request(
+        f"{OPENROUTER}{path}", headers={"Authorization": f"Bearer {key}"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.loads(r.read()).get("data")
+    except (urllib.error.URLError, json.JSONDecodeError, TimeoutError, OSError):
+        return None
+
+
+def openrouter_state(key: str) -> tuple[float | None, float | None]:
+    """(remaining credit, key usage). Remaining is the tighter of the key's own
+    limit and the account balance; /credits answers only for a management key."""
+    remaining = []
+    usage = None
+    k = openrouter_get("/key", key)
+    if k:
+        usage = k.get("usage")
+        if k.get("limit_remaining") is not None:
+            remaining.append(float(k["limit_remaining"]))
+    c = openrouter_get("/credits", os.environ.get("OPENROUTER_MANAGEMENT_KEY", key))
+    if c and c.get("total_credits") is not None:
+        remaining.append(float(c["total_credits"]) - float(c.get("total_usage") or 0))
+    return (min(remaining) if remaining else None), (
+        float(usage) if usage is not None else None
+    )
+
+
+def check_launch(a: argparse.Namespace) -> tuple[list[str], dict]:
+    """Raise Refused for anything the spec says must not launch; return warnings and preflight facts."""
+    warnings: list[str] = []
+    facts: dict = {}
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", a.slug):
+        raise Refused(
+            f"slug {a.slug!r}: use lowercase letters, digits, '.', '_' or '-'"
+        )
+    if not a.cmd:
+        raise Refused("no command after --")
+    tools = detect_backend_tools(a.cmd)
+    if a.backend == "local" and tools:
+        raise Refused(
+            f"--backend local, but the command runs {'/'.join(sorted(tools))}: declare the real backend"
+        )
+    if a.backend in GPU_BACKENDS:
+        missing = [
+            f
+            for f, v in (
+                ("--cost-cap", a.cost_cap),
+                ("--rate", a.rate),
+                ("--max-idle", a.max_idle),
+            )
+            if v is None
+        ]
+        if missing:
+            raise Refused(f"a {a.backend} launch must declare {', '.join(missing)}")
+    if a.cost_cap is not None and a.rate is None:
+        raise Refused(
+            "--cost-cap needs --rate (USD per hour, total burn) to be enforceable"
+        )
+    if a.backend == "modal" or "modal" in tools:
+        escape = modal_escapes(a.cmd)
+        if escape:
+            raise Refused(f"{escape}, so no cap can stop it")
+        if a.max_idle is not None:
+            refusals, warns = scan_modal_files(a.cmd, a.max_idle)
+            if refusals:
+                raise Refused("; ".join(refusals))
+            warnings += warns
+    if a.backend == "runpod":
+        warnings.append(
+            "runpod: runrec stops the command, not the pod; teardown must live inside the command"
+        )
+    if a.api_cap > 0:
+        if a.api_provider == "openrouter":
+            key = os.environ.get("OPENROUTER_API_KEY")
+            remaining, usage = openrouter_state(key) if key else (None, None)
+            facts.update(api_remaining_usd=remaining, api_usage0=usage)
+            if remaining is None and not a.api_unverified:
+                raise Refused(
+                    "cannot read the OpenRouter balance (no OPENROUTER_API_KEY, or the key has no limit and no "
+                    "management key is set); pass --api-unverified to launch anyway"
+                )
+            if remaining is not None and remaining < a.api_cap:
+                raise Refused(
+                    f"OpenRouter credit ${remaining:.2f} is below --api-cap ${a.api_cap:.2f}; top up or lower the cap"
+                )
+        else:
+            facts["api_remaining_usd"] = None
+            warnings.append(
+                f"{a.api_provider}: balance unreadable with a project key; the cap is enforced only in-process via RUN_API_CAP_USD"
+            )
+    return warnings, facts
+
+
+# --- supervision ---------------------------------------------------------------
+
+
+def newest_activity(paths: list[Path], skip: set[Path], limit: int = 20000) -> float:
+    """Newest mtime under the given paths, ignoring runrec's own files and their temp files."""
+    newest, seen = 0.0, 0
+    stack = [p for p in paths if p.exists()]
+    while stack and seen < limit:
+        p = stack.pop()
+        seen += 1
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if p.is_dir():
+            try:
+                stack.extend(
+                    c
+                    for c in p.iterdir()
+                    if c not in skip and not c.name.startswith(OWN_TMP_PREFIXES)
+                )
+            except OSError:
+                pass
+        elif p not in skip:
+            newest = max(newest, st.st_mtime)
+    return newest
+
+
+def count_progress(path: Path | None) -> int | None:
+    if path is None or not path.exists():
+        return None
+    if path.is_dir():
+        return sum(1 for _ in path.iterdir())
+    n = 0
+    with path.open("rb") as f:
+        while chunk := f.read(1 << 20):
+            n += chunk.count(b"\n")
+    return n
+
+
+def die_with_parent() -> None:
+    """In the child, before exec: on Linux, get SIGTERM if runrec itself is killed.
+
+    A SIGKILLed or OOM-killed wrapper cannot run its stop sequence, and the command
+    would otherwise live on unsupervised -- for `modal run`, still billing. The
+    signal reaches the direct child only; `modal run` stops its app when it exits."""
+    if sys.platform.startswith("linux"):
+        import ctypes
+
+        ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
+
+
+def group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def finish_manifest(run_dir: Path, launch: dict) -> None:
+    """Merge `launch` into manifest.json once the command has exited, touching no other key."""
+    p = run_dir / "manifest.json"
+    data: dict = {}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text())
+        except json.JSONDecodeError:
+            print(
+                f"runrec: {p} is not JSON; left alone, launch record is in launch.json",
+                file=sys.stderr,
+            )
+            return
+        if not isinstance(data, dict):
+            print(f"runrec: {p} is not an object; left alone", file=sys.stderr)
+            return
+    data["launch"] = launch
+    write_json_atomic(p, data)
+
+
+class Run:
+    def __init__(self, a: argparse.Namespace, out_root: Path, cfg: dict, facts: dict):
+        self.a, self.out_root, self.cfg = a, out_root, cfg
+        start = now()
+        if a.run_dir:
+            self.run_dir = Path(a.run_dir).expanduser().resolve()
+            if not self.run_dir.is_dir():
+                raise Refused(f"--run-dir {self.run_dir} does not exist")
+        else:
+            self.run_dir = out_root / f"{start:%Y-%m-%d}_{a.slug}"
+            try:
+                self.run_dir.mkdir(parents=True)
+            except FileExistsError:
+                raise Refused(
+                    f"{self.run_dir} already exists; pick another --slug"
+                ) from None
+        # One live run per directory: a second launch into a --run-dir still in use is refused.
+        self.lock_fd = os.open(
+            self.run_dir / ".runrec.lock", os.O_WRONLY | os.O_CREAT, 0o644
+        )
+        try:
+            fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Refused(
+                f"{self.run_dir} is in use by another runrec launch"
+            ) from None
+        cwd = Path.cwd()
+        configs = []
+        for c in a.config or []:
+            src = Path(c)
+            dst = self.run_dir / "config" / src.name
+            dst.parent.mkdir(exist_ok=True)
+            shutil.copy2(src, dst)
+            configs.append(
+                {
+                    "path": str(src.resolve()),
+                    "copy": str(dst),
+                    "sha256": hashlib.sha256(src.read_bytes()).hexdigest(),
+                }
+            )
+        self.started = start
+        self.launch = {
+            "schema": SCHEMA,
+            "run_id": f"{self.run_dir.name}-{uuid.uuid4().hex[:6]}",
+            "slug": a.slug,
+            "project": cfg.get("project") or out_root.parent.name,
+            "backend": a.backend,
+            "argv": a.cmd,
+            "cwd": str(cwd),
+            "host": socket.gethostname(),
+            "run_dir": str(self.run_dir),
+            "git_sha": git(cwd, "rev-parse", "HEAD"),
+            "git_dirty": bool(
+                git(cwd, "status", "--porcelain", "--untracked-files=no")
+            ),
+            "config": configs,
+            "caps": {
+                "cost_cap_usd": a.cost_cap,
+                "rate_usd_per_h": a.rate,
+                "max_idle_s": a.max_idle,
+                "timeout_s": a.timeout,
+                "api_cap_usd": a.api_cap,
+                "api_provider": a.api_provider if a.api_cap > 0 else None,
+                "api_verified": facts.get("api_remaining_usd") is not None,
+                "api_enforce": a.api_enforce,
+            },
+            "api_remaining_at_launch_usd": facts.get("api_remaining_usd"),
+            "heartbeat_s": HEARTBEAT_S,
+            "started_at": iso(start),
+            "heartbeat_at": iso(start),
+            "ended_at": None,
+            "status": "running",
+            "stop_reason": None,
+            "exit_code": None,
+            "spend": {
+                "gpu_est_usd": 0.0 if a.rate else None,
+                "api_usd_upper": 0.0
+                if a.api_cap > 0 and a.api_provider == "openrouter"
+                else None,
+            },
+            "progress": {"done": None, "expected": a.expect_n, "path": a.progress_path},
+            "pid": None,
+            "wrapper_pid": os.getpid(),
+        }
+        self.progress_path = (
+            Path(a.progress_path).expanduser() if a.progress_path else None
+        )
+        # Progress counts only what this run adds, so a resumed --run-dir starts at 0.
+        self.progress0 = count_progress(self.progress_path) or 0
+        self.launch["progress"]["baseline"] = self.progress0
+        self.api_usage0 = facts.get("api_usage0")
+        self.last_activity = time.time()
+        self.log_path = self.run_dir / "launch.log"
+        self.stop_requested: str | None = None
+        self.warned_api = False
+
+    # persistence
+    def progress(self) -> int | None:
+        n = count_progress(self.progress_path)
+        return None if n is None else max(0, n - self.progress0)
+
+    def save_live(self) -> None:
+        self.launch["heartbeat_at"] = iso(now())
+        self.launch["last_activity_at"] = iso(
+            datetime.fromtimestamp(self.last_activity, timezone.utc)
+        )
+        write_json_atomic(self.run_dir / "launch.json", self.launch)
+
+    def write_board(self) -> None:
+        target = self.a.board or self.cfg.get("board")
+        if target:
+            try:
+                write_board_file(
+                    Path(target).expanduser(), render_board(self.out_root, self.cfg)
+                )
+            except (OSError, Refused) as exc:
+                print(f"runrec: board not written: {exc}", file=sys.stderr)
+
+    def event(self, kind: str) -> dict:
+        keys = (
+            "run_id",
+            "slug",
+            "project",
+            "backend",
+            "host",
+            "run_dir",
+            "started_at",
+            "ended_at",
+            "status",
+            "stop_reason",
+            "exit_code",
+            "caps",
+            "spend",
+            "git_sha",
+        )
+        return {"event": kind, "at": iso(now()), **{k: self.launch[k] for k in keys}}
+
+    # the loop
+    def tee(self, proc: subprocess.Popen) -> None:
+        with self.log_path.open("ab") as log:
+            while chunk := os.read(proc.stdout.fileno(), 65536):
+                log.write(chunk)
+                log.flush()
+                if (
+                    self.progress_path is None
+                ):  # with a progress path, log chatter is not progress
+                    self.last_activity = time.time()
+                try:
+                    sys.stdout.buffer.write(chunk)
+                    sys.stdout.buffer.flush()
+                except (BrokenPipeError, ValueError):
+                    pass
+
+    def poll_api(self, enforce: bool = True) -> None:
+        if (
+            self.a.api_provider != "openrouter"
+            or self.a.api_cap <= 0
+            or self.api_usage0 is None
+        ):
+            return
+        _, usage = openrouter_state(os.environ.get("OPENROUTER_API_KEY", ""))
+        if usage is None:
+            return
+        used = max(0.0, usage - self.api_usage0)
+        self.launch["spend"]["api_usd_upper"] = round(used, 4)
+        if used >= 0.8 * self.a.api_cap and not self.warned_api:
+            self.warned_api = True
+            print(
+                f"runrec: OpenRouter key usage since launch ${used:.2f} is >=80% of --api-cap "
+                f"(upper bound: the key is shared)",
+                file=sys.stderr,
+            )
+        if enforce and used >= self.a.api_cap and self.a.api_enforce:
+            self.stop_requested = "api"
+
+    def check_caps(self, elapsed: float) -> None:
+        a = self.a
+        if a.rate is not None:
+            self.launch["spend"]["gpu_est_usd"] = round(a.rate * elapsed / 3600, 4)
+            if (
+                a.cost_cap is not None
+                and self.launch["spend"]["gpu_est_usd"] >= a.cost_cap
+            ):
+                self.stop_requested = "cost"
+        if a.timeout is not None and elapsed >= a.timeout:
+            self.stop_requested = "timeout"
+        if a.max_idle is not None and time.time() - self.last_activity >= a.max_idle:
+            self.stop_requested = "idle"
+
+    def stop(self, proc: subprocess.Popen) -> None:
+        """SIGINT first (it makes `modal run` stop its app), then SIGTERM, then SIGKILL, until
+        the whole process group is gone: a background grandchild ignores SIGINT and would
+        otherwise outlive a direct child that exited promptly."""
+        for sig, grace in (
+            (signal.SIGINT, GRACE_INT_S),
+            (signal.SIGTERM, GRACE_TERM_S),
+            (signal.SIGKILL, 5),
+        ):
+            try:
+                os.killpg(proc.pid, sig)
+            except ProcessLookupError:
+                break
+            deadline = time.monotonic() + grace
+            while time.monotonic() < deadline:
+                proc.poll()
+                if not group_alive(proc.pid):
+                    return
+                time.sleep(0.1)
+        proc.poll()
+
+    def run(self) -> int:
+        a = self.a
+        env = {
+            **os.environ,
+            "RUN_ID": self.launch["run_id"],
+            "RUN_DIR": str(self.run_dir),
+            "RUN_COST_CAP_USD": "" if a.cost_cap is None else str(a.cost_cap),
+            "RUN_API_CAP_USD": str(a.api_cap),
+            "RUNREC": "1",
+        }
+        self.save_live()
+        append_event(self.out_root, self.event("launch"))
+        self.write_board()
+        print(f"runrec: {self.launch['run_id']} -> {self.run_dir}", file=sys.stderr)
+
+        def on_signal(signum, _frame):
+            self.stop_requested = self.stop_requested or "interrupted"
+
+        for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(s, on_signal)
+
+        proc = subprocess.Popen(
+            a.cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            start_new_session=True,
+            preexec_fn=die_with_parent,  # noqa: PLW1509 -- no other thread exists yet; the tee starts after
+        )
+        self.launch["pid"] = proc.pid
+        teer = threading.Thread(target=self.tee, args=(proc,), daemon=True)
+        teer.start()
+        # Idle is measured on the progress path alone when one is declared; otherwise on
+        # anything the command writes into the run dir or prints. runrec's own files never count.
+        watch = [self.progress_path] if self.progress_path else [self.run_dir]
+        own = {self.run_dir / "launch.json", self.log_path}
+        t0 = time.monotonic()
+        last_hb = last_board = last_api = last_scan = t0
+        # Supervise until the whole process group is gone, not just the direct child: a
+        # leader that exits while its workers keep calling paid APIs is still a live run.
+        while proc.poll() is None or group_alive(proc.pid):
+            time.sleep(TICK_S)
+            tm = time.monotonic()
+            elapsed = tm - t0
+            if a.max_idle is not None and tm - last_scan >= min(SCAN_S, a.max_idle / 4):
+                last_scan = tm
+                self.last_activity = max(
+                    self.last_activity, newest_activity(watch, own)
+                )
+            if tm - last_api >= API_POLL_S:
+                last_api = tm
+                self.poll_api()
+            self.check_caps(elapsed)
+            if self.stop_requested:
+                print(
+                    f"runrec: stopping {self.launch['run_id']}: {self.stop_requested}",
+                    file=sys.stderr,
+                )
+                self.stop(proc)
+                break
+            if tm - last_hb >= HEARTBEAT_S:
+                last_hb = tm
+                self.launch["progress"]["done"] = self.progress()
+                self.save_live()
+            if tm - last_board >= BOARD_S:
+                last_board = tm
+                self.write_board()
+        rc = proc.wait()
+        teer.join(timeout=5)
+        elapsed = time.monotonic() - t0
+        if a.rate is not None:
+            self.launch["spend"]["gpu_est_usd"] = round(a.rate * elapsed / 3600, 4)
+        self.poll_api(enforce=False)
+        self.launch["progress"]["done"] = self.progress()
+        if self.stop_requested == "interrupted":
+            status = "interrupted"
+        elif self.stop_requested:
+            status = f"stopped:{self.stop_requested}"
+        else:
+            status = "succeeded" if rc == 0 else "failed"
+        self.launch.update(
+            status=status,
+            stop_reason=self.stop_requested,
+            exit_code=rc,
+            ended_at=iso(now()),
+        )
+        self.save_live()
+        finish_manifest(self.run_dir, self.launch)
+        append_event(self.out_root, self.event("finish"))
+        self.write_board()
+        print(f"runrec: {self.launch['run_id']} {status} (exit {rc})", file=sys.stderr)
+        return STOPPED_EXIT if self.stop_requested else rc
+
+
+# --- board ---------------------------------------------------------------------
+
+
+def run_view(r: dict, t: datetime) -> dict:
+    started = parse_iso(r.get("started_at"))
+    ended = parse_iso(r.get("ended_at"))
+    hb = parse_iso(r.get("heartbeat_at"))
+    status = r.get("status", "?")
+    if (
+        status == "running"
+        and hb
+        and (t - hb).total_seconds()
+        > LOST_AFTER_HEARTBEATS * float(r.get("heartbeat_s") or 60)
+    ):
+        status = "lost"
+    elapsed = ((ended or t) - started).total_seconds() if started else None
+    prog = r.get("progress") or {}
+    done, expected = prog.get("done"), prog.get("expected")
+    eta = None
+    if status == "running" and done and expected and elapsed:
+        eta = max(0.0, (expected - done) * elapsed / done)
+    caps = r.get("caps") or {}
+    spend = r.get("spend") or {}
+    deadline = (
+        started + timedelta(seconds=caps["timeout_s"])
+        if started and caps.get("timeout_s")
+        else None
+    )
+    gpu, api = spend.get("gpu_est_usd"), spend.get("api_usd_upper")
+    return {
+        "r": r,
+        "status": status,
+        "started": started,
+        "elapsed": elapsed,
+        "done": done,
+        "expected": expected,
+        "eta": eta,
+        "deadline": deadline,
+        "idle": (t - la).total_seconds()
+        if (la := parse_iso(r.get("last_activity_at")))
+        else None,
+        "gpu": gpu,
+        "api": api,
+        "caps": caps,
+        "total": (gpu or 0) + (api or 0),
+    }
+
+
+def cell_progress(v: dict) -> str:
+    if v["done"] is None:
+        return "-"
+    return f"{v['done']}/{v['expected']}" if v["expected"] else str(v["done"])
+
+
+def cell_eta(v: dict) -> str:
+    if v["eta"] is not None:
+        return fmt_duration(v["eta"])
+    return (
+        f"no ETA; deadline {v['deadline']:%m-%d %H:%M}Z" if v["deadline"] else "no ETA"
+    )
+
+
+def cell_api(v: dict) -> str:
+    caps = v["caps"]
+    if not caps.get("api_cap_usd"):
+        return "none declared ($0)"
+    seen = fmt_usd(v["api"]) + " (upper)" if v["api"] is not None else "?"
+    tag = "" if caps.get("api_verified") else ", unverified"
+    return f"{seen} / {fmt_usd(caps['api_cap_usd'])}{tag}"
+
+
+def cell_gpu(v: dict) -> str:
+    caps = v["caps"]
+    if v["gpu"] is None:
+        return "-"
+    cap = (
+        f" / {fmt_usd(caps['cost_cap_usd'])}"
+        if caps.get("cost_cap_usd") is not None
+        else ""
+    )
+    return f"{fmt_usd(v['gpu'])} est{cap}"
+
+
+def render_board(out_root: Path, cfg: dict, recent: int = 20) -> str:
+    t = now()
+    views = [run_view(r, t) for r in read_runs(out_root)]
+    project = cfg.get("project") or out_root.parent.name
+    running = [v for v in views if v["status"] == "running"]
+    lost = [v for v in views if v["status"] == "lost"]
+    done = [v for v in views if v["status"] not in ("running", "lost")]
+    week = [v for v in views if v["started"] and (t - v["started"]).days < 7]
+    lines = [
+        f"{BOARD_HEADER}{project}",
+        "",
+        (
+            f"**As of {iso(t)}.** {len(running)} running, {len(lost)} lost, {len(done)} finished. "
+            f"Spend over the last 7 days: {fmt_usd(sum(v['total'] for v in week))}."
+        ),
+        "",
+        (
+            f"Built by `runrec board` from `{out_root}/runs.jsonl`. Each live run rewrites this page every "
+            f"{fmt_duration(BOARD_S)}, so a page older than that still showing Running rows means the "
+            "wrapper died: run `runrec board --write` on the host. GPU cost is rate x wall-clock, an "
+            "estimate; API cost is key usage since launch, an upper bound on a shared key."
+        ),
+        "",
+        "## Running",
+        "",
+    ]
+    if running:
+        lines += [
+            "| Run | Backend | Host | Started | Elapsed | Progress | ETA | Idle for | GPU | API |",
+            "|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for v in running:
+            r = v["r"]
+            backend = r.get("backend", "?") + (
+                " (pod not covered)" if r.get("backend") == "runpod" else ""
+            )
+            lines.append(
+                f"| `{r.get('slug')}` | {backend} | {r.get('host')} | {v['started']:%m-%d %H:%M}Z | "
+                f"{fmt_duration(v['elapsed'])} | {cell_progress(v)} | {cell_eta(v)} | {fmt_duration(v['idle'])} | "
+                f"{cell_gpu(v)} | {cell_api(v)} |"
+            )
+    else:
+        lines.append("Nothing running.")
+    if lost:
+        lines += [
+            "",
+            "## Lost",
+            "",
+            "Marked running, but no heartbeat for three intervals: the wrapper died. Check the host; the job may still bill.",
+            "",
+            "| Run | Backend | Host | Last heartbeat | Dir |",
+            "|---|---|---|---|---|",
+        ]
+        for v in lost:
+            r = v["r"]
+            lines.append(
+                f"| `{r.get('slug')}` | {r.get('backend')} | {r.get('host')} | {r.get('heartbeat_at')} | `{r.get('run_dir')}` |"
+            )
+    lines += ["", f"## Recent (last {recent})", ""]
+    if done:
+        lines += [
+            "| Run | Status | Backend | Started | Duration | GPU | API |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for v in done[:recent]:
+            r = v["r"]
+            started = f"{v['started']:%m-%d %H:%M}Z" if v["started"] else "-"
+            lines.append(
+                f"| `{r.get('slug')}` | {v['status']} | {r.get('backend')} | {started} | "
+                f"{fmt_duration(v['elapsed'])} | {cell_gpu(v)} | {cell_api(v)} |"
+            )
+    else:
+        lines.append("No finished runs yet.")
+    return "\n".join(lines) + "\n"
+
+
+def render_ls(out_root: Path, recent: int = 10) -> str:
+    t = now()
+    rows = []
+    for v in [run_view(r, t) for r in read_runs(out_root)]:
+        if v["status"] in ("running", "lost") or recent > 0:
+            r = v["r"]
+            rows.append(
+                f"{v['status']:<16} {r.get('backend', '?'):<7} {fmt_duration(v['elapsed']):>7} "
+                f"{cell_progress(v):>9}  {fmt_usd(v['total']):>8}  {r.get('slug')}"
+            )
+            if v["status"] not in ("running", "lost"):
+                recent -= 1
+    return "\n".join(rows) + ("\n" if rows else "no runs recorded\n")
+
+
+# --- CLI -------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(
+        prog="runrec",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = p.add_subparsers(dest="cmd_name", required=True)
+    L = sub.add_parser("launch", help="record, cap and supervise one run")
+    L.add_argument(
+        "--slug", required=True, help="short run name; the run dir is <date>_<slug>"
+    )
+    L.add_argument("--backend", required=True, choices=("local", "modal", "runpod"))
+    L.add_argument(
+        "--cost-cap",
+        type=float,
+        help="stop when rate x elapsed reaches this many USD (required for modal/runpod)",
+    )
+    L.add_argument(
+        "--rate",
+        type=float,
+        help="total burn in USD per hour, all containers or GPUs (required for modal/runpod)",
+    )
+    L.add_argument(
+        "--max-idle",
+        type=parse_duration,
+        help="stop when the run's output stops growing this long (required for modal/runpod)",
+    )
+    L.add_argument(
+        "--timeout", type=parse_duration, help="stop after this much wall-clock time"
+    )
+    L.add_argument(
+        "--api-cap",
+        type=float,
+        required=True,
+        help="LLM API budget in USD; 0 declares no paid LLM calls",
+    )
+    L.add_argument(
+        "--api-provider",
+        default="openrouter",
+        choices=("openrouter", "openai", "anthropic"),
+    )
+    L.add_argument(
+        "--api-unverified",
+        action="store_true",
+        help="launch even when the API balance cannot be read",
+    )
+    L.add_argument(
+        "--api-enforce",
+        action="store_true",
+        help="stop the run when shared-key usage reaches --api-cap",
+    )
+    L.add_argument("--expect-n", type=int, help="expected progress count, for ETA")
+    L.add_argument(
+        "--progress-path",
+        help="JSONL file (lines counted) or dir (entries counted) that grows as the run progresses",
+    )
+    L.add_argument(
+        "--config",
+        action="append",
+        help="config file to snapshot into the run dir (repeatable)",
+    )
+    L.add_argument(
+        "--run-dir",
+        help="use this existing directory instead of creating <out-root>/<date>_<slug>",
+    )
+    L.add_argument(
+        "--out-root", help="default: <git toplevel>/out, or $RUNREC_OUT_ROOT"
+    )
+    L.add_argument(
+        "--board",
+        help="board file to keep current (default: 'board' in <out-root>/runrec.json)",
+    )
+    L.add_argument("cmd", nargs=argparse.REMAINDER, help="-- then the command")
+    B = sub.add_parser("board", help="print the Markdown board for one out-root")
+    B.add_argument("--out-root")
+    B.add_argument(
+        "--write",
+        nargs="?",
+        const="",
+        metavar="PATH",
+        help="write it to PATH (default: runrec.json 'board')",
+    )
+    S = sub.add_parser("ls", help="running and recent runs, one line each")
+    S.add_argument("--out-root")
+    a = p.parse_args(argv)
+    try:
+        out_root = resolve_out_root(a.out_root)
+        cfg = load_cfg(out_root)
+        if a.cmd_name == "board":
+            text = render_board(out_root, cfg)
+            if a.write is None:
+                sys.stdout.write(text)
+            else:
+                target = a.write or cfg.get("board")
+                if not target:
+                    raise Refused("no PATH given and no 'board' in runrec.json")
+                write_board_file(Path(target).expanduser(), text)
+                print(Path(target).expanduser())
+            return 0
+        if a.cmd_name == "ls":
+            sys.stdout.write(render_ls(out_root))
+            return 0
+        if a.cmd and a.cmd[0] == "--":
+            a.cmd = a.cmd[1:]
+        warnings, facts = check_launch(a)
+        for w in warnings:
+            print(f"runrec: warning: {w}", file=sys.stderr)
+        return Run(a, out_root, cfg, facts).run()
+    except Refused as exc:
+        print(f"runrec: refused: {exc}", file=sys.stderr)
+        return REFUSED_EXIT
+
+
+if __name__ == "__main__":
+    sys.exit(main())
