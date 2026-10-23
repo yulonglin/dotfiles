@@ -275,18 +275,30 @@ check    "by clicking the close button"     "$(cat "$STUB_AX_LOG" 2>/dev/null)" 
 check_eq "no keystroke, so no focus stolen" "$(cat "$STUB_KEY_LOG" 2>/dev/null)" ""
 check_eq "and nothing is remembered"        "$(cat "$AXCAP" 2>/dev/null)" ""
 
+# The keystroke fallback activates the app, so only the idle job - which closes
+# only once the user has gone idle - is allowed it. Every run below that stands
+# in for that job passes --allow-focus-steal, as escalate() in hide-idle-apps does.
 print -r -- "10. an app with no close button falls back to keystrokes"
 export STUB_AX_RC=1
-run --only Bear
+run --only Bear --allow-focus-steal
 check "the click is attempted first" "$(cat "$STUB_AX_LOG" 2>/dev/null)"  "AXCloseButton"
 check "keystrokes take over"         "$(cat "$STUB_KEY_LOG" 2>/dev/null)" "keystroke"
 check "and the app is remembered"    "$(cat "$AXCAP" 2>/dev/null)"        "Bear"
 
 print -r -- "11. a remembered app is never probed again"
-run --only Bear
+run --only Bear --allow-focus-steal
 check_eq "no second probe"        "$(cat "$STUB_AX_LOG" 2>/dev/null)" ""
 check    "straight to keystrokes" "$(cat "$STUB_KEY_LOG" 2>/dev/null)" "keystroke"
 check_eq "recorded exactly once"  "$(grep -c $'^Bear\t' "$AXCAP")" "1"
+
+# The manual run is what you trigger while working in another app. Activating
+# each keystroke-only app in turn cycled the desktop for several seconds, so
+# without the flag the app is hidden instead - no focus needed.
+print -r -- "11a. without the flag, a keystroke-only app is hidden instead of focused"
+run --only Bear
+check_eq "no keystroke, so no focus stolen" "$(cat "$STUB_KEY_LOG" 2>/dev/null)" ""
+check    "says it hid the app instead"      "$OUT" "Bear: windows cannot be closed without taking focus - hiding it instead"
+check    "and the run counts as clean"      "$(( RC == 0 ))" "1"
 
 # The record is only consulted when there IS one, so without expiry nothing would
 # ever revisit it: an app that gained a close button in an update would be typed
@@ -405,12 +417,12 @@ check "and still exits 0 once a slow app is listed"          "$(( RC == 0 ))" "1
 # nothing, which is not evidence the windows went away. Exported, because the
 # stub reads it from the environment two processes down.
 export STUB_AX_RC=1
-run --only Bear
+run --only Bear --allow-focus-steal
 check "a close that left windows behind exits non-zero"      "$(( RC != 0 ))" "1"
 check "and says which app"                                   "$OUT" "Bear still has windows"
 
 print -r -- "$CONFIG_NO_SLOW" > "$ROOT/config/app-lifecycle.yaml"
-run --only Bear
+run --only Bear --allow-focus-steal
 check "failure is reported without a slow app too"           "$(( RC != 0 ))" "1"
 unset STUB_AX_RC
 
@@ -520,7 +532,7 @@ unset STUB_AX_LOG
 # Same path, but the close genuinely fails: AX click errors, the keystroke
 # fallback tells us nothing, so the windows are still there.
 export STUB_AX_RC=1
-run --only "Google Chrome" --max-action close
+run --only "Google Chrome" --max-action close --allow-focus-steal
 check     "a close that failed exits non-zero"   "$(( RC != 0 ))" "1"
 unset STUB_AX_RC STUB_CHROME_TABS_2 STUB_CHROME_CALLS
 
@@ -533,7 +545,8 @@ print -r -- "19. a manual run notifies; only the idle job's --only run exits non
 export STUB_APP_LIST="Bear|net.shinyfrog.bear
 "
 export STUB_NOTIFY_LOG="$WORK/notify.log"
-export STUB_WINDOW_COUNT=2 STUB_AX_RC=1   # AX fails, keystrokes prove nothing
+# AX fails, keystrokes prove nothing, and the manual run's hide fallback fails too
+export STUB_WINDOW_COUNT=2 STUB_AX_RC=1 STUB_HIDE_RC=1
 : > "$AXCAP"
 print -r -- "defaults:
   manual: quit
@@ -547,10 +560,10 @@ check     "and posts a notification"               "$(cat "$STUB_NOTIFY_LOG")" "
 check     "naming the rung and the app"            "$(cat "$STUB_NOTIFY_LOG")" "close: Bear"
 check     "while still saying so on stdout"        "$OUT" "Failed actions: close: Bear"
 
-run --only Bear
+run --only Bear --allow-focus-steal
 check     "the idle job's run still exits non-zero" "$(( RC != 0 ))" "1"
 check_not "and does not notify"                     "$(cat "$STUB_NOTIFY_LOG")" "display notification"
-unset STUB_AX_RC STUB_NOTIFY_LOG
+unset STUB_AX_RC STUB_HIDE_RC STUB_NOTIFY_LOG
 
 # --- defaults.manual reaches apps the config never names -------------------
 # Test 6 pins the `quit` default, which is also what an unlisted app got when

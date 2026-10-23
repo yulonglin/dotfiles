@@ -269,7 +269,9 @@ escalate() {
         fi
         return 1
     fi
-    local -a cmd=("$CLEAR_APPS" --only "$name")
+    # Focus may be taken: closes are gated on the user being idle, so the
+    # Cmd+W fallback cannot pull the desktop out from under anyone.
+    local -a cmd=("$CLEAR_APPS" --only "$name" --allow-focus-steal)
     [[ "$rung" == close ]] && cmd+=(--max-action close)
     "${cmd[@]}" >/dev/null 2>&1
 }
