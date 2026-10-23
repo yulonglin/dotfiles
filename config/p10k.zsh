@@ -488,9 +488,16 @@
   function _my_git_diffstat_start() {
     # Words (and so line counts) only show at 100+ columns; one diff at a time.
     (( COLUMNS >= 100 && ! _my_git_diffstat_fd )) || return
+    # One write at the end: zle -F fires once the fd is readable, so printing the
+    # toplevel before the diff ends would leave the handler blocked in read.
+    # The -c/--no-* flags stop a cloned repo's config from running commands
+    # (fsmonitor hook, external diff, textconv) just because you cd'd into it.
     exec {_my_git_diffstat_fd}< <(
-      command git rev-parse --show-toplevel 2>/dev/null || print
-      GIT_OPTIONAL_LOCKS=0 command git diff --shortstat HEAD 2>/dev/null
+      local top stat
+      top=$(command git -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null)
+      stat=$(GIT_OPTIONAL_LOCKS=0 command git -c core.fsmonitor=false \
+        diff --no-ext-diff --no-textconv --shortstat HEAD 2>/dev/null)
+      print -r -- "$top"$'\n'"$stat"
     )
     zle -F $_my_git_diffstat_fd _my_git_diffstat_done
   }
